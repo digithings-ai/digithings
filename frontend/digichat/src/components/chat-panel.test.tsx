@@ -69,6 +69,13 @@ vi.mock("@assistant-ui/ai-sdk", async (importOriginal) => {
       );
     }),
     useAISDKRuntime: () => ({ kind: "runtime" }),
+    useAISDKChat: () => ({
+      messages: [],
+      status: "ready",
+      sendMessage: vi.fn(),
+      stop: vi.fn(),
+      setMessages: vi.fn(),
+    }),
   };
 });
 
@@ -119,6 +126,12 @@ vi.mock("@digithings/digichat-ui", async (importOriginal) => {
 });
 
 import { ChatPanel } from "./chat-panel";
+import {
+  setPendingForceTool,
+  setPendingTurnMode,
+  takePendingForceTool,
+  takePendingTurnMode,
+} from "@/lib/pending-chat-headers";
 
 function baseProps() {
   return {
@@ -213,5 +226,38 @@ describe("ChatPanel prepareSendMessagesRequest — X-BYOK-Model (Fix 1 regressio
       isSet: true,
     });
     expect(headers.has("X-BYOK-Model")).toBe(false);
+  });
+});
+
+describe("ChatPanel prepareSendMessagesRequest — turn mode vs force-tool", () => {
+  beforeEach(() => {
+    takePendingForceTool("t1");
+    takePendingTurnMode("t1");
+    mockByokState = { key: "", provider: "openrouter", model: "", isSet: false };
+  });
+
+  it("sends X-Digi-Turn-Mode and omits force-tool on regenerate", async () => {
+    setPendingTurnMode("t1", "regenerate");
+    setPendingForceTool("t1", "digisearch");
+    const { headers } = await callPrepareSendMessagesRequest({
+      key: "",
+      provider: "openrouter",
+      model: "",
+      isSet: false,
+    });
+    expect(headers.get("X-Digi-Turn-Mode")).toBe("regenerate");
+    expect(headers.has("X-Digi-Force-Tool")).toBe(false);
+  });
+
+  it("sends X-Digi-Force-Tool on a plain send", async () => {
+    setPendingForceTool("t1", "digisearch");
+    const { headers } = await callPrepareSendMessagesRequest({
+      key: "",
+      provider: "openrouter",
+      model: "",
+      isSet: false,
+    });
+    expect(headers.get("X-Digi-Force-Tool")).toBe("digisearch");
+    expect(headers.has("X-Digi-Turn-Mode")).toBe(false);
   });
 });

@@ -16,6 +16,19 @@ import {
   messageActivities,
 } from "@/lib/chat-activity";
 import { conversationIdFromParts } from "@/lib/ui-stream-parts";
+import {
+  setPendingForceTool,
+  setPendingTurnMode,
+  takePendingForceTool,
+  takePendingTurnMode,
+} from "@/lib/pending-chat-headers";
+
+export {
+  setPendingForceTool,
+  setPendingTurnMode,
+  takePendingForceTool,
+  takePendingTurnMode,
+};
 
 /** Read ?token= / ?host= at send time — useChat transport is frozen on first render (#1339). */
 function readEmbedUrlAuth(): { token?: string; host?: string } {
@@ -49,51 +62,6 @@ export function isEmbedTrialUnlockedAtSend(
  */
 export function chatAccessTokenAtSend(resolvedHost: string): string | null {
   return readChatAccessToken(resolvedHost);
-}
-
-/**
- * `/search` / `/docs` force-tool, written at send() and read inside
- * prepareSendMessagesRequest. Not a React ref — `react-hooks/refs` forbids
- * `.current` inside the useMemo that builds DefaultChatTransport, and useChat
- * never adopts a rebuilt transport (#1339). Keyed by embedHost so two
- * widgets on one page cannot steal each other's slash.
- */
-const pendingForceByHost = new Map<string, string>();
-
-/** Per-host pending turn mode for the next POST /api/chat (#3475). */
-const pendingTurnModeByHost = new Map<string, "regenerate" | "edit_last_user">();
-
-export function setPendingForceTool(host: string, tool?: string): void {
-  const key = host.trim();
-  if (!key) return;
-  if (tool) pendingForceByHost.set(key, tool);
-  else pendingForceByHost.delete(key);
-}
-
-export function takePendingForceTool(host: string): string | undefined {
-  const key = host.trim();
-  const tool = pendingForceByHost.get(key);
-  pendingForceByHost.delete(key);
-  return tool;
-}
-
-export function setPendingTurnMode(
-  host: string,
-  mode?: "regenerate" | "edit_last_user",
-): void {
-  const key = host.trim();
-  if (!key) return;
-  if (mode) pendingTurnModeByHost.set(key, mode);
-  else pendingTurnModeByHost.delete(key);
-}
-
-export function takePendingTurnMode(
-  host: string,
-): "regenerate" | "edit_last_user" | undefined {
-  const key = host.trim();
-  const mode = pendingTurnModeByHost.get(key);
-  pendingTurnModeByHost.delete(key);
-  return mode;
 }
 
 const CONVERSATION_STORAGE_PREFIX = "digichat_embed_conversation:";

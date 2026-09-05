@@ -925,6 +925,9 @@ function EmbedChat({
         onLanguageChange={setLanguage}
         onOpenSettings={showByok ? openSettings : undefined}
         onReset={chat.reset}
+        allowTurnMutation={typeof chat.regenerate === "function"}
+        onRegenerate={chat.regenerate}
+        onEditLastUser={chat.editLastUser}
         onSendRequest={(text, opts) => {
           wrappedSend(text, opts);
           return true;

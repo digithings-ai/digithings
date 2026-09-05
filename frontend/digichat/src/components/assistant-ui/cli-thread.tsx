@@ -7,21 +7,34 @@
 import { useCallback, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useAISDKChat } from "@assistant-ui/ai-sdk";
 import {
-  ActionBarPrimitive,
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
 } from "@assistant-ui/react";
 import type { UIMessage } from "ai";
-import { ChatActivities, matchingSlashCommands, nextPaletteIndex, parseSlashInput, slashHelpText, citationHits, serializeAssistantMarkdown, serializeThreadMarkdown, copyMarkdownWithFallback, downloadMarkdown, type SlashVisibility } from "@digithings/digichat-ui";
-import { ChatMarkdown } from "@digithings/web";
+import {
+  matchingSlashCommands,
+  nextPaletteIndex,
+  parseSlashInput,
+  slashHelpText,
+  citationHits,
+  serializeAssistantMarkdown,
+  serializeThreadMarkdown,
+  copyMarkdownWithFallback,
+  downloadMarkdown,
+  type SlashVisibility,
+} from "@digithings/digichat-ui";
+import { Button } from "@/components/ui/button";
 import { messageActivities } from "@/lib/chat-activity";
 import { cn } from "@/lib/utils";
+import { CliMessageBody, messagePlainText } from "./cli-message-body";
 
 export type CliThreadProps = {
   emptyHint?: ReactNode;
   headerSlot?: ReactNode;
   footerSlot?: ReactNode;
+  /** Rendered under the transcript, above the slash palette (e.g. quant strip). */
+  belowViewportSlot?: ReactNode;
   formReplacement?: ReactNode;
   suggestions?: readonly string[];
   placeholder?: string;
@@ -38,6 +51,8 @@ export type CliThreadProps = {
    */
   onSendRequest?: (text: string, opts?: { forceTool?: string }) => boolean | void;
   onOpenSettings?: () => void;
+  /** If set, /byok calls this instead of onOpenSettings. */
+  onByok?: () => void;
   onLanguageChange?: (code: string) => void;
   /** Called for /new instead of only clearing the client transcript. */
   onReset?: () => void;
@@ -47,29 +62,59 @@ export type CliThreadProps = {
   /** Extra control next to the error line (BYOK / retry). */
   errorAction?: ReactNode;
   disabled?: boolean;
+  /**
+   * When true and callbacks are provided, last-turn regen/edit chrome is shown.
+   * Foundry/embed hosts that do not support mutation pass false.
+   */
+  allowTurnMutation?: boolean;
+  onRegenerate?: () => void;
+  /** Host truncates the thread and POSTs with X-Digi-Turn-Mode: edit_last_user. */
+  onEditLastUser?: (text: string) => void;
 };
 
 const EMPTY_MESSAGES: UIMessage[] = [];
-
-function messagePlainText(message: UIMessage): string {
-  return (message.parts ?? [])
-    .filter((p): p is { type: "text"; text: string } => p.type === "text")
-    .map((p) => p.text)
-    .join("");
-}
 
 function CliMessage({
   role,
   uiMessage,
   isStreaming,
+  isLastAssistant,
+  isLastUser,
+  editingLastUser,
+  editDraft,
+  onEditDraftChange,
+  onSubmitEdit,
+  onCancelEdit,
+  allowTurnMutation,
+  canRegenerate,
+  canEditLastUser,
+  canExportThread,
+  onCopy,
+  onExportThread,
+  onBeginEdit,
+  onRegenerate,
 }: {
   role: string;
   uiMessage?: UIMessage;
   isStreaming?: boolean;
+  isLastAssistant?: boolean;
+  isLastUser?: boolean;
+  editingLastUser?: boolean;
+  editDraft?: string;
+  onEditDraftChange?: (value: string) => void;
+  onSubmitEdit?: () => void;
+  onCancelEdit?: () => void;
+  allowTurnMutation?: boolean;
+  canRegenerate?: boolean;
+  canEditLastUser?: boolean;
+  canExportThread?: boolean;
+  onCopy?: (message: UIMessage) => void;
+  onExportThread?: () => void;
+  onBeginEdit?: () => void;
+  onRegenerate?: () => void;
 }) {
   const isUser = role === "user";
-  const activities = uiMessage ? messageActivities(uiMessage, { settle: !isStreaming }) : [];
-  const text = uiMessage ? messagePlainText(uiMessage) : "";
+  const showEditForm = Boolean(isLastUser && editingLastUser);
   return (
     <MessagePrimitive.Root
       className={cn("dc-term-row group/message", isUser ? "dc-term-row-user" : "dc-term-row-assistant")}
@@ -78,21 +123,106 @@ function CliMessage({
         {isUser ? ">" : "▸"}
       </span>
       <div className="dc-term-body">
-        {!isUser && activities.length ? <ChatActivities activities={activities} /> : null}
-        {text ? (
-          <ChatMarkdown
-            source={text}
-            className={cn("text-[var(--text-primary)]", isStreaming && "dc-term-streaming")}
-          />
+        {showEditForm ? (
+          <div className="flex flex-col gap-2">
+            <textarea
+              className="min-h-[4.5rem] w-full resize-y rounded-none border border-border/60 bg-transparent p-2 text-sm"
+              value={editDraft}
+              onChange={(e) => onEditDraftChange?.(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  onCancelEdit?.();
+                } else if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  onSubmitEdit?.();
+                }
+              }}
+              aria-label="Edit last message"
+              maxLength={2000}
+            />
+            <div className="flex flex-wrap items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[11px] text-muted-foreground"
+                disabled={!editDraft?.trim()}
+                onClick={onSubmitEdit}
+              >
+                save
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[11px] text-muted-foreground"
+                onClick={onCancelEdit}
+              >
+                cancel
+              </Button>
+            </div>
+          </div>
+        ) : uiMessage ? (
+          <CliMessageBody message={uiMessage} isStreaming={isStreaming} />
         ) : (
           <MessagePrimitive.Parts />
         )}
-        {!isUser ? (
-          <ActionBarPrimitive.Root className="mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100">
-            <ActionBarPrimitive.Copy className="h-6 text-[11px] text-muted-foreground">
+        {!showEditForm && uiMessage ? (
+          <div
+            className={cn(
+              "mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100",
+              (isLastAssistant || isLastUser) && "opacity-100",
+            )}
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 text-[11px] text-muted-foreground"
+              onClick={() => onCopy?.(uiMessage)}
+            >
               copy
-            </ActionBarPrimitive.Copy>
-          </ActionBarPrimitive.Root>
+            </Button>
+            {isLastAssistant && canExportThread ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[11px] text-muted-foreground"
+                onClick={onExportThread}
+                aria-label="Download thread as markdown"
+              >
+                md
+              </Button>
+            ) : null}
+            {allowTurnMutation && isLastAssistant && onRegenerate ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[11px] text-muted-foreground"
+                disabled={!canRegenerate}
+                title="Replays the full digigraph workflow on this session"
+                onClick={onRegenerate}
+              >
+                regen
+              </Button>
+            ) : null}
+            {allowTurnMutation && isLastUser && onBeginEdit ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[11px] text-muted-foreground"
+                disabled={!canEditLastUser}
+                title="Replaces this turn and replays the digigraph workflow"
+                onClick={onBeginEdit}
+              >
+                edit
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </MessagePrimitive.Root>
@@ -103,6 +233,7 @@ export function CliThread({
   emptyHint,
   headerSlot,
   footerSlot,
+  belowViewportSlot,
   formReplacement,
   suggestions = [],
   placeholder = "ask digichat",
@@ -114,6 +245,7 @@ export function CliThread({
   onSlashCommand,
   onSendRequest,
   onOpenSettings,
+  onByok,
   onLanguageChange,
   onReset,
   settingsPanel,
@@ -121,14 +253,34 @@ export function CliThread({
   errorText,
   errorAction,
   disabled,
+  allowTurnMutation = false,
+  onRegenerate,
+  onEditLastUser,
 }: CliThreadProps) {
   const chat = useAISDKChat<UIMessage>();
   const [draft, setDraft] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [notes, setNotes] = useState<string[]>([]);
+  const [editingLastUser, setEditingLastUser] = useState(false);
+  const [editDraft, setEditDraft] = useState("");
 
   const busy = chat?.status === "streaming" || chat?.status === "submitted";
+  const ready = chat?.status === "ready" || chat?.status === undefined;
   const messages = chat?.messages ?? EMPTY_MESSAGES;
+
+  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+  let lastUserIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "user") {
+      lastUserIndex = i;
+      break;
+    }
+  }
+  const lastUser = lastUserIndex >= 0 ? messages[lastUserIndex] : undefined;
+  const canRegenerate =
+    allowTurnMutation && !busy && !!lastAssistant && messages.length > 0 && ready && !editingLastUser;
+  const canEditLastUser = allowTurnMutation && !busy && !!lastUser && ready && !editingLastUser;
+  const canExportThread = !busy && messages.some((m) => messagePlainText(m).trim());
 
   const slashMatches = matchingSlashCommands(draft, slashVisibility);
   const paletteRows = useMemo(() => {
@@ -225,7 +377,11 @@ export function CliThread({
         else chat?.setMessages([]);
         return true;
       }
-      if (command.id === "settings" || command.id === "byok") {
+      if (command.id === "byok") {
+        (onByok ?? onOpenSettings)?.();
+        return true;
+      }
+      if (command.id === "settings") {
         onOpenSettings?.();
         return true;
       }
@@ -237,8 +393,71 @@ export function CliThread({
       if (onSlashCommand?.(raw)) return true;
       return false;
     },
-    [busy, chat, messages, onLanguageChange, onOpenSettings, onReset, onSlashCommand, sendText, slashVisibility],
+    [
+      busy,
+      chat,
+      messages,
+      onByok,
+      onLanguageChange,
+      onOpenSettings,
+      onReset,
+      onSlashCommand,
+      sendText,
+      slashVisibility,
+    ],
   );
+
+  const onCopy = useCallback(async (m: UIMessage) => {
+    const plain = messagePlainText(m);
+    const sources =
+      m.role === "assistant"
+        ? citationHits(messageActivities(m)).map((h) => ({ title: h.title, path: h.path }))
+        : undefined;
+    const markdown =
+      m.role === "assistant" ? serializeAssistantMarkdown(plain, sources) : plain.trim();
+    await copyMarkdownWithFallback(markdown, { filename: "digichat-answer.md" });
+  }, []);
+
+  const onExportThread = useCallback(() => {
+    const turns = messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => {
+        const content = messagePlainText(m);
+        if (m.role === "assistant") {
+          return {
+            role: "assistant" as const,
+            content,
+            sources: citationHits(messageActivities(m)).map((h) => ({
+              title: h.title,
+              path: h.path,
+            })),
+          };
+        }
+        return { role: "user" as const, content };
+      });
+    const md = serializeThreadMarkdown(turns);
+    if (!md.trim()) return;
+    downloadMarkdown("digichat-thread.md", md);
+  }, [messages]);
+
+  const beginEditLastUser = useCallback(() => {
+    if (!canEditLastUser || !lastUser) return;
+    setEditingLastUser(true);
+    setEditDraft(messagePlainText(lastUser));
+  }, [canEditLastUser, lastUser]);
+
+  const cancelEditLastUser = useCallback(() => {
+    setEditingLastUser(false);
+    setEditDraft("");
+  }, []);
+
+  const submitEditLastUser = useCallback(() => {
+    const next = editDraft.trim();
+    if (!next || !onEditLastUser || busy) return;
+    setEditingLastUser(false);
+    setEditDraft("");
+    onEditLastUser(next);
+  }, [busy, editDraft, onEditLastUser]);
 
   const onComposerKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (paletteRows.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
@@ -287,13 +506,29 @@ export function CliThread({
         <ThreadPrimitive.Messages>
           {({ message }) => {
             const ui = messages.find((m) => m.id === message.id);
-            const isLast =
-              !!ui && ui.role === "assistant" && ui.id === messages[messages.length - 1]?.id;
+            const isLastAssistant =
+              !!ui && ui.role === "assistant" && ui.id === lastAssistant?.id;
+            const isLastUser = !!ui && lastUserIndex >= 0 && ui.id === lastUser?.id;
             return (
               <CliMessage
                 role={message.role}
                 uiMessage={ui}
-                isStreaming={busy && isLast}
+                isStreaming={busy && isLastAssistant}
+                isLastAssistant={isLastAssistant}
+                isLastUser={isLastUser}
+                editingLastUser={editingLastUser}
+                editDraft={editDraft}
+                onEditDraftChange={setEditDraft}
+                onSubmitEdit={submitEditLastUser}
+                onCancelEdit={cancelEditLastUser}
+                allowTurnMutation={allowTurnMutation}
+                canRegenerate={canRegenerate}
+                canEditLastUser={canEditLastUser}
+                canExportThread={canExportThread}
+                onCopy={onCopy}
+                onExportThread={onExportThread}
+                onBeginEdit={onEditLastUser ? beginEditLastUser : undefined}
+                onRegenerate={onRegenerate}
               />
             );
           }}
@@ -346,6 +581,8 @@ export function CliThread({
           </div>
         ) : null}
       </ThreadPrimitive.Viewport>
+
+      {belowViewportSlot}
 
       {formReplacement ?? (
         <>

@@ -79,11 +79,14 @@ returns **409 `would_truncate`** if a PUT would drop existing rows unless
 `src/components/assistant-ui/cli-thread.tsx`): `@ai-sdk/react` with
 `AssistantChatTransport` (`@assistant-ui/ai-sdk`) pointed at `POST /api/chat`.
 Sends `X-Digichat-Session` so upstream digigraph can correlate the same
-conversation across turns. `/embed` renders `CliThread` (CLI-skinned
-assistant-ui primitives). First-party `/chat` still owns regen/edit chrome in
-`ChatPanel` wrapped by `AssistantRuntimeProvider`. Scroll stick-to-bottom with a
-"New messages" chip when scrolled up. Copy, Regenerate, and Edit-last-user
-actions on bubbles (first-party is always digigraph).
+conversation across turns. **Both** `/embed` and first-party `/chat` render
+`CliThread` (CLI-skinned assistant-ui primitives). `ChatPanel` is the
+first-party host: transport, BYOK headers, persistence callbacks, extra slash
+(`/clear`, `/history`, `/scope`, `/model`). Regen and edit-last-user live on
+`CliThread` and send `X-Digi-Turn-Mode` via `src/lib/pending-chat-headers.ts`
+(force-tool stays send-only). Embed uses the same chrome when
+`allowClientTurnMutation` is true. Copy / thread markdown export are on the
+shared action bar.
 
 **Conversation persistence** (`src/lib/thread-local.ts`, `src/lib/conversations-repo.ts`):
 Dual-path. `localStorage` is always written (versioned blob `{ v: 1, threads: [...] }`
