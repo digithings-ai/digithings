@@ -7,11 +7,9 @@ describe("jobsForCron", () => {
     expect(jobs.map((j) => j.id)).toEqual(["research-metrics"]);
   });
 
-  it("supports one cron → N jobs (house-run + twelve-x new_york)", () => {
+  it("keeps twelve-x new_york on weekday-only cron", () => {
     const jobs = jobsForCron("17 12 * * MON-FRI");
-    expect(jobs.map((j) => j.id).sort()).toEqual(
-      ["house-run-12", "twelve-x-new-york"].sort(),
-    );
+    expect(jobs.map((j) => j.id)).toEqual(["twelve-x-new-york"]);
   });
 
   it("returns empty for unknown cron", () => {
@@ -54,9 +52,16 @@ describe("jobsForCron", () => {
     }
   });
 
-  it("keeps an explicit Sunday house run for the weekly full refresh", () => {
-    expect(jobsForCron("17 12 * * SUN").map((job) => job.id)).toContain(
-      "house-run-sun",
-    );
+  it("runs house research/portfolio retries every day without a Sunday special", () => {
+    for (const [id, cron] of [
+      ["house-run-09", "17 9 * * *"],
+      ["house-run-10", "17 10 * * *"],
+      ["house-run-11", "17 11 * * *"],
+      ["house-run-12", "17 12 * * *"],
+    ] as const) {
+      expect(jobsForCron(cron).map((job) => job.id)).toEqual([id]);
+    }
+    expect(JOBS.some((job) => job.id === "house-run-sun")).toBe(false);
+    expect(jobsForCron("17 12 * * SUN")).toEqual([]);
   });
 });
