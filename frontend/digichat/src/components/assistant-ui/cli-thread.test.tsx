@@ -8,6 +8,7 @@ import type { UIMessage } from "ai";
 const sendMessage = vi.fn();
 let mockMessages: UIMessage[] = [];
 let mockStatus = "ready";
+const setMessages = vi.fn();
 
 vi.mock("@assistant-ui/ai-sdk", () => ({
   useAISDKChat: () => ({
@@ -15,7 +16,7 @@ vi.mock("@assistant-ui/ai-sdk", () => ({
     status: mockStatus,
     sendMessage,
     stop: vi.fn(),
-    setMessages: vi.fn(),
+    setMessages,
   }),
 }));
 
@@ -76,6 +77,7 @@ describe("CliThread", () => {
     mockMessages = [];
     mockStatus = "ready";
     sendMessage.mockReset();
+    setMessages.mockReset();
   });
 
   it("renders the empty hint and CLI composer", () => {
@@ -100,12 +102,28 @@ describe("CliThread", () => {
     expect(screen.getByText("Add your API key (/byok)")).toBeTruthy();
   });
 
-  it("lists slash commands when the composer starts with /", async () => {
+  it("lists public slash copy without private names (#3418)", async () => {
     const user = userEvent.setup();
     render(<CliThread slashVisibility={{ webSearch: true, byok: true }} />);
     await user.type(screen.getByPlaceholderText("ask digichat"), "/");
     expect(screen.getByLabelText("Slash commands")).toBeTruthy();
     expect(screen.getByText("Search the knowledge base")).toBeTruthy();
+    expect(screen.getByText("Vault")).toBeTruthy();
+    expect(screen.getByText("Web search")).toBeTruthy();
+    expect(screen.getByText("Settings")).toBeTruthy();
+    expect(screen.queryByText(/digisearch/i)).toBeNull();
+    expect(screen.queryByText(/datatap/i)).toBeNull();
+  });
+
+  it("navigates the palette with ArrowUp/Down and Enter (#3556)", async () => {
+    const user = userEvent.setup();
+    render(<CliThread />);
+    const box = screen.getByPlaceholderText("ask digichat");
+    await user.type(box, "/");
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{Enter}");
+    expect((box as HTMLTextAreaElement).value).toBe("/vault ");
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it("lets onSendRequest swallow a plain question", async () => {
@@ -123,6 +141,65 @@ describe("CliThread", () => {
     render(<CliThread onSendRequest={onSendRequest} />);
     await user.type(screen.getByPlaceholderText("ask digichat"), "/search jwt{Enter}");
     expect(onSendRequest).toHaveBeenCalledWith("jwt", { forceTool: "digisearch" });
+  });
+
+  it("empty /search waits instead of sending", async () => {
+    const onSendRequest = vi.fn(() => true);
+    const user = userEvent.setup();
+    render(<CliThread onSendRequest={onSendRequest} />);
+    const box = screen.getByPlaceholderText("ask digichat");
+    await user.type(box, "/search{Enter}");
+    expect(onSendRequest).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect((box as HTMLTextAreaElement).value).toBe("/search ");
+  });
+
+  it("/search sends the tool argument with no model hint", async () => {
+    const onSendRequest = vi.fn(() => true);
+    const user = userEvent.setup();
+    render(<CliThread onSendRequest={onSendRequest} />);
+    await user.type(
+      screen.getByPlaceholderText("ask digichat"),
+      "/search RS256 token exchange{Enter}",
+    );
+    expect(onSendRequest).toHaveBeenCalledWith("RS256 token exchange", {
+      forceTool: "digisearch",
+    });
+    const [arg] = onSendRequest.mock.calls[0];
+    expect(arg).not.toMatch(/please/i);
+  });
+
+  it("/lang switches language client-side and does not send", async () => {
+    const onLanguageChange = vi.fn();
+    const onSendRequest = vi.fn(() => true);
+    const user = userEvent.setup();
+    render(
+      <CliThread onLanguageChange={onLanguageChange} onSendRequest={onSendRequest} />,
+    );
+    await user.type(screen.getByPlaceholderText("ask digichat"), "/lang de{Enter}");
+    expect(onLanguageChange).toHaveBeenCalledWith("de");
+    expect(onSendRequest).not.toHaveBeenCalled();
+    expect(screen.getByText(/Language set to de/i)).toBeTruthy();
+  });
+
+  it("/byok and /settings call host hooks (#3556)", async () => {
+    const onByok = vi.fn();
+    const onOpenSettings = vi.fn();
+    const user = userEvent.setup();
+    render(<CliThread onByok={onByok} onOpenSettings={onOpenSettings} />);
+    await user.type(screen.getByPlaceholderText("ask digichat"), "/byok{Enter}");
+    expect(onByok).toHaveBeenCalled();
+    await user.type(screen.getByPlaceholderText("ask digichat"), "/settings{Enter}");
+    expect(onOpenSettings).toHaveBeenCalled();
+  });
+
+  it("/new clears via onReset", async () => {
+    const onReset = vi.fn();
+    const user = userEvent.setup();
+    render(<CliThread onReset={onReset} />);
+    await user.type(screen.getByPlaceholderText("ask digichat"), "/new{Enter}");
+    expect(onReset).toHaveBeenCalled();
+    expect(setMessages).not.toHaveBeenCalled();
   });
 
   it("shows regen/edit when turn mutation is allowed", async () => {

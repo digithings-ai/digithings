@@ -521,8 +521,8 @@ live key). All three call sites (`chat-panel.tsx`, `embed/embed-client.tsx`,
 latter pair independently of `active`/`isSet`.
 
 UX is a stepwise terminal sequence rendered **inline in the chat transcript**
-(DigiChatSession `settingsPanel` slot inside `.dc-thread`, and the app shell
-`ChatPanel` when `/key` opens BYOK mode):
+(CliThread `settingsPanel` slot, and the app shell `ChatPanel` when `/key`
+opens BYOK mode):
 
 1. Select provider (arrow keys + Enter, or click) — pre-selected from
    `initialProvider` above when set
@@ -818,7 +818,7 @@ tenant registry theme.
 `digichat:ready`, `ChatEmbedShell` posts
 `{ type: "digichat:parent-error", code: "ready_timeout"|"embed_unloadable", ts }`
 into the iframe (same first-party allowlist as seed/theme). The embed formats a
-CLI-style DigiChatSession transcript line (`error: …` via
+CLI-style CliThread error line (`error: …` via
 `formatParentErrorLine` in `src/lib/embed-parent-error-messages.ts`) — no
 parent-page banner. If the iframe never loads, the shell shows the same line in
 the iframe slot. Copy references `DIGICHAT_EMBED_ORIGIN` / Containers (not the

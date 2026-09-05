@@ -38,7 +38,7 @@ export type EmbedTenantClientConfig = {
   webSearch?: boolean;
   /**
    * Discriminator only — never project Foundry endpoints / digigraph URLs.
-   * DigiChatSession uses this to enable regenerate/edit when the BFF turn
+   * CliThread uses this to enable regenerate/edit when the BFF turn
    * mutation API is available (#3475).
    */
   backendType?: "digigraph" | "foundry";

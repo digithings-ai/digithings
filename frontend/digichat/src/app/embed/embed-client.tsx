@@ -587,7 +587,7 @@ function EmbedChat({
 
   const [seedApplied, setSeedApplied] = useState(false);
   const [hideIntroForSeed, setHideIntroForSeed] = useState(false);
-  /** Parent handshake/load failures — DigiChatSession `.dtc-error` transcript lines. */
+  /** Parent handshake/load failures — CliThread error transcript lines. */
   const [handshakeError, setHandshakeError] = useState<string | null>(null);
 
   // Same first-party allowlist as digichat:seed / digichat:theme.

@@ -2,7 +2,7 @@
   "name": "@digithings/digichat-ui",
   "version": "0.1.0",
   "private": true,
-  "description": "Shared digichat terminal session UI — used by digithings-web /chat and digichat /embed.",
+  "description": "Shared digichat CSS, slash helpers, activities, and brand marks — digichat 2.0 UI is CliThread in frontend/digichat; parents iframe /embed.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",

@@ -14,7 +14,7 @@
 
 digichat is a **modular frontend + BFF**:
 
-1. **Shared UI** — `@digithings/digichat-ui` CSS + `ChatActivities`; digichat 2.0 `/chat` and `/embed` render through assistant-ui (`CliThread`). `DigiChatSession` remains for digithings-web until that surface migrates.
+1. **Shared UI** — `@digithings/digichat-ui` CSS + `ChatActivities` + slash/markdown helpers; digichat 2.0 `/chat` and `/embed` render through assistant-ui (`CliThread`). Parents (digithings-web, dashboard, `widget.js`) iframe `/embed`. `DigiChatSession` was removed in 2.0.
 2. **Activity contract** — `ActivitySpan` → `DigiChatActivity`; server-side `activityDetail` gate
 3. **Tenant registry** — `DIGICHAT_EMBED_TENANTS` (hostname → branding + policy + backend)
 4. **Provider adapters** — translate backend wire formats into the activity vocabulary

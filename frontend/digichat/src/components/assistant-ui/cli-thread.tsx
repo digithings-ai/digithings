@@ -468,7 +468,15 @@ export function CliThread({
     if (paletteRows.length && e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       const row = paletteRows[paletteIndex] ?? paletteRows[0];
-      if (row) setDraft(row.fill);
+      if (!row) return;
+      // Exact command already typed — run it instead of re-filling the draft.
+      const typed = draft.trim();
+      if (typed === row.cmd || typed === row.fill.trim()) {
+        setDraft("");
+        handleSlash(typed);
+        return;
+      }
+      setDraft(row.fill);
       return;
     }
     if (e.key === "Enter" && !e.shiftKey) {

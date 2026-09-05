@@ -178,7 +178,7 @@ type UseEmbedDigiChatOptions = {
    */
   getEnableWebSearch?: () => boolean;
   /**
-   * When false, omit regenerate/editLastUser so DigiChatSession hides the
+   * When false, omit regenerate/editLastUser so CliThread hides the
    * chrome. Digigraph and Foundry both support turn mutation once the BFF
    * sends X-Digi-Turn-Mode (#3475). Default true for digigraph-first callers.
    */
