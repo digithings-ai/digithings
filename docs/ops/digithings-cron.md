@@ -2,7 +2,8 @@
 
 Production schedules for digithings-ai no longer rely on GitHub Actions
 `on: schedule`. The Cloudflare Worker **digithings-cron** owns the clocks and
-dispatches workflows on `ref: main`.
+dispatches workflow runs on the default `develop` branch. Individual workflows
+retain their own release and safety gates.
 
 Canonical package + deploy docs:
 

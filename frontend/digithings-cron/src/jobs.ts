@@ -2,6 +2,7 @@
  * Typed job map for digithings-cron.
  * Each enabled job.cron must appear in wrangler.toml [triggers] crons.
  */
+import { AT_OPEN_EDT_CRON, AT_OPEN_EST_CRON } from "./et-open";
 
 export type Job = {
   id: string;
@@ -11,14 +12,14 @@ export type Job = {
   workflow?: string;
   inputs?: Record<string, string>;
   event_type?: string;
-  ref: "main";
+  ref?: "develop" | "main";
   etOpenGate?: boolean;
   enabled: boolean;
 };
 
 const DIGITHINGS = "digithings-ai/digithings" as const;
 const TWELVE_X = "digithings-ai/twelve-x" as const;
-const MAIN = "main" as const;
+const DEVELOP = "develop" as const;
 
 function wd(
   id: string,
@@ -38,7 +39,7 @@ function wd(
     kind: "workflow_dispatch",
     workflow,
     inputs: opts.inputs,
-    ref: MAIN,
+    ref: DEVELOP,
     etOpenGate: opts.etOpenGate,
     enabled: opts.enabled ?? true,
   };
@@ -57,7 +58,6 @@ function rd(
     repo,
     kind: "repository_dispatch",
     event_type,
-    ref: MAIN,
     enabled: opts.enabled ?? true,
   };
 }
@@ -65,36 +65,38 @@ function rd(
 /** All org production clocks. Source of truth alongside wrangler [triggers]. */
 export const JOBS: readonly Job[] = [
   // --- digithings: digiquant prices ---
-  wd("prices-at-open-13", "40 13 * * 1-5", DIGITHINGS, "pipeline-digiquant-prices.yml", {
+  wd("prices-at-open-13", AT_OPEN_EDT_CRON, DIGITHINGS, "pipeline-digiquant-prices.yml", {
     inputs: { mode: "at-open" },
     etOpenGate: true,
   }),
-  wd("prices-at-open-14", "40 14 * * 1-5", DIGITHINGS, "pipeline-digiquant-prices.yml", {
+  wd("prices-at-open-14", AT_OPEN_EST_CRON, DIGITHINGS, "pipeline-digiquant-prices.yml", {
     inputs: { mode: "at-open" },
     etOpenGate: true,
   }),
   wd(
     "prices-intraday",
-    "7,22,37,52 13-21 * * 1-5",
+    "7,22,37,52 13-21 * * MON-FRI",
     DIGITHINGS,
     "pipeline-digiquant-prices.yml",
     { inputs: { mode: "intraday" } },
   ),
-  wd("prices-fx-refresh", "19 */2 * * 1-5", DIGITHINGS, "pipeline-digiquant-prices.yml", {
+  wd("prices-fx-refresh", "19 */2 * * MON-FRI", DIGITHINGS, "pipeline-digiquant-prices.yml", {
     inputs: { mode: "fx-refresh" },
   }),
   wd("prices-fx-refresh-sun", "19 22 * * SUN", DIGITHINGS, "pipeline-digiquant-prices.yml", {
     inputs: { mode: "fx-refresh" },
   }),
-  wd("prices-eod-macro", "27 21 * * 1-5", DIGITHINGS, "pipeline-digiquant-prices.yml", {
+  wd("prices-eod-macro", "27 21 * * MON-FRI", DIGITHINGS, "pipeline-digiquant-prices.yml", {
     inputs: { mode: "eod-macro" },
   }),
 
   // --- digithings: house-run via leftover event id "olympus-daily" ---
-  rd("house-run-09", "17 9 * * 1-5", DIGITHINGS, "olympus-daily"),
-  rd("house-run-10", "17 10 * * 1-5", DIGITHINGS, "olympus-daily"),
-  rd("house-run-11", "17 11 * * 1-5", DIGITHINGS, "olympus-daily"),
-  rd("house-run-12", "17 12 * * 1-5", DIGITHINGS, "olympus-daily"),
+  rd("house-run-09", "17 9 * * MON-FRI", DIGITHINGS, "olympus-daily"),
+  rd("house-run-10", "17 10 * * MON-FRI", DIGITHINGS, "olympus-daily"),
+  rd("house-run-11", "17 11 * * MON-FRI", DIGITHINGS, "olympus-daily"),
+  rd("house-run-12", "17 12 * * MON-FRI", DIGITHINGS, "olympus-daily"),
+  // Sunday preserves pipeline-digiquant.yml's weekly refresh_scope="all".
+  rd("house-run-sun", "17 12 * * SUN", DIGITHINGS, "olympus-daily"),
 
   wd("research-metrics", "5 22 * * *", DIGITHINGS, "pipeline-research-metrics.yml"),
   wd("tearsheets", "12 0 * * *", DIGITHINGS, "pipeline-digiquant-tearsheets.yml"),
@@ -108,16 +110,16 @@ export const JOBS: readonly Job[] = [
     DIGITHINGS,
     "pipeline-continuous-improvement.yml",
   ),
-  wd("maintenance", "8 8 * * 1", DIGITHINGS, "pipeline-maintenance.yml"),
+  wd("maintenance", "8 8 * * MON", DIGITHINGS, "pipeline-maintenance.yml"),
   wd("provider-review", "9 0 * * SUN", DIGITHINGS, "pipeline-provider-review.yml"),
   // dry_run must be false: workflow defaults dispatch to dry_run=true and only
   // forced live on the old GHA schedule event.
   wd("agent-pr-finalizer", "11 7 * * *", DIGITHINGS, "agent-pr-finalizer.yml", {
     inputs: { dry_run: "false" },
   }),
-  wd("agent-backlog-snapshot", "13 6 * * 1", DIGITHINGS, "agent-backlog-snapshot.yml"),
+  wd("agent-backlog-snapshot", "13 6 * * MON", DIGITHINGS, "agent-backlog-snapshot.yml"),
   wd("ci-pr-hygiene", "21 6 * * *", DIGITHINGS, "ci-pr-hygiene.yml"),
-  wd("refresh-repo-activity", "10 6 * * 1", DIGITHINGS, "refresh-repo-activity.yml"),
+  wd("refresh-repo-activity", "10 6 * * MON", DIGITHINGS, "refresh-repo-activity.yml"),
   wd(
     "project-enforce-assignment",
     "23 9 * * *",
@@ -125,31 +127,31 @@ export const JOBS: readonly Job[] = [
     "project-enforce-assignment.yml",
   ),
   wd("smoke-stack", "27 7 * * *", DIGITHINGS, "smoke-stack.yml"),
-  wd("security-pip-audit", "33 6 * * 1", DIGITHINGS, "security-pip-audit.yml"),
+  wd("security-pip-audit", "33 6 * * MON", DIGITHINGS, "security-pip-audit.yml"),
   wd("smoke-site", "17 6 * * *", DIGITHINGS, "smoke-site.yml"),
 
   // --- twelve-x (FX Hub); schedule removal is a follow-up in that repo ---
-  wd("twelve-x-asia", "7 0 * * 1-5", TWELVE_X, "daily_run_asia.yml"),
-  wd("twelve-x-london", "12 7 * * 1-5", TWELVE_X, "daily_run_london.yml"),
-  // Shares cron "17 12 * * 1-5" with house-run-12 (1 cron → N jobs).
-  wd("twelve-x-new-york", "17 12 * * 1-5", TWELVE_X, "daily_run_new_york.yml"),
+  wd("twelve-x-asia", "7 0 * * MON-FRI", TWELVE_X, "daily_run_asia.yml"),
+  wd("twelve-x-london", "12 7 * * MON-FRI", TWELVE_X, "daily_run_london.yml"),
+  // Shares cron "17 12 * * MON-FRI" with house-run-12 (1 cron → N jobs).
+  wd("twelve-x-new-york", "17 12 * * MON-FRI", TWELVE_X, "daily_run_new_york.yml"),
   wd("twelve-x-market-context-intraday", "4 */4 * * *", TWELVE_X, "market_context_ingest.yml", {
     inputs: { bucket: "intraday" },
   }),
   wd("twelve-x-market-context-daily", "30 5 * * *", TWELVE_X, "market_context_ingest.yml", {
     inputs: { bucket: "daily" },
   }),
-  wd("twelve-x-market-context-weekly", "8 7 * * 6", TWELVE_X, "market_context_ingest.yml", {
+  wd("twelve-x-market-context-weekly", "8 7 * * SAT", TWELVE_X, "market_context_ingest.yml", {
     inputs: { bucket: "weekly" },
   }),
-  wd("twelve-x-performance-eval", "30 17 * * 1-5", TWELVE_X, "performance_eval.yml"),
+  wd("twelve-x-performance-eval", "30 17 * * MON-FRI", TWELVE_X, "performance_eval.yml"),
   wd(
     "twelve-x-primemarket-heartbeat",
     "3 6,18 * * *",
     TWELVE_X,
     "primemarket_session_heartbeat.yml",
   ),
-  wd("twelve-x-session-catchup", "52 * * * 1-5", TWELVE_X, "session_catchup.yml"),
+  wd("twelve-x-session-catchup", "52 * * * MON-FRI", TWELVE_X, "session_catchup.yml"),
 ];
 
 /** Exact cron-string match; one trigger may map to multiple jobs. */

@@ -13,7 +13,7 @@ const baseJob: Job = {
   repo: "digithings-ai/digithings",
   kind: "workflow_dispatch",
   workflow: "pipeline-research-metrics.yml",
-  ref: "main",
+  ref: "develop",
   enabled: true,
 };
 
@@ -84,16 +84,34 @@ describe("dispatch", () => {
     await expect(dispatch(env, baseJob, baseJob.cron)).rejects.toThrow(/403/);
   });
 
+  it("retries rate limits instead of reporting success", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("secondary rate limit", {
+          status: 429,
+          headers: { "Retry-After": "0" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+
+    const result = await dispatch(env, baseJob, baseJob.cron);
+
+    expect(result.status).toBe(204);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("POSTs repository_dispatch body", async () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
     const job: Job = {
       id: "house-run-09",
-      cron: "17 9 * * 1-5",
+      cron: "17 9 * * MON-FRI",
       repo: "digithings-ai/digithings",
       kind: "repository_dispatch",
       event_type: "olympus-daily",
-      ref: "main",
       enabled: true,
     };
     const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };

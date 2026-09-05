@@ -71,8 +71,9 @@ jobs:
           # Commit messages on develop past 7d (for simplify-findings / conventions)
           git log --since="7 days ago" origin/develop --format="=== %h %s%n%b%n" > /tmp/digest/commits.txt || true
 
-          # Failed scheduled runs past 7d (workflow health input)
-          gh api "/repos/$REPO/actions/runs?status=failure&event=schedule&created=>=$SINCE&per_page=100" \
+          # Failed automation runs past 7d. Production clocks now arrive as
+          # workflow_dispatch / repository_dispatch from digithings-cron.
+          gh api "/repos/$REPO/actions/runs?status=failure&created=>=$SINCE&per_page=100" \
             --jq '[.workflow_runs[] | {name, url: .html_url, at: .created_at}]' \
             > /tmp/digest/workflow-failures.json 2>/dev/null || echo "[]" > /tmp/digest/workflow-failures.json
 
