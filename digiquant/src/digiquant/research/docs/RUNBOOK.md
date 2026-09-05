@@ -564,7 +564,7 @@ healthy day; the banner is now telling the truth.
 
 `Report pipeline outcome` now fires on `failure() || cancelled()`. A job that blows the
 240-minute `timeout-minutes` is *cancelled*, not failed, so before #1733/#1763 nothing was
-reported at all. Look for the rolling **`olympus-daily-cancelled`** issue; its **Chain
+reported at all. Look for the rolling **`digiquant-daily-cancelled`** issue; its **Chain
 outcome** line carries the last JSON summary found in `artifacts/run.log`, or
 `(no structured outcome recorded)` when the run died before printing one.
 <!-- #1766 -->
