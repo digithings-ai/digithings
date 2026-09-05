@@ -9,6 +9,11 @@
  * digichat tenant registry (`DIGICHAT_EMBED_TENANTS` for digiquant.io) — not here.
  */
 
+import {
+  extractPageContext as extractPageContextShared,
+  extractPageHtml as extractPageHtmlShared,
+  sanitizePageHtml as sanitizePageHtmlShared,
+} from '../../digichat/src/lib/page-context-sanitize'; // canonical allowlist (#3602)
 import { can, type PlanTier } from './entitlements';
 
 export type { PlanTier };
@@ -224,85 +229,39 @@ export function readDocumentTheme(
 
 export function extractVisiblePageText(
   maxChars = PAGE_CONTEXT_MAX_CHARS,
-  bodyText: string | null | undefined =
-    typeof document !== 'undefined' ? document.body?.innerText : '',
+  bodyText?: string | null,
 ): string {
-  return (bodyText ?? '').replace(/\s+/g, ' ').trim().slice(0, maxChars);
+  if (bodyText !== undefined) {
+    return (bodyText ?? '').replace(/\s+/g, ' ').trim().slice(0, maxChars);
+  }
+  return extractPageContextShared(undefined, PAGE_CONTEXT_HTML_MAX_CHARS, maxChars).text;
 }
 
-/**
- * Strip scripts/styles/handlers and truncate. Display as text in the embed
- * preview — never re-hydrate as live DOM. Also drops hidden/password controls
- * and input values so HTML context matches the “already visible” text rule.
- */
+/** Structural allowlist — same walk as digichat `page-context-sanitize.ts`. */
 export function sanitizePageHtml(
   raw: string,
   maxChars = PAGE_CONTEXT_HTML_MAX_CHARS,
 ): string {
-  let s = raw
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
-    // hidden / password fields are not “visible text”
-    .replace(/<input\b[^>]*\btype\s*=\s*(['"]?)(?:hidden|password)\1[^>]*>/gi, '')
-    .replace(/<input\b[^>]*>/gi, (tag) =>
-      tag.replace(/\svalue\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, ''),
-    )
-    .replace(
-      /<textarea\b[^>]*>[\s\S]*?<\/textarea>/gi,
-      (tag) => tag.replace(/>[\s\S]*?</, '><'),
-    )
-    // handlers may appear after whitespace or `/` (`<svg/onload=…>`)
-    .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/([</])on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '$1')
-    .replace(/(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, '$1=$2#$2')
-    .replace(/(href|src)\s*=\s*javascript:[^\s>]*/gi, '$1=#')
-    .replace(/<\/?(?:iframe|object|embed|link|meta|base|noscript)\b[^>]*>/gi, '');
-  s = s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-  return s.slice(0, maxChars);
+  return sanitizePageHtmlShared(raw, maxChars);
 }
 
-type PageHtmlDoc = {
-  querySelector(selectors: string): { cloneNode(deep?: boolean): unknown } | null;
-  body?: { cloneNode(deep?: boolean): unknown } | null;
-};
+export function extractPageContext(
+  maxHtml = PAGE_CONTEXT_HTML_MAX_CHARS,
+  maxText = PAGE_CONTEXT_MAX_CHARS,
+): { html: string; text: string } {
+  return extractPageContextShared(undefined, maxHtml, maxText);
+}
 
 /**
- * Prefer `main` / `[role=main]`, else `body`. Drops the popup chrome so the
- * model does not see its own launcher markup.
+ * Prefer `main` / `[role=main]`, else `body`. Live computed-style walk so
+ * CSS-hidden nodes never enter the payload (#3602).
  */
 export function extractPageHtml(
   maxChars = PAGE_CONTEXT_HTML_MAX_CHARS,
-  doc: PageHtmlDoc | null | undefined =
+  doc: Document | null | undefined =
     typeof document !== 'undefined' ? document : null,
 ): string {
-  if (!doc) return '';
-  const root =
-    doc.querySelector('main') ??
-    doc.querySelector('[role="main"]') ??
-    doc.body ??
-    null;
-  if (!root) return '';
-  const clone = root.cloneNode(true) as {
-    querySelectorAll?(sel: string): Iterable<{ remove(): void }>;
-    innerHTML?: string;
-  };
-  if (clone.querySelectorAll) {
-    for (const el of clone.querySelectorAll('[data-digichat-popup]')) {
-      el.remove();
-    }
-    for (const el of clone.querySelectorAll(
-      'input[type="hidden"], input[type="password"], input[type=hidden], input[type=password]',
-    )) {
-      el.remove();
-    }
-    for (const el of clone.querySelectorAll('input, textarea')) {
-      const input = el as { removeAttribute?(n: string): void; textContent?: string | null };
-      input.removeAttribute?.('value');
-      if ('textContent' in input) input.textContent = '';
-    }
-  }
-  return sanitizePageHtml(clone.innerHTML ?? '', maxChars);
+  return extractPageHtmlShared(maxChars, doc ?? null);
 }
 
 export function buildPageContextMessage(
@@ -327,8 +286,11 @@ export function buildPageContextMessage(
     html?: string;
     screenshotDataUrl?: string;
   } = { type: DIGICHAT_PAGE_CONTEXT, text, ts };
-  const html = opts?.html?.trim();
-  if (html) payload.html = html.slice(0, PAGE_CONTEXT_HTML_MAX_CHARS);
+  const htmlRaw = opts?.html?.trim();
+  if (htmlRaw) {
+    const html = sanitizePageHtml(htmlRaw, PAGE_CONTEXT_HTML_MAX_CHARS);
+    if (html) payload.html = html;
+  }
   if (opts?.screenshotDataUrl) payload.screenshotDataUrl = opts.screenshotDataUrl;
   return payload;
 }

@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment happy-dom
+ */
 import { describe, expect, it } from 'vitest';
 import {
   buildDigichatEmbedSrc,
@@ -202,32 +205,29 @@ describe('page context + theme helpers', () => {
     expect(clean).not.toContain('onload');
   });
 
-  it('caps HTML length', () => {
-    const long = `<div>${'y'.repeat(PAGE_CONTEXT_HTML_MAX_CHARS + 40)}</div>`;
-    expect(sanitizePageHtml(long).length).toBe(PAGE_CONTEXT_HTML_MAX_CHARS);
+  it('drops nested hidden regions the regex scrubber used to miss', () => {
+    const clean = sanitizePageHtml(
+      '<p>Visible</p><div hidden><span>HIDDEN-NESTED</span></div>',
+    );
+    expect(clean).toContain('Visible');
+    expect(clean).not.toContain('HIDDEN-NESTED');
   });
 
-  it('extracts main HTML from a document-like root', () => {
-    const html = extractPageHtml(200, {
-      querySelector(sel: string) {
-        if (sel === 'main') {
-          return {
-            cloneNode() {
-              return {
-                querySelectorAll() {
-                  return [];
-                },
-                innerHTML: '<h1>Brief</h1><p>House book</p>',
-              };
-            },
-          };
-        }
-        return null;
-      },
-      body: null,
-    });
+  it('caps HTML length without slicing mid-tag', () => {
+    const long = `<div>${'y'.repeat(PAGE_CONTEXT_HTML_MAX_CHARS + 40)}</div>`;
+    const clean = sanitizePageHtml(long);
+    expect(clean.length).toBeLessThanOrEqual(PAGE_CONTEXT_HTML_MAX_CHARS);
+    expect(clean).not.toMatch(/<[^>]*$/);
+  });
+
+  it('extracts main HTML from a live document', () => {
+    document.body.innerHTML =
+      '<header>chrome</header><main><h1>Brief</h1><p>House book</p></main>';
+    const html = extractPageHtml(200);
     expect(html).toContain('<h1>Brief</h1>');
     expect(html).toContain('House book');
+    expect(html).not.toContain('chrome');
+    document.body.innerHTML = '';
   });
 
   it('builds page-context and theme postMessage payloads with optional html', () => {
