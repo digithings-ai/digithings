@@ -202,8 +202,11 @@ export default function Home() {
           <div className="wrap">
             <Reveal className="section-head center">
               <span className="kicker">{"// the architecture"}</span>
-              {/* nowrap from md up so the claim holds one line; it still wraps on
-                  phones, where forcing one line would shrink it to nothing.
+              {/* No nowrap here: the head is 56ch wide and the headline at full
+                  clamp size is wider, so forcing one line overflows the box to
+                  the right and reads off-center (text-align:center anchors
+                  overflowing nowrap text at the left edge). It wraps to two
+                  centered lines instead.
                   "Nine", not "Eleven" (full-UI-suite critique, P2): the
                   #metrics section one screen above states, and the odometer
                   literally renders, "9" shipped modules — a scanning reader
@@ -213,7 +216,7 @@ export default function Home() {
                   The 9-shipped/2-roadmap split already lives in the body copy
                   below; the headline now matches the number it is standing
                   next to. */}
-              <h2 className="md:whitespace-nowrap">Nine modules. One toolkit.</h2>
+              <h2 className="text-balance">Nine modules. One toolkit.</h2>
               <p>
                 The nine that ship run standalone or compose with the rest — retrieval, quant
                 research and chat, plus the auth, tracing and audit any deployment needs. Two more
