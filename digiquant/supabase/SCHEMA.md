@@ -1088,6 +1088,20 @@ authenticated workspace policies. Migration **117** addresses that pile only:
 - Unused indexes / unindexed FKs / RLS-enabled-no-policy service-role tables — out of
   scope for this pass.
 
+### knowledge_notes vault namespace — migration 118 (#1142 / #3603)
+
+`public.knowledge_notes` is the digivault finance KB (live table predates the numbered
+chain as 20260625 / #1087). Migration **118** brings it into the chain:
+
+| Column / constraint | Policy |
+|---------------------|--------|
+| `vault text not null default 'finance'` | Namespace so one table holds multiple corpora. `COMMENT ON COLUMN` runs **after** `ADD COLUMN` so a pre-118 table does not abort. |
+| `UNIQUE (vault, vault_path)` | The only uniqueness. Duplicate filename stems in different directories are legal (filesystem vault `_duplicates`). **Do not** add `UNIQUE (vault, slug)` — live rows already have that shape and the index build aborts the whole file (and every later migration) under `psql --single-transaction`. |
+| `knowledge_notes_set_updated_at` | Canonical on both the fresh `CREATE TABLE` path and the live upgrade path (117 already soft-alters the function when present). |
+| Grants | `REVOKE ALL` from `PUBLIC` / `anon` / `authenticated`; `GRANT` DML to `service_role`. RLS is on with no client policies. Privilege revoke is the defense if RLS is later disabled. |
+
+Proof: `tests/dq/dashboard/test_migration_118_knowledge_notes_vault.py` (parse checks plus executable Postgres against fresh, pre-118 + duplicate stems, replay, and client ACL).
+
 ## Grants (migration 060, #1757)
 
 RLS is not the only layer, and before migration 060 it was. Supabase's project bootstrap
