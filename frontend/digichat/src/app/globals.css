@@ -726,32 +726,6 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   border-radius: 0;
 }
 
-/* Popup page-context preview (#3581) — monospace “looking at” snippet, not live HTML. */
-.dc-page-context-preview {
-  margin: 0.5rem 0.75rem 0;
-  padding: 0.45rem 0.55rem;
-  border: 1px solid var(--hair);
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-  font-family: var(--font-mono);
-}
-.dc-page-context-preview__label {
-  margin: 0 0 0.3rem;
-  font-size: 0.62rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-.dc-page-context-preview__body {
-  margin: 0;
-  max-height: 4.8rem;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: 0.68rem;
-  line-height: 1.35;
-  color: var(--ink-soft, var(--ink-mute));
-}
-
 /* Opaque top bar — the imported app-shell-terminal sheet still paints a
    70% black wash that reads as glass. */
 .app-topbar {

@@ -225,16 +225,18 @@ Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment)
 
 ### digichat popup (Desk+ — #3422 / #3581 / #3587)
 
-Desk / Studio / Enterprise sessions see a bottom-right **compact Digi D-mark**
-launcher (Brief and Observer do not). Idle: square logo only. Hover/focus: mono
-**ask digichat** types out (mecha cursor). Open: label becomes **close**; click
-again dismisses. The panel top-right **expand** / **collapse** toggles a
-near-fullscreen overlay; Escape collapses first, then closes.
+Desk / Studio / Enterprise sessions see a bottom-right shared digiweb launcher
+(Brief and Observer do not). Idle is a 30px square compact terminal mark;
+hover/focus types `digichat` without changing its height or border. Clicking
+expands horizontally into a composer-height bar and then upward into the panel.
+The ×, Escape, and transparent outside-click backdrop reverse that expansion
+without blurring the dashboard. Closing hides rather than destroys the iframe,
+so the current conversation survives the next open.
 
 The panel iframes digichat `/embed?layout=embed` with page-context
 (`digichat:page-context`) for the visible dashboard DOM — sanitized **HTML**
-(preferred, ≤12k chars) plus visible text (≤8k). The embed shows a small
-“looking at this page” HTML preview; the model receives HTML+text via the existing
+(preferred, ≤12k chars) plus visible text (≤8k). Nothing is rendered for it in
+the panel (#3590); the model receives HTML+text via the existing
 prompt-prefix path (screenshot/vision multimodal deferred). Same contract as
 digichat `widget.js` (#3421), implemented in-React so CSP stays `script-src 'self'`.
 

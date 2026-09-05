@@ -43,6 +43,9 @@
    that <ChatMarkdown> (via SafeMarkdown) scopes around rendered documents
    and memo notes. */
 @import "@digithings/web/styles/chat-core.css";
+/* Standard square-to-panel digichat embed launcher. Token-only and self-
+   contained; the dashboard adapter supplies the iframe and context protocol. */
+@import "@digithings/web/styles/digichat-launcher.css";
 /* Controls layer (#1419/#1450) — dress + state machinery for the shared
    behavioral controls (twelve-x's BriefPanel rides the Sheet). Imported
    PLAINLY on purpose: the sheet manages its own @layer components /

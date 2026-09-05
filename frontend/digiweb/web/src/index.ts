@@ -71,6 +71,10 @@ export { DeckStack, DeckCard, type DeckStackProps, type DeckCardProps } from "./
 export { ChatTranscript, type ChatTranscriptProps } from "./components/chat/ChatTranscript";
 export { ChatMessage, type ChatMessageProps, type ChatRole, type ChatTone } from "./components/chat/ChatMessage";
 export { ChatStreamCursor, type ChatStreamCursorProps } from "./components/chat/ChatStreamCursor";
+export {
+  DigichatLauncher,
+  type DigichatLauncherProps,
+} from "./components/chat/DigichatLauncher";
 export { ChatMarkdown, type ChatMarkdownProps } from "./components/chat/ChatMarkdown";
 export {
   ChatMarkdownSource,

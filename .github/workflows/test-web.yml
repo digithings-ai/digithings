@@ -64,6 +64,15 @@ jobs:
       - name: Test @digithings/digichat-ui
         run: npm run test --workspace @digithings/digichat-ui
 
+      # digithings-cron owns production clocks formerly declared in workflow
+      # `schedule:` blocks. Its source and wrangler trigger map must stay typed
+      # and behavior-tested on every Worker change.
+      - name: Test digithings-cron
+        run: npm run test --workspace digithings-cron
+
+      - name: Typecheck digithings-cron
+        run: npm run typecheck --workspace digithings-cron
+
       - name: Lint digiquant-web
         run: npm run lint --workspace digiquant-web
 

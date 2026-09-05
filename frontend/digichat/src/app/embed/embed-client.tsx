@@ -82,7 +82,6 @@ import {
 } from "@/lib/embed-theme-messages";
 import {
   formatPageContextForPrompt,
-  formatPageContextPreview,
   parsePageContextMessage,
 } from "@/lib/embed-page-context-messages";
 
@@ -429,13 +428,11 @@ function EmbedChat({
   /** Visible-page context from popup widget (`digichat:page-context`); consumed once. */
   const pageContextRef = useRef<string | null>(null);
   const [pageContextAttached, setPageContextAttached] = useState(false);
-  const [pageContextPreview, setPageContextPreview] = useState<string | null>(null);
   const consumePageContextPrefix = useCallback((question: string): string => {
     const ctx = pageContextRef.current;
     if (!ctx) return question;
     pageContextRef.current = null;
     setPageContextAttached(false);
-    setPageContextPreview(null);
     return `${ctx}\n\n---\n\nUser question:\n${question}`;
   }, []);
 
@@ -683,7 +680,6 @@ function EmbedChat({
       if (!formatted) return;
       pageContextRef.current = formatted;
       setPageContextAttached(true);
-      setPageContextPreview(formatPageContextPreview(parsed) || null);
       setHandshakeError(null);
     };
     window.addEventListener("message", onMessage);
@@ -858,19 +854,7 @@ function EmbedChat({
   const headerAttribution = attributionAt === "header";
 
   // Language is `/lang` on the composer (#3418) — the top-right dropdown is gone.
-  const pageContextBanner =
-    pageContextAttached && pageContextPreview ? (
-      <aside
-        className="dc-page-context-preview"
-        aria-label="Page context preview"
-        data-page-context-preview="1"
-      >
-        <div className="dc-page-context-preview__label">looking at this page</div>
-        <pre className="dc-page-context-preview__body">{pageContextPreview}</pre>
-      </aside>
-    ) : null;
-
-  const brandHeader = headerTitle ? (
+  const headerSlot = headerTitle ? (
     <header className="dc-brand">
       <span>{headerTitle}</span>
       {headerAttribution ? (
@@ -889,14 +873,6 @@ function EmbedChat({
       ) : null}
     </header>
   ) : null;
-
-  const headerSlot =
-    pageContextBanner || brandHeader ? (
-      <>
-        {pageContextBanner}
-        {brandHeader}
-      </>
-    ) : null;
 
   const footerSlot = footerAttribution ? (
     <p className="dc-attribution">
