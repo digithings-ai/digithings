@@ -18,6 +18,7 @@ from digigraph.model_config import (
     is_native_search_only_model,
     is_tool_use_capable_model,
     is_web_search_capable_model,
+    resolve_request_model,
     sanitize_allowed_models,
     tier_allows_phase_model,
 )
@@ -188,6 +189,54 @@ def test_asset_analyst_slug_resolves_to_known_good_openrouter_model(
 
 
 @pytest.mark.unit
+@pytest.mark.unit
+def test_digiquant_research_config_never_uses_ollama_model_ids() -> None:
+    """House digiquant research pins must not be local ``ollama/`` ids.
+
+    Production pipeline has no Ollama; ``ollama/qwen3:8b`` reaching OpenRouter
+    via digillm fails with "not a valid model ID" (decision_log reflector).
+    Local digigraph defaults may still live in ``model_modes.yaml`` ``defaults``.
+    """
+    import yaml
+
+    digiquant = yaml.safe_load(Path("config/digiquant_models.yaml").read_text(encoding="utf-8"))
+    offenders: list[str] = []
+    for tier_name, tier in (digiquant.get("tiers") or {}).items():
+        for cap, pool in (tier.get("allowed_models") or {}).items():
+            for model in pool or []:
+                if str(model).startswith("ollama/"):
+                    offenders.append(f"tiers.{tier_name}.allowed_models.{cap}:{model}")
+        for model in tier.get("web_search_models") or []:
+            if str(model).startswith("ollama/"):
+                offenders.append(f"tiers.{tier_name}.web_search_models:{model}")
+    modes = yaml.safe_load(Path("config/model_modes.yaml").read_text(encoding="utf-8"))
+    for phase, model in (modes.get("phase_models") or {}).items():
+        if str(model).startswith("ollama/"):
+            offenders.append(f"phase_models.{phase}:{model}")
+    assert not offenders, f"ollama/ model ids in digiquant research config: {offenders}"
+
+
+@pytest.mark.unit
+def test_decision_reflector_resolves_openrouter_house_slug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """decision-reflector must keep the digiquant pool slug through resolve_request_model."""
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+    monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
+    monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("DIGI_LLM_MODE", "test")
+    monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+    monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
+    monkeypatch.setattr(model_config, "_model_modes_cache", None)
+    phase = get_model_for_phase("decision-reflector")
+    assert phase is not None
+    assert not phase.startswith("ollama/")
+    assert resolve_request_model(phase) == phase
+    assert resolve_request_model(phase).startswith("deepseek/")
+
+
 def test_cheap_tier_resolves_extraction_and_reasoning(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     cfg = model_config._load_digiquant_models()
