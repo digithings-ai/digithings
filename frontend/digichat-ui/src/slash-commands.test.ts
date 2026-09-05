@@ -6,6 +6,7 @@ import {
   matchingSlashCommands,
   nextPaletteIndex,
   parseSlashInput,
+  SLASH_COMMANDS,
   slashHelpText,
 } from "./slash-commands";
 
@@ -79,6 +80,34 @@ describe("parseSlashInput", () => {
   it("flags unknown commands", () => {
     expect(parseSlashInput("/web")).toEqual({ kind: "unknown", name: "/web" });
   });
+
+  it("parses /copy and /export as client commands (#3658)", () => {
+    expect(parseSlashInput("/copy")).toMatchObject({
+      kind: "command",
+      command: { id: "copy", kind: "client" },
+      arg: "",
+    });
+    expect(parseSlashInput("/export")).toMatchObject({
+      kind: "command",
+      command: { id: "export", kind: "client" },
+      arg: "",
+    });
+  });
+
+  it("keeps /copy and /export wired as arg-less client commands (#3658)", () => {
+    expect(SLASH_COMMANDS.find((c) => c.id === "copy")).toMatchObject({
+      names: ["/copy"],
+      needsArg: false,
+      hint: "Copy last answer as markdown",
+      kind: "client",
+    });
+    expect(SLASH_COMMANDS.find((c) => c.id === "export")).toMatchObject({
+      names: ["/export"],
+      needsArg: false,
+      hint: "Download thread as markdown",
+      kind: "client",
+    });
+  });
 });
 
 describe("matchingSlashCommands", () => {
@@ -107,6 +136,18 @@ describe("matchingSlashCommands", () => {
     expect(matchingSlashCommands("/search foo")).toEqual([]);
     expect(matchingSlashCommands("/va").map((c) => c.id)).toEqual(["vault"]);
   });
+
+  it("lists /copy and /export in the palette and narrows by prefix (#3658)", () => {
+    const bare = matchingSlashCommands("/", { webSearch: true, byok: true }).map((c) => c.id);
+    expect(bare).toContain("copy");
+    expect(bare).toContain("export");
+    // Always visible — not gated behind websearch/byok flags.
+    expect(matchingSlashCommands("/").map((c) => c.id)).toContain("copy");
+    expect(matchingSlashCommands("/").map((c) => c.id)).toContain("export");
+    expect(matchingSlashCommands("/cop").map((c) => c.id)).toEqual(["copy"]);
+    expect(matchingSlashCommands("/exp").map((c) => c.id)).toEqual(["export"]);
+    expect(matchingSlashCommands("/copy foo")).toEqual([]);
+  });
 });
 
 describe("slashHelpText", () => {
@@ -120,6 +161,15 @@ describe("slashHelpText", () => {
     expect(help).not.toContain("digisearch");
     expect(help).not.toContain("digivault_get_note");
     expect(help).not.toContain("/docs —");
+  });
+
+  it("lists /copy and /export with client copy (#3658)", () => {
+    const help = slashHelpText({ webSearch: true, byok: true });
+    expect(help).toContain("/copy — Copy last answer as markdown");
+    expect(help).toContain("/export — Download thread as markdown");
+    // Not gated behind websearch/byok flags.
+    expect(slashHelpText()).toContain("/copy — Copy last answer as markdown");
+    expect(slashHelpText()).toContain("/export — Download thread as markdown");
   });
 });
 
