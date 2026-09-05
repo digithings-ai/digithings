@@ -178,8 +178,13 @@ def published_curve_shape() -> SdcaCurveShape:
     return preset.shape
 
 
-def shape_from_bounds_ok(params: dict[str, float | int | str]) -> bool:
-    """True when params form a valid shape inside ``CURVE_SEARCH_BOUNDS``."""
+def shape_from_bounds_ok(
+    params: dict[str, float | int | str],
+    *,
+    bounds: dict[str, tuple[float, float]] | None = None,
+) -> bool:
+    """True when params form a valid shape inside ``bounds`` (default ``CURVE_SEARCH_BOUNDS``)."""
+    b = bounds if bounds is not None else CURVE_SEARCH_BOUNDS
     try:
         shape = SdcaCurveShape(
             buy_max_rate=float(params["buy_max_rate"]),
@@ -191,7 +196,7 @@ def shape_from_bounds_ok(params: dict[str, float | int | str]) -> bool:
         )
     except (KeyError, TypeError, ValueError):
         return False
-    for key, (lo, hi) in CURVE_SEARCH_BOUNDS.items():
+    for key, (lo, hi) in b.items():
         value = float(getattr(shape, key))
         if value < lo - 1e-9 or value > hi + 1e-9:
             return False
@@ -399,6 +404,106 @@ def search_continuous_curve(
         include_grid=include_grid,
         eps=eps,
         crossing_bounds=crossing_bounds,
+    )
+    return search_curve(
+        dates,
+        prices,
+        risk,
+        trials,
+        initial_cash=initial_cash,
+        baseline=published_curve_shape(),
+        frozen_weights=frozen_weights,
+        gates=gates,
+        evaluator="curve_simulator",
+    )
+
+
+# Wide-knee search: Chris's direct visual-inspection hypothesis (2026-09-05,
+# same session as Stage A/B) -- looking at the aggregate risk chart, buying
+# should start around risk 40 and get aggressive by ~25; selling should start
+# around risk 60 and get aggressive by ~75, and since the composite is
+# z-scored that split is naturally symmetric as a *starting point*, not a
+# constraint: buy_knee_risk and sell_knee_risk stay fully independent here
+# (unlike Stage A's single crossing point), so the search is free to land on
+# an asymmetric result. Curvature >= 1 already gives the "slow near the knee,
+# exponential near the edge" ramp Chris described; CURVE_SEARCH_BOUNDS caps
+# sell_max_rate at 40, but Stage A/B fills showed sells never came close to
+# depleting the position even with a wide dead zone -- so this search widens
+# the sell-rate ceiling well past that, to let the optimizer actually explore
+# selling the position down toward empty at extreme risk if that's what
+# improves risk_adjusted_return.
+WIDE_KNEE_SEARCH_BOUNDS: dict[str, tuple[float, float]] = {
+    "buy_max_rate": (5.0, 40.0),
+    "buy_knee_risk": (20.0, 48.0),
+    "sell_knee_risk": (52.0, 80.0),
+    "sell_max_rate": (5.0, 95.0),
+    "buy_curvature": (1.0, 6.0),
+    "sell_curvature": (1.0, 6.0),
+}
+
+WIDE_KNEE_COARSE_GRID: dict[str, tuple[float, ...]] = {
+    "buy_max_rate": (15.0, 25.0, 35.0),
+    "buy_knee_risk": (30.0, 35.0, 40.0, 45.0),
+    "sell_knee_risk": (55.0, 60.0, 65.0, 70.0),
+    "sell_max_rate": (15.0, 30.0, 50.0, 70.0, 90.0),
+    "buy_curvature": (1.5, 2.5, 4.0),
+    "sell_curvature": (1.5, 2.5, 4.0),
+}
+
+
+def sample_wide_knee_curve_trials(
+    *,
+    n_random: int = 3000,
+    seed: int = 42,
+    include_grid: bool = True,
+    bounds: dict[str, tuple[float, float]] = WIDE_KNEE_SEARCH_BOUNDS,
+    grid: dict[str, tuple[float, ...]] = WIDE_KNEE_COARSE_GRID,
+) -> list[dict[str, float]]:
+    """Rerunnable trial list for the wide-knee curve fit (buy/sell knees free)."""
+    seen: set[tuple[float, ...]] = set()
+    out: list[dict[str, float]] = []
+
+    def _add(params: dict[str, float]) -> None:
+        if not shape_from_bounds_ok(params, bounds=bounds):
+            return
+        key = tuple(round(params[k], 6) for k in _SHAPE_KEYS)
+        if key in seen:
+            return
+        seen.add(key)
+        out.append(params)
+
+    if include_grid:
+        names = list(grid)
+        for combo in itertools.product(*(grid[n] for n in names)):
+            _add(dict(zip(names, combo, strict=True)))
+    rng = random.Random(seed)
+    for _ in range(max(0, n_random)):
+        drawn = {name: round(rng.uniform(lo, hi), 4) for name, (lo, hi) in bounds.items()}
+        _add(drawn)
+    return out
+
+
+def search_wide_knee_curve(
+    dates: pl.Series,
+    prices: pl.Series,
+    risk: pl.Series,
+    *,
+    initial_cash: float,
+    frozen_weights: SdcaCompositeWeights,
+    n_random: int = 3000,
+    seed: int = 42,
+    include_grid: bool = True,
+    bounds: dict[str, tuple[float, float]] = WIDE_KNEE_SEARCH_BOUNDS,
+    grid: dict[str, tuple[float, ...]] = WIDE_KNEE_COARSE_GRID,
+    gates: CurveOptimizeGates | None = None,
+) -> CurveOptimizeResult:
+    """Wide-knee entry: fit independent buy/sell curves on a frozen index.
+
+    Baseline for comparison is today's published ``btc_optimized`` shape, same
+    caveat as Stage A: not apples-to-apples, just useful context.
+    """
+    trials = sample_wide_knee_curve_trials(
+        n_random=n_random, seed=seed, include_grid=include_grid, bounds=bounds, grid=grid
     )
     return search_curve(
         dates,
@@ -946,6 +1051,8 @@ __all__ = [
     "DEFAULT_COARSE_GRID",
     "PUBLISHED_BUY_KNEE",
     "PUBLISHED_SELL_KNEE",
+    "WIDE_KNEE_COARSE_GRID",
+    "WIDE_KNEE_SEARCH_BOUNDS",
     "CurveOptimizeGates",
     "CurveOptimizeResult",
     "CurveTrialScore",
@@ -971,6 +1078,8 @@ __all__ = [
     "score_shape_on_index",
     "search_continuous_curve",
     "search_curve",
+    "search_wide_knee_curve",
+    "sample_wide_knee_curve_trials",
     "shape_from_bounds_ok",
     "sweep_dead_zone_width",
 ]

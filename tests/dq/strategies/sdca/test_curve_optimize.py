@@ -20,6 +20,7 @@ from digiquant.strategies.sdca.curve_optimize import (
     DEEP_RICH_RISK,
     PUBLISHED_BUY_KNEE,
     PUBLISHED_SELL_KNEE,
+    WIDE_KNEE_SEARCH_BOUNDS,
     CurveOptimizeGates,
     FillConcentration,
     beats_baseline_concentration,
@@ -32,10 +33,12 @@ from digiquant.strategies.sdca.curve_optimize import (
     round_shape_for_preset,
     sample_continuous_curve_trials,
     sample_curve_trials,
+    sample_wide_knee_curve_trials,
     score_dead_zone_width,
     score_shape_on_index,
     search_continuous_curve,
     search_curve,
+    search_wide_knee_curve,
     shape_from_bounds_ok,
     sweep_dead_zone_width,
 )
@@ -312,6 +315,66 @@ class TestSearchContinuousCurve:
     def test_baseline_is_todays_published_curve(self) -> None:
         dates, prices, risk = _v_cycle()
         result = search_continuous_curve(
+            dates,
+            prices,
+            risk,
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            n_random=20,
+            seed=9,
+            include_grid=False,
+        )
+        assert result.baseline.shape == _published_shape()
+
+
+class TestSampleWideKneeCurveTrials:
+    def test_random_only_trials_deduped_and_within_bounds(self) -> None:
+        trials = sample_wide_knee_curve_trials(n_random=200, seed=7, include_grid=False)
+        assert 150 <= len(trials) <= 200
+        for params in trials:
+            assert shape_from_bounds_ok(params, bounds=WIDE_KNEE_SEARCH_BOUNDS)
+
+    def test_knees_are_independent_not_a_single_crossing(self) -> None:
+        """Unlike the continuous-curve sampler, gaps here should vary widely --
+        this search must be able to explore genuinely separated buy/sell
+        knees, not just a near-zero crossing epsilon."""
+        trials = sample_wide_knee_curve_trials(n_random=300, seed=3, include_grid=False)
+        gaps = [t["sell_knee_risk"] - t["buy_knee_risk"] for t in trials]
+        assert max(gaps) > 20.0
+        assert min(gaps) < 20.0
+
+    def test_grid_and_random_are_independent_knobs(self) -> None:
+        grid_only = sample_wide_knee_curve_trials(n_random=0, include_grid=True)
+        random_only = sample_wide_knee_curve_trials(n_random=10, seed=1, include_grid=False)
+        assert len(grid_only) > 0
+        assert 8 <= len(random_only) <= 10
+
+    def test_same_seed_is_deterministic(self) -> None:
+        a = sample_wide_knee_curve_trials(n_random=25, seed=11, include_grid=False)
+        b = sample_wide_knee_curve_trials(n_random=25, seed=11, include_grid=False)
+        assert a == b
+
+
+class TestSearchWideKneeCurve:
+    def test_search_wide_knee_curve_picks_a_feasible_shape(self) -> None:
+        dates, prices, risk = _v_cycle()
+        result = search_wide_knee_curve(
+            dates,
+            prices,
+            risk,
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            n_random=60,
+            seed=5,
+            include_grid=False,
+        )
+        assert 50 <= result.num_evaluations <= 60
+        assert result.best.shape.buy_knee_risk < result.best.shape.sell_knee_risk
+        assert result.beats_flat_dca_oos is False
+
+    def test_baseline_is_todays_published_curve(self) -> None:
+        dates, prices, risk = _v_cycle()
+        result = search_wide_knee_curve(
             dates,
             prices,
             risk,

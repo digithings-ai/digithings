@@ -351,3 +351,92 @@ that could both be read as "the baseline."
      (56.60→45.32, -20%), and every wider step trades return away faster
      than it buys back trade-count headroom. **Reported to Chris, not yet
      accepted** — pending his pick of a practical width from this frontier.
+
+8. **Wide-knee curve search: independent buy/sell dead zone, exponential
+   ramp** (Chris's 2026-09-05 direction, same session as items 6-7, after
+   seeing item 7's Stage A continuous-curve fill detail — `buy_days=398,
+   sell_days=2704, trade_days=3102/3164 (98.0%)` — and its tearsheet):
+   "Something I don't like about the behavior of the strategy is just how
+   quick or how often we're transacting... visually looking at the risk
+   chart... above, say, 75, I'd be selling aggressively, and below 25, I'd
+   be buying very aggressively. And then above, say, 60, I'd start selling,
+   and below 40, I'd start buying... it shouldn't be a linear line, it
+   should be exponential... That's part of the optimization problem is
+   finding a best selling and buying curve, which yields the best
+   risk-adjusted returns... it's two separate curves, it could have
+   different functions... looking at the fills, we never actually fully
+   sell out the position... the lowest we are after selling is at about 25%
+   cash... we could be more aggressive with our selling... I think we could
+   try to calibrate the system where it's just targeting more, a few
+   clusters of buys and sales and not a continuous range." His 40/60
+   (aggressive by 25/75) split was offered explicitly as a starting-point
+   seed, not a constraint ("we'll have to play around with those
+   variables") — buy and sell knees/curvatures/rates are independently
+   searched, not mirrored.
+
+   `curve_shape.SdcaCurveShape.rate_at()` already gives the "slow near the
+   knee, exponential toward the edge" ramp for any `curvature ≥ 1.0` and
+   already allows fully independent buy/sell knees (only invariant: strict
+   `buy_knee_risk < sell_knee_risk`) — no model change needed, only a wider
+   search. Added `curve_optimize.WIDE_KNEE_SEARCH_BOUNDS` /
+   `WIDE_KNEE_COARSE_GRID` / `sample_wide_knee_curve_trials()` /
+   `search_wide_knee_curve()` (reusing the existing general `search_curve()`
+   the same way `search_continuous_curve()` does) as a new, separate
+   parameterization alongside Stage A/B — `CURVE_SEARCH_BOUNDS` (the
+   original default search) is untouched. Bounds: `buy_knee_risk` (20-48),
+   `sell_knee_risk` (52-80), both curvatures (1-6), `sell_max_rate` widened
+   to (5-95) (vs. the default search's (3-40) ceiling) specifically to let
+   the optimizer explore near-full liquidation if that's what the objective
+   wants. `shape_from_bounds_ok()` generalized to accept a `bounds` param
+   (default `CURVE_SEARCH_BOUNDS`) so both searches share one validator.
+
+   Run (`scripts/run_curve_wide_knee_search.py`, `n_random=4000, seed=42`,
+   same all-9 floor-diversified index as items 6-7, `risk_adjusted_return`
+   objective, full 2018-01-01→2026-08-30 cache):
+   - Winner: `buy_max_rate=35.0, buy_knee_risk=40.0, sell_knee_risk=70.0,
+     sell_max_rate=30.0, buy_curvature=1.5, sell_curvature=1.5` out of 6097
+     evaluated trials (5401 feasible). `risk_adjusted_return=57.82`
+     (`total_return_pct=3153.35%`, `max_drawdown_pct=54.54%`) — a touch
+     *better* than item 7's Stage A continuous winner (56.60), not a
+     tradeoff. `buy_knee_risk=40.0` lands almost exactly on Chris's
+     hypothesis; `sell_knee_risk=70.0` is more conservative than his 60
+     seed — the objective prefers holding the winning asset longer before
+     starting to sell.
+   - Trade frequency, the headline ask: `buy_days=398, sell_days=174,
+     no_trade_days=2530, trade_days=572/3164 (18.1%)` — down from item 7's
+     98.0%. Same buy-day count as the continuous winner (buy behavior barely
+     changed) but sell days collapsed 2704→174, which is exactly the
+     "clusters of buys and sales, not a continuous range" behavior asked
+     for.
+   - Cash depletion (`cash / portfolio_value`, computed from the raw
+     backtest frame — `run_backtest()` already exposes `portfolio_value`,
+     no new field needed): during the 2018-19 bear the position gets to
+     98.1% cash (was 98.6% on item 7's curve — already good); during the
+     2022 bear, 81.6% cash (was 79.3%); but the weak case Chris was
+     describing — the 2025 top-forming period — only reaches 64.9% cash
+     (was 63.6%), barely moved despite `sell_max_rate` tripling (8.0→30.0)
+     and the widened ceiling allowing up to 95.0. The optimizer had room to
+     sell far more aggressively and chose not to: pure `risk_adjusted_return`
+     doesn't want to liquidate hard into an ongoing rally, since BTC's
+     right-skewed returns make premature selling expensive. Getting closer
+     to Chris's "down to zero in a bear market" for the weak case likely
+     needs either a different objective term (e.g. penalize a low
+     `sell_frac`/reward `sell_notional_2025` directly) or an explicit
+     floor on `sell_max_rate`/`sell_knee_risk` rather than relying on
+     risk-adjusted return alone to discover it — flagged for Chris's next
+     iteration, not resolved here.
+   - Tearsheet emitted the same way as item 7's (`emit_sdca_trial_tearsheet.py`
+     machinery, `.scratch/tearsheets/all9_wide_knee_winner.json`, gitignored):
+     `net_profit_pct=3406.71%, max_drawdown_pct=-53.01%,
+     vs_flat_dca_pct=631.91%` (vs. item 7's continuous curve:
+     `3171.37% / -50.70% / 582.79%`) — improves on all three headline
+     tearsheet numbers while trading 82% less often.
+
+   **Diagnostic only, in-sample (`curve_simulator`,
+   `beats_flat_dca_oos=False`), not a validated trading candidate.**
+   Reported to Chris with the reference-risk-level rates (`rate_at(25)=+8.0,
+   rate_at(40)=0.0, rate_at(60)=0.0, rate_at(75)=-2.0`) so the fitted curve's
+   actual aggressiveness can be checked against his visual intuition
+   directly — pending his read on the sell-side result and any further
+   iteration on the bounds/objective per his own framing ("we'll have to
+   play around with those variables").
