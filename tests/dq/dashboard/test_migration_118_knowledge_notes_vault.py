@@ -4,6 +4,8 @@ Structural parse checks always run. Executable Postgres checks apply the
 file with ``psql -v ON_ERROR_STOP=1 --single-transaction`` against an
 ephemeral Docker Postgres (the same wrapping ``db-migrate.yml`` uses).
 They skip when Docker is missing locally; they fail in CI rather than skip.
+``psql``/``pg_isready`` use TCP ``127.0.0.1`` inside the container so a unix
+socket that lags ``pg_isready`` cannot flake the promote job (#3594).
 """
 
 from __future__ import annotations
@@ -132,6 +134,16 @@ def test_revokes_client_grants_and_grants_service_role(sql: str) -> None:
     )
 
 
+def test_psql_and_pg_isready_use_tcp_loopback() -> None:
+    argv = _psql_argv("docker", "dt-m118-x", "postgres", single_transaction=True)
+    assert argv[argv.index("psql") + 1 : argv.index("psql") + 3] == ["-h", "127.0.0.1"]
+    ready = _pg_isready_argv("docker", "dt-m118-x")
+    assert ready[ready.index("pg_isready") + 1 : ready.index("pg_isready") + 3] == [
+        "-h",
+        "127.0.0.1",
+    ]
+
+
 def test_fresh_and_upgrade_share_updated_at_trigger(sql: str) -> None:
     assert "create or replace function public.knowledge_notes_set_updated_at()" in sql
     assert "set search_path = ''" in sql
@@ -162,20 +174,22 @@ def _require_docker() -> str:
     pytest.skip(message)
 
 
-def _psql(
+def _psql_argv(
     docker: str,
     container: str,
     database: str,
-    sql_text: str,
     *,
     single_transaction: bool,
-) -> str:
+) -> list[str]:
+    # TCP loopback: unix sockets in postgres:alpine can lag pg_isready (#3594 flake).
     cmd = [
         docker,
         "exec",
         "-i",
         container,
         "psql",
+        "-h",
+        "127.0.0.1",
         "-U",
         "postgres",
         "-d",
@@ -188,20 +202,42 @@ def _psql(
     ]
     if single_transaction:
         cmd.append("--single-transaction")
-    result = subprocess.run(
-        cmd,
-        input=sql_text,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=60,
-    )
-    if result.returncode != 0:
-        raise AssertionError(
-            f"psql failed (db={database}, single_tx={single_transaction}):\n"
-            f"{result.stderr or result.stdout}"
+    return cmd
+
+
+def _pg_isready_argv(docker: str, container: str) -> list[str]:
+    return [docker, "exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"]
+
+
+def _psql(
+    docker: str,
+    container: str,
+    database: str,
+    sql_text: str,
+    *,
+    single_transaction: bool,
+) -> str:
+    cmd = _psql_argv(docker, container, database, single_transaction=single_transaction)
+    last_err = ""
+    for attempt in range(8):
+        result = subprocess.run(
+            cmd,
+            input=sql_text,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=60,
         )
-    return result.stdout.strip()
+        if result.returncode == 0:
+            return result.stdout.strip()
+        last_err = result.stderr or result.stdout
+        if "No such file or directory" in last_err or "Connection refused" in last_err:
+            time.sleep(0.4)
+            continue
+        break
+    raise AssertionError(
+        f"psql failed (db={database}, single_tx={single_transaction}):\n{last_err}"
+    )
 
 
 @pytest.fixture(scope="module")
@@ -235,7 +271,7 @@ def pg_container() -> Iterator[tuple[str, str]]:
         deadline = time.time() + 40
         while time.time() < deadline:
             ready = subprocess.run(
-                [docker, "exec", name, "pg_isready", "-U", "postgres"],
+                _pg_isready_argv(docker, name),
                 capture_output=True,
                 check=False,
                 timeout=10,
