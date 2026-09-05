@@ -137,8 +137,9 @@ export function isDigichatOriginAllowedByCsp(origin: string): boolean {
 }
 
 /**
- * digiquant.io (and any non-loopback host) needs an embed token — digichat
- * treats only digithings.ai hosts as first-party for tokenless embed.
+ * Tokenless hosts: loopback, first-party digithings marketing/OCC, and the
+ * operator dashboard at digiquant.io (#3638). Unknown third-party hosts still
+ * need NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN so a wrong-tenant embed stays off.
  */
 export function embedHostRequiresToken(host: string): boolean {
   const h = host.trim().toLowerCase();
@@ -147,22 +148,19 @@ export function embedHostRequiresToken(host: string): boolean {
   if (h === 'digithings.ai' || h === 'www.digithings.ai' || h === 'occ.digithings.ai') {
     return false;
   }
+  if (h === 'digiquant.io' || h === 'www.digiquant.io') return false;
   return true;
 }
 
 /**
- * Opt-in popup: requires ORIGIN (or POPUP=1) and fails closed when the
- * resolved origin is outside CSP frame-src, or when the host needs a token
- * and none is configured (avoids a wrong-tenant gated embed).
+ * Default-on for the dashboard (#3638). Kill with NEXT_PUBLIC_DIGICHAT_POPUP=0.
+ * Fails closed when the resolved origin is outside CSP frame-src, or when a
+ * third-party embed host needs a token and none is configured.
  */
 export function isDigichatPopupEnabled(
   env: Record<string, string | undefined> = digichatPopupEnvFromProcess(),
 ): boolean {
   if (env.NEXT_PUBLIC_DIGICHAT_POPUP === '0') return false;
-  const wants =
-    env.NEXT_PUBLIC_DIGICHAT_POPUP === '1' ||
-    Boolean(resolveDigichatEmbedOrigin(env));
-  if (!wants) return false;
   const origin = digichatEmbedOriginForDashboard(env);
   if (!isDigichatOriginAllowedByCsp(origin)) return false;
   const host =

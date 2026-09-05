@@ -250,23 +250,22 @@ panel (#3590); the model receives HTML+text via the existing prompt-prefix path
 (screenshot/vision multimodal deferred). Same contract as digichat `widget.js`
 (#3421 / #3602), implemented in-React so CSP stays `script-src 'self'`.
 
-Enable with `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (or `NEXT_PUBLIC_DIGICHAT_POPUP=1`)
-plus `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` for host `digiquant.io`. Origin must be in
-the CSP `frame-src` allowlist or the launcher stays off. Client reads must use
-direct `process.env.NEXT_PUBLIC_*` property access (`digichatPopupEnvFromProcess`)
-so Turbopack inlines them — passing whole `process.env` leaves the client empty
+On by default (#3638): unset env uses origin `https://digithings.ai` and host
+`digiquant.io`. Kill with `NEXT_PUBLIC_DIGICHAT_POPUP=0`. Origin must be in the
+CSP `frame-src` allowlist or the launcher stays off. `digiquant.io` does not
+need `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN`; unknown third-party `EMBED_HOST` values
+still fail closed without a token. Client reads must use direct
+`process.env.NEXT_PUBLIC_*` property access (`digichatPopupEnvFromProcess`) so
+Turbopack inlines them — passing whole `process.env` leaves the client empty
 and the launcher disappears after hydrate (#3561).
-Local dogfood: digichat on `http://127.0.0.1:3005` + dashboard
-`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=http://127.0.0.1:3005`.
 `NEXT_PUBLIC_DIGICHAT_POPUP_MODE` is accepted for back-compat but no longer switches
 to a round ✦ launcher.
 
 **Local dogfood:** digichat on `http://127.0.0.1:3005`, dashboard on
 `http://127.0.0.1:4014/dashboard/` with `.env.local` pointing
-`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=http://127.0.0.1:3005`, host `digiquant.io`,
-and the embed token matching digichat `DIGICHAT_EMBED_TENANTS`. Desk+ session
-required. Uses digichat’s default model path (`free_then_byok` / digigraph as
-configured on the tenant). See `.env.local.example`.
+`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=http://127.0.0.1:3005` and host `localhost`.
+Desk+ session required (or auth-off enterprise). Production digichat will not
+frame a loopback parent — use the local origin. See `.env.local.example`.
 
 Tenant grounding (digigraph → digillm, research/portfolio corpus, opt-in web search,
 BYOK) is configured on digichat via `DIGICHAT_EMBED_TENANTS` for host `digiquant.io`.

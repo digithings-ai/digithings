@@ -61,8 +61,12 @@ def test_dashboard_does_not_ship_olympus_public_env_keys() -> None:
     env = (REPO_ROOT / "frontend" / "dashboard" / ".env.local.example").read_text(encoding="utf-8")
     assert "NEXT_PUBLIC_OLYMPUS" not in env
     assert "NEXT_PUBLIC_DASHBOARD_AUTH" in env
+    assert "NEXT_PUBLIC_DIGICHAT_POPUP" in env
     build = BUILD.read_text(encoding="utf-8")
     assert "NEXT_PUBLIC_OLYMPUS" not in build
+    assert "NEXT_PUBLIC_DIGICHAT_POPUP=1" in build
+    assert "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai" in build
+    assert "NEXT_PUBLIC_DIGICHAT_EMBED_HOST=digiquant.io" in build
     shell = (
         REPO_ROOT / "frontend" / "dashboard" / "components" / "app-shell-context.tsx"
     ).read_text(encoding="utf-8")
