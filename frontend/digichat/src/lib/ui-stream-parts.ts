@@ -1,7 +1,8 @@
 /**
  * 2.0 UI-stream mapping: ActivitySpan → standard AI SDK UI chunks.
  *
- * Generic `useChat` / assistant-ui clients must not need digichat vocabulary.
+ * Generic `useChat` / assistant-ui clients stream without branded part types.
+ * Product payloads (retrieve documents, brief) still need a mapper or tool UI.
  * Branded `data-digichatActivity` is not written. The activityDetail gate still
  * runs before this mapper (callers pass an already-gated span).
  */

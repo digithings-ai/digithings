@@ -223,6 +223,23 @@ export function ChatPanel({
     [onSlashCommand, pushSystemNote, webSearchAllowed, webSearchPref],
   );
 
+  /** Shared send intercept — arms force-tool before useChat freezes the transport. */
+  const onSendRequest = useCallback(
+    (text: string, opts?: { forceTool?: string }): boolean => {
+      setPendingForceTool(threadId, opts?.forceTool);
+      void sendMessage({ text });
+      return true;
+    },
+    [sendMessage, threadId],
+  );
+
+  const onLanguageChange = useCallback(
+    (code: string) => {
+      pushSystemNote(`Language preference noted (${code}). First-party /lang is session-local.`);
+    },
+    [pushSystemNote],
+  );
+
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <CliThread
@@ -230,6 +247,8 @@ export function ChatPanel({
         extraSlash={APP_SLASH_EXTRA}
         slashVisibility={{ webSearch: webSearchAllowed, byok: true }}
         onSlashCommand={handleSlash}
+        onSendRequest={onSendRequest}
+        onLanguageChange={onLanguageChange}
         onOpenSettings={() => {
           setCliSettingsOpen(true);
           setCliSettingsIndex(0);

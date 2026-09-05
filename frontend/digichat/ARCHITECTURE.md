@@ -14,19 +14,16 @@
 
 ## 1. Overview
 
-digichat is the **user-facing interface** to the digithings ecosystem. It is a Next.js
-16 App Router application that acts as a **Backend-for-Frontend (BFF)**: the browser
-never speaks directly to digigraph or any Python service. All LLM calls, auth token
-exchanges, and upstream probes are handled in Next.js Route Handlers running on the
-server.
-
-**Modular frontend:** one shared UI (`@digithings/digichat-ui`) and activity protocol,
-with backends selected per tenant (`digigraph` | `foundry`). digithings tenants use
-digigraph (digillm + digivault hub). See
-[`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md)
+digichat is the **containerized chat product** for the digithings ecosystem: a
+Next.js 16 **BFF** (the public HTTP surface) plus an optional **default UI**
+(CLI-themed assistant-ui). The browser never speaks directly to digigraph,
+Foundry, or any Python service. Backends are selected per tenant
+(`digigraph` | `foundry`). See
+[`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md),
+[`docs/architecture/digichat-renderer-contract.md`](../../docs/architecture/digichat-renderer-contract.md),
 and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 
-**Turn / thread markdown export (#3465).** Shared serializer lives in `@digithings/digichat-ui` (`serializeAssistantMarkdown` / `serializeThreadMarkdown` / `copyMarkdownWithFallback`). `ChatPanel` and embed session both use it — clipboard first, embed falls back to `.md` download (never a silent no-op).
+**Turn / thread markdown export (#3465).** Shared serializer lives in `@digithings/digichat-ui` (`serializeAssistantMarkdown` / `serializeThreadMarkdown` / `copyMarkdownWithFallback`). `ChatPanel` and embed session both use it — clipboard first, embed falls back to `.md` download (never a silent no-op). Citations prefer `source-*` parts (`messageSourceCitations`).
 
 **Last-turn regen + edit (#3466 / #3475).** Digigraph and Foundry surfaces expose **regen** on the last settled assistant and **edit** on the last user turn. Clients send `X-Digi-Turn-Mode: send | regenerate | edit_last_user` and optional `X-Digi-Run-Id` on `POST /api/chat`. Digigraph replays the **full workflow** on the same session from the truncated client transcript (tools re-run; digistore may accumulate — not “as if it never happened”). Foundry mutates conversation items (delete trailing assistant / user+assistant, then `responses.create` with no new input) via `@azure/ai-projects` OpenAI client; without an item API the BFF returns **501 `not_supported`**. Concurrent runs on the same session → **409 `run_in_progress`**; duplicate run ids → **409 `run_id_replay`**. Edit that shortens a persisted thread must set `allowTruncate: true` on the next PUT. `X-Digi-Force-Tool` is send-only.
 
@@ -42,7 +39,7 @@ and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 | Conversation persistence — localStorage (always on) | Built |
 | Conversation persistence — Postgres (optional) | Built |
 | Standard UI stream parts (tool / source / reasoning / `data-status`) | Built |
-| Shared activity UI (rich vault hits + research brief) | Built |
+| Default UI: assistant-ui `CliThread` + MessagePrimitive.Parts | Built |
 | digigraph digithings adapter (`adapters/digithings/`) | Built |
 | Foundry client adapter (`adapters/foundry/`) | Built |
 | Quant comparison strip (inline `BacktestResult` parsing) | Built |
@@ -80,13 +77,15 @@ returns **409 `would_truncate`** if a PUT would drop existing rows unless
 `AssistantChatTransport` (`@assistant-ui/ai-sdk`) pointed at `POST /api/chat`.
 Sends `X-Digichat-Session` so upstream digigraph can correlate the same
 conversation across turns. **Both** `/embed` and first-party `/chat` render
-`CliThread` (CLI-skinned assistant-ui primitives). `ChatPanel` is the
-first-party host: transport, BYOK headers, persistence callbacks, extra slash
-(`/clear`, `/history`, `/scope`, `/model`). Regen and edit-last-user live on
-`CliThread` and send `X-Digi-Turn-Mode` via `src/lib/pending-chat-headers.ts`
-(force-tool stays send-only). Embed uses the same chrome when
-`allowClientTurnMutation` is true. Copy / thread markdown export are on the
-shared action bar.
+`CliThread` (CLI-skinned assistant-ui primitives). Transcript parts render via
+`MessagePrimitive.Parts` (`cli-message-parts.tsx`) — not `ChatActivities`.
+`ChatPanel` is the first-party host: transport, BYOK headers, persistence
+callbacks, extra slash (`/clear`, `/history`, `/scope`, `/model`), and the same
+`onSendRequest` intercept embed uses so `/search` / `/vault` arm
+`X-Digi-Force-Tool`. Regen and edit-last-user live on `CliThread` and send
+`X-Digi-Turn-Mode` via `src/lib/pending-chat-headers.ts` (force-tool stays
+send-only). Embed uses the same chrome when `allowClientTurnMutation` is true.
+Copy / thread markdown export are on the shared action bar.
 
 **Conversation persistence** (`src/lib/thread-local.ts`, `src/lib/conversations-repo.ts`):
 Dual-path. `localStorage` is always written (versioned blob `{ v: 1, threads: [...] }`
@@ -751,12 +750,11 @@ in with Up/Down (no free-typing required). Public copy labels Vault (not Docs).
 Signed-in ChatShell keeps `/clear` `/history` `/scope` plus the same `/byok` /
 `/websearch` / `/settings` surface.
 
-**Open originals (#3419).** Source cards on a settled turn open a side pane
-(`DocumentPane`). Vault notes render from `body` already loaded by
-`digivault_get_note` (batch ≤20) — paths without `http(s)` never become links.
-Real `http(s)` PDFs use the browser PDF plugin plus Download; never invent a
-URL. Human tool labels live only in `activity-view.toolDisplayName` (identity
-keys still use wire ids).
+**Sources on the transcript (#3419 / 2.0).** assistant-ui `Source` parts and tool
+output document lists render inline in `CliThread`. Vault note `body` may still
+sit on tool output JSON for clients that map it; digichat 2.0 does **not** mount
+`DocumentPane`. Paths without `http(s)` never become invented URLs. Human tool
+labels for legacy hydrate live in `activity-view.toolDisplayName`.
 
 See `docs/superpowers/specs/2026-08-10-digichat-language-selector-design.md`
 for the design rationale behind the dual-backend language split.
@@ -1104,7 +1102,9 @@ digigraph SSE frames carry an optional `digigraph_trace` field on each
 `graph_update`, and opaque labels) through `mapdigigraphTraceToSpans` and emits
 only standard tool / `source-*` / reasoning / `data-status` parts (`writeStandardActivity`).
 1.4 `data-digichatActivity` is not written. Auth `chat-panel` and embed both
-project those parts through `messageActivities` → `ChatActivities` (rich hits + `brief`).
+render those parts through assistant-ui `MessagePrimitive.Parts`
+(`cli-message-parts.tsx`). Old branded parts hydrate via `LegacyActivityHydrate`
+only when no standard activity parts exist.
 
 Session correlation: `X-Session-Id` (conversation UUID), `X-Request-ID` (per-request
 UUID), `X-digichat-Tenant`, `X-Digi-Caller: digichat` are forwarded to digigraph and

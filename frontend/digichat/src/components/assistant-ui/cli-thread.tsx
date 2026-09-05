@@ -17,7 +17,6 @@ import {
   nextPaletteIndex,
   parseSlashInput,
   slashHelpText,
-  citationHits,
   serializeAssistantMarkdown,
   serializeThreadMarkdown,
   copyMarkdownWithFallback,
@@ -25,9 +24,10 @@ import {
   type SlashVisibility,
 } from "@digithings/digichat-ui";
 import { Button } from "@/components/ui/button";
-import { messageActivities } from "@/lib/chat-activity";
+import { messageSourceCitations } from "@/lib/message-sources";
 import { cn } from "@/lib/utils";
-import { CliMessageBody, messagePlainText } from "./cli-message-body";
+import { LegacyActivityHydrate, messagePlainText } from "./cli-message-body";
+import { cliMessagePartComponents, UiMessageParts } from "./cli-message-parts";
 
 export type CliThreadProps = {
   emptyHint?: ReactNode;
@@ -164,9 +164,12 @@ function CliMessage({
             </div>
           </div>
         ) : uiMessage ? (
-          <CliMessageBody message={uiMessage} isStreaming={isStreaming} />
+          <div className="space-y-3">
+            <UiMessageParts message={uiMessage} isStreaming={isStreaming} />
+            <LegacyActivityHydrate message={uiMessage} isStreaming={isStreaming} />
+          </div>
         ) : (
-          <MessagePrimitive.Parts />
+          <MessagePrimitive.Parts components={cliMessagePartComponents} />
         )}
         {!showEditForm && uiMessage ? (
           <div
@@ -342,7 +345,7 @@ export function CliThread({
             setNotes((n) => [...n, "No assistant answer to copy yet."]);
             return true;
           }
-          const sources = citationHits(messageActivities(last)).map((h) => ({ title: h.title, path: h.path }));
+          const sources = messageSourceCitations(last);
           const md = serializeAssistantMarkdown(messagePlainText(last), sources);
           void copyMarkdownWithFallback(md, { filename: "digichat-answer.md" });
           setNotes((n) => [...n, "Copied last answer."]);
@@ -355,7 +358,7 @@ export function CliThread({
               ? {
                   role: "assistant" as const,
                   content: messagePlainText(m),
-                  sources: citationHits(messageActivities(m)).map((h) => ({ title: h.title, path: h.path })),
+                  sources: messageSourceCitations(m),
                 }
               : { role: "user" as const, content: messagePlainText(m) },
           );
@@ -409,10 +412,7 @@ export function CliThread({
 
   const onCopy = useCallback(async (m: UIMessage) => {
     const plain = messagePlainText(m);
-    const sources =
-      m.role === "assistant"
-        ? citationHits(messageActivities(m)).map((h) => ({ title: h.title, path: h.path }))
-        : undefined;
+    const sources = m.role === "assistant" ? messageSourceCitations(m) : undefined;
     const markdown =
       m.role === "assistant" ? serializeAssistantMarkdown(plain, sources) : plain.trim();
     await copyMarkdownWithFallback(markdown, { filename: "digichat-answer.md" });
@@ -427,10 +427,7 @@ export function CliThread({
           return {
             role: "assistant" as const,
             content,
-            sources: citationHits(messageActivities(m)).map((h) => ({
-              title: h.title,
-              path: h.path,
-            })),
+            sources: messageSourceCitations(m),
           };
         }
         return { role: "user" as const, content };

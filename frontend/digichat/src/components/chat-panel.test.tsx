@@ -121,7 +121,6 @@ vi.mock("@digithings/digichat-ui", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@digithings/digichat-ui")>();
   return {
     ...actual,
-    ChatActivities: () => null,
   };
 });
 

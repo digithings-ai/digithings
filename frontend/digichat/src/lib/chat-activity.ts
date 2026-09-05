@@ -262,7 +262,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * Rebuild ActivitySpan[] from 2.0 standard UI parts (tool / source / reasoning /
- * data-status). Used so ChatActivities and markdown export keep working without
+ * data-status). Used so markdown export / legacy hydrate keep working without
  * branded wire types.
  */
 export function standardPartsToSpans(
