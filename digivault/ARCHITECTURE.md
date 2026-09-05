@@ -268,12 +268,14 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   backlinks, taxonomy). The on-disk `Vault` / `FilesystemStore` is the default
   `VaultStore` (#1142). `PostgresStore` serves `knowledge_notes` filtered by the
   `vault` namespace column, building the link graph from stored `wikilinks` /
-  `tags` (no markdown parse at serve time; migration 118). It pages `reindex`
-  like `SupabaseStore.list_notes` (deterministic `vault_path` order + `.range()`
-  until a short page, default 500) so a vault larger than PostgREST's row cap
-  is indexed exactly once. `rename` inserts the new `(vault, vault_path)` and
-  fails on unique-constraint conflict without modifying the source or the
-  existing destination (#3606). `from_env` takes only
+  `tags` (no markdown parse at serve time; migration 118). Table uniqueness is
+  `(vault, vault_path)` only — duplicate filename stems in different directories
+  are legal, matching the filesystem vault's `_duplicates` / `duplicate_note`
+  lint (#3603). It pages `reindex` like `SupabaseStore.list_notes` (deterministic
+  `vault_path` order + `.range()` until a short page, default 500) so a vault
+  larger than PostgREST's row cap is indexed exactly once. `rename` inserts the
+  new `(vault, vault_path)` and fails on unique-constraint conflict without
+  modifying the source or the existing destination (#3606). `from_env` takes only
   `CORE_SUPABASE_SERVICE_KEY` / `SUPABASE_SERVICE_ROLE_KEY` (and rejects a JWT
   whose `role` is not `service_role`); an anon-key-only configuration is a
   config error, not an empty vault.
