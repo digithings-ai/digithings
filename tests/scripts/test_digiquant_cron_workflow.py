@@ -84,11 +84,12 @@ class TestExecutionCronSpecIsProbeOnly:
         assert crons == ["15 12 * * *"]
         house_crons = [jobs[f"house-run-{hour:02d}"] for hour in (9, 10, 11, 12)]
         assert house_crons == [
-            "17 9 * * MON-FRI",
-            "17 10 * * MON-FRI",
-            "17 11 * * MON-FRI",
-            "17 12 * * MON-FRI",
+            "17 9 * * *",
+            "17 10 * * *",
+            "17 11 * * *",
+            "17 12 * * *",
         ]
+        assert "house-run-sun" not in jobs
         assert "0 12 * * *" not in house_crons
         assert "0 12 * * *" not in crons
         for cron in house_crons:
@@ -150,14 +151,22 @@ class TestHouseScheduleRetriesOffPeak:
         jobs = _worker_jobs()
         crons = [jobs[f"house-run-{hour:02d}"] for hour in (9, 10, 11, 12)]
         assert crons == [
-            "17 9 * * MON-FRI",
-            "17 10 * * MON-FRI",
-            "17 11 * * MON-FRI",
-            "17 12 * * MON-FRI",
+            "17 9 * * *",
+            "17 10 * * *",
+            "17 11 * * *",
+            "17 12 * * *",
         ]
+        assert "house-run-sun" not in jobs
         for cron in crons:
             minute, _hour, *_rest = cron.split()
             assert minute != "0", cron
+            assert cron.endswith(" * * *"), cron
+
+    def test_house_pipeline_has_no_sunday_forced_refresh(self) -> None:
+        blob = HOUSE.read_text(encoding="utf-8")
+        assert 'refresh_scope="all"' not in blob
+        assert "today_dow" not in blob
+        assert "INPUT_REFRESH_SCOPE" in blob
 
     def test_house_accepts_repository_dispatch_watchdog(self) -> None:
         house = yaml.safe_load(HOUSE.read_text(encoding="utf-8"))

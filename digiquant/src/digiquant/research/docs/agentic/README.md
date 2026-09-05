@@ -34,7 +34,7 @@ python3 scripts/run_db_first.py
 - Cowork: [`cowork/README.md`](../../cowork/README.md), [`cowork/tasks/README.md`](../../cowork/tasks/README.md)
 - Validate: `--validate-mode pm` or `full`
 
-**Full pipeline (combined):** `python -m digiquant.portfolio.chain --cadence daily` (Sunday: `--refresh-scope all` via cron).
+**Full pipeline (combined):** `python -m digiquant.portfolio.chain --cadence daily` (optional `--refresh-scope all` via manual dispatch/CLI).
 
 **Single segment:** read `skills/{segment}/SKILL.md`, write **JSON** where the skill specifies, publish to Supabase per [`RUNBOOK.md`](../../RUNBOOK.md).
 
