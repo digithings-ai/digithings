@@ -42,14 +42,14 @@
    and .dt-cur). */
 @import "@digithings/web/styles/chat-core.css";
 /* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
-   (~1 MB). This app renders <DigiChatSession>, so it reaches
+   (~1 MB). This app renders CliThread / ChatMarkdown, so it reaches
    remark-math/rehype-katex and genuinely needs them; dashboard and the design
    reference deliberately do not import this. Must come AFTER chat-core.css. */
 @import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
-/* The .tl-* frame for <TerminalStepCaret>, which <DigiChatSession> shows while
-   an answer is still on its way. Also AFTER chat-core.css: the caret inside it
-   is <ChatStreamCursor>, so the block, blink and reduced-motion still all come
+/* The .tl-* frame for terminal loaders (legacy DigiChatSession Searching…
+   chrome). Also AFTER chat-core.css: the caret inside it is
+   <ChatStreamCursor>, so the block, blink and reduced-motion still all come
    from there and this sheet only frames the line. */
 @import "@digithings/web/styles/terminal-loaders.css";
 /* Controls layer (#1419) — dress for the shared controls that
@@ -63,6 +63,7 @@
 @import "@digithings/web/styles/controls-overlay.css";
 @import "@digithings/digichat-ui/styles/cursor.css";
 @import "@digithings/digichat-ui/styles/session.css";
+@import "../styles/assistant-ui-cli.css";
 
 /* Tailwind never scans package sources — generate the token utilities the
    shared chat components carry (MIGRATION.md rule 3). Paths stay

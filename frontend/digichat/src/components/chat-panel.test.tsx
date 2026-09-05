@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { type ReactNode } from "react";
 import { render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UIMessage } from "ai";
@@ -10,8 +11,8 @@ import {
 } from "@/hooks/use-byok-key";
 
 // prepareSendMessagesRequest is a closure built inside useMemo(() => new
-// DefaultChatTransport({...})) in chat-panel.tsx — same situation as
-// use-embed-digi-chat.test.ts. Capture the real config DefaultChatTransport is
+// AssistantChatTransport({...})) in chat-panel.tsx — same situation as
+// use-embed-digi-chat.test.ts. Capture the real config AssistantChatTransport is
 // constructed with so the assertions below run against the actual closure,
 // not a reimplementation of it.
 type PrepareSendMessagesRequestResult = { headers: HeadersInit; body: unknown };
@@ -44,9 +45,6 @@ vi.mock("ai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ai")>();
   return {
     ...actual,
-    // `new DefaultChatTransport(...)` requires the mock to be constructible —
-    // an arrow-function mockImplementation would fail with "is not a
-    // constructor", so this uses `function` deliberately.
     DefaultChatTransport: vi.fn().mockImplementation(function (config: unknown) {
       capturedTransportConfig = config as {
         prepareSendMessagesRequest: PrepareSendMessagesRequestFn;
@@ -57,6 +55,49 @@ vi.mock("ai", async (importOriginal) => {
     }),
   };
 });
+
+vi.mock("@assistant-ui/ai-sdk", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@assistant-ui/ai-sdk")>();
+  return {
+    ...actual,
+    AssistantChatTransport: vi.fn().mockImplementation(function (config: unknown) {
+      capturedTransportConfig = config as {
+        prepareSendMessagesRequest: PrepareSendMessagesRequestFn;
+      };
+      return new actual.AssistantChatTransport(
+        config as ConstructorParameters<typeof actual.AssistantChatTransport>[0],
+      );
+    }),
+    useAISDKRuntime: () => ({ kind: "runtime" }),
+    useAISDKChat: () => ({
+      messages: [],
+      status: "ready",
+      sendMessage: vi.fn(),
+      stop: vi.fn(),
+      setMessages: vi.fn(),
+    }),
+  };
+});
+
+vi.mock("@assistant-ui/react", () => ({
+  AssistantRuntimeProvider: ({ children }: { children: ReactNode }) => children,
+  ThreadPrimitive: {
+    Root: ({ children, className }: { children?: ReactNode; className?: string }) => (
+      <div className={className}>{children}</div>
+    ),
+    Viewport: ({ children, className }: { children?: ReactNode; className?: string }) => (
+      <div className={className}>{children}</div>
+    ),
+    Empty: ({ children }: { children?: ReactNode }) => children,
+    Messages: () => null,
+  },
+  ComposerPrimitive: {
+    Root: ({ children }: { children?: ReactNode }) => children,
+    Input: "textarea",
+  },
+  MessagePrimitive: { Root: "div", Parts: () => null },
+  ActionBarPrimitive: { Root: "div", Copy: "button" },
+}));
 
 // Only useBYOKKey is faked — byokRequiresModel/BYOK_PROVIDER_LIST/etc. stay
 // real so this test exercises the actual predicate chat-panel.tsx now calls,
@@ -76,21 +117,20 @@ vi.mock("@/hooks/use-byok-key", async (importOriginal) => {
 
 // Mocked away entirely — this test only needs the transport config ChatPanel
 // builds, not real markdown/echarts/quant-strip rendering.
-vi.mock("@digithings/digichat-ui", () => ({
-  ChatActivities: () => null,
-  matchingSlashCommands: () => [],
-  nextPaletteIndex: (current: number, delta: number, length: number) => {
-    if (length <= 0) return 0;
-    return ((current + delta) % length + length) % length;
-  },
-  citationHits: () => [],
-  copyMarkdownWithFallback: vi.fn(),
-  downloadMarkdown: vi.fn(),
-  serializeAssistantMarkdown: () => "",
-  serializeThreadMarkdown: () => "",
-}));
+vi.mock("@digithings/digichat-ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@digithings/digichat-ui")>();
+  return {
+    ...actual,
+  };
+});
 
 import { ChatPanel } from "./chat-panel";
+import {
+  setPendingForceTool,
+  setPendingTurnMode,
+  takePendingForceTool,
+  takePendingTurnMode,
+} from "@/lib/pending-chat-headers";
 
 function baseProps() {
   return {
@@ -109,7 +149,7 @@ async function callPrepareSendMessagesRequest(
   render(<ChatPanel {...baseProps()} />);
   const config = readCapturedTransportConfig();
   if (!config) {
-    throw new Error("DefaultChatTransport was never constructed by ChatPanel");
+    throw new Error("AssistantChatTransport was never constructed by ChatPanel");
   }
   const result = await config.prepareSendMessagesRequest({ messages: [], id: "t1", body: undefined });
   return { headers: new Headers(result.headers), body: result.body };
@@ -185,5 +225,38 @@ describe("ChatPanel prepareSendMessagesRequest — X-BYOK-Model (Fix 1 regressio
       isSet: true,
     });
     expect(headers.has("X-BYOK-Model")).toBe(false);
+  });
+});
+
+describe("ChatPanel prepareSendMessagesRequest — turn mode vs force-tool", () => {
+  beforeEach(() => {
+    takePendingForceTool("t1");
+    takePendingTurnMode("t1");
+    mockByokState = { key: "", provider: "openrouter", model: "", isSet: false };
+  });
+
+  it("sends X-Digi-Turn-Mode and omits force-tool on regenerate", async () => {
+    setPendingTurnMode("t1", "regenerate");
+    setPendingForceTool("t1", "digisearch");
+    const { headers } = await callPrepareSendMessagesRequest({
+      key: "",
+      provider: "openrouter",
+      model: "",
+      isSet: false,
+    });
+    expect(headers.get("X-Digi-Turn-Mode")).toBe("regenerate");
+    expect(headers.has("X-Digi-Force-Tool")).toBe(false);
+  });
+
+  it("sends X-Digi-Force-Tool on a plain send", async () => {
+    setPendingForceTool("t1", "digisearch");
+    const { headers } = await callPrepareSendMessagesRequest({
+      key: "",
+      provider: "openrouter",
+      model: "",
+      isSet: false,
+    });
+    expect(headers.get("X-Digi-Force-Tool")).toBe("digisearch");
+    expect(headers.has("X-Digi-Turn-Mode")).toBe(false);
   });
 });

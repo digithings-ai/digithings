@@ -10,7 +10,7 @@
  *     via digichat:theme postMessage)
  *   ?welcome= / ?placeholder= / ?suggestions= — UI overrides (DataTapStream)
  *
- * Uses the shared @digithings/digichat-ui DigiChatSession widget.
+ * Uses assistant-ui primitives (`CliThread`) with the shared CLI session skin.
  */
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,7 +20,9 @@ import {
   readWebSearchPref,
   writeWebSearchPref,
 } from "@/lib/web-search-pref";
-import { DigiChatSession } from "@digithings/digichat-ui";
+import { parseSlashInput } from "@digithings/digichat-ui";
+import { AssistantRuntimeProvider } from "@assistant-ui/react";
+import { CliThread } from "@/components/assistant-ui/cli-thread";
 import { Key, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ByokCliFlow } from "@/components/byok-cli-flow";
@@ -585,7 +587,7 @@ function EmbedChat({
 
   const [seedApplied, setSeedApplied] = useState(false);
   const [hideIntroForSeed, setHideIntroForSeed] = useState(false);
-  /** Parent handshake/load failures — DigiChatSession `.dtc-error` transcript lines. */
+  /** Parent handshake/load failures — CliThread error transcript lines. */
   const [handshakeError, setHandshakeError] = useState<string | null>(null);
 
   // Same first-party allowlist as digichat:seed / digichat:theme.
@@ -896,90 +898,101 @@ function EmbedChat({
     });
 
   return (
-    <DigiChatSession
-      welcomeIntro={welcomeIntro}
-      suggestions={suggestions}
-      placeholder={placeholder}
-      showByok={showByok}
-      showByokOnError={showByokOnError}
-      layout={uiFlags.layout}
-      chat={{
-        messages: chat.messages,
-        busy: chat.busy,
-        // Handshake/load failures from the parent beat chat errors so the
-        // terminal line is visible. Trial overlay still suppresses chat errors.
-        error: handshakeError ?? (trialLocked ? null : chat.error),
-        quotaPrompt: showByok && quotaPrompt && !byokIsSet,
-        providerIsSet: byokIsSet,
-        openSettings: showByok ? openSettings : undefined,
-        send: wrappedSend,
-        reset: chat.reset,
-        stop: chat.stop,
-        onRetry: handshakeError
-          ? // regenerate() cannot repair a parent handshake/load failure; match
-            // the "refresh" copy and give the cold-start retry path teeth.
-            () => {
-              window.location.reload();
-            }
-          : isTrialForm &&
-              !trialLocked &&
-              !!chat.error?.toLowerCase().includes("trial form")
-            ? reopenTrialForm
-            : chat.onRetry,
-      }}
-      headerSlot={headerSlot}
-      onLanguageChange={setLanguage}
-      languageCode={language}
-      webSearchAllowed={tenantAllowsWeb}
-      webSearchEnabled={webSearchPref}
-      onWebSearchToggle={tenantAllowsWeb ? toggleWebSearch : undefined}
-      footerSlot={footerSlot}
-      settingsPanel={
-        showByok && settingsOpen ? (
-          <ByokCliFlow
-            onClose={() => setSettingsOpen(false)}
-            onActivate={onByokSaved}
-            onClear={clearByokKey}
-            active={
-              byokIsSet
-                ? { provider: byokProvider, model: byokModel }
-                : null
-            }
-            initialProvider={byokProvider}
-            initialModel={byokModel}
-            title={
-              quotaPrompt
-                ? "byok — free tier exhausted"
-                : "byok configure"
-            }
-          />
-        ) : undefined
-      }
-      formReplacement={
-        trialLocked ? (
-          resolveGateFallbackCard({ noParentChannel, parentUnresponsive }) === "paywall" ? (
+    <AssistantRuntimeProvider runtime={chat.runtime}>
+      <CliThread
+        placeholder={placeholder}
+        suggestions={suggestions}
+        layout={uiFlags.layout}
+        className={uiParams.wide ? "dc-session--wide" : undefined}
+        ariaLabel={headerTitle ?? "digichat embed"}
+        emptyHint={
+          hideIntroForSeed
+            ? null
+            : welcomeIntro
+              ? (
+                  <div className="dc-term-row dc-term-row-assistant">
+                    <span className="dc-term-marker">▸</span>
+                    <div className="dc-term-body" style={{ color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}>
+                      {welcomeIntro}
+                    </div>
+                  </div>
+                )
+              : undefined
+        }
+        headerSlot={headerSlot}
+        footerSlot={footerSlot}
+        slashVisibility={{ webSearch: tenantAllowsWeb, byok: showByok }}
+        onLanguageChange={setLanguage}
+        onOpenSettings={showByok ? openSettings : undefined}
+        onReset={chat.reset}
+        allowTurnMutation={typeof chat.regenerate === "function"}
+        onRegenerate={chat.regenerate}
+        onEditLastUser={chat.editLastUser}
+        onSendRequest={(text, opts) => {
+          wrappedSend(text, opts);
+          return true;
+        }}
+        onSlashCommand={(raw) => {
+          const parsed = parseSlashInput(raw);
+          if (parsed.kind === "command" && parsed.command.id === "websearch" && tenantAllowsWeb) {
+            toggleWebSearch();
+            return true;
+          }
+          return false;
+        }}
+        settingsPanel={
+          showByok && settingsOpen ? (
+            <ByokCliFlow
+              onClose={() => setSettingsOpen(false)}
+              onActivate={onByokSaved}
+              onClear={clearByokKey}
+              active={
+                byokIsSet
+                  ? { provider: byokProvider, model: byokModel }
+                  : null
+              }
+              initialProvider={byokProvider}
+              initialModel={byokModel}
+              title={
+                quotaPrompt
+                  ? "byok — free tier exhausted"
+                  : "byok configure"
+              }
+            />
+          ) : undefined
+        }
+        formReplacement={
+          trialLocked ? (
+            resolveGateFallbackCard({ noParentChannel, parentUnresponsive }) === "paywall" ? (
+              <PaywallCard
+                lockedContact={tenantCfg.lockedContact}
+                onSave={onByokSaved}
+                initialProvider={byokProvider}
+                initialModel={byokModel}
+              />
+            ) : (
+              <TrialGatePlaceholder onOpen={reopenTrialForm} />
+            )
+          ) : gate.locked && !ungated && !isTrialForm ? (
             <PaywallCard
               lockedContact={tenantCfg.lockedContact}
               onSave={onByokSaved}
               initialProvider={byokProvider}
               initialModel={byokModel}
             />
-          ) : (
-            <TrialGatePlaceholder onOpen={reopenTrialForm} />
-          )
-        ) : gate.locked && !ungated && !isTrialForm ? (
-          <PaywallCard
-            lockedContact={tenantCfg.lockedContact}
-            onSave={onByokSaved}
-            initialProvider={byokProvider}
-            initialModel={byokModel}
-          />
-        ) : undefined
-      }
-      showIntro={!gate.locked && !trialLocked && !hideIntroForSeed}
-      ariaLabel={headerTitle ?? "digichat embed"}
-      className={uiParams.wide ? "dc-session--wide" : undefined}
-    />
+          ) : undefined
+        }
+        errorText={handshakeError ?? (trialLocked ? null : chat.error)}
+        errorAction={
+          showByokOnError && !handshakeError && !trialLocked ? (
+            <button type="button" className="dc-inline-link" onClick={openSettings}>
+              Add your API key (/byok)
+            </button>
+          ) : undefined
+        }
+        disabled={Boolean((gate.locked || trialLocked) && !ungated)}
+      />
+    </AssistantRuntimeProvider>
   );
 }
 

@@ -67,9 +67,9 @@ function defaultModel(provider: ProviderId): string {
  *
  * Called unconditionally on every digithings-web page load from
  * `components/LegacyByokPurge.tsx` (mounted from the root layout) — not just
- * from `useProviderSettings`, whose only consumer (`DigiChatSession`) isn't
- * rendered by every page (`/chat` and `/chat/occ` render `ChatEmbedShell`
- * instead). See #2348.
+ * from `useProviderSettings`, whose historical consumer was an in-process
+ * session widget that `/chat` and `/chat/occ` no longer mount (they use
+ * `ChatEmbedShell` → digichat `/embed`). See #2348.
  *
  * Exported (alongside the two helpers below) purely so tests can exercise
  * this module's storage behavior directly — `useProviderSettings` calls

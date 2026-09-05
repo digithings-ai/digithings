@@ -14,7 +14,7 @@
  *   - Local + remote thread state + debounced server save
  *   - Conversation hydration on demand
  *   - Auth.js session via props
- *   - BYOK / streaming / trace rendering all live in ChatPanel
+ *   - BYOK / streaming / transport live in ChatPanel; transcript chrome is CliThread
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

@@ -2,6 +2,8 @@ import {
   convertToModelMessages,
   streamText,
   smoothStream,
+  toUIMessageStream,
+  createUIMessageStreamResponse,
   type UIMessage,
 } from "ai";
 import {
@@ -40,6 +42,7 @@ import {
   releaseChatRunLockOnResponseEnd,
 } from "@/lib/chat-run-lock";
 import { isMutatingTurnMode, parseDigiTurnMode } from "@/lib/turn-mode";
+import { uiMessagesForUpstream } from "@/lib/ui-stream-parts";
 
 export const maxDuration = 120;
 
@@ -254,11 +257,12 @@ export async function POST(req: Request) {
   let coreMessages;
   try {
     coreMessages = await convertToModelMessages(
-      messages.map((m) => {
+      uiMessagesForUpstream(messages).map((m) => {
         const { id: _omit, ...rest } = m;
         void _omit;
         return rest;
-      }) as Omit<UIMessage, "id">[]
+      }) as Omit<UIMessage, "id">[],
+      { ignoreIncompleteToolCalls: true },
     );
   } catch (err) {
     runLock.release();
@@ -388,7 +392,8 @@ export async function POST(req: Request) {
   });
 
   return finish(
-    result.toUIMessageStreamResponse({
+    createUIMessageStreamResponse({
+      stream: toUIMessageStream({ stream: result.stream }),
       headers: responseHeaders,
     }),
   );

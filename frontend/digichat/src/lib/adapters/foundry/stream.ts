@@ -5,7 +5,7 @@
  * in Foundry; the client echoes the conversation id back each turn using the
  * same generic conversation-id contract (`X-External-Conversation`) used for
  * Foundry turn continuity.
- * (data-externalConversation / X-External-Conversation).
+ * (`data-conversation` / `X-External-Conversation`).
  *
  * Turn mutation (#3475): `send` appends last-user text via `responses.create`.
  * `regenerate` / `edit_last_user` delete trailing conversation items (when the
@@ -23,7 +23,6 @@ import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } 
 import { lastUserMessageText } from "@/lib/adapters/shared/messages";
 import { LANGUAGES } from "@/lib/languages";
 import {
-  ACTIVITY_PART_TYPE,
   applyActivityDetail,
   sanitizeActivitySpan,
   type ActivityDetail,
@@ -32,6 +31,12 @@ import {
 } from "@/lib/chat-activity";
 import type { DigiTurnMode } from "@/lib/turn-mode";
 import { isMutatingTurnMode } from "@/lib/turn-mode";
+import {
+  CONVERSATION_PART_TYPE,
+  createActivityWriteContext,
+  finishStandardActivity,
+  writeStandardActivity,
+} from "@/lib/ui-stream-parts";
 
 /** Foundry has no per-call system-prompt slot (see module doc comment) — the
  * language directive is prepended to the raw input text instead, resent on
@@ -679,6 +684,7 @@ export async function createFoundryStreamResponse(opts: {
     execute: async ({ writer }) => {
       const textId = "assistant-main";
       let textOpen = false;
+      const activityCtx = createActivityWriteContext();
       const openText = () => {
         if (!textOpen) {
           writer.write({ type: "text-start", id: textId });
@@ -700,7 +706,7 @@ export async function createFoundryStreamResponse(opts: {
           const conversation = await openai.conversations.create();
           conversationId = conversation.id;
           writer.write({
-            type: "data-externalConversation",
+            type: CONVERSATION_PART_TYPE,
             id: "foundry-conversation",
             data: { conversationId },
           });
@@ -734,7 +740,6 @@ export async function createFoundryStreamResponse(opts: {
           body: { agent_reference: { name: opts.agentName, type: "agent_reference" } },
         });
 
-        let traceSeq = 0;
         const textFilter = new FoundryToolLeakFilter();
         for await (const event of responseStream) {
           const mapped = mapFoundryEvent(event);
@@ -755,11 +760,7 @@ export async function createFoundryStreamResponse(opts: {
             const sanitized = sanitizeActivitySpan(mapped.span);
             const span = sanitized && applyActivityDetail(sanitized, opts.activityDetail);
             if (span) {
-              writer.write({
-                type: ACTIVITY_PART_TYPE,
-                id: `foundry-activity-${traceSeq++}`,
-                data: span,
-              });
+              writeStandardActivity(writer, span, activityCtx);
             }
           } else if (mapped.type === "error") {
             throw new FoundryProtocolError(mapped.message);
@@ -802,6 +803,7 @@ export async function createFoundryStreamResponse(opts: {
           });
         }
       } finally {
+        finishStandardActivity(writer, activityCtx);
         closeText();
       }
     },

@@ -35,13 +35,14 @@ it("does not stream the upstream error body to the browser", async () => {
   });
   const body = await new Response(res.body).text();
 
+  expect(res.headers.get("x-vercel-ai-ui-message-stream")).toBe("v1");
   expect(body).not.toContain(secret);
   expect(body).not.toContain("db.internal");
   expect(body).toMatch(/unavailable|try again/i);
   expect(errorLog).toHaveBeenCalled();
 });
 
-// The authenticated path emits only data-digichatActivity spans from the typed mapper.
+// The authenticated path emits standard tool / data-status / source parts (2.0).
 it("never emits data-digigraphTrace on the authenticated path", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(
@@ -76,8 +77,9 @@ it("never emits data-digigraphTrace on the authenticated path", async () => {
   const body = await new Response(res.body).text();
 
   expect(body).not.toContain('"type":"data-digigraphTrace"');
-  expect(body).toContain('"type":"data-digichatActivity"');
-  expect(body).toContain('"operation":"chat"');
+  expect(body).not.toContain('"type":"data-digichatActivity"');
+  expect(body).toContain('"type":"data-status"');
+  expect(body).toContain("Searching…");
   expect(body).not.toContain('"workflow_id"');
 });
 
@@ -247,8 +249,9 @@ it("emits the activity span but not the legacy part on the embed path with activ
   const body = await new Response(res.body).text();
 
   // Activity span present on embed path with activityDetail: full.
-  expect(body).toContain('"type":"data-digichatActivity"');
-  expect(body).toContain('"operation":"chat"');
+  expect(body).toContain('"type":"data-status"');
+  expect(body).toContain("Searching…");
+  expect(body).not.toContain('"type":"data-digichatActivity"');
   // But legacy part is NOT emitted on embed path.
   expect(body).not.toContain('"type":"data-digigraphTrace"');
   expect(body).not.toContain('"workflow_id"');
@@ -293,10 +296,10 @@ it("emits rich retrieve activity for rag_sources on the gated path", async () =>
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
-  expect(body).toContain('"type":"data-digichatActivity"');
-  expect(body).toContain('"operation":"retrieve"');
+  expect(body).toContain('"type":"tool-output-available"');
   expect(body).toContain('"tier":"tier_a"');
   expect(body).toContain('"year":2023');
+  expect(body).not.toContain('"type":"data-digichatActivity"');
   expect(body).not.toContain('"type":"data-digigraphTrace"');
 });
 

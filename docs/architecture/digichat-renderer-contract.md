@@ -1,4 +1,4 @@
-# digichat renderer contract
+# digichat product contract (renderer + BFF)
 
 **Status:** Living architecture note (2026-09-05)
 **Related:** [ADR-0028](../adr/0028-digichat-web-foundation-and-opencode-distribution.md),
@@ -6,144 +6,93 @@
 [`frontend/digichat/ARCHITECTURE.md`](../../frontend/digichat/ARCHITECTURE.md),
 implementation [#3626](https://github.com/digithings-ai/digithings/issues/3626)
 (**digichat 2.0** — do not merge to `develop` until the 2.0 cut)
-**Verified:** 2026-09-05 against live assistant-ui, AI SDK v7, LangGraph,
-ACP, and OpenAI docs, plus `origin/develop` `frontend/digichat` **1.4.0**.
 
-This note records the public **renderer** contract. It does not invent a
-digithings-only event dialect. Implementation is the 2.0 milestone (#3626),
-not a 1.5 ship. 1.5 on `develop` is non-UI only.
+digichat-the-**product** is the containerized **BFF** plus an optional default UI.
+The UI and the HTTP contract do **not** change when the backend changes.
+`DIGICHAT_EMBED_TENANTS[].backend.type` selects `digigraph` or `foundry`.
 
-**AG-UI** is deferred and not needed: assistant-ui consumes the AI SDK UI
-stream natively. Do not add `@ag-ui/*`.
+**AG-UI** is out of scope. Do not add `@ag-ui/*`. Callers never talk to LangGraph
+Cloud, digigraph MCP, or Foundry’s native event stream.
 
-## Decision
+## Modes of consumption
 
-The canonical browser-facing contract is the **Vercel AI SDK UI message
-stream**: SSE chunks of `UIMessage` / `UIMessageChunk`, advertised with
+| Mode | What we ship | What they run |
+|------|----------------|---------------|
+| **Default UI** | CLI-themed assistant-ui at `/embed` and first-party `/chat` | iframe (marketing, dashboard popup, `widget.js`) or open the app |
+| **Own UI** | Nothing visual | Their renderer against **their** digichat origin `POST /api/chat` |
+| **Plugin** | Same HTTP, no iframe | Their existing chat calls the BFF as a backend / agent hop |
+
+“Compatible” means the **stream + headers**, not importing `CliThread`.
+
+## Canonical wire
+
+The browser-facing contract is the **Vercel AI SDK UI message stream**:
+`UIMessage[]` in, SSE `UIMessageChunk` out, advertised with
 `x-vercel-ai-ui-message-stream: v1`.
 
-That is what `@assistant-ui/react` consumes on the recommended AI SDK runtime
-and on DataStream. Other OSS chat UIs that speak `useChat` consume the same
-bytes. Custom product chrome (tool/search/vault activity) stays a `data-*`
-part **on that stream**, not a second wire protocol.
-
-## Layers (correcting “we already use OpenAI contracts”)
-
-OpenAI Chat Completions is a **model** API. It is not a UI-event contract.
-digithings already uses it at the orchestration hop; the BFF already translates
-it into a UI stream.
-
-| Layer | What it is | Live surface |
-|-------|------------|--------------|
-| Browser / any UI | Renderer contract | AI SDK UI message stream (`UIMessage[]` in, SSE `UIMessageChunk` out) |
-| digichat BFF `POST /api/chat` | Auth, persistence, tenant/embed policy, adapter translation | Already emits the UI stream; default path is `createDigigraphTraceStreamResponse` |
-| digigraph HTTP | OpenAI-compatible **model** API | `POST /v1/chat/completions` (`stream: true` → `chat.completion.chunk` SSE). Optional `delta.digigraph_trace` / `delta.digigraph_error` are product extensions on that model stream, not a UI protocol |
-| digigraph LangGraph | Internal graph runtime | `graph.stream` / `astream` modes (`values`, `updates`, `messages`, `custom`, …). Thread APIs are opt-in (`DIGI_ENABLE_THREAD_API=1`) |
-| digigraph MCP | Agent ↔ tools | FastMCP on `:8766`; unauthenticated; not a renderer |
-| Foundry adapter | Client-embed backend | Translated into the same UI stream (1.4: `data-digichatActivity`; 2.0: standard tool/`source-*`/`data-status` parts) |
-
 ```text
-UI  --UIMessage stream-->  digichat BFF  --OpenAI Chat Completions SSE-->  digigraph
-                                              (LangGraph inside the process)
+UI / plugin  --UIMessage stream-->  digichat BFF  --adapter-->  digigraph | Foundry
 ```
 
-## What `@assistant-ui/react` actually consumes (2026-09)
+| Layer | Live surface |
+|-------|--------------|
+| Browser / any UI | AI SDK UI message stream |
+| digichat BFF `POST /api/chat` | Auth, persistence, tenant/embed policy, adapter translation |
+| digigraph | OpenAI-compatible `POST /v1/chat/completions` (LangGraph inside) |
+| Foundry | Azure AI Foundry agent events (`adapters/foundry/stream.ts`) |
 
-assistant-ui is a React UI + runtime, not a wire protocol of its own. Runtimes
-wrap one of two cores (`LocalRuntime`, `ExternalStoreRuntime`) and optionally a
-protocol layer.
+### Auth
 
-Checked: [pick a runtime](https://www.assistant-ui.com/docs/runtimes/pick-a-runtime),
-[architecture](https://www.assistant-ui.com/docs/runtimes/concepts/architecture),
-[AI SDK overview](https://www.assistant-ui.com/docs/runtimes/ai-sdk/overview),
-[AI SDK v7](https://www.assistant-ui.com/docs/runtimes/ai-sdk/v7),
-[DataStream](https://www.assistant-ui.com/docs/runtimes/custom/data-stream),
-[Assistant Transport](https://www.assistant-ui.com/docs/runtimes/custom/assistant-transport),
-[LangGraph](https://www.assistant-ui.com/docs/runtimes/langgraph/quickstart),
-[AG-UI](https://www.assistant-ui.com/docs/runtimes/ag-ui/overview).
+- Auth.js cookie (first-party)
+- Embed: `X-Embed-Host` + `X-Embed-Token` (customer hosts always need token)
+- Machine: `Authorization: Bearer digi_live_…`
 
-| Runtime | Package | Wire | Role for digichat |
-|---------|---------|------|-------------------|
-| AI SDK `useChatRuntime` / `AssistantChatTransport` | `@assistant-ui/ai-sdk` (v7 current) or `@assistant-ui/react-ai-sdk@1.3.40` (v6 pin) | AI SDK UI message stream from `/api/chat` | **Selected client path.** Matches the BFF. New assistant-ui projects target v7 (`ai@^7`, `@ai-sdk/react@^4`). Some older assistant-ui pages still say v6 is current; the versioned v7 page and overview table are authoritative as of this check |
-| DataStream `useDataStreamRuntime` | `@assistant-ui/react-data-stream` | Auto-detects `x-vercel-ai-ui-message-stream: v1` (AI SDK v5+) or `x-vercel-ai-data-stream: v1` (AI SDK v4 / `assistant-stream`); unknown markers fall back to UI message stream | Compatible fallback if we do not use `useChat` |
-| LocalRuntime | `@assistant-ui/react` | Custom `ChatModelAdapter` (you invent the fetch) | Avoid. That *is* a private dialect |
-| ExternalStoreRuntime | `@assistant-ui/react` | You own the store; no wire | Used underneath LangGraph / AG-UI adapters |
-| Assistant Transport | `@assistant-ui/react` | Full **agent state** snapshots + commands, not a message stream | Skip. We stream messages, not a second state machine |
-| LangGraph `useLangGraphRuntime` | `@assistant-ui/react-langgraph` | LangGraph SDK / Cloud (`unstable_createLangGraphStream`) | Skip as the public contract. It bypasses the BFF (auth, embed policy, persistence) and couples every UI to LangGraph Platform |
-| AG-UI `useAgUiRuntime` | `@assistant-ui/react-ag-ui` + `@ag-ui/client` | AG-UI events over `HttpAgent` | **Out of scope.** CopilotKit’s alternate protocol; not needed because assistant-ui consumes the AI SDK UI stream natively |
+### Product headers
 
-## Ranked contracts
+`X-Digi-Force-Tool`, `X-Digi-Turn-Mode`, `X-BYOK-*`, `X-Digi-Enable-Web-Search`,
+`X-Digi-Language`, embed host/token/trial, `X-External-Conversation` (Foundry
+continuity — echoed from `data-conversation`).
 
-Preference if tied: (1) what assistant-ui speaks natively, (2) what other OSS
-UIs also speak, (3) what digigraph already produces, (4) maturity.
+### Published part mapping (honest)
 
-| Option | Verdict |
-|--------|---------|
-| **c) AI SDK UI message stream (current BFF)** | **Pick.** Native for assistant-ui AI SDK + DataStream. Public, documented, already emitted by `POST /api/chat`. Other `useChat` UIs speak it. Custom activity is a `data-*` part on the same stream ([AI SDK stream protocol](https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol)) |
-| e) AG-UI | **Out of scope.** CopilotKit agent↔UI protocol. Not needed: assistant-ui’s AI SDK path already speaks the stream we emit. Do not add `@ag-ui/*` |
-| a) OpenAI Chat Completions SSE | Keep as the **digigraph model** API (Open WebUI, LiteLLM-shaped callers, OpenCode `model`). Not a renderer contract: `chat.completion.chunk` deltas have no UI part model, no `data-*`, no first-class citations/tool UI lifecycle |
-| b) OpenAI Responses API | Richer model events (`response.output_text.delta`, …). digigraph lists it **not built** (Phase 2). assistant-ui’s chat runtimes do not treat it as the `/api/chat` contract |
-| d) LangGraph `stream` / `useStream` | Keep **inside** digigraph. Public UIs must not speak it; that would skip the BFF |
-| f) ACP | **Rejected as canonical.** Editor↔coding-agent JSON-RPC (stdio today; remote still in progress). Markdown-centric, no citation/RAG part model. Optional later as an editor/workspace gateway only. Spec: https://agentclientprotocol.com/get-started/introduction |
+Chunk **types** are AI SDK-shaped. **Payloads** carry digichat product data —
+a stock `useChat` client can stream text; search/vault **look** needs tool/source
+UIs or a local mapping.
 
-Honest one-liner: **speak the AI SDK UI stream because that is what assistant-ui
-DataStream / `useChatRuntime` consume. AG-UI is deferred and not needed. Do not
-invent a new dialect.**
+| Information | 2.0 part |
+|-------------|----------|
+| Tool / retrieve progress | `tool-*` (`tool-input-*`, `tool-output-available`) |
+| Citations | `source-url` / `source-document` (snippets/body may live on tool output JSON) |
+| Reasoning | `reasoning-*` |
+| Opaque progress / research brief | unbranded `data-status` `{ status, label, brief? }` |
+| Foundry conversation id | `data-conversation` |
+| Embed `activityDetail` gate | still applied in the BFF before write |
 
-## What digichat emits today (`origin/develop`)
+1.4 branded `data-digichatActivity` is **not written**. Old threads are still
+**read** for hydrate / export fallback.
 
-`frontend/digichat/package.json`: `ai ^6.0.116`, `@ai-sdk/react ^3.0.118`,
-`@ai-sdk/openai ^3.0.41`. No `@assistant-ui/*`.
+## Default UI (assistant-ui)
 
-`POST /api/chat` (also `/api/v1/chat`):
+`@assistant-ui/react` + `@assistant-ui/ai-sdk` + AI SDK v7. Session chrome is
+`CliThread`: MessagePrimitive.Parts for text / reasoning / tools / sources /
+`data-status`. Product slots only: CSS (`.dc-*`), slash + force-tool, pending
+headers, BYOK/paywall, chart fence, copy/export serializers.
 
-- Request: `{ messages: UIMessage[] }` plus turn/session headers
-  (`X-Digi-Turn-Mode`, `X-Digichat-Session`, …).
-- Default response: `createUIMessageStream` + `createUIMessageStreamResponse`
-  in `src/lib/adapters/digithings/stream.ts`. That helper sets
-  `x-vercel-ai-ui-message-stream: v1`. Text uses `text-start` / `text-delta` /
-  `text-end`. Activity uses `type: "data-digichatActivity"`.
-- Legacy path: `streamText(…).toUIMessageStreamResponse()` (AI SDK v6 instance
-  method; v7 prefers stateless `toUIMessageStream` +
-  `createUIMessageStreamResponse`).
-- The BFF **parses** digigraph OpenAI SSE (`iterateOpenAiSse`) and **writes**
-  AI SDK UI chunks. The browser never sees `delta.digigraph_trace`.
+Package version stays **1.4.0** until the owner cuts 2.0.
 
-AI SDK v6 → v7 is a library bump on the **same** UI-stream family, not a
-protocol replacement. It is part of **digichat 2.0** (#3626) together with
-assistant-ui: `ai@^7` / `@ai-sdk/react@^4` / `@assistant-ui/react-ai-sdk`.
-Do not fold that bump into 1.5. Until 2.0 lands, 1.4 stays on `ai ^6` /
-`@ai-sdk/react ^3`.
+## Backends
 
-## `data-digichatActivity` (1.4 / 1.5 only)
+- **Profile A** — digichat + digigraph stack (digithings.ai dogfood).
+- **Profile B** — digichat (+ db) only → Azure AI Foundry
+  (`DefaultAzureCredential`; no Foundry key in env). Same `/embed` or headless
+  BFF. digithings itself has **no Azure**.
 
-`ACTIVITY_PART_TYPE = "data-digichatActivity"` is today’s AI SDK **Data
-Parts** extension (`data: {"type":"data-<name>","data":…}`). The *payload*
-schema (`ActivitySpan` → `DigiChatActivity`, OTel GenAI field names, embed
-`activityDetail` gate) is product-specific and stays in the BFF mapper on
-the 1.x line.
+Both adapters call `writeStandardActivity`. UI never selects a backend.
 
-**2.0 removes the branded type.** Map the same information onto standard
-AI SDK UI parts so a generic `useChat` / assistant-ui client needs no
-digichat vocabulary:
+## Out of scope
 
-| 1.4 span | 2.0 standard part |
-|----------|-------------------|
-| `execute_tool` started/completed/failed | `tool-{name}` (typed tool UI part) |
-| `retrieve` documents / hitCount | `source-document` / `source-url` plus tool result |
-| `reasoningDelta` | `reasoning` |
-| opaque `chat` progress | unbranded `data-status` (or transient status) |
-| embed `activityDetail` gate | still applied in the BFF before write |
-
-Keep retrieval, vault, and tool-progress *information* when those standard
-parts can carry it. Drop `data-digichatActivity` and similar branded custom
-types from the wire.
-
-## Out of scope here
-
-- Merging the 2.0 implementation into `develop` before the 2.0 cut
-- 1.x UI chrome that 2.0 will replace (#3565 overlays/palette)
-- Making digigraph emit UI messages (it keeps Chat Completions)
-- Exposing unauthenticated MCP as a UI backend
-- ACP as the embed/`/chat` contract
-- AG-UI / `@ag-ui/*`
+- Merging 2.0 into `develop` before the cut
+- AG-UI / ACP as the embed contract
+- Making digigraph or Foundry emit UI messages natively
+- A third backend type in this milestone
+- LangGraph Cloud in the browser

@@ -12,8 +12,8 @@
  * Server component — no state, no effects. Action buttons come from
  * ChatWidgetButton (primary / ghost / danger tones); their transitions and
  * color-mix hovers live in styles/chat-widgets.css (import it once app-wide;
- * see the wiring note there). digichat-ui's ChatActivities `tool_result` /
- * status cards converge on this frame.
+ * see the wiring note there). digichat 2.0 maps tool/status cards via
+ * assistant-ui part components onto these primitives (ChatActivities removed).
  */
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 

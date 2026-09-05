@@ -56,10 +56,12 @@ vi.mock("ai", async () => {
     ...actual,
     convertToModelMessages: vi.fn(async (m: unknown[]) => m),
     streamText: vi.fn(() => ({
-      toUIMessageStreamResponse: vi.fn(({ headers }: { headers: Record<string, string> }) =>
-        new Response("stream", { status: 200, headers })
-      ),
+      stream: new ReadableStream({ start(c) { c.close(); } }),
     })),
+    toUIMessageStream: vi.fn(() => new ReadableStream({ start(c) { c.close(); } })),
+    createUIMessageStreamResponse: vi.fn(({ headers }: { headers?: HeadersInit }) =>
+      new Response("stream", { status: 200, headers }),
+    ),
     smoothStream: vi.fn(() => ({})),
   };
 });
@@ -74,7 +76,7 @@ import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/st
 import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
 import { resetChatRunLocksForTests } from "@/lib/chat-run-lock";
 import { EMBED_FREE_TURN_LIMIT } from "@/lib/embed-turn-limits";
-import { streamText } from "ai";
+import { streamText, createUIMessageStreamResponse } from "ai";
 
 describe("POST /api/chat", () => {
   const env = process.env;
@@ -93,6 +95,10 @@ describe("POST /api/chat", () => {
     resetChatRunLocksForTests();
     vi.mocked(createFoundryStreamResponse).mockClear();
     vi.mocked(createDigigraphTraceStreamResponse).mockClear();
+    vi.mocked(createUIMessageStreamResponse).mockImplementation(
+      ({ headers }: { headers?: HeadersInit }) =>
+        new Response("stream", { status: 200, headers }),
+    );
   });
 
   afterEach(() => {
@@ -419,19 +425,16 @@ describe("POST /api/chat", () => {
   });
 
   it("returns 409 run_in_progress for concurrent regen on the same session", async () => {
-    vi.mocked(streamText).mockImplementationOnce(
-      () =>
-        ({
-          toUIMessageStreamResponse: ({ headers }: { headers: Record<string, string> }) =>
-            new Response(
-              new ReadableStream({
-                start() {
-                  /* hold open until cancelled */
-                },
-              }),
-              { status: 200, headers },
-            ),
-        }) as ReturnType<typeof streamText>,
+    vi.mocked(createUIMessageStreamResponse).mockImplementationOnce(
+      ({ headers }: { headers?: HeadersInit }) =>
+        new Response(
+          new ReadableStream({
+            start() {
+              /* hold open until cancelled */
+            },
+          }),
+          { status: 200, headers },
+        ),
     );
 
     const first = await POST(
