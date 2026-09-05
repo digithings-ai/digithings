@@ -302,6 +302,18 @@ def _resolve_schedule_report(
     )
 
 
+def _preflight_config_loader(deps: ChainDeps) -> Callable[[], ResearchConfigBundle] | None:
+    """Return the preflight config loader when it is actually callable."""
+    research = getattr(deps, "research", None)
+    if research is None:
+        return None
+    preflight = getattr(research, "preflight", None)
+    if preflight is None:
+        return None
+    loader = getattr(preflight, "config_loader", None)
+    return loader if callable(loader) else None
+
+
 def _run_preflight_only(state: ResearchState, deps: ChainDeps) -> ResearchState:
     """Run the preflight node without the rest of the research graph.
 
@@ -478,6 +490,14 @@ def run_research_then_portfolio(
 
         # Workspace PipelineSchedule gates (#3618) — one graph, skip disabled stages.
         # Calendar context is optional; when absent, execution gates on schedule only.
+        # Overlay config_loader pins version_id only; pipeline_schedule lands on
+        # ProfileConfig during preflight. Hydrate before the research skip so an
+        # overlay Sunday-off is not ignored in favor of daily_defaults.
+        hydrated_for_gates = False
+        if state.config.profile_config is None and _preflight_config_loader(deps) is not None:
+            state = _run_preflight_only(state, deps)
+            hydrated_for_gates = True
+
         stage_report = _resolve_schedule_report(state, research_input.run_date)
         research_enabled = stage_report.research.status != "disabled"
         deliberation_enabled = stage_report.deliberation.status != "disabled"
@@ -531,7 +551,8 @@ def run_research_then_portfolio(
                 research_input.run_date.isoformat(),
                 stage_report.weekday,
             )
-            state = _run_preflight_only(state, deps)
+            if not hydrated_for_gates:
+                state = _run_preflight_only(state, deps)
             stage_report = with_stage_outcome(
                 stage_report,
                 "research",

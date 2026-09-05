@@ -26,7 +26,9 @@ portfolio consumes the daily research digest (`DigestPayload`) and runs **H1–H
   Deprecated shim: `--run-type baseline|delta` (warns; `monthly` rejected).
   After a non-retry exit, fail-soft K5 digest close-out runs (`force_digest=True`).
   Workspace `PipelineSchedule` stage gates (#3618) skip disabled research /
-  deliberation / execution inside this same chain (no competing workflows).
+  deliberation inside this same chain (no competing workflows). Execution
+  outcomes are recorded for the at-open job; this compose does not call
+  `execute_at_open`.
 - **Standalone:** `python -m digiquant.portfolio.graph --from-digest <state.json>`
 - **Library:** `digiquant.portfolio.chain.run_research_then_portfolio(research_input, deps)`
   (overlay nested path — does **not** send house mail; same stage gates)

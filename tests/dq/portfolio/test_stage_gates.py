@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from digiquant.portfolio.stage_gates import (
@@ -264,3 +266,88 @@ class TestOutcomeRecords:
     def test_breakdown_empty_without_outcomes(self) -> None:
         assert pipeline_stages_breakdown(SimpleNamespace()) == {}
         assert pipeline_stages_breakdown(SimpleNamespace(pipeline_stage_outcomes=None)) == {}
+
+
+class TestChainHonorsHydratedOverlaySchedule:
+    """Overlay config_loader pins version_id only; schedule lives on ProfileConfig dump.
+
+    Gates must not decide research-enable from daily_defaults before preflight hydrates.
+    """
+
+    def test_overlay_pin_without_dump_skips_research_once_hydrated(self) -> None:
+        from digiquant.dashboard.profile_config import ProfileConfig
+        from digiquant.portfolio.chain import ChainDeps, run_research_then_portfolio
+        from digiquant.portfolio.graph import PortfolioGraphDeps
+        from digiquant.research.graph import ResearchGraphDeps, ResearchInput
+        from digiquant.research.phases.preflight import PreflightDeps
+        from digiquant.research.state import ResearchConfigBundle, ResearchState
+
+        sunday = date(2026, 9, 13)
+        overlay_id = uuid4()
+        version_id = uuid4()
+        schedule = _schedule(research=False, deliberation=True, execution=False, only="sunday")
+        overlay_profile = ProfileConfig(
+            version_id=version_id,
+            profile_key="overlay-stage-gates",
+            is_house_default=False,
+            label="overlay stage gates",
+            pipeline_schedule=schedule,
+        )
+        pin_only = ResearchConfigBundle(
+            workspace_id=str(overlay_id),
+            profile_config_version_id=str(version_id),
+        )
+        hydrated = ResearchConfigBundle(
+            workspace_id=str(overlay_id),
+            profile_config_version_id=str(version_id),
+            profile_config=overlay_profile.model_dump(mode="json"),
+        )
+
+        def _hydrate(state: ResearchState, _deps: object) -> ResearchState:
+            return state.model_copy(update={"config": hydrated})
+
+        research_built: list[bool] = []
+        portfolio_built: list[bool] = []
+
+        def _capture_research(*_a: object, **_k: object) -> object:
+            research_built.append(True)
+            return object()
+
+        def _capture_portfolio(**_k: object) -> object:
+            portfolio_built.append(True)
+
+            class _Graph:
+                def invoke(self, state: object, *_a: object, **_kw: object) -> object:
+                    return state
+
+            return _Graph()
+
+        deps = ChainDeps(
+            research=ResearchGraphDeps(
+                preflight=PreflightDeps(
+                    client=object(),
+                    config_loader=lambda: pin_only,
+                )
+            ),
+            portfolio=PortfolioGraphDeps(),
+        )
+        with (
+            patch("digiquant.portfolio.chain._run_preflight_only", side_effect=_hydrate),
+            patch("digiquant.portfolio.chain.build_research_graph", side_effect=_capture_research),
+            patch("digiquant.portfolio.chain.build_portfolio_graph", side_effect=_capture_portfolio),
+            patch("digiquant.portfolio.chain._run_terminal_phase", side_effect=lambda *_a, **_k: _a[2]),
+            patch("digiquant.portfolio.chain._run_beliefs_fold"),
+            patch("digiquant.portfolio.chain._safe_invoke_graph", side_effect=lambda _g, state, *_a, **_k: state),
+        ):
+            final = run_research_then_portfolio(
+                research_input=ResearchInput(run_date=sunday, watchlist=("AAPL",)),
+                deps=deps,
+                manage_usage=False,
+            )
+
+        assert research_built == [], "overlay Sunday research=false must skip the research graph"
+        assert portfolio_built == [True], "deliberation stays on; portfolio must still run"
+        outcomes = final.pipeline_stage_outcomes or {}
+        assert outcomes["research"]["status"] == "disabled"
+        assert outcomes["deliberation"]["status"] == "ran"
+        assert outcomes["execution"]["status"] == "disabled"

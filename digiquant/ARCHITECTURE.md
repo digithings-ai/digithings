@@ -1278,10 +1278,13 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   and calendar-vetoable execution constraints inside the same append-only payload
   (no new table). Stage gates (#3618) resolve today's `PipelineSchedule` inside
   `digiquant.portfolio.chain.run_research_then_portfolio` (and the overlay path that
-  calls it): disabled research / deliberation / execution stages are skipped; typed
-  outcomes (`ran` | `disabled` | `deferred` | `failed`) persist on
+  calls it): disabled research / deliberation stages are skipped (preflight hydrates
+  overlay `ProfileConfig` before the research skip). Typed outcomes
+  (`ran` | `disabled` | `deferred` | `failed`) persist on
   `ResearchState.pipeline_stage_outcomes` and the diagnostics breakdown key
-  `pipeline_stages`. Calendar deferral is a typed thin hook
+  `pipeline_stages`. Execution is not invoked in this compose (`execute_at_open`
+  remains a separate job); the report records schedule eligibility / disable /
+  calendar-deferral. Calendar deferral is a typed thin hook
   (`MarketCalendarContext`) — when unavailable, execution gates on schedule only.
   Models: `digiquant.portfolio.stage_gates`. Market-hours venue I/O remains follow-on.
   Shared research corpus (#2613 Track B / WP12-class) uses tenant-agnostic keys
