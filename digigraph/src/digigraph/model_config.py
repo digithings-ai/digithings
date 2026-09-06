@@ -29,7 +29,6 @@ from pathlib import Path
 
 import yaml
 from digillm import (
-    cheaperinference_bare_id_for_house_slug,
     cheaperinference_house_preferred,
     get_provider_api_key_env,
     is_registered_provider,

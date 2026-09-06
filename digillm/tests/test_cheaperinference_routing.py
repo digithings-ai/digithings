@@ -199,4 +199,7 @@ def test_mapped_house_slug_succeeds_on_ci(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_gemini_3_1_flash_lite_mapped_to_ci() -> None:
     """gemini-3.1-flash-lite is on the CI catalog for web_search_models synthesis."""
-    assert client_mod.cheaperinference_bare_id_for_house_slug("google/gemini-3.1-flash-lite") == "gemini-3.1-flash-lite"
+    assert (
+        client_mod.cheaperinference_bare_id_for_house_slug("google/gemini-3.1-flash-lite")
+        == "gemini-3.1-flash-lite"
+    )
