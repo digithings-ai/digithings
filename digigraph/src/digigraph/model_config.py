@@ -513,14 +513,30 @@ def is_tool_use_capable_model(model: str) -> bool:
     return True
 
 
+# #3660 house grounding synthesizers (digisearch / live_search retrieval first;
+# these LLMs only rewrite the retrieved context — not OpenRouter :online/sonar).
+_HOUSE_CI_GROUNDING_SYNTHESIS_SLUGS = frozenset(
+    {
+        "google/gemini-3.1-flash-lite",
+        "deepseek/deepseek-v4-flash",
+    }
+)
+
+
 def is_web_search_capable_model(model: str) -> bool:
-    """True when *model* can ground via ``:online`` or native search (perplexity/*)."""
+    """True when *model* may run digiquant grounding pre-passes.
+
+    Includes OpenRouter ``:online`` / perplexity native search, plus house CI
+    synthesis slugs used after in-house digisearch retrieval (#3660).
+    """
     slug = _openrouter_slug(model).strip().lower()
     if not slug:
         return False
     if is_native_search_only_model(model):
         return True
-    return ":online" in slug
+    if ":online" in slug:
+        return True
+    return slug in _HOUSE_CI_GROUNDING_SYNTHESIS_SLUGS
 
 
 def _pick_from_pool(pool: list[str], key: str) -> str:
