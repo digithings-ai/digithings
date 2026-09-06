@@ -48,43 +48,31 @@ _CHEAP_PHASE_MODELS = frozenset(
         # deepseek-r1 removed from every phase pool (#1622): CoT output is not reliably
         # strict JSON (#1617 master-digest JSONDecodeError). Re-adding it here must be a
         # deliberate decision, not a drive-by.
-        "meta-llama/llama-4-maverick",
+        # #3660: maverick dropped — not on Cheaper Inference catalog.
+        "google/gemini-3.7-flash",
     }
 )
 
 _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
     {
-        # #2368 (2026-08-14): latest generation per vendor where cost allows — grok-4.3
-        # stays on balanced (grok-4.6 is quality-only). gemini-3.7-flash: native PDF/
-        # image vision. gpt-5.6-luna: mid-tier OpenAI. deepseek-v4-pro: mid-cost
-        # reasoning bump, gate-proven and also pooled on quality.
-        "google/gemini-3.7-flash",
+        # #3660: CI-mapped only (no grok / maverick).
         "openai/gpt-5.6-luna",
-        "x-ai/grok-4.3",
         "deepseek/deepseek-v4-pro",  # #1622
     }
 )
 
 _QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
     {
-        # #2368 (2026-08-14): latest-generation flagship slugs per vendor.
+        # #3660: CI-mapped only (no anthropic / grok).
         "openai/gpt-5.6-sol",
-        "anthropic/claude-sonnet-5",
-        "x-ai/grok-4.6",
     }
 )
 
-# Web-search/grounding pools keep ``:online`` (built-in plugin) and perplexity (native).
+# #3660 house grounding: CI synthesis after digisearch (not sonar / :online).
 _WEB_SEARCH_MODELS = frozenset(
     {
-        "perplexity/sonar",
-        "deepseek/deepseek-v4-flash:online",  # #1622
-        "meta-llama/llama-4-maverick:online",
-        "google/gemini-3.7-flash:online",
-        "openai/gpt-5.6-luna:online",
-        "openai/gpt-5.6-sol:online",
-        "anthropic/claude-sonnet-5:online",
-        "x-ai/grok-4.6:online",
+        "google/gemini-3.1-flash-lite",
+        "deepseek/deepseek-v4-flash",
     }
 )
 
@@ -188,7 +176,6 @@ def test_asset_analyst_slug_resolves_to_known_good_openrouter_model(
     assert is_tool_use_capable_model(model)
 
 
-@pytest.mark.unit
 @pytest.mark.unit
 def test_digiquant_research_config_never_uses_ollama_model_ids() -> None:
     """House digiquant research pins must not be local ``ollama/`` ids.
@@ -344,12 +331,15 @@ def test_apply_openrouter_rewrite_leaves_gemini_on_vendor_client(
 def test_apply_quality_tier_preserves_frontier_auto_router_pool(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # #3660: quality openrouter allowlist is CI-scoped (no anthropic/* / openai/* wildcards).
     _clear_env(monkeypatch, "OPENROUTER_ALLOWED_MODELS", "OPENAI_API_BASE", "OPENAI_API_KEY")
     monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "quality")
     apply_digiquant_openrouter_env()
     pool = os.environ["OPENROUTER_ALLOWED_MODELS"]
-    assert "openai/*" in pool
-    assert "anthropic/*" in pool
+    assert "openai/gpt-5.6-" in pool or "openai/gpt-5.6-*" in pool
+    assert "deepseek/*" in pool
+    assert "google/*" in pool
+    assert "anthropic/*" not in pool
 
 
 @pytest.mark.unit
@@ -366,24 +356,23 @@ def test_grounding_model_from_web_search_pool(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     model = get_grounding_model(segment="macro")
     assert model is not None
-    assert is_web_search_capable_model(model)
     cfg = model_config._load_digiquant_models()
     assert model in cfg.tiers["cheap"].web_search_models
 
 
 @pytest.mark.unit
-def test_grounding_model_may_be_perplexity(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Perplexity is valid for grounding-only paths, not tool phases."""
+def test_grounding_model_uses_ci_synthesis_pool(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#3660: house grounding synthesizers are CI pins, not sonar/:online."""
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     cfg = model_config._load_digiquant_models()
-    assert "perplexity/sonar" in cfg.tiers["cheap"].web_search_models
-    # Deterministic pick for a segment that hashes to perplexity
-    for segment in ("macro", "bonds", "perplexity-grounding", "alt-sentiment-news"):
+    assert "google/gemini-3.1-flash-lite" in cfg.tiers["cheap"].web_search_models
+    assert "deepseek/deepseek-v4-flash" in cfg.tiers["cheap"].web_search_models
+    assert "perplexity/sonar" not in cfg.tiers["cheap"].web_search_models
+    for segment in ("macro", "bonds", "ci-grounding", "alt-sentiment-news"):
         model = get_grounding_model(segment=segment)
         assert model is not None
-        assert is_web_search_capable_model(model)
-        if is_native_search_only_model(model):
-            assert not is_tool_use_capable_model(model)
+        assert model in cfg.tiers["cheap"].web_search_models
+        assert not is_native_search_only_model(model)
 
 
 @pytest.mark.unit
@@ -540,8 +529,8 @@ def test_sanitize_allowed_models_preserves_frontier_on_quality() -> None:
 
 
 @pytest.mark.unit
-def test_perplexity_only_in_web_search_pools_not_phase_pools() -> None:
-    """Regression: perplexity/sonar in allowed_models caused tool-use 404s."""
+def test_no_native_search_in_phase_pools_and_ci_web_search() -> None:
+    """#3660: phase pools stay tool-capable; web_search_models are CI synthesizers."""
     cfg = model_config._load_digiquant_models()
     for tier_name, tier_cfg in cfg.tiers.items():
         for capability, pool in tier_cfg.allowed_models.items():
@@ -549,9 +538,13 @@ def test_perplexity_only_in_web_search_pools_not_phase_pools() -> None:
                 assert not is_native_search_only_model(model), (
                     f"tier {tier_name} {capability} must not pool native-search-only {model}"
                 )
-        assert any(is_native_search_only_model(m) for m in tier_cfg.web_search_models), (
-            f"tier {tier_name} should offer perplexity in web_search_models"
-        )
+                assert ":online" not in model, (
+                    f"tier {tier_name} {capability} must not pool :online {model}"
+                )
+        assert tier_cfg.web_search_models, f"tier {tier_name} needs web_search_models"
+        assert "perplexity/sonar" not in tier_cfg.web_search_models
+        assert all(":online" not in m for m in tier_cfg.web_search_models)
+        assert "google/gemini-3.1-flash-lite" in tier_cfg.web_search_models
 
 
 @pytest.mark.unit
