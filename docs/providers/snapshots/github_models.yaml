@@ -1,5 +1,5 @@
 provider: github_models
-last_checked: 2026-08-30
+last_checked: 2026-09-06
 source: agent-research
 
 free_tier:
@@ -99,4 +99,4 @@ verification:
   probe_model_alias: github-gpt4o-mini
   github_secret_key: GITHUB_TOKEN
 
-notes: "CONFIRMED 2026-08-30: GitHub Models retirement (announced 2026-07-01, effective 2026-07-30) has completed — PROBE 2026-08-30 against gpt-4o-mini returned a generic 'Connection error.' (1284ms), not the 401 permission error seen last cycle, consistent with the endpoint being fully torn down rather than merely access-gated. free_tier.available and paid_tier.available both flipped to false this cycle. ACTION: remove github_models from scripts/provider_review/probe.py's PROVIDERS dict (currently lines 68-72) and from the active provider roster in docs/LLM_PROVIDERS.md / docs/free-providers — there is nothing left to probe or recommend. Historical note retained: platform expanded to 45+ models (DeepSeek, Phi-4, AI21 Jamba) shortly before the retirement announcement, now moot."
+notes: "RECONFIRMED 2026-09-06 (high confidence): no reversal/relaunch of GitHub Models since the 2026-07-30 shutdown — a full-platform relaunch would generate prominent unambiguous news, and only migration/aftermath coverage was found. CONFIRMED 2026-08-30: GitHub Models retirement (announced 2026-07-01, effective 2026-07-30) has completed — PROBE 2026-08-30 against gpt-4o-mini returned a generic 'Connection error.' (1284ms), not the 401 permission error seen last cycle, consistent with the endpoint being fully torn down rather than merely access-gated. free_tier.available and paid_tier.available both flipped to false this cycle. ACTION: remove github_models from scripts/provider_review/probe.py's PROVIDERS dict (currently lines 68-72) and from the active provider roster in docs/LLM_PROVIDERS.md / docs/free-providers — there is nothing left to probe or recommend. Historical note retained: platform expanded to 45+ models (DeepSeek, Phi-4, AI21 Jamba) shortly before the retirement announcement, now moot."

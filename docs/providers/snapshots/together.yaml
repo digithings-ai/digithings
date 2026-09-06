@@ -1,5 +1,5 @@
 provider: together
-last_checked: 2026-07-19
+last_checked: 2026-09-06
 source: agent-research
 
 free_tier:
@@ -31,7 +31,7 @@ paid_tier:
       cost_per_1m_output: 0.88
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: active
+      status: deprecated        # FLAGGED 2026-09-06: no longer appears on the current docs.together.ai serverless pricing listing (medium confidence — page refresh, not an explicit deprecation notice); price retained as last-known, not reconfirmed
     - name: deepseek-ai/DeepSeek-V3
       context_window: 65536
       max_input_tokens: 65536
@@ -41,7 +41,7 @@ paid_tier:
       cost_per_1m_output: 1.25
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: active            # legacy; V3.1 below is current flagship
+      status: deprecated        # legacy; V3.1 below is current flagship. FLAGGED 2026-09-06: absent from current pricing listing (medium confidence)
     - name: deepseek-ai/DeepSeek-V3-0324
       context_window: 131072
       max_input_tokens: 131072
@@ -51,17 +51,27 @@ paid_tier:
       cost_per_1m_output: 1.70
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: active            # V3.1 — current DeepSeek V3 flagship on Together
+      status: deprecated        # V3.1 — was current DeepSeek V3 flagship on Together. FLAGGED 2026-09-06: absent from current pricing listing (medium confidence)
     - name: deepseek-ai/DeepSeek-V4-Pro
       context_window: 1000000
       max_input_tokens: 1000000
       max_output_tokens: 8192
-      cost_per_1m_input: 2.10
+      cost_per_1m_input: 1.32     # CORRECTED 2026-09-06 direct from docs.together.ai serverless pricing (listed as "DeepSeek V4 Pro (0813)"), superseding both prior tracked figures ($2.10/$4.40 and $1.74/$3.48) — neither earlier number was correct
       cost_per_1m_input_long: null
-      cost_per_1m_output: 4.40
+      cost_per_1m_output: 3.96
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.044
+      status: active
+    - name: deepseek-ai/DeepSeek-V4-Flash
+      context_window: 1000000
+      max_input_tokens: 1000000
+      max_output_tokens: 8192
+      cost_per_1m_input: 0.22
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.66
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: active
+      status: active            # NEW 2026-09-06: "DeepSeek V4 Flash (0731)" now listed on Together's pricing page; not previously tracked for this provider — do not confuse with Fireworks' own $0.14/$0.28 figure for the same model family
     - name: Qwen/Qwen3.6-Plus
       context_window: 131072
       max_input_tokens: 131072
@@ -71,7 +81,7 @@ paid_tier:
       cost_per_1m_output: 3.00
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: active
+      status: deprecated        # FLAGGED 2026-09-06: no longer appears on current pricing listing; Qwen lineup now shows Qwen3.5/3.7/3.8 variants instead (medium confidence, not independently reconfirmed model-by-model)
   batching:
     available: false
     discount_pct: null
@@ -113,4 +123,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "MATERIAL CHANGE 2026-07-19: the $25 no-CC signup credit recorded in the prior snapshot is GONE — Together's own billing docs (docs.together.ai/docs/billing-credits) now state there are no free trials and a minimum $5 prepaid purchase with a payment method is required for any access. Multiple third-party aggregators still cite stale $25/$50/$100 figures; the $25 credit was reportedly retired around mid-2025. This flips free_tier.available from true to false — Together should be moved out of any 'free tier' recommendation list in digithings docs. Startup program (up to $50,000 in credits for qualifying applicants) remains active but is not a standing free tier. Pricing note: DeepSeek V4 Pro figures vary by source ($2.10/$4.40 here vs. $1.74/$3.48 cited elsewhere, possibly a cached-vs-standard mixup) — could not get a clean read from the JS-rendered official pricing page this cycle, retained as-is pending a direct recheck. Qwen3.6-Plus $0.50/$3.00 reconfirmed unchanged. DeepSeek-V3-0324 naming may have been superseded industry-wide by V3.1/V3.2 (seen on SambaNova too) — not confirmed for Together specifically. No key configured yet; no probe run (method: skipped)."
+notes: "PRICING REFRESH 2026-09-06: docs.together.ai's serverless pricing listing has changed materially since 2026-07-19 — DeepSeek-V4-Pro is now listed as 'DeepSeek V4 Pro (0813)' at $1.32/$3.96 (cached input $0.044), which resolves last cycle's open discrepancy between two prior figures ($2.10/$4.40 and $1.74/$3.48) by superseding both. A new 'DeepSeek V4 Flash (0731)' entry appeared at $0.22/$0.66 (added above; distinct from Fireworks' own $0.14/$0.28 figure for the same model family — do not conflate providers). Llama-3.3-70B-Turbo, DeepSeek-V3, DeepSeek-V3-0324, and Qwen3.6-Plus no longer appear on the current listing (Qwen lineup now shows Qwen3.5/3.7/3.8 variants) — marked deprecated above at medium confidence (a pricing-page refresh, not an explicit deprecation notice; prices retained as last-known). Free-tier-discontinued finding from 2026-07-19 (no standing free tier, $5 minimum prepaid + payment method required) was NOT independently reconfirmed this cycle — the current pricing page didn't surface free-tier terms directly; treat as still likely accurate but due for a direct recheck. MATERIAL CHANGE 2026-07-19: the $25 no-CC signup credit recorded in the prior snapshot is GONE — Together's own billing docs (docs.together.ai/docs/billing-credits) now state there are no free trials and a minimum $5 prepaid purchase with a payment method is required for any access. Multiple third-party aggregators still cite stale $25/$50/$100 figures; the $25 credit was reportedly retired around mid-2025. This flips free_tier.available from true to false — Together should be moved out of any 'free tier' recommendation list in digithings docs. Startup program (up to $50,000 in credits for qualifying applicants) remains active but is not a standing free tier. Pricing note: DeepSeek V4 Pro figures vary by source ($2.10/$4.40 here vs. $1.74/$3.48 cited elsewhere, possibly a cached-vs-standard mixup) — could not get a clean read from the JS-rendered official pricing page this cycle, retained as-is pending a direct recheck. Qwen3.6-Plus $0.50/$3.00 reconfirmed unchanged. DeepSeek-V3-0324 naming may have been superseded industry-wide by V3.1/V3.2 (seen on SambaNova too) — not confirmed for Together specifically. No key configured yet; no probe run (method: skipped)."

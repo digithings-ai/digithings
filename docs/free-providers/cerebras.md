@@ -10,7 +10,7 @@ free_tier_type: standing
 access_requirements:
   - email
 data_privacy_on_free: no_training
-verified_at: 2026-08-30
+verified_at: 2026-09-06
 source_urls:
   - https://inference-docs.cerebras.ai/introduction
   - https://inference-docs.cerebras.ai/api-reference
@@ -123,3 +123,4 @@ Paid tier unlocks full 128k context and higher RPM/RPD. Llama 3.3 70B ~$0.60/$0.
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
 | 2026-08-30 | Automated snapshot sync | provider-review scan |
+| 2026-09-06 | Automated snapshot sync | provider-review scan |

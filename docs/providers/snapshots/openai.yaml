@@ -1,5 +1,5 @@
 provider: openai
-last_checked: 2026-07-19
+last_checked: 2026-09-06
 source: agent-research
 
 free_tier:
@@ -71,7 +71,7 @@ paid_tier:
       cost_per_1m_output: 180.00
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: active            # likely superseded by GPT-5.6 below — not yet confirmed removed from API
+      status: active            # CONFIRMED 2026-09-06: still fully callable via API, no removal notice found (only a minor ChatGPT-surface UX change to GPT-5.5 Instant)
     - name: gpt-5.6-luna
       context_window: 1048576
       max_input_tokens: 1048576
@@ -101,7 +101,17 @@ paid_tier:
       cost_per_1m_output: 30.00
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: active            # GPT-5.6 family went GA 2026-07-09; new top-line flagship
+      status: active            # GPT-5.6 family went GA 2026-07-09; new top-line flagship. Got a temporary >20% price cut starting 2026-08-21 for 3 months — exact discounted figure not confirmed, sticker price above still the reference rate
+    - name: gpt-6-astra          # NEW 2026-09-06: launched 2026-09-03, first model to hit "Critical" cybersecurity capability under OpenAI's Preparedness Framework; rolling out to Daybreak defenders first, then ChatGPT/API/Azure/AWS
+      context_window: null
+      max_input_tokens: null
+      max_output_tokens: null
+      cost_per_1m_input: null     # pricing not published/found yet — verify next cycle
+      cost_per_1m_input_long: null
+      cost_per_1m_output: null
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
   batching:
     available: true
     discount_pct: 50
@@ -143,4 +153,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "MATERIAL CHANGE 2026-07-19: GPT-5.6 family went GA 2026-07-09 — Luna $1/$6, Terra $2.50/$15, Sol $5/$30 per 1M (input/output); this is a full flagship-lineup update, not just an add-on. gpt-5.5/gpt-5.5-pro remain callable per some sources but are likely aging out — not yet confirmed removed from the API (only ChatGPT-surface retirements confirmed: o3 retiring from ChatGPT 2026-08-26; GPT-4o/4.1/4.1-mini/o4-mini already retired from ChatGPT 2026-02-13; older GPT-5/o3 API snapshots deprecated 2026-06-11, removal scheduled 2026-12-11). gpt-4.1-mini corrected to $0.40/$1.60 (snapshot had $0.15/$0.60 which is gpt-4o-mini pricing). Container sessions now billed per-minute (5-min minimum) as of 2026-06-02. No key configured yet; no probe run (method: skipped)."
+notes: "NEW 2026-09-06: GPT-6 Astra launched 2026-09-03 (named/announced 2026-08-01), skipping a 'GPT-5.7' step entirely — first OpenAI model to hit 'Critical' cybersecurity capability under the Preparedness Framework; rolling out to Daybreak defenders first, then ChatGPT tiers/API/AWS/Azure. No pricing found yet — added as a placeholder entry, verify cost next cycle. CONFIRMED 2026-09-06: gpt-5.5/gpt-5.5-pro remain fully live via the API (no removal notice found this cycle — only a ChatGPT-surface UX change to GPT-5.5 Instant, canvas feature removed). GPT-5.6 Sol got a temporary >20% price cut (API + credits) starting 2026-08-21 for 3 months — exact discounted number not confirmed, sticker price in this snapshot is the reference/post-promo rate. MATERIAL CHANGE 2026-07-19: GPT-5.6 family went GA 2026-07-09 — Luna $1/$6, Terra $2.50/$15, Sol $5/$30 per 1M (input/output); this is a full flagship-lineup update, not just an add-on. Other confirmed retirements: o3 retiring from ChatGPT 2026-08-26; GPT-4o/4.1/4.1-mini/o4-mini already retired from ChatGPT 2026-02-13; older GPT-5/o3 API snapshots deprecated 2026-06-11, removal scheduled 2026-12-11. gpt-4.1-mini corrected to $0.40/$1.60 (snapshot had $0.15/$0.60 which is gpt-4o-mini pricing). Container sessions now billed per-minute (5-min minimum) as of 2026-06-02. No key configured yet; no probe run (method: skipped)."

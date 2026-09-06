@@ -1,5 +1,5 @@
 provider: deepseek
-last_checked: 2026-08-30
+last_checked: 2026-09-06
 source: agent-research
 
 free_tier:
@@ -62,11 +62,11 @@ paid_tier:
       context_window: 1000000
       max_input_tokens: 1000000
       max_output_tokens: 384000
-      cost_per_1m_input: 0.07
-      cost_per_1m_input_long: null
-      cost_per_1m_output: 0.28
-      cost_per_1m_output_long: null
-      cost_per_1m_input_cached: 0.0028   # 96% discount on cache hits
+      cost_per_1m_input: 0.44      # PEAK hours (same window as v4-pro), CORRECTED 2026-09-06 per official pricing docs; was flat $0.07
+      cost_per_1m_input_long: 0.22   # OFF-PEAK — repurposed field for time-of-day, matching v4-pro convention
+      cost_per_1m_output: 1.32     # PEAK hours; was flat $0.28
+      cost_per_1m_output_long: 0.66  # OFF-PEAK
+      cost_per_1m_input_cached: 0.014   # PEAK cache-hit rate; OFF-PEAK cache-hit is $0.007 (no dedicated field for the peak/off-peak cache split)
       status: active
     - name: deepseek-v4-pro
       context_window: 1000000
@@ -119,4 +119,4 @@ verification:
   probe_model_alias: deepseek-chat
   github_secret_key: DEEPSEEK_API_KEY
 
-notes: "COST INCREASE 2026-08-30: effective 2026-08-16 16:00 UTC, DeepSeek replaced deepseek-v4-pro's flat $0.435/$0.87 rate with peak/off-peak billing — $1.32/$3.96 during peak hours (01:00-04:00 and 06:00-10:00 UTC, a 3x increase) and $0.66/$1.98 off-peak (still ~1.5x the old flat rate). Repurposed cost_per_1m_input_long/cost_per_1m_output_long above to carry the off-peak figures since there is no dedicated time-of-day field in this schema — do not read those as long-context pricing for this provider. deepseek-v4-flash pricing not reconfirmed this cycle (carried forward: input price possibly $0.14 cache-miss vs the $0.07 recorded above — official pricing page and this snapshot's methodology disagree on cache-hit vs cache-miss framing; verify before relying on the exact figure). PROBE 2026-08-30: deepseek-chat probe again returned 402 Insufficient Balance (676ms) — the 2026-07-24 hard cutover to v4-flash/v4-pro has now passed, so deepseek-chat/deepseek-reasoner may no longer route at all regardless of balance; this 402 does not by itself distinguish 'probe account out of funds' from 'alias fully retired' — recommend checking probe account balance/grant status directly, or repointing scripts/provider_review/probe.py:66 to deepseek-v4-flash so the probe exercises the current-generation model. Free tier: one-time 5M-token grant (~$8.40 value) expiring 30 days after signup, not open-ended credits. Cache discount 96% on v4-flash. Data jurisdiction: platform hosted in China; use Fireworks/Together/DeepInfra for Western-jurisdiction hosting."
+notes: "COST INCREASE 2026-09-06 (high confidence, official api-docs.deepseek.com/quick_start/pricing): deepseek-v4-flash has now also moved to peak/off-peak billing, same window as v4-pro — PEAK $0.44/$1.32 in/out (cache-hit $0.014), OFF-PEAK $0.22/$0.66 (cache-hit $0.007), replacing the flat $0.07/$0.28 rate recorded last cycle. This resolves last cycle's open question about which of several conflicting third-party figures was correct. deepseek-chat/deepseek-reasoner RECONFIRMED fully retired (non-resolving) as of 2026-07-24 15:59 UTC per DeepSeek's own changelog — not merely low-balance; the 402 seen in probes is a coincidental separate error code. COST INCREASE 2026-08-30: effective 2026-08-16 16:00 UTC, DeepSeek replaced deepseek-v4-pro's flat $0.435/$0.87 rate with peak/off-peak billing — $1.32/$3.96 during peak hours (01:00-04:00 and 06:00-10:00 UTC, a 3x increase) and $0.66/$1.98 off-peak (still ~1.5x the old flat rate). Repurposed cost_per_1m_input_long/cost_per_1m_output_long above to carry the off-peak figures since there is no dedicated time-of-day field in this schema — do not read those as long-context pricing for this provider. deepseek-v4-flash pricing not reconfirmed this cycle (carried forward: input price possibly $0.14 cache-miss vs the $0.07 recorded above — official pricing page and this snapshot's methodology disagree on cache-hit vs cache-miss framing; verify before relying on the exact figure). PROBE 2026-08-30: deepseek-chat probe again returned 402 Insufficient Balance (676ms) — the 2026-07-24 hard cutover to v4-flash/v4-pro has now passed, so deepseek-chat/deepseek-reasoner may no longer route at all regardless of balance; this 402 does not by itself distinguish 'probe account out of funds' from 'alias fully retired' — recommend checking probe account balance/grant status directly, or repointing scripts/provider_review/probe.py:66 to deepseek-v4-flash so the probe exercises the current-generation model. Free tier: one-time 5M-token grant (~$8.40 value) expiring 30 days after signup, not open-ended credits. Cache discount 96% on v4-flash. Data jurisdiction: platform hosted in China; use Fireworks/Together/DeepInfra for Western-jurisdiction hosting."

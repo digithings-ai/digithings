@@ -1,5 +1,5 @@
 provider: xai
-last_checked: 2026-08-15
+last_checked: 2026-09-06
 source: agent-research
 
 free_tier:
@@ -92,6 +92,16 @@ paid_tier:
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
       status: deprecated
+    - name: grok-build-0.1        # CONFIRMED 2026-09-06: real API SKU underlying the "Grok Build" agentic coding CLI (left beta at v1.0 2026-08-07, Apache 2.0 OSS tool); 70.8% SWE-Bench Verified
+      context_window: 256000
+      max_input_tokens: 256000
+      max_output_tokens: null
+      cost_per_1m_input: 0.20      # conflicts with an earlier-spotted $1.00/$2.00 (<200k) figure for the same SKU name — treat this cycle's number as more current pending reconfirmation
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 1.50
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
   batching:
     available: true
     discount_pct: 50
@@ -133,4 +143,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "MATERIAL CHANGE 2026-08-15: grok-4.6 launched 2026-08-12 (SpaceXAI), superseding grok-4.5 as the flagship — pitched as agent/coding-focused, frontier on coding/knowledge/STEM, same $2/$6 per 1M under 200K-token prompts and $4/$12 >=200K as grok-4.5, 500K context, knowledge cutoff 2026-02-01. Available on the xAI API, OpenRouter (`x-ai/grok-4.6`), Cursor, Grok Build, Vercel, and Cloudflare. grok-4.5 retained below as still-active (not yet confirmed deprecated) rather than removed outright. Prior entry (unchanged): grok-4.5 launched 2026-07-08 (xAI's first release since the SpaceXAI/Cursor deal) — pitched by Musk as 'Opus-class', not yet available in the EU. CORRECTION (2026-07-19, still valid): grok-4-20's price was previously mis-recorded as $2/$6 (that figure actually belongs to grok-4.5) — corrected to its confirmed $1.25/$2.50. grok-3, already deprecated since the May 15 2026 slug retirement, has a confirmed hard full-retirement date of 2026-08-15 — after that the slug stops resolving entirely rather than redirecting. A 'Grok Build 0.1' SKU (256K ctx, $1.00/$2.00 <200k, $2.00/$4.00 >=200k) was also spotted in current lineups, likely tied to an agentic/coding product — not added to this snapshot pending confirmation of its exact purpose. CRITICAL (unchanged) — grok-4-1-fast RETIRED May 15 2026 (all old slugs redirect to grok-4-3 at $1.25/$2.50 — a 6× price increase over grok-4-1-fast's old rate). No permanently-free model — xAI offers $25 signup credits + up to $150/mo via data-sharing opt-in (confirmed unchanged). Tool calls: X/Live/Web Search $5/1k successful calls, File Attachments $10/1k, Collections Search $2.50/1k. Key needed: XAI_API_KEY at console.x.ai. No probe run (method: skipped)."
+notes: "CONFIRMED 2026-09-06: grok-4.5 is superseded (grok-4.6 is the recommended flagship) but NOT deprecated — same base model/specs, still active; only its cached-input price reportedly differs from grok-4.6 ($0.50 vs $0.30/1M — direction/exact field unconfirmed, not applied to structured pricing above pending clarity). grok-3's hard full-retirement on 2026-08-15 is confirmed to have happened as scheduled. 'Grok Build' confirmed real: an open-source (Apache 2.0) agentic coding CLI that left beta at v1.0 on 2026-08-07; its underlying API model grok-build-0.1 (256K ctx, $0.20/$1.50 per 1M, 70.8% SWE-Bench Verified) is now added below — note this conflicts with an earlier lower-confidence sighting of $1.00/$2.00 (<200k) / $2.00/$4.00 (>=200k) for the same SKU name, unresolved which is authoritative. MATERIAL CHANGE 2026-08-15: grok-4.6 launched 2026-08-12 (SpaceXAI), superseding grok-4.5 as the flagship — pitched as agent/coding-focused, frontier on coding/knowledge/STEM, same $2/$6 per 1M under 200K-token prompts and $4/$12 >=200K as grok-4.5, 500K context, knowledge cutoff 2026-02-01. Available on the xAI API, OpenRouter (`x-ai/grok-4.6`), Cursor, Grok Build, Vercel, and Cloudflare. grok-4.5 retained below as still-active (not yet confirmed deprecated) rather than removed outright. Prior entry (unchanged): grok-4.5 launched 2026-07-08 (xAI's first release since the SpaceXAI/Cursor deal) — pitched by Musk as 'Opus-class', not yet available in the EU. CORRECTION (2026-07-19, still valid): grok-4-20's price was previously mis-recorded as $2/$6 (that figure actually belongs to grok-4.5) — corrected to its confirmed $1.25/$2.50. grok-3, already deprecated since the May 15 2026 slug retirement, has a confirmed hard full-retirement date of 2026-08-15 — after that the slug stops resolving entirely rather than redirecting. A 'Grok Build 0.1' SKU (256K ctx, $1.00/$2.00 <200k, $2.00/$4.00 >=200k) was also spotted in current lineups, likely tied to an agentic/coding product — not added to this snapshot pending confirmation of its exact purpose. CRITICAL (unchanged) — grok-4-1-fast RETIRED May 15 2026 (all old slugs redirect to grok-4-3 at $1.25/$2.50 — a 6× price increase over grok-4-1-fast's old rate). No permanently-free model — xAI offers $25 signup credits + up to $150/mo via data-sharing opt-in (confirmed unchanged). Tool calls: X/Live/Web Search $5/1k successful calls, File Attachments $10/1k, Collections Search $2.50/1k. Key needed: XAI_API_KEY at console.x.ai. No probe run (method: skipped)."

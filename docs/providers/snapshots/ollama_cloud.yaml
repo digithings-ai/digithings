@@ -1,5 +1,5 @@
 provider: ollama_cloud
-last_checked: 2026-08-30
+last_checked: 2026-09-06
 source: agent-research
 
 free_tier:
@@ -84,7 +84,7 @@ free_tier:
 
 paid_tier:
   available: true
-  models: []               # Same models; Pro $20/mo (or $200/yr; 50× free, 3 concurrent), Max $100/mo
+  models: []               # Same models; Pro $20/mo (or $200/yr; 3 concurrent), Max $100/mo — CHANGED 2026-09-06: billing model moved from GPU-second/usage-level metering to token-based usage credits (~effective 2026-08-31): Pro now includes $60/mo in per-token usage credits (was framed as "50x free tier" GPU-seconds), Max includes $300/mo. Concurrency limits unchanged (free=1, Pro=3, Max=10). Pre-switch subscribers reportedly keep old GPU-second terms until opting in.
   batching:
     available: false
     discount_pct: null
@@ -126,4 +126,4 @@ verification:
   probe_model_alias: ollama-cloud/rnj-1
   github_secret_key: OLLAMA_API_KEY
 
-notes: "PROBE 2026-08-30: probe against rnj-1:cloud again returned 404 model not found — second consecutive cycle, config still unfixed. rnj-1:cloud never existed as a valid cloud-tier id ('rnj-1' is a local-only Ollama library model; Essential AI, 8B dense); it was already removed from this snapshot's free_tier.models as a data-quality correction on 2026-07-19, so this cycle's probe failure is expected and carries no new information about the actual cloud catalog. ACTION NEEDED (unresolved from last cycle): scripts/provider_review/probe.py:53-57 still hard-codes model: 'rnj-1:cloud' for this provider — repoint it at any of the confirmed-live free models already listed below (e.g. gpt-oss:20b or deepseek-v4-flash) so the probe actually exercises something real. Live cloud catalog and the deepseek-v3.1:671b / cogito-2.1:671b / kimi-k2-thinking rename-mapping question were not re-checked this cycle (no new research performed on ollama_cloud beyond the repeat probe failure) — carried forward unchanged from 2026-07-19: OpenAI-compatible passthrough at https://ollama.com/v1, uses OLLAMA_API_KEY, deepseek-v4-flash confirmed free, kimi-k2-thinking remains paid-only."
+notes: "BILLING MODEL CHANGE 2026-09-06 (medium-high confidence, consistent across several sources but not directly confirmed via an Ollama changelog post): Ollama Cloud shifted from GPU-second/usage-level metering to token-based usage credits around 2026-08-31 — see paid_tier.models comment for the new Pro/Max credit amounts. Free-tier model roster (gpt-oss:20b, deepseek-v3.1:671b, cogito-2.1:671b, nemotron-3-super:cloud, deepseek-v4-flash, deepseek-v4-pro:cloud) and usage-level assignments NOT reconfirmed this cycle — the current pricing page only says 'access to starter models' without naming them; needs a direct ollama.com/library or API model-list check next cycle. PROBE 2026-08-30: probe against rnj-1:cloud again returned 404 model not found — second consecutive cycle, config still unfixed. rnj-1:cloud never existed as a valid cloud-tier id ('rnj-1' is a local-only Ollama library model; Essential AI, 8B dense); it was already removed from this snapshot's free_tier.models as a data-quality correction on 2026-07-19, so this cycle's probe failure is expected and carries no new information about the actual cloud catalog. ACTION NEEDED (unresolved from last cycle): scripts/provider_review/probe.py:53-57 still hard-codes model: 'rnj-1:cloud' for this provider — repoint it at any of the confirmed-live free models already listed below (e.g. gpt-oss:20b or deepseek-v4-flash) so the probe actually exercises something real. Live cloud catalog and the deepseek-v3.1:671b / cogito-2.1:671b / kimi-k2-thinking rename-mapping question were not re-checked this cycle (no new research performed on ollama_cloud beyond the repeat probe failure) — carried forward unchanged from 2026-07-19: OpenAI-compatible passthrough at https://ollama.com/v1, uses OLLAMA_API_KEY, deepseek-v4-flash confirmed free, kimi-k2-thinking remains paid-only."

@@ -10,7 +10,7 @@ free_tier_type: credit-based
 access_requirements:
   - email
 data_privacy_on_free: regional_law
-verified_at: 2026-08-30
+verified_at: 2026-09-06
 source_urls:
   - https://api-docs.deepseek.com/quick_start/pricing
   - https://platform.deepseek.com/api-docs
@@ -122,3 +122,4 @@ After grant: $0.27/$1.10 per 1M in/out (V3/chat); $0.55/$2.19 (R1/reasoner). Off
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
 | 2026-08-30 | Automated snapshot sync | provider-review scan |
+| 2026-09-06 | Automated snapshot sync | provider-review scan |

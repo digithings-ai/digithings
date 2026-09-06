@@ -1,5 +1,5 @@
 provider: anthropic
-last_checked: 2026-07-19
+last_checked: 2026-09-06
 source: agent-research
 
 free_tier:
@@ -66,11 +66,11 @@ paid_tier:
       context_window: 1000000
       max_input_tokens: 1000000
       max_output_tokens: 64000
-      cost_per_1m_input: 3.00          # standard rate from 2026-09-01; introductory $2/$10 through 2026-08-31
+      cost_per_1m_input: 2.00          # CORRECTED 2026-09-06: the planned 2026-09-01 rise to $3/$15 was cancelled — Anthropic made the $2/$10 intro rate permanent (anthropic.com/news, 2026-08-10/11); independently corroborated by upstream litellm pricing data ($2/$10, cache-read $0.20)
       cost_per_1m_input_long: null
-      cost_per_1m_output: 15.00
+      cost_per_1m_output: 10.00
       cost_per_1m_output_long: null
-      cost_per_1m_input_cached: 0.30   # 10% of input price
+      cost_per_1m_input_cached: 0.20   # 10% of input price
       status: active            # released July 2026; new default Claude 5 model
     - name: claude-fable-5
       context_window: 1000000
@@ -123,4 +123,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "claude-opus-4-8 released 2026-05-28. Claude Sonnet 5 released July 2026 as new default (introductory $2/$10 through 2026-08-31, standard $3/$15 from 2026-09-01 — same rate as old Sonnet 4.6). Claude Fable 5 added as a new premium tier above Opus at $10/$50/MTok (pricing sourced from a single pass this cycle — verify against a second source). A 'Claude Mythos 5' was reported by one source at the same $10/$50 tier but could not be corroborated — not added to this snapshot, flag for re-check. Opus 4.7 fast-mode feature (not the model itself) is being deprecated 2026-07-24. All Opus/Sonnet context windows are 1M (not 200K). Haiku max output 64K; Opus max output 128K. Cache reads = 10% of each model's input price. Newer tokenizer on Opus 4.7+/Sonnet 5/Fable 5 produces ~30% more tokens for the same text vs. the previous tokenizer — an effective cost increase not visible in sticker price. Lowest hallucination rate on finance reasoning benchmarks. Needs separate ANTHROPIC_API_KEY (CLAUDE_CODE_OAUTH_TOKEN is for CLI only). No free-tier probe (method: skipped, no free tier to test)."
+notes: "CORRECTION 2026-09-06: the scheduled 2026-09-01 price rise to $3/$15 for claude-sonnet-5 did NOT happen — Anthropic made the $2/$10 introductory rate permanent instead (anthropic.com/news/claude-sonnet-5, corroborated by upstream litellm pricing data showing $2/$10 with $0.20 cache-read). Treat prior 'standard $3/$15' framing as superseded. 'Claude Mythos' is confirmed to be a real, separate restricted-access model line (not a rebrand/rumor) — launched ~April 2026, withheld from general availability and offered only to vetted cyberdefense/life-science partners; a second generation ('Claude Fable 5.1' and 'Claude Mythos 5.1') reportedly shipped 2026-09-01 at the same per-token price as the prior generation with a 75%-cheaper cache-read for that tier — sourcing quality for this specific claim is mixed (mix of official and secondary sites), not added as a structured model entry pending stronger corroboration; re-check next cycle before citing pricing. claude-opus-4-8 released 2026-05-28. Claude Sonnet 5 released July 2026 as new default. Claude Fable 5 added as a new premium tier above Opus at $10/$50/MTok (pricing sourced from a single pass — verify against a second source). Opus 4.7 fast-mode feature (not the model itself) is being deprecated 2026-07-24. All Opus/Sonnet context windows are 1M (not 200K). Haiku max output 64K; Opus max output 128K. Cache reads = 10% of each model's input price. Newer tokenizer on Opus 4.7+/Sonnet 5/Fable 5 produces ~30% more tokens for the same text vs. the previous tokenizer — an effective cost increase not visible in sticker price. Lowest hallucination rate on finance reasoning benchmarks. Needs separate ANTHROPIC_API_KEY (CLAUDE_CODE_OAUTH_TOKEN is for CLI only). No free-tier probe (method: skipped, no free tier to test)."

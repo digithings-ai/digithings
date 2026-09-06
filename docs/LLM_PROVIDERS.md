@@ -1,6 +1,6 @@
 # LLM Provider Catalog — Free Tiers, Cheap APIs, Local Options
 
-*Reference snapshot: August 2026. Pricing and quotas change frequently — treat numbers as directional and verify against each provider's console before committing to production use. Items marked (uncertain) could not be confirmed at time of writing.*
+*Reference snapshot: September 2026. Pricing and quotas change frequently — treat numbers as directional and verify against each provider's console before committing to production use. Items marked (uncertain) could not be confirmed at time of writing.*
 
 ## Why this document exists
 
@@ -49,7 +49,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 
 - **URL:** https://aistudio.google.com
 - **Free tier:** Standing, no expiry. Gemini 2.5 Flash 15 RPM / 1,500 RPD / 1M TPM; Flash-Lite 30 RPM / 1,500 RPD / 1M TPM (double the RPM of Flash at the same RPD/TPM). Pro is **paid-only** (free 2 RPM tier removed 2026-04-01).
-- **Best free models:** `gemini-2.5-flash` (workhorse, vision, 1M ctx), `gemini-2.5-flash-lite` (highest RPM). Embeddings: `text-embedding-004`. Gemini 3 generation (`gemini-3-flash-preview`, `gemini-3.5-flash`, `gemini-3.1-pro-preview`) is paid-only for now — exact free-tier availability for the 3.x line is unconfirmed this cycle.
+- **Best free models:** `gemini-2.5-flash` (workhorse, vision, 1M ctx), `gemini-2.5-flash-lite` (highest RPM). Embeddings: `text-embedding-004`. `gemini-3-flash-preview` free-tier availability is now **corroborated by multiple aggregators** (2026-09-06, still no primary Google docs page) but at a materially lower quota (~10 RPM / 1,500 RPD / 250,000 TPM) than 2.5-flash — not a strictly better free option once TPM is accounted for. `gemini-3.5-flash` and `gemini-3.1-pro-preview` remain paid-only.
 - **Paid:** Flash ~$0.30 / $2.50 per 1M; Flash-Lite ~$0.10 / $0.40; Pro ~$1.25 / $10 (≤200K), $2.50 / $15 above. Gemini 3-flash-preview $0.50/$3.00, 3.5-flash $1.50/$9.00, 3.1-pro-preview $2/$12 (≤200K), $4/$18 above.
 - **LiteLLM:** `gemini/gemini-2.5-flash`. Env: `GEMINI_API_KEY`.
 - **Gotcha:** **Free-tier prompts/responses are used to improve Google products.** Never send confidential data on free. Paid tier is zero-retention.
@@ -58,8 +58,8 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 
 - **URL:** https://console.groq.com
 - **⚠️ `llama-3.3-70b-versatile` hit its hard cutover in August 2026** and now 404s on the free/developer tier (Groq announced this 2026-06-17). **Do not route new traffic to it** — migrate to `openai/gpt-oss-120b` or `qwen/qwen3.6-27b`.
-- **Free tier:** Standing. 30 RPM, **1,000 RPD (binding constraint)**, TPM varies by model (gpt-oss-120b/qwen3.6-27b TPM not yet independently reconfirmed post-migration).
-- **Best free models:** `openai/gpt-oss-120b`, `qwen/qwen3.6-27b`. Plus Whisper STT. `llama-4-scout-17b-16e-instruct` was also **deprecated from the free/developer tier 2026-06-17**.
+- **Free tier:** Standing. 30 RPM, **1,000 RPD (binding constraint)**, **8,000 TPM** for `gpt-oss-120b` (corrected 2026-09-06 — the previously-recorded 12,000 TPM belonged to the now-dead `llama-3.3-70b-versatile`, not gpt-oss-120b).
+- **Best free models:** `openai/gpt-oss-120b`, and a second free model whose exact slug is unconfirmed this cycle (tracked as `qwen/qwen3.6-27b`, but 2026-09-06 sources consistently reference `qwen/qwen3-32b` instead — verify against the console before depending on either). Plus Whisper STT. `llama-4-scout-17b-16e-instruct` was also **deprecated from the free/developer tier 2026-06-17**.
 - **Paid:** gpt-oss-120b ~$0.15 / $0.60 (prompt caching $0.075/1M); Llama 4 Scout ~$0.11 / $0.34 (paid-only now); `llama-3.3-70b-versatile` ~$0.59 / $0.79 remains listed on the pricing page for enterprise committed-spend contracts only.
 - **LiteLLM:** `groq/openai/gpt-oss-120b`. Env: `GROQ_API_KEY`.
 - **Selling point:** 500–1500 tok/s inference. Use exponential backoff for bursts. Groq entered a non-exclusive inference-tech licensing deal + acquihire with Nvidia (announced May 2026); GroqCloud continues operating independently — no observed effect on free-tier limits/pricing beyond the llama-3.3-70b-versatile/llama-4-scout deprecations above.
@@ -67,16 +67,17 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 ### 3. Cerebras
 
 - **URL:** https://cloud.cerebras.ai
-- **Free tier (unconfirmed this cycle — sources conflict):** official docs cite 5 RPM / 30K TPM / 1M TPD on `gpt-oss-120b`, `zai-glm-4.7`, `gemma-4-31b`; third-party trackers still cite an older 30 RPM / 60–100K TPM / 8K-ctx-cap figure. `llama-3.3-70b`, `llama-4-scout`, `qwen-3-32b`, and `qwen3-235b` are **confirmed deprecated for free tier** — absent from official docs and 404ing on probe for two consecutive review cycles now (2026-07-19 and 2026-08-30).
+- **Free tier (still conflicting sources after three review cycles):** leaning toward official docs' 5 RPM / 30K TPM / 1M TPD on `gpt-oss-120b`, `zai-glm-4.7`, `gemma-4-31b` as of 2026-09-06; third-party trackers still cite an older 30 RPM / 60–100K TPM figure. `llama-3.3-70b`, `llama-4-scout`, `qwen-3-32b`, and `qwen3-235b` are **confirmed deprecated for free tier** — absent from official docs and 404ing on probe for three consecutive review cycles now (2026-07-19, 2026-08-30, 2026-09-06).
+- **⚠️ Unverified risk flag (2026-09-06, single low-quality source):** one aggregator claims Cerebras has replaced its standing no-card free tier with a $5/30-day trial credit requiring a payment method. **Not corroborated** and not reflected in the free-tier status above — flagged for a direct signup-flow check next cycle.
 - **Best free models:** `gpt-oss-120b` (~3000 tok/s), `zai-glm-4.7`, `gemma-4-31b`. >2000 tok/s — fastest on market.
 - **LiteLLM:** `cerebras/gpt-oss-120b`. Env: `CEREBRAS_API_KEY`.
-- **Gotcha:** Context often clipped below native (8K) on free. Model roster and CC requirement are in flux — re-verify before depending on this provider.
+- **Gotcha:** Context often clipped below native (8K) on free. Model roster and free-tier terms are in flux — re-verify before depending on this provider.
 
 ### 4. OpenRouter
 
 - **URL:** https://openrouter.ai
 - **Free tier:** Routes `:free` variants. 20 RPM; 50 RPD with <$10 balance, 1000 RPD after.
-- **Best `:free` models:** `openai/gpt-oss-20b:free` (dogfood pin as of 2026-08-10; tools+answer verified), `google/gemma-4-31b-it:free` / `google/gemma-4-26b-a4b-it:free`, `qwen/qwen3-coder:free`. **`deepseek/deepseek-chat-v3:free` is gone (404).** **`meta-llama/llama-3.3-70b-instruct:free` is confirmed gone as of 2026-08-30** — probe returns 404 pointing at the paid slug instead; migrate any remaining references to `gpt-oss-20b:free` or `qwen3-coder:free`. Roster rotates — verify before relying on any specific slug.
+- **Best `:free` models:** `openai/gpt-oss-20b:free` (dogfood pin as of 2026-08-10; tools+answer verified), `google/gemma-4-31b-it:free` / `google/gemma-4-26b-a4b-it:free`, `qwen/qwen3-coder:free`, plus `deepseek/deepseek-chat-v3:free`, `deepseek/deepseek-chat-v3-0324:free`, `deepseek/deepseek-r1:free`, `google/gemini-2.0-flash-exp:free`, and `qwen/qwen3-235b-a22b:free` (all reconfirmed still free 2026-09-06, correcting a prior cycle's "gone (404)" flag on the DeepSeek v3 slug that turned out to be inaccurate). New this cycle: `ox-alpha` (stealth model, revealed as a Zhipu GLM variant, 1M ctx) and an NVIDIA Nemotron 3 Ultra 550B free variant (medium confidence). **`meta-llama/llama-3.3-70b-instruct:free` is confirmed gone as of 2026-08-30** — probe returns 404 pointing at the paid slug instead; migrate any remaining references to `gpt-oss-20b:free` or `qwen3-coder:free`. Roster rotates — verify before relying on any specific slug.
 - **Paid:** Aggregator markup ~0–5% over upstream. BYO-key supported (5% surcharge).
 - **LiteLLM:** `openrouter/openai/gpt-oss-20b:free`. Env: `OPENROUTER_API_KEY`.
 - **Gotcha:** `:free` routes can be slow / queue-prone, and individual models are retired with little notice (llama-3.3-70b-instruct:free went from "sunsetting" banner to fully removed within six weeks). Providers may log prompts — check each model card.
@@ -85,7 +86,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 
 - **URL:** https://developers.cloudflare.com/workers-ai
 - **Free tier:** **10,000 neurons/day standing free** (~few thousand small-model calls) — confirmed unchanged, and the free-tier model was explicitly excluded from Cloudflare's 2026-05-30 deprecation wave.
-- **Best models:** Llama 3.3/4, DeepSeek, Qwen, Mistral, GLM-5.2 (new, added 2026-06-16, supersedes GLM-4.7-flash), BGE embeddings, Whisper, image models.
+- **Best models:** Llama 3.3/4, DeepSeek, Qwen, Mistral, GLM-5.2 (added 2026-06-16, supersedes GLM-4.7-flash; pricing now confirmed at $1.40/$4.40 per 1M, $0.26/1M cached input — but as of 2026-09-06 requires the Workers Paid plan, $5/mo, which still includes the 10K free neurons/day), BGE embeddings, Whisper, image models.
 - **Paid:** $0.011 per 1000 neurons beyond free.
 - **LiteLLM:** `cloudflare/@cf/meta/llama-3.3-70b-instruct`. Env: `CLOUDFLARE_API_KEY` + account ID.
 - **Gotcha:** Neuron accounting is opaque; best used from inside Workers runtime. Kimi K2.5 now auto-aliases to the pricier K2.6.
@@ -95,7 +96,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 - **URL:** https://console.mistral.ai
 - **Free tier:** "Experimental" — reported ~1 RPS (2 RPM), ~1B tokens/month across chat models, phone verification required. **Low confidence:** Mistral's public docs no longer publish exact numeric limits (gated behind the logged-in Admin Console "Limits" page) — verify before depending on this figure.
 - **Best free models:** `mistral-large-latest`, `mistral-small-latest`, `codestral-latest` (coding), `pixtral-large` (vision), `ministral-8b`.
-- **Paid:** Large ~$2 / $6; Small ~$0.20 / $0.60; Codestral ~$0.30 / $0.90; Medium 3.5 $1.50/$7.50 (262K ctx, new).
+- **Paid:** Large ~$2 / $6; Small ~$0.20 / $0.60; Codestral ~$0.30 / $0.90; Medium 3.5 $1.50/$7.50 (262K ctx, new). **Unconfirmed rumor (2026-09-06, medium-low confidence):** a "Mistral Large 3" at $0.50/$1.50 and a "Small 4"/"Ministral 3" at $0.15/$0.60 may exist — unclear whether the `-latest` aliases resolve to them; not applied above pending a direct probe.
 - **LiteLLM:** `mistral/mistral-large-latest`. Env: `MISTRAL_API_KEY`.
 - **Gotcha:** Free tier explicitly **allows training on your data** unless on paid. Codestral commercial use requires paid.
 
@@ -109,7 +110,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 ### 8. Nvidia NIM (build.nvidia.com)
 
 - **URL:** https://build.nvidia.com
-- **⚠️ `meta/llama-3.3-70b-instruct` reached end-of-life 2026-08-26** and now returns 410 Gone — no official replacement/redirect was published. Use one of the other free models below instead.
+- **⚠️ `meta/llama-3.3-70b-instruct` reached end-of-life 2026-08-26** and now returns 410 Gone — no official replacement/redirect was published. Use one of the other free models below instead. (Unresolved discrepancy 2026-09-06: the live model page renders without a deprecation banner, in tension with the probe's direct 410 response; the API-level probe is treated as authoritative pending a fresh check next cycle.)
 - **Free tier:** 1,000 credits on signup; 5,000 more with Developer Program. Credits don't refill. 40 RPM practical ceiling.
 - **Best models:** Nemotron 3 Ultra (550B MoE, 1M ctx), Llama Nemotron 70B (reasoning), DeepSeek R1, NVIDIA embeddings.
 - **LiteLLM:** `nvidia_nim/<model>`. Env: `NVIDIA_NIM_API_KEY`.
@@ -119,7 +120,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 ### 9. GitHub Models — RETIRED
 
 - **URL:** https://github.com/marketplace/models
-- **⚠️ FULLY RETIRED 2026-07-30, confirmed dead 2026-08-30.** The platform (playground, model catalog, inference API, BYOK) is shut down for everyone, including existing customers — a probe against it now returns a generic connection error rather than an auth error, consistent with the endpoint being torn down entirely. **This provider no longer works. Do not reference it in new config.** Migrate to Microsoft Foundry, GitHub Copilot, or another provider in this catalog.
+- **⚠️ FULLY RETIRED 2026-07-30, confirmed dead 2026-08-30, reconfirmed no reversal as of 2026-09-06.** The platform (playground, model catalog, inference API, BYOK) is shut down for everyone, including existing customers — a probe against it now returns a generic connection error rather than an auth error, consistent with the endpoint being torn down entirely. **This provider no longer works. Do not reference it in new config.** Migrate to Microsoft Foundry, GitHub Copilot, or another provider in this catalog.
 - **Historical note:** was free for GitHub users, rate-limited by Copilot tier (Free ~50 RPD low-tier, 10 RPD high-tier), catalog included GPT-5 family, Claude subset, Llama, Mistral, Phi, Cohere, DeepSeek. Retained here only so old references to `github/gpt-4.1` / `GITHUB_TOKEN` are recognized as dead, not for reuse.
 
 ### 10. Ollama Cloud
@@ -127,14 +128,14 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 - **URL:** https://ollama.com/cloud
 - **Free tier:** Metered usage levels 1–4 (lightest to heaviest), 1 concurrent model.
 - **Best models:** gpt-oss:20b (lightest), deepseek-v3.1:671b, deepseek-v4-flash, cogito-2.1:671b, nemotron-3-super:cloud. Current live catalog also includes gemma4, qwen3.5, glm-5.1/5.2, minimax-m2.x/m3, kimi-k2.5/2.6/2.7-code, mistral-large-3 — some older model ids may have been superseded by these, unconfirmed. kimi-k2-thinking is paid-only.
-- **Paid:** Pro $20/mo (50× free, 3 concurrent); Max $100/mo.
+- **Paid:** Pro $20/mo (3 concurrent) and Max $100/mo (10 concurrent). **Changed 2026-09-06:** billing moved from GPU-second/usage-level metering to token-based usage credits — Pro now includes $60/mo in per-token credits (was framed as "50× free tier"), Max includes $300/mo.
 - **LiteLLM:** OpenAI-compatible passthrough — `openai/gpt-oss:120b-cloud` with `api_base=https://ollama.com/v1`.
 - **Gotcha:** verify model ids against `ollama.com/search?c=cloud` before adding to config — not every plausible-looking `:cloud`-suffixed id is real.
 
 ### 11. Hugging Face Inference Providers
 
 - **URL:** https://huggingface.co/docs/api-inference
-- **Free tier:** Official docs now denominate credits in dollars — **$0.10/month free**, **$2.00/month on PRO** ($9/mo). This is a large drop from the previously-tracked "100K/2M credits" framing; flagged for manual re-verification against a live account before relying on it.
+- **Free tier:** Official docs denominate credits in dollars — **$0.10/month free**, **$2.00/month on PRO** ($9/mo). This was a large drop from the previously-tracked "100K/2M credits" framing; reconfirmed unchanged across two review cycles (2026-07-19 and 2026-09-06), confidence now high.
 - **Best use:** Model discovery + eval; routes to Together/Fireworks/SambaNova/Cerebras/DeepInfra/fal/Replicate behind the scenes.
 - **LiteLLM:** `huggingface/<model>`. Env: `HF_TOKEN`.
 
@@ -142,7 +143,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 
 - **Cohere** — free trial key, 1,000 calls/month, 20 RPM. Command A strong at RAG ($2.50/$10); Command A+ (218B MoE, Apache 2.0) is open-weight self-host — **not** on the public per-token rate card despite earlier records, hosted-endpoint pricing is "contact sales." Embed v4.0 (multimodal) $0.12/1M text tokens. `cohere/command-a-03-2025`. Trial keys forbidden for commercial.
 - **AI21** — $10 signup credit. Jamba 1.5 Large/Mini (256K context). `ai21/jamba-1.5-large`.
-- **xAI (Grok)** — no permanently-free model; $25 signup credit + up to $150/mo via data-sharing opt-in. New flagship `grok-4.6` (2026-08-12, agent/coding-focused, supersedes `grok-4.5`) at $2/$6 (<200K), $4/$12 (≥200K). `xai/grok-4-3` is the default/cheapest current tier at $1.25/$2.50; `grok-3` fully retires 2026-08-15.
+- **xAI (Grok)** — no permanently-free model; $25 signup credit + up to $150/mo via data-sharing opt-in. Flagship `grok-4.6` (2026-08-12, agent/coding-focused, supersedes `grok-4.5`) at $2/$6 (<200K), $4/$12 (≥200K); `grok-4.5` reconfirmed 2026-09-06 as superseded but **not deprecated** (still active, same specs). `xai/grok-4-3` is the default/cheapest current tier at $1.25/$2.50; `grok-3`'s hard full retirement on 2026-08-15 confirmed to have happened as scheduled. New: `grok-build-0.1` (256K ctx, $0.20/$1.50 per 1M — conflicts with an earlier $1.00/$2.00 sighting, unresolved), the API SKU behind the open-source "Grok Build" agentic coding CLI (v1.0, 2026-08-07).
 
 ---
 
@@ -150,7 +151,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 
 | Provider | Model | Input $/1M | Output $/1M |
 |---|---|---|---|
-| DeepSeek direct | `deepseek-v4-flash` (replaces V3) | $0.07–0.14 (cache-miss figure unconfirmed) | $0.28 |
+| DeepSeek direct | `deepseek-v4-flash` (replaces V3) | $0.22 off-peak / $0.44 peak | $0.66 off-peak / $1.32 peak |
 | DeepSeek direct | `deepseek-v4-pro` (replaces R1) | $0.66 off-peak / $1.32 peak (01:00-04:00, 06:00-10:00 UTC) | $1.98 off-peak / $3.96 peak |
 | Gemini | Flash-Lite | $0.10 | $0.40 |
 | Gemini | Flash | $0.30 | $2.50 |
@@ -162,15 +163,22 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 | DeepInfra | DeepSeek V3 | $0.32 | $0.89 |
 | Fireworks | Llama 3.3 70B | $0.90 | $0.90 |
 | Anthropic | Haiku 4.5 | $1.00 | $5.00 |
-| Anthropic | Sonnet 4.6 / Sonnet 5 | $3 | $15 |
+| Anthropic | Sonnet 4.6 | $3 | $15 |
+| Anthropic | Sonnet 5 | $2 | $10 |
 | Anthropic | Opus 4.7 / 4.8 | $5 | $25 |
-| Perplexity | Sonar | $1 + $5/1k searches | $1 |
+| Perplexity | Sonar (retiring 2026-09-27) | $1 + $5/1k searches | $1 |
 
 **Rule of thumb:** $5 topped up on DeepSeek or Gemini lasts weeks of dev testing. Batch APIs (OpenAI, Anthropic) and off-peak discounts (DeepSeek) halve effective cost.
 
 **Note (2026-07-19):** Together AI's $25 no-CC signup credit has been discontinued — a $5 minimum prepaid purchase with a payment method is now required, so it no longer belongs in a "cheap/free" comparison without that caveat.
 
 **Note (2026-08-30):** DeepSeek replaced `deepseek-v4-pro`'s flat $0.435/$0.87 rate with peak/off-peak billing effective 2026-08-16 — off-peak is still ~1.5x the old rate, peak is a 3x increase. Schedule cost-sensitive batch work outside 01:00-04:00 and 06:00-10:00 UTC.
+
+**Note (2026-09-06):** `deepseek-v4-flash` has now also moved to the same peak/off-peak billing as v4-pro, replacing its old flat $0.07/$0.28 rate — table updated above.
+
+**Note (2026-09-06):** Anthropic made Claude Sonnet 5's $2/$10 introductory rate **permanent** — the previously-scheduled rise to $3/$15 did not happen. Sonnet 4.6 (the prior-generation model, still available) remains at $3/$15; don't conflate the two rows above.
+
+**Note (2026-09-06):** Perplexity's Sonar Chat Completions models (all four in this catalog) are scheduled for retirement on **2026-09-27** in favor of the new Agent API. digithings references `perplexity/sonar` in `config/litellm.yaml` and `config/digiquant_models.yaml` — these need to migrate before that date.
 
 **DeepSeek caveat:** direct platform is hosted in China — prompts subject to local data law. For Western-jurisdiction hosting of the same weights, use Fireworks, Together, or DeepInfra.
 
@@ -211,9 +219,9 @@ Hardware rule of thumb: 7–14B runs on 16GB Mac / consumer GPU (Q4/Q5 quant). 7
 | Fast coding completions | Groq `qwen/qwen3.6-27b` or Mistral `codestral-latest` | Fast on Groq; Codestral purpose-built |
 | Long-context RAG | Gemini 2.5 Flash (1M ctx, free) | Only free 1M-context option at scale |
 | Vision / multimodal | Gemini 2.5 Flash or Mistral Pixtral (free) | Native multimodal, no extra charge |
-| Reasoning / math | DeepSeek `deepseek-v4-pro` (cheap paid, thinking mode) — free OpenRouter `deepseek/deepseek-r1:free` availability unconfirmed this cycle | Frontier reasoning at low cost even off free tier |
+| Reasoning / math | DeepSeek `deepseek-v4-pro` (cheap paid, thinking mode), or free via OpenRouter `deepseek/deepseek-r1:free` (reconfirmed live 2026-09-06) | Frontier reasoning at low cost even off free tier |
 | Cheap bulk embeddings | Gemini `text-embedding-004` or Cloudflare BGE; paid: Cohere Embed v3/v4 | Free at dev scale |
-| Production fallback chain | LiteLLM: Groq → Gemini Flash → DeepSeek → Anthropic | Speed-first, cost-second, quality-third. Cerebras and Together both now require a payment method / CC-backed credit — not reliable no-CC free links in this chain anymore |
+| Production fallback chain | LiteLLM: Groq → Gemini Flash → DeepSeek → Anthropic | Speed-first, cost-second, quality-third. Together now requires a payment method / CC-backed credit — not a reliable no-CC free link in this chain anymore. Cerebras remains no-CC free as of 2026-09-06 (an unverified single-source rumor claims this may change — not yet confirmed) |
 | Zero-retention commercial | Anthropic, OpenAI, Gemini paid, Cloudflare | Default no-training. Avoid Mistral/Gemini **free** for confidential data |
 
 ---

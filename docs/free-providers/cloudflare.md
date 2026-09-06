@@ -11,7 +11,7 @@ access_requirements:
   - email
   - cloudflare_account
 data_privacy_on_free: no_training
-verified_at: 2026-08-30
+verified_at: 2026-09-06
 source_urls:
   - https://developers.cloudflare.com/workers-ai/platform/pricing/
   - https://developers.cloudflare.com/workers-ai/models/
@@ -99,3 +99,4 @@ $0.011 per 1,000 neurons beyond the free 10,000/day. Effective cost: ~$0.001–$
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
 | 2026-08-30 | Automated snapshot sync | provider-review scan |
+| 2026-09-06 | Automated snapshot sync | provider-review scan |

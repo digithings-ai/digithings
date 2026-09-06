@@ -1,5 +1,5 @@
 provider: deepinfra
-last_checked: 2026-07-19
+last_checked: 2026-09-06
 source: agent-research
 
 free_tier:
@@ -50,8 +50,8 @@ paid_tier:
       cost_per_1m_input_long: null
       cost_per_1m_output: 0.38
       cost_per_1m_output_long: null
-      cost_per_1m_input_cached: null
-      status: active            # updated $0.28/$0.56 -> $0.26/$0.38
+      cost_per_1m_input_cached: 0.13    # ADDED 2026-09-06 per deepinfra.com/pricing
+      status: active            # updated $0.28/$0.56 -> $0.26/$0.38; RECONFIRMED unchanged 2026-09-06
     - name: deepseek-ai/DeepSeek-V4-Pro
       context_window: 1000000
       max_input_tokens: 1000000
@@ -60,8 +60,8 @@ paid_tier:
       cost_per_1m_input_long: null
       cost_per_1m_output: 2.60
       cost_per_1m_output_long: null
-      cost_per_1m_input_cached: null
-      status: active            # updated $1.74/$3.48 -> $1.30/$2.60
+      cost_per_1m_input_cached: 0.10    # ADDED 2026-09-06 per deepinfra.com/pricing — double-check next cycle, close to a $0.14 figure seen elsewhere for a different provider's same model family
+      status: active            # updated $1.74/$3.48 -> $1.30/$2.60; RECONFIRMED unchanged 2026-09-06
   batching:
     available: false
     discount_pct: null
@@ -103,4 +103,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "2026-07-19 UPDATE: all four tracked model prices dropped further — Llama-3.3-70B renamed to -Turbo variant at $0.10/$0.32 (was $0.23/$0.40), DeepSeek-V4-Pro down to $1.30/$2.60 (was $1.74/$3.48), DeepSeek-V3.2 down to $0.26/$0.38 (was $0.28/$0.56); DeepSeek-V3 input ticked up slightly to $0.32 while output dropped to $0.89 (was $0.27/$1.10). Confirmed still no standing free tier — DeepInfra's own pricing page states a card or prepay is required; third-party '$1 free credit, no CC' claims are stale/unreliable. A DeepStart program offers free credits to qualifying startups via separate application, not a standing free tier. DeepInfra raised $107M Series B May 2026 (25× volume growth since Series A). Still cheapest open-weight hosting for Llama 3.3 70B. No key configured yet; no probe run (method: skipped)."
+notes: "RECONFIRMED 2026-09-06 (high confidence, deepinfra.com/pricing direct): all four tracked model prices unchanged since 2026-07-19; added previously-missing cached-input rates for DeepSeek-V3.2 ($0.13) and DeepSeek-V4-Pro ($0.10). Still confirmed no standing free tier. NEW 2026-09-06: a 'DeepSeek-V4-Flash-Vision-Exp' model now featured with a 51%-off launch promo — not added as a full entry pending steady-state (post-promo) pricing, worth tracking next cycle. 2026-07-19 UPDATE: all four tracked model prices dropped further — Llama-3.3-70B renamed to -Turbo variant at $0.10/$0.32 (was $0.23/$0.40), DeepSeek-V4-Pro down to $1.30/$2.60 (was $1.74/$3.48), DeepSeek-V3.2 down to $0.26/$0.38 (was $0.28/$0.56); DeepSeek-V3 input ticked up slightly to $0.32 while output dropped to $0.89 (was $0.27/$1.10). Confirmed still no standing free tier — DeepInfra's own pricing page states a card or prepay is required; third-party '$1 free credit, no CC' claims are stale/unreliable. A DeepStart program offers free credits to qualifying startups via separate application, not a standing free tier. DeepInfra raised $107M Series B May 2026 (25× volume growth since Series A). Still cheapest open-weight hosting for Llama 3.3 70B. No key configured yet; no probe run (method: skipped)."

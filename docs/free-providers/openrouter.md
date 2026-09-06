@@ -10,7 +10,7 @@ free_tier_type: standing
 access_requirements:
   - email
 data_privacy_on_free: unknown
-verified_at: 2026-08-30
+verified_at: 2026-09-06
 source_urls:
   - https://openrouter.ai/docs#rate-limits
   - https://openrouter.ai/models?q=%3Afree
@@ -39,6 +39,8 @@ OpenRouter is an aggregator that routes requests to underlying providers via a s
 | `qwen/qwen3-235b-a22b:free` | 131,072 | 8,192 | active |
 | `openai/gpt-oss-20b:free` | 131,072 | 8,192 | active |
 | `qwen/qwen3-coder:free` | 1,048,576 | 8,192 | active |
+| `ox-alpha` | 1,000,000 | 8,192 | active |
+| `nvidia/nemotron-3-ultra:free` | 1,000,000 | 8,192 | active |
 
 > **The `:free` roster changes weekly.** Check https://openrouter.ai/models?q=:free for the current list. Models listed above were active as of 2026-05-03.
 
@@ -117,3 +119,4 @@ Deposit credit ($10 minimum recommended to unlock 1,000 RPD). Routes to upstream
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
 | 2026-08-30 | Automated snapshot sync | provider-review scan |
+| 2026-09-06 | Automated snapshot sync | provider-review scan |

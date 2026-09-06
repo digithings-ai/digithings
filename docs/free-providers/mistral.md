@@ -11,7 +11,7 @@ access_requirements:
   - email
   - phone_verification
 data_privacy_on_free: trains_on_data
-verified_at: 2026-08-30
+verified_at: 2026-09-06
 source_urls:
   - https://docs.mistral.ai/deployment/cloud/laplateforme/
   - https://mistral.ai/technology/#pricing
@@ -118,3 +118,4 @@ Enable billing in console. Same API key. Large ~$2/$6 per 1M in/out; Small ~$0.2
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
 | 2026-08-30 | Automated snapshot sync | provider-review scan |
+| 2026-09-06 | Automated snapshot sync | provider-review scan |

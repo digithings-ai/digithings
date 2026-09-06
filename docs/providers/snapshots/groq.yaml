@@ -1,5 +1,5 @@
 provider: groq
-last_checked: 2026-08-30
+last_checked: 2026-09-06
 source: agent-research
 
 free_tier:
@@ -17,8 +17,8 @@ free_tier:
       max_output_tokens: 32768
       status: deprecated        # hard cutover reached; Groq's own June 17 2026 notice said "by August 2026 requests will no longer be served" for free/developer tier
       verified: false
-      last_verified: 2026-08-30
-      last_verified_latency_ms: 112
+      last_verified: 2026-09-06
+      last_verified_latency_ms: 71
       verification_error: "Error code: 404 - {'error': {'message': 'The model `llama-3.3-70b-versatile` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}"
     - name: llama-4-scout-17b-16e-instruct
       context_window: 131072
@@ -38,7 +38,7 @@ free_tier:
       last_verified: null
       last_verified_latency_ms: null
       verification_error: null
-    - name: qwen/qwen3.6-27b
+    - name: qwen/qwen3.6-27b     # NAME UNCONFIRMED 2026-09-06: aggregator sources this cycle consistently reference "qwen/qwen3-32b" (60 RPM/6,000 TPM) instead — this id may be stale/mistyped; not renamed without a direct console check
       context_window: 131072
       max_input_tokens: 131072
       max_output_tokens: 8192
@@ -48,9 +48,9 @@ free_tier:
       last_verified_latency_ms: null
       verification_error: null
   rate_limits:
-    rpm: 30              # default; varies by model
-    rpd: 1000            # RPD is the binding constraint (dropped from 14,400 in 2026)
-    tpm: 12000           # corrected 2026-07-19: llama-3.3-70b-versatile is 12,000 TPM (6,000 was llama-3.1-8b-instant, mixed up in prior snapshot)
+    rpm: 30              # openai/gpt-oss-120b, confirmed 2026-09-06
+    rpd: 1000            # openai/gpt-oss-120b; also 200,000 TPD (no dedicated schema field)
+    tpm: 8000            # CORRECTED 2026-09-06: 12,000 was the now-dead llama-3.3-70b-versatile figure; gpt-oss-120b's real free-tier TPM is 8,000
     input_tpm: null
     concurrent_requests: null
     reset_window: rolling_24h
@@ -129,4 +129,4 @@ verification:
   probe_model_alias: groq-llama-70b
   github_secret_key: GROQ_API_KEY
 
-notes: "PROBE 2026-08-30: llama-3.3-70b-versatile now returns 404 model_not_found (112ms) — confirms Groq's June 17 2026 deprecation notice ('by August 2026, requests to these models will no longer be served' for free/developer tier; enterprise committed-spend contracts unaffected). This is the hard cutover, not a transient probe failure — status flipped active -> deprecated. Groq's own migration guidance (unchanged from last cycle): openai/gpt-oss-120b or qwen/qwen3.6-27b, both already in this snapshot's free roster. ACTION NEEDED: infra/digichat-release/config/litellm.yaml:37-40 still routes a production model_name to groq/llama-3.3-70b-versatile — that route is now dead and any caller will 404. scripts/provider_review/probe.py:36 should also be repointed to openai/gpt-oss-120b so next cycle's probe exercises a live model. TPM 12k on the now-dead llama-3.3-70b-versatile was already below research extraction phase needs (41k/run) — gpt-oss-120b does not appear rate-limited lower per Groq's docs, but its free-tier TPM/RPD have not been independently reconfirmed this cycle. ACQUISITION CLARIFIED (unchanged from 2026-07-19): the Nvidia deal is a non-exclusive inference-tech licensing deal + acquihire, not a straight acquisition — GroqCloud continues operating nominally independently."
+notes: "PROBE 2026-09-06: llama-3.3-70b-versatile still 404s model_not_found (71ms) — third consecutive cycle, deprecation reconfirmed, no new information. RATE LIMITS CORRECTED 2026-09-06: openai/gpt-oss-120b's actual free-tier limits are 30 RPM / 1,000 RPD / 8,000 TPM / 200,000 TPD (per console.groq.com/docs/rate-limits) — the previous 12,000 TPM figure belonged to the now-dead llama-3.3-70b-versatile, not gpt-oss-120b. Model-name flag: sources this cycle consistently reference 'qwen/qwen3-32b' (60 RPM/6,000 TPM) rather than 'qwen3.6-27b' for the second free model — the tracked id may be stale, not renamed without a direct console check. PROBE 2026-08-30 (superseded): llama-3.3-70b-versatile returned 404 model_not_found (112ms) — confirms Groq's June 17 2026 deprecation notice ('by August 2026, requests to these models will no longer be served' for free/developer tier; enterprise committed-spend contracts unaffected). This is the hard cutover, not a transient probe failure — status flipped active -> deprecated. Groq's own migration guidance (unchanged from last cycle): openai/gpt-oss-120b or qwen/qwen3.6-27b, both already in this snapshot's free roster. ACTION NEEDED: infra/digichat-release/config/litellm.yaml:37-40 still routes a production model_name to groq/llama-3.3-70b-versatile — that route is now dead and any caller will 404. scripts/provider_review/probe.py:36 should also be repointed to openai/gpt-oss-120b so next cycle's probe exercises a live model. TPM 12k on the now-dead llama-3.3-70b-versatile was already below research extraction phase needs (41k/run) — gpt-oss-120b does not appear rate-limited lower per Groq's docs, but its free-tier TPM/RPD have not been independently reconfirmed this cycle. ACQUISITION CLARIFIED (unchanged from 2026-07-19): the Nvidia deal is a non-exclusive inference-tech licensing deal + acquihire, not a straight acquisition — GroqCloud continues operating nominally independently."

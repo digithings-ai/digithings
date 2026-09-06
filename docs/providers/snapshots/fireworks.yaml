@@ -1,5 +1,5 @@
 provider: fireworks
-last_checked: 2026-07-19
+last_checked: 2026-09-06
 source: agent-research
 
 free_tier:
@@ -121,4 +121,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "$1 starter credits, no CC — confirmed still current 2026-07-19. DeepSeek-R1 paid clarified: Fast variant is $8.00/$8.00; Basic (slower) variant exists at lower price (exact figure not reconfirmed this cycle — pricing page structure obscured per-model detail). Added deepseek-v4-pro ($1.74/$3.48, 1M ctx, cached input $0.14/1M) and deepseek-v4-flash ($0.14/$0.28, cached input $0.028/1M) to paid tier. Llama 3.3 70B price unchanged at $0.90/$0.90 (not reconfirmed exact figure this cycle). No key configured yet; no probe run (method: skipped)."
+notes: "RECONFIRMED 2026-09-06 (high confidence, fireworks.ai pricing page): $1 no-CC starter credit still offered. LOW-CONFIDENCE FLAG 2026-09-06: DeepSeek-R1 fast-variant $8.00/$8.00 was only corroborated this cycle by a stale (early-2025-referencing) source, not docs.fireworks.ai directly — deepseek-r1-basic's exact price remains unconfirmed. A separate aggregator cited Fireworks pricing 'DeepSeek V4' at $1.74/M, inconsistent with the $1.74/$3.48 tracked here for deepseek-v4-pro and possibly a cross-provider conflation with DeepInfra's figures — NOT applied, flagged for direct docs.fireworks.ai reverification next cycle. llama-v3p3-70b-instruct pricing also not independently reconfirmed this cycle. $1 starter credits, no CC — confirmed still current 2026-07-19. DeepSeek-R1 paid clarified: Fast variant is $8.00/$8.00; Basic (slower) variant exists at lower price (exact figure not reconfirmed this cycle — pricing page structure obscured per-model detail). Added deepseek-v4-pro ($1.74/$3.48, 1M ctx, cached input $0.14/1M) and deepseek-v4-flash ($0.14/$0.28, cached input $0.028/1M) to paid tier. Llama 3.3 70B price unchanged at $0.90/$0.90 (not reconfirmed exact figure this cycle). No key configured yet; no probe run (method: skipped)."
