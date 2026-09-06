@@ -788,6 +788,57 @@ describe("POST /api/chat", () => {
       }
     });
   });
+
+  describe("digiquant.io dashboard tenant (#3662)", () => {
+    // Canonical dashboard shape: ungated + operator, no gate.consumeUrl — Desk+
+    // chat is never capped at free-3, and the trial quota is never consulted.
+    const dashboardCtx = {
+      tenantSlug: "digiquant-dashboard",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "digiquant-dashboard",
+        gateMode: "ungated",
+        theme: "dark",
+        attribution: false,
+        token: "dash-secret",
+        backend: { type: "digigraph" },
+        activityDetail: "full",
+        llmAccess: "operator",
+      },
+    };
+
+    function dashboardReq(): Request {
+      return new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-embed-host": "https://digiquant.io" },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      });
+    }
+
+    beforeEach(() => {
+      vi.mocked(resolveChatTenantContext).mockResolvedValue(dashboardCtx as never);
+    });
+
+    it("serves well past the free-turn cap with no 402 and never touches the trial quota", async () => {
+      const quotaModule = await import("@/lib/embed-turn-quota");
+      const overSpy = vi.spyOn(quotaModule, "isOverEmbedTrialLimit");
+      const recordSpy = vi.spyOn(quotaModule, "recordEmbedTrialTurn");
+      const unlockSpy = vi.spyOn(quotaModule, "unlockEmbedTrial");
+      try {
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT + 2; i++) {
+          const res = await POST(dashboardReq());
+          expect(res.status).toBe(200);
+        }
+        expect(overSpy).not.toHaveBeenCalled();
+        expect(recordSpy).not.toHaveBeenCalled();
+        expect(unlockSpy).not.toHaveBeenCalled();
+      } finally {
+        overSpy.mockRestore();
+        recordSpy.mockRestore();
+        unlockSpy.mockRestore();
+      }
+    });
+  });
   describe("trace stream (the production default)", () => {
     // Every other test in this file pins DIGICHAT_TRACE_UI="0", which routes through
     // `streamText`. Production does the opposite: the flag is unset, so `useTraceStream`

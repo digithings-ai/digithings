@@ -11,6 +11,10 @@ import {
   DEFAULT_DIGICHAT_EMBED_ORIGIN,
   digichatEmbedOriginForDashboard,
   digichatPopupEnvFromProcess,
+  DIGICHAT_UPGRADE_BODY,
+  DIGICHAT_UPGRADE_CTA_HREF,
+  DIGICHAT_UPGRADE_CTA_LABEL,
+  DIGICHAT_UPGRADE_TITLE,
   embedHostRequiresToken,
   extractPageHtml,
   extractVisiblePageText,
@@ -46,6 +50,22 @@ describe('canUseDigichatPopup', () => {
     expect(canUseDigichatPopup('desk')).toBe(true);
     expect(canUseDigichatPopup('studio')).toBe(true);
     expect(canUseDigichatPopup('enterprise')).toBe(true);
+  });
+});
+
+describe('baseline upgrade CTA (#3662)', () => {
+  it('routes to Settings billing like LockedSurface', () => {
+    expect(DIGICHAT_UPGRADE_CTA_HREF).toBe('/settings#billing');
+    expect(DIGICHAT_UPGRADE_CTA_LABEL).toBe('Upgrade in Settings → Billing');
+  });
+
+  it('keeps digi names lowercase with non-empty title and body', () => {
+    expect(DIGICHAT_UPGRADE_TITLE.length).toBeGreaterThan(0);
+    expect(DIGICHAT_UPGRADE_BODY.length).toBeGreaterThan(0);
+    for (const copy of [DIGICHAT_UPGRADE_TITLE, DIGICHAT_UPGRADE_BODY]) {
+      expect(copy).not.toMatch(/DigiChat|DigiQuant|DigiThings/);
+      expect(copy).toMatch(/digichat/);
+    }
   });
 });
 

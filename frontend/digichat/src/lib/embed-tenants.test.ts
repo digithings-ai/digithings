@@ -4,6 +4,8 @@ import {
   normalizeEmbedHost,
   resolveEmbedTenantByHost,
   resetEmbedTenantRegistryForTests,
+  DIGIQUANT_DASHBOARD_EMBED_HOST,
+  isDigiquantDashboardTenantConfig,
 } from "./embed-tenants";
 
 const VALID = JSON.stringify({
@@ -571,5 +573,89 @@ describe("resolveEmbedTenantByHost", () => {
     expect(resolveEmbedTenantByHost("https://www.datatapstream.com")?.slug).toBe("datatapstream");
     expect(resolveEmbedTenantByHost("https://unknown.example.com")).toBeNull();
     expect(resolveEmbedTenantByHost(null)).toBeNull();
+  });
+});
+
+describe("digiquant dashboard tenant contract (#3662)", () => {
+  const dashboardEntry = {
+    slug: "digiquant-dashboard",
+    aliases: ["www.digiquant.io"],
+    backend: { type: "digigraph" },
+    gateMode: "ungated",
+    llmAccess: "operator",
+    token: "dash-secret",
+  };
+
+  it("accepts the canonical digiquant.io entry: ungated + operator, no gate", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({ [DIGIQUANT_DASHBOARD_EMBED_HOST]: dashboardEntry }),
+    );
+    const cfg = reg.get("digiquant.io");
+    expect(cfg?.slug).toBe("digiquant-dashboard");
+    // www alias rides the same entry.
+    expect(reg.get("www.digiquant.io")).toBe(cfg);
+    expect(isDigiquantDashboardTenantConfig(cfg!)).toBe(true);
+  });
+
+  it("rejects turn_limited: Desk+ must never be capped at free-3", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        [DIGIQUANT_DASHBOARD_EMBED_HOST]: {
+          ...dashboardEntry,
+          gateMode: "turn_limited",
+        },
+      }),
+    );
+    expect(isDigiquantDashboardTenantConfig(reg.get("digiquant.io")!)).toBe(false);
+  });
+
+  it("rejects trial_form: baseline gets an upgrade CTA, not free-3 then lock", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        [DIGIQUANT_DASHBOARD_EMBED_HOST]: {
+          ...dashboardEntry,
+          gateMode: "trial_form",
+        },
+      }),
+    );
+    expect(isDigiquantDashboardTenantConfig(reg.get("digiquant.io")!)).toBe(false);
+  });
+
+  it("rejects free_then_byok: dashboard spend rides operator keys, not visitor BYOK", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        [DIGIQUANT_DASHBOARD_EMBED_HOST]: {
+          ...dashboardEntry,
+          llmAccess: "free_then_byok",
+        },
+      }),
+    );
+    expect(isDigiquantDashboardTenantConfig(reg.get("digiquant.io")!)).toBe(false);
+  });
+
+  it("rejects a gate.consumeUrl: no per-message server quota for entitled users", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        [DIGIQUANT_DASHBOARD_EMBED_HOST]: {
+          ...dashboardEntry,
+          gate: { consumeUrl: "https://api.test/consume" },
+        },
+      }),
+    );
+    expect(isDigiquantDashboardTenantConfig(reg.get("digiquant.io")!)).toBe(false);
+  });
+
+  it("rejects a missing llmAccess: the contract must be explicit, not defaulted", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        [DIGIQUANT_DASHBOARD_EMBED_HOST]: {
+          slug: "digiquant-dashboard",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "dash-secret",
+        },
+      }),
+    );
+    expect(isDigiquantDashboardTenantConfig(reg.get("digiquant.io")!)).toBe(false);
   });
 });

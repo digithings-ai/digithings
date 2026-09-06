@@ -359,3 +359,37 @@ export function resolveEmbedTenantByHost(
   if (!host) return null;
   return getEmbedTenantRegistry().get(host) ?? null;
 }
+
+/**
+ * Canonical host for the digiquant dashboard popup embed (#3662).
+ *
+ * The dashboard iframes `/embed?host=digiquant.io` from `digiquant.io/dashboard`.
+ * Baseline entitlement lives in the dashboard (`canUseDigichatPopup` → Desk+);
+ * this registry entry only carries the chat itself, so it must never impose a
+ * free-turn gate of its own.
+ */
+export const DIGIQUANT_DASHBOARD_EMBED_HOST = "digiquant.io";
+
+/**
+ * Dashboard tenant contract (#3662, Chris lock: no free-3 quota on the
+ * digiquant dashboard popup).
+ *
+ * - `gateMode: "ungated"` — entitled (Desk+) chat is never capped at 3. The
+ *   free-turn machinery (`EMBED_FREE_TURN_LIMIT` / `embed-turn-quota.ts` /
+ *   `trial_form` / `turn_limited`) must not apply to this host.
+ * - `llmAccess: "operator"` — spend rides operator/backend keys; no visitor
+ *   BYOK handoff inside the dashboard popup.
+ * - no `gate.consumeUrl` — no per-message server-side quota for entitled users.
+ *
+ * Non-entitled tiers (free/brief baseline) never reach this config with a
+ * working chat: the dashboard renders an upgrade CTA instead of the iframe,
+ * so they never burn turns. `digithings.ai` marketing trial
+ * (`free_then_byok`) is a separate tenant and is intentionally untouched.
+ */
+export function isDigiquantDashboardTenantConfig(cfg: EmbedTenantConfig): boolean {
+  return (
+    cfg.gateMode === "ungated" &&
+    cfg.llmAccess === "operator" &&
+    cfg.gate === undefined
+  );
+}
