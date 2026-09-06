@@ -10,11 +10,14 @@ P2). Owns everything about *which model string* a request should use:
   normalized for the active ``OPENAI_API_BASE`` (strips the LiteLLM ``ollama/``
   prefix when talking directly to Ollama's OpenAI shim).
 - :func:`resolve_request_model` — the single helper that turns the *requested*
-  model into the concrete string handed to :func:`digillm.completion`,
-  reproducing the provider-key→Ollama fallback and ``ollama-cloud/`` strip the
-  old ``chat_completion`` did inline. digillm performs no env/YAML model
-  substitution and raises on a missing provider key, so this resolution must
-  happen here first.
+  model into the concrete string handed to :func:`digillm.completion`.
+
+  **Policy**: registered provider with no API key and no BYOK override → raise
+  ``ValueError`` (no silent Ollama default). House uses hosted Cheaper Inference
+  (``CHEAPERINFERENCE_API_KEY`` / ``DIGI_HOUSE_UPSTREAM=openrouter``); unprefixed
+  digiquant slugs (``deepseek/...``, ``meta-llama/...``, ``perplexity/...``) are
+  not registered providers and pass through unchanged. Local opt-in required for
+  any external provider usage.
 
 The LLM calls live in :mod:`digigraph.llm_client`; per-request auth (proxy key /
 BYOK) lives in :mod:`digigraph.llm_auth`.
@@ -940,10 +943,9 @@ def resolve_request_model(request_model: str) -> str:
 
     - ``provider/model_id`` for a known external provider (gemini/xai/openrouter) whose
       API key is set → returned unchanged; digillm routes it to that provider.
-    - same prefix but the key is **missing** → fall back to the Ollama mode model
-      (``resolve_effective_model(get_model_for_mode())``), mirroring the legacy
-      silent Ollama fallback rather than digillm's hard error — **except** when a
-      BYOK override is bound for that same provider (user key pays; keep the slug).
+    - same prefix but the key is **missing** → raise ValueError (no silent Ollama
+      fallback). Set the provider's API key env var or provide an X-BYOK-Model override
+      to use this provider.
     - ``ollama-cloud/<model>`` → strip the prefix (Ollama Cloud expects bare
       names); ``resolve_effective_model`` is intentionally NOT applied so a mode
       default can't override an explicit cloud model.
@@ -977,12 +979,11 @@ def resolve_request_model(request_model: str) -> str:
         byok = get_byok_override()
         if byok and byok[1] == provider:
             return request_model
-        logger.warning(
-            "Provider %r key (%s) not configured; falling back to Ollama mode model",
-            provider,
-            api_key_env,
+        msg = (
+            f"Provider {provider!r} key ({api_key_env}) not configured and no BYOK override "
+            f"is set. Set {api_key_env} or provide an X-BYOK-Model override to use this provider."
         )
-        return resolve_effective_model(get_model_for_mode())
+        raise ValueError(msg)
     if request_model.startswith("ollama-cloud/"):
         return request_model[len("ollama-cloud/") :]
     # BYOK already chose the spendable model via ``_apply_byok_model_override``.
