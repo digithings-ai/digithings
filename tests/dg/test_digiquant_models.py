@@ -573,7 +573,6 @@ def test_no_stale_qwen_model_ids_in_dashboard_config() -> None:
                     f"tier {tier_name} {capability} model {model!r} lacks tool use"
                 )
         for model in tier_cfg.web_search_models:
-            assert is_web_search_capable_model(model)
             assert model.lower() in {m.lower() for m in _WEB_SEARCH_MODELS}
     assert "qwen" not in cfg.openrouter_defaults.allowed_models.lower()
 
@@ -643,10 +642,10 @@ def test_edit_mode_segments_route_to_cheap_open_weight_models(
     model = get_model_for_phase(phase_slug)
     assert model is not None
     assert not is_flagship_openrouter_model(model)
-    # Phase models are bare (tool-capable); grounding is a separate web-search pre-pass.
+    # Phase models are bare (tool-capable). Grounding is a separate digisearch +
+    # CI-synthesis pre-pass (#3660); deepseek-v4-flash may appear in both pools.
     assert ":online" not in model
     assert is_tool_use_capable_model(model)
-    assert not is_web_search_capable_model(model)
 
 
 @pytest.mark.unit
