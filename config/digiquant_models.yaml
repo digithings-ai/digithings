@@ -45,10 +45,16 @@
 # (CLI/GHA without a local proxy). Optional house savings: with
 # CHEAPERINFERENCE_API_KEY + DIGI_HOUSE_UPSTREAM=cheaperinference (or
 # CHEAPERINFERENCE_HOUSE=1), that rewrite prefers Cheaper Inference; digillm
-# maps DeepSeek/Gemini/GPT pins that exist on CI to bare ids and keeps
-# OpenRouter for perplexity/sonar, :online, meta-llama/*, and unmapped slugs.
-# LiteLLM overlay: config/litellm.cheaperinference.yaml (see docs/providers/
-# cheaperinference.md). Prefixes (openrouter/, gemini/, …) are
+# maps DeepSeek/Gemini/GPT pins that exist on CI to bare ids. House traffic is
+# CI-only (#3660): a house slug missing from the CI catalog FAILS CLOSED
+# instead of quietly falling back to OpenRouter — set
+# DIGI_HOUSE_ALLOW_OPENROUTER_FALLBACK=1 to allow the fallback explicitly.
+# The cheap tier below is fully CI-mapped (no sonar / :online / maverick pins);
+# balanced/quality still pin native-search grounding and need the override (or
+# forced OpenRouter) until they are migrated. Retrieval stays in-house
+# (digisearch / live_search / data tools); the grounding pre-pass synthesizes
+# on CI. LiteLLM overlay: config/litellm.cheaperinference.yaml (see
+# docs/providers/cheaperinference.md). Prefixes (openrouter/, gemini/, …) are
 # BYOK/diagnostics — do not put them on house pins.
 
 default_tier: cheap
@@ -65,21 +71,27 @@ tiers:
     # Phase pools = bare slugs (function tools). ``:online`` is web-search-only and lives
     # in ``web_search_models``; grounding is a separate pre-pass injected into the prompt.
     allowed_models:
-      # mistralai/mistral-small-3.1-24b-instruct removed — no endpoint supports function
-      # tools for it. deepseek-r1 and llama-4-maverick dropped from ``reasoning`` — CoT/
-      # empty-completion failures under strict json_schema (#1617, #1006).
+      # House CI-only (#3660): every pin must map to the Cheaper Inference catalog
+      # (see digillm ``_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE``). meta-llama/* is not
+      # on CI — gemini-3.7-flash (native vision, gate-proven) carries the second
+      # slot instead. flash-lite stays OUT of phase pools: lite variants have a
+      # loose/empty-JSON record under strict json_schema (#802) — it synthesizes
+      # grounding prose only (``web_search_models`` below).
       extraction:
         - "deepseek/deepseek-v4-flash"
-        - "meta-llama/llama-4-maverick"
+        - "google/gemini-3.7-flash"
       research:
         - "deepseek/deepseek-v4-flash"
-        - "meta-llama/llama-4-maverick"
+        - "google/gemini-3.7-flash"
       reasoning:
         - "deepseek/deepseek-v4-flash"
     web_search_models:
-      - "perplexity/sonar"
-      - "deepseek/deepseek-v4-flash:online"
-      - "meta-llama/llama-4-maverick:online"
+      # House CI-only (#3660): CI synthesis models, NOT sonar. perplexity/sonar
+      # and ``:online`` pins are not on CI and fail closed there — retrieval stays
+      # in-house (digisearch / live_search / data tools) and this pre-pass
+      # synthesizes on CI (primary gemini-3.1-flash-lite, alt deepseek-v4-flash).
+      - "google/gemini-3.1-flash-lite"
+      - "deepseek/deepseek-v4-flash"
 
   balanced:
     openrouter:

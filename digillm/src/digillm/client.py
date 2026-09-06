@@ -327,11 +327,13 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 
 # House OpenRouter-style slugs → Cheaper Inference bare catalog ids (verified 2026-09).
 # Excludes anthropic/* (quality bake-off), x-ai/grok-4.3|4.6 (CI has grok-4.5 only),
-# meta-llama/*, perplexity/*, and all ``:online`` variants — those stay on OpenRouter.
+# meta-llama/*, perplexity/*, and all ``:online`` variants — those are not on the
+# CI catalog and fail closed when CI is the selected house upstream (#3660).
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "deepseek/deepseek-v4-flash": "deepseek-v4-flash",
     "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
     "google/gemini-3.7-flash": "gemini-3.7-flash",
+    "google/gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
     "openai/gpt-5.6-luna": "gpt-5.6-luna",
     "openai/gpt-5.6-sol": "gpt-5.6-sol",
 }
@@ -381,6 +383,42 @@ def _openrouter_fallback_for_ci_miss(model: str) -> bool:
         _api_base_is_cheaperinference()
         and _is_openrouter_backed_house_slug(model)
         and cheaperinference_bare_id_for_house_slug(model) is None
+    )
+
+
+def house_openrouter_fallback_allowed() -> bool:
+    """True when a CI-catalog miss may quietly fall back to OpenRouter (#3660).
+
+    Fail-closed by default: when CI is the selected house upstream, a house slug
+    missing from the CI catalog raises instead of silently spending on
+    OpenRouter. Set ``DIGI_HOUSE_ALLOW_OPENROUTER_FALLBACK=1`` (or
+    ``true``/``yes``/``on``) to restore the old quiet-fallback behavior —
+    e.g. for a tier that still pins sonar/``:online`` grounding while it is
+    being migrated to CI synthesis models. Distinct from self-hosted OmniRoute
+    (``OMNIROUTE_*``).
+    """
+    return (os.environ.get("DIGI_HOUSE_ALLOW_OPENROUTER_FALLBACK") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _require_openrouter_fallback_allowed(model: str) -> None:
+    """Fail closed for a CI-catalog miss unless the fallback override is set (#3660)."""
+    if house_openrouter_fallback_allowed():
+        logger.warning(
+            "house model %r is not on the Cheaper Inference catalog; "
+            "falling back to OpenRouter (DIGI_HOUSE_ALLOW_OPENROUTER_FALLBACK is set)",
+            model,
+        )
+        return
+    raise RuntimeError(
+        f"house model {model!r} is not on the Cheaper Inference catalog and CI is the "
+        "selected house upstream — refusing to silently fall back to OpenRouter. "
+        "Remap the pin to a CI catalog id (see docs/providers/cheaperinference.md) or "
+        "set DIGI_HOUSE_ALLOW_OPENROUTER_FALLBACK=1 to allow the OpenRouter fallback."
     )
 
 
@@ -527,6 +565,7 @@ def _effective_model_id(model: str) -> str:
     if bare is not None and _api_base_is_cheaperinference():
         return bare
     if _openrouter_fallback_for_ci_miss(model):
+        _require_openrouter_fallback_allowed(model)
         return model
     provider, model_id = _parse_provider_prefix(model)
     if _use_default_base_client(model):
@@ -544,6 +583,7 @@ def _cost_controls_provider(parsed_provider: str | None, model: str) -> str | No
     ):
         return None
     if _openrouter_fallback_for_ci_miss(model):
+        _require_openrouter_fallback_allowed(model)
         return "openrouter"
     if parsed_provider == "openrouter" or _api_base_is_openrouter():
         return "openrouter"
@@ -588,8 +628,10 @@ def get_client_for_model(model: str) -> OpenAI:
         if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
             return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
     # Cheaper Inference default base: mapped house slugs use get_client(); catalog
-    # misses (sonar / :online / maverick / grok-4.3|4.6 / anthropic) stay on OpenRouter.
+    # misses (sonar / :online / maverick / grok-4.3|4.6 / anthropic) fail closed
+    # unless DIGI_HOUSE_ALLOW_OPENROUTER_FALLBACK is set (#3660).
     if _openrouter_fallback_for_ci_miss(model):
+        _require_openrouter_fallback_allowed(model)
         provider = "openrouter"
     elif (
         cheaperinference_bare_id_for_house_slug(model) is not None
