@@ -513,14 +513,30 @@ def is_tool_use_capable_model(model: str) -> bool:
     return True
 
 
+# #3660 house grounding synthesizers (digisearch / live_search retrieval first;
+# these LLMs only rewrite the retrieved context — not OpenRouter :online/sonar).
+_HOUSE_CI_GROUNDING_SYNTHESIS_SLUGS = frozenset(
+    {
+        "google/gemini-3.1-flash-lite",
+        "deepseek/deepseek-v4-flash",
+    }
+)
+
+
 def is_web_search_capable_model(model: str) -> bool:
-    """True when *model* can ground via ``:online`` or native search (perplexity/*)."""
+    """True when *model* may run digiquant grounding pre-passes.
+
+    Includes OpenRouter ``:online`` / perplexity native search, plus house CI
+    synthesis slugs used after in-house digisearch retrieval (#3660).
+    """
     slug = _openrouter_slug(model).strip().lower()
     if not slug:
         return False
     if is_native_search_only_model(model):
         return True
-    return ":online" in slug
+    if ":online" in slug:
+        return True
+    return slug in _HOUSE_CI_GROUNDING_SYNTHESIS_SLUGS
 
 
 def _pick_from_pool(pool: list[str], key: str) -> str:
@@ -542,22 +558,25 @@ def _tier_capability_pool(tier_cfg: DigiquantTierConfig, capability: str) -> lis
 
 
 def _tier_web_search_pool(tier_cfg: DigiquantTierConfig) -> list[str]:
+    # Explicit ``web_search_models`` wins (#3660): house CI synthesis pins
+    # (``gemini-3.1-flash-lite`` / ``deepseek-v4-flash``) are not ``:online`` /
+    # perplexity, but they are the configured synthesizers after digisearch
+    # retrieval. Do not filter them with ``is_web_search_capable_model``.
     if tier_cfg.web_search_models:
-        pool = list(tier_cfg.web_search_models)
+        return list(tier_cfg.web_search_models)
+    seen: set[str] = set()
+    merged: list[str] = []
+    for capability in ("research", "extraction", "reasoning"):
+        for model in _tier_capability_pool(tier_cfg, capability):
+            if model not in seen:
+                seen.add(model)
+                merged.append(model)
+    if merged:
+        pool = merged
+    elif tier_cfg.grounding_model:
+        pool = [tier_cfg.grounding_model]
     else:
-        seen: set[str] = set()
-        merged: list[str] = []
-        for capability in ("research", "extraction", "reasoning"):
-            for model in _tier_capability_pool(tier_cfg, capability):
-                if model not in seen:
-                    seen.add(model)
-                    merged.append(model)
-        if merged:
-            pool = merged
-        elif tier_cfg.grounding_model:
-            pool = [tier_cfg.grounding_model]
-        else:
-            pool = []
+        pool = []
     return [m for m in pool if is_web_search_capable_model(m)]
 
 
@@ -576,11 +595,12 @@ def _model_for_digiquant_capability(capability: str, tier: str, phase_slug: str)
 
 
 def get_grounding_model(*, segment: str = "grounding") -> str | None:
-    """Return a web-search-capable model for digiquant grounding pre-passes.
+    """Return a model for digiquant grounding pre-passes.
 
-    Pool is filtered to ``perplexity/*`` / ``:online`` only (#2567) — house
-    grounding must not use the digillm Exa toolkit branch. Slugs are unprefixed
-    OpenRouter ids resolved through LiteLLM (#3414).
+    When ``web_search_models`` is set (#3660), use that list as-is (house CI
+    synthesis after digisearch / live_search). Legacy fallbacks still filter to
+    ``perplexity/*`` / ``:online`` (#2567). Slugs are unprefixed OpenRouter-style
+    ids resolved through LiteLLM / Cheaper Inference (#3414).
     """
     tier_cfg = _load_digiquant_models().tiers.get(get_digiquant_tier())
     if tier_cfg is None:
