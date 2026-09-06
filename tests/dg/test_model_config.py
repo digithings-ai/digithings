@@ -196,10 +196,10 @@ class TestResolveRequestModel:
             == "openrouter/mistral/mistral-7b"
         )
 
-    def test_provider_falls_back_to_ollama_when_key_missing(
+    def test_provider_missing_key_raises_value_error(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """Missing provider key → Ollama mode model (legacy silent fallback, not a raise)."""
+        """Missing provider key → raise ValueError (no silent Ollama fallback)."""
         _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
@@ -207,7 +207,8 @@ class TestResolveRequestModel:
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.delenv("OLLAMA_MODEL", raising=False)
         monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")  # not :11434 → no strip
-        assert resolve_request_model("openrouter/mistral/mistral-7b") == "ollama/qwen3:8b"
+        with pytest.raises(ValueError, match="Provider 'openrouter' key \(OPENROUTER_API_KEY\)"):
+            resolve_request_model("openrouter/mistral/mistral-7b")
 
     def test_house_digiquant_slug_not_clobbered_by_mode_defaults(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
