@@ -76,15 +76,24 @@ Parent `frame-src` and iframe origin both come from `embedOriginForChat()` (defa
 
 Prod tenant (`host=digithings.ai`): `gateMode: ungated`, `llmAccess: free_then_byok`, `showByok: true`. Do **not** assert a 3-turn gate on that path. `turn_limited` remains for other tenants (unit tests lock it).
 
-Dashboard tenant (`host=digiquant.io`, #3662 — Chris lock, no free-3 quota):
+Dashboard tenant (`host=digiquant.io`, #3662 / #3664 — Chris lock, no free-3 quota):
 `gateMode: ungated`, `llmAccess: operator`, no `gate` block,
-`showByok: true`. Entitled (Desk+) dashboard chat is never turn-capped and the
-trial quota is never consulted; baseline (free/brief) never gets an iframe —
-the dashboard renders an upgrade CTA panel with chat disabled instead, so
-non-entitled tiers never burn turns. Pinned by
+`showByok: true`, `requiredPlanTier: desk`. Entitled (Desk+) dashboard chat is
+never turn-capped and the trial quota is never consulted; baseline (free/brief)
+never gets an iframe — the dashboard renders an upgrade CTA panel with chat
+disabled instead, so non-entitled tiers never burn turns. Pinned by
 `isDigiquantDashboardTenantConfig` (`src/lib/embed-tenants.ts`). This is a
 different bot from the `digithings.ai` marketing tenant above — do not conflate
-them. House-model routing is #3663 and out of scope here.
+them. House-model routing is #3663 / #3674.
+
+**Claims-backed Desk+ gate (#3664):** `/api/chat` for this tenant requires a
+verified plan — HMAC `X-Embed-Plan-Proof` from `POST /api/plan-proof`, or an
+authenticated digichat session whose JWT `app_metadata.plan_tier` is Desk+.
+Proof minting verifies the dashboard Supabase Bearer token via `/auth/v1/user`
+and reads **claims** `plan_tier` only. Raw `X-Embed-Plan-Tier` / `?plan_tier=`
+are never trusted. Env (names only): `DIGICHAT_PLAN_PROOF_SECRET`,
+`DIGICHAT_DASHBOARD_SUPABASE_URL`, `DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY`
+(see `.env.example`). Missing secrets → plan-proof 503 (ops residual).
 
 The deleted `frontend/website/` landing (`#try` iframe) is **not** the marketing surface — do not restore it.
 
