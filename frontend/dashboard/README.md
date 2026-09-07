@@ -295,31 +295,45 @@ The 2026-06-24 Settings plan's "no accounts/login" constraint is **superseded** 
 workspace tenancy program: authenticated users edit versioned investment overlays, connect
 paper brokers, seal BYOK LLM keys, and open Stripe checkout/portal.
 
+Canonical tier ladder (see [`docs/agent-backlog/kairos-tenancy/PRICING.md`](../../docs/agent-backlog/kairos-tenancy/PRICING.md)
+and [`SETTINGS-IA.md`](../../docs/agent-backlog/kairos-tenancy/SETTINGS-IA.md)): **Observer**
+(`free`) → **Brief** → **Desk** → **Studio** / Enterprise. Do not document Baseline/Custom
+as Stripe products.
+
+**Tab visibility by effective tier:** Observer and Brief see Notifications | Billing | About
+only. Desk adds Brokers. Studio / enterprise / creator floor see the full set (Profile |
+Pipeline | Keys | Brokers | Notifications | Billing | About). Tabs the current tier cannot
+use are **omitted**, not greyed.
+
 - **Profile** — client JSON-schema validation (bundled v1 schemas) plus Edge Function
   re-validation; saves append `olympus_profile_config` versions (never mutate; never the
   reserved `house` key). Optimistic concurrency via last-seen version id → 409 → reload UI.
-  Gated as Custom-tier (`overlay_profile` via `EntitledSurface`).
+  Studio+ (`overlay_profile` via `EntitledSurface`).
 - **Pipeline** — overlay watchlist / themes / `research_budget_usd` knobs; a 7×3
   weekday × stage (`research` / `deliberation` / `execution`) schedule grid and
   execution-policy controls (calendar guard is non-bypassable — closed sessions defer);
   plus a read of `GET /settings/jobs` (skip reasons such as `no_credentials` are
-  visible; remaining-hop proof is `succeeded` only).
-- **Keys** — BYOK LLM provider seal/revoke (fingerprint-only after save).
+  visible; remaining-hop proof is `succeeded` only). Studio+.
+- **Keys** — BYOK LLM provider seal/revoke (fingerprint-only after save). Studio+.
 - **Brokers** — Alpaca OAuth (`env=paper` + sessionStorage `state`) and API-key entry;
   IBKR credential entry labeled beta. Renders fingerprint / broker / env / status /
-  `last_used_at` only, plus `GET /settings/fills` paper-fill fingerprints. Gated as
-  Custom-tier (`broker_status`).
+  `last_used_at` only, plus `GET /settings/fills` paper-fill fingerprints. Desk+
+  (`broker_status`).
 - **Notifications** — PATCH prefs; `GET /settings/notifications/log` delivery events
   (digest remaining-hop needs a `digest:` log key **and** inbox confirmation **and**
   `daily_digest` on).
-- **Billing** — links T2 `create-checkout-session` / `customer-portal`; Custom is
-  the primary checkout CTA (broker connect + overlay are Custom+; Baseline would
-  leave those remaining hops `TIER_FORBIDDEN`). Shows "billing not configured"
-  when Supabase/billing envs are absent.
+- **Billing** — links T2 `create-checkout-session` / `customer-portal` for **Brief /
+  Desk / Studio** (Observer is free / not a Stripe product). Display catalog:
+  Brief $10/mo or $96/yr, Desk $30/mo or $288/yr, Studio $100/mo or $960/yr (annual =
+  20% off twelve months). **Default interval is annual**; if annual prices are unset and
+  checkout returns `PRICE_NOT_CONFIGURED`, the UI falls back to monthly with clear copy.
+  Edge secrets (names only): `STRIPE_PRICE_{BRIEF,DESK,STUDIO}_{MONTHLY,ANNUAL}`. Shows
+  "billing not configured" when Supabase/billing envs are absent.
 - **About** — remaining-hop product state (member-scoped Settings reads; Observer can
-  see unproven Stripe / Alpaca OAuth / overlay / fill / digest without Custom writes).
-  Unproven hops show a closed-vocabulary blocker (Custom checkout required, missing
-  Stripe ids, api_key not OAuth, persist disabled, inbox unconfirmed) — never Stripe ids.
+  see unproven Stripe / Alpaca OAuth / overlay / fill / digest without Studio writes).
+  Unproven hops show a closed-vocabulary blocker (Studio checkout required for overlay,
+  Desk+ for brokers, missing Stripe ids, api_key not OAuth, persist disabled, inbox
+  unconfirmed) — never Stripe ids.
 
 Edge Function: `digiquant/supabase/functions/settings` (`verify_jwt` true). **Deploy is
 blocked on K3** (vault + `broker_connections`) — see that function's README.
