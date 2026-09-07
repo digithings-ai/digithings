@@ -29,4 +29,24 @@ describe('SettingsLoadError', () => {
     expect(html).toContain('Retry');
     expect(html).not.toContain(SETTINGS_LOAD_ERROR_MESSAGE);
   });
+
+  it('renders error tone with text-down class by default', () => {
+    const html = renderToStaticMarkup(
+      createElement(SettingsLoadError, { onRetry: () => undefined }),
+    );
+    expect(html).toContain('text-down');
+    expect(html).not.toContain('text-warn');
+  });
+
+  it('renders soft tone with text-warn class when tone is soft', () => {
+    const html = renderToStaticMarkup(
+      createElement(SettingsLoadError, {
+        message: 'Backend temporarily unavailable.',
+        onRetry: () => undefined,
+        tone: 'soft',
+      }),
+    );
+    expect(html).toContain('text-warn');
+    expect(html).not.toContain('text-down');
+  });
 });
