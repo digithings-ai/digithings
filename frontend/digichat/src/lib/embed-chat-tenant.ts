@@ -10,6 +10,8 @@ import { resolveEmbedTenantByHost, type EmbedTenantConfig } from "@/lib/embed-te
 import {
   deploymentToEmbedTenant,
   getAnonymousClientInstall,
+  getDigichatConfig,
+  matchHostDeployment,
 } from "@/lib/deploy-config/loader";
 
 export type EmbedChatTenantContext = ChatTenantContext & {
@@ -64,15 +66,35 @@ function tokenUnlocksTenant(
 }
 
 /**
- * Registry host wins (token / first-party rules, #1339). If the host is not
- * in DIGICHAT_EMBED_TENANTS, a client-container YAML `deployment` is the
- * product — that is how `DIGICHAT_CONFIG_PATH=.../skins/chatgpt.yaml` actually
+ * Registry / YAML host wins (token / first-party rules, #1339). Canonical
+ * lookup is `getDigichatConfig()` hosts (YAML + DIGICHAT_EMBED_TENANTS merge)
+ * so product embed examples (`chrome.skin`, tools.catalog) actually paint.
+ * JSON-only registry is a fallback when config load fails. If the host is
+ * not registered, a client-container YAML `deployment` is the product —
+ * that is how `DIGICHAT_CONFIG_PATH=.../skins/chatgpt.yaml` actually
  * mounts ChatGPT and talks to POST /api/chat, not just the docs.
  */
+function tenantFromMergedHosts(
+  host: string | null | undefined,
+): EmbedTenantConfig | null {
+  if (!host?.trim()) return null;
+  try {
+    const dep = matchHostDeployment(host, getDigichatConfig());
+    return dep ? deploymentToEmbedTenant(dep) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function resolveVerifiedEmbedTenantFromHostToken(
   host: string | null | undefined,
   token: string | null | undefined,
 ): EmbedTenantConfig | null {
+  const fromConfig = tenantFromMergedHosts(host);
+  if (fromConfig) {
+    if (isFirstPartyEmbedHost(host)) return fromConfig;
+    return tokenUnlocksTenant(fromConfig, token) ? fromConfig : null;
+  }
   const registered = resolveEmbedTenantByHost(host);
   if (registered) {
     if (isFirstPartyEmbedHost(host)) return registered;

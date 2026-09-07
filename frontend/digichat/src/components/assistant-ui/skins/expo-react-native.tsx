@@ -1,6 +1,6 @@
 "use client";
 
-import { Thread } from "@/app/(vanilla)/stock/thread.aui";
+import { Thread } from "@/app/(baseline)/stock/thread.aui";
 import { useComposerCopy } from "@/components/stock/skin-chrome";
 
 /**

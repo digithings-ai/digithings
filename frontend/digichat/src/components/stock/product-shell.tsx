@@ -42,6 +42,7 @@ import {
   SkinChromeProvider,
   type SkinChromeValue,
 } from "@/components/stock/skin-chrome";
+import { ToolCatalogBar } from "@/components/stock/tool-catalog-bar";
 
 export type ProductShellProps = {
   runtime: AssistantRuntime;
@@ -62,6 +63,14 @@ export type ProductShellProps = {
    * returns true, Composer submit is swallowed and POST /api/chat is not fired.
    */
   sendGate?: StockSendGateHandlers | null;
+  /**
+   * Host / thread key for X-Digi-Force-Tool (must match takePendingForceTool).
+   * When set, tools.catalog renders above the Thread (not on layout templates).
+   */
+  sessionKey?: string;
+  /** localStorage scope for web search; defaults to sessionKey. */
+  webSearchScope?: string;
+  onWebSearchChange?: (enabled: boolean) => void;
 };
 
 /** Adapters accepted by useAISDKRuntime / RuntimeAdapterProvider (attachments). */
@@ -136,7 +145,7 @@ function FeatureCss({
 
 /**
  * Mount the selected assistant-ui Thread with deploy-config adapters and chrome.
- * Caller owns AssistantChatTransport → POST /api/chat (never vanilla-chat).
+ * Caller owns AssistantChatTransport → POST /api/chat (never baseline-chat).
  *
  * Persistence:
  * - none → single thread (typical embed)
@@ -156,6 +165,9 @@ export function ProductStockShell({
   footerSlot,
   sideSlot,
   sendGate = null,
+  sessionKey,
+  webSearchScope,
+  onWebSearchChange,
 }: ProductShellProps) {
   const cfg = clientConfig ?? DEFAULT_CLIENT_CONFIG;
   const features = cfg.features;
@@ -166,9 +178,10 @@ export function ProductStockShell({
     () => ({
       reasoning: features.reasoning,
       toolCalls: features.toolCalls,
-      userAlign: cfg.chrome.transcript.userAlign,
+      userAlign:
+        cfg.chrome.skin === "digichat" ? "left" : cfg.chrome.transcript.userAlign,
     }),
-    [features.reasoning, features.toolCalls, cfg.chrome.transcript.userAlign],
+    [features.reasoning, features.toolCalls, cfg.chrome.skin, cfg.chrome.transcript.userAlign],
   );
 
   const skinChrome = useMemo<SkinChromeValue>(
@@ -249,6 +262,7 @@ export function ProductStockShell({
               className={cn(
                 "flex h-full min-h-0 flex-1",
                 sideSlot && !ownsPage ? "flex-row" : "flex-col",
+                cfg.chrome.skin === "digichat" && "accent-digichat",
                 className,
               )}
               style={accentStyle}
@@ -256,6 +270,14 @@ export function ProductStockShell({
               {ownsPage ? null : sideSlot}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 {ownsPage ? null : headerSlot}
+                {!ownsPage && sessionKey ? (
+                  <ToolCatalogBar
+                    clientConfig={cfg}
+                    sessionKey={sessionKey}
+                    webSearchScope={webSearchScope}
+                    onWebSearchChange={onWebSearchChange}
+                  />
+                ) : null}
                 <div className="min-h-0 flex-1">
                   <ThreadSkinView skin={cfg.chrome.skin} welcome={headline} />
                 </div>

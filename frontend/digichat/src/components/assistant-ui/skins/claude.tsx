@@ -29,8 +29,8 @@ import {
   XIcon,
 } from "lucide-react";
 import { useState, type FC } from "react";
-import { useAttachmentSrc } from "@/app/(vanilla)/stock/use-attachment-src";
-import { MarkdownText } from "@/app/(vanilla)/stock/markdown-text";
+import { useAttachmentSrc } from "@/app/(baseline)/stock/use-attachment-src";
+import { MarkdownText } from "@/app/(baseline)/stock/markdown-text";
 import { useComposerCopy } from "@/components/stock/skin-chrome";
 import {
   DropdownMenu,

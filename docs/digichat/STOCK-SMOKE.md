@@ -32,18 +32,19 @@ env -u DIGICHAT_EMBED_TENANTS \
 ## Checklist
 
 1. **Health** — `GET /api/health` → ok envelope.
-2. **Stock embed** — `/embed?host=127.0.0.1`:
-   - Stock Thread (Inter / registry) with no extra chrome bars.
-   - Send one turn; Network shows `POST /api/chat` (not `/api/vanilla-chat`).
+2. **Stock embed** — `/embed?host=https://digithings.ai` (product YAML hosts):
+   - First-party `digichat` Thread (`data-thread-skin="digichat"`).
+   - Send one turn; Network shows `POST /api/chat` (not `/api/baseline-chat`).
    - Tokens stream (backend may return a workflow error — still counts as transport OK).
-3. **Tool catalog** — not mounted on the vanilla baseline (no Search / Vault / Web search bars).
+3. **Tool catalog** — Search / Vault on the catalog bar; Web search opt-in on
+   digithings.ai. Arm Search → next `POST /api/chat` sends `x-digi-force-tool: digisearch`.
 4. **Widget / modal** — `widget.js` or dashboard popup opens chat; small viewport uses fullscreen when `mobileFullscreen` is on.
 5. **Gate** — gated tenant: locked composer does not fire `POST /api/chat`; after unlock the held question sends once (unit-covered in `embed-send-gate` + `stock-send-gate`).
 6. **Memory** — with `local-app-memory.yaml`: sidebar list, New thread, switch threads (unit-covered in `session-memory-thread-list` + `home-stock-client.memory`).
 7. **Deploy UI knobs (web)** — with a YAML that sets granular features:
    - `features.reasoning: off` → no reasoning disclosure in the transcript.
    - `features.reasoning: expanded` / `locked_open` → disclosure opens (locked stays open).
-   - `gate.showLanguageSelector` / model picker: not mounted on the vanilla baseline.
+   - `gate.showLanguageSelector` / model picker: not mounted on the stock baseline.
    - `data-user-align` / bubbles respect `chrome.transcript.userAlign`.
 8. **CLI (optional)** — `frontend/digichat/cli` with `local-cli.yaml` (`cli.enabled: true`) hits the same `POST /api/chat`. Confirm Next/product sources still do not import `ink` / `@assistant-ui/react-ink` (`cli-isolation` unit test).
 

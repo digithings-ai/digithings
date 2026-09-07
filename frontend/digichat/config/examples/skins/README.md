@@ -1,6 +1,7 @@
 # Catalog template deploys
 
-Each file is a complete `digichat.yaml` for one official assistant-ui template.
+Each file is a complete `digichat.yaml` for one Thread skin: the 11 official
+assistant-ui catalog templates plus first-party `digichat`.
 Copy into the container (or point `DIGICHAT_CONFIG_PATH` at the baked copy).
 That file **is** the running product: `/embed` (or `/` for layout templates)
 mounts that Thread and `POST /api/chat` uses this deployment. No

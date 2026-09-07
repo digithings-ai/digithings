@@ -44,7 +44,7 @@ and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 | Deployment config (Zod YAML + env overlay + tenants compat) | Built (2.0) |
 | Granular deploy knobs (disclosure / language / models / `cli.enabled`) | Built (2.0) |
 | digichat Ink CLI (`frontend/digichat/cli`, separate from Next bundle) | Built (2.0) |
-| Local vanilla preview (`/vanilla`, production chat BFF proxy) | Dev-only |
+| Local baseline preview (`/baseline`, production chat BFF proxy) | Dev-only |
 | CLI-flavored `CliThread` skin on `/embed` | Removed (stock Thread is default) |
 | digigraph digithings adapter (`adapters/digithings/`) | Built |
 | Foundry client adapter (`adapters/foundry/`) | Built |
@@ -78,25 +78,32 @@ refuses to flush a remote thread that is still `hydrated: false`, and the API
 returns **409 `would_truncate`** if a PUT would drop existing rows unless
 `allowTruncate: true` (used by `/clear` and by last-user edit — #3466).
 
-**Local vanilla preview** (`/vanilla`, `POST /api/vanilla-chat`): isolated
-Next.js root layout (`src/app/(vanilla)/`) so **digichat `globals.css` never loads**.
+**Local baseline preview** (`/baseline`, `POST /api/baseline-chat`): isolated
+Next.js root layout (`src/app/(baseline)/`) so **digichat `globals.css` never loads**.
 Default UI is the official assistant-ui **Base** template (`chrome.skin: base`).
 The 11 hosted templates are vendored under `src/components/assistant-ui/skins/`
 (plus full starters in `reference/assistant-ui-templates/`) and selected with
-`?skin=` on `/vanilla` or `chrome.skin` in deploy YAML. The BFF proxies
+`?skin=` on `/baseline` or `chrome.skin` in deploy YAML. The BFF proxies
 `https://digithings.ai/api/chat` (Cloudflare stack; loopback + non-production
 only). `/embed` stays on the digichat layout and local `POST /api/chat`.
+Stock Thread copies live under `src/app/(baseline)/stock/` — do not restyle them
+for digichat. The full assistant-ui elements catalog (every registry slug,
+purpose, fetch command, part- vs chrome-driven attach) lives in digiweb
+[`ASSISTANT_UI_ELEMENTS.md`](../digiweb/ASSISTANT_UI_ELEMENTS.md) — do not
+duplicate that table here; copy cards into `(baseline)/stock/` only when a
+deploy needs them.
 
 **AI SDK `useChat` + assistant-ui** (`src/components/chat-panel.tsx`,
 `src/components/stock/product-shell.tsx`): `@ai-sdk/react` with
 `AssistantChatTransport` (`@assistant-ui/ai-sdk`) pointed at `POST /api/chat`.
 Sends `X-Digichat-Session` so upstream digigraph can correlate the same
 conversation across turns. **Both** `/embed` and first-party `/` render an
-assistant-ui Thread via `ThreadSkinView` (one of the 11 catalog templates).
-Deployment config drives chrome mode, **thread skin**,
+assistant-ui Thread via `ThreadSkinView` (11 catalog templates plus first-party
+`digichat`). Deployment config drives chrome mode, **thread skin**,
 feature adapters, persistence, and the tool catalog. `CliThread` was removed.
 Transcript parts render via
-assistant-ui `MessagePrimitive.Parts`. Hosts arm `X-Digi-Force-Tool` /
+assistant-ui `MessagePrimitive.Parts`. `ProductStockShell` mounts the tool
+catalog bar; hosts arm `X-Digi-Force-Tool` /
 `X-Digi-Turn-Mode` via `src/lib/pending-chat-headers.ts` (force-tool is
 catalog-allowlisted on the BFF).
 
@@ -805,14 +812,14 @@ after `digichat:ready`. Accepted only from the immediate parent browsing-context
 origin (`resolveReadyTargetOrigin`) — not limited to first-party hosts, so a
 registered third-party site can describe **its own already-visible** DOM. Prefer
 sanitized **HTML** (≤12k) for structure; `text` (≤8k) remains required for
-back-compat. Caps live in `embed-page-context-messages.ts`. The embed never
-renders the context — a “looking at this page” preview box was tried and dropped
-(#3590): it ate the top third of a 400px popup to tell the visitor what page they
-were already looking at. Only the welcome line says context is attached; the
-embed prepends the formatted context to the next `wrappedSend` once. Screenshot
-data URLs are optional and acknowledged in the prompt only — vision multimodal /
-LiteLLM image parts are deferred. Config/URL helpers:
-`src/lib/embed-popup-config.ts`.
+back-compat. Caps live in `embed-page-context-messages.ts`. The embed does **not**
+restore the tall “looking at this page” preview (#3590). On send, the snapshot
+becomes a compact `page-context.html` document attachment (assistant-ui chip;
+click opens a portaled sandboxed iframe / `<pre>` viewer). `uiMessagesForUpstream`
+folds that file part back into prompt text so digigraph still sees the context.
+The dashboard popup posts the payload once per open. Screenshot data URLs are
+optional and acknowledged in the prompt only — vision multimodal / LiteLLM image
+parts are deferred. Config/URL helpers: `src/lib/embed-popup-config.ts`.
 
 **postMessage theme.** digithings.ai `/chat` and `/chat/occ` (`ChatEmbedShell`)
 read the parent site's canon `html[data-theme]` (shared `ThemeProvider` /
@@ -1184,22 +1191,35 @@ Canonical operator config is a Zod-validated YAML file:
 
 ### Granular chrome / features / models (additive)
 
+Which assistant-ui registry cards exist upstream and whether they are
+part-driven vs chrome-driven is indexed in digiweb
+[`ASSISTANT_UI_ELEMENTS.md`](../digiweb/ASSISTANT_UI_ELEMENTS.md) — not duplicated here.
+
 | Field | Values | Notes |
 |---|---|---|
 | `features.reasoning` / `features.toolCalls` | `off \| collapsed \| expanded \| locked_open` | Booleans coerce: `true → collapsed`, `false → off` |
 | `chrome.defaultLanguage` | curated codes (`languages.ts`) | Seeds the stock language picker |
-| `chrome.transcript.userAlign` | `right \| left` | Vanilla web default `right` |
-| `chrome.skin` | `base \| chatgpt \| claude \| grok \| gemini \| perplexity \| react-ink \| expo-react-native \| base-assistant-ui \| webpage-assistant \| product-page-assistant` | The 11 assistant-ui catalog template ids, vendored in the image. Overlay: `DIGICHAT_CHROME_SKIN`. Baked YAML: `/app/config/examples/skins/<id>.yaml`. |
+| `chrome.transcript.userAlign` | `right \| left` | Stock web default `right` |
+| `chrome.skin` | `base \| chatgpt \| claude \| grok \| gemini \| perplexity \| react-ink \| expo-react-native \| base-assistant-ui \| webpage-assistant \| product-page-assistant \| digichat` | The 11 assistant-ui catalog template ids plus first-party `digichat`. Overlay: `DIGICHAT_CHROME_SKIN`. Baked YAML: `/app/config/examples/skins/<id>.yaml`. Default remains `base`. |
 | `models.default` / `models.available` / `models.allowPicker` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`); empty `available` = no restriction |
 | `features.modelPicker` | bool | Also enables picker when `models.allowPicker` unset |
-| `gate.showLanguageSelector` | bool | Reserved; language chrome is not mounted on the vanilla baseline |
+| `gate.showLanguageSelector` | bool | Reserved; language chrome is not mounted on the stock baseline |
 | `cli.enabled` | bool (default `false`) | Documents / gates the Ink CLI (see below) |
 
 Web UI mounts `ThreadSkinView` (`ProductStockShell` on `/embed` and `/`).
-`chrome.skin` selects one of the 11 official assistant-ui catalog templates vendored
-under `src/components/assistant-ui/skins/` (plus full starter copies in
-`reference/assistant-ui-templates/`). Disclosure modes still drive
-`ReasoningRoot` / `ToolGroupRoot` when those parts appear in the stream.
+`chrome.skin` selects one of the 11 official assistant-ui catalog templates
+vendored under `src/components/assistant-ui/skins/`, or first-party `digichat`
+(`DigichatThread` from `@digithings/web/chat/thread` — contract:
+[`frontend/digiweb/CHAT_THEME.md`](../digiweb/CHAT_THEME.md)). Product embed
+examples `config/examples/digithings-ai-embed.yaml` and `occ-embed.yaml` set
+`chrome.skin: digichat` and keep `backend.type: digigraph` with the
+digisearch / digivault catalog (web_search opt-in on digithings.ai only).
+YAML `hosts` resolve for `/embed` first paint (first-party / token rules
+unchanged). `ProductStockShell` mounts `ToolCatalogBar` from `tools.catalog`
+when the host passes `sessionKey` (embed host or thread id) so the digichat
+skin does not drop Search / Vault / Web search; toggles arm
+`X-Digi-Force-Tool` (catalog-allowlisted on the BFF). Disclosure modes
+still drive reasoning / tool UI when those parts appear in the stream.
 
 **Client container — pick a template (not docs-only):**
 
@@ -1226,8 +1246,10 @@ default to `chrome.mode: embed` so `/` redirects to `/embed` and chat is
 `POST /api/chat`. Layout templates (`webpage-assistant`, `product-page-assistant`,
 `expo-react-native`) own `/` (`chrome.mode: app`) so ChatShell / embed header
 do not wrap the catalog page; anonymous layout chat uses the same YAML
-install. `welcome` / `placeholder` / `title` / `accent`
-from YAML are applied to the selected template at runtime.
+install. `welcome` (headline string, or `{ title, body }`) / `placeholder` /
+`title` / `accent` from YAML are applied to the selected template at runtime.
+`suggestions` is opt-in; omit it for no starter chips. A bare `welcome: "…"`
+string still means title-only.
 
 ### digichat CLI (Ink) — separate Node package
 
@@ -1262,10 +1284,11 @@ tokens, Foundry endpoints, MCP URLs, and consume URLs. Widget.js and the
 dashboard popup merge chrome (labels/hotkeys) from that API.
 
 **Default UI:** `ThreadSkinView` inside `ProductStockShell` against
-`POST /api/chat`. Force-tool headers and model ids are catalog/allowlist-gated
-on the BFF (fail closed).
+`POST /api/chat`. `ToolCatalogBar` (tools.catalog) arms force-tool headers;
+force-tool values and model ids are catalog/allowlist-gated on the BFF
+(fail closed).
 
-**Product CSS isolation:** `(digichat)/globals.css` mirrors the `(vanilla)` stock sheet (Inter / IBM Plex Mono) plus thin `product-chrome.css` for paywall/BYOK/attribution. `assistant-ui-cli.css`, digichat-ui `session.css`/`cursor.css`, and terminal-loader sheets load only via `chat-shell-cli.css` on `ChatShell` (`persistence: server`).
+**Product CSS isolation:** `(digichat)/globals.css` mirrors the `(baseline)` stock sheet (Inter / IBM Plex Mono) plus thin `product-chrome.css` for paywall/BYOK/attribution. `assistant-ui-cli.css`, digichat-ui `session.css`/`cursor.css`, and terminal-loader sheets load only via `chat-shell-cli.css` on `ChatShell` (`persistence: server`).
 
 ## 11. Docker & MCP Composition
 
@@ -1296,7 +1319,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_LOCAL_AUTH_KEY` | Dev auto-sign-in key (non-production only) | Dev only |
 | `DIGICHAT_CONFIG_PATH` | Path to digichat deployment YAML (default `/app/config/digichat.yaml`). Zod-validated at startup; fail closed on invalid content. | Optional |
 | `DIGICHAT_EMBED_TOKEN` | Env overlay for `deployment.token` when omitted from the YAML file | Optional |
-| `DIGICHAT_CHROME_SKIN` | Overlay `chrome.skin` (one of the 11 catalog template ids) for a client container without editing YAML | Optional |
+| `DIGICHAT_CHROME_SKIN` | Overlay `chrome.skin` (11 catalog ids or first-party `digichat`) for a client container without editing YAML | Optional |
 | `DIGICHAT_REQUIRE_ROOT_AUTH` | Legacy Option B root wall. Prefer `chrome.mode: app` + `auth: session` in deploy config. | Optional |
 | `DIGIGRAPH_INTERNAL_URL` | digigraph base URL (default: `http://127.0.0.1:8000`) | Yes |
 | `DIGIGRAPH_UPSTREAM_API_KEY` | Static Bearer to digigraph (fallback auth) | If not using digikey |
@@ -1313,7 +1336,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_DEFAULT_TENANT_SLUG` | Default tenant slug when DB unavailable | Production fallback |
 | `DIGICHAT_TRACE_UI` | Disable trace stream (`0` = off, default on) | Optional |
 | `DIGICHAT_MODEL` | digigraph model name (default: `digigraph-rag`) | Optional |
-| `DIGICHAT_VANILLA_UPSTREAM` | Dev `/vanilla` proxy target (allowlisted `https://digithings.ai/api/chat` only) | Dev only |
+| `DIGICHAT_BASELINE_UPSTREAM` | Dev `/baseline` proxy target (allowlisted `https://digithings.ai/api/chat` only) | Dev only |
 | `DIGICHAT_OPENWEBUI_FORMAT` | Opt-in Open WebUI format (`1` only). Default off; digichat sends `X-Response-Format: plain` | Optional |
 | `DIGICHAT_ENDPOINT_HOST_ALLOWLIST` | Comma-separated hosts for SSRF guard | Security hardening |
 | `DIGICHAT_LEGACY_EMBED_ENABLED` | Enable legacy generic embed for **unregistered** hosts (`1` = on). Does not default on when `DIGICHAT_EMBED_TENANTS` is set. Deprecated alias: `DIGICHAT_EMBED_ENABLED` | Optional |

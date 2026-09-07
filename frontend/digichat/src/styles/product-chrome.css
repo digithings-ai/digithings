@@ -1,6 +1,6 @@
 /**
  * Thin product chrome for paywall / BYOK / attribution / embed shell.
- * Uses stock (vanilla) CSS variables — not digichat-ui session.css.
+ * Uses stock (baseline) CSS variables — not digichat-ui session.css.
  */
 
 .dc-brand {

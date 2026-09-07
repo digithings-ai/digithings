@@ -129,6 +129,7 @@ function HomeStockClientSingle({
         runtime={runtime}
         clientConfig={clientConfig}
         persistence="none"
+        sessionKey={sessionKey}
         headerSlot={null}
       />
     </div>
@@ -186,6 +187,7 @@ function HomeStockClientMemory({
         runtime={runtime}
         clientConfig={clientConfig}
         persistence="memory"
+        sessionKey={sessionKey}
         sideSlot={<MemoryThreadListSidebar />}
         headerSlot={null}
       />

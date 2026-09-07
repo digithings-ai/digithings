@@ -12,7 +12,7 @@ import {
 } from "./thread-skins";
 
 describe("thread skins", () => {
-  it("lists the 11 assistant-ui catalog template ids", () => {
+  it("lists the 11 catalog ids plus first-party digichat", () => {
     expect(THREAD_SKINS).toEqual([
       "base",
       "chatgpt",
@@ -25,8 +25,9 @@ describe("thread skins", () => {
       "base-assistant-ui",
       "webpage-assistant",
       "product-page-assistant",
+      "digichat",
     ]);
-    expect(THREAD_SKINS).toHaveLength(11);
+    expect(THREAD_SKINS).toHaveLength(12);
     expect(DEFAULT_THREAD_SKIN).toBe("base");
     expect(CLONE_SKINS).toEqual([
       "chatgpt",
@@ -35,17 +36,20 @@ describe("thread skins", () => {
       "gemini",
       "perplexity",
     ]);
-    expect(threadSkinChoices()).toContain("base-assistant-ui");
+    expect(threadSkinChoices()).toContain("digichat");
+    expect(parseThreadSkin("digichat")).toBe("digichat");
+    expect(isCloneSkin("digichat")).toBe(false);
+    expect(skinOwnsPageChrome("digichat")).toBe(false);
   });
 
   it("parses known skins and falls back on unknown", () => {
     expect(parseThreadSkin("ChatGPT")).toBe("chatgpt");
     expect(parseThreadSkin("base-assistant-ui")).toBe("base-assistant-ui");
-    expect(parseThreadSkin("vanilla")).toBe("base");
+    expect(parseThreadSkin("not-a-skin")).toBe("base");
     expect(parseThreadSkin("ink")).toBe("base");
     expect(isThreadSkin("claude")).toBe(true);
     expect(isThreadSkin("react-ink")).toBe(true);
-    expect(isThreadSkin("vanilla")).toBe(false);
+    expect(isThreadSkin("not-a-skin")).toBe(false);
     expect(isCloneSkin("chatgpt")).toBe(true);
     expect(isCloneSkin("base")).toBe(false);
   });

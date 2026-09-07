@@ -2,15 +2,22 @@
 
 /**
  * Sidebar for persistence=memory — ThreadListPrimitive against the active
- * AssistantRuntime (from useRemoteThreadListRuntime).
+ * AssistantRuntime (from useRemoteThreadListRuntime). First-party `digichat`
+ * uses the terminal list; catalog skins keep the muted rail.
  */
 
 import {
   ThreadListItemPrimitive,
   ThreadListPrimitive,
 } from "@assistant-ui/react";
+import { DigichatThreadList } from "@digithings/web/chat/thread-list";
+import { useSkinChrome } from "@/components/stock/skin-chrome";
 
 export function MemoryThreadListSidebar() {
+  const { skin } = useSkinChrome();
+  if (skin === "digichat") {
+    return <DigichatThreadList />;
+  }
   return (
     <aside
       className="border-border/50 bg-muted/20 flex w-56 shrink-0 flex-col border-r"

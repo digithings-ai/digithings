@@ -79,25 +79,18 @@ vi.mock("@assistant-ui/ai-sdk", async (importOriginal) => {
   };
 });
 
-vi.mock("@assistant-ui/react", () => ({
-  AssistantRuntimeProvider: ({ children }: { children: ReactNode }) => children,
-  ThreadPrimitive: {
-    Root: ({ children, className }: { children?: ReactNode; className?: string }) => (
-      <div className={className}>{children}</div>
-    ),
-    Viewport: ({ children, className }: { children?: ReactNode; className?: string }) => (
-      <div className={className}>{children}</div>
-    ),
-    Empty: ({ children }: { children?: ReactNode }) => children,
-    Messages: () => null,
-  },
-  ComposerPrimitive: {
-    Root: ({ children }: { children?: ReactNode }) => children,
-    Input: "textarea",
-  },
-  MessagePrimitive: { Root: "div", Parts: () => null },
-  ActionBarPrimitive: { Root: "div", Copy: "button" },
-}));
+vi.mock("@assistant-ui/react", async () => {
+  const actual = await vi.importActual<typeof import("@assistant-ui/react")>(
+    "@assistant-ui/react",
+  );
+  return {
+    ...actual,
+    AssistantRuntimeProvider: ({ children }: { children: ReactNode }) => children,
+    RuntimeAdapterProvider: ({ children }: { children: ReactNode }) => children,
+    AuiConfig: (c: unknown) => c,
+    Suggestions: (s: unknown) => s,
+  };
+});
 
 // Only useBYOKKey is faked — byokRequiresModel/BYOK_PROVIDER_LIST/etc. stay
 // real so this test exercises the actual predicate chat-panel.tsx now calls,
@@ -123,6 +116,10 @@ vi.mock("@digithings/digichat-ui", async (importOriginal) => {
     ...actual,
   };
 });
+
+vi.mock("@/components/assistant-ui/skins", () => ({
+  ThreadSkinView: () => <div data-testid="stock-thread">stock thread</div>,
+}));
 
 import { ChatPanel } from "./chat-panel";
 import {

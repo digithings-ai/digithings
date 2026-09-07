@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { ByokCliFlow } from "@/components/byok-cli-flow";
 import { ContactMailto } from "@digithings/web";
 import { ProductStockShell } from "@/components/stock/product-shell";
+import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { clientConfigFromEmbedTenant } from "@/lib/deploy-config";
 import { skinOwnsPageChrome } from "@/lib/thread-skins";
 import {
@@ -88,8 +89,9 @@ import {
   type EmbedTheme,
 } from "@/lib/embed-theme-messages";
 import {
-  formatPageContextForPrompt,
+  pageContextCreateAttachment,
   parsePageContextMessage,
+  type PageContextMessage,
 } from "@/lib/embed-page-context-messages";
 
 type Accent = "digithings" | "digiquant" | "digichat";
@@ -441,14 +443,14 @@ function EmbedChat({
    */
   const pendingGateChargeRef = useRef(false);
   /** Visible-page context from popup widget (`digichat:page-context`); consumed once. */
-  const pageContextRef = useRef<string | null>(null);
+  const pageContextRef = useRef<PageContextMessage | null>(null);
   const [pageContextAttached, setPageContextAttached] = useState(false);
-  const consumePageContextPrefix = useCallback((question: string): string => {
+  const consumePageContext = useCallback((): PageContextMessage | null => {
     const ctx = pageContextRef.current;
-    if (!ctx) return question;
+    if (!ctx) return null;
     pageContextRef.current = null;
     setPageContextAttached(false);
-    return `${ctx}\n\n---\n\nUser question:\n${question}`;
+    return ctx;
   }, []);
 
   const serverGatedOrAsked = serverGated || gateRequest.requested;
@@ -556,7 +558,10 @@ function EmbedChat({
         heldQuestionRef.current = null;
         const forceTool = heldForceToolRef.current;
         heldForceToolRef.current = undefined;
-        void chat.send(consumePageContextPrefix(held), forceTool ? { forceTool } : undefined);
+        void chat.send(held, {
+          ...(forceTool ? { forceTool } : {}),
+          pageContext: consumePageContext(),
+        });
         if (!ungated) pendingGateChargeRef.current = true;
         return;
       }
@@ -567,7 +572,10 @@ function EmbedChat({
       heldQuestionRef.current = null;
       const forceTool = heldForceToolRef.current;
       heldForceToolRef.current = undefined;
-      void chat.send(consumePageContextPrefix(held), forceTool ? { forceTool } : undefined);
+      void chat.send(held, {
+        ...(forceTool ? { forceTool } : {}),
+        pageContext: consumePageContext(),
+      });
       if (!ungated) pendingGateChargeRef.current = true;
     }
   }, [
@@ -580,7 +588,7 @@ function EmbedChat({
     chat.send,
     ungated,
     gate,
-    consumePageContextPrefix,
+    consumePageContext,
   ]);
 
   const openSettings = useCallback(() => {
@@ -693,9 +701,8 @@ function EmbedChat({
     const onMessage = (event: MessageEvent) => {
       const parsed = parsePageContextMessage(event, parentOrigin);
       if (!parsed) return;
-      const formatted = formatPageContextForPrompt(parsed);
-      if (!formatted) return;
-      pageContextRef.current = formatted;
+      if (!parsed.text.trim() && !parsed.html?.trim()) return;
+      pageContextRef.current = parsed;
       setPageContextAttached(true);
       setHandshakeError(null);
     };
@@ -747,7 +754,11 @@ function EmbedChat({
     const forceTool = heldForceToolRef.current;
     heldForceToolRef.current = undefined;
     const hadCtx = pageContextRef.current != null;
-    void chat.send(consumePageContextPrefix(question), forceTool ? { forceTool } : undefined);
+    const ctx = consumePageContext();
+    void chat.send(question, {
+      ...(forceTool ? { forceTool } : {}),
+      pageContext: ctx,
+    });
     if (!ungated) pendingGateChargeRef.current = true;
     emit("embed_turn_submitted", {
       accent,
@@ -755,7 +766,7 @@ function EmbedChat({
       byok: byokIsSet,
       page_context: hadCtx,
     });
-  }, [trialUnlocked, chat, ungated, gate, accent, byokIsSet, consumePageContextPrefix]);
+  }, [trialUnlocked, chat, ungated, gate, accent, byokIsSet, consumePageContext]);
 
   const reopenTrialForm = useCallback(() => {
     lastGatedPost.current = null;
@@ -850,7 +861,8 @@ function EmbedChat({
         return;
       }
       const hadCtx = pageContextRef.current != null;
-      void chat.send(consumePageContextPrefix(question), opts);
+      const ctx = consumePageContext();
+      void chat.send(question, { ...opts, pageContext: ctx });
       emit("embed_turn_submitted", {
         accent,
         turn: gate.turns + 1,
@@ -859,7 +871,7 @@ function EmbedChat({
       });
       if (!ungated) pendingGateChargeRef.current = true;
     },
-    [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess, consumePageContextPrefix],
+    [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess, consumePageContext],
   );
 
 
@@ -904,6 +916,8 @@ function EmbedChat({
           page_context: pageContextRef.current != null,
         });
       },
+      takePendingPageContextAttachment: () =>
+        pageContextCreateAttachment(pageContextRef.current),
     }),
     [
       gate.locked,
@@ -995,7 +1009,7 @@ function EmbedChat({
 
   if (gateForm) {
     return (
-      <div className="flex h-dvh flex-col" data-chrome-mode="embed">
+      <div className="flex h-dvh flex-col" data-chrome-mode="embed" data-thread-skin={stockClient.chrome.skin}>
         {headerSlot}
         <div className="flex flex-1 items-center justify-center p-4">{gateForm}</div>
         {footerSlot}
@@ -1010,6 +1024,11 @@ function EmbedChat({
         clientConfig={stockClient}
         persistence="none"
         sendGate={sendGate}
+        sessionKey={gate.host}
+        webSearchScope={webSearchScope}
+        onWebSearchChange={(on) => {
+          setWebSearchState({ scope: webSearchScope, pref: on });
+        }}
         welcome={hideIntroForSeed ? undefined : welcomeIntro || undefined}
         suggestions={suggestions}
         placeholder={placeholder}
@@ -1019,6 +1038,15 @@ function EmbedChat({
         }
         footerSlot={
           <>
+            <PageContextComposerBridge
+              attachment={
+                pageContextAttached
+                  ? pageContextCreateAttachment(pageContextRef.current)
+                  : null
+              }
+              contextTs={pageContextAttached ? pageContextRef.current?.ts ?? null : null}
+              onComposerSend={consumePageContext}
+            />
             {handshakeError || (!trialLocked && chat.error) ? (
               <div
                 role="alert"
@@ -1040,6 +1068,7 @@ function EmbedChat({
       {showByok && settingsOpen ? (
         <div
           className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background p-3 shadow-lg"
+          data-thread-skin={stockClient.chrome.skin}
           role="dialog"
           aria-label="BYOK settings"
         >
@@ -1058,6 +1087,31 @@ function EmbedChat({
   );
 }
 
+function PageContextComposerBridge({
+  attachment,
+  contextTs,
+  onComposerSend,
+}: {
+  attachment: ReturnType<typeof pageContextCreateAttachment>;
+  contextTs: number | null;
+  onComposerSend: () => void;
+}) {
+  const aui = useAui();
+  const addedTsRef = useRef<number | null>(null);
+  const consumedTsRef = useRef<number | null>(null);
+  useAuiEvent("composer.send", () => {
+    if (contextTs != null) consumedTsRef.current = contextTs;
+    onComposerSend();
+  });
+  useEffect(() => {
+    if (!attachment || contextTs == null) return;
+    if (consumedTsRef.current === contextTs) return;
+    if (addedTsRef.current === contextTs) return;
+    addedTsRef.current = contextTs;
+    void aui.composer.addAttachment(attachment);
+  }, [attachment, contextTs, aui]);
+  return null;
+}
 
 function PaywallCard({
   lockedContact,

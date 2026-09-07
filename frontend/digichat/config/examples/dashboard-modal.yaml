@@ -5,6 +5,7 @@ deployment:
   chrome:
     mode: modal
     theme: dark
+    skin: digichat
     title: ask digichat
     welcome: Ask about house research, portfolio decisions, and the page you are on.
     placeholder: Ask about this page
@@ -24,6 +25,8 @@ deployment:
   persistence: none
   auth: anonymous
   features:
+    # System page-context.html chip is attached by the embed, not this flag.
+    # Keep false so the popup does not grow a user file picker.
     attachments: false
     dictation: false
     speech: false

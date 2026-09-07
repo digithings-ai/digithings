@@ -1,5 +1,6 @@
 /**
- * Embed host wiring: stock Thread only — no language / help / tool chrome.
+ * Embed host wiring: stock Thread. Language / help chrome stays off.
+ * Tool catalog is ProductStockShell-owned (sessionKey → X-Digi-Force-Tool).
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -22,12 +23,14 @@ describe("embed stock chrome wiring", () => {
     expect(pageSrc).not.toMatch(/resolveEmbedClientConfigFromParams/);
   });
 
-  it("does not mount language / help / new-conversation / tool chrome", () => {
+  it("does not mount language / help / new-conversation chrome", () => {
     expect(embedClientSrc).not.toMatch(/StockChromeBar/);
-    expect(embedClientSrc).not.toMatch(/ToolCatalogBar/);
+    expect(embedClientSrc).not.toMatch(/LanguageSelect/);
   });
 
-  it("does not mount LanguageSelect dropdown", () => {
-    expect(embedClientSrc).not.toMatch(/LanguageSelect/);
+  it("passes embed host sessionKey so ProductStockShell can arm force-tool", () => {
+    expect(embedClientSrc).not.toMatch(/ToolCatalogBar/);
+    expect(embedClientSrc).toMatch(/sessionKey=\{gate\.host\}/);
+    expect(embedClientSrc).toMatch(/webSearchScope=\{webSearchScope\}/);
   });
 });

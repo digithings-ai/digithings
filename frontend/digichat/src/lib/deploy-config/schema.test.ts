@@ -9,6 +9,7 @@ import {
   disclosureIsVisible,
   parseDigichatConfig,
 } from "./schema";
+import { allowedForceTools } from "./force-tool";
 import { THREAD_SKINS } from "@/lib/thread-skins";
 
 const examplesDir = resolve(__dirname, "../../../config/examples");
@@ -71,6 +72,35 @@ describe("DigichatConfigSchema", () => {
     expect(cfg.deployment?.chrome.transcript.userAlign).toBe("left");
     expect(cfg.deployment?.cli.enabled).toBe(true);
     expect(cfg.deployment?.models.available).toEqual(["gpt-4o-mini", "gpt-4o"]);
+  });
+
+  it("coerces chrome.welcome strings and objects", () => {
+    const asString = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        chrome: { welcome: "Ask about docs" },
+      },
+    });
+    expect(asString.deployment?.chrome.welcome).toEqual({ title: "Ask about docs" });
+    const asObject = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        chrome: {
+          welcome: {
+            title: "digichat",
+            body: "Scoped to this deployment.",
+          },
+        },
+      },
+    });
+    expect(asObject.deployment?.chrome.welcome).toEqual({
+      title: "digichat",
+      body: "Scoped to this deployment.",
+    });
   });
 
   it("fails closed on missing deployment and hosts", () => {
@@ -167,10 +197,51 @@ describe("DigichatConfigSchema", () => {
       const doc = loadYaml(raw);
       const cfg = parseDigichatConfig(doc, name);
       expect(cfg.version).toBe(1);
-      expect(
-        cfg.deployment || (cfg.hosts && Object.keys(cfg.hosts).length > 0),
-      ).toBeTruthy();
+      expect(cfg.deployment || (cfg.hosts && Object.keys(cfg.hosts).length > 0)).toBeTruthy();
     }
+  });
+
+  it("keeps dashboard-modal on the digichat skin without a user file picker", () => {
+    const raw = readFileSync(resolve(examplesDir, "dashboard-modal.yaml"), "utf8");
+    const cfg = parseDigichatConfig(loadYaml(raw), "dashboard-modal.yaml");
+    expect(cfg.deployment?.chrome.skin).toBe("digichat");
+    expect(cfg.deployment?.chrome.mode).toBe("modal");
+    expect(cfg.deployment?.features.attachments).toBe(false);
+  });
+
+  it("pins product embed YAML to digichat skin + digigraph tool catalog", () => {
+    const digithings = parseDigichatConfig(
+      loadYaml(readFileSync(resolve(examplesDir, "digithings-ai-embed.yaml"), "utf8")),
+      "digithings-ai-embed.yaml",
+    );
+    const dt = digithings.hosts?.["digithings.ai"];
+    expect(dt?.chrome.skin).toBe("digichat");
+    expect(dt?.backend).toEqual({ type: "digigraph" });
+    expect(dt?.tools?.allowUserToggle).toBe(true);
+    expect(dt?.tools?.catalog.map((t) => t.id)).toEqual([
+      "digisearch",
+      "digivault",
+      "web_search",
+    ]);
+    expect(dt?.tools?.catalog.find((t) => t.id === "web_search")?.default).toBe(false);
+    expect(dt?.tools?.catalog.find((t) => t.id === "digisearch")?.default).toBe(true);
+    expect(dt?.tools?.catalog.find((t) => t.id === "digivault")?.default).toBe(true);
+    expect(allowedForceTools(dt)).toEqual(["digisearch", "digivault"]);
+
+    const occ = parseDigichatConfig(
+      loadYaml(readFileSync(resolve(examplesDir, "occ-embed.yaml"), "utf8")),
+      "occ-embed.yaml",
+    );
+    const occHost = occ.hosts?.["occ.digithings.ai"];
+    expect(occHost?.chrome.skin).toBe("digichat");
+    expect(occHost?.backend.type).toBe("digigraph");
+    if (occHost?.backend.type === "digigraph") {
+      expect(occHost.backend.digisearchIndex).toBe("occ_help");
+      expect(occHost.backend.vaultPathPrefix).toBe("clients/online-compliance-center");
+    }
+    expect(occHost?.tools?.catalog.map((t) => t.id)).toEqual(["digisearch", "digivault"]);
+    expect(occHost?.tools?.catalog.some((t) => t.id === "web_search")).toBe(false);
+    expect(allowedForceTools(occHost)).toEqual(["digisearch", "digivault"]);
   });
 
   it("ships a complete YAML install for every catalog template id", () => {
@@ -181,6 +252,10 @@ describe("DigichatConfigSchema", () => {
       expect(cfg.deployment?.chrome.skin).toBe(id);
       expect(cfg.deployment?.auth).toBe("anonymous");
       expect(cfg.deployment?.backend.type).toBe("digigraph");
+      if (id === "digichat") {
+        expect(cfg.deployment?.chrome.transcript.userAlign).toBe("left");
+        expect(cfg.deployment?.chrome.theme).toBe("dark");
+      }
     }
   });
 });

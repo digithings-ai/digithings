@@ -178,6 +178,32 @@ describe("uiMessagesForUpstream", () => {
     expect(out).toHaveLength(2);
     expect(out[1]?.parts).toEqual([{ type: "text", text: "hello" }]);
   });
+
+  it("folds page-context.html into the user text for digigraph", () => {
+    const html = "<main><h1>Brief</h1></main>";
+    const messages = [
+      {
+        id: "u1",
+        role: "user",
+        parts: [
+          { type: "text", text: "What changed?" },
+          {
+            type: "file",
+            filename: "page-context.html",
+            mediaType: "text/html",
+            url: `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+    const out = uiMessagesForUpstream(messages);
+    expect(out[0]?.parts).toHaveLength(1);
+    expect(out[0]?.parts[0]).toMatchObject({ type: "text" });
+    const text = out[0]?.parts[0]?.type === "text" ? out[0].parts[0].text : "";
+    expect(text).toContain("What changed?");
+    expect(text).toContain("Page HTML snapshot");
+    expect(text).toContain("<h1>Brief</h1>");
+  });
 });
 
 describe("conversationIdFromParts", () => {

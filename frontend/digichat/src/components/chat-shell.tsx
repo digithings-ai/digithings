@@ -443,7 +443,11 @@ export function ChatShell({
   }
 
   return (
-    <div className={cn("app-shell", collapsed && "app-shell-sidebar-collapsed")}>
+    <div
+      className={cn("app-shell", collapsed && "app-shell-sidebar-collapsed")}
+      data-thread-skin={clientConfig?.chrome.skin}
+      data-chrome-mode={clientConfig?.chrome.mode ?? "app"}
+    >
       <aside className="app-sidebar" aria-label="App sidebar" data-expanded={!collapsed}>
         <div className="app-sidebar-body">
           <div className="dc-sidebar-brand">

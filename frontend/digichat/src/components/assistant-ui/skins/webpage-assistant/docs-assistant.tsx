@@ -1,6 +1,6 @@
 "use client";
 
-import { Thread } from "@/app/(vanilla)/stock/thread.aui";
+import { Thread } from "@/app/(baseline)/stock/thread.aui";
 import { BotIcon } from "lucide-react";
 import { AssistantModal } from "./assistant-modal";
 import { useDocsConfig } from "./config-provider";

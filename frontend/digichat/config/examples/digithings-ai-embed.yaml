@@ -8,7 +8,7 @@ hosts:
     chrome:
       mode: embed
       theme: dark
-      # skin: base | chatgpt | claude | grok | gemini | perplexity | react-ink | expo-react-native | base-assistant-ui | webpage-assistant | product-page-assistant
+      skin: digichat
       title: ask digichat
       welcome: Ask about digithings — agents, digigraph, and the stack.
       placeholder: Ask a question

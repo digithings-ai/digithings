@@ -8,6 +8,7 @@
  */
 import type { UIMessage, UIMessageChunk } from "ai";
 import type { ActivityDocument, ActivitySpan } from "@/lib/chat-activity";
+import { expandPageContextFileParts } from "@/lib/embed-page-context-messages";
 
 /** Unbranded conversation-id part (Foundry continuity). Was data-externalConversation. */
 export const CONVERSATION_PART_TYPE = "data-conversation" as const;
@@ -219,9 +220,11 @@ export function finishStandardActivity(
 /**
  * Strip tool / source / data parts before convertToModelMessages.
  * digigraph speaks Chat Completions text, not UI tool parts.
+ * Page-context document chips are folded into that text first so the model
+ * still sees the host snapshot (#3590 preview stays gone).
  */
 export function uiMessagesForUpstream(messages: UIMessage[]): UIMessage[] {
-  return messages
+  return expandPageContextFileParts(messages)
     .filter((m) => m.role === "user" || m.role === "assistant" || m.role === "system")
     .map((m) => ({
       ...m,

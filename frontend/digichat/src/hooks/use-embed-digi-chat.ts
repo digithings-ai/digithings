@@ -24,6 +24,10 @@ import {
   takePendingForceTool,
   takePendingTurnMode,
 } from "@/lib/pending-chat-headers";
+import {
+  shapeUserMessageParts,
+  type PageContextMessage,
+} from "@/lib/embed-page-context-messages";
 
 export {
   setPendingForceTool,
@@ -208,7 +212,11 @@ export function useEmbedDigiChat({
   getSelectedModel,
   allowClientTurnMutation = true,
   features,
-}: UseEmbedDigiChatOptions): DigiChatController & {
+}: UseEmbedDigiChatOptions): Omit<DigiChatController, "send"> & {
+  send: (
+    question: string,
+    opts?: { forceTool?: string; pageContext?: PageContextMessage | null },
+  ) => void | Promise<void>;
   seed: (msgs: readonly DigiChatMessage[]) => void;
   /** Raw AI SDK error — for structured code detection (quota → BYOK). */
   rawError: Error | undefined;
@@ -353,13 +361,16 @@ export function useEmbedDigiChat({
   }, [error, onGated]);
 
   const send = useCallback(
-    (question: string, opts?: { forceTool?: string }) => {
+    (
+      question: string,
+      opts?: { forceTool?: string; pageContext?: PageContextMessage | null },
+    ) => {
       const q = question.trim();
       if (!q || busy) return;
       setPendingForceTool(embedHost, opts?.forceTool);
       sendMessage({
         role: "user",
-        parts: [{ type: "text", text: q }],
+        parts: shapeUserMessageParts(q, opts?.pageContext),
       });
     },
     [busy, sendMessage, embedHost],

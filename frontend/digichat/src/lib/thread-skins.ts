@@ -1,7 +1,8 @@
 /**
  * Official assistant-ui templates a digichat container can pick at deploy time.
  *
- * Ids match assistant-ui `list_templates` exactly (11 entries).
+ * Ids 1–11 match assistant-ui `list_templates`. `digichat` is the first-party
+ * Thread (digiweb tokens + primitives) — not a catalog clone.
  * `base` is the fixed Base demo. `base-assistant-ui` is the configurable
  * Base shell (brandTheme + labels). Same Thread, different catalog product.
  *
@@ -20,6 +21,7 @@ export const THREAD_SKINS = [
   "base-assistant-ui",
   "webpage-assistant",
   "product-page-assistant",
+  "digichat",
 ] as const;
 
 export type ThreadSkin = (typeof THREAD_SKINS)[number];

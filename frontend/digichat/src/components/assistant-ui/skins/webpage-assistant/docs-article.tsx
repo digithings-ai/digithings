@@ -1,7 +1,7 @@
 "use client";
 
 import { MarkdownPage } from "./markdown-page";
-import { Button } from "@/app/(vanilla)/stock/ui/button";
+import { Button } from "@/app/(baseline)/stock/ui/button";
 import { useDocsConfig } from "./config-provider";
 import { getPageById } from "./pages";
 import type { DocsPage } from "./types";

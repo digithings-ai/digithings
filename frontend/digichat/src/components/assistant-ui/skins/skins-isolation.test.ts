@@ -24,4 +24,10 @@ describe("assistant-ui skin isolation", () => {
       expect(src, file).not.toMatch(banned);
     }
   });
+
+  it("mounts first-party digichat via an explicit branch", () => {
+    const index = readFileSync(join(here, "index.tsx"), "utf8");
+    expect(index).toMatch(/skin === ["']digichat["']/);
+    expect(index).toMatch(/DigichatSkin/);
+  });
 });

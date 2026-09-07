@@ -6,7 +6,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/app/(vanilla)/stock/ui/tooltip";
+} from "@/app/(baseline)/stock/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { FC } from "react";
 

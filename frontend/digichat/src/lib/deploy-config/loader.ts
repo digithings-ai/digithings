@@ -14,6 +14,8 @@ import { load as loadYaml } from "js-yaml";
 // js-yaml v4 — default safe schema via load() with no schema override.
 import {
   parseDigichatConfig,
+  parseWelcomeCopy,
+  welcomeTitle,
   type DigichatConfig,
   type DigichatDeployment,
 } from "./schema";
@@ -73,7 +75,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       theme: cfg.theme,
       skin: cfg.skin ?? DEFAULT_THREAD_SKIN,
       title: cfg.title,
-      welcome: cfg.welcome,
+      welcome: parseWelcomeCopy(cfg.welcome),
       suggestions: cfg.suggestions,
       placeholder: cfg.placeholder,
       accent: cfg.accent,
@@ -124,7 +126,7 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     accent: dep.chrome.accent,
     attribution: dep.chrome.attribution === true,
     title: dep.chrome.title,
-    welcome: dep.chrome.welcome,
+    welcome: welcomeTitle(dep.chrome.welcome),
     suggestions: dep.chrome.suggestions,
     placeholder: dep.chrome.placeholder,
     lockedContact: dep.gate.lockedContact,
@@ -351,6 +353,40 @@ export function getAnonymousClientInstall(
   }
 }
 
+function normalizeConfigHost(hostOrOrigin: string): string | null {
+  let host = hostOrOrigin.trim().toLowerCase();
+  try {
+    if (host.includes("://")) host = new URL(host).hostname;
+    else host = host.split("/")[0].split(":")[0];
+  } catch {
+    return null;
+  }
+  host = host.replace(/\.$/, "");
+  return host || null;
+}
+
+/**
+ * Match a `hosts` entry (YAML + DIGICHAT_EMBED_TENANTS merge). Does **not**
+ * fall back to `deployment` — unknown parents must not inherit the first host.
+ */
+export function matchHostDeployment(
+  hostOrOrigin: string | null | undefined,
+  config: DigichatConfig = getDigichatConfig(),
+): DigichatDeployment | null {
+  if (!hostOrOrigin?.trim() || !config.hosts) return null;
+  const host = normalizeConfigHost(hostOrOrigin);
+  if (!host) return null;
+  if (config.hosts[host]) return config.hosts[host];
+  for (const [key, dep] of Object.entries(config.hosts)) {
+    const keyHost = normalizeConfigHost(key) ?? key.split(":")[0];
+    if (keyHost === host) return dep;
+    if (dep.aliases?.some((a) => a.toLowerCase() === host || a.toLowerCase().includes(host))) {
+      return dep;
+    }
+  }
+  return null;
+}
+
 export function resolveDeploymentForHost(
   hostOrOrigin: string | null | undefined,
   config: DigichatConfig = getDigichatConfig(),
@@ -358,33 +394,7 @@ export function resolveDeploymentForHost(
   if (!hostOrOrigin?.trim()) {
     return config.deployment ?? null;
   }
-  let host = hostOrOrigin.trim().toLowerCase();
-  try {
-    if (host.includes("://")) host = new URL(host).hostname;
-    else host = host.split("/")[0].split(":")[0];
-  } catch {
-    return config.deployment ?? null;
-  }
-  host = host.replace(/\.$/, "");
-  if (config.hosts) {
-    if (config.hosts[host]) return config.hosts[host];
-    for (const [key, dep] of Object.entries(config.hosts)) {
-      const keyHost = key.includes("://")
-        ? (() => {
-            try {
-              return new URL(key).hostname;
-            } catch {
-              return key;
-            }
-          })()
-        : key.split(":")[0];
-      if (keyHost === host) return dep;
-      if (dep.aliases?.some((a) => a.toLowerCase() === host || a.toLowerCase().includes(host))) {
-        return dep;
-      }
-    }
-  }
-  return config.deployment ?? null;
+  return matchHostDeployment(hostOrOrigin, config) ?? config.deployment ?? null;
 }
 
 /** Default / single-install deployment (no host). */

@@ -17,6 +17,7 @@ import { ExpoReactNative } from "./expo-react-native";
 import { ConfigurableBase } from "./base-assistant-ui";
 import { WebpageAssistant } from "./webpage-assistant";
 import { ProductPageAssistant } from "./product-page-assistant";
+import { DigichatSkin } from "./digichat";
 
 const CLONE_THREADS: Record<CloneSkin, FC> = {
   chatgpt: ChatGPT,
@@ -33,9 +34,9 @@ export type ThreadSkinViewProps = {
 };
 
 /**
- * Mount the selected official assistant-ui template (the 11 catalog ids).
- * `base` is the fixed Base demo. `base-assistant-ui` is the same Thread
- * inside the official brandTheme / labels config shell.
+ * Mount the selected Thread: 11 official assistant-ui catalog ids, plus
+ * first-party `digichat`. `base` is the fixed Base demo. `base-assistant-ui`
+ * is the same Thread inside the official brandTheme / labels config shell.
  * Layout templates wrap a Thread in docs / product chrome.
  * `react-ink` and `expo-react-native` are web facsimiles; TTY / Expo sources
  * stay under `reference/assistant-ui-templates/` and are not imported here.
@@ -64,6 +65,10 @@ export function ThreadSkinView({ skin }: ThreadSkinViewProps) {
 
   if (skin === "webpage-assistant") {
     return <WebpageAssistant />;
+  }
+
+  if (skin === "digichat") {
+    return <DigichatSkin />;
   }
 
   return <ProductPageAssistant />;

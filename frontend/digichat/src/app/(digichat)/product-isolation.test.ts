@@ -39,7 +39,7 @@ describe("product CSS isolation", () => {
     expect(page).toMatch(/HomeStockClient/);
   });
 
-  it("uses stock Inter theme tokens like vanilla", () => {
+  it("uses stock Inter theme tokens like the baseline preview", () => {
     const css = read("globals.css");
     expect(css).toMatch(/--font-sans:\s*var\(--font-inter\)/);
     expect(css).toMatch(/--background:\s*oklch\(1 0 0\)/);

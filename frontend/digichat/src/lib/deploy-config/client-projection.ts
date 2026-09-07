@@ -12,6 +12,7 @@ import type {
   ToolCatalogEntry,
   UserAlign,
 } from "./schema";
+import { welcomeBodyLines, welcomeTitle } from "./schema";
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
 import {
   DEFAULT_THREAD_SKIN,
@@ -34,7 +35,10 @@ export type DigichatClientChrome = {
   theme: "dark" | "light";
   skin: ThreadSkin;
   title?: string;
+  /** Headline. Legacy YAML `welcome: "…"` still lands here. */
   welcome?: string;
+  /** Subparagraphs under the headline. Empty when YAML only set a string. */
+  welcomeBody?: string[];
   suggestions?: string[];
   placeholder?: string;
   accent: { color: string; foreground: string } | null;
@@ -154,7 +158,8 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       theme: dep.chrome.theme,
       skin: dep.chrome.skin ?? DEFAULT_THREAD_SKIN,
       title: dep.chrome.title,
-      welcome: dep.chrome.welcome,
+      welcome: welcomeTitle(dep.chrome.welcome),
+      welcomeBody: welcomeBodyLines(dep.chrome.welcome),
       suggestions: dep.chrome.suggestions,
       placeholder: dep.chrome.placeholder,
       accent: dep.chrome.accent ?? null,

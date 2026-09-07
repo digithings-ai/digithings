@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Deploy-driven UI knobs for the stock (vanilla) Thread.
+ * Deploy-driven UI knobs for the stock (baseline) Thread.
  * Provided by ProductStockShell — never imports Ink / CLI packages.
  */
 

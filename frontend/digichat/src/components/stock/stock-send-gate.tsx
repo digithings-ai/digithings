@@ -13,7 +13,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { useAui } from "@assistant-ui/react";
+import { useAui, type CreateAttachment } from "@assistant-ui/react";
 
 export type StockSendGateHandlers = {
   /**
@@ -25,6 +25,11 @@ export type StockSendGateHandlers = {
   onHold: (text: string) => void;
   /** Called when submit is allowed through (e.g. arm turn charge). */
   onAllowSend?: () => void;
+  /**
+   * System document to attach just before composer.send() (page-context chip).
+   * Not a user file picker — callers keep `features.attachments` false.
+   */
+  takePendingPageContextAttachment?: () => CreateAttachment | null;
 };
 
 const StockSendGateContext = createContext<StockSendGateHandlers | null>(null);
@@ -65,7 +70,21 @@ export function useStockComposerGateSubmit():
       if (gate.shouldHold(text)) {
         event.preventDefault();
         aui.composer.setText("");
+        void aui.composer.clearAttachments();
         gate.onHold(text);
+        return;
+      }
+      const pageAttachment = gate.takePendingPageContextAttachment?.();
+      if (pageAttachment) {
+        event.preventDefault();
+        void (async () => {
+          const existing = aui.composer.getState().attachments ?? [];
+          if (!existing.some((a) => a.name === pageAttachment.name)) {
+            await aui.composer.addAttachment(pageAttachment);
+          }
+          gate.onAllowSend?.();
+          aui.composer.send();
+        })();
         return;
       }
       gate.onAllowSend?.();

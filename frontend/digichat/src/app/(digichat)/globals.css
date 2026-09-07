@@ -29,19 +29,24 @@
   }
 }
 
-/* Product stock CSS — mirrors (vanilla)/vanilla.css (Inter + registry Thread).
+/* Product stock CSS — mirrors (baseline)/baseline.css (Inter + registry Thread).
  * Does NOT import assistant-ui-cli, digichat-ui session/cursor, or terminal-loaders.
  * ChatShell loads those via @/styles/chat-shell-cli.css.
  */
 @import "../../styles/product-chrome.css";
+@import "@digithings/web/styles/chat-core.css";
+@import "@digithings/web/styles/chat-widgets.css";
+@import "@digithings/web/styles/chat-aui.css";
+@import "@digithings/web/styles/digichat-launcher.css";
 
-@source "../(vanilla)/stock";
+@source "../(baseline)/stock";
 @source "../../components/assistant-ui/skins";
 @source "../../components/stock";
 @source "../../components/ui";
 @source "../../components/byok-cli-flow.tsx";
 @source "../../app/(digichat)/embed";
 @source "../../app/(digichat)/home-stock-client.tsx";
+@source "../../../../digiweb/web/src/components/chat";
 
 @custom-variant dark (&:is(.dark *));
 

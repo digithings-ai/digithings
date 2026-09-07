@@ -12,7 +12,6 @@ import {
   ProductStockShell,
   buildProductRuntimeAdapters,
 } from "@/components/stock/product-shell";
-import { ToolCatalogBar } from "@/components/stock/tool-catalog-bar";
 import { p } from "@/lib/base-path";
 import { useBYOKKey } from "@/hooks/use-byok-key";
 import {
@@ -28,7 +27,6 @@ import {
   DEFAULT_CLIENT_CONFIG,
   type DigichatClientConfig,
 } from "@/lib/deploy-config";
-import { skinOwnsPageChrome } from "@/lib/thread-skins";
 
 type SystemNote = { id: string; text: string };
 
@@ -158,18 +156,15 @@ export function ChatPanel({
         runtime={runtime}
         clientConfig={clientConfig}
         persistence={persistence === "server" ? "none" : persistence}
+        sessionKey={threadId}
+        webSearchScope="auth"
+        onWebSearchChange={(on) => {
+          writeWebSearchPref("auth", on);
+          setWebSearchPref(on);
+        }}
         headerSlot={
-          skinOwnsPageChrome(clientConfig.chrome.skin) ? null : (
           <>
             {headerSlot}
-            <ToolCatalogBar
-              clientConfig={clientConfig}
-              sessionKey={threadId}
-              onWebSearchChange={(on) => {
-                writeWebSearchPref("auth", on);
-                setWebSearchPref(on);
-              }}
-            />
             {systemNotes.length > 0 ? (
               <div className="space-y-1 px-3 py-2 text-xs text-muted-foreground">
                 {systemNotes.map((n) => (
@@ -178,7 +173,6 @@ export function ChatPanel({
               </div>
             ) : null}
           </>
-          )
         }
         footerSlot={
           <>

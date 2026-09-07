@@ -304,8 +304,8 @@ export function extractVisiblePageText(
 }
 
 /**
- * Strip scripts/styles/handlers and truncate. Display as text in the embed
- * preview — never re-hydrate as live DOM. Also drops hidden/password controls
+ * Strip scripts/styles/handlers and truncate. Posted to the embed as HTML +
+ * text; never re-hydrate as live page DOM. Also drops hidden/password controls
  * and input values so HTML context matches the “already visible” text rule.
  */
 export function sanitizePageHtml(

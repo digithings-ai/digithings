@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { MarkdownText } from "@/app/(vanilla)/stock/markdown-text";
+import { MarkdownText } from "@/app/(baseline)/stock/markdown-text";
 import { useSkinChrome } from "@/components/stock/skin-chrome";
 import {
   ActionBarPrimitive,
@@ -32,7 +32,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { type FC, useState } from "react";
-import { useAttachmentSrc } from "@/app/(vanilla)/stock/use-attachment-src";
+import { useAttachmentSrc } from "@/app/(baseline)/stock/use-attachment-src";
 import {
   DropdownMenu,
   DropdownMenuContent,

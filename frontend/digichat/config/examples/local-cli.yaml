@@ -1,6 +1,6 @@
 version: 1
 # Local install with digichat Ink CLI enabled (TTY against the same BFF).
-# Web chrome stays stock vanilla Thread — Ink is never imported by Next.js.
+# Web chrome stays stock baseline Thread — Ink is never imported by Next.js.
 deployment:
   slug: local-cli
   chrome:

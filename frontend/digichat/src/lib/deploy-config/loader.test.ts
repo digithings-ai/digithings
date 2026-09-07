@@ -6,10 +6,15 @@ import {
   deploymentToEmbedTenant,
   getAnonymousClientInstall,
   setDigichatConfigForTests,
+  matchHostDeployment,
 } from "./loader";
 import { toDigichatClientConfig, toChromeClientConfig } from "./client-projection";
 import { filterForceToolHeader } from "./force-tool";
+import { clientConfigFromEmbedTenant } from "./embed-bridge";
+import { toEmbedClientConfig } from "@/lib/embed-client-config";
 import type { EmbedTenantConfig } from "@/lib/embed-tenants";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 beforeEach(() => {
   resetDigichatConfigForTests();
@@ -268,6 +273,41 @@ deployment:
     expect(tenant.token).toBe("");
     expect(tenant.skin).toBe("chatgpt");
     expect(tenant.gateMode).toBe("ungated");
+  });
+});
+
+describe("matchHostDeployment", () => {
+  it("resolves product embed YAML hosts without leaking hosts[0] to unknowns", () => {
+    const raw = readFileSync(
+      resolve(__dirname, "../../../config/examples/digithings-ai-embed.yaml"),
+      "utf8",
+    );
+    const cfg = loadDigichatConfig({ fileContents: raw, env: {} });
+    const dt = matchHostDeployment("https://digithings.ai", cfg);
+    expect(dt?.chrome.skin).toBe("digichat");
+    expect(dt?.backend.type).toBe("digigraph");
+    expect(dt?.tools?.catalog.map((t) => t.id)).toEqual([
+      "digisearch",
+      "digivault",
+      "web_search",
+    ]);
+    expect(matchHostDeployment("www.digithings.ai", cfg)?.slug).toBe("digithings-ai");
+    expect(matchHostDeployment("https://unknown.example", cfg)).toBeNull();
+  });
+
+  it("round-trips YAML host skin into the embed client projection", () => {
+    const raw = readFileSync(
+      resolve(__dirname, "../../../config/examples/digithings-ai-embed.yaml"),
+      "utf8",
+    );
+    const cfg = loadDigichatConfig({ fileContents: raw, env: {} });
+    const tenant = deploymentToEmbedTenant(cfg.hosts!["digithings.ai"]!);
+    const client = clientConfigFromEmbedTenant(toEmbedClientConfig(tenant));
+    expect(client.chrome.skin).toBe("digichat");
+    expect(client.backendType).toBe("digigraph");
+    expect(client.tools.catalog.map((t) => t.id)).toEqual(
+      expect.arrayContaining(["digisearch", "digivault", "web_search"]),
+    );
   });
 });
 

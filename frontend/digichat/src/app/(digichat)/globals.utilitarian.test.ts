@@ -19,7 +19,7 @@ function walkTsx(dir: string, out: string[] = []): string[] {
     if (ent.isDirectory()) {
       if (
         ent.name === "node_modules" ||
-        ent.name === "(vanilla)" ||
+        ent.name === "(baseline)" ||
         ent.name === "stock"
       ) {
         continue;

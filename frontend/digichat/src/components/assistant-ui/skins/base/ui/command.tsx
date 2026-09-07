@@ -11,7 +11,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/app/(vanilla)/stock/ui/dialog";
+} from "@/app/(baseline)/stock/ui/dialog";
 
 function Command({
   className,

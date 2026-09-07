@@ -6,6 +6,7 @@ hosts:
     chrome:
       mode: embed
       theme: light
+      skin: digichat
       title: OCC Help
       welcome: Ask about OCC policies and procedures.
       placeholder: Ask OCC help

@@ -2,7 +2,7 @@
 
 /**
  * Deploy chrome copy that official assistant-ui templates read at runtime.
- * ProductStockShell provides it. /vanilla preview has no provider — skins
+ * ProductStockShell provides it. /baseline preview has no provider — skins
  * keep their catalog demo strings.
  */
 

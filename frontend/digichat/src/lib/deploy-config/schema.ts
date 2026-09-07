@@ -35,6 +35,45 @@ export const LlmAccessSchema = z.enum([
 ]);
 export const UserAlignSchema = z.enum(["right", "left"]);
 
+const WelcomeBodySchema = z.union([
+  z.string().min(1),
+  z.array(z.string().min(1)).min(1),
+]);
+
+/** Empty-state copy. A bare string still means title-only (legacy YAML). */
+export const WelcomeCopySchema = z
+  .object({
+    title: z.string().min(1),
+    body: WelcomeBodySchema.optional(),
+  })
+  .strict();
+
+export type WelcomeCopy = z.infer<typeof WelcomeCopySchema>;
+
+export function coerceWelcomeCopy(value: unknown): unknown {
+  if (value == null || value === "") return undefined;
+  if (typeof value === "string") {
+    const title = value.trim();
+    return title.length > 0 ? { title } : undefined;
+  }
+  return value;
+}
+
+export function parseWelcomeCopy(value: unknown): WelcomeCopy | undefined {
+  const coerced = coerceWelcomeCopy(value);
+  if (coerced == null) return undefined;
+  return WelcomeCopySchema.parse(coerced);
+}
+
+export function welcomeTitle(welcome: WelcomeCopy | undefined): string | undefined {
+  return welcome?.title;
+}
+
+export function welcomeBodyLines(welcome: WelcomeCopy | undefined): string[] {
+  if (!welcome?.body) return [];
+  return typeof welcome.body === "string" ? [welcome.body] : [...welcome.body];
+}
+
 /**
  * Reasoning / tool-call disclosure. Booleans coerce for older YAML:
  * true → collapsed, false → off.
@@ -76,7 +115,7 @@ export const LauncherSchema = z
 
 export const TranscriptSchema = z
   .object({
-    /** User bubble alignment — vanilla web default is right. */
+    /** User bubble alignment — stock web default is right. */
     userAlign: UserAlignSchema.default("right"),
   })
   .strict();
@@ -86,13 +125,13 @@ export const ChromeSchema = z
     mode: ChromeModeSchema.default("embed"),
     theme: ThemeSchema.default("light"),
     /**
-     * Which official assistant-ui template to mount (the 11 catalog ids).
-     * Overlay: `DIGICHAT_CHROME_SKIN`.
+     * Which Thread to mount (11 official catalog ids + first-party `digichat`).
+     * Overlay: `DIGICHAT_CHROME_SKIN`. Default remains `base`.
      */
     skin: ThreadSkinInputSchema.default(DEFAULT_THREAD_SKIN),
     launcher: LauncherSchema.optional(),
     title: z.string().optional(),
-    welcome: z.string().optional(),
+    welcome: z.preprocess(coerceWelcomeCopy, WelcomeCopySchema.optional()),
     suggestions: z.array(z.string()).optional(),
     placeholder: z.string().optional(),
     accent: AccentSchema.optional(),

@@ -296,3 +296,58 @@ describe("client-container YAML install", () => {
     expect(ctx?.embedConfig?.layout).toBe("page");
   });
 });
+
+const DIGITHINGS_EMBED_YAML = resolve(
+  __dirname,
+  "../../config/examples/digithings-ai-embed.yaml",
+);
+const OCC_EMBED_YAML = resolve(__dirname, "../../config/examples/occ-embed.yaml");
+
+describe("product embed YAML hosts", () => {
+  it("paints digithings.ai from hosts YAML as digichat skin with tools", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", DIGITHINGS_EMBED_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const painted = resolveEmbedClientConfigForPaint(
+      undefined,
+      "https://digithings.ai",
+    );
+    expect(painted.skin).toBe("digichat");
+    expect(painted.slug).toBe("digithings-ai");
+    expect(painted.backendType).toBe("digigraph");
+    expect(painted.webSearch).toBe(true);
+    expect(painted.gateMode).toBe("ungated");
+  });
+
+  it("paints OCC YAML host without web_search", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", OCC_EMBED_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const painted = resolveEmbedClientConfigForPaint(
+      undefined,
+      "https://occ.digithings.ai",
+    );
+    expect(painted.skin).toBe("digichat");
+    expect(painted.slug).toBe("occ");
+    expect(painted.backendType).toBe("digigraph");
+    expect(painted.webSearch).toBe(false);
+  });
+
+  it("does not leak the first YAML host to an unknown parent", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", DIGITHINGS_EMBED_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const painted = resolveEmbedClientConfigForPaint(
+      undefined,
+      "https://unknown.example",
+    );
+    expect(painted).toEqual(DEFAULT_EMBED_TENANT_CONFIG);
+    const denied = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://unknown.example" }),
+    );
+    expect(denied).toBeInstanceOf(Response);
+  });
+});

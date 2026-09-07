@@ -8,7 +8,7 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
 } from "@assistant-ui/react";
-import { MarkdownText } from "@/app/(vanilla)/stock/markdown-text";
+import { MarkdownText } from "@/app/(baseline)/stock/markdown-text";
 import { useComposerCopy } from "@/components/stock/skin-chrome";
 
 /**

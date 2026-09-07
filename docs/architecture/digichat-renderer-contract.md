@@ -76,8 +76,8 @@ UIs or a local mapping.
 ## Default UI (assistant-ui)
 
 **Stock Thread is the default UI substrate.** Product `/embed` and `/` mount the
-registry `Thread` (same module path as the isolated `/vanilla` preview) against
-`POST /api/chat` — not `/api/vanilla-chat`. Pin: `@assistant-ui/react@0.15.x` +
+registry `Thread` (same module path as the isolated `/baseline` preview) against
+`POST /api/chat` — not `/api/baseline-chat`. Pin: `@assistant-ui/react@0.15.x` +
 `@assistant-ui/ai-sdk` + `@assistant-ui/react-markdown` + AI SDK v7.
 
 Deployment config (`digichat.yaml` / `DIGICHAT_CONFIG_PATH`) chooses chrome mode

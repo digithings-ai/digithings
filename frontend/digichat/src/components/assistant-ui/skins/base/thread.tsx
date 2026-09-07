@@ -4,26 +4,26 @@ import {
   ComposerAddAttachment,
   ComposerAttachments,
   UserMessageAttachments,
-} from "@/app/(vanilla)/stock/attachment.aui";
-import { MarkdownText } from "@/app/(vanilla)/stock/markdown-text";
+} from "@/app/(baseline)/stock/attachment.aui";
+import { MarkdownText } from "@/app/(baseline)/stock/markdown-text";
 import { DotMatrix } from "./ui/dot-matrix";
 import { MessageTiming } from "./elements/message-timing.aui";
-import { ToolFallback } from "@/app/(vanilla)/stock/tool-fallback.aui";
+import { ToolFallback } from "@/app/(baseline)/stock/tool-fallback.aui";
 import {
   ToolGroupContent,
   ToolGroupRoot,
   ToolGroupTrigger,
-} from "@/app/(vanilla)/stock/tool-group.aui";
-import { TooltipIconButton } from "@/app/(vanilla)/stock/tooltip-icon-button";
+} from "@/app/(baseline)/stock/tool-group.aui";
+import { TooltipIconButton } from "@/app/(baseline)/stock/tooltip-icon-button";
 import {
   Reasoning,
   ReasoningContent,
   ReasoningRoot,
   ReasoningText,
   ReasoningTrigger,
-} from "@/app/(vanilla)/stock/reasoning.aui";
-import { Button } from "@/app/(vanilla)/stock/ui/button";
-import { Skeleton } from "@/app/(vanilla)/stock/ui/skeleton";
+} from "@/app/(baseline)/stock/reasoning.aui";
+import { Button } from "@/app/(baseline)/stock/ui/button";
+import { Skeleton } from "@/app/(baseline)/stock/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useComposerCopy, useSkinChrome } from "@/components/stock/skin-chrome";
 import {

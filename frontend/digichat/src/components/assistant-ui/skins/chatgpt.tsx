@@ -14,7 +14,7 @@ import {
 } from "@assistant-ui/react";
 import { type FC } from "react";
 import { TooltipIconButton } from "./tooltip-icon-button";
-import { useAttachmentSrc } from "@/app/(vanilla)/stock/use-attachment-src";
+import { useAttachmentSrc } from "@/app/(baseline)/stock/use-attachment-src";
 import {
   ArrowUpIcon,
   AudioLines,
@@ -35,8 +35,8 @@ import {
   Volume2,
   XIcon,
 } from "lucide-react";
-import { MarkdownText } from "@/app/(vanilla)/stock/markdown-text";
-import { ToolFallback } from "@/app/(vanilla)/stock/tool-fallback.aui";
+import { MarkdownText } from "@/app/(baseline)/stock/markdown-text";
+import { ToolFallback } from "@/app/(baseline)/stock/tool-fallback.aui";
 import { useComposerCopy } from "@/components/stock/skin-chrome";
 
 export const ChatGPT: FC = () => {

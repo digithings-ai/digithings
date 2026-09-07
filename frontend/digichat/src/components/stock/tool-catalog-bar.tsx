@@ -18,8 +18,10 @@ import { cn } from "@/lib/utils";
 
 export type ToolCatalogBarProps = {
   clientConfig: DigichatClientConfig;
-  /** Session key for prefs / pending force-tool (embed host or thread id). */
+  /** Session key for pending force-tool (embed host or thread id). */
   sessionKey: string;
+  /** localStorage scope for web search; defaults to sessionKey. */
+  webSearchScope?: string;
   className?: string;
   onWebSearchChange?: (enabled: boolean) => void;
 };
@@ -27,18 +29,20 @@ export type ToolCatalogBarProps = {
 export function ToolCatalogBar({
   clientConfig,
   sessionKey,
+  webSearchScope,
   className,
   onWebSearchChange,
 }: ToolCatalogBarProps) {
   const { tools, gate } = clientConfig;
   const catalog = tools.catalog;
   const allowToggle = tools.allowUserToggle;
+  const prefScope = webSearchScope?.trim() || sessionKey;
 
   const tenantAllowsWeb =
     gate.webSearch === true || catalog.some((t) => t.id === "web_search");
 
   const [webPref, setWebPref] = useState(() =>
-    typeof window !== "undefined" ? readWebSearchPref(sessionKey) : false,
+    typeof window !== "undefined" ? readWebSearchPref(prefScope) : false,
   );
   const [armedForce, setArmedForce] = useState<string | null>(null);
 
@@ -50,10 +54,10 @@ export function ToolCatalogBar({
   const toggleWeb = useCallback(() => {
     if (!allowToggle || !tenantAllowsWeb) return;
     const next = !webPref;
-    writeWebSearchPref(sessionKey, next);
+    writeWebSearchPref(prefScope, next);
     setWebPref(next);
     onWebSearchChange?.(next);
-  }, [allowToggle, tenantAllowsWeb, webPref, sessionKey, onWebSearchChange]);
+  }, [allowToggle, tenantAllowsWeb, webPref, prefScope, onWebSearchChange, setWebPref]);
 
   const toggleForce = useCallback(
     (catalogId: string) => {
@@ -64,7 +68,7 @@ export function ToolCatalogBar({
       setArmedForce(next);
       setPendingForceTool(sessionKey, next ?? undefined);
     },
-    [allowToggle, armedForce, sessionKey],
+    [allowToggle, armedForce, sessionKey, setArmedForce],
   );
 
   const entries = useMemo(
