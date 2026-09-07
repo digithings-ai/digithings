@@ -38,6 +38,7 @@ import {
   mergeDigichatChromeIntoPopup,
   readDigichatPopupConfig,
   readDocumentTheme,
+  type DigichatChromeApiResponse,
   type DigichatPopupConfig,
   type DigichatPopupTheme,
   type PlanTier,
@@ -68,16 +69,27 @@ export default function DigichatPopup({
       configOverride !== undefined ? configOverride : readDigichatPopupConfig(),
     [configOverride],
   );
-  const [config, setConfig] = useState<DigichatPopupConfig | null>(baseConfig);
+  const chromeHostKey = baseConfig
+    ? `${baseConfig.origin}|${baseConfig.host}`
+    : '';
+  const [chromeHost, setChromeHost] = useState(chromeHostKey);
+  const [chrome, setChrome] = useState<DigichatChromeApiResponse | null>(null);
+  if (chromeHost !== chromeHostKey) {
+    setChromeHost(chromeHostKey);
+    setChrome(null);
+  }
+  const config = useMemo(() => {
+    if (!baseConfig) return null;
+    return chrome ? mergeDigichatChromeIntoPopup(baseConfig, chrome) : baseConfig;
+  }, [baseConfig, chrome]);
 
   useEffect(() => {
-    setConfig(baseConfig);
     if (!baseConfig || configOverride) return;
     let cancelled = false;
     void fetchDigichatChromeConfig(baseConfig.origin, baseConfig.host).then(
-      (chrome) => {
-        if (cancelled || !chrome) return;
-        setConfig(mergeDigichatChromeIntoPopup(baseConfig, chrome));
+      (next) => {
+        if (cancelled || !next) return;
+        setChrome(next);
       },
     );
     return () => {

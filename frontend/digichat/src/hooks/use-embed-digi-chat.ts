@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
 import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
 import { buildProductRuntimeAdapters } from "@/components/stock/product-shell";
@@ -239,12 +239,6 @@ export function useEmbedDigiChat({
   armRegenerate?: () => void;
   armEditLastUser?: () => void;
 } {
-  const planProofRef = useRef(planProof);
-  // Send-time read — transport is frozen on first render (#1339). Dashboard
-  // mints HMAC proof after mount; a closed-over planProof stays null forever.
-  // eslint-disable-next-line react-hooks/refs -- see comment above
-  planProofRef.current = planProof;
-
   const transport = useMemo(
     () =>
       new AssistantChatTransport({
@@ -311,7 +305,7 @@ export function useEmbedDigiChat({
           // The chat route verifies the signature — raw X-Embed-Plan-Tier headers
           // are never trusted. Read at send time (getPlanProof / ref) so a mint
           // after mount still reaches the header (#1339).
-          const proof = (getPlanProof?.() ?? planProofRef.current)?.trim();
+          const proof = (getPlanProof?.() ?? planProof)?.trim();
           if (proof) {
             headers["X-Embed-Plan-Proof"] = proof;
           }
