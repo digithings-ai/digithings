@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:37a4790633fe324606ac76ae45e78743f6fa1c7311a12063aa51f9cd13cb6d4a",
+  "claims": [
+    {
+      "id": "claim_5f8e9d8198004cde85830b8b3d8d07fd",
+      "statement": "traceable(name) activates only when the langsmith SDK is importable and LANGSMITH_API_KEY is set, checked at decoration time; otherwise it returns the original function object unchanged with zero per-call overhead.",
+      "evidence": [
+        {
+          "resource": "repo://digismith/src/digismith/trace.py#L35-L59",
+          "version": "repo-lines-v1:sha256:1bbdf1a3beae0a5669d481bf8b2d8910f074a1f36cfe80b6c75a06532d8a23a2:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmZWVlMTJiMTAxY2IzNTI2NWNhM2FlMmY4ZmM1YjRmODNkNWRlYjM5MGE0MmQ1MTRkMzI2OGYwMTlhMDgwZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1MDFiYzg4ZmNkMjgzNTU4NjBiZWI3ODYzM2I3ZjBjNzQyZTE1NDU4MDZjMmIzM2Y4MTg2MGZiZWJlYjY0YjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3Y2IzYjlhNjQxMmQyYTM2MzU2YzM4Y2RhZmZjNjgyMDI1YjJmZDY5M2NlNGM1ODE1OGEyNzY1NjU4NWUxMDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://tests/dsm/test_trace.py#L12-L34",
+          "version": "repo-lines-v1:sha256:39588fff0dabd246325bac08f1da704626b07cfe5ccb603fbb4bf797e37db988:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmNDgyOTVjYTFiNzNlYWYzMDExNzFjNjUyMTZkOWQ5YjczMDRmMTExZWU4OTNhMzEwZWFkMjZmNTljYzkzZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdhYmZlNGJjNWQwZWY4MmE2YTc5NjI4OGIzMTk0NzBiM2U5ZjM4OTgyNTVlZDk0YTFmODc3NjBiY2FjM2ZkNWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ4MjJlMzllMjJjZTUyOWVjM2M2ZWY0ODdkZjg0NmVkYTBhN2M2OWVlYWFjNjg3YTJmMTY4MDI5YmI0NmI1ZGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_401b10caa663480680d5923bef4ebd72",
+      "statement": "When active, traceable() wraps with langsmith.traceable(name=...) and attaches the PiiRedactor via the SDK's native process_inputs/process_outputs hooks, with an optional redactor= override built from the current environment by default.",
+      "evidence": [
+        {
+          "resource": "repo://digismith/src/digismith/trace.py#L35-L59",
+          "version": "repo-lines-v1:sha256:1bbdf1a3beae0a5669d481bf8b2d8910f074a1f36cfe80b6c75a06532d8a23a2:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmZWVlMTJiMTAxY2IzNTI2NWNhM2FlMmY4ZmM1YjRmODNkNWRlYjM5MGE0MmQ1MTRkMzI2OGYwMTlhMDgwZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1MDFiYzg4ZmNkMjgzNTU4NjBiZWI3ODYzM2I3ZjBjNzQyZTE1NDU4MDZjMmIzM2Y4MTg2MGZiZWJlYjY0YjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3Y2IzYjlhNjQxMmQyYTM2MzU2YzM4Y2RhZmZjNjgyMDI1YjJmZDY5M2NlNGM1ODE1OGEyNzY1NjU4NWUxMDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://tests/dsm/test_trace.py#L36-L68",
+          "version": "repo-lines-v1:sha256:3ba11c82c838a3e063238bd15a407f07776de9d715b0da20950f084150391d31:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmNDgyOTVjYTFiNzNlYWYzMDExNzFjNjUyMTZkOWQ5YjczMDRmMTExZWU4OTNhMzEwZWFkMjZmNTljYzkzZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZjVjYTI5YTEzZWIxZjc5ZWNlYzcxYzRmY2M0ODVhYTliNDcxMjRiNWE3NjEyMGJmZDc1MmI0NWQzOTU5MDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFiMzIzMWFhOWMwYTc3YjVmZmQ5ZGM2OTE5MWIyODIwNTJmMDViYTZiYzhlZjY4ZmRlYWJmOWEzMmUxZGY0MjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUxZTQ3Nzg1YjMwMTQ4NGVhYzZlZjU5ZTM1ZDE1Y2JkNTM4YjRhODVhZjgxNTc3YTlhYmQ1YjFhYTlhNGQ5ODYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3bba7de51c7649feb74b48c654dc8898",
+      "statement": "If the installed langsmith SDK rejects the process_* kwargs (TypeError/ValueError/RuntimeError/OSError), setup logs at debug and returns the undecorated function so the host never crashes.",
+      "evidence": [
+        {
+          "resource": "repo://digismith/src/digismith/trace.py#L54-L57",
+          "version": "repo-lines-v1:sha256:0f23208137bb9ecc33799a3ff26c848aa722d53fc296de4263d8c283731f6caf:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTBjNDhjODEyMzkxOWVmN2VkZWRkMWVkMWI2ZGJjNmRjOWM3OTVkNzEyMjFiOGU5YjJlY2FiNjU1MTU0MzA0YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTYyNzAxZjcxYTg1NjAwNzU3OGE5MGM5YWI1MzY3Mjk3ZGJmY2VmY2YxNjEwNjllZjRkNDc4NjQ2NTYyMWRmMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWYwNWYzNWRmMmEzYzQxZTI2OTZjNzg3ODFlMjcyNDRhM2M2ZmNlMDVjZTM3NjNmMjIzYzU2NzA1ZmFkNDBlMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjIsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDFhYWFhMDAxNjBjNjE5Yzc3MmQ4OWVmNDM1Y2MwNTNjNTM3MzUwZmIxMmFkNTNlMDRkM2U2YmUxMGQ1OGY1OCJ9"
+        },
+        {
+          "resource": "repo://tests/dsm/test_trace.py#L71-L95",
+          "version": "repo-lines-v1:sha256:0e9bffbe07263fc9d6fa83094aaf54301ca6896a070335323a5df2435be39986:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmNDgyOTVjYTFiNzNlYWYzMDExNzFjNjUyMTZkOWQ5YjczMDRmMTExZWU4OTNhMzEwZWFkMjZmNTljYzkzZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE5ZDFmNzg4MzI3ODUxZDdjMzhlMDVjYmZiMzM2MDA0MzMyYzI4OGQ3N2M4ZDdiY2EyMTk4ZTkzMmFmOTA2M2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhjZTQ3NzBjY2E0MTA4ZTY2MmJiMzcyNDM1MTMxNzYzYjY3NjUyYThjYWVkMjkzOGQ4M2NlZWNiZjIwMGQ4ZjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c8ee101aec2245a69ccfb15ac8219c4f",
+      "statement": "tracing_enabled() re-reads LANGSMITH_API_KEY on each call and requires an importable SDK; langsmith_host_sanitized() returns only the hostname of LANGSMITH_ENDPOINT (defaulting to api.smith.langchain.com) with no path, credentials, or query.",
+      "evidence": [
+        {
+          "resource": "repo://digismith/src/digismith/config.py#L11-L40",
+          "version": "repo-lines-v1:sha256:51ca72bb5a7377d550543418c21edde7c00713709f96620cbcf146e21c7ec18a:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxYmMyZDBjN2E1MWZjYTZhMTkxYzM2ODYxNjgyZTM5MWNkMzM2NDhmYjFmNjUzMmU5Y2I0ZWRhMjg5MmM5ZjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEzMzZjY2Y5M2RmMTc1YTg3ZWE2ZjMyOGFhMWRiMzE5Nzk1OGVkMjkwZTVjMDQ5Mzc1YWJmNWQ2ZGYwNmYwMjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVlYWJlZjFkNTE5ZGM0YzlmNDMwNjFiMGJjNDkzNDE2MWNkMzNhOWJmNmYyZWJiODg5YzgxYThhNjc4ZWU0NjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJhMGVhZmU3MDcwNzY1OTIyODBiZjE5MTk1YWI2MTJmYTc4Y2ZiODZmZTg3MGU2ZWE2N2UwYTdlMTFmYmRlYWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_053d2e0111014757b8c9e9c45b976007",
+      "statement": "PiiRedactor replaces emails with [REDACTED_EMAIL], sk-/sk_/dgk_live_/dgk_test_/lsv2_-prefixed keys with [REDACTED_KEY] (checked before phone patterns), and E.164/North-American phones with [REDACTED_PHONE].",
+      "evidence": [
+        {
+          "resource": "repo://digismith/src/digismith/redaction.py#L39-L55",
+          "version": "repo-lines-v1:sha256:e8ab9be3fc10901f35c130abc24b571216927def786de808fbfc94bf7fbc10f2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2OTJhNGJkZmM1N2ExNjlkNDY2ODdmN2Q4YTU0MDBjNGI3Y2ZhZWVhY2EyNjJjNjdlZjM5NGZlOGVkYmY3YjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmJhMDUyN2MzOTUzYzRiNmUwZTViNTczOWJhODM2MTJmODA1M2JjZGM5NDY2NzMwMTkzY2QxZDU5MGI0MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQzZDE3MWRlNzU0MzFhMDIxYTBkOTRmYTc2ZmFiZjBkNzEzOWM4OThjMWEwYjQ0YjQzY2E2MDkwM2ZhMWI4NDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNmNzI5MmVjYTBlYTU3MjJlOTU3ZjExODY0ZjJiOWMyZDg2YzczZTM4M2E4MzM0N2RjMTZjZTkyNTFmZWVkNzAifQ"
+        },
+        {
+          "resource": "repo://tests/dsm/test_redaction.py#L11-L30",
+          "version": "repo-lines-v1:sha256:adc933d8fc46052214a3af01fa07b357547deaaa20d0e01bf7bc74e2c31cef19:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwZTA3YmFhN2NlYTIxN2IwNTA5NWIzNzFkZmNmZTgxMDliOTFhZTM3MWE0MDIzZWEzODVlZmMzMmIzNzkxNDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZkMTQ4OGI2ODM0MTU1YmQwNDY2YWRlZDY1NDQ3NGIzMjU1NWE2ZjQ2N2U3MmEwOGNlZmJhNGVjYmJmZjVhYWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZmOGY5ZGE0MjYxNTRjODVhNDJkOGNiYjgyNWYyNjc3YmY1MzkyMmY3YzgyMmE4MGNhYjJjOGYwOTE0OTBiODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxYzUyOTkxZjE2MjU3MmJmOTllZDk5OTYxZWQ2YTAwYmNiOWMxYmNjMGQ2MTFhY2M2Yjg1NDgzNTEzNzRjYmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e640ee7c6f6b406b8b0cfc6164d9d8ba",
+      "statement": "Extra comma-separated regexes from DIGI_PII_PATTERNS are appended as [REDACTED] rules read at redactor construction, and invalid regexes are skipped without breaking tracing.",
+      "evidence": [
+        {
+          "resource": "repo://digismith/src/digismith/redaction.py#L58-L74",
+          "version": "repo-lines-v1:sha256:c77f141ef2d055578ee692c548b294d332cbf07995b0df500ae3ca2f573debea:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRhNjI1NDk3M2U3OTFlMjk3NzUwM2JkYTY4ZDhlZTFiNzkzY2JlOGI0OTNjYmRhYjVlYWUxMDA0M2JlMjI4MDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI0M2JmN2FlYzQ1NzU5MjI0ZTdkY2ZkY2IxZGM4ZGMxM2MxOTk0MmI0MTViYWZkMGQxYTUwMmZjMDEwNTkxYjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5OGIwNjNkOWI0N2U2NTM3OTYyNTU3MmNjZTE5NzY2OWQ1NzY3ZTEyYzE4YmUwNzU2NTJiOGNkOTgxY2U4ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZjMWYwMmZkN2VjMWQ0NjJjMGNiODE4Yjk0OGZmZTRmNzE1YjJjMmM0MzI2MzBjMjMyZGZlMzRkNDI3NDNmYTkifQ"
+        },
+        {
+          "resource": "repo://tests/dsm/test_redaction.py#L77-L95",
+          "version": "repo-lines-v1:sha256:0ca1753fd8eeeb0f73838c7aa4ab9ed97c05dc6d640a2c5381b6b7f1b9fc3cee:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhkNmU4NzMzZTRhMWM0OTFjNzIwMDEzYTdjOThmOGMxOGMwODU4YzRjNGU3YzgwOTZjYWNmZmZmMjNhNGQwMGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNlMGQ3ODM0ODk4OGM0Y2M3ZTgwMGFiODc1YTVlOWI5MmM4OGVlNjhmZjY1NGY5YTY1ZTJjMWFkNjgwYTg5MWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJlMjIxODdhNjlkNGY5YjkxMmQ0MzczOTM4MDkxNzNlZTUyM2IzM2Y5OTBmYTRjOWU4N2FmOWIyYWQzZTFkOWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYyM2MyZWZiYTkwODcwMWM0NzlkODAxMjAxMzNkNGMzYmQyZDhmMzA5MDEwMTNmZjkzMDMwMWFkNGJlYTZjODUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ec15afbd78ee4e3c8e4a9651b6fce8bb",
+      "statement": "Redaction recurses through dict/list/tuple structures matching by value pattern regardless of key names, passes non-string scalars through untouched, and the module has no langsmith dependency.",
+      "evidence": [
+        {
+          "resource": "repo://digismith/src/digismith/redaction.py#L100-L119",
+          "version": "repo-lines-v1:sha256:69163a8ffb0ce46422d57a5ecc084febd68fdabca751933fceb3d0224839d3da:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk5Mjc0MGIxN2IyY2ZkNzc0MTIwMjUyYmM4NjY2YzZiYTE0MTNlYzNiMGJjOGJhNDNhMGVmN2MxODg4OTZmNWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzZTRiZDc3ODRmZTJiZWIxMDFhY2E4OTQ5NDc4ZGU1YjkxNzc0ZWU0MWY4ZTM1ZWZkMmZlOWM4OTM0OWY2ZTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdiN2M4YTgzMWM0MDExZDg4NjdmZDhlYjQ2M2Q2ZGVkZGZjOWEyYjgzNjMwY2FhZGQxNTYxOGIxYzdiNWZlY2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ3OGUwZTZmMmU2MmY3YjQ5N2I1NzVmMmRlNWQxNjcxMmUzYWZkYWUzZmFiZjI0ODkyMjI1MjAzNGNiNzhmOTQifQ"
+        },
+        {
+          "resource": "repo://tests/dsm/test_redaction.py#L39-L74",
+          "version": "repo-lines-v1:sha256:ea9e965ab85adf16bf6a04c62bcbfa1a1d21ed85335a1cf78b9e30cf131e2593:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIxOWRjN2Q4ODAzMDgwMWRmOTc4MzM0NzZhMjViOTU1MTVjZjhiNzc3M2VjNzE3NTNlZTFmMTMzMTA1OTJhZGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyZDE3Mjk4NWQ5YWU3ZDg0MWE4YmI3M2M2YzQ3Yjg0NGFmOTlkZjY1NGRmMmM5MWM3MWUwZTIzMWFlYWEwNTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkzNjU5YmE5ZWQ0NjcyMDE4YjNjYjM0Y2MwMGMyMWExMWQzMjA1ODVjZWNhYTZlNmFjNmVkNGU0NWM1M2E3YmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIxNjdlM2Q2MTY0MDk2ZTRkYWZkZGUzZWEyMDQ3NjY2YWM4ZDRlNjc0MDAyZDMyOTBkNWMzYWUyMTkyMGY5ZmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_819e2ead3f524348b257351964ab1880",
+      "statement": "The span attribute contract (required workflow/request/session/job correlation IDs, forbidden raw prompts, keys, and document bodies) is advisory documentation only, enforced by the redactor plus discipline rather than any runtime validator.",
+      "evidence": [
+        {
+          "resource": "repo://digismith/ARCHITECTURE.md#L122-L139",
+          "version": "repo-lines-v1:sha256:ca7395dd58c0c1edc77b47e01a00c742e0bfb64cae20438cea353832a0f6c4ce:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgyNDU2MjQwYWMyOWRjMDc5NGQ2NzVmNjIzMDNkMDY4M2Y3YjA1NGUzYTY4OWI2MjhjZDU0MDczMmJiMDJhNDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU3M2RiNjBhODE2OGRiZTA5Y2ZlODdlN2FkZjFlNmFjYTM1MzdmZDMxMmMzMWMxMjA4NTVhZjAyNzBmOWMzYjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEyZTgyODkxMDQyMTJkMmJlYzAwZDM2ODI4NGZjYmYzN2Y5ODM3NjQ2ZDY5ZmVkOGU3Y2YzMDMzYjBkMDg5NTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:31:53.755Z"
+  }
+}

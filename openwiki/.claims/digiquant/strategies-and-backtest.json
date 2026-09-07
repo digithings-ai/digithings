@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:5561ac26cba1a9cd7c8593a93b229fd0a2a3f2585c29e9e133c7db5bda9e30e9",
+  "claims": [
+    {
+      "id": "claim_833ed63831fe44b6b1de03b1788c1bf4",
+      "statement": "Six Nautilus strategies plus the SDCA engine register with aliases, resolved through the single canonical STRATEGY_ALIASES map with PARAM_SPEC_NAMES for differing optimize keys.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/ARCHITECTURE.md#L64-L80",
+          "version": "repo-lines-v1:sha256:d83835afff77baa630a0ac554c042667153e422b4e2be15219cb50218e1ab3e3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdjYTY0ZTJmMzI1OTc0MDFiZTQxMmNlNmE3NDliYzY1MjAxNTgyODQzNDM1MGRjNThkOTg0YTllNzM2NzI5NTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzZTc2ZmMzODI4ZmY3M2ZmNWEyNDQxYmU0ZmEzOTc4YmU2OThhOTJiMzIwYjE3OTRlNzQzNDFhZmNmMGI0ZTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEyMTMwYWZkZmNmNWIzZTk5OGJlZGI3NDNmZjU5ZmIyMDYzMzg1MGM3MDZlMzAyYWEzOGRiNzQ3ODY0NDZjZDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1ZWUyZGMzOTAwYjVhMTQ0Nzk2YzFmMDQzZjAzY2FiYzlmM2U5NThiMjJmMDViOTg1ZDA2ZDVmNjc5MGFkMTQifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/strategy_aliases.py#L15-L36",
+          "version": "repo-lines-v1:sha256:603532e6fd03f1ac7eb793bc7e6168535e14ab5f01afe2d96a3e5bbda0d25a66:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiYTA4ZGM1NDkxNGI1N2NlMzNiMmRlNzI1NGI5ZTViODdmN2Q5MTI2ZTY5ZjliYWQxNjIzZDBhMjVhYTEzNmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1OWNhZDk1NjNhNjQ5NjY4ZTQ3NTdkZjkyNzA4MzhmZDhhMDhmNThmOWQ2ZDU5NGI1ZjQ3YWRjZjY1NTJkYWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5NGE1ZDA4MWE2ZDRlMzYxNmE3NGM5OGMzZmEwNzIxMzQ0NmUzNWZmMzExNzQwNGI1M2E4ZmI1YjlmOGVhZjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM1NmFiNWNjZWZhNmJlZThlNDUxMzUxMWZmYjU0ZDE5MDIyZGI4ZGIwMmEzYWIzYWIwMWExZTM1MmRmNzZhNGMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7dc52f81d62742509a481ff522d473d5",
+      "statement": "run_backtest requires an explicit data_path or data_dir, rejects unknown strategies and empty symbols, and caches by strategy/symbols/params/data hash unless a tearsheet path is set or caching is disabled.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/backtest.py#L107-L140",
+          "version": "repo-lines-v1:sha256:8b23f1747085158ca3c98756159171b65ab4cf7ca0a3d43882af188c12bcb3dc:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiZTIyYmQxYWU5NjcxZmI4ZmExMGIyY2RmOGYxYTkzNmVhM2M0Mzk1YWM2NTI3ZWExNDlhNWIwYTkwOGE2NTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwZDZkMzBhN2ExYjI2MzdiODAyNDg2YTE4YzIzNTkyMDk0ODYyZDY5ZGFiNGYzYzUyMDM3NDQwZTVlOTExMDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMwMDViZDc3NjdmMjg0MjkyMjBkOGJiYzkzMGNkMTI2OWY0MmM0MGEzNTJmNjMyMDJkMDdkYjBiZDdjZmY5ZGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjViNTlhMzNhNjdhYTc3MDJhODE2NjQzMmE2NjA4MzRiNGM5OTJjMzRlMzIwZWUzODU5OTNjZDZhMmU2ZGQ0MGEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_903268d5d1f84649927f74ff308c3d1c",
+      "statement": "BacktestResult carries run identity, window, PnL, return, Sharpe, drawdown, and trade counts with ok/partial/error status; OptimizeResult adds best_params with the best trial's backtest under OptimizationConstraints.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/models.py#L46-L67",
+          "version": "repo-lines-v1:sha256:60a51a7e9516864bc2835a7e73ff37a5accdd836e48596c896068d4e93de9046:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZTVhOGRmMjZmYWJhZWI5ZGNlZGYxYzZiNzg5ZDRhZmVhZjI1ZmNjNWY4ODhlZDlkNGU1MGU1OWRmMjE0NWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhNjdmMTJkODYxMzBhZjQ0NTRhYTM0NGQyYThjYjc4YWI5Y2E2NGJjNzExMDAxODU1MzJiOTlkN2E2MTI2YjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFiNDY2Njk1OWJmYzNiMDBmNzFhMmVlZDkxODk3YzljYmUzMzVjMjQ1Zjc5MzJkMjgzN2ZlOGQ0YTAwNWY5NDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/models.py#L8-L40",
+          "version": "repo-lines-v1:sha256:0cda94949d7d88add341bbe0350ec2abf5c1a53b1de8fa208418290471bb64e8:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2ODkzYTczODQ1YTk2ZjI2MmIyNDM5YjIzMWU5NzE4ZDQ3OGEzYjNmM2U4OWIwNDdjNGUxYWUxNDU0MDZhNmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4YTAxOGVhYTcyY2MxOTVlNmRlYjUxNjM1NGNiZTg4NjdjNmZjOTg3OGQzZDAzYTQxNmQ5ZTdmMzRhMDQwMjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVlYWJlZjFkNTE5ZGM0YzlmNDMwNjFiMGJjNDkzNDE2MWNkMzNhOWJmNmYyZWJiODg5YzgxYThhNjc4ZWU0NjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiMDYwNjYzOGMyZTNmNGEwZTIyZWUyMjg4NjUyNDJhN2UyMmI0ZTIyOTkzMTUwOTNiOTJiOGM4MTg1ZWIyZWIifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

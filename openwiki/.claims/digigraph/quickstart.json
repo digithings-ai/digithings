@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:a63850bfc7d983d64ae69a2248e937bbae504330d287e250fe49ef3e68e75bc0",
+  "claims": [
+    {
+      "id": "claim_1b1988c5197f45c3bc867b32770b4f95",
+      "statement": "digigraph starts via make stack-local or make up with an LLM provider key in .env, verifies through /healthz and POST /workflow, and gates on pytest -m unit -k digigraph plus ruff check and format --check.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/AGENTS.md#L60-L90",
+          "version": "repo-lines-v1:sha256:1fdaccffb97746d682eedc43267aeeeb428d50589b89528d77e1d56d0c163a24:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2YjdmOWI5NDgwY2YwMDI1ZjkyMDlmOTVjN2NmYWNlNDQ2NjYxZjcxMmMyZGE1YjA4NWEyMWVkZDc1YTI0NTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkOGJlYzIzNTgxMDA1ZDA3ODhiZjdkNWFhNTVlZGFlZTE0YzViMzY1NDEyZTIwYjQwZmRkNWYyODA3ODczZWQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNlNzVhN2M0NzE2MzEwZmE2YzlhMTY0NWVlOTI0MDcwNDM0NTIwMDA2MmE0ZmIzNWYzOWM3Mzk1ZjkyNjkxNTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU1YTU1MTIzODVjMjIxYmIwNmU4OGYxOTExNTQ4OTcxZjIxYmFlODRiMDQxZGY0YWE1NTdmYzU5NTY4YWVlNDYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_147cb898879d405b927b4768eee6630b",
+      "statement": "The MCP server runs separately via python -m digigraph.mcp_server on 8766, or --stdio for Claude Desktop.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L9-L10",
+          "version": "repo-lines-v1:sha256:b08bcba9a59c340b417b550146345e2d23cf83473ed1dbac90aeebbbd229907c:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ZjOTkxMGJjNDUwOTRjZTEyYjk5OTQ2Nzg0ZDZiNGI0ZjZkZjEyN2MyNWFkYTZjNTljY2FmZjIzOGVlYjIyNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGUyYjg5NDgwYjQ1ZGE1MTU4N2FjNTA0M2Q5ZDFmY2IxOGQ1ZmExYzlmOTQxNTFjYjY1ODJiYzAyZWM2NzZhYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzM3OWNjNDM0OWM4ZWMyODcxODU0YzA4MGVkNjI0NTE5MjNjMTkyNWZmMDFmMDE2MjQxNDcwNDVhYmQ5NTU2MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjA5ZTFkNTQ3MTQ1YjgyMjY5ODI0Y2QzMDg1NWI5MzZhNzdkODMxNTRmOWY4MTc1YjJiNWNhZWI3M2I2OTM2NiJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}
