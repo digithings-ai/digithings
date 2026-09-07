@@ -14,6 +14,10 @@ import {
   DIGICHAT_PAGE_CONTEXT,
   DIGICHAT_READY,
   DIGICHAT_THEME,
+  DIGICHAT_UPGRADE_BODY,
+  DIGICHAT_UPGRADE_CTA_HREF,
+  DIGICHAT_UPGRADE_CTA_LABEL,
+  DIGICHAT_UPGRADE_TITLE,
   type DigichatPopupConfig,
 } from '@/lib/digichat-popup';
 
@@ -50,13 +54,44 @@ describe('DigichatPopup', () => {
     vi.useRealTimers();
   });
 
-  it('renders nothing for Brief (below Desk)', () => {
+  it('renders launcher with an upgrade CTA (disabled chat) for Brief (#3662)', () => {
     act(() => {
       root.render(
         createElement(DigichatPopup, { tier: 'brief', config: CFG }),
       );
     });
-    expect(container.querySelector('[data-digichat-popup]')).toBeNull();
+    // Launcher is visible, but opening it shows the upgrade block — never chat.
+    expect(container.querySelector('[data-digichat-popup]')).not.toBeNull();
+    const btn = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+    act(() => {
+      btn.click();
+    });
+    expect(document.body.querySelector('.digichat-launcher__panel')).not.toBeNull();
+    const cta = document.body.querySelector('[data-testid="digichat-upgrade-cta"]');
+    expect(cta).not.toBeNull();
+    expect(cta?.textContent).toContain(DIGICHAT_UPGRADE_TITLE);
+    expect(cta?.textContent).toContain(DIGICHAT_UPGRADE_BODY);
+    const link = cta?.querySelector('a');
+    expect(link?.textContent).toBe(DIGICHAT_UPGRADE_CTA_LABEL);
+    expect(link?.getAttribute('href')).toBe(DIGICHAT_UPGRADE_CTA_HREF);
+  });
+
+  it('builds no iframe for baseline, so free/brief never burn turns (#3662)', () => {
+    act(() => {
+      root.render(
+        createElement(DigichatPopup, { tier: 'free', config: CFG }),
+      );
+    });
+    const btn = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    act(() => {
+      btn.click();
+    });
+    expect(document.body.querySelector('#digichat-popup-iframe')).toBeNull();
   });
 
   it('renders launcher for Desk+ when config is present', () => {
@@ -66,6 +101,22 @@ describe('DigichatPopup', () => {
     const btn = document.body.querySelector('.digichat-launcher__trigger');
     expect(btn).not.toBeNull();
     expect(btn?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('shows no upgrade CTA for Desk+ (entitled chat, #3662)', () => {
+    act(() => {
+      root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
+    });
+    const btn = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    act(() => {
+      btn.click();
+    });
+    expect(
+      document.body.querySelector('[data-testid="digichat-upgrade-cta"]'),
+    ).toBeNull();
+    expect(document.body.querySelector('#digichat-popup-iframe')).not.toBeNull();
   });
 
   it('opens the shared panel and sets iframe src on click', () => {

@@ -217,6 +217,8 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/lib/digigraph-activity-map.ts` | Re-export of digithings activity mappers |
 | `src/lib/embed-gate-provider.ts` | Consume per-tenant embed chat access tokens |
 | `src/lib/chat-activity.ts` | Activity allowlist, detail gate, projector |
+| `src/lib/page-context-sanitize.ts` | Structural DOM allowlist for embed page-context HTML (#3602) |
+| `src/lib/embed-page-context-messages.ts` | `digichat:page-context` postMessage schema, caps, receiver sanitize |
 | `src/lib/conversations-repo.ts` | Drizzle query helpers (conversations + quant runs) |
 | `src/lib/thread-local.ts` | localStorage read/write/merge |
 | `src/lib/ecosystem.ts` | Endpoint resolution + SSRF guard |
@@ -493,6 +495,25 @@ for per-tenant corpus isolation — forwarded as `X-Digi-Corpus-Index` /
 (`free_then_byok` | `byok_only` | `backend_only` | `operator`) for LLM spend
 policy (digithings.ai = `free_then_byok` + `showByok: true`; foundry/DataTap =
 `backend_only` + BYOK off), `attribution` flag, `aliases`, and a required `token`.
+
+The `digiquant.io` dashboard tenant is `ungated` + `llmAccess: operator` with
+no `gate` block, `showByok: true`, and `requiredPlanTier: desk` (#3662 / #3664,
+Chris lock: no free-3 quota on the dashboard popup). Desk+ chat is never
+turn-capped and the trial quota is never consulted for this host; baseline
+entitlement is enforced dashboard-side (upgrade CTA panel, no iframe, no turns
+burned). Pinned by `isDigiquantDashboardTenantConfig` in
+`src/lib/embed-tenants.ts` — a different bot from the `digithings.ai` marketing
+tenant, never conflated.
+
+**Plan proof (claims-backed, #3664):** when `requiredPlanTier` is set,
+`POST /api/chat` accepts only (1) `X-Embed-Plan-Proof` verified with
+`DIGICHAT_PLAN_PROOF_SECRET`, or (2) an authenticated digichat session with
+`app_metadata.plan_tier` ≥ required. Mint path: embed calls
+`POST /api/plan-proof` with dashboard Supabase `Authorization: Bearer` + embed
+token; digichat verifies the access token against
+`DIGICHAT_DASHBOARD_SUPABASE_URL` / anon key, reads claims `plan_tier`, and
+signs Desk+ only. Client-asserted `X-Embed-Plan-Tier` / `?plan_tier=` are never
+trusted (see `src/lib/plan-proof.ts` and `src/app/api/plan-proof/route.ts`).
 
 On structured `free_quota_exceeded` / clear rate-limit errors, embed tenants with
 `llmAccess: free_then_byok` stop the turn and open the in-chat BYOK sequence
@@ -805,7 +826,7 @@ parent browsing-context origin** (`location.ancestorOrigins[0]` or
 and caps live in `src/lib/embed-seed-messages.ts`. DataTap's `datatap:gated` /
 `datatap:unlocked` channel is unchanged.
 
-**postMessage page-context (popup widget #3421 / #3581).** Hosts that load
+**postMessage page-context (popup widget #3421 / #3581 / #3602).** Hosts that load
 `public/widget.js` (or the dashboard React popup) may post
 `{ type: "digichat:page-context", text, html?, screenshotDataUrl?, ts }`
 after `digichat:ready`. Accepted only from the immediate parent browsing-context
@@ -815,11 +836,26 @@ sanitized **HTML** (≤12k) for structure; `text` (≤8k) remains required for
 back-compat. Caps live in `embed-page-context-messages.ts`. The embed does **not**
 restore the tall “looking at this page” preview (#3590). On send, the snapshot
 becomes a compact `page-context.html` document attachment (assistant-ui chip;
-click opens a portaled sandboxed iframe / `<pre>` viewer). `uiMessagesForUpstream`
+click opens a portaled sandboxed iframe / `<pre>` viewer). `expandPageContextFileParts`
 folds that file part back into prompt text so digigraph still sees the context.
 The dashboard popup posts the payload once per open. Screenshot data URLs are
 optional and acknowledged in the prompt only — vision multimodal / LiteLLM image
 parts are deferred. Config/URL helpers: `src/lib/embed-popup-config.ts`.
+
+**Page-context privacy contract.** Regex tag-stripping is not the boundary.
+Sender and receiver both run the structural sanitizer in
+`src/lib/page-context-sanitize.ts` (widget.js ports the same DOM walk):
+
+| Side | Duty |
+|---|---|
+| Sender (`widget.js`, dashboard popup) | Clone `main` / `[role=main]` / `body`. Drop nodes that are not visible (computed style `display:none` / `visibility:hidden` / `opacity:0`, `hidden`, `inert`, `aria-hidden="true"`), password/hidden/autofill controls, scripts/styles/iframes/svg, popup chrome (`[data-digichat-popup]`), and host-marked private regions. Serialize an allowlisted fragment only. |
+| Receiver (`parsePageContextMessage`) | Enforce origin, type, age, and size caps. Re-parse `html` with `DOMParser` and apply the same tag/attribute allowlist (event handlers, framework metadata, secret-bearing query strings, javascript: URLs). Fail closed if `DOMParser` is missing. Never rehydrate the HTML as live page DOM — the user-message chip may open a **sandboxed** iframe / `<pre>` viewer of the already-sanitized snapshot. |
+| Host opt-out | Mark a region `data-digichat-private` (any value). That subtree is omitted from HTML and derived visible text. |
+
+Allowlisted tags are layout/text (`p`, headings, lists, tables, `a`, …).
+Allowlisted attributes are presentation/a11y (`class`, `id`, `role`, `aria-*`,
+`href` with query/hash stripped). Inputs, textareas, and selects are dropped
+entirely so values cannot leak.
 
 **postMessage theme.** digithings.ai `/chat` and `/chat/occ` (`ChatEmbedShell`)
 read the parent site's canon `html[data-theme]` (shared `ThemeProvider` /

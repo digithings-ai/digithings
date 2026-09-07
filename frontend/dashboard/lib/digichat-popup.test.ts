@@ -1,13 +1,22 @@
+/**
+ * @vitest-environment happy-dom
+ */
 import { describe, expect, it } from 'vitest';
 import {
   buildDigichatEmbedSrc,
   buildPageContextMessage,
+  buildPlanTierMessage,
   buildThemeMessage,
   canUseDigichatPopup,
   DEFAULT_DIGICHAT_EMBED_HOST,
   DEFAULT_DIGICHAT_EMBED_ORIGIN,
   digichatEmbedOriginForDashboard,
   digichatPopupEnvFromProcess,
+  DIGICHAT_UPGRADE_BODY,
+  DIGICHAT_UPGRADE_CTA_HREF,
+  DIGICHAT_UPGRADE_CTA_LABEL,
+  DIGICHAT_UPGRADE_TITLE,
+  embedHostRequiresToken,
   extractPageHtml,
   extractVisiblePageText,
   isDigichatPopupEnabled,
@@ -46,6 +55,22 @@ describe('canUseDigichatPopup', () => {
   });
 });
 
+describe('baseline upgrade CTA (#3662)', () => {
+  it('routes to Settings billing like LockedSurface', () => {
+    expect(DIGICHAT_UPGRADE_CTA_HREF).toBe('/settings#billing');
+    expect(DIGICHAT_UPGRADE_CTA_LABEL).toBe('Upgrade in Settings → Billing');
+  });
+
+  it('keeps digi names lowercase with non-empty title and body', () => {
+    expect(DIGICHAT_UPGRADE_TITLE.length).toBeGreaterThan(0);
+    expect(DIGICHAT_UPGRADE_BODY.length).toBeGreaterThan(0);
+    for (const copy of [DIGICHAT_UPGRADE_TITLE, DIGICHAT_UPGRADE_BODY]) {
+      expect(copy).not.toMatch(/DigiChat|DigiQuant|DigiThings/);
+      expect(copy).toMatch(/digichat/);
+    }
+  });
+});
+
 describe('resolveDigichatEmbedOrigin', () => {
   it('returns null when unset or invalid', () => {
     expect(resolveDigichatEmbedOrigin({})).toBeNull();
@@ -69,23 +94,51 @@ describe('digichatEmbedOriginForDashboard', () => {
   });
 });
 
-describe('isDigichatPopupEnabled / readDigichatPopupConfig', () => {
-  it('stays off without origin or explicit flag', () => {
-    expect(isDigichatPopupEnabled({})).toBe(false);
-    expect(readDigichatPopupConfig({})).toBeNull();
+describe('embedHostRequiresToken', () => {
+  it('skips tokens for loopback, first-party digithings, and digiquant.io', () => {
+    expect(embedHostRequiresToken('localhost')).toBe(false);
+    expect(embedHostRequiresToken('digithings.ai')).toBe(false);
+    expect(embedHostRequiresToken('digiquant.io')).toBe(false);
+    expect(embedHostRequiresToken('www.digiquant.io')).toBe(false);
   });
 
-  it('stays off when digiquant.io has origin but no token', () => {
+  it('requires a token for unknown third-party hosts', () => {
+    expect(embedHostRequiresToken('customer.example')).toBe(true);
+    expect(embedHostRequiresToken('')).toBe(true);
+  });
+});
+
+describe('isDigichatPopupEnabled / readDigichatPopupConfig', () => {
+  it('enables with default origin and digiquant.io host when env is unset', () => {
+    expect(isDigichatPopupEnabled({})).toBe(true);
+    const cfg = readDigichatPopupConfig({});
+    expect(cfg).not.toBeNull();
+    expect(cfg!.origin).toBe(DEFAULT_DIGICHAT_EMBED_ORIGIN);
+    expect(cfg!.host).toBe(DEFAULT_DIGICHAT_EMBED_HOST);
+    expect(cfg!.token).toBeUndefined();
+  });
+
+  it('enables for digiquant.io without an embed token', () => {
     expect(
       isDigichatPopupEnabled({
         NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: 'https://digithings.ai',
       }),
-    ).toBe(false);
+    ).toBe(true);
+    const cfg = readDigichatPopupConfig({
+      NEXT_PUBLIC_DIGICHAT_POPUP: '1',
+    });
+    expect(cfg).not.toBeNull();
+    expect(cfg!.host).toBe(DEFAULT_DIGICHAT_EMBED_HOST);
+    expect(cfg!.token).toBeUndefined();
+  });
+
+  it('stays off for a third-party host without a token', () => {
     expect(
-      readDigichatPopupConfig({
-        NEXT_PUBLIC_DIGICHAT_POPUP: '1',
+      isDigichatPopupEnabled({
+        NEXT_PUBLIC_DIGICHAT_EMBED_HOST: 'customer.example',
+        NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: 'https://digithings.ai',
       }),
-    ).toBeNull();
+    ).toBe(false);
   });
 
   it('stays off when ORIGIN is outside CSP frame-src', () => {
@@ -203,32 +256,29 @@ describe('page context + theme helpers', () => {
     expect(clean).not.toContain('onload');
   });
 
-  it('caps HTML length', () => {
-    const long = `<div>${'y'.repeat(PAGE_CONTEXT_HTML_MAX_CHARS + 40)}</div>`;
-    expect(sanitizePageHtml(long).length).toBe(PAGE_CONTEXT_HTML_MAX_CHARS);
+  it('drops nested hidden regions the regex scrubber used to miss', () => {
+    const clean = sanitizePageHtml(
+      '<p>Visible</p><div hidden><span>HIDDEN-NESTED</span></div>',
+    );
+    expect(clean).toContain('Visible');
+    expect(clean).not.toContain('HIDDEN-NESTED');
   });
 
-  it('extracts main HTML from a document-like root', () => {
-    const html = extractPageHtml(200, {
-      querySelector(sel: string) {
-        if (sel === 'main') {
-          return {
-            cloneNode() {
-              return {
-                querySelectorAll() {
-                  return [];
-                },
-                innerHTML: '<h1>Brief</h1><p>House book</p>',
-              };
-            },
-          };
-        }
-        return null;
-      },
-      body: null,
-    });
+  it('caps HTML length without slicing mid-tag', () => {
+    const long = `<div>${'y'.repeat(PAGE_CONTEXT_HTML_MAX_CHARS + 40)}</div>`;
+    const clean = sanitizePageHtml(long);
+    expect(clean.length).toBeLessThanOrEqual(PAGE_CONTEXT_HTML_MAX_CHARS);
+    expect(clean).not.toMatch(/<[^>]*$/);
+  });
+
+  it('extracts main HTML from a live document', () => {
+    document.body.innerHTML =
+      '<header>chrome</header><main><h1>Brief</h1><p>House book</p></main>';
+    const html = extractPageHtml(200);
     expect(html).toContain('<h1>Brief</h1>');
     expect(html).toContain('House book');
+    expect(html).not.toContain('chrome');
+    document.body.innerHTML = '';
   });
 
   it('builds page-context and theme postMessage payloads with optional html', () => {
@@ -256,6 +306,19 @@ describe('page context + theme helpers', () => {
     expect(readDocumentTheme({ getAttribute: () => 'light' })).toBe('light');
     expect(readDocumentTheme({ getAttribute: () => 'dark' })).toBe('dark');
     expect(readDocumentTheme({ getAttribute: () => null })).toBe('dark');
+  });
+
+  it('builds plan tier message with accessToken for claims-backed proof (#3662)', () => {
+    expect(buildPlanTierMessage('desk', 'supabase-access-token')).toEqual({
+      type: 'digichat:plan-tier',
+      tier: 'desk',
+      accessToken: 'supabase-access-token',
+    });
+    expect(buildPlanTierMessage('studio', 'tok-2')).toEqual({
+      type: 'digichat:plan-tier',
+      tier: 'studio',
+      accessToken: 'tok-2',
+    });
   });
 });
 

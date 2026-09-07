@@ -13,6 +13,10 @@ import {
   type ProfileTip,
   type SettingsApiOptions,
 } from '@/lib/settings-api';
+import {
+  SETTINGS_LOAD_ERROR_MESSAGE,
+  SettingsLoadError,
+} from './settings-load-error';
 
 export type ProfileTabProps = {
   api: SettingsApiOptions | null;
@@ -72,6 +76,7 @@ export function ProfileTab({
   const [pipelineThemes, setPipelineThemes] = useState<string[]>([]);
   const [pipelineBudget, setPipelineBudget] = useState<number | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -102,17 +107,15 @@ export function ProfileTab({
   const hydrate = useCallback(async () => {
     if (!api) return;
     setLoading(true);
-    setFieldError(null);
+    setLoadError(null);
     try {
       const tip = await getFn(api);
       applyTip(tip);
     } catch (err) {
       if (err instanceof SettingsHttpError && (err.status === 503 || err.code === 'NOT_READY')) {
-        setFieldError(
-          'Profile backend is temporarily unavailable. Showing empty form.',
-        );
+        setLoadError('Profile backend is temporarily unavailable. Showing empty form.');
       } else {
-        setFieldError(err instanceof Error ? err.message : 'Unable to load profile.');
+        setLoadError(SETTINGS_LOAD_ERROR_MESSAGE);
       }
     } finally {
       setLoading(false);
@@ -292,6 +295,9 @@ export function ProfileTab({
         />
       </label>
 
+      {loadError ? (
+        <SettingsLoadError message={loadError} onRetry={() => void hydrate()} />
+      ) : null}
       {fieldError ? (
         <p className="text-sm text-down" data-testid="profile-field-error" role="alert">
           {fieldError}

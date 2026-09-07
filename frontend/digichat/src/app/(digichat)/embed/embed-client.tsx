@@ -47,6 +47,7 @@ import {
   writeChatAccessToken,
   EMBED_FREE_TURN_LIMIT,
 } from "@/lib/embed-gate";
+import { p } from "@/lib/base-path";
 import {
   decideEmbedSendGate,
   shouldArmGateCharge,
@@ -145,6 +146,59 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
   // Parent postMessage > ?theme= URL pin > tenant registry (default dark).
   const effectiveTheme: EmbedTheme =
     parentTheme ?? urlTheme ?? (tenantCfg.theme === "light" ? "light" : "dark");
+
+  // Plan proof (#3662): the dashboard parent sends a Supabase access_token via
+  // postMessage; we exchange it at /api/plan-proof (server verifies claims) and
+  // include the HMAC proof in X-Embed-Plan-Proof on every chat request. Raw
+  // client-asserted X-Embed-Plan-Tier headers are NEVER trusted by the chat route.
+  const [planProof, setPlanProof] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onMessage = async (event: MessageEvent) => {
+      // Only accept from the configured parent origin.
+      if (host) {
+        try {
+          const parentOrigin = host.includes("://")
+            ? new URL(host).origin
+            : `https://${host}`;
+          if (event.origin !== parentOrigin) return;
+        } catch {
+          return;
+        }
+      }
+      const data = event.data as {
+        type?: string;
+        accessToken?: string;
+        tier?: string;
+      } | null;
+      if (!data || data.type !== "digichat:plan-tier") return;
+      const accessToken = data.accessToken?.trim();
+      if (!accessToken) return;
+      // Exchange session token for HMAC-signed proof (claims verified server-side).
+      try {
+        const embedToken = token ?? searchParams.get("token") ?? undefined;
+        const embedHost = host ?? searchParams.get("host") ?? undefined;
+        const res = await fetch(p("/api/plan-proof"), {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            ...(embedToken ? { "X-Embed-Token": embedToken } : {}),
+            ...(embedHost ? { "X-Embed-Host": embedHost } : {}),
+          },
+          body: "{}",
+        });
+        if (res.ok) {
+          const { proof } = (await res.json()) as { proof?: string };
+          if (proof) setPlanProof(proof);
+        }
+      } catch {
+        /* best-effort — chat will 403 without proof, which is correct */
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [host, token, searchParams]);
 
   useEffect(() => {
     emit("embed_loaded", { accent });
@@ -246,6 +300,7 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
           token={token}
           host={host}
           uiParams={urlColors}
+          planProof={planProof}
         />
       </div>
     </>
@@ -258,12 +313,14 @@ function EmbedChat({
   token,
   host,
   uiParams,
+  planProof,
 }: {
   accent: Accent;
   tenantCfg: EmbedTenantClientConfig;
   token?: string;
   host?: string;
   uiParams: EmbedUiParams;
+  planProof?: string | null;
 }) {
   const {
     key: byokKey,
@@ -488,6 +545,7 @@ function EmbedChat({
     getResponseLanguage,
     getEnableWebSearch,
     getSelectedModel,
+    planProof,
     // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
     // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
     // Missing backendType (gated default) must not enable regen/edit.

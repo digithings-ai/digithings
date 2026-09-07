@@ -34,6 +34,7 @@ const sampleSsot: PerformanceSsotMeta = {
   navAsOf: '2026-06-23',
   tipDayReturnPct: 0,
   tipInvestedPct: 75,
+  tipCashPct: 25,
   metricsAsOf: null,
   metricsLagDays: null,
   metricsLagging: false,

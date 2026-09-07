@@ -143,7 +143,7 @@ describe("dispatch", () => {
       cron: "17 9 * * *",
       repo: "digithings-ai/digithings",
       kind: "repository_dispatch",
-      event_type: "olympus-daily",
+      event_type: "digiquant-baseline",
       enabled: true,
     };
     const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
@@ -152,7 +152,7 @@ describe("dispatch", () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toContain("/dispatches");
     expect(JSON.parse(String(init.body))).toEqual({
-      event_type: "olympus-daily",
+      event_type: "digiquant-baseline",
       client_payload: {},
     });
   });

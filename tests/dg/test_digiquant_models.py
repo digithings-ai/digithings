@@ -8,7 +8,7 @@ from pathlib import Path
 import digigraph.model_config as model_config
 import pytest
 from digigraph.model_config import (
-    apply_digiquant_openrouter_env,
+    apply_digiquant_house_env,
     get_digiquant_tier,
     get_grounding_model,
     get_model_for_mode,
@@ -18,6 +18,7 @@ from digigraph.model_config import (
     is_native_search_only_model,
     is_tool_use_capable_model,
     is_web_search_capable_model,
+    resolve_request_model,
     sanitize_allowed_models,
     tier_allows_phase_model,
 )
@@ -29,9 +30,9 @@ def _clear_env(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
     """Delete env vars so teardown still undoes mutations by the code under test.
 
     ``monkeypatch.delenv(..., raising=False)`` records no undo when the key was already
-    absent. ``apply_digiquant_openrouter_env`` then does ``os.environ[k] = ...`` and the
-    value leaks into later tests (e.g. Live Search ``extra_body`` assertions). Seed a
-    placeholder first so the undo stack always restores the pre-test state.
+    absent. ``apply_digiquant_house_env`` then does ``os.environ[k] = ...`` and the
+    value leaks into later tests. Seed a placeholder first so the undo stack always
+    restores the pre-test state.
     """
     for name in names:
         monkeypatch.setenv(name, "")
@@ -47,43 +48,31 @@ _CHEAP_PHASE_MODELS = frozenset(
         # deepseek-r1 removed from every phase pool (#1622): CoT output is not reliably
         # strict JSON (#1617 master-digest JSONDecodeError). Re-adding it here must be a
         # deliberate decision, not a drive-by.
-        "meta-llama/llama-4-maverick",
+        # #3660: maverick dropped — not on Cheaper Inference catalog.
+        "google/gemini-3.7-flash",
     }
 )
 
 _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
     {
-        # #2368 (2026-08-14): latest generation per vendor where cost allows — grok-4.3
-        # stays on balanced (grok-4.6 is quality-only). gemini-3.7-flash: native PDF/
-        # image vision. gpt-5.6-luna: mid-tier OpenAI. deepseek-v4-pro: mid-cost
-        # reasoning bump, gate-proven and also pooled on quality.
-        "google/gemini-3.7-flash",
+        # #3660: CI-mapped only (no grok / maverick).
         "openai/gpt-5.6-luna",
-        "x-ai/grok-4.3",
         "deepseek/deepseek-v4-pro",  # #1622
     }
 )
 
 _QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
     {
-        # #2368 (2026-08-14): latest-generation flagship slugs per vendor.
+        # #3660: CI-mapped only (no anthropic / grok).
         "openai/gpt-5.6-sol",
-        "anthropic/claude-sonnet-5",
-        "x-ai/grok-4.6",
     }
 )
 
-# Web-search/grounding pools keep ``:online`` (built-in plugin) and perplexity (native).
+# #3660 house grounding: CI synthesis after digisearch (not sonar / :online).
 _WEB_SEARCH_MODELS = frozenset(
     {
-        "perplexity/sonar",
-        "deepseek/deepseek-v4-flash:online",  # #1622
-        "meta-llama/llama-4-maverick:online",
-        "google/gemini-3.7-flash:online",
-        "openai/gpt-5.6-luna:online",
-        "openai/gpt-5.6-sol:online",
-        "anthropic/claude-sonnet-5:online",
-        "x-ai/grok-4.6:online",
+        "google/gemini-3.1-flash-lite",
+        "deepseek/deepseek-v4-flash",
     }
 )
 
@@ -188,6 +177,53 @@ def test_asset_analyst_slug_resolves_to_known_good_openrouter_model(
 
 
 @pytest.mark.unit
+def test_digiquant_research_config_never_uses_ollama_model_ids() -> None:
+    """House digiquant research pins must not be local ``ollama/`` ids.
+
+    Production pipeline has no Ollama; ``ollama/qwen3:8b`` reaching OpenRouter
+    via digillm fails with "not a valid model ID" (decision_log reflector).
+    Local digigraph defaults may still live in ``model_modes.yaml`` ``defaults``.
+    """
+    import yaml
+
+    digiquant = yaml.safe_load(Path("config/digiquant_models.yaml").read_text(encoding="utf-8"))
+    offenders: list[str] = []
+    for tier_name, tier in (digiquant.get("tiers") or {}).items():
+        for cap, pool in (tier.get("allowed_models") or {}).items():
+            for model in pool or []:
+                if str(model).startswith("ollama/"):
+                    offenders.append(f"tiers.{tier_name}.allowed_models.{cap}:{model}")
+        for model in tier.get("web_search_models") or []:
+            if str(model).startswith("ollama/"):
+                offenders.append(f"tiers.{tier_name}.web_search_models:{model}")
+    modes = yaml.safe_load(Path("config/model_modes.yaml").read_text(encoding="utf-8"))
+    for phase, model in (modes.get("phase_models") or {}).items():
+        if str(model).startswith("ollama/"):
+            offenders.append(f"phase_models.{phase}:{model}")
+    assert not offenders, f"ollama/ model ids in digiquant research config: {offenders}"
+
+
+@pytest.mark.unit
+def test_decision_reflector_resolves_openrouter_house_slug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """decision-reflector must keep the digiquant pool slug through resolve_request_model."""
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+    monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
+    monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("DIGI_LLM_MODE", "test")
+    monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+    monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
+    monkeypatch.setattr(model_config, "_model_modes_cache", None)
+    phase = get_model_for_phase("decision-reflector")
+    assert phase is not None
+    assert not phase.startswith("ollama/")
+    assert resolve_request_model(phase) == phase
+    assert resolve_request_model(phase).startswith("deepseek/")
+
+
 def test_cheap_tier_resolves_extraction_and_reasoning(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     cfg = model_config._load_digiquant_models()
@@ -239,29 +275,24 @@ def test_phase_slug_selection_is_stable(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.mark.unit
-def test_apply_digiquant_openrouter_env_sets_open_weight_pool(
+def test_apply_house_env_points_at_openrouter_without_ci_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """No CI key → default client points at OpenRouter; no model-policy env is written."""
     _clear_env(
         monkeypatch,
-        "OPENROUTER_ALLOWED_MODELS",
-        "OPENROUTER_COST_QUALITY_TRADEOFF",
         "OPENAI_API_BASE",
         "OPENAI_API_KEY",
+        "OPENROUTER_ALLOWED_MODELS",
+        "OPENROUTER_COST_QUALITY_TRADEOFF",
+        "CHEAPERINFERENCE_API_KEY",
     )
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
-    tier = apply_digiquant_openrouter_env()
-    assert tier == "cheap"
-    pool = os.environ["OPENROUTER_ALLOWED_MODELS"]
-    assert "deepseek/*" in pool
-    assert "perplexity/*" in pool
-    assert "qwen" not in pool.lower()
-    assert "openai" not in pool
-    assert "anthropic" not in pool
-    assert os.environ["OPENROUTER_COST_QUALITY_TRADEOFF"] == "10"
+    apply_digiquant_house_env()
     assert os.environ["OPENAI_API_BASE"] == "https://openrouter.ai/api/v1"
     assert os.environ["OPENAI_API_KEY"] == "sk-or-test"
+    assert "OPENROUTER_ALLOWED_MODELS" not in os.environ
+    assert "OPENROUTER_COST_QUALITY_TRADEOFF" not in os.environ
 
 
 @pytest.mark.unit
@@ -271,13 +302,13 @@ def test_apply_does_not_override_existing_openai_api_base(
     monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-litellm")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    apply_digiquant_openrouter_env()
+    apply_digiquant_house_env()
     assert os.environ["OPENAI_API_BASE"] == "http://127.0.0.1:4000/v1"
     assert os.environ["OPENAI_API_KEY"] == "sk-litellm"
 
 
 @pytest.mark.unit
-def test_apply_openrouter_rewrite_leaves_gemini_on_vendor_client(
+def test_apply_house_env_leaves_gemini_on_vendor_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """CLI rewrite is not LiteLLM: leftover ``gemini/`` still needs ``GEMINI_API_KEY``."""
@@ -285,31 +316,20 @@ def test_apply_openrouter_rewrite_leaves_gemini_on_vendor_client(
 
     _clear_env(monkeypatch, "OPENAI_API_BASE", "OPENAI_API_KEY", "GEMINI_API_KEY")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    apply_digiquant_openrouter_env()
+    apply_digiquant_house_env()
     assert os.environ["OPENAI_API_BASE"] == "https://openrouter.ai/api/v1"
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         digillm.get_client_for_model("gemini/gemini-2.5-flash")
 
 
 @pytest.mark.unit
-def test_apply_quality_tier_preserves_frontier_auto_router_pool(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _clear_env(monkeypatch, "OPENROUTER_ALLOWED_MODELS", "OPENAI_API_BASE", "OPENAI_API_KEY")
-    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "quality")
-    apply_digiquant_openrouter_env()
-    pool = os.environ["OPENROUTER_ALLOWED_MODELS"]
-    assert "openai/*" in pool
-    assert "anthropic/*" in pool
-
-
-@pytest.mark.unit
 def test_apply_does_not_override_explicit_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENROUTER_ALLOWED_MODELS", "custom/*")
-    monkeypatch.setenv("OPENROUTER_COST_QUALITY_TRADEOFF", "9")
-    apply_digiquant_openrouter_env()
-    assert os.environ["OPENROUTER_ALLOWED_MODELS"] == "custom/*"
-    assert os.environ["OPENROUTER_COST_QUALITY_TRADEOFF"] == "9"
+    """Pre-set house env survives: the rewrite only fills unset values."""
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-litellm")
+    apply_digiquant_house_env()
+    assert os.environ["OPENAI_API_BASE"] == "http://127.0.0.1:4000/v1"
+    assert os.environ["OPENAI_API_KEY"] == "sk-litellm"
 
 
 @pytest.mark.unit
@@ -317,24 +337,23 @@ def test_grounding_model_from_web_search_pool(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     model = get_grounding_model(segment="macro")
     assert model is not None
-    assert is_web_search_capable_model(model)
     cfg = model_config._load_digiquant_models()
     assert model in cfg.tiers["cheap"].web_search_models
 
 
 @pytest.mark.unit
-def test_grounding_model_may_be_perplexity(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Perplexity is valid for grounding-only paths, not tool phases."""
+def test_grounding_model_uses_ci_synthesis_pool(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#3660: house grounding synthesizers are CI pins, not sonar/:online."""
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     cfg = model_config._load_digiquant_models()
-    assert "perplexity/sonar" in cfg.tiers["cheap"].web_search_models
-    # Deterministic pick for a segment that hashes to perplexity
-    for segment in ("macro", "bonds", "perplexity-grounding", "alt-sentiment-news"):
+    assert "google/gemini-3.1-flash-lite" in cfg.tiers["cheap"].web_search_models
+    assert "deepseek/deepseek-v4-flash" in cfg.tiers["cheap"].web_search_models
+    assert "perplexity/sonar" not in cfg.tiers["cheap"].web_search_models
+    for segment in ("macro", "bonds", "ci-grounding", "alt-sentiment-news"):
         model = get_grounding_model(segment=segment)
         assert model is not None
-        assert is_web_search_capable_model(model)
-        if is_native_search_only_model(model):
-            assert not is_tool_use_capable_model(model)
+        assert model in cfg.tiers["cheap"].web_search_models
+        assert not is_native_search_only_model(model)
 
 
 @pytest.mark.unit
@@ -491,8 +510,8 @@ def test_sanitize_allowed_models_preserves_frontier_on_quality() -> None:
 
 
 @pytest.mark.unit
-def test_perplexity_only_in_web_search_pools_not_phase_pools() -> None:
-    """Regression: perplexity/sonar in allowed_models caused tool-use 404s."""
+def test_no_native_search_in_phase_pools_and_ci_web_search() -> None:
+    """#3660: phase pools stay tool-capable; web_search_models are CI synthesizers."""
     cfg = model_config._load_digiquant_models()
     for tier_name, tier_cfg in cfg.tiers.items():
         for capability, pool in tier_cfg.allowed_models.items():
@@ -500,9 +519,13 @@ def test_perplexity_only_in_web_search_pools_not_phase_pools() -> None:
                 assert not is_native_search_only_model(model), (
                     f"tier {tier_name} {capability} must not pool native-search-only {model}"
                 )
-        assert any(is_native_search_only_model(m) for m in tier_cfg.web_search_models), (
-            f"tier {tier_name} should offer perplexity in web_search_models"
-        )
+                assert ":online" not in model, (
+                    f"tier {tier_name} {capability} must not pool :online {model}"
+                )
+        assert tier_cfg.web_search_models, f"tier {tier_name} needs web_search_models"
+        assert "perplexity/sonar" not in tier_cfg.web_search_models
+        assert all(":online" not in m for m in tier_cfg.web_search_models)
+        assert "google/gemini-3.1-flash-lite" in tier_cfg.web_search_models
 
 
 @pytest.mark.unit
@@ -531,7 +554,6 @@ def test_no_stale_qwen_model_ids_in_dashboard_config() -> None:
                     f"tier {tier_name} {capability} model {model!r} lacks tool use"
                 )
         for model in tier_cfg.web_search_models:
-            assert is_web_search_capable_model(model)
             assert model.lower() in {m.lower() for m in _WEB_SEARCH_MODELS}
     assert "qwen" not in cfg.openrouter_defaults.allowed_models.lower()
 
@@ -601,10 +623,10 @@ def test_edit_mode_segments_route_to_cheap_open_weight_models(
     model = get_model_for_phase(phase_slug)
     assert model is not None
     assert not is_flagship_openrouter_model(model)
-    # Phase models are bare (tool-capable); grounding is a separate web-search pre-pass.
+    # Phase models are bare (tool-capable). Grounding is a separate digisearch +
+    # CI-synthesis pre-pass (#3660); deepseek-v4-flash may appear in both pools.
     assert ":online" not in model
     assert is_tool_use_capable_model(model)
-    assert not is_web_search_capable_model(model)
 
 
 @pytest.mark.unit
@@ -782,3 +804,53 @@ def test_unresolved_capability_returns_none_under_a_bound_byok_key(
         assert get_model_for_phase("macro") is None
     finally:
         pop_byok(tok)
+
+
+@pytest.mark.unit
+def test_apply_prefers_cheaperinference_when_flagged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_env(
+        monkeypatch,
+        "OPENAI_API_BASE",
+        "OPENAI_API_KEY",
+    )
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("CHEAPERINFERENCE_API_KEY", "ci_live_test")
+    monkeypatch.setenv("DIGI_HOUSE_UPSTREAM", "cheaperinference")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
+    apply_digiquant_house_env()
+    assert os.environ["OPENAI_API_BASE"] == "https://api.cheaperinference.com/v1"
+    assert os.environ["OPENAI_API_KEY"] == "ci_live_test"
+
+
+@pytest.mark.unit
+def test_apply_defaults_to_cheaperinference_when_key_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Key alone is enough — DIGI_HOUSE_UPSTREAM opt-in no longer required."""
+    _clear_env(
+        monkeypatch,
+        "OPENAI_API_BASE",
+        "OPENAI_API_KEY",
+        "DIGI_HOUSE_UPSTREAM",
+        "CHEAPERINFERENCE_HOUSE",
+    )
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("CHEAPERINFERENCE_API_KEY", "ci_live_test")
+    apply_digiquant_house_env()
+    assert os.environ["OPENAI_API_BASE"] == "https://api.cheaperinference.com/v1"
+    assert os.environ["OPENAI_API_KEY"] == "ci_live_test"
+
+
+@pytest.mark.unit
+def test_apply_forces_openrouter_when_upstream_openrouter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_env(monkeypatch, "OPENAI_API_BASE", "OPENAI_API_KEY")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("CHEAPERINFERENCE_API_KEY", "ci_live_test")
+    monkeypatch.setenv("DIGI_HOUSE_UPSTREAM", "openrouter")
+    apply_digiquant_house_env()
+    assert os.environ["OPENAI_API_BASE"] == "https://openrouter.ai/api/v1"
+    assert os.environ["OPENAI_API_KEY"] == "sk-or-test"

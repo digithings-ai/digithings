@@ -178,7 +178,7 @@ def build_grounding(
 
     - ``tools`` / ``execute_tool``: the Supabase data tools (function calling).
     - ``web_grounding``: a cited grounding-summary dict to inject into ``phase_inputs`` —
-      either an OpenRouter ``openrouter:web_search`` pre-pass (``live_search``) or a web
+      either a completion-synthesis pre-pass (``live_search``) or a web
       search read of the tracked AI-portfolio accounts (``ai_portfolios``). ``None`` if
       unavailable.
 
