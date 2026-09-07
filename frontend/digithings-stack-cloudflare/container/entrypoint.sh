@@ -40,6 +40,7 @@ if [ -n "$_ci_key" ] && [ "$_force_or" -eq 0 ]; then
       --overlay /app/config/litellm.cheaperinference.yaml \
       -o /app/config/litellm.runtime.yaml \
       && export LITELLM_CONFIG=/app/config/litellm.runtime.yaml \
+      && export ENV_LITELLM_CONFIG=/app/config/litellm.runtime.yaml \
       || echo "cheaperinference: merge failed; using default litellm.yaml" >&2
   fi
 fi

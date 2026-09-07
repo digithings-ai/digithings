@@ -1,9 +1,12 @@
 /**
- * digichat popup embed for the digiquant dashboard (#3422 / #3581).
+ * digichat popup embed for the digiquant dashboard (#3422 / #3581 / #3662).
  *
  * Desk+ (plan “pro” in the issue = Desk / glass-box) get a bottom-right launcher
  * that iframes digichat `/embed?layout=embed` — same popup contract as digichat
  * `widget.js` (#3421), implemented in-React so CSP stays `script-src 'self'`.
+ * Baseline (free/brief) sees the same launcher but an upgrade CTA panel with
+ * chat disabled — never an iframe, so non-entitled tiers never burn turns and
+ * never meet the free-3 gate (Chris lock: no free-3 quota on this popup).
  *
  * Grounding, web search, three-tier models, and digigraph→digillm live in the
  * digichat tenant registry (`DIGICHAT_EMBED_TENANTS` for digiquant.io) — not here.
@@ -42,6 +45,8 @@ export const DIGICHAT_POPUP_ACCENT = '#3dd6c4'; // canon-allow: digichat ?accent
 export const DIGICHAT_READY = 'digichat:ready';
 export const DIGICHAT_PAGE_CONTEXT = 'digichat:page-context';
 export const DIGICHAT_THEME = 'digichat:theme';
+/** Plan tier message type for the authenticated tier proof (#3662). */
+export const DIGICHAT_PLAN_TIER = 'digichat:plan-tier';
 
 /** Keep in sync with digichat `DEFAULT_POPUP_PAGE_CONTEXT_MAX_CHARS`. */
 export const PAGE_CONTEXT_MAX_CHARS = 8_000;
@@ -57,6 +62,23 @@ export const DIGICHAT_LAUNCHER_LABEL = 'ask digichat';
 
 /** Open-state launcher label — same control toggles close / minimize. */
 export const DIGICHAT_LAUNCHER_CLOSE_LABEL = 'close';
+
+/**
+ * Baseline (free/brief) upgrade panel (#3662, Chris lock: no free-3 quota).
+ * Non-entitled tiers may open the launcher, but the panel shows this upgrade
+ * CTA with chat disabled — never an iframe, so baseline never burns turns.
+ * Copy matches `LockedSurface` (`/settings#billing` upgrade route); digi
+ * names stay lowercase per repo convention.
+ */
+export const DIGICHAT_UPGRADE_TITLE = 'digichat unlocks with Desk';
+
+export const DIGICHAT_UPGRADE_BODY =
+  'House research and portfolio chat is a Desk feature. ' +
+  'Upgrade to ask digichat about the house book and the page you are on.';
+
+export const DIGICHAT_UPGRADE_CTA_LABEL = 'Upgrade in Settings → Billing';
+
+export const DIGICHAT_UPGRADE_CTA_HREF = '/settings#billing';
 
 export type DigichatPopupTheme = 'light' | 'dark';
 
@@ -85,6 +107,9 @@ const RESEARCH_PORTFOLIO_SUGGESTIONS = [
 /**
  * Desk+ unlocks glass-box research + portfolio deliberation — the issue’s
  * “pro and above, not basic” gate (Brief alone is not enough).
+ *
+ * This gates the *chat* (iframe), not the launcher itself: baseline tiers see
+ * the launcher with an upgrade CTA panel instead (#3662).
  */
 export function canUseDigichatPopup(tier: PlanTier): boolean {
   return can(tier, 'glassbox_economics');
@@ -298,4 +323,20 @@ export function buildThemeMessage(
   ts = Date.now(),
 ): { type: typeof DIGICHAT_THEME; theme: DigichatPopupTheme; ts: number } {
   return { type: DIGICHAT_THEME, theme, ts };
+}
+
+/**
+ * Build a plan-session postMessage for the digichat iframe (#3662).
+ *
+ * The iframe receives the dashboard Supabase access_token after digichat:ready,
+ * exchanges it at /api/plan-proof (server verifies claims via /auth/v1/user),
+ * and includes the HMAC proof in X-Embed-Plan-Proof on every chat request.
+ * Raw client-asserted X-Embed-Plan-Tier headers are NEVER trusted.
+ * `tier` is a UI hint only — digichat ignores it for authorization.
+ */
+export function buildPlanTierMessage(
+  tier: PlanTier,
+  accessToken: string,
+): { type: typeof DIGICHAT_PLAN_TIER; tier: PlanTier; accessToken: string } {
+  return { type: DIGICHAT_PLAN_TIER, tier, accessToken };
 }
