@@ -9,6 +9,8 @@ export type SettingsLoadErrorProps = {
   onRetry: () => void;
   /** Optional test id. Defaults to "settings-load-error". */
   testId?: string;
+  /** Visual tone: error (default, text-down) or soft (text-warn). */
+  tone?: 'error' | 'soft';
 };
 
 /**
@@ -24,14 +26,16 @@ export function SettingsLoadError({
   message = SETTINGS_LOAD_ERROR_MESSAGE,
   onRetry,
   testId = 'settings-load-error',
+  tone = 'error',
 }: SettingsLoadErrorProps) {
+  const textClass = tone === 'soft' ? 'text-warn' : 'text-down';
   return (
     <div
       data-testid={testId}
       role="alert"
       className="flex items-start justify-between gap-4 border border-hair bg-term-bg/40 px-3 py-2"
     >
-      <p className="text-sm text-down">{message}</p>
+      <p className={`text-sm ${textClass}`}>{message}</p>
       <button
         type="button"
         onClick={onRetry}
