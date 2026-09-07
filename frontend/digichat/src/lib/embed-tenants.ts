@@ -116,10 +116,13 @@ export type EmbedTenantConfig = {
   gate?: { consumeUrl: string };
   /**
    * Minimum plan tier required to chat via this embed. When set, /api/chat
-   * enforces a 403 unless the caller supplies a tier at or above this level
-   * (via X-Embed-Plan-Tier header or ?plan_tier= query param). Used by the
-   * digiquant.io dashboard popup (#3662) to fail-closed when plan_tier is
-   * absent or below Desk+. Absent for tenants with no tier gating.
+   * enforces a 403 unless the caller presents a verified Desk+ tier via
+   * HMAC `X-Embed-Plan-Proof` (from POST /api/plan-proof after Supabase
+   * app_metadata.plan_tier claims check) or an authenticated digichat session
+   * with claims plan_tier. Raw `X-Embed-Plan-Tier` / `?plan_tier=` are NEVER
+   * trusted (#3664). Used by the digiquant.io dashboard popup to fail-closed
+   * when plan_tier is absent or below Desk+. Absent for tenants with no tier
+   * gating.
    */
   requiredPlanTier?: "desk" | "studio" | "enterprise";
 };

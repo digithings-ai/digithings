@@ -271,11 +271,21 @@ frame a loopback parent — use the local origin. See `.env.local.example`.
 
 Tenant grounding (digigraph → digillm, research/portfolio corpus, opt-in web search)
 is configured on digichat via `DIGICHAT_EMBED_TENANTS` for host `digiquant.io`.
-Contract (#3662, Chris lock — no free-3 quota): `gateMode: "ungated"`,
-`llmAccess: "operator"`, no `gate.consumeUrl`, `showByok: true`. Entitled
-(Desk+) chat is never turn-capped; spend rides operator keys with no visitor
-BYOK handoff. Pinned in code by `isDigiquantDashboardTenantConfig`. The
-`digithings.ai` marketing trial (`free_then_byok`) is a separate tenant.
+Contract (#3662 / #3664, Chris lock — no free-3 quota): `gateMode: "ungated"`,
+`llmAccess: "operator"`, no `gate.consumeUrl`, `showByok: true`,
+`requiredPlanTier: "desk"`. Entitled (Desk+) chat is never turn-capped; spend
+rides operator keys with no visitor BYOK handoff. Pinned in code by
+`isDigiquantDashboardTenantConfig`. The `digithings.ai` marketing trial
+(`free_then_byok`) is a separate tenant.
+
+**Claims-backed plan proof (#3664):** digichat never trusts client-asserted
+`X-Embed-Plan-Tier` / `?plan_tier=`. The embed mints an HMAC proof via
+`POST /api/plan-proof` only after verifying the dashboard Supabase access token
+and reading `app_metadata.plan_tier` (Desk / Studio / enterprise only). Chat
+accepts `X-Embed-Plan-Proof` (or an authenticated digichat session with claims
+`plan_tier`). Ops (names only): `DIGICHAT_PLAN_PROOF_SECRET`,
+`DIGICHAT_DASHBOARD_SUPABASE_URL`, `DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY` on
+digichat — see `frontend/digichat/.env.example`.
 
 **Deploy freshness (#1759):** `scripts/write-build-info.sh` writes
 `dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) into the
