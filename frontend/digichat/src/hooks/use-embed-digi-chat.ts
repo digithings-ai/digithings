@@ -211,6 +211,12 @@ type UseEmbedDigiChatOptions = {
    */
   getEnableWebSearch?: () => boolean;
   /**
+   * HMAC-signed plan proof token from /api/plan-proof.  Sent as
+   * X-Embed-Plan-Proof on every chat request.  The chat route verifies the
+   * signature — raw X-Embed-Plan-Tier headers are never trusted (#3662).
+   */
+  planProof?: string | null;
+  /**
    * When false, omit regenerate/editLastUser so DigiChatSession hides the
    * chrome. Digigraph and Foundry both support turn mutation once the BFF
    * sends X-Digi-Turn-Mode (#3475). Default true for digigraph-first callers.
@@ -229,6 +235,7 @@ export function useEmbedDigiChat({
   onGated,
   getResponseLanguage,
   getEnableWebSearch,
+  planProof,
   allowClientTurnMutation = true,
 }: UseEmbedDigiChatOptions): DigiChatController & {
   seed: (msgs: readonly DigiChatMessage[]) => void;
@@ -293,6 +300,12 @@ export function useEmbedDigiChat({
           if (chatToken) {
             headers["X-Embed-Chat-Token"] = chatToken;
           }
+          // HMAC-signed plan proof (#3662): sent on every request when available.
+          // The chat route verifies the signature — raw X-Embed-Plan-Tier headers
+          // are never trusted.
+          if (planProof) {
+            headers["X-Embed-Plan-Proof"] = planProof;
+          }
           try {
             const conversationId = window.sessionStorage.getItem(
               conversationStorageKey(resolvedHost),
@@ -317,18 +330,19 @@ export function useEmbedDigiChat({
     // here costs nothing — the caller builds it with useCallback(() => ...,
     // []), so its identity never changes and the transport is never rebuilt
     // on a language change — while satisfying react-hooks/exhaustive-deps.
-    [
-      accent,
-      token,
-      host,
-      embedHost,
-      byokKey,
-      byokProvider,
-      byokModel,
-      trialUnlocked,
-      getResponseLanguage,
-      getEnableWebSearch,
-    ],
+      [
+        accent,
+        token,
+        host,
+        embedHost,
+        byokKey,
+        byokProvider,
+        byokModel,
+        trialUnlocked,
+        getResponseLanguage,
+        getEnableWebSearch,
+        planProof,
+      ],
   );
 
   const { messages, sendMessage, status, error, regenerate, setMessages, stop } = useChat<UIMessage>({

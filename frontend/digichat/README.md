@@ -76,6 +76,16 @@ Parent `frame-src` and iframe origin both come from `embedOriginForChat()` (defa
 
 Prod tenant (`host=digithings.ai`): `gateMode: ungated`, `llmAccess: free_then_byok`, `showByok: true`. Do **not** assert a 3-turn gate on that path. `turn_limited` remains for other tenants (unit tests lock it).
 
+Dashboard tenant (`host=digiquant.io`, #3662 — Chris lock, no free-3 quota):
+`gateMode: ungated`, `llmAccess: operator`, no `gate` block,
+`showByok: true`. Entitled (Desk+) dashboard chat is never turn-capped and the
+trial quota is never consulted; baseline (free/brief) never gets an iframe —
+the dashboard renders an upgrade CTA panel with chat disabled instead, so
+non-entitled tiers never burn turns. Pinned by
+`isDigiquantDashboardTenantConfig` (`src/lib/embed-tenants.ts`). This is a
+different bot from the `digithings.ai` marketing tenant above — do not conflate
+them. House-model routing is #3663 and out of scope here.
+
 The deleted `frontend/website/` landing (`#try` iframe) is **not** the marketing surface — do not restore it.
 
 ### Embed behavior

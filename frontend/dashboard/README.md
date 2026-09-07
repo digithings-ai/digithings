@@ -230,10 +230,12 @@ secure WebSockets (`wss://*.supabase.co`).
 (`https://digithings.ai`, `digichat.digithings.ai`, loopback `:3005`).
 Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment).
 
-### digichat popup (Desk+ — #3422 / #3581 / #3587)
+### digichat popup (Desk+ chat, baseline upgrade CTA — #3422 / #3581 / #3587 / #3662)
 
 Desk / Studio / Enterprise sessions see a bottom-right shared digiweb launcher
-(Brief and Observer do not). Idle is a 30px square compact terminal mark;
+with full chat. Brief and Observer see the same launcher, but opening it shows
+an upgrade CTA panel with chat disabled (no iframe, so baseline never burns
+turns and never meets the free-3 gate). Idle is a 30px square compact terminal mark;
 hover/focus types `digichat` without changing its height or border. Clicking
 expands horizontally into a composer-height bar and then upward into the panel.
 The ×, Escape, and transparent outside-click backdrop reverse that expansion
@@ -267,8 +269,13 @@ to a round ✦ launcher.
 Desk+ session required (or auth-off enterprise). Production digichat will not
 frame a loopback parent — use the local origin. See `.env.local.example`.
 
-Tenant grounding (digigraph → digillm, research/portfolio corpus, opt-in web search,
-BYOK) is configured on digichat via `DIGICHAT_EMBED_TENANTS` for host `digiquant.io`.
+Tenant grounding (digigraph → digillm, research/portfolio corpus, opt-in web search)
+is configured on digichat via `DIGICHAT_EMBED_TENANTS` for host `digiquant.io`.
+Contract (#3662, Chris lock — no free-3 quota): `gateMode: "ungated"`,
+`llmAccess: "operator"`, no `gate.consumeUrl`, `showByok: true`. Entitled
+(Desk+) chat is never turn-capped; spend rides operator keys with no visitor
+BYOK handoff. Pinned in code by `isDigiquantDashboardTenantConfig`. The
+`digithings.ai` marketing trial (`free_then_byok`) is a separate tenant.
 
 **Deploy freshness (#1759):** `scripts/write-build-info.sh` writes
 `dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) into the

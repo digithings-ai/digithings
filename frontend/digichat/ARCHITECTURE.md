@@ -461,6 +461,14 @@ for per-tenant corpus isolation — forwarded as `X-Digi-Corpus-Index` /
 policy (digithings.ai = `free_then_byok` + `showByok: true`; foundry/DataTap =
 `backend_only` + BYOK off), `attribution` flag, `aliases`, and a required `token`.
 
+The `digiquant.io` dashboard tenant is `ungated` + `llmAccess: operator` with
+no `gate` block and `showByok: true` (#3662, Chris lock: no free-3 quota on
+the dashboard popup). Desk+ chat is never turn-capped and the trial quota is
+never consulted for this host; baseline entitlement is enforced dashboard-side
+(upgrade CTA panel, no iframe, no turns burned). Pinned by
+`isDigiquantDashboardTenantConfig` in `src/lib/embed-tenants.ts` — a different
+bot from the `digithings.ai` marketing tenant, never conflated.
+
 On structured `free_quota_exceeded` / clear rate-limit errors, embed tenants with
 `llmAccess: free_then_byok` stop the turn and open the in-chat BYOK sequence
 (even when `gateMode` is `ungated` — see `shouldSuggestByokOnEmbedError`). After
