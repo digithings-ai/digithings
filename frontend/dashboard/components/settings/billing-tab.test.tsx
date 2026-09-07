@@ -16,7 +16,7 @@ describe('BillingTab (static)', () => {
     expect(html).toContain('Billing is not configured');
   });
 
-  it('defaults to monthly and shows monthly prices without annual billing captions', () => {
+  it('defaults to annual and shows annual prices with discount', () => {
     const html = renderToStaticMarkup(
       createElement(BillingTab, {
         api: { accessToken: 'tok' },
@@ -25,13 +25,17 @@ describe('BillingTab (static)', () => {
         portalFn: vi.fn(),
       }),
     );
-    expect(html).toContain('data-interval="monthly"');
-    expect(html).toContain('$10/mo');
-    expect(html).toContain('$30/mo');
-    expect(html).toContain('$100/mo');
-    expect(html).not.toContain('billed $96/yr');
-    expect(html).not.toContain('billed $288/yr');
-    expect(html).not.toContain('billed $960/yr');
+    expect(html).toContain('data-interval="annual"');
+    expect(html).toContain('$8/mo');
+    expect(html).toContain('$24/mo');
+    expect(html).toContain('$80/mo');
+    expect(html).toContain('billed $96/yr');
+    expect(html).toContain('billed $288/yr');
+    expect(html).toContain('billed $960/yr');
+    expect(html).toContain('20% off');
+    expect(html).toContain('<s data-testid="billing-price-list">$10/mo</s>');
+    expect(html).toContain('<s data-testid="billing-price-list">$30/mo</s>');
+    expect(html).toContain('<s data-testid="billing-price-list">$100/mo</s>');
   });
 });
 
@@ -70,7 +74,7 @@ describe('BillingTab (interval)', () => {
     );
     expect(
       el.querySelector('[data-testid="settings-billing-tab"]')?.getAttribute('data-interval'),
-    ).toBe('monthly');
+    ).toBe('annual');
 
     await act(async () => {
       (el.querySelector('[data-testid="billing-interval-monthly"]') as HTMLButtonElement).click();
@@ -118,7 +122,7 @@ describe('BillingTab (interval)', () => {
     );
     expect(
       el.querySelector('[data-testid="settings-billing-tab"]')?.getAttribute('data-interval'),
-    ).toBe('monthly');
+    ).toBe('annual');
 
     await act(async () => {
       (el.querySelector('[data-testid="billing-checkout-brief"]') as HTMLButtonElement).click();

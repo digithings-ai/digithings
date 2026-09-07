@@ -28,7 +28,7 @@ export function BillingTab({
   configured = isBillingConfigured(),
   checkoutFn = createCheckoutSession,
   portalFn = createCustomerPortal,
-  defaultInterval = 'monthly',
+  defaultInterval = 'annual',
 }: BillingTabProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
