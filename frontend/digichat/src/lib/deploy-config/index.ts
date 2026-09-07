@@ -13,6 +13,7 @@ export {
   parseWelcomeCopy,
   welcomeTitle,
   welcomeBodyLines,
+  allowlistModelId,
   type WelcomeCopy,
   type DigichatConfig,
   type DigichatDeployment,
