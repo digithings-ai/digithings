@@ -39,19 +39,12 @@
 # Fail-hard when grounding unavailable: OLYMPUS_WEB_SEARCH=required.
 #
 # Env contract: house calls go service → digillm → LiteLLM (OPENAI_API_BASE).
-# apply_digiquant_openrouter_env() sets OPENROUTER_ALLOWED_MODELS +
-# OPENROUTER_COST_QUALITY_TRADEOFF at chain startup, and points the default
-# client at OpenRouter's OpenAI-compat API only when OPENAI_API_BASE is unset
-# (CLI/GHA without a local proxy). Optional house savings: with
-# CHEAPERINFERENCE_API_KEY + DIGI_HOUSE_UPSTREAM=cheaperinference (or
-# CHEAPERINFERENCE_HOUSE=1), that rewrite prefers Cheaper Inference; digillm
-# maps DeepSeek/Gemini/GPT pins that exist on CI to bare ids. House traffic is
-# CI-only (#3660): a house slug missing from the CI catalog FAILS CLOSED
-# instead of quietly falling back to OpenRouter — set
-# DIGI_HOUSE_ALLOW_OPENROUTER_FALLBACK=1 to allow the fallback explicitly.
-# The cheap tier below is fully CI-mapped (no sonar / :online / maverick pins);
-# balanced/quality still pin native-search grounding and need the override (or
-# forced OpenRouter) until they are migrated. Retrieval stays in-house
+# apply_digiquant_house_env() points the default client at the house upstream
+# only when OPENAI_API_BASE is unset (CLI/GHA without a local proxy): Cheaper
+# Inference when keyed, else OpenRouter's OpenAI-compat API. House traffic is
+# CI-only (#3660): a house slug missing from the CI catalog raises — there is
+# no OpenRouter fallback. The cheap tier below is fully CI-mapped (no sonar /
+# :online / maverick pins); balanced/quality are CI-mapped too. Retrieval stays in-house
 # (digisearch / live_search / data tools); the grounding pre-pass synthesizes
 # on CI. LiteLLM overlay: config/litellm.cheaperinference.yaml (see
 # docs/providers/cheaperinference.md). Prefixes (openrouter/, gemini/, …) are
@@ -126,8 +119,7 @@ tiers:
       cost_quality_tradeoff: 0
     allowed_models:
       # House CI-only (#3660): capability tier still CI-mapped only. anthropic /
-      # grok / sonar are not on the CI catalog and fail closed without
-      # DIGI_HOUSE_ALLOW_OPENROUTER_FALLBACK.
+      # grok / sonar are not on the CI catalog and raise there.
       extraction:
         - "deepseek/deepseek-v4-flash"
         - "openai/gpt-5.6-sol"

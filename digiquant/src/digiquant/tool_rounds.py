@@ -57,7 +57,6 @@ def run_olympus_research_agent(
     max_tokens: int | None = None,
     tools: list[dict[str, Any]] | None = None,
     execute_tool: Callable[[str, dict[str, Any]], str] | None = None,
-    search_parameters: dict[str, Any] | None = None,
     max_tool_rounds: int | None = None,
 ) -> T:
     """Thin digiquant wrapper around digigraph's ``run_research_agent``.
@@ -79,7 +78,6 @@ def run_olympus_research_agent(
         max_tokens=max_tokens,
         tools=tools,
         execute_tool=execute_tool,
-        search_parameters=search_parameters,
         max_tool_rounds=max_tool_rounds
         if max_tool_rounds is not None
         else olympus_max_tool_rounds(),

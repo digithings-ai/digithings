@@ -825,9 +825,9 @@ def cli_main(argv: list[str] | None = None) -> int:
     import json
     import sys
 
-    from digigraph.model_config import apply_digiquant_openrouter_env
+    from digigraph.model_config import apply_digiquant_house_env
 
-    apply_digiquant_openrouter_env()
+    apply_digiquant_house_env()
 
     # Re-use research's CLI helpers — they already handle --auto-baseline,
     # watchlist parsing, summary formatting.

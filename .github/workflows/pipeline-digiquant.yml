@@ -183,8 +183,9 @@ jobs:
           "${ARGS[@]}" || echo "::warning::Fed rate-decision odds ingest failed (fail-soft) — pipeline continues"
 
       - name: Validate AI provider routing
-        # Hard ceiling for the whole preflight LLM probe block (#2531). A hung provider must
-        # fail this step cleanly, not burn the job's 240-minute timeout → cancelled.
+        # Fail-fast house: no provider pings — env + Supabase only (dry-runs are
+        # skipped in this step via --skip-dry-run). timeout-minutes stays so a
+        # hung Supabase probe fails this step cleanly (#2531).
         timeout-minutes: 10
         env:
           CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
@@ -195,15 +196,8 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CHEAPERINFERENCE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
           CHEAPERINFERENCE_API_BASE: ${{ vars.CHEAPERINFERENCE_API_BASE || secrets.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
-          # Per-attempt read timeout for digillm during preflight only (#2528/#2531). The real
-          # pipeline run step keeps digillm's 600s default.
-          DIGILLM_REQUEST_TIMEOUT_SECONDS: "20"
-          # Same pool as the "Run dashboard research pipeline" step below (#1622). OPENROUTER_ALLOWED_MODELS
-          # is applied in-process by validate-providers.py via apply_digiquant_openrouter_env() — same
-          # as portfolio chain startup (#2532). Fallback routing applies to the initial request as well
-          # as empty-response retries (#2540); check_openrouter_function_tools() surfaces model
-          # substitution instead of hard-failing when it matches production tolerance.
-          OPENROUTER_FALLBACK_MODELS: &digiquant_openrouter_fallback_models "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-pro,meta-llama/llama-4-maverick"
+          # House routing is applied in-process by validate-providers.py
+          # via apply_digiquant_house_env() — same as portfolio chain startup (#2532).
         run: |
           uv run --frozen --no-sync python digiquant/scripts/research/validate-providers.py --skip-dry-run
 
@@ -220,11 +214,8 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CHEAPERINFERENCE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
           CHEAPERINFERENCE_API_BASE: ${{ vars.CHEAPERINFERENCE_API_BASE || secrets.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
-          # #1622: provider-error fallback chain. digillm attaches models+route=fallback to
-          # every openrouter/ request when this is set (primary call, not only empty retries).
-          # That covers provider errors (5xx, rate limits, endpoint refusals) — not empty 200s
-          # with blank content (#2520). Cheap→capable, all endpoint-gate-verified.
-          OPENROUTER_FALLBACK_MODELS: *digiquant_openrouter_fallback_models
+          # Fail-fast: provider errors surface to the caller — no models+route=fallback
+          # chain. Cheap→capable pool is enforced by config/digiquant_models.yaml tiers.
           DRY_RUN: ${{ inputs.dry_run }}
           DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
