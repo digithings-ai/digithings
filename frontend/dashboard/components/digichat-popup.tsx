@@ -23,6 +23,7 @@ import { usePlanTier } from '@/lib/use-entitlement';
 import {
   buildDigichatEmbedSrc,
   buildPageContextMessage,
+  buildPlanTierMessage,
   buildThemeMessage,
   canUseDigichatPopup,
   DIGICHAT_READY,
@@ -134,12 +135,18 @@ export default function DigichatPopup({
       const win = iframeRef.current?.contentWindow;
       if (win) {
         win.postMessage(buildThemeMessage(themeRef.current), config!.origin);
+        // Send authenticated plan tier (#3662): the iframe fetches an HMAC-
+        // signed proof from /api/plan-proof and includes it in X-Embed-Plan-Proof.
+        // Raw X-Embed-Plan-Tier headers are NEVER trusted by the chat route.
+        if (entitled) {
+          win.postMessage(buildPlanTierMessage(tier), config!.origin);
+        }
       }
       if (open) sendPageContext();
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [config, iframeSrc, open, sendPageContext]);
+  }, [config, iframeSrc, open, sendPageContext, entitled, tier]);
 
   if (!config) return null;
 

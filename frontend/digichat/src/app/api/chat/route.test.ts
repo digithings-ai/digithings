@@ -810,13 +810,15 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       },
     };
 
-    function dashboardReq(): Request {
+    const PLAN_PROOF_SECRET = "test-secret-for-plan-proof-3662";
+
+    function dashboardReq(headers: Record<string, string> = {}): Request {
       return new Request("http://localhost/api/chat", {
         method: "POST",
         headers: {
           "content-type": "application/json",
           "x-embed-host": "https://digiquant.io",
-          "x-embed-plan-tier": "desk",
+          ...headers,
         },
         body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
       });
@@ -824,16 +826,23 @@ vi.mocked(createFoundryStreamResponse).mockClear();
 
     beforeEach(() => {
       vi.mocked(resolveChatTenantContext).mockResolvedValue(dashboardCtx as never);
+      process.env.DIGICHAT_PLAN_PROOF_SECRET = PLAN_PROOF_SECRET;
+    });
+
+    afterEach(() => {
+      delete process.env.DIGICHAT_PLAN_PROOF_SECRET;
     });
 
     it("serves well past the free-turn cap with no 402 and never touches the trial quota", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      const proof = signPlanProof("desk", PLAN_PROOF_SECRET);
       const quotaModule = await import("@/lib/embed-turn-quota");
       const overSpy = vi.spyOn(quotaModule, "isOverEmbedTrialLimit");
       const recordSpy = vi.spyOn(quotaModule, "recordEmbedTrialTurn");
       const unlockSpy = vi.spyOn(quotaModule, "unlockEmbedTrial");
       try {
         for (let i = 0; i < EMBED_FREE_TURN_LIMIT + 2; i++) {
-          const res = await POST(dashboardReq());
+          const res = await POST(dashboardReq({ "x-embed-plan-proof": proof }));
           expect(res.status).toBe(200);
         }
         expect(overSpy).not.toHaveBeenCalled();
@@ -846,56 +855,25 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       }
     });
 
-    it("returns 403 plan_tier_required when no X-Embed-Plan-Tier is supplied (#3662)", async () => {
-      const req = new Request("http://localhost/api/chat", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-embed-host": "https://digiquant.io",
-        },
-        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
-      });
+    it("returns 403 plan_tier_required when no proof is supplied (#3662)", async () => {
+      const req = dashboardReq();
       const res = await POST(req);
       expect(res.status).toBe(403);
       const body = (await res.json()) as { error: string };
       expect(body.error).toBe("plan_tier_required");
     });
 
-    it("returns 403 when caller tier is below desk (free/brief)", async () => {
-      for (const tier of ["free", "brief"]) {
-        const req = new Request("http://localhost/api/chat", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-embed-host": "https://digiquant.io",
-            "x-embed-plan-tier": tier,
-          },
-          body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
-        });
-        const res = await POST(req);
-        expect(res.status).toBe(403);
-        const body = (await res.json()) as { error: string };
-        expect(body.error).toBe("plan_tier_required");
-      }
+    it("returns 403 when X-Embed-Plan-Tier header is spoofed (#3662 Chris lock)", async () => {
+      // Raw X-Embed-Plan-Tier header is NEVER trusted — must still 403.
+      const req = dashboardReq({ "x-embed-plan-tier": "desk" });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe("plan_tier_required");
     });
 
-    it("allows chat when X-Embed-Plan-Tier is desk+", async () => {
-      for (const tier of ["desk", "studio", "enterprise"]) {
-        const req = new Request("http://localhost/api/chat", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-embed-host": "https://digiquant.io",
-            "x-embed-plan-tier": tier,
-          },
-          body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
-        });
-        const res = await POST(req);
-        expect(res.status).toBe(200);
-      }
-    });
-
-    it("reads plan_tier from ?plan_tier= query param as fallback", async () => {
+    it("returns 403 when ?plan_tier= query param is spoofed (#3662 Chris lock)", async () => {
+      // Raw ?plan_tier= query param is NEVER trusted — must still 403.
       const req = new Request("http://localhost/api/chat?plan_tier=desk", {
         method: "POST",
         headers: {
@@ -905,20 +883,92 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
       });
       const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("allows chat when HMAC proof is desk+", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      for (const tier of ["desk", "studio", "enterprise"]) {
+        const proof = signPlanProof(tier as "desk" | "studio" | "enterprise", PLAN_PROOF_SECRET);
+        const req = dashboardReq({ "x-embed-plan-proof": proof });
+        const res = await POST(req);
+        expect(res.status).toBe(200);
+      }
+    });
+
+    it("returns 403 when HMAC proof is free/brief", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      for (const tier of ["free", "brief"]) {
+        const proof = signPlanProof(tier as "free" | "brief", PLAN_PROOF_SECRET);
+        const req = dashboardReq({ "x-embed-plan-proof": proof });
+        const res = await POST(req);
+        expect(res.status).toBe(403);
+        const body = (await res.json()) as { error: string };
+        expect(body.error).toBe("plan_tier_required");
+      }
+    });
+
+    it("returns 403 when HMAC proof has wrong secret", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      const proof = signPlanProof("desk", "wrong-secret");
+      const req = dashboardReq({ "x-embed-plan-proof": proof });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 when HMAC proof is expired", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      const proof = signPlanProof("desk", PLAN_PROOF_SECRET, Date.now() - 1000);
+      const req = dashboardReq({ "x-embed-plan-proof": proof });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 when HMAC proof is tampered", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      const proof = signPlanProof("desk", PLAN_PROOF_SECRET);
+      // Tamper with the proof by flipping a character
+      const tampered = proof.slice(0, -2) + (proof.slice(-2) === "AA" ? "BB" : "AA");
+      const req = dashboardReq({ "x-embed-plan-proof": tampered });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("allows chat via authenticated session plan_tier (not embed proof)", async () => {
+      // When the user is authenticated via digichat session (not embed),
+      // the plan_tier from the JWT session is used as fallback.
+      vi.mocked(resolveChatTenantContext).mockResolvedValue({
+        tenantSlug: "digiquant-dashboard",
+        ownerUserSub: "user:123",
+      } as never);
+      vi.mocked(requireDigiChatAuth).mockResolvedValue({
+        tenantSlug: "digiquant-dashboard",
+        ownerUserSub: "user:123",
+        plan_tier: "desk",
+      });
+      const req = dashboardReq();
+      const res = await POST(req);
       expect(res.status).toBe(200);
     });
 
-    it("denies free tier via query param", async () => {
-      const req = new Request("http://localhost/api/chat?plan_tier=free", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-embed-host": "https://digiquant.io",
-        },
-        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+    it("returns 403 when session plan_tier is free/brief", async () => {
+      vi.mocked(resolveChatTenantContext).mockResolvedValue({
+        tenantSlug: "digiquant-dashboard",
+        ownerUserSub: "user:123",
+        embedConfig: dashboardCtx.embedConfig,
+      } as never);
+      vi.mocked(requireDigiChatAuth).mockResolvedValue({
+        tenantSlug: "digiquant-dashboard",
+        ownerUserSub: "user:123",
+        plan_tier: "free",
       });
+      const req = dashboardReq();
       const res = await POST(req);
       expect(res.status).toBe(403);
+    });
+
+    it("showByok is true in the embed config (contract test)", () => {
+      expect(dashboardCtx.embedConfig.showByok).toBe(true);
     });
   });
   describe("trace stream (the production default)", () => {

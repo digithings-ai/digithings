@@ -45,6 +45,8 @@ export const DIGICHAT_POPUP_ACCENT = '#3dd6c4'; // canon-allow: digichat ?accent
 export const DIGICHAT_READY = 'digichat:ready';
 export const DIGICHAT_PAGE_CONTEXT = 'digichat:page-context';
 export const DIGICHAT_THEME = 'digichat:theme';
+/** Plan tier message type for the authenticated tier proof (#3662). */
+export const DIGICHAT_PLAN_TIER = 'digichat:plan-tier';
 
 /** Keep in sync with digichat `DEFAULT_POPUP_PAGE_CONTEXT_MAX_CHARS`. */
 export const PAGE_CONTEXT_MAX_CHARS = 8_000;
@@ -321,4 +323,18 @@ export function buildThemeMessage(
   ts = Date.now(),
 ): { type: typeof DIGICHAT_THEME; theme: DigichatPopupTheme; ts: number } {
   return { type: DIGICHAT_THEME, theme, ts };
+}
+
+/**
+ * Build a plan tier postMessage for the digichat iframe (#3662).
+ *
+ * The iframe receives this after digichat:ready, fetches an HMAC-signed
+ * proof from /api/plan-proof, and includes it in X-Embed-Plan-Proof on
+ * every chat request.  The chat route verifies the signature — raw client-
+ * asserted X-Embed-Plan-Tier headers are NEVER trusted.
+ */
+export function buildPlanTierMessage(
+  tier: PlanTier,
+): { type: typeof DIGICHAT_PLAN_TIER; tier: PlanTier } {
+  return { type: DIGICHAT_PLAN_TIER, tier };
 }

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDigichatEmbedSrc,
   buildPageContextMessage,
+  buildPlanTierMessage,
   buildThemeMessage,
   canUseDigichatPopup,
   DEFAULT_DIGICHAT_EMBED_HOST,
@@ -304,5 +305,16 @@ describe('page context + theme helpers', () => {
     expect(readDocumentTheme({ getAttribute: () => 'light' })).toBe('light');
     expect(readDocumentTheme({ getAttribute: () => 'dark' })).toBe('dark');
     expect(readDocumentTheme({ getAttribute: () => null })).toBe('dark');
+  });
+
+  it('builds plan tier message for authenticated tier proof (#3662)', () => {
+    expect(buildPlanTierMessage('desk')).toEqual({
+      type: 'digichat:plan-tier',
+      tier: 'desk',
+    });
+    expect(buildPlanTierMessage('studio')).toEqual({
+      type: 'digichat:plan-tier',
+      tier: 'studio',
+    });
   });
 });
