@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any  # score:allow untyped any
+
+# Justification: MagicMock kwargs / heterogeneous LiteLLM payloads in adversarial tests.
 from unittest.mock import MagicMock, patch
 
 import pytest
