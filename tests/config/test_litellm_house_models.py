@@ -263,3 +263,35 @@ def test_merge_litellm_cheaperinference_replaces_mapped_keeps_openrouter() -> No
     assert sonar["api_key"] == "os.environ/OPENROUTER_API_KEY"
     mav = by_name["meta-llama/llama-4-maverick"]["litellm_params"]
     assert mav["api_key"] == "os.environ/OPENROUTER_API_KEY"
+
+
+def test_cheaperinference_overlay_merges_when_keyed() -> None:
+    from scripts.merge_litellm_cheaperinference import merge
+    import os
+
+    # Arrange: set CI key env vars so the merged config contains CI models
+    os.environ["CHEAPERINFERENCE_API_KEY"] = "sk-test-12345"
+    os.environ["CHEAPERINFERENCE_API_BASE"] = "https://api.cheaperinference.com/v1"
+
+    try:
+        merged = merge(CONFIG / "litellm.yaml", CONFIG / "litellm.cheaperinference.yaml")
+        by_name = {e["model_name"]: e for e in merged["model_list"] if isinstance(e, dict)}
+
+        # CI models should have CHEAPERINFERENCE_* creds
+        flash = by_name["deepseek/deepseek-v4-flash"]["litellm_params"]
+        assert flash["api_key"] == "os.environ/CHEAPERINFERENCE_API_KEY"
+        assert flash["api_base"] == "os.environ/CHEAPERINFERENCE_API_BASE"
+        assert flash["model"].startswith("openai/"), flash["model"]
+
+        # OpenRouter-only models should keep their original creds
+        sonar = by_name["perplexity/sonar"]["litellm_params"]
+        assert sonar["api_key"] == "os.environ/OPENROUTER_API_KEY"
+
+        # gpt-5.6-luna should also be remapped to CI
+        luna = by_name["openai/gpt-5.6-luna"]["litellm_params"]
+        assert luna["api_key"] == "os.environ/CHEAPERINFERENCE_API_KEY"
+        assert luna["api_base"] == "os.environ/CHEAPERINFERENCE_API_BASE"
+
+    finally:
+        del os.environ["CHEAPERINFERENCE_API_KEY"]
+        del os.environ["CHEAPERINFERENCE_API_BASE"]
