@@ -120,12 +120,14 @@ _MAX_TOOL_MESSAGE_CHARS = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "120
 # ── Provider registry ─────────────────────────────────────────────────────────
 # Maps a ``provider/`` model prefix to its OpenAI-compatible base_url + the env
 # var holding its API key. House traffic does **not** use this table: when
-# ``OPENAI_API_BASE`` points at LiteLLM, prefixes stay on the wire as model ids.
-# BYOK through LiteLLM puts the user's key/base in ``extra_body`` (clientside
-# credentials). The CLI OpenRouter rewrite of ``OPENAI_API_BASE`` is **not**
-# LiteLLM — registered prefixes open vendor clients there, and BYOK uses the
-# user Bearer directly. The registry is diagnostics-only without a LiteLLM
-# base. Do not default callers onto a hosted marketplace.
+# ``OPENAI_API_BASE`` points at a declared LiteLLM proxy, prefixes stay on the
+# wire as model ids. BYOK through LiteLLM puts the user's key/base in
+# ``extra_body`` (clientside credentials) only for those declared proxies.
+# Direct vendor bases, Ollama, and the CLI OpenRouter rewrite of
+# ``OPENAI_API_BASE`` are **not** LiteLLM — registered prefixes open vendor
+# clients there, and BYOK uses the user Bearer directly. The registry is
+# diagnostics-only without a LiteLLM base. Do not default callers onto a
+# hosted marketplace.
 
 _EXTERNAL_PROVIDERS: dict[str, dict[str, str]] = {
     "xai": {
@@ -281,11 +283,12 @@ _REQUEST_TIMEOUT = Timeout(_REQUEST_TIMEOUT_SECONDS, connect=_CONNECT_TIMEOUT_SE
 def get_client() -> OpenAI:
     """Return an OpenAI client for the default (non-prefixed) path.
 
-    When a LiteLLM proxy is configured (``OPENAI_API_BASE`` set and not
-    ``openrouter.ai``), this is always that proxy client — house key as Bearer,
-    BYOK keys passed per-request via :func:`_with_byok_litellm_pass_through`.
-    The leftover CLI OpenRouter rewrite is a default base, not LiteLLM: BYOK
-    then returns an *uncached* client at the user's ``base_url``.
+    When a declared LiteLLM proxy is configured (``OPENAI_API_BASE`` on the
+    trusted-proxy allowlist), this is always that proxy client — house key as
+    Bearer, BYOK keys passed per-request via :func:`_with_byok_litellm_pass_through`.
+    The leftover CLI OpenRouter rewrite, a direct vendor ``OPENAI_API_BASE``,
+    and Ollama are not LiteLLM: BYOK then returns an *uncached* client at the
+    user's ``base_url``.
     Otherwise returns a client cached by ``(api_key, base_url)`` so the httpx
     connection pool is reused; the cache key embeds both env-derived values so
     the client is recreated automatically when either changes (e.g. in tests).
@@ -320,9 +323,164 @@ def _api_base_is_openrouter() -> bool:
     return "openrouter.ai" in (os.environ.get("OPENAI_API_BASE") or "").lower()
 
 
+_DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
+
+# House OpenRouter-style slugs → Cheaper Inference bare catalog ids (verified 2026-09).
+# Excludes anthropic/* (quality bake-off), x-ai/grok-4.3|4.6 (CI has grok-4.5 only),
+# meta-llama/*, perplexity/*, and all ``:online`` variants — those are not on the
+# CI catalog and fail closed when CI is the selected house upstream (#3660).
+_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
+    "deepseek/deepseek-v4-flash": "deepseek-v4-flash",
+    "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
+    "google/gemini-3.7-flash": "gemini-3.7-flash",
+    "google/gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
+    "openai/gpt-5.6-luna": "gpt-5.6-luna",
+    "openai/gpt-5.6-sol": "gpt-5.6-sol",
+}
+
+
+def _api_base_is_cheaperinference() -> bool:
+    """True when the default client talks to hosted Cheaper Inference (CLI/GHA)."""
+    return "cheaperinference.com" in (os.environ.get("OPENAI_API_BASE") or "").lower()
+
+
+def cheaperinference_house_preferred() -> bool:
+    """True when house traffic should prefer hosted Cheaper Inference.
+
+    House default: ``CHEAPERINFERENCE_API_KEY`` present → prefer CI.
+    Force OpenRouter: ``DIGI_HOUSE_UPSTREAM=openrouter|or`` or
+    ``CHEAPERINFERENCE_HOUSE=0|false|no|off``.
+    Explicit CI: ``DIGI_HOUSE_UPSTREAM=cheaperinference|ci`` or
+    ``CHEAPERINFERENCE_HOUSE=1|true|yes|on`` (still requires the key).
+    Distinct from self-hosted OmniRoute (``OMNIROUTE_*``).
+    """
+    key = (os.environ.get("CHEAPERINFERENCE_API_KEY") or "").strip()
+    if not key:
+        return False
+    upstream = (os.environ.get("DIGI_HOUSE_UPSTREAM") or "").strip().lower()
+    if upstream in {"openrouter", "or"}:
+        return False
+    if upstream in {"cheaperinference", "ci"}:
+        return True
+    flag = (os.environ.get("CHEAPERINFERENCE_HOUSE") or "").strip().lower()
+    if flag in {"0", "false", "no", "off"}:
+        return False
+    if flag in {"1", "true", "yes", "on"}:
+        return True
+    return True
+
+
+def cheaperinference_bare_id_for_house_slug(model: str) -> str | None:
+    """Return CI bare id for a mapped house slug, else ``None`` (stay OpenRouter)."""
+    if ":online" in model:
+        return None
+    return _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE.get(model)
+
+
+def _openrouter_fallback_for_ci_miss(model: str) -> bool:
+    """CI is the default base but this house slug is not on the CI catalog."""
+    return (
+        _api_base_is_cheaperinference()
+        and _is_openrouter_backed_house_slug(model)
+        and cheaperinference_bare_id_for_house_slug(model) is None
+    )
+
+
+def house_openrouter_fallback_allowed() -> bool:
+    """True when a CI-catalog miss may quietly fall back to OpenRouter (#3660).
+
+    Fail-closed by default: when CI is the selected house upstream, a house slug
+    missing from the CI catalog raises instead of silently spending on
+    OpenRouter. Set ``DIGI_HOUSE_ALLOW_OPENROUTER_FALLBACK=1`` (or
+    ``true``/``yes``/``on``) to restore the old quiet-fallback behavior —
+    e.g. for a tier that still pins sonar/``:online`` grounding while it is
+    being migrated to CI synthesis models. Distinct from self-hosted OmniRoute
+    (``OMNIROUTE_*``).
+    """
+    return (os.environ.get("DIGI_HOUSE_ALLOW_OPENROUTER_FALLBACK") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _require_openrouter_fallback_allowed(model: str) -> None:
+    """Fail closed for a CI-catalog miss unless the fallback override is set (#3660)."""
+    if house_openrouter_fallback_allowed():
+        logger.warning(
+            "house model %r is not on the Cheaper Inference catalog; "
+            "falling back to OpenRouter (DIGI_HOUSE_ALLOW_OPENROUTER_FALLBACK is set)",
+            model,
+        )
+        return
+    raise RuntimeError(
+        f"house model {model!r} is not on the Cheaper Inference catalog and CI is the "
+        "selected house upstream — refusing to silently fall back to OpenRouter. "
+        "Remap the pin to a CI catalog id (see docs/providers/cheaperinference.md) or "
+        "set DIGI_HOUSE_ALLOW_OPENROUTER_FALLBACK=1 to allow the OpenRouter fallback."
+    )
+
+
+# Documented LiteLLM listen URLs. A non-empty ``DIGILLM_TRUSTED_LITELLM_BASES``
+# (comma-separated) replaces this tuple so an operator can pin a single proxy.
+# ``OPENAI_API_BASE`` is a trusted proxy only when it canonicalizes to one of
+# these — never merely because it is set and is not OpenRouter (#3605).
+_DEFAULT_TRUSTED_LITELLM_BASES = (
+    "http://127.0.0.1:4000/v1",
+    "http://localhost:4000/v1",
+    "http://[::1]:4000/v1",
+    "http://litellm:4000/v1",
+    "http://host.docker.internal:4000/v1",
+)
+
+# Catalog ``baseUrl`` values from ``config/byok-providers.json``, trailing slash
+# stripped. digillm does not read that file (standalone library); tests pin
+# this set to the catalog so a new provider cannot silently skip the regex.
+_BYOK_CATALOG_API_BASES = frozenset(
+    {
+        "https://openrouter.ai/api/v1",
+        "https://api.openai.com/v1",
+        "https://api.anthropic.com/v1",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        "https://api.x.ai/v1",
+    }
+)
+
+
+def _canonical_llm_base(url: str) -> str:
+    """Lowercase origin+port, dropping a trailing ``/v1`` so allowlist matches both forms."""
+    raw = (url or "").strip().rstrip("/")
+    if not raw:
+        return ""
+    lower = raw.lower()
+    if lower.endswith("/v1"):
+        return lower[: -len("/v1")].rstrip("/")
+    return lower
+
+
+def _trusted_litellm_bases() -> frozenset[str]:
+    extra = (os.environ.get("DIGILLM_TRUSTED_LITELLM_BASES") or "").strip()
+    raw = (
+        [part.strip() for part in extra.split(",") if part.strip()]
+        if extra
+        else list(_DEFAULT_TRUSTED_LITELLM_BASES)
+    )
+    return frozenset(filter(None, (_canonical_llm_base(item) for item in raw)))
+
+
 def _litellm_proxy_configured() -> bool:
-    """True when ``OPENAI_API_BASE`` is a LiteLLM (or other non-OpenRouter) proxy."""
-    return _default_base_configured() and not _api_base_is_openrouter()
+    """True when ``OPENAI_API_BASE`` is an explicitly declared LiteLLM proxy.
+
+    The allowlist is :data:`_DEFAULT_TRUSTED_LITELLM_BASES` unless
+    ``DIGILLM_TRUSTED_LITELLM_BASES`` replaces it. Direct vendor endpoints
+    (OpenAI, OpenRouter, Ollama :11434, …) are not proxies even when they
+    speak the OpenAI protocol.
+    """
+    base = (os.environ.get("OPENAI_API_BASE") or "").strip()
+    if not base:
+        return False
+    return _canonical_llm_base(base) in _trusted_litellm_bases()
 
 
 # OpenRouter org slugs used as house ``model_name`` keys in ``config/litellm.yaml``.
@@ -350,24 +508,32 @@ def _use_default_base_client(model: str) -> bool:
     LiteLLM: every prefix (caller → digillm → LiteLLM). Leftover OpenRouter rewrite:
     house OpenRouter slugs that collide with the registry (``anthropic/``, leftover
     ``openrouter/``) stay on the default client so ``anthropic/claude-sonnet-5`` does
-    not hit api.anthropic.com. ``gemini/`` and ``xai/`` stay vendor clients.
+    not hit api.anthropic.com. ``gemini/`` and ``xai/`` stay vendor clients. Any
+    other non-proxy ``OPENAI_API_BASE`` (direct OpenAI, Ollama, …) is not treated
+    as LiteLLM.
     """
     provider, _ = _parse_provider_prefix(model)
     if provider is None or not _default_base_configured():
         return False
     if _litellm_proxy_configured():
         return True
-    return provider in {"anthropic", "openrouter"}
+    if _api_base_is_openrouter():
+        return provider in {"anthropic", "openrouter"}
+    return False
 
 
 def _with_byok_litellm_pass_through(kwargs: dict[str, Any]) -> dict[str, Any]:
     """Attach LiteLLM clientside credentials when BYOK is bound on the proxy path.
 
-    Only when ``OPENAI_API_BASE`` is a LiteLLM proxy, not the leftover OpenRouter
-    rewrite. HTTP still authenticates to LiteLLM with the house proxy key.
-    ``extra_body`` ``api_key`` / ``api_base`` are LiteLLM's request-level
-    pass-through so the proxy uses the user's token against that vendor or the
-    user's own OpenAI-compat endpoint. No-op without LiteLLM or without BYOK.
+    Only when ``OPENAI_API_BASE`` is a declared LiteLLM proxy. HTTP still
+    authenticates to LiteLLM with the house proxy key. ``extra_body``
+    ``api_key`` / ``api_base`` are LiteLLM's request-level pass-through so the
+    proxy spends the user's token at the catalog provider host. ``api_base``
+    outside :data:`_BYOK_CATALOG_API_BASES` is refused here — LiteLLM's regex
+    allowlist is the second gate. BYOK requests also set
+    ``cache: {no-cache, no-store}`` so LiteLLM's shared proxy cache cannot
+    reuse one principal's response for another. No-op without LiteLLM or
+    without BYOK.
     """
     if not _litellm_proxy_configured():
         return kwargs
@@ -375,16 +541,32 @@ def _with_byok_litellm_pass_through(kwargs: dict[str, Any]) -> dict[str, Any]:
     if not byok_override:
         return kwargs
     api_key, base_url = byok_override
+    catalog_base = base_url.rstrip("/")
+    if catalog_base not in _BYOK_CATALOG_API_BASES:
+        raise RuntimeError(
+            f"BYOK api_base {base_url!r} is not a catalog provider host; "
+            "clientside pass-through is limited to config/byok-providers.json bases."
+        )
     merged = dict(kwargs)
     extra = dict(merged.get("extra_body") or {})
     extra["api_key"] = api_key
-    extra["api_base"] = base_url.rstrip("/")
+    extra["api_base"] = catalog_base
+    cache = dict(extra.get("cache") or {})
+    cache["no-cache"] = True
+    cache["no-store"] = True
+    extra["cache"] = cache
     merged["extra_body"] = extra
     return merged
 
 
 def _effective_model_id(model: str) -> str:
     """Model id on the wire: full caller string for LiteLLM; vendor slug otherwise."""
+    bare = cheaperinference_bare_id_for_house_slug(model)
+    if bare is not None and _api_base_is_cheaperinference():
+        return bare
+    if _openrouter_fallback_for_ci_miss(model):
+        _require_openrouter_fallback_allowed(model)
+        return model
     provider, model_id = _parse_provider_prefix(model)
     if _use_default_base_client(model):
         return model
@@ -395,9 +577,24 @@ def _cost_controls_provider(parsed_provider: str | None, model: str) -> str | No
     """Attach OpenRouter extra_body for OpenRouter prefixes, a direct OR base, or
     OpenRouter-backed house slugs through LiteLLM. Not ``gpt-4o-mini`` / ``ollama/*``.
     """
+    if (
+        cheaperinference_bare_id_for_house_slug(model) is not None
+        and _api_base_is_cheaperinference()
+    ):
+        return None
+    if _openrouter_fallback_for_ci_miss(model):
+        _require_openrouter_fallback_allowed(model)
+        return "openrouter"
     if parsed_provider == "openrouter" or _api_base_is_openrouter():
         return "openrouter"
     if _litellm_proxy_configured() and _is_openrouter_backed_house_slug(model):
+        # When LiteLLM proxies a CI-mapped slug, skip OR provider prefs — the
+        # overlay routes those to Cheaper Inference (drop_params alone is not enough).
+        if (
+            cheaperinference_bare_id_for_house_slug(model) is not None
+            and cheaperinference_house_preferred()
+        ):
+            return None
         return "openrouter"
     return parsed_provider
 
@@ -405,9 +602,9 @@ def _cost_controls_provider(parsed_provider: str | None, model: str) -> str | No
 def get_client_for_model(model: str) -> OpenAI:
     """Return the OpenAI client for ``model`` (the single public client entry point).
 
-    LiteLLM (``OPENAI_API_BASE`` set and not ``openrouter.ai``): house and BYOK
-    use :func:`get_client`. Registered prefixes are LiteLLM ``model_name`` keys.
-    BYOK keys ride ``extra_body``.
+    Declared LiteLLM proxy (``OPENAI_API_BASE`` on the trusted-proxy allowlist):
+    house and BYOK use :func:`get_client`. Registered prefixes are LiteLLM
+    ``model_name`` keys. BYOK keys ride ``extra_body``.
 
     Default base set (including leftover OpenRouter rewrite): house
     ``anthropic/`` / leftover ``openrouter/`` stay on :func:`get_client` so
@@ -430,6 +627,17 @@ def get_client_for_model(model: str) -> OpenAI:
         cfg = _EXTERNAL_PROVIDERS.get(provider)
         if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
             return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
+    # Cheaper Inference default base: mapped house slugs use get_client(); catalog
+    # misses (sonar / :online / maverick / grok-4.3|4.6 / anthropic) fail closed
+    # unless DIGI_HOUSE_ALLOW_OPENROUTER_FALLBACK is set (#3660).
+    if _openrouter_fallback_for_ci_miss(model):
+        _require_openrouter_fallback_allowed(model)
+        provider = "openrouter"
+    elif (
+        cheaperinference_bare_id_for_house_slug(model) is not None
+        and _api_base_is_cheaperinference()
+    ):
+        return get_client()
     if provider is None or _use_default_base_client(model):
         return get_client()
     cfg = _EXTERNAL_PROVIDERS[provider]

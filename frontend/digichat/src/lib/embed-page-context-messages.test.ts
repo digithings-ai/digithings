@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import { describe, expect, it } from "vitest";
 import {
   PAGE_CONTEXT_MESSAGE_TYPE,
@@ -65,6 +66,26 @@ describe("embed-page-context-messages", () => {
         "https://app.example",
       ),
     ).toBeNull();
+  });
+
+  it("re-allowlists html on the receiver even if the parent skipped sanitizing", () => {
+    const parsed = parsePageContextMessage(
+      {
+        origin: "https://app.example",
+        data: {
+          type: PAGE_CONTEXT_MESSAGE_TYPE,
+          text: "ok",
+          html:
+            '<div hidden>HIDDEN-NESTED</div><p>Visible</p>' +
+            '<a href="/x?token=tok_live">link</a>',
+          ts: Date.now(),
+        },
+      } as MessageEvent,
+      "https://app.example",
+    );
+    expect(parsed?.html).toContain("Visible");
+    expect(parsed?.html).not.toContain("HIDDEN-NESTED");
+    expect(parsed?.html).not.toContain("tok_live");
   });
 
   it("extracts visible body text only", () => {

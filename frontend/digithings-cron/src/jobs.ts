@@ -88,13 +88,13 @@ export const JOBS: readonly Job[] = [
     inputs: { mode: "eod-macro" },
   }),
 
-  // --- digithings: house-run via leftover event id "olympus-daily" ---
+  // --- digithings: house-run via repository_dispatch digiquant-baseline ---
   // Research/portfolio retries run every day; ordinary source cadence decides
   // refresh. Manual workflow_dispatch still owns explicit refresh_scope.
-  rd("house-run-09", "17 9 * * *", DIGITHINGS, "olympus-daily"),
-  rd("house-run-10", "17 10 * * *", DIGITHINGS, "olympus-daily"),
-  rd("house-run-11", "17 11 * * *", DIGITHINGS, "olympus-daily"),
-  rd("house-run-12", "17 12 * * *", DIGITHINGS, "olympus-daily"),
+  rd("house-run-09", "17 9 * * *", DIGITHINGS, "digiquant-baseline"),
+  rd("house-run-10", "17 10 * * *", DIGITHINGS, "digiquant-baseline"),
+  rd("house-run-11", "17 11 * * *", DIGITHINGS, "digiquant-baseline"),
+  rd("house-run-12", "17 12 * * *", DIGITHINGS, "digiquant-baseline"),
 
   wd("research-metrics", "5 22 * * *", DIGITHINGS, "pipeline-research-metrics.yml"),
   wd("tearsheets", "12 0 * * *", DIGITHINGS, "pipeline-digiquant-tearsheets.yml"),

@@ -29,6 +29,7 @@ vi.mock('next/link', () => ({
     ),
 }));
 
+import { MIN_OVERLAP_DAYS } from '@digithings/web';
 import OverviewPage from './page';
 
 type Action = { ticker: string; current_pct: number; recommended_pct: number; action: string };
@@ -73,6 +74,24 @@ function makeData(actions: Action[]): DashboardData {
     },
     server_portfolio_metrics: { invested_pct: 75 },
   } as unknown as DashboardData;
+}
+
+function weekdayOverlap(
+  count: number,
+  startIso = '2026-05-04'
+): Array<{ date: string; nav: number; price: number }> {
+  const out: Array<{ date: string; nav: number; price: number }> = [];
+  let nav = 100;
+  let price = 500;
+  const start = Date.parse(`${startIso}T00:00:00Z`);
+  for (let i = 0; out.length < count; i++) {
+    const d = new Date(start + i * 86_400_000);
+    if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
+    nav *= 1 + 0.001 + (out.length % 5) * 0.0003;
+    price *= 1 + 0.0005 + (out.length % 7) * 0.0002;
+    out.push({ date: d.toISOString().slice(0, 10), nav, price });
+  }
+  return out;
 }
 
 describe('Today (Overview) page', () => {
@@ -211,5 +230,86 @@ describe('Today (Overview) page', () => {
     expect(html).toContain('marks unstamped');
     expect(html).toContain('accounting tip');
     expect(html).not.toContain('>79%<');
+  });
+
+  it('keeps persisted alpha/IR when live overlay is off and NAV/benchmark overlap is valid', () => {
+    const series = weekdayOverlap(MIN_OVERLAP_DAYS + 5);
+    const data = makeData([]);
+    data.portfolio.snapshots = series.map((p) => ({
+      date: p.date,
+      nav: p.nav,
+      invested_pct: 75,
+      cash_pct: 25,
+      contract: 'finalized_accounting',
+      source: 'finalized_accounting',
+    }));
+    data.benchmarks = {
+      SPY: { history: series.map((p) => ({ date: p.date, price: p.price })) },
+    };
+    useLiveBriefKpisMock.mockReturnValue({
+      liveNav: 101.2,
+      liveVsMarkPct: 0,
+      priceAsOfDate: series.at(-1)!.date,
+      dayReturnPct: 9.9,
+      sinceInceptionPct: 9.9,
+      sinceInceptionStartDate: series[0]!.date,
+      portfolioReturnPct: 9.9,
+      benchmarkReturnPct: 9.9,
+      excessReturnPct: 9.9,
+      relativeGainPct: 9.9,
+      alphaPct: 99.9,
+      informationRatio: 9.99,
+      benchmarkTicker: 'SPY',
+      bookNavDate: series.at(-1)!.date,
+    });
+    useDashboardMock.mockReturnValue({ data, loading: false, error: null });
+    const html = renderToStaticMarkup(createElement(OverviewPage));
+    expect(html).not.toContain('live marks');
+    expect(html).not.toContain('99.9');
+    expect(html).not.toContain('9.99');
+    expect(html).not.toMatch(/>Alpha<\/dt><dd[^>]*>—</);
+    expect(html).not.toMatch(/>Info ratio<\/dt><dd[^>]*>—</);
+  });
+
+  it('does not label live overlay numbers as finalized accounting', () => {
+    const data = makeData([]);
+    data.portfolio.snapshots = [
+      {
+        date: '2026-06-23',
+        nav: 99.32,
+        invested_pct: 75,
+        cash_pct: 25,
+        contract: 'finalized_accounting',
+        source: 'finalized_accounting',
+      },
+      {
+        date: '2026-06-24',
+        nav: 98.64,
+        invested_pct: 75,
+        cash_pct: 25,
+        contract: 'finalized_accounting',
+        source: 'finalized_accounting',
+      },
+    ];
+    useLiveBriefKpisMock.mockReturnValue({
+      liveNav: 101.2,
+      liveVsMarkPct: 0.5,
+      priceAsOfDate: '2026-06-24',
+      dayReturnPct: 0.3,
+      sinceInceptionPct: 1.2,
+      sinceInceptionStartDate: '2026-06-23',
+      portfolioReturnPct: 1.2,
+      benchmarkReturnPct: -0.6,
+      excessReturnPct: 1.8,
+      relativeGainPct: 1.8,
+      alphaPct: 0.45,
+      informationRatio: 0.32,
+      benchmarkTicker: 'SPY',
+      bookNavDate: '2026-06-24',
+    });
+    useDashboardMock.mockReturnValue({ data, loading: false, error: null });
+    const html = renderToStaticMarkup(createElement(OverviewPage));
+    expect(html).toContain('live marks');
+    expect(html).not.toContain('finalized accounting');
   });
 });

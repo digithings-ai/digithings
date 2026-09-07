@@ -14,7 +14,7 @@ unified research+portfolio pipeline via
 | Workflow | Trigger | `refresh_scope` | Timeout |
 | --- | --- | --- | --- |
 | `pipeline-digiquant.yml` | digithings-cron daily house clocks (`17 9/10/11/12 * * *`) | `none` | 240 min |
-| `pipeline-digiquant.yml` | `repository_dispatch` `olympus-daily` | `none` | 240 min |
+| `pipeline-digiquant.yml` | `repository_dispatch` `digiquant-baseline` | `none` | 240 min |
 | `pipeline-digiquant.yml` | `workflow_dispatch` | `none` \| `all` \| `segments` \| `portfolio` \| `digest` \| `beliefs` | 240 min |
 | execution cron check (spec) | `cron '15 12 * * *'` — copy `docs/agent-backlog/execution-tenancy/execution-cron-check.workflow.yml` onto a `chore/`/`feat/` branch; never `--execute`/`--all`/`portfolio.chain` | n/a (probe) | 10 min |
 | `test-research-graph.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/dashboard/{research,portfolio}/**`, `tests/dq/{research,portfolio}/**`, or `pipeline-digiquant.yml` | unit tests + ruff | 15 min |
@@ -217,11 +217,11 @@ minute, hourly retries; later slots skip after a success). After edits, re-run
 `actionlint`. Do not `workflow_dispatch` the house pipeline from an agent.
 
 External watchdog (optional, beats GitHub `schedule` lag): a Cloudflare Cron
-Trigger or ops runner POSTs `repository_dispatch` with `event_type=olympus-daily`.
+Trigger or ops runner POSTs `repository_dispatch` with `event_type=digiquant-baseline`.
 That is not `workflow_dispatch` and does not count as house-proof for #3391
 until a **schedule** success lands. Example:
 
 ```bash
 gh api repos/digithings-ai/digithings/dispatches \
-  -f event_type=olympus-daily
+  -f event_type=digiquant-baseline
 ```

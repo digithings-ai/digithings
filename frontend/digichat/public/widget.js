@@ -15,8 +15,10 @@
  *
  * Opens a bottom-right panel that iframes /embed?layout=embed. Same tenant
  * registry / RAG corpus as full-page embed. When data-page-context=1, after
- * digichat:ready the launcher posts visible document.body.innerText (already
- * shown to the visitor) — never scrapes behind auth.
+ * digichat:ready the launcher posts a structurally sanitized HTML snapshot of
+ * already-visible DOM (plus visible text) — never scrapes hidden/password
+ * controls or `data-digichat-private` regions. Keep the walk in sync with
+ * `src/lib/page-context-sanitize.ts` (#3602).
  */
 (function () {
   "use strict";
@@ -96,49 +98,181 @@
     return url.toString();
   }
 
-  function extractVisibleText() {
-    var raw = (document.body && document.body.innerText) || "";
-    return raw.replace(/\s+/g, " ").trim().slice(0, maxChars);
+  var maxHtmlChars = 12000;
+  var PRIVATE_ATTR = "data-digichat-private";
+  var ALLOWED_TAGS = {
+    a: 1, abbr: 1, article: 1, aside: 1, b: 1, blockquote: 1, br: 1, button: 1,
+    caption: 1, code: 1, dd: 1, details: 1, dfn: 1, div: 1, dl: 1, dt: 1, em: 1,
+    figcaption: 1, figure: 1, footer: 1, h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1,
+    header: 1, hr: 1, i: 1, label: 1, li: 1, main: 1, mark: 1, nav: 1, ol: 1, p: 1,
+    pre: 1, s: 1, section: 1, small: 1, span: 1, strong: 1, sub: 1, summary: 1,
+    sup: 1, table: 1, tbody: 1, td: 1, tfoot: 1, th: 1, thead: 1, time: 1, tr: 1,
+    u: 1, ul: 1,
+  };
+  var ALLOWED_ATTRS = {
+    id: 1, class: 1, role: 1, title: 1, lang: 1, dir: 1,
+    "aria-label": 1, "aria-labelledby": 1, "aria-describedby": 1,
+    "aria-expanded": 1, "aria-current": 1, "aria-level": 1,
+    colspan: 1, rowspan: 1, scope: 1, headers: 1, datetime: 1, for: 1, href: 1,
+  };
+  var DROP_TAGS = {
+    script: 1, style: 1, noscript: 1, iframe: 1, object: 1, embed: 1, link: 1,
+    meta: 1, base: 1, template: 1, svg: 1, math: 1, canvas: 1, video: 1, audio: 1,
+    source: 1, track: 1, picture: 1, param: 1, applet: 1, frame: 1, frameset: 1,
+    img: 1,
+  };
+
+  function tagOf(el) {
+    return (el.tagName || "").toLowerCase();
   }
 
-  var maxHtmlChars = 12000;
+  function inlineHides(el) {
+    var style = el.getAttribute && el.getAttribute("style");
+    if (!style) return false;
+    var probe = document.createElement("div");
+    probe.setAttribute("style", style);
+    return probe.style.display === "none" || probe.style.visibility === "hidden" || probe.style.opacity === "0";
+  }
 
-  /** Prefer main/role=main; strip scripts/handlers; never re-hydrate as live DOM. */
-  function extractPageHtml() {
+  function computedHides(el) {
+    if (!window.getComputedStyle) return false;
+    var cs = window.getComputedStyle(el);
+    if (cs.display === "none" || cs.visibility === "hidden") return true;
+    return parseFloat(cs.opacity) === 0;
+  }
+
+  function shouldDrop(el, useComputed) {
+    var tag = tagOf(el);
+    if (DROP_TAGS[tag]) return true;
+    if (tag === "input" || tag === "textarea" || tag === "select") return true;
+    if (el.hasAttribute("hidden") || el.hasAttribute("inert")) return true;
+    if ((el.getAttribute("aria-hidden") || "").trim().toLowerCase() === "true") return true;
+    if (el.hasAttribute(PRIVATE_ATTR)) return true;
+    if (el.closest && el.closest("[data-digichat-popup]")) return true;
+    if (inlineHides(el)) return true;
+    return !!(useComputed && computedHides(el));
+  }
+
+  function sanitizeHref(raw) {
+    var trimmed = (raw || "").trim();
+    if (!trimmed) return null;
+    var lower = trimmed.toLowerCase();
+    if (
+      lower.indexOf("javascript:") === 0 ||
+      lower.indexOf("data:") === 0 ||
+      lower.indexOf("vbscript:") === 0 ||
+      lower.indexOf("blob:") === 0 ||
+      lower.indexOf("file:") === 0
+    ) {
+      return null;
+    }
+    try {
+      var u = new URL(trimmed, "https://page-context.invalid");
+      if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+      if (u.hostname === "page-context.invalid") return u.pathname || "/";
+      return u.origin + u.pathname;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function stripAttrs(el) {
+    var tag = tagOf(el);
+    var attrs = el.attributes ? Array.prototype.slice.call(el.attributes) : [];
+    for (var i = 0; i < attrs.length; i++) {
+      var name = attrs[i].name.toLowerCase();
+      if (name.indexOf("on") === 0 || !ALLOWED_ATTRS[name]) {
+        el.removeAttribute(attrs[i].name);
+        continue;
+      }
+      if (name === "href") {
+        if (tag !== "a") {
+          el.removeAttribute(attrs[i].name);
+          continue;
+        }
+        var safe = sanitizeHref(attrs[i].value);
+        if (safe) el.setAttribute("href", safe);
+        else el.removeAttribute(attrs[i].name);
+      }
+    }
+  }
+
+  function unwrap(el) {
+    var parent = el.parentNode;
+    if (!parent) {
+      if (el.remove) el.remove();
+      return;
+    }
+    while (el.firstChild) parent.insertBefore(el.firstChild, el);
+    parent.removeChild(el);
+  }
+
+  function sanitizeInPlace(el) {
+    var kids = Array.prototype.slice.call(el.childNodes);
+    for (var i = 0; i < kids.length; i++) {
+      var child = kids[i];
+      if (child.nodeType === 8) {
+        if (child.parentNode) child.parentNode.removeChild(child);
+        continue;
+      }
+      if (child.nodeType === 3) continue;
+      if (child.nodeType !== 1) {
+        if (child.parentNode) child.parentNode.removeChild(child);
+        continue;
+      }
+      if (shouldDrop(child, false)) {
+        if (child.remove) child.remove();
+        else if (child.parentNode) child.parentNode.removeChild(child);
+        continue;
+      }
+      stripAttrs(child);
+      sanitizeInPlace(child);
+      if (!ALLOWED_TAGS[tagOf(child)]) unwrap(child);
+    }
+  }
+
+  function pruneFromLive(live, clone) {
+    var liveKids = Array.prototype.slice.call(live.childNodes);
+    var cloneKids = Array.prototype.slice.call(clone.childNodes);
+    for (var i = liveKids.length - 1; i >= 0; i--) {
+      var liveNode = liveKids[i];
+      var cloneNode = cloneKids[i];
+      if (!cloneNode || liveNode.nodeType !== 1 || cloneNode.nodeType !== 1) continue;
+      if (shouldDrop(liveNode, true)) {
+        if (cloneNode.remove) cloneNode.remove();
+        else if (cloneNode.parentNode) cloneNode.parentNode.removeChild(cloneNode);
+        continue;
+      }
+      pruneFromLive(liveNode, cloneNode);
+    }
+  }
+
+  function capHtml(html, max) {
+    if (html.length <= max) return html;
+    var sliced = html.slice(0, max);
+    var lastLt = sliced.lastIndexOf("<");
+    var lastGt = sliced.lastIndexOf(">");
+    if (lastLt > lastGt) sliced = sliced.slice(0, lastLt);
+    return sliced.replace(/\s+$/, "");
+  }
+
+  function extractPageContext() {
     var root =
       document.querySelector("main") ||
       document.querySelector('[role="main"]') ||
       document.body;
-    if (!root) return "";
+    if (!root) return { html: "", text: "" };
+    if (shouldDrop(root, true)) return { html: "", text: "" };
     var clone = root.cloneNode(true);
-    var popup = clone.querySelectorAll
-      ? clone.querySelectorAll("[data-digichat-popup]")
-      : [];
-    for (var i = 0; i < popup.length; i++) {
-      if (popup[i].parentNode) popup[i].parentNode.removeChild(popup[i]);
-    }
-    var html = clone.innerHTML || "";
-    html = html
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
-      .replace(/<!--[\s\S]*?-->/g, "")
-      .replace(/<input\b[^>]*\btype\s*=\s*(['"]?)(?:hidden|password)\1[^>]*>/gi, "")
-      .replace(/<input\b[^>]*>/gi, function (tag) {
-        return tag.replace(/\svalue\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
-      })
-      .replace(/<textarea\b[^>]*>[\s\S]*?<\/textarea>/gi, function (tag) {
-        return tag.replace(/>[\s\S]*?</, "><");
-      })
-      .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
-      .replace(/([</])on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "$1")
-      .replace(/(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, "$1=$2#$2")
-      .replace(/(href|src)\s*=\s*javascript:[^\s>]*/gi, "$1=#")
-      .replace(/<\/?(?:iframe|object|embed|link|meta|base|noscript)\b[^>]*>/gi, "");
-    return html.replace(/\n{3,}/g, "\n\n").trim().slice(0, maxHtmlChars);
+    pruneFromLive(root, clone);
+    sanitizeInPlace(clone);
+    var html = capHtml((clone.innerHTML || "").replace(/\n{3,}/g, "\n\n").trim(), maxHtmlChars);
+    var text = ((clone.textContent || "").replace(/\s+/g, " ").trim()).slice(0, maxChars);
+    return { html: html, text: text };
   }
 
   /** Best-effort viewport capture; fails soft (CORS / tainted canvas). */
-  function captureScreenshot(cb) {
+  function captureScreenshot(cb, visibleText) {
     try {
       var w = Math.min(window.innerWidth || 800, 1280);
       var h = Math.min(window.innerHeight || 600, 900);
@@ -158,7 +292,7 @@
         '">' +
         '<foreignObject width="100%" height="100%">' +
         '<div xmlns="http://www.w3.org/1999/xhtml" style="font:14px sans-serif;background:#fff;color:#111;padding:8px;white-space:pre-wrap;">' +
-        extractVisibleText()
+        (visibleText || "")
           .slice(0, 4000)
           .replace(/&/g, "&amp;")
           .replace(/</g, "&lt;")
@@ -258,8 +392,9 @@
       if (!pageContextOn || pageContextSent) return;
       var win = iframe.contentWindow;
       if (!win) return;
-      var text = extractVisibleText();
-      var html = extractPageHtml();
+      var ctx = extractPageContext();
+      var text = ctx.text;
+      var html = ctx.html;
       captureScreenshot(function (shot) {
         var payload = {
           type: PAGE_CONTEXT,
@@ -274,7 +409,7 @@
         } catch (e) {
           /* ignore — allow retry on next ready */
         }
-      });
+      }, text);
     }
 
     function setOpen(next) {

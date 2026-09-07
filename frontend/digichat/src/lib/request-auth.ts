@@ -6,6 +6,7 @@ export type DigiChatAuthContext = {
   tenantSlug: string;
   /** OIDC subject or `machine:${tenantSlug}` for API keys. */
   ownerUserSub: string;
+  plan_tier?: string;
 };
 
 export async function requireDigiChatAuth(
@@ -26,10 +27,12 @@ export async function requireDigiChatAuth(
   }
 
   let tenantSlug: string;
+  let planTier: string | undefined;
   try {
     tenantSlug = machine
       ? machine.tenantSlug
       : await tenantSlugForOidcSubject(session!.user!.id);
+    planTier = session?.user?.app_metadata?.plan_tier;
   } catch (e) {
     const message = e instanceof Error ? e.message : "tenant_resolution_failed";
     return new Response(JSON.stringify({ error: "tenant_error", message }), {
@@ -41,5 +44,5 @@ export async function requireDigiChatAuth(
     ? `machine:${tenantSlug}`
     : session!.user!.id;
 
-  return { tenantSlug, ownerUserSub };
+  return { tenantSlug, ownerUserSub, plan_tier: planTier };
 }

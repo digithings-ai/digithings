@@ -254,6 +254,30 @@ export function informationRatioFromDaily(
  * the book date (post-EOD), baseline is the prior NAV row so the printed day
  * return still reflects the last completed session.
  */
+/**
+ * Build the NAV series used for overlapping daily returns when a live tip
+ * may sit on a later calendar day than the last accounting row.
+ *
+ * Keep every accounting observation and append the live tip when `endDate`
+ * is strictly after the book — dropping the last accounting row can drop a
+ * valid overlap pair below {@link MIN_OVERLAP_DAYS}.
+ */
+export function navHistoryForLiveOverlap(
+  sortedNav: readonly LiveKpiNavPoint[],
+  endDate: string,
+  liveNav: number
+): LiveKpiNavPoint[] {
+  const last = sortedNav.at(-1);
+  if (!last) return [{ date: endDate, nav: liveNav }];
+  if (endDate === last.date) {
+    return [...sortedNav.slice(0, -1), { date: endDate, nav: liveNav }];
+  }
+  if (endDate > last.date) {
+    return [...sortedNav, { date: endDate, nav: liveNav }];
+  }
+  return [...sortedNav];
+}
+
 export function dayReturnAnchorNav(
   sortedNav: readonly LiveKpiNavPoint[],
   priceAsOfDate: string | null
@@ -324,10 +348,7 @@ export function computeLivePerformanceKpis(input: LivePerformanceKpisInput): Liv
         excessReturnPct = portfolioReturnPct - benchmarkReturnPct;
 
         const { port, bench } = overlappingDailyReturns(
-          [
-            ...sortedNav.slice(0, -1),
-            { date: endDate, nav: liveNav },
-          ],
+          navHistoryForLiveOverlap(sortedNav, endDate, liveNav),
           benchmarkHistory
         );
         const beta = olsBeta(port, bench);

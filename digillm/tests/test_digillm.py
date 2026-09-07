@@ -39,6 +39,7 @@ def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
         "OPENAI_API_KEY",
         "OPENAI_API_BASE",
         "LITELLM_PROXY_API_KEY",
+        "DIGILLM_TRUSTED_LITELLM_BASES",
         "XAI_API_KEY",
         "GEMINI_API_KEY",
         "OPENROUTER_API_KEY",

@@ -44,15 +44,6 @@ DEFAULT_VENUE = "NYSE"
 # US equity cash close proxy when price_history has no observation timestamp.
 _SESSION_CLOSE_HOUR_UTC = 20
 
-# ReturnFraction is Decimal(max_digits=16, decimal_places=8). Price division
-# yields up to 28-digit repeating decimals — quantize before model validation.
-# Mirrors portfolio/forecast_calibration.py::_QUANTUM — keep both in sync.
-_QUANTUM = Decimal("0.00000001")
-
-
-def _q(value: Decimal) -> Decimal:
-    return value.quantize(_QUANTUM, rounding=ROUND_HALF_UP)
-
 
 @dataclass(frozen=True)
 class OutcomeResolveResult:
@@ -388,6 +379,22 @@ def _outcome_row(outcome: ForecastOutcome) -> dict[str, Any]:
     }
 
 
+_RETURN_FRACTION_QUANTUM = Decimal("0.00000001")  # ReturnFraction decimal_places=8
+
+
+def _quantize_return_fraction(value: Decimal) -> Decimal:
+    """Clamp a computed return to ``ReturnFraction`` digit/place limits.
+
+    Decimal division of prices routinely exceeds ``max_digits=16`` /
+    ``decimal_places=8`` on :class:`ForecastOutcome` fields; Pydantic then raises
+    ``decimal_max_digits`` during preflight_reflect outcome assembly.
+
+    ``ROUND_HALF_UP`` matches the codebase economics standard (ledger_io,
+    execution_io, cost_liquidity, forecast_calibration ``_q``).
+    """
+    return value.quantize(_RETURN_FRACTION_QUANTUM, rounding=ROUND_HALF_UP)
+
+
 def _build_resolved_outcome(
     *,
     base: ForecastAssessment,
@@ -400,12 +407,21 @@ def _build_resolved_outcome(
     maturity_snapshot: SessionPriceSnapshot,
     forecast_mean_return: Decimal,
 ) -> ForecastOutcome:
-    # Quantized strings feed content_hash, so hashes differ in trailing-zero
-    # format from pre-fix runs; idempotency still holds via the pre-build
-    # (effective_id, maturity_session) natural-key guard, not the hash.
-    mean_q = _q(forecast_mean_return)
-    realized_q = _q((maturity_snapshot.price - reference_snapshot.price) / reference_snapshot.price)
-    residual_q = _q(realized_q - mean_q)
+    # Quantize the mean FIRST, then derive the residual from quantized
+    # operands: their difference is exactly representable at 8dp, so the
+    # outer quantize is identity and the model invariant
+    # (signed_residual == realized - forecast_mean) holds exactly. Quantizing
+    # an unquantized mean instead would round the residual away from the
+    # stored operands whenever the mean carries >8dp (scenario_mean_return
+    # products run to 16dp). Quantized strings feed content_hash, so hashes
+    # differ in trailing-zero format from pre-fix runs; idempotency still
+    # holds via the pre-build (effective_id, maturity_session) natural-key
+    # guard, not the hash.
+    mean_q = _quantize_return_fraction(forecast_mean_return)
+    realized_q = _quantize_return_fraction(
+        (maturity_snapshot.price - reference_snapshot.price) / reference_snapshot.price
+    )
+    residual_q = _quantize_return_fraction(realized_q - mean_q)
     positive = realized_q > Decimal("0")
     event_time = maturity_snapshot.observed_at
     known_at = maturity_snapshot.known_at

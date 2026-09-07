@@ -115,21 +115,23 @@ def test_search_params_ignored_for_non_xai(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.mark.unit
-def test_search_params_not_attached_on_xai_ollama_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    # xai/ model but no key → digigraph.llm_client.resolve_request_model falls back to the
-    # Ollama mode model, so digillm never sees an xAI client and Live Search rides nothing.
+def test_search_params_not_attached_on_xai_ollama_fallback(
+        monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # xai/ model but no key → digigraph.llm_client.resolve_request_model now raises
+    # ValueError (no silent Ollama fallback per #3661). The test verifies the error
+    # is propagated rather than a silent clobber.
     monkeypatch.delenv("XAI_API_KEY", raising=False)
     monkeypatch.delenv("OLLAMA_MODEL", raising=False)
     monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_xyz")  # mode model → gpt-4o-mini
     client = _mock_client()
     with patch("digillm.client.get_client", return_value=client):
-        dg_completion(
-            "xai/grok-4.3",
-            [{"role": "user", "content": "xai-fallback-unique-prompt"}],
-            search_parameters=SEARCH_PARAMS,
-        )
-    captured = client.chat.completions.create.call_args[1]
-    assert "extra_body" not in captured
+        with pytest.raises(ValueError, match="Provider 'xai' key \(XAI_API_KEY\)"):
+            dg_completion(
+                "xai/grok-4.3",
+                [{"role": "user", "content": "xai-fallback-unique-prompt"}],
+                search_parameters=SEARCH_PARAMS,
+            )
 
 
 def _mk_resp(content: str, tool_calls: object) -> MagicMock:

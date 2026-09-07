@@ -1310,6 +1310,76 @@ Deno.test("PATCH profile: persists pipeline_schedule and execution_policy", asyn
   );
 });
 
+Deno.test("PATCH profile: preserves pipeline_schedule and execution_policy when omitted", async () => {
+  const store = freshStore();
+  const day = { research: true, deliberation: true, execution: true };
+  const schedule = {
+    schema_version: 1,
+    monday: day,
+    tuesday: day,
+    wednesday: day,
+    thursday: day,
+    friday: day,
+    saturday: { research: false, deliberation: false, execution: false },
+    sunday: day,
+  };
+  const policy = {
+    calendar_mode: "venue_calendar",
+    on_closed_session: "defer",
+    respect_early_close: true,
+    permitted_venues: ["NYSE"],
+  };
+  // First write with pipeline_schedule and execution_policy
+  const first = await call(store, "PATCH", "/profile", {
+    profile_key: "workspace",
+    label: "Overlay A",
+    pipeline_schedule: schedule,
+    execution_policy: policy,
+  });
+  assertEquals(first.status, 200);
+  const v1 = first.json.version_id as string;
+
+  // Small delay to ensure different recorded_at timestamps in mock (test infrastructure)
+  await new Promise((r) => setTimeout(r, 2));
+
+  // Second write omits pipeline_schedule and execution_policy — should preserve prior
+  const second = await call(store, "PATCH", "/profile", {
+    profile_key: "workspace",
+    label: "Overlay B",
+    expected_version_id: v1,
+  });
+  assertEquals(second.status, 200);
+  const v2 = second.json.version_id as string;
+
+  const got = await call(store, "GET", "/profile");
+  assertEquals(got.status, 200);
+  // Verify the returned profile has the second label (proving new version was created)
+  // and the preserved pipeline_schedule/execution_policy from the first version
+  assertEquals(got.json.label, "Overlay B");
+  assertEquals(
+    (got.json.pipeline_schedule as { saturday: { research: boolean } }).saturday
+      .research,
+    false,
+  );
+  assertEquals(
+    (got.json.execution_policy as { permitted_venues: string[] }).permitted_venues[0],
+    "NYSE",
+  );
+
+  // Verify stored payload also has preserved values
+  const tip = store.profiles.find((p) => p.id === v2)!;
+  const payload = tip.payload as Record<string, unknown>;
+  assertEquals(
+    (payload.pipeline_schedule as { saturday: { execution: boolean } }).saturday
+      .execution,
+    false,
+  );
+  assertEquals(
+    (payload.execution_policy as { permitted_venues: string[] }).permitted_venues[0],
+    "NYSE",
+  );
+});
+
 Deno.test("PATCH profile: rejects invalid execution_policy calendar_mode", async () => {
   const store = freshStore();
   const { status, json } = await call(store, "PATCH", "/profile", {
