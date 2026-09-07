@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:cc0f35943e6b2f1e8f3c45bf00371c1bfa24b0a35e16afd78abb7993717a93a6",
+  "claims": [
+    {
+      "id": "claim_1d4b0230e3554df7a67a3bae9989f02d",
+      "statement": "The core Vault API (list, backlinks, tag search, create, rename, lint) works library-first with a CLI offering init, lint, reindex, and new-note.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/ARCHITECTURE.md#L46-L63",
+          "version": "repo-lines-v1:sha256:cce4b1642f328a507103503a5610fbb5949f083629e28ba568463b4dc5b22bfb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkNTgxZDk0ZmQyNjU5MWQ0M2I1MmNiNmE0NmVlZWMyYWNkZjUzYWJhMWM0M2M5ZjBlZTEyNWYzOTNlOTg1MzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY2OTY4NWNmNzRiNzc1ODhiNjYyNjIwZWE2MGU3MmZiZDc3NmVjZWIwZjcxOTYwMzg1MmI4NWRhZTljMzY2MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRkNzYwMWI4ZTNjMDJmNTNlODVhNWM5ODRiN2IxYjEzZjE4YTFhZjkyZWQ2ZTgyM2YwNTkwNGMyOTg4Y2U1MGYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f9eee856af2f409199c871c2b39efe86",
+      "statement": "Verification is core install plus pytest tests/dv -m unit, a FastAPI-free import-cost guard, and ruff check plus format --check on src and tests.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/AGENTS.md#L60-L77",
+          "version": "repo-lines-v1:sha256:2a245be61ba0a064cfef28892227479380ccb374ac9ca7588517019ca678e4e4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIzOWQyODYyZWVjYjE3ZDg4NWM3NDY4ODI1MTI4NjIzMzdkY2FiOWViYjlkZDJmMThjOWI5MTdmZWU2YjI0OTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI1YjdhYjEyNWZjYTEyOGUyNjdkZDljMmM0ODljZTdmZDY5Mjg5Zjk5MzRjMjEyMWFhNzM1Y2M2NTBkNTljNDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

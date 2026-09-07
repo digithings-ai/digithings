@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f64989dfa5677f31563359ffa5dc039e26fe6cd6ab6d1df2fddc02e1dedb1cc2",
+  "claims": [
+    {
+      "id": "claim_6cf4a226f7c744a896428528596f7366",
+      "statement": "digikey is the sole auth control plane whose short-lived RS256 JWTs gate every protected route, while JWKS caching keeps it off the per-request verification hot path.",
+      "evidence": [
+        {
+          "resource": "repo://digikey/ARCHITECTURE.md#L9-L20",
+          "version": "repo-lines-v1:sha256:6b4b054b660ee7ba163caad06c2165c4e4161dd0d634a149835329962f8c50c5:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzNThjYzE2Yzk5NTU1NWEwYjgxZGZiODg4ZjQ1MjhiNjM5NDYxMjAxMzM5MTBjM2EyMjUzZTRiNWY3MTMyMTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE5ODdlMGMzYTBlMWVhZmY1NTExMTg0MWVjNTg2ZDg1ZjdhZDk5MjJiODBjNGZiYWVlZmRlODI5ZjkyMjE5ZmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7ae4b4cdfcda433782727bc625c8c106",
+      "statement": "Opaque dgk_live_ keys store as immutable bcrypt hashes shown once, in standard and dev-only dev_global kinds; signing loads DIGIKEY_PRIVATE_KEY_PEM or a dev-only ephemeral keypair, refusing to start with neither.",
+      "evidence": [
+        {
+          "resource": "repo://digikey/ARCHITECTURE.md#L32-L40",
+          "version": "repo-lines-v1:sha256:d53543acc5762df7c6bbb9fc00c4950539e4d540f20a91e48636a8530636c121:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTU5NjBlNDk5N2ViZmQwNDkyNDcyMmVlZjE2ZTQxMzg5NDBlMWU2ODg3ZTk4MGUwZjdjNWRmNjcyYzU5YzljNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZWJmMjgyODE5N2ZhYmRjNGYzZDAwZjM0MmM5YWU2YjQ3ODJmYWE0YTBhNjhiMjNlMWM5MjY0ZDI1YmYxMDIyYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGEwYjI1NDhmNzNiNzljNWRkMzM2ZjA5YjAyY2IzMjA5ZmVjZmVjYzczMDUwZmFmZTQ4M2ZmYjI4YTMxMzVlNyJ9"
+        },
+        {
+          "resource": "repo://digikey/src/digikey/crypto_keys.py#L56-L76",
+          "version": "repo-lines-v1:sha256:16ceac978290536ca3684385631738081c8d9c3cb7eee2711360797ef80cc3c7:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYxM2Q1N2Q1YzA4NWQ4ZjMyZWIxOTc2OGU5MWUzYmM3ZGRmYzIwYjMwNzEzNTJkYzc4NmMwOWQwYzViNDdlMWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0MmYyMGNlNzI5MGI3NTVkNzM4Yzk3NzA4MGFmMGE4MGMxYjkwMTgyOTVkMDhjNTQ3ODMxMmQ2ZDQ0YmMzMDQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZkYTJmMzYwY2M1Yjk5MzFjNGJmNWVjNjFkMTkxZjYxODhmM2UxMDRkZDBiMmVhM2FiZmEzNzhkZmZlODAwYjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdhM2U2ODQxNGY2ZTVmYTlhMWI0MzI4MDAzNzAxOTAxZGRmZjE4YmQ2ODEzYjgyOGU3NjljOTJhYmMwMjI0ZjgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_35b545f24dfd475980cb8461a811b8be",
+      "statement": "TokenClaims normalizes sub/iss/aud/exp/jti with tenant, profile pointer, scopes, and key prefix only, converted to a request-state DigiAuthContext with no raw secrets.",
+      "evidence": [
+        {
+          "resource": "repo://digikey/src/digikey/models.py#L12-L39",
+          "version": "repo-lines-v1:sha256:579bd91d72f3dc487ea362a85dd54a97fdecd517bcf4d0b6f3b68a64a8dc4844:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUwYjczZjhhMGFhY2UwNDkzODU0ZjBiYzcwNWI1ZDcxNTc4NmFhN2FlYWRlNThmODcwMDYxN2FmMzczNGE5OTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIzZjBlMmFlNDQ0MDI1ZWMxZjgyNDA5MmM4NjM1NzM5NDBmZjdmMmZkMWU1MjY2MzJjNThiNTE5NGM4ZmUxZjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQwMTgyZWEwYmI2NTUyNDEyOTIxZDJkMTkyYjY0NjdiMDZlMTI3N2I4ZjljYTNmMTZiNjBjZGNmOTM3NDcwNDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgwNjE0OGM4ZjdiZjM0NzYwNmIzZTlhNWExMjE0M2M3M2YxMDI0NDJhZmVjMWViZDdjZjcwZGUyOTY5YTUzZDcifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

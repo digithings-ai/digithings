@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:6b3e79338de7c4a3f1cc34487517b247cb4554746ae7977a43df6fb727c0258b",
+  "claims": [
+    {
+      "id": "claim_438170df43654ce587dde6b7f5116049",
+      "statement": "digichat is a Next.js 16 BFF where the browser never calls Python services directly; all LLM, auth-exchange, and probe work runs in server Route Handlers with one shared @digithings/digichat-ui.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/digichat/ARCHITECTURE.md#L10-L20",
+          "version": "repo-lines-v1:sha256:e23fcc265b5103671819858b774c9bf003f09d856ca6ce9c5a1d2ed4559e8903:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmODQzZGYyZWRmNTAzODhkMjQyMjMyOTgxM2M4YzM5OGFhZjA3NDkxMjIwZDU4YWU0YzFlMTA0MjhlYTI0OWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0YjI4ZDgzMzk3MDlhYTY1NTkxZDU3ZTk1Yzk3MzJmN2U1OTQzYmRiNjdlZTI5NGYwZmVlNjU2Zjk0M2M2MTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFiYjNlM2ViYzFmZGZmOWI4YWUwYmE5MmQ0NWJmNjYzYzM5N2E2YTZiM2JjODEyNGZkZTI5ZWZkMzkyMmNmYWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJlM2FhMjViOTBlMGE4ZWZjM2E1ZjQ2ODBhMTJjZWYyYTc1NGJiYjIzYzhhYTY2NzJiNDExNzI3NmY3MTEzMDQifQ"
+        },
+        {
+          "resource": "repo://frontend/digichat/package.json#L1-L20",
+          "version": "repo-lines-v1:sha256:8bba6c0a8565ef6449c28bd2425f79f6a7dd8fc3b561c3203b5ab874dded7a0e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZmIwOGZkYTFhY2I5NTdiNjExNmJkMzc4MTFhMWZlNDFhMDE2MTFjMDYzMWVkYmY3ODZkNjg4OWEyN2E1NWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1ZWY4ZDVlYjc4MDE5NWUzNDgxNjliNzBlMGRkMGFhNTM5ZDdhZGU0NWU4Nzk4OTRhMDNjNWNkZGJkMDU0ZTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI5M2JhYzYxYWNjZTI3Y2VlZTNiZTM3MThiOTJmNTM4NGNkODJmYjE4MWU3NDZhYWY3YTExNWFiMjVkMjI1NTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d241d69821384fbb83727a41276a9608",
+      "statement": "User-supplied service URLs pass the isAllowedServiceUrl SSRF guard, and every API route except GET /api/health requires requireDigiChatAuth.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/digichat/src/lib/ecosystem.test.ts#L1-L24",
+          "version": "repo-lines-v1:sha256:448ec020870e0f02f58657294f9ceaba817b9da2057c27058fc35f1eb05a1be5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4OTk4OWYzNzM4ODU0N2U0NTAzN2Q0MTA1MmY3NDBiMzg3ODg4MjdkM2QzZDcyMzc4MWZmMmFkZjAxZDQ4ZjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFiZThhY2ExYWM2YWI3ZWIwNTE5MTQ1OTM2ZmZlN2UzNmI2MjcxN2ZmNDI2YTM4ODFlNGRhNmU3YTVlMzQyODQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjcxN2U2ZmE4ZjQyZTk5Njk0MjE5MzJmNDg1MzQxOTc4YWRlODk1ZWNlZjhkNTgyNTgxODc1Yzg5N2EwNTk0ZDgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ce0b0496acc24b15a752853622a5e124",
+      "statement": "Backends are selected per tenant via src/lib/adapters (digithings, foundry, shared), with per-adapter regen/edit semantics and 409 conflict handling for concurrent runs.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/digichat/ARCHITECTURE.md#L16-L24",
+          "version": "repo-lines-v1:sha256:d48ef1cc14a0a7bc2b091f8412579837a22c1b0326fbb48a88cfa979288ae102:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzIyMWQ4ZWY3YzJhYWZkZTA1NzdhOGVkOGVmYzcxNWM0MzE1MzE3MDQ4YTc2ODY5ZjU0ZGI5NDExNTE1MjE5MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWNjYTM1MjE0ZTM5N2Q5ZWJhYmY5MWY1OTYzMDhjNWQ2MzQyMWEzYTU5NjIxZjg2Yjg3ZjRhNmI3ZGY0ZGVkYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOWNiMGUwYjA4ZGI0MzVjY2YxYmQyZGJjMmFhNGQ3NzViMDM0N2E4NDkyNWE0YmQwYjkwYTU5NGFmOGQyNjEzZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjhmNDdlYjIwMjA3YWFlNDUyMjIxODhhNjBlMWMzMTNmYTY2MDcyYzJmNzczZWIwMjk2NDIyYjQ2NzQxNDcyZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_14bd5cbb882d4b0a98c7871628d53170",
+      "statement": "Built capabilities include Auth.js OIDC, digikey JWT exchange, hashed machine keys, Postgres-optional persistence, and the digigraph activity stream; OpenClaw and RAG ingestion UI are Phase 2.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/digichat/ARCHITECTURE.md#L26-L51",
+          "version": "repo-lines-v1:sha256:8caa1d28142bc32b84dbe149b91624d91af0c3af5fa5fc0b40c06fe89069e614:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM2NDg5ZDNhZDZjMzM1NGRkM2JlZDRkNDE4OTRlYzYyOWY0OTBlMzlhYmI5MzIwMTk1YmFhMjBlNjVjYTVjMTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZkNDQ5ZjA1NWQ5MGE1OGVjZDEwNmYxMDAzYjUzNWE1ZmY5OTIwODk3NTNiZmRkZDkxYjZmYzg0ZWFhYjg1MWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE5ODdlMGMzYTBlMWVhZmY1NTExMTg0MWVjNTg2ZDg1ZjdhZDk5MjJiODBjNGZiYWVlZmRlODI5ZjkyMjE5ZmIifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}
