@@ -1075,6 +1075,12 @@ function EmbedChat({
     );
   }
 
+  // Composer chip reads the last parent snapshot at render; send consumes the same ref.
+  // eslint-disable-next-line react-hooks/refs -- useLatest page-context for the attachment chip
+  const pageContextSnapshot = pageContextAttached ? pageContextRef.current : null;
+  const pageContextAttachment = pageContextCreateAttachment(pageContextSnapshot);
+  const pageContextTs = pageContextSnapshot?.ts ?? null;
+
   return (
     <>
       <ProductStockShell
@@ -1097,12 +1103,8 @@ function EmbedChat({
         footerSlot={
           <>
             <PageContextComposerBridge
-              attachment={
-                pageContextAttached
-                  ? pageContextCreateAttachment(pageContextRef.current)
-                  : null
-              }
-              contextTs={pageContextAttached ? pageContextRef.current?.ts ?? null : null}
+              attachment={pageContextAttachment}
+              contextTs={pageContextTs}
               onComposerSend={consumePageContext}
             />
             {handshakeError || (!trialLocked && chat.error) ? (

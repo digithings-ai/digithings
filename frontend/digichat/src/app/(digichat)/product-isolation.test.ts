@@ -28,9 +28,10 @@ describe("product CSS isolation", () => {
     expect(importLines).not.toMatch(/session\.css/);
     expect(importLines).not.toMatch(/cursor\.css/);
     expect(importLines).not.toMatch(/terminal-loaders/);
-    expect(importLines).not.toMatch(/chat-core\.css/);
     expect(importLines).not.toMatch(/digichat-ui/);
     expect(importLines).toMatch(/product-chrome\.css/);
+    expect(importLines).toMatch(/@digithings\/web\/styles\/chat-core\.css/);
+    expect(importLines).toMatch(/@digithings\/web\/styles\/chat-aui\.css/);
   });
 
   it("layout catalog templates own / instead of ChatShell", () => {

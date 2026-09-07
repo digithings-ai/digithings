@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { Geist_Mono, IBM_Plex_Mono, Inter } from "next/font/google";
+import { IBM_Plex_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { themeInitScript } from "@digithings/web";
 import { auth } from "@/auth";
@@ -20,12 +20,6 @@ const ibmPlexMono = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: ["400", "500"],
   variable: "--font-ibm-plex-mono",
-});
-
-/** First-party `digichat` Thread; catalog skins keep Inter / IBM Plex. */
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-geist-mono",
 });
 
 export const metadata: Metadata = {
@@ -70,7 +64,7 @@ export default async function RootLayout({
       lang="en"
       data-theme={theme}
       suppressHydrationWarning
-      className={`${inter.variable} ${ibmPlexMono.variable} ${geistMono.variable} ${theme === "light" ? "light" : "dark"} h-full antialiased`}
+      className={`${inter.variable} ${ibmPlexMono.variable} ${theme === "light" ? "light" : "dark"} h-full antialiased`}
     >
       <body
         className={`${inter.className} accent-digichat flex min-h-full flex-col bg-background text-foreground`}

@@ -83,7 +83,9 @@ function useDeployChromeState(clientConfig: DigichatClientConfig) {
   );
   const languageRef = useRef(language);
   const modelRef = useRef(model);
+  // eslint-disable-next-line react-hooks/refs -- send-time useLatest (same freeze as embed)
   languageRef.current = language;
+  // eslint-disable-next-line react-hooks/refs -- send-time useLatest
   modelRef.current = model;
   const getLanguage = useCallback(() => languageRef.current, []);
   const getModel = useCallback(() => {
@@ -145,20 +147,21 @@ function HomeStockClientMemory({
 }) {
   const sessionKey = userId ? `app:${userId}` : "app:anon";
   const chrome = useDeployChromeState(clientConfig);
-  const adapterRef = useRef<SessionMemoryThreadListAdapter | null>(null);
-  if (!adapterRef.current) {
-    adapterRef.current = new SessionMemoryThreadListAdapter(
-      memoryThreadStorageKey("app", userId),
-    );
-  }
+  const [memoryAdapter] = useState(
+    () => new SessionMemoryThreadListAdapter(memoryThreadStorageKey("app", userId)),
+  );
 
   const configRef = useRef(clientConfig);
+  // eslint-disable-next-line react-hooks/refs -- useLatest for runtimeHook closures
   configRef.current = clientConfig;
   const sessionRef = useRef(sessionKey);
+  // eslint-disable-next-line react-hooks/refs -- useLatest
   sessionRef.current = sessionKey;
   const getLanguageRef = useRef(chrome.getLanguage);
+  // eslint-disable-next-line react-hooks/refs -- useLatest
   getLanguageRef.current = chrome.getLanguage;
   const getModelRef = useRef(chrome.getModel);
+  // eslint-disable-next-line react-hooks/refs -- useLatest
   getModelRef.current = chrome.getModel;
 
   const runtimeHook = useMemo(() => {
@@ -173,7 +176,7 @@ function HomeStockClientMemory({
   }, []);
 
   const runtime = useRemoteThreadListRuntime({
-    adapter: adapterRef.current,
+    adapter: memoryAdapter,
     runtimeHook,
   });
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.0.0](https://github.com/digithings-ai/digithings/compare/digichat-v1.5.0...digichat-v2.0.0) (2026-09-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* assistant-ui Thread + AI SDK v7 is the product UI. DigiChatSession is gone; parents stay iframe-only into `/embed`.
+* `chrome.skin: digichat` is the digithings.ai / OCC / dashboard dogfood skin. Page context is a `page-context.html` document chip, not a prompt-prefix-only UX.
+
+
+### Features
+
+* **digichat:** assistant-ui + AI SDK v7, product skin, tool catalog, page-context attachment ([#3626](https://github.com/digithings-ai/digithings/issues/3626))
+
 ## [1.5.0](https://github.com/digithings-ai/digithings/compare/digichat-v1.4.0...digichat-v1.5.0) (2026-09-05)
 
 
