@@ -231,6 +231,7 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
         "deepseek/deepseek-v4-flash",
         "deepseek/deepseek-v4-pro",
         "google/gemini-3.7-flash",
+        "google/gemini-3.1-flash-lite",
         "openai/gpt-5.6-luna",
         "openai/gpt-5.6-sol",
     }
