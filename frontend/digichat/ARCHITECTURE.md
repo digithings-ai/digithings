@@ -505,6 +505,10 @@ burned). Pinned by `isDigiquantDashboardTenantConfig` in
 `src/lib/embed-tenants.ts` — a different bot from the `digithings.ai` marketing
 tenant, never conflated.
 
+YAML `gate.requiredPlanTier` and JSON `requiredPlanTier` both round-trip
+through `embedTenantToDeployment` / `deploymentToEmbedTenant`. The field is
+server-only — `toDigichatClientConfig` / `toEmbedClientConfig` never project it.
+
 **Plan proof (claims-backed, #3664):** when `requiredPlanTier` is set,
 `POST /api/chat` accepts only (1) `X-Embed-Plan-Proof` verified with
 `DIGICHAT_PLAN_PROOF_SECRET`, or (2) an authenticated digichat session with

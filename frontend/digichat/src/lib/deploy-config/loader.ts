@@ -109,6 +109,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       showByok: cfg.showByok,
       showLanguageSelector: cfg.showLanguageSelector,
       webSearch: cfg.webSearch,
+      requiredPlanTier: cfg.requiredPlanTier,
     },
     token: cfg.token,
   };
@@ -139,6 +140,9 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     layout: dep.chrome.mode === "app" || dep.chrome.mode === "sidebar" ? "page" : "embed",
     llmAccess: dep.gate.llmAccess,
     token: dep.token ?? "",
+    ...(dep.gate.requiredPlanTier
+      ? { requiredPlanTier: dep.gate.requiredPlanTier }
+      : {}),
     ...(dep.gate.consumeUrl ? { gate: { consumeUrl: dep.gate.consumeUrl } } : {}),
   };
 }
@@ -206,10 +210,19 @@ function mergeEmbedTenantsOverlay(
     ...(config?.hosts ? structuredClone(config.hosts) : {}),
   };
 
-  // Registry is host → config; reverse so each distinct slug/token lands once per host key.
+  // Registry is host → config. New hosts hydrate fully. Existing YAML hosts
+  // keep chrome, but copy `requiredPlanTier` when YAML omitted it so a baked
+  // example file cannot drop the live DIGICHAT_EMBED_TENANTS Desk+ gate (#3662).
   for (const [host, cfg] of registry) {
     if (!hosts[host]) {
       hosts[host] = embedTenantToDeployment(cfg);
+      continue;
+    }
+    if (cfg.requiredPlanTier && !hosts[host].gate.requiredPlanTier) {
+      hosts[host] = {
+        ...hosts[host],
+        gate: { ...hosts[host].gate, requiredPlanTier: cfg.requiredPlanTier },
+      };
     }
   }
 

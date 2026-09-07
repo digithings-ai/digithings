@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
 import { buildProductRuntimeAdapters } from "@/components/stock/product-shell";
@@ -192,8 +192,14 @@ type UseEmbedDigiChatOptions = {
    * HMAC-signed plan proof token from /api/plan-proof. Sent as
    * X-Embed-Plan-Proof on every chat request. The chat route verifies the
    * signature — raw X-Embed-Plan-Tier headers are never trusted (#3662).
+   * Prefer `getPlanProof` — this value is frozen at transport creation (#1339).
    */
   planProof?: string | null;
+  /**
+   * Send-time accessor for the HMAC plan proof (same freeze reason as
+   * getSelectedModel / getResponseLanguage). Dashboard mint is async after mount.
+   */
+  getPlanProof?: () => string | null | undefined;
   /**
    * When false, omit regenerate/editLastUser so assistant-ui hides the
    * chrome. Digigraph and Foundry both support turn mutation once the BFF
@@ -217,6 +223,7 @@ export function useEmbedDigiChat({
   getEnableWebSearch,
   getSelectedModel,
   planProof,
+  getPlanProof,
   allowClientTurnMutation = true,
   features,
 }: UseEmbedDigiChatOptions): Omit<DigiChatController, "send"> & {
@@ -232,6 +239,12 @@ export function useEmbedDigiChat({
   armRegenerate?: () => void;
   armEditLastUser?: () => void;
 } {
+  const planProofRef = useRef(planProof);
+  // Send-time read — transport is frozen on first render (#1339). Dashboard
+  // mints HMAC proof after mount; a closed-over planProof stays null forever.
+  // eslint-disable-next-line react-hooks/refs -- see comment above
+  planProofRef.current = planProof;
+
   const transport = useMemo(
     () =>
       new AssistantChatTransport({
@@ -296,9 +309,11 @@ export function useEmbedDigiChat({
           }
           // HMAC-signed plan proof (#3662): sent on every request when available.
           // The chat route verifies the signature — raw X-Embed-Plan-Tier headers
-          // are never trusted.
-          if (planProof) {
-            headers["X-Embed-Plan-Proof"] = planProof;
+          // are never trusted. Read at send time (getPlanProof / ref) so a mint
+          // after mount still reaches the header (#1339).
+          const proof = (getPlanProof?.() ?? planProofRef.current)?.trim();
+          if (proof) {
+            headers["X-Embed-Plan-Proof"] = proof;
           }
           try {
             const conversationId = window.sessionStorage.getItem(
@@ -336,7 +351,7 @@ export function useEmbedDigiChat({
         getResponseLanguage,
         getEnableWebSearch,
         getSelectedModel,
-        planProof,
+        getPlanProof,
       ],
   );
 

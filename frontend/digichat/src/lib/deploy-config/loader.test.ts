@@ -79,6 +79,59 @@ deployment:
     expect(cfg.hosts?.["customer.example"]?.tools?.catalog.some((t) => t.id === "web_search")).toBe(
       true,
     );
+    expect(cfg.hosts?.["customer.example"]?.gate.requiredPlanTier).toBeUndefined();
+  });
+
+  it("hydrates requiredPlanTier from DIGICHAT_EMBED_TENANTS (#3662 YAML round-trip)", () => {
+    const tenants = JSON.stringify({
+      "digiquant.io": {
+        slug: "digiquant-dashboard",
+        token: "dash-secret",
+        backend: { type: "digigraph" },
+        gateMode: "ungated",
+        llmAccess: "operator",
+        showByok: true,
+        requiredPlanTier: "desk",
+      },
+    });
+    const cfg = loadDigichatConfig({
+      fileContents: null,
+      env: { DIGICHAT_EMBED_TENANTS: tenants },
+    });
+    expect(cfg.hosts?.["digiquant.io"]?.gate.requiredPlanTier).toBe("desk");
+    expect(cfg.hosts?.["digiquant.io"]?.gate.showByok).toBe(true);
+  });
+
+  it("copies requiredPlanTier from JSON overlay onto a YAML host that omitted it", () => {
+    const tenants = JSON.stringify({
+      "digiquant.io": {
+        slug: "digiquant-dashboard",
+        token: "dash-secret",
+        backend: { type: "digigraph" },
+        gateMode: "ungated",
+        llmAccess: "operator",
+        showByok: true,
+        requiredPlanTier: "desk",
+      },
+    });
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+hosts:
+  digiquant.io:
+    slug: digiquant-dashboard
+    token: yaml-tok
+    backend:
+      type: digigraph
+    gate:
+      mode: ungated
+      llmAccess: operator
+      showByok: true
+`,
+      env: { DIGICHAT_EMBED_TENANTS: tenants },
+    });
+    expect(cfg.hosts?.["digiquant.io"]?.gate.requiredPlanTier).toBe("desk");
+    expect(cfg.hosts?.["digiquant.io"]?.token).toBe("yaml-tok");
   });
 
   it("overlays DIGICHAT_EMBED_TOKEN onto deployment", () => {
@@ -160,6 +213,7 @@ describe("client projection", () => {
       theme: "dark",
       attribution: false,
       activityDetail: "full",
+      requiredPlanTier: "desk",
       gate: { consumeUrl: "https://quota.example.com/spend" },
     } satisfies EmbedTenantConfig);
 
@@ -174,6 +228,7 @@ describe("client projection", () => {
     expect(json).not.toContain("proj.example.com");
     expect(json).not.toContain("my-agent");
     expect(json).not.toContain("mcp.example.com");
+    expect(json).not.toContain("requiredPlanTier");
     expect(client.backendType).toBe("foundry");
     expect(client.mcp.servers).toEqual([{ id: "extra", label: "Extra" }]);
   });
@@ -253,6 +308,28 @@ describe("embed tenant round-trip", () => {
     const back = deploymentToEmbedTenant(embedTenantToDeployment(original));
     expect(back.backend).toEqual(original.backend);
     expect(back.token).toBe("tok");
+  });
+
+  it("preserves requiredPlanTier through YAML converters (#3662)", () => {
+    const original: EmbedTenantConfig = {
+      slug: "digiquant-dashboard",
+      token: "dash-secret",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "dark",
+      attribution: false,
+      activityDetail: "labels",
+      llmAccess: "operator",
+      showByok: true,
+      requiredPlanTier: "desk",
+    };
+    const dep = embedTenantToDeployment(original);
+    expect(dep.gate.requiredPlanTier).toBe("desk");
+    const back = deploymentToEmbedTenant(dep);
+    expect(back.requiredPlanTier).toBe("desk");
+    expect(back.gate).toBeUndefined();
+    expect(back.showByok).toBe(true);
+    expect(back.llmAccess).toBe("operator");
   });
 
   it("projects a tokenless YAML deployment (client container)", () => {

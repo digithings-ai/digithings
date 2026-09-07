@@ -246,6 +246,11 @@ export const GateSchema = z
     showLanguageSelector: z.boolean().optional(),
     /** Legacy embed field — also implies tools.catalog web_search when true */
     webSearch: z.boolean().optional(),
+    /**
+     * Minimum Desk+ plan for this embed. Server-only (#3662 HMAC X-Embed-Plan-Proof).
+     * Never projected to the browser.
+     */
+    requiredPlanTier: z.enum(["desk", "studio", "enterprise"]).optional(),
   })
   .strict();
 

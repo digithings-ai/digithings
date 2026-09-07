@@ -679,3 +679,30 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-BYOK-Model (#2490)",
     expect(headers.has("X-BYOK-Model")).toBe(false);
   });
 });
+
+describe("useEmbedDigiChat prepareSendMessagesRequest — X-Embed-Plan-Proof (#3662)", () => {
+  it("omits the header when no proof is available", async () => {
+    const { headers } = await callPrepareSendMessagesRequest({});
+    expect(headers.has("X-Embed-Plan-Proof")).toBe(false);
+  });
+
+  it("reads the proof fresh on every send, not the value captured at transport creation", async () => {
+    let currentProof: string | null = null;
+    const { unmount } = renderHookLocally(() =>
+      useEmbedDigiChat(baseEmbedOptions({ getPlanProof: () => currentProof })),
+    );
+    const config = readCapturedTransportConfig();
+    if (!config) {
+      throw new Error("AssistantChatTransport was never constructed by useEmbedDigiChat");
+    }
+
+    const first = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(first.headers).has("X-Embed-Plan-Proof")).toBe(false);
+
+    currentProof = "hmac.proof.token";
+    const second = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(second.headers).get("X-Embed-Plan-Proof")).toBe("hmac.proof.token");
+
+    unmount();
+  });
+});

@@ -50,5 +50,7 @@ deployment:
     mode: ungated
     activityDetail: labels
     llmAccess: operator
+    showByok: true
+    requiredPlanTier: desk
     showLanguageSelector: true
     webSearch: true

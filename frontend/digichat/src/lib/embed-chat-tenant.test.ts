@@ -5,9 +5,14 @@ import {
   resolveAnonymousInstallChat,
   resolveEmbedChatTenant,
   resolveEmbedClientConfigForPaint,
+  resolveVerifiedEmbedTenantFromHostToken,
 } from "./embed-chat-tenant";
 import { resetEmbedTenantRegistryForTests } from "./embed-tenants";
-import { resetDigichatConfigForTests } from "@/lib/deploy-config/loader";
+import {
+  loadDigichatConfig,
+  resetDigichatConfigForTests,
+  setDigichatConfigForTests,
+} from "@/lib/deploy-config/loader";
 import { DEFAULT_EMBED_TENANT_CONFIG } from "@/lib/embed-client-config";
 
 const REGISTRY = JSON.stringify({
@@ -349,5 +354,59 @@ describe("product embed YAML hosts", () => {
       embedRequest({ "x-embed-host": "https://unknown.example" }),
     );
     expect(denied).toBeInstanceOf(Response);
+  });
+});
+
+describe("resolveVerifiedEmbedTenantFromHostToken requiredPlanTier (#3662)", () => {
+  const dashboardTenants = JSON.stringify({
+    "digiquant.io": {
+      slug: "digiquant-dashboard",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      llmAccess: "operator",
+      showByok: true,
+      requiredPlanTier: "desk",
+      token: "dash-secret",
+    },
+  });
+
+  it("keeps requiredPlanTier after DIGICHAT_EMBED_TENANTS YAML conversion", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: null,
+      env: { DIGICHAT_EMBED_TENANTS: dashboardTenants },
+    });
+    setDigichatConfigForTests(cfg);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", dashboardTenants);
+    resetEmbedTenantRegistryForTests();
+
+    const resolved = resolveVerifiedEmbedTenantFromHostToken(
+      "https://digiquant.io",
+      "dash-secret",
+    );
+    expect(resolved?.slug).toBe("digiquant-dashboard");
+    expect(resolved?.requiredPlanTier).toBe("desk");
+    expect(resolved?.showByok).toBe(true);
+    expect(resolved?.llmAccess).toBe("operator");
+    expect(resolved?.gate).toBeUndefined();
+  });
+
+  it("returns 403-ready embedConfig on the chat tenant resolver path", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: null,
+      env: { DIGICHAT_EMBED_TENANTS: dashboardTenants },
+    });
+    setDigichatConfigForTests(cfg);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", dashboardTenants);
+    resetEmbedTenantRegistryForTests();
+
+    const result = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://digiquant.io",
+        "x-embed-token": "dash-secret",
+      }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.embedConfig?.requiredPlanTier).toBe("desk");
   });
 });

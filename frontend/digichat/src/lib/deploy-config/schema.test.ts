@@ -207,6 +207,9 @@ describe("DigichatConfigSchema", () => {
     expect(cfg.deployment?.chrome.skin).toBe("digichat");
     expect(cfg.deployment?.chrome.mode).toBe("modal");
     expect(cfg.deployment?.features.attachments).toBe(false);
+    expect(cfg.deployment?.gate.requiredPlanTier).toBe("desk");
+    expect(cfg.deployment?.gate.showByok).toBe(true);
+    expect(cfg.deployment?.gate.llmAccess).toBe("operator");
   });
 
   it("pins product embed YAML to digichat skin + digigraph tool catalog", () => {

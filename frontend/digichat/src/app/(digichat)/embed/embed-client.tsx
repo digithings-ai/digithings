@@ -371,6 +371,10 @@ function EmbedChat({
     const id = modelRef.current.trim();
     return id || undefined;
   }, []);
+  const planProofRef = useRef(planProof);
+  // eslint-disable-next-line react-hooks/refs -- send-time HMAC proof (#1339)
+  planProofRef.current = planProof ?? null;
+  const getPlanProof = useCallback(() => planProofRef.current, []);
 
   // Opt-in web search (#3420) — tenant allow + user localStorage pref; default off.
   // Adjust during render when scope changes (same pattern as trialUnlockedFor).
@@ -545,7 +549,7 @@ function EmbedChat({
     getResponseLanguage,
     getEnableWebSearch,
     getSelectedModel,
-    planProof,
+    getPlanProof,
     // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
     // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
     // Missing backendType (gated default) must not enable regen/edit.
