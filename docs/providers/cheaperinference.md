@@ -8,6 +8,8 @@ here means this product, **not** self-hosted OmniRoute Docker / `OMNIROUTE_*`.
 
 When `CHEAPERINFERENCE_API_KEY` is set, digillm prefers CI and maps house slugs
 in `_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE` to bare CI model ids (#3648 / #3660).
+On the Cloudflare stack container, entrypoint merges the CI LiteLLM overlay and
+exports `ENV_LITELLM_CONFIG` for the LiteLLM supervisor (#3674).
 
 Force OpenRouter: `DIGI_HOUSE_UPSTREAM=openrouter` (or `or`), or
 `CHEAPERINFERENCE_HOUSE=0|false|no|off`.
