@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import (
     Any,  # score:allow untyped any — duck-typed Supabase client / row dicts
     Sequence,
@@ -43,6 +43,14 @@ OUTCOMES = "olympus_forecast_outcomes"
 DEFAULT_VENUE = "NYSE"
 # US equity cash close proxy when price_history has no observation timestamp.
 _SESSION_CLOSE_HOUR_UTC = 20
+
+# ReturnFraction is Decimal(max_digits=16, decimal_places=8). Price division
+# yields up to 28-digit repeating decimals — quantize before model validation.
+_QUANTUM = Decimal("0.00000001")
+
+
+def _q(value: Decimal) -> Decimal:
+    return value.quantize(_QUANTUM, rounding=ROUND_HALF_UP)
 
 
 @dataclass(frozen=True)
@@ -391,9 +399,10 @@ def _build_resolved_outcome(
     maturity_snapshot: SessionPriceSnapshot,
     forecast_mean_return: Decimal,
 ) -> ForecastOutcome:
-    realized = (maturity_snapshot.price - reference_snapshot.price) / reference_snapshot.price
-    residual = realized - forecast_mean_return
-    positive = realized > Decimal("0")
+    mean_q = _q(forecast_mean_return)
+    realized_q = _q((maturity_snapshot.price - reference_snapshot.price) / reference_snapshot.price)
+    residual_q = _q(realized_q - mean_q)
+    positive = realized_q > Decimal("0")
     event_time = maturity_snapshot.observed_at
     known_at = maturity_snapshot.known_at
     draft = {
@@ -405,9 +414,9 @@ def _build_resolved_outcome(
         "maturity_session": maturity_session,
         "reference_snapshot": reference_snapshot,
         "maturity_snapshot": maturity_snapshot,
-        "forecast_mean_return": forecast_mean_return,
-        "realized_return": realized,
-        "signed_residual": residual,
+        "forecast_mean_return": mean_q,
+        "realized_return": realized_q,
+        "signed_residual": residual_q,
         "positive_label": positive,
         "status": OutcomeStatus.RESOLVED,
         "unavailable_reason": None,
@@ -423,9 +432,9 @@ def _build_resolved_outcome(
         "maturity_session": maturity_session.isoformat(),
         "reference_snapshot": reference_snapshot.model_dump(mode="json"),
         "maturity_snapshot": maturity_snapshot.model_dump(mode="json"),
-        "forecast_mean_return": str(forecast_mean_return),
-        "realized_return": str(realized),
-        "signed_residual": str(residual),
+        "forecast_mean_return": str(mean_q),
+        "realized_return": str(realized_q),
+        "signed_residual": str(residual_q),
         "positive_label": positive,
         "status": OutcomeStatus.RESOLVED.value,
         "unavailable_reason": None,
@@ -558,17 +567,27 @@ def resolve_matured_forecast_outcomes(
             pending += 1
             continue
 
-        outcome = _build_resolved_outcome(
-            base=assessment,
-            effective_id=effective.effective_id,
-            ticker=assessment.ticker,
-            horizon_sessions=effective.terms.horizon_sessions,
-            reference_session=reference_session,
-            maturity_session=maturity_session,
-            reference_snapshot=ref_snap,
-            maturity_snapshot=mat_snap,
-            forecast_mean_return=effective.terms.scenario_mean_return(),
-        )
+        try:
+            outcome = _build_resolved_outcome(
+                base=assessment,
+                effective_id=effective.effective_id,
+                ticker=assessment.ticker,
+                horizon_sessions=effective.terms.horizon_sessions,
+                reference_session=reference_session,
+                maturity_session=maturity_session,
+                reference_snapshot=ref_snap,
+                maturity_snapshot=mat_snap,
+                forecast_mean_return=effective.terms.scenario_mean_return(),
+            )
+        except Exception as exc:
+            logger.warning(
+                "forecast outcomes: skip unbuildable outcome for %s (%s: %s)",
+                effective.effective_id,
+                type(exc).__name__,
+                exc,
+            )
+            pending += 1
+            continue
 
         # Re-check natural key after build (concurrent writer / exact retry race).
         existing = _existing_outcome(
