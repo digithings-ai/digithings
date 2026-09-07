@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { signPlanProof, verifyPlanProof, isValidPlanTier } from "./plan-proof";
 
 const SECRET = "test-hmac-secret-3662";
@@ -87,5 +87,44 @@ describe("plan-proof", () => {
       const b = signPlanProof("desk", SECRET, Date.now() + 1000);
       expect(a).not.toBe(b);
     });
+  });
+});
+
+describe("resolvePlanTierFromDashboardAccessToken", () => {
+  it("returns desk from app_metadata.plan_tier", async () => {
+    const { resolvePlanTierFromDashboardAccessToken } = await import("./plan-proof");
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ app_metadata: { plan_tier: "desk" } }),
+    });
+    await expect(
+      resolvePlanTierFromDashboardAccessToken("tok", {
+        supabaseUrl: "https://example.supabase.co",
+        anonKey: "anon",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      }),
+    ).resolves.toBe("desk");
+  });
+
+  it("returns null when auth endpoint fails", async () => {
+    const { resolvePlanTierFromDashboardAccessToken } = await import("./plan-proof");
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) });
+    await expect(
+      resolvePlanTierFromDashboardAccessToken("tok", {
+        supabaseUrl: "https://example.supabase.co",
+        anonKey: "anon",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it("returns null when url/anon/token missing", async () => {
+    const { resolvePlanTierFromDashboardAccessToken } = await import("./plan-proof");
+    await expect(
+      resolvePlanTierFromDashboardAccessToken("", {
+        supabaseUrl: "https://example.supabase.co",
+        anonKey: "anon",
+      }),
+    ).resolves.toBeNull();
   });
 });

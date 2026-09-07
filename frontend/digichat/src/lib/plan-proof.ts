@@ -1,11 +1,13 @@
 /**
  * HMAC-signed plan proof tokens for the digiquant dashboard embed (#3662).
  *
- * The dashboard mints a signed token proving the user's plan_tier. The chat
+ * Digichat mints a signed token only after verifying a dashboard Supabase
+ * access token and reading plan_tier from app_metadata claims. The chat
  * route verifies the signature before accepting the tier — raw client-asserted
  * X-Embed-Plan-Tier / ?plan_tier= are NEVER trusted.
  *
- * Secret: DIGICHAT_PLAN_PROOF_SECRET (env, never committed).
+ * Env (names only): DIGICHAT_PLAN_PROOF_SECRET,
+ * DIGICHAT_DASHBOARD_SUPABASE_URL, DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY.
  * Format: base64url(tier|exp|sig)
  * TTL: 300 seconds (5 minutes).
  */
@@ -16,8 +18,16 @@ const PROOF_TTL_MS = 300_000; // 5 minutes
 const PLAN_TIERS = ["free", "brief", "desk", "studio", "enterprise"] as const;
 export type PlanTier = (typeof PLAN_TIERS)[number];
 
+/** Desk+ tiers eligible for a signed chat proof. */
+export const PROOF_ELIGIBLE_TIERS = ["desk", "studio", "enterprise"] as const;
+export type ProofEligibleTier = (typeof PROOF_ELIGIBLE_TIERS)[number];
+
 export function isValidPlanTier(value: string): value is PlanTier {
   return (PLAN_TIERS as readonly string[]).includes(value);
+}
+
+export function isProofEligibleTier(value: string): value is ProofEligibleTier {
+  return (PROOF_ELIGIBLE_TIERS as readonly string[]).includes(value);
 }
 
 function base64urlEncode(data: string): string {
@@ -33,7 +43,7 @@ function hmacSign(secret: string, payload: string): string {
 }
 
 /**
- * Mint a signed plan proof token.  Call server-side only (dashboard API route).
+ * Mint a signed plan proof token. Call server-side only after claims check.
  */
 export function signPlanProof(
   tier: PlanTier,
@@ -80,8 +90,51 @@ export function verifyPlanProof(
 }
 
 /**
- * Best-effort tier from query param or header.  NEVER used for authorization —
- * only for non-security UI hints.  The chat route uses verifyPlanProof() instead.
+ * Resolve plan_tier from a digiquant dashboard Supabase access token.
+ * Calls GET /auth/v1/user — never trusts client-asserted tier.
+ * Returns null when the token is invalid or claims are missing/unusable.
+ */
+export async function resolvePlanTierFromDashboardAccessToken(
+  accessToken: string,
+  opts?: {
+    supabaseUrl?: string;
+    anonKey?: string;
+    fetchImpl?: typeof fetch;
+  },
+): Promise<PlanTier | null> {
+  const supabaseUrl = (
+    opts?.supabaseUrl ?? process.env.DIGICHAT_DASHBOARD_SUPABASE_URL ?? ""
+  ).trim().replace(/\/$/, "");
+  const anonKey = (
+    opts?.anonKey ?? process.env.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? ""
+  ).trim();
+  if (!supabaseUrl || !anonKey || !accessToken.trim()) return null;
+
+  const fetchImpl = opts?.fetchImpl ?? fetch;
+  try {
+    const res = await fetchImpl(`${supabaseUrl}/auth/v1/user`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken.trim()}`,
+        apikey: anonKey,
+      },
+    });
+    if (!res.ok) return null;
+    const user = (await res.json()) as {
+      app_metadata?: { plan_tier?: unknown };
+    };
+    const raw = user?.app_metadata?.plan_tier;
+    if (typeof raw !== "string") return null;
+    const tier = raw.trim().toLowerCase();
+    return isValidPlanTier(tier) ? tier : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Best-effort tier from query param or header. NEVER used for authorization —
+ * only for non-security UI hints. The chat route uses verifyPlanProof() instead.
  */
 export function rawTierFromRequest(req: Request): PlanTier | null {
   const raw =

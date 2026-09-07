@@ -307,14 +307,16 @@ describe('page context + theme helpers', () => {
     expect(readDocumentTheme({ getAttribute: () => null })).toBe('dark');
   });
 
-  it('builds plan tier message for authenticated tier proof (#3662)', () => {
-    expect(buildPlanTierMessage('desk')).toEqual({
+  it('builds plan tier message with accessToken for claims-backed proof (#3662)', () => {
+    expect(buildPlanTierMessage('desk', 'supabase-access-token')).toEqual({
       type: 'digichat:plan-tier',
       tier: 'desk',
+      accessToken: 'supabase-access-token',
     });
-    expect(buildPlanTierMessage('studio')).toEqual({
+    expect(buildPlanTierMessage('studio', 'tok-2')).toEqual({
       type: 'digichat:plan-tier',
       tier: 'studio',
+      accessToken: 'tok-2',
     });
   });
 });

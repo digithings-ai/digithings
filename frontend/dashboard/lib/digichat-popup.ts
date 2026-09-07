@@ -326,15 +326,17 @@ export function buildThemeMessage(
 }
 
 /**
- * Build a plan tier postMessage for the digichat iframe (#3662).
+ * Build a plan-session postMessage for the digichat iframe (#3662).
  *
- * The iframe receives this after digichat:ready, fetches an HMAC-signed
- * proof from /api/plan-proof, and includes it in X-Embed-Plan-Proof on
- * every chat request.  The chat route verifies the signature — raw client-
- * asserted X-Embed-Plan-Tier headers are NEVER trusted.
+ * The iframe receives the dashboard Supabase access_token after digichat:ready,
+ * exchanges it at /api/plan-proof (server verifies claims via /auth/v1/user),
+ * and includes the HMAC proof in X-Embed-Plan-Proof on every chat request.
+ * Raw client-asserted X-Embed-Plan-Tier headers are NEVER trusted.
+ * `tier` is a UI hint only — digichat ignores it for authorization.
  */
 export function buildPlanTierMessage(
   tier: PlanTier,
-): { type: typeof DIGICHAT_PLAN_TIER; tier: PlanTier } {
-  return { type: DIGICHAT_PLAN_TIER, tier };
+  accessToken: string,
+): { type: typeof DIGICHAT_PLAN_TIER; tier: PlanTier; accessToken: string } {
+  return { type: DIGICHAT_PLAN_TIER, tier, accessToken };
 }

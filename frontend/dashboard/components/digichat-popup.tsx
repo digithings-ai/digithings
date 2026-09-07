@@ -13,12 +13,14 @@
 import { DigichatLauncher } from '@digithings/web';
 import {
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
 } from 'react';
+import { AuthContext } from '@/lib/auth-context';
 import { usePlanTier } from '@/lib/use-entitlement';
 import {
   buildDigichatEmbedSrc,
@@ -57,6 +59,8 @@ export default function DigichatPopup({
 }: DigichatPopupProps) {
   const sessionTier = usePlanTier();
   const tier = tierOverride ?? sessionTier;
+  const auth = useContext(AuthContext);
+  const accessToken = auth?.session?.access_token ?? null;
   const config = useMemo(
     () =>
       configOverride !== undefined ? configOverride : readDigichatPopupConfig(),
@@ -138,15 +142,18 @@ export default function DigichatPopup({
         // Send authenticated plan tier (#3662): the iframe fetches an HMAC-
         // signed proof from /api/plan-proof and includes it in X-Embed-Plan-Proof.
         // Raw X-Embed-Plan-Tier headers are NEVER trusted by the chat route.
-        if (entitled) {
-          win.postMessage(buildPlanTierMessage(tier), config!.origin);
+        if (entitled && accessToken) {
+          win.postMessage(
+            buildPlanTierMessage(tier, accessToken),
+            config!.origin,
+          );
         }
       }
       if (open) sendPageContext();
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [config, iframeSrc, open, sendPageContext, entitled, tier]);
+  }, [config, iframeSrc, open, sendPageContext, entitled, tier, accessToken]);
 
   if (!config) return null;
 

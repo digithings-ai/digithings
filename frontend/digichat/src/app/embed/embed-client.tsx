@@ -138,10 +138,10 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
   const effectiveTheme: EmbedTheme =
     parentTheme ?? urlTheme ?? (tenantCfg.theme === "light" ? "light" : "dark");
 
-  // Plan proof (#3662): the dashboard parent sends the user's tier via
-  // postMessage; we fetch an HMAC-signed token from /api/plan-proof and
-  // include it in X-Embed-Plan-Proof on every chat request.  Raw client-
-  // asserted X-Embed-Plan-Tier headers are NEVER trusted by the chat route.
+  // Plan proof (#3662): the dashboard parent sends a Supabase access_token via
+  // postMessage; we exchange it at /api/plan-proof (server verifies claims) and
+  // include the HMAC proof in X-Embed-Plan-Proof on every chat request. Raw
+  // client-asserted X-Embed-Plan-Tier headers are NEVER trusted by the chat route.
   const [planProof, setPlanProof] = useState<string | null>(null);
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -157,11 +157,15 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
           return;
         }
       }
-      const data = event.data as { type?: string; tier?: string } | null;
-      if (!data || data.type !== "digichat:plan-tier" || !data.tier) return;
-      const tier = data.tier.trim().toLowerCase();
-      if (!["desk", "studio", "enterprise"].includes(tier)) return;
-      // Fetch HMAC-signed proof from the server (embed token authenticates us).
+      const data = event.data as {
+        type?: string;
+        accessToken?: string;
+        tier?: string;
+      } | null;
+      if (!data || data.type !== "digichat:plan-tier") return;
+      const accessToken = data.accessToken?.trim();
+      if (!accessToken) return;
+      // Exchange session token for HMAC-signed proof (claims verified server-side).
       try {
         const embedToken = token ?? searchParams.get("token") ?? undefined;
         const embedHost = host ?? searchParams.get("host") ?? undefined;
@@ -169,10 +173,11 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
           method: "POST",
           headers: {
             "content-type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
             ...(embedToken ? { "X-Embed-Token": embedToken } : {}),
             ...(embedHost ? { "X-Embed-Host": embedHost } : {}),
           },
-          body: JSON.stringify({ tier }),
+          body: "{}",
         });
         if (res.ok) {
           const { proof } = (await res.json()) as { proof?: string };
