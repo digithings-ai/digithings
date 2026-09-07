@@ -265,9 +265,12 @@ def _ground_via_completion(
         {
             "role": "system",
             "content": (
-                "You are a market-research assistant. Use web search to gather current "
-                "facts, then reply with concise bullet points and inline markdown citations "
-                "linking each claim to its source URL."
+                "You are a market-research assistant. Summarize the key findings "
+                "relevant to the user's query as concise bullet points. Include an "
+                "inline markdown citation linking a claim to its source URL only "
+                "when you can verify that source from the conversation — never "
+                "invent URLs, titles, or attributions. State unverifiable claims "
+                "without a citation."
             ),
         },
         {"role": "user", "content": query},

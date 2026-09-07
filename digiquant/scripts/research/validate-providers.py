@@ -95,7 +95,6 @@ def check_env_vars() -> bool:
     required = {
         "SUPABASE_URL": "Supabase project URL",
         "SUPABASE_SERVICE_ROLE_KEY": "Supabase service-role key",
-        "CHEAPERINFERENCE_API_KEY": "house Cheaper Inference key (digillm house default — see docs/providers/cheaperinference.md)",
     }
     all_ok = True
     for var, desc in required.items():
@@ -104,7 +103,16 @@ def check_env_vars() -> bool:
         check(f"{var}", ok, "" if ok else f"missing — {desc}")
         if not ok:
             all_ok = False
-    return all_ok
+    house_key = bool(
+        (os.environ.get("CHEAPERINFERENCE_API_KEY") or "").strip()
+        or (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    )
+    check(
+        "house LLM key (CHEAPERINFERENCE_API_KEY or OPENROUTER_API_KEY)",
+        house_key,
+        "" if house_key else "missing — house routing needs one upstream key",
+    )
+    return all_ok and house_key
 
 
 # Preflight-local digillm bounds — read once at digillm import. The real pipeline keeps

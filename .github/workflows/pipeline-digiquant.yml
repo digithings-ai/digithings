@@ -196,8 +196,8 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CHEAPERINFERENCE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
           CHEAPERINFERENCE_API_BASE: ${{ vars.CHEAPERINFERENCE_API_BASE || secrets.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
-          # OPENROUTER_ALLOWED_MODELS is applied in-process by validate-providers.py
-          # via apply_digiquant_openrouter_env() — same as portfolio chain startup (#2532).
+          # House routing is applied in-process by validate-providers.py
+          # via apply_digiquant_house_env() — same as portfolio chain startup (#2532).
         run: |
           uv run --frozen --no-sync python digiquant/scripts/research/validate-providers.py --skip-dry-run
 

@@ -1,13 +1,14 @@
 """Web-grounding pre-pass for research phases (#650 / #2567).
 
-For ``live_search`` segments, runs a read-only search pass and returns a cited
+For ``live_search`` segments, runs a read-only synthesis pass and returns a cited
 summary injected into ``phase_inputs`` before the normal structured-output
 research call.
 
 dashboard grounding synthesizes via a plain digillm completion over in-house
 retrieval context (:func:`digigraph.model_config.get_grounding_model` selects
 the synthesis model from the tier's ``web_search_models``). No vendor search
-tooling — digillm is a generic router.
+tooling — digillm is a generic router. Citations are model-recalled only; the
+prompt forbids inventing sources.
 
 Fails soft on error or missing key unless ``OLYMPUS_WEB_SEARCH=required``.
 """

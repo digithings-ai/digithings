@@ -66,8 +66,19 @@ def test_check_env_vars_passes_with_house_key(vp: Any) -> None:
 
 def test_check_env_vars_fails_without_house_key(vp: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CHEAPERINFERENCE_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     vp.results.clear()
     assert vp.check_env_vars() is False
+
+
+def test_check_env_vars_passes_with_openrouter_key_only(
+    vp: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OR-only runs are valid — either upstream key satisfies the house gate."""
+    monkeypatch.delenv("CHEAPERINFERENCE_API_KEY", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    vp.results.clear()
+    assert vp.check_env_vars() is True
 
 
 def test_preflight_configures_bounded_digillm_env(vp: Any, monkeypatch: pytest.MonkeyPatch) -> None:

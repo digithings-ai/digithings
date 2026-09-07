@@ -16,6 +16,11 @@ Routing follows the process environment (house Cheaper Inference when
 ``CHEAPERINFERENCE_API_KEY`` is set, else OpenRouter rewrite / LiteLLM proxy /
 vendor clients). Per-request BYOK / proxy-key contextvars do not cross the
 MCP boundary. Provider errors surface as MCP errors (fail-fast, no fallback).
+
+Trust model (same as the other component servers): streamable-http binds
+loopback by default — treat any wider bind (``--host`` / ``DIGILLM_MCP_HOST``)
+like a network API with gateway auth, since callers spend the operator key.
+stdio suits trusted local clients.
 """
 
 from __future__ import annotations
