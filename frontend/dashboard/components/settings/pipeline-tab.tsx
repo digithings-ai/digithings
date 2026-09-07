@@ -15,6 +15,10 @@ import {
   validatePipelineSchedule,
 } from '@/lib/settings/validate-profile';
 import {
+  SETTINGS_LOAD_ERROR_MESSAGE,
+  SettingsLoadError,
+} from './settings-load-error';
+import {
   STAGE_LABELS,
   STAGES,
   WEEKDAY_LABELS,
@@ -76,6 +80,7 @@ export function PipelineTab({
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -108,7 +113,7 @@ export function PipelineTab({
   const hydrate = useCallback(async () => {
     if (!api) return;
     setLoading(true);
-    setError(null);
+    setLoadError(null);
     try {
       applyTip(await getFn(api));
       try {
@@ -116,8 +121,8 @@ export function PipelineTab({
       } catch {
         setJobs([]);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load pipeline knobs.');
+    } catch {
+      setLoadError(SETTINGS_LOAD_ERROR_MESSAGE);
     } finally {
       setLoading(false);
     }
@@ -440,6 +445,9 @@ export function PipelineTab({
         <p className="text-sm text-warn" role="alert" data-testid="pipeline-conflict">
           Profile changed elsewhere — reload and try again.
         </p>
+      ) : null}
+      {loadError ? (
+        <SettingsLoadError message={loadError} onRetry={() => void hydrate()} />
       ) : null}
       {error ? (
         <p className="text-sm text-down" role="alert" data-testid="pipeline-error">
