@@ -35,6 +35,8 @@ import {
   isEmbedChatRequest,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
+import { isPlanTierSatisfied } from "@/lib/embed-tenants";
+import { verifyPlanProof } from "@/lib/plan-proof";
 import {
   acquireChatRunLock,
   releaseChatRunLockOnResponseEnd,
@@ -148,6 +150,42 @@ export async function POST(req: Request) {
   };
 
   const embedConfig = embedConfigOf(tenantCtx);
+
+  // Desk+ tier gate (#3662, Chris lock): when the embed config declares a
+  // requiredPlanTier, the caller must present a valid HMAC-signed plan proof
+  // token (X-Embed-Plan-Proof header) OR an authenticated digichat session
+  // with plan_tier in app_metadata.  Raw client-asserted X-Embed-Plan-Tier
+  // headers and ?plan_tier= query params are NEVER trusted — they are
+  // spoofable.  Fail closed when proof is absent or tier below threshold.
+  // Scoped to tenants with requiredPlanTier set — digithings.ai and all
+  // other tenants are untouched.
+  if (embedConfig?.requiredPlanTier) {
+    let callerTier: string | null = null;
+
+    // Prefer: HMAC-signed plan proof token from the dashboard popup.
+    const proofToken = req.headers.get("x-embed-plan-proof")?.trim();
+    if (proofToken) {
+      const proofSecret = process.env.DIGICHAT_PLAN_PROOF_SECRET?.trim();
+      if (proofSecret) {
+        callerTier = verifyPlanProof(proofToken, proofSecret);
+      }
+    }
+
+    // Fallback: authenticated digichat session with plan_tier in JWT claims.
+    if (!callerTier && authResult && !(authResult instanceof Response)) {
+      callerTier = authResult.plan_tier ?? null;
+    }
+
+    // NEVER trust raw X-Embed-Plan-Tier / ?plan_tier= — client-asserted and spoofable.
+
+    if (!isPlanTierSatisfied(embedConfig, callerTier)) {
+      return jsonError(
+        403,
+        "plan_tier_required",
+        `Chat requires ${embedConfig.requiredPlanTier}+ plan tier.`,
+      );
+    }
+  }
 
   // trial_form gate: DataTap-branded embed that, after EMBED_FREE_TURN_LIMIT free
   // turns, defers the locked presentation to the embedding page (which shows the

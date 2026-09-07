@@ -33,6 +33,10 @@ export function BillingTab({
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [interval, setInterval] = useState<BillingInterval>(defaultInterval);
+  const [lastError, setLastError] = useState<{
+    code: string;
+    message: string;
+  } | null>(null);
 
   if (!configured) {
     return (
@@ -53,6 +57,7 @@ export function BillingTab({
     }
     setBusy(true);
     setMessage(null);
+    setLastError(null);
     try {
       const session = await checkoutFn(api, { tier, interval });
       if (session.url) {
@@ -60,8 +65,20 @@ export function BillingTab({
       } else {
         setMessage('Checkout session created without a URL.');
       }
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to start checkout.');
+    } catch (err: any) {
+      const code = err?.code ?? err?.status ?? 'UNKNOWN';
+      const msg = err?.message ?? 'Unable to start checkout.';
+      setLastError({ code, message: msg });
+      if (code === 'PRICE_NOT_CONFIGURED') {
+        setMessage('Annual pricing is not configured. Falling back to monthly interval.');
+        setInterval('monthly');
+      } else if (code === 'STRIPE_NOT_CONFIGURED') {
+        setMessage('Stripe is not configured. Please contact support.');
+      } else if (code === 'NO_STRIPE_CUSTOMER') {
+        setMessage('No Stripe customer on workspace. Please complete onboarding.');
+      } else {
+        setMessage(msg);
+      }
     } finally {
       setBusy(false);
     }
@@ -108,7 +125,7 @@ export function BillingTab({
         <button
           type="button"
           aria-pressed={interval === 'monthly'}
-          disabled={busy}
+          disabled={busy || lastError?.code === 'PRICE_NOT_CONFIGURED'}
           onClick={() => setInterval('monthly')}
           className={
             interval === 'monthly'
@@ -122,7 +139,7 @@ export function BillingTab({
         <button
           type="button"
           aria-pressed={interval === 'annual'}
-          disabled={busy}
+          disabled={busy || lastError?.code === 'PRICE_NOT_CONFIGURED'}
           onClick={() => setInterval('annual')}
           className={
             interval === 'annual'
@@ -134,6 +151,11 @@ export function BillingTab({
           {annualToggleLabel()}
         </button>
       </div>
+      {lastError?.code === 'PRICE_NOT_CONFIGURED' && (
+        <p className="text-sm text-ink-soft" data-testid="billing-annual-error">
+          {lastError.message}
+        </p>
+      )}
 
       <div
         className="border border-hair divide-y divide-hair"

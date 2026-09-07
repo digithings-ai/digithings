@@ -461,6 +461,25 @@ for per-tenant corpus isolation — forwarded as `X-Digi-Corpus-Index` /
 policy (digithings.ai = `free_then_byok` + `showByok: true`; foundry/DataTap =
 `backend_only` + BYOK off), `attribution` flag, `aliases`, and a required `token`.
 
+The `digiquant.io` dashboard tenant is `ungated` + `llmAccess: operator` with
+no `gate` block, `showByok: true`, and `requiredPlanTier: desk` (#3662 / #3664,
+Chris lock: no free-3 quota on the dashboard popup). Desk+ chat is never
+turn-capped and the trial quota is never consulted for this host; baseline
+entitlement is enforced dashboard-side (upgrade CTA panel, no iframe, no turns
+burned). Pinned by `isDigiquantDashboardTenantConfig` in
+`src/lib/embed-tenants.ts` — a different bot from the `digithings.ai` marketing
+tenant, never conflated.
+
+**Plan proof (claims-backed, #3664):** when `requiredPlanTier` is set,
+`POST /api/chat` accepts only (1) `X-Embed-Plan-Proof` verified with
+`DIGICHAT_PLAN_PROOF_SECRET`, or (2) an authenticated digichat session with
+`app_metadata.plan_tier` ≥ required. Mint path: embed calls
+`POST /api/plan-proof` with dashboard Supabase `Authorization: Bearer` + embed
+token; digichat verifies the access token against
+`DIGICHAT_DASHBOARD_SUPABASE_URL` / anon key, reads claims `plan_tier`, and
+signs Desk+ only. Client-asserted `X-Embed-Plan-Tier` / `?plan_tier=` are never
+trusted (see `src/lib/plan-proof.ts` and `src/app/api/plan-proof/route.ts`).
+
 On structured `free_quota_exceeded` / clear rate-limit errors, embed tenants with
 `llmAccess: free_then_byok` stop the turn and open the in-chat BYOK sequence
 (even when `gateMode` is `ungated` — see `shouldSuggestByokOnEmbedError`). After
