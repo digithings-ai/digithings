@@ -14,6 +14,7 @@ import {
   Suggestions,
   useLocalRuntime,
   type ChatModelAdapter,
+  type SuggestionConfig,
 } from "@assistant-ui/react";
 import { useSyncExternalStore, type ReactNode } from "react";
 
@@ -114,6 +115,11 @@ type WelcomeSuggestion =
   | string
   | { title: string; label?: string; prompt: string };
 
+function toSuggestionConfig(item: WelcomeSuggestion): SuggestionConfig {
+  if (typeof item === "string") return item;
+  return { title: item.title, label: item.label ?? "", prompt: item.prompt };
+}
+
 /** Opt-in welcome starters. Empty = no chips (default template). */
 const DEFAULT_CHIPS: readonly WelcomeSuggestion[] = [];
 
@@ -161,7 +167,9 @@ function DigichatFixtureRuntimeInner({
   });
   const config =
     suggestions.length > 0
-      ? AuiConfig({ suggestions: Suggestions([...suggestions]) })
+      ? AuiConfig({
+          suggestions: Suggestions(suggestions.map(toSuggestionConfig)),
+        })
       : AuiConfig({});
   return (
     <AssistantRuntimeProvider runtime={runtime} config={config}>
