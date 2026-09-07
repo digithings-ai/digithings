@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any  # score:allow untyped any — MagicMock kwargs / heterogeneous payloads
 from unittest.mock import MagicMock, patch
 
 import pytest
