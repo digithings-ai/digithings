@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-07T06:11:34Z",
+  "generatedAt": "2026-09-07T19:12:33Z",
   "windowDays": 30,
-  "commits": 2143,
+  "commits": 2139,
   "features": [
     {
       "scope": "digithings-web",
@@ -40,66 +40,84 @@
       "date": "2026-09-05T09:57:58Z"
     }
   ],
-  "pullsMerged": 1155,
-  "issuesClosed": 1225,
-  "pullsOpen": 3,
-  "issuesOpen": 3,
+  "pullsMerged": 1163,
+  "issuesClosed": 460,
+  "pullsOpen": 4,
+  "issuesOpen": 143,
   "mergedPulls": [
     {
-      "number": 3668,
-      "title": "fix(digigraph): fail closed when provider key missing \u2014 no silent Ollama default (#3661)",
-      "url": "https://github.com/digithings-ai/digithings/pull/3668",
-      "mergedAt": "2026-09-06T20:17:06Z"
+      "number": 3683,
+      "title": "fix(digichat-cloudflare): wire /api/plan-proof + Container env whitelist for Desk+ mint (#3682)",
+      "url": "https://github.com/digithings-ai/digithings/pull/3683",
+      "mergedAt": "2026-09-07T13:59:51Z"
     },
     {
-      "number": 3669,
-      "title": "Fix: preserve pipeline_schedule/execution_policy on Profile PATCH when omitted",
-      "url": "https://github.com/digithings-ai/digithings/pull/3669",
-      "mergedAt": "2026-09-06T20:21:23Z"
+      "number": 3684,
+      "title": "feat(dashboard): polish Notifications Settings empty/error/soft-503 UX (#3681)",
+      "url": "https://github.com/digithings-ai/digithings/pull/3684",
+      "mergedAt": "2026-09-07T13:43:14Z"
     },
     {
-      "number": 3667,
-      "title": "fix(digiquant): house CI-only \u2014 digisearch grounding + fail-closed OpenRouter (#3660)",
-      "url": "https://github.com/digithings-ai/digithings/pull/3667",
-      "mergedAt": "2026-09-06T18:55:06Z"
+      "number": 3680,
+      "title": "docs: claims-backed Desk+ plan_tier + review fixes (#3664)",
+      "url": "https://github.com/digithings-ai/digithings/pull/3680",
+      "mergedAt": "2026-09-07T12:24:17Z"
     },
     {
-      "number": 3659,
-      "title": "test(digichat-ui): assert /copy and /export in slash palette",
-      "url": "https://github.com/digithings-ai/digithings/pull/3659",
-      "mergedAt": "2026-09-05T22:04:00Z"
+      "number": 3679,
+      "title": "fix(dashboard): unify Settings tab load/error UI",
+      "url": "https://github.com/digithings-ai/digithings/pull/3679",
+      "mergedAt": "2026-09-07T12:08:50Z"
     },
     {
-      "number": 3657,
-      "title": "promote: stack CI secrets via CF API",
-      "url": "https://github.com/digithings-ai/digithings/pull/3657",
-      "mergedAt": "2026-09-05T21:48:04Z"
-    },
-    {
-      "number": 3656,
-      "title": "fix(ci): digithings-stack Cheaper Inference secrets via CF API",
-      "url": "https://github.com/digithings-ai/digithings/pull/3656",
-      "mergedAt": "2026-09-05T21:47:37Z"
-    }
-  ],
-  "openIssues": [
-    {
-      "number": 3670,
-      "title": "Fix BillingTab defaulting to annual when STRIPE_PRICE_*_ANNUAL unset \u2192 PRICE_NOT_CONFIGURED",
-      "url": "https://github.com/digithings-ai/digithings/pull/3670",
-      "updatedAt": "2026-09-06T20:27:00Z"
+      "number": 3678,
+      "title": "docs: sync Brief/Desk/Studio billing + house CI LiteLLM (#3670/#3674)",
+      "url": "https://github.com/digithings-ai/digithings/pull/3678",
+      "mergedAt": "2026-09-07T11:57:58Z"
     },
     {
       "number": 3664,
       "title": "fix(digichat): digiquant dashboard popup Desk+ only, no free-3 quota",
       "url": "https://github.com/digithings-ai/digithings/pull/3664",
-      "updatedAt": "2026-09-06T20:16:01Z"
+      "mergedAt": "2026-09-07T11:25:49Z"
+    }
+  ],
+  "openIssues": [
+    {
+      "number": 3676,
+      "title": "docs(dashboard): Settings UX pass \u2014 page-by-page user-facing readiness",
+      "url": "https://github.com/digithings-ai/digithings/issues/3676",
+      "updatedAt": "2026-09-07T09:42:49Z"
     },
     {
-      "number": 3629,
-      "title": "[digichat 2.0] feat(digichat)!: assistant-ui + AI SDK v7 + standard data parts",
-      "url": "https://github.com/digithings-ai/digithings/pull/3629",
-      "updatedAt": "2026-09-05T13:17:19Z"
+      "number": 3673,
+      "title": "[cleanup] 21 stale merged branches \u2014 2026-09-07",
+      "url": "https://github.com/digithings-ai/digithings/issues/3673",
+      "updatedAt": "2026-09-07T08:09:33Z"
+    },
+    {
+      "number": 642,
+      "title": "[housekeeping-auto] scheduled-workflow failures (weekly)",
+      "url": "https://github.com/digithings-ai/digithings/issues/642",
+      "updatedAt": "2026-09-07T08:09:09Z"
+    },
+    {
+      "number": 643,
+      "title": "[housekeeping-auto] label coverage drift",
+      "url": "https://github.com/digithings-ai/digithings/issues/643",
+      "updatedAt": "2026-09-07T08:09:06Z"
+    },
+    {
+      "number": 3647,
+      "title": "Follow-up: centralized OpenAI-compat BYOK providers (live models + ping before save)",
+      "url": "https://github.com/digithings-ai/digithings/issues/3647",
+      "updatedAt": "2026-09-06T09:24:39Z"
+    },
+    {
+      "number": 3078,
+      "title": "digiquant-daily-failure",
+      "url": "https://github.com/digithings-ai/digithings/issues/3078",
+      "updatedAt": "2026-09-05T20:44:34Z"
     }
   ],
   "branch": "main",
@@ -131,8 +149,8 @@
     "digichat": {
       "path": "frontend/digichat",
       "lastCommit": "2026-09-05T14:43:49Z",
-      "files": 229,
-      "lines": 30923
+      "files": 233,
+      "lines": 32150
     },
     "digikey": {
       "path": "digikey",
