@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any  # score:allow untyped any — fake OpenAI kwargs + captured call dicts
+from typing import Any  # score:allow untyped any
+
+# Justification: fake OpenAI kwargs + captured call dicts over untyped client boundary.
 from unittest.mock import MagicMock, patch
 
 import pytest
