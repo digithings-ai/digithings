@@ -10,6 +10,10 @@ import {
   type NotificationPrefs,
   type SettingsApiOptions,
 } from '@/lib/settings-api';
+import {
+  SETTINGS_LOAD_ERROR_MESSAGE,
+  SettingsLoadError,
+} from './settings-load-error';
 
 export type NotifyTabProps = {
   api: SettingsApiOptions | null;
@@ -30,6 +34,7 @@ export function NotifyTab({
   const [executionAlerts, setExecutionAlerts] = useState(false);
   const [digestHour, setDigestHour] = useState(12);
   const [message, setMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [notReady, setNotReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -50,8 +55,7 @@ export function NotifyTab({
   const hydrate = useCallback(async () => {
     if (!api) return;
     setLoading(true);
-    setMessage(null);
-    setNotReady(false);
+    setLoadError(null);
     try {
       const prefs = await getFn(api);
       applyPrefs(prefs);
@@ -62,12 +66,11 @@ export function NotifyTab({
       }
     } catch (err) {
       if (err instanceof SettingsHttpError && (err.status === 503 || err.code === 'NOT_READY')) {
-        setNotReady(true);
-        setMessage(
+        setLoadError(
           'Notification preferences backend is temporarily unavailable. Showing empty form.',
         );
       } else {
-        setMessage(err instanceof Error ? err.message : 'Unable to load preferences.');
+        setLoadError(SETTINGS_LOAD_ERROR_MESSAGE);
       }
     } finally {
       setLoading(false);
@@ -175,6 +178,9 @@ export function NotifyTab({
         />
       </label>
 
+      {loadError ? (
+        <SettingsLoadError message={loadError} onRetry={() => void hydrate()} />
+      ) : null}
       {message ? (
         <p
           className={`text-sm ${notReady ? 'text-warn' : 'text-ink-soft'}`}
