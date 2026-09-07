@@ -583,10 +583,11 @@ describe("digiquant dashboard tenant contract (#3662)", () => {
     backend: { type: "digigraph" },
     gateMode: "ungated",
     llmAccess: "operator",
+    showByok: true,
     token: "dash-secret",
   };
 
-  it("accepts the canonical digiquant.io entry: ungated + operator, no gate", () => {
+  it("accepts the canonical digiquant.io entry: ungated + operator + showByok true, no gate", () => {
     const reg = parseEmbedTenants(
       JSON.stringify({ [DIGIQUANT_DASHBOARD_EMBED_HOST]: dashboardEntry }),
     );
@@ -595,6 +596,14 @@ describe("digiquant dashboard tenant contract (#3662)", () => {
     // www alias rides the same entry.
     expect(reg.get("www.digiquant.io")).toBe(cfg);
     expect(isDigiquantDashboardTenantConfig(cfg!)).toBe(true);
+  });
+
+  it("showByok is true on digiquant.io tenant config", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({ [DIGIQUANT_DASHBOARD_EMBED_HOST]: dashboardEntry }),
+    );
+    const cfg = reg.get("digiquant.io")!;
+    expect(cfg.showByok).toBe(true);
   });
 
   it("rejects turn_limited: Desk+ must never be capped at free-3", () => {

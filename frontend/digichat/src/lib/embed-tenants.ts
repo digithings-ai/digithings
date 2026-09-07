@@ -390,6 +390,7 @@ export function isDigiquantDashboardTenantConfig(cfg: EmbedTenantConfig): boolea
   return (
     cfg.gateMode === "ungated" &&
     cfg.llmAccess === "operator" &&
-    cfg.gate === undefined
+    cfg.gate === undefined &&
+    cfg.showByok === true
   );
 }

@@ -272,7 +272,7 @@ frame a loopback parent — use the local origin. See `.env.local.example`.
 Tenant grounding (digigraph → digillm, research/portfolio corpus, opt-in web search)
 is configured on digichat via `DIGICHAT_EMBED_TENANTS` for host `digiquant.io`.
 Contract (#3662, Chris lock — no free-3 quota): `gateMode: "ungated"`,
-`llmAccess: "operator"`, no `gate.consumeUrl`, `showByok: false`. Entitled
+`llmAccess: "operator"`, no `gate.consumeUrl`, `showByok: true`. Entitled
 (Desk+) chat is never turn-capped; spend rides operator keys with no visitor
 BYOK handoff. Pinned in code by `isDigiquantDashboardTenantConfig`. The
 `digithings.ai` marketing trial (`free_then_byok`) is a separate tenant.

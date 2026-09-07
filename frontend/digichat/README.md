@@ -78,7 +78,7 @@ Prod tenant (`host=digithings.ai`): `gateMode: ungated`, `llmAccess: free_then_b
 
 Dashboard tenant (`host=digiquant.io`, #3662 — Chris lock, no free-3 quota):
 `gateMode: ungated`, `llmAccess: operator`, no `gate` block,
-`showByok: false`. Entitled (Desk+) dashboard chat is never turn-capped and the
+`showByok: true`. Entitled (Desk+) dashboard chat is never turn-capped and the
 trial quota is never consulted; baseline (free/brief) never gets an iframe —
 the dashboard renders an upgrade CTA panel with chat disabled instead, so
 non-entitled tiers never burn turns. Pinned by

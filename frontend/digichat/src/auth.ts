@@ -107,6 +107,7 @@ export const authConfig = {
         token.sub = user.id ?? token.sub;
         if (user.email) token.email = user.email;
         if (user.name) token.name = user.name;
+        if (user.app_metadata?.plan_tier) token.plan_tier = user.app_metadata.plan_tier;
       }
       return token;
     },

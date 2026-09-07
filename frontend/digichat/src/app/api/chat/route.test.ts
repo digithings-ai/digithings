@@ -91,9 +91,25 @@ describe("POST /api/chat", () => {
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
     resetEmbedTrialQuotaForTests();
     resetChatRunLocksForTests();
-    vi.mocked(createFoundryStreamResponse).mockClear();
+vi.mocked(createFoundryStreamResponse).mockClear();
     vi.mocked(createDigigraphTraceStreamResponse).mockClear();
   });
+
+  const dashboardCtx = {
+    tenantSlug: "digiquant-dashboard",
+    ownerUserSub: "embed:anonymous",
+    embedConfig: {
+      slug: "digiquant-dashboard",
+      gateMode: "ungated",
+      theme: "dark",
+      attribution: false,
+      token: "dash-secret",
+      backend: { type: "digigraph" },
+      activityDetail: "full",
+      llmAccess: "operator",
+      showByok: true,
+    },
+  };
 
   afterEach(() => {
     process.env = env;
@@ -706,6 +722,100 @@ describe("POST /api/chat", () => {
     expect(call?.headers?.["X-BYOK-Model"]).toBeUndefined();
   });
 
+  it("refuses baseline plan_tier: free users get 403", async () => {
+    vi.mocked(requireDigiChatAuth).mockResolvedValue({
+      tenantSlug: "digiquant-dashboard",
+      ownerUserSub: "embed:anonymous",
+      plan_tier: "free",
+    } as never);
+    const baselineCtx = {
+      ...dashboardCtx,
+      plan_tier: "free",
+    };
+    vi.mocked(resolveChatTenantContext).mockResolvedValue(baselineCtx as never);
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-embed-host": "https://digiquant.io" },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      })
+    );
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toBe("plan_tier_required");
+  });
+
+  it("refuses baseline plan_tier: brief users get 403", async () => {
+    vi.mocked(requireDigiChatAuth).mockResolvedValue({
+      tenantSlug: "digiquant-dashboard",
+      ownerUserSub: "embed:anonymous",
+      plan_tier: "brief",
+    } as never);
+    const baselineCtx = {
+      ...dashboardCtx,
+      plan_tier: "brief",
+    };
+    vi.mocked(resolveChatTenantContext).mockResolvedValue(baselineCtx as never);
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-embed-host": "https://digiquant.io" },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      })
+    );
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toBe("plan_tier_required");
+  });
+
+  it("allows desk plan_tier", async () => {
+    const deskCtx = {
+      ...dashboardCtx,
+      plan_tier: "desk",
+    };
+    vi.mocked(resolveChatTenantContext).mockResolvedValue(deskCtx as never);
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-embed-host": "https://digiquant.io" },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      })
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("allows studio plan_tier", async () => {
+    const studioCtx = {
+      ...dashboardCtx,
+      plan_tier: "studio",
+    };
+    vi.mocked(resolveChatTenantContext).mockResolvedValue(studioCtx as never);
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-embed-host": "https://digiquant.io" },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      })
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("allows enterprise plan_tier", async () => {
+    const enterpriseCtx = {
+      ...dashboardCtx,
+      plan_tier: "enterprise",
+    };
+    vi.mocked(resolveChatTenantContext).mockResolvedValue(enterpriseCtx as never);
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-embed-host": "https://digiquant.io" },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      })
+    );
+    expect(res.status).toBe(200);
+  });
+
   describe("trial_form gate", () => {
     const trialCtx = {
       tenantSlug: "datatap",
@@ -804,6 +914,7 @@ describe("POST /api/chat", () => {
         backend: { type: "digigraph" },
         activityDetail: "full",
         llmAccess: "operator",
+        showByok: true,
       },
     };
 

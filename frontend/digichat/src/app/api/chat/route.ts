@@ -35,6 +35,7 @@ import {
   isEmbedChatRequest,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
+import { isDigiquantDashboardTenantConfig } from "@/lib/embed-tenants";
 import {
   acquireChatRunLock,
   releaseChatRunLockOnResponseEnd,
@@ -148,6 +149,23 @@ export async function POST(req: Request) {
   };
 
   const embedConfig = embedConfigOf(tenantCtx);
+
+  // Plan tier enforcement for digiquant.io dashboard (#3662):
+  // Baseline (free/brief) users are refused server-side (403) even with a
+  // valid embed token + forced iframe. Desk+/studio/enterprise allowed.
+  // Scoped to the digiquant dashboard tenant only — digithings.ai and all
+  // other tenants are untouched.
+  if (
+    embedConfig &&
+    isDigiquantDashboardTenantConfig(embedConfig) &&
+    authResult.plan_tier &&
+    ["free", "brief"].includes(authResult.plan_tier)
+  ) {
+    return new Response(
+      JSON.stringify({ error: "plan_tier_required", message: "Plan tier required to access chat." }),
+      { status: 403, headers: { "content-type": "application/json" } },
+    );
+  }
 
   // trial_form gate: DataTap-branded embed that, after EMBED_FREE_TURN_LIMIT free
   // turns, defers the locked presentation to the embedding page (which shows the
