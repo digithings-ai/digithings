@@ -12,9 +12,11 @@ clipped to ``[-3, 3]``.
 max-sell) fed into an **agreement-scaled confluence** of weekly (long-term)
 and daily (medium-term) RSI (``rsi_confluence_z``): a weighted blend of the
 two dead-zone z-scores, amplified when the timeframes agree in sign and
-damped toward 0 when they conflict. ``mtf_rsi_z`` (weekly/monthly blend)
-stays as a diagnostic. Do not affine-map ``(50−RSI)/50`` — that pegs a bull
-at the floor.
+damped toward 0 when they conflict. ``mtf_rsi_z`` (weekly/monthly blend,
+naive 0.5/0.5 average) stays as a diagnostic — superseded for real use by
+``weekly_monthly_rsi_confluence_z`` below, which applies the same
+agreement-scaled blend used everywhere else instead of a naive average. Do
+not affine-map ``(50−RSI)/50`` — that pegs a bull at the floor.
 
 ``monthly_rsi_confluence_z``/``monthly_macd_confluence_z`` swap the long-term
 leg for **completed calendar months** instead of weeks (``monthly_rsi_z``,
@@ -38,6 +40,16 @@ z-score of its own recent lmacd, since a medium-term momentum dip needs to
 register against recent normal rather than an absolute, secular-scale
 threshold. ``SdcaCompositeWeights`` still defaults both to 0; published
 ``btc_sdca`` turns them on in ``settings.json``.
+
+``weekly_monthly_rsi_confluence_z``/``weekly_monthly_macd_confluence_z`` are
+a third confluence pairing (Chris, 2026-09-07): monthly (long-term) blended
+with weekly (medium-term) directly — no daily leg at all — via the same
+``agreement_scaled_blend`` primitive as every function above. Distinct from
+both ``weekly_rsi``/``weekly_macd`` (weekly+daily) and
+``monthly_rsi``/``monthly_macd`` (monthly+daily): this pairing is a pure
+long-vs-medium cycle read. Research-only, same dormant-field pattern as the
+monthly variants: not yet in
+``EXTRA_INDICATOR_NAMES``/``build_extra_indicators``/settings.json.
 
 ``sma_band`` is the same agreement-scaled pattern applied to the Bollinger-
 style SMA z (``sma_band_confluence_z``): a slow leg (``sma_band_z`` at the
@@ -427,6 +439,58 @@ def monthly_rsi_confluence_z(
     )
 
 
+def weekly_monthly_rsi_confluence_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    monthly_length: int = _RSI_LENGTH,
+    weekly_length: int = _RSI_LENGTH,
+    monthly_weight: float = _RSI_CONFLUENCE_WEEKLY_WEIGHT,
+    agreement_boost: float = _RSI_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _RSI_CONFLUENCE_DISAGREEMENT_DAMP,
+    dead_low: float = _RSI_DEAD_LOW,
+    dead_high: float = _RSI_DEAD_HIGH,
+    extreme_low: float = _RSI_EXTREME_LOW,
+    extreme_high: float = _RSI_EXTREME_HIGH,
+) -> pl.Series:
+    """Monthly (long-term) + weekly (medium-term) RSI, amplified on agreement.
+
+    Chris (2026-09-07): a single merged weekly+monthly RSI vote instead of
+    separate weekly_rsi/monthly_rsi slots each confluenced against daily.
+    Same agreement-scaled blend as ``rsi_confluence_z``/
+    ``monthly_rsi_confluence_z``, but both legs are macro-cadence (weekly and
+    monthly, no daily leg) — a pure long-vs-medium-term cycle read, not a
+    short-term momentum check. Research-only: not yet in
+    ``EXTRA_INDICATOR_NAMES``/``build_extra_indicators``/settings.json.
+    """
+    monthly = monthly_rsi_z(
+        dates,
+        close,
+        length=monthly_length,
+        dead_low=dead_low,
+        dead_high=dead_high,
+        extreme_low=extreme_low,
+        extreme_high=extreme_high,
+    )
+    weekly = weekly_rsi_z(
+        dates,
+        close,
+        length=weekly_length,
+        dead_low=dead_low,
+        dead_high=dead_high,
+        extreme_low=extreme_low,
+        extreme_high=extreme_high,
+    )
+    return agreement_scaled_blend(
+        monthly,
+        weekly,
+        long_term_weight=monthly_weight,
+        agreement_boost=agreement_boost,
+        disagreement_damp=disagreement_damp,
+        name="weekly_monthly_rsi",
+    )
+
+
 def daily_rsi_z(
     dates: pl.Series,
     close: pl.Series,
@@ -752,6 +816,40 @@ def monthly_macd_confluence_z(
     )
 
 
+def weekly_monthly_macd_confluence_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    monthly_fast: int = _MACD_FAST,
+    monthly_slow: int = _MACD_SLOW,
+    weekly_fast: int = _MACD_FAST,
+    weekly_slow: int = _MACD_SLOW,
+    monthly_weight: float = _MACD_CONFLUENCE_WEEKLY_WEIGHT,
+    agreement_boost: float = _MACD_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _MACD_CONFLUENCE_DISAGREEMENT_DAMP,
+) -> pl.Series:
+    """Monthly (long-term) + weekly (medium-term) log-MACD, amplified on agreement.
+
+    Chris (2026-09-07): a single merged weekly+monthly MACD vote instead of
+    separate weekly_macd/monthly_macd slots each confluenced against daily.
+    Same agreement-scaled blend as ``macd_confluence_z``/
+    ``monthly_macd_confluence_z``, but both legs are macro-cadence (weekly
+    and monthly, no daily leg) — a pure long-vs-medium-term trend read, not a
+    short-term momentum check. Research-only: not yet in
+    ``EXTRA_INDICATOR_NAMES``/``build_extra_indicators``/settings.json.
+    """
+    monthly = monthly_macd_z(dates, close, fast=monthly_fast, slow=monthly_slow)
+    weekly = weekly_macd_z(dates, close, fast=weekly_fast, slow=weekly_slow)
+    return agreement_scaled_blend(
+        monthly,
+        weekly,
+        long_term_weight=monthly_weight,
+        agreement_boost=agreement_boost,
+        disagreement_damp=disagreement_damp,
+        name="weekly_monthly_macd",
+    )
+
+
 def sma_band_z(
     dates: pl.Series,
     close: pl.Series,
@@ -850,6 +948,20 @@ def price_oscillator_z_vectors(
             daily_slow=spec.macd_daily_slow,
             daily_z_window=spec.macd_daily_z_window,
             daily_min_samples=spec.macd_daily_min_samples,
+        ).to_list(),
+        "weekly_monthly_rsi": weekly_monthly_rsi_confluence_z(
+            dates,
+            close,
+            monthly_length=spec.monthly_rsi_length,
+            weekly_length=spec.rsi_length,
+        ).to_list(),
+        "weekly_monthly_macd": weekly_monthly_macd_confluence_z(
+            dates,
+            close,
+            monthly_fast=spec.monthly_macd_fast,
+            monthly_slow=spec.monthly_macd_slow,
+            weekly_fast=spec.macd_fast,
+            weekly_slow=spec.macd_slow,
         ).to_list(),
     }
 

@@ -981,6 +981,8 @@ class TestCatalogWiring:
             "sma_band",
             "monthly_rsi",
             "monthly_macd",
+            "weekly_monthly_rsi",
+            "weekly_monthly_macd",
         )
         assert set(PRICE_OSCILLATOR_NAMES).issubset(set(EXTRA_INDICATOR_NAMES))
         w = SdcaCompositeWeights()

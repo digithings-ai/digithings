@@ -16,9 +16,15 @@ comparably fast rotation to confluence against.
 
 ``SdcaCompositeWeights`` defaults ``power_law=1``, extras ``0`` (disabled,
 excluded from the blend). Published ``btc_sdca`` in ``settings.json`` turns
-on M2, DXY, weekly log-MACD, and MTF weekly/monthly RSI — see
-``btc_richer_composite.json``. Model defaults stay extras-off so a missing
-macro row cannot null an unpublished path.
+on M2, DXY, and weekly log-MACD — see ``btc_richer_composite.json``. (That
+sidecar's own notes describe its ``weekly_rsi`` as an MTF weekly+monthly
+blend; the actual code wires ``weekly_rsi`` to weekly+daily
+(``rsi_confluence_z``) — stale doc on an unvalidated,
+``beats_flat_dca_oos: false`` track. ``weekly_monthly_rsi``/
+``weekly_monthly_macd`` below are the real weekly+monthly pairing, built
+fresh via ``agreement_scaled_blend`` rather than reusing that drifted
+description.) Model defaults stay extras-off so a missing macro row cannot
+null an unpublished path.
 
 Omitted on purpose (see ARCHITECTURE.md):
 - Mayer / 200w SMA — *r* ≈ 0.84 vs ``power_law_z`` (research PR #3232)
@@ -48,6 +54,8 @@ from digiquant.strategies.sdca.price_oscillators import (
     price_oscillator_z_vectors,
     rsi_confluence_z,
     sma_band_confluence_z,
+    weekly_monthly_macd_confluence_z,
+    weekly_monthly_rsi_confluence_z,
 )
 
 MACRO_INDICATOR_NAMES: tuple[str, ...] = ("m2", "rs_eth", "dxy")
@@ -57,6 +65,8 @@ PRICE_OSCILLATOR_NAMES: tuple[str, ...] = (
     "sma_band",
     "monthly_rsi",
     "monthly_macd",
+    "weekly_monthly_rsi",
+    "weekly_monthly_macd",
 )
 GENERIC_TECHNICAL_NAMES: tuple[str, ...] = PRICE_OSCILLATOR_NAMES
 BTC_PLUGIN_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES
@@ -76,6 +86,8 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "sma_band": "sma_band_weight",
     "monthly_rsi": "monthly_rsi_weight",
     "monthly_macd": "monthly_macd_weight",
+    "weekly_monthly_rsi": "weekly_monthly_rsi_weight",
+    "weekly_monthly_macd": "weekly_monthly_macd_weight",
 }
 
 # User-facing labels. The fallback (``name.replace("_", " ")``) covers every
@@ -89,6 +101,8 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "sma_band": "SMA band",
     "monthly_rsi": "monthly RSI",
     "monthly_macd": "monthly log-MACD",
+    "weekly_monthly_rsi": "weekly+monthly RSI",
+    "weekly_monthly_macd": "weekly+monthly log-MACD",
 }
 
 
@@ -116,6 +130,12 @@ class SdcaCompositeWeights(BaseModel):
     # scripts/run_dual_timeframe_composite_search.py (RESEARCH_STATE.md).
     monthly_rsi: float = Field(0.0, ge=0.0)
     monthly_macd: float = Field(0.0, ge=0.0)
+    # Weekly+monthly merged pairing (price_oscillators.weekly_monthly_rsi_confluence_z /
+    # weekly_monthly_macd_confluence_z) -- Chris (2026-09-07): blend the two
+    # macro-cadence legs directly instead of each confluenced against daily.
+    # Wired into build_extra_indicators below; research-only until validated.
+    weekly_monthly_rsi: float = Field(0.0, ge=0.0)
+    weekly_monthly_macd: float = Field(0.0, ge=0.0)
 
     @model_validator(mode="after")
     def _at_least_one_positive(self) -> SdcaCompositeWeights:
@@ -133,6 +153,8 @@ class SdcaCompositeWeights(BaseModel):
             ("sma_band", self.sma_band),
             ("monthly_rsi", self.monthly_rsi),
             ("monthly_macd", self.monthly_macd),
+            ("weekly_monthly_rsi", self.weekly_monthly_rsi),
+            ("weekly_monthly_macd", self.weekly_monthly_macd),
         )
 
     def enabled_extras(self) -> dict[str, float]:
@@ -169,6 +191,8 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         sma_band=float(params.get("sma_band_weight", 0.0)),
         monthly_rsi=float(params.get("monthly_rsi_weight", 0.0)),
         monthly_macd=float(params.get("monthly_macd_weight", 0.0)),
+        weekly_monthly_rsi=float(params.get("weekly_monthly_rsi_weight", 0.0)),
+        weekly_monthly_macd=float(params.get("weekly_monthly_macd_weight", 0.0)),
     )
 
 
@@ -190,6 +214,8 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         sma_band=float(payload.get("sma_band", 0.0)),
         monthly_rsi=float(payload.get("monthly_rsi", 0.0)),
         monthly_macd=float(payload.get("monthly_macd", 0.0)),
+        weekly_monthly_rsi=float(payload.get("weekly_monthly_rsi", 0.0)),
+        weekly_monthly_macd=float(payload.get("weekly_monthly_macd", 0.0)),
     )
 
 
@@ -466,6 +492,36 @@ def build_extra_indicators(
                 ),
                 weight=weights.monthly_macd,
                 enabled=weights.monthly_macd > 0.0,
+            )
+        )
+    if allowlist is None or "weekly_monthly_rsi" in allowlist:
+        extras.append(
+            IndicatorWeight(
+                name="weekly_monthly_rsi",
+                z=weekly_monthly_rsi_confluence_z(
+                    dates,
+                    btc_price,
+                    monthly_length=spec.monthly_rsi_length,
+                    weekly_length=spec.rsi_length,
+                ),
+                weight=weights.weekly_monthly_rsi,
+                enabled=weights.weekly_monthly_rsi > 0.0,
+            )
+        )
+    if allowlist is None or "weekly_monthly_macd" in allowlist:
+        extras.append(
+            IndicatorWeight(
+                name="weekly_monthly_macd",
+                z=weekly_monthly_macd_confluence_z(
+                    dates,
+                    btc_price,
+                    monthly_fast=spec.monthly_macd_fast,
+                    monthly_slow=spec.monthly_macd_slow,
+                    weekly_fast=spec.macd_fast,
+                    weekly_slow=spec.macd_slow,
+                ),
+                weight=weights.weekly_monthly_macd,
+                enabled=weights.weekly_monthly_macd > 0.0,
             )
         )
     return extras

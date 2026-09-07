@@ -261,6 +261,8 @@ class TestBuildExtraIndicators:
             "sma_band",
             "monthly_rsi",
             "monthly_macd",
+            "weekly_monthly_rsi",
+            "weekly_monthly_macd",
         }
         assert all(not e.enabled for e in extras)
 
