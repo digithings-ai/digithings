@@ -266,8 +266,9 @@ def test_merge_litellm_cheaperinference_replaces_mapped_keeps_openrouter() -> No
 
 
 def test_cheaperinference_overlay_merges_when_keyed() -> None:
-    from scripts.merge_litellm_cheaperinference import merge
     import os
+
+    from scripts.merge_litellm_cheaperinference import merge
 
     # Arrange: set CI key env vars so the merged config contains CI models
     os.environ["CHEAPERINFERENCE_API_KEY"] = "sk-test-12345"
