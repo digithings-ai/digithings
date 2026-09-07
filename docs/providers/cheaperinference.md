@@ -45,3 +45,23 @@ CHEAPERINFERENCE_API_BASE=https://api.cheaperinference.com/v1   # optional
 GitHub Actions: repository secret `CHEAPERINFERENCE_API_KEY` (pipeline already
 passes it). Weekday house bill/route proof via CI logs is a Human Gate after
 land — not automated in this PR.
+
+## Tenant isolation (digithings.ai digichat vs digiquant.io dashboard)
+
+- **digithings.ai digichat** is a separate tenant/product with its own
+  `CHEAPERINFERENCE_API_KEY` and house upstream configuration. Its LiteLLM
+  overlay is merged per the same rules as digiquant, but model pins and tier
+  policies are independent — changes to digiquant `config/digiquant_models.yaml`
+  do not affect digichat, and vice versa.
+- **digiquant.io dashboard** (embedded) uses its own `CHEAPERINFERENCE_API_KEY`
+  and `config/digiquant_models.yaml` tier policy. The dashboard UI owns embed/tenant
+  UX (#3664). Do not conflate digichat tenant configs with digiquant dashboard
+  embed configs.
+- When `DIGI_HOUSE_UPSTREAM=cheaperinference` is set on either tenant, the
+  corresponding `digillm` client maps house slugs to CI bare ids independently.
+- The `DIGI_HOUSE_ALLOW_OPENROUTER_FALLBACK` override is per-tenant — setting it
+  for one does not affect the other.
+
+It is an operator error to share a single `CHEAPERINFERENCE_API_KEY` between
+different tenants expecting isolated model routing; each tenant should have its
+own key and upstream configuration.
