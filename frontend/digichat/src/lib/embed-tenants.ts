@@ -13,6 +13,12 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
+import {
+  DEFAULT_THREAD_SKIN,
+  isThreadSkin,
+  threadSkinChoices,
+  type ThreadSkin,
+} from "@/lib/thread-skins";
 
 /**
  * digichat Node backends: digigraph (digithings stack) or foundry (client Azure).
@@ -51,6 +57,8 @@ export type EmbedTenantConfig = {
   backend: EmbedBackendConfig;
   gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
+  /** Which vendored assistant-ui Thread to mount. */
+  skin?: ThreadSkin;
   accent?: { color: string; foreground: string };
   attribution: boolean;
   /** Branded embed header title (e.g. "Chat for Help"). */
@@ -207,6 +215,16 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: theme must be "dark" or "light"`);
   }
 
+  let skin: ThreadSkin | undefined;
+  if (v.skin !== undefined) {
+    if (!isThreadSkin(v.skin)) {
+      throw new Error(
+        `${ctx}: skin must be one of ${threadSkinChoices()}`,
+      );
+    }
+    skin = v.skin;
+  }
+
   let accent: EmbedTenantConfig["accent"];
   if (v.accent !== undefined) {
     const a = v.accent as Record<string, unknown> | null;
@@ -285,6 +303,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     backend: backendCfg,
     gateMode: v.gateMode,
     theme: (v.theme as "dark" | "light" | undefined) ?? "dark",
+    skin: skin ?? DEFAULT_THREAD_SKIN,
     accent,
     attribution: v.attribution === true,
     token: v.token,

@@ -182,10 +182,52 @@
     }
   }
 
+  var chromeLabel = mode === "bar" ? "Ask digichat" : "✦";
+  var chromeCloseLabel = "Close digichat";
+  var chromeHotkey = "";
+  var chromeWelcome = "";
+  var chromePlaceholder = "";
+
+  function applyChrome(data) {
+    if (!data || typeof data !== "object") return;
+    var launcher = data.launcher || {};
+    if (launcher.mode === "dot" || launcher.mode === "bar") mode = launcher.mode;
+    if (launcher.label) chromeLabel = launcher.label;
+    if (launcher.closeLabel) chromeCloseLabel = launcher.closeLabel;
+    if (launcher.hotkey) chromeHotkey = String(launcher.hotkey);
+    if (data.welcome) chromeWelcome = String(data.welcome);
+    if (data.placeholder) chromePlaceholder = String(data.placeholder);
+    if (Array.isArray(data.suggestions) && data.suggestions.length) {
+      /* reserved for buildSrc */
+    }
+  }
+
+  function fetchChrome(done) {
+    try {
+      var u = new URL(origin + "/api/deploy/chrome");
+      u.searchParams.set("host", host);
+      fetch(u.toString(), { method: "GET", credentials: "omit" })
+        .then(function (r) {
+          return r.ok ? r.json() : null;
+        })
+        .then(function (data) {
+          applyChrome(data);
+          done();
+        })
+        .catch(function () {
+          done();
+        });
+    } catch (e) {
+      done();
+    }
+  }
+
   function mount() {
     if (document.getElementById(ROOT_ID)) return;
     if (!document.body) {
-      document.addEventListener("DOMContentLoaded", mount, { once: true });
+      document.addEventListener("DOMContentLoaded", function () {
+        fetchChrome(mount);
+      }, { once: true });
       return;
     }
 
@@ -235,7 +277,8 @@
     btn.setAttribute("aria-label", "Open digichat");
     btn.setAttribute("aria-expanded", "false");
     btn.setAttribute("aria-controls", PANEL_ID);
-    btn.textContent = mode === "bar" ? "Ask digichat" : "✦";
+    btn.textContent = mode === "bar" ? chromeLabel : "✦";
+    btn.setAttribute("data-hotkey", chromeHotkey || "");
     if (accent) btn.style.background = accent;
 
     var panel = document.createElement("div");
@@ -281,7 +324,8 @@
       open = next;
       panel.setAttribute("data-open", open ? "1" : "0");
       btn.setAttribute("aria-expanded", open ? "true" : "false");
-      btn.setAttribute("aria-label", open ? "Close digichat" : "Open digichat");
+      btn.setAttribute("aria-label", open ? chromeCloseLabel : (mode === "bar" ? chromeLabel : "Open digichat"));
+      if (mode === "bar") btn.textContent = open ? chromeCloseLabel : chromeLabel;
       if (open && !iframeLoaded) {
         iframe.src = buildSrc();
         iframeLoaded = true;

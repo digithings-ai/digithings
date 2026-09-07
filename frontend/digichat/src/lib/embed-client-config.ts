@@ -18,11 +18,17 @@ import {
   type EmbedLlmAccess,
   type EmbedTenantConfig,
 } from "@/lib/embed-tenants";
+import {
+  DEFAULT_THREAD_SKIN,
+  type ThreadSkin,
+} from "@/lib/thread-skins";
 
 export type EmbedTenantClientConfig = {
   slug: string;
   gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
+  /** assistant-ui Thread layout. See thread-skins.ts */
+  skin?: ThreadSkin;
   accent: { color: string; foreground: string } | null;
   attribution: boolean;
   title?: string;
@@ -50,6 +56,7 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   slug: "embed",
   gateMode: "turn_limited",
   theme: "dark",
+  skin: DEFAULT_THREAD_SKIN,
   accent: null,
   attribution: false,
   showByok: false,
@@ -67,6 +74,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     slug: cfg.slug,
     gateMode: cfg.gateMode,
     theme: cfg.theme,
+    skin: cfg.skin ?? DEFAULT_THREAD_SKIN,
     accent: cfg.accent ?? null,
     attribution: cfg.attribution,
     title: cfg.title,

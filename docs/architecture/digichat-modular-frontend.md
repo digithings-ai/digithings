@@ -16,10 +16,13 @@ digichat is the **containerized chat product**:
 
 1. **BFF (the product)** — `POST /api/chat` AI SDK UI stream; auth; persistence;
    tenant/embed policy; adapters
-2. **Default UI** — CLI-themed assistant-ui (`CliThread`) at `/chat` and `/embed`
-3. **Shared helpers** — `@digithings/digichat-ui` CSS, slash, brand marks,
-   transcript markdown (not a session shell)
-4. **Tenant registry** — `DIGICHAT_EMBED_TENANTS` (hostname → branding + policy + `backend.type`)
+2. **Default UI** — **stock** assistant-ui `Thread` at `/` and `/embed`
+   (`chrome.mode` from deployment config). CLI flavor deferred.
+3. **Shared helpers** — `@digithings/digichat-ui` slash/markdown helpers where still
+   used; not a second session shell
+4. **Deployment config** — file (`DIGICHAT_CONFIG_PATH` → `/app/config/digichat.yaml`)
+   + env secret overlay; `DIGICHAT_EMBED_TENANTS` remains a compat hydrate into the
+   same schema (hostname → branding + policy + `backend.type`)
 
 Parents (digithings-web, dashboard, `widget.js`) iframe `/embed`. Client-owned
 UIs and “plugin into their chat” use the same HTTP contract. `DigiChatSession`
@@ -39,7 +42,7 @@ and `ChatActivities` are gone from the 2.0 session path.
 ```mermaid
 flowchart TB
   subgraph consume [How clients consume]
-    appUI["Default UI: CLI-themed assistant-ui"]
+    appUI["Default UI: stock assistant-ui Thread"]
     ownUI["Client-owned UI"]
     plugin["Plugin into their chat"]
   end

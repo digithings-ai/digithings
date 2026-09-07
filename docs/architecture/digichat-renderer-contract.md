@@ -18,11 +18,13 @@ Cloud, digigraph MCP, or Foundry’s native event stream.
 
 | Mode | What we ship | What they run |
 |------|----------------|---------------|
-| **Default UI** | CLI-themed assistant-ui at `/embed` and first-party `/chat` | iframe (marketing, dashboard popup, `widget.js`) or open the app |
+| **Default UI** | **Stock** assistant-ui `Thread` at `/embed` and first-party `/` (deployment `chrome.mode`) | iframe (marketing, dashboard popup, `widget.js`) or open the app |
 | **Own UI** | Nothing visual | Their renderer against **their** digichat origin `POST /api/chat` |
 | **Plugin** | Same HTTP, no iframe | Their existing chat calls the BFF as a backend / agent hop |
 
-“Compatible” means the **stream + headers**, not importing `CliThread`.
+“Compatible” means the **stream + headers**, not importing a digichat skin.
+CLI-flavored chrome (`CliThread`) is **deferred** — not the 2.0 default substrate
+(owner decision on [#3626](https://github.com/digithings-ai/digithings/issues/3626), 2026-09-05).
 
 ## Canonical wire
 
@@ -73,10 +75,18 @@ UIs or a local mapping.
 
 ## Default UI (assistant-ui)
 
-`@assistant-ui/react` + `@assistant-ui/ai-sdk` + AI SDK v7. Session chrome is
-`CliThread`: MessagePrimitive.Parts for text / reasoning / tools / sources /
-`data-status`. Product slots only: CSS (`.dc-*`), slash + force-tool, pending
-headers, BYOK/paywall, chart fence, copy/export serializers.
+**Stock Thread is the default UI substrate.** Product `/embed` and `/` mount the
+registry `Thread` (same module path as the isolated `/vanilla` preview) against
+`POST /api/chat` — not `/api/vanilla-chat`. Pin: `@assistant-ui/react@0.15.x` +
+`@assistant-ui/ai-sdk` + `@assistant-ui/react-markdown` + AI SDK v7.
+
+Deployment config (`digichat.yaml` / `DIGICHAT_CONFIG_PATH`) chooses chrome mode
+(`app` | `embed` | `modal` | `sidebar`), persistence, feature adapters, and the
+tool/MCP catalog. Styling / CLI token work is **out of scope** for this phase.
+
+Product slots around stock Thread: force-tool allowlist, pending headers,
+BYOK/paywall, `activityDetail` strip (BFF), `data-status`. Message chrome stays
+assistant-ui `ActionBarPrimitive` where enabled by config.
 
 Package version stays **1.4.0** until the owner cuts 2.0.
 

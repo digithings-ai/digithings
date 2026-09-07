@@ -1,5 +1,8 @@
 "use client";
 
+/** CLI / session / terminal sheets — only for persistence:server ChatShell. */
+import "@/styles/chat-shell-cli.css";
+
 /**
  * ChatShell — authenticated chat chrome for digichat.
  *
@@ -14,7 +17,7 @@
  *   - Local + remote thread state + debounced server save
  *   - Conversation hydration on demand
  *   - Auth.js session via props
- *   - BYOK / streaming / transport live in ChatPanel; transcript chrome is CliThread
+ *   - BYOK / streaming / transport live in ChatPanel; transcript chrome is ProductStockShell
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -43,6 +46,7 @@ import {
 } from "@/lib/thread-local";
 import { cn } from "@/lib/utils";
 import { p } from "@/lib/base-path";
+import type { DigichatClientConfig } from "@/lib/deploy-config";
 
 type RemoteSummary = { id: string; title: string; updatedAt: string };
 
@@ -80,10 +84,12 @@ export function ChatShell({
   userId,
   userEmail,
   displayName,
+  clientConfig,
 }: {
   userId: string;
   userEmail?: string | null;
   displayName?: string | null;
+  clientConfig?: DigichatClientConfig;
 }) {
   const [threads, setThreads] = useState<ChatThreadState[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -653,20 +659,7 @@ export function ChatShell({
               onAllowTruncate={allowTruncateForThread}
               byokMode={byokMode}
               onByokModeChange={setByokMode}
-              onSlashCommand={(cmd) => {
-                const [name] = cmd.trim().split(/\s+/);
-                if (name === "/clear") {
-                  clearActiveThread();
-                  return true;
-                }
-                if (name === "/history") {
-                  setCollapsed(false);
-                  const first = document.querySelector<HTMLElement>(".dc-sidebar-thread");
-                  first?.focus();
-                  return true;
-                }
-                return false;
-              }}
+              clientConfig={clientConfig}
             />
           )}
         </main>

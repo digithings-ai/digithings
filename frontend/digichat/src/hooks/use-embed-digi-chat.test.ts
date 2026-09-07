@@ -524,6 +524,8 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
     });
     expect(chat?.regenerate).toBeTypeOf("function");
     expect(chat?.editLastUser).toBeTypeOf("function");
+    expect(chat?.armRegenerate).toBeTypeOf("function");
+    expect(chat?.armEditLastUser).toBeTypeOf("function");
     expect(chat?.onRetry).toBeTypeOf("function");
     unmount();
   });
@@ -537,6 +539,8 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
     });
     expect(chat?.regenerate).toBeUndefined();
     expect(chat?.editLastUser).toBeUndefined();
+    expect(chat?.armRegenerate).toBeUndefined();
+    expect(chat?.armEditLastUser).toBeUndefined();
     expect(chat?.onRetry).toBeUndefined();
     unmount();
   });

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
 import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
+import { buildProductRuntimeAdapters } from "@/components/stock/product-shell";
+import type { DigichatClientFeatures } from "@/lib/deploy-config";
 import type { AssistantRuntime } from "@assistant-ui/react";
 import type { UIMessage } from "ai";
 import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@digithings/digichat-ui";
@@ -178,11 +180,18 @@ type UseEmbedDigiChatOptions = {
    */
   getEnableWebSearch?: () => boolean;
   /**
+   * Optional deploy-allowlisted model id. Read at send time (same freeze
+   * reason as getResponseLanguage) so the picker can change after mount.
+   */
+  getSelectedModel?: () => string | undefined;
+  /**
    * When false, omit regenerate/editLastUser so CliThread hides the
    * chrome. Digigraph and Foundry both support turn mutation once the BFF
    * sends X-Digi-Turn-Mode (#3475). Default true for digigraph-first callers.
    */
   allowClientTurnMutation?: boolean;
+  /** Deploy feature flags → runtime adapters (attachments/dictation/speech). */
+  features?: DigichatClientFeatures;
 };
 export function useEmbedDigiChat({
   accent,
@@ -196,12 +205,17 @@ export function useEmbedDigiChat({
   onGated,
   getResponseLanguage,
   getEnableWebSearch,
+  getSelectedModel,
   allowClientTurnMutation = true,
+  features,
 }: UseEmbedDigiChatOptions): DigiChatController & {
   seed: (msgs: readonly DigiChatMessage[]) => void;
   /** Raw AI SDK error — for structured code detection (quota → BYOK). */
   rawError: Error | undefined;
   runtime: AssistantRuntime;
+  /** Arm X-Digi-Turn-Mode only; ActionBar Reload/Send run the runtime. */
+  armRegenerate?: () => void;
+  armEditLastUser?: () => void;
 } {
   const transport = useMemo(
     () =>
@@ -239,6 +253,10 @@ export function useEmbedDigiChat({
           const normalizedLanguage = resolveLanguageCode(getResponseLanguage?.());
           if (normalizedLanguage !== "en") {
             headers["X-Digi-Language"] = normalizedLanguage;
+          }
+          const selectedModel = getSelectedModel?.()?.trim();
+          if (selectedModel) {
+            headers["X-Digi-Model"] = selectedModel;
           }
           const forceTool = takePendingForceTool(embedHost);
           if (forceTool) {
@@ -302,7 +320,11 @@ export function useEmbedDigiChat({
   const chat = useChat<UIMessage>({
     transport,
   });
-  const runtime = useAISDKRuntime(chat);
+  const runtimeAdapters = useMemo(
+    () => (features ? buildProductRuntimeAdapters(features) : undefined),
+    [features],
+  );
+  const runtime = useAISDKRuntime(chat, runtimeAdapters ? { adapters: runtimeAdapters } : undefined);
   const { messages, sendMessage, status, error, regenerate, setMessages, stop } = chat;
 
   useEffect(() => {
@@ -357,13 +379,23 @@ export function useEmbedDigiChat({
     }
   }, [setMessages, embedHost]);
 
-  const doRegenerate = useCallback(() => {
-    if (!allowClientTurnMutation || busy) return;
-    // Never set a pending force-tool on regen — slash force is send-only (#3466).
+  const armRegenerate = useCallback(() => {
+    if (!allowClientTurnMutation) return;
     setPendingForceTool(embedHost);
     setPendingTurnMode(embedHost, "regenerate");
+  }, [allowClientTurnMutation, embedHost]);
+
+  const doRegenerate = useCallback(() => {
+    if (!allowClientTurnMutation || busy) return;
+    armRegenerate();
     void regenerate();
-  }, [allowClientTurnMutation, busy, embedHost, regenerate]);
+  }, [allowClientTurnMutation, armRegenerate, busy, regenerate]);
+
+  const armEditLastUser = useCallback(() => {
+    if (!allowClientTurnMutation || busy) return;
+    setPendingForceTool(embedHost);
+    setPendingTurnMode(embedHost, "edit_last_user");
+  }, [allowClientTurnMutation, busy, embedHost]);
 
   const editLastUser = useCallback(
     (text: string) => {
@@ -433,7 +465,12 @@ export function useEmbedDigiChat({
         }
       : undefined,
     ...(allowClientTurnMutation
-      ? { regenerate: doRegenerate, editLastUser }
+      ? {
+          regenerate: doRegenerate,
+          editLastUser,
+          armRegenerate,
+          armEditLastUser,
+        }
       : {}),
     seed,
     runtime,

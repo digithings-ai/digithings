@@ -1,7 +1,7 @@
 # @digithings/digichat-ui — architecture
 
 Shared digichat helpers and CSS. digichat **2.0** renders the session through
-assistant-ui (`CliThread` in `frontend/digichat`). This package is **not** a
+assistant-ui (stock Thread in `frontend/digichat` (CliThread removed)). This package is **not** a
 session shell.
 
 Parents (digithings-web, dashboard popup, `widget.js`) **iframe** digichat
@@ -43,8 +43,8 @@ Do not reintroduce a second transcript renderer here.
 | digithings-web `/chat`, `/chat/occ` | iframe → digichat `/embed` (`ChatEmbedShell`) |
 | dashboard popup / `DigichatLauncher` | iframe → digichat `/embed` |
 | `widget.js` | iframe → digichat `/embed` |
-| digichat first-party `/chat` | in-process `CliThread` (assistant-ui) |
-| digichat `/embed` | in-process `CliThread` (assistant-ui) |
+| digichat first-party `/chat` | stock assistant-ui Thread |
+| digichat `/embed` | stock assistant-ui Thread |
 | Client-owned UI / plugin | headless `POST /api/chat` only |
 
 ## Anti-patterns

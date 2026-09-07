@@ -1,0 +1,216 @@
+import { describe, expect, it } from "vitest";
+import { readFileSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
+import { load as loadYaml } from "js-yaml";
+import {
+  allowlistModelId,
+  disclosureDefaultOpen,
+  disclosureIsLocked,
+  disclosureIsVisible,
+  parseDigichatConfig,
+} from "./schema";
+import { THREAD_SKINS } from "@/lib/thread-skins";
+
+const examplesDir = resolve(__dirname, "../../../config/examples");
+
+describe("DigichatConfigSchema", () => {
+  it("parses a minimal single deployment", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+      },
+    });
+    expect(cfg.deployment?.slug).toBe("acme");
+    expect(cfg.deployment?.chrome.mode).toBe("embed");
+    expect(cfg.deployment?.persistence).toBe("none");
+    expect(cfg.deployment?.auth).toBe("anonymous");
+    expect(cfg.deployment?.features.reasoning).toBe("collapsed");
+    expect(cfg.deployment?.features.toolCalls).toBe("collapsed");
+    expect(cfg.deployment?.chrome.defaultLanguage).toBe("en");
+    expect(cfg.deployment?.chrome.transcript.userAlign).toBe("right");
+    expect(cfg.deployment?.chrome.skin).toBe("base");
+    expect(cfg.deployment?.cli.enabled).toBe(false);
+    expect(cfg.deployment?.models.available).toEqual([]);
+    expect(cfg.deployment?.gate.activityDetail).toBe("labels");
+  });
+
+  it("coerces reasoning/toolCalls booleans", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        features: { reasoning: true, toolCalls: false },
+      },
+    });
+    expect(cfg.deployment?.features.reasoning).toBe("collapsed");
+    expect(cfg.deployment?.features.toolCalls).toBe("off");
+  });
+
+  it("accepts disclosure enums and cli.enabled", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        features: { reasoning: "expanded", toolCalls: "locked_open" },
+        chrome: { defaultLanguage: "de", transcript: { userAlign: "left" } },
+        models: {
+          default: "gpt-4o-mini",
+          available: ["gpt-4o-mini", "gpt-4o"],
+          allowPicker: true,
+        },
+        cli: { enabled: true },
+      },
+    });
+    expect(cfg.deployment?.features.reasoning).toBe("expanded");
+    expect(cfg.deployment?.features.toolCalls).toBe("locked_open");
+    expect(cfg.deployment?.chrome.defaultLanguage).toBe("de");
+    expect(cfg.deployment?.chrome.transcript.userAlign).toBe("left");
+    expect(cfg.deployment?.cli.enabled).toBe(true);
+    expect(cfg.deployment?.models.available).toEqual(["gpt-4o-mini", "gpt-4o"]);
+  });
+
+  it("fails closed on missing deployment and hosts", () => {
+    expect(() => parseDigichatConfig({ version: 1 })).toThrow(
+      /deployment or at least one hosts/,
+    );
+  });
+
+  it("fails closed on invalid chrome.mode", () => {
+    expect(() =>
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "x",
+          chrome: { mode: "popup" },
+          backend: { type: "digigraph" },
+        },
+      }),
+    ).toThrow(/chrome/);
+  });
+
+  it("accepts official thread skins and fails closed on unknown ones", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        chrome: { skin: "chatgpt" },
+        backend: { type: "digigraph" },
+      },
+    });
+    expect(cfg.deployment?.chrome.skin).toBe("chatgpt");
+    expect(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "acme",
+          chrome: { skin: "ChatGPT" },
+          backend: { type: "digigraph" },
+        },
+      }).deployment?.chrome.skin,
+    ).toBe("chatgpt");
+    const ink = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        chrome: { skin: "react-ink" },
+        backend: { type: "digigraph" },
+      },
+    });
+    expect(ink.deployment?.chrome.skin).toBe("react-ink");
+    expect(() =>
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "x",
+          chrome: { skin: "ink" },
+          backend: { type: "digigraph" },
+        },
+      }),
+    ).toThrow(/skin/);
+  });
+
+  it("fails closed on foundry http endpoint", () => {
+    expect(() =>
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "x",
+          backend: {
+            type: "foundry",
+            projectEndpoint: "http://example.com",
+            agentName: "agent",
+          },
+        },
+      }),
+    ).toThrow(/https/);
+  });
+
+  it("parses all example YAML files", () => {
+    const files = [
+      "digithings-ai-embed.yaml",
+      "occ-embed.yaml",
+      "dashboard-modal.yaml",
+      "local-app.yaml",
+      "local-app-memory.yaml",
+      "local-cli.yaml",
+    ];
+    const skinFiles = readdirSync(resolve(examplesDir, "skins"))
+      .filter((name) => name.endsWith(".yaml"))
+      .map((name) => `skins/${name}`);
+    expect(skinFiles.length).toBeGreaterThanOrEqual(11);
+    for (const name of [...files, ...skinFiles]) {
+      const raw = readFileSync(resolve(examplesDir, name), "utf8");
+      const doc = loadYaml(raw);
+      const cfg = parseDigichatConfig(doc, name);
+      expect(cfg.version).toBe(1);
+      expect(
+        cfg.deployment || (cfg.hosts && Object.keys(cfg.hosts).length > 0),
+      ).toBeTruthy();
+    }
+  });
+
+  it("ships a complete YAML install for every catalog template id", () => {
+    const skinDir = resolve(examplesDir, "skins");
+    for (const id of THREAD_SKINS) {
+      const raw = readFileSync(resolve(skinDir, `${id}.yaml`), "utf8");
+      const cfg = parseDigichatConfig(loadYaml(raw), id);
+      expect(cfg.deployment?.chrome.skin).toBe(id);
+      expect(cfg.deployment?.auth).toBe("anonymous");
+      expect(cfg.deployment?.backend.type).toBe("digigraph");
+    }
+  });
+});
+
+describe("disclosure helpers", () => {
+  it("maps visibility / defaultOpen / locked", () => {
+    expect(disclosureIsVisible("off")).toBe(false);
+    expect(disclosureIsVisible("collapsed")).toBe(true);
+    expect(disclosureDefaultOpen("collapsed")).toBe(false);
+    expect(disclosureDefaultOpen("expanded")).toBe(true);
+    expect(disclosureDefaultOpen("locked_open")).toBe(true);
+    expect(disclosureIsLocked("locked_open")).toBe(true);
+    expect(disclosureIsLocked("expanded")).toBe(false);
+  });
+});
+
+describe("allowlistModelId", () => {
+  it("passes through when available is empty", () => {
+    expect(allowlistModelId(undefined, "any-model")).toBe("any-model");
+    expect(allowlistModelId({ available: [] }, undefined)).toBeUndefined();
+    expect(allowlistModelId({ available: [], default: "d" }, undefined)).toBe("d");
+  });
+
+  it("fail-closes when available is non-empty", () => {
+    const models = {
+      default: "a",
+      available: ["a", "b"],
+    };
+    expect(allowlistModelId(models, "b")).toBe("b");
+    expect(allowlistModelId(models, "c")).toBeUndefined();
+    expect(allowlistModelId(models, undefined)).toBe("a");
+  });
+});

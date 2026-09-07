@@ -1,6 +1,14 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
-import { resolveEmbedChatTenant, embedHostOf } from "./embed-chat-tenant";
+import { resolve } from "node:path";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import {
+  embedHostOf,
+  resolveAnonymousInstallChat,
+  resolveEmbedChatTenant,
+  resolveEmbedClientConfigForPaint,
+} from "./embed-chat-tenant";
 import { resetEmbedTenantRegistryForTests } from "./embed-tenants";
+import { resetDigichatConfigForTests } from "@/lib/deploy-config/loader";
+import { DEFAULT_EMBED_TENANT_CONFIG } from "@/lib/embed-client-config";
 
 const REGISTRY = JSON.stringify({
   "datatapstream.com": {
@@ -22,6 +30,18 @@ function embedRequest(headers: Record<string, string>): Request {
 afterEach(() => {
   vi.unstubAllEnvs();
   resetEmbedTenantRegistryForTests();
+  resetDigichatConfigForTests();
+});
+
+beforeEach(() => {
+  vi.stubEnv("DIGICHAT_LEGACY_EMBED_ENABLED", "");
+  vi.stubEnv("DIGICHAT_EMBED_ENABLED", "");
+  vi.stubEnv("DIGICHAT_EMBED_TOKEN", "");
+  vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+  vi.stubEnv("DIGICHAT_CHROME_SKIN", "");
+  vi.stubEnv("DIGICHAT_CONFIG_PATH", "");
+  resetEmbedTenantRegistryForTests();
+  resetDigichatConfigForTests();
 });
 
 describe("embedHostOf", () => {
@@ -194,5 +214,85 @@ describe("dev loopback first-party (dogfood)", () => {
     );
     expect(result).toBeInstanceOf(Response);
     if (result instanceof Response) expect(result.status).toBe(503);
+  });
+});
+
+const CHATGPT_YAML = resolve(__dirname, "../../config/examples/skins/chatgpt.yaml");
+const WEBPAGE_YAML = resolve(
+  __dirname,
+  "../../config/examples/skins/webpage-assistant.yaml",
+);
+
+describe("client-container YAML install", () => {
+  it("paints /embed from the baked chatgpt.yaml without DIGICHAT_EMBED_TENANTS", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", CHATGPT_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const painted = resolveEmbedClientConfigForPaint(undefined, undefined);
+    expect(painted).not.toEqual(DEFAULT_EMBED_TENANT_CONFIG);
+    expect(painted.skin).toBe("chatgpt");
+    expect(painted.slug).toBe("client-chatgpt");
+    expect(painted.gateMode).toBe("ungated");
+    expect(painted.theme).toBe("light");
+  });
+
+  it("lets POST /api/chat through for an unregistered parent host", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", CHATGPT_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://acme.example" }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("client-chatgpt");
+    expect(result.ownerUserSub).toBe("embed:anonymous");
+    expect(result.embedConfig?.skin).toBe("chatgpt");
+  });
+
+  it("does not override a registered customer host that lacks a token (#1339)", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", CHATGPT_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://datatapstream.com" }),
+    );
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("requires the YAML token when the operator set one", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", CHATGPT_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TOKEN", "install-secret");
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const denied = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://acme.example" }),
+    );
+    expect(denied).toBeInstanceOf(Response);
+    const allowed = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://acme.example",
+        "x-embed-token": "install-secret",
+      }),
+    );
+    expect(allowed).not.toBeInstanceOf(Response);
+    if (allowed instanceof Response) return;
+    expect(allowed.tenantSlug).toBe("client-chatgpt");
+  });
+
+  it("unlocks anonymous app chat for layout templates on /", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", WEBPAGE_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const ctx = resolveAnonymousInstallChat();
+    expect(ctx?.tenantSlug).toBe("client-webpage-assistant");
+    expect(ctx?.embedConfig?.skin).toBe("webpage-assistant");
+    expect(ctx?.embedConfig?.layout).toBe("page");
   });
 });

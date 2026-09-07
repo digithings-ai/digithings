@@ -24,6 +24,8 @@ import {
   DIGICHAT_READY,
   extractPageHtml,
   extractVisiblePageText,
+  fetchDigichatChromeConfig,
+  mergeDigichatChromeIntoPopup,
   readDigichatPopupConfig,
   readDocumentTheme,
   type DigichatPopupConfig,
@@ -49,11 +51,27 @@ export default function DigichatPopup({
 }: DigichatPopupProps) {
   const sessionTier = usePlanTier();
   const tier = tierOverride ?? sessionTier;
-  const config = useMemo(
+  const baseConfig = useMemo(
     () =>
       configOverride !== undefined ? configOverride : readDigichatPopupConfig(),
     [configOverride],
   );
+  const [config, setConfig] = useState<DigichatPopupConfig | null>(baseConfig);
+
+  useEffect(() => {
+    setConfig(baseConfig);
+    if (!baseConfig || configOverride) return;
+    let cancelled = false;
+    void fetchDigichatChromeConfig(baseConfig.origin, baseConfig.host).then(
+      (chrome) => {
+        if (cancelled || !chrome) return;
+        setConfig(mergeDigichatChromeIntoPopup(baseConfig, chrome));
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [baseConfig, configOverride]);
 
   const entitled = canUseDigichatPopup(tier);
   const [open, setOpen] = useState(false);

@@ -1,15 +1,18 @@
 "use client";
 
-/** First-party chat host: transport, persistence, BYOK. Transcript/composer live in CliThread. */
+/** First-party chat host: transport, persistence, BYOK. Stock Thread via ProductStockShell. */
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
-import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { QuantComparisonStrip } from "@/components/quant-comparison-strip";
 import { ByokCliFlow } from "@/components/byok-cli-flow";
-import { CliThread } from "@/components/assistant-ui/cli-thread";
+import {
+  ProductStockShell,
+  buildProductRuntimeAdapters,
+} from "@/components/stock/product-shell";
+import { ToolCatalogBar } from "@/components/stock/tool-catalog-bar";
 import { p } from "@/lib/base-path";
 import { useBYOKKey } from "@/hooks/use-byok-key";
 import {
@@ -18,18 +21,14 @@ import {
   writeWebSearchPref,
 } from "@/lib/web-search-pref";
 import {
-  setPendingForceTool,
-  setPendingTurnMode,
   takePendingForceTool,
   takePendingTurnMode,
 } from "@/lib/pending-chat-headers";
-
-const APP_SLASH_EXTRA: Array<{ cmd: string; hint: string }> = [
-  { cmd: "/clear", hint: "clear thread" },
-  { cmd: "/history", hint: "focus sidebar" },
-  { cmd: "/scope", hint: "show JWT scopes" },
-  { cmd: "/model", hint: "model via /byok" },
-];
+import {
+  DEFAULT_CLIENT_CONFIG,
+  type DigichatClientConfig,
+} from "@/lib/deploy-config";
+import { skinOwnsPageChrome } from "@/lib/thread-skins";
 
 type SystemNote = { id: string; text: string };
 
@@ -39,21 +38,12 @@ export type ChatPanelProps = {
   initialMessages: UIMessage[];
   onMessagesCommit: (threadId: string, messages: UIMessage[]) => void;
   onTitleDerived?: (threadId: string, title: string) => void;
-  /**
-   * Mark the next server flush as an intentional truncate (edit last user).
-   * Without this, PUT returns 409 `would_truncate` (#3466).
-   */
   onAllowTruncate?: (threadId: string) => void;
   headerSlot?: React.ReactNode;
   byokMode?: boolean;
   onByokModeChange?: (open: boolean) => void;
-  /**
-   * Slash-command hook. Receives the raw text (starts with `/`).
-   * Return true if the command was handled — the panel will NOT send it
-   * to the chat transport. Return false to fall through to the panel's
-   * own handling (unknown commands render as a system note).
-   */
-  onSlashCommand?: (raw: string) => boolean;
+  /** Deploy client projection (features, tools, chrome). */
+  clientConfig?: DigichatClientConfig;
 };
 
 function messagePlainText(message: UIMessage): string {
@@ -73,11 +63,9 @@ export function ChatPanel({
   headerSlot,
   byokMode = false,
   onByokModeChange,
-  onSlashCommand,
+  clientConfig = DEFAULT_CLIENT_CONFIG,
 }: ChatPanelProps) {
   const [systemNotes, setSystemNotes] = useState<SystemNote[]>([]);
-  const [cliSettingsOpen, setCliSettingsOpen] = useState(false);
-  const [cliSettingsIndex, setCliSettingsIndex] = useState(0);
   const {
     key: byokKey,
     provider: byokProvider,
@@ -88,17 +76,13 @@ export function ChatPanel({
   } = useBYOKKey();
 
   const webSearchAllowed =
-    typeof process.env.NEXT_PUBLIC_DIGICHAT_WEB_SEARCH === "string" &&
-    process.env.NEXT_PUBLIC_DIGICHAT_WEB_SEARCH === "1";
+    clientConfig.gate.webSearch === true ||
+    clientConfig.tools.catalog.some((t) => t.id === "web_search") ||
+    (typeof process.env.NEXT_PUBLIC_DIGICHAT_WEB_SEARCH === "string" &&
+      process.env.NEXT_PUBLIC_DIGICHAT_WEB_SEARCH === "1");
   const [webSearchPref, setWebSearchPref] = useState(() =>
     webSearchAllowed && typeof window !== "undefined" ? readWebSearchPref("auth") : false,
   );
-  if (typeof window !== "undefined" && webSearchAllowed) {
-    const stored = readWebSearchPref("auth");
-    if (stored !== webSearchPref && !webSearchPref && stored) {
-      setWebSearchPref(stored);
-    }
-  }
 
   const transport = useMemo(
     () =>
@@ -156,160 +140,76 @@ export function ChatPanel({
       }
     },
   });
-  const { messages, sendMessage, status, error, regenerate, setMessages } = chat;
-  const runtime = useAISDKRuntime(chat);
-  const busy = status === "streaming" || status === "submitted";
-
-  const pushSystemNote = useCallback((msg: string) => {
-    setSystemNotes((prev) => [...prev, { id: crypto.randomUUID(), text: msg }]);
-  }, []);
-
-  const onRegenerate = useCallback(() => {
-    setPendingForceTool(threadId);
-    setPendingTurnMode(threadId, "regenerate");
-    void regenerate();
-  }, [regenerate, threadId]);
-
-  const onEditLastUser = useCallback(
-    (text: string) => {
-      const next = text.trim();
-      if (!next || busy) return;
-      let lastUserIdx = -1;
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i]?.role === "user") {
-          lastUserIdx = i;
-          break;
-        }
-      }
-      if (lastUserIdx < 0) return;
-      onAllowTruncate?.(threadId);
-      setMessages(messages.slice(0, lastUserIdx));
-      setPendingForceTool(threadId);
-      setPendingTurnMode(threadId, "edit_last_user");
-      void sendMessage({
-        role: "user",
-        parts: [{ type: "text", text: next }],
-      });
-    },
-    [busy, messages, onAllowTruncate, sendMessage, setMessages, threadId],
+  const { messages, error } = chat;
+  const runtimeAdapters = useMemo(
+    () => buildProductRuntimeAdapters(clientConfig.features),
+    [clientConfig.features],
   );
+  const runtime = useAISDKRuntime(chat, { adapters: runtimeAdapters });
 
-  const handleSlash = useCallback(
-    (raw: string): boolean => {
-      const [rawName] = raw.split(/\s+/);
-      const name = rawName.toLowerCase();
-      if (name === "/scope") {
-        pushSystemNote("scope: (signed-in session) — scope surfacing lands with SSO in #202.");
-        return true;
-      }
-      if (name === "/model") {
-        pushSystemNote("model selector is part of /byok.");
-        return true;
-      }
-      if (name === "/websearch") {
-        if (!webSearchAllowed) {
-          pushSystemNote("Web search is not enabled for this tenant.");
-          return true;
-        }
-        const next = !webSearchPref;
-        writeWebSearchPref("auth", next);
-        setWebSearchPref(next);
-        pushSystemNote(`Web search ${next ? "on" : "off"} (External cites).`);
-        return true;
-      }
-      if (onSlashCommand?.(raw)) return true;
-      return false;
-    },
-    [onSlashCommand, pushSystemNote, webSearchAllowed, webSearchPref],
-  );
-
-  /** Shared send intercept — arms force-tool before useChat freezes the transport. */
-  const onSendRequest = useCallback(
-    (text: string, opts?: { forceTool?: string }): boolean => {
-      setPendingForceTool(threadId, opts?.forceTool);
-      void sendMessage({ text });
-      return true;
-    },
-    [sendMessage, threadId],
-  );
-
-  const onLanguageChange = useCallback(
-    (code: string) => {
-      pushSystemNote(`Language preference noted (${code}). First-party /lang is session-local.`);
-    },
-    [pushSystemNote],
-  );
+  const persistence =
+    clientConfig.persistence === "server" || clientConfig.persistence === "memory"
+      ? clientConfig.persistence
+      : "none";
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <CliThread
-        headerSlot={headerSlot}
-        extraSlash={APP_SLASH_EXTRA}
-        slashVisibility={{ webSearch: webSearchAllowed, byok: true }}
-        onSlashCommand={handleSlash}
-        onSendRequest={onSendRequest}
-        onLanguageChange={onLanguageChange}
-        onOpenSettings={() => {
-          setCliSettingsOpen(true);
-          setCliSettingsIndex(0);
-        }}
-        onByok={() => onByokModeChange?.(true)}
-        allowTurnMutation
-        onRegenerate={onRegenerate}
-        onEditLastUser={onEditLastUser}
-        systemNotes={systemNotes}
-        errorText={error?.message ?? null}
-        disabled={byokMode}
-        belowViewportSlot={<QuantComparisonStrip messages={messages} conversationId={threadId} />}
-        settingsPanel={
-          byokMode ? (
-            <ByokCliFlow
-              onClose={() => onByokModeChange?.(false)}
-              onActivate={(key, provider, model) => {
-                setByokKey(key, provider, model);
-                onByokModeChange?.(false);
+    <>
+      <ProductStockShell
+        runtime={runtime}
+        clientConfig={clientConfig}
+        persistence={persistence === "server" ? "none" : persistence}
+        headerSlot={
+          skinOwnsPageChrome(clientConfig.chrome.skin) ? null : (
+          <>
+            {headerSlot}
+            <ToolCatalogBar
+              clientConfig={clientConfig}
+              sessionKey={threadId}
+              onWebSearchChange={(on) => {
+                writeWebSearchPref("auth", on);
+                setWebSearchPref(on);
               }}
-              onClear={clearByokKey}
-              active={byokIsSet ? { provider: byokProvider, model: byokModel } : null}
-              initialProvider={byokProvider}
-              initialModel={byokModel}
             />
-          ) : cliSettingsOpen ? (
-            <div className="dc-term-row dc-term-row-assistant" role="dialog" aria-label="Settings">
-              <span className="dc-term-marker">▸</span>
-              <div className="dc-term-body flex flex-col gap-1 font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
-                <div>settings</div>
-                {webSearchAllowed ? (
-                  <button
-                    type="button"
-                    className="text-left"
-                    onClick={() => {
-                      const next = !webSearchPref;
-                      writeWebSearchPref("auth", next);
-                      setWebSearchPref(next);
-                    }}
-                    onMouseEnter={() => setCliSettingsIndex(0)}
-                  >
-                    {cliSettingsIndex === 0 ? "> " : "  "}[websearch {webSearchPref ? "on" : "off"}] Web search — External cites
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="text-left"
-                  onClick={() => {
-                    setCliSettingsOpen(false);
-                    onByokModeChange?.(true);
-                  }}
-                  onMouseEnter={() => setCliSettingsIndex(webSearchAllowed ? 1 : 0)}
-                >
-                  {cliSettingsIndex === (webSearchAllowed ? 1 : 0) ? "> " : "  "}BYOK → {byokIsSet ? "update" : "configure"} — /byok
-                </button>
-                <div className="opacity-70">click a row · Esc on composer to close</div>
+            {systemNotes.length > 0 ? (
+              <div className="space-y-1 px-3 py-2 text-xs text-muted-foreground">
+                {systemNotes.map((n) => (
+                  <div key={n.id}>{n.text}</div>
+                ))}
               </div>
-            </div>
-          ) : null
+            ) : null}
+          </>
+          )
+        }
+        footerSlot={
+          <>
+            {error?.message ? (
+              <div role="alert" className="px-3 py-2 text-sm text-destructive">
+                {error.message}
+              </div>
+            ) : null}
+            <QuantComparisonStrip messages={messages} conversationId={threadId} />
+          </>
         }
       />
-    </AssistantRuntimeProvider>
+      {byokMode ? (
+        <div
+          className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background p-3 shadow-lg"
+          role="dialog"
+          aria-label="BYOK"
+        >
+          <ByokCliFlow
+            onClose={() => onByokModeChange?.(false)}
+            onActivate={(key, provider, model) => {
+              setByokKey(key, provider, model);
+              onByokModeChange?.(false);
+            }}
+            onClear={clearByokKey}
+            active={byokIsSet ? { provider: byokProvider, model: byokModel } : null}
+            initialProvider={byokProvider}
+            initialModel={byokModel}
+          />
+        </div>
+      ) : null}
+    </>
   );
 }
