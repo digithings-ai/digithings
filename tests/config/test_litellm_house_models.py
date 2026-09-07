@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any  # score:allow untyped any
+
+# Justification: yaml.safe_load returns open mappings (Any per typeshed).
 from urllib.parse import urlparse
 
 import pytest
