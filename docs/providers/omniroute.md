@@ -2,7 +2,7 @@
 
 **Cost:** operator-run. OmniRoute is a self-hosted OpenAI-compatible gateway. It is **off by default** in digithings — same pattern as optional local Ollama, not an always-on compose service.
 
-**Best for:** operators who already self-host OmniRoute and want LiteLLM to treat it as one more upstream. It does **not** replace OpenRouter as the house default, and this change does **not** cut digiquant pins over to OmniRoute.
+**Best for:** operators who already self-host OmniRoute and want LiteLLM to treat it as one more upstream. It does **not** replace the digillm house upstream (Cheaper Inference when keyed; otherwise OpenRouter), and this change does **not** cut digiquant pins over to OmniRoute.
 
 **Follow-up (not this work):** compare house OpenRouter `:free` routing vs the OmniRoute hosted catalog on the models we actually pin, then decide whether a bake-off issue is worth filing. Do not swap pins here.
 
