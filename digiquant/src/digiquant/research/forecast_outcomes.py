@@ -46,6 +46,7 @@ _SESSION_CLOSE_HOUR_UTC = 20
 
 # ReturnFraction is Decimal(max_digits=16, decimal_places=8). Price division
 # yields up to 28-digit repeating decimals — quantize before model validation.
+# Mirrors portfolio/forecast_calibration.py::_QUANTUM — keep both in sync.
 _QUANTUM = Decimal("0.00000001")
 
 
@@ -399,6 +400,9 @@ def _build_resolved_outcome(
     maturity_snapshot: SessionPriceSnapshot,
     forecast_mean_return: Decimal,
 ) -> ForecastOutcome:
+    # Quantized strings feed content_hash, so hashes differ in trailing-zero
+    # format from pre-fix runs; idempotency still holds via the pre-build
+    # (effective_id, maturity_session) natural-key guard, not the hash.
     mean_q = _q(forecast_mean_return)
     realized_q = _q((maturity_snapshot.price - reference_snapshot.price) / reference_snapshot.price)
     residual_q = _q(realized_q - mean_q)
@@ -579,7 +583,10 @@ def resolve_matured_forecast_outcomes(
                 maturity_snapshot=mat_snap,
                 forecast_mean_return=effective.terms.scenario_mean_return(),
             )
-        except Exception as exc:
+        except (ValueError, ArithmeticError) as exc:
+            # _build does no I/O — only Decimal arithmetic + Pydantic, so
+            # only validation/arithmetic failures are expected here. Counted
+            # as pending (retried next run) rather than failing the run.
             logger.warning(
                 "forecast outcomes: skip unbuildable outcome for %s (%s: %s)",
                 effective.effective_id,

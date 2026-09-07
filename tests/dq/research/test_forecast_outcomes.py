@@ -370,10 +370,12 @@ class TestResolveMaturedOutcomes:
             assert value.as_tuple().exponent >= -8
             assert len(value.as_tuple().digits) <= 16
         assert residual == realized - mean
-        assert row["positive_label"] is (realized > Decimal("0"))
+        assert row["positive_label"] == (realized > Decimal("0"))
 
     def test_quantize_matches_prod_failure_decimals(self) -> None:
-        # Exact decimals from run 33988634459 — must not raise decimal_max_digits.
+        # Exact vectors from prod run 33988634459 (a different row than the
+        # 66.71/68.71 case above, which yields 0.02998051…) — must quantize
+        # without raising decimal_max_digits.
         assert fo._q(Decimal("0.02998405466970387243735763098")) == Decimal("0.02998405")
         assert fo._q(Decimal("0.02698405466970387243735763098")) == Decimal("0.02698405")
 
