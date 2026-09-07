@@ -23,16 +23,14 @@
    and .dt-cur). */
 @import "@digithings/web/styles/chat-core.css";
 /* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
-   (~1 MB). This app renders <DigiChatSession>, so it reaches
-   remark-math/rehype-katex and genuinely needs them; dashboard and the design
-   reference deliberately do not import this. Must come AFTER chat-core.css. */
+   (~1 MB). digithings-web iframes digichat /embed (CliThread / ChatMarkdown),
+   which reaches remark-math/rehype-katex; dashboard and the design reference
+   deliberately do not import this. Must come AFTER chat-core.css. */
 @import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
-/* The .tl-* frame for <TerminalStepCaret>, which <DigiChatSession> shows while
-   an answer is still on its way. This app is the second consumer of that
-   session component (digichat is the first), so it needs the sheet too — the
-   chat page renders the caret whether or not this line is here, just unstyled.
-   AFTER chat-core.css: the caret inside it is <ChatStreamCursor>. */
+/* Terminal loaders sheet (legacy DigiChatSession Searching… chrome). Kept for
+   any residual .tl-* usage on the marketing shell; the live chat UI lives in
+   the iframe. AFTER chat-core.css. */
 @import "@digithings/web/styles/terminal-loaders.css";
 @import "@digithings/digichat-ui/styles/cursor.css";
 @import "@digithings/digichat-ui/styles/session.css";

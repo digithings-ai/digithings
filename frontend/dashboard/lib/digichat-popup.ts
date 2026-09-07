@@ -93,6 +93,11 @@ export type DigichatPopupConfig = {
   welcome: string;
   suggestions: string[];
   placeholder: string;
+  /** From digichat GET /api/deploy/chrome when available. */
+  launcherLabel?: string;
+  launcherCloseLabel?: string;
+  launcherHotkey?: string;
+  mobileFullscreen?: boolean;
 };
 
 const RESEARCH_PORTFOLIO_WELCOME =
@@ -220,7 +225,75 @@ export function readDigichatPopupConfig(
     welcome: RESEARCH_PORTFOLIO_WELCOME,
     suggestions: [...RESEARCH_PORTFOLIO_SUGGESTIONS],
     placeholder: 'ask about research or portfolio…',
+    launcherLabel: DIGICHAT_LAUNCHER_LABEL,
+    launcherCloseLabel: DIGICHAT_LAUNCHER_CLOSE_LABEL,
   };
+}
+
+/** Chrome fields from digichat deploy config (client-safe). */
+export type DigichatChromeApiResponse = {
+  slug?: string;
+  mode?: string;
+  theme?: string;
+  title?: string;
+  welcome?: string;
+  suggestions?: string[];
+  placeholder?: string;
+  launcher?: {
+    hotkey?: string;
+    mobileFullscreen?: boolean;
+    label?: string;
+    closeLabel?: string;
+    mode?: 'dot' | 'bar';
+  };
+};
+
+/**
+ * Merge GET /api/deploy/chrome into a popup config so labels/hotkeys are not
+ * hardcoded only in the dashboard. Env/local defaults remain the fallback.
+ */
+export function mergeDigichatChromeIntoPopup(
+  cfg: DigichatPopupConfig,
+  chrome: DigichatChromeApiResponse | null | undefined,
+): DigichatPopupConfig {
+  if (!chrome) return cfg;
+  const launcher = chrome.launcher;
+  return {
+    ...cfg,
+    mode: launcher?.mode === 'dot' || launcher?.mode === 'bar' ? launcher.mode : cfg.mode,
+    welcome: chrome.welcome?.trim() || cfg.welcome,
+    suggestions:
+      chrome.suggestions && chrome.suggestions.length > 0
+        ? chrome.suggestions
+        : cfg.suggestions,
+    placeholder: chrome.placeholder?.trim() || cfg.placeholder,
+    launcherLabel: launcher?.label?.trim() || cfg.launcherLabel || DIGICHAT_LAUNCHER_LABEL,
+    launcherCloseLabel:
+      launcher?.closeLabel?.trim() || cfg.launcherCloseLabel || DIGICHAT_LAUNCHER_CLOSE_LABEL,
+    launcherHotkey: launcher?.hotkey?.trim() || cfg.launcherHotkey,
+    mobileFullscreen: launcher?.mobileFullscreen ?? cfg.mobileFullscreen,
+  };
+}
+
+/** Fetch client-safe chrome from digichat; returns null on network/parse failure. */
+export async function fetchDigichatChromeConfig(
+  origin: string,
+  host: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<DigichatChromeApiResponse | null> {
+  try {
+    const url = new URL(`${origin.replace(/\/$/, '')}/api/deploy/chrome`);
+    url.searchParams.set('host', host);
+    const res = await fetchImpl(url.toString(), {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as DigichatChromeApiResponse;
+  } catch {
+    return null;
+  }
 }
 
 export function buildDigichatEmbedSrc(
@@ -260,7 +333,10 @@ export function extractVisiblePageText(
   return extractPageContextShared(undefined, PAGE_CONTEXT_HTML_MAX_CHARS, maxChars).text;
 }
 
-/** Structural allowlist — same walk as digichat `page-context-sanitize.ts`. */
+/**
+ * Structural allowlist — same walk as digichat `page-context-sanitize.ts`.
+ * Posted to the embed as HTML + text; never re-hydrate as live page DOM.
+ */
 export function sanitizePageHtml(
   raw: string,
   maxChars = PAGE_CONTEXT_HTML_MAX_CHARS,

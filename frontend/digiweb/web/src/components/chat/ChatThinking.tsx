@@ -8,9 +8,8 @@
  * scrolled into view (`animateIn`); reduced motion renders the whole chain
  * settled. Uncontrolled by default (`defaultOpen`) or controlled via
  * `open`/`onOpenChange`. Pass `steps` for the railed list, or `children` for
- * a custom body (e.g. digichat-ui's single reasoning blob — its
- * ChatActivities `reasoning` kind rebuilds as
- * `<ChatThinking label="reasoning"><pre>{text}</pre></ChatThinking>`).
+ * a custom body (e.g. digichat’s reasoning part —
+ * `<ChatThinking label="Reasoning"><pre>{text}</pre></ChatThinking>`).
  * Step text inherits the surrounding transcript font. Chip background/hover,
  * caret art, the pulse, the step rail, and the reveal transitions live in
  * styles/chat-widgets.css (import it once app-wide; see the wiring note
