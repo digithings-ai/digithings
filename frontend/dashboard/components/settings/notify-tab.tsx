@@ -10,6 +10,10 @@ import {
   type NotificationPrefs,
   type SettingsApiOptions,
 } from '@/lib/settings-api';
+import {
+  SETTINGS_LOAD_ERROR_MESSAGE,
+  SettingsLoadError,
+} from './settings-load-error';
 
 export type NotifyTabProps = {
   api: SettingsApiOptions | null;
@@ -30,6 +34,8 @@ export function NotifyTab({
   const [executionAlerts, setExecutionAlerts] = useState(false);
   const [digestHour, setDigestHour] = useState(12);
   const [message, setMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadErrorTone, setLoadErrorTone] = useState<'error' | 'soft'>('error');
   const [notReady, setNotReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -50,8 +56,7 @@ export function NotifyTab({
   const hydrate = useCallback(async () => {
     if (!api) return;
     setLoading(true);
-    setMessage(null);
-    setNotReady(false);
+    setLoadError(null);
     try {
       const prefs = await getFn(api);
       applyPrefs(prefs);
@@ -62,12 +67,13 @@ export function NotifyTab({
       }
     } catch (err) {
       if (err instanceof SettingsHttpError && (err.status === 503 || err.code === 'NOT_READY')) {
-        setNotReady(true);
-        setMessage(
+        setLoadError(
           'Notification preferences backend is temporarily unavailable. Showing empty form.',
         );
+        setLoadErrorTone('soft');
       } else {
-        setMessage(err instanceof Error ? err.message : 'Unable to load preferences.');
+        setLoadError(SETTINGS_LOAD_ERROR_MESSAGE);
+        setLoadErrorTone('error');
       }
     } finally {
       setLoading(false);
@@ -143,18 +149,21 @@ export function NotifyTab({
 
       <Toggle
         label="Daily digest"
+        description="Once/day portfolio/activity summary emailed at digest hour UTC"
         checked={dailyDigest}
         onChange={setDailyDigest}
         testId="notify-digest"
       />
       <Toggle
         label="Holding-change alerts"
+        description="Email when holdings change"
         checked={holdingChange}
         onChange={setHoldingChange}
         testId="notify-holding"
       />
       <Toggle
         label="Execution alerts"
+        description="Email when orders/executions happen"
         checked={executionAlerts}
         onChange={setExecutionAlerts}
         testId="notify-execution"
@@ -175,6 +184,13 @@ export function NotifyTab({
         />
       </label>
 
+      {loadError ? (
+        <SettingsLoadError
+          message={loadError}
+          onRetry={() => void hydrate()}
+          tone={loadErrorTone}
+        />
+      ) : null}
       {message ? (
         <p
           className={`text-sm ${notReady ? 'text-warn' : 'text-ink-soft'}`}
@@ -200,7 +216,12 @@ export function NotifyTab({
           Delivery log
         </p>
         {events.length === 0 ? (
-          <p className="text-sm text-ink-mute">No digest events logged yet.</p>
+          <div
+            className="border border-hair px-3 py-2"
+            data-testid="notify-empty-log"
+          >
+            <p className="text-sm text-ink-mute">No digest events logged yet.</p>
+          </div>
         ) : (
           <ul className="divide-y divide-hair border border-hair">
             {events.map((event) => (
@@ -225,18 +246,23 @@ export function NotifyTab({
 
 function Toggle({
   label,
+  description,
   checked,
   onChange,
   testId,
 }: {
   label: string;
+  description: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   testId?: string;
 }) {
   return (
-    <label className="flex items-center justify-between gap-3 border border-hair bg-term-bg/40 px-3 py-2">
-      <span className="text-sm text-ink-soft">{label}</span>
+    <label className="flex items-start justify-between gap-3 border border-hair bg-term-bg/40 px-3 py-2">
+      <div className="space-y-0.5">
+        <span className="text-sm text-ink">{label}</span>
+        <span className="text-xs text-ink-mute">{description}</span>
+      </div>
       <input
         type="checkbox"
         checked={checked}

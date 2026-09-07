@@ -10,11 +10,14 @@ P2). Owns everything about *which model string* a request should use:
   normalized for the active ``OPENAI_API_BASE`` (strips the LiteLLM ``ollama/``
   prefix when talking directly to Ollama's OpenAI shim).
 - :func:`resolve_request_model` — the single helper that turns the *requested*
-  model into the concrete string handed to :func:`digillm.completion`,
-  reproducing the provider-key→Ollama fallback and ``ollama-cloud/`` strip the
-  old ``chat_completion`` did inline. digillm performs no env/YAML model
-  substitution and raises on a missing provider key, so this resolution must
-  happen here first.
+  model into the concrete string handed to :func:`digillm.completion`.
+
+  **Policy**: registered provider with no API key and no BYOK override → raise
+  ``ValueError`` (no silent Ollama default). House uses hosted Cheaper Inference
+  (``CHEAPERINFERENCE_API_KEY`` / ``DIGI_HOUSE_UPSTREAM=openrouter``); unprefixed
+  digiquant slugs (``deepseek/...``, ``meta-llama/...``, ``perplexity/...``) are
+  not registered providers and pass through unchanged. Local opt-in required for
+  any external provider usage.
 
 The LLM calls live in :mod:`digigraph.llm_client`; per-request auth (proxy key /
 BYOK) lives in :mod:`digigraph.llm_auth`.
@@ -28,7 +31,11 @@ import os
 from pathlib import Path
 
 import yaml
-from digillm import get_provider_api_key_env, is_registered_provider
+from digillm import (
+    cheaperinference_house_preferred,
+    get_provider_api_key_env,
+    is_registered_provider,
+)
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from digigraph.llm_auth import (
@@ -509,14 +516,30 @@ def is_tool_use_capable_model(model: str) -> bool:
     return True
 
 
+# #3660 house grounding synthesizers (digisearch / live_search retrieval first;
+# these LLMs only rewrite the retrieved context — not OpenRouter :online/sonar).
+_HOUSE_CI_GROUNDING_SYNTHESIS_SLUGS = frozenset(
+    {
+        "google/gemini-3.1-flash-lite",
+        "deepseek/deepseek-v4-flash",
+    }
+)
+
+
 def is_web_search_capable_model(model: str) -> bool:
-    """True when *model* can ground via ``:online`` or native search (perplexity/*)."""
+    """True when *model* may run digiquant grounding pre-passes.
+
+    Includes OpenRouter ``:online`` / perplexity native search, plus house CI
+    synthesis slugs used after in-house digisearch retrieval (#3660).
+    """
     slug = _openrouter_slug(model).strip().lower()
     if not slug:
         return False
     if is_native_search_only_model(model):
         return True
-    return ":online" in slug
+    if ":online" in slug:
+        return True
+    return slug in _HOUSE_CI_GROUNDING_SYNTHESIS_SLUGS
 
 
 def _pick_from_pool(pool: list[str], key: str) -> str:
@@ -538,22 +561,25 @@ def _tier_capability_pool(tier_cfg: DigiquantTierConfig, capability: str) -> lis
 
 
 def _tier_web_search_pool(tier_cfg: DigiquantTierConfig) -> list[str]:
+    # Explicit ``web_search_models`` wins (#3660): house CI synthesis pins
+    # (``gemini-3.1-flash-lite`` / ``deepseek-v4-flash``) are not ``:online`` /
+    # perplexity, but they are the configured synthesizers after digisearch
+    # retrieval. Do not filter them with ``is_web_search_capable_model``.
     if tier_cfg.web_search_models:
-        pool = list(tier_cfg.web_search_models)
+        return list(tier_cfg.web_search_models)
+    seen: set[str] = set()
+    merged: list[str] = []
+    for capability in ("research", "extraction", "reasoning"):
+        for model in _tier_capability_pool(tier_cfg, capability):
+            if model not in seen:
+                seen.add(model)
+                merged.append(model)
+    if merged:
+        pool = merged
+    elif tier_cfg.grounding_model:
+        pool = [tier_cfg.grounding_model]
     else:
-        seen: set[str] = set()
-        merged: list[str] = []
-        for capability in ("research", "extraction", "reasoning"):
-            for model in _tier_capability_pool(tier_cfg, capability):
-                if model not in seen:
-                    seen.add(model)
-                    merged.append(model)
-        if merged:
-            pool = merged
-        elif tier_cfg.grounding_model:
-            pool = [tier_cfg.grounding_model]
-        else:
-            pool = []
+        pool = []
     return [m for m in pool if is_web_search_capable_model(m)]
 
 
@@ -572,11 +598,12 @@ def _model_for_digiquant_capability(capability: str, tier: str, phase_slug: str)
 
 
 def get_grounding_model(*, segment: str = "grounding") -> str | None:
-    """Return a web-search-capable model for digiquant grounding pre-passes.
+    """Return a model for digiquant grounding pre-passes.
 
-    Pool is filtered to ``perplexity/*`` / ``:online`` only (#2567) — house
-    grounding must not use the digillm Exa toolkit branch. Slugs are unprefixed
-    OpenRouter ids resolved through LiteLLM (#3414).
+    When ``web_search_models`` is set (#3660), use that list as-is (house CI
+    synthesis after digisearch / live_search). Legacy fallbacks still filter to
+    ``perplexity/*`` / ``:online`` (#2567). Slugs are unprefixed OpenRouter-style
+    ids resolved through LiteLLM / Cheaper Inference (#3414).
     """
     tier_cfg = _load_digiquant_models().tiers.get(get_digiquant_tier())
     if tier_cfg is None:
@@ -587,26 +614,50 @@ def get_grounding_model(*, segment: str = "grounding") -> str | None:
     return _pick_from_pool(pool, segment)
 
 
+def _cheaperinference_house_preferred() -> bool:
+    """House default prefers Cheaper Inference when ``CHEAPERINFERENCE_API_KEY`` is set.
+
+    Delegates to :func:`digillm.client.cheaperinference_house_preferred`. Force
+    OpenRouter with ``DIGI_HOUSE_UPSTREAM=openrouter``. OpenRouter remains the
+    fallback for catalog misses. Distinct from self-hosted OmniRoute.
+    """
+    return cheaperinference_house_preferred()
+
+
 def apply_digiquant_openrouter_env(*, force: bool = False) -> str:
     """Apply house LLM routing + OpenRouter cost knobs from the active digiquant tier.
 
     When ``OPENAI_API_BASE`` is already set (Docker LiteLLM, stack-local), leave it
     alone — house pins are unprefixed slugs on that proxy's ``model_list``.
 
-    CLI / GHA without a local proxy: point the default client at OpenRouter's
-    OpenAI-compatible API and copy ``OPENROUTER_API_KEY`` into ``OPENAI_API_KEY``
-    when that is unset, so unprefixed pins do not hit api.openai.com.
+    CLI / GHA without a local proxy:
+    - If Cheaper Inference is the house default (``CHEAPERINFERENCE_API_KEY`` set,
+      unless ``DIGI_HOUSE_UPSTREAM=openrouter``), point the default client at
+      ``CHEAPERINFERENCE_API_BASE`` (default ``https://api.cheaperinference.com/v1``).
+      digillm rewrites mapped house slugs to bare CI ids and keeps OpenRouter for
+      sonar / ``:online`` / maverick / unmapped pins.
+    - Otherwise point at OpenRouter's OpenAI-compatible API and copy
+      ``OPENROUTER_API_KEY`` into ``OPENAI_API_KEY`` when that is unset, so
+      unprefixed pins do not hit api.openai.com.
 
     Also sets ``OPENROUTER_ALLOWED_MODELS`` and ``OPENROUTER_COST_QUALITY_TRADEOFF``
     when unset (or when *force*). Called at chain startup so CI picks up tier policy
     without duplicating values in ``digiquant-pipeline.yml``.
     """
     if not (os.environ.get("OPENAI_API_BASE") or "").strip():
-        os.environ["OPENAI_API_BASE"] = "https://openrouter.ai/api/v1"
-        if not (os.environ.get("OPENAI_API_KEY") or "").strip():
-            or_key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
-            if or_key:
-                os.environ["OPENAI_API_KEY"] = or_key
+        if _cheaperinference_house_preferred():
+            ci_base = (os.environ.get("CHEAPERINFERENCE_API_BASE") or "").strip()
+            os.environ["OPENAI_API_BASE"] = ci_base or "https://api.cheaperinference.com/v1"
+            if not (os.environ.get("OPENAI_API_KEY") or "").strip():
+                os.environ["OPENAI_API_KEY"] = (
+                    os.environ.get("CHEAPERINFERENCE_API_KEY") or ""
+                ).strip()
+        else:
+            os.environ["OPENAI_API_BASE"] = "https://openrouter.ai/api/v1"
+            if not (os.environ.get("OPENAI_API_KEY") or "").strip():
+                or_key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+                if or_key:
+                    os.environ["OPENAI_API_KEY"] = or_key
     tier = get_digiquant_tier()
     tier_cfg = _load_digiquant_models().tiers.get(tier)
     if tier_cfg is None:
@@ -623,10 +674,11 @@ def apply_digiquant_openrouter_env(*, force: bool = False) -> str:
     ):
         os.environ["OPENROUTER_COST_QUALITY_TRADEOFF"] = str(or_cfg.cost_quality_tradeoff)
     logger.info(
-        "dashboard model tier=%s openrouter_pool=%s tradeoff=%s",
+        "dashboard model tier=%s openrouter_pool=%s tradeoff=%s openai_api_base=%s",
         tier,
         os.environ.get("OPENROUTER_ALLOWED_MODELS", ""),
         os.environ.get("OPENROUTER_COST_QUALITY_TRADEOFF", ""),
+        os.environ.get("OPENAI_API_BASE", ""),
     )
     return tier
 
@@ -891,10 +943,9 @@ def resolve_request_model(request_model: str) -> str:
 
     - ``provider/model_id`` for a known external provider (gemini/xai/openrouter) whose
       API key is set → returned unchanged; digillm routes it to that provider.
-    - same prefix but the key is **missing** → fall back to the Ollama mode model
-      (``resolve_effective_model(get_model_for_mode())``), mirroring the legacy
-      silent Ollama fallback rather than digillm's hard error — **except** when a
-      BYOK override is bound for that same provider (user key pays; keep the slug).
+    - same prefix but the key is **missing** → raise ValueError (no silent Ollama
+      fallback). Set the provider's API key env var or provide an X-BYOK-Model override
+      to use this provider.
     - ``ollama-cloud/<model>`` → strip the prefix (Ollama Cloud expects bare
       names); ``resolve_effective_model`` is intentionally NOT applied so a mode
       default can't override an explicit cloud model.
@@ -910,6 +961,13 @@ def resolve_request_model(request_model: str) -> str:
       checking presence alone would let an unroutable-provider override this
       branch too — harmless only by the coincidence that server.py's 400 on
       unroutable providers (#1873) never lets one reach here today.
+    - unprefixed house digiquant slugs (``deepseek/…``, ``meta-llama/…``,
+      ``perplexity/…``, …) → returned unchanged. After #3414 these are not
+      registered provider prefixes; digillm sends them to ``OPENAI_API_BASE``
+      (LiteLLM, or the CLI/GHA OpenRouter rewrite). They must not fall through
+      to ``resolve_effective_model``, which prefers ``OLLAMA_MODEL`` /
+      ``model_modes`` local defaults (``ollama/qwen3:8b``) and would hand
+      OpenRouter an invalid model id.
     - anything else → ``resolve_effective_model(request_model)``.
     """
     provider, _model_id = _parse_provider_prefix(request_model)
@@ -921,12 +979,11 @@ def resolve_request_model(request_model: str) -> str:
         byok = get_byok_override()
         if byok and byok[1] == provider:
             return request_model
-        logger.warning(
-            "Provider %r key (%s) not configured; falling back to Ollama mode model",
-            provider,
-            api_key_env,
+        msg = (
+            f"Provider {provider!r} key ({api_key_env}) not configured and no BYOK override "
+            f"is set. Set {api_key_env} or provide an X-BYOK-Model override to use this provider."
         )
-        return resolve_effective_model(get_model_for_mode())
+        raise ValueError(msg)
     if request_model.startswith("ollama-cloud/"):
         return request_model[len("ollama-cloud/") :]
     # BYOK already chose the spendable model via ``_apply_byok_model_override``.
@@ -935,5 +992,13 @@ def resolve_request_model(request_model: str) -> str:
     # is bound" -- see the docstring note on ``push_byok_header`` vs ``set_byok``.
     byok = get_byok_override()
     if byok is not None and byok_provider_supported(byok[1]):
+        return request_model
+    # House digiquant pins (#3414) are unprefixed OpenRouter-style slugs such as
+    # ``deepseek/deepseek-v4-flash``. They are not registered providers, so the
+    # branch above does not keep them. Without this guard, ``resolve_effective_model``
+    # clobbers them with ``model_modes`` local defaults (``ollama/qwen3:8b``), which
+    # OpenRouter rejects ("not a valid model ID") on decision_log reflector and every
+    # other digiquant phase that goes through digigraph → digillm.
+    if "/" in request_model and not request_model.startswith("ollama/"):
         return request_model
     return resolve_effective_model(request_model)

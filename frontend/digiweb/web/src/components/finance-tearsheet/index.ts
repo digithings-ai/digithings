@@ -87,6 +87,7 @@ export {
   informationRatioFromDaily,
   olsBeta,
   overlappingDailyReturns,
+  navHistoryForLiveOverlap,
   relativeMetricsFromReturnSeries,
   sinceInceptionPctFromNav,
   MIN_OVERLAP_DAYS,

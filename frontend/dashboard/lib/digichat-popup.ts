@@ -1,14 +1,22 @@
 /**
- * digichat popup embed for the digiquant dashboard (#3422 / #3581).
+ * digichat popup embed for the digiquant dashboard (#3422 / #3581 / #3662).
  *
  * Desk+ (plan “pro” in the issue = Desk / glass-box) get a bottom-right launcher
  * that iframes digichat `/embed?layout=embed` — same popup contract as digichat
  * `widget.js` (#3421), implemented in-React so CSP stays `script-src 'self'`.
+ * Baseline (free/brief) sees the same launcher but an upgrade CTA panel with
+ * chat disabled — never an iframe, so non-entitled tiers never burn turns and
+ * never meet the free-3 gate (Chris lock: no free-3 quota on this popup).
  *
  * Grounding, web search, three-tier models, and digigraph→digillm live in the
  * digichat tenant registry (`DIGICHAT_EMBED_TENANTS` for digiquant.io) — not here.
  */
 
+import {
+  extractPageContext as extractPageContextShared,
+  extractPageHtml as extractPageHtmlShared,
+  sanitizePageHtml as sanitizePageHtmlShared,
+} from '../../digichat/src/lib/page-context-sanitize'; // canonical allowlist (#3602)
 import { can, type PlanTier } from './entitlements';
 
 export type { PlanTier };
@@ -37,6 +45,8 @@ export const DIGICHAT_POPUP_ACCENT = '#3dd6c4'; // canon-allow: digichat ?accent
 export const DIGICHAT_READY = 'digichat:ready';
 export const DIGICHAT_PAGE_CONTEXT = 'digichat:page-context';
 export const DIGICHAT_THEME = 'digichat:theme';
+/** Plan tier message type for the authenticated tier proof (#3662). */
+export const DIGICHAT_PLAN_TIER = 'digichat:plan-tier';
 
 /** Keep in sync with digichat `DEFAULT_POPUP_PAGE_CONTEXT_MAX_CHARS`. */
 export const PAGE_CONTEXT_MAX_CHARS = 8_000;
@@ -52,6 +62,23 @@ export const DIGICHAT_LAUNCHER_LABEL = 'ask digichat';
 
 /** Open-state launcher label — same control toggles close / minimize. */
 export const DIGICHAT_LAUNCHER_CLOSE_LABEL = 'close';
+
+/**
+ * Baseline (free/brief) upgrade panel (#3662, Chris lock: no free-3 quota).
+ * Non-entitled tiers may open the launcher, but the panel shows this upgrade
+ * CTA with chat disabled — never an iframe, so baseline never burns turns.
+ * Copy matches `LockedSurface` (`/settings#billing` upgrade route); digi
+ * names stay lowercase per repo convention.
+ */
+export const DIGICHAT_UPGRADE_TITLE = 'digichat unlocks with Desk';
+
+export const DIGICHAT_UPGRADE_BODY =
+  'House research and portfolio chat is a Desk feature. ' +
+  'Upgrade to ask digichat about the house book and the page you are on.';
+
+export const DIGICHAT_UPGRADE_CTA_LABEL = 'Upgrade in Settings → Billing';
+
+export const DIGICHAT_UPGRADE_CTA_HREF = '/settings#billing';
 
 export type DigichatPopupTheme = 'light' | 'dark';
 
@@ -80,6 +107,9 @@ const RESEARCH_PORTFOLIO_SUGGESTIONS = [
 /**
  * Desk+ unlocks glass-box research + portfolio deliberation — the issue’s
  * “pro and above, not basic” gate (Brief alone is not enough).
+ *
+ * This gates the *chat* (iframe), not the launcher itself: baseline tiers see
+ * the launcher with an upgrade CTA panel instead (#3662).
  */
 export function canUseDigichatPopup(tier: PlanTier): boolean {
   return can(tier, 'glassbox_economics');
@@ -132,8 +162,9 @@ export function isDigichatOriginAllowedByCsp(origin: string): boolean {
 }
 
 /**
- * digiquant.io (and any non-loopback host) needs an embed token — digichat
- * treats only digithings.ai hosts as first-party for tokenless embed.
+ * Tokenless hosts: loopback, first-party digithings marketing/OCC, and the
+ * operator dashboard at digiquant.io (#3638). Unknown third-party hosts still
+ * need NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN so a wrong-tenant embed stays off.
  */
 export function embedHostRequiresToken(host: string): boolean {
   const h = host.trim().toLowerCase();
@@ -142,22 +173,19 @@ export function embedHostRequiresToken(host: string): boolean {
   if (h === 'digithings.ai' || h === 'www.digithings.ai' || h === 'occ.digithings.ai') {
     return false;
   }
+  if (h === 'digiquant.io' || h === 'www.digiquant.io') return false;
   return true;
 }
 
 /**
- * Opt-in popup: requires ORIGIN (or POPUP=1) and fails closed when the
- * resolved origin is outside CSP frame-src, or when the host needs a token
- * and none is configured (avoids a wrong-tenant gated embed).
+ * Default-on for the dashboard (#3638). Kill with NEXT_PUBLIC_DIGICHAT_POPUP=0.
+ * Fails closed when the resolved origin is outside CSP frame-src, or when a
+ * third-party embed host needs a token and none is configured.
  */
 export function isDigichatPopupEnabled(
   env: Record<string, string | undefined> = digichatPopupEnvFromProcess(),
 ): boolean {
   if (env.NEXT_PUBLIC_DIGICHAT_POPUP === '0') return false;
-  const wants =
-    env.NEXT_PUBLIC_DIGICHAT_POPUP === '1' ||
-    Boolean(resolveDigichatEmbedOrigin(env));
-  if (!wants) return false;
   const origin = digichatEmbedOriginForDashboard(env);
   if (!isDigichatOriginAllowedByCsp(origin)) return false;
   const host =
@@ -224,85 +252,39 @@ export function readDocumentTheme(
 
 export function extractVisiblePageText(
   maxChars = PAGE_CONTEXT_MAX_CHARS,
-  bodyText: string | null | undefined =
-    typeof document !== 'undefined' ? document.body?.innerText : '',
+  bodyText?: string | null,
 ): string {
-  return (bodyText ?? '').replace(/\s+/g, ' ').trim().slice(0, maxChars);
+  if (bodyText !== undefined) {
+    return (bodyText ?? '').replace(/\s+/g, ' ').trim().slice(0, maxChars);
+  }
+  return extractPageContextShared(undefined, PAGE_CONTEXT_HTML_MAX_CHARS, maxChars).text;
 }
 
-/**
- * Strip scripts/styles/handlers and truncate. Display as text in the embed
- * preview — never re-hydrate as live DOM. Also drops hidden/password controls
- * and input values so HTML context matches the “already visible” text rule.
- */
+/** Structural allowlist — same walk as digichat `page-context-sanitize.ts`. */
 export function sanitizePageHtml(
   raw: string,
   maxChars = PAGE_CONTEXT_HTML_MAX_CHARS,
 ): string {
-  let s = raw
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
-    // hidden / password fields are not “visible text”
-    .replace(/<input\b[^>]*\btype\s*=\s*(['"]?)(?:hidden|password)\1[^>]*>/gi, '')
-    .replace(/<input\b[^>]*>/gi, (tag) =>
-      tag.replace(/\svalue\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, ''),
-    )
-    .replace(
-      /<textarea\b[^>]*>[\s\S]*?<\/textarea>/gi,
-      (tag) => tag.replace(/>[\s\S]*?</, '><'),
-    )
-    // handlers may appear after whitespace or `/` (`<svg/onload=…>`)
-    .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/([</])on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '$1')
-    .replace(/(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, '$1=$2#$2')
-    .replace(/(href|src)\s*=\s*javascript:[^\s>]*/gi, '$1=#')
-    .replace(/<\/?(?:iframe|object|embed|link|meta|base|noscript)\b[^>]*>/gi, '');
-  s = s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-  return s.slice(0, maxChars);
+  return sanitizePageHtmlShared(raw, maxChars);
 }
 
-type PageHtmlDoc = {
-  querySelector(selectors: string): { cloneNode(deep?: boolean): unknown } | null;
-  body?: { cloneNode(deep?: boolean): unknown } | null;
-};
+export function extractPageContext(
+  maxHtml = PAGE_CONTEXT_HTML_MAX_CHARS,
+  maxText = PAGE_CONTEXT_MAX_CHARS,
+): { html: string; text: string } {
+  return extractPageContextShared(undefined, maxHtml, maxText);
+}
 
 /**
- * Prefer `main` / `[role=main]`, else `body`. Drops the popup chrome so the
- * model does not see its own launcher markup.
+ * Prefer `main` / `[role=main]`, else `body`. Live computed-style walk so
+ * CSS-hidden nodes never enter the payload (#3602).
  */
 export function extractPageHtml(
   maxChars = PAGE_CONTEXT_HTML_MAX_CHARS,
-  doc: PageHtmlDoc | null | undefined =
+  doc: Document | null | undefined =
     typeof document !== 'undefined' ? document : null,
 ): string {
-  if (!doc) return '';
-  const root =
-    doc.querySelector('main') ??
-    doc.querySelector('[role="main"]') ??
-    doc.body ??
-    null;
-  if (!root) return '';
-  const clone = root.cloneNode(true) as {
-    querySelectorAll?(sel: string): Iterable<{ remove(): void }>;
-    innerHTML?: string;
-  };
-  if (clone.querySelectorAll) {
-    for (const el of clone.querySelectorAll('[data-digichat-popup]')) {
-      el.remove();
-    }
-    for (const el of clone.querySelectorAll(
-      'input[type="hidden"], input[type="password"], input[type=hidden], input[type=password]',
-    )) {
-      el.remove();
-    }
-    for (const el of clone.querySelectorAll('input, textarea')) {
-      const input = el as { removeAttribute?(n: string): void; textContent?: string | null };
-      input.removeAttribute?.('value');
-      if ('textContent' in input) input.textContent = '';
-    }
-  }
-  return sanitizePageHtml(clone.innerHTML ?? '', maxChars);
+  return extractPageHtmlShared(maxChars, doc ?? null);
 }
 
 export function buildPageContextMessage(
@@ -327,8 +309,11 @@ export function buildPageContextMessage(
     html?: string;
     screenshotDataUrl?: string;
   } = { type: DIGICHAT_PAGE_CONTEXT, text, ts };
-  const html = opts?.html?.trim();
-  if (html) payload.html = html.slice(0, PAGE_CONTEXT_HTML_MAX_CHARS);
+  const htmlRaw = opts?.html?.trim();
+  if (htmlRaw) {
+    const html = sanitizePageHtml(htmlRaw, PAGE_CONTEXT_HTML_MAX_CHARS);
+    if (html) payload.html = html;
+  }
   if (opts?.screenshotDataUrl) payload.screenshotDataUrl = opts.screenshotDataUrl;
   return payload;
 }
@@ -338,4 +323,20 @@ export function buildThemeMessage(
   ts = Date.now(),
 ): { type: typeof DIGICHAT_THEME; theme: DigichatPopupTheme; ts: number } {
   return { type: DIGICHAT_THEME, theme, ts };
+}
+
+/**
+ * Build a plan-session postMessage for the digichat iframe (#3662).
+ *
+ * The iframe receives the dashboard Supabase access_token after digichat:ready,
+ * exchanges it at /api/plan-proof (server verifies claims via /auth/v1/user),
+ * and includes the HMAC proof in X-Embed-Plan-Proof on every chat request.
+ * Raw client-asserted X-Embed-Plan-Tier headers are NEVER trusted.
+ * `tier` is a UI hint only — digichat ignores it for authorization.
+ */
+export function buildPlanTierMessage(
+  tier: PlanTier,
+  accessToken: string,
+): { type: typeof DIGICHAT_PLAN_TIER; tier: PlanTier; accessToken: string } {
+  return { type: DIGICHAT_PLAN_TIER, tier, accessToken };
 }

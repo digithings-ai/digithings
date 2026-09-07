@@ -1,5 +1,10 @@
 <!-- title: [epic] Olympus client-ready: Kairos execution + user tenancy -->
 
+> **Pricing ladder (live, 2026-09):** Observer / Brief / Desk / Studio — see
+> [`PRICING.md`](PRICING.md) and [`SETTINGS-IA.md`](SETTINGS-IA.md). The Baseline /
+> Custom SKU names below are **historical draft** from epic kickoff; do not provision
+> Stripe products or env vars with those names.
+
 ## Goal
 
 Ship the two remaining Olympus milestones so the product can take paying clients: **Kairos**
@@ -11,8 +16,9 @@ Authoritative spec: `docs/superpowers/specs/2026-08-29-kairos-tenancy-implementa
 
 ## Locked shape (summary)
 
-- Tiers: Observer (free; Atlas + narrative, no weights/NAV) → Baseline (full house book, read) →
-  Custom (overlays, private book, broker connect, BYOK) → Enterprise (manual).
+- Tiers (live): Observer (free teaser) → **Brief** (full digest + house book) → **Desk**
+  (house pipeline + paper brokers) → **Studio** (overlay / private book / BYOK) → Enterprise
+  (invoice). *(Draft epic text said Baseline/Custom; superseded by PRICING.md.)*
 - Payments: **Stripe** (ADR-0004). Identity: **Supabase Auth**; digikey untouched.
 - Olympus stays a static export; enforcement = RLS + Supabase Edge Functions.
 - Brokers: Alpaca OAuth2/paper first; IBKR OAuth 1.0a read-first, orders feature-flagged off.
@@ -111,7 +117,7 @@ Wave E
 
 - [ ] Alpaca Connect OAuth app registration submitted (long pole for product connect)
 - [ ] IBKR OAuth 1.0a vendor onboarding email sent (longest pole; scope to include trading)
-- [ ] Stripe test-mode products (Baseline, Custom) + webhook secret provisioned
+- [ ] Stripe test-mode products (Brief / Desk / Studio monthly+annual) + webhook secret provisioned
 - [ ] Mailgun API key fixed + sending domain confirmed
 - [ ] Supabase Auth providers (Google, GitHub) enabled on `core`
 - [x] `DIGIQUANT_VAULT_MASTER_KEY` generated into deploy secrets

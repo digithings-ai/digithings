@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { reconcileBook, heldByWeight } from './book-reconciliation';
+import { isCashTicker, reconcileBook, heldByWeight } from './book-reconciliation';
 import type { Position } from './types';
 
 const pos = (ticker: string, weight_actual: number, weight_delta?: number): Position => ({
@@ -61,5 +61,13 @@ describe('reconcileBook (F3)', () => {
       { investedPct: 90 }
     );
     expect(heldByWeight(rows).map((r) => r.ticker)).toEqual(['UUP', 'IJR', 'XLE']);
+  });
+});
+
+describe('isCashTicker', () => {
+  it('treats trimmed case-insensitive CASH as the synthetic sleeve', () => {
+    expect(isCashTicker('CASH')).toBe(true);
+    expect(isCashTicker(' cash ')).toBe(true);
+    expect(isCashTicker('SPY')).toBe(false);
   });
 });

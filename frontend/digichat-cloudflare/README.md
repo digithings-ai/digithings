@@ -13,7 +13,7 @@ Requires **Workers Paid** (Containers are not on Free).
 | `digithings.ai/chat` | Pages shell → iframe `/embed?host=digithings.ai` | digithings |
 | `digithings.ai/chat/occ` | Pages shell → iframe `/embed?host=occ.digithings.ai` | occ |
 | `digithings.ai/embed*` | Worker → Container | selected by `host` |
-| `digithings.ai/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/health` | Worker → Container | — |
+| `digithings.ai/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health` | Worker → Container | — |
 | `digithings.ai/_dtchat*` | Worker → Container (assetPrefix) | — |
 | Other paths | Pages static export | — |
 
@@ -58,12 +58,15 @@ npx wrangler secret put DIGICHAT_EMBED_TENANTS
 npx wrangler secret put DIGIGRAPH_INTERNAL_URL   # https://graph.digithings.ai
 npx wrangler secret put DIGIKEY_URL              # https://key.digithings.ai
 npx wrangler secret put DIGIKEY_BFF_TOKEN
+npx wrangler secret put DIGICHAT_PLAN_PROOF_SECRET
+npx wrangler secret put DIGICHAT_DASHBOARD_SUPABASE_URL
+npx wrangler secret put DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY
 
 npx wrangler deploy
 ```
 
 Then enable zone routes (uncomment in `wrangler.toml` or Dashboard → Worker →
-Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`,
+Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`,
 `/api/health`, `/_dtchat*`.
 
 ### `DIGICHAT_EMBED_TENANTS` (digithings + OCC)
@@ -104,6 +107,14 @@ Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`,
 ```
 
 `DIGICHAT_EMBED_HOSTS` is already set in `wrangler.toml` `[vars]`.
+
+### digiquant.io Desk+ tenant shape (names only)
+
+For the digiquant dashboard embed tenant in `DIGICHAT_EMBED_TENANTS`, production shape is:
+`gateMode: ungated`, `llmAccess: operator`, `requiredPlanTier: desk`, `showByok: true`
+(no gate block). Put real values only via `wrangler secret put` — never commit them.
+`POST /api/plan-proof` mint needs the three plan-proof / dashboard Supabase names above
+whitelisted into the Container `envVars` (already wired in `src/index.ts`).
 
 ## Pages
 

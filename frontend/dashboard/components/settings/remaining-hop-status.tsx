@@ -20,6 +20,10 @@ import {
   type RemainingHopEvidence,
   type RemainingHopProven,
 } from '@/lib/remaining-hops';
+import {
+  SETTINGS_LOAD_ERROR_MESSAGE,
+  SettingsLoadError,
+} from './settings-load-error';
 
 export type RemainingHopStatusProps = {
   api: SettingsApiOptions | null;
@@ -73,13 +77,13 @@ export function RemainingHopStatus({
 }: RemainingHopStatusProps) {
   const [proven, setProven] = useState<RemainingHopProven | null>(null);
   const [blockers, setBlockers] = useState<RemainingHopBlockers>({});
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const hydrate = useCallback(async () => {
     if (!api) return;
     setLoading(true);
-    setError(null);
+    setLoadError(null);
     try {
       const [profile, connections, jobs, fills, events, prefs] = await Promise.all([
         getProfileFn(api).catch(() => null),
@@ -101,8 +105,8 @@ export function RemainingHopStatus({
       });
       setProven(provenRemainingHops(evidence));
       setBlockers(remainingHopBlockers(evidence));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load remaining hops.');
+    } catch {
+      setLoadError(SETTINGS_LOAD_ERROR_MESSAGE);
       setProven(null);
       setBlockers({});
     } finally {
@@ -135,10 +139,8 @@ export function RemainingHopStatus({
           Loading remaining hops…
         </p>
       ) : null}
-      {error ? (
-        <p className="text-sm text-down" role="alert">
-          {error}
-        </p>
+      {loadError ? (
+        <SettingsLoadError message={loadError} onRetry={() => void hydrate()} />
       ) : null}
       {proven ? (
         <ul className="divide-y divide-hair border border-hair">

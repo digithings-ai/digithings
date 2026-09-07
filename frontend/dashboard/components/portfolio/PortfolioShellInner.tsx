@@ -31,6 +31,7 @@ import {
   type PortfolioTabId,
 } from '@/lib/portfolio-url-state';
 import { normalizeThesisId } from '@/lib/thesis-id';
+import { isCashTicker } from '@/lib/book-reconciliation';
 import { resolveInvestedPct } from '@/lib/performance-ssot';
 import AllocationsTab from './tabs/AllocationsTab';
 import ThesesTab from './tabs/ThesesTab';
@@ -218,7 +219,7 @@ export default function PortfolioShellInner() {
 
   const tipInvested = data.portfolio.snapshots.at(-1)?.invested_pct ?? null;
   const bookWeightInvestedPct = positions
-    .filter((p) => p.ticker.trim().toUpperCase() !== 'CASH')
+    .filter((p) => !isCashTicker(p.ticker))
     .reduce((sum, p) => sum + (p.weight_actual ?? 0), 0);
   const holdingsInvestedPct = resolveInvestedPct({
     tipInvestedPct: tipInvested,
