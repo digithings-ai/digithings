@@ -4,14 +4,12 @@ For ``live_search`` segments, runs a read-only search pass and returns a cited
 summary injected into ``phase_inputs`` before the normal structured-output
 research call.
 
-dashboard grounding uses **web-search-capable models only** (Perplexity /
-``:online``) via :func:`digigraph.model_config.get_grounding_model` — provider
-built-in search through :func:`digillm.openrouter_web_search`'s native branch.
-The Exa ``openrouter:web_search`` server-tool path stays available as a digillm
-toolkit fallback for non-native models; dashboard does not assemble Exa params.
+dashboard grounding synthesizes via a plain digillm completion over in-house
+retrieval context (:func:`digigraph.model_config.get_grounding_model` selects
+the synthesis model from the tier's ``web_search_models``). No vendor search
+tooling — digillm is a generic router.
 
-Requires ``OPENROUTER_API_KEY``. Fails soft on error or missing key unless
-``OLYMPUS_WEB_SEARCH=required``.
+Fails soft on error or missing key unless ``OLYMPUS_WEB_SEARCH=required``.
 """
 
 from __future__ import annotations
@@ -74,13 +72,11 @@ def _domains_for(segment: str, cfg: dict[str, Any]) -> list[str] | None:
 
 
 def _openrouter_web_search(model: str, query: str) -> tuple[str, list[str]] | None:
-    """dashboard grounding dispatch — native search models only (no Exa params)."""
-    if not model.startswith("openrouter/"):
-        return None
+    """dashboard grounding dispatch — plain completion synthesis via llm_client."""
     from digigraph.llm_client import openrouter_web_search
 
-    # Do not pass engine=/max_results=/allowed_domains= — those only apply to the
-    # digillm Exa toolkit branch, which dashboard must not use (#2567).
+    # No prefix gate and no Exa params: the wrapper synthesizes over whatever
+    # model the house routes (fail-soft None on error).
     return openrouter_web_search(model, query)
 
 

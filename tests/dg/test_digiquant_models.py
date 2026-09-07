@@ -8,7 +8,7 @@ from pathlib import Path
 import digigraph.model_config as model_config
 import pytest
 from digigraph.model_config import (
-    apply_digiquant_openrouter_env,
+    apply_digiquant_house_env,
     get_digiquant_tier,
     get_grounding_model,
     get_model_for_mode,
@@ -30,9 +30,9 @@ def _clear_env(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
     """Delete env vars so teardown still undoes mutations by the code under test.
 
     ``monkeypatch.delenv(..., raising=False)`` records no undo when the key was already
-    absent. ``apply_digiquant_openrouter_env`` then does ``os.environ[k] = ...`` and the
-    value leaks into later tests (e.g. Live Search ``extra_body`` assertions). Seed a
-    placeholder first so the undo stack always restores the pre-test state.
+    absent. ``apply_digiquant_house_env`` then does ``os.environ[k] = ...`` and the
+    value leaks into later tests. Seed a placeholder first so the undo stack always
+    restores the pre-test state.
     """
     for name in names:
         monkeypatch.setenv(name, "")
@@ -275,29 +275,24 @@ def test_phase_slug_selection_is_stable(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.mark.unit
-def test_apply_digiquant_openrouter_env_sets_open_weight_pool(
+def test_apply_house_env_points_at_openrouter_without_ci_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """No CI key → default client points at OpenRouter; no model-policy env is written."""
     _clear_env(
         monkeypatch,
-        "OPENROUTER_ALLOWED_MODELS",
-        "OPENROUTER_COST_QUALITY_TRADEOFF",
         "OPENAI_API_BASE",
         "OPENAI_API_KEY",
+        "OPENROUTER_ALLOWED_MODELS",
+        "OPENROUTER_COST_QUALITY_TRADEOFF",
+        "CHEAPERINFERENCE_API_KEY",
     )
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
-    tier = apply_digiquant_openrouter_env()
-    assert tier == "cheap"
-    pool = os.environ["OPENROUTER_ALLOWED_MODELS"]
-    assert "deepseek/*" in pool
-    assert "perplexity/*" in pool
-    assert "qwen" not in pool.lower()
-    assert "openai" not in pool
-    assert "anthropic" not in pool
-    assert os.environ["OPENROUTER_COST_QUALITY_TRADEOFF"] == "10"
+    apply_digiquant_house_env()
     assert os.environ["OPENAI_API_BASE"] == "https://openrouter.ai/api/v1"
     assert os.environ["OPENAI_API_KEY"] == "sk-or-test"
+    assert "OPENROUTER_ALLOWED_MODELS" not in os.environ
+    assert "OPENROUTER_COST_QUALITY_TRADEOFF" not in os.environ
 
 
 @pytest.mark.unit
@@ -307,13 +302,13 @@ def test_apply_does_not_override_existing_openai_api_base(
     monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-litellm")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    apply_digiquant_openrouter_env()
+    apply_digiquant_house_env()
     assert os.environ["OPENAI_API_BASE"] == "http://127.0.0.1:4000/v1"
     assert os.environ["OPENAI_API_KEY"] == "sk-litellm"
 
 
 @pytest.mark.unit
-def test_apply_openrouter_rewrite_leaves_gemini_on_vendor_client(
+def test_apply_house_env_leaves_gemini_on_vendor_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """CLI rewrite is not LiteLLM: leftover ``gemini/`` still needs ``GEMINI_API_KEY``."""
@@ -321,34 +316,20 @@ def test_apply_openrouter_rewrite_leaves_gemini_on_vendor_client(
 
     _clear_env(monkeypatch, "OPENAI_API_BASE", "OPENAI_API_KEY", "GEMINI_API_KEY")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    apply_digiquant_openrouter_env()
+    apply_digiquant_house_env()
     assert os.environ["OPENAI_API_BASE"] == "https://openrouter.ai/api/v1"
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         digillm.get_client_for_model("gemini/gemini-2.5-flash")
 
 
 @pytest.mark.unit
-def test_apply_quality_tier_preserves_frontier_auto_router_pool(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # #3660: quality openrouter allowlist is CI-scoped (no anthropic/* / openai/* wildcards).
-    _clear_env(monkeypatch, "OPENROUTER_ALLOWED_MODELS", "OPENAI_API_BASE", "OPENAI_API_KEY")
-    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "quality")
-    apply_digiquant_openrouter_env()
-    pool = os.environ["OPENROUTER_ALLOWED_MODELS"]
-    assert "openai/gpt-5.6-" in pool or "openai/gpt-5.6-*" in pool
-    assert "deepseek/*" in pool
-    assert "google/*" in pool
-    assert "anthropic/*" not in pool
-
-
-@pytest.mark.unit
 def test_apply_does_not_override_explicit_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENROUTER_ALLOWED_MODELS", "custom/*")
-    monkeypatch.setenv("OPENROUTER_COST_QUALITY_TRADEOFF", "9")
-    apply_digiquant_openrouter_env()
-    assert os.environ["OPENROUTER_ALLOWED_MODELS"] == "custom/*"
-    assert os.environ["OPENROUTER_COST_QUALITY_TRADEOFF"] == "9"
+    """Pre-set house env survives: the rewrite only fills unset values."""
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-litellm")
+    apply_digiquant_house_env()
+    assert os.environ["OPENAI_API_BASE"] == "http://127.0.0.1:4000/v1"
+    assert os.environ["OPENAI_API_KEY"] == "sk-litellm"
 
 
 @pytest.mark.unit
@@ -833,17 +814,14 @@ def test_apply_prefers_cheaperinference_when_flagged(
         monkeypatch,
         "OPENAI_API_BASE",
         "OPENAI_API_KEY",
-        "OPENROUTER_ALLOWED_MODELS",
-        "OPENROUTER_COST_QUALITY_TRADEOFF",
     )
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
     monkeypatch.setenv("CHEAPERINFERENCE_API_KEY", "ci_live_test")
     monkeypatch.setenv("DIGI_HOUSE_UPSTREAM", "cheaperinference")
     monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
-    apply_digiquant_openrouter_env()
+    apply_digiquant_house_env()
     assert os.environ["OPENAI_API_BASE"] == "https://api.cheaperinference.com/v1"
     assert os.environ["OPENAI_API_KEY"] == "ci_live_test"
-    assert "deepseek/*" in os.environ["OPENROUTER_ALLOWED_MODELS"]
 
 
 @pytest.mark.unit
@@ -860,7 +838,7 @@ def test_apply_defaults_to_cheaperinference_when_key_set(
     )
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
     monkeypatch.setenv("CHEAPERINFERENCE_API_KEY", "ci_live_test")
-    apply_digiquant_openrouter_env()
+    apply_digiquant_house_env()
     assert os.environ["OPENAI_API_BASE"] == "https://api.cheaperinference.com/v1"
     assert os.environ["OPENAI_API_KEY"] == "ci_live_test"
 
@@ -873,6 +851,6 @@ def test_apply_forces_openrouter_when_upstream_openrouter(
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
     monkeypatch.setenv("CHEAPERINFERENCE_API_KEY", "ci_live_test")
     monkeypatch.setenv("DIGI_HOUSE_UPSTREAM", "openrouter")
-    apply_digiquant_openrouter_env()
+    apply_digiquant_house_env()
     assert os.environ["OPENAI_API_BASE"] == "https://openrouter.ai/api/v1"
     assert os.environ["OPENAI_API_KEY"] == "sk-or-test"

@@ -229,6 +229,7 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
         "deepseek/deepseek-v4-flash",
         "deepseek/deepseek-v4-pro",
         "google/gemini-3.7-flash",
+        "google/gemini-3.1-flash-lite",
         "openai/gpt-5.6-luna",
         "openai/gpt-5.6-sol",
     }
@@ -249,6 +250,30 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
         assert params.get("api_key") == "os.environ/CHEAPERINFERENCE_API_KEY", entry["model_name"]
         assert params.get("api_base") == "os.environ/CHEAPERINFERENCE_API_BASE", entry["model_name"]
         assert str(params.get("model", "")).startswith("openai/"), entry["model_name"]
+
+
+def test_cheaperinference_overlay_has_no_bare_api_base() -> None:
+    """BYOK guard parity with #3605: the CI overlay must regex-pin api_base.
+
+    A bare ``api_base`` in ``configurable_clientside_auth_params`` would let a
+    BYOK caller pass any upstream through LiteLLM — the base config forbids it,
+    and the overlay must not reintroduce it.
+    """
+    data = yaml.safe_load((CONFIG / "litellm.cheaperinference.yaml").read_text(encoding="utf-8"))
+    for entry in data["model_list"]:
+        params = entry["litellm_params"]
+        allowed = params.get("configurable_clientside_auth_params") or []
+        assert "api_base" not in allowed, (
+            f"{entry['model_name']}: bare api_base passthrough is forbidden"
+        )
+        patterns = [
+            item["api_base"] for item in allowed if isinstance(item, dict) and "api_base" in item
+        ]
+        assert patterns, f"{entry['model_name']}: missing api_base regex pin"
+        for pattern in patterns:
+            assert "cheaperinference" in pattern, (
+                f"{entry['model_name']}: api_base pin must scope to CI, got {pattern!r}"
+            )
 
 
 def test_merge_litellm_cheaperinference_replaces_mapped_keeps_openrouter() -> None:
