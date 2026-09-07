@@ -95,22 +95,6 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     vi.mocked(createDigigraphTraceStreamResponse).mockClear();
   });
 
-  const dashboardCtx = {
-    tenantSlug: "digiquant-dashboard",
-    ownerUserSub: "embed:anonymous",
-    embedConfig: {
-      slug: "digiquant-dashboard",
-      gateMode: "ungated",
-      theme: "dark",
-      attribution: false,
-      token: "dash-secret",
-      backend: { type: "digigraph" },
-      activityDetail: "full",
-      llmAccess: "operator",
-      showByok: true,
-    },
-  };
-
   afterEach(() => {
     process.env = env;
   });
@@ -722,100 +706,6 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-BYOK-Model"]).toBeUndefined();
   });
 
-  it("refuses baseline plan_tier: free users get 403", async () => {
-    vi.mocked(requireDigiChatAuth).mockResolvedValue({
-      tenantSlug: "digiquant-dashboard",
-      ownerUserSub: "embed:anonymous",
-      plan_tier: "free",
-    } as never);
-    const baselineCtx = {
-      ...dashboardCtx,
-      plan_tier: "free",
-    };
-    vi.mocked(resolveChatTenantContext).mockResolvedValue(baselineCtx as never);
-    const res = await POST(
-      new Request("http://localhost/api/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-embed-host": "https://digiquant.io" },
-        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
-      })
-    );
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toBe("plan_tier_required");
-  });
-
-  it("refuses baseline plan_tier: brief users get 403", async () => {
-    vi.mocked(requireDigiChatAuth).mockResolvedValue({
-      tenantSlug: "digiquant-dashboard",
-      ownerUserSub: "embed:anonymous",
-      plan_tier: "brief",
-    } as never);
-    const baselineCtx = {
-      ...dashboardCtx,
-      plan_tier: "brief",
-    };
-    vi.mocked(resolveChatTenantContext).mockResolvedValue(baselineCtx as never);
-    const res = await POST(
-      new Request("http://localhost/api/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-embed-host": "https://digiquant.io" },
-        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
-      })
-    );
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toBe("plan_tier_required");
-  });
-
-  it("allows desk plan_tier", async () => {
-    const deskCtx = {
-      ...dashboardCtx,
-      plan_tier: "desk",
-    };
-    vi.mocked(resolveChatTenantContext).mockResolvedValue(deskCtx as never);
-    const res = await POST(
-      new Request("http://localhost/api/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-embed-host": "https://digiquant.io" },
-        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
-      })
-    );
-    expect(res.status).toBe(200);
-  });
-
-  it("allows studio plan_tier", async () => {
-    const studioCtx = {
-      ...dashboardCtx,
-      plan_tier: "studio",
-    };
-    vi.mocked(resolveChatTenantContext).mockResolvedValue(studioCtx as never);
-    const res = await POST(
-      new Request("http://localhost/api/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-embed-host": "https://digiquant.io" },
-        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
-      })
-    );
-    expect(res.status).toBe(200);
-  });
-
-  it("allows enterprise plan_tier", async () => {
-    const enterpriseCtx = {
-      ...dashboardCtx,
-      plan_tier: "enterprise",
-    };
-    vi.mocked(resolveChatTenantContext).mockResolvedValue(enterpriseCtx as never);
-    const res = await POST(
-      new Request("http://localhost/api/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-embed-host": "https://digiquant.io" },
-        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
-      })
-    );
-    expect(res.status).toBe(200);
-  });
-
   describe("trial_form gate", () => {
     const trialCtx = {
       tenantSlug: "datatap",
@@ -900,8 +790,9 @@ vi.mocked(createFoundryStreamResponse).mockClear();
   });
 
   describe("digiquant.io dashboard tenant (#3662)", () => {
-    // Canonical dashboard shape: ungated + operator, no gate.consumeUrl — Desk+
-    // chat is never capped at free-3, and the trial quota is never consulted.
+    // Canonical dashboard shape: ungated + operator, no gate.consumeUrl, requiredPlanTier desk —
+    // Desk+ chat is never capped at free-3, and the trial quota is never consulted.
+    // Anonymous embed without a valid plan_tier must get 403.
     const dashboardCtx = {
       tenantSlug: "digiquant-dashboard",
       ownerUserSub: "embed:anonymous",
@@ -915,13 +806,18 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         activityDetail: "full",
         llmAccess: "operator",
         showByok: true,
+        requiredPlanTier: "desk",
       },
     };
 
     function dashboardReq(): Request {
       return new Request("http://localhost/api/chat", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-embed-host": "https://digiquant.io" },
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://digiquant.io",
+          "x-embed-plan-tier": "desk",
+        },
         body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
       });
     }
@@ -948,6 +844,81 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         recordSpy.mockRestore();
         unlockSpy.mockRestore();
       }
+    });
+
+    it("returns 403 plan_tier_required when no X-Embed-Plan-Tier is supplied (#3662)", async () => {
+      const req = new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://digiquant.io",
+        },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe("plan_tier_required");
+    });
+
+    it("returns 403 when caller tier is below desk (free/brief)", async () => {
+      for (const tier of ["free", "brief"]) {
+        const req = new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-embed-host": "https://digiquant.io",
+            "x-embed-plan-tier": tier,
+          },
+          body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+        });
+        const res = await POST(req);
+        expect(res.status).toBe(403);
+        const body = (await res.json()) as { error: string };
+        expect(body.error).toBe("plan_tier_required");
+      }
+    });
+
+    it("allows chat when X-Embed-Plan-Tier is desk+", async () => {
+      for (const tier of ["desk", "studio", "enterprise"]) {
+        const req = new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-embed-host": "https://digiquant.io",
+            "x-embed-plan-tier": tier,
+          },
+          body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+        });
+        const res = await POST(req);
+        expect(res.status).toBe(200);
+      }
+    });
+
+    it("reads plan_tier from ?plan_tier= query param as fallback", async () => {
+      const req = new Request("http://localhost/api/chat?plan_tier=desk", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://digiquant.io",
+        },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+    });
+
+    it("denies free tier via query param", async () => {
+      const req = new Request("http://localhost/api/chat?plan_tier=free", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://digiquant.io",
+        },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
     });
   });
   describe("trace stream (the production default)", () => {

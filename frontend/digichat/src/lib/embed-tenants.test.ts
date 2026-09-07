@@ -6,6 +6,7 @@ import {
   resetEmbedTenantRegistryForTests,
   DIGIQUANT_DASHBOARD_EMBED_HOST,
   isDigiquantDashboardTenantConfig,
+  isPlanTierSatisfied,
 } from "./embed-tenants";
 
 const VALID = JSON.stringify({
@@ -584,6 +585,7 @@ describe("digiquant dashboard tenant contract (#3662)", () => {
     gateMode: "ungated",
     llmAccess: "operator",
     showByok: true,
+    requiredPlanTier: "desk",
     token: "dash-secret",
   };
 
@@ -666,5 +668,93 @@ describe("digiquant dashboard tenant contract (#3662)", () => {
       }),
     );
     expect(isDigiquantDashboardTenantConfig(reg.get("digiquant.io")!)).toBe(false);
+  });
+
+  it("rejects when requiredPlanTier is absent — fail closed (#3662)", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        [DIGIQUANT_DASHBOARD_EMBED_HOST]: {
+          slug: "digiquant-dashboard",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          llmAccess: "operator",
+          showByok: true,
+          token: "dash-secret",
+        },
+      }),
+    );
+    expect(isDigiquantDashboardTenantConfig(reg.get("digiquant.io")!)).toBe(false);
+  });
+
+  it("rejects when requiredPlanTier is free or brief — baseline must not bypass Desk+", () => {
+    for (const tier of ["free", "brief"]) {
+      expect(() =>
+        parseEmbedTenants(
+          JSON.stringify({
+            [DIGIQUANT_DASHBOARD_EMBED_HOST]: {
+              ...dashboardEntry,
+              requiredPlanTier: tier,
+            },
+          }),
+        ),
+      ).toThrow(/requiredPlanTier must be/);
+    }
+  });
+
+  it("accepts requiredPlanTier desk, studio, enterprise", () => {
+    for (const tier of ["desk", "studio", "enterprise"]) {
+      const reg = parseEmbedTenants(
+        JSON.stringify({
+          [DIGIQUANT_DASHBOARD_EMBED_HOST]: {
+            ...dashboardEntry,
+            requiredPlanTier: tier,
+          },
+        }),
+      );
+      expect(isDigiquantDashboardTenantConfig(reg.get("digiquant.io")!)).toBe(true);
+    }
+  });
+
+  it("rejects an invalid requiredPlanTier value", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          [DIGIQUANT_DASHBOARD_EMBED_HOST]: {
+            ...dashboardEntry,
+            requiredPlanTier: "premium",
+          },
+        }),
+      ),
+    ).toThrow(/requiredPlanTier must be/);
+  });
+});
+
+describe("isPlanTierSatisfied", () => {
+  const deskCfg = { requiredPlanTier: "desk" as const } as import("./embed-tenants").EmbedTenantConfig;
+
+  it("returns true when no requiredPlanTier is set", () => {
+    expect(isPlanTierSatisfied(null, null)).toBe(true);
+    expect(isPlanTierSatisfied({} as never, "free")).toBe(true);
+  });
+
+  it("denies when callerTier is absent", () => {
+    expect(isPlanTierSatisfied(deskCfg, null)).toBe(false);
+    expect(isPlanTierSatisfied(deskCfg, undefined)).toBe(false);
+  });
+
+  it("denies free and brief for desk+ requirement", () => {
+    expect(isPlanTierSatisfied(deskCfg, "free")).toBe(false);
+    expect(isPlanTierSatisfied(deskCfg, "brief")).toBe(false);
+  });
+
+  it("allows desk, studio, enterprise for desk+ requirement", () => {
+    expect(isPlanTierSatisfied(deskCfg, "desk")).toBe(true);
+    expect(isPlanTierSatisfied(deskCfg, "studio")).toBe(true);
+    expect(isPlanTierSatisfied(deskCfg, "enterprise")).toBe(true);
+  });
+
+  it("denies unknown/spoofed tier strings", () => {
+    expect(isPlanTierSatisfied(deskCfg, "premium")).toBe(false);
+    expect(isPlanTierSatisfied(deskCfg, "")).toBe(false);
   });
 });
