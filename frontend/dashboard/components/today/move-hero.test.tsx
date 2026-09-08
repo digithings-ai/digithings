@@ -9,7 +9,7 @@ import { MoveHero } from './move-hero';
 
 const navOk = {
   sincePct: -0.7,
-  sinceDate: '2026-06-23',
+  sinceDate: '2026-07-17',
   dailyPct: -0.7,
   benchTicker: 'SPY',
   excessPct: 4.2,
@@ -23,7 +23,7 @@ describe('MoveHero', () => {
         regimeLabel: 'caution',
         headline: 'Mixed signals persist as tech leads equities and USD strengthens.',
         confidence: 0.7,
-        asOf: '2026-06-24',
+        asOf: '2026-07-20',
         runType: 'delta',
         actions: [{ ticker: 'NVDA', current_pct: 8, recommended_pct: 6, action: 'TRIM' }],
         nav: navOk,
@@ -47,7 +47,7 @@ describe('MoveHero', () => {
         regimeLabel: 'bullish',
         headline: 'Breadth improves; defensives lag.',
         confidence: 0.8,
-        asOf: '2026-06-21',
+        asOf: '2026-07-21',
         runType: 'delta',
         actions: [{ ticker: 'SPY', current_pct: 50, recommended_pct: 50, action: 'HOLD' }],
         nav: navOk,
@@ -63,10 +63,10 @@ describe('MoveHero', () => {
         regimeLabel: 'caution',
         headline: 'Quiet tape.',
         confidence: null,
-        asOf: '2026-06-23',
+        asOf: '2026-07-17',
         runType: null,
         actions: [],
-        nav: { sincePct: -0.7, sinceDate: '2026-06-23', dailyPct: null, benchTicker: null, excessPct: null },
+        nav: { sincePct: -0.7, sinceDate: '2026-07-17', dailyPct: null, benchTicker: null, excessPct: null },
       })
     );
     expect(html).toContain('since inception');
@@ -82,13 +82,13 @@ describe('MoveHero', () => {
         regimeLabel: 'caution',
         headline: 'Quiet tape.',
         confidence: null,
-        asOf: '2026-07-16',
+        asOf: '2026-08-03',
         runType: null,
         actions: [],
-        nav: { sincePct: -0.6, sinceDate: '2026-06-23', dailyPct: -0.2, benchTicker: null, excessPct: null, asOfDate: '2026-06-26' },
+        nav: { sincePct: -0.6, sinceDate: '2026-07-17', dailyPct: -0.2, benchTicker: null, excessPct: null, asOfDate: '2026-07-31' },
       })
     );
-    expect(html).toContain('on Jun 26');
+    expect(html).toContain('on Jul 31');
     expect(html).not.toContain(' today<');
   });
 });

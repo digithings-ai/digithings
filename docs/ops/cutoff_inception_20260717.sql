@@ -4,21 +4,34 @@
 -- WHAT IT DID (executed via supabase-py service-role, operator script):
 --   1. Backed up 4 nav_history rows (2026-06-23/24/25/26) + 2
 --      portfolio_metrics rows (2026-06-24/26) to JSON
---      (operator copy: /tmp/ntproto/cutoff_backup_20260908.json).
+--      (operator copy: /tmp/ntproto/cutoff_backup_20260908.json,
+--      sha256 07cfef66fb4b248dda7c52da0b1b72aa2e77e1fedff388c4551430265ec0c977).
+--      NOTE: /tmp is host-ephemeral — copy that JSON to durable operator
+--      storage before relying on the rollback recipe below. The 6 deleted
+--      rows' values are also listed inline at each statement so rollback
+--      math survives even if the JSON is lost.
 --   2. DELETE portfolio_metrics WHERE date < '2026-07-17' (house) → 2 rows.
 --      DELETE nav_history WHERE date < '2026-07-17' (house) → 4 rows.
 --   3. Rebased the 41 remaining nav_history rows: nav = round(100 * live_nav /
 --      99.431364, 6), where 99.431364 was the live (pre-cutoff) 2026-07-17 NAV.
---      Result: 2026-07-17 = 100.0 … 2026-09-04 = 99.921539. Daily returns,
---      pnl_pct, and all metrics are scale-invariant and were NOT touched.
+--      Result: 2026-07-17 = 100.0 … 2026-09-04 = 99.921539 (09-04 is the
+--      last trading day; the chain extends with 09-05/09-07 weekend carries).
+--      Daily returns and pnl_pct are scale-invariant and were NOT touched.
+--      Inception-anchored cumulative columns on surviving metrics rows (e.g.
+--      07-17 net_return_pct, computed against the old scale) were left as-is
+--      intentionally — fresh engine-written rows going forward anchor to the
+--      new 2026-07-17 = 100 inception.
 --      positions / position_events rows were kept as a paper trail.
 --   4. Verified: 41 nav rows min date 2026-07-17, 32 metrics rows, 0 rows
 --      remaining before the cutoff.
 --
--- DO NOT re-run: the DELETEs are no-ops now (0 rows match) and the UPDATEs
--- would double-divide. ROLLBACK (if ever needed): re-insert the 6 backup rows
--- and multiply all 41 nav values back by 99.431364/100. No workflow or
--- migration references this file.
+-- DO NOT re-run the operator procedure: re-PATCHing the rebase would
+-- double-divide. Re-running THIS file's DELETEs is a no-op (0 rows match).
+-- ROLLBACK (if ever needed): re-insert the 6 backup rows (values inline
+-- below) and multiply all 41 nav values back by 99.431364/100 — approximate,
+-- within ~5e-7 NAV per row due to the round-to-6dp rebase; do not expect
+-- bitwise equality. As of 2026-09-08 no workflow or migration references
+-- this file (re-grep rather than trust if much time has passed).
 begin;
 -- 4 nav_history rows deleted (pre-cutoff values shown for the record):
 --   2026-06-23 nav=99.546640, 2026-06-24 nav=99.890309,

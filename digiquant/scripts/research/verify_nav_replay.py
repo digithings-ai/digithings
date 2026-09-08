@@ -176,8 +176,13 @@ def _slice_write_path(
     """
     write_path = {d: v for d, v in engine_nav.items() if d >= inception_date}
     if date:
+        if date < inception_date:
+            raise ValueError(
+                f"{date} predates inception {inception_date} "
+                "(pre-cutoff history was deleted as unreliable; see #3695)"
+            )
         if date not in write_path:
-            raise ValueError(f"engine path has no writable bar for {date}")
+            raise ValueError(f"engine path has no bar for {date}")
         return write_path, {date}
     return write_path, None
 
@@ -191,10 +196,12 @@ def _write_nav(
     """Persist engine NAV rows to ``nav_history`` on the inception-100 scale.
 
     Normalization: ``nav[d] = 100 * engine[d] / base`` where ``base`` is
-    ALWAYS the engine NAV on the FIRST bar of the full path — the function
+    ALWAYS the engine NAV on the FIRST bar of the passed path — the function
     derives it internally, so a single-date caller cannot self-normalize to
-    100 by passing a one-row path. ``dates_to_write`` only slices which rows
-    are upserted (None = full path). Returns the number of rows upserted.
+    100 by passing a one-row path. Callers MUST pass the inception-sliced
+    path (see :func:`_slice_write_path`); the function itself only trusts
+    ``arg[0]``. ``dates_to_write`` only slices which rows are upserted
+    (None = full path). Returns the number of rows upserted.
     """
     from decimal import Decimal as _Decimal
 
@@ -246,6 +253,19 @@ def main() -> int:
         "first bar >= this.",
     )
     args = parser.parse_args()
+    # I1: the floor comparisons are raw string compares, so a malformed date
+    # silently disables the guard ("" matches everything). Fail closed here.
+    from datetime import date as _date
+
+    def _ymd(label: str, value: str) -> None:
+        try:
+            _date.fromisoformat(value)
+        except ValueError:
+            parser.error(f"{label} must be YYYY-MM-DD (got {value!r})")
+
+    _ymd("--inception-date", args.inception_date)
+    if args.date:
+        _ymd("--date", args.date)
     if args.date and not args.write:
         parser.error("--date requires --write (verify mode compares the full path)")
     if args.write and args.date and args.date < args.inception_date:
@@ -298,6 +318,9 @@ def main() -> int:
             write_path, target = _slice_write_path(engine_nav, args.inception_date, args.date)
         except ValueError as exc:
             print(f"WRITE FAIL: {exc}")
+            return 2
+        if not write_path:
+            print(f"WRITE FAIL: no engine bars >= inception {args.inception_date}")
             return 2
         n = _write_nav(sb, house_id, write_path, target)
         if not n:

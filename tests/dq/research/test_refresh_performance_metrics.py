@@ -884,7 +884,12 @@ _verify_mod = _load_verify_module()
 
 
 class TestWriteNavNormalization:
-    """``_write_nav`` derives the inception base from the full path itself."""
+    """``_write_nav`` derives the inception base from the passed path itself.
+
+    NOTE: the 2026-06-22 base below is a unit-test convention only. In prod
+    the pre-cutoff rows were deleted (#3695) and ``_slice_write_path`` forces
+    the base to the first bar >= 2026-07-17 — see ``TestSliceWritePath``.
+    """
 
     def test_full_path_normalizes_to_inception_100(self) -> None:
         from decimal import Decimal
@@ -949,12 +954,40 @@ class TestSliceWritePath:
             "2026-06-26": Decimal("99546640"),
             "2026-07-17": Decimal("99431364"),
         }
-        with pytest.raises(ValueError, match="no writable bar"):
+        with pytest.raises(ValueError, match="predates inception"):
             _verify_mod._slice_write_path(engine, "2026-07-17", "2026-06-26")
 
     def test_unknown_date_raises(self) -> None:
         from decimal import Decimal
 
         engine = {"2026-07-17": Decimal("99431364")}
-        with pytest.raises(ValueError, match="no writable bar"):
+        with pytest.raises(ValueError, match="has no bar"):
             _verify_mod._slice_write_path(engine, "2026-07-17", "2026-09-99")
+
+    def test_all_pre_cutoff_yields_empty_path(self) -> None:
+        """All bars < inception → empty path; ``_write_nav`` persists nothing."""
+        from decimal import Decimal
+
+        engine = {"2026-06-23": Decimal("99546640")}
+        path, target = _verify_mod._slice_write_path(engine, "2026-07-17")
+        assert path == {}
+        assert target is None
+        sb = _fake_with({})
+        assert _verify_mod._write_nav(sb, "house", path) == 0
+        assert sb.store.get("nav_history", []) == []
+
+    def test_slice_then_write_rebases_inception_to_100(self) -> None:
+        """End-to-end: slice the raw engine path, then write — 07-17 == 100.0."""
+        from decimal import Decimal
+
+        engine = {
+            "2026-06-23": Decimal("99546640"),
+            "2026-07-17": Decimal("99431364"),
+            "2026-09-04": Decimal("99353349"),
+        }
+        path, target = _verify_mod._slice_write_path(engine, "2026-07-17")
+        sb = _fake_with({})
+        assert _verify_mod._write_nav(sb, "house", path, target) == 2
+        rows = {r["date"]: r["nav"] for r in sb.store["nav_history"]}
+        assert rows["2026-07-17"] == 100.0
+        assert "2026-06-23" not in rows
