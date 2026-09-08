@@ -19,10 +19,10 @@ import {
 } from "@/lib/embed-gate";
 
 // prepareSendMessagesRequest is a closure built inside useMemo(() => new
-// DefaultChatTransport({...})) in use-embed-digi-chat.ts — there is no
+// AssistantChatTransport({...})) in use-embed-digi-chat.ts — there is no
 // existing harness in this file for asserting on its output (the other
 // describe blocks below only exercise plain exported functions). Capture the
-// real config DefaultChatTransport is constructed with so the assertions
+// real config AssistantChatTransport is constructed with so the assertions
 // below run against the actual closure, not a reimplementation of it.
 //
 // This intentionally does NOT use @testing-library/react's renderHook: in
@@ -69,21 +69,19 @@ vi.mock("@ai-sdk/react", () => ({
   })),
 }));
 
-vi.mock("ai", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("ai")>();
+vi.mock("@assistant-ui/ai-sdk", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@assistant-ui/ai-sdk")>();
   return {
     ...actual,
-    // `new DefaultChatTransport(...)` requires the mock to be constructible —
-    // an arrow-function mockImplementation would fail with "is not a
-    // constructor", so this uses `function` deliberately.
-    DefaultChatTransport: vi.fn().mockImplementation(function (config: unknown) {
+    AssistantChatTransport: vi.fn().mockImplementation(function (config: unknown) {
       capturedTransportConfig = config as {
         prepareSendMessagesRequest: PrepareSendMessagesRequestFn;
       };
-      return new actual.DefaultChatTransport(
-        config as ConstructorParameters<typeof actual.DefaultChatTransport>[0],
+      return new actual.AssistantChatTransport(
+        config as ConstructorParameters<typeof actual.AssistantChatTransport>[0],
       );
     }),
+    useAISDKRuntime: () => ({ kind: "runtime" }),
   };
 });
 
@@ -130,7 +128,7 @@ async function callPrepareSendMessagesRequest(
   const { unmount } = renderHookLocally(() => useEmbedDigiChat(baseEmbedOptions(overrides)));
   const config = readCapturedTransportConfig();
   if (!config) {
-    throw new Error("DefaultChatTransport was never constructed by useEmbedDigiChat");
+    throw new Error("AssistantChatTransport was never constructed by useEmbedDigiChat");
   }
   const result = await config.prepareSendMessagesRequest({
     messages: [],
@@ -428,7 +426,7 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Language", () =
     );
     const config = readCapturedTransportConfig();
     if (!config) {
-      throw new Error("DefaultChatTransport was never constructed by useEmbedDigiChat");
+      throw new Error("AssistantChatTransport was never constructed by useEmbedDigiChat");
     }
 
     const first = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
@@ -526,6 +524,8 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
     });
     expect(chat?.regenerate).toBeTypeOf("function");
     expect(chat?.editLastUser).toBeTypeOf("function");
+    expect(chat?.armRegenerate).toBeTypeOf("function");
+    expect(chat?.armEditLastUser).toBeTypeOf("function");
     expect(chat?.onRetry).toBeTypeOf("function");
     unmount();
   });
@@ -539,6 +539,8 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
     });
     expect(chat?.regenerate).toBeUndefined();
     expect(chat?.editLastUser).toBeUndefined();
+    expect(chat?.armRegenerate).toBeUndefined();
+    expect(chat?.armEditLastUser).toBeUndefined();
     expect(chat?.onRetry).toBeUndefined();
     unmount();
   });
@@ -675,5 +677,32 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-BYOK-Model (#2490)",
     expect(headers.has("X-BYOK-Key")).toBe(false);
     expect(headers.has("X-BYOK-Provider")).toBe(false);
     expect(headers.has("X-BYOK-Model")).toBe(false);
+  });
+});
+
+describe("useEmbedDigiChat prepareSendMessagesRequest — X-Embed-Plan-Proof (#3662)", () => {
+  it("omits the header when no proof is available", async () => {
+    const { headers } = await callPrepareSendMessagesRequest({});
+    expect(headers.has("X-Embed-Plan-Proof")).toBe(false);
+  });
+
+  it("reads the proof fresh on every send, not the value captured at transport creation", async () => {
+    let currentProof: string | null = null;
+    const { unmount } = renderHookLocally(() =>
+      useEmbedDigiChat(baseEmbedOptions({ getPlanProof: () => currentProof })),
+    );
+    const config = readCapturedTransportConfig();
+    if (!config) {
+      throw new Error("AssistantChatTransport was never constructed by useEmbedDigiChat");
+    }
+
+    const first = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(first.headers).has("X-Embed-Plan-Proof")).toBe(false);
+
+    currentProof = "hmac.proof.token";
+    const second = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(second.headers).get("X-Embed-Plan-Proof")).toBe("hmac.proof.token");
+
+    unmount();
   });
 });

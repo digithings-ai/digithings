@@ -42,7 +42,8 @@ describe('run-economics formatting', () => {
     expect(html).toContain('Failed');
     expect(html).toContain('grid-cols-2');
     expect(html).toContain('md:grid-cols-4');
-    expect(html).toContain('p-4');
+    expect(html).toContain('font-mono');
+    expect(html).not.toContain('rounded-[12px]');
     expect(html).toContain('data-testid="run-economics-row"');
   });
 });

@@ -18,6 +18,11 @@ import {
 } from './PortfolioPerformanceCharts';
 import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
 import { ledgerHref } from '@/lib/portfolio-url-state';
+import {
+  metricsDivergenceBadgeLabel,
+  navContractBadgeLabel,
+  type PerformanceSsotMeta,
+} from '@/lib/performance-ssot';
 
 function ReturnValue({ value }: { value: number | null }) {
   if (value == null) return <>—</>;
@@ -151,7 +156,14 @@ function LedgerDoorway({ sellCount }: { sellCount: number }) {
   );
 }
 
-export function PerformanceTearsheetView({ data }: { data: PerformanceTearsheet }) {
+export function PerformanceTearsheetView({
+  data,
+  ssot = null,
+}: {
+  data: PerformanceTearsheet;
+  /** Optional full SSOT meta from `getPerformanceBundle` (#3580). */
+  ssot?: PerformanceSsotMeta | null;
+}) {
   const [, setPrinting] = useState(false);
   const [benchmarkTicker, setBenchmarkTicker] = useState(
     data.benchmarkComparisons.find((comparison) => comparison.ticker === 'SPY')?.ticker ??
@@ -172,17 +184,40 @@ export function PerformanceTearsheetView({ data }: { data: PerformanceTearsheet 
     [portfolioReturnPct, benchmarkReturnPct, data.navSeries, benchmark]
   );
   const relativeReturnPct = relative.excessReturnPct ?? data.relativeReturnPct;
+  const periodEnd = ssot?.navAsOf ?? data.metricsAsOf;
   const performancePeriod =
-    data.inceptionDate && data.metricsAsOf
-      ? `${data.inceptionDate}–${data.metricsAsOf}`
-      : null;
+    data.inceptionDate && periodEnd ? `${data.inceptionDate}–${periodEnd}` : null;
   const sellCount = data.historicalHoldings.length;
+  const navContract = ssot?.navContract ?? data.navContract ?? null;
+  const metricsLagging = ssot?.metricsLagging ?? data.metricsLagging ?? false;
+  const divergenceLabel = ssot
+    ? metricsDivergenceBadgeLabel(ssot)
+    : metricsLagging
+      ? 'metrics lag'
+      : null;
 
   return (
     <div className="ts-print-root space-y-0">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-hair pb-3">
         <h1 className="font-display text-2xl font-normal text-ink">Performance</h1>
         <div className="flex flex-wrap items-center gap-3">
+          {navContract && navContract !== 'empty' ? (
+            <span
+              data-testid="tearsheet-nav-contract-badge"
+              className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute"
+            >
+              {navContractBadgeLabel(navContract)}
+            </span>
+          ) : null}
+          {divergenceLabel ? (
+            <span
+              data-testid="tearsheet-metrics-lag-badge"
+              className="font-mono text-[0.62rem] uppercase tracking-wider text-warn"
+            >
+              {divergenceLabel}
+              {ssot?.metricsAsOf ? ` · ${ssot.metricsAsOf}` : ''}
+            </span>
+          ) : null}
           {data.benchmarkComparisons.length ? (
             <label
               data-testid="global-benchmark-control"
@@ -233,10 +268,13 @@ export function PerformanceTearsheetView({ data }: { data: PerformanceTearsheet 
           />
         </dl>
         <div data-region="stamp" className="flex min-w-[11rem] flex-col items-start justify-center gap-1 border-t border-hair px-5 py-4 font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute md:items-end md:border-l md:border-t-0">
-          <span>{performancePeriod ? 'period' : data.metricsAsOf ? 'as of' : 'status'}</span>
+          <span>{performancePeriod ? 'period' : periodEnd ? 'as of' : 'status'}</span>
           <strong className="font-medium text-accent">
-            {performancePeriod ?? data.metricsAsOf ?? 'awaiting persisted metrics'}
+            {performancePeriod ?? periodEnd ?? 'awaiting persisted metrics'}
           </strong>
+          {ssot?.navAsOf && ssot.navAsOf !== data.metricsAsOf ? (
+            <span data-testid="tearsheet-nav-as-of">nav tip {ssot.navAsOf}</span>
+          ) : null}
         </div>
       </section>
 

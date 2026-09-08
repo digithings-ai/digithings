@@ -1,10 +1,6 @@
 /**
- * Conviction vocabulary — recorded faithfully from the dashboard's shared
- * conviction primitives, RECORDED-FROM-DASHBOARD pending a promotion ruling: no
- * @digithings/web export exists yet, so this specimen reproduces the dress as
- * static markup sourced class-for-class from
- * `frontend/dashboard/components/shared/conviction-meter.tsx` and
- * `signed-conviction-badge.tsx`, rather than consuming a shared primitive.
+ * Conviction vocabulary — the dashboard's F6 primitives, promoted to
+ * `@digithings/web` (components/conviction) and consumed live below.
  *
  * THREE encodings, never conflated (the dashboard F6 ruling) — same cyan
  * `--accent` pip grammar can mean two different things, and a signed badge
@@ -35,6 +31,7 @@
  * Either way they are not two views of one number — never merge them into
  * a single cell or a single scale.
  */
+import { ConvictionMeter, SignedConvictionBadge } from "@digithings/web";
 
 type PipDemo = { label: string; value: number; max: number; caption: string };
 
@@ -53,62 +50,16 @@ const CONFIDENCE_SAMPLES: PipDemo[] = [0, 0.25, 0.5, 0.75, 1].map((confidence) =
 
 const SIGNED_SAMPLES = [-5, -3, -1, 0, 1, 3, 5];
 
-/** Unexported: mirrors `ConvictionMeter` (conviction-meter.tsx) markup exactly,
- *  including the redundant `aria-label` + `sr-only` pair and `data-filled`
- *  attributes the source component ships for testability. */
-function ConvictionPips({
-  value,
-  max,
-  srLabel,
-}: {
-  value: number;
-  max: number;
-  srLabel: string;
-}) {
-  const filled = Math.max(0, Math.min(max, Math.round(value)));
-  return (
-    <span className="inline-flex items-center gap-1" role="img" aria-label={srLabel}>
-      {Array.from({ length: max }).map((_, i) => {
-        const isFilled = i < filled;
-        return (
-          <span
-            key={i}
-            data-filled={isFilled ? "true" : "false"}
-            className={`h-1.5 w-1.5 rounded-full ${isFilled ? "bg-accent" : "bg-hair"}`}
-          />
-        );
-      })}
-      <span className="sr-only">{srLabel}</span>
-    </span>
-  );
-}
-
-/** Unexported: mirrors `SignedConvictionBadge` (signed-conviction-badge.tsx)
- *  markup exactly — sign is U+2212 minus, zero and above render up-toned. */
-function ConvictionBadge({ value }: { value: number }) {
-  const sign = value < 0 ? "−" : "+";
-  const tone = value < 0 ? "text-down border-down/35" : "text-up border-up/35";
-  return (
-    <span
-      className={`inline-flex items-center rounded-none border px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums ${tone}`}
-    >
-      {sign}
-      {Math.abs(value)}
-    </span>
-  );
-}
-
 export function ConvictionReference() {
   return (
     <section className="section-block" id="conviction">
       <p className="kicker">{"// conviction"}</p>
       <h2 className="title">One pip grammar. Three meanings — never one.</h2>
       <p className="section-copy">
-        Recorded from the dashboard&apos;s <code>ConvictionMeter</code> and{" "}
-        <code>SignedConvictionBadge</code> — RECORDED-FROM-DASHBOARD, pending a promotion ruling.
-        Not exported from <code>@digithings/web</code> yet, so this specimen reproduces the dress
-        as static markup rather than consuming a shared primitive. Three distinct encodings share
-        one cyan pip grammar plus one signed badge — the rule is that they never conflate.
+        The dashboard&apos;s <code>ConvictionMeter</code> and <code>SignedConvictionBadge</code>,
+        promoted to <code>@digithings/web</code> and consumed live below. Three distinct
+        encodings share one cyan pip grammar plus one signed badge — the rule is that they
+        never conflate.
       </p>
 
       <div className="cvx-block">
@@ -117,7 +68,7 @@ export function ConvictionReference() {
           {POSITION_SAMPLES.map((s) => (
             <div className="cvx-row" key={s.label}>
               <span className="cvx-row-label">{s.label}</span>
-              <ConvictionPips value={s.value} max={s.max} srLabel={`Conviction ${s.caption}`} />
+              <ConvictionMeter value={s.value} max={s.max} srLabel={`Conviction ${s.caption}`} />
               <span className="cvx-row-caption">{s.caption}</span>
             </div>
           ))}
@@ -133,7 +84,7 @@ export function ConvictionReference() {
           {CONFIDENCE_SAMPLES.map((s) => (
             <div className="cvx-row" key={s.label}>
               <span className="cvx-row-label">{s.label}</span>
-              <ConvictionPips value={s.value} max={s.max} srLabel={s.caption} />
+              <ConvictionMeter value={s.value} max={s.max} srLabel={s.caption} />
               <span className="cvx-row-caption">{s.caption}</span>
             </div>
           ))}
@@ -145,7 +96,7 @@ export function ConvictionReference() {
           </p>
           <div className="cvx-badge-row">
             {SIGNED_SAMPLES.map((v) => (
-              <ConvictionBadge key={v} value={v} />
+              <SignedConvictionBadge key={v} value={v} />
             ))}
           </div>
         </div>

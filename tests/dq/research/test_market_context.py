@@ -136,6 +136,11 @@ class TestPreflightInjection:
         node = build_preflight_node(deps)
         out = node(ResearchState(run_type="baseline", run_date=RUN_DATE))
 
-        # Freshness metadata survives; market_context degrades to empty.
+        # Freshness metadata survives; get_market_context degrades to empty.
+        # venue_sessions is injected independently (#3612) even when that query
+        # raises — empty calendar → fail-closed snapshot, not a missing slot.
         assert out["data_layer"].price_technicals_latest == date(2026, 6, 11)
-        assert out["data_layer"].market_context == {}
+        mc = out["data_layer"].market_context
+        assert "price_technicals" not in mc
+        assert "macro_series" not in mc
+        assert "venue_sessions" in mc

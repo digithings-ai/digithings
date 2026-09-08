@@ -246,9 +246,34 @@ Installs Prometheus instrumentation on *app* per [ADR-0003](../docs/adr/0003-obs
 ### `digibase.otel`
 
 ```python
-setup_otel_fastapi(app: Any, *, service_name: str) -> None
+resolve_otel_endpoint() -> str
+inject_trace_context(headers: MutableMapping[str, str]) -> None
+setup_otel_fastapi(app: Any, *, service_name: str, service_version: str | None = None) -> None
 ```
-No-op unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set in the environment. When set, attempts to import OpenTelemetry SDK packages; if they are missing (base install without `[otel]`), logs a warning and returns. When packages are present, creates a `TracerProvider` backed by a `BatchSpanProcessor` writing to `OTLPSpanExporter` at the configured endpoint, and instruments the FastAPI app via `FastAPIInstrumentor`. Logs the outcome at INFO level.
+
+Endpoint resolution (#222): prefers `DIGI_OTEL_ENDPOINT`, then the OpenTelemetry
+standard `OTEL_EXPORTER_OTLP_ENDPOINT`. Empty / unset → tracing disabled
+(zero overhead).
+
+When an endpoint is set, attempts to import OpenTelemetry SDK packages; if they
+are missing (base install without `[otel]`), logs a warning and returns. When
+packages are present, creates a `TracerProvider` backed by a `BatchSpanProcessor`
+writing to `OTLPSpanExporter`, sets resource attributes `service.name` and
+optional `service.version` (from the `service_version` argument, else
+`OTEL_SERVICE_VERSION` / `DIGI_SERVICE_VERSION`), instruments the FastAPI app via
+`FastAPIInstrumentor`, and instruments httpx via `HTTPXClientInstrumentor` so
+outbound LLM / digisearch / digikey HTTP calls become child spans.
+
+`inject_trace_context` is a no-op without an endpoint / packages. 
+`outbound_service_headers` calls it so W3C `traceparent`/`tracestate` propagate
+on service-to-service calls when tracing is on.
+
+Optional Docker Compose profile `otel` runs an OpenTelemetry Collector
+(`docs/ops/otel/otel-collector-config.yaml`). Set
+`DIGI_OTEL_ENDPOINT=http://otel-collector:4318` when that profile is up.
+digikey server init is deferred (human-gate auth surface); other services already
+call `setup_otel_fastapi`, and outbound digikey client calls are covered by httpx
+instrumentation.
 
 ### `digibase.connectors.supabase`
 
@@ -622,8 +647,10 @@ digichat and digikey are the first consumers that need managed Postgres credenti
 **(b) Add `emit_event` buffering with retry.**
 `digibase.audit.emit_event` writes to a local JSONL file (optional best-effort `AUDIT_SINK_URL` POST, no retry). If the `AUDIT_LOG_PATH` volume is unavailable, the exception propagates into the caller. Wrap local write failures so audit outages do not crash workflows, and add an async buffered writer with retry for the remote sink.
 
-**(c) Add OTel trace context propagation helper for HTTP outbound calls.**
-`digibase.http.outbound_service_headers` correctly propagates `X-Request-ID` but does not inject W3C `traceparent`/`tracestate` headers. Services using `FastAPIInstrumentor` receive inbound trace context automatically, but when they make outbound calls with httpx, the trace context is not propagated unless `httpx` is also instrumented via `opentelemetry-instrumentation-httpx`. Add a `propagate_trace_context(headers: dict[str, str]) -> dict[str, str]` helper to `digibase.otel` that calls `opentelemetry.propagate.inject(headers)` when OTel is configured, making distributed trace stitching automatic for all callers of `outbound_service_headers`.
+**(c) ~~Add OTel trace context propagation helper for HTTP outbound calls.~~ Done (#222).**
+`inject_trace_context` lives in `digibase.otel`; `outbound_service_headers` calls
+it. httpx is instrumented when tracing is enabled so outbound LLM / digisearch /
+digikey calls become child spans. Optional compose profile `otel` ships a collector.
 
 **(d) ~~Standardize audit event schema with a Pydantic model.~~ Done (CHR-151 / #1193).**
 `AuditEvent` + `emit_event` live in `digibase.audit`; component `audit_log` helpers are thin wrappers. Remaining work: optional payload-field validator integration and callers that still build large unredacted dicts before calling.

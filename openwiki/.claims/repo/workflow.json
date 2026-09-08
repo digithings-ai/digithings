@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:d7323610047eadc8ab6c991b32dc5496af3477b4d061f87550d2f8125a25d6a4",
+  "claims": [
+    {
+      "id": "claim_e99d14d599e14d27a9dde5e69d6e752f",
+      "statement": "Branches flow main <- develop <- module/<component> <- task/<N>-slug, with task branches cut by make task ISSUE=N, module sprints batched by make module-pr, and project_routing.json deciding which components skip the module tier.",
+      "evidence": [
+        {
+          "resource": "repo://BRANCHING.md#L19-L32",
+          "version": "repo-lines-v1:sha256:214f3b0b8f5f8fb2952039abb7c5144c4e649a127400e753799f580d1d17e217:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY2MTk2MjM2NWQ3Mzg3YTM5YTA5YmI2MmRiNWNiNTdmY2I2NTNmZTFmYjlmZDAxZTgzNDYxMGE5MWRlOTA2ZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhOWExOTcwY2U2MTZmYjcyYzVjZDE2MTI3N2Y4ZGU2NjAxZDkwMjYzMmNkNjI3NmI1ZTJhNDIzYzRmMmZkM2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhY2Y5YjgzNWEzZmQ2ZjgxNTRjM2Q5YzU3MTg0YzlmNDIzNDA3YTY0Nzg3NTFkNTIxYjI2NTFkN2NhMmUzZmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUwOWFiZDk1NDhkZjY0MmU5MzEyOTEyYmEzZjAyYzMwNDdjMWZmZDlkYzA3ZWU4N2QxY2RmYjBjYjI0ODc5MjkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b6d7446556c84c9c94b05fdfdcd7b95b",
+      "statement": "module/** branches block force-push and deletion server-side while main requires the every-commit-was-reviewed coverage check rather than an approval count.",
+      "evidence": [
+        {
+          "resource": "repo://BRANCHING.md#L185-L199",
+          "version": "repo-lines-v1:sha256:b3feeef3f6f029c8b189d686f3d1ffedae99dbcc76696b3dbbac081fd72edd49:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4ZDljODA0YWQ1N2Q3NWE2MzcwZmZlYzYwZDU5YTEwMjcxNmY5MWQ4MWI5MjAyNjQ2ZTRlNmRkZWZhOGFiZTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFjYWQ1NzFlNWNhYWQ4M2ZiNmYyMjkxZjlkYjZjMGFiMGUzNGExZDc4NGU3MzhjMmYxODg2MmFhYjEwY2QzODIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJlYmQ0Mzk5Yzc1Yzg1MGIyMTZlOTQ3NDJkNDg5ZjFkZWU3Y2I4ZjgxNDJmYjJiNTg3ZWYyNGUzN2RlNTAxMzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY3MDY4NGMxMWZiMjcxYzllODE4NDk1MWJkOGQ1NzBiMTI4NGY1YzgxYTQzYzM2YjYwYTg4ODRjMWJkY2QxMWIifQ"
+        },
+        {
+          "resource": "repo://BRANCHING.md#L41-L50",
+          "version": "repo-lines-v1:sha256:3613904a0ed3fb7c1a2cba702d9fb38be75cc669f9abdf03e70f2cf2e13329c0:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE3NTg4ZTM5MWEyOWZhODljMmRkNGJkNzgwOGRmZTY4ZTNkOTU3ODM5ZGFmZjhmYzY0MmNiNGExYTVlZDM4ZjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZDJjNjY0ZTUxYzBjZmJlZDY4MDJmNjg4Y2ZkNzA0YTVjMzcwZWQxNjZjNmQ2ZThjZGUzODU1YWY0ZmVjMDciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY0M2ZmNmNlZDViMzRiZjNlMTkwMjUxM2YxODNmZjBjNTJlZjNjZmQxMmNhZjA3MTgxM2ExYWQzNWI1YjkwNTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc0ZjQzNDc2ZTkxZWZmODc4OTQ0NDAyMmYzYjlkZjU4MGQ3NWVlNDk3ODkyODlhNWYwNmJkNDYwNTI3NDdlZGYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2989fa73fe6b4c288e66ea5dfb8e2d43",
+      "statement": "Make targets cover stack lifecycle (up/down, stack-local), test tiers (test-unit, test-baseline, test-e2e), and digichat dev/database flows.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L146-L149",
+          "version": "repo-lines-v1:sha256:d90bb9645bcc17fb8e11b4e33fb86ca51b55d868c26ac67619f4704f9a246fba:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzgyYTg5YzJlYmI1Y2VlOGVhYTY0MWNkNTlhNzViNTJiNjZmODI0M2MyZTA1ZmYxNTdhMDE4MDkxZjY3YTY0MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTNmYzMxZjQ1YWZjNjhlMThmOWY5NjcwOTY1NDIzZTA0NTdjYTE5NGRkMDU0YmQ2OTg5MjM0ZDEyNTg1MzNjNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGQzNDlhZGVlNTI4OTFmMjc0MjNkNmU0MDM1YzAzMmIyNTBhMzk4OGRlYTU2N2QwODM3ZWU5NDMxMjlmNjZlNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzY2ZjI4MjAxMWVkZWNlNTk0MGE2ZjdjODZlYjMwYmY5NDQ1NGNkNDAzYzgwYTIxN2ZjZmEyN2UyOTYxMmY2YiJ9"
+        },
+        {
+          "resource": "repo://Makefile#L26-L42",
+          "version": "repo-lines-v1:sha256:0b1583b53e3102a3139b24b232b7573879216bb46c7356d9879b30075fdc9cec:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQwMDdiNTExODg0NTFkYjM3OTNhZTI0ZWExNzk0ODU4MzY3MmVjNTUxNDJhZmFiOTVmMzE0MTNkZjExZDViOWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBmOTVhMjRiMmE5YTg4NGU2NWIyM2FkYjVkYjkxZTc0NzAzYmNiMTJhYTY1MzZlZGJhZTIwODc3NWVkYzczNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM3MjU0OGQ1YTM2ZmE2ZDJlYzA1NmYwY2JiZmVlMjc1MmZkNGQ1ODEyNjRkMWVmZTgyY2I1NTI5YmY0NDM0NWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY0MjRjNWY3YWJmN2VhYWU0YjRjMDYxOWY1YzNlNGE1NmQ3YTAxMGM1YzlkNGFlYTdmMmJjMGI3ZDY2MjI1YmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_73ea7f7aab944f0ba03e845fe52bbf2e",
+      "statement": "Default review is in-session on a fresh-context subagent with findings posted as in-session-review plus reviewed:agent, and the authoring agent merges when CI is green and threads are triaged unless a human-gate exception applies.",
+      "evidence": [
+        {
+          "resource": "repo://docs/agents/CODE_REVIEW_POLICY.md#L47-L49",
+          "version": "repo-lines-v1:sha256:8e7787249642a8d1515643d2d63ea8b01177380210f3d431a41bceef27846a67:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDkxYzZlMTI4NmNlZWZjODMxNGNhOWVlZmMxNjQ3MmMzOTdhOWE3YTg1MjI5ZmU0NTcyZjg2OTI5MDZlNjUwMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjllYzdlMjYxOGM1M2I3Zjc5YWVhMDRmODFlNjA2ZDliYTZlNGY0YmYxMTBlY2Q3Mjc3NDY0MWMxNDBlOTIwYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjJkYmMxNzNmOWQyNTBhOTYyYWFjNGU4OGEzNTM0M2QzOWQ0MDEwYjI2ZDYyNmU5ODAzOTg5ZTI3NWVkOWY1ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        },
+        {
+          "resource": "repo://docs/agents/CODE_REVIEW_POLICY.md#L5-L15",
+          "version": "repo-lines-v1:sha256:b83e2869d03b3cafb715933f48db311cd2f45ec78a2d61af6cb90d0ad177021b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBkY2VmMTVmOGMyNWE2YjE0YTBiZjI0ZDY0MzMxM2IyNjUwYTFhYzc3MjEyMTYzOTNiYmEzMjZiMzAyZGIzNGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0MTdmZGQwYWRhNjM1MzE1YWZhZDIzNDJhNGNhYTUwYjc5M2M0NTE0NjU3ZWUxMTA5NmUwNmExYjdjNzdjYWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViYzQyZDQ4NjFlYzZmYjFhZThjYzQ2YzRkYzg1MTEzZTI0ZjllZmZkMmJlNjE1NTJkN2JlYmI4OThhMjQzNTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk0YmRiM2YyZjMxNThkMTc4ZjdiMjFiOWYyNmNjZDA1N2QyZDM3NjIzMWE0NzE1YTc3NjFiNGU1NTUyNGY2OWUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

@@ -544,17 +544,49 @@ def resolve_execution_venue_for_run(workspace_id: Optional[str] = None) -> str:
     return resolve_venue(resolved).value
 
 
+def _load_trading_calendar_rows(sb, execution_date: dt_date) -> List[Dict[str, Any]]:
+    """Fetch a short window of ``trading_calendar`` rows for the session gate (#3612).
+
+    Fail closed on read errors: return ``[]`` so equity venues defer rather than
+    terminal-reject. CRYPTO still resolves open without rows.
+    """
+    start = (execution_date - timedelta(days=3)).isoformat()
+    end = (execution_date + timedelta(days=21)).isoformat()
+    try:
+        res = (
+            sb.table("trading_calendar")
+            .select("date,venue,is_trading_day,reason")
+            .gte("date", start)
+            .lte("date", end)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        return [r for r in rows if isinstance(r, dict)]
+    except Exception as exc:
+        print(
+            f"⚠️  trading_calendar load failed ({exc}); session gate fail-closed "
+            f"(equity orders will defer).",
+            file=sys.stderr,
+        )
+        return []
+
+
 def build_events_from_paper_fills(
     sb,
     run_d: str,
     execution_d: str,
     now: Optional[datetime] = None,
+    calendar_rows: Optional[List[Dict[str, Any]]] = None,
 ) -> Tuple[Optional[List[Dict[str, Any]]], str]:
     """Book the ledger's pending orders and project the fills into `position_events`.
 
     `run_d` is the decision date (the date H9 committed a chain for) and `execution_d` the
     morning the fills happen — normally the next trading day, which is why the two are
     separate.
+
+    ``calendar_rows`` (optional) are ``trading_calendar`` dicts for the venue-session
+    gate (#3612). When omitted, rows around ``execution_d`` are loaded from Supabase
+    (fail closed: empty load still enables the gate so equity orders defer).
 
     Two different "nothing" answers, and the caller must not conflate them:
 
@@ -646,18 +678,29 @@ def build_events_from_paper_fills(
     except Exception as exc:
         return None, f"a portfolio-ledger cold-start probe failed ({exc})"
 
+    if calendar_rows is None:
+        calendar_rows = _load_trading_calendar_rows(sb, execution_date)
+
     result = execute_pending_orders(
         client=sb,
         run_date=run_date,
         executed_date=execution_date,
         marks=_open_marks(sb, symbols, execution_d),
         now=stamp,
+        calendar_rows=calendar_rows,
     )
     if not result.authoritative:
         # execute_pending_orders re-checks the switch and the commit row itself. Reaching
         # here means one of them changed between the probe and the call.
         return None, "the ledger stopped being authoritative between the probe and the write"
 
+    for deferred in result.deferred:
+        nxt = deferred.next_open.isoformat() if deferred.next_open else "unknown"
+        print(
+            f"⏸️  {deferred.symbol}: deferred ({deferred.reason or 'closed'}) on venue "
+            f"{deferred.venue} — order stays pending; next_open={nxt}"
+            + (" [fail-closed]" if deferred.fail_closed else "")
+        )
     for rejection in result.rejections:
         print(
             f"⛔ {rejection.symbol}: order not filled ({rejection.reason}) — recorded as "
@@ -667,6 +710,12 @@ def build_events_from_paper_fills(
         print(
             f"↩️  {len(result.already_booked)} order(s) were already filled on a previous run "
             f"({', '.join(result.already_booked)}) — fills are immutable, nothing re-booked."
+        )
+    if result.deferred and not result.fills and not result.rejections:
+        print(
+            f"⏸️  the ledger was authoritative for run_date={run_d} and deferred all "
+            f"{len(result.deferred)} order(s) (venue session closed) — not a quiet day, "
+            f"and not a terminal rejection."
         )
     if result.rejections and not result.fills:
         # Without this line the run ends on `_record_ledger_events`' "booked no fills"

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
-import { DocsLayout } from "@/components/docs/DocsLayout";
+import { DigithingsDocs } from "@/components/docs/DigithingsDocs";
 
 export const metadata: Metadata = {
   title: "docs — digithings product guides & API reference",
@@ -18,7 +18,7 @@ export default function DocsPage() {
     <>
       <DtNav />
       <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)] pb-[clamp(2rem,5vw,4rem)]">
-        <DocsLayout />
+        <DigithingsDocs />
       </main>
       <DtFooter />
     </>

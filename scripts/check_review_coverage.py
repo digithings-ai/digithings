@@ -46,15 +46,11 @@ encoding that here is how the gate started blocking already-reviewed work).
      an in-session review ran against the diff and posted its findings. The
      label without the comment is REFUSED;
   5. the label ``reviewed:owner`` — "I read this myself." The verdict names who
-     applied it and when;
-  6. the label ``risk:low`` — "this did not warrant a review."
+     applied it and when.
 
-Do not use (6) to mean (5): "I read it" and "it needed no reading" are
-different claims, and collapsing them loses the only signal worth having.
-
-All six hang off a pull request, so a commit pushed **straight to a branch** can
+All five hang off a pull request, so a commit pushed **straight to a branch** can
 carry none of them — see ``direct_push_review`` for the one hatch that addresses
-the commit instead of the branch, and why it is not a seventh way to clear a PR.
+the commit instead of the branch, and why it is not a sixth way to clear a PR.
 
 Commits that are exempt by nature, not by decision:
 
@@ -97,7 +93,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # changed zero commits' status when tested against a live 111-commit range.
 # e03c7095 itself is still a correct, working ancestor of both main and develop
 # today and needs no change. Orphaned pre-gate commits like these need their own
-# hatch label (risk:low / reviewed:owner) applied directly -- there is no
+# hatch label (reviewed:owner) applied directly -- there is no
 # baseline value that retroactively covers a severed-ancestry commit.
 BASELINE_SHA = "e03c7095"
 
@@ -149,7 +145,6 @@ CODERABBIT_COMPLETED_MARKERS = (
     "<!-- recent_review_start -->",
 )
 
-SKIP_LABEL = "risk:low"
 OWNER_REVIEW_LABEL = "reviewed:owner"
 AGENT_REVIEW_LABEL = "reviewed:agent"
 BUGBOT_CHECK = "Cursor Bugbot"
@@ -174,15 +169,15 @@ _REST_POOL = 8
 
 # `reviewed:owner` exists because of a hole the gate's own first run exposed. In a
 # single-maintainer org every PR is authored by the same account, so GitHub blocks
-# self-approval; with Bugbot out of quota the only satisfiable hatch was
-# `risk:low`, which would have trained the maintainer to label a blocking CI
-# change "low risk" to get past it. Mislabelling under pressure from your own gate
-# is worse than having no gate.
+# self-approval; with Bugbot out of quota the only satisfiable hatch was going to
+# be a self-granted "no review needed" label, which would have trained the
+# maintainer to bypass their own gate under pressure. Mislabelling under pressure
+# from your own gate is worse than having no gate.
 #
-# The two labels assert DIFFERENT things and must not be conflated:
-#   risk:low       — "this did not warrant a review"
-#   reviewed:owner — "I read this myself", whatever its risk
-#
+# (A `risk:low` "did not warrant a review" hatch existed for this until the
+# 2026-09 label simplification retired the whole risk:* family. Truly trivial
+# diffs now clear the gate via `reviewed:owner` — "I read it, it needed no
+# further reading" — which keeps the timestamped accountability record.)
 # Be honest about its strength: with one account holding write access, this is an
 # ACCOUNTABILITY record, not an enforcement mechanism — whoever can merge can also
 # apply it. What it buys is a timestamped, attributed claim in the timeline instead
@@ -628,7 +623,7 @@ def _sha_mentioned_in(short_sha: str) -> list[int]:
 def direct_push_review(sha: str) -> dict | None:
     """The in-session review artifact for a commit with no source PR, or None.
 
-    All six PR hatches hang off a pull request, so a commit pushed straight to
+    All five PR hatches hang off a pull request, so a commit pushed straight to
     develop can never carry one: `resolve_pr_number` returns None and the gate
     refuses it permanently. The only ways out were advancing `BASELINE_SHA` —
     which retroactively skips unrelated history — or never promoting.
@@ -727,8 +722,6 @@ def verdict_for(state: dict) -> tuple[bool, str]:
         if who.get("actor"):
             return True, f"{OWNER_REVIEW_LABEL} applied by {who['actor']} at {who['at']}"
         return True, f"labelled {OWNER_REVIEW_LABEL}"
-    if SKIP_LABEL in state["labels"]:
-        return True, f"labelled {SKIP_LABEL} — judged not to warrant a review"
     if state["bugbot"] == "NEUTRAL":
         return False, (
             f"{BUGBOT_CHECK} reported neutral — that is the usage-limit skip, not a review"
@@ -737,7 +730,7 @@ def verdict_for(state: dict) -> tuple[bool, str]:
         return False, f"{BUGBOT_CHECK} reported {state['bugbot'].lower()}"
     return False, (
         "no completed agent review (Bugbot, CodeRabbit, Claude, in-session), "
-        f"no approval, and neither {OWNER_REVIEW_LABEL} nor {SKIP_LABEL}"
+        f"no approval, and no {OWNER_REVIEW_LABEL}"
     )
 
 
@@ -875,16 +868,14 @@ def main() -> int:
             f"applies `{AGENT_REVIEW_LABEL}`\n"
             f"  • you read it yourself      → label the PR `{OWNER_REVIEW_LABEL}`; the "
             "actor and timestamp are recorded in the verdict\n"
-            f"  • it did not warrant one    → label the PR `{SKIP_LABEL}`\n"
             "  • someone else read it      → approve the PR\n"
             "  • it has no PR at all       → review it, then post the findings with "
             f"`{AGENT_REVIEW_MARKER}` and the commit's {AGENT_REVIEW_SHA_LEN}-char sha "
             f"on an issue or PR labelled `{AGENT_REVIEW_LABEL}`\n"
             "Address the findings on the same branch before merge. A large follow-up "
             "fix is a new review loop, not a reason to skip this one.\n"
-            "\nThe label hatches claim different things: "
-            f"`{OWNER_REVIEW_LABEL}` means you read it, `{SKIP_LABEL}` means it did "
-            "not need reading. Do not use the second to mean the first.\n"
+            "\nThe label hatches are accountability records: "
+            f"`{OWNER_REVIEW_LABEL}` means you read it, with actor and timestamp recorded.\n"
             "This gate never fails because an external service is unavailable — a "
             "label or an approval always clears it.",
             file=sys.stderr,

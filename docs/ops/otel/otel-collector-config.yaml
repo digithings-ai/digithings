@@ -1,0 +1,30 @@
+# OpenTelemetry Collector — optional compose profile `otel` (#222).
+# Receives OTLP from digithings services and logs spans (debug exporter).
+# Point DIGI_OTEL_ENDPOINT at http://otel-collector:4318 (HTTP) or
+# http://otel-collector:4317 (gRPC) from the compose network.
+#
+# Swap the debug exporter for jaeger / otlp / tempo when you have a backend.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 256
+
+exporters:
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

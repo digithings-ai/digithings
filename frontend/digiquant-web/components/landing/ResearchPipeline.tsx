@@ -142,10 +142,8 @@ export function ResearchPipeline() {
                 >
                   <span className="dqpipe-rail" aria-hidden="true" />
                   <div className="dqpipe-card">
-                    {/* execution step numbers wear the money-up phosphor */}
-                    <span
-                      className={`font-mono text-[0.8rem] tracking-[0.1em] ${isExec ? "text-up" : "text-accent"}`}
-                    >
+                    {/* step numbers wear the accent phosphor (sequence, not P&L) */}
+                    <span className="font-mono text-[0.8rem] tracking-[0.1em] text-accent">
                       {s.n}
                     </span>
                     <h3>{s.title}</h3>

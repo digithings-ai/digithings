@@ -1,3 +1,4 @@
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Pipeline: execution cron check"
 
 # Fail-closed probe for overlay dispatch env, Alpaca paper sync env, route
@@ -23,10 +24,6 @@ name: "Pipeline: execution cron check"
 # against this spec.
 
 on:
-  schedule:
-    # Independent of house retries (17 9/10/11/12). Offset so the probe never
-    # shares a process with portfolio.chain; 12:15 UTC is still off minute 0.
-    - cron: "15 12 * * *"
   workflow_dispatch:
 
 permissions:
