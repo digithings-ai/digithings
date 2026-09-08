@@ -174,8 +174,8 @@ jobs:
           CHEAPERINFERENCE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           # Do not set wrangler-action `with.wranglerVersion` to 4.28.0 — that
-          # CLI rejects `deploy --message` (run 34213316753). Leaving the pin
-          # off `with:` lets the action's current default (4.x with --message
-          # and Containers) run. A comment-only floor lives here so the
-          # structural test can still see the intended range.
+          # CLI rejects `deploy --message` (run 34213316753). Omit the pin so
+          # `npx --no-install wrangler` uses the workspace install from
+          # `npm ci` (lockfile 4.120.x), which accepts --message and builds
+          # Containers. wrangler-action@v3's own default is still 3.90.0.
           # wranglerVersion floor: 4.28.0 (package.json ^4.28.0)

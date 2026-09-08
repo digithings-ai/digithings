@@ -108,9 +108,9 @@ def test_the_deploy_step_uses_repo_secrets_not_hardcoded_credentials() -> None:
 @pytest.mark.unit
 def test_the_deploy_step_does_not_pin_wrangler_4_28_0_on_with() -> None:
     """wrangler 4.28.0 rejects `deploy --message` (run 34213316753 / #3720).
-    Do not set wrangler-action `with.wranglerVersion` to that floor — the
-    action's current default is a 4.x that still builds Containers and
-    accepts --message. package.json keeps `^4.28.0` as the range floor."""
+    Do not set wrangler-action `with.wranglerVersion` to that floor — omit
+    it so `npx --no-install` uses the `npm ci` workspace wrangler (4.120.x).
+    package.json keeps `^4.28.0` as the range floor."""
     deploy_step = next(
         s
         for s in _deploy_job()["steps"]
