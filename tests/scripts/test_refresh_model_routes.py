@@ -190,6 +190,23 @@ def test_render_table_shows_pricing_and_capabilities() -> None:
     assert "fireworks" in table
 
 
+def test_render_table_marks_fireworks_live_by_trailing_segment() -> None:
+    mod = _load()
+    routes = mod.normalize_models_dev_catalog(_catalog_payload(), ["fireworks"])
+    table = mod.render_table(routes, live={"fireworks": ["cheap-fw"]})
+    assert "accounts/fireworks/models/cheap-fw | " in table
+    row = [line for line in table.splitlines() if "cheap-fw" in line][0]
+    assert row.split(" | ")[-1] == "yes"  # live column matches by trailing segment
+    mod = _load()
+    routes = mod.normalize_models_dev_catalog(_catalog_payload(), ["openrouter", "fireworks"])
+    table = mod.render_table(routes, live={"openrouter": ["cheap/tool-model"]})
+    assert "cheap/tool-model" in table
+    assert "0.27" in table  # $/1M input, human units
+    assert "tools" in table.lower()
+    assert "openrouter" in table
+    assert "fireworks" in table
+
+
 def test_main_writes_full_inventory_and_prints_table(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

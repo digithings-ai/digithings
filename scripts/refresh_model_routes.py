@@ -306,6 +306,19 @@ def _price_per_million(price_per_token: float | None) -> str:
     return f"{price_per_token * 1_000_000:.2f}"
 
 
+def _is_listed_live(model: str, live_ids: set[str]) -> bool:
+    """True when *model* matches a live id exactly or by trailing path segment.
+
+    Catalog ids and live list ids use different namespaces on some providers
+    (Fireworks catalog ids are ``accounts/…`` paths while live ids are bare
+    names), so compare trailing segments too.
+    """
+    if model in live_ids:
+        return True
+    tail = model.rsplit("/", 1)[-1]
+    return any(tail == live_id.rsplit("/", 1)[-1] for live_id in live_ids)
+
+
 def render_table(routes: list[ModelRoute], live: Mapping[str, list[str]]) -> str:
     """Render routes as a human-readable pricing/capability table grouped by provider."""
     lines = ["provider | model | $/1M in | $/1M out | ctx | tools | json | live"]
@@ -320,7 +333,7 @@ def render_table(routes: list[ModelRoute], live: Mapping[str, list[str]]) -> str
                 f"{_price_per_million(route.completion_price)} | {route.context_length} | "
                 f"{'yes' if route.supports_tools else 'no'} | "
                 f"{'yes' if route.supports_structured_output else 'no'} | "
-                f"{'yes' if route.model in live_ids else 'no'}"
+                f"{'yes' if _is_listed_live(route.model, live_ids) else 'no'}"
             )
     return "\n".join(lines)
 
