@@ -16,31 +16,31 @@ const sample: PerformanceTearsheet = {
       ticker: 'SPY',
       returnPct: 8.25,
       series: [
-        { date: '2026-05-01', returnPct: 0 },
-        { date: '2026-07-17', returnPct: 8.25 },
+        { date: '2026-07-17', returnPct: 0 },
+        { date: '2026-08-03', returnPct: 8.25 },
       ],
     },
     {
       ticker: 'QQQ',
       returnPct: 10,
       series: [
-        { date: '2026-05-01', returnPct: 0 },
-        { date: '2026-07-17', returnPct: 10 },
+        { date: '2026-07-17', returnPct: 0 },
+        { date: '2026-08-03', returnPct: 10 },
       ],
     },
   ],
   returnsSource: 'persisted',
-  metricsAsOf: '2026-07-17',
-  inceptionDate: '2026-05-01',
-  holdingsAsOf: '2026-07-17',
-  generatedAt: '2026-07-17T22:00:00Z',
+  metricsAsOf: '2026-08-03',
+  inceptionDate: '2026-07-17',
+  holdingsAsOf: '2026-08-03',
+  generatedAt: '2026-08-03T22:00:00Z',
   navSeries: [
-    { date: '2026-05-01', nav: 100, returnPct: 0 },
-    { date: '2026-07-17', nav: 112.5, returnPct: 12.5 },
+    { date: '2026-07-17', nav: 100, returnPct: 0 },
+    { date: '2026-08-03', nav: 112.5, returnPct: 12.5 },
   ],
   contributionSeries: [
-    { t: '2026-05-01', returnPct: 0, contributions: { AAA: 0 } },
-    { t: '2026-07-17', returnPct: 12.5, contributions: { AAA: 1 } },
+    { t: '2026-07-17', returnPct: 0, contributions: { AAA: 0 } },
+    { t: '2026-08-03', returnPct: 12.5, contributions: { AAA: 1 } },
   ],
   currentHoldings: [
     {
@@ -49,7 +49,7 @@ const sample: PerformanceTearsheet = {
       weightPct: 20,
       unrealizedReturnPct: 5,
       realizedReturnPct: null,
-      attributionDate: '2026-07-17',
+      attributionDate: '2026-08-03',
     },
   ],
   historicalHoldings: [
@@ -59,7 +59,7 @@ const sample: PerformanceTearsheet = {
       weightPct: 10,
       unrealizedReturnPct: null,
       realizedReturnPct: -2,
-      attributionDate: '2026-06-20',
+      attributionDate: '2026-07-20',
       disposition: 'EXIT',
       eventId: 'old-exit',
     },
@@ -82,8 +82,8 @@ describe('PerformanceTearsheetView', () => {
     expect(out).toContain('SPY return');
     expect(out).toContain('8.25%');
     expect(out).toContain('>period<');
-    expect(out).toContain('2026-05-01–2026-07-17');
-    expect(out).toContain('paper NAV index 112.50');
+    expect(out).toContain('2026-07-17–2026-08-03');
+    expect(out).not.toContain('paper NAV index 112.50');
   });
 
   it('keeps the benchmark control outside the chart (page-global)', () => {
@@ -186,7 +186,7 @@ describe('headline vs realized presentation (#1664)', () => {
     const out = html();
     expect(out).not.toContain('Portfolio return · live');
     expect(out).not.toContain('Active return · live');
-    expect(out).toContain('2026-05-01–2026-07-17');
+    expect(out).toContain('2026-07-17–2026-08-03');
     expect(out).toContain('data-region="stamp"');
     expect(out).not.toContain('persisted metrics');
     expect(out).not.toContain('marks the open book · incl. unrealized');
@@ -234,7 +234,7 @@ describe('performance SSOT chrome (#3604)', () => {
 
   it('ends the period at the NAV tip, not a lagged metrics stamp', () => {
     const out = html(sample, sampleSsot);
-    expect(out).toContain('2026-05-01–2026-07-20');
+    expect(out).toContain('2026-07-17–2026-07-20');
     expect(out).toContain('nav tip 2026-07-20');
   });
 
