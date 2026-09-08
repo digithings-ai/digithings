@@ -209,6 +209,10 @@ def _commits_since(since: str) -> list[dict]:
 # rows this list was showing, which made the page's "the most recent features to land
 # on main" false. #1901 is a prior fix for the same merge-vs-squash shape elsewhere.
 _FEAT = re.compile(r"^feat(?:\(([^)]+)\))?!?: (.+?)(?:\s*\(#(\d+)\))?$")
+# A subject that already carried a ref (cherry-pick, revert, "fixes #N" remnant)
+# can leave a stale `(#N)` inside the summary after _FEAT strips the trailing
+# one. The page renders summaries raw, so strip every trailing ref, not just one.
+_TRAILING_REF = re.compile(r"(?:\s*\(#\d+\))+$")
 
 
 def _pr_for_commit(sha: str) -> int | None:
@@ -242,6 +246,7 @@ def _features(commits: list[dict], limit: int = 6) -> list[dict]:
         if not m:
             continue
         scope, summary, pr_text = m.group(1), m.group(2), m.group(3)
+        summary = _TRAILING_REF.sub("", summary).strip()
         pr = int(pr_text) if pr_text else _pr_for_commit(c.get("sha") or "")
         if pr is None or pr in seen:
             continue

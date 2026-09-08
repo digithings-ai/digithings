@@ -296,6 +296,19 @@ def test_features_reads_scope_summary_and_pr_from_a_squash_subject() -> None:
 
 
 @pytest.mark.unit
+def test_features_strips_a_stale_ref_left_by_a_referenced_subject() -> None:
+    feats = fra._features(
+        [
+            _commit(
+                "feat(settings): polish empty/error/soft-503 UX (#3681) (#3684)",
+            )
+        ]
+    )
+    assert feats[0]["summary"] == "polish empty/error/soft-503 UX"
+    assert feats[0]["pr"] == 3684
+
+
+@pytest.mark.unit
 def test_features_keeps_unscoped_and_breaking_feats() -> None:
     feats = fra._features(
         [_commit("feat: a bare feature (#12)"), _commit("feat(api)!: broke it (#13)")]

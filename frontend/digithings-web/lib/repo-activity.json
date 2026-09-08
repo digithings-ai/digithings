@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-08T13:08:14Z",
+  "generatedAt": "2026-09-08T14:52:37Z",
   "windowDays": 30,
-  "commits": 2218,
+  "commits": 2214,
   "features": [
     {
       "scope": "digiweb",
@@ -29,7 +29,7 @@
     },
     {
       "scope": "dashboard",
-      "summary": "polish Notifications Settings empty/error/soft-503 UX (#3681)",
+      "summary": "polish Notifications Settings empty/error/soft-503 UX",
       "pr": 3684,
       "date": "2026-09-07T13:43:14Z"
     },
@@ -40,11 +40,17 @@
       "date": "2026-09-05T21:38:04Z"
     }
   ],
-  "pullsMerged": 1187,
-  "issuesClosed": 467,
+  "pullsMerged": 1188,
+  "issuesClosed": 468,
   "pullsOpen": 2,
   "issuesOpen": 145,
   "mergedPulls": [
+    {
+      "number": 3716,
+      "title": "Nautilus engine as single source of truth for NAV (#3695)",
+      "url": "https://github.com/digithings-ai/digithings/pull/3716",
+      "mergedAt": "2026-09-08T13:24:48Z"
+    },
     {
       "number": 3728,
       "title": "docs: add package-root re-export to review regression lens",
@@ -74,26 +80,26 @@
       "title": "promote: develop \u2192 main (restore wrangler deploy --message)",
       "url": "https://github.com/digithings-ai/digithings/pull/3722",
       "mergedAt": "2026-09-08T10:18:16Z"
-    },
-    {
-      "number": 3721,
-      "title": "fix(digichat): do not pin wrangler 4.28.0 on deploy --message",
-      "url": "https://github.com/digithings-ai/digithings/pull/3721",
-      "mergedAt": "2026-09-08T10:15:35Z"
     }
   ],
   "openIssues": [
+    {
+      "number": 3729,
+      "title": "[agent] Port approved /chatbot theme onto product gallery Thread",
+      "url": "https://github.com/digithings-ai/digithings/issues/3729",
+      "updatedAt": "2026-09-08T14:07:35Z"
+    },
+    {
+      "number": 3078,
+      "title": "digiquant-daily-failure",
+      "url": "https://github.com/digithings-ai/digithings/issues/3078",
+      "updatedAt": "2026-09-08T14:02:57Z"
+    },
     {
       "number": 3694,
       "title": "research: BlockHorizon charts API for valuation time series (later pipeline)",
       "url": "https://github.com/digithings-ai/digithings/issues/3694",
       "updatedAt": "2026-09-08T09:24:45Z"
-    },
-    {
-      "number": 3695,
-      "title": "Recompute performance book from inception via Nautilus replay + harden metrics",
-      "url": "https://github.com/digithings-ai/digithings/issues/3695",
-      "updatedAt": "2026-09-08T09:24:44Z"
     },
     {
       "number": 3712,
@@ -112,12 +118,6 @@
       "title": "[cleanup] 21 stale merged branches \u2014 2026-09-07",
       "url": "https://github.com/digithings-ai/digithings/issues/3673",
       "updatedAt": "2026-09-07T08:09:33Z"
-    },
-    {
-      "number": 642,
-      "title": "[housekeeping-auto] scheduled-workflow failures (weekly)",
-      "url": "https://github.com/digithings-ai/digithings/issues/642",
-      "updatedAt": "2026-09-07T08:09:09Z"
     }
   ],
   "branch": "main",
@@ -1604,7 +1604,7 @@
     },
     {
       "date": "2026-09-08",
-      "count": 61
+      "count": 63
     }
   ],
   "latestRelease": {
@@ -1617,26 +1617,26 @@
     "digigraph": {
       "path": "digigraph",
       "lastCommit": "2026-09-07T21:52:24Z",
-      "files": 139,
-      "lines": 19932
+      "files": 149,
+      "lines": 20515
     },
     "digiquant": {
       "path": "digiquant",
       "lastCommit": "2026-09-07T21:52:24Z",
-      "files": 773,
-      "lines": 167073
+      "files": 788,
+      "lines": 170420
     },
     "digisearch": {
       "path": "digisearch",
       "lastCommit": "2026-09-04T11:51:21Z",
-      "files": 98,
-      "lines": 9394
+      "files": 106,
+      "lines": 11028
     },
     "digichat": {
       "path": "frontend/digichat",
       "lastCommit": "2026-09-08T10:43:43Z",
-      "files": 227,
-      "lines": 30335
+      "files": 645,
+      "lines": 80230
     },
     "digikey": {
       "path": "digikey",
@@ -1660,13 +1660,13 @@
       "path": "digibase",
       "lastCommit": "2026-09-04T11:28:16Z",
       "files": 16,
-      "lines": 2056
+      "lines": 2157
     },
     "digivault": {
       "path": "digivault",
       "lastCommit": "2026-09-05T13:27:26Z",
-      "files": 21,
-      "lines": 4286
+      "files": 23,
+      "lines": 4871
     }
   }
 }
