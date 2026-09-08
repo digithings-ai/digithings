@@ -1,17 +1,9 @@
 "use client";
 
-import { memo, type FC } from "react";
+import { memo } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import {
-  FileIcon,
-  FileTextIcon,
-  ImageIcon,
-  MusicIcon,
-  VideoIcon,
-  BracesIcon,
-  DownloadIcon,
-} from "lucide-react";
 import type { FileMessagePartComponent } from "@assistant-ui/react";
+import { DotMatrix } from "../DotMatrix";
 import { cn } from "./cn";
 
 const fileVariants = cva(
@@ -36,28 +28,6 @@ const fileVariants = cva(
   },
 );
 
-function getMimeTypeIcon(mimeType: string): FC<{ className?: string }> {
-  const type = mimeType.toLowerCase();
-  if (type.startsWith("image/")) {
-    return ImageIcon;
-  }
-  if (type === "application/pdf") {
-    return FileTextIcon;
-  }
-  if (type === "application/json") {
-    return BracesIcon;
-  }
-  if (type.startsWith("text/")) {
-    return FileTextIcon;
-  }
-  if (type.startsWith("audio/")) {
-    return MusicIcon;
-  }
-  if (type.startsWith("video/")) {
-    return VideoIcon;
-  }
-  return FileIcon;
-}
 
 export type FileDataKind = "data-uri" | "url" | "base64" | "id";
 
@@ -122,15 +92,19 @@ function FileIconDisplay({
   children,
   ...props
 }: FileIconDisplayProps) {
-  const IconComponent = mimeType ? getMimeTypeIcon(mimeType) : FileIcon;
-
   return (
     <span
       data-slot="file-icon"
       className={cn("text-muted-foreground shrink-0", className)}
       {...props}
     >
-      {children ?? <IconComponent className="size-5" />}
+      {children ?? (
+        <DotMatrix
+          state="attach"
+          label={mimeType ? `${mimeType} file` : "File"}
+          className="size-3.5"
+        />
+      )}
     </span>
   );
 }
@@ -201,7 +175,7 @@ function FileDownload({
       )}
       {...props}
     >
-      {children || <DownloadIcon className="size-4" />}
+      {children || <DotMatrix state="download" label="Download" className="size-3.5" />}
     </a>
   );
 }
@@ -258,7 +232,6 @@ export {
   FileSize,
   FileDownload,
   fileVariants,
-  getMimeTypeIcon,
   getFileDataKind,
   getBase64Size,
   formatFileSize,

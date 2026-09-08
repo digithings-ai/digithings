@@ -10,16 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { cva, type VariantProps } from "class-variance-authority";
-import {
-  CopyIcon,
-  DownloadIcon,
-  ImageIcon,
-  ImageOffIcon,
-  Loader2Icon,
-  RefreshCwIcon,
-  ShieldAlertIcon,
-  XIcon,
-} from "lucide-react";
+import { DotMatrix } from "../DotMatrix";
 import type {
   ImageMessagePart,
   ImageMessagePartComponent,
@@ -191,7 +182,7 @@ function ImagePreview({
           data-slot="image-preview-loading"
           className="bg-muted/50 absolute inset-0 flex items-center justify-center"
         >
-          <ImageIcon className="text-muted-foreground size-8 animate-pulse" />
+          <DotMatrix state="loading" label="Loading image" className="size-8" />
         </div>
       )}
       {error ? (
@@ -199,7 +190,7 @@ function ImagePreview({
           data-slot="image-preview-error"
           className="bg-muted/50 flex min-h-32 items-center justify-center p-4"
         >
-          <ImageOffIcon className="text-muted-foreground size-8" />
+          <DotMatrix state="error" label="Image failed" className="size-8" />
         </div>
       ) : (
         <img
@@ -347,7 +338,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
               }}
               className="text-muted-foreground hover:text-foreground bg-background/80 absolute end-4 top-4 cursor-pointer rounded-md p-2"
             >
-              <XIcon className="size-5" />
+              <DotMatrix state="remove" label="Close" className="size-5" />
             </button>
           </div>,
           document.body,
@@ -365,7 +356,7 @@ function ImageGenerating({ className }: { className?: string }) {
         className,
       )}
     >
-      <Loader2Icon className="text-muted-foreground size-8 animate-spin" />
+      <DotMatrix state="loading" label="Generating image" className="size-8" />
       <span className="sr-only">Generating image…</span>
     </div>
   );
@@ -386,7 +377,7 @@ function ImageContentFilterError({
         className,
       )}
     >
-      <ShieldAlertIcon className="text-muted-foreground size-8" />
+      <DotMatrix state="warning" label="Image blocked" className="size-8" />
       <p className="text-sm font-medium">Image could not be generated</p>
       {reason && <p className="text-muted-foreground text-xs">{reason}</p>}
     </div>
@@ -426,8 +417,10 @@ function RegenerateButton({
       aria-label="Regenerate image"
       className="hover:bg-muted inline-flex size-7 items-center justify-center rounded disabled:opacity-50"
     >
-      <RefreshCwIcon
-        className={cn("size-4", isRegenerating && "animate-spin")}
+      <DotMatrix
+        state={isRegenerating ? "loading" : "refresh"}
+        label="Regenerate image"
+        className="size-4"
       />
     </button>
   );
@@ -446,7 +439,7 @@ function ImageActions({ part, onRegenerate, className }: ImageActionsProps) {
         aria-label="Download image"
         className="hover:bg-muted inline-flex size-7 items-center justify-center rounded"
       >
-        <DownloadIcon className="size-4" />
+        <DotMatrix state="download" label="Download image" className="size-4" />
       </button>
       <button
         type="button"
@@ -457,7 +450,7 @@ function ImageActions({ part, onRegenerate, className }: ImageActionsProps) {
         aria-label="Copy image"
         className="hover:bg-muted inline-flex size-7 items-center justify-center rounded"
       >
-        <CopyIcon className="size-4" />
+        <DotMatrix state="copy" label="Copy image" className="size-4" />
       </button>
       {onRegenerate && <RegenerateButton onRegenerate={onRegenerate} />}
     </div>

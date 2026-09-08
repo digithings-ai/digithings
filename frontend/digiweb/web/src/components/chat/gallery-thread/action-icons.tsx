@@ -21,5 +21,5 @@ export const CloseActionIcon: FC<{ className?: string }> = ({ className }) => (
 );
 
 export const PlusActionIcon: FC<{ className?: string }> = ({ className }) => (
-  <Cube state="plus" label="Add" className={className} />
+  <Cube state="attach" label="Add" className={className} />
 );

@@ -1,10 +1,13 @@
 "use client";
 
+/**
+ * Gallery DotMatrix is the promoted first-party cube matrix.
+ * Source of truth: @digithings/web chat/DotMatrix.
+ */
 export {
   DotMatrix,
-  litCellsFor,
-  PATTERNS,
   dotMatrixStates,
+  litCellsFor,
   type DotMatrixProps,
   type DotMatrixState,
-} from "@digithings/web/chat/dot-matrix";
+} from "@digithings/web";

@@ -76,6 +76,13 @@ export type ThreadComponents = {
 /** Expanded: input, then a row of attach + send. Compact: attach | input | send. */
 export type ComposerLayout = "expanded" | "compact";
 
+export type ThreadActions = {
+  /** Restore previous assistant branch. Default on. */
+  undo?: boolean | undefined;
+  /** Thumbs up / down. Off when absent. */
+  feedback?: boolean | undefined;
+};
+
 export type ThreadProps = {
   components?: ThreadComponents | undefined;
   autoFocus?: boolean | undefined;
@@ -83,6 +90,8 @@ export type ThreadProps = {
   placeholder?: string | undefined;
   /** `chrome.composerLayout`. Default expanded (toolbar under the input). */
   composerLayout?: ComposerLayout | undefined;
+  /** `features.undo` / `features.feedback`. */
+  actions?: ThreadActions | undefined;
   /** `chrome.welcome.title`. Used by the default Welcome slot. */
   welcome?: string | undefined;
   /** `chrome.welcome.body`. */
@@ -91,6 +100,15 @@ export type ThreadProps = {
   /** Embed send-gate / system page-context attach. */
   onComposerSubmit?: (event: FormEvent<HTMLFormElement>) => void;
 };
+
+const DEFAULT_THREAD_ACTIONS: Required<ThreadActions> = {
+  undo: true,
+  feedback: false,
+};
+
+const ThreadActionsContext = createContext<Required<ThreadActions>>(
+  DEFAULT_THREAD_ACTIONS,
+);
 
 const EMPTY_COMPONENTS: ThreadComponents = {};
 
@@ -151,11 +169,16 @@ export const Thread: FC<ThreadProps> = ({
   autoFocus = true,
   placeholder,
   composerLayout = "expanded",
+  actions,
   welcome,
   welcomeBody,
   className,
   onComposerSubmit,
 }) => {
+  const resolvedActions: Required<ThreadActions> = {
+    undo: actions?.undo !== false,
+    feedback: actions?.feedback === true,
+  };
   const chrome: ThreadChrome = {
     welcome: welcome ?? DEFAULT_CHROME.welcome,
     welcomeBody: welcomeBody ?? DEFAULT_CHROME.welcomeBody,
@@ -164,13 +187,15 @@ export const Thread: FC<ThreadProps> = ({
   };
   return (
     <ThreadChromeContext.Provider value={chrome}>
-      <ThreadComponentsContext.Provider value={components}>
-        <ThreadRoot
-          autoFocus={autoFocus}
-          placeholder={placeholder}
-          composerLayout={composerLayout}
-        />
-      </ThreadComponentsContext.Provider>
+      <ThreadActionsContext.Provider value={resolvedActions}>
+        <ThreadComponentsContext.Provider value={components}>
+          <ThreadRoot
+            autoFocus={autoFocus}
+            placeholder={placeholder}
+            composerLayout={composerLayout}
+          />
+        </ThreadComponentsContext.Provider>
+      </ThreadActionsContext.Provider>
     </ThreadChromeContext.Provider>
   );
 };
@@ -225,9 +250,7 @@ const ThreadRoot: FC<{
                 className="aui-thread-empty flex flex-col gap-3"
               >
                 <Welcome />
-                <AuiIf condition={(s) => s.composer.isEmpty}>
-                  <ThreadSuggestions />
-                </AuiIf>
+                <ThreadSuggestions />
               </div>
             </AuiIf>
             <Composer
@@ -301,10 +324,14 @@ const ThreadSuggestionItem: FC = () => {
     <SuggestionPrimitive.Trigger send asChild>
       <button
         type="button"
-        className="aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full grid-cols-[1.25rem_minmax(0,1fr)] items-baseline gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-left text-sm font-normal duration-200"
+        className="aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-left text-sm font-normal duration-200"
       >
         <span className="aui-msg-marker" aria-hidden="true">
-          <DotMatrix state="example" label="" className="size-3.5" />
+          <DotMatrix
+            state="example"
+            label="Example"
+            className="aui-thread-welcome-suggestion-mark size-3.5"
+          />
         </span>
         <span className="aui-thread-welcome-suggestion-text min-w-0">
           <SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1" />
@@ -337,17 +364,17 @@ const Composer: FC<{
           <div
             className={cn(
               "aui-composer-main",
-              compact && "flex min-w-0 items-end gap-1",
+              compact && "flex min-w-0 items-center gap-1",
             )}
           >
             {compact ? <ComposerAddAttachment /> : null}
             <ComposerPrimitive.Input
               placeholder={placeholder}
               className={cn(
-                "aui-composer-input placeholder:text-muted-foreground/60 max-h-48 w-full resize-none bg-transparent outline-none",
+                "aui-composer-input placeholder:text-muted-foreground/60 max-h-48 w-full resize-none overflow-hidden bg-transparent outline-none",
                 compact
-                  ? "min-h-7 flex-1 px-1.5 py-1.5 text-sm leading-5"
-                  : "min-h-10 px-2.5 py-1 text-base leading-6",
+                  ? "min-h-7 flex-1 px-1.5 py-0 text-sm leading-7"
+                  : "min-h-[1.375rem] px-2.5 py-0.5 text-base leading-6",
               )}
               rows={1}
               autoFocus={autoFocus}
@@ -363,27 +390,6 @@ const Composer: FC<{
     </ComposerPrimitive.Root>
   );
 };
-
-/** Cube chrome glyphs — same 5×5 matrix as status. */
-const EnterKeyIcon: FC<{ className?: string }> = ({ className }) => (
-  <DotMatrix state="send" label="Send" className={className} />
-);
-
-const ReloadActionIcon: FC<{ className?: string }> = ({ className }) => (
-  <DotMatrix state="refresh" label="Refresh" className={className} />
-);
-
-const MoreActionIcon: FC<{ className?: string }> = ({ className }) => (
-  <DotMatrix state="more" label="More" className={className} />
-);
-
-const DownloadActionIcon: FC<{ className?: string }> = ({ className }) => (
-  <DotMatrix state="export" label="Export" className={className} />
-);
-
-const EditActionIcon: FC<{ className?: string }> = ({ className }) => (
-  <DotMatrix state="edit" label="Edit" className={className} />
-);
 
 const ComposerSendControls: FC = () => {
   return (
@@ -403,7 +409,7 @@ const ComposerSendControls: FC = () => {
               <DotMatrix
                 state="dictate"
                 label="Voice input"
-                className="aui-composer-dictate-icon size-4"
+                className="aui-composer-dictate-icon size-3.5"
               />
             </TooltipIconButton>
           </ComposerPrimitive.Dictate>
@@ -439,7 +445,11 @@ const ComposerSendControls: FC = () => {
             className="aui-composer-send size-7 rounded-full"
             aria-label="Send message"
           >
-            <EnterKeyIcon className="aui-composer-send-icon size-4" />
+            <DotMatrix
+              state="send"
+              label="Send"
+              className="aui-composer-send-icon size-3.5"
+            />
           </TooltipIconButton>
         </ComposerPrimitive.Send>
       </AuiIf>
@@ -518,11 +528,8 @@ const AssistantMessage: FC = () => {
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className="aui-msg fade-in slide-in-from-bottom-1 animate-in relative grid grid-cols-[1.25rem_minmax(0,1fr)] items-baseline gap-x-[0.55rem] -mb-7.5 pb-7.5 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+      className="aui-msg fade-in slide-in-from-bottom-1 animate-in relative grid grid-cols-[minmax(0,1fr)] items-start -mb-7.5 pb-7.5 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
     >
-      <span className="aui-msg-marker" aria-hidden="true">
-        <DotMatrix state="assistant" label="Assistant" className="size-3.5" />
-      </span>
       <div
         data-slot="aui_assistant-message-content"
         className="aui-assistant-message-content text-foreground min-w-0 leading-relaxed wrap-break-word"
@@ -591,7 +598,7 @@ const AssistantMessage: FC = () => {
 
       <div
         data-slot="aui_assistant-message-footer"
-        className={cn("col-start-2 flex items-center", ACTION_BAR_HEIGHT)}
+        className={cn("col-start-1 flex items-center", ACTION_BAR_HEIGHT)}
       >
         <BranchPicker />
         <AssistantActionBar />
@@ -601,6 +608,7 @@ const AssistantMessage: FC = () => {
 };
 
 const AssistantActionBar: FC = () => {
+  const { undo, feedback } = useContext(ThreadActionsContext);
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
@@ -610,33 +618,60 @@ const AssistantActionBar: FC = () => {
       <ActionBarPrimitive.Copy asChild>
         <TooltipIconButton tooltip="Copy">
           <AuiIf condition={(s) => s.message.isCopied}>
-            <CheckActionIcon className="size-3.5 animate-in zoom-in-50 fade-in duration-200 ease-out" />
+            <CheckActionIcon className="size-3.5" />
           </AuiIf>
           <AuiIf condition={(s) => !s.message.isCopied}>
             <CopyActionIcon className="size-3.5" />
           </AuiIf>
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
+      {undo ? (
+        <AuiIf
+          condition={(s) =>
+            (s.message.branchCount ?? 1) > 1 && (s.message.branchNumber ?? 1) > 1
+          }
+        >
+          <BranchPickerPrimitive.Previous asChild>
+            <TooltipIconButton tooltip="Undo">
+              <DotMatrix state="prev" label="Undo" className="size-3.5" />
+            </TooltipIconButton>
+          </BranchPickerPrimitive.Previous>
+        </AuiIf>
+      ) : null}
       <ActionBarPrimitive.Reload asChild>
-        <TooltipIconButton tooltip="Refresh">
-          <ReloadActionIcon className="size-3.5" />
+        <TooltipIconButton tooltip="Redo">
+          <DotMatrix state="refresh" label="Redo" className="size-3.5" />
         </TooltipIconButton>
       </ActionBarPrimitive.Reload>
+      {feedback ? (
+        <>
+          <ActionBarPrimitive.FeedbackPositive asChild>
+            <TooltipIconButton tooltip="Good response">
+              <DotMatrix state="thumbsUp" label="Good response" className="size-3.5" />
+            </TooltipIconButton>
+          </ActionBarPrimitive.FeedbackPositive>
+          <ActionBarPrimitive.FeedbackNegative asChild>
+            <TooltipIconButton tooltip="Bad response">
+              <DotMatrix state="thumbsDown" label="Bad response" className="size-3.5" />
+            </TooltipIconButton>
+          </ActionBarPrimitive.FeedbackNegative>
+        </>
+      ) : null}
       <ActionBarMorePrimitive.Root>
         <ActionBarMorePrimitive.Trigger asChild>
           <TooltipIconButton tooltip="More">
-            <MoreActionIcon className="size-3.5" />
+            <DotMatrix state="more" label="More" className="size-3.5" />
           </TooltipIconButton>
         </ActionBarMorePrimitive.Trigger>
         <ActionBarMorePrimitive.Content
           side="bottom"
           align="start"
           sideOffset={6}
-          className="aui-action-bar-more-content z-50 min-w-[8rem] overflow-hidden border p-1"
+          className="aui-action-bar-more-content z-[110] min-w-[8rem] overflow-hidden border p-1"
         >
           <ActionBarPrimitive.ExportMarkdown asChild>
-            <ActionBarMorePrimitive.Item className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 px-2 py-1.5 outline-none select-none">
-              <DownloadActionIcon className="size-3.5" />
+            <ActionBarMorePrimitive.Item className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink">
+              <DotMatrix state="export" label="Export" className="size-3.5" />
               Export as Markdown
             </ActionBarMorePrimitive.Item>
           </ActionBarPrimitive.ExportMarkdown>
@@ -662,7 +697,7 @@ const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
-      className="aui-msg fade-in slide-in-from-bottom-1 animate-in grid grid-cols-[1.25rem_minmax(0,1fr)_1.75rem] items-baseline gap-x-[0.55rem] gap-y-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+      className="aui-msg fade-in slide-in-from-bottom-1 animate-in grid grid-cols-[1.25rem_minmax(0,1fr)_1.75rem] items-start gap-x-[0.55rem] gap-y-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
       data-role="user"
     >
       <span className="aui-msg-marker" aria-hidden="true">
@@ -697,7 +732,7 @@ const UserActionBar: FC = () => {
     >
       <ActionBarPrimitive.Edit asChild>
         <TooltipIconButton tooltip="Edit" className="aui-user-action-edit">
-          <EditActionIcon className="size-3.5" />
+          <DotMatrix state="edit" label="Edit" className="size-3.5" />
         </TooltipIconButton>
       </ActionBarPrimitive.Edit>
     </ActionBarPrimitive.Root>

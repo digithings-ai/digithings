@@ -176,38 +176,36 @@ function ReasoningTrigger({
     <CollapsibleTrigger
       data-slot="reasoning-trigger"
       className={cn(
-        "aui-reasoning-trigger group/trigger text-muted-foreground hover:text-foreground flex max-w-[75%] origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]",
+        "aui-reasoning-trigger group/trigger text-muted-foreground hover:text-foreground flex w-full items-center gap-2 py-1.5 text-sm transition-colors",
         className,
       )}
       {...props}
     >
-      <DotMatrix
-        state="thinking"
-        label="Reasoning"
+      <span
         data-slot="reasoning-trigger-icon"
-        className="aui-reasoning-trigger-icon size-4 shrink-0"
-      />
+        className="aui-reasoning-trigger-icon inline-flex size-3.5 shrink-0 items-center justify-center"
+      >
+        <DotMatrix
+          state={active ? "thinking" : "thought"}
+          label={active ? "Reasoning" : "Thought"}
+          className="size-3.5"
+        />
+      </span>
       <span
         data-slot="reasoning-trigger-label"
         className={cn(
-          "aui-reasoning-trigger-label-wrapper inline-block leading-none tabular-nums",
+          "aui-reasoning-trigger-label-wrapper min-w-0 flex-1 truncate text-start leading-none tabular-nums",
           active && "shimmer motion-reduce:animate-none",
         )}
       >
         Reasoning{durationText}
       </span>
-      <DotMatrix
-        state="expand"
-        label="Toggle reasoning"
+      <span
         data-slot="reasoning-trigger-chevron"
-        className={cn(
-          "aui-reasoning-trigger-chevron mt-0.5 size-4 shrink-0",
-          "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-          "-rotate-90",
-          "group-data-open/trigger:rotate-0",
-          "group-data-panel-open/trigger:rotate-0",
-        )}
-      />
+        className="aui-reasoning-trigger-chevron inline-flex shrink-0 items-center justify-center"
+      >
+        <DotMatrix state="expand" label="Toggle reasoning" className="size-3.5" />
+      </span>
     </CollapsibleTrigger>
   );
 }

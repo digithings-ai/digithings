@@ -28,7 +28,36 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(thread).toMatch(/state="send"/);
     expect(thread).toMatch(/state="copy"|CopyActionIcon/);
     expect(thread).toMatch(/state="user"/);
+    expect(thread).toMatch(/welcomeBody/);
+    expect(thread).toMatch(/onComposerSubmit/);
+    expect(thread).toMatch(/digichat-thread__viewport/);
+    expect(thread).not.toMatch(/state="assistant"/);
     expect(thread).not.toMatch(/from ["']lucide-react["']/);
+  });
+
+  it("tools stay collapsed unless they require action", () => {
+    const fallback = read("gallery-thread/tool-fallback.aui.tsx");
+    expect(fallback).toMatch(/useState\(isRequiresAction\)/);
+    expect(fallback).not.toMatch(/isSettled/);
+    expect(fallback).not.toMatch(/wantOpen/);
+    expect(fallback).toMatch(/toolName/);
+    expect(fallback).not.toMatch(/tool\(\$\{/);
+    expect(fallback).not.toMatch(/`tool\(/);
+  });
+
+  it("reasoning uses thought when done and expand caret", () => {
+    const reasoning = read("gallery-thread/reasoning.tsx");
+    expect(reasoning).toMatch(/state=\{active \? "thinking" : "thought"\}/);
+    expect(reasoning).toMatch(/state="expand"/);
+  });
+
+  it("container still COPY gallery chatbot.css", () => {
+    const root = join(here, "../../../../../../");
+    const cf = readFileSync(join(root, "Dockerfile.digichat-cloudflare"), "utf8");
+    const app = readFileSync(join(root, "frontend/digichat/Dockerfile"), "utf8");
+    const copy = "frontend/digiweb/reference/app/(chatbot)/chatbot/chatbot.css";
+    expect(cf).toContain(copy);
+    expect(app).toContain(copy);
   });
 
   it("web package exposes Thread on a chat subpath, not the main barrel", () => {

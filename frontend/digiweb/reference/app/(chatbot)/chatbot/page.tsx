@@ -13,29 +13,35 @@ export default function ChatbotPage() {
         </h1>
         <p>
           This page is the default assistant-ui <code>Thread</code> from the
-          registry — welcome, messages, markdown, reasoning, tools, composer —
-          with no custom message tree. Shell: radius 0, monochrome ink.
-          Welcome: official <code>components.Welcome</code> slot, in the
+          registry — welcome, messages, markdown, reasoning, MCP tools,
+          composer — with no custom message tree. Shell: radius 0, monochrome
+          ink. Welcome: official <code>components.Welcome</code> slot, in the
           footer immediately above the composer. Copy is
-          deploy-config shaped (title + body). Optional <code>&gt;</code>{" "}
-          starters from config — not chips, not a top-of-thread empty state.
-          Two composers: expanded (toolbar under the input) and
+          deploy-config shaped (title + body). Optional example rows from
+          config — not chips, not a top-of-thread empty state. Two composers:
+          expanded (toolbar under the input) and
           compact (attach · field · send on one row). Send stays quiet until
           there is text, then fills. Enter and the send key both submit.
-          Transcript: both roles left, <code>&gt;</code> user / <code>▸</code>{" "}
-          assistant, no bubbles. Waiting: 5×5 cube matrix, cubes snap on and
-          off. Reasoning: square caret, hairline rail, no pill. Theme toggle
-          still flips light/dark.
+          Transcript: both roles left, cube marker on user and example
+          rows, no assistant arrow, no bubbles. Waiting and chrome: 5×5 cube matrix,
+          cubes snap on and off. Reasoning: hairline rail, no pill. A send
+          streams website retrieval (<code>digisearch_query</code> then{" "}
+          <code>digivault_get_note</code>) or a dashboard backtest (
+          <code>digiquant_list_strategies</code> then{" "}
+          <code>digiquant_run_backtest</code>). Theme toggle still flips
+          light/dark.
         </p>
       </header>
       <section className="section-block" id="matrix">
         <p className="kicker">{"// matrix"}</p>
         <h2 className="title">Status in cubes.</h2>
         <p className="section-copy">
-          Cubes are on or off — no fade. Loading orbits the rim; thinking
-          rings in and out; tool is a smaller orbit; executing scans down;
-          search scans across; compacting shrinks a filled square. Caution
-          and error are static glyphs. Send a line below to see loading.
+          Cubes are on or off — no fade. Loading sweeps a thick arc around
+          the rim; thinking rings in and out; tool presses two bars together;
+          executing scans down; search scans across; compacting shrinks a
+          filled square. Thought is a light bulb. Caution, error, and every
+          chat chrome mark (copy, send, roles) are static glyphs. Send a line
+          below to see loading.
         </p>
         <CubeMatrixLegend />
       </section>
@@ -44,7 +50,7 @@ export default function ChatbotPage() {
         composerLayout="compact"
         kicker="// composer compact"
         heading="One row."
-        copy="Attach on the left, field in the middle, send on the right. Same registry ComposerPrimitive — layout only. Type a line: the enter keycap fills, then click or Enter sends."
+        copy="Attach on the left, field in the middle, send on the right. Same registry ComposerPrimitive — layout only. Empty and one typed line share height; a newline grows the field. Type a line: the enter keycap fills, then click or Enter sends."
       />
       <ChatbotChromeSpecimen />
     </main>

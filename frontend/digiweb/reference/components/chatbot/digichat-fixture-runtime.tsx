@@ -2,8 +2,8 @@
 
 /**
  * Local fixture runtime for the design-reference Thread specimen.
- * Streams a canned assistant turn (reasoning → tool → markdown) so the
- * registry Thread can be walked without a backend.
+ * Streams MCP-shaped tools (digisearch / digivault / digiquant) so the
+ * gallery looks like the website embed and the digiquant dashboard.
  */
 import {
   AuiConfig,
@@ -18,81 +18,74 @@ import {
 } from "@assistant-ui/react";
 import { useSyncExternalStore, type ReactNode } from "react";
 
-const REPLY = `Done — trend_xsec (time-series), 8y ETH-USD, Kelly-capped 0.5×.
+import { lastUserText, pickFixtureScenario, type FixtureTool } from "./digichat-fixture-scenarios";
 
-| metric | value |
-| --- | --- |
-| PF | **2.31** |
-| max DD | −18.4% |
-
-\`\`\`python
-bt = Backtest("trend_xsec", symbol="ETH-USD")
-bt.run(years=8)
-\`\`\`
-`;
-
-const REASONING = [
-  "Single-symbol request — fall back to the time-series variant.",
-  "Cap sizing with Kelly at 0.5× so the drawdown stays bounded.",
-].join("\n");
+function asToolPart(tool: FixtureTool, result?: string) {
+  return {
+    type: "tool-call" as const,
+    toolCallId: tool.toolCallId,
+    toolName: tool.toolName,
+    args: tool.args,
+    argsText: tool.argsText,
+    ...(result !== undefined
+      ? { result, status: { type: "complete" as const } }
+      : { status: { type: "running" as const } }),
+  };
+}
 
 const adapter: ChatModelAdapter = {
-  async *run({ abortSignal }) {
-    // Hold on the cube matrix before any parts land.
-    await pause(2200, abortSignal);
+  async *run({ messages, abortSignal }) {
+    const scenario = pickFixtureScenario(lastUserText(messages));
+    await pause(900, abortSignal);
 
-    const reasoningStep = 8;
+    const reasoningStep = 10;
     for (let end = reasoningStep; ; end += reasoningStep) {
       if (abortSignal.aborted) return;
       yield {
         content: [
           {
             type: "reasoning" as const,
-            text: REASONING.slice(0, Math.min(end, REASONING.length)),
+            text: scenario.reasoning.slice(0, Math.min(end, scenario.reasoning.length)),
           },
         ],
       };
-      if (end >= REASONING.length) break;
-      await pause(70, abortSignal);
+      if (end >= scenario.reasoning.length) break;
+      await pause(55, abortSignal);
     }
 
-    await pause(900, abortSignal);
+    const settled: ReturnType<typeof asToolPart>[] = [];
+    for (const tool of scenario.tools) {
+      await pause(700, abortSignal);
+      yield {
+        content: [
+          { type: "reasoning" as const, text: scenario.reasoning },
+          ...settled,
+          asToolPart(tool),
+        ],
+      };
+      await pause(900, abortSignal);
+      settled.push(asToolPart(tool, tool.result));
+      yield {
+        content: [
+          { type: "reasoning" as const, text: scenario.reasoning },
+          ...settled,
+        ],
+      };
+    }
 
-    const tool = {
-      type: "tool-call" as const,
-      toolCallId: "bt-1",
-      toolName: "digiquant.backtest",
-      args: { symbol: "ETH-USD", years: 8 },
-      argsText: "trend_xsec · ETH-USD · 8y",
-    };
-
-    yield {
-      content: [{ type: "reasoning" as const, text: REASONING }, tool],
-    };
-    await pause(1100, abortSignal);
-
-    const toolDone = { ...tool, result: "PF 2.31 · maxDD −18.4%" };
-    yield {
-      content: [
-        { type: "reasoning" as const, text: REASONING },
-        toolDone,
-        { type: "text" as const, text: "" },
-      ],
-    };
-    await pause(450, abortSignal);
-
-    const STEP = 10;
+    await pause(350, abortSignal);
+    const STEP = 12;
     for (let end = STEP; ; end += STEP) {
       if (abortSignal.aborted) return;
       yield {
         content: [
-          { type: "reasoning" as const, text: REASONING },
-          toolDone,
-          { type: "text" as const, text: REPLY.slice(0, Math.min(end, REPLY.length)) },
+          { type: "reasoning" as const, text: scenario.reasoning },
+          ...settled,
+          { type: "text" as const, text: scenario.reply.slice(0, Math.min(end, scenario.reply.length)) },
         ],
       };
-      if (end >= REPLY.length) break;
-      await pause(55, abortSignal);
+      if (end >= scenario.reply.length) break;
+      await pause(40, abortSignal);
     }
   },
 };
@@ -120,7 +113,6 @@ function toSuggestionConfig(item: WelcomeSuggestion): SuggestionConfig {
   return { title: item.title, label: item.label ?? "", prompt: item.prompt };
 }
 
-/** Opt-in welcome starters. Empty = no `>` example list. */
 const DEFAULT_CHIPS: readonly WelcomeSuggestion[] = [];
 
 const subscribe = () => () => {};
