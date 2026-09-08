@@ -27,6 +27,7 @@ describe("RepoActivity snapshot render", () => {
     expect(html).not.toContain("PRs open");
     expect(html).not.toContain("current backlog");
     expect(html).not.toContain("merge heat");
+    expect(html).not.toContain("ra-heat");
     expect(html).not.toContain("#3445");
     expect(html).not.toMatch(/stars|forks|watchers/i);
   });

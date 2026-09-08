@@ -35,6 +35,22 @@ describe("bucketDaily", () => {
     expect(days.find((d) => d.date === "2026-08-20")?.count).toBe(1);
     expect(days.find((d) => d.date === "2026-08-19")?.count).toBe(0);
   });
+
+  it("counts pulls on the window boundary days", () => {
+    const days = bucketDaily(
+      [pull("2026-08-11T00:00:00Z", 1), pull("2026-08-24T23:59:59Z", 2)],
+      2,
+      END,
+    );
+    expect(days.find((d) => d.date === "2026-08-11")?.count).toBe(1);
+    expect(days.find((d) => d.date === "2026-08-24")?.count).toBe(1);
+  });
+
+  it("buckets by UTC day, not the stamped calendar date", () => {
+    const days = bucketDaily([pull("2026-08-21T00:30:00+02:00", 1)], 16, END);
+    expect(days.find((d) => d.date === "2026-08-20")?.count).toBe(1);
+    expect(days.find((d) => d.date === "2026-08-21")?.count).toBe(0);
+  });
 });
 
 describe("levelFor", () => {
@@ -50,5 +66,12 @@ describe("levelFor", () => {
     expect(levelFor(4, 8)).toBe(2);
     expect(levelFor(6, 8)).toBe(3);
     expect(levelFor(8, 8)).toBe(4);
+  });
+
+  it("exercises the max <= 4 branch boundary", () => {
+    expect(levelFor(4, 4)).toBe(4);
+    expect(levelFor(4, 5)).toBe(4);
+    expect(levelFor(2, 5)).toBe(2);
+    expect(levelFor(1, 5)).toBe(1);
   });
 });

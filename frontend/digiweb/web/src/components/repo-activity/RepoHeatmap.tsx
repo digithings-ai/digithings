@@ -20,13 +20,14 @@ export function RepoHeatmap({ pulls, weeks = 16, end, className }: RepoHeatmapPr
   const days: HeatDay[] = bucketDaily(pulls, weeks, end);
   const max = days.reduce((m, d) => Math.max(m, d.count), 0);
   const total = days.reduce((m, d) => m + d.count, 0);
+  const displayWeeks = days.length / 7;
   const cls = ["ra-heat", className ?? ""].filter(Boolean).join(" ");
 
   return (
     <div
       className={cls}
       role="img"
-      aria-label={`Merge heat: ${grouped(total)} merged pull requests over the last ${weeks} weeks.`}
+      aria-label={`Merge heat: ${grouped(total)} merged pull request${total === 1 ? "" : "s"} over the last ${displayWeeks} week${displayWeeks === 1 ? "" : "s"}.`}
     >
       {days.map((d) => (
         <span

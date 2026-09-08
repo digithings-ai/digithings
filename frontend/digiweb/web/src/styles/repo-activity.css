@@ -89,6 +89,12 @@
     color: var(--accent);
   }
 
+  /* Defensive default for a cell rendered without data-level; the step
+     rules below (higher specificity, same layer) still win. */
+  .ra-heat-cell {
+    background: color-mix(in srgb, var(--ink) 9%, transparent);
+  }
+
   .ra-heat-cell[data-level="0"] {
     background: color-mix(in srgb, var(--ink) 9%, transparent);
   }
@@ -261,6 +267,12 @@
   border: 0;
   border-radius: 0;
   padding: 0;
+}
+
+@media (forced-colors: active) {
+  .ra-heat-cell {
+    forced-color-adjust: none;
+  }
 }
 @media (max-width: 720px) {
   .ra-cols {
