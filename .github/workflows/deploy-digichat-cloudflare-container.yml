@@ -164,14 +164,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: frontend/digichat-cloudflare
           command: deploy --message digichat-v${{ steps.version.outputs.version }}
-          # wrangler-action's own default (no `wranglerVersion` given) installed a
-          # hardcoded 3.90.0 on its first real run here (#2199), silently ignoring
-          # this project's own `"wrangler": "^4.28.0"` devDependency -- 3.x predates
-          # Cloudflare Containers entirely, so it printed "Unexpected fields found
-          # in top-level field: containers" and deployed only the Worker routing
-          # shell, never rebuilding the actual Container image. Pin to the same
-          # range package.json declares so both installs agree on what's supported.
-          wranglerVersion: "4.28.0"
           # Sync house-default upstream key into the Worker/Container env (same
           # pattern as deploy-digithings-cron.yml → GH_DISPATCH_TOKEN).
           # Only non-empty Actions secrets — empty optional names fail the action.
@@ -181,3 +173,9 @@ jobs:
         env:
           CHEAPERINFERENCE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Do not set wrangler-action `with.wranglerVersion` to 4.28.0 — that
+          # CLI rejects `deploy --message` (run 34213316753). Omit the pin so
+          # `npx --no-install wrangler` uses the workspace install from
+          # `npm ci` (lockfile 4.120.x), which accepts --message and builds
+          # Containers. wrangler-action@v3's own default is still 3.90.0.
+          # wranglerVersion floor: 4.28.0 (package.json ^4.28.0)
