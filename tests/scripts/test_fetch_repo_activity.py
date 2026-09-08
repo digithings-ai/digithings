@@ -21,8 +21,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
+import subprocess
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any  # score:allow untyped any — dynamically loaded module
 
@@ -497,6 +499,101 @@ def test_search_dates_stops_on_short_page_without_sleeping(
     assert fra._search_dates("repo:x+is:pr") == ["2026-08-20T08:00:00Z"]
     assert len(calls) == 1
     assert sleeps == []
+
+
+# ── search-cap bisection (Task 4 review) ─────────────────────────────────────
+
+
+_CAP_STDERR = "gh: Only the first 1000 search results are available (HTTP 422)"
+
+
+def _cap_error() -> subprocess.CalledProcessError:
+    """The 1000-result-cap failure `gh` raises past page 10 of a big window."""
+    return subprocess.CalledProcessError(1, ["gh", "api"], "", _CAP_STDERR)
+
+
+@pytest.mark.unit
+def test_search_dates_bisects_the_cap_without_gaps_or_double_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bisected spans must partition the window: every day once, none missing.
+
+    The unbounded query 422s; any span longer than a day 422s; day-sized spans
+    succeed with one stamp per day. The concatenated pieces must then be exactly
+    the full window — no double-count from overlapping ranges, no gap from a
+    dropped one. Stubbed at `_gh`, so no network; the real `_search_pages` and
+    bisection run unmodified.
+    """
+    today = datetime.now(UTC).date()
+    start = today - timedelta(days=7)
+    query = f"repo:x+is:pr+is:merged+merged:>={start.isoformat()}"
+
+    def fake_gh(*args: str) -> dict[str, Any]:
+        found = re.search(r"(\d{4}-\d{2}-\d{2})(?:\.\.(\d{4}-\d{2}-\d{2}))?", args[1])
+        assert found and found.group(1)
+        if found.group(2) is None:
+            raise _cap_error()
+        first = date.fromisoformat(found.group(1))
+        last = date.fromisoformat(found.group(2))
+        if (last - first).days > 1:
+            raise _cap_error()
+        days = (last - first).days + 1
+        return {
+            "items": [
+                {"closed_at": f"{(first + timedelta(days=i)).isoformat()}T12:00:00Z"}
+                for i in range(days)
+            ]
+        }
+
+    monkeypatch.setattr(fra, "_gh", fake_gh)
+    got = fra._search_dates(query)
+    expected = [f"{(start + timedelta(days=i)).isoformat()}T12:00:00Z" for i in range(8)]
+    assert sorted(got) == expected
+    assert len(got) == len(set(got)) == 8
+
+
+@pytest.mark.unit
+def test_search_dates_reraises_a_single_day_still_over_the_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A day that still 422s must raise, never silently truncate the heatmap."""
+
+    def fake_gh(*args: str) -> dict[str, Any]:
+        raise _cap_error()
+
+    monkeypatch.setattr(fra, "_gh", fake_gh)
+    today = datetime.now(UTC).date().isoformat()
+    with pytest.raises(subprocess.CalledProcessError):
+        fra._search_dates(f"repo:x+is:pr+is:merged+merged:>={today}")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "gh: Bad credentials (HTTP 401)",
+        "gh: API rate limit exceeded (HTTP 403)",
+        "gh: failed to connect to api.github.com (network unreachable)",
+    ],
+)
+def test_search_dates_passes_non_cap_failures_through_without_bisect(
+    stderr: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Auth, rate-limit and network failures raise at once — one call, no retries.
+
+    Bisecting those would fan a single failure into a retry storm that masks the
+    original error, so only the 1000-result-cap signal may trigger the fallback.
+    """
+    calls: list[str] = []
+
+    def fake_gh(*args: str) -> dict[str, Any]:
+        calls.append(args[1])
+        raise subprocess.CalledProcessError(1, ["gh", "api"], "", stderr)
+
+    monkeypatch.setattr(fra, "_gh", fake_gh)
+    with pytest.raises(subprocess.CalledProcessError):
+        fra._search_dates("repo:x+is:pr+is:merged+merged:>=2026-01-01")
+    assert len(calls) == 1
 
 
 # ── wiring ──────────────────────────────────────────────────────────────────

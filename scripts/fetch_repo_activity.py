@@ -93,7 +93,9 @@ def _shown(path: Path) -> str:
 
 
 def _gh(*args: str) -> object:
-    out = subprocess.check_output(["gh", *args], text=True, cwd=REPO_ROOT)
+    # stderr is captured (not inherited) so a CalledProcessError carries gh's
+    # message — _is_search_cap_error matches the 1000-result-cap signal in it.
+    out = subprocess.check_output(["gh", *args], text=True, cwd=REPO_ROOT, stderr=subprocess.PIPE)
     return json.loads(out)
 
 
@@ -341,6 +343,20 @@ def _search_pages(query: str) -> list[str]:
 _SEARCH_SINCE = re.compile(r"(merged|closed):>=(\d{4}-\d{2}-\d{2})")
 
 
+def _is_search_cap_error(exc: subprocess.CalledProcessError) -> bool:
+    """Whether *exc* is GitHub Search's 1000-result cap, not any other failure.
+
+    A bare `except CalledProcessError` fanned every `gh` failure (bad auth,
+    rate-limit, network) into bisected retries — a retry storm masking the
+    original error. Only the cap 422s ("Only the first 1000 search results are
+    available"); everything else must raise immediately, unretried.
+    """
+    hay = " ".join(
+        part for part in (str(exc.output or ""), str(exc.stderr or ""), str(exc)) if part
+    ).lower()
+    return "422" in hay or "1000" in hay or "only the first" in hay
+
+
 def _search_dates(query: str) -> list[str]:
     """All closed_at dates for a Search issues query, paginated at 100/page.
 
@@ -350,13 +366,15 @@ def _search_dates(query: str) -> list[str]:
     GitHub Search returns only the first 1000 matches, so a year-long query on
     a busy repo 422s past page 10 (measured 2026-09-08: 2193 merged PRs, 1195
     closed issues in 365 days — August 2026 alone merged over 1000). On that
-    failure the window is bisected until every piece fits under the cap, and
-    the pieces concatenated. Pieces are disjoint date ranges, so nothing is
-    counted twice.
+    failure alone the window is bisected until every piece fits under the cap,
+    and the pieces concatenated. Pieces are disjoint date ranges, so nothing is
+    counted twice. Any other `gh` failure raises at once, with no retries.
     """
     try:
         return _search_pages(query)
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as exc:
+        if not _is_search_cap_error(exc):
+            raise
         m = _SEARCH_SINCE.search(query)
         if not m:
             raise
@@ -375,11 +393,19 @@ def _search_dates(query: str) -> list[str]:
 def _search_span(
     query: str, m: re.Match[str], kind: str, first: date, last: date, out: list[str]
 ) -> None:
-    """Append closed_at dates for one `START..END` span, bisecting past the cap."""
-    ranged = query[: m.start()] + f"{kind}:{first.isoformat()}..{last.isoformat()}" + query[m.end() :]
+    """Append closed_at dates for one `START..END` span, bisecting past the cap.
+
+    A single day still over the cap re-raises rather than truncating — dropping
+    it would silently undercount the heatmap. Non-cap failures raise at once.
+    """
+    ranged = (
+        query[: m.start()] + f"{kind}:{first.isoformat()}..{last.isoformat()}" + query[m.end() :]
+    )
     try:
         out.extend(_search_pages(ranged))
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as exc:
+        if not _is_search_cap_error(exc):
+            raise
         if first >= last:
             raise
         mid = first + (last - first) // 2
