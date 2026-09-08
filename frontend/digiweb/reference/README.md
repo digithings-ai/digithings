@@ -9,8 +9,9 @@ start here: copy a pattern, keep its grammar.
 ## Run it
 
 ```bash
-npm run dev --workspace design-reference   # http://127.0.0.1:4013
-# or via the repo's preview tooling: launch config name "design-reference"
+npm run dev --workspace design-reference -- --port 4013
+# Chatbot gallery only: http://127.0.0.1:4013/chatbot/
+# Do not open `/` in the same session — that root still compiles the full gallery.
 ```
 
 It consumes the shared workspaces from source: `@digithings/design` (tokens) and
@@ -35,7 +36,7 @@ is the only shared chrome.
 | `/effects`         | Effects     | cursor-follow hero graph, typed terminal, scrolly module graph, research pipeline, ambient mesh, rotating prompts, clip reveal, section transitions (zoom-morph · stacking · cross-fade), arc-flight routing map (revolut-mined), pipeline workflow viz (sequential + parallel, per-step time/token/cost diagnostics; dashboard-ported) |
 | `/chrome`          | Chrome      | announcement bar, command palette, tabs (sliding indicator), toast stack, scroll-aware nav, colophon footer with glow sweep |
 | `/terminal`        | Terminal    | diegetic CLI session + budget, streaming chat transcript |
-| `/chatbot`         | Chatbot     | digichat as a terminal CLI (mono scrollback, `>` prompt) — reusable square-to-panel embed launcher, thinking chain, collapsible tool-call chain, composer, markdown, inline chart, inline route graph, custom action widgets embedded in the terminal |
+| `/chatbot`         | Chatbot     | official assistant-ui `Thread` (registry copy), themed with digiweb CSS variables. Isolated Next root (`app/(chatbot)/`) so it does not compile the rest of the gallery. Full elements index (not a live specimen dump): [`../ASSISTANT_UI_ELEMENTS.md`](../ASSISTANT_UI_ELEMENTS.md). |
 | `/symbols`         | Symbols     | module emblems, brand marks, favicon tiles, vendor logos, utility glyphs |
 | `/brand`           | Brand       | avatars, social headers, OG card, mail sign-off — local kit, not shipped on digithings.ai |
 | `/account`         | Account     | login, sign-up, payment, settings, profile templates |

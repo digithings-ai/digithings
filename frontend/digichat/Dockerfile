@@ -43,6 +43,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/scripts/trusted
 # so runMigrate() resolves process.cwd()/drizzle = frontend/digichat/drizzle.
 # Compose sets DIGICHAT_AUTO_MIGRATE=1, so the folder MUST ship in the image.
 COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/drizzle ./frontend/digichat/drizzle
+# Operator deploy YAML examples (DIGICHAT_CONFIG_PATH=/app/config/examples/skins/<id>.yaml)
+COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/config /app/config
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000

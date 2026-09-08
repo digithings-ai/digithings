@@ -18,6 +18,7 @@ Per-request auth (proxy key / BYOK) is wired separately by
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 from contextlib import contextmanager
 from typing import (
@@ -25,7 +26,7 @@ from typing import (
     Iterator,
 )
 
-from digillm import (  # re-exported: grounding pre-passes
+from digillm import (  # telemetry + message types for the wrappers below
     CallPurpose,
     ChatCompletionMessage,
     JsonSchemaResponseFormat,
@@ -35,7 +36,6 @@ from digillm import (  # re-exported: grounding pre-passes
     ToolDefinition,
 )
 from digillm import completion as _digillm_completion
-from digillm import openrouter_web_search as _digillm_openrouter_web_search
 from digillm import (
     provider_call_context as _digillm_provider_call_context,
 )
@@ -43,8 +43,6 @@ from digillm import run_tools as _digillm_run_tools
 from digillm import set_fan_out_detach_hook as _set_fan_out_detach_hook
 from digillm import set_telemetry_observer as _set_telemetry_observer
 from digillm import set_usage_observer as _set_usage_observer
-from digillm import web_search as _digillm_web_search
-from digillm import x_search as _digillm_x_search
 from openai.types.chat import ChatCompletion
 
 from digigraph import usage as _usage
@@ -52,8 +50,11 @@ from digigraph.model_config import resolve_request_model
 
 logger = logging.getLogger(__name__)
 
-# Public surface. ``web_search`` / ``x_search`` are re-exported from digillm so digigraph
-# and digiquant consumers import every LLM entry point from this one module.
+# Public surface. ``web_search`` / ``openrouter_web_search`` / ``x_search`` are
+# grounding pre-passes backed by a plain digillm ``completion`` — digillm itself
+# is a generic router with no vendor search tooling, so this module owns the
+# grounding prompt + citation extraction. Consumers import every LLM entry
+# point from this one module.
 __all__ = [
     "completion",
     "completion_text",
@@ -130,14 +131,12 @@ def completion(
     tool_choice: str | ToolArguments = "auto",
     response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
-    search_parameters: dict[str, Any] | None = None,
 ) -> ChatCompletion:
     """Single chat completion through digillm; returns the OpenAI ``ChatCompletion`` object.
 
     The model is resolved with :func:`resolve_request_model` first (provider-key→
     Ollama fallback, ``ollama-cloud/`` strip, mode / ``OLLAMA_MODEL`` selection).
     Read ``resp.choices[0].message.content`` / ``.tool_calls`` from the result.
-    ``search_parameters`` forwards an xAI Live Search descriptor (no-op off xAI).
     """
     default_purpose = (
         CallPurpose.STRUCTURED_COMPLETION
@@ -153,7 +152,6 @@ def completion(
             tool_choice=tool_choice,
             response_format=response_format,
             max_tokens=max_tokens,
-            search_parameters=search_parameters,
         )
 
 
@@ -164,7 +162,6 @@ def completion_text(
     temperature: float = 0.2,
     response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
-    search_parameters: dict[str, Any] | None = None,
 ) -> str:
     """Run :func:`completion` and return the first choice's text (stripped, ``""`` if none).
 
@@ -172,7 +169,7 @@ def completion_text(
     preserves the legacy ``chat_completion`` no-tools return exactly (strip;
     empty string when the response has no choices or no content). For tool calls
     or the full ``ChatCompletion`` object, call :func:`completion` /
-    :func:`run_tools` directly. ``search_parameters`` is forwarded to xAI Live Search.
+    :func:`run_tools` directly.
     """
     resp = completion(
         model,
@@ -180,7 +177,6 @@ def completion_text(
         temperature=temperature,
         response_format=response_format,
         max_tokens=max_tokens,
-        search_parameters=search_parameters,
     )
     if not resp.choices:
         return ""
@@ -208,14 +204,12 @@ def run_tools(
     max_tool_rounds: int = 5,
     tool_choice: str = "auto",
     on_tool_step: Callable[[str, Any], None] | None = None,
-    search_parameters: dict[str, Any] | None = None,
 ) -> str:
     """Run digillm's agentic tool-calling loop with digigraph's parallel-safe set + streaming.
 
     Streams each assistant turn (``stream_deltas``) whenever ``on_tool_step`` is
     supplied, so the callback also receives ``("content", delta)`` / ``("reasoning",
-    delta)`` alongside the tool-call/result steps. ``search_parameters`` forwards an
-    xAI Live Search descriptor (first tool round only). ``tool_choice`` forwards to
+    delta)`` alongside the tool-call/result steps. ``tool_choice`` forwards to
     every turn ("auto" default; "required" forces a tool call every round — see
     :func:`digigraph.tool_policy.require_tool_calls_for_workflow`). Returns the
     model's final answer.
@@ -237,8 +231,66 @@ def run_tools(
             on_tool_step=on_tool_step,
             parallel_safe_tools=_parallel_safe_tools(),
             stream_deltas=on_tool_step is not None,
-            search_parameters=search_parameters,
         )
+
+
+# Inline ``(url)`` / ``[text](url)`` citations in grounding summaries.
+_INLINE_URL_RE = re.compile(r"\((https?://[^\s)]+)\)")
+_MD_LINK_URL_RE = re.compile(r"\[[^\]]*\]\((https?://[^\s)]+)\)")
+
+
+def _urls_from_grounding_text(text: str) -> list[str]:
+    urls: list[str] = []
+    for pat in (_MD_LINK_URL_RE, _INLINE_URL_RE):
+        for url in pat.findall(text):
+            if url not in urls:
+                urls.append(url)
+    return urls
+
+
+def _ground_via_completion(
+    model: str,
+    query: str,
+    *,
+    usage_kind: str,
+) -> tuple[str, list[str]] | None:
+    """Run a grounding pre-pass as a plain digillm completion; fail soft (``None``).
+
+    digillm is a generic router with no vendor search tooling — grounding is a
+    cited-summary prompt over whatever model the house routes. Returns
+    ``(summary_text, source_urls)`` or ``None`` when the call fails or yields
+    no text, so callers degrade to ungrounded research rather than crash.
+    """
+    messages: list[ChatCompletionMessage] = [
+        {
+            "role": "system",
+            "content": (
+                "You are a market-research assistant. Summarize the key findings "
+                "relevant to the user's query as concise bullet points. Include an "
+                "inline markdown citation linking a claim to its source URL only "
+                "when you can verify that source from the conversation — never "
+                "invent URLs, titles, or attributions. State unverifiable claims "
+                "without a citation."
+            ),
+        },
+        {"role": "user", "content": query},
+    ]
+    try:
+        resp = _digillm_completion(
+            resolve_request_model(model),
+            messages,
+            temperature=0.2,
+            usage_kind=usage_kind,
+        )
+    except Exception as exc:  # grounding is best-effort; degrade gracefully
+        logger.warning("grounding completion failed (%s); continuing ungrounded", exc)
+        return None
+    if not resp.choices:
+        return None
+    text = (resp.choices[0].message.content or "").strip()
+    if not text:
+        return None
+    return text, _urls_from_grounding_text(text)
 
 
 def web_search(
@@ -248,14 +300,10 @@ def web_search(
     allowed_domains: list[str] | None = None,
     max_results: int = 8,
 ) -> tuple[str, list[str]] | None:
-    """Run xAI web grounding with generic logical-call purpose metadata."""
+    """Run web grounding with generic logical-call purpose metadata."""
+    del allowed_domains, max_results  # folded into the query by callers, not tool params
     with _logical_call_scope(CallPurpose.WEB_GROUNDING, NoArtifactReason.CONSUMED_INLINE):
-        return _digillm_web_search(
-            resolve_request_model(model),
-            query,
-            allowed_domains=allowed_domains,
-            max_results=max_results,
-        )
+        return _ground_via_completion(model, query, usage_kind="web_search")
 
 
 def openrouter_web_search(
@@ -266,21 +314,16 @@ def openrouter_web_search(
     max_results: int = 8,
     engine: str = "exa",
 ) -> tuple[str, list[str]] | None:
-    """OpenRouter web grounding (digillm toolkit wrapper).
+    """Web grounding via plain completion (no vendor search tooling).
 
-    Native-search models (``perplexity/*``, ``:online``) use built-in search —
-    dashboard grounding. Non-native models use the Exa ``openrouter:web_search``
-    server tool as a digillm toolkit fallback (#2567). Do not pass ``engine`` /
-    ``max_results`` from dashboard call sites.
+    Dashboard call sites must not pass ``engine`` / ``max_results`` /
+    ``allowed_domains`` — domain hints belong in the query text (see
+    ``web_grounding.fetch_web_grounding``). Kept as separate names so existing
+    call sites and telemetry purposes keep working.
     """
+    del allowed_domains, max_results, engine
     with _logical_call_scope(CallPurpose.WEB_GROUNDING, NoArtifactReason.CONSUMED_INLINE):
-        return _digillm_openrouter_web_search(
-            resolve_request_model(model),
-            query,
-            allowed_domains=allowed_domains,
-            max_results=max_results,
-            engine=engine,
-        )
+        return _ground_via_completion(model, query, usage_kind="web_search")
 
 
 def x_search(
@@ -289,10 +332,7 @@ def x_search(
     *,
     max_results: int = 12,
 ) -> tuple[str, list[str]] | None:
-    """Run xAI social grounding with generic logical-call purpose metadata."""
+    """Run social grounding with generic logical-call purpose metadata."""
+    del max_results  # folded into the query by callers, not tool params
     with _logical_call_scope(CallPurpose.X_GROUNDING, NoArtifactReason.CONSUMED_INLINE):
-        return _digillm_x_search(
-            resolve_request_model(model),
-            query,
-            max_results=max_results,
-        )
+        return _ground_via_completion(model, query, usage_kind="x_search")

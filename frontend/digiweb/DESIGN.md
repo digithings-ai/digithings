@@ -116,6 +116,8 @@ As of 2026-08-30 the Instrument Panel tightens to utilitarian terminal simplicit
 
 Phases 2–3 product-local debt is stripped on this branch (marketing Fraunces heroes, digichat shadcn radius, dashboard `.glass-card` and `rounded-*` chrome). Gallery `uv-` CSS stays reference-only.
 
+First-party chat look: [`CHAT_THEME.md`](CHAT_THEME.md) (`chrome.skin: digichat`). Gallery: design-reference `/chatbot`.
+
 That restraint is structural, not stylistic. A dashboard, a landing page, and a terminal-style chatbot all draw from the *same* instrument-panel vocabulary — the module color that dresses digigraph's marketing hero is the identical `--accent` variable a digiquant chart reads to tint its equity line, just scoped differently. Color is a wiring diagram, not a moodboard: every hue in the system routes to an explicit meaning (a module's identity, a gain, a loss, a diff) and never means two things in the same place.
 
 digiweb explicitly rejects the AI-slop default aesthetic: no purple-to-blue gradient heroes, no glassmorphism, no floating gradient blobs, no Inter-as-brand-font, no decorative box-shadow lifted off nothing in particular. Depth comes from hairline borders and tonal layering; when a shadow does appear, it means something specific (see Elevation & Depth).

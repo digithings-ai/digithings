@@ -106,7 +106,20 @@ Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/ap
 }
 ```
 
-`DIGICHAT_EMBED_HOSTS` is already set in `wrangler.toml` `[vars]`.
+`DIGICHAT_EMBED_HOSTS` is already set in `wrangler.toml` `[vars]` (CSP
+`frame-ancestors` — no tokens). Keep it aligned with tenant host keys:
+
+| Align | Rule |
+|---|---|
+| Host keys | `DIGICHAT_EMBED_TENANTS` object keys (and `aliases`) must match iframe `?host=` / `X-Embed-Host`. |
+| `DIGICHAT_EMBED_HOSTS` | Comma-separated parent hostnames allowed to frame `/embed`. Must include every live parent (marketing `digithings.ai` / `www` / `occ.digithings.ai`, plus `digiquant.io` if the dashboard popup iframes this origin). Not a secret. |
+| First-party token | `digithings.ai`, `www.digithings.ai`, and `occ.digithings.ai` skip `X-Embed-Token` when registered. The JSON schema still requires a `token` field — use a non-secret placeholder; do not invent or commit a real secret. |
+| Other hosts | Parent snippet / `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` must equal that tenant’s registry `token`. Put the real JSON only via `wrangler secret put DIGICHAT_EMBED_TENANTS`. |
+| Tools | `backend.type: digigraph` (and OCC `digisearchIndex` / `vaultPathPrefix`) is how digisearch + digivault reach Profile A. digichat only probes digigraph (`DIGICHAT_ENABLED_SERVICES`); it does not talk to those services directly. |
+
+Worker **path** routes stay unchanged: `/embed*`, `/api/chat*`, `/api/embed*`,
+`/api/byok*`, `/api/plan-proof*` (1.5 Desk+ HMAC), `/api/health`, `/_dtchat*`.
+Pages still owns `/chat` and `/chat/occ` shells; iframe origin stays `digithings.ai`.
 
 ### digiquant.io Desk+ tenant shape (names only)
 

@@ -36,12 +36,6 @@ def llm_cache_key(
             "temperature": temperature,
             "response_format": response_format,
             "max_tokens": max_tokens,
-            "cost_controls": [
-                os.environ.get("OPENROUTER_FALLBACK_MODELS", ""),
-                os.environ.get("OPENROUTER_SORT", ""),
-                os.environ.get("OPENROUTER_MAX_PROMPT_PRICE", ""),
-                os.environ.get("OPENROUTER_MAX_COMPLETION_PRICE", ""),
-            ],
         },
         sort_keys=True,
     )

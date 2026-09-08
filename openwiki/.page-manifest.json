@@ -1,0 +1,285 @@
+{
+  "schemaVersion": 1,
+  "pages": {
+    "/openwiki/dashboard/architecture.md": {
+      "pageVersion": "sha256:4e509aa45a0f3c262f7c446f39f68a6a1e98128791ec149289854185f6902958",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/dashboard/operator-views.md": {
+      "pageVersion": "sha256:75c3aaf6de862a88963ace5bf238db08b31a00bc49907afea80a284d3b953165",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digibase/connectors.md": {
+      "pageVersion": "sha256:55af8d4c68c875571db8d3408d629e2029ddb572a3092412846999976f15acea",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digibase/library-guide.md": {
+      "pageVersion": "sha256:db9d428950415c63754b589c906d71c558b815e98dde8e07d319291506530b2b",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digichat/architecture.md": {
+      "pageVersion": "sha256:6b3e79338de7c4a3f1cc34487517b247cb4554746ae7977a43df6fb727c0258b",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digichat/auth-and-chat.md": {
+      "pageVersion": "sha256:c5e6af76c85966774acc42c746cdb063ede36701577c8b28ef8f16337bfde9c2",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digichat/operations.md": {
+      "pageVersion": "sha256:a6edca5dcb287e4e1ead2a9eb1afcca6f7899e9020b2ffe58447a9d04a4a7276",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digichat/quickstart.md": {
+      "pageVersion": "sha256:f948dc524c2840755afe1135beb139636e2d9e2453334e6917955017f7ebc616",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digiclaw/architecture.md": {
+      "pageVersion": "sha256:9f1f2021c9d5e3fd94ac14193eafbe08ce7c612332f431178f497690eee9be57",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digiclaw/operations.md": {
+      "pageVersion": "sha256:fd7b2a2b67b40449d082d2a330319ade92fe6f0b0282f844d5ede48b457638d2",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digiclaw/quickstart.md": {
+      "pageVersion": "sha256:121f59a5edc06ba8f261291b46566aebef95ea523f16fbd0637ac5a30226abc5",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digigraph/api-and-operations.md": {
+      "pageVersion": "sha256:751544562728279638c79b05102c9911564aa7a40ce5ec5735025c73ee03d762",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digigraph/architecture.md": {
+      "pageVersion": "sha256:7246c9420d2c25820ab421f318d2d13b5dae2ce04bcbb3f27615f44590e91023",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digigraph/quickstart.md": {
+      "pageVersion": "sha256:a63850bfc7d983d64ae69a2248e937bbae504330d287e250fe49ef3e68e75bc0",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digigraph/workflow-and-tools.md": {
+      "pageVersion": "sha256:4cab81ab84aa68acb75b81ad2cddc5823cff32aed031f378bf56637695fb53c2",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digikey/api-and-operations.md": {
+      "pageVersion": "sha256:82b546c1299cff479bfd65a4a48db3135b1c093eed9ee0d1e73e2423b82d68cf",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digikey/architecture.md": {
+      "pageVersion": "sha256:f64989dfa5677f31563359ffa5dc039e26fe6cd6ab6d1df2fddc02e1dedb1cc2",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digikey/quickstart.md": {
+      "pageVersion": "sha256:160b94c7b73240844936170bc1dcdbc41ab51e79d58a63e2f6cff1c0db0ec9ee",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digikey/token-exchange-and-scopes.md": {
+      "pageVersion": "sha256:61fb8f884ba27c5c02c86ba50dab7dd7d4bdb41fcf194b6760661f41967584af",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digiquant/api-and-operations.md": {
+      "pageVersion": "sha256:6fc7053b2693e83794285c823e810ea84aea723cddb4b0b9306101ad3763cf0c",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digiquant/architecture.md": {
+      "pageVersion": "sha256:f469da550310682f56a42ed7d953f26bd5d84cb60ad552b10ce2b28f9df96064",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digiquant/quickstart.md": {
+      "pageVersion": "sha256:60d2aa7f6f90671e06d26b8e64419c0f774879c75b9fdd3c92cd8ab4f3a32650",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digiquant/research-and-portfolio.md": {
+      "pageVersion": "sha256:9087a2872972bef83f3d2a0f40d38a01543b4d90ddc6cf37681cbde83a1727d8",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digiquant/strategies-and-backtest.md": {
+      "pageVersion": "sha256:5561ac26cba1a9cd7c8593a93b229fd0a2a3f2585c29e9e133c7db5bda9e30e9",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digisearch/architecture.md": {
+      "pageVersion": "sha256:d720fcd9ab721902da8348011502bc7f6127c7c5850a4f42bcc705b58bc4cf06",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digisearch/ingest-and-index.md": {
+      "pageVersion": "sha256:f009eb88e2a93ebdab3e6d3c93967aec07e0085d032315d4342d2e899025c31e",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digisearch/query-and-operations.md": {
+      "pageVersion": "sha256:6d7ff7f9927eef9872375152da23ff9fbc1049b23cde33dbfa28a5cacb2d2d13",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digisearch/quickstart.md": {
+      "pageVersion": "sha256:25272785e9e81ae489d0ae520ac52d8b61dfbd849966cd2b774aa44af3ccdc72",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digismith/architecture.md": {
+      "pageVersion": "sha256:04939830a7bc1cd30636e885222d0ca7e973170ebbd14f89598746f47e263065",
+      "completedBy": "opencode",
+      "completedRunId": "9bcacd04-a2f9-49ce-8c86-271882f6801d",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digismith/status-api-and-operations.md": {
+      "pageVersion": "sha256:16dfc9f67e6fac0f4d1271c9bfcdf90fba094afac2aa57411b3201bf2a5d1ad9",
+      "completedBy": "opencode",
+      "completedRunId": "9bcacd04-a2f9-49ce-8c86-271882f6801d",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digismith/tracing-and-redaction.md": {
+      "pageVersion": "sha256:37a4790633fe324606ac76ae45e78743f6fa1c7311a12063aa51f9cd13cb6d4a",
+      "completedBy": "opencode",
+      "completedRunId": "9bcacd04-a2f9-49ce-8c86-271882f6801d",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digivault/architecture.md": {
+      "pageVersion": "sha256:707a47910e7619e75b7afc432789f07f271180b7b82611a17ad557c34f16cce8",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digivault/notes-and-links.md": {
+      "pageVersion": "sha256:61fd124bdf3833311b98c1193765decddc0c09f96270d71fd3626cf2b2b063d6",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digivault/quickstart.md": {
+      "pageVersion": "sha256:cc0f35943e6b2f1e8f3c45bf00371c1bfa24b0a35e16afd78abb7993717a93a6",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/digivault/service-and-operations.md": {
+      "pageVersion": "sha256:f818953d7a62dca0284df719058a6fb632dacdd3c05f5b197bc1b3645d9135ed",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/libraries/digifetch.md": {
+      "pageVersion": "sha256:a6e30e739376bc6bdddf9dfb0c24c63cda54ba3b42be9061ab565285072270b8",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/libraries/digillm.md": {
+      "pageVersion": "sha256:cb1466b0016ac6c6f0009b2674086dd1366d1f256115838d5a9b918e211258cf",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/libraries/digiskills.md": {
+      "pageVersion": "sha256:74c20b071f95fcfa253073f1a8aae483c10b5b736bd0a749840d27828bdbc2e6",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/quickstart.md": {
+      "pageVersion": "sha256:c3609327b54d3f54ae44497234f4878c7eb0e15fcdf37978bf389c89aa6ca696",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    },
+    "/openwiki/repo/workflow.md": {
+      "pageVersion": "sha256:d7323610047eadc8ab6c991b32dc5496af3477b4d061f87550d2f8125a25d6a4",
+      "completedBy": "opencode",
+      "completedRunId": "a98f4a78-8924-4996-a119-59e122713f68",
+      "gitHead": "e37a514b3308c6f36a98ab24b24704c18c481695",
+      "sourceFingerprint": "sha256:900fd1a1d5cd950455193018a0607ab6ec1ee4ec33be6da9d858406d4fca7e69"
+    }
+  }
+}

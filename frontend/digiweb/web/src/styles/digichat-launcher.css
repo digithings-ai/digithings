@@ -26,6 +26,13 @@
   line-height: 0;
 }
 
+.digichat-launcher__panel,
+.digichat-launcher__body {
+  /* The trigger keeps line-height: 0. The panel must not inherit it —
+     welcome copy stacks on one row and autosize textareas explode. */
+  line-height: 1.45;
+}
+
 .digichat-launcher--contained {
   position: absolute;
 }

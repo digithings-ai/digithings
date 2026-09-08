@@ -454,6 +454,10 @@ services:
       - DIGIKEY_URL=${DIGIKEY_URL:-http://digikey:8005}
       - DIGIKEY_BFF_TOKEN=${DIGIKEY_BFF_TOKEN:-}
       - DIGICHAT_AUTO_MIGRATE=1
+      # Catalog template: DIGICHAT_CHROME_SKIN=claude
+      # or DIGICHAT_CONFIG_PATH=/app/config/examples/skins/claude.yaml (baked in image)
+      - DIGICHAT_CONFIG_PATH=${DIGICHAT_CONFIG_PATH:-}
+      - DIGICHAT_CHROME_SKIN=${DIGICHAT_CHROME_SKIN:-}
     depends_on:
       digichat-db:
         condition: service_healthy

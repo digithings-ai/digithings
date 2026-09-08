@@ -3,8 +3,8 @@
  *
  * digithings.ai `ChatEmbedShell` posts `{ type: "digichat:parent-error", code, ts }`
  * when the ready handshake times out (or the iframe never loads). The embed
- * surfaces the line in DigiChatSession's transcript via `.dtc-error` — same
- * mono terminal aesthetic as chat errors, not a parent-page banner.
+ * surfaces the line in CliThread's error row — same mono terminal aesthetic
+ * as chat errors, not a parent-page banner.
  */
 
 export const PARENT_ERROR_MESSAGE_TYPE = "digichat:parent-error" as const;
@@ -55,7 +55,7 @@ function defaultParentErrorBody(code: ParentErrorCode): string {
   }
 }
 
-/** CLI-style transcript line for DigiChatSession `.dtc-error`. */
+/** CLI-style error line for CliThread's error row. */
 export function formatParentErrorLine(
   code: ParentErrorCode,
   message?: string | null,

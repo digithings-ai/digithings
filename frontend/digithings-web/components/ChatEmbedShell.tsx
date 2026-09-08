@@ -38,7 +38,7 @@ export function buildEmbedThemeMessage(
   return { type: THEME, theme, ts };
 }
 
-/** Parent → embed: surface handshake/load failures inside DigiChatSession. */
+/** Parent → embed: surface handshake/load failures inside CliThread. */
 export function buildEmbedParentErrorMessage(
   code: EmbedParentErrorCode,
   ts = Date.now(),

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DIGICHAT_APP_CSP,
   DIGICHAT_APP_SECURITY_HEADERS,
@@ -10,6 +10,13 @@ import {
   frameAncestorOriginsForHost,
 } from "./security-headers";
 import { resetEmbedTenantRegistryForTests } from "./embed-tenants";
+
+function isolateEmbedCspEnv() {
+  vi.stubEnv("DIGICHAT_EMBED_HOSTS", "");
+  vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+  vi.stubEnv("DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS", "");
+  resetEmbedTenantRegistryForTests();
+}
 
 describe("security-headers", () => {
   it("denies framing on the main app CSP", () => {
@@ -50,6 +57,9 @@ describe("security-headers", () => {
 });
 
 describe("registry-derived frame-ancestors", () => {
+  beforeEach(() => {
+    isolateEmbedCspEnv();
+  });
   afterEach(() => {
     vi.unstubAllEnvs();
     resetEmbedTenantRegistryForTests();
@@ -114,6 +124,9 @@ describe("registry-derived frame-ancestors", () => {
 });
 
 describe("loopback DIGICHAT_EMBED_HOSTS (prod-like Docker dogfood)", () => {
+  beforeEach(() => {
+    isolateEmbedCspEnv();
+  });
   afterEach(() => {
     vi.unstubAllEnvs();
     resetEmbedTenantRegistryForTests();
@@ -149,6 +162,9 @@ describe("loopback DIGICHAT_EMBED_HOSTS (prod-like Docker dogfood)", () => {
 });
 
 describe("DIGICHAT_EMBED_HOSTS (runtime CSP without the secret registry)", () => {
+  beforeEach(() => {
+    isolateEmbedCspEnv();
+  });
   afterEach(() => {
     vi.unstubAllEnvs();
     resetEmbedTenantRegistryForTests();
@@ -208,6 +224,9 @@ describe("DIGICHAT_EMBED_HOSTS (runtime CSP without the secret registry)", () =>
 });
 
 describe("runtime embed host parsing (fail closed)", () => {
+  beforeEach(() => {
+    isolateEmbedCspEnv();
+  });
   afterEach(() => {
     vi.unstubAllEnvs();
     resetEmbedTenantRegistryForTests();

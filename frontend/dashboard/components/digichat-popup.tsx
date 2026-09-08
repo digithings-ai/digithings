@@ -34,8 +34,11 @@ import {
   DIGICHAT_UPGRADE_CTA_LABEL,
   DIGICHAT_UPGRADE_TITLE,
   extractPageContext,
+  fetchDigichatChromeConfig,
+  mergeDigichatChromeIntoPopup,
   readDigichatPopupConfig,
   readDocumentTheme,
+  type DigichatChromeApiResponse,
   type DigichatPopupConfig,
   type DigichatPopupTheme,
   type PlanTier,
@@ -61,11 +64,38 @@ export default function DigichatPopup({
   const tier = tierOverride ?? sessionTier;
   const auth = useContext(AuthContext);
   const accessToken = auth?.session?.access_token ?? null;
-  const config = useMemo(
+  const baseConfig = useMemo(
     () =>
       configOverride !== undefined ? configOverride : readDigichatPopupConfig(),
     [configOverride],
   );
+  const chromeHostKey = baseConfig
+    ? `${baseConfig.origin}|${baseConfig.host}`
+    : '';
+  const [chromeHost, setChromeHost] = useState(chromeHostKey);
+  const [chrome, setChrome] = useState<DigichatChromeApiResponse | null>(null);
+  if (chromeHost !== chromeHostKey) {
+    setChromeHost(chromeHostKey);
+    setChrome(null);
+  }
+  const config = useMemo(() => {
+    if (!baseConfig) return null;
+    return chrome ? mergeDigichatChromeIntoPopup(baseConfig, chrome) : baseConfig;
+  }, [baseConfig, chrome]);
+
+  useEffect(() => {
+    if (!baseConfig || configOverride) return;
+    let cancelled = false;
+    void fetchDigichatChromeConfig(baseConfig.origin, baseConfig.host).then(
+      (next) => {
+        if (cancelled || !next) return;
+        setChrome(next);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [baseConfig, configOverride]);
 
   const entitled = canUseDigichatPopup(tier);
   const [open, setOpen] = useState(false);

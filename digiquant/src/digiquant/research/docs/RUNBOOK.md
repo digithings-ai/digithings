@@ -312,48 +312,52 @@ the day cost $18. And $10 is calibrated on observed runs ($4.00 on 07-31, $4.70 
 ~$1.55 mean, against the $11.95 Jun 19 outlier below) — re-calibrate it if the model roster
 changes.
 
-### OpenRouter model tiers (`config/digiquant_models.yaml`)
+### House model tiers (`config/digiquant_models.yaml`)
 
 As of Jun 2026 the pipeline pins **open-weight** models per capability tier. The Jun 19
 delta run (**$11.95** / 147 calls) used bare Auto Router + `openai/*` (GPT-5.5) — that path
-is blocked: `cost_quality_tradeoff=10`, open-weight `allowed_models` only, no frontier pins.
+is blocked: CI-mapped tier pools only, no frontier pins, no auto-router.
 
 | Env | Values | Effect |
 |---|---|---|
 | `OLYMPUS_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/digiquant_models.yaml` |
-| `OPENROUTER_API_KEY` | GitHub secret | Required — all LLM calls + dashboard native web grounding (`get_grounding_model` / Perplexity / `:online`) |
+| `CHEAPERINFERENCE_API_KEY` | GitHub secret | House default upstream — all LLM calls route here when set |
+| `OPENROUTER_API_KEY` | GitHub secret | Fallback upstream when house is forced to OpenRouter (`DIGI_HOUSE_UPSTREAM=openrouter`) |
 
-`apply_digiquant_openrouter_env()` (portfolio chain startup and `validate-providers.py` preflight)
-sets **`OPENROUTER_ALLOWED_MODELS`** and **`OPENROUTER_COST_QUALITY_TRADEOFF`** from the active
-tier + `openrouter_defaults`. No other OpenRouter env vars are set at chain startup. The workflow
-(`.github/workflows/pipeline-digiquant.yml`) additionally sets `OPENROUTER_FALLBACK_MODELS` on both
-the pipeline run step and the preflight-validation step — see the table below.
+`apply_digiquant_house_env()` (portfolio chain startup and `validate-providers.py` preflight)
+points the default client at the house upstream. No model-policy env vars are set at chain
+startup — tiers live in `config/digiquant_models.yaml` and misconfiguration surfaces
+fail-fast from digillm.
+Fail-fast: provider errors surface to the caller — there is no fallback chain.
 
 **Preflight time ceiling (#2528/#2531):** `digiquant/scripts/research/validate-providers.py` sets
 `DIGILLM_REQUEST_TIMEOUT_SECONDS=20` and `DIGILLM_EMPTY_RETRY_MAX=0` before any LLM import (local
 runs and CI). The `Validate AI provider routing` workflow step has `timeout-minutes: 10` so a hung
 provider yields a step **failure**, not a 240-minute job **cancellation**.
 
-#### OpenRouter routing knobs (digillm → `extra_body`)
+#### Provider request shaping (retired)
 
-| Knob | Where set | Semantics |
-|---|---|---|
-| **`cost_quality_tradeoff`** | `OPENROUTER_COST_QUALITY_TRADEOFF` (always **10**) | Auto Router plugin dial **0–10**: 0 = most capable, **10 = cheapest** |
-| **`allowed_models`** | `OPENROUTER_ALLOWED_MODELS` | `plugins[{id:auto-router, allowed_models}]` — candidate pool for `openrouter/auto` only |
-| **`provider.require_parameters`** | digillm default ON | Routes structured-output / tool calls to providers that honor `response_format` / `tools` |
-| **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain on every `openrouter/` request (primary call, not only empty retries) — set on both the pipeline run step and the preflight-validation step since #2512. Covers provider **errors** (5xx, rate limits, endpoint refusals), not empty `200` bodies (#2520) |
-| **`openrouter:web_search` (Exa)** | digillm **toolkit** fallback for non-native OpenRouter models — **not** dashboard production grounding (#2567) | Exa engine, **$0.007**/request for auto/instant/fast modes ([OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search), 10 results included, +$0.001/extra) |
+digillm used to attach OpenRouter routing controls (`provider.require_parameters`,
+`plugins[auto-router]`, price ceilings, Exa `openrouter:web_search`) via `extra_body`.
+That machinery is removed — digillm is a generic router and sends requests as built
+(plus BYOK pass-through on the proxy path). Tier capability is enforced by the pinned
+pools in `config/digiquant_models.yaml`, not by request knobs.
 
-Phases pass **pinned** `openrouter/<vendor>/<model>` strings (not `openrouter/auto`). Auto
-Router knobs still apply to any auto/fallback path and keep operator overrides bounded.
+| Knob | Status |
+|---|---|
+| **`cost_quality_tradeoff` / `allowed_models`** | Removed — no reader; tier pools are the capability guarantee |
+| **`provider.require_parameters`** | Removed — pin capable models instead |
+| **`openrouter:web_search` (Exa)** | Removed from digillm — pass the tool dict explicitly via generic `completion(tools=…)` if ever needed |
+
+Phases pass **pinned** model slugs (not `openrouter/auto`). Fail-fast:
+provider errors surface instead of substituting another model.
 
 **Web grounding (dashboard)** resolves via `get_grounding_model()` from the tier's
-`web_search_models` pool. Every production pool entry is `perplexity/sonar` or an
-`:online` variant — **web-search-capable models only** (#2567). digillm uses
-built-in provider search; dashboard call sites do **not** pass Exa `engine` /
-`max_results`. The Exa `openrouter:web_search` server tool remains a digillm /
-digigraph toolkit fallback for non-native models (opt-in / diagnostics). Check 4
-in `validate-providers.py` exercises the **native** dashboard path.
+`web_search_models` pool. House pools are CI synthesis models (`gemini-3.1-flash-lite`,
+`deepseek-v4-flash`) over in-house digisearch retrieval — not sonar / `:online`
+(#3660). Grounding synthesizes via plain completion over the tier pins; dashboard
+call sites do **not** pass Exa `engine` / `max_results`. Fail-fast: there is no
+preflight web-search ping — provider errors surface from the real run.
 **Structured JSON** phases use pinned open-weight models with `strict:true` json_schema.
 
 Per-phase override: `config/model_modes.yaml` → `phase_models` — **frontier models are
@@ -398,7 +402,7 @@ back with empty bodies. Contract and levers, in order of cause:
 1. **Account state first.** An empty body can be the Auto Router silently degrading on a key with no credit/over a limit. Check OpenRouter `GET /api/v1/credits` (balance) and `GET /api/v1/key` (daily/weekly/monthly spend + limits) with the `OPENROUTER_API_KEY` as a Bearer token. This is the cheapest first check.
 2. **Strict structured outputs are sent correctly** (digigraph `research_agent`): `strict: true` + a strict-legal schema (`additionalProperties:false`, all-required, unsupported keywords stripped). A strict request carrying Pydantic's raw schema is rejected by the provider and surfaces as an empty body (not an error).
 3. **`provider.require_parameters` is forced on** for any request carrying `response_format`/`tools` (digillm, independent of the `OPENROUTER_REQUIRE_PARAMETERS` toggle) so the Auto Router only routes to a provider that honors the param. Do **not** disable it for the pipeline.
-4. **Capable-model fallback (operator lever).** The Auto Router is *best-effort* for structured outputs — OpenRouter's own docs do not recommend the bare auto router for json_schema. Pin a capable allowlist via **`OPENROUTER_FALLBACK_MODELS`** (comma-separated, cheap→capable) in the workflow `env:`; digillm attaches `route=fallback` on the **primary** request so OpenRouter can swap on provider **errors** — not on empty `200` bodies (#2520). Pick current slugs from the OpenRouter models page filtered by **`supported_parameters=structured_outputs`** (slugs churn — keep them in config, never hard-coded). Restoring this list also restores a cost ceiling if you re-add `OPENROUTER_MAX_*_PRICE`.
+4. **Pinned capable models (operator lever).** The Auto Router is *best-effort* for structured outputs — OpenRouter's own docs do not recommend the bare auto router for json_schema. Phases pass **pinned** `openrouter/<vendor>/<model>` strings, and tier pools in `config/digiquant_models.yaml` are the capability guarantee. A provider error surfaces instead of substituting another model — fix the pin, don't add a fallback chain. Pick current slugs from the OpenRouter models page filtered by **`supported_parameters=structured_outputs`** (slugs churn — keep them in config, never hard-coded).
 
 ## Environment requirements
 1. Python 3.11+ recommended.

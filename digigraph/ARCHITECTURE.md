@@ -453,7 +453,7 @@ Three-layer structure:
 
 1. **Primitives** (`tools/`): stateless callables not exposed to the LLM directly.
 2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. digisearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` at the bottom of `builtin.py`.
-3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `project_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair) activates only when `DIGIVAULT_URL` is set. The `web` skill (`web_search` via digillm) activates only when `WorkflowState.enable_web_search` is true — digichat sends `X-Digi-Enable-Web-Search` after tenant + user opt-in (#3420); default off so web never mixes into corpus RAG silently. External cites use `evidence_tier: External` and supplement vault/search hits.
+3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `project_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair) activates only when `DIGIVAULT_URL` is set. The `web` skill (`web_search` grounding synthesis via `llm_client`, backed by a plain digillm completion — no vendor search tooling) activates only when `WorkflowState.enable_web_search` is true — digichat sends `X-Digi-Enable-Web-Search` after tenant + user opt-in (#3420); default off so web never mixes into corpus RAG silently. External cites use `evidence_tier: External` and supplement vault/search hits.
 
 The registry is a module-level dict (`_tools`, `_skills` in `registry.py`). It is global to the process — all requests share the same registry. `register_tool` raises `ValueError` on duplicate names, so plugins loaded via `load_entrypoint_tools()` must use unique names.
 
@@ -910,14 +910,12 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
   `openrouter.ai` (direct OpenAI, Ollama `:11434`) is **not** LiteLLM; BYOK
   then uses the user Bearer against the catalog vendor URL so a foreign
   provider secret is never placed in `extra_body` toward the wrong host. The
-  leftover CLI rewrite (`apply_digiquant_openrouter_env` in
+  leftover CLI rewrite (`apply_digiquant_house_env` in
   `digigraph/src/digigraph/model_config.py`) points the default base at
   `openrouter.ai`; that is not LiteLLM, so prefixed BYOK uses the user Bearer
   against the vendor URL and leftover `gemini/` / `xai/` stay vendor clients.
-  `openrouter/auto`
-  remains the diagnostic auto-router id (preflight structured-output probe),
-  not a phase pin. Grounding uses unprefixed `:online` / `perplexity/*` slugs
-  via `get_grounding_model()`. Optional OmniRoute is a separate overlay
+  Grounding synthesizes via plain completion over the tier's `web_search_models`
+  pins (`get_grounding_model()`). Optional OmniRoute is a separate overlay
   (`config/litellm.omniroute.yaml`, compose profile `omniroute`) — off by
   default; do not cut house pins over to it. See `docs/providers/omniroute.md`.
 - Caching: LiteLLM supports Redis-backed semantic caching when `REDIS_URL` is set (Compose profile: `litellm-cache`). BYOK must not share that cache across principals — digillm sends `no-cache` / `no-store` on every BYOK proxy request.
