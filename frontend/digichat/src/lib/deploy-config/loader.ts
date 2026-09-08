@@ -22,7 +22,7 @@ import {
 import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
 import {
   isThreadSkin,
-  DEFAULT_THREAD_SKIN,
+  defaultThreadSkinForTenant,
   threadSkinChoices,
 } from "@/lib/thread-skins";
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
@@ -73,7 +73,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
     chrome: {
       mode: chromeMode,
       theme: cfg.theme,
-      skin: cfg.skin ?? DEFAULT_THREAD_SKIN,
+      skin: cfg.skin ?? defaultThreadSkinForTenant({ slug: cfg.slug, aliases: cfg.aliases }),
       title: cfg.title,
       welcome: parseWelcomeCopy(cfg.welcome),
       suggestions: cfg.suggestions,
