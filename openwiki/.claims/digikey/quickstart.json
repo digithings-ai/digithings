@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:160b94c7b73240844936170bc1dcdbc41ab51e79d58a63e2f6cff1c0db0ec9ee",
+  "claims": [
+    {
+      "id": "claim_8661ba5798b04e31ba8e39111b038dba",
+      "statement": "The CLI issues keys via issue-key --tenant/--label/--scopes/--kind with the plaintext shown once, and verification is pytest -m unit -k digikey plus ruff check and format --check.",
+      "evidence": [
+        {
+          "resource": "repo://digikey/AGENTS.md#L60-L80",
+          "version": "repo-lines-v1:sha256:910b2baa99b3e0d2b4f1dcd3e8710e26e7fc3bb106ba8d6d471f71dd8e75b832:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0ZjhmYWMwZDRkODg3NjE5YTQxNmRlM2RjYzA0ZWI5ZTgyNGQyZWQ1MDllOWRmYzA0MDBlZGEzYmRkNDliMTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFhMGUyODFlODRjZDY5NTJjOTgyOWI0NzU2MGFlY2VkZDViY2I5ZWRhYmE0N2M5ZDE3NmU1NTE0ZjczNDFiZGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFmYjZiOTNmN2E2YjEwNWZkYjdlMzQ4NTY0MWVlNjgxNTdhODM5MWU3ODQ2Y2I1YjM0NTNkNzg2ZTZiMDJmY2QifQ"
+        },
+        {
+          "resource": "repo://digikey/src/digikey/cli.py#L10-L34",
+          "version": "repo-lines-v1:sha256:83ee5693358d42262fbc5cb1c0f6e5b2caaceb1612df78a72a50eede279022ce:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcwYmM1MTI2NWRhM2M0OTRiZGQyOTQwOGMwZTE3NzY2NWJmZWFkNmZkMjc5MzZmMDU5ZDJjNTU3YjE5YTNjZTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5OTdiNzY2NjQxMThmY2MzNjExNzI0NDMwOGMzNGM0OTZjYzI1MzM2YmE0ZTQzYjgwNmJjNzRhMGY4NzEyYTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUyOWQ2N2FlMzljZDAxYjllZDZkN2Q1N2JlYTFhYjhiYjRlMzNiZTVjZTM0ZGIxNTdjZWZmNzEzNTEzMjY4ZTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYwNjZmMzFkZDhjNGUwNTQ3ZDMwZGE5NDIyNWIwNmI5NDllMDU5MTJhZjAzZjA1ZjczOGM4MDBkNmY0NmU3NzgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_883b5a6afe5e4ad59f4d536575627f0d",
+      "statement": "POST /v1/oauth/token exchanges an API key for a short-lived JWT that downstream services verify locally against the public JWKS endpoint.",
+      "evidence": [
+        {
+          "resource": "repo://digikey/ARCHITECTURE.md#L37-L44",
+          "version": "repo-lines-v1:sha256:af30d1f07754fc740bf9880799aeaa013f5258d0f1b664cab8fe3861f9ccc242:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzZmNjVkYWYyZjI3Njk0Yjc2ZWU4MjdiNjRiNzk2Mzk1NTA4MGY5YmU1MjcwZDU0MmY0NmNhM2I5MDkyYTMzZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWMxYTNkYzVjODgwMjA5MjZkZGQxMDA2Y2M5MzhjMWU5OTg3MTRmODg3MDllZTc2MTIwNWJhZjllZjU5Y2FlYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjc3ZGIyZjJmMGEzNzRkMWY0YWI3ZDY5MGM1NjA4MzZlMTY4MjM1MGJkYmUwNWE0MTIzMWYxZDcxNjQxN2RmNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDIzYzE1OTQ2ZWIzZDA2ZGExYzhhODM2OWRhOTliY2VhYWM0Zjc3Yzk2ZWJlMDFjMWFkYzdjZGRlYTI5YjY4NiJ9"
+        },
+        {
+          "resource": "repo://digikey/src/digikey/server.py#L110-L115",
+          "version": "repo-lines-v1:sha256:ce8a89ac7f31db747c082e28c8f477574bb4c479f4129367cc3bafb952b6f2fd:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzc1Y2Y4MWMyNzgzZjJkNjU0Yzk1N2JkYzkxMjI4ZDA5MjU1YWY2ZDVmNTk5NTk3NmRiZjA3ZTE0ZTNlNGQyYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTI3ODAyOTFhOWYyNjI1YmFmNDA0ZmIwYWIxZDExMmZiYmQ0MmQ3ZDNiNzBiMWY3NzU2ZGY4OWVkMzBkNDFjZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOGY0NTk0NWU2YjI1YThkYjE2YmY0NmM2OGMzMzI5Mzk3ZmUzNGRmYTU2MTFkZGI2NmVkNTAxMDYyZGM5MWQyOSJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

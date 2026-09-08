@@ -23,22 +23,22 @@
    and .dt-cur). */
 @import "@digithings/web/styles/chat-core.css";
 /* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
-   (~1 MB). This app renders <DigiChatSession>, so it reaches
-   remark-math/rehype-katex and genuinely needs them; dashboard and the design
-   reference deliberately do not import this. Must come AFTER chat-core.css. */
+   (~1 MB). digithings-web iframes digichat /embed (CliThread / ChatMarkdown),
+   which reaches remark-math/rehype-katex; dashboard and the design reference
+   deliberately do not import this. Must come AFTER chat-core.css. */
 @import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
-/* The .tl-* frame for <TerminalStepCaret>, which <DigiChatSession> shows while
-   an answer is still on its way. This app is the second consumer of that
-   session component (digichat is the first), so it needs the sheet too — the
-   chat page renders the caret whether or not this line is here, just unstyled.
-   AFTER chat-core.css: the caret inside it is <ChatStreamCursor>. */
+/* Terminal loaders sheet (legacy DigiChatSession Searching… chrome). Kept for
+   any residual .tl-* usage on the marketing shell; the live chat UI lives in
+   the iframe. AFTER chat-core.css. */
 @import "@digithings/web/styles/terminal-loaders.css";
 @import "@digithings/digichat-ui/styles/cursor.css";
 @import "@digithings/digichat-ui/styles/session.css";
 
 /* Tailwind must scan the shared components that carry token utilities —
-   paths relative to this file (frontend/digiweb/web). */
+   paths relative to this file (frontend/digiweb/web). Do NOT rewrite these
+   through node_modules/@digithings/web: Tailwind's scanner does not traverse
+   the workspace symlink and silently generates nothing. */
 @source "../../digiweb/web/src/components/NavShell.tsx";
 @source "../../digiweb/web/src/components/TerminalManifest.tsx";
 @source "../../digiweb/web/src/components/docs";
@@ -50,6 +50,8 @@
 @source "../../digiweb/web/src/components/symbols";
 /* … and the terminal loaders' (<TerminalStepCaret> in the waiting turn). */
 @source "../../digiweb/web/src/components/terminal";
+/* … and the shared ContactMailto's pending dim. */
+@source "../../digiweb/web/src/components/contact";
 
 /* Point the token font families at the self-hosted next/font variable.
    Utilitarian v0.1: mono is the default voice for claim, body, and chrome.
@@ -234,8 +236,8 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dc-settings-primary { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
 .dc-settings-primary:hover { opacity: 0.92; }
 .dc-settings-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
-.dc-settings-error { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--down); }
-.dc-settings-test-ok { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--up); }
+.dc-settings-error { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--danger); }
+.dc-settings-test-ok { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--accent); }
 
 /* digichat embed boot loader (ChatEmbedShell.tsx) sits over the page's own
    fixed .grain/.glow layers, not a plain app background. ContainerBootLoader's

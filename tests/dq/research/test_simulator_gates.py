@@ -244,15 +244,20 @@ class TestWorkflowDailyCadence:
         assert '--run-type "monthly"' not in text
 
     def test_dashboard_workflow_schedule_is_daily(self) -> None:
-        """Daily cadence is Worker-driven since #3579: digithings-cron dispatches the
-        `olympus-daily` repository_dispatch jobs (house-run-*) and pipeline-digiquant.yml
-        listens for that event type (no GHA `schedule:` key remains)."""
+        """Production clock is digithings-cron (#3579); house-run jobs keep the daily cadence."""
         import re
 
-        jobs_ts = _REPO_ROOT / "frontend" / "digithings-cron" / "src" / "jobs.ts"
-        text = jobs_ts.read_text(encoding="utf-8")
-        house_runs = re.findall(r'rd\(\s*"house-run-[^"]+"\s*,\s*"([^"]+)"', text)
-        assert house_runs, "digithings-cron must keep dispatching olympus-daily house runs"
-        workflow_text = _PIPELINE_WORKFLOW.read_text(encoding="utf-8")
-        assert "olympus-daily" in workflow_text
-        assert 'cron: "0 12 * * *"' not in workflow_text
+        jobs_src = (
+            Path(__file__).resolve().parents[3] / "frontend" / "digithings-cron" / "src" / "jobs.ts"
+        )
+        pairs = dict(
+            re.findall(
+                r'(?:wd|rd)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
+                jobs_src.read_text(encoding="utf-8"),
+                flags=re.DOTALL,
+            )
+        )
+        for hour in (9, 10, 11, 12):
+            assert pairs.get(f"house-run-{hour:02d}") == f"17 {hour} * * *"
+        assert "house-run-sun" not in pairs
+        assert "0 12 * * *" not in pairs.values()

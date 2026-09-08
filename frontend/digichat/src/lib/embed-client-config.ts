@@ -18,11 +18,18 @@ import {
   type EmbedLlmAccess,
   type EmbedTenantConfig,
 } from "@/lib/embed-tenants";
+import {
+  DEFAULT_THREAD_SKIN,
+  defaultThreadSkinForTenant,
+  type ThreadSkin,
+} from "@/lib/thread-skins";
 
 export type EmbedTenantClientConfig = {
   slug: string;
   gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
+  /** assistant-ui Thread layout. See thread-skins.ts */
+  skin?: ThreadSkin;
   accent: { color: string; foreground: string } | null;
   attribution: boolean;
   title?: string;
@@ -38,7 +45,7 @@ export type EmbedTenantClientConfig = {
   webSearch?: boolean;
   /**
    * Discriminator only — never project Foundry endpoints / digigraph URLs.
-   * DigiChatSession uses this to enable regenerate/edit when the BFF turn
+   * CliThread uses this to enable regenerate/edit when the BFF turn
    * mutation API is available (#3475).
    */
   backendType?: "digigraph" | "foundry";
@@ -50,6 +57,7 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   slug: "embed",
   gateMode: "turn_limited",
   theme: "dark",
+  skin: DEFAULT_THREAD_SKIN,
   accent: null,
   attribution: false,
   showByok: false,
@@ -67,6 +75,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     slug: cfg.slug,
     gateMode: cfg.gateMode,
     theme: cfg.theme,
+    skin: cfg.skin ?? defaultThreadSkinForTenant({ slug: cfg.slug }),
     accent: cfg.accent ?? null,
     attribution: cfg.attribution,
     title: cfg.title,

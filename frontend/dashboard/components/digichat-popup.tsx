@@ -1,25 +1,44 @@
 'use client';
 
 /**
- * Desk+ digichat popup (#3422 / #3581) — bottom-right launcher + floating iframe.
- * Mirrors digichat `widget.js` (#3421) without loading an external script (CSP).
- * Rectangular “ask digichat” chrome, expand/collapse, HTML page context.
+ * Desk+ digichat popup (#3422) — dashboard adapter around digiweb's shared
+ * square-to-panel launcher. This file owns entitlement, embed URL, theme, and
+ * page-context messaging; @digithings/web owns all launcher chrome and motion.
+ *
+ * Baseline (free/brief) sees the same launcher but an upgrade CTA panel with
+ * chat disabled (#3662) — never an iframe, so non-entitled tiers never burn
+ * turns and never meet the free-3 gate.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DigichatLauncher } from '@digithings/web';
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
+import { AuthContext } from '@/lib/auth-context';
 import { usePlanTier } from '@/lib/use-entitlement';
 import {
   buildDigichatEmbedSrc,
   buildPageContextMessage,
+  buildPlanTierMessage,
   buildThemeMessage,
   canUseDigichatPopup,
-  DIGICHAT_LAUNCHER_CLOSE_LABEL,
-  DIGICHAT_LAUNCHER_LABEL,
   DIGICHAT_READY,
-  extractPageHtml,
-  extractVisiblePageText,
+  DIGICHAT_UPGRADE_BODY,
+  DIGICHAT_UPGRADE_CTA_HREF,
+  DIGICHAT_UPGRADE_CTA_LABEL,
+  DIGICHAT_UPGRADE_TITLE,
+  extractPageContext,
+  fetchDigichatChromeConfig,
+  mergeDigichatChromeIntoPopup,
   readDigichatPopupConfig,
   readDocumentTheme,
+  type DigichatChromeApiResponse,
   type DigichatPopupConfig,
   type DigichatPopupTheme,
   type PlanTier,
@@ -43,17 +62,46 @@ export default function DigichatPopup({
 }: DigichatPopupProps) {
   const sessionTier = usePlanTier();
   const tier = tierOverride ?? sessionTier;
-  const config = useMemo(
+  const auth = useContext(AuthContext);
+  const accessToken = auth?.session?.access_token ?? null;
+  const baseConfig = useMemo(
     () =>
       configOverride !== undefined ? configOverride : readDigichatPopupConfig(),
     [configOverride],
   );
+  const chromeHostKey = baseConfig
+    ? `${baseConfig.origin}|${baseConfig.host}`
+    : '';
+  const [chromeHost, setChromeHost] = useState(chromeHostKey);
+  const [chrome, setChrome] = useState<DigichatChromeApiResponse | null>(null);
+  if (chromeHost !== chromeHostKey) {
+    setChromeHost(chromeHostKey);
+    setChrome(null);
+  }
+  const config = useMemo(() => {
+    if (!baseConfig) return null;
+    return chrome ? mergeDigichatChromeIntoPopup(baseConfig, chrome) : baseConfig;
+  }, [baseConfig, chrome]);
+
+  useEffect(() => {
+    if (!baseConfig || configOverride) return;
+    let cancelled = false;
+    void fetchDigichatChromeConfig(baseConfig.origin, baseConfig.host).then(
+      (next) => {
+        if (cancelled || !next) return;
+        setChrome(next);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [baseConfig, configOverride]);
 
   const entitled = canUseDigichatPopup(tier);
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const [iframeSrc, setIframeSrc] = useState('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const iframeReadyRef = useRef(false);
   const pageContextSentRef = useRef(false);
   const themeRef = useRef<DigichatPopupTheme>('dark');
 
@@ -76,31 +124,19 @@ export default function DigichatPopup({
   }, [config, entitled, open]);
 
   useEffect(() => {
-    if (!open || !config) return;
+    if (!open || !config || !entitled) return;
     pageContextSentRef.current = false;
-    setIframeSrc(buildDigichatEmbedSrc(config, themeRef.current));
-  }, [open, config]);
-
-  const closePanel = useCallback(() => {
-    setOpen(false);
-    setExpanded(false);
-  }, []);
-
-  const togglePanel = useCallback(() => {
-    if (open) {
-      setOpen(false);
-      setExpanded(false);
-    } else {
-      setOpen(true);
-    }
-  }, [open]);
+    const nextSrc = buildDigichatEmbedSrc(config, themeRef.current);
+    if (nextSrc === iframeSrc) return;
+    iframeReadyRef.current = false;
+    setIframeSrc(nextSrc);
+  }, [open, config, entitled, iframeSrc]);
 
   const sendPageContext = useCallback(() => {
     if (!config?.pageContext || pageContextSentRef.current) return;
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
-    const text = extractVisiblePageText();
-    const html = extractPageHtml();
+    const { html, text } = extractPageContext();
     try {
       win.postMessage(
         buildPageContextMessage(text, { html: html || undefined }),
@@ -112,103 +148,87 @@ export default function DigichatPopup({
     }
   }, [config]);
 
+  // A closed launcher retains its iframe so the conversation survives. On
+  // reopen, refresh the theme and page context without waiting for another
+  // `digichat:ready` event (the retained document will not emit one).
   useEffect(() => {
-    if (!config || !open) return;
+    if (!config || !open || !iframeReadyRef.current) return;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage(buildThemeMessage(themeRef.current), config.origin);
+    sendPageContext();
+  }, [config, open, sendPageContext]);
+
+  useEffect(() => {
+    if (!config || !iframeSrc) return;
     function onMessage(ev: MessageEvent) {
       if (ev.origin !== config!.origin) return;
       const data = ev.data as { type?: string } | null;
       if (!data || data.type !== DIGICHAT_READY) return;
+      iframeReadyRef.current = true;
       const win = iframeRef.current?.contentWindow;
       if (win) {
         win.postMessage(buildThemeMessage(themeRef.current), config!.origin);
+        // Send authenticated plan tier (#3662): the iframe fetches an HMAC-
+        // signed proof from /api/plan-proof and includes it in X-Embed-Plan-Proof.
+        // Raw X-Embed-Plan-Tier headers are NEVER trusted by the chat route.
+        if (entitled && accessToken) {
+          win.postMessage(
+            buildPlanTierMessage(tier, accessToken),
+            config!.origin,
+          );
+        }
       }
-      sendPageContext();
+      if (open) sendPageContext();
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [config, open, sendPageContext]);
+  }, [config, iframeSrc, open, sendPageContext, entitled, tier, accessToken]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(ev: KeyboardEvent) {
-      if (ev.key !== 'Escape') return;
-      if (expanded) {
-        setExpanded(false);
-        return;
-      }
-      closePanel();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, expanded, closePanel]);
-
-  if (!config || !entitled) return null;
-
-  const launcherLabel = open
-    ? DIGICHAT_LAUNCHER_CLOSE_LABEL
-    : DIGICHAT_LAUNCHER_LABEL;
+  if (!config) return null;
 
   return (
-    <div
-      data-digichat-popup="1"
-      className="pointer-events-none fixed inset-0 z-[2147483000]"
-      aria-live="polite"
-    >
-      <div
-        id="digichat-popup-panel"
-        role="dialog"
-        aria-label="digichat"
-        data-open={open ? '1' : '0'}
-        data-expanded={expanded ? '1' : '0'}
-        className={[
-          'pointer-events-auto fixed z-[2147483000] flex flex-col overflow-hidden bg-surface shadow-lg',
-          open ? 'flex' : 'hidden',
-          expanded
-            ? 'inset-3 h-auto w-auto'
-            : 'right-5 bottom-[5.5rem] h-[min(640px,calc(100vh-7.5rem))] w-[min(400px,calc(100vw-1.5rem))]',
-        ].join(' ')}
+    <div data-digichat-popup="1" aria-live="polite">
+      <DigichatLauncher
+        ariaLabel="digichat dashboard assistant"
+        onOpenChange={setOpen}
+        style={
+          {
+            '--digichat-launcher-panel-width':
+              'min(400px, calc(100vw - 2.5rem))',
+            '--digichat-launcher-panel-height':
+              'min(640px, calc(100dvh - 2.5rem))',
+            zIndex: 2147483000,
+          } as CSSProperties
+        }
       >
-        <div className="flex shrink-0 items-center justify-end gap-1 border-b border-hair px-2 py-1">
-          <button
-            type="button"
-            id="digichat-popup-expand"
-            aria-label={expanded ? 'Collapse digichat' : 'Expand digichat'}
-            aria-pressed={expanded}
-            onClick={() => setExpanded((v) => !v)}
-            className="cursor-pointer border-0 bg-transparent px-2 py-1 font-mono text-[0.72rem] text-ink-mute hover:text-ink"
+        {entitled ? (
+          iframeSrc ? (
+            <iframe
+              ref={iframeRef}
+              id="digichat-popup-iframe"
+              title="digichat"
+              src={iframeSrc}
+              allow="clipboard-write"
+              className="h-full w-full border-0 bg-transparent"
+            />
+          ) : null
+        ) : (
+          <div
+            data-testid="digichat-upgrade-cta"
+            className="flex h-full flex-col justify-center gap-3 p-6"
           >
-            {expanded ? 'collapse' : 'expand'}
-          </button>
-        </div>
-        {iframeSrc ? (
-          <iframe
-            ref={iframeRef}
-            id="digichat-popup-iframe"
-            title="digichat"
-            src={iframeSrc}
-            allow="clipboard-write"
-            className="min-h-0 w-full flex-1 border-0 bg-transparent"
-          />
-        ) : null}
-      </div>
-      <button
-        id="digichat-popup-launcher"
-        type="button"
-        data-mode="bar"
-        aria-label={open ? 'Close digichat' : 'Open digichat'}
-        aria-expanded={open}
-        aria-controls="digichat-popup-panel"
-        onClick={togglePanel}
-        className={[
-          'pointer-events-auto fixed right-5 bottom-5 z-[2147483000]',
-          'h-11 min-w-[10rem] cursor-pointer rounded-none border border-hair bg-surface',
-          'px-4 text-sm font-medium text-ink shadow-lg',
-          'transition-[transform,opacity,border-color,background-color] duration-150 ease-out',
-          'hover:-translate-y-px hover:border-ink-mute hover:bg-ink/[0.04]',
-        ].join(' ')}
-      >
-        {launcherLabel}
-      </button>
+            <p className="text-sm font-medium">{DIGICHAT_UPGRADE_TITLE}</p>
+            <p className="text-sm opacity-70">{DIGICHAT_UPGRADE_BODY}</p>
+            <a
+              href={DIGICHAT_UPGRADE_CTA_HREF}
+              className="text-sm font-medium underline underline-offset-4"
+            >
+              {DIGICHAT_UPGRADE_CTA_LABEL}
+            </a>
+          </div>
+        )}
+      </DigichatLauncher>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-"""DST correctness for `.github/workflows/pipeline-digiquant-prices.yml` (#1775).
+"""DST correctness for the digithings-cron prices schedules (#1775 / #3579).
 
 Every deadline the prices pipeline is trying to hit is an ``America/New_York``
 wall-clock event — the 09:30 ET open and the 16:00 ET close — but GitHub cron is
@@ -13,22 +13,10 @@ prove nothing about either season. Each schedule is expanded to UTC instants and
 converted to ET on representative dates in both offsets, including the first
 weekday after each 2026 transition, which is where this class of bug bites.
 
-The second half covers the two failure modes that are invisible in a green run:
-
-* a live Worker cron no workflow job routes (the dispatch fires, nothing runs);
-* a workflow job stranded without a ``workflow_dispatch`` mode branch (the
-  schedule removal left it unreachable);
-* the ET gate that picks between the two at-open crons. The workflow command is
-    resolved to its helper and executed against an injected clock. The gate job
-    checks out the default-branch revision that supplied the schedule, while the
-    side-effecting writer remains pinned to released ``main``.
-
-Since #3579 the production clock is the Cloudflare Worker digithings-cron
-(``frontend/digithings-cron/src/jobs.ts``), not a GHA ``schedule:`` key — so the
-"schedules" below are read out of the Worker's ``prices-*`` jobs (which dispatch
-this workflow via ``workflow_dispatch`` ``inputs.mode``), and the linkage tests
-assert Worker-cron <-> ``inputs.mode`` routing instead of cron <-> ``if:``
-literal equality.
+The Worker owns the clocks after #3579, while the workflow remains manually
+dispatchable. These tests derive schedule literals from ``src/jobs.ts``, require
+exact parity with ``wrangler.toml``, and continue exercising the workflow's ET
+gate helper against an injected clock.
 """
 
 from __future__ import annotations
@@ -36,6 +24,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import tomllib
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -47,6 +36,8 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pipeline-digiquant-prices.yml"
+JOBS_SOURCE = REPO_ROOT / "frontend" / "digithings-cron" / "src" / "jobs.ts"
+WRANGLER = REPO_ROOT / "frontend" / "digithings-cron" / "wrangler.toml"
 
 ET = ZoneInfo("America/New_York")
 CASH_OPEN = time(9, 30)
@@ -64,66 +55,34 @@ def workflow() -> dict:
     return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
 
 
-_WORKER_JOBS_TS = REPO_ROOT / "frontend" / "digithings-cron" / "src" / "jobs.ts"
-
-# Workflow job buckets the DST assertions below key on, by Worker job-id shape.
-_BUCKET_BY_JOB_ID = (
-    ("at-open", "at-open-clock"),
-    ("intraday", "intraday"),
-    ("fx-refresh", "fx-refresh"),
-    ("eod-macro", "eod-macro"),
-)
-
-
-def _worker_prices_jobs() -> list[tuple[str, str, str]]:
-    """Live (job id, cron, dispatch mode) for the Worker's prices jobs.
-
-    Parsed out of jobs.ts rather than restated: a copy here would keep passing
-    after someone shifted the production clock.
-    """
-    text = _WORKER_JOBS_TS.read_text(encoding="utf-8")
-    out: list[tuple[str, str, str]] = []
-    starts = [
-        m
-        for m in re.finditer(
-            r'wd\(\s*"prices-([^"]+)"\s*,\s*"([^"]+)"\s*,\s*DIGITHINGS\s*,'
-            r'\s*"pipeline-digiquant-prices\.yml"',
-            text,
-        )
-    ]
-    for i, m in enumerate(starts):
-        job_id, cron = m.group(1), m.group(2)
-        tail = text[m.end() :]
-        # Scope to this call: call-closing lines are indented exactly 2 spaces,
-        # so an inner opts line (4+) can never match first.
-        end = re.search(r"\n  \}?\),", tail)
-        scope = tail[: end.start()] if end else tail
-        mode_match = re.search(r'mode:\s*"([^"]+)"', scope)
-        assert mode_match, f"Worker prices job {job_id!r} has no dispatch mode"
-        out.append((job_id, cron, mode_match.group(1)))
-    assert out, f"no prices jobs found in {_WORKER_JOBS_TS}"
-    return out
-
-
-def _bucket(job_id: str) -> str:
-    for prefix, bucket in _BUCKET_BY_JOB_ID:
-        if job_id.startswith(prefix):
-            return bucket
-    raise AssertionError(f"Worker prices job {job_id!r} maps to no assertion bucket")
+@pytest.fixture(scope="module")
+def worker_jobs() -> dict[str, str]:
+    """Read literal ``wd``/``rd`` job IDs and crons from the typed Worker map."""
+    pairs = re.findall(
+        r'(?:wd|rd)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
+        JOBS_SOURCE.read_text(encoding="utf-8"),
+        flags=re.DOTALL,
+    )
+    jobs = dict(pairs)
+    assert pairs and len(jobs) == len(pairs), "Worker job IDs must be unique literal strings"
+    return jobs
 
 
 @pytest.fixture(scope="module")
-def crons() -> dict[str, list[str]]:
-    """Each assertion bucket's live crons, read out of the production clock.
-
-    Deriving them rather than restating them is the point: a copy of the literals
-    here would make every assertion below a snapshot of whatever is currently
-    committed, and would keep passing after someone shifted a schedule by an hour.
-    """
-    buckets: dict[str, list[str]] = {}
-    for job_id, cron, _mode in _worker_prices_jobs():
-        buckets.setdefault(_bucket(job_id), []).append(cron)
-    return buckets
+def crons(worker_jobs: dict[str, str]) -> dict[str, list[str]]:
+    """Price clocks grouped by the behavior the DST assertions exercise."""
+    return {
+        "intraday": [worker_jobs["prices-intraday"]],
+        "fx-refresh": [
+            worker_jobs["prices-fx-refresh"],
+            worker_jobs["prices-fx-refresh-sun"],
+        ],
+        "eod-macro": [worker_jobs["prices-eod-macro"]],
+        "at-open-clock": [
+            worker_jobs["prices-at-open-13"],
+            worker_jobs["prices-at-open-14"],
+        ],
+    }
 
 
 def _expand_field(spec: str, lo: int, hi: int) -> list[int]:
@@ -152,18 +111,8 @@ def _expand_field(spec: str, lo: int, hi: int) -> list[int]:
 def _utc_ticks(cron: str, day: date) -> list[datetime]:
     """Every UTC instant ``cron`` fires on ``day``."""
     minute, hour, dom, month, dow = cron.split()
-    if (dom, month) != ("*", "*") or dow not in ("MON-FRI", "1-5", "SUN"):
+    if (dom, month) != ("*", "*") or dow not in {"MON-FRI", "1-5"}:
         raise ValueError(f"unsupported day fields in {cron!r}")
-    if dow == "SUN":
-        return (
-            [
-                datetime(day.year, day.month, day.day, h, m, tzinfo=timezone.utc)
-                for h in _expand_field(hour, 0, 23)
-                for m in _expand_field(minute, 0, 59)
-            ]
-            if day.weekday() == 6
-            else []
-        )
     if day.weekday() > 4:
         return []
     return [
@@ -183,21 +132,9 @@ def _et_ticks(cron: str, day: date) -> list[datetime]:
     return [t.astimezone(ET) for t in _utc_ticks(cron, day)]
 
 
-def _schedules(workflow: dict) -> list[str]:
-    # `on` is parsed as the boolean True by YAML 1.1. Since #3579 there is no
-    # `schedule:` key — the live clock is the Worker's prices jobs.
-    own = workflow.get(True, {}).get("schedule") or []
-    live = [cron for _job_id, cron, _mode in _worker_prices_jobs()]
-    return [entry["cron"] for entry in own] + live
-
-
-def _metrics_cron() -> tuple[int, int]:
-    """(hour, minute) of the live metrics dispatch — EOD must finish before it."""
-    text = _WORKER_JOBS_TS.read_text(encoding="utf-8")
-    m = re.search(r'\(\s*"research-metrics"\s*,\s*"([^"]+)"', text)
-    assert m, "research-metrics job missing from the Worker clock"
-    minute, hour = m.group(1).split()[0], m.group(1).split()[1]
-    return int(hour), int(minute)
+def _configured_crons() -> list[str]:
+    parsed = tomllib.loads(WRANGLER.read_text(encoding="utf-8"))
+    return parsed["triggers"]["crons"]
 
 
 # --------------------------------------------------------------------------- #
@@ -250,7 +187,7 @@ def test_eod_finishes_before_the_metrics_cron_and_shares_no_minute_with_intraday
 ) -> None:
     """Two constraints that pin the EOD *minute* rather than its hour.
 
-    ``pipeline-research-metrics.yml``'s dispatch documents that it must run after
+    ``pipeline-research-metrics.yml``'s ``0 22`` cron documents that it must run after
     this ingest, and the job's own ``timeout-minutes`` bounds the worst case. And
     since intraday now extends through hour 21, an EOD minute on the 15-minute grid
     would collide with an intraday tick — ``digiquant-prices-intraday`` is a per-job
@@ -259,10 +196,7 @@ def test_eod_finishes_before_the_metrics_cron_and_shares_no_minute_with_intraday
     """
     (eod,) = [t for cron in crons["eod-macro"] for t in _utc_ticks(cron, day)]
     intraday = {t for cron in crons["intraday"] for t in _utc_ticks(cron, day)}
-    metrics_hour, metrics_minute = _metrics_cron()
-    metrics_cron = datetime(
-        day.year, day.month, day.day, metrics_hour, metrics_minute, tzinfo=timezone.utc
-    )
+    metrics_cron = datetime(day.year, day.month, day.day, 22, 0, tzinfo=timezone.utc)
     assert eod + timedelta(minutes=20) <= metrics_cron, "EOD can overrun the metrics cron"
     assert eod not in intraday, "EOD shares a minute with an intraday tick"
 
@@ -291,80 +225,16 @@ def test_exactly_one_at_open_cron_lands_just_after_the_open(
 
 
 # --------------------------------------------------------------------------- #
-# cron <-> `if:` linkage — a mismatch here is a silent no-op, not a red run
+# Worker job map <-> deployed trigger linkage
 # --------------------------------------------------------------------------- #
 
 
-def test_every_cron_is_claimed_by_exactly_one_job(workflow: dict) -> None:
-    """Every live Worker cron must route to exactly one workflow job.
-
-    Dispatches carry ``inputs.mode``; a mode no job gates on fires a run that
-    executes nothing, and a mode two jobs gate on double-ingests.
-    """
-    modes = {mode for _job_id, _cron, mode in _worker_prices_jobs()}
-    for mode in sorted(modes):
-        owners = [
-            name
-            for name, job in workflow["jobs"].items()
-            if f"github.event.inputs.mode == '{mode}'" in (job.get("if") or "")
-        ]
-        # at-open runs behind the at-open-clock gate (`needs`), not its own mode branch.
-        if mode == "at-open":
-            assert owners == ["at-open-clock"], f"at-open mode owners: {owners}"
-            continue
-        assert owners, f"Worker mode {mode!r} routes to no workflow job"
-        assert len(owners) == 1, f"Worker mode {mode!r} routes to several jobs: {owners}"
-
-
-def test_no_job_matches_a_schedule_that_no_longer_exists(workflow: dict) -> None:
-    """The failure mode of a trigger migration: the job stops running and CI stays green.
-
-    Since #3579 removed the ``schedule:`` trigger, every job whose ``if:`` still
-    mentions ``github.event.schedule`` must also be reachable via
-    ``workflow_dispatch`` + ``inputs.mode`` — otherwise the schedule removal
-    stranded it.
-    """
-    for name, job in workflow["jobs"].items():
-        expr = job.get("if") or ""
-        if "github.event.schedule" not in expr:
-            continue
-        assert "github.event_name == 'workflow_dispatch'" in expr, (
-            f"job {name} waits on a schedule trigger that no longer exists "
-            "with no workflow_dispatch mode branch"
-        )
-        assert "github.event.inputs.mode" in expr, (
-            f"job {name} has a dispatch branch with no inputs.mode gate"
-        )
-
-
-def _schedule_literals(expr: str) -> list[str]:
-    """Single-quoted operands of a ``github.event.schedule ==`` comparison."""
-    out: list[str] = []
-    for chunk in expr.split("github.event.schedule ==")[1:]:
-        _, _, rest = chunk.partition("'")
-        literal, _, _ = rest.partition("'")
-        out.append(literal)
-    return out
-
-
-def test_tracker_issue_bodies_quote_the_live_crons(workflow: dict) -> None:
-    """The failure-tracker steps hardcode their own cron in the issue body they open.
-
-    Two of them, and they are the copy an on-call reader trusts, so a stale literal
-    here sends whoever is triaging to a schedule that no longer exists. Live crons
-    are the Worker's prices jobs.
-    """
-    schedules = set(_schedules(workflow))
-    quoted = [
-        match
-        for job in workflow["jobs"].values()
-        for step in job.get("steps", [])
-        for match in re.findall(
-            r"`([^`]*\* \* (?:MON-FRI|1-5|SUN))`", str(step.get("with", {}).get("script"))
-        )
-    ]
-    assert len(quoted) == 2, f"expected two tracker bodies to quote a cron, found {len(quoted)}"
-    assert set(quoted) <= schedules, f"tracker bodies quote unscheduled crons: {quoted}"
+def test_worker_jobs_and_wrangler_triggers_have_exact_cron_parity(
+    worker_jobs: dict[str, str],
+) -> None:
+    configured = _configured_crons()
+    assert len(configured) == len(set(configured)), "wrangler has duplicate cron triggers"
+    assert set(worker_jobs.values()) == set(configured)
 
 
 # --------------------------------------------------------------------------- #

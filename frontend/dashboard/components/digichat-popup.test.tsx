@@ -10,12 +10,23 @@ vi.mock('@/lib/use-entitlement', () => ({
 }));
 
 import DigichatPopup from './digichat-popup';
-import type { DigichatPopupConfig } from '@/lib/digichat-popup';
+import {
+  DIGICHAT_PAGE_CONTEXT,
+  DIGICHAT_READY,
+  DIGICHAT_THEME,
+  DIGICHAT_UPGRADE_BODY,
+  DIGICHAT_UPGRADE_CTA_HREF,
+  DIGICHAT_UPGRADE_CTA_LABEL,
+  DIGICHAT_UPGRADE_TITLE,
+  type DigichatPopupConfig,
+} from '@/lib/digichat-popup';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const CFG: DigichatPopupConfig = {
   origin: 'https://digithings.ai',
   host: 'digiquant.io',
-  mode: 'bar',
+  mode: 'dot',
   pageContext: true,
   accent: '#3dd6c4',
   welcome: 'hello',
@@ -32,6 +43,7 @@ describe('DigichatPopup', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     document.documentElement.setAttribute('data-theme', 'dark');
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
@@ -39,96 +51,161 @@ describe('DigichatPopup', () => {
       root.unmount();
     });
     container.remove();
+    vi.useRealTimers();
   });
 
-  it('renders nothing for Brief (below Desk)', () => {
+  it('renders launcher with an upgrade CTA (disabled chat) for Brief (#3662)', () => {
     act(() => {
       root.render(
         createElement(DigichatPopup, { tier: 'brief', config: CFG }),
       );
     });
-    expect(container.querySelector('[data-digichat-popup]')).toBeNull();
-  });
-
-  it('renders ask digichat rectangle launcher for Desk+', () => {
-    act(() => {
-      root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
-    });
-    const btn = container.querySelector('#digichat-popup-launcher');
+    // Launcher is visible, but opening it shows the upgrade block — never chat.
+    expect(container.querySelector('[data-digichat-popup]')).not.toBeNull();
+    const btn = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
     expect(btn).not.toBeNull();
-    expect(btn?.textContent).toBe('ask digichat');
-    expect(btn?.getAttribute('data-mode')).toBe('bar');
-    expect(btn?.getAttribute('aria-expanded')).toBe('false');
+    act(() => {
+      btn.click();
+    });
+    expect(document.body.querySelector('.digichat-launcher__panel')).not.toBeNull();
+    const cta = document.body.querySelector('[data-testid="digichat-upgrade-cta"]');
+    expect(cta).not.toBeNull();
+    expect(cta?.textContent).toContain(DIGICHAT_UPGRADE_TITLE);
+    expect(cta?.textContent).toContain(DIGICHAT_UPGRADE_BODY);
+    const link = cta?.querySelector('a');
+    expect(link?.textContent).toBe(DIGICHAT_UPGRADE_CTA_LABEL);
+    expect(link?.getAttribute('href')).toBe(DIGICHAT_UPGRADE_CTA_HREF);
   });
 
-  it('opens panel, toggles close label, and sets iframe src on click', () => {
+  it('builds no iframe for baseline, so free/brief never burn turns (#3662)', () => {
     act(() => {
-      root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
+      root.render(
+        createElement(DigichatPopup, { tier: 'free', config: CFG }),
+      );
     });
-    const btn = container.querySelector(
-      '#digichat-popup-launcher',
+    const btn = document.body.querySelector(
+      '.digichat-launcher__trigger',
     ) as HTMLButtonElement;
     act(() => {
       btn.click();
     });
-    expect(btn.getAttribute('aria-expanded')).toBe('true');
-    expect(btn.textContent).toBe('close');
-    const iframe = container.querySelector(
+    expect(document.body.querySelector('#digichat-popup-iframe')).toBeNull();
+  });
+
+  it('renders launcher for Desk+ when config is present', () => {
+    act(() => {
+      root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
+    });
+    const btn = document.body.querySelector('.digichat-launcher__trigger');
+    expect(btn).not.toBeNull();
+    expect(btn?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('shows no upgrade CTA for Desk+ (entitled chat, #3662)', () => {
+    act(() => {
+      root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
+    });
+    const btn = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    act(() => {
+      btn.click();
+    });
+    expect(
+      document.body.querySelector('[data-testid="digichat-upgrade-cta"]'),
+    ).toBeNull();
+    expect(document.body.querySelector('#digichat-popup-iframe')).not.toBeNull();
+  });
+
+  it('opens the shared panel and sets iframe src on click', () => {
+    act(() => {
+      root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
+    });
+    const btn = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    act(() => {
+      btn.click();
+    });
+    expect(document.body.querySelector('.digichat-launcher__panel')).not.toBeNull();
+    const iframe = document.body.querySelector(
       '#digichat-popup-iframe',
     ) as HTMLIFrameElement;
     expect(iframe).not.toBeNull();
     expect(iframe.src).toContain('https://digithings.ai/embed');
     expect(iframe.src).toContain('host=digiquant.io');
     expect(iframe.src).toContain('layout=embed');
-    const panel = container.querySelector('#digichat-popup-panel');
-    expect(panel?.getAttribute('data-expanded')).toBe('0');
   });
 
-  it('expands and collapses via the panel control', () => {
+  it('keeps the iframe mounted across close and reopen', () => {
     act(() => {
       root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
     });
-    const launcher = container.querySelector(
-      '#digichat-popup-launcher',
+    const trigger = document.body.querySelector(
+      '.digichat-launcher__trigger',
     ) as HTMLButtonElement;
+    act(() => trigger.click());
+    const iframe = document.body.querySelector(
+      '#digichat-popup-iframe',
+    ) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage');
     act(() => {
-      launcher.click();
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: CFG.origin,
+          data: { type: DIGICHAT_READY },
+        }),
+      );
     });
-    const expand = container.querySelector(
-      '#digichat-popup-expand',
+    const readyCallCount = postMessage.mock.calls.length;
+
+    const close = document.body.querySelector(
+      '.digichat-launcher__close',
     ) as HTMLButtonElement;
-    expect(expand).not.toBeNull();
-    act(() => {
-      expand.click();
-    });
-    expect(
-      container.querySelector('#digichat-popup-panel')?.getAttribute('data-expanded'),
-    ).toBe('1');
-    expect(expand.getAttribute('aria-pressed')).toBe('true');
-    act(() => {
-      expand.click();
-    });
-    expect(
-      container.querySelector('#digichat-popup-panel')?.getAttribute('data-expanded'),
-    ).toBe('0');
+    act(() => close.click());
+    act(() => vi.advanceTimersByTime(340));
+    expect(document.body.querySelector('#digichat-popup-iframe')).toBe(iframe);
+
+    const reopenedTrigger = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    act(() => reopenedTrigger.click());
+    expect(document.body.querySelector('#digichat-popup-iframe')).toBe(iframe);
+    const reopenTypes = postMessage.mock.calls
+      .slice(readyCallCount)
+      .map(([message]) => (message as { type?: string }).type);
+    expect(reopenTypes).toEqual(
+      expect.arrayContaining([DIGICHAT_THEME, DIGICHAT_PAGE_CONTEXT]),
+    );
   });
 
-  it('launcher click dismisses an open panel', () => {
+  it('sends page-context once per open even if ready fires twice', () => {
     act(() => {
       root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
     });
-    const btn = container.querySelector(
-      '#digichat-popup-launcher',
+    const trigger = document.body.querySelector(
+      '.digichat-launcher__trigger',
     ) as HTMLButtonElement;
-    act(() => {
-      btn.click();
-    });
-    expect(btn.getAttribute('aria-expanded')).toBe('true');
-    act(() => {
-      btn.click();
-    });
-    expect(btn.getAttribute('aria-expanded')).toBe('false');
-    expect(btn.textContent).toBe('ask digichat');
+    act(() => trigger.click());
+    const iframe = document.body.querySelector(
+      '#digichat-popup-iframe',
+    ) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage');
+    const ready = () =>
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: CFG.origin,
+          data: { type: DIGICHAT_READY },
+        }),
+      );
+    act(() => ready());
+    act(() => ready());
+    const pageContextCalls = postMessage.mock.calls.filter(
+      ([message]) => (message as { type?: string }).type === DIGICHAT_PAGE_CONTEXT,
+    );
+    expect(pageContextCalls).toHaveLength(1);
   });
 
   it('renders nothing when config is null', () => {

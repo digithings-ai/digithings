@@ -1,0 +1,328 @@
+/* ==========================================================================
+   First-party digichat Thread — assistant-ui CSS-var bridge
+   --------------------------------------------------------------------------
+   Maps AUI / shadcn vars used by primitives and copied elements onto the
+   digiweb terminal pane. SCOPED to `.digichat-thread` so the 11 official
+   catalog skins keep their own `--background` / radius.
+   Import once in the app shell (gallery globals, or via DigichatThread.tsx):
+     @import "@digithings/web/styles/chat-aui.css";
+   ========================================================================== */
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-mute: var(--ink-mute);
+  --color-term-bg: var(--term-bg);
+  --color-term-ink: var(--term-ink);
+  --color-term-hair: var(--term-hair);
+  --color-term-fill: var(--term-fill);
+  --color-term-mute: var(--term-mute);
+  --color-hair: var(--hair);
+  --color-hair-2: var(--hair-2);
+  --color-surface: var(--surface);
+  --color-bg: var(--bg);
+  --color-on-accent: var(--on-accent);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-danger: var(--danger);
+  --color-warn: var(--warn);
+}
+
+[data-thread-skin="digichat"] {
+  --radius: 0;
+  --radius-thread: 0;
+  --composer-radius: 0;
+  /* Gallery chatbot.css uses var(--font-mono). Catalog :root keeps IBM Plex. */
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+[data-thread-skin="digichat"] .digichat-composer textarea:focus,
+[data-thread-skin="digichat"] .digichat-composer textarea:focus-visible,
+[data-thread-skin="digichat"] .aui-composer-input:focus,
+[data-thread-skin="digichat"] .aui-composer-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.digichat-thread {
+  --accent: var(--ink);
+  --accent-weak: color-mix(in srgb, var(--ink) 14%, transparent);
+  --on-accent: var(--bg);
+  --bg: #0a0e0c;
+  --surface: #121417;
+  --surface-2: #171a1e;
+  --hair: rgba(255, 255, 255, 0.09);
+  --hair-2: rgba(255, 255, 255, 0.15);
+  --ink: #eceef0;
+  --ink-soft: #9aa0a6;
+  --ink-mute: #6b7177;
+  --term-bg: #08090b;
+  --term-ink: #e7eaec;
+  --term-hair: #2a2e33;
+  --term-fill: #101317;
+  --term-mute: #7e858b;
+  --up: #3dd6c4;
+  --down: #e5533e;
+  --danger: #e5533e;
+  --warn: #e0b341;
+  --radius: 0;
+  --radius-thread: 0;
+  --thread-max-width: 44rem;
+  --composer-radius: 0;
+  --composer-padding: 0.5rem;
+  --composer-bg: var(--surface);
+  --background: var(--term-bg);
+  --foreground: var(--term-ink);
+  --card: var(--surface);
+  --card-foreground: var(--term-ink);
+  --muted: var(--term-fill);
+  --muted-foreground: var(--term-mute);
+  --border: var(--term-hair);
+  --primary: var(--ink);
+  --primary-foreground: var(--bg);
+  --ring: var(--accent);
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  background: var(--term-bg);
+  color: var(--term-ink);
+  max-width: var(--thread-max-width);
+  width: 100%;
+  margin-inline: auto;
+}
+
+:root[data-theme="light"] .digichat-thread,
+.light .digichat-thread {
+  --bg: #f4f3ee;
+  --surface: #f1f0eb;
+  --surface-2: #e8e6df;
+  --hair: rgba(12, 12, 10, 0.12);
+  --hair-2: rgba(12, 12, 10, 0.2);
+  --ink: #1a1c1e;
+  --ink-soft: #4a4f54;
+  --ink-mute: #6b7177;
+  --term-bg: #f1f0eb;
+  --term-ink: #1a1c1e;
+  --term-hair: #d4d1c8;
+  --term-fill: #e8e6df;
+  --term-mute: #6b7177;
+  --on-accent: #06110f;
+  --background: var(--term-bg);
+  --foreground: var(--term-ink);
+}
+
+.digichat-thread [data-role="user"],
+.digichat-thread .chat-msg--user,
+.digichat-thread .chat-msg--assistant,
+.digichat-thread .chat-msg--system {
+  justify-content: flex-start;
+  margin-inline: 0;
+  max-width: none;
+}
+
+.digichat-thread textarea,
+.digichat-thread input,
+.digichat-thread button {
+  border-radius: 0;
+}
+
+.digichat-example:hover,
+.digichat-example:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+.digichat-action:hover,
+.digichat-action:focus-visible {
+  color: var(--accent);
+}
+
+.digichat-thread__viewport {
+  scrollbar-width: thin;
+}
+
+.digichat-thread-list {
+  --accent: var(--accent-digichat, #e2708a);
+  --term-bg: #08090b;
+  --term-ink: #e7eaec;
+  --term-hair: #2a2e33;
+  --term-fill: #101317;
+  --term-mute: #7e858b;
+  --hair: rgba(255, 255, 255, 0.09);
+  background: var(--term-bg);
+  color: var(--term-ink);
+  font-family: var(--font-geist-mono, var(--font-mono), ui-monospace, monospace);
+}
+
+:root[data-theme="light"] .digichat-thread-list,
+.light .digichat-thread-list {
+  --term-bg: #f1f0eb;
+  --term-ink: #1a1c1e;
+  --term-hair: #d4d1c8;
+  --term-fill: #e8e6df;
+  --term-mute: #6b7177;
+  --hair: rgba(12, 12, 10, 0.12);
+}
+
+.digichat-thread-list__item[data-active],
+.digichat-thread-list__item[aria-current="true"] {
+  background: var(--term-fill);
+  color: var(--term-ink);
+}
+
+.digichat-gate,
+[data-thread-skin="digichat"] .dc-paywall,
+[data-thread-skin="digichat"] .dc-gate-card {
+  border: 1px solid var(--term-hair, var(--border));
+  border-radius: 0;
+  background: var(--term-fill, var(--card));
+  color: var(--term-ink, var(--card-foreground));
+  font-family: var(--font-geist-mono, var(--font-mono), ui-monospace, monospace);
+  box-shadow: none;
+}
+
+[data-thread-skin="digichat"][data-chrome-mode="embed"] .digichat-thread {
+  --thread-max-width: 100%;
+  max-width: none;
+}
+
+/* Hairline attachment chips — same grammar as the gallery `/chatbot` chips. */
+.digichat-thread .aui-attachment-chip {
+  display: inline-flex;
+  max-width: 16rem;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--hair);
+  background: transparent;
+  font-family: var(--font-geist-mono, var(--font-mono), ui-monospace, monospace);
+  font-size: 0.66rem;
+  line-height: 1.3;
+  color: var(--ink-soft);
+}
+
+.digichat-thread .aui-attachment-chip-hit {
+  display: inline-flex;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  outline: none;
+}
+
+.digichat-thread .aui-attachment-chip-hit:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.digichat-thread .aui-attachment-chip-name {
+  color: var(--ink-soft);
+}
+
+.digichat-thread .aui-attachment-chip-type::before {
+  content: "· ";
+  color: var(--ink-mute);
+}
+
+.digichat-thread .aui-attachment-chip-type {
+  color: var(--ink-mute);
+}
+
+.digichat-thread .aui-attachment-chip-remove {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  font: inherit;
+}
+
+.digichat-thread .aui-attachment-chip-remove:hover {
+  color: var(--ink);
+}
+
+.digichat-attach-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg, #0a0e0c) 55%, transparent);
+  padding: 1.25rem;
+}
+
+.digichat-attach-viewer__panel {
+  display: flex;
+  max-height: min(80dvh, 36rem);
+  width: min(36rem, 100%);
+  flex-direction: column;
+  border: 1px solid var(--hair, rgba(255, 255, 255, 0.09));
+  background: var(--term-bg, #08090b);
+  color: var(--term-ink, #e7eaec);
+  font-family: var(--font-geist-mono, var(--font-mono), ui-monospace, monospace);
+}
+
+.digichat-attach-viewer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--hair, rgba(255, 255, 255, 0.09));
+  padding: 0.45rem 0.7rem;
+}
+
+.digichat-attach-viewer__title {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--ink-soft, #9aa0a6);
+}
+
+.digichat-attach-viewer__close {
+  border: 0;
+  background: transparent;
+  color: var(--ink-mute, #6b7177);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.66rem;
+}
+
+.digichat-attach-viewer__close:hover,
+.digichat-attach-viewer__close:focus-visible {
+  color: var(--accent, #e2708a);
+}
+
+.digichat-attach-viewer__frame,
+.digichat-attach-viewer__pre {
+  min-height: 12rem;
+  flex: 1;
+  margin: 0;
+  border: 0;
+  background: var(--term-fill, #101317);
+  color: var(--term-ink, #e7eaec);
+  padding: 0.7rem;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .digichat-thread .chat-cursor {
+    animation: none;
+    opacity: 1;
+  }
+}

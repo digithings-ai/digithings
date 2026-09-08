@@ -3,23 +3,28 @@
 > **Scope:** Production Next.js 16 BFF + React 19 chat UI at `frontend/digichat/`.
 > Marketing parent is `frontend/digithings-web` `/chat` → iframe `/embed` (not the deleted `frontend/website/`).
 
+> **Release line:** published package is **1.4.0**. This branch is **digichat 2.0**
+> (assistant-ui + AI SDK v7 + standard UI parts). Do **not** merge to `develop`
+> until the 2.0 cut. 1.5 on `develop` is non-UI only. See
+> [ADR-0028](../../docs/adr/0028-digichat-web-foundation-and-opencode-distribution.md)
+> and [#3626](https://github.com/digithings-ai/digithings/issues/3626).
+> AG-UI is out of scope.
+
 ---
 
 ## 1. Overview
 
-digichat is the **user-facing interface** to the digithings ecosystem. It is a Next.js
-16 App Router application that acts as a **Backend-for-Frontend (BFF)**: the browser
-never speaks directly to digigraph or any Python service. All LLM calls, auth token
-exchanges, and upstream probes are handled in Next.js Route Handlers running on the
-server.
-
-**Modular frontend:** one shared UI (`@digithings/digichat-ui`) and activity protocol,
-with backends selected per tenant (`digigraph` | `foundry`). digithings tenants use
-digigraph (digillm + digivault hub). See
-[`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md)
+digichat is the **containerized chat product** for the digithings ecosystem: a
+Next.js 16 **BFF** (the public HTTP surface) plus an optional **default UI**
+(**stock** assistant-ui `Thread` — CLI flavor deferred). The browser never speaks
+directly to digigraph, Foundry, or any Python service. Backends and chrome are
+selected per **deployment config** (`digichat.yaml` / env overlay;
+`DIGICHAT_EMBED_TENANTS` compat) with `backend.type` `digigraph` | `foundry`. See
+[`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md),
+[`docs/architecture/digichat-renderer-contract.md`](../../docs/architecture/digichat-renderer-contract.md),
 and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 
-**Turn / thread markdown export (#3465).** Shared serializer lives in `@digithings/digichat-ui` (`serializeAssistantMarkdown` / `serializeThreadMarkdown` / `copyMarkdownWithFallback`). `ChatPanel` and embed session both use it — clipboard first, embed falls back to `.md` download (never a silent no-op).
+**Turn / thread markdown export (#3465).** Shared serializer lives in `@digithings/digichat-ui` (`serializeAssistantMarkdown` / `serializeThreadMarkdown` / `copyMarkdownWithFallback`). `ChatPanel` and embed session both use it — clipboard first, embed falls back to `.md` download (never a silent no-op). Citations prefer `source-*` parts (`messageSourceCitations`).
 
 **Last-turn regen + edit (#3466 / #3475).** Digigraph and Foundry surfaces expose **regen** on the last settled assistant and **edit** on the last user turn. Clients send `X-Digi-Turn-Mode: send | regenerate | edit_last_user` and optional `X-Digi-Run-Id` on `POST /api/chat`. Digigraph replays the **full workflow** on the same session from the truncated client transcript (tools re-run; digistore may accumulate — not “as if it never happened”). Foundry mutates conversation items (delete trailing assistant / user+assistant, then `responses.create` with no new input) via `@azure/ai-projects` OpenAI client; without an item API the BFF returns **501 `not_supported`**. Concurrent runs on the same session → **409 `run_in_progress`**; duplicate run ids → **409 `run_id_replay`**. Edit that shortens a persisted thread must set `allowTruncate: true` on the next PUT. `X-Digi-Force-Tool` is send-only.
 
@@ -27,15 +32,20 @@ and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 
 | Capability | Status |
 |---|---|
-| React 19 streaming chat (`useChat`, AI SDK v6) | Built |
+| React 19 streaming chat (`useChat` + assistant-ui, AI SDK v7) | Built |
 | Auth.js v5 — generic OIDC provider | Built |
 | Auth.js v5 — dev password provider (`DIGICHAT_DEV_AUTH`) | Built |
 | digikey JWT exchange (`bff_session` + `api_key` grants) | Built |
 | Machine API key auth (`digi_live_…`, hashed in Postgres) | Built |
 | Conversation persistence — localStorage (always on) | Built |
 | Conversation persistence — Postgres (optional) | Built |
-| digigraph activity stream (`data-digichatActivity` parts) | Built |
-| Shared activity UI (rich vault hits + research brief) | Built |
+| Standard UI stream parts (tool / source / reasoning / `data-status`) | Built |
+| Default UI: assistant-ui Thread skins (registry + official clones) | Built (2.0) |
+| Deployment config (Zod YAML + env overlay + tenants compat) | Built (2.0) |
+| Granular deploy knobs (disclosure / language / models / `cli.enabled`) | Built (2.0) |
+| digichat Ink CLI (`frontend/digichat/cli`, separate from Next bundle) | Built (2.0) |
+| Local baseline preview (`/baseline`, production chat BFF proxy) | Dev-only |
+| CLI-flavored `CliThread` skin on `/embed` | Removed (stock Thread is default) |
 | digigraph digithings adapter (`adapters/digithings/`) | Built |
 | Foundry client adapter (`adapters/foundry/`) | Built |
 | Quant comparison strip (inline `BacktestResult` parsing) | Built |
@@ -68,11 +78,34 @@ refuses to flush a remote thread that is still `hydrated: false`, and the API
 returns **409 `would_truncate`** if a PUT would drop existing rows unless
 `allowTruncate: true` (used by `/clear` and by last-user edit — #3466).
 
-**AI SDK `useChat`** (`src/components/chat-panel.tsx`): Uses `@ai-sdk/react` with a
-`DefaultChatTransport` pointed at `POST /api/chat`. Sends `X-Digichat-Session` header
-so upstream digigraph can correlate the same conversation across turns. Scroll
-stick-to-bottom with a "New messages" chip when scrolled up. Copy, Regenerate,
-and Edit-last-user actions on bubbles (first-party is always digigraph).
+**Local baseline preview** (`/baseline`, `POST /api/baseline-chat`): isolated
+Next.js root layout (`src/app/(baseline)/`) so **digichat `globals.css` never loads**.
+Default UI is the official assistant-ui **Base** template (`chrome.skin: base`).
+The 11 hosted templates are vendored under `src/components/assistant-ui/skins/`
+(plus full starters in `reference/assistant-ui-templates/`) and selected with
+`?skin=` on `/baseline` or `chrome.skin` in deploy YAML. The BFF proxies
+`https://digithings.ai/api/chat` (Cloudflare stack; loopback + non-production
+only). `/embed` stays on the digichat layout and local `POST /api/chat`.
+Stock Thread copies live under `src/app/(baseline)/stock/` — do not restyle them
+for digichat. The full assistant-ui elements catalog (every registry slug,
+purpose, fetch command, part- vs chrome-driven attach) lives in digiweb
+[`ASSISTANT_UI_ELEMENTS.md`](../digiweb/ASSISTANT_UI_ELEMENTS.md) — do not
+duplicate that table here; copy cards into `(baseline)/stock/` only when a
+deploy needs them.
+
+**AI SDK `useChat` + assistant-ui** (`src/components/chat-panel.tsx`,
+`src/components/stock/product-shell.tsx`): `@ai-sdk/react` with
+`AssistantChatTransport` (`@assistant-ui/ai-sdk`) pointed at `POST /api/chat`.
+Sends `X-Digichat-Session` so upstream digigraph can correlate the same
+conversation across turns. **Both** `/embed` and first-party `/` render an
+assistant-ui Thread via `ThreadSkinView` (11 catalog templates plus first-party
+`digichat`). Deployment config drives chrome mode, **thread skin**,
+feature adapters, persistence, and the tool catalog. `CliThread` was removed.
+Transcript parts render via
+assistant-ui `MessagePrimitive.Parts`. `ProductStockShell` mounts the tool
+catalog bar; hosts arm `X-Digi-Force-Tool` /
+`X-Digi-Turn-Mode` via `src/lib/pending-chat-headers.ts` (force-tool is
+catalog-allowlisted on the BFF).
 
 **Conversation persistence** (`src/lib/thread-local.ts`, `src/lib/conversations-repo.ts`):
 Dual-path. `localStorage` is always written (versioned blob `{ v: 1, threads: [...] }`
@@ -176,13 +209,16 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/lib/digigraph-messages.ts` | Content coercion for digigraph OpenAI body |
 | `src/lib/digigraph-upstream.ts` | `resolvedigigraphUpstreamAuth` — JWT resolution |
 | `src/lib/digikey-exchange.ts` | digikey token exchange (both grant types) |
-| `src/lib/adapters/digithings/stream.ts` | digigraph SSE → `data-digichatActivity` |
+| `src/lib/adapters/digithings/stream.ts` | digigraph SSE → standard UI chunks (`ui-stream-parts.ts`) |
+| `src/lib/ui-stream-parts.ts` | ActivitySpan → tool / source / reasoning / `data-status` |
 | `src/lib/adapters/digithings/activity/` | digivault / digisearch activity mappers (digigraph tools) |
 | `src/lib/adapters/foundry/stream.ts` | Azure Foundry → AI SDK UI message stream |
 | `src/lib/adapters/shared/messages.ts` | Shared helpers (e.g. `lastUserMessageText`) |
 | `src/lib/digigraph-activity-map.ts` | Re-export of digithings activity mappers |
 | `src/lib/embed-gate-provider.ts` | Consume per-tenant embed chat access tokens |
 | `src/lib/chat-activity.ts` | Activity allowlist, detail gate, projector |
+| `src/lib/page-context-sanitize.ts` | Structural DOM allowlist for embed page-context HTML (#3602) |
+| `src/lib/embed-page-context-messages.ts` | `digichat:page-context` postMessage schema, caps, receiver sanitize |
 | `src/lib/conversations-repo.ts` | Drizzle query helpers (conversations + quant runs) |
 | `src/lib/thread-local.ts` | localStorage read/write/merge |
 | `src/lib/ecosystem.ts` | Endpoint resolution + SSRF guard |
@@ -213,7 +249,7 @@ probe).
 - Auth: Auth.js session cookie or `Authorization: Bearer <machine-key>`.
 - Request body: `{ messages: UIMessage[] }` (AI SDK UI message format). **Full conversation history after the intended truncation** — every prior user+assistant turn still on the client must be posted; the BFF forwards the entire array to digigraph (trace stream and `streamText` paths). Foundry `send` sends only the latest user text because Azure holds server-side conversation state; Foundry `regenerate` / `edit_last_user` mutate items then create a response without re-appending user text (#3475).
 - Notable request headers: `X-Digichat-Session` / `X-Session-Id` (stable UUID for upstream tracing), `X-Request-ID` (propagated to digigraph), `X-Digi-Turn-Mode` (`send` default | `regenerate` | `edit_last_user`), `X-Digi-Run-Id` (optional idempotency), `X-External-Conversation` (Foundry), `X-Digichat-Trace: 0` (opt out of trace stream), `X-Embed-Chat-Token` (optional per-tenant trial-gate token).
-- Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus optional `data-digichatActivity` parts. Mutation errors: `400 invalid_turn_mode`, `409 run_in_progress` / `run_id_replay`, Foundry `501 not_supported` when item delete/create is unavailable.
+- Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus standard tool / `source-*` / reasoning / `data-status` parts (`x-vercel-ai-ui-message-stream: v1`). Mutation errors: `400 invalid_turn_mode`, `409 run_in_progress` / `run_id_replay`, Foundry `501 not_supported` when item delete/create is unavailable.
 - The route resolves upstream auth, builds a `createdigigraphClient`, then either (a) calls `createdigigraphTraceStreamResponse` for the trace path (passes `req.signal` so Stop aborts the digigraph fetch) or (b) calls `streamText` with `smoothStream` for the legacy path.
 - `maxDuration = 120` (Vercel/Next.js edge timeout).
 - **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). When `DIGICHAT_TRUSTED_PROXIES` is unset, IP selection keeps the historical order: `cf-connecting-ip`, the leftmost `X-Forwarded-For` hop, then `unknown`. When configured with comma-separated IPs/CIDRs, only a TCP peer in that allowlist may supply a forwarded client-IP header; `x-digichat-peer-ip` is captured from the socket by the production entrypoint, which strips a caller-provided value before forwarding to the loopback-only Next server. Then `cf-connecting-ip` is preferred, or the XFF chain is walked from right to left past trusted proxy hops to the first valid non-trusted address. An untrusted or malformed boundary falls back to the captured peer. This mirrors digigraph's allowlist policy while accounting for Next.js Route Handlers' lack of socket access; rate-limit IPs remain non-identity signals.
@@ -244,7 +280,7 @@ probe).
 
 ### Health
 
-**`GET /api/health`** — unauthenticated. Probes `{base}/health` for all enabled services (4 s AbortController timeout per service). Probes Postgres with `SELECT 1`. Returns `{ ok, checks, version }`. HTTP 200 when healthy, 503 when any required service is unreachable.
+**`GET /api/health`** — unauthenticated. Probes `{base}/health` for all enabled services (4 s AbortController timeout per service). Probes Postgres with `SELECT 1`. Returns `{ ok, checks, version }`. `version` is `DIGICHAT_VERSION` when set and non-empty; otherwise `frontend/digichat/package.json` `version` (Cloudflare Container and GHCR images also bake that value into `/etc/digichat-version` and `ENV DIGICHAT_VERSION`). HTTP 200 when healthy, 503 when any required service is unreachable.
 
 ### Auth
 
@@ -293,10 +329,11 @@ entire message set (delete all + re-insert by sequence index). No incremental ap
 
 ### AI SDK message format
 
-Messages conform to AI SDK v6 `UIMessage`: `{ id: string, role: "user"|"assistant",
-parts: UIPart[] }`. Parts include `TextUIPart`, `ReasoningUIPart`, `ToolInvocationUIPart`,
-and the custom `data-digichatActivity` part emitted by digigraph / digivault /
-foundry streams. Messages are stored verbatim as JSONB in
+Messages conform to AI SDK v7 `UIMessage`: `{ id: string, role: "user"|"assistant",
+parts: UIPart[] }`. Parts include `TextUIPart`, `ReasoningUIPart`, tool UI parts
+(`tool-{name}`), `source-url` / `source-document`, and unbranded `data-status`.
+1.4 `data-digichatActivity` is **read** only to hydrate old transcripts; 2.0
+does not emit it. Messages are stored verbatim as JSONB in
 `conversation_messages.payload`.
 
 ### BacktestResult parsing
@@ -370,7 +407,7 @@ BFF route handler
   │   ├─ POST {base}/v1/chat/completions  (raw fetch, no AI SDK client)
   │   ├─ iterateOpenAiSse: parse SSE frames
   │   │   ├─ delta.content  → text-delta parts
-  │   │   └─ delta.digigraph_trace → data-digichatActivity parts (typed mapper)
+  │   │   └─ delta.digigraph_trace → standard UI parts (typed mapper)
   │   └─ createUIMessageStreamResponse → SSE to browser
   │
   └─ Legacy path (DIGICHAT_TRACE_UI=0 or X-Digichat-Trace: 0)
@@ -459,6 +496,29 @@ for per-tenant corpus isolation — forwarded as `X-Digi-Corpus-Index` /
 policy (digithings.ai = `free_then_byok` + `showByok: true`; foundry/DataTap =
 `backend_only` + BYOK off), `attribution` flag, `aliases`, and a required `token`.
 
+The `digiquant.io` dashboard tenant is `ungated` + `llmAccess: operator` with
+no `gate` block, `showByok: true`, and `requiredPlanTier: desk` (#3662 / #3664,
+Chris lock: no free-3 quota on the dashboard popup). Desk+ chat is never
+turn-capped and the trial quota is never consulted for this host; baseline
+entitlement is enforced dashboard-side (upgrade CTA panel, no iframe, no turns
+burned). Pinned by `isDigiquantDashboardTenantConfig` in
+`src/lib/embed-tenants.ts` — a different bot from the `digithings.ai` marketing
+tenant, never conflated.
+
+YAML `gate.requiredPlanTier` and JSON `requiredPlanTier` both round-trip
+through `embedTenantToDeployment` / `deploymentToEmbedTenant`. The field is
+server-only — `toDigichatClientConfig` / `toEmbedClientConfig` never project it.
+
+**Plan proof (claims-backed, #3664):** when `requiredPlanTier` is set,
+`POST /api/chat` accepts only (1) `X-Embed-Plan-Proof` verified with
+`DIGICHAT_PLAN_PROOF_SECRET`, or (2) an authenticated digichat session with
+`app_metadata.plan_tier` ≥ required. Mint path: embed calls
+`POST /api/plan-proof` with dashboard Supabase `Authorization: Bearer` + embed
+token; digichat verifies the access token against
+`DIGICHAT_DASHBOARD_SUPABASE_URL` / anon key, reads claims `plan_tier`, and
+signs Desk+ only. Client-asserted `X-Embed-Plan-Tier` / `?plan_tier=` are never
+trusted (see `src/lib/plan-proof.ts` and `src/app/api/plan-proof/route.ts`).
+
 On structured `free_quota_exceeded` / clear rate-limit errors, embed tenants with
 `llmAccess: free_then_byok` stop the turn and open the in-chat BYOK sequence
 (even when `gateMode` is `ungated` — see `shouldSuggestByokOnEmbedError`). After
@@ -505,8 +565,8 @@ live key). All three call sites (`chat-panel.tsx`, `embed/embed-client.tsx`,
 latter pair independently of `active`/`isSet`.
 
 UX is a stepwise terminal sequence rendered **inline in the chat transcript**
-(DigiChatSession `settingsPanel` slot inside `.dc-thread`, and the app shell
-`ChatPanel` when `/key` opens BYOK mode):
+(stock BYOK / paywall surfaces, and the app shell `ChatPanel` when `/key`
+opens BYOK mode):
 
 1. Select provider (arrow keys + Enter, or click) — pre-selected from
    `initialProvider` above when set
@@ -689,11 +749,11 @@ registry there would leak every tenant's token.
 `src/lib/adapters/foundry/stream.ts` (`@azure/ai-projects` +
 `DefaultAzureCredential` — the container's own managed identity, no stored
 key). Conversation state lives in Foundry; the client echoes the conversation
-id via `X-External-Conversation` / `data-externalConversation`. For ordinary
+id via `X-External-Conversation` / `data-conversation`. For ordinary
 `send` turns the adapter appends last-user text. Regen/edit use conversation
 item delete/create when available (#3475); otherwise the BFF returns 501.
-Foundry maps `azure_ai_search` calls and returned chunks into the shared
-`data-digichatActivity` search/source rows. A reasoning disclosure appears
+Foundry maps `azure_ai_search` calls and returned chunks into standard
+tool / `source-*` / `data-status` parts. A reasoning disclosure appears
 only when the Foundry event includes summary text. Operators enable that
 summary on the agent definition: the Responses API refuses a per-call
 `reasoning.summary` request when using `agent_reference`. Empty reasoning
@@ -735,12 +795,11 @@ in with Up/Down (no free-typing required). Public copy labels Vault (not Docs).
 Signed-in ChatShell keeps `/clear` `/history` `/scope` plus the same `/byok` /
 `/websearch` / `/settings` surface.
 
-**Open originals (#3419).** Source cards on a settled turn open a side pane
-(`DocumentPane`). Vault notes render from `body` already loaded by
-`digivault_get_note` (batch ≤20) — paths without `http(s)` never become links.
-Real `http(s)` PDFs use the browser PDF plugin plus Download; never invent a
-URL. Human tool labels live only in `activity-view.toolDisplayName` (identity
-keys still use wire ids).
+**Sources on the transcript (#3419 / 2.0).** assistant-ui `Source` parts and tool
+output document lists render inline in `CliThread`. Vault note `body` may still
+sit on tool output JSON for clients that map it; digichat 2.0 does **not** mount
+`DocumentPane`. Paths without `http(s)` never become invented URLs. Human tool
+labels for legacy hydrate live in `activity-view.toolDisplayName`.
 
 See `docs/superpowers/specs/2026-08-10-digichat-language-selector-design.md`
 for the design rationale behind the dual-backend language split.
@@ -771,19 +830,36 @@ parent browsing-context origin** (`location.ancestorOrigins[0]` or
 and caps live in `src/lib/embed-seed-messages.ts`. DataTap's `datatap:gated` /
 `datatap:unlocked` channel is unchanged.
 
-**postMessage page-context (popup widget #3421 / #3581).** Hosts that load
+**postMessage page-context (popup widget #3421 / #3581 / #3602).** Hosts that load
 `public/widget.js` (or the dashboard React popup) may post
 `{ type: "digichat:page-context", text, html?, screenshotDataUrl?, ts }`
 after `digichat:ready`. Accepted only from the immediate parent browsing-context
 origin (`resolveReadyTargetOrigin`) — not limited to first-party hosts, so a
 registered third-party site can describe **its own already-visible** DOM. Prefer
 sanitized **HTML** (≤12k) for structure; `text` (≤8k) remains required for
-back-compat. Caps live in `embed-page-context-messages.ts`. The embed shows a
-compact “looking at this page” monospace preview (never re-hydrates HTML as live
-DOM) and prepends formatted context to the next `wrappedSend` once. Screenshot
-data URLs are optional and acknowledged in the prompt only — vision multimodal /
-LiteLLM image parts are deferred. Config/URL helpers:
-`src/lib/embed-popup-config.ts`.
+back-compat. Caps live in `embed-page-context-messages.ts`. The embed does **not**
+restore the tall “looking at this page” preview (#3590). On send, the snapshot
+becomes a compact `page-context.html` document attachment (assistant-ui chip;
+click opens a portaled sandboxed iframe / `<pre>` viewer). `expandPageContextFileParts`
+folds that file part back into prompt text so digigraph still sees the context.
+The dashboard popup posts the payload once per open. Screenshot data URLs are
+optional and acknowledged in the prompt only — vision multimodal / LiteLLM image
+parts are deferred. Config/URL helpers: `src/lib/embed-popup-config.ts`.
+
+**Page-context privacy contract.** Regex tag-stripping is not the boundary.
+Sender and receiver both run the structural sanitizer in
+`src/lib/page-context-sanitize.ts` (widget.js ports the same DOM walk):
+
+| Side | Duty |
+|---|---|
+| Sender (`widget.js`, dashboard popup) | Clone `main` / `[role=main]` / `body`. Drop nodes that are not visible (computed style `display:none` / `visibility:hidden` / `opacity:0`, `hidden`, `inert`, `aria-hidden="true"`), password/hidden/autofill controls, scripts/styles/iframes/svg, popup chrome (`[data-digichat-popup]`), and host-marked private regions. Serialize an allowlisted fragment only. |
+| Receiver (`parsePageContextMessage`) | Enforce origin, type, age, and size caps. Re-parse `html` with `DOMParser` and apply the same tag/attribute allowlist (event handlers, framework metadata, secret-bearing query strings, javascript: URLs). Fail closed if `DOMParser` is missing. Never rehydrate the HTML as live page DOM — the user-message chip may open a **sandboxed** iframe / `<pre>` viewer of the already-sanitized snapshot. |
+| Host opt-out | Mark a region `data-digichat-private` (any value). That subtree is omitted from HTML and derived visible text. |
+
+Allowlisted tags are layout/text (`p`, headings, lists, tables, `a`, …).
+Allowlisted attributes are presentation/a11y (`class`, `id`, `role`, `aria-*`,
+`href` with query/hash stripped). Inputs, textareas, and selects are dropped
+entirely so values cannot leak.
 
 **postMessage theme.** digithings.ai `/chat` and `/chat/occ` (`ChatEmbedShell`)
 read the parent site's canon `html[data-theme]` (shared `ThemeProvider` /
@@ -800,7 +876,7 @@ tenant registry theme.
 `digichat:ready`, `ChatEmbedShell` posts
 `{ type: "digichat:parent-error", code: "ready_timeout"|"embed_unloadable", ts }`
 into the iframe (same first-party allowlist as seed/theme). The embed formats a
-CLI-style DigiChatSession transcript line (`error: …` via
+CLI-style CliThread error line (`error: …` via
 `formatParentErrorLine` in `src/lib/embed-parent-error-messages.ts`) — no
 parent-page banner. If the iframe never loads, the shell shows the same line in
 the iframe slot. Copy references `DIGICHAT_EMBED_ORIGIN` / Containers (not the
@@ -1084,9 +1160,11 @@ coerces AI SDK `ModelMessage` content to plain strings to avoid digigraph's stri
 digigraph SSE frames carry an optional `digigraph_trace` field on each
 `choices[0].delta`. The trace path maps typed payloads (`rag_sources`,
 `graph_update`, and opaque labels) through `mapdigigraphTraceToSpans` and emits
-only `data-digichatActivity` parts (legacy `data-digigraphTrace` dual-emit was
-removed in Phase 2). Auth `chat-panel` and embed both render via
-`@digithings/digichat-ui` `ChatActivities` (rich hits + `brief`).
+only standard tool / `source-*` / reasoning / `data-status` parts (`writeStandardActivity`).
+1.4 `data-digichatActivity` is not written. Auth `chat-panel` and embed both
+render those parts through assistant-ui `MessagePrimitive.Parts`
+(`cli-message-parts.tsx`). Old branded parts hydrate via `LegacyActivityHydrate`
+only when no standard activity parts exist.
 
 Session correlation: `X-Session-Id` (conversation UUID), `X-Request-ID` (per-request
 UUID), `X-digichat-Tenant`, `X-Digi-Caller: digichat` are forwarded to digigraph and
@@ -1134,7 +1212,130 @@ badge confirms the tracing service is reachable.
 
 ---
 
-## 10. Docker & MCP Composition
+## 10. Deployment config (file + env)
+
+Canonical operator config is a Zod-validated YAML file:
+
+- Path: `DIGICHAT_CONFIG_PATH` (default `/app/config/digichat.yaml`)
+- Loader: `src/lib/deploy-config/` (`loadDigichatConfig` / `getDigichatConfig`)
+- Examples: `frontend/digichat/config/examples/*.yaml` (incl. `skins/<id>.yaml` and `local-cli.yaml`)
+- Startup: `src/instrumentation.ts` calls `initDigichatConfigAtStartup()` (fail closed)
+
+**Shape:** `version: 1` plus either a single `deployment` (client install) or
+`hosts` (digithings multi-tenant container). Fields: `chrome.mode`
+(`app|embed|modal|sidebar`), `persistence` (`none|memory|server`), `auth`,
+
+**`persistence: memory`:** `HomeStockClient` mounts `useRemoteThreadListRuntime` with `SessionMemoryThreadListAdapter` (sessionStorage key `digichat:memory-threads:<host>:<user|anon>`) and `MemoryThreadListSidebar` (`ThreadListPrimitive`). Embed stays `persistence: none` (single thread, no list).
+`features` (attachments/dictation/reasoning/…), `backend`, `tools.catalog`,
+`mcp.servers` (BFF URLs only), `gate`.
+
+### Granular chrome / features / models (additive)
+
+Which assistant-ui registry cards exist upstream and whether they are
+part-driven vs chrome-driven is indexed in digiweb
+[`ASSISTANT_UI_ELEMENTS.md`](../digiweb/ASSISTANT_UI_ELEMENTS.md) — not duplicated here.
+
+| Field | Values | Notes |
+|---|---|---|
+| `features.reasoning` / `features.toolCalls` | `off \| collapsed \| expanded \| locked_open` | Booleans coerce: `true → collapsed`, `false → off` |
+| `chrome.defaultLanguage` | curated codes (`languages.ts`) | Seeds the stock language picker |
+| `chrome.transcript.userAlign` | `right \| left` | Stock web default `right` |
+| `chrome.skin` | `base \| chatgpt \| claude \| grok \| gemini \| perplexity \| react-ink \| expo-react-native \| base-assistant-ui \| webpage-assistant \| product-page-assistant \| digichat` | The 11 assistant-ui catalog template ids plus first-party `digichat`. Overlay: `DIGICHAT_CHROME_SKIN`. Baked YAML: `/app/config/examples/skins/<id>.yaml`. Catalog / third-party default remains `base`. Unset `skin` on digithings.ai / OCC hosts (and slugs `digithings`, `digithings-ai`, `occ`) defaults to `digichat` so production `DIGICHAT_EMBED_TENANTS` without `skin` still mounts DigichatThread. |
+| `models.default` / `models.available` / `models.allowPicker` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`); empty `available` = no restriction |
+| `features.modelPicker` | bool | Also enables picker when `models.allowPicker` unset |
+| `gate.showLanguageSelector` | bool | Reserved; language chrome is not mounted on the stock baseline |
+| `cli.enabled` | bool (default `false`) | Documents / gates the Ink CLI (see below) |
+
+Web UI mounts `ThreadSkinView` (`ProductStockShell` on `/embed` and `/`).
+`chrome.skin` selects one of the 11 official assistant-ui catalog templates
+vendored under `src/components/assistant-ui/skins/`, or first-party `digichat`
+(`DigichatThread` from `@digithings/web/chat/thread` **is** the gallery
+`/chatbot` Thread module — `thread.aui.tsx` + slots + cube glyphs — plus
+`@digithings/web/styles/chatbot.css`. Contract:
+[`frontend/digiweb/CHAT_THEME.md`](../digiweb/CHAT_THEME.md)). Product embed
+examples `config/examples/digithings-ai-embed.yaml` and `occ-embed.yaml` set
+`chrome.skin: digichat` and keep `backend.type: digigraph` with the
+digisearch / digivault catalog (web_search opt-in on digithings.ai only).
+YAML `hosts` resolve for `/embed` first paint (first-party / token rules
+unchanged). `ProductStockShell` mounts `ToolCatalogBar` from `tools.catalog`
+when the host passes `sessionKey` (embed host or thread id) so the digichat
+skin does not drop Search / Vault / Web search; toggles arm
+`X-Digi-Force-Tool` (catalog-allowlisted on the BFF). Disclosure modes
+still drive reasoning / tool UI when those parts appear in the stream.
+
+**Client container — pick a template (not docs-only):**
+
+```bash
+# Overlay on whatever YAML / DIGICHAT_EMBED_TENANTS you already run:
+DIGICHAT_CHROME_SKIN=claude
+
+# Or a complete baked file (shipped in the GHCR image):
+DIGICHAT_CONFIG_PATH=/app/config/examples/skins/claude.yaml
+
+# Or bind-mount your own:
+#   ./digichat.yaml:/app/config/digichat.yaml:ro
+DIGICHAT_CONFIG_PATH=/app/config/digichat.yaml
+```
+
+A YAML `deployment:` block (or `DIGICHAT_CHROME_SKIN` overlay) **is** the live
+tenant. `/embed` first paint, `GET /api/embed/tenant-config`, and
+`POST /api/chat` all resolve it. You do **not** need `DIGICHAT_EMBED_TENANTS`
+for a single client container. Multi-tenant host registries still win when
+the parent host is registered (token / first-party rules unchanged).
+
+Thread templates (`base`, the five clones, `base-assistant-ui`, `react-ink`)
+default to `chrome.mode: embed` so `/` redirects to `/embed` and chat is
+`POST /api/chat`. Layout templates (`webpage-assistant`, `product-page-assistant`,
+`expo-react-native`) own `/` (`chrome.mode: app`) so ChatShell / embed header
+do not wrap the catalog page; anonymous layout chat uses the same YAML
+install. `welcome` (headline string, or `{ title, body }`) / `placeholder` /
+`title` / `accent` from YAML are applied to the selected template at runtime.
+`suggestions` is opt-in; omit it for no starter chips. A bare `welcome: "…"`
+string still means title-only.
+
+### digichat CLI (Ink) — separate Node package
+
+TTY client lives in `frontend/digichat/cli` (`@digithings/digichat-cli`). UI is
+the official assistant-ui React Ink starter (`examples/with-react-ink`: status
+bar, reasoning, `DiffView` / `apply_patch`, `LiveChecklist`). Live traffic uses
+`useChatRuntime` + `AssistantChatTransport` against the **same** `POST /api/chat`
+BFF (absolute URL). `--demo` keeps the starter’s scripted adapter. **Never**
+import `ink` / `react-ink` from Next.js client modules.
+
+```bash
+cd frontend/digichat/cli && npm install && npm run dev -- \
+  --url http://127.0.0.1:3005 \
+  --config ../config/examples/local-cli.yaml \
+  --embed-token "$TOKEN"
+```
+
+When `--config` / `DIGICHAT_CONFIG` is set, startup **fails closed** unless
+`cli.enabled: true`. Without a config path the binary still runs (YAML is
+advisory for operators who skip `--config`).
+
+**Deploy config import split:** Client surfaces import `@/lib/deploy-config` (schema / client projection / force-tool). The `node:fs` YAML loader is `@/lib/deploy-config/loader` and is imported only from server routes / instrumentation — never from `"use client"` modules.
+
+**Env overlay:** secrets such as `DIGICHAT_EMBED_TOKEN` /
+`DIGICHAT_HOST_<SLUG>_TOKEN`. `DIGICHAT_CHROME_SKIN` overlays `chrome.skin` on
+the primary deployment (or every host when there is no `deployment` block).
+`DIGICHAT_EMBED_TENANTS` JSON remains a **compat hydrate** into the same schema
+until dogfood cutover. Tenants JSON may also set `"skin": "chatgpt"`. First-party
+hosts (`digithings.ai`, `www.digithings.ai`, `occ.digithings.ai`) default omitted
+`skin` to `digichat` — live wrangler JSON that never set `skin` must not fall
+through to catalog `base`.
+
+**Client projection:** `toDigichatClientConfig` / `GET /api/deploy/chrome` strip
+tokens, Foundry endpoints, MCP URLs, and consume URLs. Widget.js and the
+dashboard popup merge chrome (labels/hotkeys) from that API.
+
+**Default UI:** `ThreadSkinView` inside `ProductStockShell` against
+`POST /api/chat`. `ToolCatalogBar` (tools.catalog) arms force-tool headers;
+force-tool values and model ids are catalog/allowlist-gated on the BFF
+(fail closed).
+
+**Product CSS isolation:** `(digichat)/globals.css` mirrors the `(baseline)` stock sheet (Inter / IBM Plex Mono) plus thin `product-chrome.css` for paywall/BYOK/attribution. `assistant-ui-cli.css`, digichat-ui `session.css`/`cursor.css`, and terminal-loader sheets load only via `chat-shell-cli.css` on `ChatShell` (`persistence: server`).
+
+## 11. Docker & MCP Composition
 
 ### Docker Compose digichat profile
 
@@ -1161,7 +1362,10 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_DEV_AUTH` | Enable dev password login (`1` = on) | Dev only |
 | `DIGICHAT_DEV_PASSWORD` | Dev password (default: `dev`) | Dev only |
 | `DIGICHAT_LOCAL_AUTH_KEY` | Dev auto-sign-in key (non-production only) | Dev only |
-| `DIGICHAT_REQUIRE_ROOT_AUTH` | Require Auth.js session on `/` (`1` = on). Default unset/`0` redirects `/` → `/embed` (Option A) | Optional |
+| `DIGICHAT_CONFIG_PATH` | Path to digichat deployment YAML (default `/app/config/digichat.yaml`). Zod-validated at startup; fail closed on invalid content. | Optional |
+| `DIGICHAT_EMBED_TOKEN` | Env overlay for `deployment.token` when omitted from the YAML file | Optional |
+| `DIGICHAT_CHROME_SKIN` | Overlay `chrome.skin` (11 catalog ids or first-party `digichat`) for a client container without editing YAML | Optional |
+| `DIGICHAT_REQUIRE_ROOT_AUTH` | Legacy Option B root wall. Prefer `chrome.mode: app` + `auth: session` in deploy config. | Optional |
 | `DIGIGRAPH_INTERNAL_URL` | digigraph base URL (default: `http://127.0.0.1:8000`) | Yes |
 | `DIGIGRAPH_UPSTREAM_API_KEY` | Static Bearer to digigraph (fallback auth) | If not using digikey |
 | `DIGIKEY_URL` | digikey base URL | If using digikey |
@@ -1177,6 +1381,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_DEFAULT_TENANT_SLUG` | Default tenant slug when DB unavailable | Production fallback |
 | `DIGICHAT_TRACE_UI` | Disable trace stream (`0` = off, default on) | Optional |
 | `DIGICHAT_MODEL` | digigraph model name (default: `digigraph-rag`) | Optional |
+| `DIGICHAT_BASELINE_UPSTREAM` | Dev `/baseline` proxy target (allowlisted `https://digithings.ai/api/chat` only) | Dev only |
 | `DIGICHAT_OPENWEBUI_FORMAT` | Opt-in Open WebUI format (`1` only). Default off; digichat sends `X-Response-Format: plain` | Optional |
 | `DIGICHAT_ENDPOINT_HOST_ALLOWLIST` | Comma-separated hosts for SSRF guard | Security hardening |
 | `DIGICHAT_LEGACY_EMBED_ENABLED` | Enable legacy generic embed for **unregistered** hosts (`1` = on). Does not default on when `DIGICHAT_EMBED_TENANTS` is set. Deprecated alias: `DIGICHAT_EMBED_ENABLED` | Optional |
@@ -1187,7 +1392,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`) | Optional |
 | `DIGICHAT_TRUSTED_PROXIES` | Comma-separated IP addresses/CIDRs whose socket peers may supply `cf-connecting-ip` or `X-Forwarded-For` for anonymous-embed rate limiting. Unset preserves historical header behavior. The bundled production entrypoint captures the direct socket peer and isolates Next on loopback; do not set this unless that entrypoint remains in the request path. In a Cloudflare Container, trust the container ingress/overlay peer, not Cloudflare's published edge ranges. | Optional |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password (Compose default: `digichat`) | Change in production |
-| `DIGICHAT_VERSION` | Version string returned in health response | Optional |
+| `DIGICHAT_VERSION` | Version string returned in health response | Optional override. Unset/blank → `package.json` version. Cloudflare Container (`Dockerfile.digichat-cloudflare`) and GHCR (`frontend/digichat/Dockerfile`) bake it from `package.json` at image build (`ARG`/`ENV` + `/etc/digichat-version`). Not a dashboard secret. |
 | `NEXTAUTH_SECRET` | Legacy Auth.js secret alias (same value as `AUTH_SECRET`) | If using legacy env |
 | `NEXTAUTH_URL` | Legacy Auth.js URL alias (same value as `AUTH_URL`) | If using legacy env |
 
@@ -1195,8 +1400,8 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 
 Three-stage build:
 1. `deps` (node:22-alpine): `npm ci` to populate `node_modules`.
-2. `builder` (node:22-alpine): copies deps, copies source, runs `next build`. `NEXT_TELEMETRY_DISABLED=1`.
-3. `runner` (node:22-alpine): copies only `public/`, `.next/standalone/`, `.next/static/`. Adds `curl` for the Compose healthcheck. Runs as non-root `nextjs` user (uid 1001). `next.config.ts` sets `output: "standalone"` to enable this.
+2. `builder` (node:22-alpine): copies deps, copies source, runs `next build`. `NEXT_TELEMETRY_DISABLED=1`. Both Dockerfiles also COPY `frontend/digiweb/reference/app/(chatbot)/chatbot/chatbot.css` — the product `chrome.skin: digichat` sheet `@import`s that path from `frontend/digiweb/web/src/styles/chatbot.css`, and `COPY frontend/digiweb/web` does not include `reference/` (#3717).
+3. `runner` (node:22-alpine): copies only `public/`, `.next/standalone/`, `.next/static/`. Adds `curl` for the Compose healthcheck. Runs as non-root `nextjs` user (uid 1001). `next.config.ts` sets `output: "standalone"` to enable this. Both this Dockerfile and `Dockerfile.digichat-cloudflare` write `/etc/digichat-version` from `package.json` (or `ARG DIGICHAT_VERSION`) and set `ENV DIGICHAT_VERSION`.
 
 The standalone output is a self-contained Node.js server (`server.js`) with only production
 dependencies. Image size is significantly smaller than a non-standalone build.

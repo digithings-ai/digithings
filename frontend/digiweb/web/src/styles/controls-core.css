@@ -1757,8 +1757,9 @@
 /* ── Slider input — DigiWeb range mechanic (#3577)
    Native <input type="range"> restyled like the reference specimen: 4px
    track, accent fill supplied inline by the consumer, SQUARE thumb (sharp-
-   corner grammar — not OS accent-color pills / round knobs). Full <Slider/>
-   composite can wrap this later; apps may use `.ctl-slider-input` alone. */
+   corner grammar — not OS accent-color pills / round knobs). Wrapped by the
+   shared <Slider/> composite (components/controls/Slider.tsx); apps may
+   also use `.ctl-slider-input` alone. */
 @layer components {
   .ctl-slider-input {
     -webkit-appearance: none;
@@ -1812,6 +1813,540 @@
   }
 }
 
+
+/* ── Field — label + control + hint/error (components/controls/Field.tsx) ─
+   The wrapper meshes the wiring (ids, aria-describedby, aria-invalid); the
+   control's own dress (shared Input's [aria-invalid] ring, native fields)
+   does the rest. Error is --danger, never --down (money colors are P&L). */
+@layer components {
+  .ctl-field {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  /* Screen-reader-only (required) marker. Deliberately NOT Tailwind's
+     `.sr-only`: that utility only exists in an app whose own sources use
+     it (see .tm-sr) — shared components carry their own. */
+  .ctl-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .ctl-field-required {
+    color: var(--ink-soft);
+  }
+
+  .ctl-field-hint {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    line-height: 1.5;
+    color: var(--ink-mute);
+    margin: 0;
+  }
+
+  .ctl-field-error {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    line-height: 1.5;
+    color: var(--danger);
+    margin: 0;
+  }
+}
+
+
+/* ── Checkbox / Radio / Switch (components/controls/Selection.tsx) ───────
+   Values mirror the form-fields specimen (.ff-box / .ff-dot / .ff-toggle):
+   16px box/dot, hairline, accent check, accent focus ring. Base UI reports
+   state on data-* (buttons have no :checked); focus travels natively. */
+@layer components {
+  .ctl-check {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    border: 1px solid var(--hair);
+    border-radius: 0;
+    background: var(--surface);
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    transition: border-color 0.15s var(--ease), background-color 0.15s var(--ease);
+  }
+
+  /* the indicator mounts only when checked — the glyph lives in ::after */
+  .ctl-check-indicator::after {
+    content: "✓";
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.62rem;
+    line-height: 1;
+    color: var(--on-accent);
+  }
+
+  .ctl-radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .ctl-radio {
+    appearance: none;
+    position: relative;
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    border: 1px solid var(--hair);
+    border-radius: 999px;
+    background: var(--surface);
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    transition: border-color 0.15s var(--ease);
+  }
+
+  /* the indicator mounts only when checked */
+  .ctl-radio-dot {
+    position: absolute;
+    inset: 3px;
+    border-radius: 999px;
+    background: var(--accent);
+  }
+
+  .ctl-switch {
+    appearance: none;
+    position: relative;
+    width: 34px;
+    height: 20px;
+    flex-shrink: 0;
+    border: 1px solid var(--hair);
+    border-radius: 0;
+    background: var(--surface);
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
+  }
+
+  .ctl-switch-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    display: block;
+    width: 14px;
+    height: 14px;
+    border-radius: 0;
+    background: var(--ink-mute);
+    transition: transform 0.2s var(--ease), background-color 0.2s var(--ease);
+  }
+}
+
+
+/* ── Select (components/controls/Select.tsx) ─────────────────────────────
+   Trigger wears the ff-input grammar; the popup mirrors the menu-pane read
+   (surface, hair ring, soft shadow) with the shared .ctl-pop travel. */
+@layer components {
+  .ctl-select {
+    font: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    width: 100%;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--hair);
+    border-radius: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    cursor: pointer;
+  }
+
+  .ctl-select svg {
+    width: 0.9rem;
+    height: 0.9rem;
+    flex-shrink: 0;
+    color: var(--ink-mute);
+  }
+
+  .ctl-select-value {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ctl-select-positioner {
+    z-index: 50;
+  }
+
+  .ctl-select-popup {
+    width: var(--anchor-width);
+    min-width: 8rem;
+    max-height: 16rem;
+    overflow-y: auto;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--ink) 10%, transparent),
+      0 4px 6px -1px rgb(0 0 0 / 0.1),
+      0 2px 4px -2px rgb(0 0 0 / 0.1);
+    padding: 0.25rem;
+  }
+
+  .ctl-select-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.5rem 0.6rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    cursor: default;
+    outline: none;
+  }
+
+  .ctl-select-check {
+    display: inline-flex;
+    width: 0.85rem;
+    height: 0.85rem;
+    flex-shrink: 0;
+    color: var(--accent);
+  }
+
+  .ctl-select-separator {
+    height: 1px;
+    background: var(--hair);
+    margin: 0.25rem 0.6rem;
+  }
+}
+
+
+/* ── Slider — the native parameter control (components/controls/Slider.tsx)
+   Values mirror the reference slider mechanic: 4px track, computed accent
+   fill from the tsx, 16px round thumb ringed on focus. */
+@layer components {
+  .ctl-slider {
+    display: block;
+    min-width: 0;
+  }
+
+  .ctl-slider.is-disabled {
+    opacity: 0.5;
+  }
+
+  .ctl-slider-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.8rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .ctl-slider-label {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-mute);
+  }
+
+  .ctl-slider-value {
+    font-family: var(--font-mono);
+    font-size: 0.86rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+
+
+
+
+
+
+
+
+  .ctl-slider-ticks {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.55rem;
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    color: var(--ink-mute);
+  }
+}
+
+
+/* ── Table — the plain hairline ledger (components/controls/Table.tsx) ────
+   Mono numerals, one hairline per row, micro-cap header, caption below.
+   Numeric columns take .ctl-table-num (right + tabular figures). Wrap wide
+   tables in .ctl-table-scroll. density="compact" halves cell padding. */
+@layer components {
+  .ctl-table-scroll {
+    overflow-x: auto;
+  }
+
+  .ctl-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+
+  .ctl-table-caption {
+    caption-side: bottom;
+    text-align: left;
+    color: var(--ink-mute);
+    font-size: 0.72rem;
+    padding-top: 0.7rem;
+  }
+
+  .ctl-table-th {
+    text-align: left;
+    font-weight: 500;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-mute);
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--hair-strong);
+    white-space: nowrap;
+  }
+
+  .ctl-table-td {
+    padding: 0.6rem 0.75rem;
+    border-top: 1px solid var(--hair);
+    color: var(--ink);
+    vertical-align: top;
+  }
+
+  /* the header owns the first divider — no doubled hairline */
+  .ctl-table thead + tbody tr:first-child .ctl-table-td,
+  .ctl-table tbody:first-child tr:first-child .ctl-table-td {
+    border-top: 0;
+  }
+
+  .ctl-table-foot .ctl-table-td {
+    border-top: 1px solid var(--hair-strong);
+    font-weight: 600;
+  }
+
+  .ctl-table-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+}
+
+/* row wash is state, not default — unlayered so it keeps beating utilities */
+.ctl-table tbody tr:hover .ctl-table-td {
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+
+/* ── Breadcrumbs — the wayfinding trail (components/controls/Breadcrumbs.tsx) */
+@layer components {
+  .ctl-crumbs ol {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.45rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+  }
+
+  .ctl-crumbs li {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
+  .ctl-crumbs-sep {
+    color: var(--ink-mute);
+  }
+
+  .ctl-crumbs-link {
+    color: var(--ink-soft);
+    text-decoration: none;
+  }
+
+  .ctl-crumbs-current {
+    color: var(--ink);
+  }
+}
+
+/* ── Pagination — the numbered page trail (components/controls/Pagination.tsx)
+   The current page is the one loud control (ink fill); siblings are ghosts. */
+@layer components {
+  .ctl-pagination {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+  }
+
+  .ctl-pagination-item,
+  .ctl-pagination-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.5rem;
+    border: 1px solid var(--hair);
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink-soft);
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .ctl-pagination-item.is-current {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--bg);
+    font-weight: 600;
+    cursor: default;
+  }
+
+  .ctl-pagination-gap {
+    color: var(--ink-mute);
+    padding: 0 0.1rem;
+  }
+}
+
+
+
+/* ── states (unlayered: must beat call-site utilities) ── */
+
+  .ctl-check[data-checked] {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .ctl-check:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  .ctl-check[data-disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .ctl-radio[data-checked] {
+    border-color: var(--accent);
+  }
+
+  .ctl-radio:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  .ctl-radio[data-disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .ctl-switch[data-checked] {
+    background: var(--accent-weak);
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  }
+
+  .ctl-switch[data-checked] .ctl-switch-knob {
+    transform: translateX(14px);
+    background: var(--accent);
+  }
+
+  .ctl-switch:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  .ctl-switch[data-disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .ctl-select:focus-visible {
+    outline: none;
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+
+  .ctl-select[data-disabled] {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .ctl-select-value[data-placeholder] {
+    color: var(--ink-mute);
+  }
+
+  .ctl-select-item[data-highlighted] {
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+    color: var(--ink);
+  }
+
+  .ctl-select-item[data-selected] {
+    color: var(--accent);
+  }
+
+  .ctl-table[data-density="compact"] .ctl-table-th,
+  .ctl-table[data-density="compact"] .ctl-table-td {
+    padding-top: 0.32rem;
+    padding-bottom: 0.32rem;
+  }
+
+  .ctl-crumbs-link:hover {
+    color: var(--ink);
+  }
+
+  .ctl-pagination-item:hover,
+  .ctl-pagination-step:hover:not(:disabled) {
+    color: var(--ink);
+    border-color: var(--hair-strong);
+  }
+
+  .ctl-pagination-step:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+/* F7: universal focus ring on wayfinding controls */
+.ctl-crumbs-link:focus-visible {
+  outline: none;
+  color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.ctl-pagination-item:focus-visible,
+.ctl-pagination-step:focus-visible {
+  outline: none;
+  border-color: var(--hair-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
 /* ── reduced motion ─────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -1822,6 +2357,13 @@
   /* skeletons go static — the ink-tint placeholder stays, the sweep stops */
   .sk::after {
     animation: none;
+  }
+
+  /* form-kit state swaps go instant */
+  .ctl-check,
+  .ctl-switch,
+  .ctl-switch-knob {
+    transition: none;
   }
 }
 

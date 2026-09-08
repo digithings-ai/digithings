@@ -23,9 +23,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app ./
 COPY frontend/digiweb/design ./frontend/digiweb/design
 COPY frontend/digiweb/web ./frontend/digiweb/web
+# Product skin @imports gallery chatbot.css from outside web/ (#3717).
+COPY ["frontend/digiweb/reference/app/(chatbot)/chatbot/chatbot.css", "frontend/digiweb/reference/app/(chatbot)/chatbot/chatbot.css"]
 COPY frontend/digichat-ui ./frontend/digichat-ui
 COPY frontend/digichat ./frontend/digichat
-RUN npm run build --workspace frontend/digichat
+# Same bake as Dockerfile.digichat-cloudflare: health version matches package.json.
+ARG DIGICHAT_VERSION
+RUN VERSION="${DIGICHAT_VERSION:-$(node -p "require('./frontend/digichat/package.json').version")}" \
+ && printf '%s' "$VERSION" > /tmp/digichat-version \
+ && DIGICHAT_VERSION="$VERSION" npm run build --workspace frontend/digichat
 
 FROM node:22-alpine AS runner
 WORKDIR /app
@@ -43,6 +49,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/scripts/trusted
 # so runMigrate() resolves process.cwd()/drizzle = frontend/digichat/drizzle.
 # Compose sets DIGICHAT_AUTO_MIGRATE=1, so the folder MUST ship in the image.
 COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/drizzle ./frontend/digichat/drizzle
+# Operator deploy YAML examples (DIGICHAT_CONFIG_PATH=/app/config/examples/skins/<id>.yaml)
+COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/config /app/config
+COPY --from=builder /tmp/digichat-version /etc/digichat-version
+ARG DIGICHAT_VERSION
+ENV DIGICHAT_VERSION=$DIGICHAT_VERSION
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000

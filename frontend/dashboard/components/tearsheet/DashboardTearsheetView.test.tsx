@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { PerformanceTearsheetView } from './DashboardTearsheetView';
 import type { PerformanceTearsheet } from './types';
+import type { PerformanceSsotMeta } from '@/lib/performance-ssot';
 
 const sample: PerformanceTearsheet = {
   currentNav: 112.5,
@@ -65,8 +66,8 @@ const sample: PerformanceTearsheet = {
   ],
 };
 
-function html(data: PerformanceTearsheet = sample) {
-  return renderToStaticMarkup(createElement(PerformanceTearsheetView, { data }));
+function html(data: PerformanceTearsheet = sample, ssot: PerformanceSsotMeta | null = null) {
+  return renderToStaticMarkup(createElement(PerformanceTearsheetView, { data, ssot }));
 }
 
 describe('PerformanceTearsheetView', () => {
@@ -213,5 +214,40 @@ describe('contribution chart presentation', () => {
     expect(out).not.toContain('hover for per-position contributions');
     expect(out).not.toContain('Portfolio attribution');
     expect(out).not.toContain('aria-hidden="true" style="background-color');
+  });
+});
+
+describe('performance SSOT chrome (#3604)', () => {
+  const sampleSsot: PerformanceSsotMeta = {
+    navContract: 'legacy_estimate',
+    navAsOf: '2026-07-20',
+    tipDayReturnPct: 0.1,
+    tipInvestedPct: 80,
+    tipCashPct: 20,
+    metricsAsOf: '2026-07-17',
+    metricsLagDays: 3,
+    metricsLagging: true,
+    bookAsOf: '2026-07-17',
+    marksUnstamped: false,
+    investedDefinition: 'accounting_nav_tip',
+  };
+
+  it('ends the period at the NAV tip, not a lagged metrics stamp', () => {
+    const out = html(sample, sampleSsot);
+    expect(out).toContain('2026-05-01–2026-07-20');
+    expect(out).toContain('nav tip 2026-07-20');
+  });
+
+  it('badges NAV-behind-metrics divergence as nav lag', () => {
+    const out = html(sample, {
+      ...sampleSsot,
+      navAsOf: '2026-07-15',
+      metricsAsOf: '2026-07-17',
+      metricsLagDays: -2,
+      metricsLagging: true,
+    });
+    expect(out).toContain('data-testid="tearsheet-metrics-lag-badge"');
+    expect(out).toContain('nav lag');
+    expect(out).toContain('2026-07-17');
   });
 });

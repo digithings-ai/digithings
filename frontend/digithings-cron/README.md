@@ -3,7 +3,7 @@
 Org-wide Cloudflare Worker that owns production clocks for digithings-ai (#3579).
 
 Replaces unreliable GitHub Actions schedule triggers with Cloudflare Cron Triggers
-that dispatch workflow_dispatch / repository_dispatch against ref main on
+that dispatch workflow_dispatch / repository_dispatch on the default `develop` branch of
 digithings-ai/digithings and digithings-ai/twelve-x (FX Hub).
 
 Thin Worker only — no Containers / Durable Objects. Default branch stays develop.
@@ -12,8 +12,8 @@ Thin Worker only — no Containers / Durable Objects. Default branch stays devel
 
 - wrangler.toml — name digithings-cron, triggers crons, DRY_RUN var
 - src/jobs.ts — typed job map
-- src/dispatch.ts — GitHub API dispatch (204/200 ok; 422 already-running = success)
-- src/et-open.ts — America/New_York >= 09:30 gate
+- src/dispatch.ts — GitHub API dispatch (204/200 ok; rate limits retry)
+- src/et-open.ts — season-specific America/New_York 09:30 gate
 - src/index.ts — scheduled + GET /healthz + optional POST /kick
 
 ## Env
@@ -26,8 +26,10 @@ Set secrets from this directory with wrangler secret put (never echo values).
 
 ## Unique crons
 
-33 unique cron expressions in wrangler.toml [triggers]. Cron `17 12 * * 1-5` fires
-both digithings house-run-12 and twelve-x-new-york.
+34 unique cron expressions in wrangler.toml [triggers]. House research/portfolio
+retries (`house-run-09`…`12`) use daily `DOW=*`; twelve-x-new-york stays
+weekday-only on `17 12 * * MON-FRI`. At-open price clocks remain `MON-FRI` with
+the ET open gate.
 
 ## Local
 
@@ -40,10 +42,11 @@ npm run dev
 
 ## Deploy
 
-Deploy from main only. CI workflow: .github/workflows/deploy-digithings-cron.yml
-(push paths frontend/digithings-cron/** + workflow_dispatch; Node 22; wrangler deploy).
-Needs CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID. GH_DISPATCH_TOKEN is set once
-manually on the Worker, not from deploy logs.
+Deploy from `develop` and `main`. CI workflow:
+.github/workflows/deploy-digithings-cron.yml (push paths
+frontend/digithings-cron/** + workflow_dispatch; Node 22; wrangler deploy).
+Needs CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID and syncs GH_DISPATCH_TOKEN
+through the wrangler-action secret input without printing the value.
 
 ## Migration
 
@@ -57,4 +60,4 @@ session_catchup; keep workflow_dispatch; add header pointing at digithings-cron.
 
 See src/jobs.ts for the full enabled map. market_context uses bucket inputs
 intraday / daily / weekly. agent-pr-finalizer dispatches with dry_run=false.
-House-run uses repository_dispatch event_type olympus-daily (leftover id only).
+House-run uses repository_dispatch event_type digiquant-baseline.

@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:6fc7053b2693e83794285c823e810ea84aea723cddb4b0b9306101ad3763cf0c",
+  "claims": [
+    {
+      "id": "claim_45ab64bfaaf249c1979e43120519a1b5",
+      "statement": "POST /run_backtest requires an explicit data_path or data_dir and records Sharpe into ADDM history, while run_optimize, run_export, and run_pipeline complete the ordered chain with async job variants for long runs.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/server.py#L250-L282",
+          "version": "repo-lines-v1:sha256:d34cb35850e4e19d87a9251ef0c68b3529058d277347c8398e24a32f2020e142:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFlYmFkNmU4N2JhNjdmYjYxNDhiYzI4YWZjN2Q5OWQyM2MwN2Q2MTlhYjFlZmU3ZWQxOTAwM2ZlMmNlZjBjYzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI3ZDU5YjE4NTBjZDE2ZjRiMGI3MjBmNDI0OWZjNGM1ZTc3MWIwODE2NDYwYWQzMTFjMGM1MTc2YjcxZmUwMGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhjYzRhN2QxY2M3OTZhYmEzZTQ2NzIzMzI3ZjUxN2U5ZjgxMTk4MmQyNTBmMDcwMjk4NmU0YjU3NjRhZDk1ODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3MjIzMTA2ZmQ4NzQyYjcwZWEyMzNmOWRjMzU5ZjRiMDJiYmIwNjliNzI4M2VlZjc2MjQ5OTUxNmJkN2I5YzgifQ"
+        },
+        {
+          "resource": "repo://digiquant/src/digiquant/server.py#L899-L946",
+          "version": "repo-lines-v1:sha256:301b44622ac22ff9ed15efbe097739a7962798d1c0348819a52db269183e222e:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZTZmMzRkZjFiNDRkYTgxYmVmZDdlYzIwYjNmYTJiNDNhOWZlYjdmZWUzM2VkZjhlOWJkZTBjNGE1NzZmZDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2MzQ1YTlmYjJmZWVkMzYzZmQ3MmY4ZDFhODIzZmU4ZDBkZDE3NDM4ODljODVmMDlmZWMyZTY1YmIxNjc1ZGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE0MmEyMDBiZjlkYWUyMjhkODE5OTk4YjA0YzgzMmE0YjRlNTYzZmQzMzZiYzc0YWE3NGUzOTRjOTIzZGQwMzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM0ZTAzZjM5YzQ5YTAzMjA5MjY4Y2RlY2U4OTQyYWM1MzMyZTY0ZWM0NDgwMzk2ODkwYmQ0ODE1ZDc3MDRiN2IifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e9f60c11243e4da4b4704482555d99f3",
+      "statement": "GET /check_drift takes strategy_id, baseline_run_id, and current_sharpe for heartbeat-polled ADDM drift detection that triggers re-optimization, with history held in-process.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/server.py#L236-L248",
+          "version": "repo-lines-v1:sha256:64dd194e72b38a1b4bb87dd8717c5185c3c7938fe19e6a63462c42d87fb781c3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiMmU2OWNmNDQ4YjU5ZWQ3MjAzODFlNmJjNTgzYjlhM2MyZjljMWE0NDE3MmE1YTExMzE2YzM4ODE0MDk4NjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI1NjdlZmYwZjNjNjYyNjNkNmYxM2Y5ZmM0NmRkZWYwOGI2ODUyMTUwOWE4NDMwMzk3ZjIxZDQ0MTg2ZjY0YjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM4M2JhMWY3NTE5M2E3ZDRiMTdjZWY0MmQ0ZTJhN2VlMmI0ZmU5MzA1OTllYmExMDc1N2RhODNhZTljYTA2MmMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8e44968555974f1a9e83b44c6f0920a6",
+      "statement": "MCP tools for backtest, optimize, export, and the strategy catalog attach via streamable-http on 8767 or stdio and require the digiquant[mcp] extra.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/mcp_server.py#L1-L46",
+          "version": "repo-lines-v1:sha256:a413ed0eb10934dcd28cc1b814059b67dd7b5d6c6eef1c3f150056ec2eb60dd4:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3YzI1MzU4YWY4MzE2MmNkNmIzNTQxYzM3MjdhZjUxZjEyODU2MzYyYzAxNGZkY2ZkYWM5YjNjYTE1MzQwMjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2OTNiOThmNWJlOTZjNTU5N2I4ZjVmMjgwOGViMzFhOGU2YjdkMWRjZDUxZTA5YWQ1NGQxZTgwYmE1MDI5MzYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhZjQ5YjdlZTNmNWMyNzQxZmVkYzNlODI1ZjczNjM1NDRlYWVkMGI2NWNiYzFmNmRkNWUzNmEyNTZlYzYyNTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1df9508a2ccf4735b501e67437bf14a0",
+      "statement": "The research sandbox is a separate build-time-baked image with no live-trading paths, while the HTTP service container serves digiquant.server:app loopback-bound on 8001 with a /healthz healthcheck.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/Dockerfile#L34-L35",
+          "version": "repo-lines-v1:sha256:8956edaf8f8b3b42edbb01fd909b2795719f3dc638c0a8bb4f2a1afac6a998bf:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjM0NWFiYzgwZGI0YTUzMzc0Njg1YTBjMGE0ZmFlYzMwODk1MzA1YWMwNDdhYjExNGNkZWEzNTk5ZmI0YzM0MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTcwOTM0NzYzMjI0MTZiYTZjN2Q2MDI0MzYxYjE5ODEyZGMzZDFmOTRjNjYxMzM1OWY4MmYwY2MzMjY0ZjUwOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDUwZjA0NTgzZjlmNDI0NDJmNTIzMDNjMzMxMzUyMDFmNzc0MzhhMGM3MGU2MWQ5MjJlY2FhYWY3NWEzMThiNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        },
+        {
+          "resource": "repo://digiquant/Dockerfile.sandbox#L20-L57",
+          "version": "repo-lines-v1:sha256:7bf5a00f65f782124f322d1408134bdf289ea4ad68da63fc12cbd7c8c24a6ed3:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZlOTA0MGI2YzE2YjY1ZTM5NDI5ZTEzZmZmMTg5OWZhZmUzYzgwNDJlNzQ2MWNkNDdiYzlmY2RlYmUwZDUzNzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMDg0YzliY2Q3NGE4MDY0MGRiZDA1NzFmYjE1MjU2YWVhY2Q1MzAwNzZhOGM3YTZhNzA2MzIzZjEyMWViM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxYmY4MzE5NzNhZDM4YzYwZDM5MTA0NzlmYzdkMjRhODE3MThjMjM4MmEyYTg0NjVhZWNhZDE3OGIzYWFkMmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI2ODE0YzZlZjI4MTJhNTNmYjFlMjI0NzFlYWM4NDM2NzZmZWQ4ZmQ4YzgxMGQxNGRkYzU4OTliZDU5ZDZkNzkifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

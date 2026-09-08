@@ -47,8 +47,7 @@ extras — no FastAPI service yet.
   slug (`_SLUG_RE` in `models.py`) — it becomes both the frontmatter `name`
   and the on-disk package directory name.
 - A single URL fetch failure in `UrlCorpusBuilder` must not abort the whole
-  build (skip + mark `truncated`, matching `digillm.web_search`'s fail-soft
-  convention) — don't change this to fail-fast.
+  build (skip + mark `truncated`, fail-soft convention) — don't change this to fail-fast.
 - Do not add a FastAPI service, MCP server, or hosted registry without first
   updating ADR-0023 (or filing a new ADR) — those are explicitly deferred
   phases (P4), a novel-architecture decision requiring human sign-off per

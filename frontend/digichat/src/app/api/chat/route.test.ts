@@ -56,10 +56,12 @@ vi.mock("ai", async () => {
     ...actual,
     convertToModelMessages: vi.fn(async (m: unknown[]) => m),
     streamText: vi.fn(() => ({
-      toUIMessageStreamResponse: vi.fn(({ headers }: { headers: Record<string, string> }) =>
-        new Response("stream", { status: 200, headers })
-      ),
+      stream: new ReadableStream({ start(c) { c.close(); } }),
     })),
+    toUIMessageStream: vi.fn(() => new ReadableStream({ start(c) { c.close(); } })),
+    createUIMessageStreamResponse: vi.fn(({ headers }: { headers?: HeadersInit }) =>
+      new Response("stream", { status: 200, headers }),
+    ),
     smoothStream: vi.fn(() => ({})),
   };
 });
@@ -74,7 +76,7 @@ import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/st
 import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
 import { resetChatRunLocksForTests } from "@/lib/chat-run-lock";
 import { EMBED_FREE_TURN_LIMIT } from "@/lib/embed-turn-limits";
-import { streamText } from "ai";
+import { streamText, createUIMessageStreamResponse } from "ai";
 
 describe("POST /api/chat", () => {
   const env = process.env;
@@ -91,8 +93,12 @@ describe("POST /api/chat", () => {
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
     resetEmbedTrialQuotaForTests();
     resetChatRunLocksForTests();
-    vi.mocked(createFoundryStreamResponse).mockClear();
+vi.mocked(createFoundryStreamResponse).mockClear();
     vi.mocked(createDigigraphTraceStreamResponse).mockClear();
+    vi.mocked(createUIMessageStreamResponse).mockImplementation(
+      ({ headers }: { headers?: HeadersInit }) =>
+        new Response("stream", { status: 200, headers }),
+    );
   });
 
   afterEach(() => {
@@ -419,19 +425,16 @@ describe("POST /api/chat", () => {
   });
 
   it("returns 409 run_in_progress for concurrent regen on the same session", async () => {
-    vi.mocked(streamText).mockImplementationOnce(
-      () =>
-        ({
-          toUIMessageStreamResponse: ({ headers }: { headers: Record<string, string> }) =>
-            new Response(
-              new ReadableStream({
-                start() {
-                  /* hold open until cancelled */
-                },
-              }),
-              { status: 200, headers },
-            ),
-        }) as ReturnType<typeof streamText>,
+    vi.mocked(createUIMessageStreamResponse).mockImplementationOnce(
+      ({ headers }: { headers?: HeadersInit }) =>
+        new Response(
+          new ReadableStream({
+            start() {
+              /* hold open until cancelled */
+            },
+          }),
+          { status: 200, headers },
+        ),
     );
 
     const first = await POST(
@@ -786,6 +789,189 @@ describe("POST /api/chat", () => {
       } finally {
         spy.mockReturnValue("127.0.0.1");
       }
+    });
+  });
+
+  describe("digiquant.io dashboard tenant (#3662)", () => {
+    // Canonical dashboard shape: ungated + operator, no gate.consumeUrl, requiredPlanTier desk —
+    // Desk+ chat is never capped at free-3, and the trial quota is never consulted.
+    // Anonymous embed without a valid plan_tier must get 403.
+    const dashboardCtx = {
+      tenantSlug: "digiquant-dashboard",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "digiquant-dashboard",
+        gateMode: "ungated",
+        theme: "dark",
+        attribution: false,
+        token: "dash-secret",
+        backend: { type: "digigraph" },
+        activityDetail: "full",
+        llmAccess: "operator",
+        showByok: true,
+        requiredPlanTier: "desk",
+      },
+    };
+
+    const PLAN_PROOF_SECRET = "test-secret-for-plan-proof-3662";
+
+    function dashboardReq(headers: Record<string, string> = {}): Request {
+      return new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://digiquant.io",
+          ...headers,
+        },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      });
+    }
+
+    beforeEach(() => {
+      vi.mocked(resolveChatTenantContext).mockResolvedValue(dashboardCtx as never);
+      process.env.DIGICHAT_PLAN_PROOF_SECRET = PLAN_PROOF_SECRET;
+    });
+
+    afterEach(() => {
+      delete process.env.DIGICHAT_PLAN_PROOF_SECRET;
+    });
+
+    it("serves well past the free-turn cap with no 402 and never touches the trial quota", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      const proof = signPlanProof("desk", PLAN_PROOF_SECRET);
+      const quotaModule = await import("@/lib/embed-turn-quota");
+      const overSpy = vi.spyOn(quotaModule, "isOverEmbedTrialLimit");
+      const recordSpy = vi.spyOn(quotaModule, "recordEmbedTrialTurn");
+      const unlockSpy = vi.spyOn(quotaModule, "unlockEmbedTrial");
+      try {
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT + 2; i++) {
+          const res = await POST(dashboardReq({ "x-embed-plan-proof": proof }));
+          expect(res.status).toBe(200);
+        }
+        expect(overSpy).not.toHaveBeenCalled();
+        expect(recordSpy).not.toHaveBeenCalled();
+        expect(unlockSpy).not.toHaveBeenCalled();
+      } finally {
+        overSpy.mockRestore();
+        recordSpy.mockRestore();
+        unlockSpy.mockRestore();
+      }
+    });
+
+    it("returns 403 plan_tier_required when no proof is supplied (#3662)", async () => {
+      const req = dashboardReq();
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe("plan_tier_required");
+    });
+
+    it("returns 403 when X-Embed-Plan-Tier header is spoofed (#3662 Chris lock)", async () => {
+      // Raw X-Embed-Plan-Tier header is NEVER trusted — must still 403.
+      const req = dashboardReq({ "x-embed-plan-tier": "desk" });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe("plan_tier_required");
+    });
+
+    it("returns 403 when ?plan_tier= query param is spoofed (#3662 Chris lock)", async () => {
+      // Raw ?plan_tier= query param is NEVER trusted — must still 403.
+      const req = new Request("http://localhost/api/chat?plan_tier=desk", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://digiquant.io",
+        },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("allows chat when HMAC proof is desk+", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      for (const tier of ["desk", "studio", "enterprise"]) {
+        const proof = signPlanProof(tier as "desk" | "studio" | "enterprise", PLAN_PROOF_SECRET);
+        const req = dashboardReq({ "x-embed-plan-proof": proof });
+        const res = await POST(req);
+        expect(res.status).toBe(200);
+      }
+    });
+
+    it("returns 403 when HMAC proof is free/brief", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      for (const tier of ["free", "brief"]) {
+        const proof = signPlanProof(tier as "free" | "brief", PLAN_PROOF_SECRET);
+        const req = dashboardReq({ "x-embed-plan-proof": proof });
+        const res = await POST(req);
+        expect(res.status).toBe(403);
+        const body = (await res.json()) as { error: string };
+        expect(body.error).toBe("plan_tier_required");
+      }
+    });
+
+    it("returns 403 when HMAC proof has wrong secret", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      const proof = signPlanProof("desk", "wrong-secret");
+      const req = dashboardReq({ "x-embed-plan-proof": proof });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 when HMAC proof is expired", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      const proof = signPlanProof("desk", PLAN_PROOF_SECRET, Date.now() - 1000);
+      const req = dashboardReq({ "x-embed-plan-proof": proof });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 when HMAC proof is tampered", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      const proof = signPlanProof("desk", PLAN_PROOF_SECRET);
+      // Tamper with the proof by flipping a character
+      const tampered = proof.slice(0, -2) + (proof.slice(-2) === "AA" ? "BB" : "AA");
+      const req = dashboardReq({ "x-embed-plan-proof": tampered });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("allows chat via authenticated session plan_tier (not embed proof)", async () => {
+      // When the user is authenticated via digichat session (not embed),
+      // the plan_tier from the JWT session is used as fallback.
+      vi.mocked(resolveChatTenantContext).mockResolvedValue({
+        tenantSlug: "digiquant-dashboard",
+        ownerUserSub: "user:123",
+      } as never);
+      vi.mocked(requireDigiChatAuth).mockResolvedValue({
+        tenantSlug: "digiquant-dashboard",
+        ownerUserSub: "user:123",
+        plan_tier: "desk",
+      });
+      const req = dashboardReq();
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+    });
+
+    it("returns 403 when session plan_tier is free/brief", async () => {
+      vi.mocked(resolveChatTenantContext).mockResolvedValue({
+        tenantSlug: "digiquant-dashboard",
+        ownerUserSub: "user:123",
+        embedConfig: dashboardCtx.embedConfig,
+      } as never);
+      vi.mocked(requireDigiChatAuth).mockResolvedValue({
+        tenantSlug: "digiquant-dashboard",
+        ownerUserSub: "user:123",
+        plan_tier: "free",
+      });
+      const req = dashboardReq();
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("showByok is true in the embed config (contract test)", () => {
+      expect(dashboardCtx.embedConfig.showByok).toBe(true);
     });
   });
   describe("trace stream (the production default)", () => {

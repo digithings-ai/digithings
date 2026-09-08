@@ -12,6 +12,7 @@ byte-for-byte. Probe-only (``--check`` / ``--dry-run``); never ``--execute``.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -21,16 +22,27 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
-WORKER_JOBS_TS = REPO_ROOT / "frontend" / "digithings-cron" / "src" / "jobs.ts"
 SPEC = REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "kairos-cron-check.workflow.yml"
 INSTALLED = WORKFLOW_DIR / "execution-cron-check.yml"
 HOUSE = WORKFLOW_DIR / "pipeline-digiquant.yml"
+JOBS_SOURCE = REPO_ROOT / "frontend" / "digithings-cron" / "src" / "jobs.ts"
 MAILGUN_FRAGMENT = (
     REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "pipeline-olympus-mailgun.env.yml"
 )
 MAILGUN_KEYS = ("MAILGUN_API_KEY", "MAILGUN_DOMAIN", "NOTIFY_FROM")
 
 FORBIDDEN_APPLY = ("--execute", "--all", "portfolio.chain")
+
+
+def _worker_jobs() -> dict[str, str]:
+    pairs = re.findall(
+        r'(?:wd|rd)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
+        JOBS_SOURCE.read_text(encoding="utf-8"),
+        flags=re.DOTALL,
+    )
+    jobs = dict(pairs)
+    assert pairs and len(jobs) == len(pairs), "Worker job IDs must be unique literals"
+    return jobs
 
 
 def _triggers(doc: dict[str | bool, object]) -> dict[str, object]:
@@ -44,36 +56,6 @@ def _triggers(doc: dict[str | bool, object]) -> dict[str, object]:
         raise AssertionError("workflow missing on:")
     assert isinstance(raw, dict)
     return raw
-
-
-def _worker_job_cron(job_id: str) -> str:
-    """Cron string for a digithings-cron job id (the production clock since #3579).
-
-    Both wd()/rd() helpers take (id, cron, ...) so one pattern covers both.
-    """
-    import re
-
-    text = WORKER_JOBS_TS.read_text(encoding="utf-8")
-    m = re.search(rf'\(\s*"{re.escape(job_id)}"\s*,\s*"([^"]+)"', text)
-    assert m, f"job {job_id!r} not found in {WORKER_JOBS_TS}"
-    return m.group(1)
-
-
-def _worker_job_crons_by_prefix(prefix: str) -> list[str]:
-    """Crons for all digithings-cron jobs whose id starts with prefix, in file order."""
-    import re
-
-    text = WORKER_JOBS_TS.read_text(encoding="utf-8")
-    crons = re.findall(rf'\(\s*"{re.escape(prefix)}[^"]*"\s*,\s*"([^"]+)"', text)
-    assert crons, f"no jobs with prefix {prefix!r} in {WORKER_JOBS_TS}"
-    return crons
-
-
-def _schedule_entries(doc: dict[str | bool, object]) -> list[dict[str, object]]:
-    triggers = _triggers(doc)
-    entries = triggers.get("schedule") or []
-    assert isinstance(entries, list)
-    return entries  # type: ignore[return-value]
 
 
 def _run_scripts(path: Path) -> list[str]:
@@ -94,24 +76,24 @@ class TestExecutionCronSpecIsProbeOnly:
     def test_spec_file_exists(self) -> None:
         assert SPEC.is_file()
 
-    def test_schedule_is_offset_from_house(self) -> None:
-        """Probe dispatch stays offset from the house retries (Worker clock since #3579).
-
-        Neither workflow keeps a GHA `schedule:` key; digithings-cron dispatches the
-        probe (`execution-cron-check`, 12:15 UTC, off minute 0) and the house retries
-        (`house-run-*`, minute 17). Different minutes => the probe never shares a
-        dispatch slot with portfolio.chain; `0 12 * * *` stays unused anywhere.
-        """
+    def test_worker_schedule_is_offset_from_house(self) -> None:
         doc = yaml.safe_load(SPEC.read_text(encoding="utf-8"))
-        assert _schedule_entries(doc) == []
-        house = yaml.safe_load(HOUSE.read_text(encoding="utf-8"))
-        assert _schedule_entries(house) == []
-        probe_cron = _worker_job_cron("execution-cron-check")
-        assert probe_cron == "15 12 * * *"
-        house_crons = _worker_job_crons_by_prefix("house-run-")
-        assert house_crons == ["17 9 * * 1-5", "17 10 * * 1-5", "17 11 * * 1-5", "17 12 * * 1-5"]
-        assert probe_cron not in house_crons
+        assert _triggers(doc) == {"workflow_dispatch": None}
+        jobs = _worker_jobs()
+        crons = [jobs["execution-cron-check"]]
+        assert crons == ["15 12 * * *"]
+        house_crons = [jobs[f"house-run-{hour:02d}"] for hour in (9, 10, 11, 12)]
+        assert house_crons == [
+            "17 9 * * *",
+            "17 10 * * *",
+            "17 11 * * *",
+            "17 12 * * *",
+        ]
+        assert "house-run-sun" not in jobs
         assert "0 12 * * *" not in house_crons
+        assert "0 12 * * *" not in crons
+        for cron in house_crons:
+            assert cron not in crons
 
     def test_permissions_are_contents_read_only(self) -> None:
         doc = yaml.safe_load(SPEC.read_text(encoding="utf-8"))
@@ -166,12 +148,25 @@ class TestHouseScheduleRetriesOffPeak:
     """Same anti-congestion pattern as FX Hub (`17 */2` in pipeline-digiquant-prices)."""
 
     def test_house_crons_avoid_top_of_hour_and_retry_before_ny_open(self) -> None:
-        """Worker-dispatched house retries (schedule removed from the workflow #3579)."""
-        crons = _worker_job_crons_by_prefix("house-run-")
-        assert crons == ["17 9 * * 1-5", "17 10 * * 1-5", "17 11 * * 1-5", "17 12 * * 1-5"]
+        jobs = _worker_jobs()
+        crons = [jobs[f"house-run-{hour:02d}"] for hour in (9, 10, 11, 12)]
+        assert crons == [
+            "17 9 * * *",
+            "17 10 * * *",
+            "17 11 * * *",
+            "17 12 * * *",
+        ]
+        assert "house-run-sun" not in jobs
         for cron in crons:
             minute, _hour, *_rest = cron.split()
             assert minute != "0", cron
+            assert cron.endswith(" * * *"), cron
+
+    def test_house_pipeline_has_no_sunday_forced_refresh(self) -> None:
+        blob = HOUSE.read_text(encoding="utf-8")
+        assert 'refresh_scope="all"' not in blob
+        assert "today_dow" not in blob
+        assert "INPUT_REFRESH_SCOPE" in blob
 
     def test_house_accepts_repository_dispatch_watchdog(self) -> None:
         house = yaml.safe_load(HOUSE.read_text(encoding="utf-8"))
@@ -179,7 +174,7 @@ class TestHouseScheduleRetriesOffPeak:
         dispatch = triggers.get("repository_dispatch")
         assert isinstance(dispatch, dict)
         types = dispatch.get("types")
-        assert types == ["olympus-daily"]
+        assert types == ["digiquant-baseline"]
 
     def test_already_committed_gate_skips_the_llm_job(self) -> None:
         house = yaml.safe_load(HOUSE.read_text(encoding="utf-8"))
