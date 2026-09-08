@@ -680,44 +680,47 @@ class TestRefreshEventCumulativeHouseScope:
         assert by_id["overlay-1"]["cumulative_return_since_event_pct"] is None
 
 
+_WORKER_JOBS_TS = (
+    Path(__file__).resolve().parents[3] / "frontend" / "digithings-cron" / "src" / "jobs.ts"
+)
+
+
+def _worker_job_cron(job_id: str) -> str:
+    """Cron string for a digithings-cron job id (the production clock since #3579).
+
+    Both wd()/rd() helpers take (id, cron, ...) so one pattern covers both.
+    """
+    import re
+
+    text = _WORKER_JOBS_TS.read_text(encoding="utf-8")
+    m = re.search(rf'\(\s*"{re.escape(job_id)}"\s*,\s*"([^"]+)"', text)
+    assert m, f"job {job_id!r} not found in {_WORKER_JOBS_TS}"
+    return m.group(1)
+
+
 class TestMetricsCronRunsEveryDay:
     """The schedule half of #1833. The book cron is daily; the metrics cron was MON-SAT, so a
-    Sunday book was written and then never enriched — NULL permanently, not just until 22:00."""
+    Sunday book was written and then never enriched — NULL permanently, not just until 22:00.
+
+    Since #3579 the production clock is the Cloudflare Worker digithings-cron
+    (frontend/digithings-cron/src/jobs.ts), not a GHA `schedule:` key — so these
+    tests assert on the Worker's `research-metrics` job, which dispatches
+    pipeline-research-metrics.yml via workflow_dispatch."""
 
     def test_the_cron_has_no_weekday_restriction(self) -> None:
-        import yaml
-
-        wf = (
-            Path(__file__).resolve().parents[3]
-            / ".github"
-            / "workflows"
-            / "pipeline-research-metrics.yml"
+        cron = _worker_job_cron("research-metrics")
+        dow = cron.split()[4]
+        assert dow == "*", (
+            f"research-metrics cron day-of-week is {dow!r}; a restricted schedule leaves the book "
+            "for an excluded day permanently unenriched (#1833)"
         )
-        doc = yaml.safe_load(wf.read_text(encoding="utf-8"))
-        crons = [s["cron"] for s in doc[True]["schedule"]]  # `on:` parses as boolean True
-        assert crons, "the metrics workflow must keep a schedule"
-        for cron in crons:
-            dow = cron.split()[4]
-            assert dow == "*", (
-                f"metrics cron day-of-week is {dow!r}; a restricted schedule leaves the book "
-                "for an excluded day permanently unenriched (#1833)"
-            )
 
     def test_it_still_runs_after_the_eod_price_ingest(self) -> None:
         """22:00 UTC is load-bearing: the price cron writes closes at 21:00, so an earlier
         metrics run would carry the *previous* day forward on every trading day."""
-        import yaml
-
-        wf = (
-            Path(__file__).resolve().parents[3]
-            / ".github"
-            / "workflows"
-            / "pipeline-research-metrics.yml"
-        )
-        doc = yaml.safe_load(wf.read_text(encoding="utf-8"))
-        for cron in [s["cron"] for s in doc[True]["schedule"]]:
-            minute, hour = cron.split()[0], cron.split()[1]
-            assert (int(hour), int(minute)) >= (22, 0), f"{cron} runs before the 21:00 ingest"
+        cron = _worker_job_cron("research-metrics")
+        minute, hour = cron.split()[0], cron.split()[1]
+        assert (int(hour), int(minute)) >= (22, 0), f"{cron} runs before the 21:00 ingest"
 
 
 class TestResolveScheduledMetricsDate:
