@@ -107,8 +107,8 @@ directory/zip. `compile_skill` wraps the middle two steps and reports
   extracting plain text from HTML via a stdlib `html.parser.HTMLParser`
   (no BeautifulSoup dependency — good enough for doc pages, not a general
   HTML→Markdown converter). A single URL failure is logged and skipped, not
-  fatal to the whole build (mirrors `digillm.web_search`'s fail-soft
-  convention). Accepts an injected `fetcher=` for tests (an
+  fatal to the whole build (fail-soft convention: best-effort ingest, not an
+  all-or-nothing gate). Accepts an injected `fetcher=` for tests (an
   `httpx.MockTransport`-backed `HttpFetcher`) — no real network calls in the
   unit suite. Every fetched `SourceDocument` is marked `trusted=False` — see
   "Security hardening" below.

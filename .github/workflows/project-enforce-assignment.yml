@@ -1,9 +1,8 @@
 # REM-041 (org ops): complements in-repo pr-linkage.yml — see docs/reviews/REM-deferred-ops.md
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Project: enforce assignment"
 
 on:
-  schedule:
-    - cron: '0 9 * * *'  # daily at 09:00 UTC
   workflow_dispatch:
 
 permissions:

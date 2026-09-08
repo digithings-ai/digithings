@@ -158,7 +158,14 @@ def test_kit_is_not_on_the_marketing_site() -> None:
 
 def test_design_reference_ships_the_kit_page() -> None:
     page = (
-        REPO_ROOT / "frontend" / "digiweb" / "reference" / "app" / "brand" / "page.tsx"
+        REPO_ROOT
+        / "frontend"
+        / "digiweb"
+        / "reference"
+        / "app"
+        / "(gallery)"
+        / "brand"
+        / "page.tsx"
     ).read_text(encoding="utf-8")
     assert "{BRAND_TAGLINE}" in page
     assert "design-reference" in page

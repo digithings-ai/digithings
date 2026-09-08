@@ -14,7 +14,9 @@ import {
   HOUSE_PROFILE_KEY,
   validateAgainstSchema,
   validateAssetPreferences,
+  validateExecutionPolicy,
   validateInvestmentProfile,
+  validatePipelineSchedule,
 } from "./profile-schemas.ts";
 
 const validInvestment = {
@@ -195,4 +197,75 @@ Deno.test("validateAgainstSchema reports nested array item type errors", () => {
 
 Deno.test("HOUSE_PROFILE_KEY stays reserved as house", () => {
   assertEquals(HOUSE_PROFILE_KEY, "house");
+});
+
+const allDaysTrue = {
+  research: true,
+  deliberation: true,
+  execution: true,
+};
+
+const validPipelineSchedule = {
+  schema_version: 1,
+  monday: allDaysTrue,
+  tuesday: allDaysTrue,
+  wednesday: allDaysTrue,
+  thursday: allDaysTrue,
+  friday: allDaysTrue,
+  saturday: allDaysTrue,
+  sunday: allDaysTrue,
+};
+
+Deno.test("validatePipelineSchedule accepts daily defaults matrix", () => {
+  assertEquals(validatePipelineSchedule(validPipelineSchedule).ok, true);
+});
+
+Deno.test("validatePipelineSchedule rejects missing weekday", () => {
+  const { sunday: _drop, ...partial } = validPipelineSchedule;
+  const result = validatePipelineSchedule(partial);
+  assertEquals(result.ok, false);
+  if (!result.ok) {
+    assertEquals(result.errors.some((e) => e.path === "sunday"), true);
+  }
+});
+
+Deno.test("validatePipelineSchedule rejects non-boolean stage flag", () => {
+  const result = validatePipelineSchedule({
+    ...validPipelineSchedule,
+    monday: { ...allDaysTrue, research: "yes" },
+  });
+  assertEquals(result.ok, false);
+  if (!result.ok) {
+    assertEquals(result.errors[0]?.path, "monday.research");
+    assertEquals(result.errors[0]?.message, "must be a boolean");
+  }
+});
+
+Deno.test("validateExecutionPolicy accepts calendar-vetoable defaults", () => {
+  assertEquals(validateExecutionPolicy({}).ok, true);
+  assertEquals(
+    validateExecutionPolicy({
+      calendar_mode: "venue_calendar",
+      on_closed_session: "defer",
+      respect_early_close: true,
+      permitted_venues: ["NYSE"],
+    }).ok,
+    true,
+  );
+});
+
+Deno.test("validateExecutionPolicy rejects non-calendar modes", () => {
+  const result = validateExecutionPolicy({ calendar_mode: "always_open" });
+  assertEquals(result.ok, false);
+  if (!result.ok) {
+    assertEquals(result.errors[0]?.path, "calendar_mode");
+  }
+});
+
+Deno.test("validateExecutionPolicy rejects force-open closed-session behavior", () => {
+  const result = validateExecutionPolicy({ on_closed_session: "force" });
+  assertEquals(result.ok, false);
+  if (!result.ok) {
+    assertEquals(result.errors[0]?.path, "on_closed_session");
+  }
 });

@@ -21,11 +21,11 @@ export function FreshnessBanner({ latest }: { latest: ResearchRunDiagnostics }) 
   return (
     <div className="oly-slab flex flex-wrap items-center gap-x-3 gap-y-1 p-4">
       <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden />
-      <span className="text-sm text-ink">
+      <span className="font-mono text-xs text-ink md:text-sm">
         Last successful run{' '}
-        <span className="font-medium">{latest.run_date ?? '—'}</span>
+        <span className="font-medium tabular-nums">{latest.run_date ?? '—'}</span>
         {latest.run_type ? <span className="text-ink-soft"> · {latest.run_type}</span> : null}
-        {segs ? <span className="text-ink-soft"> · {segs}</span> : null}
+        {segs ? <span className="tabular-nums text-ink-soft"> · {segs}</span> : null}
       </span>
       <AsOfBadge date={latest.run_date} createdAt={latest.created_at} />
     </div>

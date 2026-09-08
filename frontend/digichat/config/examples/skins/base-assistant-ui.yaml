@@ -1,0 +1,38 @@
+version: 1
+# Official assistant-ui template `base-assistant-ui` — copy to DIGICHAT_CONFIG_PATH
+# or set DIGICHAT_CHROME_SKIN=base-assistant-ui on any valid deployment YAML.
+deployment:
+  slug: client-base-assistant-ui
+  chrome:
+    mode: embed
+    theme: dark
+    skin: base-assistant-ui
+    title: assistant-ui
+    welcome: How can I help you today?
+    placeholder: Send a message... (@ to mention, / for commands)
+  persistence: none
+  auth: anonymous
+  features:
+    attachments: true
+    dictation: false
+    speech: false
+    reasoning: collapsed
+    toolCalls: collapsed
+    sources: true
+    branchPicker: true
+    modelPicker: false
+  backend:
+    type: digigraph
+  tools:
+    allowUserToggle: true
+    catalog:
+      - id: digisearch
+        default: true
+        label: Search
+      - id: digivault
+        default: true
+        label: Vault
+  gate:
+    mode: ungated
+    activityDetail: labels
+    llmAccess: operator

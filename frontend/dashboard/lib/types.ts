@@ -165,12 +165,18 @@ export interface BenchmarkData {
 /** Map of benchmark ticker → BenchmarkData. */
 export type BenchmarkHistoryMap = Record<string, BenchmarkData>;
 
-/** A single NAV data point for charts (aligned with nav_history). */
+/** A single NAV data point for charts (aligned with nav_history / accounting tip). */
 export interface NavChartPoint {
   date: string;
   nav: number;
   cash_pct?: number | null;
   invested_pct?: number | null;
+  /** Accounting series source (#3580 SSOT badge). */
+  source?: string | null;
+  /** Accounting series contract (#3580 SSOT badge). */
+  contract?: string | null;
+  /** Tip day return when present on `public_accounting_nav_history`. */
+  day_return_pct?: number | null;
 }
 
 /** One historical position row for sleeve / time-series aggregation. */

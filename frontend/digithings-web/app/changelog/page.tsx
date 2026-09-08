@@ -3,7 +3,7 @@ import { Reveal } from "@digithings/web";
 import { DtFooter } from "@/components/DtFooter";
 import { PageHead } from "../_company/prose";
 import { DtNav } from "@/components/DtNav";
-import releases from "../../../digiweb/design/releases.json";
+import releases from "@digithings/design/releases.json";
 
 export const metadata: Metadata = {
   title: "changelog — tagged frontend releases",
