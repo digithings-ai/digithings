@@ -23,6 +23,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app ./
 COPY frontend/digiweb/design ./frontend/digiweb/design
 COPY frontend/digiweb/web ./frontend/digiweb/web
+# Product skin @imports gallery chatbot.css from outside web/ (#3717).
+COPY ["frontend/digiweb/reference/app/(chatbot)/chatbot/chatbot.css", "frontend/digiweb/reference/app/(chatbot)/chatbot/chatbot.css"]
 COPY frontend/digichat-ui ./frontend/digichat-ui
 COPY frontend/digichat ./frontend/digichat
 # Same bake as Dockerfile.digichat-cloudflare: health version matches package.json.
