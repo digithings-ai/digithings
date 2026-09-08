@@ -60,6 +60,19 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(app).toContain(copy);
   });
 
+  it("portaled More-menu CSS is gated so catalog skins keep their menus", () => {
+    const gate =
+      ':is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-content';
+    const chatbot = read(
+      "../../../../reference/app/(chatbot)/chatbot/chatbot.css",
+    );
+    const aui = read("../../styles/chat-aui.css");
+    expect(chatbot).toContain(gate);
+    expect(aui).toContain(gate);
+    expect(chatbot).not.toMatch(/^\.aui-action-bar-more-content \{/m);
+    expect(aui).not.toMatch(/^\.aui-action-bar-more-content \{/m);
+  });
+
   it("web package exposes Thread on a chat subpath, not the main barrel", () => {
     const pkg = read("../../../package.json");
     const index = read("../../index.ts");
