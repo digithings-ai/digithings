@@ -138,7 +138,7 @@ make test-unit      # all unit tests green
 ruff check .        # zero violations
 ```
 
-Quality bar is **review** ([CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)), not `make score`. Use `/review` / `code-review` / `review-and-ship` when that policy needs a hatch. `make score` is optional (human/CI).
+Quality bar is **review** ([CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)), not `make score`. Use `/review` / in-session / `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin. `make score` is optional (human/CI).
 
 ### 3e. PR submission
 

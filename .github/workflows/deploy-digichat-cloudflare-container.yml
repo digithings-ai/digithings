@@ -164,6 +164,15 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: frontend/digichat-cloudflare
           command: deploy --message digichat-v${{ steps.version.outputs.version }}
+          # Sync house-default upstream key into the Worker/Container env (same
+          # pattern as deploy-digithings-cron.yml → GH_DISPATCH_TOKEN).
+          # Only non-empty Actions secrets — empty optional names fail the action.
+          secrets: |
+            CHEAPERINFERENCE_API_KEY
+            OPENROUTER_API_KEY
+        env:
+          CHEAPERINFERENCE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           # wrangler-action's own default (no `wranglerVersion` given) installed a
           # hardcoded 3.90.0 on its first real run here (#2199), silently ignoring
           # this project's own `"wrangler": "^4.28.0"` devDependency -- 3.x predates
@@ -171,4 +180,4 @@ jobs:
           # in top-level field: containers" and deployed only the Worker routing
           # shell, never rebuilding the actual Container image. Pin to the same
           # range package.json declares so both installs agree on what's supported.
-          wranglerVersion: "^4.28.0"
+          wranglerVersion: "4.28.0"

@@ -16,14 +16,19 @@
  * empty result rather than throwing, so consumers render a clean empty state instead of an
  * error wall.
  *
- * Exception — accounting NAV (#2599 / #3029): `fetchPerformanceTearsheet` FAILS CLOSED when
- * `public_accounting_nav_history` errors. Swallowing that into an empty series looked like
- * a healthy empty book and hid unapplied migrations 072–074.
+ * Exception — accounting NAV (#2599 / #3029): `fetchPerformanceTearsheet` /
+ * `getPerformanceBundle` FAIL CLOSED when `public_accounting_nav_history` errors.
+ * Swallowing that into an empty series looked like a healthy empty book and hid
+ * unapplied migrations 072–074.
+ *
+ * Performance SSOT (#3580): Brief persisted KPIs and Tearsheet share
+ * `getPerformanceBundle()` / `buildPerformanceTearsheet` — one NAV adapter, one
+ * contract badge. Live marks on Brief are a badged overlay only.
  */
 
 import { supabase, isSupabaseConfigured } from './supabase';
 import type { TableRow, ViewRow } from './database.types';
-import type { ResearchRunDiagnostics } from './types';
+import type { ResearchRunDiagnostics, BenchmarkHistoryMap } from './types';
 import type {
   BenchmarkComparison,
   PerformanceTearsheet,
@@ -45,6 +50,13 @@ import {
   soldWeightPct,
 } from './position-event-economics';
 import { houseBook } from './house-workspace';
+import { isCashTicker } from './book-reconciliation';
+import { committedBookDate } from './dashboard-ssot';
+import {
+  buildPerformanceSsotMeta,
+  type PerformanceSsotMeta,
+} from './performance-ssot';
+import { fetchComparablePriceHistory } from './queries';
 
 const DECISION_PAGE_SIZE = 1000;
 const DECISION_MAX_ROWS = 50000;
@@ -219,7 +231,7 @@ function latestAttributionByTicker(
   const latest = new Map<string, TableRow<'position_attribution'>>();
   for (const row of [...rows].sort((a, b) => b.date.localeCompare(a.date))) {
     const ticker = row.ticker.toUpperCase();
-    if (ticker !== 'CASH' && !latest.has(ticker)) latest.set(ticker, row);
+    if (!isCashTicker(ticker) && !latest.has(ticker)) latest.set(ticker, row);
   }
   return latest;
 }
@@ -399,7 +411,7 @@ function buildPositionContributionSeries(
   const pricesByTicker = new Map<string, Array<{ date: string; price: number }>>();
   for (const row of positions) {
     const ticker = row.ticker.toUpperCase();
-    if (ticker === 'CASH' || !currentTickers.has(ticker)) continue;
+    if (isCashTicker(ticker) || !currentTickers.has(ticker)) continue;
     if (!snapshots.has(row.date)) snapshots.set(row.date, new Map());
     snapshots.get(row.date)!.set(ticker, row);
     if (row.current_price != null && row.current_price > 0) {
@@ -463,7 +475,7 @@ function latestPositionByTicker(
   const latest = new Map<string, TableRow<'positions'>>();
   for (const position of [...positions].sort((a, b) => b.date.localeCompare(a.date))) {
     const ticker = position.ticker.toUpperCase();
-    if (ticker !== 'CASH' && !latest.has(ticker)) latest.set(ticker, position);
+    if (!isCashTicker(ticker) && !latest.has(ticker)) latest.set(ticker, position);
   }
   return latest;
 }
@@ -484,6 +496,10 @@ export function buildPerformanceTearsheet(args: {
   benchmarkPrices?: Array<{ ticker?: string; date: string; close: number }>;
   /** Latest closes for open-book tickers when positions rows lack marks. */
   holdingMarks?: Array<{ ticker: string; date: string; close: number }>;
+  /** Raw accounting rows (with contract) for SSOT badges (#3580). */
+  accountingNav?: AccountingNavRow[];
+  /** Committed snapshot date for book-as-of SSOT. */
+  snapshotDate?: string | null;
 }): PerformanceTearsheet {
   const navAsc = [...args.nav].sort((a, b) => a.date.localeCompare(b.date));
   const inceptionDate = navAsc[0]?.date ?? null;
@@ -491,14 +507,14 @@ export function buildPerformanceTearsheet(args: {
   const currentSnapshot = latestDateRows(args.positions);
   const marksByTicker = latestCloseByTicker(args.holdingMarks ?? []);
   const currentPositions = currentSnapshot.rows
-    .filter((position) => position.ticker.toUpperCase() !== 'CASH' && position.weight_pct > 0)
+    .filter((position) => !isCashTicker(position.ticker) && position.weight_pct > 0)
     .map((position) => applyHoldingMarks(position, marksByTicker));
   const attributionByTicker = latestAttributionByTicker(args.attribution);
   const latestPosition = latestPositionByTicker(args.positions);
   const latestAttribution = latestDateRows(args.attribution);
   const currentTickers = new Set(
     (currentPositions.length ? currentPositions : latestAttribution.rows)
-      .filter((row) => row.ticker.toUpperCase() !== 'CASH')
+      .filter((row) => !isCashTicker(row.ticker))
       .map((row) => row.ticker.toUpperCase())
   );
   const positionByTicker = new Map(
@@ -569,6 +585,17 @@ export function buildPerformanceTearsheet(args: {
       ? 'derived'
       : 'unavailable';
 
+  const metricsAsOf = args.metrics?.as_of_date ?? args.metrics?.date ?? null;
+  const holdingsAsOf = currentSnapshot.date ?? latestAttribution.date;
+  const ssot = attachTearsheetSsot({
+    accountingNav: args.accountingNav,
+    navHistory: navAsc,
+    metricsAsOf: args.metrics?.as_of_date ?? args.metrics?.date ?? null,
+    snapshotDate: args.snapshotDate ?? null,
+    positions: args.positions,
+    holdingsAsOf,
+  });
+
   return {
     currentNav: navAsc.at(-1)?.nav ?? null,
     netReturnPct,
@@ -577,12 +604,9 @@ export function buildPerformanceTearsheet(args: {
     benchmarkTicker: defaultComparison?.ticker ?? persistedBenchmarkTicker,
     benchmarkComparisons,
     returnsSource,
-    metricsAsOf:
-      derivedUsed
-        ? navAsc.at(-1)?.date ?? args.metrics?.as_of_date ?? args.metrics?.date ?? null
-        : args.metrics?.as_of_date ?? args.metrics?.date ?? null,
+    metricsAsOf,
     inceptionDate,
-    holdingsAsOf: currentSnapshot.date ?? latestAttribution.date,
+    holdingsAsOf,
     generatedAt: args.metrics?.generated_at ?? null,
     navSeries,
     contributionSeries: buildPositionContributionSeries(
@@ -592,23 +616,97 @@ export function buildPerformanceTearsheet(args: {
     ),
     currentHoldings,
     historicalHoldings,
+    ...ssot,
   };
 }
 
-export async function fetchPerformanceTearsheet(): Promise<PerformanceTearsheet> {
+function attachTearsheetSsot(args: {
+  accountingNav?: AccountingNavRow[];
+  navHistory: TableRow<'nav_history'>[];
+  metricsAsOf: string | null;
+  snapshotDate: string | null;
+  positions: TableRow<'positions'>[];
+  holdingsAsOf: string | null;
+}): Pick<PerformanceTearsheet, 'navContract' | 'metricsLagging' | 'tipInvestedPct'> {
+  const bookAsOf = committedBookDate(args.snapshotDate, args.positions.map((p) => p.date));
+  const openBookDate = bookAsOf ?? args.holdingsAsOf;
+  const openBook = openBookDate
+    ? args.positions.filter((p) => p.date === openBookDate && !isCashTicker(p.ticker))
+    : [];
+  const navRows: AccountingNavRow[] =
+    args.accountingNav ??
+    args.navHistory.map((row) => ({
+      date: row.date,
+      nav: row.nav,
+      cash_pct: row.cash_pct ?? null,
+      invested_pct: row.invested_pct ?? null,
+      day_return_pct: null,
+      source: 'legacy_nav_history',
+      contract: 'legacy_estimate',
+    }));
+  const meta = buildPerformanceSsotMeta({
+    navRows,
+    metricsAsOf: args.metricsAsOf,
+    snapshotDate: args.snapshotDate,
+    positionDates: args.positions.map((p) => p.date),
+    positionMetricsAsOf: openBook.map((p) => p.metrics_as_of ?? null),
+    metricsInvestedPct: null,
+  });
+  return {
+    navContract: meta.navContract,
+    metricsLagging: meta.metricsLagging,
+    tipInvestedPct: meta.tipInvestedPct,
+  };
+}
+
+/** Shared Brief + Tearsheet performance payload (#3580). */
+export type PerformanceBundle = {
+  tearsheet: PerformanceTearsheet;
+  ssot: PerformanceSsotMeta;
+};
+
+/**
+ * Single performance fetch for Tearsheet and Brief persisted KPIs.
+ * Prefer this over calling {@link fetchPerformanceTearsheet} alone — same NAV
+ * adapter, contract badge, and metrics-lag chrome.
+ */
+export async function getPerformanceBundle(
+  opts: { snapshotDate?: string | null } = {}
+): Promise<PerformanceBundle> {
   if (!isSupabaseConfigured() || !supabase) {
-    // Configured-but-empty must still render the empty-state tear sheet — return a zeroed build.
-    return buildPerformanceTearsheet({
+    const tearsheet = buildPerformanceTearsheet({
       nav: [],
       positions: [],
       metrics: null,
       attribution: [],
       events: [],
+      snapshotDate: opts.snapshotDate ?? null,
     });
+    return {
+      tearsheet,
+      ssot: buildPerformanceSsotMeta({
+        navRows: [],
+        metricsAsOf: null,
+        snapshotDate: opts.snapshotDate ?? null,
+        positionDates: [],
+        positionMetricsAsOf: [],
+      }),
+    };
   }
-  // NAV: curated accounting series (#2599). Fail closed on query error (#3029) —
-  // never build an empty tearsheet that looks like a healthy empty book.
-  // Query directly (not via safeSelect) so the PostgREST error is preserved.
+
+  let snapshotDate = opts.snapshotDate ?? null;
+  if (snapshotDate == null) {
+    const snapRes = await supabase
+      .from('daily_snapshots')
+      .select('date')
+      .order('date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!snapRes.error) {
+      snapshotDate = (snapRes.data as { date?: string | null } | null)?.date ?? null;
+    }
+  }
+
   const navQuery = await supabase
     .from(ACCOUNTING_NAV_VIEW)
     .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract')
@@ -628,8 +726,6 @@ export async function fetchPerformanceTearsheet(): Promise<PerformanceTearsheet>
     safeSelect<TableRow<'portfolio_metrics'>>('portfolio_metrics', (sb) =>
       houseBook(sb, 'portfolio_metrics').order('date', { ascending: false }).limit(1)
     ),
-    // Book attribution tab stays on current-book lookback (diagnostic). Realized daily
-    // contribution is public_daily_realized_attribution — do not mix into this series.
     safeSelect<TableRow<'position_attribution'>>('position_attribution', (sb) =>
       sb
         .from('position_attribution')
@@ -639,12 +735,12 @@ export async function fetchPerformanceTearsheet(): Promise<PerformanceTearsheet>
     ),
     safeSelect<TableRow<'position_events'>>('position_events', (sb) =>
       houseBook(sb, 'position_events')
-        // EXIT = full close; TRIM = partial sell — both are realized vs average entry.
         .in('event', ['EXIT', 'TRIM'])
         .order('date', { ascending: false })
         .limit(PERFORMANCE_HISTORY_LIMIT)
     ),
   ]);
+
   const navHistory: TableRow<'nav_history'>[] = navRows.map((row) => {
     const shaped = accountingNavToHistoryShape(row);
     return {
@@ -661,25 +757,18 @@ export async function fetchPerformanceTearsheet(): Promise<PerformanceTearsheet>
   const openTickers = [
     ...new Set(
       currentBook.rows
-        .filter((row) => row.ticker.toUpperCase() !== 'CASH' && row.weight_pct > 0)
+        .filter((row) => !isCashTicker(row.ticker) && row.weight_pct > 0)
         .map((row) => row.ticker.toUpperCase())
     ),
   ];
-  const [benchmarkRes, holdingMarksRes] = await Promise.all([
+  const [benchmarkMap, holdingMarksRes] = await Promise.all([
     navWindow.length >= 2
-      ? safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
-          'benchmark price_history',
-          (sb) =>
-            sb
-              .from('price_history')
-              .select('ticker,date,close')
-              .in('ticker', [...DASHBOARD_BENCHMARK_TICKERS])
-              .gte('date', navWindow[0].date)
-              .lte('date', navWindow.at(-1)!.date)
-              .order('date', { ascending: true })
-              .limit(PERFORMANCE_HISTORY_LIMIT)
+      ? fetchComparablePriceHistory(
+          [...DASHBOARD_BENCHMARK_TICKERS],
+          navWindow[0].date,
+          navWindow.at(-1)!.date
         )
-      : Promise.resolve({ rows: [], ok: true as const }),
+      : Promise.resolve({} as BenchmarkHistoryMap),
     openTickers.length
       ? safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
           'holding mark price_history',
@@ -689,18 +778,50 @@ export async function fetchPerformanceTearsheet(): Promise<PerformanceTearsheet>
               .select('ticker,date,close')
               .in('ticker', openTickers)
               .order('date', { ascending: false })
-              // One recent window per open name is enough to resolve a close mark.
               .limit(Math.max(openTickers.length * 40, 200))
         )
       : Promise.resolve({ rows: [], ok: true as const }),
   ]);
-  return buildPerformanceTearsheet({
+  const benchmarkPrices = Object.entries(benchmarkMap).flatMap(([ticker, series]) =>
+    (series?.history ?? []).map((point) => ({
+      ticker,
+      date: point.date,
+      close: point.price,
+    }))
+  );
+
+  const metricsRow = metricsRes.rows[0] ?? null;
+  const tearsheet = buildPerformanceTearsheet({
     nav: navHistory,
     positions: positionsRes.rows,
-    metrics: metricsRes.rows[0] ?? null,
+    metrics: metricsRow,
     attribution: attributionRes.rows,
     events: eventsRes.rows,
-    benchmarkPrices: benchmarkRes.rows,
+    benchmarkPrices,
     holdingMarks: holdingMarksRes.rows,
+    accountingNav: navRows,
+    snapshotDate,
   });
+
+  const openBook = currentBook.rows.filter((p) => !isCashTicker(p.ticker));
+  const bookWeightInvestedPct = openBook.reduce((sum, p) => sum + Number(p.weight_pct ?? 0), 0);
+  const ssot = buildPerformanceSsotMeta({
+    navRows,
+    metricsAsOf: metricsRow?.as_of_date ?? metricsRow?.date ?? null,
+    snapshotDate,
+    positionDates: positionsRes.rows.map((p) => p.date),
+    positionMetricsAsOf: openBook.map((p) => p.metrics_as_of ?? null),
+    bookWeightInvestedPct,
+    metricsInvestedPct: metricsRow?.invested_pct != null ? Number(metricsRow.invested_pct) : null,
+  });
+
+  return { tearsheet, ssot };
+}
+
+/** @deprecated Prefer {@link getPerformanceBundle} — same NAV adapter (#3580). */
+export async function fetchPerformanceTearsheet(
+  opts: { snapshotDate?: string | null } = {}
+): Promise<PerformanceTearsheet> {
+  const { tearsheet } = await getPerformanceBundle(opts);
+  return tearsheet;
 }

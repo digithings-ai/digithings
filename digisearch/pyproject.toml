@@ -45,6 +45,10 @@ embedding = ["openai>=1.0"]
 # so OpenAI-only consumers are not forced to pull sentence-transformers (#2441).
 rerank = ["sentence-transformers>=3.0"]
 azure = ["azure-search-documents>=11.4", "azure-core>=1.0"]
+# Optional RetrievalBackend implementations (#402). pgvector uses an existing
+# Postgres instance (DIGISEARCH_DATABASE_URL); lightrag is the graph upgrade path.
+pgvector = ["psycopg[binary]>=3.1"]
+lightrag = ["lightrag-hku>=1.4", "digisearch[pgvector]"]
 # Document-parser third-party deps. polars is in the base install; the rest are
 # parser-only (html→beautifulsoup4, docx→python-docx, pdf→pdfplumber,
 # plaintext→chardet). Each parser try-imports its dep at module scope (guarded by
@@ -66,7 +70,17 @@ edgar-corpus = ["datasets>=3.0"]
 # base. Keep this in sync when adding runtime/parser deps.
 dev = ["digisearch[server]", "digisearch[ingestion]", "langgraph>=0.2"]
 otel = ["digibase[otel]"]
-all = ["digisearch[server]", "digisearch[chroma]", "digisearch[embedding]", "digisearch[rerank]", "digisearch[azure]", "digisearch[ingestion]", "digisearch[agent]"]
+all = [
+    "digisearch[server]",
+    "digisearch[chroma]",
+    "digisearch[embedding]",
+    "digisearch[rerank]",
+    "digisearch[azure]",
+    "digisearch[ingestion]",
+    "digisearch[agent]",
+    "digisearch[pgvector]",
+    "digisearch[lightrag]",
+]
 
 [project.scripts]
 digisearch = "digisearch.cli:main"

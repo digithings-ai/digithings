@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:db9d428950415c63754b589c906d71c558b815e98dde8e07d319291506530b2b",
+  "claims": [
+    {
+      "id": "claim_77aba88ac88f44a98131a6ae36681463",
+      "statement": "ApiErrorEnvelope is the fleet-wide {error: {code, message, request_id, service}} shape built by json_error_response and wired per-app by register_fastapi_error_handlers.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/errors.py#L25-L56",
+          "version": "repo-lines-v1:sha256:fa078c1e4be0ca4f846d5cc58ca256b76d6b191114fc182fc57346d2b3546944:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkZjFmNmFjN2U4MDNiMmMwMmE4MDU2YmE5MGU4YjkzNzgxZTY3OGNlMjdhMGJjM2FhMmNkYzI1ZjNiZTdkNmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhZjJmMTdkNjBlNDVmNDZhOTM0YjViZTM0MGIxZDc4MzFhNzFmZWZjOWUwNmVkM2VjYTRlMGE3NWM2ZmMwYTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVhYjcwNGMwMWYwOWIwZDkyNDMyYjNhNTg0YzVmY2NmNWI3YjljZTA4NmU3YTU1OGViZTEwYmQxNGFhMTJkNDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZmMTEyMWVkZGZlMTU3Y2Q4NTQzYjk1MDcxZTdjNWZmMjg4MzQwNDI2NWM0MjIzMGMzNWQwYTM5NjBiZDJkMzQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_96318169025f4081857d2cbc61eeda72",
+      "statement": "install_request_id_middleware assigns or honors X-Request-ID on request.state (registered after rate limiting for LIFO wrap) while outbound_service_headers merges correlation ID with an optional bearer without logging it.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/http.py#L46-L120",
+          "version": "repo-lines-v1:sha256:e383170c3b07c11950545a89009a135d3dea223ca8a4be084648decb32ba865e:eyJzZWxlY3RlZExpbmVDb3VudCI6NzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFlNjk5MWFlYjBmYjA3YTM3OWMxZmEwYWFiMjc4M2MxMTgxYTM2NGI4YzYyMDQzOWMxYTVkOGVlMjczZTIyNWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3ZGNjOGE0Njc5ZDRkMDEyMDVmNWFkNTM0MjIyNWQ1YWU4NDRlM2UyNjE2OGExNThlMjY3ZDVjYTg5YzJhNzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3MDE0OWUwNjlhZDY3ZWNjZjQ3MzY0NmZmMWM3NTAwNTBkMzI5ZDExMDAxOGRjNTc2Njg3OGVhZmExZDYwN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk3MTNiODMzY2I5YjA0OTQ1MmUxNTA5ZmE3MzVjODFkNzQ2NTIyYTZkYTVkNjIwMTk2MTkyMWUzYWUxM2M3MzMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e373bb176e404ac28c69cf74418927b3",
+      "statement": "install_metrics records http_requests_total, http_request_duration_seconds, and http_requests_in_flight labelled with service/version/environment/method/route/status and exposes GET /metrics.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/metrics.py#L228-L273",
+          "version": "repo-lines-v1:sha256:5753f5cad6a78585f62584552bdff076123b48fcbf19627794231df4742d68a0:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM2ZTJlZDIwMmE3OTBiMDU4Njc0YjcxNmRmZDZhZjJiMjMwYjcwNWU1YTA4NGJkZjIyMmM0NDVmMzdlZTZjMGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MDlhNTNhNjE4ZDAyOGUxZDMwMDBjMGE3YWJjZWVjYmU1ZmIzN2Y0ZTUxMWVmZTQ2NjQzZmFkNmU2Njg3MmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjUyMmI2ODQzNmIwNThlNDEzOGQyN2NmMzczNzFlZjBmZTg1OTgzODIwMDNjNWYwYWI0MGQxMzg1MzJkODA0MzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a8f9c931ebbd4de09dd5c72856efdcbf",
+      "statement": "setup_otel_fastapi is a strict no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set and requires the digibase[otel] extra, warning and continuing without tracing otherwise.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/otel.py#L12-L30",
+          "version": "repo-lines-v1:sha256:cd42f1d94b8f5d31f1c144ba056b858210a3d7e97e75b33d11211c9969a89858:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE1NWFjNGYyMWE5YzdhNWYwN2IwNjhlYzMxMGY1OWYyOWNkODQyMTg0MzVhYjAyNTdhYWI3N2NhNjc1NTU3NjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxOWQzZGVmNDFkNDk1NDY1NWI5YzRlNjJiOTNhMDJjZTAxZTY0MDEzZWEzZGQyZTVhMDE3NTgwYjJhMzI4ZGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ4ZDFhYzczMTI1NTE0ZjM5MzNlMjU5Njc1ZTdjZmViZjM0NmViMjMzYTM5NmIzYzg4NGNlYzAzNzI1ODJkMjAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4e0cfd9c674748168a70b6a042cab24a",
+      "statement": "redact_mapping recursively replaces sensitive keys with [REDACTED] under additive patterns, and emit_event appends canonical AuditEvent JSONL lines with sparse digikey correlation fields.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/audit.py#L34-L79",
+          "version": "repo-lines-v1:sha256:c249b206eb858d803cb8d71e8d5069349ce2d4fd539b62456a731adf6734830c:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1Mzc5ODMzZjJmOGQ4YTcxNDU4YTkxNTU2NzQ2MmQ2Mjc5YzlmOGQ3MTdmOWFkODUzYjJhMmNjOGFlMGIxOTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3YTdjY2NiNzk5NDM3NDlkYWNkNThiNjljMGFkNGUyNTg4ZjEzN2RiZWZiZGFlMWI5ZDEyOWFjODlkZGM5NWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI5ZWUxOTMyODRlODJmYjc2YWY0ZjRmNTgzZTQzZjA1MDdiNWYxMzJiMTY0ZTZkMzUyM2JhZmI5NGMwYzdiMWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ0ZTgyMDgxNWYxNDhkZjhlYzE0OTZmMGQ2MmYwNDUwNDdjNmQzYTNjMjA0YTI1YTE3NWUxYTlkYTAyNTY1NGYifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

@@ -1,3 +1,4 @@
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Pipeline: research metrics refresh"
 
 # Daily refresh of the derived performance + lookback surfaces the dashboard
@@ -27,8 +28,6 @@ name: "Pipeline: research metrics refresh"
 # refresh_performance_metrics.refresh_positions_metrics.
 
 on:
-  schedule:
-    - cron: "0 22 * * *"
   workflow_dispatch:
     inputs:
       date:
