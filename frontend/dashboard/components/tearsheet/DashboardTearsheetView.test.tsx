@@ -82,7 +82,7 @@ describe('PerformanceTearsheetView', () => {
     expect(out).toContain('8.25%');
     expect(out).toContain('>period<');
     expect(out).toContain('2026-05-01–2026-07-17');
-    expect(out).toContain('paper NAV index 112.50');
+    expect(out).not.toContain('paper NAV index 112.50');
   });
 
   it('keeps the benchmark control outside the chart (page-global)', () => {

@@ -11,7 +11,7 @@ import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
  *
  * Quiet regime ribbon → "Brief" (display face) + the move (reusing the tested
  * TodayActionsPanel, which already renders the empty and all-HOLD states) → a
- * one-line NAV status. The regime accent is localized here ONLY; the page no
+ * one-line performance status (percentages only — no NAV index). The regime accent is localized here ONLY; the page no
  * longer washes regime colour across the whole viewport.
  */
 
@@ -52,7 +52,8 @@ const REGIME_ACCENT: Record<string, RegimeAccent> = {
 };
 
 export interface MoveHeroNav {
-  index: number | null;
+  // NOTE: no NAV index field — day-by-day relative percentages are what we
+  // surface; a level index is meaningless across differing portfolio sizes.
   sincePct: number | null;
   sinceDate: string | null;
   dailyPct: number | null;
@@ -131,7 +132,7 @@ export function MoveHero({
         </div>
 
         {/* THE READ — the marquee. Date wears the shared as-of format so the
-            kicker, the ribbon badge, and the NAV line all read alike (#1553). */}
+            kicker, the ribbon badge, and the status line all read alike (#1553). */}
         <p className="mt-4 text-[11px] font-bold uppercase tracking-widest text-ink-mute">
           Brief · {asOf ? formatAsOf(asOf) : '—'}
         </p>
@@ -160,12 +161,8 @@ export function MoveHero({
           </details>
         )}
 
-        {/* NAV status line — honest for one point */}
+        {/* Performance status line — percentages only, honest for one point */}
         <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-sm tabular-nums">
-          <span className="text-[11px] uppercase tracking-widest text-ink-mute">NAV</span>
-          <span className="text-base font-semibold text-ink">
-            {nav.index == null ? '—' : nav.index.toFixed(1)}
-          </span>
           {nav.sincePct != null ? (
             <span>
               <span className={sinceColor}>{signedPct(nav.sincePct)}</span>

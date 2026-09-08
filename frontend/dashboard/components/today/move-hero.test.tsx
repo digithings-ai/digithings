@@ -8,7 +8,6 @@ vi.mock('next/link', () => ({ default: (props: { children?: unknown }) => props.
 import { MoveHero } from './move-hero';
 
 const navOk = {
-  index: 98.6,
   sincePct: -0.7,
   sinceDate: '2026-06-23',
   dailyPct: -0.7,
@@ -17,7 +16,7 @@ const navOk = {
 };
 
 describe('MoveHero', () => {
-  it('leads with the regime headline and shows the demoted move + honest NAV', () => {
+  it('leads with the regime headline and shows the demoted move + honest percentages', () => {
     const html = renderToStaticMarkup(
       createElement(MoveHero, {
         regime: 'Risk-Off Consolidation',
@@ -33,7 +32,7 @@ describe('MoveHero', () => {
     expect(html).toContain('Mixed signals persist'); // headline is the marquee
     expect(html).toContain('Risk-Off Consolidation');
     expect(html).toContain('0.7'); // confidence chip
-    expect(html).toContain('98.6'); // NAV index
+    expect(html).not.toContain('98.6'); // NAV index is never surfaced
     expect(html).toContain('since inception'); // honest since-inception clause
     expect(html).toContain('text-down">-0.7%</span><span class="text-ink-soft"> since inception');
     expect(html).toContain('1 change today'); // demoted move status (1 non-HOLD action)
@@ -57,7 +56,7 @@ describe('MoveHero', () => {
     expect(html).toContain('No rebalance today — holding the book');
   });
 
-  it('omits the daily-delta clause when there is only one NAV point', () => {
+  it('omits the daily-delta clause when there is only one performance point', () => {
     const html = renderToStaticMarkup(
       createElement(MoveHero, {
         regime: 'Risk-Off Consolidation',
@@ -67,16 +66,16 @@ describe('MoveHero', () => {
         asOf: '2026-06-23',
         runType: null,
         actions: [],
-        nav: { index: 99.3, sincePct: -0.7, sinceDate: '2026-06-23', dailyPct: null, benchTicker: null, excessPct: null },
+        nav: { sincePct: -0.7, sinceDate: '2026-06-23', dailyPct: null, benchTicker: null, excessPct: null },
       })
     );
     expect(html).toContain('since inception');
-    // No daily-delta NAV clause (the " today" suffix on a signed pct) with one NAV point.
+    // No daily-delta clause (the " today" suffix on a signed pct) with one performance point.
     // ("No rebalance today" move-status copy is a separate string and may appear.)
     expect(html).not.toContain(' today<'); // daily-delta clause renders "<pct> today" in its own span
   });
 
-  it('labels the daily NAV delta with its own date when the book lags the digest (#1555)', () => {
+  it('labels the daily delta with its own date when the book lags the digest (#1555)', () => {
     const html = renderToStaticMarkup(
       createElement(MoveHero, {
         regime: 'Risk-Off Consolidation',
@@ -86,7 +85,7 @@ describe('MoveHero', () => {
         asOf: '2026-07-16',
         runType: null,
         actions: [],
-        nav: { index: 98.7, sincePct: -0.6, sinceDate: '2026-06-23', dailyPct: -0.2, benchTicker: null, excessPct: null, asOfDate: '2026-06-26' },
+        nav: { sincePct: -0.6, sinceDate: '2026-06-23', dailyPct: -0.2, benchTicker: null, excessPct: null, asOfDate: '2026-06-26' },
       })
     );
     expect(html).toContain('on Jun 26');

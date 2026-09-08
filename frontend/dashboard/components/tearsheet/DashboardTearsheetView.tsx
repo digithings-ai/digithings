@@ -304,7 +304,6 @@ export function PerformanceTearsheetView({
 
       <p className="mt-3 text-right font-mono text-[0.62rem] text-ink-mute">
         Holdings as of {data.holdingsAsOf ?? '—'}
-        {data.currentNav != null ? ` · paper NAV index ${data.currentNav.toFixed(2)} (not a headline)` : ''}
       </p>
     </div>
   );
