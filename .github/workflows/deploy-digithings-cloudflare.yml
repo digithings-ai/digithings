@@ -206,8 +206,11 @@ jobs:
           # shared <TerminalManifest> primitive since #1416 (was .dt-manifest).
           grep -q 'aria-label="digithings module manifest"' dist/index.html
           grep -q digithings.ai dist/CNAME
-          # fonts self-hosted; no Google Fonts references in the export
-          ! grep -rq "fonts.googleapis.com" dist
+          # fonts self-hosted; no Google Fonts references in the export —
+          # except dist/openwiki, the openwiki visualizer (#3696), whose pinned
+          # jsDelivr scripts + Inter via Google Fonts are allowlisted under the
+          # /openwiki/* _headers exception (lib/security-headers.mjs).
+          ! grep -rq "fonts.googleapis.com" dist --exclude-dir=openwiki
 
       # The daily freshness probe in smoke-site.yml reads this stamp off the live
       # site (#1759). Validate the stamp the build just wrote with the same
