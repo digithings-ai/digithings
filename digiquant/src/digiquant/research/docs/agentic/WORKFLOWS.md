@@ -13,7 +13,7 @@ Step-by-step procedures for every recurring workflow.
 
 **Weekly digest:** no scheduled GitHub job — use [`scripts/weekly-rollup.sh`](../../scripts/weekly-rollup.sh) when you need the operator prompt.
 
-**dashboard daily pipeline:** `.github/workflows/pipeline-digiquant.yml` — `python -m digiquant.portfolio.chain --cadence daily` (Sunday `refresh_scope=all`).
+**dashboard daily pipeline:** `.github/workflows/pipeline-digiquant.yml` — `python -m digiquant.portfolio.chain --cadence daily` (`refresh_scope=none` unless manually overridden).
 
 **Co-work / operator** runs ([`RUNBOOK.md`](../../RUNBOOK.md)): research + portfolio JSON → `run_db_first.py` → Supabase. Cowork setup: [`cowork/README.md`](../../cowork/README.md), project prompt [`cowork/PROJECT-PROMPT.md`](../../cowork/PROJECT-PROMPT.md), task list [`cowork/tasks/README.md`](../../cowork/tasks/README.md).
 
@@ -35,7 +35,7 @@ Step-by-step procedures for every recurring workflow.
 ```bash
 # 2. Run the unified daily chain (research A0–A4 → portfolio H1–H9 → commit_run)
 python -m digiquant.portfolio.chain --cadence daily
-#    Sunday full refresh: --refresh-scope all (cron sets this automatically)
+#    Operator full refresh: --refresh-scope all (manual dispatch/CLI only)
 #    Beliefs only: --refresh-scope beliefs
 python3 scripts/run_db_first.py
 #    Flags: --skip-execute / --validate-mode research|pm|full — RUNBOOK.md

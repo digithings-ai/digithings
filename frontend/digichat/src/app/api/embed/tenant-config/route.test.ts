@@ -2,10 +2,12 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { GET } from "./route";
 import { DATATAPSTREAM_SUGGESTION_POOL } from "@/lib/embed-suggestion-pools";
 import { resetEmbedTenantRegistryForTests } from "@/lib/embed-tenants";
+import { resetDigichatConfigForTests } from "@/lib/deploy-config/loader";
 
 afterEach(() => {
   vi.unstubAllEnvs();
   resetEmbedTenantRegistryForTests();
+  resetDigichatConfigForTests();
 });
 
 const REGISTRY = JSON.stringify({
@@ -43,6 +45,7 @@ describe("GET /api/embed/tenant-config", () => {
       slug: "datatapstream",
       gateMode: "ungated",
       theme: "light",
+      skin: "base",
       accent: { color: "#b5562b", foreground: "#fff7f2" },
       attribution: true,
       suggestions: [...DATATAPSTREAM_SUGGESTION_POOL],
@@ -69,6 +72,7 @@ describe("GET /api/embed/tenant-config", () => {
       slug: "embed",
       gateMode: "turn_limited",
       theme: "dark",
+      skin: "base",
       accent: null,
       attribution: false,
       showByok: false,
@@ -84,6 +88,7 @@ describe("GET /api/embed/tenant-config", () => {
       slug: "embed",
       gateMode: "turn_limited",
       theme: "dark",
+      skin: "base",
       accent: null,
       attribution: false,
       showByok: false,

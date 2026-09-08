@@ -201,11 +201,10 @@ gen-api-vault:
 agents-init:
 	python3 scripts/agents_init.py
 
-# Validate research providers and graph compilation before triggering a real run.
-# Pings OpenRouter (connectivity, structured output, function tools, web search),
-# checks Supabase baseline row, and runs --dry-run.
+# Validate research env + Supabase baseline row + graph compilation before a real run.
+# Fail-fast house: no provider pings — provider errors surface from the real run.
 # Usage: make research-validate              (full check)
-#        make research-validate SKIP=--skip-llm   (env + DB + dry-run only)
+#        make research-validate SKIP=--skip-db   (env + dry-run only)
 research-validate:
 	python3 digiquant/scripts/research/validate-providers.py $(SKIP)
 

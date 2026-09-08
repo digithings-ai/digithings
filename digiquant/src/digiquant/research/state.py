@@ -805,3 +805,14 @@ class ResearchState(BaseModel):
     # their own recoverable failure via ``{"errors": [PhaseError(...)]}``; the
     # reducer concatenates them so none are lost before the diagnostics row.
     errors: Annotated[list[PhaseError], _merge_append_list] = Field(default_factory=list)
+    # Workspace PipelineSchedule stage gates (#3618). Written by the chain after
+    # resolving today's flags; surfaced via diagnostics breakdown
+    # ``pipeline_stages``. JSON dump of ``PipelineStageReport`` — not a second
+    # cadence or competing workflow.
+    pipeline_stage_outcomes: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Typed stage outcomes (research / deliberation / execution → "
+            "ran|disabled|deferred|failed) for this run's PipelineSchedule gate."
+        ),
+    )

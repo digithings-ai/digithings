@@ -38,7 +38,9 @@ import {
 import {
   HOUSE_PROFILE_KEY,
   validateAssetPreferences,
+  validateExecutionPolicy,
   validateInvestmentProfile,
+  validatePipelineSchedule,
 } from "./profile-schemas.ts";
 import {
   createAdminClient,
@@ -283,6 +285,8 @@ function emptyProfileBody(
     recorded_at: null,
     investment: null,
     assets: null,
+    pipeline_schedule: null,
+    execution_policy: null,
     watchlist: [],
     themes: [],
     research_budget_usd: null,
@@ -332,6 +336,8 @@ function profileResponseBody(row: Record<string, unknown>): Record<string, unkno
     recorded_at: row.recorded_at ?? null,
     investment: payload.investment ?? null,
     assets: payload.assets ?? null,
+    pipeline_schedule: payload.pipeline_schedule ?? null,
+    execution_policy: payload.execution_policy ?? null,
     watchlist: normalizeStringList(payload.watchlist).map((t) => t.toUpperCase()),
     themes: normalizeStringList(payload.themes).map((t) => t.toLowerCase()),
     research_budget_usd:
@@ -421,6 +427,8 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     label?: string;
     investment?: unknown;
     assets?: unknown;
+    pipeline_schedule?: unknown;
+    execution_policy?: unknown;
     expected_version_id?: string | null;
     supersedes_id?: string | null;
     watchlist?: string[];
@@ -472,15 +480,38 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
       return jsonError(400, "SCHEMA_INVALID", assets.errors[0]?.message ?? "invalid assets");
     }
   }
+  if (body.pipeline_schedule !== undefined && body.pipeline_schedule !== null) {
+    const schedule = validatePipelineSchedule(body.pipeline_schedule);
+    if (!schedule.ok) {
+      return jsonError(
+        400,
+        "SCHEMA_INVALID",
+        schedule.errors[0]?.message ?? "invalid pipeline_schedule",
+      );
+    }
+  }
+  if (body.execution_policy !== undefined && body.execution_policy !== null) {
+    const policy = validateExecutionPolicy(body.execution_policy);
+    if (!policy.ok) {
+      return jsonError(
+        400,
+        "SCHEMA_INVALID",
+        policy.errors[0]?.message ?? "invalid execution_policy",
+      );
+    }
+  }
 
   const expected =
     body.expected_version_id ?? body.supersedes_id ?? null;
 
   // Optimistic concurrency: tip is scoped by (workspace_id, profile_key).
+  // Also fetch full payload to preserve pipeline_schedule / execution_policy when omitted.
+  let priorPipelineSchedule: unknown = null;
+  let priorExecutionPolicy: unknown = null;
   if (expected) {
     const { data: tip, error: tipErr } = await deps.admin
       .from("olympus_profile_config")
-      .select("id, supersedes_id")
+      .select("id, supersedes_id, payload")
       .eq("workspace_id", workspaceId)
       .eq("profile_key", profileKey)
       .eq("is_house_default", false)
@@ -497,10 +528,18 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
         "profile changed elsewhere — reload",
       );
     }
+    if (tip) {
+      const tipPayload =
+        tip.payload && typeof tip.payload === "object" && !Array.isArray(tip.payload)
+          ? (tip.payload as Record<string, unknown>)
+          : {};
+      priorPipelineSchedule = tipPayload.pipeline_schedule ?? null;
+      priorExecutionPolicy = tipPayload.execution_policy ?? null;
+    }
     if (!tip && expected) {
       const { data: row } = await deps.admin
         .from("olympus_profile_config")
-        .select("id")
+        .select("id, payload")
         .eq("id", expected)
         .eq("workspace_id", workspaceId)
         .maybeSingle();
@@ -511,6 +550,12 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
           "profile changed elsewhere — reload",
         );
       }
+      const rowPayload =
+        row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+          ? (row.payload as Record<string, unknown>)
+          : {};
+      priorPipelineSchedule = rowPayload.pipeline_schedule ?? null;
+      priorExecutionPolicy = rowPayload.execution_policy ?? null;
     }
   }
 
@@ -534,6 +579,10 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     research_budget_usd: budgetParsed.value,
     investment: body.investment ?? null,
     assets: body.assets ?? null,
+    pipeline_schedule:
+      body.pipeline_schedule !== undefined ? body.pipeline_schedule : priorPipelineSchedule,
+    execution_policy:
+      body.execution_policy !== undefined ? body.execution_policy : priorExecutionPolicy,
   };
 
   const { data: inserted, error: insertErr } = await deps.admin

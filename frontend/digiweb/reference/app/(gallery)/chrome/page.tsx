@@ -1,0 +1,43 @@
+import "./chrome.css";
+import { AnnouncementBarReference } from "@/components/announcement-bar-reference";
+import { BreadcrumbsReference } from "@/components/chrome/breadcrumbs-reference";
+import { CommandPaletteReference } from "@/components/command-palette-reference";
+import { FooterReference } from "@/components/footer-reference";
+import { ModuleCardReference } from "@/components/chrome/module-card-reference";
+import { NavMenuReference } from "@/components/chrome/nav-menu-reference";
+import { NavShellReference } from "@/components/chrome/nav-shell-reference";
+import { PaginationReference } from "@/components/chrome/pagination-reference";
+import { ScrollNavReference } from "@/components/scroll-nav-reference";
+import { SocialsReference } from "@/components/socials-reference";
+import { TabsReference } from "@/components/tabs-reference";
+import { ToastStackReference } from "@/components/toast-stack-reference";
+
+export default function ChromePage() {
+  return (
+    <main className="reference-page">
+      <header className="hero">
+        <p className="kicker">{"// chrome"}</p>
+        <h1>
+          Site chrome, <em>quiet by default.</em>
+        </h1>
+        <p>
+          Navigation, socials, and footer grammar: scroll-aware bars, a quiet profile row, and the
+          one sanctioned personality moment at the very bottom of the page.
+        </p>
+      </header>
+
+      <AnnouncementBarReference />
+      <CommandPaletteReference />
+      <TabsReference />
+      <ToastStackReference />
+      <ScrollNavReference />
+      <NavShellReference />
+      <NavMenuReference />
+      <BreadcrumbsReference />
+      <PaginationReference />
+      <ModuleCardReference />
+      <SocialsReference />
+      <FooterReference />
+    </main>
+  );
+}

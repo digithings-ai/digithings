@@ -154,7 +154,9 @@ re-point to `public_nav_history` in the browser. Apply migrations **072–074** 
 Private append-only versioned investment overlay pins for dashboard preflight. The
 digithings-owned **house** row (`profile_key='house'`, `is_house_default=true`) is the
 immutable always-on default run. Overlay rows may request different universe / risk /
-themes / budgets; they must not claim the house key or cancel/replace the house run.
+themes / budgets / pipeline schedule / execution policy; they must not claim the house
+key or cancel/replace the house run. `#3611` adds optional `pipeline_schedule` and
+`execution_policy` inside the existing jsonb `payload` (no migration).
 
 | Table | PK | Purpose |
 |-------|----|---------|
@@ -1085,6 +1087,20 @@ authenticated workspace policies. Migration **117** addresses that pile only:
   protection. [#3461](https://github.com/digithings-ai/digithings/issues/3461)
 - Unused indexes / unindexed FKs / RLS-enabled-no-policy service-role tables — out of
   scope for this pass.
+
+### knowledge_notes vault namespace — migration 118 (#1142 / #3603)
+
+`public.knowledge_notes` is the digivault finance KB (live table predates the numbered
+chain as 20260625 / #1087). Migration **118** brings it into the chain:
+
+| Column / constraint | Policy |
+|---------------------|--------|
+| `vault text not null default 'finance'` | Namespace so one table holds multiple corpora. `COMMENT ON COLUMN` runs **after** `ADD COLUMN` so a pre-118 table does not abort. |
+| `UNIQUE (vault, vault_path)` | The only uniqueness. Duplicate filename stems in different directories are legal (filesystem vault `_duplicates`). **Do not** add `UNIQUE (vault, slug)` — live rows already have that shape and the index build aborts the whole file (and every later migration) under `psql --single-transaction`. |
+| `knowledge_notes_set_updated_at` | Canonical on both the fresh `CREATE TABLE` path and the live upgrade path (117 already soft-alters the function when present). |
+| Grants | `REVOKE ALL` from `PUBLIC` / `anon` / `authenticated`; `GRANT` DML to `service_role`. RLS is on with no client policies. Privilege revoke is the defense if RLS is later disabled. |
+
+Proof: `tests/dq/dashboard/test_migration_118_knowledge_notes_vault.py` (parse checks plus executable Postgres against fresh, pre-118 + duplicate stems, replay, and client ACL).
 
 ## Grants (migration 060, #1757)
 

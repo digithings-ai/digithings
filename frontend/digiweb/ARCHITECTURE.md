@@ -13,6 +13,9 @@ frontend/digiweb/
 ├── README.md              suite overview + the pass-through rule
 ├── ARCHITECTURE.md        this file
 ├── DESIGN.md              agent-readable design system (Stitch / Refero shape)
+├── CHARTS.md              finance chart house rules
+├── CHAT_THEME.md          first-party digichat skin on /chatbot
+├── ASSISTANT_UI_ELEMENTS.md  full assistant-ui elements catalog (fetch map)
 ├── MANIFEST.json          generated machine index of every reference component
 ├── scripts/
 │   └── build-manifest.mjs regenerates MANIFEST.json from the reference source
@@ -23,11 +26,11 @@ frontend/digiweb/
 ├── brand/                 generated identity kit (avatars, headers, OG) — previewed at design-reference `/brand`, not on digithings.ai
 ├── web/                   @digithings/web — shared React component layer
 └── reference/             the live showcase app (Next.js 16 / React 19 / Tailwind v4 / Motion)
-    ├── app/<family>/       one page per design family (foundations, iterate, controls, …)
+    ├── app/(gallery)/      family pages (foundations, iterate, controls, …)
+    ├── app/(chatbot)/      isolated /chatbot root — do not compile the gallery graph
     ├── components/         the reusable patterns (one file each, docblock-headed)
     └── README.md           the canon: tokens, livery, type, motion, chart rules
 ```
-
 The **`/iterate`** family is the human preference gallery for the utilitarian
 terminal blend (`uv-` CSS only). Picks persist in `localStorage`. Round-1 is
 locked in `design/BLEND.md` and promoted into tokens/`DESIGN.md`; further
@@ -46,7 +49,7 @@ is irrelevant to resolution — every other frontend imports them the same way:
 | Package | Directory | Provides |
 | ------- | --------- | -------- |
 | `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
-| `@digithings/web` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family including `DigichatLauncher`, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+| `@digithings/web` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family including `DigichatLauncher`, the controls layer [`dress` axis], the conviction primitives, Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
 
 `SocialRow` (`web/src/components/SocialRow.tsx`, dress in `./styles/nav-shell.css`)
 is the quiet company-profile utility row: the same borderless `.btn-icon`
@@ -67,19 +70,25 @@ account page (`AuthCardProposals`) as a layout catalog. The dashboard login
 screen imports compact `AuthCard` (`frontend/dashboard/components/login-screen.tsx`).
 
 `DigichatLauncher` (`web/src/components/chat/DigichatLauncher.tsx`, CSS
-`./styles/digichat-launcher.css`) is the standard embedded-chat entry point.
-Its idle state is a 30px square using the canonical compact `TerminalMark`;
-hover/focus types `digichat` in the shared mono chrome size while preserving
-height and border. Opening runs a two-step expansion out of that square — the
-square widens into a composer-height bar, then the bar lifts to full height —
-and closing reverses both steps. It dismisses via its header, Escape, or the
-transparent outside-click backdrop. `CLOSE_MS` in the component mirrors the
-close animation duration in the sheet; reduced-motion closes immediately.
-After the first open, the hidden panel keeps its children mounted so an iframe
-conversation survives close/reopen. It portals to `document.body` by default
-to escape transformed/backdrop-filter app shells; `portal={false}` contains
-reference specimens. Product apps pass the iframe or other chat body as
-`children` rather than forking launcher behavior.
+`./styles/digichat-launcher.css`, import `@digithings/web/chat/launcher`) is the standard embedded-chat entry point
+(`chrome.mode: modal`). Its idle state is a 30px square using the canonical
+compact `TerminalMark`; hover/focus types `digichat` in the shared mono chrome
+size while preserving height and border. Opening runs a two-step expansion out
+of that square — the square widens into a composer-height bar, then the bar
+lifts to full height — and closing reverses both steps. It dismisses via its
+header, Escape, or the transparent outside-click backdrop. `CLOSE_MS` in the
+component mirrors the close animation duration in the sheet; reduced-motion
+closes immediately. After the first open, the hidden panel keeps its children
+mounted so an iframe conversation survives close/reopen. It portals to
+`document.body` by default to escape transformed/backdrop-filter app shells;
+`portal={false}` contains reference specimens. Product can mount
+`DigichatThread` (`@digithings/web/chat/thread`) as `children`. The
+design-reference `/chatbot` gallery iterates on the official assistant-ui
+`Thread` via CSS variables — see [`CHAT_THEME.md`](CHAT_THEME.md). The full
+assistant-ui elements catalog (every `/elements` slug, purpose, fetch command,
+and digichat attach kind) lives in
+[`ASSISTANT_UI_ELEMENTS.md`](ASSISTANT_UI_ELEMENTS.md) — discover there, copy
+from the registry on demand; do not dump the catalog into `MANIFEST.json`.
 
 The F1 promotion campaign (#1450) added four more component families to
 `@digithings/web`, each a `web/src/components/<family>/` directory with its own
