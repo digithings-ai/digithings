@@ -412,6 +412,11 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
         "conservative_case": "synthetic conservative",
         "key_tension": "synthetic tension",
     },
+    # H4.5 coverage director (#3739) — the per-call default below refreshes
+    # every rostered ticker so simulated runs preserve pre-H4.5 behavior
+    # (full H4 roster flows to H5). Static entry must exist or the
+    # dispatcher raises KeyError before reaching the per-call default.
+    "CoverageDirective": {"refresh": [], "explore": [], "skip": []},
     # H7 PM direction (no weights)
     "PMDirectionMemo": {
         "schema_version": "1.0",
@@ -793,6 +798,17 @@ def simulate_chat_completion(
             )
         if schema == "DebateSummary":
             return _debate_summary_body(ticker=str(inputs.get("ticker", "AAPL")))
+        if schema == "CoverageDirective":
+            h4_roster = inputs.get("h4_roster") or []
+            return {
+                "refresh": [
+                    {"ticker": str(row.get("ticker", "")).upper(), "reason": "simulated refresh"}
+                    for row in h4_roster
+                    if isinstance(row, dict) and str(row.get("ticker") or "").strip()
+                ],
+                "explore": [],
+                "skip": [],
+            }
         if schema == "PMDirectionMemo":
             roster = inputs.get("focus_roster") or ["AAPL"]
             return {
@@ -975,14 +991,19 @@ class SimulationRun:
             portfolio=self.portfolio_deps or PortfolioGraphDeps(),
             publish=None,
         )
+        phases = build_portfolio_phases_thesis(
+            watchlist=list(research_input.watchlist),
+            deps=chain_deps.portfolio,
+        )
+        # Slice by phase name, not fixed index — phases insert between H4/H5 (#3739).
+        h5_end = next(
+            i for i, phase in enumerate(phases) if phase.name == "portfolio_h5_asset_analyst"
+        )
         state = _invoke_research_then_portfolio_phases(
             research_input,
             chain_deps,
             self.config_bundle,
-            portfolio_phases=build_portfolio_phases_thesis(
-                watchlist=list(research_input.watchlist),
-                deps=chain_deps.portfolio,
-            )[:5],
+            portfolio_phases=phases[: h5_end + 1],
         )
         return ResearchState.model_validate(state) if isinstance(state, dict) else state
 
@@ -996,13 +1017,17 @@ class SimulationRun:
             portfolio=self.portfolio_deps or PortfolioGraphDeps(),
             publish=self.publish_deps,
         )
+        phases = build_portfolio_phases_thesis(
+            watchlist=list(state.config.watchlist),
+            deps=chain_deps.portfolio,
+        )
+        h6_start = next(
+            i for i, phase in enumerate(phases) if phase.name == "portfolio_h6_deliberation"
+        )
         resume = _invoke_portfolio_phases_from(
             state,
             chain_deps,
-            build_portfolio_phases_thesis(
-                watchlist=list(state.config.watchlist),
-                deps=chain_deps.portfolio,
-            )[5:],  # H6–H9
+            phases[h6_start:],  # H6–H9
         )
         return ResearchState.model_validate(resume) if isinstance(resume, dict) else resume
 
