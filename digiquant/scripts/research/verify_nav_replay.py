@@ -162,6 +162,26 @@ def build_request(price_rows, position_rows, nav_rows):
     )
 
 
+def _slice_write_path(
+    engine_nav: dict[str, object],
+    inception_date: str,
+    date: str = "",
+) -> tuple[dict[str, object], set[str] | None]:
+    """Slice the engine path to writable dates (>= ``inception_date``).
+
+    Returns ``(write_path, target)`` for :func:`_write_nav`. The inception-100
+    base is then derived from the first bar >= inception, so a full-path
+    write can never resurrect deleted pre-cutoff rows (#3695). Raises
+    ``ValueError`` when ``date`` names no writable bar.
+    """
+    write_path = {d: v for d, v in engine_nav.items() if d >= inception_date}
+    if date:
+        if date not in write_path:
+            raise ValueError(f"engine path has no writable bar for {date}")
+        return write_path, {date}
+    return write_path, None
+
+
 def _write_nav(
     sb,
     house_id: str,
@@ -215,11 +235,24 @@ def main() -> int:
     parser.add_argument(
         "--date",
         default="",
-        help="With --write, persist only this date (YYYY-MM-DD); default persists the full engine path.",
+        help="With --write, persist only this date (YYYY-MM-DD); default persists all dates from --inception-date.",
+    )
+    parser.add_argument(
+        "--inception-date",
+        default="2026-07-17",
+        help="Earliest date ever written to nav_history. Pre-cutoff dates can never "
+        "be resurrected (2026-06-23..26 deleted as unreliable #3695); the write "
+        "target is sliced to dates >= this and the inception-100 base is the "
+        "first bar >= this.",
     )
     args = parser.parse_args()
     if args.date and not args.write:
         parser.error("--date requires --write (verify mode compares the full path)")
+    if args.write and args.date and args.date < args.inception_date:
+        parser.error(
+            f"--date {args.date} predates --inception-date {args.inception_date} "
+            "(pre-cutoff history was deleted as unreliable; see #3695)"
+        )
 
     try:
         from digiquant.dashboard.replay.models import PortfolioReplayStatus
@@ -261,11 +294,12 @@ def main() -> int:
 
     engine_nav = {str(p.ts.date()): p.nav for p in result.nav_path}
     if args.write:
-        if args.date and args.date not in engine_nav:
-            print(f"WRITE FAIL: engine path has no bar for {args.date}")
+        try:
+            write_path, target = _slice_write_path(engine_nav, args.inception_date, args.date)
+        except ValueError as exc:
+            print(f"WRITE FAIL: {exc}")
             return 2
-        target = {args.date} if args.date else None
-        n = _write_nav(sb, house_id, engine_nav, target)
+        n = _write_nav(sb, house_id, write_path, target)
         if not n:
             return 2
         return 0

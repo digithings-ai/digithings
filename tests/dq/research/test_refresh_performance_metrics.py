@@ -914,3 +914,47 @@ class TestWriteNavNormalization:
         sb = _fake_with({})
         assert _verify_mod._write_nav(sb, "house", {"2026-09-04": Decimal("0")}) == 0
         assert sb.store.get("nav_history", []) == []
+
+
+class TestSliceWritePath:
+    """Inception floor: pre-cutoff dates can never reach ``_write_nav`` (#3695)."""
+
+    def test_full_path_drops_pre_inception_bars(self) -> None:
+        from decimal import Decimal
+
+        engine = {
+            "2026-06-23": Decimal("99546640"),
+            "2026-07-17": Decimal("99431364"),
+            "2026-09-04": Decimal("99353349"),
+        }
+        path, target = _verify_mod._slice_write_path(engine, "2026-07-17")
+        assert sorted(path) == ["2026-07-17", "2026-09-04"]
+        assert target is None
+
+    def test_single_date_subset(self) -> None:
+        from decimal import Decimal
+
+        engine = {
+            "2026-07-17": Decimal("99431364"),
+            "2026-09-04": Decimal("99353349"),
+        }
+        path, target = _verify_mod._slice_write_path(engine, "2026-07-17", "2026-09-04")
+        assert target == {"2026-09-04"}
+        assert sorted(path) == ["2026-07-17", "2026-09-04"]
+
+    def test_pre_inception_date_raises(self) -> None:
+        from decimal import Decimal
+
+        engine = {
+            "2026-06-26": Decimal("99546640"),
+            "2026-07-17": Decimal("99431364"),
+        }
+        with pytest.raises(ValueError, match="no writable bar"):
+            _verify_mod._slice_write_path(engine, "2026-07-17", "2026-06-26")
+
+    def test_unknown_date_raises(self) -> None:
+        from decimal import Decimal
+
+        engine = {"2026-07-17": Decimal("99431364")}
+        with pytest.raises(ValueError, match="no writable bar"):
+            _verify_mod._slice_write_path(engine, "2026-07-17", "2026-09-99")
