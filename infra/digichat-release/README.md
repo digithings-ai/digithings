@@ -30,7 +30,7 @@ Stack packages are published by [`publish-service-images.yml`](../../.github/wor
 on `main` (after #2023). Until the first publish, `docker pull` for digikey /
 digigraph / digivault will 404 — promote develop → main, then run the workflow.
 
-Optional: LiteLLM cache Redis via `--profile litellm-cache` and `REDIS_URL=redis://redis:6379`.
+Optional: LiteLLM cache Redis via `--profile litellm-cache` and `REDIS_URL=redis://redis:6379` in the env file. Leave `REDIS_URL` unset when Redis is not running — an empty value makes LiteLLM exit 3.
 
 ## Pull pinned digichat (monorepo operators)
 

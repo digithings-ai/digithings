@@ -13,8 +13,8 @@ import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-_SCRIPT = REPO_ROOT / "digiquant" / "scripts" / "atlas" / "check_allocation_shadow_isolation.py"
-_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pipeline-olympus-allocation-shadow.yml"
+_SCRIPT = REPO_ROOT / "digiquant" / "scripts" / "research" / "check_allocation_shadow_isolation.py"
+_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pipeline-digiquant-allocation-shadow.yml"
 
 pytestmark = pytest.mark.unit
 
@@ -39,11 +39,11 @@ def _codes(findings: list[Any]) -> set[str]:
 
 def _minimal_good_workflow() -> str:
     return """
-name: "Pipeline: Olympus allocation shadow"
+name: "Pipeline: allocation shadow"
 on:
   workflow_run:
     workflows:
-      - "Pipeline: Olympus research"
+      - "Pipeline: dashboard research"
     types:
       - completed
     branches:
@@ -58,7 +58,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: check
-        run: python digiquant/scripts/atlas/check_allocation_shadow_isolation.py
+        run: python digiquant/scripts/research/check_allocation_shadow_isolation.py
       - uses: actions/upload-artifact@v4
         with:
           name: report
@@ -80,15 +80,15 @@ class TestWorkflowIsolation:
 
     def test_rejects_supabase_secret_reference(self, iso: ModuleType) -> None:
         bad = _minimal_good_workflow().replace(
-            "run: python digiquant/scripts/atlas/check_allocation_shadow_isolation.py",
+            "run: python digiquant/scripts/research/check_allocation_shadow_isolation.py",
             "env:\n          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}\n"
-            "        run: python digiquant/scripts/atlas/check_allocation_shadow_isolation.py",
+            "        run: python digiquant/scripts/research/check_allocation_shadow_isolation.py",
         )
         assert "forbidden_secret" in _codes(iso.check_workflow_text(bad))
 
     def test_rejects_provider_secret_reference(self, iso: ModuleType) -> None:
         bad = _minimal_good_workflow().replace(
-            "run: python digiquant/scripts/atlas/check_allocation_shadow_isolation.py",
+            "run: python digiquant/scripts/research/check_allocation_shadow_isolation.py",
             "env:\n          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}\n"
             "        run: echo hi",
         )
@@ -103,7 +103,7 @@ class TestWorkflowIsolation:
 
     def test_rejects_untrusted_source_workflow(self, iso: ModuleType) -> None:
         bad = _minimal_good_workflow().replace(
-            '"Pipeline: Olympus research"',
+            '"Pipeline: dashboard research"',
             '"Pipeline: Digiquant prices"',
         )
         assert "untrusted_source" in _codes(iso.check_workflow_text(bad))
@@ -117,7 +117,7 @@ class TestWorkflowIsolation:
 
     def test_rejects_network_sink(self, iso: ModuleType) -> None:
         bad = _minimal_good_workflow().replace(
-            "run: python digiquant/scripts/atlas/check_allocation_shadow_isolation.py",
+            "run: python digiquant/scripts/research/check_allocation_shadow_isolation.py",
             "run: curl https://api.supabase.com/rest/v1/",
         )
         codes = _codes(iso.check_workflow_text(bad))
@@ -136,7 +136,7 @@ class TestWorkflowIsolation:
         assert 'gh api "repos/${REPO}/actions/runs/${source_run_id}"' in text
         assert "untrusted producer workflow" in text
         # The pre-fix anti-pattern: assign trusted label without API lookup.
-        assert 'source_workflow="Pipeline: Olympus research"' not in text
+        assert 'source_workflow="Pipeline: dashboard research"' not in text
         assert "TRUSTED_WORKFLOW=" in text
         assert "BRANCH_DISPATCH" in text
 
@@ -163,8 +163,8 @@ class TestForbiddenImports:
                 [
                     "import httpx",
                     "import nautilus_trader",
-                    "from digiquant.olympus.hermes.writers import commit_io",
-                    "from digiquant.olympus.hermes.phases.h9_commit_run import commit_run",
+                    "from digiquant.portfolio.writers import commit_io",
+                    "from digiquant.portfolio.phases.h9_commit_run import commit_run",
                 ]
             )
             + "\n",
@@ -207,7 +207,7 @@ class TestArtifactTrustGates:
     def test_accepts_trusted_metadata_without_full_model(self, iso: ModuleType) -> None:
         findings = iso.check_artifact_trust(
             {"schema_version": "1.0", "artifact_content_hash": "a" * 64},
-            source_workflow="Pipeline: Olympus research",
+            source_workflow="Pipeline: dashboard research",
             source_branch="main",
             require_hash=False,
         )

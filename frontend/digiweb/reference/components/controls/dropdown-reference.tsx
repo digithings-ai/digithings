@@ -14,9 +14,9 @@ type Option = { id: string; group: string; label: string; note: string; pf: stri
 const OPTIONS: Option[] = [
   { id: "trend_xsec", group: "Momentum", label: "trend_xsec", note: "cross-sectional", pf: "2.31", livery: "digiquant" },
   { id: "breakout", group: "Momentum", label: "breakout", note: "volatility breakout", pf: "1.94", livery: "digiquant" },
-  { id: "mean_rev", group: "Mean reversion", label: "mean_rev", note: "intraday", pf: "2.58", livery: "atlas" },
-  { id: "pairs", group: "Mean reversion", label: "pairs", note: "cointegrated legs", pf: "1.71", livery: "atlas" },
-  { id: "carry", group: "Carry", label: "carry", note: "funding-rate", pf: "3.02", livery: "hermes" },
+  { id: "mean_rev", group: "Mean reversion", label: "mean_rev", note: "intraday", pf: "2.58", livery: "research" },
+  { id: "pairs", group: "Mean reversion", label: "pairs", note: "cointegrated legs", pf: "1.71", livery: "research" },
+  { id: "carry", group: "Carry", label: "carry", note: "funding-rate", pf: "3.02", livery: "portfolio" },
 ];
 
 export function DropdownReference() {

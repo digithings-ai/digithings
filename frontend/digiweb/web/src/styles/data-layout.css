@@ -98,7 +98,7 @@
   .dms-dot {
     width: 8px;
     height: 8px;
-    border-radius: 999px;
+    border-radius: 0;
     background: color-mix(in srgb, var(--ink-mute) 20%, transparent);
   }
 }
@@ -206,7 +206,7 @@
   position: relative;
   container-type: inline-size;
   border: 1px solid var(--hair);
-  border-radius: 10px;
+  border-radius: 0;
   background: var(--bg);
   overflow: hidden;
   /* the artboard is 800 wide; height tracks it via the same scale factor */
@@ -240,7 +240,7 @@
        glassmorphism exception — surfaces here are flat, full stop. */
     background: var(--surface);
     border: 1px solid var(--hair);
-    border-radius: 5px;
+    border-radius: 0;
     padding: 0.15rem 0.45rem;
   }
 }

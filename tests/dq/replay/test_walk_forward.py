@@ -12,7 +12,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.learning.outcome_models import (
+from digiquant.dashboard.learning.outcome_models import (
     EpisodeDisposition,
     H8TargetLineage,
     H9ExecutionLinks,
@@ -22,7 +22,7 @@ from digiquant.olympus.learning.outcome_models import (
     episode_content_hash,
     episode_version_id,
 )
-from digiquant.olympus.replay.walk_forward import (
+from digiquant.dashboard.replay.walk_forward import (
     WalkForwardBuildStatus,
     WalkForwardExclusionReason,
     WalkForwardScheduleParams,

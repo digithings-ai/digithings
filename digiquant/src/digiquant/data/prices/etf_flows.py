@@ -8,7 +8,7 @@ real fund flows — and is labelled as such so the analysts never overstate it.
 
 ``compute_etf_flows_proxy`` is pure (frame in, dict out) so it unit-tests with a tiny fixture
 and no Supabase fake. The reader that fetches the window lives in
-``olympus/atlas/data/queries.py``. Polars only.
+``dashboard/research/data/queries.py``. Polars only.
 """
 
 from __future__ import annotations

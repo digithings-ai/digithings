@@ -43,9 +43,11 @@ Do **not** treat bare PR issue comments as a head-scoped review artifact —
 `gh pr view --json comments` has no commit association, so an old CodeRabbit
 comment must not suppress `/review` after a new push.
 
-Do **not** `@coderabbitai review` just to avoid `/review`. Metered bots are
-optional; in-session review is the org default when they have not left an
-artifact on this head.
+Do **not** `@coderabbitai review` or run the CodeRabbit CLI / Cursor plugin
+`code-review` skill just to avoid `/review`. Metered bots are optional; in-session
+review is the org default when they have not left an artifact on this head.
+Keep the CodeRabbit Cursor plugin disabled (`.cursor/settings.json`); see
+`.cursor/rules/no-coderabbit.mdc`.
 
 ## Why an in-session review counts
 
@@ -64,7 +66,9 @@ labelled as one.
 
 2. **Tiered fan-out** (cost-efficient; see `docs/agents/CODE_REVIEW_POLICY.md`).
    Do **not** leave `model` unset (inheritance tax under an expensive orchestrator).
-   Do **not** call `@coderabbitai review` for this path — this *is* the review.
+   Do **not** call `@coderabbitai review`, CodeRabbit CLI, or the CodeRabbit
+   Cursor plugin `code-review` / `code-reviewer` skills for this path — this
+   *is* the review.
 
    **Pass A — scope (token-efficient, not fast mode):** one subagent with
    `model: sonnet` (or haiku if the diff is tiny). In Cursor, use a cheaper

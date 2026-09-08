@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Footer } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "../../../_nav";
+import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 import { SwaggerExplorer } from "@/components/docs/SwaggerExplorer";
 import {
@@ -73,7 +72,7 @@ export default async function OpenApiServicePage({
               <p className="m-0 font-mono text-[0.68rem] uppercase tracking-[0.14em] text-accent">
                 {"// openapi"}
               </p>
-              <h1 className="mb-[0.55rem] mt-[0.45rem] font-display text-[clamp(1.7rem,3.5vw,2.4rem)] font-normal tracking-[-0.02em] text-ink">
+              <h1 className="mb-[0.7rem] mt-[0.5rem] font-display text-[clamp(1.9rem,4vw,2.7rem)] font-normal tracking-[-0.02em] text-ink">
                 <ServiceWordmark id={entry.id} />
               </h1>
               <p className="m-0 max-w-[62ch] leading-[1.55] text-ink-soft">{entry.role}</p>
@@ -96,7 +95,7 @@ export default async function OpenApiServicePage({
                   key={s.id}
                   href={`/docs/api/${s.id}/`}
                   aria-current={s.id === entry.id ? "page" : undefined}
-                  className={`rounded-[7px] border px-[0.65rem] py-[0.28rem] font-mono text-[0.76rem] no-underline transition-colors duration-150 ease-brand ${
+                  className={`rounded-none border px-[0.65rem] py-[0.28rem] font-mono text-[0.76rem] no-underline transition-colors duration-150 ease-brand ${
                     s.id === entry.id
                       ? "border-accent bg-accent-weak text-ink"
                       : "border-hair text-ink-soft hover:bg-accent-weak hover:text-ink"
@@ -111,7 +110,7 @@ export default async function OpenApiServicePage({
           </div>
         </div>
       </main>
-      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
+      <DtFooter />
     </>
   );
 }

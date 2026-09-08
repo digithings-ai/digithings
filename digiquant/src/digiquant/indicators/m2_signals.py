@@ -7,6 +7,12 @@ crosses 0.5.
 
 Input DataFrame must contain columns: total, total_shifted, roc_sig, roc_plot, close.
 All indicator computations operate on the `_sig` variants for strategy entries.
+
+For the broader **macro-liquidity regime gauge** (M2 + DXY + labor + mfg
+activity → expansion/neutral/contraction), see
+``digiquant.indicators.macro_liquidity.MacroLiquidityModel`` (#1085). That
+model reuses this equal-weight vote pattern and exposes a regime series for
+rotation (#1084) and book gates — it does not replace this M2-ROC computer.
 """
 
 from __future__ import annotations

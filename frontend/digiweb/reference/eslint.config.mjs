@@ -5,7 +5,17 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+  globalIgnores([
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+    // Vendor assistant-ui / catalog copies — not product lint surface.
+    "components/assistant-ui/**",
+    "components/ui/dot-matrix.tsx",
+    "app/(chatbot)/**",
+    "components/chatbot/**",
+  ]),
 ]);
 
 export default eslintConfig;

@@ -37,6 +37,7 @@ def main() -> int:
     load_repo_env()
     from digiquant.data.store.client import build_digiquant_client, digiquant_credentials
     from digiquant.data.store.strategies import read_calibration, read_strategies
+    from digiquant.strategies.calibrations_loader import entry_is_slapper
 
     url, service_key = digiquant_credentials()
     if not url or not service_key:
@@ -61,8 +62,14 @@ def main() -> int:
         return 1
     logger.info("strategies registry: %d rows OK (public metadata only)", len(found_ids))
 
+    settings = json.loads(SETTINGS_PATH.read_text())
+    slapper_ids = [
+        str(sid)
+        for sid, entry in settings.get("strategies", {}).items()
+        if isinstance(entry, dict) and entry_is_slapper(entry, settings)
+    ]
     empty_cals: list[str] = []
-    for sid in ids:
+    for sid in slapper_ids:
         cal = read_calibration(client, sid)
         if not cal:
             empty_cals.append(sid)
@@ -70,11 +77,18 @@ def main() -> int:
         if "rsi_upper_band" not in cal:
             logger.warning("%s calibration missing expected keys", sid)
         logger.info("  service-role read OK: %s (%d params)", sid, len(cal))
+    skipped = [sid for sid in ids if sid not in slapper_ids]
+    if skipped:
+        logger.info("  skip calibration rows for non-Slapper ids: %s", ", ".join(skipped))
     if empty_cals:
-        logger.error("No calibration rows for: %s — run sync_strategy_calibrations.py", ", ".join(empty_cals))
+        logger.error(
+            "No calibration rows for: %s — run sync_strategy_calibrations.py", ", ".join(empty_cals)
+        )
         return 1
 
-    anon_key = (os.environ.get("CORE_SUPABASE_ANON_KEY") or os.environ.get("SUPABASE_ANON_KEY") or "").strip()
+    anon_key = (
+        os.environ.get("CORE_SUPABASE_ANON_KEY") or os.environ.get("SUPABASE_ANON_KEY") or ""
+    ).strip()
     if anon_key:
         from supabase import create_client  # type: ignore[import-not-found]
 
@@ -92,11 +106,15 @@ def main() -> int:
             if rows_data and rows_data[0].get("calibration"):
                 leaked += 1
         if leaked:
-            logger.error("RLS LEAK: anon key read %d calibration row(s) — remove anon policy!", leaked)
+            logger.error(
+                "RLS LEAK: anon key read %d calibration row(s) — remove anon policy!", leaked
+            )
             return 1
         logger.info("anon key: strategy_calibrations returns empty (protected)")
     else:
-        logger.info("CORE_SUPABASE_ANON_KEY not set — skip live anon probe (RLS defined in migration 046)")
+        logger.info(
+            "CORE_SUPABASE_ANON_KEY not set — skip live anon probe (RLS defined in migration 046)"
+        )
 
     logger.info("Calibration store verified.")
     return 0

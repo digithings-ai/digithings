@@ -9,7 +9,6 @@ import pytest
 from digiquant.data.loader import generate_synthetic_ohlcv
 from digiquant.export import run_export
 from digiquant.optimize import run_optimize
-from digiquant.sweep import run_sweep
 from digiquant.tradingview import export_to_pine, import_from_pine
 
 
@@ -29,6 +28,7 @@ class TestRunOptimize:
         assert r.status == "ok"
 
     def test_with_param_grid(self) -> None:
+        """param_grid replaces the deleted sweep.py loop (#1185)."""
         pytest.importorskip("nautilus_trader")
         with tempfile.TemporaryDirectory() as tmp:
             generate_synthetic_ohlcv(["AAPL"], freq="1d").write_csv(Path(tmp) / "AAPL.csv")
@@ -55,21 +55,6 @@ class TestRunExport:
     def test_unsupported_target_raises(self) -> None:
         with pytest.raises(ValueError, match="Unsupported target"):
             run_export("x", target="unknown")
-
-
-@pytest.mark.unit
-class TestRunSweep:
-    """run_sweep returns list of BacktestResult. Requires Nautilus and data_dir."""
-
-    def test_returns_list(self) -> None:
-        pytest.importorskip("nautilus_trader")
-        with tempfile.TemporaryDirectory() as tmp:
-            generate_synthetic_ohlcv(["AAPL"], freq="1d").write_csv(Path(tmp) / "AAPL.csv")
-            results = run_sweep(
-                strategy_name="ema_cross", symbols=["AAPL"], param_grid=[{}, {}], data_dir=tmp
-            )
-        assert len(results) == 2
-        assert all(hasattr(r, "run_id") for r in results)
 
 
 @pytest.mark.unit

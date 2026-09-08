@@ -45,7 +45,7 @@ export interface NavShellProps {
    *  narrow. A NavGroup entry renders as a dropdown on the bar and as a
    *  labelled section in the sheet. `NavLink[]` is still accepted as-is. */
   links: NavItem[];
-  /** App CTA for the narrow-viewport sheet (e.g. Olympus / Ask digichat button). */
+  /** App CTA for the narrow-viewport sheet (e.g. digiquant / Ask digichat button). */
   cta?: ReactNode;
   /** Extra tail actions between the theme toggle and the hamburger
    *  (e.g. a `.btn-icon` GitHub link) — kept a slot so the primitive carries

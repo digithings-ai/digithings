@@ -201,3 +201,36 @@ def test_a_slow_consumer_still_gets_backpressure() -> None:
 
     assert drained.is_set(), "the reader never ran, so this proves nothing"
     assert queue.get_nowait() == ("content", "second")
+
+
+@pytest.mark.unit
+def test_streaming_digigraph_error_channel_requires_error_code() -> None:
+    """The SSE digigraph_error contract is gated on error_code — not every error."""
+    from queue import Queue
+    from types import SimpleNamespace
+
+    from digigraph.workflow import run_digigraph_workflow_streaming
+
+    def _collect_events(final: dict) -> list[tuple]:
+        queue: Queue = Queue()
+        with patch("digigraph.workflow.build_workflow_graph") as m_build:
+            m_build.return_value.stream.return_value = iter([])
+            m_build.return_value.get_state.return_value = SimpleNamespace(values=final)
+            run_digigraph_workflow_streaming(WorkflowRequest(prompt="test"), queue)
+        events: list[tuple] = []
+        while not queue.empty():
+            events.append(queue.get_nowait())
+        return events
+
+    without_code = _collect_events({"error": "Internal stack trace at db.internal:5432"})
+    assert ("error",) not in {e[0] for e in without_code}
+    assert any(e == ("content", "Error: Internal stack trace at db.internal:5432") for e in without_code)
+
+    quota_message = "Free-tier model quota is exhausted."
+    with_code = _collect_events(
+        {"error": quota_message, "error_code": "free_quota_exceeded"}
+    )
+    error_events = [e for e in with_code if e[0] == "error"]
+    assert error_events == [
+        ("error", {"code": "free_quota_exceeded", "message": quota_message})
+    ]

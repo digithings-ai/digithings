@@ -1,65 +1,33 @@
-# GitHub Models
+# GitHub Models — **retired 2026-07-30**
 
-**Free tier:** Yes — free for GitHub users. Rate limits by Copilot tier: Free plan ~50 RPD low-tier models, 8 RPD high-tier; Pro higher; Enterprise highest. Context capped below native (8K in / 4K out on free).
+> **Status:** The GitHub Models platform (playground, model catalog, inference API,
+> and BYOK endpoints) was **fully retired on 2026-07-30**. Do not add new
+> dependencies. This page is kept as a tombstone so old links and agent memory do
+> not reintroduce the provider.
 
-**ToS warning:** **free tier is for evaluation and prototyping only — not production.** Commercial deployment requires graduating to Azure AI.
+**Historical free tier:** eval/prototyping only (never production). Rate limits
+varied by Copilot tier. Access required a PAT with explicit `models:read`.
 
-## 1. Sign up
+## Migration
 
-- You already have this if you have a GitHub account.
-- Go to https://github.com/marketplace/models and browse models.
+| Was using GitHub Models for… | Prefer now |
+|---|---|
+| Free eval / Actions smoke | Groq, Gemini Flash, or Cerebras (see [../LLM_PROVIDERS.md](../LLM_PROVIDERS.md)) |
+| GitHub-native PR review | GitHub Copilot |
+| Azure-backed production | [Microsoft Foundry](https://learn.microsoft.com/azure/ai-foundry) |
 
-## 2. Create API token
+There is **no** LiteLLM `github/…` entry in digithings `config/` anymore. If you
+still have `GITHUB_TOKEN` / `github/…` model lines in a local override, delete them.
 
-- Visit https://github.com/settings/personal-access-tokens/new
-- Create a **fine-grained personal access token**.
-- No special repo permissions needed; default scope is fine.
-- Copy (starts with `github_pat_...` or `ghp_...`).
+## Historical setup (obsolete)
 
-## 3. Add to `.env`
+The former PAT + `https://models.github.ai/inference/chat/completions` flow no
+longer works after the retirement cutover. Brownouts ran 2026-07-16 and
+2026-07-23; new orgs were blocked from 2026-06-16.
 
-```bash
-GITHUB_TOKEN=github_pat_...
-```
+## Docs / provenance
 
-## 4. LiteLLM entry
-
-```yaml
-model_list:
-  - model_name: gh-gpt-4-1
-    litellm_params:
-      model: github/gpt-4.1
-      api_key: os.environ/GITHUB_TOKEN
-
-  - model_name: gh-gpt-5-mini
-    litellm_params:
-      model: github/gpt-5-mini
-      api_key: os.environ/GITHUB_TOKEN
-
-  - model_name: gh-llama-70b
-    litellm_params:
-      model: github/meta-llama-3.3-70b-instruct
-      api_key: os.environ/GITHUB_TOKEN
-
-  - model_name: gh-deepseek-v3
-    litellm_params:
-      model: github/deepseek-v3
-      api_key: os.environ/GITHUB_TOKEN
-```
-
-## 5. Verify
-
-```bash
-curl -s https://models.github.ai/inference/chat/completions \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"gpt-4.1","messages":[{"role":"user","content":"Say hi"}]}'
-```
-
-## Graduating to production
-
-Once past eval, provision an Azure AI Foundry project and use the same code with an Azure endpoint + key. See https://learn.microsoft.com/azure/ai-foundry.
-
-## Docs
-
-https://docs.github.com/github-models
+- Snapshot: [`snapshots/github_models.yaml`](snapshots/github_models.yaml)
+  (notes the 2026-07-30 retirement)
+- Tracker: [#1589](https://github.com/digithings-ai/digithings/issues/1589)
+- Changelog: https://github.blog/changelog/ (GitHub Models retirement)

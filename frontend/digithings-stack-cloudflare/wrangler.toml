@@ -51,6 +51,9 @@ new_sqlite_classes = ["DigiStackContainer"]
 #   DIGIKEY_PRIVATE_KEY_PEM   # stable RS256; do not use ephemeral in prod
 #   DIGIKEY_ADMIN_TOKEN       # optional; for key issue / ops
 #   GROQ_API_KEY / OPENROUTER_API_KEY / OPENAI_API_KEY  (as needed by LiteLLM)
+#   CHEAPERINFERENCE_API_KEY  # house default digillm upstream when set
+#   CHEAPERINFERENCE_API_BASE # optional; default https://api.cheaperinference.com/v1
+#   DIGI_HOUSE_UPSTREAM       # optional; set "openrouter" to force OpenRouter
 #   LITELLM_PROXY_API_KEY     # optional shared proxy key
 #   CLOUDFLARE_ACCOUNT_ID     # Cloudflare account id owning both the Vectorize indexes and
 #                             # the D1 databases -- canonical name (wrangler's own convention,

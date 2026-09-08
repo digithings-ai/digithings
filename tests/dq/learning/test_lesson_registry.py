@@ -12,13 +12,13 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.learning.lesson_registry import (
+from digiquant.dashboard.learning.lesson_registry import (
     LessonCompilationError,
     LessonCompilationPolicy,
     LessonCompiler,
     cohort_key,
 )
-from digiquant.olympus.learning.outcome_models import (
+from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     AttributionMethod,
     ComponentAttributionReport,
@@ -34,7 +34,7 @@ from digiquant.olympus.learning.outcome_models import (
     episode_content_hash,
     episode_version_id,
 )
-from digiquant.olympus.learning.outcome_store import OutcomeLearningStore
+from digiquant.dashboard.learning.outcome_store import OutcomeLearningStore
 
 pytestmark = pytest.mark.unit
 

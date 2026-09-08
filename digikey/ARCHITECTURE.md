@@ -164,7 +164,7 @@ All tokens issued by digikey include these claims:
 
 | Case | JWT payload | Downstream behaviour |
 |------|-------------|----------------------|
-| Profile exists for `subject` | Both claims present | Atlas / digigraph may key caches / personalization off these values without a second DB round-trip |
+| Profile exists for `subject` | Both claims present | research / digigraph may key caches / personalization off these values without a second DB round-trip |
 | No profile yet | Both claims **absent** (not `null`) | Frontend may route the user to intake; digikey does not invent an intake flow |
 
 Rules:

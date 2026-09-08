@@ -11,7 +11,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     HoldingQuantity,
     InstrumentBarSeries,
@@ -20,7 +20,7 @@ from digiquant.olympus.replay.models import (
     PortfolioReplayStatus,
     TargetWeight,
 )
-from digiquant.olympus.replay.worker import run_portfolio_replay_isolated
+from digiquant.dashboard.replay.worker import run_portfolio_replay_isolated
 
 pytestmark = pytest.mark.unit
 
@@ -28,38 +28,34 @@ nautilus = pytest.importorskip("nautilus_trader")
 
 _UTC = timezone.utc
 _REPLAY_ROOT = (
-    Path(__file__).resolve().parents[3] / "digiquant" / "src" / "digiquant" / "olympus" / "replay"
+    Path(__file__).resolve().parents[3] / "digiquant" / "src" / "digiquant" / "dashboard" / "replay"
 )
 _PRODUCTION_GUARD_PATHS = (
     Path(__file__).resolve().parents[3]
     / "digiquant"
     / "src"
     / "digiquant"
-    / "olympus"
-    / "hermes"
+    / "portfolio"
     / "chain.py",
     Path(__file__).resolve().parents[3]
     / "digiquant"
     / "src"
     / "digiquant"
-    / "olympus"
-    / "hermes"
+    / "portfolio"
     / "phases"
     / "phase7e_risk_sizing.py",
     Path(__file__).resolve().parents[3]
     / "digiquant"
     / "src"
     / "digiquant"
-    / "olympus"
-    / "hermes"
+    / "portfolio"
     / "phases"
     / "h9_commit_run.py",
     Path(__file__).resolve().parents[3]
     / "digiquant"
     / "src"
     / "digiquant"
-    / "olympus"
-    / "hermes"
+    / "portfolio"
     / "shadow_artifact.py",
 )
 
@@ -290,10 +286,10 @@ def test_production_surfaces_do_not_import_replay() -> None:
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module:
-                assert "olympus.replay" not in node.module
+                assert "dashboard.replay" not in node.module
             elif isinstance(node, ast.Import):
                 for alias in node.names:
-                    assert "olympus.replay" not in alias.name
+                    assert "dashboard.replay" not in alias.name
 
 
 def test_nautilus_portfolio_module_never_calls_multi_symbol_runner() -> None:

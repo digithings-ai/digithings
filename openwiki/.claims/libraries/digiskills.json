@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:74c20b071f95fcfa253073f1a8aae483c10b5b736bd0a749840d27828bdbc2e6",
+  "claims": [
+    {
+      "id": "claim_75eddfbcfb2f488786260944af013e1d",
+      "statement": "compile_skill orchestrates a CorpusBuilder plus Synthesizer into a CompileResult, defaulting the builder from source kind with TemplateSynthesizer making no LLM calls.",
+      "evidence": [
+        {
+          "resource": "repo://digiskills/src/digiskills/compiler.py#L21-L84",
+          "version": "repo-lines-v1:sha256:c1cfb6741362e8cfe8069dbfaf8050e53035dc64d5af010d0dc74546cf0f282a:eyJzZWxlY3RlZExpbmVDb3VudCI6NjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxMzdiMmNmZjcwNmFiMGFkNDJjMjE2ODBhYWY5MmNlMGE4OGZhODQwYjU4MTcwMjRkMWZkYTI0ZTlmMGNiOTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViNWFlZGViNWMzMTM2NWQ0ODBlN2YzZTYyZjAzYjQ1ZTIzOTEwNjgxYjdlZDYxMDY4MmY3N2E2NmYzMTk0ZmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_448a1db5bfe74312855177c1af216559",
+      "statement": "Remote ingestion hardens every fetch with an SSRF allowlist, secret redaction, and prompt-injection scanning, shipped before any external source ran through the pipeline.",
+      "evidence": [
+        {
+          "resource": "repo://digiskills/src/digiskills/security.py#L31-L149",
+          "version": "repo-lines-v1:sha256:37f5cd01a533df9911db9039d633f1de58c99cc86514c70a332b1720e62919e4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI3MzRmMDRjMTAxNzU1MDUxZTBmZmM5Y2Y1YzBlMmFkOWUwYzhhOGE2MWY4MTIxZTczODA4OGE0ODc1NTY3NWNiIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI3NzFlNGMyYWZiZTFkNmZlY2FmN2RhMDVlZWZjZDZmNTg5OGZiY2UyMWJmZDBhZWExM2Q1NTk4ZmI1ZGY1ODk3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIyYzc0NzNhNzdhMjhlODY0OTA4NTQ4MTMwNzI3ODk3ZTFmNGU3NGMwOTAyY2QyMDE4OGNlNGM5ZGI5YmZjNGIyIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_ad056d7e72c24a7f95389dd4b504132f",
+      "statement": "Core deps are pydantic plus pyyaml only with lazy digifetch/digillm imports, sandboxed package writes, and no service or registry — P1/P2 shipped, hosted platform deferred.",
+      "evidence": [
+        {
+          "resource": "repo://digiskills/ARCHITECTURE.md#L18-L45",
+          "version": "repo-lines-v1:sha256:036759489fd91a859f4e1b70a5a86c147d010a7d0aebff69e923f1ccb18da645:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxNGI2Njg0OThiN2ExOTIzZGNiM2IyNTFiMDhhOWI1OTc1YTE3OGIwYmMxYmI3ZjJmNWE3ZTAxYjllZDBjNTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0ZDM4MzE3NjIyMTA1ZDhkNDkzYTY0ZWVjZDUwODFmN2RjZmRjYTg0MWUzNGIxZTRlZDNkNGM1MWVhMmIzOGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQzMmZmZDExZmU2YjY1MDg1ZjkyYzNjZGM4MmY4NDEwM2Q5MTdhOWZjNjI0NjcyMzk0NTYyZTNhZWQyYjAyOTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwZTZkMDlmMzUyMDEyZThiODQ3ZGIwZWU4OTQ4NzA5YzQ1ZGIxN2JlNDMwYTAzNWEwNjM1NmQwOWI5MGMxODQifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

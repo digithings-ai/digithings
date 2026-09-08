@@ -18,10 +18,10 @@ from digiquant.cli.prices import (
     fetch_quotes_cmd,
     recompute_technicals_cmd,
 )
+from digiquant.dashboard.instrument_metadata import InstrumentMetadata
 from digiquant.data.prices import TECHNICAL_COLUMNS
 from digiquant.data.prices.instrument_metadata import InstrumentMetadataFetchResult
 from digiquant.data.prices.refresh import RefreshResult
-from digiquant.olympus.instrument_metadata import InstrumentMetadata
 
 pytestmark = pytest.mark.unit
 
@@ -108,7 +108,7 @@ def test_fetch_quotes_persists_resolved_instrument_metadata() -> None:
 
 
 def test_sector_universe_dedupes_and_includes_single_names() -> None:
-    from digiquant.olympus.atlas.sectors_config import sector_universe
+    from digiquant.research.sectors_config import sector_universe
 
     universe = sector_universe()
     assert universe == [t.upper() for t in universe]  # all upper-cased
@@ -121,7 +121,7 @@ def test_fetch_quotes_include_sectors_unions_universe(tmp_path) -> None:
     # --include-sectors must union the sector config's single names + ETFs into the fetch
     # universe so sector research gets single-name technicals (price_technicals was ETF-only;
     # #946).
-    from digiquant.olympus.atlas.sectors_config import sector_universe
+    from digiquant.research.sectors_config import sector_universe
 
     captured: dict[str, list[str]] = {}
 

@@ -134,7 +134,7 @@ def test_the_bindings_are_not_hand_installed_anywhere() -> None:
     sites = [
         REPO_ROOT / ".github" / "workflows" / "test-web.yml",
         REPO_ROOT / ".github" / "workflows" / "test-digichat.yml",
-        REPO_ROOT / ".github" / "workflows" / "test-olympus.yml",
+        REPO_ROOT / ".github" / "workflows" / "test-dashboard.yml",
         REPO_ROOT / "scripts" / "build-digithings.sh",
         REPO_ROOT / "scripts" / "build-digiquant.sh",
         REPO_ROOT / "frontend" / "digichat" / "Dockerfile",
