@@ -10,11 +10,14 @@ import {
 } from "@/lib/digigraph";
 import { stripToolDumpFromAnswerDelta } from "@/lib/adapters/digithings/strip-tool-dump";
 import { coreMessagesToDigigraphOpenAi } from "@/lib/digigraph-messages";
-import {
-  ACTIVITY_PART_TYPE,
-  type ActivityDetail,
-} from "@/lib/chat-activity";
+import { type ActivityDetail } from "@/lib/chat-activity";
 import { mapDigigraphTraceToSpans } from "@/lib/adapters/digithings/activity";
+import {
+  createActivityWriteContext,
+  finishStandardActivity,
+  uiMessagesForUpstream,
+  writeStandardActivity,
+} from "@/lib/ui-stream-parts";
 import { BYOK_MODEL_REMEDIABLE_CODES } from "@/lib/embed-chat-error";
 
 export type DigigraphTracePayload = {
@@ -38,7 +41,13 @@ export type DigigraphErrorPayload = {
 export function digigraphErrorToEmbedPayload(err: DigigraphErrorPayload): string {
   const code = typeof err.code === "string" && err.code.length ? err.code : "digigraph_error";
   const payload: { error: string; message?: string } = { error: code };
-  if (typeof err.message === "string" && err.message.length) {
+  // BYOK remediable codes carry trusted copy in embed-chat-error — never relay
+  // digigraph's message (it can echo caller headers or other upstream detail).
+  if (
+    typeof err.message === "string" &&
+    err.message.length &&
+    !BYOK_MODEL_REMEDIABLE_CODES.has(code)
+  ) {
     payload.message = err.message;
   }
   return JSON.stringify(payload);
@@ -127,13 +136,17 @@ export async function createDigigraphTraceStreamResponse(opts: {
   upstreamHeaders: Record<string, string>;
   responseHeaders: Record<string, string>;
   activityDetail: ActivityDetail;
+  /** AbortSignal from the inbound request — Stop must cancel the digigraph fetch (#3475). */
+  signal?: AbortSignal;
 }) {
-  const stripped = opts.messages.map((m) => {
+  const stripped = uiMessagesForUpstream(opts.messages).map((m) => {
     const { id: _omit, ...rest } = m;
     void _omit;
     return rest;
   }) as Omit<UIMessage, "id">[];
-  const coreMessages = await convertToModelMessages(stripped);
+  const coreMessages = await convertToModelMessages(stripped, {
+    ignoreIncompleteToolCalls: true,
+  });
   const url = digigraphChatCompletionsUrl(opts.digigraphBaseUrl);
   const model = digigraphModelName();
 
@@ -143,7 +156,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
       let textSeq = 0;
       let textId = "assistant-main";
       writer.write({ type: "text-start", id: textId });
-      let activitySeq = 0;
+      const activityCtx = createActivityWriteContext();
       const bodyPayload: Record<string, unknown> = {
         model,
         messages: coreMessagesToDigigraphOpenAi(coreMessages),
@@ -171,6 +184,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
           "X-Response-Format": "plain",
         },
         body: JSON.stringify(bodyPayload),
+        signal: opts.signal,
       });
       if (!res.ok) {
         // Log the upstream detail server-side; never stream it. A 500 body can
@@ -185,12 +199,8 @@ export async function createDigigraphTraceStreamResponse(opts: {
         if (relayable) {
           // Actionable refusal: hand the code (never the body) to the client so
           // it can say what to do instead of a dead end. Same mechanism as the
-          // `digigraph_error` SSE branch below, but not the same disclosure
-          // surface: that branch relays digigraph's `message` verbatim, this one
-          // never does. Unreachable today (the SSE contract carries only
-          // free_quota_exceeded / rate_limit), but the two now share one
-          // allowlist — adding a BYOK code to that contract would relay an
-          // upstream message to an anonymous visitor.
+          // `digigraph_error` SSE branch below; both now drop upstream `message`
+          // for BYOK remediable codes (embed-chat-error owns that copy).
           writer.write({ type: "text-end", id: textId });
           throw new DigigraphStreamContractError(
             digigraphErrorToEmbedPayload({ code: relayable })
@@ -252,14 +262,11 @@ export async function createDigigraphTraceStreamResponse(opts: {
           }
 
           for (const span of mapDigigraphTraceToSpans(payload, opts.activityDetail)) {
-            writer.write({
-              type: ACTIVITY_PART_TYPE,
-              id: `dg-activity-${activitySeq++}`,
-              data: span,
-            });
+            writeStandardActivity(writer, span, activityCtx);
           }
         }
       }
+      finishStandardActivity(writer, activityCtx);
       writer.write({ type: "text-end", id: textId });
     },
   });

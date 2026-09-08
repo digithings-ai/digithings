@@ -6,6 +6,14 @@
  */
 
 import { getEmbedTenantRegistry, normalizeEmbedHost } from "./embed-tenants";
+import { DIGICHAT_EMBED_BAKED_SECURITY_HEADERS } from "./security-headers-bake";
+
+export {
+  DIGICHAT_APP_CSP,
+  DIGICHAT_APP_SECURITY_HEADERS,
+  DIGICHAT_EMBED_BAKED_SECURITY_HEADERS,
+  DIGICHAT_EMBED_FAIL_CLOSED_CSP,
+} from "./security-headers-bake";
 
 const FIRST_PARTY_FRAME_ANCESTORS = [
   "'self'",
@@ -31,8 +39,8 @@ const LOOPBACK_FRAME_ANCESTOR_HOSTS = new Set([
  * iframe. Must work in production Docker too (`NODE_ENV=production` GHCR /
  * compose images) when DIGICHAT_EMBED_HOSTS lists loopback (#2093).
  *
- * Kept free of `embed-first-party` imports: next.config loads this module, and
- * `@/` aliases inside that graph fail to resolve at config-transpile time.
+ * Kept free of `embed-first-party` imports: next.config loads
+ * `security-headers-bake.ts` only. This module is request-time (proxy).
  */
 export function frameAncestorOriginsForHost(host: string): string[] {
   if (LOOPBACK_FRAME_ANCESTOR_HOSTS.has(host)) {
@@ -54,34 +62,6 @@ export function allowLocalEmbedParents(): boolean {
   const flag = process.env.DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS?.trim().toLowerCase();
   return flag === "1" || flag === "true" || flag === "yes";
 }
-
-/**
- * Dev tooling (Next.js HMR / React Refresh) evaluates code via eval() and
- * needs 'unsafe-eval' in script-src. Added ONLY outside production so the
- * shipped CSP stays byte-identical; mirrors the localhost dev-guard on
- * embedFrameAncestors below. Evaluated at import — next dev loads this config
- * with NODE_ENV=development, next build with NODE_ENV=production. (#1434)
- * Note: 'unsafe-eval' is a CSP token string only — not JavaScript eval().
- */
-const SCRIPT_SRC_DEV_EVAL = process.env.NODE_ENV !== "production" ? " 'unsafe-eval'" : "";
-
-/** Baseline CSP for the authenticated app (frame-ancestors deny). */
-export const DIGICHAT_APP_CSP = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${SCRIPT_SRC_DEV_EVAL}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
-  "connect-src 'self'",
-  "frame-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-].join("; ");
-
-/** Baked into next.config `/embed` headers — proxy overwrites at request time. */
-export const DIGICHAT_EMBED_FAIL_CLOSED_CSP = "frame-ancestors 'none';";
 
 /** Valid hostnames only — never `*`, never empty. */
 export function parseEmbedHostsEnv(raw: string | undefined): string[] {
@@ -147,29 +127,6 @@ export function embedFrameAncestors(): string[] {
 export function embedFrameAncestorsCsp(): string {
   return `frame-ancestors ${embedFrameAncestors().join(" ")};`;
 }
-
-export const DIGICHAT_APP_SECURITY_HEADERS: ReadonlyArray<{
-  key: string;
-  value: string;
-}> = [
-  { key: "Content-Security-Policy", value: DIGICHAT_APP_CSP },
-  { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "X-Frame-Options", value: "DENY" },
-  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  {
-    key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=()",
-  },
-];
-
-/** Fail-closed bake for next.config — proxy sets the real allowlist at request time. */
-export const DIGICHAT_EMBED_BAKED_SECURITY_HEADERS: ReadonlyArray<{
-  key: string;
-  value: string;
-}> = [
-  { key: "Content-Security-Policy", value: DIGICHAT_EMBED_FAIL_CLOSED_CSP },
-  { key: "X-Content-Type-Options", value: "nosniff" },
-];
 
 /**
  * @deprecated Use DIGICHAT_EMBED_BAKED_SECURITY_HEADERS in next.config and

@@ -457,7 +457,7 @@
           },
           "mode": {
             "default": "hybrid",
-            "description": "keyword | vector | hybrid",
+            "description": "keyword | vector | hybrid \u2014 capability hint. Chroma/Vectorize/stub coerce keyword/hybrid to vector-only ANN (see ARCHITECTURE).",
             "title": "Mode",
             "type": "string"
           },
@@ -488,6 +488,12 @@
             "minimum": 0.0,
             "title": "Skip",
             "type": "integer"
+          },
+          "skip_rerank": {
+            "default": false,
+            "description": "When true, skip optional DIGISEARCH_RERANK_ENABLED second pass. Set by digisearch_fetch_all so partial pages are not reordered (#2441).",
+            "title": "Skip Rerank",
+            "type": "boolean"
           },
           "summarize_if_over": {
             "anyOf": [
@@ -752,7 +758,7 @@
           },
           "mode": {
             "default": "hybrid",
-            "description": "keyword | vector | hybrid",
+            "description": "keyword | vector | hybrid \u2014 capability hint. Chroma/Vectorize/stub coerce keyword/hybrid to vector-only ANN (see ARCHITECTURE).",
             "title": "Mode",
             "type": "string"
           },
@@ -1087,7 +1093,7 @@
     },
     "/ingest": {
       "post": {
-        "description": "Ingest a document. Uses parsers + chunkers when available. Returns 503 if ingestion fails.",
+        "description": "Ingest a document via :func:`digisearch.pipeline.ingest.ingest_source`.",
         "operationId": "api_ingest_ingest_post",
         "requestBody": {
           "content": {

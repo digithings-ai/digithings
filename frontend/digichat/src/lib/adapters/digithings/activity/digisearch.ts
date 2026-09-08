@@ -1,4 +1,5 @@
 import type { ActivitySpan } from "@/lib/chat-activity";
+import { mapDigivaultGetNote, DIGIVAULT_GET_NOTE_TOOL } from "./digivault";
 import {
   mapRawSourceToDocument,
   ragToolDisplayName,
@@ -11,6 +12,10 @@ import {
 export function mapDigisearchRagSources(
   payload: Record<string, unknown>
 ): ActivitySpan | null {
+  const toolRaw = typeof payload.tool === "string" ? payload.tool.trim() : "";
+  if (toolRaw === DIGIVAULT_GET_NOTE_TOOL) {
+    return mapDigivaultGetNote(payload);
+  }
   const sources = payload.sources;
   if (!Array.isArray(sources)) return null;
   const documents = [];

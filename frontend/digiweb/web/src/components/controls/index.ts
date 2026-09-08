@@ -38,6 +38,32 @@ export {
   type SheetContentProps,
 } from "./Sheet";
 export {
+  Dialog,
+  DialogTrigger,
+  DialogClose,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+  type DialogContentProps,
+} from "./Dialog";
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableCaption,
+  type TableDensity,
+} from "./Table";
+export { Breadcrumbs, type Crumb } from "./Breadcrumbs";
+export { Pagination, paginationWindow, type PaginationProps } from "./Pagination";
+export {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
@@ -72,3 +98,27 @@ export {
 } from "./DatePager";
 export { TagsInput, TagChip, type TagsInputProps, type TagChipProps } from "./TagsInput";
 export { SearchBar, type SearchBarProps } from "./SearchBar";
+export { Field, type FieldProps } from "./Field";
+export {
+  Checkbox,
+  RadioGroup,
+  Radio,
+  Switch,
+  type CheckboxProps,
+  type RadioGroupProps,
+  type RadioProps,
+  type SwitchProps,
+} from "./Selection";
+export {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectPopup,
+  SelectItem,
+  SelectItemIndicator,
+  SelectSeparator,
+  type SelectProps,
+  type SelectTriggerProps,
+  type SelectPopupProps,
+} from "./Select";
+export { Slider, sliderFill, type SliderProps } from "./Slider";

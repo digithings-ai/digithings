@@ -31,9 +31,12 @@
                                    override below for why this one does NOT track --accent's own
                                    separate #2280 darkening). emerald #4fa37a returns to the
                                    unassigned pool. */
-  --accent-atlas:      #6fbf94;
-  --accent-hermes:     #4a8f7b;
-  --accent-kairos:     #2f7a65;
+  --accent-research:      #6fbf94;
+  --accent-portfolio:     #4a8f7b;
+  --accent-execution:     #2f7a65;
+  --accent-atlas:   var(--accent-research);
+  --accent-hermes:  var(--accent-portfolio);
+  --accent-kairos:  var(--accent-execution);
   --accent-digisearch: #5aa3c4;
   --accent-digichat:   #e2708a; /* ruled 2026-07-06: digichat splits off digiquant's shared cyan —
                                    now a standalone consumer chat surface, it earns its own voice.
@@ -54,6 +57,9 @@
   --accent: var(--fg);
 
   /* --- Typography ------------------------------------------------------- */
+  /* Unthemed legacy slot. Themed surfaces remap this to --font-sans (mono)
+     under :root[data-theme] so Inter is not the live body default. Override
+     --font-sans locally for a sans/serif escape hatch; --font-family follows. */
   --font-family: 'Inter', system-ui, -apple-system, sans-serif;
   --font-family-mono: 'JetBrains Mono', 'Fira Code', 'Space Mono', monospace;
 
@@ -78,9 +84,11 @@
   --space-9: 8rem;
 
   /* --- Radius ---------------------------------------------------------- */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  /* Utilitarian v0.1 (2026-08-30): zero corners. True circles (spinners,
+     live dots) may still use 999px locally — that is geometry, not chrome. */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
 
   /* --- Motion ---------------------------------------------------------- */
   --transition-speed: 0.8s;
@@ -95,7 +103,7 @@
    --accent, e.g. .btn-primary) is declared theme-scoped only, below
    (:root[data-theme="dark|light"]): white on dark, near-black on light. That
    pairing is only correct for accents that flip light/dark WITH the theme —
-   which is true of --ink (mono livery, and atlas/hermes/kairos, which
+   which is true of --ink (mono livery, and research/portfolio/execution, which
    collapse to --ink under [data-theme] by design) but false for every
    per-module accent hex here: they're all light-to-medium hues in both
    themes (the [data-theme="light"] override below, added for the separate
@@ -113,14 +121,17 @@
    fresh one picked for this 4.5:1 headroom — it deliberately did NOT follow
    --accent's own #2280 darkening below, precisely to protect this 4.64:1
    pairing; see that override's own comment) rather than letting it
-   inherit the theme flip. .accent-atlas/-hermes/-kairos are deliberately
+   inherit the theme flip. .accent-research/-portfolio/-execution are deliberately
    NOT listed here — their accent already resolves to --ink, so they should
    keep following the theme flip like mono does. */
 .accent-digigraph  { --accent: var(--accent-digigraph);  --on-accent: #06110f; }
 .accent-digiquant  { --accent: var(--accent-digiquant);  --on-accent: #06110f; }
-.accent-atlas      { --accent: var(--accent-atlas); }
-.accent-hermes     { --accent: var(--accent-hermes); }
-.accent-kairos     { --accent: var(--accent-kairos); }
+.accent-research      { --accent: var(--accent-research); }
+.accent-portfolio     { --accent: var(--accent-portfolio); }
+.accent-execution     { --accent: var(--accent-execution); }
+.accent-atlas   { --accent: var(--accent-research); }
+.accent-hermes  { --accent: var(--accent-portfolio); }
+.accent-kairos  { --accent: var(--accent-execution); }
 .accent-digisearch { --accent: var(--accent-digisearch); --on-accent: #06110f; }
 .accent-digichat   { --accent: var(--accent-digichat);   --on-accent: #06110f; }
 .accent-digikey    { --accent: var(--accent-digikey);    --on-accent: #06110f; }
@@ -135,7 +146,7 @@
    Redesign theme layer (v2) — semantic, light + dark, terminal-phosphor cyan
    --------------------------------------------------------------------------
    Scoped ONLY under [data-theme] so the legacy :root palette above (still
-   consumed by chat.html, atlas.html, and Olympus until migrated) is left
+   consumed by chat.html, research.html, and dashboard until migrated) is left
    untouched. Redesigned pages set data-theme via a pre-paint snippet, so they
    resolve these. Accent is a single cyan; --up/--down are P&L semantics only.
    ========================================================================== */
@@ -286,32 +297,41 @@
 
 /* Shared (theme-independent) tokens for the redesign. */
 :root[data-theme] {
-  /* ruled 2026-07-08 (promoted from design-reference): atlas · hermes · kairos
+  /* ruled 2026-07-08 (promoted from design-reference): research · portfolio · execution
      name backend langgraphs, not colored products — on redesigned surfaces
      their accents collapse to ink so any scope, livery, or stale persisted
      selection resolves monochrome. Scoped to [data-theme] so legacy pages
      (no data-theme attr) keep the :root greens until they migrate. */
+  --accent-research: var(--ink);
+  --accent-portfolio: var(--ink);
+  --accent-execution: var(--ink);
   --accent-atlas: var(--ink);
   --accent-hermes: var(--ink);
   --accent-kairos: var(--ink);
 
-  --font-sans: "Geist", system-ui, -apple-system, sans-serif;
+  /* Utilitarian v0.1: mono is the default voice for claim, body, and chrome.
+     Serif/sans escape hatches set --font-display / --font-sans locally.
+     Legacy --font-family follows --font-sans so themed consumers of
+     components.css / app-shell-terminal do not fall through to Inter. */
+  --font-sans: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
   --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
-  --font-display: "Instrument Serif", Georgia, serif;
+  --font-display: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  --font-family: var(--font-sans);
+  --font-family-mono: var(--font-mono);
 
   --wrap: 1180px;
   --wrap-wide: 1280px;
   --product-frame-w: 800px;
   --gutter: clamp(1.25rem, 4vw, 3.25rem);
 
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
+  --r-sm: 0;
+  --r-md: 0;
+  --r-lg: 0;
 
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 
-  /* Graphite-inspired section rhythm + reveal motion (EVOLUTION.md §5). */
-  --section-y: clamp(4rem, 8vw, 7rem);
+  /* Sparse-leaning marketing rhythm (agentmail); dashboards may tighten locally. */
+  --section-y: clamp(4.5rem, 9vw, 8rem);
   --section-y-tight: clamp(2.5rem, 5vw, 4rem);
   --ease-glide: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-reveal: 0.6s;

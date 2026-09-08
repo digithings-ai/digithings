@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import logging
 import time
-import uuid
 from pathlib import Path
 
 from digisearch.core.models import Document
+from digisearch.core.stable_ids import stable_doc_id
 from digisearch.ingestion.base import Parser
 from digisearch.ingestion.segmenters.heading import heading_segments
 
@@ -31,7 +31,7 @@ class MarkdownParser(Parser):
                 else:
                     content = str(source)
                     src_str = "<string>"
-            doc_id = str(uuid.uuid4())
+            doc_id = stable_doc_id(source=src_str, content=content)
             doc = Document(
                 id=doc_id,
                 content=content,

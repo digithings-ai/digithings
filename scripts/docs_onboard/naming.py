@@ -8,7 +8,7 @@ from urllib.parse import urlparse, urlunparse
 
 _SLUG_SAFE = re.compile(r"[^a-z0-9]+")
 
-# CamelCase product names → lowercase prose (see CLAUDE.md § Naming).
+# CamelCase product names → lowercase prose (see AGENTS.md § Naming).
 _DIGI_PRODUCT_CAMEL: tuple[tuple[str, str], ...] = (
     ("DigiThings", "digithings"),
     ("DigiChat", "digichat"),

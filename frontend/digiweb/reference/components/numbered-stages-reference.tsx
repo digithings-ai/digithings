@@ -10,8 +10,8 @@ import { NumberedStages, type NumberedStage } from "@digithings/web";
 const STAGES: NumberedStage[] = [
   {
     num: "1.0",
-    tag: "atlas",
-    livery: "atlas",
+    tag: "research",
+    livery: "research",
     title: "Research",
     mech: "Ask in plain language. The research loop pulls free macro and market data and proposes directions worth testing.",
   },
@@ -24,10 +24,10 @@ const STAGES: NumberedStage[] = [
   },
   {
     num: "3.0",
-    tag: "hermes",
-    livery: "hermes",
+    tag: "portfolio",
+    livery: "portfolio",
     title: "Execute",
-    mech: "A validated signal routes to the sizer; kairos holds it until the moment the rules actually fire.",
+    mech: "A validated signal routes to the sizer; execution holds it until the moment the rules actually fire.",
   },
 ];
 

@@ -10,7 +10,7 @@ free_tier_type: standing
 access_requirements:
   - email
 data_privacy_on_free: no_training
-verified_at: 2026-07-19
+verified_at: 2026-08-30
 source_urls:
   - https://console.groq.com/docs/rate-limits
   - https://console.groq.com/docs/models
@@ -30,7 +30,7 @@ The fastest inference provider on the market (500–1,500 tok/s on Llama/Qwen vi
 
 | Model ID | Context Window | Max Output | Notes |
 |---|---|---|---|
-| `llama-3.3-70b-versatile` | 128,000 | 32,768 | active |
+| `llama-3.3-70b-versatile` | 128,000 | 32,768 | ⚠️ Error code: 404 - {'error': {'message': 'The model `llama-3.3-70b-versatile` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}} |
 | `llama-4-scout-17b-16e-instruct` | 131,072 | 8,192 | **deprecated** |
 | `openai/gpt-oss-120b` | 131,072 | 32,768 | active |
 | `qwen/qwen3.6-27b` | 131,072 | 8,192 | active |
@@ -84,7 +84,7 @@ model_list:
 | DIGI_LLM_MODE tier | `test` (primary anchor) |
 | Single-shot 100k | Yes — 128k context, but TPM (6k) limits throughput at large payloads |
 | Privacy safe | Yes — no training on free data |
-| Atlas/Hermes role | Fast extraction pass; structured JSON generation on chunked inputs |
+| research/portfolio role | Fast extraction pass; structured JSON generation on chunked inputs |
 
 ---
 
@@ -110,3 +110,4 @@ Pay-as-you-go after free tier. Llama 3.3 70B ~$0.59/$0.79 per 1M in/out; Llama 4
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
+| 2026-08-30 | Automated snapshot sync | provider-review scan |

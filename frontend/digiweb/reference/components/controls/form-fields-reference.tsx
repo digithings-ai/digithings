@@ -4,7 +4,7 @@ import { useState } from "react";
 
 /**
  * Form fields — labelled inputs in mono micro-caps across every state: focus
- * lights the accent ring, error swaps the border to --down with a message
+ * lights the accent ring, error swaps the border to --danger with a message
  * beneath, disabled dims and locks. Below sit the selection controls — checkbox,
  * radio group, and a toggle — each keyboard-reachable and driven from the native
  * input's :checked. Static interactive display template.
@@ -18,11 +18,11 @@ export function FormFieldsReference() {
     <section className="section-block">
       <p className="kicker">{"// form fields"}</p>
       <h2 className="title">Every field, every state.</h2>
-      <p className="section-copy">
-        Labelled inputs in mono micro-caps: focus lights the accent ring, error swaps the border to
-        <code> --down</code> with a message beneath, disabled dims and locks. Below, the selection
-        controls — checkbox, radio group, and a toggle — each keyboard-reachable.
-      </p>
+        <p className="section-copy">
+          Labelled inputs in mono micro-caps: focus lights the accent ring, error swaps the border to
+          <code> --danger</code> with a message beneath, disabled dims and locks. Below, the selection
+          controls — checkbox, radio group, and a toggle — each keyboard-reachable.
+        </p>
 
       <div className="mt-[1.2rem] grid grid-cols-2 gap-[1rem] max-[640px]:grid-cols-1">
         <label className="ff-field flex flex-col gap-[0.35rem]">

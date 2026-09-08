@@ -1,6 +1,6 @@
 /**
  * Fail-closed contract for digiquant.io live book NAV (#2599 / #3029).
- * Must match olympus `lib/accounting-views.ts` view name — no client fallback.
+ * Must match dashboard `lib/accounting-views.ts` view name — no client fallback.
  */
 
 export const ACCOUNTING_NAV_VIEW = 'public_accounting_nav_history' as const;

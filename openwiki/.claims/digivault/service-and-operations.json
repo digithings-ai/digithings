@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f818953d7a62dca0284df719058a6fb632dacdd3c05f5b197bc1b3645d9135ed",
+  "claims": [
+    {
+      "id": "claim_6e962be50cd047299eb8706fff8fea28",
+      "statement": "digivault_path_scopes requires digivault:read for reads and digivault:write for mutations, with POST /v1/notes/by-path read-scoped and method-gated and orchestrator_invoke gated at read with create_note enforcing write itself.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/src/digivault/path_scopes.py#L1-L49",
+          "version": "repo-lines-v1:sha256:2222b6ce3c690b792cb7c411e464609d2551ede749cb046d2485843c7ba286c1:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4ODA5MmE4ZGE2OTI2OTdkNjY2ZjdjM2M5ZGU2Mjc4ODRlYjNjNTZlZDcyNDFiZmFmODcyZTFjM2JlMTA2MTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1NTkwZjc0MjhkMmQyMjFiYjIxZDc4MDg2YmFiNTQyNDc1NmY5OTBiOTE3YTk1NWE0MjQ0M2MzNmRlZWY5NDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_bf5eb6c5c1f3496b8b82774c04cbfbbd",
+      "statement": "Tenant path prefixes bind server-side to the JWT tenant via DIGI_TENANT_CORPUS_MAP, no-op when unset and fail-closed once set, complementing digigraph's model-side prefix overwrite.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/ARCHITECTURE.md#L39-L40",
+          "version": "repo-lines-v1:sha256:a92aef42de712219d5849ebad8b01c437b0cde87ccaecf016266100fc2895ba1:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWE3YWRmZDU5MDU3Y2RjZWVlYzQ2OTg3NDUyYjRkZTMxNDVkNGFiMmZjMWQ2MWE2ZDE4ZDc0YzgxMTA5MTIzMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWM3OGJjOTk5MDYyMGY4NDY1OTI1NTFjOGZiMzYyYTI4Y2YwMzAyMTNjOGVjYzg5YjNkZmRlNGQ2ODc2OWI2MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmNiNDdiMjUwMDAzZDQ4YTRjZWUxODJjYzlhNzg4ODMwNDgyNTFmYTZhMTgzMTEzMWJlNmMxY2ZiM2NhYWFkYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGVlZWUyODIxNDIyYTRjMDg0YzIwZTY0ZThiZjQyNGZkM2UwN2U2OTk5NDVmMGY5NTc5Y2MxMGNjMmMwNWUyYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_447ab991bb634a9e8b0c27d4234fa159",
+      "statement": "Tool dispatch is canonical in tool_dispatch with dispatch names equal to vault-local plus runtime-only handlers by assertion, shared by MCP registration and orchestrator_invoke.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/src/digivault/tool_dispatch.py#L35-L66",
+          "version": "repo-lines-v1:sha256:4a4dfb1ec1b841ab189b515e9e35f2e185d4b9193dca617a58cf12799e0747f1:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxNDY2YWZhYmM0Y2I2N2U3NGVhNWU4MDNlNjVlMGNhNzQ3ZGFhZmQ4ZmMxZGI2MjQzM2U0ZWRlODYyNjBkYzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4OGFiODU5OTQyMTJhMzA3NGZlNDY0ZDQ2YzlmYWRmOGZlMzJhYmE5NzdlYjBiMzY0ZmE4NzlhYzFmMDUzYTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1Y2IwN2Q2NDEwYmJjNGY0NjI5NDkwZDA0YWY4YzQyMTRmNDEzN2JjYjVjN2RlNGZjZmUyYWIzY2Y0MWU5MWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwM2UzMGRmM2Y0NjUzYjcwOTUyZTU2YmU4NjFkNTM1MjM2MWEyZWViZTMwMmNmYTk1Njc3MjY4ZjZkYWZlNTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_58c4d7d788af4cd7bbd52238fabfe3e2",
+      "statement": "The service exposes exempt /healthz and /v1/status plus note CRUD, by-path fetch, and orchestrator endpoints on port 8004 under the dedicated digivault Compose profile.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/src/digivault/server.py#L476-L502",
+          "version": "repo-lines-v1:sha256:f031424e7012b708ddefe2eba6d9eccf51db44bf73c9ce5e98aca38ffae0b382:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzMGVkYWFiZThlZTI2NDExMGVjYzE3MjQ1ZjVmMDgyZTkxZWNlMjFmNDY5N2U4ZTFlM2I1ZjM5YTQwZDk1NjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmMmJiMzc1OWZkOGVmZmJhZjBjNjkyMDdjNWEzNGZhNTg2YjJkNjQ5NDVlYzAxZmYwYzJlMmEwZGViYjI2NGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE3OTkzYjc2NjA0MzVlNTVjNWEzNjNkNWY1NDE3NzliYmQyNjE1NGJkYzE4YWVkNzc0NGFhZTU3ZjEzNTQ4MzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFjZDU3OTYxNTI4MDI1YTNjNGE5OGEyYTM3YTdiZjM4M2NjM2JjZmYxNzExMjQxYjA2MTRkMjI2YWRkNDZjMzkifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

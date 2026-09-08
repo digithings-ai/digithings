@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke-test each LLM provider key configured for the Atlas pipeline.
+"""Smoke-test each LLM provider key configured for the research pipeline.
 
 Run after adding keys to .env or after setting GitHub Actions secrets locally:
 
@@ -80,7 +80,7 @@ def test_provider(name: str, cfg: dict) -> bool:
 
 
 def main() -> int:
-    print("Atlas provider validation\n")
+    print("research provider validation\n")
     results = []
     for name, cfg in PROVIDERS.items():
         results.append(test_provider(name, cfg))
@@ -89,7 +89,7 @@ def main() -> int:
     failures = results.count(False)
     if failures:
         print(f"RESULT: {failures} provider(s) failed — see output above.")
-        print("See docs/atlas/token-budget.md for setup instructions.")
+        print("See docs/research/token-budget.md for setup instructions.")
         return 1
     print("RESULT: all configured providers OK.")
     return 0

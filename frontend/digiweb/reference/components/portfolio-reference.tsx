@@ -42,7 +42,7 @@ export function PortfolioReference() {
       {/* Migrated to token-backed utilities. The .pos-side pill group stays in
           finance.css (its --short border is a two-color ink+hair mix). Money
           colors (text-up/text-down) are applied per-row on the unrealized P&L. */}
-      <div className="mt-[1.2rem] overflow-x-auto rounded-[12px] border border-hair bg-surface">
+      <div className="mt-[1.2rem] overflow-x-auto rounded-none border border-hair bg-surface">
         <table className="w-full min-w-[560px] border-collapse font-mono text-[0.82rem] [font-variant-numeric:tabular-nums]">
           <thead>
             <tr>
