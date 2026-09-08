@@ -1,12 +1,13 @@
 # Local dev: LiteLLM routes to Docker/host Ollama at ollama:11434 (see config/litellm.yaml).
 # Use: DIGI_MODEL_MODES_FILE=model_modes.local.yaml DIGI_CONFIG_PATH=/path/to/repo/config
+# NOTE: ollama/qwen3:8b is banned house-wide (#3078) — local defaults use deepseek-r1:14b.
 defaults:
-  test: ollama/qwen3:8b
-  medium: ollama/qwen3:8b
+  test: ollama/deepseek-r1:14b
+  medium: ollama/deepseek-r1:14b
   best: ollama/deepseek-r1:14b
 test:
-  - ollama/qwen3:8b
+  - ollama/deepseek-r1:14b
 medium:
-  - ollama/qwen3:8b
+  - ollama/deepseek-r1:14b
 best:
   - ollama/deepseek-r1:14b
