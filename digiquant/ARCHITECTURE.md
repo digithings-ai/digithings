@@ -1927,8 +1927,8 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   `None`, unknown required `bias` stays rejected.
 - **portfolio** (`digiquant/src/digiquant/portfolio/`) — thesis-aware portfolio loop.
   **H1–H9:** market thesis review → exploration → vehicle map → opportunity screener →
-  unified asset analyst (×N) → PM↔analyst deliberation (×N) → PM direction memo →
-  deterministic risk sizing (H8 / legacy 7E) → `commit_run` terminal booking.
+  coverage director (H4.5) → unified asset analyst (×N) → PM↔analyst deliberation (×N) →
+  PM direction memo → deterministic risk sizing (H8 / legacy 7E) → `commit_run` terminal booking.
   Split from research in epic #471 per [ADR-0015](../docs/adr/0015-research-vs-portfolio.md);
   topology canonical in [ADR-0020](../docs/adr/0020-dashboard-mvp-daily-delta.md).
   **H4 is the sole fan-out cap chokepoint** — `roster_cap.capped_tickers` bounds the
@@ -1938,7 +1938,11 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   `build_h6_deliberation` compile-time builders also call it, but are test-only —
   `graph.py` wires the runtime `build_h5_from_state` / `build_h6_from_state` fan-outs.
   Roster width lands in `atlas_run_diagnostics.breakdown` via
-  `portfolio/roster_diagnostics.roster_breakdown`.
+  `portfolio/roster_diagnostics.roster_breakdown`. H4.5 coverage director (#3739) narrows
+  the H4 roster behaviorally (refresh / explore / skip with reasons, reasoning-tier
+  judgment, `portfolio/coverage/director: reasoning` pin) and can never widen it —
+  H4 remains the sole width ceiling; an LLM failure keeps H4's roster with a
+  non-retryable PhaseError.
 
 The handoff seam is `digiquant.research.snapshot.DigestPayload` — the only symbol
 portfolio imports from research runtime.
@@ -1973,12 +1977,13 @@ flowchart TB
     H2["H2 market thesis exploration"]
     H3["H3 thesis vehicle map"]
     H4["H4 opportunity screener"]
+    H45["H4.5 coverage director"]
     H5["H5 asset analyst ×N"]
     H6["H6 deliberation ×N"]
     H7["H7 PM direction memo"]
     H8["H8 risk sizing (7E)"]
     H9["H9 commit_run"]
-    H1 --> H2 --> H3 --> H4 --> H5 --> H6 --> H7 --> H8 --> H9
+    H1 --> H2 --> H3 --> H4 --> H45 --> H5 --> H6 --> H7 --> H8 --> H9
   end
 
   A4 -->|"DigestPayload"| H1
