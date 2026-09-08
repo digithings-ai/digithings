@@ -51,6 +51,9 @@ So the snapshot does not claim one uniform "as of main" for everything, and noth
 here says it does. The page prints ``generatedAt``, which is the honest anchor for
 all three.
 
+The heat is snapshot-sourced because client-side pagination would exhaust the
+unauthenticated budget; weekly refresh keeps it fresh.
+
 Usage:
     scripts/fetch_repo_activity.py                      # write the snapshot
     scripts/fetch_repo_activity.py --check              # validate shape, write nothing
@@ -349,6 +352,10 @@ def collect() -> dict:
         "api",
         f"search/issues?q=repo:{SLUG}+is:issue+is:closed+closed:>={since[:10]}&per_page=1",
     )
+    year_since = (datetime.now(UTC) - timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    year_commits = _commits_since(year_since)
+    year_merged = _search_dates(f"repo:{SLUG}+is:pr+is:merged+merged:>={year_since[:10]}")
+    year_closed = _search_dates(f"repo:{SLUG}+is:issue+is:closed+closed:>={year_since[:10]}")
     # Deliberately UNBOUNDED, unlike the three above — the whole open backlog, not
     # what opened this month. Consumers must label it as current state; see the
     # module docstring.
@@ -409,6 +416,7 @@ def collect() -> dict:
             for row in _search_items(open_issues, 6)
         ],
         "branch": BRANCH,
+        "dailyContributions": _to_daily(year_commits, year_merged, year_closed, datetime.now(UTC)),
         "latestRelease": (
             {
                 "tag": latest.get("tag_name"),
