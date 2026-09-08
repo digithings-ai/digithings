@@ -42,7 +42,6 @@ import {
   type ImageMessagePartComponent,
   type ToolCallMessagePartComponent,
   type Unstable_DirectiveFormatter,
-  type Unstable_TriggerAdapter,
   type Unstable_TriggerItem,
   type Unstable_TriggerMatcher,
   useAuiState,
@@ -113,7 +112,11 @@ export type ThreadProps = {
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
 export type ThreadSlashTrigger = {
-  adapter: Unstable_TriggerAdapter;
+  adapter: {
+    categories(): readonly unknown[];
+    categoryItems(categoryId: string): readonly Unstable_TriggerItem[];
+    search?(query: string): readonly Unstable_TriggerItem[];
+  };
   action: {
     onExecute: (item: Unstable_TriggerItem) => void;
     removeOnExecute?: boolean;
