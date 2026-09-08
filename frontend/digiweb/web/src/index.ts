@@ -396,6 +396,7 @@ export {
   informationRatioFromDaily,
   olsBeta,
   overlappingDailyReturns,
+  navHistoryForLiveOverlap,
   relativeMetricsFromReturnSeries,
   sinceInceptionPctFromNav,
   MIN_OVERLAP_DAYS,
@@ -444,6 +445,9 @@ export {
 // repo-activity family (#3445) — snapshot-first GitHub velocity, compact + detailed
 export {
   RepoActivity,
+  RepoHeatmap,
+  bucketDaily,
+  levelFor,
   fetchRepoActivityLive,
   cloneParts,
   grouped,
@@ -453,7 +457,9 @@ export {
   REPO_ACTIVITY_DEMO_CLONE,
   REPO_ACTIVITY_DEMO_CONTRIBUTING,
   REPO_ACTIVITY_DEMO_URL,
+  type HeatDay,
   type RepoActivityProps,
+  type RepoHeatmapProps,
   type RepoActivityLiveConfig,
   type RepoActivitySnapshot,
   type RepoFeature,

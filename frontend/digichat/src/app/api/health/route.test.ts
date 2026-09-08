@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { version as packageVersion } from "../../../../package.json";
 import { GET } from "./route";
 
 vi.mock("@/db", () => ({
@@ -25,6 +26,9 @@ describe("GET /api/health", () => {
       "fetch",
       vi.fn().mockResolvedValue({ ok: true, status: 200 })
     );
+    // Treat unset/blank the same so a developer shell DIGICHAT_VERSION cannot
+    // leak into fallback assertions.
+    vi.stubEnv("DIGICHAT_VERSION", "");
   });
 
   afterEach(() => {
@@ -78,5 +82,19 @@ describe("GET /api/health", () => {
     const body = await res.json();
     expect(body.ok).toBe(false);
     expect(body.checks.digraph).toBe("unreachable");
+  });
+
+  it("returns DIGICHAT_VERSION when that env is set", async () => {
+    vi.stubEnv("DIGICHAT_VERSION", "9.9.9");
+    const res = await GET();
+    const body = await res.json();
+    expect(body.version).toBe("9.9.9");
+  });
+
+  it("falls back to package.json version when DIGICHAT_VERSION is unset or blank", async () => {
+    const res = await GET();
+    const body = await res.json();
+    expect(body.version).toBe(packageVersion);
+    expect(body.version).not.toBe("0.1.0");
   });
 });

@@ -2,21 +2,16 @@
 
 *Last updated: 2026-06-20.*
 
-> **⚠️ Current routing (2026-06): OpenRouter, open-weight pins per tier.**
-> `config/digiquant_models.yaml` pins an **open-weight** model per capability tier;
+> **⚠️ Current routing: house Cheaper Inference, CI-mapped pins per tier.**
+> `config/digiquant_models.yaml` pins a model per capability tier;
 > `OLYMPUS_MODEL_TIER` (`cheap` default / `balanced` / `quality`) selects the
-> pinned set, and `apply_digiquant_openrouter_env()` (portfolio chain startup) sets
-> `OPENROUTER_ALLOWED_MODELS` + `OPENROUTER_COST_QUALITY_TRADEOFF` (always **10**
-> = cheapest Auto Router dial) from the active tier. Every LLM call and the web
-> grounding pre-pass (built-in provider search on `perplexity/sonar` or `:online`
-> models from `web_search_models` — billed per that model's page, not Exa; the
-> `openrouter:web_search` Exa server-tool path is **$0.007**/request for
-> auto/instant/fast modes per [OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search),
-> 10 results included, +$0.001/extra, but is unreachable from production pools) go through
-> `OPENROUTER_API_KEY`. **Frontier models are rejected** (`openai/*`,
+> pinned set, and `apply_digiquant_house_env()` (portfolio chain startup) points
+> the default client at the house upstream. Every LLM call and the web
+> grounding pre-pass (completion synthesis over the tier's `web_search_models`)
+> go through the house key. **Frontier models are rejected** (`openai/*`,
 > `anthropic/*`, GPT-5.x, Claude Opus/Sonnet, o-series — see
 > `digigraph.model_config.is_flagship_openrouter_model`); phases pass **pinned**
-> `openrouter/<vendor>/<model>` strings, not `openrouter/auto`.
+> model slugs, not `openrouter/auto`.
 >
 > This replaced the earlier **Gemini free tier** (10 RPM / per-minute token caps
 > broke the daily workflows, #569 / #570 / #572) and the interim all-`xai/grok`
@@ -224,7 +219,7 @@ simulator delta run via `atlas_run_diagnostics`.
 Research phases run a **tool loop** so the model fetches real data on demand instead of asserting from priors. This adds round-trips and (for Live Search) per-request billing — accounted for here:
 
 - **digiquant data tools** (`get_price_technicals` / `get_macro_series`): each tool call is a Supabase read + an extra LLM round-trip carrying the tool result. Bounded by `max_tool_rounds` (default 5). Cost scales with how many symbols/series a phase queries; the prompts name a finite set per phase.
-- **Web grounding (xAI Agent Tools `web_search`)**: a single read-only **pre-pass** per `live_search` phase via the Responses API (`responses.create`) — one extra billed search call before the phase's normal completion (not per tool-round). `max_search_results` is capped via `config/search_domains.yaml` (default 8). Gated to phases that need soft signals (macro + all alt-/inst- + international). Replaced the deprecated chat-completions `search_parameters` Live Search (xAI HTTP 410).
+- **Web grounding (completion synthesis)**: a single read-only **pre-pass** per `live_search` phase — a plain digillm completion over in-house retrieval context (no vendor search tooling), one extra call before the phase's normal completion (not per tool-round). Gated to phases that need soft signals (macro + all alt-/inst- + international).
 - **Kill-switch**: set `ATLAS_DATA_TOOLS=0` to disable all tool grounding (falls back to the tool-less structured call) for cost-controlled or offline runs.
 
 ---

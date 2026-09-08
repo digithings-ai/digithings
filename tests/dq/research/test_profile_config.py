@@ -40,6 +40,8 @@ def test_house_profile_is_immutable_default() -> None:
     assert cfg.profile_key == HOUSE_PROFILE_KEY
     assert cfg.version_id == HOUSE_VERSION
     assert cfg.schema_version == 1
+    assert cfg.pipeline_schedule is not None
+    assert cfg.execution_policy is not None
 
 
 def test_overlay_cannot_claim_house_key() -> None:

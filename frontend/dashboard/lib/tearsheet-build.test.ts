@@ -268,7 +268,9 @@ describe('buildPerformanceTearsheet', () => {
     expect(result.benchmarkReturnPct).toBe(2);
     expect(result.relativeReturnPct).toBe(4);
     expect(result.returnsSource).toBe('derived');
-    expect(result.metricsAsOf).toBe('2026-07-17');
+    // No portfolio_metrics row — do not stamp metricsAsOf from the NAV tip.
+    expect(result.metricsAsOf).toBeNull();
+    expect(result.navContract).toBe('legacy_estimate');
   });
 
   it('partitions full attribution history by the latest current book', () => {

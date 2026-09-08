@@ -3,10 +3,13 @@ import type { NextConfig } from "next";
 import {
   DIGICHAT_APP_SECURITY_HEADERS,
   DIGICHAT_EMBED_BAKED_SECURITY_HEADERS,
-} from "./src/lib/security-headers";
+} from "./src/lib/security-headers-bake";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Separate `next dev` lock when previewing a second config (e.g. a baked skin YAML)
+  // without stopping the dogfood server on :3005.
+  distDir: process.env.DIGICHAT_DIST_DIR || ".next",
   // Serve under a subpath when set (e.g. /chat for digithings.ai/chat). Unset →
   // root, so self-host (`make up-digichat`), local dev, and the legacy deploy are
   // unchanged. Must match NEXT_PUBLIC_DIGICHAT_BASE_PATH (see src/lib/base-path.ts).

@@ -50,17 +50,31 @@ export function accountingNavToHistoryShape(row: AccountingNavRow): {
 }
 
 /**
- * Dominant series label for UI badges: finalized when any finalized row exists,
- * otherwise legacy. Never invents a mixed unlabeled value.
+ * Provenance of one NAV row. Unlabeled rows are estimates — never finalized.
  */
-export function navSeriesContractLabel(
-  rows: Array<{ source?: string | null; contract?: string | null }>
-): 'finalized_accounting' | 'legacy_estimate' | 'empty' {
-  if (!rows.length) return 'empty';
-  if (rows.some((r) => r.source === 'finalized_accounting' || r.contract === 'finalized_accounting')) {
+export function navRowContractLabel(row: {
+  source?: string | null;
+  contract?: string | null;
+}): 'finalized_accounting' | 'legacy_estimate' {
+  if (row.contract === 'finalized_accounting' || row.source === 'finalized_accounting') {
     return 'finalized_accounting';
   }
   return 'legacy_estimate';
+}
+
+/**
+ * Badge for the displayed NAV tip (latest dated row). Historical finalized
+ * rows must not relabel a legacy-estimate tip as finalized accounting.
+ */
+export function navSeriesContractLabel(
+  rows: Array<{ date?: string | null; source?: string | null; contract?: string | null }>
+): 'finalized_accounting' | 'legacy_estimate' | 'empty' {
+  if (!rows.length) return 'empty';
+  const dated = rows.filter((r) => typeof r.date === 'string' && r.date.length > 0);
+  const tip = dated.length
+    ? [...dated].sort((a, b) => String(a.date).localeCompare(String(b.date))).at(-1)
+    : rows[rows.length - 1];
+  return navRowContractLabel(tip!);
 }
 
 /**

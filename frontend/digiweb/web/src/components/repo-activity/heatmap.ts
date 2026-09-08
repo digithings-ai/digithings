@@ -4,9 +4,11 @@ export type HeatDay = { date: string; count: number };
 
 const DAY_MS = 86_400_000;
 
-/** `2026-08-21T17:35:10Z` → `2026-08-21`; empty string when absent. */
+/** Stamp → UTC calendar day (`2026-08-21T00:30:00+02:00` → `2026-08-20`); "" when absent. */
 function dayOf(stamp: string | null | undefined): string {
-  return stamp ? stamp.slice(0, 10) : "";
+  if (!stamp) return "";
+  const ms = Date.parse(stamp);
+  return Number.isNaN(ms) ? "" : isoOf(ms);
 }
 
 function toUtcMidnight(d: Date): number {

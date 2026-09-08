@@ -1,9 +1,9 @@
 # Phase D — free-source ingestion replaces paid agentic search
 
-> **Superseded (2026-06):** dashboard web grounding now uses OpenRouter
-> `openrouter:web_search` (Exa engine) via `OPENROUTER_API_KEY` only — see
-> `config/digiquant_models.yaml` `grounding_model` and `RUNBOOK.md`. The xAI
-> cost baseline below is historical context for Phase D ingestion work.
+> **Superseded (2026-06, updated):** dashboard web grounding is now a plain
+> completion-synthesis pre-pass over in-house retrieval (no vendor search
+> tooling) — see `web_grounding.py` and `RUNBOOK.md`. The xAI cost baseline
+> below is historical context for Phase D ingestion work.
 
 **Goal:** cut a daily delta run from ~$3 to **<$1** *without reducing research
 capability* (owner directive: optimize/replace, never narrow). ~$2.44 of the

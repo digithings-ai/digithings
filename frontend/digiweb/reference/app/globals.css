@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
 @import "@digithings/design/tokens.css";
 @import "@digithings/web/styles/web-theme.css";
 @import "@digithings/web/styles/docs.css";
@@ -11,7 +11,6 @@
 @import "@digithings/web/styles/terminal-manifest.css";
 @import "@digithings/web/styles/chat-core.css";
 @import "@digithings/web/styles/chat-widgets.css";
-@import "@digithings/web/styles/digichat-launcher.css";
 @import "@digithings/web/styles/controls-core.css";
 @import "@digithings/web/styles/controls-overlay.css";
 @import "@digithings/web/styles/finance-composites.css";
@@ -25,10 +24,18 @@
 @import "@digithings/web/styles/effects-chrome.css";
 @import "@digithings/web/styles/command-palette.css";
 @import "@digithings/web/styles/account-auth.css";
+@import "tw-shimmer";
+@import "tw-animate-css";
 
 /* Shared components (@digithings/web) carry token-backed utilities, and
    Tailwind never scans package sources on its own — point it at them
-   explicitly. */
+   explicitly. Auto-detect is off: a nested worktree's CWD/lockfile walk
+   would otherwise scan the parent monorepo and sibling worktrees. */
+@source "./(gallery)";
+@source "../components";
+@source not "../components/assistant-ui";
+@source not "../components/ui";
+@source not "../components/chatbot";
 @source "../../web/src/components/docs";
 @source "../../web/src/components/NavShell.tsx";
 @source "../../web/src/components/pricing";
@@ -599,4 +606,50 @@ html {
   .btn-spinner {
     animation: none !important;
   }
+}
+
+@custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
+
+@custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
+
+@theme inline {
+  @keyframes collapsible-down {
+  from {
+    height: 0;
+    }
+  to {
+    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    }
+  }
+  @keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    }
+  to {
+    height: 0;
+    }
+  }
+}
+
+/* assistant-ui Thread uses shadcn token names. Point them at digiweb tokens
+   so theme/livery toggles restyle the registry Thread without a second palette. */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--on-accent);
+  --color-secondary: var(--surface-2);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--surface);
+  --color-muted-foreground: var(--ink-mute);
+  --color-accent-foreground: var(--on-accent);
+  --color-destructive: var(--danger);
+  --color-border: var(--hair);
+  --color-input: var(--hair);
+  --color-ring: var(--accent);
+  --color-input-background: var(--surface);
 }
