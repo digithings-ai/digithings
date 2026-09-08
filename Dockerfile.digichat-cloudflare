@@ -25,6 +25,8 @@ ENV NEXT_PUBLIC_DIGICHAT_ASSET_PREFIX=$DIGICHAT_ASSET_PREFIX
 COPY --from=deps /app ./
 COPY frontend/digiweb/design ./frontend/digiweb/design
 COPY frontend/digiweb/web ./frontend/digiweb/web
+# Product skin @imports gallery chatbot.css from outside web/ (#3717).
+COPY ["frontend/digiweb/reference/app/(chatbot)/chatbot/chatbot.css", "frontend/digiweb/reference/app/(chatbot)/chatbot/chatbot.css"]
 COPY frontend/digichat-ui ./frontend/digichat-ui
 COPY frontend/digichat ./frontend/digichat
 # Alpine musl bindings for lockfile platforms that resolve to glibc on some hosts

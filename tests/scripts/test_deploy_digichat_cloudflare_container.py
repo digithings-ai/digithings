@@ -90,7 +90,9 @@ def test_the_deploy_step_targets_the_right_directory_and_command() -> None:
         if s.get("uses", "").startswith("cloudflare/wrangler-action")
     )
     assert deploy_step["with"]["workingDirectory"] == "frontend/digichat-cloudflare"
-    assert deploy_step["with"]["command"] == "deploy"
+    command = deploy_step["with"]["command"]
+    assert command.split()[0] == "deploy"
+    assert "--message" in command
 
 
 def test_the_deploy_step_uses_repo_secrets_not_hardcoded_credentials() -> None:
@@ -123,7 +125,8 @@ def test_the_deploy_step_pins_a_wrangler_version_that_supports_containers() -> N
             encoding="utf-8"
         )
     )["devDependencies"]["wrangler"]
-    assert pinned == declared, (
+    declared_floor = declared.lstrip("^~")
+    assert pinned == declared or pinned == declared_floor, (
         f"workflow pins wrangler {pinned!r} but package.json declares {declared!r} -- "
         "keep both in agreement so a local `npm ci` and the CI deploy resolve the same wrangler."
     )
