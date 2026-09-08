@@ -19,6 +19,7 @@
 import type { DigiChatActivity } from "@digithings/digichat-ui";
 import type { UIMessage } from "ai";
 
+/** @deprecated 1.4 wire type — 2.0 does not emit this. Kept to hydrate old transcripts. */
 export const ACTIVITY_PART_TYPE = "data-digichatActivity" as const;
 
 export const MAX_LABEL_CHARS = 200;
@@ -254,6 +255,143 @@ export function chatActivitySpan(
 
 const KEY_SEP = "\x1f";
 const toolKey = (name: string, query: string) => `${name}${KEY_SEP}${query}`;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * Rebuild ActivitySpan[] from 2.0 standard UI parts (tool / source / reasoning /
+ * data-status). Used so markdown export / legacy hydrate keep working without
+ * branded wire types.
+ */
+export function standardPartsToSpans(
+  parts: UIMessage["parts"],
+): ActivitySpan[] {
+  const spans: ActivitySpan[] = [];
+  let sawRetrieve = false;
+
+  for (const part of parts) {
+    if (part.type === "reasoning") {
+      const text = "text" in part && typeof part.text === "string" ? part.text : "";
+      if (text) {
+        spans.push({
+          operation: "chat",
+          status: "completed",
+          label: "Thinking",
+          reasoningDelta: text,
+        });
+      }
+      continue;
+    }
+
+    if (part.type === "data-status") {
+      const data = "data" in part ? part.data : undefined;
+      if (!isRecord(data)) continue;
+      const label = typeof data.label === "string" ? data.label : "activity";
+      const status: ActivitySpan["status"] =
+        data.status === "failed" || data.status === "started" || data.status === "completed"
+          ? data.status
+          : "completed";
+      const span: ActivitySpan = { operation: "chat", status, label };
+      if (isRecord(data.brief)) {
+        const briefVal = brief(data.brief);
+        if (briefVal) span.brief = briefVal;
+      }
+      spans.push(span);
+      continue;
+    }
+
+    if (
+      part.type === "dynamic-tool" ||
+      (typeof part.type === "string" && part.type.startsWith("tool-"))
+    ) {
+      const name =
+        part.type === "dynamic-tool"
+          ? ("toolName" in part && typeof part.toolName === "string" && part.toolName
+              ? part.toolName
+              : "tool")
+          : part.type.slice("tool-".length) || "tool";
+      const input = "input" in part && isRecord(part.input) ? part.input : {};
+      const output = "output" in part && isRecord(part.output) ? part.output : undefined;
+      const state = "state" in part ? String(part.state) : "";
+      const queryRaw = output?.query ?? input.query;
+      const query = typeof queryRaw === "string" ? queryRaw : undefined;
+      const label =
+        (typeof output?.label === "string" && output.label) ||
+        (typeof input.label === "string" && input.label) ||
+        name;
+
+      if (
+        output &&
+        (Array.isArray(output.documents) ||
+          output.documentsWithheld === true ||
+          typeof output.hitCount === "number")
+      ) {
+        sawRetrieve = true;
+        const docs = documents(output.documents);
+        const span: ActivitySpan = {
+          operation: "retrieve",
+          status: output.status === "failed" ? "failed" : "completed",
+          label,
+          toolName: name,
+        };
+        if (query) span.query = query;
+        if (docs) span.documents = docs;
+        if (output.documentsWithheld === true) span.documentsWithheld = true;
+        if (typeof output.hitCount === "number" && Number.isFinite(output.hitCount) && output.hitCount > 0) {
+          span.hitCount = Math.trunc(output.hitCount);
+        }
+        spans.push(span);
+        continue;
+      }
+
+      const status: ActivitySpan["status"] =
+        output?.status === "failed"
+          ? "failed"
+          : output?.status === "completed" || state === "output-available"
+            ? "completed"
+            : "started";
+      const span: ActivitySpan = { operation: "execute_tool", status, label, toolName: name };
+      if (query) span.query = query;
+      spans.push(span);
+      continue;
+    }
+  }
+
+  if (!sawRetrieve) {
+    const docs: ActivityDocument[] = [];
+    for (const part of parts) {
+      if (part.type === "source-url") {
+        const url = "url" in part && typeof part.url === "string" ? part.url : "";
+        const title =
+          "title" in part && typeof part.title === "string" && part.title
+            ? part.title
+            : url;
+        if (url) docs.push({ title, path: url });
+      } else if (part.type === "source-document") {
+        const filename =
+          "filename" in part && typeof part.filename === "string" ? part.filename : "";
+        const title =
+          "title" in part && typeof part.title === "string" && part.title
+            ? part.title
+            : filename || "document";
+        const path = filename || title;
+        docs.push({ title, path });
+      }
+    }
+    if (docs.length) {
+      spans.push({
+        operation: "retrieve",
+        status: "completed",
+        label: "Sources",
+        documents: docs,
+      });
+    }
+  }
+
+  return spans;
+}
 
 export type ToDigiChatActivityOptions = {
   /**
@@ -514,6 +652,9 @@ export function messageActivities(
   message: UIMessage,
   opts: ToDigiChatActivityOptions = {},
 ): DigiChatActivity[] {
+  const standard = standardPartsToSpans(message.parts);
+  if (standard.length) return toDigiChatActivity(standard, opts);
+
   const spans = message.parts
     .filter(
       (part): part is { type: typeof ACTIVITY_PART_TYPE; data: unknown } =>

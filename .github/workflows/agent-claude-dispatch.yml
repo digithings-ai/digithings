@@ -20,6 +20,12 @@ on:
   issues:
     types: [labeled, opened, reopened]
 
+# Same per-issue serialization as the cursor-dispatch workflow (duplicate
+# delivery of opened+labeled in the same second).
+concurrency:
+  group: claude-dispatch-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   issues: write
@@ -105,6 +111,13 @@ jobs:
           BRANCH:       ${{ steps.meta.outputs.branch }}
           TEST_CMD:     ${{ steps.meta.outputs.test_cmd }}
         run: |
+          # Re-check immediately before posting (concurrent duplicate delivery).
+          LAST_NOTE=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json comments \
+            --jq '[.comments[] | select(.body | contains("Claude tier")) | .createdAt] | max // empty')
+          if [[ -n "$LAST_NOTE" ]] && [[ "$LAST_NOTE" > "$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)" ]]; then
+            echo "Instructions appeared while queued ($LAST_NOTE) — skipping duplicate."
+            exit 0
+          fi
           gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "\
           **Claude tier — human-supervised, local only**
 

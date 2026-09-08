@@ -201,11 +201,10 @@ gen-api-vault:
 agents-init:
 	python3 scripts/agents_init.py
 
-# Validate research providers and graph compilation before triggering a real run.
-# Pings OpenRouter (connectivity, structured output, function tools, web search),
-# checks Supabase baseline row, and runs --dry-run.
+# Validate research env + Supabase baseline row + graph compilation before a real run.
+# Fail-fast house: no provider pings — provider errors surface from the real run.
 # Usage: make research-validate              (full check)
-#        make research-validate SKIP=--skip-llm   (env + DB + dry-run only)
+#        make research-validate SKIP=--skip-db   (env + dry-run only)
 research-validate:
 	python3 digiquant/scripts/research/validate-providers.py $(SKIP)
 
@@ -223,6 +222,19 @@ score:
 # Run this before `make score` to catch incremental quality slippage early.
 score-delta:
 	python3 scripts/score_delta.py
+
+# Repo-health panel for housekeeping shifts (advisory only — never a gate, never a pre-flight).
+# Prints 8 metric rows and exits 0. Use readiness-write to refresh docs/agents/READINESS.md.
+readiness:
+	python3 scripts/readiness.py $(ARGS)
+
+readiness-write:
+	python3 scripts/readiness.py --write
+
+# Visual dashboard artifact (gitignored build output). Regenerate and open locally;
+# bots can quote `make readiness ARGS=--format=json` and point at this file.
+readiness-html:
+	mkdir -p dist && python3 scripts/readiness.py --format html > dist/readiness.html && python3 -c "import webbrowser; webbrowser.open('dist/readiness.html')" || true
 
 # Detect unused Python imports with ruff (dry-run by default; set APPLY=1 to fix in-place)
 clean-imports:

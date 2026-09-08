@@ -15,7 +15,9 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from digiquant.profiles.asset_preferences import AssetPreferences
+from digiquant.profiles.execution_policy import ExecutionPolicy
 from digiquant.profiles.investment_profile import InvestmentProfile
+from digiquant.profiles.pipeline_schedule import PipelineSchedule
 
 HOUSE_PROFILE_KEY = "house"
 # Frozen identity string (migration 075). Do not rename with the package.
@@ -50,6 +52,8 @@ class ProfileConfig(BaseModel):
     research_budget_usd: Decimal | None = Field(default=None, ge=0)
     investment: InvestmentProfile | None = None
     assets: AssetPreferences | None = None
+    pipeline_schedule: PipelineSchedule | None = None
+    execution_policy: ExecutionPolicy | None = None
 
     @field_validator("watchlist", "themes", mode="before")
     @classmethod
@@ -109,6 +113,8 @@ def house_profile_config(*, schema_version: int = 1) -> ProfileConfig:
             esg_preference="none",
             experience_level="intermediate",
         ),
+        pipeline_schedule=PipelineSchedule.daily_defaults(),
+        execution_policy=ExecutionPolicy.defaults(),
     )
 
 

@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:75c3aaf6de862a88963ace5bf238db08b31a00bc49907afea80a284d3b953165",
+  "claims": [
+    {
+      "id": "claim_0b7fef078ce14f44b7408295c5c8addd",
+      "statement": "Group A book reads go through houseBook(), which pins the house workspace_id so overlay rows never seed the public book; shared teasers without workspace_id stay date-only.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/dashboard/lib/house-workspace.test.ts#L28-L48",
+          "version": "repo-lines-v1:sha256:0e039ee0519738c8735e177b970b7b7ca2552c241dff01f8dc419dd3c217dc0a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxOTNhOTVkMGE2MjZjZjQyMTMyZWNkM2UyOWMxYzQ2M2NmYWM5Y2ZiYTYzZWM0MmRmZmY2ODBkOTE2ODBhMjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiMDFhNzMwMDQzMjVlYzhkZGUwMjBiZGM5ZjBhMzUwMmI1NDc1OThkNjJkYjRlZDI0NDY3OWI4OGI3OGUzZjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY2NTIxNmJhZjI5OTVlOWQ4ZDQ3ZjA0NWE4N2VhMjNiZWMyOTY2MWU1NDM4OGQzN2U2NGZiZDNhZTZkNDlhZWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI2MzE1ZmYyNDVlY2NjMWRmYjNiMjhlMTQyMjI5MmRmZjg2MDU4N2Q3ZmVkZjM5Yzc1YmM5MzRjY2M3ZWNmNjcifQ"
+        },
+        {
+          "resource": "repo://frontend/dashboard/lib/house-workspace.ts#L1-L30",
+          "version": "repo-lines-v1:sha256:3b87f42d1779b197e833cbcdebe0bacfb733355e99daa982df567cfe83689264:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA1MzU2ZjlkYzczMmIzMTYzZDQxMDIyMjM2NmUwNDQ3MzkzYmFjMWM4YjA5NjJhM2IyNjFmYmM2OTA2ZGJiNWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc2MjQxNjU4MDFiNDZmNDY4ZjFhMzNkNGJiNDlhODg4ZDUzOTJhMzAxYTM5ZWE1NzQzYjdjZjE4OGE4NGRkNjAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_154eff4286b74ea6a21812bb87a8f891",
+      "statement": "The performance tearsheet reads the public_accounting_nav_history view (finalized tips plus labeled legacy estimates) with rollback to legacy views by repointing constants.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/dashboard/README.md#L30-L60",
+          "version": "repo-lines-v1:sha256:2db9e0f7f79362d936074477d3f2e2df01bfdf974a1b6cfb18c703903385a454:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2YTg3MzYxN2JhZTI2Y2I5MGVlMWQ4ZThiZTRkZDY1MmJiYWFlMWQyMGJkN2E0ODVlMDE4MTliZjE3MDM2ZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ2NmIxMTkxMThlOTliOTQ2N2I5OGJlNWFiMDNlOGM5NWI3ZGQ1YWU1YWE2NWE0NTgzMWY0NmIwZDJlZDA2ZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2NjMxOGY0ZjIzZjRiMDdjYjQwZTIwOGJkNWJlODg3Mzc2OTRlNGU2YzNiZDE0ZmNhYTlkOWIwNjE2YjlhMDYifQ"
+        },
+        {
+          "resource": "repo://frontend/dashboard/lib/accounting-views.ts#L1-L30",
+          "version": "repo-lines-v1:sha256:c4e8400db2ae9986077adf2267e241504205a2834237e7a6286dfa9a75210563:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVhNTc4M2Y4MjlmYjAxNWUxOTc2ZTg5N2ZlNDYxMmU5Njc2N2Y4MWY2YTIxZDMxZDA5YzNjZmJlZmVjZTk4ZmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY5ZjRiM2I0OTY3N2ViMDBhMmNmZTc2NWQzZDkzNTNkNzNmNmRjY2MyZmE4MTRmNDA5MDcyMTkzMGNmOGQ5ZDMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_dc7f3e2ee1de498db5a2f4c9ce474c5f",
+      "statement": "Open-book Unrealized prefers stored unrealized_pnl_pct/since_entry_return_pct, derives from entry vs current price otherwise, fills missing marks from price_history stamped with that close date, and fails closed to em-dash without basis or mark.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/dashboard/README.md#L30-L60",
+          "version": "repo-lines-v1:sha256:2db9e0f7f79362d936074477d3f2e2df01bfdf974a1b6cfb18c703903385a454:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2YTg3MzYxN2JhZTI2Y2I5MGVlMWQ4ZThiZTRkZDY1MmJiYWFlMWQyMGJkN2E0ODVlMDE4MTliZjE3MDM2ZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ2NmIxMTkxMThlOTliOTQ2N2I5OGJlNWFiMDNlOGM5NWI3ZGQ1YWU1YWE2NWE0NTgzMWY0NmIwZDJlZDA2ZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2NjMxOGY0ZjIzZjRiMDdjYjQwZTIwOGJkNWJlODg3Mzc2OTRlNGU2YzNiZDE0ZmNhYTlkOWIwNjE2YjlhMDYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_08e3eb90e14f46f994be80aaa7b9d3d1",
+      "statement": "Ledger is the single source of truth for OPEN/ADD/EXIT/TRIM fills with avg entry, fill price, and realized pct vs average entry; the tearsheet links there instead of duplicating closed positions.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/dashboard/README.md#L30-L60",
+          "version": "repo-lines-v1:sha256:2db9e0f7f79362d936074477d3f2e2df01bfdf974a1b6cfb18c703903385a454:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2YTg3MzYxN2JhZTI2Y2I5MGVlMWQ4ZThiZTRkZDY1MmJiYWFlMWQyMGJkN2E0ODVlMDE4MTliZjE3MDM2ZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ2NmIxMTkxMThlOTliOTQ2N2I5OGJlNWFiMDNlOGM5NWI3ZGQ1YWU1YWE2NWE0NTgzMWY0NmIwZDJlZDA2ZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2NjMxOGY0ZjIzZjRiMDdjYjQwZTIwOGJkNWJlODg3Mzc2OTRlNGU2YzNiZDE0ZmNhYTlkOWIwNjE2YjlhMDYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_dd603fcd79884867962fc117988830c0",
+      "statement": "Attribution defaults to a direction-adjusted decision-effectiveness monitor with book attribution and audit siblings, calibration gated on two buckets of 10 independent decisions, and audit paged at 25 rows.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/dashboard/README.md#L30-L60",
+          "version": "repo-lines-v1:sha256:2db9e0f7f79362d936074477d3f2e2df01bfdf974a1b6cfb18c703903385a454:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2YTg3MzYxN2JhZTI2Y2I5MGVlMWQ4ZThiZTRkZDY1MmJiYWFlMWQyMGJkN2E0ODVlMDE4MTliZjE3MDM2ZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ2NmIxMTkxMThlOTliOTQ2N2I5OGJlNWFiMDNlOGM5NWI3ZGQ1YWU1YWE2NWE0NTgzMWY0NmIwZDJlZDA2ZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2NjMxOGY0ZjIzZjRiMDdjYjQwZTIwOGJkNWJlODg3Mzc2OTRlNGU2YzNiZDE0ZmNhYTlkOWIwNjE2YjlhMDYifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

@@ -77,8 +77,8 @@ review.
 
 ## Shared primitives first
 
-Before writing new UI, check `frontend/digiweb/MANIFEST.json` (90 components,
-14 families) and `@digithings/web` exports: NavShell, Footer/Colophon,
+Before writing new UI, check `frontend/digiweb/MANIFEST.json` (106 components,
+15 families) and `@digithings/web` exports: NavShell, Footer/Colophon,
 DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages,
 PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family (ChatTranscript/
 ChatMessage/ChatMarkdown/ChatToolCall/…), the controls layer (Button/Badge/

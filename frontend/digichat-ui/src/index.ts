@@ -1,8 +1,5 @@
-export { DigiChatSession } from "./DigiChatSession";
-export { useStreamingIntro } from "./useStreamingIntro";
 export { CopyButton } from "./components/CopyButton";
 export { DigiChatMark, DigiChatWordmark } from "./components/DigiChatMark";
-export { ChatActivities } from "./components/ChatActivities";
 export { MiniMarkdown } from "./components/MiniMarkdown";
 export { DocumentPane } from "./components/DocumentPane";
 export {
@@ -42,16 +39,23 @@ export {
 export {
   parseSlashInput,
   matchingSlashCommands,
+  slashHelpText,
+  nextPaletteIndex,
+  formatCliSettingLine,
+  isLangCode,
   SLASH_COMMANDS,
+  LANG_CODES,
   LANG_LABELS,
+  LANG_CHOICES,
   type SlashDef,
+  type SlashId,
+  type SlashVisibility,
+  type CliSettingRow,
+  type LangCode,
 } from "./slash-commands";
 export type {
   DigiChatActivity,
-  DigiChatBranding,
   DigiChatController,
   DigiChatMessage,
-  DigiChatSessionConfig,
-  DigiChatSessionProps,
   VaultHitSummary,
 } from "./types";

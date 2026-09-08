@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const accountRef = join(here, "../../../../reference/components/account");
-const accountPage = join(here, "../../../../reference/app/account/page.tsx");
+const accountPage = join(here, "../../../../reference/app/(gallery)/account/page.tsx");
 
 const FORBIDDEN = [
   /reply\s*[abc]/i,

@@ -1,5 +1,8 @@
 "use client";
 
+/** CLI / session / terminal sheets — only for persistence:server ChatShell. */
+import "@/styles/chat-shell-cli.css";
+
 /**
  * ChatShell — authenticated chat chrome for digichat.
  *
@@ -14,7 +17,7 @@
  *   - Local + remote thread state + debounced server save
  *   - Conversation hydration on demand
  *   - Auth.js session via props
- *   - BYOK / streaming / trace rendering all live in ChatPanel
+ *   - BYOK / streaming / transport live in ChatPanel; transcript chrome is ProductStockShell
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -43,6 +46,7 @@ import {
 } from "@/lib/thread-local";
 import { cn } from "@/lib/utils";
 import { p } from "@/lib/base-path";
+import type { DigichatClientConfig } from "@/lib/deploy-config";
 
 type RemoteSummary = { id: string; title: string; updatedAt: string };
 
@@ -60,12 +64,14 @@ async function fetchConversationBody(
 
 const SLASH_REFERENCE: Array<{ cmd: string; hint: string }> = [
   { cmd: "/help", hint: "list commands" },
-  { cmd: "/key", hint: "BYOK (CLI)" },
+  { cmd: "/byok", hint: "BYOK (CLI)" },
+  { cmd: "/websearch", hint: "toggle web search" },
+  { cmd: "/settings", hint: "CLI settings panel" },
   { cmd: "/model", hint: "<id>" },
   { cmd: "/clear", hint: "clear thread" },
   { cmd: "/scope", hint: "show JWT scopes" },
   { cmd: "/history", hint: "focus sidebar" },
-  { cmd: "/settings", hint: "alias for /key" },
+  { cmd: "/key", hint: "alias for /byok" },
 ];
 
 function formatTimestamp(iso: string): string {
@@ -78,10 +84,12 @@ export function ChatShell({
   userId,
   userEmail,
   displayName,
+  clientConfig,
 }: {
   userId: string;
   userEmail?: string | null;
   displayName?: string | null;
+  clientConfig?: DigichatClientConfig;
 }) {
   const [threads, setThreads] = useState<ChatThreadState[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -90,6 +98,12 @@ export function ChatShell({
   const [collapsed, setCollapsed] = useState(false);
   const [byokMode, setByokMode] = useState(false);
   const [threadQuery, setThreadQuery] = useState("");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  // Tracks whether the active rename gesture already resolved (Enter/Escape)
+  // so the input's onBlur — which also fires on unmount — doesn't commit
+  // after a cancel or double-commit after Enter.
+  const renameHandledRef = useRef(false);
 
   const threadsRef = useRef(threads);
   useEffect(() => {
@@ -230,6 +244,7 @@ export function ChatShell({
       }
       setActiveId(id);
       setByokMode(false);
+      setRenamingId(null);
     },
     [threads],
   );
@@ -253,6 +268,7 @@ export function ChatShell({
     });
     setActiveId(id);
     setByokMode(false);
+    setRenamingId(null);
   }, [userId]);
 
   const deleteThread = useCallback(
@@ -287,6 +303,7 @@ export function ChatShell({
         });
         return next;
       });
+      setRenamingId(null);
     },
     [serverPersistence, userId],
   );
@@ -305,6 +322,22 @@ export function ChatShell({
       scheduleServerSave(id);
     },
     [userId, scheduleServerSave],
+  );
+
+  const cancelRename = useCallback(() => {
+    renameHandledRef.current = true;
+    setRenamingId(null);
+  }, []);
+  const commitRename = useCallback(
+    (id: string, currentTitle: string, draft: string) => {
+      renameHandledRef.current = true;
+      const next = draft.trim();
+      // Dirty check: equal/empty drafts close without a write (no reorder,
+      // no PUT for a no-op).
+      if (next && next !== currentTitle) renameThread(id, next);
+      setRenamingId(null);
+    },
+    [renameThread],
   );
 
   const clearActiveThread = useCallback(() => {
@@ -410,7 +443,11 @@ export function ChatShell({
   }
 
   return (
-    <div className={cn("app-shell", collapsed && "app-shell-sidebar-collapsed")}>
+    <div
+      className={cn("app-shell", collapsed && "app-shell-sidebar-collapsed")}
+      data-thread-skin={clientConfig?.chrome.skin}
+      data-chrome-mode={clientConfig?.chrome.mode ?? "app"}
+    >
       <aside className="app-sidebar" aria-label="App sidebar" data-expanded={!collapsed}>
         <div className="app-sidebar-body">
           <div className="dc-sidebar-brand">
@@ -461,7 +498,41 @@ export function ChatShell({
                         tabIndex={0}
                         aria-pressed={t.id === activeId}
                       >
-                        <span className="dc-sidebar-thread-title">{t.title}</span>
+                        <span className="dc-sidebar-thread-title">
+                          {renamingId === t.id ? (
+                            <input
+                              className="dc-sidebar-rename"
+                              value={renameDraft}
+                              ref={(el) => {
+                                // No autoFocus: it scroll-jumps the sidebar.
+                                // Focus without scrolling once mounted.
+                                if (el && renamingId === t.id) el.focus({ preventScroll: true });
+                              }}
+                              maxLength={120}
+                              aria-label="Rename chat"
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  commitRename(t.id, t.title, renameDraft);
+                                } else if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  cancelRename();
+                                }
+                              }}
+                              onChange={(e) => setRenameDraft(e.target.value)}
+                              onBlur={() => {
+                                // Blur after Enter/Escape already resolved, or a
+                                // no-op draft: close without writing.
+                                if (renameHandledRef.current) return;
+                                commitRename(t.id, t.title, renameDraft);
+                              }}
+                            />
+                          ) : (
+                            t.title
+                          )}
+                        </span>
                         <span className="dc-sidebar-thread-time">{formatTimestamp(t.updatedAt)}</span>
                         <DropdownMenu>
                           <DropdownMenuTrigger
@@ -475,8 +546,9 @@ export function ChatShell({
                           <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem
                               onClick={() => {
-                                const next = window.prompt("Rename chat", t.title);
-                                if (next != null) renameThread(t.id, next);
+                                renameHandledRef.current = false;
+                                setRenamingId(t.id);
+                                setRenameDraft(t.title);
                               }}
                             >
                               <Pencil className="size-3.5" />
@@ -591,20 +663,7 @@ export function ChatShell({
               onAllowTruncate={allowTruncateForThread}
               byokMode={byokMode}
               onByokModeChange={setByokMode}
-              onSlashCommand={(cmd) => {
-                const [name] = cmd.trim().split(/\s+/);
-                if (name === "/clear") {
-                  clearActiveThread();
-                  return true;
-                }
-                if (name === "/history") {
-                  setCollapsed(false);
-                  const first = document.querySelector<HTMLElement>(".dc-sidebar-thread");
-                  first?.focus();
-                  return true;
-                }
-                return false;
-              }}
+              clientConfig={clientConfig}
             />
           )}
         </main>

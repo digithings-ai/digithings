@@ -10,11 +10,14 @@ import {
 } from "@/lib/digigraph";
 import { stripToolDumpFromAnswerDelta } from "@/lib/adapters/digithings/strip-tool-dump";
 import { coreMessagesToDigigraphOpenAi } from "@/lib/digigraph-messages";
-import {
-  ACTIVITY_PART_TYPE,
-  type ActivityDetail,
-} from "@/lib/chat-activity";
+import { type ActivityDetail } from "@/lib/chat-activity";
 import { mapDigigraphTraceToSpans } from "@/lib/adapters/digithings/activity";
+import {
+  createActivityWriteContext,
+  finishStandardActivity,
+  uiMessagesForUpstream,
+  writeStandardActivity,
+} from "@/lib/ui-stream-parts";
 import { BYOK_MODEL_REMEDIABLE_CODES } from "@/lib/embed-chat-error";
 
 export type DigigraphTracePayload = {
@@ -136,12 +139,14 @@ export async function createDigigraphTraceStreamResponse(opts: {
   /** AbortSignal from the inbound request — Stop must cancel the digigraph fetch (#3475). */
   signal?: AbortSignal;
 }) {
-  const stripped = opts.messages.map((m) => {
+  const stripped = uiMessagesForUpstream(opts.messages).map((m) => {
     const { id: _omit, ...rest } = m;
     void _omit;
     return rest;
   }) as Omit<UIMessage, "id">[];
-  const coreMessages = await convertToModelMessages(stripped);
+  const coreMessages = await convertToModelMessages(stripped, {
+    ignoreIncompleteToolCalls: true,
+  });
   const url = digigraphChatCompletionsUrl(opts.digigraphBaseUrl);
   const model = digigraphModelName();
 
@@ -151,7 +156,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
       let textSeq = 0;
       let textId = "assistant-main";
       writer.write({ type: "text-start", id: textId });
-      let activitySeq = 0;
+      const activityCtx = createActivityWriteContext();
       const bodyPayload: Record<string, unknown> = {
         model,
         messages: coreMessagesToDigigraphOpenAi(coreMessages),
@@ -257,14 +262,11 @@ export async function createDigigraphTraceStreamResponse(opts: {
           }
 
           for (const span of mapDigigraphTraceToSpans(payload, opts.activityDetail)) {
-            writer.write({
-              type: ACTIVITY_PART_TYPE,
-              id: `dg-activity-${activitySeq++}`,
-              data: span,
-            });
+            writeStandardActivity(writer, span, activityCtx);
           }
         }
       }
+      finishStandardActivity(writer, activityCtx);
       writer.write({ type: "text-end", id: textId });
     },
   });

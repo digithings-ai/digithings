@@ -56,10 +56,8 @@ import {
   type AccountingNavRow,
 } from './accounting-views';
 import {
-  digestItemsToStrings,
   extractDigestContextBullets,
-  parseActionableItems,
-  parseRiskItems,
+  resolveBriefFieldsFromDigest,
 } from './snapshot-context';
 import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
 import { getDocLibraryTier } from './library-doc-tier';
@@ -840,15 +838,27 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   // Fail closed: never drop NAV into [] when the contracted accounting view errors —
   // that previously rendered empty Performance charts as if the book had no history (#3029).
   assertAccountingNavQueryOk(navRes.error);
-  const navHistory: TableRow<'nav_history'>[] = (
-    (navRes.data ?? []) as AccountingNavRow[]
-  ).map((row) => {
+  const accountingNavRows = (navRes.data ?? []) as AccountingNavRow[];
+  const navHistory: TableRow<'nav_history'>[] = accountingNavRows.map((row) => {
     const shaped = accountingNavToHistoryShape(row);
     return {
       date: shaped.date,
       nav: shaped.nav,
       cash_pct: shaped.cash_pct,
       invested_pct: shaped.invested_pct,
+    };
+  });
+  // Keep contract/source/day_return on the dashboard snapshot series for Brief SSOT badges (#3580).
+  const navSnapshots = accountingNavRows.map((row) => {
+    const shaped = accountingNavToHistoryShape(row);
+    return {
+      date: shaped.date,
+      nav: Number(shaped.nav),
+      cash_pct: shaped.cash_pct != null ? Number(shaped.cash_pct) : null,
+      invested_pct: shaped.invested_pct != null ? Number(shaped.invested_pct) : null,
+      source: shaped.source,
+      contract: shaped.contract,
+      day_return_pct: row.day_return_pct != null ? Number(row.day_return_pct) : null,
     };
   });
   const metricsRow = metricsRes.data as TableRow<'portfolio_metrics'> | null;
@@ -1341,6 +1351,9 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     pipeline_observability = await fetchPipelineObservabilityForDate(dashboardDate);
   }
 
+  // #3641: structured Brief slots if present, else parse stitched markdown body.
+  const brief = resolveBriefFieldsFromDigest(digest);
+
   return {
     portfolio: {
       meta: {
@@ -1351,12 +1364,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
         benchmarks: Object.keys(benchmarks),
         latest_snapshot_run_type,
       },
-      snapshots: navHistory.map((h) => ({
-        date: h.date,
-        nav: Number(h.nav),
-        cash_pct: h.cash_pct != null ? Number(h.cash_pct) : null,
-        invested_pct: h.invested_pct != null ? Number(h.invested_pct) : null,
-      })),
+      snapshots: navSnapshots,
       strategy: {
         // Prefer the short `regime_label` string (e.g. "Risk-Off Consolidation")
         // over the full `market_regime_snapshot` paragraph — that is a multi-
@@ -1367,14 +1375,14 @@ export async function getFullDashboardData(): Promise<DashboardData> {
         //   → digest.headline (always-present one-liner)
         //   → 'Unknown' (safe final fallback; never the paragraph)
         regime: String(
-          digest.regime_label ?? regime.label ?? regime.regime ?? digest.headline ?? 'Unknown'
+          digest.regime_label ?? regime.label ?? regime.regime ?? brief.headline ?? 'Unknown'
         ),
         regime_label: String(regime.bias ?? regime.regime_label ?? digest.bias ?? 'neutral'),
-        summary: String(regime.summary ?? digest.headline ?? ''),
-        actionable: digestItemsToStrings(digest.actionable_summary),
-        risks: digestItemsToStrings(digest.risk_radar),
-        actionableItems: parseActionableItems(digest.actionable_summary),
-        riskItems: parseRiskItems(digest.risk_radar),
+        summary: String(regime.summary ?? brief.headline ?? ''),
+        actionable: brief.actionable,
+        risks: brief.risks,
+        actionableItems: brief.actionableItems,
+        riskItems: brief.riskItems,
         theses,
         next_review: 'Daily',
       },

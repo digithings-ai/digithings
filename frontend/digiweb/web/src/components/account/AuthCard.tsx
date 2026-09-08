@@ -1,3 +1,9 @@
+/** AuthCard — the shared sign-in / create-account card. Layouts `compact`,
+ *  `icons-first`, and `desk` share one email + password form with Google /
+ *  GitHub / X OAuth. Dress lives in `./styles/account-auth.css` (`.acct-*`);
+ *  the sign-up strength meter renders on desk-signup only. Consumers: the
+ *  dashboard login screen (compact) and the reference account-page specimens.
+ */
 "use client";
 
 import { type FormEvent, type ReactNode } from "react";
