@@ -38,7 +38,6 @@ import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
 import {
   buildProductSlashCommands,
   executeSlashDef,
-  matchSlashAllowingArgs,
   slashSubmitAction,
   visibilityFromPrefs,
 } from "@/lib/product-slash-commands";
@@ -187,7 +186,7 @@ export function DigichatSkin() {
       placeholder={placeholder}
       onComposerSubmit={onComposerSubmit}
       composerLayout={mode === "app" ? "expanded" : "compact"}
-      slash={enableSlash ? { ...slash, matcher: matchSlashAllowingArgs } : undefined}
+      slash={enableSlash ? slash : undefined}
     />
   );
 }
