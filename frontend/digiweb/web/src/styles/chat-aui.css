@@ -32,7 +32,10 @@
   --radius: 0;
   --radius-thread: 0;
   --composer-radius: 0;
-  font-family: var(--font-geist-mono, var(--font-mono), ui-monospace, monospace);
+  /* Gallery chatbot.css uses var(--font-mono). Catalog :root keeps IBM Plex. */
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 [data-thread-skin="digichat"] .digichat-composer textarea:focus,
@@ -80,7 +83,9 @@
   --primary: var(--ink);
   --primary-foreground: var(--bg);
   --ring: var(--accent);
-  font-family: var(--font-geist-mono, var(--font-mono), ui-monospace, monospace);
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
   background: var(--term-bg);
   color: var(--term-ink);
   max-width: var(--thread-max-width);

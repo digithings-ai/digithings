@@ -31,4 +31,12 @@ describe("gallery chatbot.css product share", () => {
     expect(css).not.toMatch(/^\s*\[data-slot="dialog-overlay"\]/m);
     expect(css).toMatch(/html:has\(\[data-thread-skin="digichat"\]\)/);
   });
+
+  it("remaps --font-mono to Geist on the product skin only", () => {
+    const aui = readFileSync(join(here, "../../styles/chat-aui.css"), "utf8");
+    const skinBlock = aui.slice(aui.indexOf('[data-thread-skin="digichat"]'));
+    expect(skinBlock).toMatch(
+      /--font-mono:\s*var\(--font-geist-mono\),\s*ui-monospace,\s*monospace/,
+    );
+  });
 });

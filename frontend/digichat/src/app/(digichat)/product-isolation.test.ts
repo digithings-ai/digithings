@@ -48,6 +48,7 @@ describe("product CSS isolation", () => {
   it("uses stock Inter theme tokens like the baseline preview", () => {
     const css = read("globals.css");
     expect(css).toMatch(/--font-sans:\s*var\(--font-inter\)/);
+    expect(css).toMatch(/--font-mono:\s*var\(--font-ibm-plex-mono\)/);
     expect(css).toMatch(/--background:\s*oklch\(1 0 0\)/);
   });
 
