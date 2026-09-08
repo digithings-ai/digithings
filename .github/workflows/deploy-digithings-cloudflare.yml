@@ -207,10 +207,11 @@ jobs:
           grep -q 'aria-label="digithings module manifest"' dist/index.html
           grep -q digithings.ai dist/CNAME
           # fonts self-hosted; no Google Fonts references in the export —
-          # except dist/openwiki, the openwiki visualizer (#3696), whose pinned
-          # jsDelivr scripts + Inter via Google Fonts are allowlisted under the
-          # /openwiki/* _headers exception (lib/security-headers.mjs).
-          ! grep -rq "fonts.googleapis.com" dist --exclude-dir=openwiki
+          # except the openwiki visualizer (#3696): dist/openwiki (pinned
+          # jsDelivr scripts + Inter via Google Fonts) and the /openwiki/*
+          # _headers exception itself (lib/security-headers.mjs + contract
+          # test own that rule). Both are allowlisted, nothing else may be.
+          ! grep -rq "fonts.googleapis.com" dist --exclude-dir=openwiki --exclude=_headers
 
       # The daily freshness probe in smoke-site.yml reads this stamp off the live
       # site (#1759). Validate the stamp the build just wrote with the same
