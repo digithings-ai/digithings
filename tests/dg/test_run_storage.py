@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 
 import pytest
+from digigraph.digistore import digistore_get, digistore_put
 from digigraph.run_storage import (
     resolve_dataset_ref,
     write_search_results,
@@ -34,7 +37,39 @@ def test_resolve_rejects_escape(tmp_path) -> None:
     """resolve_dataset_ref rejects path that escapes run_data_dir."""
     os.environ["DIGI_RUN_DATA_DIR"] = str(tmp_path)
     try:
-        with pytest.raises(ValueError, match="under run_data_dir|escape"):
+        with pytest.raises(ValueError, match="under run_data_dir|escape|session directory"):
             resolve_dataset_ref("sess1", "../../etc/passwd")
+    finally:
+        os.environ.pop("DIGI_RUN_DATA_DIR", None)
+
+
+@pytest.mark.unit
+def test_resolve_rejects_relative_cross_session(tmp_path) -> None:
+    """``../other_sess/...`` must not read another session's datasets."""
+    os.environ["DIGI_RUN_DATA_DIR"] = str(tmp_path)
+    try:
+        victim_ref = digistore_put("victim_sess", "search_1", [{"secret": "victim-row"}])
+        assert Path(victim_ref).exists()
+        with pytest.raises(ValueError, match="session directory"):
+            resolve_dataset_ref("attacker_sess", "../victim_sess/datasets/search_1.json")
+        with pytest.raises(ValueError, match="session directory"):
+            digistore_get("attacker_sess", "../victim_sess/datasets/search_1.json")
+    finally:
+        os.environ.pop("DIGI_RUN_DATA_DIR", None)
+
+
+@pytest.mark.unit
+def test_resolve_rejects_absolute_cross_session(tmp_path) -> None:
+    """Absolute dataset_ref from another session must be rejected."""
+    os.environ["DIGI_RUN_DATA_DIR"] = str(tmp_path)
+    try:
+        victim_ref = digistore_put("victim_sess", "search_1", [{"secret": "victim-row"}])
+        with pytest.raises(ValueError, match="session directory"):
+            resolve_dataset_ref("attacker_sess", victim_ref)
+        with pytest.raises(ValueError, match="session directory"):
+            digistore_get("attacker_sess", victim_ref)
+        # Same-session absolute ref still works (digistore_put return value).
+        same = digistore_get("victim_sess", victim_ref)
+        assert json.loads(same.read_text()) == [{"secret": "victim-row"}]
     finally:
         os.environ.pop("DIGI_RUN_DATA_DIR", None)

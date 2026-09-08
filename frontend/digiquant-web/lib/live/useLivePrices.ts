@@ -43,7 +43,7 @@ const COINBASE_WS_URL = "wss://ws-feed.exchange.coinbase.com";
  *
  * The per-instance suffix is load-bearing — do NOT collapse this back to a bare constant.
  * Two `useLivePrices` instances mount on the landing page (`LiveTickerRow` directly, and
- * `OlympusPortfolioPanel` via `useLivePortfolio`) against the same singleton client, and
+ * `LivePortfolioPanel` via `useLivePortfolio`) against the same singleton client, and
  * `RealtimeClient.channel()` DEDUPES BY TOPIC (realtime-js 2.104.0, RealtimeClient.js:305-316)
  * — it returns the existing channel rather than creating a second one. Both instances would
  * then `.on()` the same channel, but only the first `.subscribe()` does anything

@@ -56,10 +56,12 @@ vi.mock("ai", async () => {
     ...actual,
     convertToModelMessages: vi.fn(async (m: unknown[]) => m),
     streamText: vi.fn(() => ({
-      toUIMessageStreamResponse: vi.fn(({ headers }: { headers: Record<string, string> }) =>
-        new Response("stream", { status: 200, headers })
-      ),
+      stream: new ReadableStream({ start(c) { c.close(); } }),
     })),
+    toUIMessageStream: vi.fn(() => new ReadableStream({ start(c) { c.close(); } })),
+    createUIMessageStreamResponse: vi.fn(({ headers }: { headers?: HeadersInit }) =>
+      new Response("stream", { status: 200, headers }),
+    ),
     smoothStream: vi.fn(() => ({})),
   };
 });
@@ -72,8 +74,9 @@ import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
+import { resetChatRunLocksForTests } from "@/lib/chat-run-lock";
 import { EMBED_FREE_TURN_LIMIT } from "@/lib/embed-turn-limits";
-import { streamText } from "ai";
+import { streamText, createUIMessageStreamResponse } from "ai";
 
 describe("POST /api/chat", () => {
   const env = process.env;
@@ -89,8 +92,13 @@ describe("POST /api/chat", () => {
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
     resetEmbedTrialQuotaForTests();
-    vi.mocked(createFoundryStreamResponse).mockClear();
+    resetChatRunLocksForTests();
+vi.mocked(createFoundryStreamResponse).mockClear();
     vi.mocked(createDigigraphTraceStreamResponse).mockClear();
+    vi.mocked(createUIMessageStreamResponse).mockImplementation(
+      ({ headers }: { headers?: HeadersInit }) =>
+        new Response("stream", { status: 200, headers }),
+    );
   });
 
   afterEach(() => {
@@ -329,6 +337,209 @@ describe("POST /api/chat", () => {
       headers?: Record<string, string>;
     };
     expect(call?.headers?.["X-Digi-Language"]).toBeUndefined();
+  });
+
+  it("forwards X-Digi-Force-Tool to digigraph upstream headers", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-force-tool": "digisearch",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "RS256" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Force-Tool"]).toBe("digisearch");
+  });
+
+  it("forwards X-Digi-Enable-Web-Search only when DIGICHAT_WEB_SEARCH=1 (#3420)", async () => {
+    process.env.DIGICHAT_WEB_SEARCH = "1";
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-enable-web-search": "1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBe("1");
+  });
+
+  it("does not forward web search when env gate is off (#3420)", async () => {
+    delete process.env.DIGICHAT_WEB_SEARCH;
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-enable-web-search": "1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
+  });
+
+  it("ignores X-Digi-Force-Tool on regenerate (send-only)", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-force-tool": "digisearch",
+          "x-digi-turn-mode": "regenerate",
+          "x-digichat-session": "sess-force-regen",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "RS256" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    await res.text();
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Force-Tool"]).toBeUndefined();
+  });
+
+  it("returns 409 run_in_progress for concurrent regen on the same session", async () => {
+    vi.mocked(createUIMessageStreamResponse).mockImplementationOnce(
+      ({ headers }: { headers?: HeadersInit }) =>
+        new Response(
+          new ReadableStream({
+            start() {
+              /* hold open until cancelled */
+            },
+          }),
+          { status: 200, headers },
+        ),
+    );
+
+    const first = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digichat-session": "sess-concurrent",
+          "x-digi-turn-mode": "regenerate",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(first.status).toBe(200);
+
+    const second = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digichat-session": "sess-concurrent",
+          "x-digi-turn-mode": "regenerate",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(second.status).toBe(409);
+    const body = (await second.json()) as { error: string };
+    expect(body.error).toBe("run_in_progress");
+    await first.body?.cancel();
+  });
+
+  it("returns 409 run_id_replay for a duplicate X-Digi-Run-Id", async () => {
+    const first = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digichat-session": "sess-runid",
+          "x-digi-run-id": "run-dup-1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(first.status).toBe(200);
+    await first.text();
+
+    const second = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digichat-session": "sess-runid",
+          "x-digi-run-id": "run-dup-1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(second.status).toBe(409);
+    const body = (await second.json()) as { error: string };
+    expect(body.error).toBe("run_id_replay");
+  });
+
+  it("passes turnMode to the Foundry adapter", async () => {
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "foundry-tenant",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "foundry-tenant",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
+        activityDetail: "full",
+      },
+    });
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://foundry-tenant.digithings.ai",
+          "x-digi-turn-mode": "regenerate",
+          "x-external-conversation": "conv_1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    await res.text();
+    const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+      turnMode?: string;
+    };
+    expect(call?.turnMode).toBe("regenerate");
   });
 
   it("passes responseLanguage to the Foundry adapter", async () => {
@@ -580,6 +791,189 @@ describe("POST /api/chat", () => {
       }
     });
   });
+
+  describe("digiquant.io dashboard tenant (#3662)", () => {
+    // Canonical dashboard shape: ungated + operator, no gate.consumeUrl, requiredPlanTier desk —
+    // Desk+ chat is never capped at free-3, and the trial quota is never consulted.
+    // Anonymous embed without a valid plan_tier must get 403.
+    const dashboardCtx = {
+      tenantSlug: "digiquant-dashboard",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "digiquant-dashboard",
+        gateMode: "ungated",
+        theme: "dark",
+        attribution: false,
+        token: "dash-secret",
+        backend: { type: "digigraph" },
+        activityDetail: "full",
+        llmAccess: "operator",
+        showByok: true,
+        requiredPlanTier: "desk",
+      },
+    };
+
+    const PLAN_PROOF_SECRET = "test-secret-for-plan-proof-3662";
+
+    function dashboardReq(headers: Record<string, string> = {}): Request {
+      return new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://digiquant.io",
+          ...headers,
+        },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      });
+    }
+
+    beforeEach(() => {
+      vi.mocked(resolveChatTenantContext).mockResolvedValue(dashboardCtx as never);
+      process.env.DIGICHAT_PLAN_PROOF_SECRET = PLAN_PROOF_SECRET;
+    });
+
+    afterEach(() => {
+      delete process.env.DIGICHAT_PLAN_PROOF_SECRET;
+    });
+
+    it("serves well past the free-turn cap with no 402 and never touches the trial quota", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      const proof = signPlanProof("desk", PLAN_PROOF_SECRET);
+      const quotaModule = await import("@/lib/embed-turn-quota");
+      const overSpy = vi.spyOn(quotaModule, "isOverEmbedTrialLimit");
+      const recordSpy = vi.spyOn(quotaModule, "recordEmbedTrialTurn");
+      const unlockSpy = vi.spyOn(quotaModule, "unlockEmbedTrial");
+      try {
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT + 2; i++) {
+          const res = await POST(dashboardReq({ "x-embed-plan-proof": proof }));
+          expect(res.status).toBe(200);
+        }
+        expect(overSpy).not.toHaveBeenCalled();
+        expect(recordSpy).not.toHaveBeenCalled();
+        expect(unlockSpy).not.toHaveBeenCalled();
+      } finally {
+        overSpy.mockRestore();
+        recordSpy.mockRestore();
+        unlockSpy.mockRestore();
+      }
+    });
+
+    it("returns 403 plan_tier_required when no proof is supplied (#3662)", async () => {
+      const req = dashboardReq();
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe("plan_tier_required");
+    });
+
+    it("returns 403 when X-Embed-Plan-Tier header is spoofed (#3662 Chris lock)", async () => {
+      // Raw X-Embed-Plan-Tier header is NEVER trusted — must still 403.
+      const req = dashboardReq({ "x-embed-plan-tier": "desk" });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe("plan_tier_required");
+    });
+
+    it("returns 403 when ?plan_tier= query param is spoofed (#3662 Chris lock)", async () => {
+      // Raw ?plan_tier= query param is NEVER trusted — must still 403.
+      const req = new Request("http://localhost/api/chat?plan_tier=desk", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://digiquant.io",
+        },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("allows chat when HMAC proof is desk+", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      for (const tier of ["desk", "studio", "enterprise"]) {
+        const proof = signPlanProof(tier as "desk" | "studio" | "enterprise", PLAN_PROOF_SECRET);
+        const req = dashboardReq({ "x-embed-plan-proof": proof });
+        const res = await POST(req);
+        expect(res.status).toBe(200);
+      }
+    });
+
+    it("returns 403 when HMAC proof is free/brief", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      for (const tier of ["free", "brief"]) {
+        const proof = signPlanProof(tier as "free" | "brief", PLAN_PROOF_SECRET);
+        const req = dashboardReq({ "x-embed-plan-proof": proof });
+        const res = await POST(req);
+        expect(res.status).toBe(403);
+        const body = (await res.json()) as { error: string };
+        expect(body.error).toBe("plan_tier_required");
+      }
+    });
+
+    it("returns 403 when HMAC proof has wrong secret", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      const proof = signPlanProof("desk", "wrong-secret");
+      const req = dashboardReq({ "x-embed-plan-proof": proof });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 when HMAC proof is expired", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      const proof = signPlanProof("desk", PLAN_PROOF_SECRET, Date.now() - 1000);
+      const req = dashboardReq({ "x-embed-plan-proof": proof });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 when HMAC proof is tampered", async () => {
+      const { signPlanProof } = await import("@/lib/plan-proof");
+      const proof = signPlanProof("desk", PLAN_PROOF_SECRET);
+      // Tamper with the proof by flipping a character
+      const tampered = proof.slice(0, -2) + (proof.slice(-2) === "AA" ? "BB" : "AA");
+      const req = dashboardReq({ "x-embed-plan-proof": tampered });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("allows chat via authenticated session plan_tier (not embed proof)", async () => {
+      // When the user is authenticated via digichat session (not embed),
+      // the plan_tier from the JWT session is used as fallback.
+      vi.mocked(resolveChatTenantContext).mockResolvedValue({
+        tenantSlug: "digiquant-dashboard",
+        ownerUserSub: "user:123",
+      } as never);
+      vi.mocked(requireDigiChatAuth).mockResolvedValue({
+        tenantSlug: "digiquant-dashboard",
+        ownerUserSub: "user:123",
+        plan_tier: "desk",
+      });
+      const req = dashboardReq();
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+    });
+
+    it("returns 403 when session plan_tier is free/brief", async () => {
+      vi.mocked(resolveChatTenantContext).mockResolvedValue({
+        tenantSlug: "digiquant-dashboard",
+        ownerUserSub: "user:123",
+        embedConfig: dashboardCtx.embedConfig,
+      } as never);
+      vi.mocked(requireDigiChatAuth).mockResolvedValue({
+        tenantSlug: "digiquant-dashboard",
+        ownerUserSub: "user:123",
+        plan_tier: "free",
+      });
+      const req = dashboardReq();
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("showByok is true in the embed config (contract test)", () => {
+      expect(dashboardCtx.embedConfig.showByok).toBe(true);
+    });
+  });
   describe("trace stream (the production default)", () => {
     // Every other test in this file pins DIGICHAT_TRACE_UI="0", which routes through
     // `streamText`. Production does the opposite: the flag is unset, so `useTraceStream`
@@ -646,6 +1040,7 @@ describe("POST /api/chat", () => {
       expect(call?.responseHeaders["X-Request-Id"]).toBe("rid-trace");
       // No embed config on an authenticated request, so the adapter gets the default.
       expect(call?.activityDetail).toBe("full");
+      expect(call?.signal).toBeDefined();
     });
 
     it("forwards a digigraph-backed embed's activityDetail to the trace adapter", async () => {

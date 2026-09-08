@@ -60,7 +60,7 @@ export function CodeSampleReference() {
         clipboard, honest about what runs.
       </p>
 
-      <div className="cs-block cs-install mt-[1.2rem] max-w-[640px] overflow-hidden rounded-[12px] border border-hair bg-term-bg">
+      <div className="cs-block cs-install mt-[1.2rem] max-w-[640px] overflow-hidden rounded-none border border-hair bg-term-bg">
         <div
           className="flex items-center gap-[0.2rem] border-b border-hair py-[0.4rem] pl-[0.9rem] pr-[0.5rem]"
           role="tablist"
@@ -101,7 +101,7 @@ export function CodeSampleReference() {
         </pre>
       </div>
 
-      <div className="cs-block mt-[1.2rem] max-w-[640px] overflow-hidden rounded-[12px] border border-hair bg-term-bg">
+      <div className="cs-block mt-[1.2rem] max-w-[640px] overflow-hidden rounded-none border border-hair bg-term-bg">
         <div className="flex items-center gap-[0.2rem] border-b border-hair py-[0.4rem] pl-[0.9rem] pr-[0.5rem]">
           <span className="font-mono text-[0.62rem] uppercase tracking-[0.1em] text-ink-mute">
             python

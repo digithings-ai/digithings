@@ -1,0 +1,232 @@
+/* ==========================================================================
+   @digithings/web — repo-activity family (components/repo-activity/*:
+   <RepoActivity/> compact + detailed). Import AFTER the token bridge:
+
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/web/styles/web-theme.css";
+     @import "@digithings/web/styles/repo-activity.css";
+     @source "<path-to>/digiweb/web/src/components/repo-activity";
+
+   Self-layering: dress defaults in @layer components so call-site utilities
+   can override; hairline lists, the two-column collapse, and clone-box
+   geometry stay unlayered so they keep beating utilities.
+   ========================================================================== */
+
+@layer components {
+  .ra-compact,
+  .ra-detailed {
+    border: 1px solid var(--hair);
+    background: var(--surface);
+    padding: 1.15rem 1.25rem;
+  }
+
+  .ra-kicker {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+  }
+
+  .ra-stamp {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--ink-mute);
+  }
+
+  .ra-n {
+    font-family: var(--font-mono);
+    font-size: 1.15rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    line-height: 1.1;
+  }
+
+  .ra-l {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--ink-mute);
+  }
+
+  .ra-num {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--accent);
+    text-underline-offset: 2px;
+  }
+
+  .ra-num:hover {
+    text-decoration: underline;
+  }
+
+  .ra-title {
+    flex: 1 1 12rem;
+    min-width: 0;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    color: var(--ink-soft);
+  }
+
+  .ra-date {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--ink-mute);
+    white-space: nowrap;
+  }
+
+  .ra-copy {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--ink-mute);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    padding: 0.15rem 0.1rem;
+  }
+
+  .ra-copy:hover {
+    color: var(--accent);
+  }
+}
+
+.ra-head,
+.ra-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem 1.1rem;
+}
+
+.ra-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem 1.6rem;
+  margin-top: 0.7rem;
+  list-style: none;
+  padding: 0;
+}
+
+.ra-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-width: 5.2rem;
+}
+
+.ra-meta {
+  margin-top: 0.95rem;
+}
+
+.ra-release {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-mute);
+}
+
+.ra-release a {
+  color: var(--ink);
+  text-underline-offset: 2px;
+}
+
+.ra-release a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.ra-repo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.ra-repo:hover {
+  color: var(--accent);
+}
+
+.ra-list {
+  list-style: none;
+  padding: 0;
+  margin-top: 0.85rem;
+  border-top: 1px solid var(--hair);
+}
+
+.ra-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.7rem;
+  padding: 0.62rem 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.ra-group + .ra-group {
+  margin-top: 1.15rem;
+  padding-top: 1.05rem;
+  border-top: 1px solid var(--hair);
+}
+
+.ra-actions {
+  margin-top: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.ra-clone {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  border: 1px solid var(--hair);
+  padding: 0.6rem 0.75rem;
+}
+
+.ra-clone code {
+  min-width: 0;
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.ra-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.ra-cta a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--hair);
+  padding: 0.5rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+
+.ra-cta a:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ra-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.6rem;
+  margin-top: 1.4rem;
+  padding-top: 1.15rem;
+  border-top: 1px solid var(--hair);
+}
+
+@media (max-width: 720px) {
+  .ra-cols {
+    grid-template-columns: 1fr;
+  }
+}

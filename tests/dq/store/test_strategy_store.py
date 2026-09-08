@@ -161,12 +161,12 @@ class TestCredentials:
         monkeypatch.setenv(DIGIQUANT_SERVICE_ROLE_KEY_ENV, "dq-key")
         assert digiquant_credentials() == ("https://dq.supabase.co", "dq-key")
 
-    def test_atlas_service_key_alias(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Atlas local .env uses SUPABASE_SERVICE_KEY (legacy alias)."""
+    def test_research_service_key_alias(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """research local .env uses SUPABASE_SERVICE_KEY (legacy alias)."""
         self._clear_all(monkeypatch)
         monkeypatch.setenv(SUPABASE_URL_ENV, "https://core.supabase.co")
-        monkeypatch.setenv(SUPABASE_SERVICE_KEY_ENV, "atlas-key")
-        assert digiquant_credentials() == ("https://core.supabase.co", "atlas-key")
+        monkeypatch.setenv(SUPABASE_SERVICE_KEY_ENV, "research-key")
+        assert digiquant_credentials() == ("https://core.supabase.co", "research-key")
 
     def test_blank_values_normalize_to_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._clear_all(monkeypatch)

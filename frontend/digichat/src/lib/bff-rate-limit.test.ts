@@ -1,5 +1,40 @@
-import { describe, expect, it } from "vitest";
-import { checkBffRateLimit } from "@/lib/bff-rate-limit";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { checkBffRateLimit, envPositiveInt } from "@/lib/bff-rate-limit";
+
+afterEach(() => {
+  delete process.env.DIGICHAT_TEST_ENV_POSITIVE_INT;
+  vi.restoreAllMocks();
+});
+
+describe("envPositiveInt", () => {
+  it("returns fallback when unset or blank", () => {
+    delete process.env.DIGICHAT_TEST_ENV_POSITIVE_INT;
+    expect(envPositiveInt("DIGICHAT_TEST_ENV_POSITIVE_INT", 42)).toBe(42);
+    process.env.DIGICHAT_TEST_ENV_POSITIVE_INT = "   ";
+    expect(envPositiveInt("DIGICHAT_TEST_ENV_POSITIVE_INT", 42)).toBe(42);
+  });
+
+  it("rejects underscore separators that parse as NaN (#675)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    process.env.DIGICHAT_TEST_ENV_POSITIVE_INT = "60_000";
+    expect(envPositiveInt("DIGICHAT_TEST_ENV_POSITIVE_INT", 60_000)).toBe(60_000);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it("rejects zero, negative, and non-integer values", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    for (const raw of ["0", "-1", "3.5", "abc"]) {
+      process.env.DIGICHAT_TEST_ENV_POSITIVE_INT = raw;
+      expect(envPositiveInt("DIGICHAT_TEST_ENV_POSITIVE_INT", 7)).toBe(7);
+    }
+    expect(warn.mock.calls.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("accepts a plain positive integer string", () => {
+    process.env.DIGICHAT_TEST_ENV_POSITIVE_INT = "90";
+    expect(envPositiveInt("DIGICHAT_TEST_ENV_POSITIVE_INT", 7)).toBe(90);
+  });
+});
 
 describe("checkBffRateLimit", () => {
   it("allows requests under the limit", () => {

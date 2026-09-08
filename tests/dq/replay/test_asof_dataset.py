@@ -6,8 +6,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.asof_dataset import (
+from digiquant.dashboard.replay.asof_dataset import (
     AsOfDatasetBuildError,
     AsOfDatasetSnapshot,
     VersionedBarSeries,
@@ -15,8 +14,8 @@ from digiquant.olympus.replay.asof_dataset import (
     build_replay_input_manifest,
     build_shared_portfolio_request,
 )
-from digiquant.olympus.replay.canonical import data_hash_from_request
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.canonical import data_hash_from_request
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     InstrumentBarSeries,
     OhlcvBar,
@@ -24,7 +23,8 @@ from digiquant.olympus.replay.models import (
     PolicyVersionRef,
     TargetWeight,
 )
-from digiquant.olympus.replay.policy_registry import PolicyRegistry, RegisteredPolicyVersion
+from digiquant.dashboard.replay.policy_registry import PolicyRegistry, RegisteredPolicyVersion
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 pytestmark = pytest.mark.unit
 

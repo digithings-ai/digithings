@@ -62,7 +62,7 @@ export function TooltipContent({
           data-slot="tooltip-content"
           className={cxBase(
             cx(
-              "ctl-tip ctl-pop z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md px-3 py-1.5 text-xs",
+              "ctl-tip ctl-pop z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-none px-3 py-1.5 text-xs",
               skin === "reference" && "ctl-tip--ref",
             ),
             className,

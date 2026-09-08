@@ -20,6 +20,7 @@ EXPORT_COLUMNS = {
     "net_deployed",
     "portfolio_value",
     "buy_hold_value",
+    "flat_dca_value",
 }
 
 
@@ -87,17 +88,21 @@ class TestRunBacktestMultiDay:
         assert report.sell_days == 1
 
     def test_sell_clamped_to_available_holdings(self) -> None:
-        oversell_curve = AccumDistCurve(nodes=tuple(-200.0 for _ in range(21)))
+        # Positive at low risk (buy day 1), deeply negative at high risk (oversell day 2).
+        signed_curve = AccumDistCurve(nodes=tuple(10.0 if i < 11 else -200.0 for i in range(21)))
         report, frame = run_backtest(
             dates=_dates(2),
             price=pl.Series([100.0, 100.0]),
             risk=pl.Series([0.0, 100.0]),
-            curve=oversell_curve,
+            curve=signed_curve,
             initial_cash=1000.0,
         )
-        # day1 buys nothing (rate<0 with 0 btc held -> clamp to 0)
-        assert frame["asset_units"][0] == pytest.approx(0.0)
+        # day1: buy 10% -> 1.0 unit. day2: -200% would sell 2.0 units; clamp to 1.0 held.
+        assert frame["asset_units"][1] == pytest.approx(0.0)
+        assert frame["asset_units"][1] >= 0.0
+        assert frame["daily_trade_usd"][1] == pytest.approx(-100.0)
         assert frame["cash"][1] == pytest.approx(1000.0)
+        assert report.sell_days == 1
 
     def test_buy_hold_value_is_lump_sum_at_day0_price(self) -> None:
         report, frame = run_backtest(
@@ -132,6 +137,8 @@ class TestRunBacktestMultiDay:
             initial_cash=1000.0,
         )
         assert report.buy_hold_max_drawdown_pct == pytest.approx(-0.20)
+        # DCA side never trades here, so portfolio is flat cash — no drawdown.
+        assert report.dca_max_drawdown_pct == pytest.approx(0.0)
 
     def test_report_pnl_and_return_pct(self) -> None:
         report, frame = run_backtest(
@@ -143,6 +150,54 @@ class TestRunBacktestMultiDay:
         )
         assert report.total_pnl == pytest.approx(100.0)
         assert report.total_return_pct == pytest.approx(10.0)
+        # day1: portfolio 1100 vs lump 2000 -> -900 USD, -45% (×100 convention)
+        assert report.vs_lump_usd == pytest.approx(-900.0)
+        assert report.vs_lump_pct == pytest.approx(-45.0)
+
+    def test_flat_dca_benchmark_is_hand_derived_true_percent(self) -> None:
+        """Equal daily spend over 2 days: 50/day at 100 then 200 → final 150.
+
+        SDCA with no trades stays at 100 cash. vs_flat_dca_pct = (100/150-1)*100
+        = -33.333… A 100× error would store -0.333 and this assertion fails.
+        """
+        report, frame = run_backtest(
+            dates=_dates(2),
+            price=pl.Series([100.0, 200.0]),
+            risk=pl.Series([None, None], dtype=pl.Float64),
+            curve=AccumDistCurve(),
+            initial_cash=100.0,
+        )
+        assert frame["flat_dca_value"][-1] == pytest.approx(150.0)
+        assert report.vs_flat_dca_pct == pytest.approx((100.0 / 150.0 - 1.0) * 100.0)
+        assert report.vs_flat_dca_pct == pytest.approx(-100.0 / 3.0)
+        assert abs(report.vs_flat_dca_pct) > 1.0  # not a fraction
+
+    def test_cost_basis_vs_price_is_percent_not_fraction(self) -> None:
+        # day0: risk=0 → 10% of 1000 = 100 USD at price 100 → 1 unit, cost 100.
+        # day1: no trade, price 200. cost/price = 50.0 percent, not 0.5.
+        report, frame = run_backtest(
+            dates=_dates(2),
+            price=pl.Series([100.0, 200.0]),
+            risk=pl.Series([0.0, None], dtype=pl.Float64),
+            curve=AccumDistCurve(),
+            initial_cash=1000.0,
+        )
+        assert report.avg_cost_basis == pytest.approx(100.0)
+        assert report.final_cost_basis_vs_price == pytest.approx(50.0)
+        assert report.final_cost_basis_vs_price != pytest.approx(0.5)
+        assert report.capital_deployed_pct == pytest.approx(10.0)
+        assert report.units_accumulated == pytest.approx(1.0)
+
+    def test_dca_max_drawdown_is_raw_fraction_not_times_100(self) -> None:
+        # day0 buys 1 unit @100; day1 peak pv=1050; day2 trough pv=975 -> -7.14% raw
+        report, frame = run_backtest(
+            dates=_dates(3),
+            price=pl.Series([100.0, 150.0, 75.0]),
+            risk=pl.Series([0.0, None, None], dtype=pl.Float64),
+            curve=AccumDistCurve(),
+            initial_cash=1000.0,
+        )
+        assert report.dca_max_drawdown_pct == pytest.approx(-75.0 / 1050.0)
 
     def test_avg_risk_and_avg_rate_ignore_null_days(self) -> None:
         report, frame = run_backtest(

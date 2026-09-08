@@ -54,6 +54,14 @@ class TestWorkflowRequest:
         req = WorkflowRequest(prompt="hi")
         assert req.require_tool_calls is None
 
+    def test_workflow_request_accepts_force_tool(self) -> None:
+        req = WorkflowRequest(prompt="hi", force_tool="digisearch")
+        assert req.force_tool == "digisearch"
+
+    def test_workflow_request_force_tool_defaults_to_none(self) -> None:
+        req = WorkflowRequest(prompt="hi")
+        assert req.force_tool is None
+
 
 @pytest.mark.unit
 class TestChatCompletionRequest:
@@ -62,6 +70,10 @@ class TestChatCompletionRequest:
     def test_chat_completion_request_accepts_require_tool_calls(self) -> None:
         req = ChatCompletionRequest(messages=[], require_tool_calls=False)
         assert req.require_tool_calls is False
+
+    def test_chat_completion_request_accepts_force_tool(self) -> None:
+        req = ChatCompletionRequest(messages=[], force_tool="docs")
+        assert req.force_tool == "docs"
 
 
 @pytest.mark.unit

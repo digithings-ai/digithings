@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:121f59a5edc06ba8f261291b46566aebef95ea523f16fbd0637ac5a30226abc5",
+  "claims": [
+    {
+      "id": "claim_22aa66ad4cde4b2291ed64fff1a94dd3",
+      "statement": "python -m digiclaw runs one heartbeat cycle exiting 0 clean, writing heartbeat and drift audit events; verification is pytest tests/dc -m unit plus ruff check and format --check.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/AGENTS.md#L60-L80",
+          "version": "repo-lines-v1:sha256:41ca819a79fb6654f3aac4950b9422bb730addf683e60cb52a38389f0bfed7de:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxOTM4Y2MyY2QyZGMwZjBiNzA5Yzc3NGJlNDU4NWMwNTc5YmY2MDE2ODFhNTQ2MjFiZmM1YzZkNGY2MzU5ZDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc2MzJjZjlhMGRkNTIxZjA2ODU1NTM3MTI4MGE2YmNkYWZmMWI3N2FjMzNlY2Q0NjA0MDM0ZWY1ZWQ5MjllZDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM3Mjk4YTIyODkyMDFkYWFjMDNmNmFkYjExNDRlN2JkMWM5MTFkMzQxMWMwOWVkMmUwY2U5ZDFiZWQwZWVkN2MifQ"
+        },
+        {
+          "resource": "repo://digiclaw/ARCHITECTURE.md#L50-L56",
+          "version": "repo-lines-v1:sha256:ef64a16fefe4d6baa80f4a26f7f31c2c0a051868217e9ee1e3cc94ee06f7dae8:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYWE4Mzg3YzBmNTE4YjZmNzRjYzhiNTAwZjY1YzM0MWE3OTg3OTlhNjcyYzFhMjkxM2EzMTkxNGNhMDU2OTNlOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDdjMDZjNTYxZDVjMzI3MzQzNjg1MjY4YTQ2YjMzOTFmMzk5OGVlZTg5MGQyYmU1MWYwZDIxY2M0YTUzYWU2ZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTIxZTA2M2E5ZWI4M2VlNGE5N2IyMDRhZjQ3MzljZTU0YTQyMjVkYmY1OWVmM2I0MmZiYTgyZjJkODY3MmFiYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTcyZWEzNTczYWYzYzI2ZmI5YTNiZDZmZmUyYjA4MDFlN2MzYmU5ZDc3MTk4ZmI2ODBhZTc2NDBjZDEzM2RjMyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_39d9812b10dc4d6c848ccba07216b2fa",
+      "statement": "Scheduler status shows next runs via digiclaw schedule status over digiclaw/agents YAML, and the audit log inspects at digiquant/results/audit/events.jsonl.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/AGENTS.md#L60-L80",
+          "version": "repo-lines-v1:sha256:41ca819a79fb6654f3aac4950b9422bb730addf683e60cb52a38389f0bfed7de:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxOTM4Y2MyY2QyZGMwZjBiNzA5Yzc3NGJlNDU4NWMwNTc5YmY2MDE2ODFhNTQ2MjFiZmM1YzZkNGY2MzU5ZDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc2MzJjZjlhMGRkNTIxZjA2ODU1NTM3MTI4MGE2YmNkYWZmMWI3N2FjMzNlY2Q0NjA0MDM0ZWY1ZWQ5MjllZDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM3Mjk4YTIyODkyMDFkYWFjMDNmNmFkYjExNDRlN2JkMWM5MTFkMzQxMWMwOWVkMmUwY2U5ZDFiZWQwZWVkN2MifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

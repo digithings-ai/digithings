@@ -12,7 +12,7 @@ digichat is the **production** web client for tenants that run digigraph. The br
 
 ## Design
 
-digichat follows the **digithings.ai** marketing palette from **digiweb** tokens / `frontend/digithings-web` (the deleted `frontend/website/` landing is not a source of truth): near-black page background, elevated panels, borders, primary/muted text. The **starfield** and hero animation from the public site are intentionally **not** used in the app chrome so the chat stays readable and calm. The **browser tab icon** is vendored as [`digichat/src/app/icon.svg`](digichat/src/app/icon.svg); refresh from the shared brand asset if it changes.
+digichat follows the **digithings.ai** marketing palette from **digiweb** tokens / `frontend/digithings-web` (the deleted `frontend/website/` landing is not a source of truth): near-black page background, elevated panels, borders, primary/muted text. The **starfield** and hero animation from the public site are intentionally **not** used in the app chrome so the chat stays readable and calm. The **browser tab icon** is the compact digithings **d + block** mark, vendored as [`src/app/icon.svg`](src/app/icon.svg) (and [`src/app/apple-icon.png`](src/app/apple-icon.png) for Apple touch). Refresh both from `frontend/digithings-web/public/icons/digi-app-dark.svg` / `digi-app-touch-dark.png` when the shared brand tile changes — never reintroduce the retired QR mark.
 
 ## Features
 
@@ -22,6 +22,19 @@ digichat follows the **digithings.ai** marketing palette from **digiweb** tokens
 - **Optional Postgres**: tenants, `api_keys`, `user_tenants` mapping (OIDC `sub` → tenant).
 - **Docker** `digichat` + `digichat-db` under Compose **profile `digichat`**.
 - **Health**: `GET /api/health` (digigraph + DB checks).
+
+## Foundry activity and reasoning summaries
+
+Client deployments using `backend.type: foundry` translate Foundry's
+`azure_ai_search` events into the same search and source activity rows as
+digigraph. The adapter renders a **Thinking** disclosure only when a Foundry
+reasoning event contains summary text.
+
+Enable that summary on the Foundry agent definition. It cannot be requested on
+an individual Responses API call when the request uses `agent_reference`;
+Foundry rejects per-call `reasoning.summary` in that configuration. When the
+agent emits empty reasoning items, digichat deliberately omits the disclosure
+rather than showing a row with no reader-visible content.
 
 ## Capability matrix (federated hub)
 

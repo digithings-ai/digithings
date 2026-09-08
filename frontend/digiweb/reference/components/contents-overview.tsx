@@ -13,10 +13,15 @@ import { usePathname } from "next/navigation";
 
 const FAMILIES = [
   { href: "/", label: "Foundations", blurb: "Livery system, feature picker, button & CTA states." },
+  {
+    href: "/iterate",
+    label: "Iterate",
+    blurb: "Utilitarian terminal blend — pick corners, type, CTAs, heroes (herdr / agentmail / omarchy).",
+  },
   { href: "/controls", label: "Controls", blurb: "Custom dropdown pane, search, nav buttons, form fields." },
   { href: "/layout-patterns", label: "Layout", blurb: "Feature cell, bento grid, scaled product frames." },
   { href: "/typography", label: "Typography", blurb: "Scroll-linked word reveals and the copy & voice grammar." },
-  { href: "/data", label: "Data", blurb: "Dot matrix, count-up stats, card deck, pricing, matrix." },
+  { href: "/data", label: "Data", blurb: "Dot matrix, count-up stats, card deck, repository activity, pricing, matrix." },
   { href: "/finance", label: "Finance", blurb: "Lightweight-Charts dashboards, order book, money metrics." },
   { href: "/tearsheet", label: "Tearsheet", blurb: "Print-grade SVG tearsheet: synced charts, matrix, trade log, cards." },
   { href: "/effects", label: "Effects", blurb: "Cursor-follow graph, terminals, pipeline, ambient mesh." },
@@ -24,6 +29,7 @@ const FAMILIES = [
   { href: "/terminal", label: "Terminal", blurb: "Diegetic CLI session and streaming chat transcript." },
   { href: "/chatbot", label: "Chatbot", blurb: "Thinking chain, composer, markdown, inline chart & graph, widgets." },
   { href: "/symbols", label: "Symbols", blurb: "Module emblems, wordmarks, QR, vendor logos, glyphs." },
+  { href: "/brand", label: "Brand", blurb: "Avatars, social headers, OG card, mail sign-off — local kit only." },
   { href: "/account", label: "Account", blurb: "Login, sign-up, payment, settings, profile templates." },
 ] as const;
 
@@ -39,10 +45,11 @@ export function ContentsOverview() {
   return (
     <section className="section-block contents-overview">
       <p className="kicker">{"// contents"}</p>
-      <h2 className="title">Thirteen families, one system.</h2>
+      <h2 className="title">Fifteen families, one system.</h2>
       <p className="section-copy">
         Every page is one family of design elements, all sharing the same tokens, livery, and
-        motion laws. Start anywhere — the top bar carries the same map.
+        motion laws. Start on Iterate when the blend is in flux — otherwise start anywhere; the
+        top bar carries the same map.
       </p>
 
       <div className="mt-[1.2rem] grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-[0.7rem]">

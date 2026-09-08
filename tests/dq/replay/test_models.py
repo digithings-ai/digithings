@@ -8,7 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     FORBIDDEN_IMPORT_PREFIXES,
     ExecutionPolicy,
     HoldingQuantity,
@@ -26,7 +26,7 @@ pytestmark = pytest.mark.unit
 
 _UTC = timezone.utc
 _REPLAY_ROOT = (
-    Path(__file__).resolve().parents[3] / "digiquant" / "src" / "digiquant" / "olympus" / "replay"
+    Path(__file__).resolve().parents[3] / "digiquant" / "src" / "digiquant" / "dashboard" / "replay"
 )
 
 

@@ -85,7 +85,7 @@ export function ModuleManifest() {
       footer={
         <button
           type="button"
-          className="mt-auto cursor-pointer self-end rounded-[7px] border border-hair bg-transparent px-[0.6rem] py-[0.3rem] font-mono text-[0.78rem] text-ink-soft transition-colors hover:bg-accent-weak hover:text-ink"
+          className="mt-auto cursor-pointer self-end rounded-none border border-hair bg-transparent px-[0.6rem] py-[0.3rem] font-mono text-[0.78rem] text-ink-soft transition-colors hover:bg-accent-weak hover:text-ink"
           onClick={() => askAbout(selMod)}
         >
           ask <span className="text-ink">digi</span>

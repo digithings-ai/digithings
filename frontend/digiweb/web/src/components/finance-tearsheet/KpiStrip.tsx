@@ -1,7 +1,7 @@
 /**
  * KpiStrip + Kpi (#1463) — the tearsheet KPI card grammar promoted from the
  * inline `Kpi` in frontend/digiquant-web/components/tearsheet/tearsheet-view.tsx
- * and olympus' OlympusTearsheetView. Values are ReactNodes so consumers tone
+ * and the dashboard PerformanceTearsheetView. Values are ReactNodes so consumers tone
  * them with the money classes (`is-pos` / `is-neg` via `toneClass`); the
  * gradient card surface, the 6-up `primary` strip (3-up ≤1100px, 2-up
  * ≤640px), and the `break-inside: avoid` print rules live in

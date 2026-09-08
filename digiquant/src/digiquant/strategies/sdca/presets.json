@@ -1,34 +1,62 @@
 {
   "conservative_hold": {
-    "description": "Gentle, long-only accumulation. Buys a small % of cash only when risk is low-to-mid; stops buying by mid risk. Never sells. Hand-authored personality, not optimized.",
+    "description": "Gentle, long-only accumulation. Buys a small % of cash only when risk is low-to-mid; stops buying by the dead zone. Never sells (sell_max_rate=0). Authored as SdcaCurveShape parameters, not 21 free nodes.",
     "long_only": true,
-    "curve_nodes": [
-      3.0, 3.0, 3.0, 2.5, 2.0, 1.5, 1.0, 0.5, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    ]
+    "shape": {
+      "buy_max_rate": 3.0,
+      "buy_knee_risk": 40.0,
+      "sell_knee_risk": 100.0,
+      "sell_max_rate": 0.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 1.0
+    }
   },
   "balanced": {
-    "description": "Moderate, long-only accumulation across a wider low-to-mid risk band, tapering to zero by mid-high risk. Never sells. Hand-authored personality, not optimized.",
+    "description": "Moderate, long-only accumulation across a wider low-to-mid risk band, tapering to zero at the dead zone. Never sells. Authored as SdcaCurveShape parameters, not 21 free nodes.",
     "long_only": true,
-    "curve_nodes": [
-      8.0, 8.0, 7.0, 6.0, 5.0, 3.5, 2.0, 1.0, 0.3, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    ]
+    "shape": {
+      "buy_max_rate": 8.0,
+      "buy_knee_risk": 45.0,
+      "sell_knee_risk": 100.0,
+      "sell_max_rate": 0.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 1.0
+    }
   },
   "aggressive_accumulate": {
-    "description": "Aggressive, long-only accumulation: high buy rates at low risk, decaying slowly through mid risk. Never sells. Hand-authored personality, not optimized.",
+    "description": "Aggressive, long-only accumulation: high buy rates at low risk, decaying through mid risk. Never sells. Authored as SdcaCurveShape parameters, not 21 free nodes.",
     "long_only": true,
-    "curve_nodes": [
-      15.0, 15.0, 14.0, 13.0, 11.0, 9.0, 7.0, 5.0, 3.0, 1.5, 0.5,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    ]
+    "shape": {
+      "buy_max_rate": 15.0,
+      "buy_knee_risk": 55.0,
+      "sell_knee_risk": 100.0,
+      "sell_max_rate": 0.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 1.0
+    }
   },
   "accumulate_and_distribute": {
-    "description": "Full accumulation + distribution: buys through low-to-mid risk, holds flat through the value zone, sells into high risk. The BTC-reference signed curve (sdca/curve.py DEFAULT_BTC_NODES). Hand-authored personality, not optimized.",
+    "description": "Full accumulation + distribution: buys through low-to-mid risk, holds flat through the value zone, sells into high risk. BTC-reference personality encoded as SdcaCurveShape (sell_curvature=2.0 back-loads distribution). Not optimized.",
     "long_only": false,
-    "curve_nodes": [
-      10.0, 10.0, 10.0, 10.0, 6.5, 4.0, 1.2, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.5, -1.5, -3.0, -10.0
-    ]
+    "shape": {
+      "buy_max_rate": 10.0,
+      "buy_knee_risk": 35.0,
+      "sell_knee_risk": 80.0,
+      "sell_max_rate": 10.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 2.0
+    }
+  },
+  "btc_optimized": {
+    "description": "Concentrated remaining-book curve (high max daily % of remaining cash/coins at the extremes). Shape was searched on a frozen 3-member index (power law + M2 + DXY) then applied to the published richer composite (those plus weekly log-MACD + RSI). Objective is total return with fill-concentration gates. beats_flat_dca_oos stays false. Re-run: digiquant sdca-optimize-curve. Do not --push-supabase from the agent environment.",
+    "long_only": false,
+    "shape": {
+      "buy_max_rate": 35.5,
+      "buy_knee_risk": 24.1,
+      "sell_knee_risk": 71.9,
+      "sell_max_rate": 21.0,
+      "buy_curvature": 1.3,
+      "sell_curvature": 4.0
+    }
   }
 }

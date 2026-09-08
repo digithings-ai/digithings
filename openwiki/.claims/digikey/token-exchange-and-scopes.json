@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:61fb8f884ba27c5c02c86ba50dab7dd7d4bdb41fcf194b6760661f41967584af",
+  "claims": [
+    {
+      "id": "claim_91aaf5b23682449fa4eb6c3a2c7c407e",
+      "statement": "Token exchange supports api_key and bff_session grants, returning an RS256 JWT with kid header and fresh jti at a short TTL, with profile_id and profile_version emitted together or omitted together.",
+      "evidence": [
+        {
+          "resource": "repo://digikey/ARCHITECTURE.md#L37-L44",
+          "version": "repo-lines-v1:sha256:af30d1f07754fc740bf9880799aeaa013f5258d0f1b664cab8fe3861f9ccc242:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzZmNjVkYWYyZjI3Njk0Yjc2ZWU4MjdiNjRiNzk2Mzk1NTA4MGY5YmU1MjcwZDU0MmY0NmNhM2I5MDkyYTMzZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWMxYTNkYzVjODgwMjA5MjZkZGQxMDA2Y2M5MzhjMWU5OTg3MTRmODg3MDllZTc2MTIwNWJhZjllZjU5Y2FlYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjc3ZGIyZjJmMGEzNzRkMWY0YWI3ZDY5MGM1NjA4MzZlMTY4MjM1MGJkYmUwNWE0MTIzMWYxZDcxNjQxN2RmNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDIzYzE1OTQ2ZWIzZDA2ZGExYzhhODM2OWRhOTliY2VhYWM0Zjc3Yzk2ZWJlMDFjMWFkYzdjZGRlYTI5YjY4NiJ9"
+        },
+        {
+          "resource": "repo://digikey/src/digikey/jwt_issue.py#L23-L60",
+          "version": "repo-lines-v1:sha256:d50170ba95e3093deaf7f9abe6d7e2bf5f760d8182a536d9a7f97b934cdea44e:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjljMmUxODRjMWExMTVjZjZlZGE4NGM2MmY4MGNiN2RiZjRhNmU0NjBhODRiODE4ZjM3OGQ0M2NhNjA3ZDQ0MDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2YjEyMWRkNzMwNDNhNWIzOTQyMjI4ZDk1MDI4ZjdhYzYzNjMwNTBmMzQ5Mjg2MGQwYTlhNzUwOTFkMzczNDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk1ODQ2NTQ2ODM4NTgzZDUxNWY5ZjNmNDYwYzQ0YTQ1YWI1MzIxNTFmYzU5NGI0OWRjNGE4YTExYTY1NTA5OTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlkYzJiNzdkZWE1NjJkMWM2NjNmOWE0Y2Y2M2JkYmU2YmEzYjE1ZDkzOWE2M2Y3MGQ1NWQ0YWZjMGJkZmZmYmYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f05f75b874e848a4b4eeb2847f0b0e0f",
+      "statement": "Scope matching grants everything on *, subtree on service:*, otherwise exact match, and callers can only ever receive a subset of their granted scopes.",
+      "evidence": [
+        {
+          "resource": "repo://digikey/src/digikey/scopes.py#L1-L44",
+          "version": "repo-lines-v1:sha256:12375f95726a5ce83fd55cf93e9f8ae6982f7e4655c138d33f2e7b7a592c870a:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0OTk3NjU4OWMxZjgxYTZjYjY0ZmJlNWMwMDAzNTIzZDExODZiYTFhMjViZTc0NTdkNTFiNzVjYzIxYzcyYTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5NDE2ZTA5Zjc4YmEzMTZjMDMyNTY4MjEzYjg1NWVlNzU2ZTQxNTY1ZDkxOGYwOTUxOWM4MWZkNjIwZjQwNjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6e23c0d1023b4124a21b17debfc0c19f",
+      "statement": "Revocation blocks new exchanges via revoked_at always, and additionally fails closed on live JTIs until exp only when the Redis blocklist is configured and consumers check it.",
+      "evidence": [
+        {
+          "resource": "repo://digikey/AGENTS.md#L25-L35",
+          "version": "repo-lines-v1:sha256:0f449918ec7838187175508ed42cf8a7ffd9fccb92878650f1a2daf102bc5094:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3MjlhZTAyZDY0OTQxOWNiYjYxYzI4ZGQwMDIxZTU4MDBjYmM5ZDkwOTFkNGQxYzIzNTM4ZGE2MGI0ZmY0ZDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFiYWFiOGU0MmEzNDRmNThlZGUwNDc4NDQyMGM5YjgzNmNiM2IwN2NjODhjMjhiOGViNWQ3ODQzOGY0YWJjZGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdiYjM0NTBlNjAwMjVkOWYzYWRjOTg0NGRiNmQwMDdmZWVkMjk4Nzg3NGM1ZWM5YmNmM2FmMGI0Zjg3NTI2MWIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2c7c6ad103e745e3a36643657927bbe0",
+      "statement": "DigiAuthMiddleware enforces per-service path-scope tables (None means public), returning 401 without bearer and 503 without JWKS config, and attaches the verified DigiAuthContext to request state.",
+      "evidence": [
+        {
+          "resource": "repo://digikey/src/digikey/integrations/service_middleware.py#L113-L160",
+          "version": "repo-lines-v1:sha256:a7b9903c576c1826a59a82b8eece2f33795d19f53303a3bff96665b53bd86f3b:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIxZjQ0OTBkYmViZjZjZWUzYzk2MGM3NGMyYmYxMTg0OGM5ODQyZjhkYWViMDY3NjgwMTJhNzZjNWJjNmU1OGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkxYzZmNGFkMjhmMzEzOGU1ZDdhMDQyOTQ0MDU5Nzc0NWUyN2FjOTJlN2I2ZGRiY2JmYmM4N2E2Y2Q4MjAxMzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ4NzNjODgzZmY1YjRiMzY4NDA5NzVlNjY2MWExYWM1MTE0YjE2NmMwNDdlYWRhODNlNzViZDY2OTczMGVjMmMifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

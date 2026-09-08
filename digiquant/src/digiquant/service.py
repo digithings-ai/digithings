@@ -6,26 +6,26 @@ from datetime import datetime
 from uuid import UUID
 
 from digiquant.backtest import run_backtest
-from digiquant.export import run_export
-from digiquant.models import BacktestResult, ExportResult, OptimizationConstraints, OptimizeResult
-from digiquant.olympus.replay.comparison import (
+from digiquant.dashboard.replay.comparison import (
     PolicyComparisonReport as RichPolicyComparisonReport,
 )
-from digiquant.olympus.replay.exposure import (
+from digiquant.dashboard.replay.exposure import (
     PolicyComparisonSummary,
     PolicyGateEvaluationSummary,
     PolicyReplayFacade,
     PolicyReplayRunSummary,
 )
-from digiquant.olympus.replay.governance import (
+from digiquant.dashboard.replay.governance import (
     AuthenticatedPrincipal,
     HumanAuthoredGateCriteria,
 )
-from digiquant.olympus.replay.governance_models import (
+from digiquant.dashboard.replay.governance_models import (
     GovernanceDecisionKind,
     PolicyGovernanceDecision,
 )
-from digiquant.olympus.replay.store import PolicyReplayStore
+from digiquant.dashboard.replay.store import PolicyReplayStore
+from digiquant.export import run_export
+from digiquant.models import BacktestResult, ExportResult, OptimizationConstraints, OptimizeResult
 from digiquant.optimize import run_optimize
 from digiquant.paths import validate_data_paths
 from digiquant.strategies.registry import list_strategies
@@ -88,6 +88,7 @@ def service_run_optimize(
     n_trials: int = 50,
     objective: str = "sharpe",
     constraints: OptimizationConstraints | None = None,
+    base_params: dict[str, float | int | str] | None = None,
 ) -> OptimizeResult:
     validate_data_paths(data_path=data_path, data_dir=data_dir)
     return run_optimize(
@@ -100,6 +101,7 @@ def service_run_optimize(
         n_trials=n_trials,
         objective=objective,
         constraints=constraints,
+        base_params=base_params,
     )
 
 

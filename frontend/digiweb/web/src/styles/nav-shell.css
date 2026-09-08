@@ -137,7 +137,7 @@
   margin-top: 0.2rem;
   padding: 0.4rem;
   border: 1px solid var(--hair);
-  border-radius: 10px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -167,7 +167,7 @@
 .nav-shell-menu-item {
   display: block;
   padding: 0.45rem 0.7rem;
-  border-radius: 7px;
+  border-radius: 0;
   color: var(--ink-soft);
   white-space: nowrap;
   transition:
@@ -206,6 +206,44 @@
   display: block;
 }
 
+/* Quiet company-profile row — the same borderless glyph buttons as the nav
+   tail, usable in a contact band or footer. Phosphor (`--accent`) only on
+   :focus-visible; hover stays ink. Radius 0, no fill. */
+.social-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--ink-mute);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.2s var(--ease);
+}
+
+.btn-icon:hover {
+  color: var(--ink);
+  background: transparent;
+}
+
+.btn-icon:focus-visible {
+  color: var(--accent);
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn-icon svg {
+  display: block;
+}
+
 /* ── hamburger: two lines folding to an × from the parent state ─────────── */
 .nav-shell-toggle {
   display: none; /* wide viewports; media query below re-enables */
@@ -219,7 +257,7 @@
   width: 18px;
   height: 1.5px;
   background: currentColor;
-  border-radius: 1px;
+  border-radius: 0;
   transition:
     transform 0.25s var(--ease),
     opacity 0.2s var(--ease);
@@ -300,7 +338,7 @@
   width: min(100%, 20rem);
   margin-left: auto;
   font-size: 1.35rem;
-  font-family: var(--font-serif, Georgia, serif);
+  font-family: var(--font-mono);
   color: var(--ink);
   pointer-events: auto;
 }

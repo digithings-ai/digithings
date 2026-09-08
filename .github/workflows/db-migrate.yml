@@ -1,5 +1,5 @@
 name: db-migrate
-# Apply pending Olympus Supabase migrations to prod on release to main, so the
+# Apply pending dashboard Supabase migrations to prod on release to main, so the
 # schema stops drifting behind the repo (#1016 — root cause of the 044/045
 # incidents). Forward-only, race-free, and with exactly ONE gate:
 #   * A dedicated `olympus_schema_migrations` table records applied files, keyed

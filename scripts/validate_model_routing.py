@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Atlas/Hermes model routing and provider connectivity.
+"""Validate research/portfolio model routing and provider connectivity.
 
 Two modes:
   --routing   Print every phase slug → resolved model (no network calls).
@@ -60,7 +60,7 @@ def get_model_for_mode() -> str:
 
 
 # ── Phase slug inventory ─────────────────────────────────────────────────────
-# All slugs that Atlas/Hermes phases pass to run_research_agent(phase_slug=…).
+# All slugs that research/portfolio phases pass to run_research_agent(phase_slug=…).
 # Dynamic ones (per-ticker) are represented with a concrete example.
 
 ALL_SLUGS: list[tuple[str, str]] = [
@@ -141,7 +141,7 @@ def _provider(model: str) -> str:
 def print_routing_table() -> dict[str, list[str]]:
     mode = os.environ.get("DIGI_LLM_MODE", "test")
     print(f"\n{'=' * 70}")
-    print(f"  Atlas/Hermes model routing table  (DIGI_LLM_MODE={mode})")
+    print(f"  research/portfolio model routing table  (DIGI_LLM_MODE={mode})")
     print(f"{'=' * 70}")
 
     by_model: dict[str, list[str]] = {}

@@ -1,6 +1,6 @@
-# digiquant Atlas research sandbox — paper book / research only (#396).
+# digiquant research sandbox — paper book / research only (#396).
 #
-# Isolated image for Atlas agents to execute Python research code. Quant stack
+# Isolated image for research agents to execute Python research code. Quant stack
 # is baked at build time; do not pip-install inside agent runs.
 #
 # Separate from digiquant/Dockerfile (HTTP service). Do not merge.
@@ -20,7 +20,7 @@
 FROM python:3.12-slim
 
 LABEL org.opencontainers.image.title="digiquant-sandbox" \
-      org.opencontainers.image.description="Atlas research sandbox with baked open-source quant stack (#396)" \
+      org.opencontainers.image.description="research sandbox with baked open-source quant stack (#396)" \
       org.opencontainers.image.source="https://github.com/digithings-ai/digithings"
 
 # Runtime libs for scientific wheels (matplotlib, BLAS-backed numpy/scipy) and

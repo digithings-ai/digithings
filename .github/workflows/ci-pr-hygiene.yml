@@ -1,3 +1,4 @@
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "CI: PR hygiene"
 
 # Agent-task TSV coverage (path-gated), on schedule and PR.
@@ -14,8 +15,6 @@ name: "CI: PR hygiene"
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  schedule:
-    - cron: "0 6 * * *"   # 06:00 UTC daily
   workflow_dispatch:
 
 concurrency:
