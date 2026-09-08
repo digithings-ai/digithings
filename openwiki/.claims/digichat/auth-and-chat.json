@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:c5e6af76c85966774acc42c746cdb063ede36701577c8b28ef8f16337bfde9c2",
+  "claims": [
+    {
+      "id": "claim_46ac243de09747f8a6eadd474e3475ff",
+      "statement": "Auth.js v5 offers OIDC enterprise SSO plus dev-only password and local-bootstrap providers, with the session secret from AUTH_SECRET/NEXTAUTH_SECRET.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/digichat/src/auth.ts#L1-L60",
+          "version": "repo-lines-v1:sha256:95e2d63f911a9abff46a75df309ad90f3a31931dddd9b9bcef106de7d38ece13:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiNWQ5MzQ1YWMxZWJiYTMxOGJhNDA5NmJkMTE1MDM3ZjIwMTYyZjg3NjI3ZWQwNDY4ZGRlNGEwMjdkNjQzOTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3OGNmMzU4ODFhOTBhZjQ2ZmExNDMxNGE4YzdlOTYxZjQ0NTUxNTZhYmUzOGMwZmM1ODQxYTViOGMyOTM2NDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ3YTU0MjBmNjkxMGQ4YmNjMGE1NzExMDM0NjNmNDI5ZDc5MDQ0YjYxYWIxNWVlNzY5YjY3YTZhMmViMDkxYjUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_41af1e60538b4f8195d5c47b7ad73e09",
+      "statement": "The BFF exchanges DIGIKEY_BFF_TOKEN for a short-lived bff_session JWT server-side, and POST /api/chat streams with a 120s max duration behind BFF rate limiting and a per-session run lock.",
+      "evidence": [
+        {
+          "resource": "repo://digikey/ARCHITECTURE.md#L37-L40",
+          "version": "repo-lines-v1:sha256:c78f37d14639db603406b651163de620f31c86f3053fb3f704a735b0c44110fa:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzZmNjVkYWYyZjI3Njk0Yjc2ZWU4MjdiNjRiNzk2Mzk1NTA4MGY5YmU1MjcwZDU0MmY0NmNhM2I5MDkyYTMzZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjc3ZGIyZjJmMGEzNzRkMWY0YWI3ZDY5MGM1NjA4MzZlMTY4MjM1MGJkYmUwNWE0MTIzMWYxZDcxNjQxN2RmNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGEwYjI1NDhmNzNiNzljNWRkMzM2ZjA5YjAyY2IzMjA5ZmVjZmVjYzczMDUwZmFmZTQ4M2ZmYjI4YTMxMzVlNyJ9"
+        },
+        {
+          "resource": "repo://frontend/digichat/src/app/api/chat/route.ts#L1-L60",
+          "version": "repo-lines-v1:sha256:4c5fec5b67a492e6b98182237a7af5806d28a9ad8259e2adf6656f527be5b1fd:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4MjAwOTY0YTk3ODYzNTUyMmIyYWIwOTBjNjUwNjVkOGVmOGU4NWM0NzMwYmIyZWIwNDYwZDM0YzY3N2RkYmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM1Yjg4MmE2Y2ZhMWFlMzdhNDA5OTJiNGU3NWNmYmNmOTJjOWJjY2IzNWEwYWMwYzFhOTk3NzA3YWQxZTRmN2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNjYmY0NDZlMzRmNGYwNGMzNTNlMDc0MGRlMTI1N2I3ZDZhMTMyMTE5OTdlNDQ5YzUxNjRhMWNhNjNmMjIwNDMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b672b9b2616042bc8873b5d69c1697a1",
+      "statement": "Turn modes arrive via X-Digi-Turn-Mode (send/regenerate/edit_last_user); concurrent session runs conflict with 409 run_in_progress and duplicate run IDs with 409 run_id_replay.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/digichat/src/app/api/chat/route.ts#L130-L230",
+          "version": "repo-lines-v1:sha256:9ecf2407a5dd05618e2542805f578f999b0a915ed9fb5e7270ce07d5a3d4eb82:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAxLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIxMWRmODdhNDczMTZjNzA4YzU1MDIwOThlOWFmNmM0NDUzNGViODBiZWFkY2Y2MDYzMDI4ZWZjYTg1OTM3YWJlIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI2NjVjZDJiZTEwMTY2YmIxY2MxNTU3NDgxYmZjNTJjOTVlYmZjMDczZTcxY2RhNDU3YTVhYjM3YTA2NDQ4OWQ3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIwMGI4ZmViZWJkYjYzMzA2YmRjNzNlYTIzNGVkMzU5NWZjNDJmYjc1NzA0NjdhYTAwYTkyOWM3NWVhYzEzNmQzIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_1a4febc9769e4baba69a7a3cf1a8fd1c",
+      "statement": "Threads persist to localStorage always-on merged with server conversations, Postgres persistence is optional including quant_runs, and markdown export is clipboard-first with download fallback.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/digichat/ARCHITECTURE.md#L31-L44",
+          "version": "repo-lines-v1:sha256:309872a8ad4286449e10cd652322a52cefe6e19ea6ae5ae50de57989810b479d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgyMTcxMGEwOWFhMmE3NGJkMmEwZjc2NzFkMjkxNDQ1YzJiMzgzMGMyNzM5ZGI4MDhhYmZlMGExNGIwOTkxMzMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMxMTk2ZDg2NzY4ODdhMThkNGI1M2FmMWRjNDhjNWVjNGZjNmZjNGQ3YjJmZTlmMTA5NTEwZDE5ZGQyYzgzOGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ0M2UyNDYwZDEyNTkzYzU1ZjkzZGVlYjQ3ZjMzYzU4MjYzYzc3ZGEwYjM4NGYwNTM2ZDQ5NzBmOTAyNjk4NzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc3MzI4ZTgxMzg2MTBhNjlhMDhkMGQ3MjNhZGVmNDljNjI0N2VkOWVjZDllYzQ0ZjE4YWNhMTU5ODI3MDk0N2IifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

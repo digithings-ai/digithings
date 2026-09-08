@@ -58,6 +58,38 @@ describe("parseEmbedTenants", () => {
       agentName: "agent",
     });
     expect(reg.get("datatapstream.com")?.theme).toBe("light");
+    expect(reg.get("datatapstream.com")?.skin).toBe("base");
+  });
+
+  it("accepts an official thread skin", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "shh",
+          skin: "perplexity",
+        },
+      }),
+    );
+    expect(reg.get("example.com")?.skin).toBe("perplexity");
+  });
+
+  it("fails closed on unknown thread skin", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+            token: "shh",
+            skin: "ink",
+          },
+        }),
+      ),
+    ).toThrow(/skin/);
   });
 
   it("defaults theme to dark and attribution to false when omitted", () => {

@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
+import { buildProductRuntimeAdapters } from "@/components/stock/product-shell";
+import type { DigichatClientFeatures } from "@/lib/deploy-config";
+import type { AssistantRuntime } from "@assistant-ui/react";
+import type { UIMessage } from "ai";
 import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@digithings/digichat-ui";
 import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { type BYOKProvider } from "@/hooks/use-byok-key";
@@ -11,10 +15,26 @@ import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/
 import { resolveLanguageCode } from "@/lib/languages";
 import {
   ACTIVITY_PART_TYPE,
-  sanitizeActivitySpan,
-  toDigiChatActivity,
-  type ActivitySpan,
+  messageActivities,
 } from "@/lib/chat-activity";
+import { conversationIdFromParts } from "@/lib/ui-stream-parts";
+import {
+  setPendingForceTool,
+  setPendingTurnMode,
+  takePendingForceTool,
+  takePendingTurnMode,
+} from "@/lib/pending-chat-headers";
+import {
+  shapeUserMessageParts,
+  type PageContextMessage,
+} from "@/lib/embed-page-context-messages";
+
+export {
+  setPendingForceTool,
+  setPendingTurnMode,
+  takePendingForceTool,
+  takePendingTurnMode,
+};
 
 /** Read ?token= / ?host= at send time — useChat transport is frozen on first render (#1339). */
 function readEmbedUrlAuth(): { token?: string; host?: string } {
@@ -48,51 +68,6 @@ export function isEmbedTrialUnlockedAtSend(
  */
 export function chatAccessTokenAtSend(resolvedHost: string): string | null {
   return readChatAccessToken(resolvedHost);
-}
-
-/**
- * `/search` / `/docs` force-tool, written at send() and read inside
- * prepareSendMessagesRequest. Not a React ref — `react-hooks/refs` forbids
- * `.current` inside the useMemo that builds DefaultChatTransport, and useChat
- * never adopts a rebuilt transport (#1339). Keyed by embedHost so two
- * widgets on one page cannot steal each other's slash.
- */
-const pendingForceByHost = new Map<string, string>();
-
-/** Per-host pending turn mode for the next POST /api/chat (#3475). */
-const pendingTurnModeByHost = new Map<string, "regenerate" | "edit_last_user">();
-
-export function setPendingForceTool(host: string, tool?: string): void {
-  const key = host.trim();
-  if (!key) return;
-  if (tool) pendingForceByHost.set(key, tool);
-  else pendingForceByHost.delete(key);
-}
-
-export function takePendingForceTool(host: string): string | undefined {
-  const key = host.trim();
-  const tool = pendingForceByHost.get(key);
-  pendingForceByHost.delete(key);
-  return tool;
-}
-
-export function setPendingTurnMode(
-  host: string,
-  mode?: "regenerate" | "edit_last_user",
-): void {
-  const key = host.trim();
-  if (!key) return;
-  if (mode) pendingTurnModeByHost.set(key, mode);
-  else pendingTurnModeByHost.delete(key);
-}
-
-export function takePendingTurnMode(
-  host: string,
-): "regenerate" | "edit_last_user" | undefined {
-  const key = host.trim();
-  const mode = pendingTurnModeByHost.get(key);
-  pendingTurnModeByHost.delete(key);
-  return mode;
 }
 
 const CONVERSATION_STORAGE_PREFIX = "digichat_embed_conversation:";
@@ -161,24 +136,22 @@ export function uiMessageToDigiChat(
     .map((part) => part.text)
     .join("");
 
-  const spans = message.parts
-    .filter((part): part is { type: typeof ACTIVITY_PART_TYPE; data: unknown } =>
-      part.type === ACTIVITY_PART_TYPE
-    )
-    .map((part) => sanitizeActivitySpan(part.data))
-    .filter((span): span is ActivitySpan => span !== null);
-
-  // Activity parts win outright: during a deploy a single message could carry
-  // both shapes, and rendering both would double every step.
-  const hasActivityParts = message.parts.some((part) => part.type === ACTIVITY_PART_TYPE);
-  const activities = hasActivityParts
-    ? toDigiChatActivity(spans, opts)
-    : legacyTraceActivities(message);
+  const activities = messageActivities(message, opts);
+  const hasActivityParts = message.parts.some(
+    (part) =>
+      part.type === ACTIVITY_PART_TYPE ||
+      part.type === "data-status" ||
+      part.type === "reasoning" ||
+      part.type === "source-url" ||
+      part.type === "source-document" ||
+      (typeof part.type === "string" && part.type.startsWith("tool-")),
+  );
+  const resolved = hasActivityParts ? activities : legacyTraceActivities(message);
 
   return {
     role: message.role === "user" ? "user" : "assistant",
     content: text,
-    activities: activities.length ? activities : undefined,
+    activities: resolved.length ? resolved : undefined,
   };
 }
 
@@ -211,17 +184,30 @@ type UseEmbedDigiChatOptions = {
    */
   getEnableWebSearch?: () => boolean;
   /**
-   * HMAC-signed plan proof token from /api/plan-proof.  Sent as
-   * X-Embed-Plan-Proof on every chat request.  The chat route verifies the
+   * Optional deploy-allowlisted model id. Read at send time (same freeze
+   * reason as getResponseLanguage) so the picker can change after mount.
+   */
+  getSelectedModel?: () => string | undefined;
+  /**
+   * HMAC-signed plan proof token from /api/plan-proof. Sent as
+   * X-Embed-Plan-Proof on every chat request. The chat route verifies the
    * signature — raw X-Embed-Plan-Tier headers are never trusted (#3662).
+   * Prefer `getPlanProof` — this value is frozen at transport creation (#1339).
    */
   planProof?: string | null;
   /**
-   * When false, omit regenerate/editLastUser so DigiChatSession hides the
+   * Send-time accessor for the HMAC plan proof (same freeze reason as
+   * getSelectedModel / getResponseLanguage). Dashboard mint is async after mount.
+   */
+  getPlanProof?: () => string | null | undefined;
+  /**
+   * When false, omit regenerate/editLastUser so assistant-ui hides the
    * chrome. Digigraph and Foundry both support turn mutation once the BFF
    * sends X-Digi-Turn-Mode (#3475). Default true for digigraph-first callers.
    */
   allowClientTurnMutation?: boolean;
+  /** Deploy feature flags → runtime adapters (attachments/dictation/speech). */
+  features?: DigichatClientFeatures;
 };
 export function useEmbedDigiChat({
   accent,
@@ -235,16 +221,27 @@ export function useEmbedDigiChat({
   onGated,
   getResponseLanguage,
   getEnableWebSearch,
+  getSelectedModel,
   planProof,
+  getPlanProof,
   allowClientTurnMutation = true,
-}: UseEmbedDigiChatOptions): DigiChatController & {
+  features,
+}: UseEmbedDigiChatOptions): Omit<DigiChatController, "send"> & {
+  send: (
+    question: string,
+    opts?: { forceTool?: string; pageContext?: PageContextMessage | null },
+  ) => void | Promise<void>;
   seed: (msgs: readonly DigiChatMessage[]) => void;
   /** Raw AI SDK error — for structured code detection (quota → BYOK). */
   rawError: Error | undefined;
+  runtime: AssistantRuntime;
+  /** Arm X-Digi-Turn-Mode only; ActionBar Reload/Send run the runtime. */
+  armRegenerate?: () => void;
+  armEditLastUser?: () => void;
 } {
   const transport = useMemo(
     () =>
-      new DefaultChatTransport({
+      new AssistantChatTransport({
         api: p("/api/chat"),
         prepareSendMessagesRequest: ({ messages, body }) => {
           const urlAuth = readEmbedUrlAuth();
@@ -279,6 +276,10 @@ export function useEmbedDigiChat({
           if (normalizedLanguage !== "en") {
             headers["X-Digi-Language"] = normalizedLanguage;
           }
+          const selectedModel = getSelectedModel?.()?.trim();
+          if (selectedModel) {
+            headers["X-Digi-Model"] = selectedModel;
+          }
           const forceTool = takePendingForceTool(embedHost);
           if (forceTool) {
             headers["X-Digi-Force-Tool"] = forceTool;
@@ -302,9 +303,11 @@ export function useEmbedDigiChat({
           }
           // HMAC-signed plan proof (#3662): sent on every request when available.
           // The chat route verifies the signature — raw X-Embed-Plan-Tier headers
-          // are never trusted.
-          if (planProof) {
-            headers["X-Embed-Plan-Proof"] = planProof;
+          // are never trusted. Read at send time (getPlanProof / ref) so a mint
+          // after mount still reaches the header (#1339).
+          const proof = (getPlanProof?.() ?? planProof)?.trim();
+          if (proof) {
+            headers["X-Embed-Plan-Proof"] = proof;
           }
           try {
             const conversationId = window.sessionStorage.getItem(
@@ -341,28 +344,30 @@ export function useEmbedDigiChat({
         trialUnlocked,
         getResponseLanguage,
         getEnableWebSearch,
-        planProof,
+        getSelectedModel,
+        getPlanProof,
       ],
   );
 
-  const { messages, sendMessage, status, error, regenerate, setMessages, stop } = useChat<UIMessage>({
+  const chat = useChat<UIMessage>({
     transport,
   });
+  const runtimeAdapters = useMemo(
+    () => (features ? buildProductRuntimeAdapters(features) : undefined),
+    [features],
+  );
+  const runtime = useAISDKRuntime(chat, runtimeAdapters ? { adapters: runtimeAdapters } : undefined);
+  const { messages, sendMessage, status, error, regenerate, setMessages, stop } = chat;
 
   useEffect(() => {
     const last = messages[messages.length - 1];
     if (!last || last.role !== "assistant") return;
-    for (const part of last.parts) {
-      if (part.type === "data-externalConversation") {
-        const id = (part as { data?: { conversationId?: string } }).data?.conversationId;
-        if (id) {
-          try {
-            window.sessionStorage.setItem(conversationStorageKey(embedHost), id);
-          } catch {
-            /* ignore */
-          }
-        }
-      }
+    const id = conversationIdFromParts(last.parts);
+    if (!id) return;
+    try {
+      window.sessionStorage.setItem(conversationStorageKey(embedHost), id);
+    } catch {
+      /* ignore */
     }
   }, [messages, embedHost]);
 
@@ -380,13 +385,16 @@ export function useEmbedDigiChat({
   }, [error, onGated]);
 
   const send = useCallback(
-    (question: string, opts?: { forceTool?: string }) => {
+    (
+      question: string,
+      opts?: { forceTool?: string; pageContext?: PageContextMessage | null },
+    ) => {
       const q = question.trim();
       if (!q || busy) return;
       setPendingForceTool(embedHost, opts?.forceTool);
       sendMessage({
         role: "user",
-        parts: [{ type: "text", text: q }],
+        parts: shapeUserMessageParts(q, opts?.pageContext),
       });
     },
     [busy, sendMessage, embedHost],
@@ -406,13 +414,23 @@ export function useEmbedDigiChat({
     }
   }, [setMessages, embedHost]);
 
-  const doRegenerate = useCallback(() => {
-    if (!allowClientTurnMutation || busy) return;
-    // Never set a pending force-tool on regen — slash force is send-only (#3466).
+  const armRegenerate = useCallback(() => {
+    if (!allowClientTurnMutation) return;
     setPendingForceTool(embedHost);
     setPendingTurnMode(embedHost, "regenerate");
+  }, [allowClientTurnMutation, embedHost]);
+
+  const doRegenerate = useCallback(() => {
+    if (!allowClientTurnMutation || busy) return;
+    armRegenerate();
     void regenerate();
-  }, [allowClientTurnMutation, busy, embedHost, regenerate]);
+  }, [allowClientTurnMutation, armRegenerate, busy, regenerate]);
+
+  const armEditLastUser = useCallback(() => {
+    if (!allowClientTurnMutation || busy) return;
+    setPendingForceTool(embedHost);
+    setPendingTurnMode(embedHost, "edit_last_user");
+  }, [allowClientTurnMutation, busy, embedHost]);
 
   const editLastUser = useCallback(
     (text: string) => {
@@ -482,8 +500,14 @@ export function useEmbedDigiChat({
         }
       : undefined,
     ...(allowClientTurnMutation
-      ? { regenerate: doRegenerate, editLastUser }
+      ? {
+          regenerate: doRegenerate,
+          editLastUser,
+          armRegenerate,
+          armEditLastUser,
+        }
       : {}),
     seed,
+    runtime,
   };
 }

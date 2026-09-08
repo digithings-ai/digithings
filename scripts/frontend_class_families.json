@@ -38,8 +38,11 @@
     "tl",
     "ts"
   ],
+  "_digichat_2_0": "digichat 2.0 assistant-ui product CSS: .aui-* (stock Thread chrome) and .dark-* (theme variants). Added with the 2.0.0 cut (#3629); not a new app-local family.",
   "digichat": [
     "app",
+    "aui",
+    "dark",
     "dc"
   ],
   "digichat-ui": [

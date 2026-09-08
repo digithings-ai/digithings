@@ -87,13 +87,6 @@ model_list:
       configurable_clientside_auth_params: *byok_auth_openrouter
   - model_name: openrouter/google/gemini-3.7-flash
     litellm_params: *or_gem_37_flash
-  - model_name: google/gemini-3.7-flash:online
-    litellm_params: &or_gem_37_flash_online
-      model: openrouter/google/gemini-3.7-flash:online
-      api_key: os.environ/OPENROUTER_API_KEY
-      configurable_clientside_auth_params: *byok_auth_openrouter
-  - model_name: openrouter/google/gemini-3.7-flash:online
-    litellm_params: *or_gem_37_flash_online
   - model_name: google/gemini-3.1-flash-lite
     litellm_params: &or_gem_31_flash_lite
       model: openrouter/google/gemini-3.1-flash-lite
@@ -101,6 +94,13 @@ model_list:
       configurable_clientside_auth_params: *byok_auth_openrouter
   - model_name: openrouter/google/gemini-3.1-flash-lite
     litellm_params: *or_gem_31_flash_lite
+  - model_name: google/gemini-3.7-flash:online
+    litellm_params: &or_gem_37_flash_online
+      model: openrouter/google/gemini-3.7-flash:online
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/google/gemini-3.7-flash:online
+    litellm_params: *or_gem_37_flash_online
   - model_name: openai/gpt-5.6-luna
     litellm_params: &or_gpt56_luna
       model: openrouter/openai/gpt-5.6-luna

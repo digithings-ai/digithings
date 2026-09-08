@@ -26,6 +26,7 @@ import {
   readDocumentTheme,
   resolveDigichatEmbedOrigin,
   sanitizePageHtml,
+  mergeDigichatChromeIntoPopup,
 } from './digichat-popup';
 
 describe('digichatPopupEnvFromProcess', () => {
@@ -318,5 +319,32 @@ describe('page context + theme helpers', () => {
       tier: 'studio',
       accessToken: 'tok-2',
     });
+  });
+});
+
+describe('mergeDigichatChromeIntoPopup', () => {
+  it('overlays launcher labels/hotkey from deploy chrome API', () => {
+    const base = readDigichatPopupConfig({
+      NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: 'https://digithings.ai',
+      NEXT_PUBLIC_DIGICHAT_POPUP: '1',
+      NEXT_PUBLIC_DIGICHAT_EMBED_HOST: 'digiquant.io',
+      NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN: 'tok',
+    });
+    expect(base).not.toBeNull();
+    const merged = mergeDigichatChromeIntoPopup(base!, {
+      welcome: 'From deploy config',
+      launcher: {
+        label: 'ask ai',
+        closeLabel: 'minimize',
+        hotkey: 'meta+i',
+        mobileFullscreen: true,
+        mode: 'bar',
+      },
+    });
+    expect(merged.welcome).toBe('From deploy config');
+    expect(merged.launcherLabel).toBe('ask ai');
+    expect(merged.launcherCloseLabel).toBe('minimize');
+    expect(merged.launcherHotkey).toBe('meta+i');
+    expect(merged.mobileFullscreen).toBe(true);
   });
 });

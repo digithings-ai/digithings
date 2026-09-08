@@ -153,3 +153,203 @@ export function formatPageContextForPrompt(ctx: {
   }
   return lines.join("\n");
 }
+
+/** Filename for the system document chip on the user message. */
+export const PAGE_CONTEXT_ATTACHMENT_NAME = "page-context.html";
+
+export type PageContextFileUiPart = {
+  type: "file";
+  filename: string;
+  mediaType: string;
+  url: string;
+};
+
+/** Composer `CreateAttachment` shape — file part so the chip is not inlined as text. */
+export type PageContextCreateAttachment = {
+  name: string;
+  type: "document";
+  contentType: string;
+  content: Array<{
+    type: "file";
+    filename: string;
+    data: string;
+    mimeType: string;
+  }>;
+};
+
+export function isPageContextAttachmentName(name: string | undefined): boolean {
+  return name === PAGE_CONTEXT_ATTACHMENT_NAME;
+}
+
+export function isPageContextFilePart(part: {
+  type?: string;
+  filename?: string;
+}): boolean {
+  return part.type === "file" && isPageContextAttachmentName(part.filename);
+}
+
+/** Marker folded into the document body so BFF expansion can acknowledge a screenshot. */
+const PAGE_CONTEXT_SCREENSHOT_MARKER = "<!-- digichat:page-context-screenshot -->";
+
+function htmlCommentSafe(text: string): string {
+  return text.replace(/--+/g, "—");
+}
+
+function visibleTextComment(text: string): string {
+  return `<!-- digichat:page-context-text\n${htmlCommentSafe(text)}\n-->`;
+}
+
+/** Snapshot stored on the document chip — HTML preferred, visible text as fallback. */
+export function pageContextSnapshotBody(ctx: {
+  text: string;
+  html?: string;
+  screenshotDataUrl?: string;
+}): { body: string; mediaType: string } {
+  const html = ctx.html?.trim() ?? "";
+  const text = ctx.text.trim();
+  const extras: string[] = [];
+  if (html && text) extras.push(visibleTextComment(text));
+  if (ctx.screenshotDataUrl) extras.push(PAGE_CONTEXT_SCREENSHOT_MARKER);
+  const suffix = extras.length ? `\n${extras.join("\n")}` : "";
+  if (html) return { body: html + suffix, mediaType: "text/html" };
+  return { body: text + suffix, mediaType: "text/plain" };
+}
+
+export function encodeTextDataUrl(mediaType: string, body: string): string {
+  return `data:${mediaType};charset=utf-8,${encodeURIComponent(body)}`;
+}
+
+export function decodeDataUrlText(url: string): string {
+  if (!url.startsWith("data:")) return url;
+  const comma = url.indexOf(",");
+  if (comma < 0) return "";
+  const header = url.slice(5, comma);
+  const payload = url.slice(comma + 1);
+  if (header.includes(";base64")) {
+    try {
+      if (typeof Buffer !== "undefined") {
+        return Buffer.from(payload, "base64").toString("utf8");
+      }
+      const binary = atob(payload);
+      const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+      return new TextDecoder().decode(bytes);
+    } catch {
+      return payload;
+    }
+  }
+  try {
+    return decodeURIComponent(payload);
+  } catch {
+    return payload;
+  }
+}
+
+export function pageContextFileUiPart(
+  ctx: { text: string; html?: string; screenshotDataUrl?: string } | null | undefined,
+): PageContextFileUiPart | null {
+  if (!ctx) return null;
+  const { body, mediaType } = pageContextSnapshotBody(ctx);
+  if (!body) return null;
+  return {
+    type: "file",
+    filename: PAGE_CONTEXT_ATTACHMENT_NAME,
+    mediaType,
+    url: encodeTextDataUrl(mediaType, body),
+  };
+}
+
+export function pageContextCreateAttachment(
+  ctx: { text: string; html?: string; screenshotDataUrl?: string } | null | undefined,
+): PageContextCreateAttachment | null {
+  const file = pageContextFileUiPart(ctx);
+  if (!file) return null;
+  return {
+    name: file.filename,
+    type: "document",
+    contentType: file.mediaType,
+    content: [
+      {
+        type: "file",
+        filename: file.filename,
+        data: file.url,
+        mimeType: file.mediaType,
+      },
+    ],
+  };
+}
+
+/**
+ * User-visible parts: the question text plus a document file part for the chip.
+ * Do not prefix the question — BFF expansion feeds digigraph.
+ */
+export function shapeUserMessageParts(
+  question: string,
+  ctx: { text: string; html?: string; screenshotDataUrl?: string } | null | undefined,
+): Array<{ type: "text"; text: string } | PageContextFileUiPart> {
+  const text = question.trim();
+  const parts: Array<{ type: "text"; text: string } | PageContextFileUiPart> = [
+    { type: "text", text },
+  ];
+  const file = pageContextFileUiPart(ctx);
+  if (file) parts.push(file);
+  return parts;
+}
+
+function pageContextFromFilePart(part: {
+  url?: string;
+  mediaType?: string;
+  filename?: string;
+}): { text: string; html?: string; screenshotDataUrl?: string } | null {
+  if (!isPageContextFilePart(part) || typeof part.url !== "string") return null;
+  const raw = decodeDataUrlText(part.url);
+  const screenshotDataUrl = raw.includes("digichat:page-context-screenshot")
+    ? "data:image/png;base64,"
+    : undefined;
+  const textMatch = raw.match(/<!--\s*digichat:page-context-text\n([\s\S]*?)\n-->/);
+  const supplement = textMatch?.[1]?.trim() ?? "";
+  const body = raw
+    .replace(/<!--\s*digichat:page-context-text\n[\s\S]*?\n-->/g, "")
+    .replace(/\n?<!--\s*digichat:page-context-screenshot\s*-->/g, "")
+    .trim();
+  if (!body && !supplement && !screenshotDataUrl) return null;
+  const html = (part.mediaType ?? "").includes("html");
+  return html
+    ? { text: supplement, html: body, screenshotDataUrl }
+    : { text: body || supplement, screenshotDataUrl };
+}
+
+/**
+ * Fold `page-context.html` file parts into the user text so convertToModelMessages
+ * (text-only) still ships the snapshot to digigraph. Idempotent if already prefixed.
+ */
+export function expandPageContextFileParts<
+  M extends {
+    role: string;
+    parts: Array<{ type: string; text?: string; filename?: string; url?: string; mediaType?: string }>;
+  },
+>(messages: M[]): M[] {
+  return messages.map((m) => {
+    if (m.role !== "user") return m;
+    const fileParts = m.parts.filter((p) => isPageContextFilePart(p));
+    if (fileParts.length === 0) return m;
+    const question = m.parts
+      .filter((p): p is { type: "text"; text: string } => p.type === "text")
+      .map((p) => p.text)
+      .join("");
+    if (question.includes("[Page context from the host page")) {
+      return {
+        ...m,
+        parts: m.parts.filter((p) => p.type === "text" || !isPageContextFilePart(p)),
+      };
+    }
+    const ctx = pageContextFromFilePart(fileParts[0]!);
+    const formatted = ctx ? formatPageContextForPrompt(ctx) : "";
+    const text = formatted
+      ? `${formatted}\n\n---\n\nUser question:\n${question}`
+      : question;
+    return {
+      ...m,
+      parts: [{ type: "text" as const, text }],
+    };
+  });
+}

@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from typing import (
     Any,  # score:allow untyped any — duck-typed Supabase client / row dicts
     Sequence,
@@ -388,11 +388,8 @@ def _quantize_return_fraction(value: Decimal) -> Decimal:
     Decimal division of prices routinely exceeds ``max_digits=16`` /
     ``decimal_places=8`` on :class:`ForecastOutcome` fields; Pydantic then raises
     ``decimal_max_digits`` during preflight_reflect outcome assembly.
-
-    ``ROUND_HALF_UP`` matches the codebase economics standard (ledger_io,
-    execution_io, cost_liquidity, forecast_calibration ``_q``).
     """
-    return value.quantize(_RETURN_FRACTION_QUANTUM, rounding=ROUND_HALF_UP)
+    return value.quantize(_RETURN_FRACTION_QUANTUM)
 
 
 def _build_resolved_outcome(
@@ -407,22 +404,11 @@ def _build_resolved_outcome(
     maturity_snapshot: SessionPriceSnapshot,
     forecast_mean_return: Decimal,
 ) -> ForecastOutcome:
-    # Quantize the mean FIRST, then derive the residual from quantized
-    # operands: their difference is exactly representable at 8dp, so the
-    # outer quantize is identity and the model invariant
-    # (signed_residual == realized - forecast_mean) holds exactly. Quantizing
-    # an unquantized mean instead would round the residual away from the
-    # stored operands whenever the mean carries >8dp (scenario_mean_return
-    # products run to 16dp). Quantized strings feed content_hash, so hashes
-    # differ in trailing-zero format from pre-fix runs; idempotency still
-    # holds via the pre-build (effective_id, maturity_session) natural-key
-    # guard, not the hash.
-    mean_q = _quantize_return_fraction(forecast_mean_return)
-    realized_q = _quantize_return_fraction(
+    realized = _quantize_return_fraction(
         (maturity_snapshot.price - reference_snapshot.price) / reference_snapshot.price
     )
-    residual_q = _quantize_return_fraction(realized_q - mean_q)
-    positive = realized_q > Decimal("0")
+    residual = _quantize_return_fraction(realized - forecast_mean_return)
+    positive = realized > Decimal("0")
     event_time = maturity_snapshot.observed_at
     known_at = maturity_snapshot.known_at
     draft = {
@@ -434,9 +420,9 @@ def _build_resolved_outcome(
         "maturity_session": maturity_session,
         "reference_snapshot": reference_snapshot,
         "maturity_snapshot": maturity_snapshot,
-        "forecast_mean_return": mean_q,
-        "realized_return": realized_q,
-        "signed_residual": residual_q,
+        "forecast_mean_return": forecast_mean_return,
+        "realized_return": realized,
+        "signed_residual": residual,
         "positive_label": positive,
         "status": OutcomeStatus.RESOLVED,
         "unavailable_reason": None,
@@ -452,9 +438,9 @@ def _build_resolved_outcome(
         "maturity_session": maturity_session.isoformat(),
         "reference_snapshot": reference_snapshot.model_dump(mode="json"),
         "maturity_snapshot": maturity_snapshot.model_dump(mode="json"),
-        "forecast_mean_return": str(mean_q),
-        "realized_return": str(realized_q),
-        "signed_residual": str(residual_q),
+        "forecast_mean_return": str(forecast_mean_return),
+        "realized_return": str(realized),
+        "signed_residual": str(residual),
         "positive_label": positive,
         "status": OutcomeStatus.RESOLVED.value,
         "unavailable_reason": None,
@@ -587,30 +573,17 @@ def resolve_matured_forecast_outcomes(
             pending += 1
             continue
 
-        try:
-            outcome = _build_resolved_outcome(
-                base=assessment,
-                effective_id=effective.effective_id,
-                ticker=assessment.ticker,
-                horizon_sessions=effective.terms.horizon_sessions,
-                reference_session=reference_session,
-                maturity_session=maturity_session,
-                reference_snapshot=ref_snap,
-                maturity_snapshot=mat_snap,
-                forecast_mean_return=effective.terms.scenario_mean_return(),
-            )
-        except (ValueError, ArithmeticError) as exc:
-            # _build does no I/O — only Decimal arithmetic + Pydantic, so
-            # only validation/arithmetic failures are expected here. Counted
-            # as pending (retried next run) rather than failing the run.
-            logger.warning(
-                "forecast outcomes: skip unbuildable outcome for %s (%s: %s)",
-                effective.effective_id,
-                type(exc).__name__,
-                exc,
-            )
-            pending += 1
-            continue
+        outcome = _build_resolved_outcome(
+            base=assessment,
+            effective_id=effective.effective_id,
+            ticker=assessment.ticker,
+            horizon_sessions=effective.terms.horizon_sessions,
+            reference_session=reference_session,
+            maturity_session=maturity_session,
+            reference_snapshot=ref_snap,
+            maturity_snapshot=mat_snap,
+            forecast_mean_return=effective.terms.scenario_mean_return(),
+        )
 
         # Re-check natural key after build (concurrent writer / exact retry race).
         existing = _existing_outcome(

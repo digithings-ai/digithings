@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:fd7b2a2b67b40449d082d2a330319ade92fe6f0b0282f844d5ede48b457638d2",
+  "claims": [
+    {
+      "id": "claim_8da502feb6a340b1913abe805c363752",
+      "statement": "The container runs python3 -m digiclaw (single-shot, exit 0 clean) inside an external 1800s shell loop, with an import-level HEALTHCHECK and digibase installed for audit helpers.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/ARCHITECTURE.md#L50-L56",
+          "version": "repo-lines-v1:sha256:ef64a16fefe4d6baa80f4a26f7f31c2c0a051868217e9ee1e3cc94ee06f7dae8:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYWE4Mzg3YzBmNTE4YjZmNzRjYzhiNTAwZjY1YzM0MWE3OTg3OTlhNjcyYzFhMjkxM2EzMTkxNGNhMDU2OTNlOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDdjMDZjNTYxZDVjMzI3MzQzNjg1MjY4YTQ2YjMzOTFmMzk5OGVlZTg5MGQyYmU1MWYwZDIxY2M0YTUzYWU2ZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTIxZTA2M2E5ZWI4M2VlNGE5N2IyMDRhZjQ3MzljZTU0YTQyMjVkYmY1OWVmM2I0MmZiYTgyZjJkODY3MmFiYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTcyZWEzNTczYWYzYzI2ZmI5YTNiZDZmZmUyYjA4MDFlN2MzYmU5ZDc3MTk4ZmI2ODBhZTc2NDBjZDEzM2RjMyJ9"
+        },
+        {
+          "resource": "repo://digiclaw/Dockerfile#L20-L29",
+          "version": "repo-lines-v1:sha256:9aa246e01fb9c7d41a16a8becb9855c30fb8cf9913b5120320eb2e219503e78e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY2M2QwNzhkMTYzNGE0Yzk4OWVjMDhhZmQzMDZjNmEyYTM4M2UwYTFhZDUyN2U2ZDY5MGZhNzVhZTIzNGVmYTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiNTE2ZjExZDNjMTcwMGJmNTc4ZGNmYjU4MDM5YThhMjgwNzM1Yjk3ZmE1ZTk1Njk1ZTkzNGZlMWQ2NDA4MWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY1YjM5YTc0M2QyOTA2M2ZhY2M1NjZhZDZlMTc0YTJlNWE5MjI4Y2NlZTExYmY5MzZhMmY1OTc4ZTgxYTBhNzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cc9049a80db64be9b791318014325392",
+      "statement": "Each cycle pings DIGIGRAPH_URL and DIGIQUANT_URL (defaulting to 127.0.0.1:8000/8001) and emits one heartbeat audit event with per-service OK and detail fields.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/src/digiclaw/heartbeat_runner.py#L19-L25",
+          "version": "repo-lines-v1:sha256:0307106998ca0b91c083fda6e48bd363650480d8fa2c747bbafea64ee45477d4:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmY5Yzk4ZmZlNGZiN2Y1OGUyNmE0YWY1Yjc3MjQ0ZWE5YTZhM2QyZTBkYmQzODM5YzJmYmJlYjRhMzhmYTM4MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzg2OWE2ZjAwYzI2Mzg3NGU2YmYyYjZmMTc5YzI0MDMzZGNhZGVlNzA1YmI1ZDZkYmFkNWU2M2U0YzFhZjQ1OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTUwNmY3NDQ1MjAyNDJkYjIxNmJkYTMyMmI3MTllNjUwYmUxMTJjMjc1MDlmYzVkNjI3YTc4YjQyYzBlMTBjMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmJmMjAzZWUzZTBlMzJhMTU2MzhhYzMzMjgzOWYzZmViNDBjNzgzZmU4YTdjMTZkYjczN2VhOTY1ZWFmY2U2MCJ9"
+        },
+        {
+          "resource": "repo://digiclaw/src/digiclaw/heartbeat_runner.py#L60-L90",
+          "version": "repo-lines-v1:sha256:70328481ec714914a3f1d88be71f28593f05bfc1cf55e95dbac7e31afa019724:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiYjM3MTljNjgzZDgxYmVmMjQwMmZiZmFhNDM0MTkzNjJlNmViZWUxNjk5MWFkNjI2NWFmZmM3ZGJmNDE0N2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhNmUzNDg2YmZkMzMwODc2ODg3YzY5ZTUwNmNkMzRjYWQ3NjQ4NzJmZDNiODNjY2RiYTZkMmFkYzA2MjAyN2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYyZGQzNzQwNTEzNmVhMDM3YTMxYzNkYTdiN2M2ZGNlMGUyMWU3NDc4Y2Q2NzEzYzZlZDM2ZjY4YzM4Y2NhNDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY4MmFjMzQyNzRmYTBlNzQ3NjcxYWQ4NWRiYjRmZWM0MTdhYTVhOTEwYzEzMzJlNjAwN2IwY2RhN2JlODFlYzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_10d3687b15744f5bb1c5d6d1756ba686",
+      "statement": "Drift polling uses REOPTIMIZE_STRATEGY with a bearer exchanged from DIGICLAW_DIGIKEY_API_KEY at DIGIKEY_URL for digiquant backtest/optimize scopes; missing key logs drift_check_skipped and every failure path audits explicitly.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/src/digiclaw/digikey_auth.py#L1-L36",
+          "version": "repo-lines-v1:sha256:e3b6ca4b1aa7ecf8cdcacbfa7fc8a5df1aa0d00ba219c0f50c6840713c2dae0b:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIxNGY4ZmMzMDQ1Y2RiM2JmZWNjYjlhNTVmOTMyMzUyZjk4MzE4NjhmNWIxMzJlZjIwYTg1MTdjNDllNzgzMGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5OTUyMjc2ZjhlZjVkNzE0MzI3MmIxZjI2YjA4MWY4NDc3MzIxNDBjMjYxMGU0NzFlYmU1YTQ4ZGM3OWU4MTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digiclaw/src/digiclaw/heartbeat_runner.py#L83-L130",
+          "version": "repo-lines-v1:sha256:87991fd304c22adb0c0863a029ad280b82baef8c818ffea2b8cdc4628c59d696:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhmNTFmOGIxZGViMTQ3ZWQ1ZjIwNTRlZDUxYTA1MjU3NzZlZmU4NmEwYzg3MmIzMWQ3ZjJmNjk0ZTY5NjkxZTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkYTVjNjZlMTdiMTQ1Mzk3ODM0YjhjODU0ZGM0MTkzZTIxMjUxODBhODk5NmExNGMzMTg4MzMyNmIyZWZiY2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM0NDc3YzMzNGJiN2E2YmJmYzg2NTU1OTE0YmI2YmY3YzM3MjVlZTdhN2FhZjllOTQ2MzFkZDA5NDM0MDVhOGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZmNjBlYjliY2M4MjNmMTVjZDcyZTBkY2Q0YjQyMGZkYjA0Zjk2YjA3NzI5Zjg4M2JkYzg1NDc5ZDY4YjJjY2UifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d752f28756784261bd01da26576e9577",
+      "statement": "Scheduler lifecycle and isolated ticks run via digiclaw schedule status/tick over digiclaw/agents YAML, separate from the heartbeat runner.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/AGENTS.md#L30-L60",
+          "version": "repo-lines-v1:sha256:d9ba63de1c9bf84a6215924c382bba1ff7d03b82ca95d3fd53005f8190662aed:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVlZjVmOTVhMDMyMzliZDgyODQyZmIwODJkNjAwZjEzYjc5MzY2Yjk0MTkyNjUwMWU5NjQ4ZTI1YTNmYmRjMDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMzY2RhMjA4ZWY1MDFlZTQ1MGE2NzIyN2ZlNjYzOTEwMDRiYWMyNTc1NGI4ODc2Y2ViNzNmMmM4YzMwMDBkN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk0YTZmN2ZkNDJhYjQzM2Q2M2VjMGY2Yjg2ZTY3YmM4MDBlODMxNmE0YmIyODg4NTljMTRlY2Q4Yjg2ZTI3MWEifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

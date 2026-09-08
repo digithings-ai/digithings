@@ -199,7 +199,6 @@ def run_research_agent(
     max_tokens: int | None = None,
     tools: list[dict[str, Any]] | None = None,
     execute_tool: Callable[[str, dict[str, Any]], str] | None = None,
-    search_parameters: dict[str, Any] | None = None,
     max_tool_rounds: int | None = None,
 ) -> T:
     """Run one research-agent LLM call and return a validated Pydantic instance.
@@ -236,9 +235,6 @@ def run_research_agent(
             ``response_format`` — see "Tool-path retry" below.
         execute_tool: Dispatcher ``(name, args) -> json_str`` bound to the tools.
             Required for the tool path; ignored when ``tools`` is empty.
-        search_parameters: Optional xAI Live Search descriptor, forwarded via
-            ``extra_body`` for xAI models (no-op otherwise). Applies on both the
-            tool and the structured-output paths.
         max_tool_rounds: Optional cap for the tool-calling loop. None (default)
             keeps digillm's default (5); Olympus passes 24 via its wrapper.
 
@@ -371,7 +367,6 @@ def run_research_agent(
                             tools=tools,
                             execute_tool=traced_execute_tool,
                             temperature=temperature,
-                            search_parameters=search_parameters,
                             max_tool_rounds=max_tool_rounds if max_tool_rounds is not None else 5,
                         )
                         parent_call_id = call.last_call_id
@@ -394,7 +389,6 @@ def run_research_agent(
                                 temperature=temperature,
                                 response_format=response_format,
                                 max_tokens=max_tokens,
-                                search_parameters=search_parameters,
                             )
                         parent_call_id = call.last_call_id
                     except Exception:

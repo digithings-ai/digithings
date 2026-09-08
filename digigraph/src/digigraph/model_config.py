@@ -16,8 +16,8 @@ P2). Owns everything about *which model string* a request should use:
   ``ValueError`` (no silent Ollama default). House uses hosted Cheaper Inference
   (``CHEAPERINFERENCE_API_KEY`` / ``DIGI_HOUSE_UPSTREAM=openrouter``); unprefixed
   digiquant slugs (``deepseek/...``, ``meta-llama/...``, ``perplexity/...``) are
-  not registered providers and pass through unchanged. Local opt-in required for
-  any external provider usage.
+  not registered providers and pass through unchanged. Catalog misses raise —
+  there is no fallback. Local opt-in required for any external provider usage.
 
 The LLM calls live in :mod:`digigraph.llm_client`; per-request auth (proxy key /
 BYOK) lives in :mod:`digigraph.llm_auth`.
@@ -417,26 +417,6 @@ def sanitize_allowed_models(allowed_models: str, *, tier: str = "cheap") -> str:
     return ",".join(kept) if kept else _OPEN_WEIGHT_ALLOWED_MODELS
 
 
-def _effective_openrouter_config(
-    tier_name: str,
-    tier_cfg: DigiquantTierConfig,
-    dashboard: DigiquantModelsConfig,
-) -> DigiquantOpenRouterTierConfig:
-    """Merge tier overrides with ``openrouter_defaults`` (defaults win on empty tier fields)."""
-    defaults = dashboard.openrouter_defaults
-    tier_or = tier_cfg.openrouter
-    allowed = tier_or.allowed_models.strip() or defaults.allowed_models
-    tradeoff = (
-        tier_or.cost_quality_tradeoff
-        if tier_or.cost_quality_tradeoff is not None
-        else defaults.cost_quality_tradeoff
-    )
-    return DigiquantOpenRouterTierConfig(
-        allowed_models=sanitize_allowed_models(allowed, tier=tier_name),
-        cost_quality_tradeoff=tradeoff,
-    )
-
-
 def _warn_flagship_models_in_digiquant_config(cfg: DigiquantModelsConfig) -> None:
     """Log when digiquant_models.yaml pools a frontier model on a restricted tier."""
     for tier_name, tier_cfg in cfg.tiers.items():
@@ -618,31 +598,29 @@ def _cheaperinference_house_preferred() -> bool:
     """House default prefers Cheaper Inference when ``CHEAPERINFERENCE_API_KEY`` is set.
 
     Delegates to :func:`digillm.client.cheaperinference_house_preferred`. Force
-    OpenRouter with ``DIGI_HOUSE_UPSTREAM=openrouter``. OpenRouter remains the
-    fallback for catalog misses. Distinct from self-hosted OmniRoute.
+    OpenRouter with ``DIGI_HOUSE_UPSTREAM=openrouter``. Catalog misses raise —
+    there is no OpenRouter fallback. Distinct from self-hosted OmniRoute.
     """
     return cheaperinference_house_preferred()
 
 
-def apply_digiquant_openrouter_env(*, force: bool = False) -> str:
-    """Apply house LLM routing + OpenRouter cost knobs from the active digiquant tier.
+def apply_digiquant_house_env() -> None:
+    """Point the default client at the house upstream (CLI/GHA without a local proxy).
 
     When ``OPENAI_API_BASE`` is already set (Docker LiteLLM, stack-local), leave it
     alone — house pins are unprefixed slugs on that proxy's ``model_list``.
 
-    CLI / GHA without a local proxy:
-    - If Cheaper Inference is the house default (``CHEAPERINFERENCE_API_KEY`` set,
-      unless ``DIGI_HOUSE_UPSTREAM=openrouter``), point the default client at
-      ``CHEAPERINFERENCE_API_BASE`` (default ``https://api.cheaperinference.com/v1``).
-      digillm rewrites mapped house slugs to bare CI ids and keeps OpenRouter for
-      sonar / ``:online`` / maverick / unmapped pins.
-    - Otherwise point at OpenRouter's OpenAI-compatible API and copy
-      ``OPENROUTER_API_KEY`` into ``OPENAI_API_KEY`` when that is unset, so
-      unprefixed pins do not hit api.openai.com.
+    Otherwise: Cheaper Inference is the house default when ``CHEAPERINFERENCE_API_KEY``
+    is set (unless ``DIGI_HOUSE_UPSTREAM=openrouter``) — point at
+    ``CHEAPERINFERENCE_API_BASE`` (default ``https://api.cheaperinference.com/v1``).
+    Else point at OpenRouter's OpenAI-compatible API and copy ``OPENROUTER_API_KEY``
+    into ``OPENAI_API_KEY`` when that is unset, so unprefixed pins do not hit
+    api.openai.com.
 
-    Also sets ``OPENROUTER_ALLOWED_MODELS`` and ``OPENROUTER_COST_QUALITY_TRADEOFF``
-    when unset (or when *force*). Called at chain startup so CI picks up tier policy
-    without duplicating values in ``digiquant-pipeline.yml``.
+    Called at chain startup (and preflight) so CLI picks up house routing without
+    duplicating values in workflow files. Sets no model policy — tiers live in
+    ``config/digiquant_models.yaml`` and misconfiguration surfaces fail-fast
+    from digillm at first call.
     """
     if not (os.environ.get("OPENAI_API_BASE") or "").strip():
         if _cheaperinference_house_preferred():
@@ -658,29 +636,10 @@ def apply_digiquant_openrouter_env(*, force: bool = False) -> str:
                 or_key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
                 if or_key:
                     os.environ["OPENAI_API_KEY"] = or_key
-    tier = get_digiquant_tier()
-    tier_cfg = _load_digiquant_models().tiers.get(tier)
-    if tier_cfg is None:
-        logger.warning("dashboard tier %r not found in digiquant_models.yaml", tier)
-        return tier
-    dashboard = _load_digiquant_models()
-    or_cfg = _effective_openrouter_config(tier, tier_cfg, dashboard)
-    if or_cfg.allowed_models and (
-        force or not os.environ.get("OPENROUTER_ALLOWED_MODELS", "").strip()
-    ):
-        os.environ["OPENROUTER_ALLOWED_MODELS"] = or_cfg.allowed_models
-    if or_cfg.cost_quality_tradeoff is not None and (
-        force or not os.environ.get("OPENROUTER_COST_QUALITY_TRADEOFF", "").strip()
-    ):
-        os.environ["OPENROUTER_COST_QUALITY_TRADEOFF"] = str(or_cfg.cost_quality_tradeoff)
     logger.info(
-        "dashboard model tier=%s openrouter_pool=%s tradeoff=%s openai_api_base=%s",
-        tier,
-        os.environ.get("OPENROUTER_ALLOWED_MODELS", ""),
-        os.environ.get("OPENROUTER_COST_QUALITY_TRADEOFF", ""),
+        "dashboard house openai_api_base=%s",
         os.environ.get("OPENAI_API_BASE", ""),
     )
-    return tier
 
 
 def _apply_byok_model_override(resolved: str) -> str:

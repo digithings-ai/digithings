@@ -181,6 +181,33 @@ describe('DigichatPopup', () => {
     );
   });
 
+  it('sends page-context once per open even if ready fires twice', () => {
+    act(() => {
+      root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
+    });
+    const trigger = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    act(() => trigger.click());
+    const iframe = document.body.querySelector(
+      '#digichat-popup-iframe',
+    ) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage');
+    const ready = () =>
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: CFG.origin,
+          data: { type: DIGICHAT_READY },
+        }),
+      );
+    act(() => ready());
+    act(() => ready());
+    const pageContextCalls = postMessage.mock.calls.filter(
+      ([message]) => (message as { type?: string }).type === DIGICHAT_PAGE_CONTEXT,
+    );
+    expect(pageContextCalls).toHaveLength(1);
+  });
+
   it('renders nothing when config is null', () => {
     act(() => {
       root.render(

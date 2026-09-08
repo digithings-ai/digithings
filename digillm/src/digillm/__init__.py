@@ -40,9 +40,7 @@ from digillm.client import (
     get_client_for_model,
     get_provider_api_key_env,
     get_proxy_key,
-    house_openrouter_fallback_allowed,
     is_registered_provider,
-    openrouter_web_search,
     provider_call_context,
     proxy_key,
     register_provider,
@@ -54,8 +52,6 @@ from digillm.client import (
     set_proxy_key,
     set_telemetry_observer,
     set_usage_observer,
-    web_search,
-    x_search,
 )
 from digillm.structured import resolve_model, structured_completion
 from digillm.telemetry import (
@@ -115,7 +111,6 @@ __all__ = [
     "get_client_for_model",
     "get_provider_api_key_env",
     "get_proxy_key",
-    "house_openrouter_fallback_allowed",
     "is_registered_provider",
     "proxy_key",
     "provider_call_context",
@@ -130,7 +125,4 @@ __all__ = [
     "set_telemetry_observer",
     "set_usage_observer",
     "structured_completion",
-    "web_search",
-    "openrouter_web_search",
-    "x_search",
 ]

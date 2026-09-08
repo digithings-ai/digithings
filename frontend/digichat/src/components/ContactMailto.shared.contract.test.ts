@@ -12,7 +12,9 @@ describe("embed paywall contact", () => {
     // most severe pattern (bare address as visible link text), on the same
     // digithings.ai/occ.digithings.ai zone confirmed to have Cloudflare Email
     // Address Obfuscation on (#2220). It must stay on the shared component.
-    const path = fileURLToPath(new URL("../app/embed/embed-client.tsx", import.meta.url));
+    const path = fileURLToPath(
+      new URL("../app/(digichat)/embed/embed-client.tsx", import.meta.url),
+    );
     const src = readFileSync(path, "utf8");
     expect(src).not.toContain("mailto:");
     expect(src).toContain("<ContactMailto");
