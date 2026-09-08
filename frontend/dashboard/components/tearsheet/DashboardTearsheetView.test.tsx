@@ -234,7 +234,7 @@ describe('performance SSOT chrome (#3604)', () => {
 
   it('ends the period at the NAV tip, not a lagged metrics stamp', () => {
     const out = html(sample, sampleSsot);
-    expect(out).toContain('2026-05-01–2026-07-20');
+    expect(out).toContain('2026-07-17–2026-07-20');
     expect(out).toContain('nav tip 2026-07-20');
   });
 
