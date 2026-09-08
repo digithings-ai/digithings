@@ -4,6 +4,8 @@
  * Stars, forks and watchers are deliberately absent.
  */
 
+import type { HeatDay } from "./heatmap";
+
 export type RepoRelease = {
   tag: string;
   name: string | null;
@@ -58,6 +60,9 @@ export type RepoActivitySnapshot = {
   latestRelease: RepoRelease | null;
   mergedPulls: RepoPullItem[];
   openIssues: RepoIssueItem[];
+  /** Pre-bucketed per-day contributions for the heatmap (oldest → newest).
+   *  Emitted by scripts/fetch_repo_activity.py; absent in older snapshots. */
+  dailyContributions?: HeatDay[];
   features?: RepoFeature[];
   modules?: Record<string, RepoModuleActivity | undefined>;
 };

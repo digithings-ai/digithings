@@ -38,6 +38,7 @@ export const Brand = () => (
 export const DT_NAV_PRIMARY: NavItem[] = [
   { label: "Docs", href: "/docs" },
   { label: "API", href: "/docs/api" },
+  { label: "Wiki", href: "/openwiki" },
   { label: "Architecture", href: "/#architecture" },
   { label: "Services", href: "/services" },
   {
@@ -63,6 +64,7 @@ export const DT_FOOTER: NavLink[] = [
   { label: "Architecture", href: "/#architecture" },
   { label: "Docs", href: "/docs" },
   { label: "API", href: "/docs/api" },
+  { label: "Wiki", href: "/openwiki" },
   { label: "Services", href: "/services" },
   { label: "About", href: "/about" },
   { label: "Team", href: "/team" },
