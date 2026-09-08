@@ -33,7 +33,13 @@ RUN npm install \
       lightningcss-linux-x64-musl@1.32.0 \
       @tailwindcss/oxide-linux-x64-musl@4.2.2 \
       --no-save --no-audit --no-fund
-RUN npm run build --workspace frontend/digichat
+# Bake DIGICHAT_VERSION from package.json so GET /api/health matches the package.
+# Optional override: docker --build-arg or wrangler [[containers]] image_vars.
+# Do not use a Cloudflare dashboard secret for this.
+ARG DIGICHAT_VERSION
+RUN VERSION="${DIGICHAT_VERSION:-$(node -p "require('./frontend/digichat/package.json').version")}" \
+ && printf '%s' "$VERSION" > /tmp/digichat-version \
+ && DIGICHAT_VERSION="$VERSION" npm run build --workspace frontend/digichat
 
 FROM node:22-alpine AS runner
 WORKDIR /app
@@ -46,6 +52,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/.next/static ./
 COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/public ./frontend/digichat/public
 COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/scripts/trusted-proxy-server.mjs ./frontend/digichat/scripts/trusted-proxy-server.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/drizzle ./frontend/digichat/drizzle
+COPY --from=builder /tmp/digichat-version /etc/digichat-version
+# Empty when image_vars/--build-arg is omitted; trusted-proxy then reads /etc/digichat-version.
+ARG DIGICHAT_VERSION
+ENV DIGICHAT_VERSION=$DIGICHAT_VERSION
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
