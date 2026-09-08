@@ -41,20 +41,20 @@ import {
   type FileMessagePartComponent,
   type ImageMessagePartComponent,
   type ToolCallMessagePartComponent,
-  type Unstable_DirectiveFormatter,
-  type Unstable_TriggerItem,
-  type Unstable_TriggerMatcher,
   useAuiState,
 } from "@assistant-ui/react";
 import {
   createContext,
   useContext,
+  type ComponentPropsWithoutRef,
   type ComponentType,
   type FC,
   type FormEvent,
   type PropsWithChildren,
 } from "react";
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
+
+type SlashPopoverProps = ComponentPropsWithoutRef<typeof ComposerTriggerPopover>;
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -111,19 +111,12 @@ export type ThreadProps = {
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
+type SlashPopoverProps = ComponentPropsWithoutRef<typeof ComposerTriggerPopover>;
 export type ThreadSlashTrigger = {
-  adapter: {
-    categories(): readonly unknown[];
-    categoryItems(categoryId: string): readonly Unstable_TriggerItem[];
-    search?(query: string): readonly Unstable_TriggerItem[];
-  };
-  action: {
-    onExecute: (item: Unstable_TriggerItem) => void;
-    removeOnExecute?: boolean;
-    formatter?: Unstable_DirectiveFormatter;
-  };
-  iconMap?: Record<string, FC<{ className?: string }>>;
-  matcher?: Unstable_TriggerMatcher;
+  adapter: SlashPopoverProps["adapter"];
+  action: NonNullable<SlashPopoverProps["action"]>;
+  iconMap?: SlashPopoverProps["iconMap"];
+  matcher?: SlashPopoverProps["matcher"];
 };
 
 const DEFAULT_THREAD_ACTIONS: Required<ThreadActions> = {
