@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:04939830a7bc1cd30636e885222d0ca7e973170ebbd14f89598746f47e263065",
+  "claims": [
+    {
+      "id": "claim_f7e8de97a7f3435da19fb8c9223f02f1",
+      "statement": "digismith has two decoupled faces: a conditional LangSmith tracing library (trace/config/redaction modules) and a stateless HTTP service on port 8003 that never receives, stores, or forwards spans.",
+      "evidence": [
+        {
+          "resource": "repo://digismith/src/digismith/server.py#L1-L67",
+          "version": "repo-lines-v1:sha256:0e740b157dd85857bfc71247f33dd36b76cc451b0139a29f03c3ee023e9148ea:eyJzZWxlY3RlZExpbmVDb3VudCI6NjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRjYzFiY2RiNzEzMjYxNmY2M2U0YjI4NDkxMTA0NjgxODdlOGNkMzRiYzBlMTkxZDc2NWI0MjNiZWU5MzNjZWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg1ZTA1ZDZiN2IwMWI3ZThlMWY4MmMzODU2YmVjMGI2NDVmZWFiZGYyMmM2ZGM1YjI4YWZiYjZhZjFiYzU0ODAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://digismith/src/digismith/trace.py#L1-L9",
+          "version": "repo-lines-v1:sha256:bbd06a4b764dfa221b22afeaf299086533b68c2b82ab3c5a331bb9565340ed7e:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWVmOTdjOGViYjU3ZjY5MDgyYzRiOTJkYWZjY2MyOTAzNmRhMmYwOWU4ZjYzZGUwOThlYzc1MTA0MmQ1ZDVjMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTMwM2VjZGQ0YTRkMTBmMTljNzNmZDQyZmQxMjQzN2ZkMzM1NGE4MjY4MTYwNWRhNTI1NWE5N2EzOTA2OGRiYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTViNmU4NzA2YjQzMDQ3ZjJhNmRiNjdmMTMyNjM4NTk1NjA0ZTY3ZjM2OTY2ODc2Y2UwMTU4ZjAwNTNlNmJkMSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_019fbac5a3d84e77974801e02330e1dc",
+      "statement": "traceable(name) returns the original function unmodified when the langsmith SDK is missing or LANGSMITH_API_KEY is unset (zero per-call overhead), and wraps with langsmith.traceable plus PiiRedactor process hooks only when both are present.",
+      "evidence": [
+        {
+          "resource": "repo://digismith/src/digismith/trace.py#L35-L59",
+          "version": "repo-lines-v1:sha256:1bbdf1a3beae0a5669d481bf8b2d8910f074a1f36cfe80b6c75a06532d8a23a2:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmZWVlMTJiMTAxY2IzNTI2NWNhM2FlMmY4ZmM1YjRmODNkNWRlYjM5MGE0MmQ1MTRkMzI2OGYwMTlhMDgwZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1MDFiYzg4ZmNkMjgzNTU4NjBiZWI3ODYzM2I3ZjBjNzQyZTE1NDU4MDZjMmIzM2Y4MTg2MGZiZWJlYjY0YjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3Y2IzYjlhNjQxMmQyYTM2MzU2YzM4Y2RhZmZjNjgyMDI1YjJmZDY5M2NlNGM1ODE1OGEyNzY1NjU4NWUxMDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://tests/dsm/test_trace.py#L12-L34",
+          "version": "repo-lines-v1:sha256:39588fff0dabd246325bac08f1da704626b07cfe5ccb603fbb4bf797e37db988:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmNDgyOTVjYTFiNzNlYWYzMDExNzFjNjUyMTZkOWQ5YjczMDRmMTExZWU4OTNhMzEwZWFkMjZmNTljYzkzZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdhYmZlNGJjNWQwZWY4MmE2YTc5NjI4OGIzMTk0NzBiM2U5ZjM4OTgyNTVlZDk0YTFmODc3NjBiY2FjM2ZkNWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ4MjJlMzllMjJjZTUyOWVjM2M2ZWY0ODdkZjg0NmVkYTBhN2M2OWVlYWFjNjg3YTJmMTY4MDI5YmI0NmI1ZGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_540172360227461a8d6dcceb5486908c",
+      "statement": "If the installed langsmith SDK rejects the process_inputs/process_outputs kwargs, traceable() logs at debug and falls back to the undecorated function instead of raising.",
+      "evidence": [
+        {
+          "resource": "repo://digismith/src/digismith/trace.py#L45-L57",
+          "version": "repo-lines-v1:sha256:57632995112590e6edfccf0c1a84703b4ae9ec86284804472d5f3aae86a95c78:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRiMzk4N2ExMzcyMjAzOGYxMzYyYzJjNjJjNjY2YWJiY2YyYTU0YmUwYWI5MjMxODU0NTY4MjQwMWY3ZDI2ZjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE2MjcwMWY3MWE4NTYwMDc1NzhhOTBjOWFiNTM2NzI5N2RiZmNlZmNmMTYxMDY5ZWY0ZDQ3ODY0NjU2MjFkZjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE2NjQ2OTUxOTU4MDAzMWFlOTM0ODg5NGIwZGNkYzdlZWRjZjFlYWRkYmNiNjc1NGZhMTdmMmM1ZGY0YWFmNmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQxYWFhYTAwMTYwYzYxOWM3NzJkODllZjQzNWNjMDUzYzUzNzM1MGZiMTJhZDUzZTA0ZDNlNmJlMTBkNThmNTgifQ"
+        },
+        {
+          "resource": "repo://tests/dsm/test_trace.py#L71-L95",
+          "version": "repo-lines-v1:sha256:0e9bffbe07263fc9d6fa83094aaf54301ca6896a070335323a5df2435be39986:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmNDgyOTVjYTFiNzNlYWYzMDExNzFjNjUyMTZkOWQ5YjczMDRmMTExZWU4OTNhMzEwZWFkMjZmNTljYzkzZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE5ZDFmNzg4MzI3ODUxZDdjMzhlMDVjYmZiMzM2MDA0MzMyYzI4OGQ3N2M4ZDdiY2EyMTk4ZTkzMmFmOTA2M2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhjZTQ3NzBjY2E0MTA4ZTY2MmJiMzcyNDM1MTMxNzYzYjY3NjUyYThjYWVkMjkzOGQ4M2NlZWNiZjIwMGQ4ZjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e2c369f94b234007b9e2f8ca60b7638b",
+      "statement": "tracing_enabled() re-reads LANGSMITH_API_KEY on every call, while traceable() decides at decoration (import) time, so a key added later does not activate already-decorated functions in that process.",
+      "evidence": [
+        {
+          "resource": "repo://digismith/src/digismith/config.py#L25-L28",
+          "version": "repo-lines-v1:sha256:e5ff48f97d81425339d8a2f89153588bae1b3248527efc30899fc13d3500042b:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWJhY2FlOWZmNmQ5OGU4YjRiOTI0ZjlkYjhmODgyYWQxNTE2YWY4MDQyMGM3MGY3NDM0NDQ3NGI1MTY1ZTAwOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTM1YjlkNzM0NGNkOGVkN2E1M2E2ODg1YWFlYzI2MTM1N2YwNTUzMGU5ZDQ0MDFkMjZlMmQ3NzY5MDc5YmI5YSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjk5ZWZlZGZkMmQ5NzA2ZDg5MWM3YmE5ODNlN2Y4NGUwNWFkMGUwMTkxYzEzMjc5OGJlNWUzYzFjYzUzMDQyNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTdhZTMxMTdlZDk2Njk5MmU1NjlhZjliNzc3YzU4ZDE4NTliYmFjZDhkM2JjY2FlYzJiYzJmZDllYjdlYmM0NyJ9"
+        },
+        {
+          "resource": "repo://digismith/src/digismith/trace.py#L46-L46",
+          "version": "repo-lines-v1:sha256:ea7d7992249f49756f7227e8e998e7de6ac37e2f3a0d629f47adc0a5f7394b63:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWE3ZDc5OTIyNDlmNDk3NTZmNzIyN2U4ZTk5OGU3ZGU2YWMzN2UyZjNhMGQ2MjlmNDdhZGMwYTVmNzM5NGI2MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWE3ZDc5OTIyNDlmNDk3NTZmNzIyN2U4ZTk5OGU3ZGU2YWMzN2UyZjNhMGQ2MjlmNDdhZGMwYTVmNzM5NGI2MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmQ2Y2M1NWM0MjNkNDBlNzliNTVlMjcyODMzNDFkNjE3ZGNmYzBjYTg3ZTc2ZWU3Njc2NWY2OTcxYjhjNGJmNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTA2MWRiOWQxZWVjMWI1NjZlZjQzYzBmNzRiOGJiMzE2YjA3MjYxYzdkODcxODA3MTgyMDg1MjJkMzBhMDA1MyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_1fe2c495aa7c429694037686472e4f0e",
+      "statement": "The in-repo tracing consumer (digillm) imports digismith.trace lazily with a local no-op fallback, and the port-8003 container is optional for tracing: traces go directly from the instrumented process to the LangSmith API.",
+      "evidence": [
+        {
+          "resource": "repo://digillm/src/digillm/client.py#L102-L113",
+          "version": "repo-lines-v1:sha256:435a6d1a57d18b1e027822ea7077cdf6fd7fa4fc84d98e89899b21971cfcf997:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwNjI1NGM2ZDUzOGRjYWViOGM0NjI2MDc3NWQ0YTI4ZWJmZTliYTBmNDMzZjQ1ZGNkYzE1OGY0YTc1ZDQ4YWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmNjhhZWI1YzRiMzE2MjZjYTBjMzdkNTYwNjMxZWIyNzkwM2E3MjJmMGU3NGQ0OGU5ZDlkYmRjMjcxNDVlOWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU1YzFjNDYyZTJhMzlkNzQ3NTlmNWUxYjEyNmY3NjgzYTJiNzMwMTE4ZTE4ZjUxMjJiMDhjZWRlZWI2NTBlMjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFhODYxMjZiNTFlOGYxNDI0ZTUyMmY0NDAwNzc4ZDU3NGZjYTU1ODU0MDk1ZTUwMWI4MTc5ZGQ0ODRhY2E4YTYifQ"
+        },
+        {
+          "resource": "repo://digismith/Dockerfile#L22-L28",
+          "version": "repo-lines-v1:sha256:a1d855268c028fb4024d26c4ad591c29385e20621132fd63fc793160a24a1346:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjg0NjI4MmUzYzFkMWIzZTMxYzU4OTVjMDYxZDZkNTkzYWViNzczN2JiNTdjMzQ1YmY0NDdmNzQwNzg0ODFiZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjU3NzVhZjhkMzEwYWZlNDg0ZDI0M2IzZDJiMmI1MWQ5ZTRlYTBlNzNjOThmOWEzMjFhZTMyOGJmOGI3NDZkOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmI5NGFjOWZlZTA5ZmExNjM0NWMyNDllMzliYzVjZTQ5N2Y5NGY5ZmUzNDA0MWQzZTgyZTQwMjhiOTgyMTY1NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_8a550a908efb4f069f6e63e496c55998",
+      "statement": "digismith's hard dependencies are pydantic, fastapi, uvicorn, and digibase; langsmith and OTel are absent-safe optionals, and the library modules perform no I/O at import time.",
+      "evidence": [
+        {
+          "resource": "repo://digismith/pyproject.toml#L12-L22",
+          "version": "repo-lines-v1:sha256:a882459d4eb57f578a7c822585b6b64d392ea276fcfc37578a1beb1ca895ec3c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkOTVmNWU5ZWRlMDE4MTYwNDNjMDc5N2FjZThkYTJhYzRlOTlhOGE2YTYxMGZhOTg1NzBlZjM0YjkzNTYxMDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY2ODBmMGJiYTFjNDVmMzBkOTJlYWI1MWExMzllMDMyZjIzNTc2MjQ2NjE2OGE4ZDNlODIzMjJjMmEyODAwODkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhiZTRlZDFkYTkxYzRiZWIxOTllYmY4OGE2YjAyN2RlODcyZWIwMWYzMjcyMGExMmE4ZTMzZTBlYThkOTcxYTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIzYjczNDFiMzYyZjkxNTJmNTBiZmE5NjA0OWNkOThiZDdmMjRiZTFmMzIyOWFkYjBmMTYzNmMwMTQ1YzBlZTUifQ"
+        },
+        {
+          "resource": "repo://digismith/src/digismith/server.py#L66-L67",
+          "version": "repo-lines-v1:sha256:456da4d50e02b23c24ad0af8fe99772c3a6e232619b1f308fb730815691a6698:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmIxMzlkZjg0YjU0ODg3ZmYyMTUzNDAxNjhjZjkwNzA1ODhiNDUwNzUwYTlhNDE5ZTBmOGJjNzhhN2M2ZDg2ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODVlMDVkNmI3YjAxYjdlOGUxZjgyYzM4NTZiZWMwYjY0NWZlYWJkZjIyYzZkYzViMjhhZmJiNmFmMWJjNTQ4MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNjNGE3ZDFjYzc5NmFiYTNlNDY3MjMzMjdmNTE3ZTlmODExOTgyZDI1MGYwNzAyOTg2ZTRiNTc2NGFkOTU4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:31:53.755Z"
+  }
+}

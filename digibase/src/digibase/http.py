@@ -61,6 +61,10 @@ def outbound_service_headers(
         h["Authorization"] = f"Bearer {str(bearer_token).strip()}"
     if extra:
         h.update({k: v for k, v in extra.items() if v})
+    # Best-effort W3C trace context when digibase[otel] is active (#222).
+    from digibase.otel import inject_trace_context
+
+    inject_trace_context(h)
     return h
 
 

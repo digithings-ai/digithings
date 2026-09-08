@@ -12,10 +12,10 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
 type Initiative = { label: string; livery: string; start: number; end: number };
 
 const ROWS: Initiative[] = [
-  { label: "atlas research loop", livery: "atlas", start: 1, end: 3 },
+  { label: "research loop", livery: "research", start: 1, end: 3 },
   { label: "Kelly-capped sizing", livery: "digiquant", start: 2, end: 4 },
-  { label: "Live broker adapters", livery: "hermes", start: 3, end: 6 },
-  { label: "olympus dashboard", livery: "kairos", start: 5, end: 8 },
+  { label: "Live broker adapters", livery: "portfolio", start: 3, end: 6 },
+  { label: "dashboard", livery: "execution", start: 5, end: 8 },
   { label: "digichat embed", livery: "digichat", start: 6, end: 8 },
 ];
 

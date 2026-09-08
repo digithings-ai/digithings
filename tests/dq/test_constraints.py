@@ -56,6 +56,25 @@ class TestSatisfiesConstraints:
         c = OptimizationConstraints(max_drawdown_pct=-10.0)
         assert satisfies_constraints(_bt(max_drawdown_pct=-15.0), c) is False
 
+    def test_sub_one_percent_drawdown_constraint_is_not_treated_as_fraction(self) -> None:
+        """A -0.5 value is a valid negative half-percent limit."""
+        c = OptimizationConstraints(max_drawdown_pct=-0.5)
+
+        assert satisfies_constraints(_bt(max_drawdown_pct=-0.5), c) is True
+        assert satisfies_constraints(_bt(max_drawdown_pct=-1.0), c) is False
+
+    def test_max_drawdown_constraint_schema_uses_negative_percent(self) -> None:
+        """Constraints and backtest results both use negative percentage points."""
+        schema = OptimizationConstraints.model_json_schema()
+
+        assert schema["properties"]["max_drawdown_pct"]["description"] == (
+            "Max drawdown as negative percent, e.g. -15 for -15%"
+        )
+        backtest_schema = BacktestResult.model_json_schema()
+        assert backtest_schema["properties"]["max_drawdown_pct"]["description"] == (
+            "Max drawdown as negative percent, e.g. -15 for -15%"
+        )
+
     def test_drawdown_none_in_result_skips_check(self) -> None:
         """When bt.max_drawdown_pct is None, constraint is skipped (not rejected)."""
         c = OptimizationConstraints(max_drawdown_pct=-10.0)

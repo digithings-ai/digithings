@@ -14,7 +14,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.learning.component_attribution import (
+from digiquant.dashboard.learning.component_attribution import (
     ComponentAttributor,
     CostAttributionSlice,
     ForecastAttributionSlice,
@@ -23,7 +23,7 @@ from digiquant.olympus.learning.component_attribution import (
     TimingDiagnosticsSlice,
     attribution_report_id,
 )
-from digiquant.olympus.learning.outcome_models import (
+from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     AttributionMethod,
     ComponentEligibility,
@@ -38,7 +38,7 @@ from digiquant.olympus.learning.outcome_models import (
     episode_content_hash,
     episode_version_id,
 )
-from digiquant.olympus.learning.outcome_store import OutcomeLearningStore
+from digiquant.dashboard.learning.outcome_store import OutcomeLearningStore
 
 pytestmark = pytest.mark.unit
 
@@ -424,7 +424,7 @@ def test_attribute_and_persist_appends_report_to_store() -> None:
 
 
 def test_report_id_is_deterministic() -> None:
-    from digiquant.olympus.learning.component_attribution import attribution_report_content_hash
+    from digiquant.dashboard.learning.component_attribution import attribution_report_content_hash
 
     episode = _episode()
     readers = FakeReaders(forecast=_forecast_slice(), cost=_cost_slice())

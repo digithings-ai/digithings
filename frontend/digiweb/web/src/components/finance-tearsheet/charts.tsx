@@ -17,8 +17,9 @@
  * ViewWindow: wheel-zoom / drag-pan / double-click reset stay synced across
  * charts, with lookback presets matched back via `matchLookbackPreset`.
  */
-import { type ReactNode, type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { fmtCompact, fmtMoney, fmtNum, fmtPct, toneClass } from "./format";
+import { RISK_BANDS } from "./risk-bands";
 import {
   isOpenTrade,
   type TearsheetOhlcBar,
@@ -427,11 +428,23 @@ function dataDomain(
   return { lo: lo - pad, hi: hi + pad };
 }
 
+export type ChartLegendKind =
+  | "line"
+  | "line-up"
+  | "line-down"
+  | "line-mute"
+  | "line-dashed"
+  | "bar-up"
+  | "bar-down"
+  | "bar-open"
+  | "marker-buy"
+  | "marker-sell";
+
 /** Compact HTML legend for panel headers (top-right, beside controls). */
 export function ChartLegend({
   items,
 }: {
-  items: { kind: "line" | "bar-up" | "bar-down" | "bar-open" | "marker-buy" | "marker-sell"; label: string }[];
+  items: { kind: ChartLegendKind; label: string }[];
 }) {
   return (
     // Not aria-hidden: these labels ("long"/"short"/"Realized %"/etc.) are
@@ -455,16 +468,24 @@ function axisLabelY(y: number, plotTop: number, plotBottom: number): number {
 
 export type ChartScale = "linear" | "log" | "symlog";
 export type ChartTone = "accent" | "up" | "down";
+/** Overlay lines may also use the muted ink (rails, lump/flat benchmarks). */
+export type OverlayTone = ChartTone | "mute";
 
 /** A normalized x-domain window (fractions 0..1 over a chart's full date span). */
 export interface ViewWindow {
   lo: number;
   hi: number;
 }
-/** Smallest allowed window (2% of the span) — keeps zoom from collapsing. */
-const MIN_VIEW = 0.02;
+/**
+ * Smallest allowed window (2% of the span) — keeps zoom from collapsing into
+ * an empty/degenerate range that blanks the chart (legacy ComboPnl bug #1180;
+ * the SVG tearsheet grammar owns that surface after the digiquant-web → digiweb
+ * promotion).
+ */
+export const MIN_VIEW = 0.02;
 
-function clampView(lo: number, hi: number): ViewWindow {
+/** Clamp a zoom window into `[0,1]` and enforce {@link MIN_VIEW} width. */
+export function clampView(lo: number, hi: number): ViewWindow {
   let l = Math.max(0, Math.min(lo, 1));
   let h = Math.max(0, Math.min(hi, 1));
   if (h - l < MIN_VIEW) {
@@ -1753,6 +1774,643 @@ function TradeReturnChartBody({
           </text>
         );
       })}
+      </Svg>
+    </ChartHoverShell>
+  );
+}
+
+export interface OverlaySeries {
+  id: string;
+  label: string;
+  points: TearsheetSeriesPoint[];
+  tone?: OverlayTone;
+  dashed?: boolean;
+  /** Area fill under the line (default false — overlays stay as strokes). */
+  fill?: boolean;
+}
+
+export interface MultiTimeSeriesProps {
+  series: OverlaySeries[];
+  height?: number;
+  scale?: ChartScale;
+  fmt?: (v: number) => string;
+  zeroBaseline?: boolean;
+  view?: ViewWindow;
+  onView?: (v: ViewWindow) => void;
+  fullSpan?: [string, string];
+  resetView?: ViewWindow;
+  interactive?: boolean;
+  ariaLabel: string;
+}
+
+function unionDates(series: OverlaySeries[]): string[] {
+  const set = new Set<string>();
+  for (const s of series) {
+    for (const p of s.points) set.add(p.t);
+  }
+  return [...set].sort();
+}
+
+function pathForOverlay(
+  dates: string[],
+  values: Map<string, number>,
+  xAt: (i: number) => number,
+  yAt: (v: number) => number,
+): string {
+  let d = "";
+  let drawing = false;
+  for (let i = 0; i < dates.length; i++) {
+    const v = values.get(dates[i]);
+    if (v === undefined || !Number.isFinite(v)) {
+      drawing = false;
+      continue;
+    }
+    d += `${drawing ? "L" : "M"}${xAt(i).toFixed(1)} ${yAt(v).toFixed(1)} `;
+    drawing = true;
+  }
+  return d;
+}
+
+function OverlayTipContent({
+  date,
+  rows,
+}: {
+  date: string;
+  rows: { label: string; value: string }[];
+}) {
+  return (
+    <dl className="ts-chart-tip-dl">
+      <div>
+        <dt>Date</dt>
+        <dd>{date.slice(0, 10)}</dd>
+      </div>
+      {rows.map((r) => (
+        <div key={r.label}>
+          <dt>{r.label}</dt>
+          <dd>{r.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** Overlay several time series on one SVG pane (valuation rails, three-way equity). */
+export function MultiTimeSeries(props: MultiTimeSeriesProps) {
+  const { series, height = 320 } = props;
+  const any = series.some((s) => s.points.length > 0);
+  if (!any) return <Empty height={height} msg="no data" />;
+  return <MultiTimeSeriesBody {...props} height={height} />;
+}
+
+function MultiTimeSeriesBody({
+  series,
+  height,
+  scale: scaleKind = "linear",
+  fmt = fmtCompact,
+  zeroBaseline = false,
+  view,
+  onView,
+  fullSpan,
+  resetView,
+  interactive = true,
+  ariaLabel,
+}: MultiTimeSeriesProps & { height: number }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<ChartHoverTip | null>(null);
+  const { vbW, pad } = useChartLayout(wrapRef, height, false);
+  const clipId = `ts-overlay-clip-${useId().replace(/:/g, "")}`;
+  const sliced = series.map((s) => ({
+    ...s,
+    points: sliceByView(s.points, view, fullSpan),
+  }));
+  const control = viewHandlers(view, onView, pad, vbW, resetView);
+  const scale = makeScale(scaleKind);
+  const plotW = vbW - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const plotTop = pad.top;
+  const plotBottom = pad.top + plotH;
+
+  const dates = unionDates(sliced);
+  const maps = sliced.map((s) => new Map(s.points.map((p) => [p.t, p.v])));
+  const values: number[] = [];
+  for (const m of maps) {
+    for (const v of m.values()) values.push(v);
+  }
+  const { lo, hi } = dataDomain(values, scale, {
+    padRatio: 0.05,
+    anchorZero: zeroBaseline ? "max" : undefined,
+  });
+
+  const n = dates.length;
+  const xAt = (i: number) => pad.left + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const yAt = (val: number) => pad.top + plotH - ((scale.f(val) - lo) / (hi - lo)) * plotH;
+
+  const realLo = scale.inv(lo);
+  const realHi = scale.inv(hi);
+  const ticks =
+    scaleKind === "log"
+      ? logTicks(realLo, realHi, 6)
+      : scaleKind === "symlog"
+        ? decadeTicks("symlog", realLo, realHi)
+        : niceLinearTicks(realLo, realHi, 4);
+
+  const gridEls: ReactNode[] = [];
+  ticks.forEach((tv, i) => {
+    const y = yAt(tv);
+    if (y < plotTop - 1 || y > plotBottom + 1) return;
+    gridEls.push(
+      <line key={`g${i}`} x1={pad.left} y1={y} x2={vbW - pad.right} y2={y} className={"ts-grid" + (tv === 0 ? " ts-grid-zero" : "")} />,
+      <text key={`gt${i}`} x={pad.left - 8} y={axisLabelY(y, plotTop, plotBottom)} textAnchor="end" className="ts-axis">{fmt(tv)}</text>,
+    );
+  });
+
+  const lineEls: ReactNode[] = [];
+  sliced.forEach((s, si) => {
+    const line = pathForOverlay(dates, maps[si], xAt, yAt);
+    if (!line) return;
+    const tone = s.tone ?? "accent";
+    const dash = s.dashed ? " ts-line-dashed" : "";
+    if (s.fill) {
+      const baseReal = zeroBaseline ? 0 : realLo;
+      const baseY = yAt(baseReal);
+      const first = dates.findIndex((t) => maps[si].has(t));
+      const last = (() => {
+        for (let i = dates.length - 1; i >= 0; i--) if (maps[si].has(dates[i])) return i;
+        return first;
+      })();
+      if (first >= 0 && last >= 0) {
+        const area = `${line}L${xAt(last).toFixed(1)} ${baseY.toFixed(1)} L${xAt(first).toFixed(1)} ${baseY.toFixed(1)} Z`;
+        lineEls.push(
+          <path key={`${s.id}-fill`} d={area} className={"ts-area ts-tone-" + tone} data-series={s.id} data-chart-layer="overlay-fill" />,
+        );
+      }
+    }
+    lineEls.push(
+      <path
+        key={s.id}
+        d={line}
+        fill="none"
+        className={"ts-line ts-tone-" + tone + dash}
+        data-series={s.id}
+        data-chart-layer="overlay-line"
+      />,
+    );
+  });
+
+  const idxs = n === 0 ? [] : [0, Math.floor((n - 1) / 2), n - 1];
+
+  const onChartMouseMove = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      if (e.buttons !== 0) {
+        setHover(null);
+        return;
+      }
+      const wrap = wrapRef.current;
+      if (!wrap || n === 0) return;
+      const { x: vbX, y: vbY } = viewBoxPoint(e.clientX, e.clientY, e.currentTarget, vbW, height);
+      if (vbX < pad.left || vbX > vbW - pad.right || vbY < plotTop || vbY > plotBottom) {
+        setHover(null);
+        return;
+      }
+      const frac = plotFraction(e.clientX, e.currentTarget, pad.left, pad.right, vbW);
+      const idx = n === 1 ? 0 : Math.round(frac * (n - 1));
+      const date = dates[idx];
+      if (!date) {
+        setHover(null);
+        return;
+      }
+      const rows = sliced.flatMap((s, si) => {
+        const v = maps[si].get(date);
+        if (v === undefined) return [];
+        return [{ label: s.label, value: fmt(v) }];
+      });
+      const pos = positionHoverTip(e.clientX, e.clientY, wrap, 200, 24 + rows.length * 22);
+      setHover({ ...pos, content: <OverlayTipContent date={date} rows={rows} /> });
+    },
+    [dates, fmt, height, maps, n, pad.left, pad.right, plotBottom, plotTop, sliced, vbW],
+  );
+
+  const onChartMouseLeave = useCallback(() => setHover(null), []);
+
+  return (
+    <ChartHoverShell hover={interactive ? hover : null} wrapRef={wrapRef}>
+      <Svg
+        height={height}
+        vbW={vbW}
+        control={control}
+        onMouseMove={interactive ? onChartMouseMove : undefined}
+        onMouseLeave={interactive ? onChartMouseLeave : undefined}
+        ariaLabel={ariaLabel}
+      >
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={pad.left} y={plotTop} width={plotW} height={plotH} />
+          </clipPath>
+        </defs>
+        {gridEls}
+        <g clipPath={`url(#${clipId})`}>{lineEls}</g>
+        {idxs.map((i, k) => {
+          const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
+          return (
+            <text key={`x${k}`} x={xAt(i)} y={height - 10} textAnchor={anchor} className="ts-axis">
+              {(dates[i] || "").slice(0, 10)}
+            </text>
+          );
+        })}
+      </Svg>
+    </ChartHoverShell>
+  );
+}
+
+export interface RiskBandStripProps {
+  points: TearsheetSeriesPoint[];
+  height?: number;
+  view?: ViewWindow;
+  onView?: (v: ViewWindow) => void;
+  fullSpan?: [string, string];
+  resetView?: ViewWindow;
+  interactive?: boolean;
+  ariaLabel: string;
+  /** Horizontal accumulate / distribute knees (published curve). */
+  thresholds?: { id: string; value: number; label: string }[];
+  /** Faint log-scale price drawn behind the 0–100 index (right axis). */
+  priceOverlay?: TearsheetSeriesPoint[];
+}
+
+/** Composite-risk 0–100 strip with labelled SDCA bands (#3172). */
+export function RiskBandStrip(props: RiskBandStripProps) {
+  const { points: allPoints, height = 220 } = props;
+  if (!allPoints || allPoints.length === 0) return <Empty height={height} msg="no data" />;
+  return <RiskBandStripBody {...props} points={allPoints} height={height} />;
+}
+
+function RiskBandStripBody({
+  points: allPoints,
+  height,
+  view,
+  onView,
+  fullSpan,
+  resetView,
+  interactive = true,
+  ariaLabel,
+  thresholds = [],
+  priceOverlay = [],
+}: RiskBandStripProps & { points: TearsheetSeriesPoint[]; height: number }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<ChartHoverTip | null>(null);
+  const dual = priceOverlay.length > 0;
+  const { vbW, pad: layoutPad } = useChartLayout(wrapRef, height, false);
+  const pad = dual ? { ...layoutPad, right: Math.max(layoutPad.right, 64) } : layoutPad;
+  const clipId = `ts-risk-clip-${useId().replace(/:/g, "")}`;
+  const points = sliceByView(allPoints, view, fullSpan);
+  const pricePts = sliceByView(priceOverlay, view, fullSpan);
+  const control = viewHandlers(view, onView, pad, vbW, resetView);
+  const plotW = vbW - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const plotTop = pad.top;
+  const plotBottom = pad.top + plotH;
+
+  const n = points.length;
+  const xAt = (i: number) => pad.left + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const yAt = (val: number) => pad.top + plotH - (val / 100) * plotH;
+
+  const bandEls = RISK_BANDS.map((b) => {
+    const yHi = yAt(b.hi);
+    const yLo = yAt(b.lo);
+    return (
+      <rect
+        key={b.id}
+        x={pad.left}
+        y={yHi}
+        width={plotW}
+        height={Math.max(0, yLo - yHi)}
+        className={"ts-risk-band ts-risk-band-" + b.id}
+        data-band={b.id}
+      />
+    );
+  });
+
+  const ticks = [0, 10, 25, 50, 75, 95, 100];
+  const gridEls: ReactNode[] = ticks.map((tv) => {
+    const y = yAt(tv);
+    return (
+      <g key={`g${tv}`}>
+        <line x1={pad.left} y1={y} x2={vbW - pad.right} y2={y} className="ts-grid" />
+        <text x={pad.left - 8} y={axisLabelY(y, plotTop, plotBottom)} textAnchor="end" className="ts-axis">
+          {tv}
+        </text>
+      </g>
+    );
+  });
+
+  let line = "";
+  for (let i = 0; i < n; i++) {
+    const v = Math.max(0, Math.min(100, points[i].v));
+    line += `${i ? "L" : "M"}${xAt(i).toFixed(1)} ${yAt(v).toFixed(1)} `;
+  }
+
+  const priceMap = new Map(pricePts.map((p) => [p.t, p.v]));
+  const priceVals = points.map((p) => priceMap.get(p.t)).filter((v): v is number => v != null && v > 0);
+  const priceScale = makeScale("log");
+  const priceDom =
+    priceVals.length > 0
+      ? dataDomain(priceVals, priceScale, { padRatio: 0.04 })
+      : { lo: 0, hi: 1 };
+  const yPrice = (val: number) =>
+    pad.top + plotH - ((priceScale.f(val) - priceDom.lo) / (priceDom.hi - priceDom.lo)) * plotH;
+  let priceLine = "";
+  let drawingPrice = false;
+  for (let i = 0; i < n; i++) {
+    const v = priceMap.get(points[i].t);
+    if (v == null || !(v > 0)) {
+      drawingPrice = false;
+      continue;
+    }
+    priceLine += `${drawingPrice ? "L" : "M"}${xAt(i).toFixed(1)} ${yPrice(v).toFixed(1)} `;
+    drawingPrice = true;
+  }
+  const priceTicks =
+    priceVals.length > 0 ? logTicks(priceScale.inv(priceDom.lo), priceScale.inv(priceDom.hi), 4) : [];
+
+  const idxs = n === 0 ? [] : [0, Math.floor((n - 1) / 2), n - 1];
+
+  const onChartMouseMove = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      if (e.buttons !== 0) {
+        setHover(null);
+        return;
+      }
+      const wrap = wrapRef.current;
+      if (!wrap || n === 0) return;
+      const { x: vbX, y: vbY } = viewBoxPoint(e.clientX, e.clientY, e.currentTarget, vbW, height);
+      if (vbX < pad.left || vbX > vbW - pad.right || vbY < plotTop || vbY > plotBottom) {
+        setHover(null);
+        return;
+      }
+      const frac = plotFraction(e.clientX, e.currentTarget, pad.left, pad.right, vbW);
+      const idx = n === 1 ? 0 : Math.round(frac * (n - 1));
+      const pt = points[idx];
+      if (!pt) {
+        setHover(null);
+        return;
+      }
+      const pos = positionHoverTip(e.clientX, e.clientY, wrap, 180, 72);
+      setHover({
+        ...pos,
+        content: <SeriesTipContent date={pt.t} value={pt.v.toFixed(1)} />,
+      });
+    },
+    [height, n, pad.left, pad.right, plotBottom, plotTop, points, vbW],
+  );
+
+  const onChartMouseLeave = useCallback(() => setHover(null), []);
+
+  return (
+    <ChartHoverShell hover={interactive ? hover : null} wrapRef={wrapRef}>
+      <Svg
+        height={height}
+        vbW={vbW}
+        control={control}
+        onMouseMove={interactive ? onChartMouseMove : undefined}
+        onMouseLeave={interactive ? onChartMouseLeave : undefined}
+        ariaLabel={ariaLabel}
+      >
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={pad.left} y={plotTop} width={plotW} height={plotH} />
+          </clipPath>
+        </defs>
+        <g clipPath={`url(#${clipId})`} data-chart-layer="risk-bands">
+          {bandEls}
+        </g>
+        {gridEls}
+        {priceLine ? (
+          <g clipPath={`url(#${clipId})`} data-chart-layer="price-overlay">
+            <path d={priceLine} fill="none" className="ts-line ts-price-faint" />
+          </g>
+        ) : null}
+        {thresholds.map((th) => {
+          const y = yAt(th.value);
+          return (
+            <g key={th.id} data-chart-layer="risk-threshold" data-threshold={th.id}>
+              <line
+                x1={pad.left}
+                y1={y}
+                x2={vbW - pad.right}
+                y2={y}
+                className={"ts-risk-threshold ts-risk-threshold-" + th.id}
+              />
+              <text x={vbW - pad.right - 4} y={y - 4} textAnchor="end" className="ts-risk-threshold-label">
+                {th.label}
+              </text>
+            </g>
+          );
+        })}
+        <g clipPath={`url(#${clipId})`}>
+          <path d={line} fill="none" className="ts-line ts-tone-accent" data-chart-layer="risk-line" />
+        </g>
+        {priceTicks.map((tv, i) => (
+          <text
+            key={`pr${i}`}
+            x={vbW - pad.right + 8}
+            y={axisLabelY(yPrice(tv), plotTop, plotBottom)}
+            textAnchor="start"
+            className="ts-axis ts-axis-mute"
+          >
+            {fmtCompact(tv)}
+          </text>
+        ))}
+        {idxs.map((i, k) => {
+          const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
+          return (
+            <text key={`x${k}`} x={xAt(i)} y={height - 10} textAnchor={anchor} className="ts-axis">
+              {(points[i].t || "").slice(0, 10)}
+            </text>
+          );
+        })}
+      </Svg>
+    </ChartHoverShell>
+  );
+}
+
+export interface AllocationFillMarker {
+  t: string;
+  side: "buy" | "sell";
+  book_frac: number;
+}
+
+export interface AllocationStepChartProps {
+  allocated: TearsheetSeriesPoint[];
+  markers: AllocationFillMarker[];
+  priceOverlay?: TearsheetSeriesPoint[];
+  height?: number;
+  view?: ViewWindow;
+  onView?: (v: ViewWindow) => void;
+  fullSpan?: [string, string];
+  resetView?: ViewWindow;
+  interactive?: boolean;
+  ariaLabel: string;
+}
+
+function stepPath(
+  points: TearsheetSeriesPoint[],
+  xAt: (i: number) => number,
+  yAt: (v: number) => number,
+): string {
+  if (points.length === 0) return "";
+  let d = `M${xAt(0).toFixed(1)} ${yAt(points[0].v).toFixed(1)} `;
+  for (let i = 1; i < points.length; i++) {
+    d += `H${xAt(i).toFixed(1)} V${yAt(points[i].v).toFixed(1)} `;
+  }
+  return d;
+}
+
+/** Step % allocated (MTM) with sized buy/sell fill dots and faint log price. Cash is the inverse of allocated and is not drawn. */
+export function AllocationStepChart(props: AllocationStepChartProps) {
+  const { allocated, height = 320 } = props;
+  if (!allocated || allocated.length === 0) return <Empty height={height} msg="no data" />;
+  return <AllocationStepChartBody {...props} height={height} />;
+}
+
+function AllocationStepChartBody({
+  allocated: allAllocated,
+  markers,
+  priceOverlay = [],
+  height,
+  view,
+  onView,
+  fullSpan,
+  resetView,
+  interactive = true,
+  ariaLabel,
+}: AllocationStepChartProps & { height: number }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<ChartHoverTip | null>(null);
+  const { vbW, pad: layoutPad } = useChartLayout(wrapRef, height, false);
+  const pad = { ...layoutPad, right: Math.max(layoutPad.right, 64) };
+  const clipId = `ts-alloc-clip-${useId().replace(/:/g, "")}`;
+  const allocated = sliceByView(allAllocated, view, fullSpan);
+  const pricePts = sliceByView(priceOverlay, view, fullSpan);
+  const control = viewHandlers(view, onView, pad, vbW, resetView);
+  const plotW = vbW - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const plotTop = pad.top;
+  const plotBottom = pad.top + plotH;
+  const n = allocated.length;
+  const xAt = (i: number) => pad.left + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const yAt = (val: number) => pad.top + plotH - (val / 100) * plotH;
+  const allocPath = stepPath(allocated, xAt, yAt);
+  const dateIx = new Map(allocated.map((p, i) => [p.t.slice(0, 10), i]));
+
+  const priceMap = new Map(pricePts.map((p) => [p.t, p.v]));
+  const priceVals = allocated
+    .map((p) => priceMap.get(p.t))
+    .filter((v): v is number => v != null && v > 0);
+  const priceScale = makeScale("log");
+  const priceDom =
+    priceVals.length > 0 ? dataDomain(priceVals, priceScale, { padRatio: 0.04 }) : { lo: 0, hi: 1 };
+  const yPrice = (val: number) =>
+    pad.top + plotH - ((priceScale.f(val) - priceDom.lo) / (priceDom.hi - priceDom.lo)) * plotH;
+  let priceLine = "";
+  let drawingPrice = false;
+  for (let i = 0; i < n; i++) {
+    const v = priceMap.get(allocated[i].t);
+    if (v == null || !(v > 0)) {
+      drawingPrice = false;
+      continue;
+    }
+    priceLine += `${drawingPrice ? "L" : "M"}${xAt(i).toFixed(1)} ${yPrice(v).toFixed(1)} `;
+    drawingPrice = true;
+  }
+
+  const ticks = [0, 25, 50, 75, 100];
+  const idxs = n === 0 ? [] : [0, Math.floor((n - 1) / 2), n - 1];
+
+  const onChartMouseMove = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      if (e.buttons !== 0) {
+        setHover(null);
+        return;
+      }
+      const wrap = wrapRef.current;
+      if (!wrap || n === 0) return;
+      const { x: vbX, y: vbY } = viewBoxPoint(e.clientX, e.clientY, e.currentTarget, vbW, height);
+      if (vbX < pad.left || vbX > vbW - pad.right || vbY < plotTop || vbY > plotBottom) {
+        setHover(null);
+        return;
+      }
+      const frac = plotFraction(e.clientX, e.currentTarget, pad.left, pad.right, vbW);
+      const idx = n === 1 ? 0 : Math.round(frac * (n - 1));
+      const pt = allocated[idx];
+      if (!pt) {
+        setHover(null);
+        return;
+      }
+      const pos = positionHoverTip(e.clientX, e.clientY, wrap, 200, 80);
+      setHover({
+        ...pos,
+        content: <SeriesTipContent date={pt.t} value={`${pt.v.toFixed(1)}% allocated`} />,
+      });
+    },
+    [allocated, height, n, pad.left, pad.right, plotBottom, plotTop, vbW],
+  );
+
+  return (
+    <ChartHoverShell hover={interactive ? hover : null} wrapRef={wrapRef}>
+      <Svg
+        height={height}
+        vbW={vbW}
+        control={control}
+        onMouseMove={interactive ? onChartMouseMove : undefined}
+        onMouseLeave={interactive ? () => setHover(null) : undefined}
+        ariaLabel={ariaLabel}
+      >
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={pad.left} y={plotTop} width={plotW} height={plotH} />
+          </clipPath>
+        </defs>
+        {ticks.map((tv) => (
+          <g key={`g${tv}`}>
+            <line x1={pad.left} y1={yAt(tv)} x2={vbW - pad.right} y2={yAt(tv)} className="ts-grid" />
+            <text x={pad.left - 8} y={axisLabelY(yAt(tv), plotTop, plotBottom)} textAnchor="end" className="ts-axis">
+              {tv}%
+            </text>
+          </g>
+        ))}
+        {priceLine ? (
+          <g clipPath={`url(#${clipId})`} data-chart-layer="price-overlay">
+            <path d={priceLine} fill="none" className="ts-line ts-price-faint" />
+          </g>
+        ) : null}
+        <g clipPath={`url(#${clipId})`}>
+          <path d={allocPath} fill="none" className="ts-line ts-tone-accent" data-chart-layer="alloc-step" />
+        </g>
+        <g clipPath={`url(#${clipId})`} data-chart-layer="fill-markers">
+          {markers.map((m, i) => {
+            const idx = dateIx.get(m.t.slice(0, 10));
+            if (idx == null) return null;
+            const r = 3 + 10 * Math.sqrt(Math.min(m.book_frac, 0.25));
+            return (
+              <circle
+                key={`${m.side}-${m.t}-${i}`}
+                cx={xAt(idx)}
+                cy={yAt(allocated[idx].v)}
+                r={r}
+                className={m.side === "buy" ? "ts-fill-dot ts-fill-dot-buy" : "ts-fill-dot ts-fill-dot-sell"}
+                data-side={m.side}
+              />
+            );
+          })}
+        </g>
+        {idxs.map((i, k) => {
+          const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
+          return (
+            <text key={`x${k}`} x={xAt(i)} y={height - 10} textAnchor={anchor} className="ts-axis">
+              {(allocated[i].t || "").slice(0, 10)}
+            </text>
+          );
+        })}
       </Svg>
     </ChartHoverShell>
   );

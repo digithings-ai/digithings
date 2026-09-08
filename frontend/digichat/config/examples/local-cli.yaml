@@ -1,0 +1,49 @@
+version: 1
+# Local install with digichat Ink CLI enabled (TTY against the same BFF).
+# Web chrome stays stock baseline Thread — Ink is never imported by Next.js.
+deployment:
+  slug: local-cli
+  chrome:
+    mode: app
+    theme: light
+    title: digichat cli
+    welcome: Ask from the terminal.
+    placeholder: Type a message...
+    defaultLanguage: en
+    transcript:
+      userAlign: right
+  persistence: none
+  auth: anonymous
+  features:
+    attachments: false
+    dictation: false
+    speech: false
+    reasoning: collapsed
+    toolCalls: collapsed
+    sources: true
+    branchPicker: false
+    modelPicker: false
+  models:
+    default: gpt-4o-mini
+    available:
+      - gpt-4o-mini
+    allowPicker: false
+  cli:
+    enabled: true
+  backend:
+    type: digigraph
+  tools:
+    allowUserToggle: false
+    catalog:
+      - id: digisearch
+        default: true
+        label: Search
+  mcp:
+    servers: []
+  gate:
+    mode: ungated
+    activityDetail: labels
+    llmAccess: operator
+    showByok: false
+    showLanguageSelector: false
+    webSearch: false

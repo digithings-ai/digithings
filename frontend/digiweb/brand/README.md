@@ -14,8 +14,18 @@ need a file that lives elsewhere, take it from the path given.
 |---|---|---|
 | **GitHub org avatar** | `avatar/digithings-avatar-dark.png` | 1024×1024, holds up on GitHub's light and dark UI |
 | GitHub org avatar, light preference | `avatar/digithings-avatar-light.png` | same mark, inverted polarity |
+| **X (@digithingsai) avatar** | `avatar/digithings-avatar-dark.png` | same 1024 file |
+| **X profile header** | `headers/digithings-x-1500x500.png` | 1500×500 compact OG lockup — do not crop `og.png` |
+| **LinkedIn (Chris, personal)** | `headers/digithings-linkedin-personal-1584x396.png` | 1584×396; photo uses the dark 1024 avatar |
+| **LinkedIn company cover** | `headers/digithings-linkedin-company-1128x191.png` | 1128×191; same avatar |
 | anywhere with a ≤500px cap | `avatar/digithings-avatar-{dark,light}-500.png` | 500×500, ~6.5KB |
 | vector / print / resize | `avatar/digithings-avatar-{dark,light}.svg` | the source both PNGs are rendered from |
+| **company email sign-off** | `email/signoff.{txt,html}` | lowercase digithings, tagline, digithings.ai |
+
+The same bytes are previewed on the local design-reference at `/brand`
+(`npm run dev --workspace design-reference` → http://127.0.0.1:4013/brand/).
+That page is a `--check` mirror, not a second set of logos, and it is **not**
+shipped on digithings.ai.
 
 The avatar is the compact `d` + block cursor — the terminal identity's reduction,
 not the full `digi` lockup, which closes up below about 64px.
@@ -29,8 +39,15 @@ avatar/
 og/
   digithings-og.svg             digithings-og.png             (1200x630)
   digiquant-og.svg              digiquant-og.png              (1200x630)
+headers/
+  digithings-x-1500x500.{svg,png}
+  digithings-linkedin-personal-1584x396.{svg,png}
+  digithings-linkedin-company-1128x191.{svg,png}
+email/
+  signoff.txt                   signoff.html
 build-avatar.py                 regenerates the six avatars from the favicon tile
 build-og.py                     regenerates both cards, wordmark outlined from Geist Mono
+build-header.py                 regenerates social headers + the served kit copies
 ```
 
 **The avatar is derived, never drawn.** `build-avatar.py` reads the `d` glyph path
@@ -96,6 +113,24 @@ monochrome identity, and it carried **no mark at all**. digiquant.io had no
 
 The copy on each card lives in `HEADLINES` in `build-og.py` and must track that
 site's own hero. A card is not a place to invent a new tagline.
+
+### Social headers
+
+X and LinkedIn are much shorter than 1200×630. Cropping the OG card drops the
+domain into the platform chrome. `build-header.py` composes the **same** copy
+(HEADLINES, outlined Geist Mono, dark/ink, inset frame) as a compact vertical
+stack that fits each crop:
+
+```bash
+python3 frontend/digiweb/brand/build-header.py          # rebuild headers + kit copies
+python3 frontend/digiweb/brand/build-header.py --check   # verify, write nothing
+```
+
+`--check` also verifies the served mirrors under
+`frontend/digiweb/reference/public/brand/` (and the live `public/og.png` unfurl
+cards) so the design-reference kit cannot drift from this folder. Re-run the
+header builder after an avatar or OG rebuild so those copies refresh. The
+marketing sites do not serve `/brand`.
 
 ## Colours
 

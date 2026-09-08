@@ -39,16 +39,10 @@ def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
         "OPENAI_API_KEY",
         "OPENAI_API_BASE",
         "LITELLM_PROXY_API_KEY",
+        "DIGILLM_TRUSTED_LITELLM_BASES",
         "XAI_API_KEY",
         "GEMINI_API_KEY",
         "OPENROUTER_API_KEY",
-        "OPENROUTER_FALLBACK_MODELS",
-        "OPENROUTER_SORT",
-        "OPENROUTER_MAX_PROMPT_PRICE",
-        "OPENROUTER_MAX_COMPLETION_PRICE",
-        "OPENROUTER_REQUIRE_PARAMETERS",
-        "OPENROUTER_ALLOWED_MODELS",
-        "OPENROUTER_COST_QUALITY_TRADEOFF",
         "DIGI_LLM_CACHE_TTL_SECONDS",
     ):
         monkeypatch.delenv(var, raising=False)
@@ -181,6 +175,220 @@ def test_default_client_cached_by_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-2")  # different cache key
         c = digillm.get_client()
         assert c is not a
+
+
+def test_house_proxy_routes_registered_prefix_to_default_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """House traffic is service → digillm → LiteLLM (#3414).
+
+    ``OPENAI_API_BASE`` is the proxy; registered prefixes must not skip it (or
+    ``anthropic/claude-sonnet-5`` would demand ``ANTHROPIC_API_KEY``).
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-operator")
+    made: dict[str, Any] = {}
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.update(kwargs)
+        return MagicMock()
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        digillm.get_client_for_model("anthropic/claude-sonnet-5")
+    assert made["api_key"] == "sk-proxy"
+    assert made["base_url"] == "http://127.0.0.1:4000/v1"
+
+
+def test_house_proxy_does_not_require_vendor_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    monkeypatch.setenv("OPENAI_API_BASE", "http://litellm:4000/v1")
+    with patch.object(client_mod, "OpenAI", return_value=MagicMock()):
+        digillm.get_client_for_model("gemini/gemini-2.5-flash")
+
+
+@pytest.mark.parametrize(
+    ("model", "user_key", "user_base"),
+    [
+        ("openrouter/openai/gpt-4o-mini", "sk-or-user", "https://openrouter.ai/api/v1"),
+        (
+            "gemini/gemini-2.5-flash",
+            "sk-gem-user",
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+        ),
+        ("anthropic/claude-sonnet-5", "sk-ant-user", "https://api.anthropic.com/v1/"),
+        ("xai/grok-4", "sk-xai-user", "https://api.x.ai/v1"),
+    ],
+)
+def test_prefixed_byok_does_not_bypass_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+    model: str,
+    user_key: str,
+    user_base: str,
+) -> None:
+    """Prefixed BYOK must stay on LiteLLM — no direct vendor HTTP (#3414)."""
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    made: list[dict[str, Any]] = []
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.append(kwargs)
+        return MagicMock()
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        with digillm.byok(user_key, user_base):
+            digillm.get_client_for_model(model)
+    assert made, "expected a LiteLLM client construction"
+    assert made[0]["api_key"] == "sk-proxy"
+    assert made[0]["base_url"] == "http://127.0.0.1:4000/v1"
+    assert all("openrouter.ai" not in (kw.get("base_url") or "") for kw in made)
+    assert all("api.anthropic.com" not in (kw.get("base_url") or "") for kw in made)
+    assert all("generativelanguage.googleapis.com" not in (kw.get("base_url") or "") for kw in made)
+    assert all("api.x.ai" not in (kw.get("base_url") or "") for kw in made)
+
+
+def test_unprefixed_byok_does_not_bypass_litellm(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_BASE", "http://litellm:4000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    made: list[dict[str, Any]] = []
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.append(kwargs)
+        return MagicMock()
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        with digillm.byok("sk-user-openai", "https://api.openai.com/v1"):
+            digillm.get_client()
+            digillm.get_client_for_model("gpt-4o-mini")
+    assert made
+    assert all(kw["api_key"] == "sk-proxy" for kw in made)
+    assert all(kw["base_url"] == "http://litellm:4000/v1" for kw in made)
+
+
+def test_prefixed_byok_completion_passes_user_key_through_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LiteLLM clientside credentials: house Bearer, user key in extra_body."""
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with digillm.byok("sk-ant-user", "https://api.anthropic.com/v1/"):
+            digillm.completion("anthropic/claude-sonnet-5", [{"role": "user", "content": "hi"}])
+    _, kwargs = fake_client.chat.completions.create.call_args
+    extra = kwargs.get("extra_body") or {}
+    assert kwargs["model"] == "anthropic/claude-sonnet-5"
+    assert extra["api_key"] == "sk-ant-user"
+    assert extra["api_base"].rstrip("/") == "https://api.anthropic.com/v1"
+
+
+def test_prefixed_byok_stream_passes_user_key_through_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = iter([])
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with digillm.byok("sk-or-user", "https://openrouter.ai/api/v1"):
+            client_mod._stream_completion_one_turn(
+                "openrouter/openai/gpt-4o-mini",
+                [{"role": "user", "content": "hi"}],
+            )
+    _, kwargs = fake_client.chat.completions.create.call_args
+    extra = kwargs.get("extra_body") or {}
+    assert extra["api_key"] == "sk-or-user"
+    assert extra["api_base"].rstrip("/") == "https://openrouter.ai/api/v1"
+
+
+def test_openrouter_rewrite_gemini_uses_vendor_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLI OpenRouter rewrite is not LiteLLM: leftover ``gemini/`` stays a vendor client."""
+    monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-or-house")
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+        digillm.get_client_for_model("gemini/gemini-2.5-flash")
+    monkeypatch.setenv("GEMINI_API_KEY", "sk-gem")
+    made: dict[str, Any] = {}
+    with patch.object(
+        client_mod, "OpenAI", side_effect=lambda **kw: made.update(kw) or MagicMock()
+    ):
+        digillm.get_client_for_model("gemini/gemini-2.5-flash")
+    assert "generativelanguage.googleapis.com" in made["base_url"]
+    assert made["api_key"] == "sk-gem"
+
+
+def test_openrouter_rewrite_house_anthropic_uses_default_base(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """House ``anthropic/…`` must not hit api.anthropic.com when a default base is set."""
+    monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-or-house")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-operator")
+    made: dict[str, Any] = {}
+    with patch.object(
+        client_mod, "OpenAI", side_effect=lambda **kw: made.update(kw) or MagicMock()
+    ):
+        digillm.get_client_for_model("anthropic/claude-sonnet-5")
+    assert made["api_key"] == "sk-or-house"
+    assert "openrouter.ai" in made["base_url"]
+    assert "api.anthropic.com" not in made["base_url"]
+
+
+def test_openrouter_rewrite_prefixed_byok_uses_user_bearer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLI OpenRouter rewrite is not LiteLLM — BYOK must not use extra_body pass-through.
+
+    Leftover ``apply_digiquant_house_env()`` (``digigraph/src/digigraph/model_config.py``)
+    sets ``OPENAI_API_BASE`` to OpenRouter when unset; OpenRouter ignores LiteLLM
+    clientside credential fields.
+    """
+    monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-or-house")
+    made: list[dict[str, Any]] = []
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.append(kwargs)
+        return fake_client
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        with digillm.byok("sk-ant-user", "https://api.anthropic.com/v1/"):
+            digillm.get_client_for_model("anthropic/claude-sonnet-5")
+            digillm.completion("anthropic/claude-sonnet-5", [{"role": "user", "content": "hi"}])
+    assert made[0]["api_key"] == "sk-ant-user"
+    assert made[0]["base_url"].rstrip("/") == "https://api.anthropic.com/v1"
+    extra = fake_client.chat.completions.create.call_args[1].get("extra_body") or {}
+    assert extra.get("api_key") != "sk-ant-user"
+    assert "api_key" not in extra
+    assert "api_base" not in extra
+
+
+def test_no_litellm_base_gemini_requires_vendor_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+        digillm.get_client_for_model("gemini/gemini-2.5-flash")
+
+
+def test_completion_sends_full_model_id_through_house_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LiteLLM ``model_list`` keys are the caller ids (e.g. ``anthropic/claude-sonnet-5``)."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.completion("anthropic/claude-sonnet-5", [{"role": "user", "content": "hi"}])
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert kwargs["model"] == "anthropic/claude-sonnet-5"
 
 
 def test_register_provider(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -366,36 +574,6 @@ def test_completion_still_strips_one_prefix_for_an_ordinary_openrouter_model(
     assert kwargs["model"] == "anthropic/claude-sonnet-4"
 
 
-def test_auto_router_pool_constraint_applies_to_the_single_prefix_spelling(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The #802 curated pool keys off ``endswith("/auto")`` on the *wire* model.
-
-    While the BYOK spelling collapsed to a bare ``auto`` that test was False, so the
-    capability guard silently did not apply to it either. Restoring the id restores the
-    guard — a BYOK auto-router request is now constrained exactly like an operator one.
-    """
-    monkeypatch.setenv("OPENROUTER_ALLOWED_MODELS", "a/x,b/y")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    fake_client = MagicMock()
-    fake_client.chat.completions.create.return_value = _mock_response("ok")
-    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        digillm.completion("openrouter/auto", [{"role": "user", "content": "hi"}])
-    _, kwargs = fake_client.chat.completions.create.call_args
-    plugins = kwargs["extra_body"]["plugins"]
-    assert [p for p in plugins if p["id"] == "auto-router"] == [
-        {"id": "auto-router", "allowed_models": ["a/x", "b/y"]}
-    ]
-    # Control: a pinned model is not the auto-router, so the plugin must NOT be attached.
-    fake_client.chat.completions.create.reset_mock()
-    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        digillm.completion(
-            "openrouter/anthropic/claude-sonnet-4", [{"role": "user", "content": "hi"}]
-        )
-    _, pinned = fake_client.chat.completions.create.call_args
-    assert "plugins" not in (pinned.get("extra_body") or {})
-
-
 def test_streaming_path_reaches_the_auto_router_too(monkeypatch: pytest.MonkeyPatch) -> None:
     """``_stream_completion_one_turn`` derives the wire model separately from ``completion``.
 
@@ -432,223 +610,6 @@ def test_is_empty_completion_detects_blank_and_no_tool_calls() -> None:
     assert client_mod._is_empty_completion(no_choices) is True
 
 
-def test_openrouter_fallback_models_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", " a/x , b/y ,")
-    assert client_mod._openrouter_fallback_models() == ["a/x", "b/y"]
-    monkeypatch.delenv("OPENROUTER_FALLBACK_MODELS", raising=False)
-    assert client_mod._openrouter_fallback_models() == []
-
-
-def test_openrouter_usage_cost_reads_typed_extra_and_missing() -> None:
-    # OpenRouter usage.cost as a plain typed attribute.
-    typed = MagicMock(spec=["cost", "model_extra"])
-    typed.cost = 0.0042
-    typed.model_extra = None
-    assert client_mod._openrouter_usage_cost(typed) == pytest.approx(0.0042)
-    # Falls back to pydantic model_extra when the SDK drops the unknown field off the typed attr.
-    extra_only = MagicMock(spec=["cost", "model_extra"])
-    extra_only.cost = None
-    extra_only.model_extra = {"cost": 0.009}
-    assert client_mod._openrouter_usage_cost(extra_only) == pytest.approx(0.009)
-    # No usage / no cost / non-numeric → None (never fabricate 0 — #2763 / WP1).
-    assert client_mod._openrouter_usage_cost(None) is None
-    none_cost = MagicMock(spec=["cost", "model_extra"])
-    none_cost.cost = None
-    none_cost.model_extra = {}
-    assert client_mod._openrouter_usage_cost(none_cost) is None
-    bad = MagicMock(spec=["cost", "model_extra"])
-    bad.cost = "free"
-    bad.model_extra = None
-    assert client_mod._openrouter_usage_cost(bad) is None
-    # Non-finite / negative cost must not poison run-level aggregation → None.
-    for bad_value in (float("nan"), float("inf"), -0.5, "nan", "inf"):
-        nf = MagicMock(spec=["cost", "model_extra"])
-        nf.cost = bad_value
-        nf.model_extra = None
-        assert client_mod._openrouter_usage_cost(nf) is None
-
-
-def test_with_openrouter_fallback_only_for_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "a/x,b/y")
-    base = {"model": "m", "messages": []}
-    out = client_mod._with_openrouter_fallback(base, "openrouter")
-    # require_parameters defaults ON, so it rides alongside the fallback allowlist.
-    assert out["extra_body"] == {
-        "models": ["a/x", "b/y"],
-        "route": "fallback",
-        "provider": {"require_parameters": True},
-    }
-    # Non-openrouter providers (and the default client) are untouched.
-    assert client_mod._with_openrouter_fallback(base, "xai") == base
-    assert client_mod._with_openrouter_fallback(base, None) == base
-
-
-def test_openrouter_provider_prefs_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Unset → empty (fully opt-in, no behavior change by default).
-    assert client_mod._openrouter_provider_prefs() == {}
-    monkeypatch.setenv("OPENROUTER_SORT", "price")
-    monkeypatch.setenv("OPENROUTER_MAX_PROMPT_PRICE", "1.5")
-    monkeypatch.setenv("OPENROUTER_MAX_COMPLETION_PRICE", "4")
-    assert client_mod._openrouter_provider_prefs() == {
-        "sort": "price",
-        "max_price": {"prompt": 1.5, "completion": 4.0},
-    }
-
-
-def test_openrouter_provider_prefs_ignores_non_numeric_ceiling(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("OPENROUTER_MAX_PROMPT_PRICE", "cheap")  # garbage → dropped, not crash
-    assert client_mod._openrouter_provider_prefs() == {}
-
-
-def test_openrouter_provider_prefs_drops_invalid_sort(monkeypatch: pytest.MonkeyPatch) -> None:
-    # An invalid sort would 400 (not transient) and crash the call — drop it instead of sending.
-    monkeypatch.setenv("OPENROUTER_SORT", "cheapest")  # not in the OpenRouter enum
-    assert client_mod._openrouter_provider_prefs() == {}
-    monkeypatch.setenv("OPENROUTER_SORT", "throughput")  # a valid value passes through
-    assert client_mod._openrouter_provider_prefs() == {"sort": "throughput"}
-
-
-def test_openrouter_provider_prefs_drops_nonpositive_or_nonfinite_ceiling(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # float() accepts these, but a price ceiling must be finite and > 0.
-    for bad in ("0", "-1", "inf", "nan"):
-        monkeypatch.setenv("OPENROUTER_MAX_PROMPT_PRICE", bad)
-        assert client_mod._openrouter_provider_prefs() == {}, bad
-
-
-def test_cost_controls_combine_allowlist_and_price_ceiling(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "a/x,b/y")
-    monkeypatch.setenv("OPENROUTER_SORT", "price")
-    monkeypatch.setenv("OPENROUTER_MAX_PROMPT_PRICE", "1.5")
-    out = client_mod._with_openrouter_cost_controls(
-        {"model": "openrouter/auto", "messages": []}, "openrouter"
-    )
-    assert out["extra_body"]["models"] == ["a/x", "b/y"]
-    assert out["extra_body"]["route"] == "fallback"
-    assert out["extra_body"]["provider"] == {
-        "require_parameters": True,
-        "sort": "price",
-        "max_price": {"prompt": 1.5},
-    }
-
-
-def test_cost_controls_default_adds_require_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
-    # With no cost knobs set, an OpenRouter request still gets provider.require_parameters
-    # (default ON) so the Auto Router only routes to a provider that honors the request's
-    # response_format / tools — preventing the empty-completion failure mode (#717 regression).
-    base = {"model": "openrouter/auto", "messages": []}
-    out = client_mod._with_openrouter_cost_controls(base, "openrouter")
-    assert out["extra_body"] == {"provider": {"require_parameters": True}}
-    # Opt-out → a true no-op for OpenRouter.
-    monkeypatch.setenv("OPENROUTER_REQUIRE_PARAMETERS", "0")
-    assert client_mod._with_openrouter_cost_controls(base, "openrouter") == base
-    # Never applies to non-OpenRouter providers regardless of the flag.
-    monkeypatch.delenv("OPENROUTER_REQUIRE_PARAMETERS", raising=False)
-    assert client_mod._with_openrouter_cost_controls(base, "xai") == base
-
-
-def test_require_parameters_forced_for_structured_requests(monkeypatch: pytest.MonkeyPatch) -> None:
-    # A response_format / tools request must keep require_parameters even when the operator
-    # disables the global toggle — those requests empty-fail on a provider that drops the param.
-    monkeypatch.setenv("OPENROUTER_REQUIRE_PARAMETERS", "0")
-    schema_req = {
-        "model": "openrouter/auto",
-        "messages": [],
-        "response_format": {"type": "json_schema", "json_schema": {"name": "X", "schema": {}}},
-    }
-    out = client_mod._with_openrouter_cost_controls(schema_req, "openrouter")
-    assert out["extra_body"] == {"provider": {"require_parameters": True}}
-    tool_req = {"model": "openrouter/auto", "messages": [], "tools": [{"type": "function"}]}
-    out = client_mod._with_openrouter_cost_controls(tool_req, "openrouter")
-    assert out["extra_body"] == {"provider": {"require_parameters": True}}
-    # OpenRouter server tools (web search) must NOT get require_parameters — it 404s.
-    server_tool_req = {
-        "model": "perplexity/sonar",
-        "messages": [],
-        "tools": [{"type": "openrouter:web_search", "parameters": {"engine": "exa"}}],
-    }
-    out = client_mod._with_openrouter_cost_controls(server_tool_req, "openrouter")
-    assert "extra_body" not in out or "require_parameters" not in out.get("extra_body", {}).get(
-        "provider", {}
-    )
-    # A plain-prose request still honors the opt-out (no extra_body added).
-    prose_req = {"model": "openrouter/auto", "messages": []}
-    assert client_mod._with_openrouter_cost_controls(prose_req, "openrouter") == prose_req
-
-
-def test_allowed_models_constrains_auto_router(monkeypatch: pytest.MonkeyPatch) -> None:
-    # OPENROUTER_ALLOWED_MODELS fences the Auto Router's candidate pool via the auto-router
-    # plugin (keeps per-prompt auto-selection, excludes incapable models like flash-lite, #802).
-    monkeypatch.setenv(
-        "OPENROUTER_ALLOWED_MODELS", " openai/gpt-4o-mini , deepseek/deepseek-chat ,"
-    )
-    monkeypatch.setenv("OPENROUTER_COST_QUALITY_TRADEOFF", "6")
-    req = {"model": "openrouter/auto", "messages": []}
-    out = client_mod._with_openrouter_cost_controls(req, "openrouter")
-    assert out["extra_body"]["plugins"] == [
-        {
-            "id": "auto-router",
-            "allowed_models": ["openai/gpt-4o-mini", "deepseek/deepseek-chat"],
-            "cost_quality_tradeoff": 6,
-        }
-    ]
-    # allowed_models supersedes require_parameters — applying both compounds to an empty set
-    # → OpenRouter 404 (#802). The curated pool is the capability guarantee, so no provider block.
-    assert "provider" not in out["extra_body"]
-
-
-def test_allowed_models_only_for_auto_router(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The plugin is meaningless on a pinned model → not injected there.
-    monkeypatch.setenv("OPENROUTER_ALLOWED_MODELS", "openai/gpt-4o-mini")
-    pinned = {"model": "deepseek/deepseek-chat", "messages": []}
-    out = client_mod._with_openrouter_cost_controls(pinned, "openrouter")
-    assert "plugins" not in out.get("extra_body", {})
-    # Out-of-range / non-int tradeoff is ignored (plugin omits the key, uses OpenRouter default).
-    monkeypatch.setenv("OPENROUTER_COST_QUALITY_TRADEOFF", "99")
-    out = client_mod._with_openrouter_cost_controls(
-        {"model": "openrouter/auto", "messages": []}, "openrouter"
-    )
-    assert out["extra_body"]["plugins"][0] == {
-        "id": "auto-router",
-        "allowed_models": ["openai/gpt-4o-mini"],
-    }
-
-
-def test_cost_controls_merge_preserves_existing_extra_body(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The xAI search_parameters branch is openrouter-gated out, but a pre-existing extra_body
-    # (and any pre-set provider keys) must be preserved/merged, not clobbered.
-    monkeypatch.setenv("OPENROUTER_SORT", "price")
-    base = {
-        "model": "openrouter/auto",
-        "messages": [],
-        "extra_body": {"provider": {"order": ["x"]}, "foo": 1},
-    }
-    out = client_mod._with_openrouter_cost_controls(base, "openrouter")
-    assert out["extra_body"]["foo"] == 1
-    assert out["extra_body"]["provider"] == {
-        "order": ["x"],
-        "require_parameters": True,
-        "sort": "price",
-    }
-    assert base["extra_body"]["provider"] == {"order": ["x"]}  # input not mutated
-
-
-def test_cost_controls_deep_merge_max_price(monkeypatch: pytest.MonkeyPatch) -> None:
-    # A caller-set max_price key (completion) must survive when env sets only the other
-    # (prompt) — deep-merge the nested dict, don't clobber it.
-    monkeypatch.setenv("OPENROUTER_MAX_PROMPT_PRICE", "1.5")
-    base = {
-        "model": "openrouter/auto",
-        "messages": [],
-        "extra_body": {"provider": {"max_price": {"completion": 9.0}}},
-    }
-    out = client_mod._with_openrouter_cost_controls(base, "openrouter")
-    assert out["extra_body"]["provider"]["max_price"] == {"completion": 9.0, "prompt": 1.5}
-
-
 def test_empty_response_retries_then_heals(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk")
     monkeypatch.setattr(client_mod, "_EMPTY_RETRY_MAX", 2)  # deterministic regardless of env
@@ -672,30 +633,6 @@ def test_empty_response_gives_up_gracefully(monkeypatch: pytest.MonkeyPatch) -> 
     assert client_mod._is_empty_completion(resp)  # returned unchanged, no crash
     # 1 initial + _EMPTY_RETRY_MAX retries.
     assert fake_client.chat.completions.create.call_count == 1 + client_mod._EMPTY_RETRY_MAX
-
-
-def test_openrouter_cost_controls_applied_on_primary_and_retry(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Cost controls (#774) now apply on the PRIMARY request (cheap allowlist + price ceiling),
-    # not only on the empty-retry path — so every OpenRouter call is bounded to cheap models.
-    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
-    monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "openrouter/cheap-a,openrouter/cheap-b")
-    monkeypatch.setenv("OPENROUTER_MAX_PROMPT_PRICE", "1.5")
-    monkeypatch.setattr(client_mod, "_EMPTY_RETRY_MAX", 2)  # deterministic regardless of env
-    monkeypatch.setattr(client_mod.time, "sleep", lambda *_a, **_k: None)
-    fake_client = MagicMock()
-    fake_client.chat.completions.create.side_effect = [_mock_response(""), _mock_response("ok")]
-    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        digillm.completion("openrouter/primary/model", [{"role": "user", "content": "hi"}])
-    calls = fake_client.chat.completions.create.call_args_list
-    expected = {
-        "models": ["openrouter/cheap-a", "openrouter/cheap-b"],
-        "route": "fallback",
-        "provider": {"require_parameters": True, "max_price": {"prompt": 1.5}},
-    }
-    assert calls[0].kwargs["extra_body"] == expected  # primary already bounded to cheap models
-    assert calls[1].kwargs["extra_body"] == expected  # retry keeps the controls
 
 
 def test_chat_completion_response_cache_hit(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1710,32 +1647,6 @@ def test_completion_reports_transient_provider_retries() -> None:
     assert events[0]["retry_count"] == 1
 
 
-def test_completion_records_failed_410_fallback_retry() -> None:
-    class GoneError(RuntimeError):
-        status_code = 410
-
-    fake_client = MagicMock()
-    fake_client.chat.completions.create.side_effect = [
-        GoneError("live search removed"),
-        ValueError("fallback failed"),
-    ]
-    events: list[dict[str, Any]] = []
-    digillm.set_usage_observer(lambda **fields: events.append(fields))
-
-    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        with pytest.raises(ValueError, match="fallback failed"):
-            digillm.completion(
-                "xai/grok-4",
-                [{"role": "user", "content": "hi"}],
-                search_parameters={"mode": "auto"},
-            )
-
-    assert fake_client.chat.completions.create.call_count == 2
-    assert len(events) == 1
-    assert events[0]["ok"] is False
-    assert events[0]["retry_count"] == 1
-
-
 def test_create_with_retry_propagates_non_transient() -> None:
     fake_client = MagicMock()
     fake_client.chat.completions.create.side_effect = ValueError("bad request")
@@ -1767,59 +1678,6 @@ def test_sdk_hidden_retries_remain_enabled_and_opaque() -> None:
     assert len(made) == 1
     assert "max_retries" not in made[0]
     assert DEFAULT_MAX_RETRIES == 2
-
-
-@pytest.mark.parametrize(
-    ("search_name", "expected_kind"),
-    [("web_search", "web_search"), ("x_search", "x_search")],
-)
-def test_direct_search_reports_duration(
-    monkeypatch: pytest.MonkeyPatch,
-    search_name: str,
-    expected_kind: str,
-) -> None:
-    monkeypatch.setenv("XAI_API_KEY", "xai-test")
-    response = MagicMock()
-    response.output_text = "Grounded [[1]](https://example.test/source)"
-    response.output = []
-    fake_client = MagicMock()
-    fake_client.responses.create.return_value = response
-    events: list[dict[str, Any]] = []
-    digillm.set_usage_observer(lambda **fields: events.append(fields))
-
-    with (
-        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
-        patch.object(client_mod.time, "perf_counter", side_effect=[10.0, 10.125]),
-    ):
-        result = getattr(client_mod, search_name)("xai/grok-4", "latest market news")
-
-    assert result is not None
-    assert len(events) == 1
-    assert events[0]["kind"] == expected_kind
-    assert events[0]["duration_ms"] == 125
-
-
-@pytest.mark.parametrize("search_name", ["web_search", "x_search"])
-def test_direct_search_failure_reports_duration(
-    monkeypatch: pytest.MonkeyPatch,
-    search_name: str,
-) -> None:
-    monkeypatch.setenv("XAI_API_KEY", "xai-test")
-    fake_client = MagicMock()
-    fake_client.responses.create.side_effect = RuntimeError("provider unavailable")
-    events: list[dict[str, Any]] = []
-    digillm.set_usage_observer(lambda **fields: events.append(fields))
-
-    with (
-        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
-        patch.object(client_mod.time, "perf_counter", side_effect=[20.0, 20.075]),
-    ):
-        result = getattr(client_mod, search_name)("xai/grok-4", "latest market news")
-
-    assert result is None
-    assert len(events) == 1
-    assert events[0]["ok"] is False
-    assert events[0]["duration_ms"] == 75
 
 
 # ── Per-request overrides (contextvars) ──────────────────────────────────────
@@ -1959,7 +1817,7 @@ class _PersonNested(BaseModel):
 
 def test_structured_completion_strict_schema_forces_required_through_nested_defs() -> None:
     """#2353 claims recursive required-forcing through $defs/items/anyOf. Flat
-    optional coverage alone would miss nested Atlas/digest schemas that still
+    optional coverage alone would miss nested research/digest schemas that still
     400 on OpenAI-family providers when a child property is omitted from
     required."""
     captured: dict[str, Any] = {}
@@ -2123,3 +1981,12 @@ def test_empty_retry_new_name_wins_over_legacy(monkeypatch: pytest.MonkeyPatch) 
         or "5.0"
     )
     assert float(backoff_raw) == 8.0, "new DIGILLM_EMPTY_RETRY_BACKOFF must win over legacy name"
+
+
+def test_client_compatibility_facade_reexports_split_helpers() -> None:
+    """The historic client import path remains valid after internal modules split."""
+    from digillm import cache, overrides, types
+
+    assert client_mod.ToolDefinition is types.ToolDefinition
+    assert client_mod.byok is overrides.byok
+    assert client_mod._llm_cache_key is cache.llm_cache_key

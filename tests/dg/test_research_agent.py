@@ -596,3 +596,56 @@ class TestRunResearchAgent:
             )
         assert out.regime == "recovery"
         assert mock.call_count == 2
+
+    def test_max_tool_rounds_forwarded_to_tool_loop(self) -> None:
+        """Olympus threads OLYMPUS_MAX_TOOL_ROUNDS (24) into run_tools (#3299)."""
+        payload = json.dumps({"regime": "grounded", "confidence": 0.7})
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "probe",
+                    "description": "probe",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ]
+        with patch("digigraph.graph.research_agent.run_tools", return_value=payload) as mock:
+            out = run_research_agent(
+                skill_text="x",
+                phase_inputs={},
+                shared_context={},
+                output_model=_SampleOutput,
+                model="test-model",
+                tools=tools,
+                execute_tool=lambda name, args: "{}",
+                max_tool_rounds=24,
+            )
+        assert out.regime == "grounded"
+        assert mock.call_count == 1
+        assert mock.call_args.kwargs["max_tool_rounds"] == 24
+
+    def test_tool_loop_defaults_to_five_rounds(self) -> None:
+        """No explicit budget keeps digillm's default so chat behavior is unchanged."""
+        payload = json.dumps({"regime": "grounded", "confidence": 0.7})
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "probe",
+                    "description": "probe",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ]
+        with patch("digigraph.graph.research_agent.run_tools", return_value=payload) as mock:
+            run_research_agent(
+                skill_text="x",
+                phase_inputs={},
+                shared_context={},
+                output_model=_SampleOutput,
+                model="test-model",
+                tools=tools,
+                execute_tool=lambda name, args: "{}",
+            )
+        assert mock.call_args.kwargs["max_tool_rounds"] == 5

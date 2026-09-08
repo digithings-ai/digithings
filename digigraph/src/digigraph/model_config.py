@@ -10,11 +10,14 @@ P2). Owns everything about *which model string* a request should use:
   normalized for the active ``OPENAI_API_BASE`` (strips the LiteLLM ``ollama/``
   prefix when talking directly to Ollama's OpenAI shim).
 - :func:`resolve_request_model` — the single helper that turns the *requested*
-  model into the concrete string handed to :func:`digillm.completion`,
-  reproducing the provider-key→Ollama fallback and ``ollama-cloud/`` strip the
-  old ``chat_completion`` did inline. digillm performs no env/YAML model
-  substitution and raises on a missing provider key, so this resolution must
-  happen here first.
+  model into the concrete string handed to :func:`digillm.completion`.
+
+  **Policy**: registered provider with no API key and no BYOK override → raise
+  ``ValueError`` (no silent Ollama default). House uses hosted Cheaper Inference
+  (``CHEAPERINFERENCE_API_KEY`` / ``DIGI_HOUSE_UPSTREAM=openrouter``); unprefixed
+  digiquant slugs (``deepseek/...``, ``meta-llama/...``, ``perplexity/...``) are
+  not registered providers and pass through unchanged. Catalog misses raise —
+  there is no fallback. Local opt-in required for any external provider usage.
 
 The LLM calls live in :mod:`digigraph.llm_client`; per-request auth (proxy key /
 BYOK) lives in :mod:`digigraph.llm_auth`.
@@ -28,13 +31,18 @@ import os
 from pathlib import Path
 
 import yaml
-from digillm import get_provider_api_key_env, is_registered_provider
+from digillm import (
+    cheaperinference_house_preferred,
+    get_provider_api_key_env,
+    is_registered_provider,
+)
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from digigraph.llm_auth import (
     byok_default_model_refusal,
     byok_model_routes_elsewhere,
     byok_operator_model_routes_elsewhere,
+    byok_provider_supported,
     byok_routable_model,
     get_byok_model_override,
     get_byok_override,
@@ -44,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 _MODEL_MODES_LOAD_ERRORS = (OSError, yaml.YAMLError)
 
-# Open-weight-only policy for Olympus / OpenRouter. Blocks frontier providers and IDs.
+# Open-weight-only policy for dashboard / OpenRouter. Blocks frontier providers and IDs.
 _FLAGSHIP_PROVIDER_PREFIXES = frozenset({"openai/", "anthropic/"})
 _FLAGSHIP_ALLOWED_POOL_PREFIXES = frozenset({"openai/", "anthropic/", "openai/*", "anthropic/*"})
 _FLAGSHIP_MODEL_ID_MARKERS = frozenset(
@@ -213,15 +221,15 @@ class ModelModesConfig(BaseModel):
     phase_models: dict[str, str] = Field(default_factory=dict)
 
 
-class OlympusOpenRouterTierConfig(BaseModel):
-    """OpenRouter env knobs for one Olympus model tier (or global defaults)."""
+class DigiquantOpenRouterTierConfig(BaseModel):
+    """OpenRouter env knobs for one dashboard model tier (or global defaults)."""
 
     allowed_models: str = _OPEN_WEIGHT_ALLOWED_MODELS
     cost_quality_tradeoff: int = _DEFAULT_COST_QUALITY_TRADEOFF
 
 
-class OlympusTierConfig(BaseModel):
-    """One Olympus cost/quality tier (cheap / balanced / quality)."""
+class DigiquantTierConfig(BaseModel):
+    """One dashboard cost/quality tier (cheap / balanced / quality)."""
 
     # Legacy single-pin map — migrated into ``allowed_models`` on load when present.
     models: dict[str, str] = Field(default_factory=dict)
@@ -231,10 +239,10 @@ class OlympusTierConfig(BaseModel):
     web_search_models: list[str] = Field(default_factory=list)
     # Legacy single grounding pin — ignored when ``web_search_models`` is set.
     grounding_model: str = ""
-    openrouter: OlympusOpenRouterTierConfig = Field(default_factory=OlympusOpenRouterTierConfig)
+    openrouter: DigiquantOpenRouterTierConfig = Field(default_factory=DigiquantOpenRouterTierConfig)
 
     @model_validator(mode="after")
-    def _migrate_legacy_models(self) -> OlympusTierConfig:
+    def _migrate_legacy_models(self) -> DigiquantTierConfig:
         if self.models and not self.allowed_models:
             object.__setattr__(
                 self,
@@ -244,23 +252,23 @@ class OlympusTierConfig(BaseModel):
         return self
 
 
-class OlympusModelsConfig(BaseModel):
-    """Parsed ``olympus_models.yaml`` — centralized Atlas/Hermes model policy."""
+class DigiquantModelsConfig(BaseModel):
+    """Parsed ``digiquant_models.yaml`` — centralized research/portfolio model policy."""
 
     default_tier: str = "cheap"
-    openrouter_defaults: OlympusOpenRouterTierConfig = Field(
-        default_factory=OlympusOpenRouterTierConfig
+    openrouter_defaults: DigiquantOpenRouterTierConfig = Field(
+        default_factory=DigiquantOpenRouterTierConfig
     )
-    tiers: dict[str, OlympusTierConfig] = Field(default_factory=dict)
+    tiers: dict[str, DigiquantTierConfig] = Field(default_factory=dict)
     phase_capabilities: dict[str, str] = Field(default_factory=dict)
     phase_capability_prefixes: dict[str, str] = Field(default_factory=dict)
 
 
 _EMPTY_MODEL_MODES = ModelModesConfig()
 _model_modes_cache: tuple[float, ModelModesConfig] | None = None
-_EMPTY_OLYMPUS_MODELS = OlympusModelsConfig()
-_olympus_models_cache: tuple[float, OlympusModelsConfig] | None = None
-_VALID_OLYMPUS_TIERS = frozenset({"cheap", "balanced", "quality"})
+_EMPTY_DIGIQUANT_MODELS = DigiquantModelsConfig()
+_digiquant_models_cache: tuple[float, DigiquantModelsConfig] | None = None
+_VALID_MODEL_TIERS = frozenset({"cheap", "balanced", "quality"})
 _VALID_CAPABILITIES = frozenset({"extraction", "research", "reasoning"})
 
 
@@ -296,37 +304,37 @@ def _load_model_modes() -> ModelModesConfig:
     return cfg
 
 
-def _olympus_models_path() -> Path:
+def _digiquant_models_path() -> Path:
     config_dir = os.environ.get("DIGI_CONFIG_PATH", "config")
-    return Path(config_dir) / "olympus_models.yaml"
+    return Path(config_dir) / "digiquant_models.yaml"
 
 
-def _load_olympus_models() -> OlympusModelsConfig:
-    """Load ``olympus_models.yaml`` (mtime-cached)."""
-    global _olympus_models_cache
-    path = _olympus_models_path()
+def _load_digiquant_models() -> DigiquantModelsConfig:
+    """Load ``digiquant_models.yaml`` (mtime-cached)."""
+    global _digiquant_models_cache
+    path = _digiquant_models_path()
     if not path.exists():
-        return _EMPTY_OLYMPUS_MODELS
+        return _EMPTY_DIGIQUANT_MODELS
     try:
         mtime = path.stat().st_mtime
     except OSError as e:
-        logger.warning("olympus_models load failed (stat): %s", e)
-        return _EMPTY_OLYMPUS_MODELS
-    if _olympus_models_cache is not None and _olympus_models_cache[0] == mtime:
-        return _olympus_models_cache[1]
+        logger.warning("dashboard_models load failed (stat): %s", e)
+        return _EMPTY_DIGIQUANT_MODELS
+    if _digiquant_models_cache is not None and _digiquant_models_cache[0] == mtime:
+        return _digiquant_models_cache[1]
     try:
         with open(path) as f:
             raw = yaml.safe_load(f) or {}
     except _MODEL_MODES_LOAD_ERRORS as e:
-        logger.warning("olympus_models load failed: %s", e)
-        return _EMPTY_OLYMPUS_MODELS
+        logger.warning("dashboard_models load failed: %s", e)
+        return _EMPTY_DIGIQUANT_MODELS
     try:
-        cfg = OlympusModelsConfig.model_validate(raw)
+        cfg = DigiquantModelsConfig.model_validate(raw)
     except ValidationError as e:
-        logger.warning("olympus_models validation failed: %s", e)
-        return _EMPTY_OLYMPUS_MODELS
-    _olympus_models_cache = (mtime, cfg)
-    _warn_flagship_models_in_olympus_config(cfg)
+        logger.warning("dashboard_models validation failed: %s", e)
+        return _EMPTY_DIGIQUANT_MODELS
+    _digiquant_models_cache = (mtime, cfg)
+    _warn_flagship_models_in_digiquant_config(cfg)
     return cfg
 
 
@@ -409,28 +417,8 @@ def sanitize_allowed_models(allowed_models: str, *, tier: str = "cheap") -> str:
     return ",".join(kept) if kept else _OPEN_WEIGHT_ALLOWED_MODELS
 
 
-def _effective_openrouter_config(
-    tier_name: str,
-    tier_cfg: OlympusTierConfig,
-    olympus: OlympusModelsConfig,
-) -> OlympusOpenRouterTierConfig:
-    """Merge tier overrides with ``openrouter_defaults`` (defaults win on empty tier fields)."""
-    defaults = olympus.openrouter_defaults
-    tier_or = tier_cfg.openrouter
-    allowed = tier_or.allowed_models.strip() or defaults.allowed_models
-    tradeoff = (
-        tier_or.cost_quality_tradeoff
-        if tier_or.cost_quality_tradeoff is not None
-        else defaults.cost_quality_tradeoff
-    )
-    return OlympusOpenRouterTierConfig(
-        allowed_models=sanitize_allowed_models(allowed, tier=tier_name),
-        cost_quality_tradeoff=tradeoff,
-    )
-
-
-def _warn_flagship_models_in_olympus_config(cfg: OlympusModelsConfig) -> None:
-    """Log when olympus_models.yaml pools a frontier model on a restricted tier."""
+def _warn_flagship_models_in_digiquant_config(cfg: DigiquantModelsConfig) -> None:
+    """Log when digiquant_models.yaml pools a frontier model on a restricted tier."""
     for tier_name, tier_cfg in cfg.tiers.items():
         if tier_name == "quality":
             continue
@@ -440,7 +428,7 @@ def _warn_flagship_models_in_olympus_config(cfg: OlympusModelsConfig) -> None:
                     model, tier_name
                 ):
                     logger.warning(
-                        "olympus_models tier=%s capability=%s pools disallowed model %r",
+                        "dashboard_models tier=%s capability=%s pools disallowed model %r",
                         tier_name,
                         capability,
                         model,
@@ -448,7 +436,7 @@ def _warn_flagship_models_in_olympus_config(cfg: OlympusModelsConfig) -> None:
     pool = sanitize_allowed_models(cfg.openrouter_defaults.allowed_models, tier="cheap")
     if pool != cfg.openrouter_defaults.allowed_models.strip():
         logger.debug(
-            "olympus_models openrouter_defaults sanitized for cheap tier to %r",
+            "dashboard_models openrouter_defaults sanitized for cheap tier to %r",
             pool,
         )
 
@@ -463,15 +451,18 @@ def _phase_models_override(phase_slug: str, phase_models: dict[str, str]) -> str
     return None
 
 
-def get_olympus_tier() -> str:
-    """Active Olympus tier from ``OLYMPUS_MODEL_TIER`` or ``olympus_models.yaml`` default."""
-    raw = os.environ.get("OLYMPUS_MODEL_TIER", "").strip().lower()
-    if raw in _VALID_OLYMPUS_TIERS:
+def get_digiquant_tier() -> str:
+    """Active dashboard tier from ``OLYMPUS_MODEL_TIER`` or ``digiquant_models.yaml`` default."""
+    if "DIGIQUANT_MODEL_TIER" in os.environ:
+        raw = os.environ.get("DIGIQUANT_MODEL_TIER", "").strip().lower()
+    else:
+        raw = os.environ.get("OLYMPUS_MODEL_TIER", "").strip().lower()
+    if raw in _VALID_MODEL_TIERS:
         return raw
-    return _load_olympus_models().default_tier or "cheap"
+    return _load_digiquant_models().default_tier or "cheap"
 
 
-def _capability_for_phase(phase_slug: str, cfg: OlympusModelsConfig) -> str | None:
+def _capability_for_phase(phase_slug: str, cfg: DigiquantModelsConfig) -> str | None:
     """Map a phase slug to extraction / research / reasoning, or None if unknown."""
     if phase_slug in cfg.phase_capabilities:
         return cfg.phase_capabilities[phase_slug]
@@ -505,14 +496,30 @@ def is_tool_use_capable_model(model: str) -> bool:
     return True
 
 
+# #3660 house grounding synthesizers (digisearch / live_search retrieval first;
+# these LLMs only rewrite the retrieved context — not OpenRouter :online/sonar).
+_HOUSE_CI_GROUNDING_SYNTHESIS_SLUGS = frozenset(
+    {
+        "google/gemini-3.1-flash-lite",
+        "deepseek/deepseek-v4-flash",
+    }
+)
+
+
 def is_web_search_capable_model(model: str) -> bool:
-    """True when *model* can ground via ``:online`` or native search (perplexity/*)."""
+    """True when *model* may run digiquant grounding pre-passes.
+
+    Includes OpenRouter ``:online`` / perplexity native search, plus house CI
+    synthesis slugs used after in-house digisearch retrieval (#3660).
+    """
     slug = _openrouter_slug(model).strip().lower()
     if not slug:
         return False
     if is_native_search_only_model(model):
         return True
-    return ":online" in slug
+    if ":online" in slug:
+        return True
+    return slug in _HOUSE_CI_GROUNDING_SYNTHESIS_SLUGS
 
 
 def _pick_from_pool(pool: list[str], key: str) -> str:
@@ -524,7 +531,7 @@ def _pick_from_pool(pool: list[str], key: str) -> str:
     return pool[int(digest[:8], 16) % len(pool)]
 
 
-def _tier_capability_pool(tier_cfg: OlympusTierConfig, capability: str) -> list[str]:
+def _tier_capability_pool(tier_cfg: DigiquantTierConfig, capability: str) -> list[str]:
     pool = list(tier_cfg.allowed_models.get(capability) or [])
     if not pool:
         legacy = tier_cfg.models.get(capability)
@@ -533,30 +540,33 @@ def _tier_capability_pool(tier_cfg: OlympusTierConfig, capability: str) -> list[
     return pool
 
 
-def _tier_web_search_pool(tier_cfg: OlympusTierConfig) -> list[str]:
+def _tier_web_search_pool(tier_cfg: DigiquantTierConfig) -> list[str]:
+    # Explicit ``web_search_models`` wins (#3660): house CI synthesis pins
+    # (``gemini-3.1-flash-lite`` / ``deepseek-v4-flash``) are not ``:online`` /
+    # perplexity, but they are the configured synthesizers after digisearch
+    # retrieval. Do not filter them with ``is_web_search_capable_model``.
     if tier_cfg.web_search_models:
-        pool = list(tier_cfg.web_search_models)
+        return list(tier_cfg.web_search_models)
+    seen: set[str] = set()
+    merged: list[str] = []
+    for capability in ("research", "extraction", "reasoning"):
+        for model in _tier_capability_pool(tier_cfg, capability):
+            if model not in seen:
+                seen.add(model)
+                merged.append(model)
+    if merged:
+        pool = merged
+    elif tier_cfg.grounding_model:
+        pool = [tier_cfg.grounding_model]
     else:
-        seen: set[str] = set()
-        merged: list[str] = []
-        for capability in ("research", "extraction", "reasoning"):
-            for model in _tier_capability_pool(tier_cfg, capability):
-                if model not in seen:
-                    seen.add(model)
-                    merged.append(model)
-        if merged:
-            pool = merged
-        elif tier_cfg.grounding_model:
-            pool = [tier_cfg.grounding_model]
-        else:
-            pool = []
+        pool = []
     return [m for m in pool if is_web_search_capable_model(m)]
 
 
-def _model_for_olympus_capability(capability: str, tier: str, phase_slug: str) -> str | None:
+def _model_for_digiquant_capability(capability: str, tier: str, phase_slug: str) -> str | None:
     if capability not in _VALID_CAPABILITIES:
         return None
-    tier_cfg = _load_olympus_models().tiers.get(tier)
+    tier_cfg = _load_digiquant_models().tiers.get(tier)
     if tier_cfg is None:
         return None
     pool = [
@@ -568,8 +578,14 @@ def _model_for_olympus_capability(capability: str, tier: str, phase_slug: str) -
 
 
 def get_grounding_model(*, segment: str = "grounding") -> str | None:
-    """Return an OpenRouter model for web-search grounding pre-passes."""
-    tier_cfg = _load_olympus_models().tiers.get(get_olympus_tier())
+    """Return a model for digiquant grounding pre-passes.
+
+    When ``web_search_models`` is set (#3660), use that list as-is (house CI
+    synthesis after digisearch / live_search). Legacy fallbacks still filter to
+    ``perplexity/*`` / ``:online`` (#2567). Slugs are unprefixed OpenRouter-style
+    ids resolved through LiteLLM / Cheaper Inference (#3414).
+    """
+    tier_cfg = _load_digiquant_models().tiers.get(get_digiquant_tier())
     if tier_cfg is None:
         return None
     pool = _tier_web_search_pool(tier_cfg)
@@ -578,35 +594,52 @@ def get_grounding_model(*, segment: str = "grounding") -> str | None:
     return _pick_from_pool(pool, segment)
 
 
-def apply_olympus_openrouter_env(*, force: bool = False) -> str:
-    """Apply OpenRouter cost knobs from the active Olympus tier. Returns tier name.
+def _cheaperinference_house_preferred() -> bool:
+    """House default prefers Cheaper Inference when ``CHEAPERINFERENCE_API_KEY`` is set.
 
-    Sets ``OPENROUTER_ALLOWED_MODELS`` and ``OPENROUTER_COST_QUALITY_TRADEOFF`` when
-    unset (or when *force*). Called at chain startup so CI picks up tier policy
-    without duplicating values in ``olympus-pipeline.yml``.
+    Delegates to :func:`digillm.client.cheaperinference_house_preferred`. Force
+    OpenRouter with ``DIGI_HOUSE_UPSTREAM=openrouter``. Catalog misses raise —
+    there is no OpenRouter fallback. Distinct from self-hosted OmniRoute.
     """
-    tier = get_olympus_tier()
-    tier_cfg = _load_olympus_models().tiers.get(tier)
-    if tier_cfg is None:
-        logger.warning("olympus tier %r not found in olympus_models.yaml", tier)
-        return tier
-    olympus = _load_olympus_models()
-    or_cfg = _effective_openrouter_config(tier, tier_cfg, olympus)
-    if or_cfg.allowed_models and (
-        force or not os.environ.get("OPENROUTER_ALLOWED_MODELS", "").strip()
-    ):
-        os.environ["OPENROUTER_ALLOWED_MODELS"] = or_cfg.allowed_models
-    if or_cfg.cost_quality_tradeoff is not None and (
-        force or not os.environ.get("OPENROUTER_COST_QUALITY_TRADEOFF", "").strip()
-    ):
-        os.environ["OPENROUTER_COST_QUALITY_TRADEOFF"] = str(or_cfg.cost_quality_tradeoff)
+    return cheaperinference_house_preferred()
+
+
+def apply_digiquant_house_env() -> None:
+    """Point the default client at the house upstream (CLI/GHA without a local proxy).
+
+    When ``OPENAI_API_BASE`` is already set (Docker LiteLLM, stack-local), leave it
+    alone — house pins are unprefixed slugs on that proxy's ``model_list``.
+
+    Otherwise: Cheaper Inference is the house default when ``CHEAPERINFERENCE_API_KEY``
+    is set (unless ``DIGI_HOUSE_UPSTREAM=openrouter``) — point at
+    ``CHEAPERINFERENCE_API_BASE`` (default ``https://api.cheaperinference.com/v1``).
+    Else point at OpenRouter's OpenAI-compatible API and copy ``OPENROUTER_API_KEY``
+    into ``OPENAI_API_KEY`` when that is unset, so unprefixed pins do not hit
+    api.openai.com.
+
+    Called at chain startup (and preflight) so CLI picks up house routing without
+    duplicating values in workflow files. Sets no model policy — tiers live in
+    ``config/digiquant_models.yaml`` and misconfiguration surfaces fail-fast
+    from digillm at first call.
+    """
+    if not (os.environ.get("OPENAI_API_BASE") or "").strip():
+        if _cheaperinference_house_preferred():
+            ci_base = (os.environ.get("CHEAPERINFERENCE_API_BASE") or "").strip()
+            os.environ["OPENAI_API_BASE"] = ci_base or "https://api.cheaperinference.com/v1"
+            if not (os.environ.get("OPENAI_API_KEY") or "").strip():
+                os.environ["OPENAI_API_KEY"] = (
+                    os.environ.get("CHEAPERINFERENCE_API_KEY") or ""
+                ).strip()
+        else:
+            os.environ["OPENAI_API_BASE"] = "https://openrouter.ai/api/v1"
+            if not (os.environ.get("OPENAI_API_KEY") or "").strip():
+                or_key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+                if or_key:
+                    os.environ["OPENAI_API_KEY"] = or_key
     logger.info(
-        "Olympus model tier=%s openrouter_pool=%s tradeoff=%s",
-        tier,
-        os.environ.get("OPENROUTER_ALLOWED_MODELS", ""),
-        os.environ.get("OPENROUTER_COST_QUALITY_TRADEOFF", ""),
+        "dashboard house openai_api_base=%s",
+        os.environ.get("OPENAI_API_BASE", ""),
     )
-    return tier
 
 
 def _apply_byok_model_override(resolved: str) -> str:
@@ -775,9 +808,9 @@ def get_model_for_mode() -> str:
     4. ``defaults[llm_mode]`` for ``test`` / ``medium`` / ``best`` — mode-keyed fallback.
     5. ``"gpt-4o-mini"`` — hard last resort (non-free modes only).
 
-    OpenRouter paid/Olympus auto-override is **not** applied here. Olympus/Atlas
+    OpenRouter paid/dashboard auto-override is **not** applied here. dashboard/research
     phases use :func:`get_model_for_phase`. Having ``OPENROUTER_API_KEY`` set alone
-    must not swap a free/local digithings install onto paid Olympus models.
+    must not swap a free/local digithings install onto paid dashboard models.
     ``llm_mode: free`` refuses non-``:free`` (non-Ollama) model ids.
     """
     return _apply_byok_model_override(operator_default_model())
@@ -788,7 +821,7 @@ def get_model_for_phase(phase_slug: str) -> str | None:
 
     Resolution order:
     1. ``model_modes.yaml`` ``phase_models`` — explicit per-phase override (frontier escape hatch).
-    2. ``olympus_models.yaml`` — capability tier × ``OLYMPUS_MODEL_TIER``.
+    2. ``digiquant_models.yaml`` — capability tier × ``OLYMPUS_MODEL_TIER``.
     3. ``None`` → caller uses :func:`get_model_for_mode`.
 
     Prefix match in ``phase_models``: a key ending in '-' (e.g. 'analyst-') matches any
@@ -796,26 +829,26 @@ def get_model_for_phase(phase_slug: str) -> str | None:
     """
     data = _load_model_modes()
     phase_models = data.phase_models
-    tier = get_olympus_tier()
+    tier = get_digiquant_tier()
     override = _phase_models_override(phase_slug, phase_models)
     if override is not None:
         if tier_allows_phase_model(override, tier):
             return _apply_byok_model_override(override)
         logger.warning(
             "Rejecting phase_models override for %s (%r) on tier %s; "
-            "using olympus_models.yaml instead",
+            "using digiquant_models.yaml instead",
             phase_slug,
             override,
             tier,
         )
 
-    olympus = _load_olympus_models()
-    capability = _capability_for_phase(phase_slug, olympus)
+    dashboard = _load_digiquant_models()
+    capability = _capability_for_phase(phase_slug, dashboard)
     if capability is not None:
-        # _model_for_olympus_capability is str | None; the override takes str and now
+        # _model_for_digiquant_capability is str | None; the override takes str and now
         # *refuses* rather than passing through, so an unresolved capability must
         # short-circuit instead of reaching it.
-        capability_model = _model_for_olympus_capability(capability, tier, phase_slug)
+        capability_model = _model_for_digiquant_capability(capability, tier, phase_slug)
         if not capability_model:
             # Signature is ``str | None``; a blank pool entry must read as "unresolved",
             # not as an empty model name. Callers chain ``or get_model_for_mode()``, so
@@ -869,12 +902,31 @@ def resolve_request_model(request_model: str) -> str:
 
     - ``provider/model_id`` for a known external provider (gemini/xai/openrouter) whose
       API key is set → returned unchanged; digillm routes it to that provider.
-    - same prefix but the key is **missing** → fall back to the Ollama mode model
-      (``resolve_effective_model(get_model_for_mode())``), mirroring the legacy
-      silent Ollama fallback rather than digillm's hard error.
+    - same prefix but the key is **missing** → raise ValueError (no silent Ollama
+      fallback). Set the provider's API key env var or provide an X-BYOK-Model override
+      to use this provider.
     - ``ollama-cloud/<model>`` → strip the prefix (Ollama Cloud expects bare
       names); ``resolve_effective_model`` is intentionally NOT applied so a mode
       default can't override an explicit cloud model.
+    - bare / non-prefixed slug with an active BYOK override **for a routable
+      provider** → returned unchanged. ``openai`` is not a digillm-registered
+      prefix, so OpenAI BYOK models are bare (``gpt-4o-mini``).
+      ``resolve_effective_model`` prefers ``OLLAMA_MODEL`` over the request
+      string; applying it under BYOK would send a local Ollama slug to the
+      user's OpenAI (or other) endpoint while digillm still holds their key.
+      Gated on :func:`byok_provider_supported` rather than "BYOK is bound at
+      all": ``push_byok_header`` sets digigraph's override whenever a key is
+      present, independent of whether the provider has a catalog base URL, so
+      checking presence alone would let an unroutable-provider override this
+      branch too — harmless only by the coincidence that server.py's 400 on
+      unroutable providers (#1873) never lets one reach here today.
+    - unprefixed house digiquant slugs (``deepseek/…``, ``meta-llama/…``,
+      ``perplexity/…``, …) → returned unchanged. After #3414 these are not
+      registered provider prefixes; digillm sends them to ``OPENAI_API_BASE``
+      (LiteLLM, or the CLI/GHA OpenRouter rewrite). They must not fall through
+      to ``resolve_effective_model``, which prefers ``OLLAMA_MODEL`` /
+      ``model_modes`` local defaults (``ollama/qwen3:8b``) and would hand
+      OpenRouter an invalid model id.
     - anything else → ``resolve_effective_model(request_model)``.
     """
     provider, _model_id = _parse_provider_prefix(request_model)
@@ -886,12 +938,26 @@ def resolve_request_model(request_model: str) -> str:
         byok = get_byok_override()
         if byok and byok[1] == provider:
             return request_model
-        logger.warning(
-            "Provider %r key (%s) not configured; falling back to Ollama mode model",
-            provider,
-            api_key_env,
+        msg = (
+            f"Provider {provider!r} key ({api_key_env}) not configured and no BYOK override "
+            f"is set. Set {api_key_env} or provide an X-BYOK-Model override to use this provider."
         )
-        return resolve_effective_model(get_model_for_mode())
+        raise ValueError(msg)
     if request_model.startswith("ollama-cloud/"):
         return request_model[len("ollama-cloud/") :]
+    # BYOK already chose the spendable model via ``_apply_byok_model_override``.
+    # Do not let ``OLLAMA_MODEL`` / mode defaults clobber a bare OpenAI (etc.) slug.
+    # Gated on the provider actually being BYOK-routable, not just "a BYOK override
+    # is bound" -- see the docstring note on ``push_byok_header`` vs ``set_byok``.
+    byok = get_byok_override()
+    if byok is not None and byok_provider_supported(byok[1]):
+        return request_model
+    # House digiquant pins (#3414) are unprefixed OpenRouter-style slugs such as
+    # ``deepseek/deepseek-v4-flash``. They are not registered providers, so the
+    # branch above does not keep them. Without this guard, ``resolve_effective_model``
+    # clobbers them with ``model_modes`` local defaults (``ollama/qwen3:8b``), which
+    # OpenRouter rejects ("not a valid model ID") on decision_log reflector and every
+    # other digiquant phase that goes through digigraph → digillm.
+    if "/" in request_model and not request_model.startswith("ollama/"):
+        return request_model
     return resolve_effective_model(request_model)

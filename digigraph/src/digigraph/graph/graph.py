@@ -35,7 +35,7 @@ WORKFLOW_PROFILES = frozenset({"full_stack", "research_rag", "quant_backtest", "
 # ``psycopg.Connection.connect``, which applies no timeout and no TCP keepalives of its
 # own, and exposes no kwarg for either. A peer that disappears mid-session without sending
 # an RST therefore leaves the socket in ESTABLISHED indefinitely and the only bound left is
-# the 240-minute CI job timeout — the shape of the 2026-07-30 Olympus stall, where a
+# the 240-minute CI job timeout — the shape of the 2026-07-30 dashboard stall, where a
 # checkpoint-write boundary was followed by 210 minutes of total silence. libpq accepts all
 # of these as ordinary connection parameters, so they can be merged into the conninfo
 # without a kwarg ``from_conn_string`` does not have.

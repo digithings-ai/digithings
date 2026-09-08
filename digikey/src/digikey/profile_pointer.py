@@ -3,7 +3,7 @@
 This module stores only ``profile_id`` + ``profile_version`` keyed by BFF
 subject. It is **not** the investment-profile / asset-preferences body store —
 that CRUD surface is #307. Digikey mints these claims on ``bff_session`` token
-exchange so Atlas / digigraph can key caches without a second DB lookup.
+exchange so research / digigraph can key caches without a second DB lookup.
 
 Contract:
 - When a pointer row exists for the subject, minted JWTs include both claims.
