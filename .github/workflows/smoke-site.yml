@@ -68,6 +68,11 @@ jobs:
           # manifest (build-digithings.sh now asserts that manifest instead) — so
           # probe /docs/, still a prerendered static-export route.
           probe "https://digithings.ai/docs/" "text/html"
+          # openwiki visualizer (#3696): static export at /openwiki/. Probe the
+          # HTML shell plus graph.json — the JSON is the canary for a missing
+          # export the same way og.png guards the SPA-fallback regression.
+          probe "https://digithings.ai/openwiki/" "text/html"
+          probe "https://digithings.ai/openwiki/graph.json" "application/json"
           # Stable non-HTML asset (public/og.png) — the canary for the
           # SPA-fallback MIME-masking regression #671 was written to catch.
           # Brand OG cards live at the export root (not /design/assets/); the
