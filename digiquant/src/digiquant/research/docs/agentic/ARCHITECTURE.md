@@ -665,9 +665,9 @@ phase_models:
 
 House traffic is caller → digillm → LiteLLM. Unprefixed OpenRouter slugs (`deepseek/…`, `anthropic/…`) are `config/litellm.yaml` `model_name` keys. Leftover `openrouter/` / `gemini/` / `xai/` prefixes are vendor-client diagnostics when no LiteLLM proxy is configured (`digillm/src/digillm/client.py`).
 
-### Fan-out cap (`ATLAS_MAX_ANALYSTS`)
+### Fan-out cap (`DIGIQUANT_MAX_ANALYSTS`)
 
-Phase 7C spawns one LLM node per ticker in the watchlist (up to 98). The `ATLAS_MAX_ANALYSTS` env var caps the fan-out:
+Phase 7C spawns one LLM node per ticker in the watchlist (up to 98). The `DIGIQUANT_MAX_ANALYSTS` env var caps the fan-out:
 
 | Value | Behaviour |
 |-------|-----------|
@@ -679,7 +679,7 @@ and since #1767 it is actually enforced — the prior book is the only sanctione
 and thesis vehicles are prioritised within it. See
 `portfolio/docs/ARCHITECTURE.md` § "Roster cap enforcement (#1767)".
 
-This bounds the per-run OpenRouter call volume (and spend) during scheduled CI runs. Production / local runs can set `ATLAS_MAX_ANALYSTS=0` to use the full watchlist.
+This bounds the per-run OpenRouter call volume (and spend) during scheduled CI runs. Production / local runs can set `DIGIQUANT_MAX_ANALYSTS=0` to use the full watchlist.
 
 **Watchlist resolution (#694):** when the CLI is invoked without `--watchlist`
 (every scheduled workflow), `resolve_cli_inputs` falls back to
@@ -687,8 +687,8 @@ This bounds the per-run OpenRouter call volume (and spend) during scheduled CI r
 compiled from `ResearchInput.watchlist`, and an empty tuple silently skipped every
 analyst/debate node. An explicit `--watchlist` still overrides the file, and an
 empty file still disables the fan-out. Cost note: with the fallback active, a
-delta run adds `min(len(watchlist), ATLAS_MAX_ANALYSTS) × 4` analyst calls plus
-the debate/risk rounds — tune `ATLAS_MAX_ANALYSTS` in the workflow envs to
+delta run adds `min(len(watchlist), DIGIQUANT_MAX_ANALYSTS) × 4` analyst calls plus
+the debate/risk rounds — tune `DIGIQUANT_MAX_ANALYSTS` in the workflow envs to
 bound spend.
 
 ### Fallback behaviour
@@ -713,7 +713,7 @@ Tier-wide changes belong in `config/digiquant_models.yaml` (capability pools per
 |----------|---------|-----------|
 | `OPENROUTER_API_KEY` | All phase LLM calls + web grounding | GitHub secret + local `.env` |
 | `OLYMPUS_MODEL_TIER` | Tier select (`cheap` default / `balanced` / `quality`) | Optional; workflow env or shell |
-| `ATLAS_MAX_ANALYSTS` | H4/H5/H6 roster fan-out cap (#1767) | CI workflow env: `"30"` |
+| `DIGIQUANT_MAX_ANALYSTS` | H4/H5/H6 roster fan-out cap (#1767) | CI workflow env: `"30"` |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Publishing + diagnostics | GitHub secret + local `.env` |
 
 House routing (default client base) is applied by `apply_digiquant_house_env()` at chain startup. Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test the configured providers.

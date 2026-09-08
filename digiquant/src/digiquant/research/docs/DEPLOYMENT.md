@@ -35,7 +35,7 @@ into `$GITHUB_ENV` by the "Load pipeline configuration" step.
 | `OLYMPUS_MODEL_TIER` | `cheap` | Routes LLM nodes via `config/digiquant_models.yaml` (`cheap` \| `balanced` \| `quality`) — cost lever, alongside edit-mode (see [Cost monitoring](#cost-monitoring)) |
 | `OLYMPUS_STALE_FULL_DAYS` | `7` | Prior gap > N calendar days → `full` rewrite instead of `edit` |
 | `OLYMPUS_BELIEFS_BACKLOG` | `20` | Additional trigger for a **full** beliefs rewrite when unfolded `decision_log` rows exceed the threshold. House runs already publish a **daily short fold**. |
-| `ATLAS_MAX_ANALYSTS` | `30` (`.github/digiquant-pipeline.yml`) | Caps H4/H5/H6 fan-out width — enforced for the first time by #1767. Held tickers always survive (#936) and are the only sanctioned overshoot; thesis vehicles are prioritised *within* the cap, not exempt from it. `0` = uncapped |
+| `DIGIQUANT_MAX_ANALYSTS` | `30` (`.github/digiquant-pipeline.yml`) | Caps H4/H5/H6 fan-out width — enforced for the first time by #1767. Held tickers always survive (#936) and are the only sanctioned overshoot; thesis vehicles are prioritised *within* the cap, not exempt from it. `0` = uncapped |
 
 Operator full refresh: `workflow_dispatch` with `refresh_scope=all` or CLI
 `--refresh-scope all` — not a separate graph or cron.

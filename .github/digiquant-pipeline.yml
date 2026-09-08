@@ -17,7 +17,7 @@ env:
   # 25 would now leave 12 of 27 live theses with no vehicle analysed (~$2.60/day);
   # 30 leaves 7 (~$3.10) against today's uncapped 39-wide $4.00. Tighten once
   # `breakdown.roster` has a week of width telemetry.
-  ATLAS_MAX_ANALYSTS: "30"
+  DIGIQUANT_MAX_ANALYSTS: "30"
 
   # Tool-round budget for Olympus research-agent calls (#3299). High but finite:
   # cheap models need room for data-tool grounding; the cap stays to bound cost.

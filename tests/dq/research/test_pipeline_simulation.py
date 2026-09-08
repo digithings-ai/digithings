@@ -70,6 +70,32 @@ class TestSimulatorContract:
     def test_parse_schema_name_returns_none_when_missing(self) -> None:
         assert parse_schema_name([{"content": [{"text": "no schema"}]}]) is None
 
+    def test_coverage_directive_default_refreshes_rostered_tickers(self) -> None:
+        """The simulator keeps the full H4 roster flowing to H5 (#3739).
+
+        The director's per-call default refreshes every rostered ticker, so
+        simulated runs preserve pre-H4.5 behavior (full H4 roster → H5).
+        """
+        from digiquant.research.testing.simulator import simulate_chat_completion
+
+        inputs = {
+            "h4_roster": [
+                {"ticker": "AAPL", "roster_reason": "held"},
+                {"ticker": "MSFT", "roster_reason": "thesis_mapped"},
+            ]
+        }
+        messages = [
+            {
+                "content": [
+                    {"text": f"PHASE_INPUTS (today): {json.dumps(inputs)}"},
+                    {"text": "OUTPUT_SCHEMA (name: CoverageDirective):\n{...}"},
+                ]
+            }
+        ]
+        body = json.loads(simulate_chat_completion()(model="sim", messages=messages))
+        assert {s["ticker"] for s in body["refresh"]} == {"AAPL", "MSFT"}
+        assert body["explore"] == [] and body["skip"] == []
+
 
 @pytest.mark.unit
 class TestBaselineEndToEnd:
