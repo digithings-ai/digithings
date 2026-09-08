@@ -1,8 +1,10 @@
-"""Cheaper Inference house routing (CLI/GHA rewrite + catalog misses → OpenRouter)."""
+"""Cheaper Inference house routing (CLI/GHA rewrite + fail-fast catalog misses)."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any  # score:allow untyped any
+
+# Justification: fake OpenAI kwargs + captured call dicts over untyped client boundary.
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -34,36 +36,20 @@ def test_ci_base_rewrites_mapped_house_slug(monkeypatch: pytest.MonkeyPatch) -> 
     assert made["api_key"] == "ci_live_test"
 
 
-def test_ci_base_routes_sonar_to_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ci_base_raises_on_sonar(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CI-catalog miss (sonar) always raises — no OpenRouter fallback."""
     monkeypatch.setenv("OPENAI_API_BASE", "https://api.cheaperinference.com/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "ci_live_test")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    made: dict[str, Any] = {}
-
-    def fake_openai(**kwargs: Any) -> MagicMock:
-        made.update(kwargs)
-        return MagicMock()
-
-    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+    with pytest.raises(RuntimeError, match="not on the Cheaper Inference catalog"):
         digillm.get_client_for_model("perplexity/sonar")
-    assert made["base_url"] == "https://openrouter.ai/api/v1"
-    assert made["api_key"] == "sk-or-test"
-    assert client_mod._effective_model_id("perplexity/sonar") == "perplexity/sonar"
 
 
-def test_ci_base_keeps_online_on_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ci_base_raises_on_online(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CI-catalog miss (:online) always raises — no OpenRouter fallback."""
     monkeypatch.setenv("OPENAI_API_BASE", "https://api.cheaperinference.com/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "ci_live_test")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    made: dict[str, Any] = {}
-
-    def fake_openai(**kwargs: Any) -> MagicMock:
-        made.update(kwargs)
-        return MagicMock()
-
-    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+    with pytest.raises(RuntimeError, match="not on the Cheaper Inference catalog"):
         digillm.get_client_for_model("deepseek/deepseek-v4-flash:online")
-    assert made["base_url"] == "https://openrouter.ai/api/v1"
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4-flash:online")
         is None
@@ -91,3 +77,45 @@ def test_house_preferred_false_without_key(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.delenv("CHEAPERINFERENCE_API_KEY", raising=False)
     monkeypatch.setenv("DIGI_HOUSE_UPSTREAM", "cheaperinference")
     assert client_mod.cheaperinference_house_preferred() is False
+
+
+# ── Fail-fast behavior (no OpenRouter fallback) ───────────────────────────
+
+
+def test_ci_catalog_miss_raises_on_get_client_for_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """get_client_for_model raises for unmapped house slug when CI is upstream."""
+    monkeypatch.setenv("OPENAI_API_BASE", "https://api.cheaperinference.com/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "ci_live_test")
+    # meta-llama/* is not on CI catalog
+    with pytest.raises(RuntimeError, match="not on the Cheaper Inference catalog"):
+        digillm.get_client_for_model("meta-llama/llama-4-maverick")
+
+
+def test_ci_catalog_miss_raises_on_effective_model_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_effective_model_id raises for unmapped house slug when CI is upstream."""
+    monkeypatch.setenv("OPENAI_API_BASE", "https://api.cheaperinference.com/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "ci_live_test")
+    # :online variants are not on CI catalog
+    with pytest.raises(RuntimeError, match="not on the Cheaper Inference catalog"):
+        client_mod._effective_model_id("deepseek/deepseek-v4-flash:online")
+
+
+def test_mapped_house_slug_succeeds_on_ci(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mapped house slug returns get_client() on CI base without raising."""
+    monkeypatch.setenv("OPENAI_API_BASE", "https://api.cheaperinference.com/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "ci_live_test")
+    # Should not raise — gemini-3.1-flash-lite is mapped
+    client = digillm.get_client_for_model("google/gemini-3.1-flash-lite")
+    assert client is not None
+
+
+def test_gemini_3_1_flash_lite_mapped_to_ci() -> None:
+    """gemini-3.1-flash-lite is on the CI catalog for web_search_models synthesis."""
+    assert (
+        client_mod.cheaperinference_bare_id_for_house_slug("google/gemini-3.1-flash-lite")
+        == "gemini-3.1-flash-lite"
+    )

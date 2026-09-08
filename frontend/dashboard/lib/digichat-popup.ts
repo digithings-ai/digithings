@@ -1,9 +1,12 @@
 /**
- * digichat popup embed for the digiquant dashboard (#3422 / #3581).
+ * digichat popup embed for the digiquant dashboard (#3422 / #3581 / #3662).
  *
  * Desk+ (plan “pro” in the issue = Desk / glass-box) get a bottom-right launcher
  * that iframes digichat `/embed?layout=embed` — same popup contract as digichat
  * `widget.js` (#3421), implemented in-React so CSP stays `script-src 'self'`.
+ * Baseline (free/brief) sees the same launcher but an upgrade CTA panel with
+ * chat disabled — never an iframe, so non-entitled tiers never burn turns and
+ * never meet the free-3 gate (Chris lock: no free-3 quota on this popup).
  *
  * Grounding, web search, three-tier models, and digigraph→digillm live in the
  * digichat tenant registry (`DIGICHAT_EMBED_TENANTS` for digiquant.io) — not here.
@@ -42,6 +45,8 @@ export const DIGICHAT_POPUP_ACCENT = '#3dd6c4'; // canon-allow: digichat ?accent
 export const DIGICHAT_READY = 'digichat:ready';
 export const DIGICHAT_PAGE_CONTEXT = 'digichat:page-context';
 export const DIGICHAT_THEME = 'digichat:theme';
+/** Plan tier message type for the authenticated tier proof (#3662). */
+export const DIGICHAT_PLAN_TIER = 'digichat:plan-tier';
 
 /** Keep in sync with digichat `DEFAULT_POPUP_PAGE_CONTEXT_MAX_CHARS`. */
 export const PAGE_CONTEXT_MAX_CHARS = 8_000;
@@ -58,6 +63,23 @@ export const DIGICHAT_LAUNCHER_LABEL = 'ask digichat';
 /** Open-state launcher label — same control toggles close / minimize. */
 export const DIGICHAT_LAUNCHER_CLOSE_LABEL = 'close';
 
+/**
+ * Baseline (free/brief) upgrade panel (#3662, Chris lock: no free-3 quota).
+ * Non-entitled tiers may open the launcher, but the panel shows this upgrade
+ * CTA with chat disabled — never an iframe, so baseline never burns turns.
+ * Copy matches `LockedSurface` (`/settings#billing` upgrade route); digi
+ * names stay lowercase per repo convention.
+ */
+export const DIGICHAT_UPGRADE_TITLE = 'digichat unlocks with Desk';
+
+export const DIGICHAT_UPGRADE_BODY =
+  'House research and portfolio chat is a Desk feature. ' +
+  'Upgrade to ask digichat about the house book and the page you are on.';
+
+export const DIGICHAT_UPGRADE_CTA_LABEL = 'Upgrade in Settings → Billing';
+
+export const DIGICHAT_UPGRADE_CTA_HREF = '/settings#billing';
+
 export type DigichatPopupTheme = 'light' | 'dark';
 
 export type DigichatPopupConfig = {
@@ -71,6 +93,11 @@ export type DigichatPopupConfig = {
   welcome: string;
   suggestions: string[];
   placeholder: string;
+  /** From digichat GET /api/deploy/chrome when available. */
+  launcherLabel?: string;
+  launcherCloseLabel?: string;
+  launcherHotkey?: string;
+  mobileFullscreen?: boolean;
 };
 
 const RESEARCH_PORTFOLIO_WELCOME =
@@ -85,6 +112,9 @@ const RESEARCH_PORTFOLIO_SUGGESTIONS = [
 /**
  * Desk+ unlocks glass-box research + portfolio deliberation — the issue’s
  * “pro and above, not basic” gate (Brief alone is not enough).
+ *
+ * This gates the *chat* (iframe), not the launcher itself: baseline tiers see
+ * the launcher with an upgrade CTA panel instead (#3662).
  */
 export function canUseDigichatPopup(tier: PlanTier): boolean {
   return can(tier, 'glassbox_economics');
@@ -195,7 +225,75 @@ export function readDigichatPopupConfig(
     welcome: RESEARCH_PORTFOLIO_WELCOME,
     suggestions: [...RESEARCH_PORTFOLIO_SUGGESTIONS],
     placeholder: 'ask about research or portfolio…',
+    launcherLabel: DIGICHAT_LAUNCHER_LABEL,
+    launcherCloseLabel: DIGICHAT_LAUNCHER_CLOSE_LABEL,
   };
+}
+
+/** Chrome fields from digichat deploy config (client-safe). */
+export type DigichatChromeApiResponse = {
+  slug?: string;
+  mode?: string;
+  theme?: string;
+  title?: string;
+  welcome?: string;
+  suggestions?: string[];
+  placeholder?: string;
+  launcher?: {
+    hotkey?: string;
+    mobileFullscreen?: boolean;
+    label?: string;
+    closeLabel?: string;
+    mode?: 'dot' | 'bar';
+  };
+};
+
+/**
+ * Merge GET /api/deploy/chrome into a popup config so labels/hotkeys are not
+ * hardcoded only in the dashboard. Env/local defaults remain the fallback.
+ */
+export function mergeDigichatChromeIntoPopup(
+  cfg: DigichatPopupConfig,
+  chrome: DigichatChromeApiResponse | null | undefined,
+): DigichatPopupConfig {
+  if (!chrome) return cfg;
+  const launcher = chrome.launcher;
+  return {
+    ...cfg,
+    mode: launcher?.mode === 'dot' || launcher?.mode === 'bar' ? launcher.mode : cfg.mode,
+    welcome: chrome.welcome?.trim() || cfg.welcome,
+    suggestions:
+      chrome.suggestions && chrome.suggestions.length > 0
+        ? chrome.suggestions
+        : cfg.suggestions,
+    placeholder: chrome.placeholder?.trim() || cfg.placeholder,
+    launcherLabel: launcher?.label?.trim() || cfg.launcherLabel || DIGICHAT_LAUNCHER_LABEL,
+    launcherCloseLabel:
+      launcher?.closeLabel?.trim() || cfg.launcherCloseLabel || DIGICHAT_LAUNCHER_CLOSE_LABEL,
+    launcherHotkey: launcher?.hotkey?.trim() || cfg.launcherHotkey,
+    mobileFullscreen: launcher?.mobileFullscreen ?? cfg.mobileFullscreen,
+  };
+}
+
+/** Fetch client-safe chrome from digichat; returns null on network/parse failure. */
+export async function fetchDigichatChromeConfig(
+  origin: string,
+  host: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<DigichatChromeApiResponse | null> {
+  try {
+    const url = new URL(`${origin.replace(/\/$/, '')}/api/deploy/chrome`);
+    url.searchParams.set('host', host);
+    const res = await fetchImpl(url.toString(), {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as DigichatChromeApiResponse;
+  } catch {
+    return null;
+  }
 }
 
 export function buildDigichatEmbedSrc(
@@ -235,7 +333,10 @@ export function extractVisiblePageText(
   return extractPageContextShared(undefined, PAGE_CONTEXT_HTML_MAX_CHARS, maxChars).text;
 }
 
-/** Structural allowlist — same walk as digichat `page-context-sanitize.ts`. */
+/**
+ * Structural allowlist — same walk as digichat `page-context-sanitize.ts`.
+ * Posted to the embed as HTML + text; never re-hydrate as live page DOM.
+ */
 export function sanitizePageHtml(
   raw: string,
   maxChars = PAGE_CONTEXT_HTML_MAX_CHARS,
@@ -298,4 +399,20 @@ export function buildThemeMessage(
   ts = Date.now(),
 ): { type: typeof DIGICHAT_THEME; theme: DigichatPopupTheme; ts: number } {
   return { type: DIGICHAT_THEME, theme, ts };
+}
+
+/**
+ * Build a plan-session postMessage for the digichat iframe (#3662).
+ *
+ * The iframe receives the dashboard Supabase access_token after digichat:ready,
+ * exchanges it at /api/plan-proof (server verifies claims via /auth/v1/user),
+ * and includes the HMAC proof in X-Embed-Plan-Proof on every chat request.
+ * Raw client-asserted X-Embed-Plan-Tier headers are NEVER trusted.
+ * `tier` is a UI hint only — digichat ignores it for authorization.
+ */
+export function buildPlanTierMessage(
+  tier: PlanTier,
+  accessToken: string,
+): { type: typeof DIGICHAT_PLAN_TIER; tier: PlanTier; accessToken: string } {
+  return { type: DIGICHAT_PLAN_TIER, tier, accessToken };
 }

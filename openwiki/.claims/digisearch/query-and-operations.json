@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:6d7ff7f9927eef9872375152da23ff9fbc1049b23cde33dbfa28a5cacb2d2d13",
+  "claims": [
+    {
+      "id": "claim_b4be3a1d084146038945f107689976b9",
+      "statement": "POST /query is the retrieval entry point while POST /v1/orchestrator_tools and /v1/orchestrator_invoke expose digigraph's federated surface with schemas and dispatch owned by digisearch.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/server.py#L389-L389",
+          "version": "repo-lines-v1:sha256:e1742134504a9994e68818a10e3f2a7618baf6618342dced96ade38eb8fc90c2:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTE3NDIxMzQ1MDRhOTk5NGU2ODgxOGExMGUzZjJhNzYxOGJhZjY2MTgzNDJkY2VkOTZhZGUzOGViOGZjOTBjMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTE3NDIxMzQ1MDRhOTk5NGU2ODgxOGExMGUzZjJhNzYxOGJhZjY2MTgzNDJkY2VkOTZhZGUzOGViOGZjOTBjMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNjNGE3ZDFjYzc5NmFiYTNlNDY3MjMzMjdmNTE3ZTlmODExOTgyZDI1MGYwNzAyOTg2ZTRiNTc2NGFkOTU4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDE2YTQ3NDhjZDU3NDljNzUwNjk4OTY1NDYzNmU4N2QxN2I2MTIzMDQ0NzQzNDU1MmYxMWYzYjYyZjA5YzQ3MCJ9"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/server.py#L461-L512",
+          "version": "repo-lines-v1:sha256:c54c228c80edec3900f0e51ade0ca630cbb869d884e6986f8abf11281b85a0e8:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlYTM1YjZjZTExMjgwYTVlMzRjZTE1NTFjZTA4OTcxNDNlNjJjYWU3MmY3ZTE5NmY3ZWIzYzI5NTE4YmM5OTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMyYjFkNWJjOTE0M2QzM2JjNmRiNWRmNzcwNWQ2YWM0YjA4MTU0YzQxYmI5NmJlMTE2OTk4M2Q3ZTliYjc2YjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY5OWVmZWRmZDJkOTcwNmQ4OTFjN2JhOTgzZTdmODRlMDVhZDBlMDE5MWMxMzI3OThiZTVlM2MxY2M1MzA0MjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJkODQ2NjlmZDUyZGU2YWEyNDlhOGM1MjNlZDVmNGU4MTdjYjQwMTQ5YmU4NjZkNjVlNzFiZTMzYzJjMWNlMTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_47774f98e3f842b28b9b29ae5962e8a8",
+      "statement": "GET /azure_status reports backend configuration and reachability and stays behind the digisearch:query scope rather than public.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/server.py#L296-L310",
+          "version": "repo-lines-v1:sha256:2f86f8dc658a1b7b4aa7fd58fb309e61230a1cfedd12c79c46540e635dea6ded:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNkYzYxMWM2Mjk4MDExN2QwOGNjNTVmN2MzZWVlNDY0YmU0MDFkODI5Yjg2YmE0NWYwYTc1NzhkMDQ0ZmFkNTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM3MWE5MjNmN2Q3MWY4Yzg0NWRhNzQyMTcxMzk5NWY3ZGZlODdlMTgwNTQ1NjYxZGJiODc2MWVjMjhmMjE0NTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkyNzgwMjkxYTlmMjYyNWJhZjQwNGZiMGFiMWQxMTJmYmJkNDJkN2QzYjcwYjFmNzc1NmRmODllZDMwZDQxY2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVjOWM2NzJlNzJmMTkzMDE5Y2NkNWI1YTVmMDUyMjAwMmE2Y2RmOGMzMDQ0MDVlMmU3MGI2NzBlNGYzZjM5YjgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c18cd2be1d4b4a64aa73437d515fc707",
+      "statement": "HybridSearcher fuses keyword and vector rankings with RRF and the Reranker reorders top results via Cohere, BGE, or CrossEncoder providers.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/search/hybrid.py#L13-L31",
+          "version": "repo-lines-v1:sha256:31d895b1e604437ecc779dd19f8305bb8b16d3660a7b130b1bb9d8b528432200:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM2M2I1Mjk3MjA0NTllMGZhMDE4YWNlNGU1MjgzNTZhYjM3OTY4ZDdlZmIxM2JiODM4YmQ0NGRlNmYzYTc3MmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFiZmIyOTE1NDI4NTJkN2FjODFlYzY0NzU0Yzg4YTJiMWJiOTc5ZDMzZDlhNjU0MzAwNDU5ODNhN2I3Njk5OGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFkYjE5YWUyMDg5ZTEzZmU1ZDU2YTM0Yzk5YWY1NDM5Y2NmNzFiMGJhYzYwODdkNWIyYTQzZGI0ZTkxYWE5ZWEifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/search/reranker.py#L8-L26",
+          "version": "repo-lines-v1:sha256:b48c2ca2e3d1e832463b8d9e907757375d84b303aef80b5d4203ca72541fd3b9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVhNjFhZDM2ZDNmNTFlNmRkZjE3ZGE4YTQzNTMzZjRlN2JiOGM2NDU2NjQwMTFmYWMzMDg4YTg0OTlmOWY1ZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyM2ExNDZiMDM3MzUzMTQ3YWNhNmQyYjg3MjczNGI3NzQ1OGQ0ODEwZWQzOWQ5YzY0OTc1MTRlZWM3MDJlY2MiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJkMWMwMTQyYjMzZjViNTFlZDBkMDY4OGYxYjgzZjViYjZhMjFiOGE5ZmM4OGNiYTFhNGY5MWQ1MGJkYTJkOTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFmNjJiNTBmOTc5YjU0ZWJmMzZiMzg5ZWNkMmY4Zjg1NDc1MDdjYmZkM2VjMDBhMmQ4NmNkYzE2YTlkOWVkMWIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c40a0084817c40a492184832a2e1457d",
+      "statement": "Query callers use structured filters lists with raw OData gated behind allow_raw_filter for trusted callers, and new endpoints require digisearch query or ingest scopes.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/AGENTS.md#L20-L40",
+          "version": "repo-lines-v1:sha256:0d98ba41498971042b8bb14a3dcc6989ba6e14db68ef82cdcad18cc52d6f0408:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNlZmI5NzE0MDI3YWM0YjBmODY0ZTU0NzQ2YTk3ZTQxYWYxOWJkYTBiMDk4YjBjODYwZTQ5YjgyODEyYzBhYWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlkZGMxODNlMWVmZjkyN2MzYzk5MWRiZjdiNTdjMzczYzkwNmY3YTA4Nzc1OGNiNWI4OGQyYjkxYmFjOTBhYmYifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

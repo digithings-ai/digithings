@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:61fd124bdf3833311b98c1193765decddc0c09f96270d71fd3626cf2b2b063d6",
+  "claims": [
+    {
+      "id": "claim_306cc6ba86d54e2794ac647038af0059",
+      "statement": "Frontmatter split/dump/set_keys round-trips losslessly with tags and aliases normalized to canonical tuples.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/src/digivault/frontmatter.py#L19-L71",
+          "version": "repo-lines-v1:sha256:236a82294e8ba68250367a4b1603c54f8a27c736f9f6fa3cd952b2374052cfe7:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc0NDEzOTdhNjNhZTc3ZGZkMGJjY2E0NDVmNDIzMWIzYTk3OTdlNjk2YmZjY2ZkMjM5ZjdjOTRjODc4ODI2ZjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYzM2VjMDMzYWQ5NjZkNzhmZjg0ZGE3MmU5MzNjZTJkZjVmY2Y2MzljNDI5MDNmYTBhNWNhMGU3YzBhYjFmMTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRjNTZlNmMxNjIzZTJjZDkzOTQ0YTNkZGRkMmZlYTBjODIxMzc2ZDZhZDZjYzFlYTU2MWFhZDdiOGUxMGE2MmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c62d0a560c204b08a1c2e9cfb4a73bf0",
+      "statement": "Wikilink parsing covers note, heading-alias, and embed forms, and rewrites mask code spans and blocks so fenced examples never change.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/src/digivault/wikilinks.py#L27-L116",
+          "version": "repo-lines-v1:sha256:e3f8ed4182e62031d3d40e529643a9d30826d1bd7733814784e0ad0c37210356:eyJzZWxlY3RlZExpbmVDb3VudCI6OTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNiN2MwNDY3YzBiNjg1YmExZmY4NWM3MjEzMTY2YjBhNTBlYzYwZTE0NmI3MzYzMzdmOWVlM2NmOTBhNzQwMmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVhMjI2OTE5OGYwNjcxODIxOTNmZWY1MTRhYThhNDFiY2QzMjM1ODNiZTkxYmQ0ZDIyYWRjZDhkMzljNzRhMjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1M2QzNzZmNGY5ZThhMWY2ZmM2NWNkZjliM2M2YTg1ZGVlNzQxMmNlYTY4M2E3MGQ1YWYxMTRhNjEyZGE5NTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cf2f8fb0b2714e69a310cb96471633e0",
+      "statement": "Vault builds note, link-graph, backlink, and tag indexes with from_sources reconstruction over remote rows, serving list, backlinks, tag search, and fetch reads.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/src/digivault/vault.py#L123-L260",
+          "version": "repo-lines-v1:sha256:725689d4145dea3dc03fee6983f028a698f8f4af493d65569dd93eac3dfee3b3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTM4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzNWFiZjQ0ZDBlMTdlMjMzZTA5NDQ1MjU4ZmNmOGYzNzU0Y2I4NDU5MGIzZDBlYWQ3ZjE2ZDNkZjM2N2I3NTUyIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyMmExN2M5MWVlOGI1OGVlN2E0OTViYjE2YTFmZjQ4MzVjMjRkOGVlZWY2NzNhZGNhMjQ3YzliNTliZTI5ZDM3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhYTE3OTY4MDA1OTdmOWEwMmU1YWQ0NWNhZTdiYjgyZTZlNzhiNDZlMzA3N2M2MDQ2MzRjZGViOTA5YzM0M2Y3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJmNzViMzI3ZWU4MWUzOTdlOTMxYjU4M2ViZGIxYWJmMTE3NThhZjE3ZTI2ZTQzOGQ4MjI0MDhmZGJiNWRlMGFlIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_ea174a223c1340528a741060e2f3b8b3",
+      "statement": "Maintenance ops (create, idempotent write, rename with link rewrite, prune, reindex, lint) resolve through _safe_path with traversal and absolute escapes refused.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/src/digivault/vault.py#L269-L281",
+          "version": "repo-lines-v1:sha256:9129026b2fd60ee31ea6f836a6834556a77713c58258c32c59e3a168a527b0f7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwOTY4ZTg0YzkxMzgyMTVjODBjNTVlYWQ2NTU2ZThiNjY2OTMwMDU5ODgzZjIzYjRiN2YxMjAzYWMwMTVhOWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ0ZTE5MjM0YjUyODNjZDMyMDkwYjA5NjJlNTUyODZmODljNjJhZjkzNDFiMDAyNzA2NzYxNzNlYzMzZTllODAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImExMjFmNGM1NDAyOGJlODdkYzM4MzQ3YTM3NWU5YTMyYzRiYjc4MGQ4MzI5ZDc0YmYyZWYzMmQ1YzJhOGQ0YWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImExYjM1YTEyYjRhMDIwZDU1MjFkMmFmMzRjODJlM2RmODNkYzM0MTRiNzQwNTM1Zjk4NGI2OWVlNDkxZWE0MDMifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

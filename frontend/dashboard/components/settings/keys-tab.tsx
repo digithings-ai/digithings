@@ -9,6 +9,10 @@ import {
   type ProviderCredentialView,
   type SettingsApiOptions,
 } from '@/lib/settings-api';
+import {
+  SETTINGS_LOAD_ERROR_MESSAGE,
+  SettingsLoadError,
+} from './settings-load-error';
 
 export type KeysTabProps = {
   api: SettingsApiOptions | null;
@@ -55,6 +59,7 @@ export function KeysTab({
   const [provider, setProvider] = useState<LlmProviderName>('openai');
   const [secret, setSecret] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -62,9 +67,9 @@ export function KeysTab({
     try {
       const list = await listFn(api);
       setRows(list.map(sanitizeKeyRow));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load keys');
+      setLoadError(null);
+    } catch {
+      setLoadError(SETTINGS_LOAD_ERROR_MESSAGE);
     }
   }, [api, listFn]);
 
@@ -157,6 +162,9 @@ export function KeysTab({
         </p>
       </div>
 
+      {loadError ? (
+        <SettingsLoadError message={loadError} onRetry={() => void refresh()} />
+      ) : null}
       {error ? (
         <p className="text-sm text-down" role="alert" data-testid="keys-error">
           {error}

@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:82b546c1299cff479bfd65a4a48db3135b1c093eed9ee0d1e73e2423b82d68cf",
+  "claims": [
+    {
+      "id": "claim_4bee6cb652a446108fbfa4619ad56aff",
+      "statement": "digikey serves public /health, /healthz, and /.well-known/jwks.json alongside admin-gated POST /v1/admin/keys (plaintext key returned once, 503 without admin token) and POST /v1/oauth/token for api_key and bff_session grants.",
+      "evidence": [
+        {
+          "resource": "repo://digikey/src/digikey/server.py#L160-L222",
+          "version": "repo-lines-v1:sha256:5ffdd12327b6c40d9250e31fa7f06815b852ba67ca021687d645b5bb6d96a510:eyJzZWxlY3RlZExpbmVDb3VudCI6NjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxNjAzOGZhZjAxNjQ1M2Y4YTRiNTRjYzEzZDQ1MjgwZjlkN2U2Y2QxYWEyZDcwMjEwNTE3NjQzMDRjNWVhYmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxNjAzOGZhZjAxNjQ1M2Y4YTRiNTRjYzEzZDQ1MjgwZjlkN2U2Y2QxYWEyZDcwMjEwNTE3NjQzMDRjNWVhYmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMyZjVhNzZlYWVlMTM1ODFhNGMzZjM2OTBjZmNiM2IwZTExNWY3NzM2ZWIxOWEzMDA3YWQ5NzNlNzE5ODQ5YjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA0ODQxYjk1YjcxYTllY2Q5MjU4MTliOTNjYmM0OTc1NjBmZjgxN2NiOTY1OTg0MmRlODk5M2FiZWZmMmMxMTMifQ"
+        },
+        {
+          "resource": "repo://digikey/src/digikey/server.py#L93-L115",
+          "version": "repo-lines-v1:sha256:1e0c60cb22755008e3ebc9a461528bbc25018cae13ae7436e308b369413b95e5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhMTllYmE5M2JjYWVmNWE1MmVmYjQwYmE1YTg5MTRkNjljNjA4M2MzNWRkZDUxODJiY2M4NTM0NDExYzExYTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU2ZGZiZjQ1M2Y3ZjFiZWJhYjcyODM2MWIwZjM5M2VlYjRjMWZiNjY4ZjllYTIyYjkxNmRhY2Y1ZGZmODFkODMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhmNDU5NDVlNmIyNWE4ZGIxNmJmNDZjNjhjMzMyOTM5N2ZlMzRkZmE1NjExZGRiNjZlZDUwMTA2MmRjOTFkMjkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_49676aa3c355421a9beb3cd499273db2",
+      "statement": "Revocation blocklists live JTIs per ADR-0007, and auth-path routes throttle per client IP through an in-process token-bucket limiter.",
+      "evidence": [
+        {
+          "resource": "repo://digikey/src/digikey/ratelimit.py#L70-L156",
+          "version": "repo-lines-v1:sha256:0884c3242a51133ea224d172be992caeaf97836c31cf0418e6e9766bac1bd660:eyJzZWxlY3RlZExpbmVDb3VudCI6ODcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyNjcxNmQzZjc2MGI3NDNiOGVhMDFhNGFmZjVlMzllOTdiODZmNjlhMmQzNDFiOTk4ZDFhMmI2ZGE2NDY2MTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcwOTJlMjMwMjU4ZWY1NDlkNDhkYTRlODUyM2QyNGQ5MzNkNjM5MWEwYmQwN2QxNTU2Yzk0OGJmNzAwZTc0MDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhZWE0MjNmMTZkNjY0Y2Y2OWQxMjY1NTgyMGI5ZjdlYmQxZTgwMjZhZTFhYjJkZjY4YTMzMGRhOTBmYTU4YmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU2MmFjNTU3Njc3MTRhYzMyNDRkZTAwOTZkNGQwZDU4ZGE4YmZkZmQ2NDQ2NjAxM2E2MDUwYjQ4N2VmOTkwZjkifQ"
+        },
+        {
+          "resource": "repo://digikey/src/digikey/server.py#L349-L360",
+          "version": "repo-lines-v1:sha256:e370ee0ea60290ba87c3018028c700c6ba0cf5eaecaa4d6ef5412d373eefa9e1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxNjAzOGZhZjAxNjQ1M2Y4YTRiNTRjYzEzZDQ1MjgwZjlkN2U2Y2QxYWEyZDcwMjEwNTE3NjQzMDRjNWVhYmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjljYTk2YTg4NmQ2ZThlNTRhMGJmODFlOGU5ZGM3OTU3YzJiYTYwNmFhYjhiYzc1ZmY1N2Y3NTBhN2E0NDFkNGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1NTRkMDM0NThjMTMxMWZlYjMwZGI4MjcxMWRkZTM3ZGE2NTQ3MjJkMzBmZGQ1NTVjZjY4Mjk2MjU4MjI1ZDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU5YjY1YjQzMjNhYTlhNDU1YTlkN2I0MWZmOWJmZGUwYTIyNjU2NGE1NWM1MWMxODNiNGE5YTY3OThkNDk0NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_36a08ee36b8342c08aac63f89e2f3975",
+      "statement": "Startup prefers DIGIKEY_PRIVATE_KEY_PEM, warns on unset admin token, and keeps ephemeral keys and dev-global wildcard keys behind explicit dev-only flags that must never reach production.",
+      "evidence": [
+        {
+          "resource": "repo://digikey/src/digikey/server.py#L57-L92",
+          "version": "repo-lines-v1:sha256:b8978117b5eb81966c5afc5d0e47198ad912b20e365bb16264639bf161d3736c:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlNDZhODEyYjBhNzNhMjQyMjBjMjFkOWMzOGEyODhhMGI0YTYzM2FkNzI0NzkzM2MwMmU4M2Q0MDc0ODBlMTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMjdhYWMxYTZmNDBiMTkwNzI4NjQ4YTgwZWI5NDViMGQ1NDRhNGM0NDIxNDdmNTQyY2FjODk3MTI5NmJiZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzMTQyYTc2MmQzYjIzYTlkNjU4MzU0MzY1YWQ5MWQxOTFmZjcyZGJhYTg1YmFjYmIyMDUyYmZkZDY0OGQ0YjMifQ"
+        },
+        {
+          "resource": "repo://digikey/src/digikey/settings.py#L7-L20",
+          "version": "repo-lines-v1:sha256:6267911f4adf25be90834f62ac9fd9b126059f894903155e09c2f80f93aae958:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFiYjc0MjUxNTRlZGI1MjhlYTYyNDAzMGNhMDg5OWI3NDVmZGE4NzY5ZDFjZTJkOGI4ZTI5YzFmM2YyNWQzMDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNhNTZlMjc3MTFjZmU4ZjljNzc1NDBkYWUwYjM1MjQ3YjVmZTljYmRmMDhiZjk1ODZjNDA5ZmYyOGJhYTRkMTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJhZmU0N2ZiMGJlZGZhMGI0NWYwYTgzNjg1ODgwYmE2MjIzZjRmNjRkOTUwODg2YmNiNWRkYmZjZTZlOWIzOTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

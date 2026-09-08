@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 export type VaultHitSummary = {
   title: string;
   path: string;
@@ -34,27 +32,11 @@ export type DigiChatMessage = {
   activities?: DigiChatActivity[];
 };
 
-export type DigiChatBranding = {
-  title?: string;
-  /** e.g. "by digichat" link target */
-  attributionUrl?: string;
-  attributionLabel?: string;
-};
-
-export type DigiChatSessionConfig = {
-  welcomeIntro: string;
-  suggestions?: string[];
-  placeholder: string;
-  showByok: boolean;
-  /** Inline "Add your API key" on error rows; default on for gated embeds. */
-  showByokOnError?: boolean;
-  branding?: DigiChatBranding;
-  ariaLabel?: string;
-  className?: string;
-  /** page = full viewport under nav; embed = flex child inside iframe shell */
-  layout?: "page" | "embed";
-};
-
+/**
+ * Embed/controller adapter shape used by digichat's `useEmbedDigiChat` and
+ * activity projection. digichat 2.0 UI is `CliThread` (assistant-ui); this is
+ * not a mountable session component.
+ */
 export type DigiChatController = {
   messages: DigiChatMessage[];
   busy: boolean;
@@ -80,27 +62,4 @@ export type DigiChatController = {
   modelLabel?: string;
   providerIsSet?: boolean;
   openSettings?: () => void;
-};
-
-export type DigiChatSessionProps = DigiChatSessionConfig & {
-  chat: DigiChatController;
-  headerSlot?: ReactNode;
-  footerSlot?: ReactNode;
-  /** Replaces the input form (e.g. embed paywall). */
-  formReplacement?: ReactNode;
-  settingsPanel?: ReactNode;
-  /** Override assistant markdown rendering (e.g. mermaid in digithings-web). */
-  renderAssistantContent?: (content: string, streaming: boolean) => ReactNode;
-  /** When false, skip streaming intro (e.g. resumed handoff with messages). */
-  showIntro?: boolean;
-  /** /lang on the embed — the session does not own language state. */
-  onLanguageChange?: (code: string) => void;
-  /** Current language code for /settings and /lang dive-in highlight. */
-  languageCode?: string;
-  /** Tenant allows opt-in web search (#3420 / #3556). */
-  webSearchAllowed?: boolean;
-  /** User web-search preference (local). */
-  webSearchEnabled?: boolean;
-  /** Toggle web search when `/websearch` runs or settings flips it. */
-  onWebSearchToggle?: () => void;
 };

@@ -5,12 +5,17 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDigichatEmbedSrc,
   buildPageContextMessage,
+  buildPlanTierMessage,
   buildThemeMessage,
   canUseDigichatPopup,
   DEFAULT_DIGICHAT_EMBED_HOST,
   DEFAULT_DIGICHAT_EMBED_ORIGIN,
   digichatEmbedOriginForDashboard,
   digichatPopupEnvFromProcess,
+  DIGICHAT_UPGRADE_BODY,
+  DIGICHAT_UPGRADE_CTA_HREF,
+  DIGICHAT_UPGRADE_CTA_LABEL,
+  DIGICHAT_UPGRADE_TITLE,
   embedHostRequiresToken,
   extractPageHtml,
   extractVisiblePageText,
@@ -21,6 +26,7 @@ import {
   readDocumentTheme,
   resolveDigichatEmbedOrigin,
   sanitizePageHtml,
+  mergeDigichatChromeIntoPopup,
 } from './digichat-popup';
 
 describe('digichatPopupEnvFromProcess', () => {
@@ -46,6 +52,22 @@ describe('canUseDigichatPopup', () => {
     expect(canUseDigichatPopup('desk')).toBe(true);
     expect(canUseDigichatPopup('studio')).toBe(true);
     expect(canUseDigichatPopup('enterprise')).toBe(true);
+  });
+});
+
+describe('baseline upgrade CTA (#3662)', () => {
+  it('routes to Settings billing like LockedSurface', () => {
+    expect(DIGICHAT_UPGRADE_CTA_HREF).toBe('/settings#billing');
+    expect(DIGICHAT_UPGRADE_CTA_LABEL).toBe('Upgrade in Settings → Billing');
+  });
+
+  it('keeps digi names lowercase with non-empty title and body', () => {
+    expect(DIGICHAT_UPGRADE_TITLE.length).toBeGreaterThan(0);
+    expect(DIGICHAT_UPGRADE_BODY.length).toBeGreaterThan(0);
+    for (const copy of [DIGICHAT_UPGRADE_TITLE, DIGICHAT_UPGRADE_BODY]) {
+      expect(copy).not.toMatch(/DigiChat|DigiQuant|DigiThings/);
+      expect(copy).toMatch(/digichat/);
+    }
   });
 });
 
@@ -284,5 +306,45 @@ describe('page context + theme helpers', () => {
     expect(readDocumentTheme({ getAttribute: () => 'light' })).toBe('light');
     expect(readDocumentTheme({ getAttribute: () => 'dark' })).toBe('dark');
     expect(readDocumentTheme({ getAttribute: () => null })).toBe('dark');
+  });
+
+  it('builds plan tier message with accessToken for claims-backed proof (#3662)', () => {
+    expect(buildPlanTierMessage('desk', 'supabase-access-token')).toEqual({
+      type: 'digichat:plan-tier',
+      tier: 'desk',
+      accessToken: 'supabase-access-token',
+    });
+    expect(buildPlanTierMessage('studio', 'tok-2')).toEqual({
+      type: 'digichat:plan-tier',
+      tier: 'studio',
+      accessToken: 'tok-2',
+    });
+  });
+});
+
+describe('mergeDigichatChromeIntoPopup', () => {
+  it('overlays launcher labels/hotkey from deploy chrome API', () => {
+    const base = readDigichatPopupConfig({
+      NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: 'https://digithings.ai',
+      NEXT_PUBLIC_DIGICHAT_POPUP: '1',
+      NEXT_PUBLIC_DIGICHAT_EMBED_HOST: 'digiquant.io',
+      NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN: 'tok',
+    });
+    expect(base).not.toBeNull();
+    const merged = mergeDigichatChromeIntoPopup(base!, {
+      welcome: 'From deploy config',
+      launcher: {
+        label: 'ask ai',
+        closeLabel: 'minimize',
+        hotkey: 'meta+i',
+        mobileFullscreen: true,
+        mode: 'bar',
+      },
+    });
+    expect(merged.welcome).toBe('From deploy config');
+    expect(merged.launcherLabel).toBe('ask ai');
+    expect(merged.launcherCloseLabel).toBe('minimize');
+    expect(merged.launcherHotkey).toBe('meta+i');
+    expect(merged.mobileFullscreen).toBe(true);
   });
 });

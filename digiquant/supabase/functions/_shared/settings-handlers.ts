@@ -505,10 +505,13 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     body.expected_version_id ?? body.supersedes_id ?? null;
 
   // Optimistic concurrency: tip is scoped by (workspace_id, profile_key).
+  // Also fetch full payload to preserve pipeline_schedule / execution_policy when omitted.
+  let priorPipelineSchedule: unknown = null;
+  let priorExecutionPolicy: unknown = null;
   if (expected) {
     const { data: tip, error: tipErr } = await deps.admin
       .from("olympus_profile_config")
-      .select("id, supersedes_id")
+      .select("id, supersedes_id, payload")
       .eq("workspace_id", workspaceId)
       .eq("profile_key", profileKey)
       .eq("is_house_default", false)
@@ -525,10 +528,18 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
         "profile changed elsewhere — reload",
       );
     }
+    if (tip) {
+      const tipPayload =
+        tip.payload && typeof tip.payload === "object" && !Array.isArray(tip.payload)
+          ? (tip.payload as Record<string, unknown>)
+          : {};
+      priorPipelineSchedule = tipPayload.pipeline_schedule ?? null;
+      priorExecutionPolicy = tipPayload.execution_policy ?? null;
+    }
     if (!tip && expected) {
       const { data: row } = await deps.admin
         .from("olympus_profile_config")
-        .select("id")
+        .select("id, payload")
         .eq("id", expected)
         .eq("workspace_id", workspaceId)
         .maybeSingle();
@@ -539,6 +550,12 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
           "profile changed elsewhere — reload",
         );
       }
+      const rowPayload =
+        row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+          ? (row.payload as Record<string, unknown>)
+          : {};
+      priorPipelineSchedule = rowPayload.pipeline_schedule ?? null;
+      priorExecutionPolicy = rowPayload.execution_policy ?? null;
     }
   }
 
@@ -562,8 +579,10 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     research_budget_usd: budgetParsed.value,
     investment: body.investment ?? null,
     assets: body.assets ?? null,
-    pipeline_schedule: body.pipeline_schedule ?? null,
-    execution_policy: body.execution_policy ?? null,
+    pipeline_schedule:
+      body.pipeline_schedule !== undefined ? body.pipeline_schedule : priorPipelineSchedule,
+    execution_policy:
+      body.execution_policy !== undefined ? body.execution_policy : priorExecutionPolicy,
   };
 
   const { data: inserted, error: insertErr } = await deps.admin

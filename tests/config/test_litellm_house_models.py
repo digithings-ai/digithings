@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any  # score:allow untyped any
+
+# Justification: yaml.safe_load returns open mappings (Any per typeshed).
 from urllib.parse import urlparse
 
 import pytest
@@ -229,6 +231,7 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
         "deepseek/deepseek-v4-flash",
         "deepseek/deepseek-v4-pro",
         "google/gemini-3.7-flash",
+        "google/gemini-3.1-flash-lite",
         "openai/gpt-5.6-luna",
         "openai/gpt-5.6-sol",
     }
@@ -251,6 +254,30 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
         assert str(params.get("model", "")).startswith("openai/"), entry["model_name"]
 
 
+def test_cheaperinference_overlay_has_no_bare_api_base() -> None:
+    """BYOK guard parity with #3605: the CI overlay must regex-pin api_base.
+
+    A bare ``api_base`` in ``configurable_clientside_auth_params`` would let a
+    BYOK caller pass any upstream through LiteLLM — the base config forbids it,
+    and the overlay must not reintroduce it.
+    """
+    data = yaml.safe_load((CONFIG / "litellm.cheaperinference.yaml").read_text(encoding="utf-8"))
+    for entry in data["model_list"]:
+        params = entry["litellm_params"]
+        allowed = params.get("configurable_clientside_auth_params") or []
+        assert "api_base" not in allowed, (
+            f"{entry['model_name']}: bare api_base passthrough is forbidden"
+        )
+        patterns = [
+            item["api_base"] for item in allowed if isinstance(item, dict) and "api_base" in item
+        ]
+        assert patterns, f"{entry['model_name']}: missing api_base regex pin"
+        for pattern in patterns:
+            assert "cheaperinference" in pattern, (
+                f"{entry['model_name']}: api_base pin must scope to CI, got {pattern!r}"
+            )
+
+
 def test_merge_litellm_cheaperinference_replaces_mapped_keeps_openrouter() -> None:
     from scripts.merge_litellm_cheaperinference import merge
 
@@ -263,3 +290,36 @@ def test_merge_litellm_cheaperinference_replaces_mapped_keeps_openrouter() -> No
     assert sonar["api_key"] == "os.environ/OPENROUTER_API_KEY"
     mav = by_name["meta-llama/llama-4-maverick"]["litellm_params"]
     assert mav["api_key"] == "os.environ/OPENROUTER_API_KEY"
+
+
+def test_cheaperinference_overlay_merges_when_keyed() -> None:
+    import os
+
+    from scripts.merge_litellm_cheaperinference import merge
+
+    # Arrange: set CI key env vars so the merged config contains CI models
+    os.environ["CHEAPERINFERENCE_API_KEY"] = "sk-test-12345"
+    os.environ["CHEAPERINFERENCE_API_BASE"] = "https://api.cheaperinference.com/v1"
+
+    try:
+        merged = merge(CONFIG / "litellm.yaml", CONFIG / "litellm.cheaperinference.yaml")
+        by_name = {e["model_name"]: e for e in merged["model_list"] if isinstance(e, dict)}
+
+        # CI models should have CHEAPERINFERENCE_* creds
+        flash = by_name["deepseek/deepseek-v4-flash"]["litellm_params"]
+        assert flash["api_key"] == "os.environ/CHEAPERINFERENCE_API_KEY"
+        assert flash["api_base"] == "os.environ/CHEAPERINFERENCE_API_BASE"
+        assert flash["model"].startswith("openai/"), flash["model"]
+
+        # OpenRouter-only models should keep their original creds
+        sonar = by_name["perplexity/sonar"]["litellm_params"]
+        assert sonar["api_key"] == "os.environ/OPENROUTER_API_KEY"
+
+        # gpt-5.6-luna should also be remapped to CI
+        luna = by_name["openai/gpt-5.6-luna"]["litellm_params"]
+        assert luna["api_key"] == "os.environ/CHEAPERINFERENCE_API_KEY"
+        assert luna["api_base"] == "os.environ/CHEAPERINFERENCE_API_BASE"
+
+    finally:
+        del os.environ["CHEAPERINFERENCE_API_KEY"]
+        del os.environ["CHEAPERINFERENCE_API_BASE"]

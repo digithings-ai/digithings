@@ -38,7 +38,6 @@ import contextlib
 import functools
 import json
 import logging
-import math
 import os
 import random
 import re
@@ -49,7 +48,10 @@ from contextvars import ContextVar, copy_context
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any  # score:allow untyped any — OpenAI message dict payloads are heterogeneous
+from typing import (  # score:allow untyped any — OpenAI message dict payloads are heterogeneous
+    Any,
+    NoReturn,
+)
 from uuid import UUID, uuid4
 
 from openai import OpenAI, Timeout
@@ -327,11 +329,13 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 
 # House OpenRouter-style slugs → Cheaper Inference bare catalog ids (verified 2026-09).
 # Excludes anthropic/* (quality bake-off), x-ai/grok-4.3|4.6 (CI has grok-4.5 only),
-# meta-llama/*, perplexity/*, and all ``:online`` variants — those stay on OpenRouter.
+# meta-llama/*, perplexity/*, and all ``:online`` variants — those are not on the
+# CI catalog and fail closed when CI is the selected house upstream (#3660).
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "deepseek/deepseek-v4-flash": "deepseek-v4-flash",
     "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
     "google/gemini-3.7-flash": "gemini-3.7-flash",
+    "google/gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
     "openai/gpt-5.6-luna": "gpt-5.6-luna",
     "openai/gpt-5.6-sol": "gpt-5.6-sol",
 }
@@ -375,12 +379,27 @@ def cheaperinference_bare_id_for_house_slug(model: str) -> str | None:
     return _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE.get(model)
 
 
-def _openrouter_fallback_for_ci_miss(model: str) -> bool:
-    """CI is the default base but this house slug is not on the CI catalog."""
+def _is_ci_catalog_miss(model: str) -> bool:
+    """CI is the default base but this house slug is not on the CI catalog.
+
+    Fail-fast: callers raise via :func:`_raise_for_ci_catalog_miss` — there is
+    no quiet OpenRouter fallback. A misconfigured pin must surface, not spend
+    silently on another upstream.
+    """
     return (
         _api_base_is_cheaperinference()
         and _is_openrouter_backed_house_slug(model)
         and cheaperinference_bare_id_for_house_slug(model) is None
+    )
+
+
+def _raise_for_ci_catalog_miss(model: str) -> NoReturn:
+    """Raise for a CI-catalog miss — never fall back to OpenRouter."""
+    raise RuntimeError(
+        f"house model {model!r} is not on the Cheaper Inference catalog and CI is the "
+        "selected house upstream — refusing to fall back to OpenRouter. "
+        "Remap the pin to a CI catalog id (see docs/providers/cheaperinference.md) or "
+        "set DIGI_HOUSE_UPSTREAM=openrouter to route house traffic to OpenRouter."
     )
 
 
@@ -526,37 +545,12 @@ def _effective_model_id(model: str) -> str:
     bare = cheaperinference_bare_id_for_house_slug(model)
     if bare is not None and _api_base_is_cheaperinference():
         return bare
-    if _openrouter_fallback_for_ci_miss(model):
-        return model
+    if _is_ci_catalog_miss(model):
+        _raise_for_ci_catalog_miss(model)
     provider, model_id = _parse_provider_prefix(model)
     if _use_default_base_client(model):
         return model
     return _wire_model(provider, model_id, model)
-
-
-def _cost_controls_provider(parsed_provider: str | None, model: str) -> str | None:
-    """Attach OpenRouter extra_body for OpenRouter prefixes, a direct OR base, or
-    OpenRouter-backed house slugs through LiteLLM. Not ``gpt-4o-mini`` / ``ollama/*``.
-    """
-    if (
-        cheaperinference_bare_id_for_house_slug(model) is not None
-        and _api_base_is_cheaperinference()
-    ):
-        return None
-    if _openrouter_fallback_for_ci_miss(model):
-        return "openrouter"
-    if parsed_provider == "openrouter" or _api_base_is_openrouter():
-        return "openrouter"
-    if _litellm_proxy_configured() and _is_openrouter_backed_house_slug(model):
-        # When LiteLLM proxies a CI-mapped slug, skip OR provider prefs — the
-        # overlay routes those to Cheaper Inference (drop_params alone is not enough).
-        if (
-            cheaperinference_bare_id_for_house_slug(model) is not None
-            and cheaperinference_house_preferred()
-        ):
-            return None
-        return "openrouter"
-    return parsed_provider
 
 
 def get_client_for_model(model: str) -> OpenAI:
@@ -587,10 +581,11 @@ def get_client_for_model(model: str) -> OpenAI:
         cfg = _EXTERNAL_PROVIDERS.get(provider)
         if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
             return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
-    # Cheaper Inference default base: mapped house slugs use get_client(); catalog
-    # misses (sonar / :online / maverick / grok-4.3|4.6 / anthropic) stay on OpenRouter.
-    if _openrouter_fallback_for_ci_miss(model):
-        provider = "openrouter"
+    # Cheaper Inference default base: mapped house slugs use get_client(); a catalog
+    # miss (sonar / :online / maverick / grok-4.3|4.6 / anthropic) always raises —
+    # there is no OpenRouter fallback.
+    if _is_ci_catalog_miss(model):
+        _raise_for_ci_catalog_miss(model)
     elif (
         cheaperinference_bare_id_for_house_slug(model) is not None
         and _api_base_is_cheaperinference()
@@ -1017,57 +1012,6 @@ def _wp1_join_fields() -> dict[str, Any]:
     return fields
 
 
-def _responses_create_with_attempt(
-    client: OpenAI,
-    *,
-    provider: str,
-    requested_model: str,
-    **kwargs: Any,
-) -> Any:
-    with _logical_attempt_scope() as scope:
-        scope.cache_status = CacheStatus.BYPASSED
-        attempt_number, retry_reason, started_at = scope.start()
-        try:
-            response = client.responses.create(**kwargs)
-        except asyncio.CancelledError:
-            scope.terminal_outcome = ProviderCallOutcome.CANCELLED
-            _emit_attempt(
-                scope=scope,
-                attempt_number=attempt_number,
-                retry_reason=retry_reason,
-                provider=provider,
-                requested_model=requested_model,
-                started_at=started_at,
-                outcome=ProviderAttemptOutcome.CANCELLED,
-            )
-            raise
-        except Exception as error:
-            scope.terminal_outcome = ProviderCallOutcome.FAILED
-            scope.logical_error_type = type(error).__name__
-            _emit_attempt(
-                scope=scope,
-                attempt_number=attempt_number,
-                retry_reason=retry_reason,
-                provider=provider,
-                requested_model=requested_model,
-                started_at=started_at,
-                outcome=ProviderAttemptOutcome.FAILED,
-                error=error,
-            )
-            raise
-        _emit_attempt(
-            scope=scope,
-            attempt_number=attempt_number,
-            retry_reason=retry_reason,
-            provider=provider,
-            requested_model=requested_model,
-            started_at=started_at,
-            outcome=ProviderAttemptOutcome.SUCCEEDED,
-            response=response,
-        )
-        return response
-
-
 # ── Usage observer ──────────────────────────────────────────────────────────────
 # digillm stays a leaf library (no digigraph/service imports), so it can't write into
 # a consumer's per-run usage accumulator directly. Instead the consuming app registers
@@ -1078,11 +1022,12 @@ _usage_observer: Callable[..., None] | None = None
 
 
 def set_usage_observer(observer: Callable[..., None] | None) -> None:
-    """Register a telemetry sink called after each completion / web_search / x_search.
+    """Register a telemetry sink called after each completion.
 
-    The observer is invoked with keyword fields: ``kind`` ("chat" | "web_search" |
-    "x_search"), ``model``, and per-kind ``prompt_tokens`` / ``completion_tokens`` /
-    ``sources`` / ``ok``. Pass ``None`` to disable. Observer errors are swallowed.
+    The observer is invoked with keyword fields: ``kind`` ("chat" |
+    "empty_retry"), ``model``, and per-kind ``prompt_tokens`` /
+    ``completion_tokens`` / ``ok``. Pass ``None`` to disable. Observer errors
+    are swallowed.
     """
     global _usage_observer
     _usage_observer = observer
@@ -1246,8 +1191,8 @@ def _create_with_retry(
 
 # Empty-response self-heal: a 200-OK with no usable output (empty ``choices`` / blank
 # content and no tool_calls) is a transient provider hiccup — the one that aborted the
-# #726 baseline. Under the 25-analyst fan-out with OPENROUTER_COST_QUALITY_TRADEOFF=10
-# (all-cheapest routing), empty completions became a storm (#814). Defaults raised:
+# #726 baseline. Under a wide analyst fan-out on cheapest routing, empty completions
+# became a storm (#814). Defaults raised:
 #   DIGILLM_EMPTY_RETRY_MAX     2 → 4  (more healing attempts before giving up)
 #   DIGILLM_EMPTY_RETRY_BACKOFF 2s → 5s  (longer pause lets the provider recover)
 # If still empty after all retries, the response is returned unchanged (callers stay
@@ -1263,9 +1208,6 @@ _backoff_raw = (
 )
 _EMPTY_RETRY_DELAY = float(_backoff_raw)
 
-# Valid OpenRouter provider.sort values; an unknown value 400s (not transient), so we drop it.
-_OPENROUTER_SORTS = ("price", "throughput", "latency")
-
 
 def _is_empty_completion(resp: Any) -> bool:
     """A completion with no usable output: no choices, or blank content AND no tool_calls."""
@@ -1276,232 +1218,6 @@ def _is_empty_completion(resp: Any) -> bool:
     content = (getattr(message, "content", None) or "").strip()
     tool_calls = getattr(message, "tool_calls", None)
     return not content and not tool_calls
-
-
-def _openrouter_usage_cost(usage: Any) -> float | None:
-    """Actual USD charged for a call, from OpenRouter's ``usage.cost`` when present.
-
-    The OpenAI SDK is typed for OpenAI's schema, so an unknown ``cost`` field lands in
-    pydantic ``model_extra`` rather than a typed attribute — check both. Returns ``None``
-    when the provider/SDK does not surface cost so glass-box / WP1 paths never fabricate 0
-    (#2763)."""
-    if usage is None:
-        return None
-    cost = getattr(usage, "cost", None)
-    if cost is None:
-        extra = getattr(usage, "model_extra", None)
-        if isinstance(extra, dict):
-            cost = extra.get("cost")
-    if cost is None:
-        return None
-    try:
-        value = float(cost)
-    except (TypeError, ValueError):
-        return None
-    # float() also accepts 'nan'/'inf'/negatives; a bad cost must not poison run-level
-    # aggregation (one nan turns the whole run's cost_usd into nan).
-    return value if math.isfinite(value) and value >= 0 else None
-
-
-def _openrouter_fallback_models() -> list[str]:
-    """``OPENROUTER_FALLBACK_MODELS`` (comma-separated) — the cheap-model allowlist OpenRouter
-    routes/falls-back across (keeps automatic selection, but only among affordable models)."""
-    raw = os.environ.get("OPENROUTER_FALLBACK_MODELS", "").strip()
-    return [m.strip() for m in raw.split(",") if m.strip()]
-
-
-def _openrouter_provider_prefs() -> dict[str, Any]:
-    """OpenRouter ``provider`` routing preferences from env (all opt-in; empty when unset):
-
-    - ``OPENROUTER_SORT`` → ``provider.sort`` (e.g. ``price`` routes to the cheapest endpoint).
-    - ``OPENROUTER_MAX_PROMPT_PRICE`` / ``OPENROUTER_MAX_COMPLETION_PRICE`` (USD per 1M tokens)
-      → ``provider.max_price``, a hard ceiling that structurally excludes flagship-tier models
-      *by price* without naming them — the requested "exclude expensive, keep auto" control.
-    """
-    prefs: dict[str, Any] = {}
-    sort = os.environ.get("OPENROUTER_SORT", "").strip()
-    if sort:
-        # OpenRouter accepts a fixed sort enum; an invalid value would 400 (not a transient/410
-        # error, so it would crash the call). Drop an unknown value with a warning instead.
-        if sort in _OPENROUTER_SORTS:
-            prefs["sort"] = sort
-        else:
-            logger.warning(
-                "ignoring invalid OPENROUTER_SORT=%r (allowed: %s)", sort, _OPENROUTER_SORTS
-            )
-    max_price: dict[str, float] = {}
-    for key, env_name in (
-        ("prompt", "OPENROUTER_MAX_PROMPT_PRICE"),
-        ("completion", "OPENROUTER_MAX_COMPLETION_PRICE"),
-    ):
-        raw = os.environ.get(env_name, "").strip()
-        if not raw:
-            continue
-        try:
-            value = float(raw)
-        except ValueError:
-            logger.warning("ignoring non-numeric %s=%r", env_name, raw)
-            continue
-        # float() also accepts 'inf'/'nan'/negatives; a price ceiling must be finite and > 0.
-        if not math.isfinite(value) or value <= 0:
-            logger.warning("ignoring out-of-range %s=%r (need a finite price > 0)", env_name, raw)
-            continue
-        max_price[key] = value
-    if max_price:
-        prefs["max_price"] = max_price
-    return prefs
-
-
-def _openrouter_require_parameters() -> bool:
-    """Default-ON: ask OpenRouter to route ONLY to providers that actually support the
-    parameters this request sends (``response_format`` json_schema, ``tools``).
-
-    Without ``provider.require_parameters``, the Auto Router can select a provider/model that
-    silently DROPS an unsupported param (e.g. a tiny model that ignores json_schema) and
-    returns an EMPTY body — which is exactly how the pipeline degraded after the #717
-    auto-router migration (every structured-output / tool call came back empty). Setting it
-    true makes OpenRouter skip those providers and pick a capable one (still the cheapest
-    capable one under any ``max_price`` ceiling). Disable with ``OPENROUTER_REQUIRE_PARAMETERS=0``."""
-    return os.environ.get("OPENROUTER_REQUIRE_PARAMETERS", "1").strip().lower() not in (
-        "0",
-        "false",
-        "no",
-        "",
-    )
-
-
-def _openrouter_allowed_models() -> list[str]:
-    """``OPENROUTER_ALLOWED_MODELS`` (comma-separated) — the Auto Router's candidate pool.
-
-    Constrains ``openrouter/auto`` to select ONLY from this curated set of reasoning +
-    structured-output-capable models (exact slugs and/or ``provider/*`` wildcards), via the
-    OpenRouter ``auto-router`` plugin. This keeps per-prompt auto-selection but fences out
-    models that don't honor strict structured outputs (e.g. ``google/gemini-2.5-flash-lite``,
-    which the bare Auto Router kept picking → loose/empty JSON, #802). Empty = unconstrained."""
-    raw = os.environ.get("OPENROUTER_ALLOWED_MODELS", "").strip()
-    return [m.strip() for m in raw.split(",") if m.strip()]
-
-
-def _openrouter_cost_quality_tradeoff() -> int | None:
-    """``OPENROUTER_COST_QUALITY_TRADEOFF`` — the Auto Router plugin's 0-10 dial (0 = always the
-    most capable model, 10 = cheapest; OpenRouter default 7). Returns None (use the default) when
-    unset or out of range."""
-    raw = os.environ.get("OPENROUTER_COST_QUALITY_TRADEOFF", "").strip()
-    if not raw:
-        return None
-    try:
-        value = int(raw)
-    except ValueError:
-        logger.warning("ignoring non-integer OPENROUTER_COST_QUALITY_TRADEOFF=%r", raw)
-        return None
-    if not 0 <= value <= 10:
-        logger.warning("ignoring out-of-range OPENROUTER_COST_QUALITY_TRADEOFF=%r (need 0-10)", raw)
-        return None
-    return value
-
-
-def _uses_openrouter_server_tools(tools: list[Any] | None) -> bool:
-    """True when every tool is an OpenRouter server tool (``openrouter:*``).
-
-    Server tools (e.g. ``openrouter:web_search``) are executed by OpenRouter, not the
-    underlying model provider. ``provider.require_parameters`` must NOT be set for those
-    requests — it filters to providers that declare support for the tool param, which
-    excludes all providers for server tools → HTTP 404 "Server tool request failed".
-    """
-    if not tools:
-        return False
-    for tool in tools:
-        ttype = tool.get("type", "") if isinstance(tool, dict) else getattr(tool, "type", "")
-        if not (isinstance(ttype, str) and ttype.startswith("openrouter:")):
-            return False
-    return True
-
-
-def _with_openrouter_cost_controls(kwargs: dict[str, Any], provider: str | None) -> dict[str, Any]:
-    """Merge OpenRouter routing controls into ``extra_body`` for an ``openrouter/`` request:
-
-    - ``provider.require_parameters`` (default ON) — only route to providers that support the
-      request's params (response_format / tools), so the Auto Router never lands on a provider
-      that drops them and returns an empty body (the post-#717 failure mode). FORCED ON for any
-      request that actually carries ``response_format`` or ``tools``, regardless of the global
-      ``OPENROUTER_REQUIRE_PARAMETERS`` toggle: the toggle exists to allow plain-prose requests
-      onto cheaper providers that ignore harmless extra params, but a structured-output / tool
-      request that lands on a provider which drops the param comes back EMPTY — an operator must
-      not be able to footgun that off. (OpenRouter structured-outputs docs pair ``strict:true``
-      with ``require_parameters`` to keep routing on capable providers.) SKIPPED when the Auto
-      Router pool is constrained (below): the curated pool is the capability guarantee, and
-      applying both filters compounds to an empty set → 404 (#802).
-    - the Auto Router candidate pool (``OPENROUTER_ALLOWED_MODELS`` → ``plugins[auto-router]
-      .allowed_models``, with optional ``cost_quality_tradeoff``) — keeps ``openrouter/auto``'s
-      per-prompt selection but constrains it to a curated set of reasoning + structured-output
-      capable models, so it stops landing on incapable models like gemini-2.5-flash-lite (#802).
-      Only applied to ``openrouter/auto`` requests (the plugin is meaningless on a pinned model).
-    - a cheap-model allowlist with fallback routing (``OPENROUTER_FALLBACK_MODELS`` →
-      ``models`` + ``route=fallback``), price-sorted endpoints, and an optional hard price
-      ceiling (``provider.max_price``) — keeps automatic selection but bounds it to affordable
-      models (flagships excluded by price, not by name).
-
-    No-op for non-OpenRouter providers and when nothing (incl. require_parameters) is active.
-    Merges with (never clobbers) an existing ``extra_body`` (e.g. the xAI ``search_parameters``
-    branch)."""
-    if provider != "openrouter":
-        return kwargs
-    fallbacks = _openrouter_fallback_models()
-    prefs = _openrouter_provider_prefs()
-    allowed_models = _openrouter_allowed_models()
-    # Constrain the Auto Router to a curated capable pool only for the auto router itself.
-    constrain_auto = bool(allowed_models) and (kwargs.get("model") or "").endswith("/auto")
-    # Structured-output (json_schema) and tool requests empty-fail without require_parameters, so
-    # force it for them even when the global toggle is off; plain-prose requests honor the toggle.
-    tools = kwargs.get("tools")
-    server_tools_only = _uses_openrouter_server_tools(tools)
-    structured = kwargs.get("response_format") is not None or (
-        bool(tools) and not server_tools_only
-    )
-    # allowed_models SUPERSEDES require_parameters: the curated pool is already the capability
-    # guarantee, and applying BOTH filters compounds to an empty set → OpenRouter 404
-    # "No models match your request and model restrictions" (#802). So when we constrain the auto
-    # router, drop require_parameters; otherwise keep the #798 behavior (forced for structured/tool).
-    require_params = (
-        (not constrain_auto)
-        and (not server_tools_only)
-        and (_openrouter_require_parameters() or structured)
-    )
-    if not fallbacks and not prefs and not require_params and not constrain_auto:
-        return kwargs
-    merged = dict(kwargs)
-    extra = dict(merged.get("extra_body") or {})
-    if fallbacks:
-        extra["models"] = fallbacks
-        extra["route"] = "fallback"
-    # Auto Router candidate-pool constraint — only meaningful for the auto router itself.
-    if constrain_auto:
-        plugin: dict[str, Any] = {"id": "auto-router", "allowed_models": allowed_models}
-        tradeoff = _openrouter_cost_quality_tradeoff()
-        if tradeoff is not None:
-            plugin["cost_quality_tradeoff"] = tradeoff
-        # Replace any prior auto-router plugin, preserve other plugins (e.g. web search).
-        others = [p for p in (extra.get("plugins") or []) if p.get("id") != "auto-router"]
-        extra["plugins"] = [*others, plugin]
-    provider_prefs = {**(extra.get("provider") or {})}
-    if require_params:
-        provider_prefs["require_parameters"] = True
-    for key, value in prefs.items():
-        # Deep-merge the nested max_price dict so a caller-set ceiling key (e.g. only
-        # ``completion``) survives when env sets the other (``prompt``), rather than the
-        # whole sub-dict being overwritten.
-        if key == "max_price" and isinstance(provider_prefs.get("max_price"), dict):
-            provider_prefs["max_price"] = {**provider_prefs["max_price"], **value}
-        else:
-            provider_prefs[key] = value
-    if provider_prefs:
-        extra["provider"] = provider_prefs
-    merged["extra_body"] = extra
-    return merged
-
-
-# Back-compat alias: the empty-retry path historically called the fallback-only form.
-_with_openrouter_fallback = _with_openrouter_cost_controls
 
 
 # ── Public API: chat_completion ────────────────────────────────────────────────
@@ -1518,7 +1234,6 @@ def completion(
     tool_choice: str | ToolArguments = "auto",
     response_format: JsonSchemaResponseFormat | None = None,
     max_tokens: int | None = None,
-    search_parameters: dict[str, Any] | None = None,
     usage_kind: str = "chat",
 ) -> ChatCompletion:
     """Single chat completion — mirrors ``litellm.completion`` / OpenAI's ``chat.completions.create``.
@@ -1565,27 +1280,17 @@ def completion(
             **call_kwargs,
         )
 
-    # xAI Live Search rides the OpenAI-compatible client via ``extra_body`` and only
-    # when the real xAI client is active (reaching here for an ``xai/`` model means its
-    # key was set — get_client_for_model raises otherwise). It is time-sensitive and not
-    # captured by the cache key, so a search request bypasses the cache like tool calls.
-    xai_live_search = (
-        search_parameters is not None and provider == "xai" and not _use_default_base_client(model)
-    )
-
     attempt_scope = _attempt_scope.get()
     cache_status = (
-        CacheStatus.BYPASSED
-        if tools or xai_live_search or _byok_override.get() is not None
-        else CacheStatus.MISS
+        CacheStatus.BYPASSED if tools or _byok_override.get() is not None else CacheStatus.MISS
     )
     if attempt_scope is not None:
         attempt_scope.cache_status = cache_status
 
-    # Cache only tool-free, search-free, non-BYOK requests (BYOK keys must not pollute or
-    # read the shared in-process cache; tool calls / live search may have side effects).
+    # Cache only tool-free, non-BYOK requests (BYOK keys must not pollute or
+    # read the shared in-process cache; tool calls may have side effects).
     cache_key: str | None = None
-    if not tools and not xai_live_search and _byok_override.get() is None:
+    if not tools and _byok_override.get() is None:
         cache_key = _llm_cache_key(
             effective_model, messages, temperature, response_format, max_tokens
         )
@@ -1609,32 +1314,9 @@ def completion(
     elif response_format is not None:
         # tools and response_format are mutually exclusive in the OpenAI API.
         kwargs["response_format"] = response_format
-    if xai_live_search:
-        kwargs["extra_body"] = {"search_parameters": search_parameters}
-    elif search_parameters is not None:
-        logger.debug("search_parameters ignored for non-xAI model %s", effective_model)
-
-    # Bound OpenRouter's automatic selection to affordable models on the PRIMARY request
-    # (cheap-model allowlist + price ceiling); a no-op unless the OPENROUTER_* env is set.
-    kwargs = _with_openrouter_cost_controls(kwargs, _cost_controls_provider(provider, model))
 
     try:
-        try:
-            r = create_with_retry(kwargs)
-        except Exception as exc:  # only the 410 case is soft; everything else re-raises
-            # xAI deprecated Live Search (HTTP 410) in favour of the Agent Tools API
-            # (:func:`web_search`). Fail soft: drop the deprecated extra_body and retry once
-            # ungrounded so the phase/pipeline keeps producing instead of crashing.
-            if getattr(exc, "status_code", None) != 410 or "extra_body" not in kwargs:
-                raise
-            logger.warning(
-                "xAI rejected search_parameters (410 deprecated); retrying without Live Search"
-            )
-            kwargs.pop("extra_body", None)
-            attempt_scope = _attempt_scope.get()
-            if attempt_scope is not None:
-                attempt_scope.next_retry_reason = RetryReason.UNKNOWN
-            r = create_with_retry(kwargs)
+        r = create_with_retry(kwargs)
     except Exception:
         _record_usage(
             kind=usage_kind,
@@ -1646,17 +1328,12 @@ def completion(
         raise
 
     # Empty-response self-heal. An empty body is transient; retry with backoff.
-    # OPENROUTER_FALLBACK_MODELS (attached on the primary request above, not here) covers
-    # provider errors via route=fallback — it does not swap models on an empty 200. Empty
-    # retries re-ask the same model. A persistent blank falls through unchanged.
+    # Empty retries re-ask the same model with the same cost controls as the
+    # primary request. A persistent blank falls through unchanged.
     empty_attempts = 0
     while _is_empty_completion(r) and empty_attempts < _EMPTY_RETRY_MAX:
         empty_attempts += 1
-        retry_kwargs = (
-            _with_openrouter_fallback(kwargs, _cost_controls_provider(provider, model))
-            if empty_attempts == 1
-            else kwargs
-        )
+        retry_kwargs = kwargs
         logger.warning(
             "empty completion from %s (empty-retry %d/%d); backing off %.1fs",
             effective_model,
@@ -1687,10 +1364,11 @@ def completion(
     _u = getattr(r, "usage", None)
     _details = getattr(_u, "prompt_tokens_details", None) if _u is not None else None
     _cached_raw = getattr(_details, "cached_tokens", None) if _details is not None else None
+    _, _, _cost_usd = _response_usage(r)
     _record_usage(
         kind=usage_kind,
-        # Record the model OpenRouter actually served (``r.model``), not the request string
-        # ("auto" / the allowlist), so cost telemetry reflects what was really billed.
+        # Record the model actually served (``r.model``), not the request string,
+        # so cost telemetry reflects what was really billed.
         model=getattr(r, "model", None) or effective_model,
         prompt_tokens=_optional_nonnegative_int(getattr(_u, "prompt_tokens", None) if _u else None),
         completion_tokens=_optional_nonnegative_int(
@@ -1698,7 +1376,7 @@ def completion(
         ),
         cached_tokens=_optional_nonnegative_int(_cached_raw),
         # Actual USD when reported; None when unknown — never fabricate 0 (#2763).
-        cost=_openrouter_usage_cost(_u),
+        cost=float(_cost_usd) if _cost_usd is not None else None,
         duration_ms=round((time.perf_counter() - usage_started) * 1000),
         retry_count=max(0, provider_attempts - 1),
     )
@@ -1707,250 +1385,6 @@ def completion(
     if cache_key is not None and r.choices and (r.choices[0].message.content or "").strip():
         _llm_cache_set(cache_key, r.model_dump_json())
     return r
-
-
-# Inline ``(url)`` / ``[text](url)`` citations in grounding summaries.
-_INLINE_URL_RE = re.compile(r"\((https?://[^\s)]+)\)")
-_MD_LINK_URL_RE = re.compile(r"\[[^\]]*\]\((https?://[^\s)]+)\)")
-
-
-def _urls_from_grounding_text(text: str) -> list[str]:
-    urls: list[str] = []
-    for pat in (_MD_LINK_URL_RE, _INLINE_URL_RE):
-        for url in pat.findall(text):
-            if url not in urls:
-                urls.append(url)
-    return urls
-
-
-def _grounding_slug(model: str) -> str:
-    """OpenRouter-style slug for grounding checks (strip a registered prefix if present)."""
-    provider, model_id = _parse_provider_prefix(model)
-    return model_id if provider is not None else model
-
-
-def _is_native_web_search_model(model: str) -> bool:
-    slug = _grounding_slug(model)
-    return ":online" in slug or slug.startswith("perplexity/")
-
-
-def openrouter_web_search(
-    model: str,
-    query: str,
-    *,
-    allowed_domains: list[str] | None = None,
-    max_results: int = 8,
-    engine: str = "exa",
-) -> tuple[str, list[str]] | None:
-    """Run web-search grounding and return ``(summary_text, source_urls)``.
-
-    House digiquant grounding pins are unprefixed ``:online`` / ``perplexity/*``
-    slugs sent through LiteLLM (``OPENAI_API_BASE``). Leftover ``openrouter/``
-    prefixes still work for diagnostics when ``OPENROUTER_API_KEY`` is set.
-
-    ``:online`` models and native-search providers (``perplexity/*``) use built-in
-    web search via a plain completion — this is the digiquant grounding path
-    (:func:`digigraph.model_config.get_grounding_model`).
-
-    Other prefixed OpenRouter models fall back to the server-side
-    ``openrouter:web_search`` tool (Exa by default). That branch is a digillm
-    toolkit capability for non-native-search models; digiquant must not assemble
-    ``engine`` / ``max_results`` for production grounding (#2567).
-
-    Returns ``None`` when the model is not a grounding slug, neither a default
-    ``OPENAI_API_BASE`` (LiteLLM or OpenRouter rewrite) nor ``OPENROUTER_API_KEY``
-    is configured, or the call fails (fail-soft).
-    """
-    provider, _ = _parse_provider_prefix(model)
-    native = _is_native_web_search_model(model)
-    if not native and provider != "openrouter":
-        logger.debug("openrouter_web_search skipped: %s is not a grounding model", model)
-        return None
-    or_key = bool(os.environ.get(_EXTERNAL_PROVIDERS["openrouter"]["api_key_env"], "").strip())
-    if not _default_base_configured() and not or_key:
-        logger.debug(
-            "openrouter_web_search skipped: no OPENAI_API_BASE and OPENROUTER_API_KEY unset"
-        )
-        return None
-
-    messages: list[ChatCompletionMessage] = [
-        {
-            "role": "system",
-            "content": (
-                "You are a market-research assistant. Use web search to gather current "
-                "facts, then reply with concise bullet points and inline markdown citations "
-                "linking each claim to its source URL."
-            ),
-        },
-        {"role": "user", "content": query},
-    ]
-    try:
-        # ``:online`` and native-search (perplexity) models use built-in web search —
-        # do NOT attach ``openrouter:web_search`` (404 on endpoints that lack the tool).
-        if native:
-            resp = completion(
-                model,
-                messages,
-                temperature=0.2,
-                usage_kind="web_search",
-            )
-        else:
-            tool_params: dict[str, Any] = {
-                "engine": engine,
-                "max_results": max(1, min(max_results, 25)),
-                "search_context_size": "medium",
-            }
-            if allowed_domains:
-                tool_params["allowed_domains"] = list(allowed_domains)
-            tools: list[dict[str, Any]] = [
-                {"type": "openrouter:web_search", "parameters": tool_params}
-            ]
-            resp = completion(
-                model,
-                messages,
-                tools=tools,
-                tool_choice="auto",
-                temperature=0.2,
-                usage_kind="web_search",
-            )
-    except Exception as exc:  # grounding is best-effort; degrade gracefully
-        logger.warning("openrouter_web_search failed (%s); continuing ungrounded", exc)
-        return None
-
-    if not resp.choices:
-        return None
-    text = (resp.choices[0].message.content or "").strip()
-    if not text:
-        return None
-    return text, _urls_from_grounding_text(text)
-
-
-@_with_logical_attempt_scope
-def web_search(
-    model: str,
-    query: str,
-    *,
-    allowed_domains: list[str] | None = None,
-    max_results: int = 8,
-) -> tuple[str, list[str]] | None:
-    """Run an xAI Agent-Tools ``web_search`` via the Responses API and return grounding.
-
-    Returns ``(summary_text, source_urls)`` where ``summary_text`` is the model's cited
-    summary (inline ``[[n]](url)`` citations) and ``source_urls`` are the URLs the search
-    surfaced. xAI-only — returns ``None`` for non-xAI models (or when ``XAI_API_KEY`` is
-    unset), and fails soft (``None``) on any API error so callers degrade to ungrounded
-    research rather than crash.
-
-    A read-only grounding *pre-pass*: callers inject the returned summary into their prompt,
-    then run their normal completion. Replaces the deprecated chat-completions
-    ``search_parameters`` Live Search (HTTP 410).
-    """
-    provider, model_id = _parse_provider_prefix(model)
-    if provider != "xai":
-        logger.debug("web_search skipped: %s is not an xAI model", model)
-        return None
-    api_key = os.environ.get(_EXTERNAL_PROVIDERS["xai"]["api_key_env"], "").strip()
-    if not api_key:
-        logger.debug("web_search skipped: XAI_API_KEY not set")
-        return None
-    tool: dict[str, Any] = {"type": "web_search", "max_search_results": max_results}
-    if allowed_domains:
-        tool["filters"] = {"allowed_domains": list(allowed_domains)}
-    started = time.perf_counter()
-    try:
-        client = get_client_for_model(model)
-        resp = _responses_create_with_attempt(
-            client,
-            provider=provider,
-            requested_model=model,
-            model=model_id,
-            input=[{"role": "user", "content": query}],
-            tools=[tool],
-        )
-    except Exception as exc:  # grounding is best-effort; degrade gracefully
-        logger.warning("web_search failed (%s); continuing ungrounded", exc)
-        _record_usage(
-            kind="web_search",
-            model=model_id,
-            ok=False,
-            duration_ms=round((time.perf_counter() - started) * 1000),
-        )
-        return None
-    text = getattr(resp, "output_text", "") or ""
-    sources: list[str] = []
-    for item in getattr(resp, "output", None) or []:
-        action = getattr(item, "action", None)
-        srcs = getattr(action, "sources", None) if action is not None else None
-        for s in srcs or []:
-            url = getattr(s, "url", None) or (s.get("url") if isinstance(s, dict) else None)
-            if url and url not in sources:
-                sources.append(url)
-    _, _, cost_usd = _response_usage(resp)
-    _record_usage(
-        kind="web_search",
-        model=model_id,
-        cost=float(cost_usd) if cost_usd is not None else None,
-        sources=len(sources),
-        ok=True,
-        duration_ms=round((time.perf_counter() - started) * 1000),
-    )
-    return text, sources
-
-
-@_with_logical_attempt_scope
-def x_search(
-    model: str,
-    query: str,
-    *,
-    max_results: int = 12,
-) -> tuple[str, list[str]] | None:
-    """Run an xAI Agent-Tools ``x_search`` (X / Twitter) via the Responses API.
-
-    Returns ``(summary_text, source_urls)``. Unlike :func:`web_search`, x_search carries
-    citations **inline** in ``output_text`` as ``[[n]](url)`` (its ``output[]`` items are
-    ``custom_tool_call``, not ``action.sources``), so URLs are regex-extracted from the
-    text. xAI-only; returns ``None`` for non-xAI models / unset key, and fails soft
-    (``None``) on any API error.
-    """
-    provider, model_id = _parse_provider_prefix(model)
-    if provider != "xai":
-        logger.debug("x_search skipped: %s is not an xAI model", model)
-        return None
-    if not os.environ.get(_EXTERNAL_PROVIDERS["xai"]["api_key_env"], "").strip():
-        logger.debug("x_search skipped: XAI_API_KEY not set")
-        return None
-    started = time.perf_counter()
-    try:
-        client = get_client_for_model(model)
-        resp = _responses_create_with_attempt(
-            client,
-            provider=provider,
-            requested_model=model,
-            model=model_id,
-            input=[{"role": "user", "content": query}],
-            tools=[{"type": "x_search", "max_search_results": max_results}],
-        )
-    except Exception as exc:  # grounding is best-effort; degrade gracefully
-        logger.warning("x_search failed (%s); continuing ungrounded", exc)
-        _record_usage(
-            kind="x_search",
-            model=model_id,
-            ok=False,
-            duration_ms=round((time.perf_counter() - started) * 1000),
-        )
-        return None
-    text = getattr(resp, "output_text", "") or ""
-    sources = _urls_from_grounding_text(text)
-    _, _, cost_usd = _response_usage(resp)
-    _record_usage(
-        kind="x_search",
-        model=model_id,
-        cost=float(cost_usd) if cost_usd is not None else None,
-        sources=len(sources),
-        ok=True,
-        duration_ms=round((time.perf_counter() - started) * 1000),
-    )
-    return text, sources
 
 
 # ── Public API: tool-calling loop ───────────────────────────────────────────────
@@ -2029,8 +1463,6 @@ def _stream_completion_one_turn(
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
-
-    kwargs = _with_openrouter_cost_controls(kwargs, _cost_controls_provider(provider, model))
 
     stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
         client,
@@ -2246,7 +1678,6 @@ def run_tools(
     on_tool_step: Callable[[str, Any], None] | None = None,
     parallel_safe_tools: set[str] | None = None,
     stream_deltas: bool = False,
-    search_parameters: dict[str, Any] | None = None,
 ) -> str:
     """Run a non-streaming tool-calling loop until the model returns a final answer.
 
@@ -2288,10 +1719,6 @@ def run_tools(
             instead of live per-token, since a delta already streamed can't be
             un-streamed if that round then turns out to have no tool_calls and
             gets rejected (see ``_produce_turn``'s docstring below).
-        search_parameters: Optional xAI Live Search descriptor (see
-            :func:`completion`). Attached only to the **first** tool round so a
-            multi-round loop doesn't re-search (and re-bill); ignored on the
-            streaming path (warns once).
 
     Returns:
         The model's final response content.
@@ -2303,14 +1730,11 @@ def run_tools(
     def _produce_turn(
         turn_messages: list[ChatCompletionMessage],
         turn_tools: list[ToolDefinition] | None,
-        *,
-        include_search: bool = False,
     ) -> tuple[str, list[ToolCallDict] | None]:
         """Produce one assistant turn as ``(content, tool_calls|None)``.
 
         Streams content/reasoning deltas to ``on_tool_step`` when ``stream_deltas`` is
-        set; otherwise makes a single non-streaming call. ``include_search`` attaches
-        ``search_parameters`` to this turn (first round only).
+        set; otherwise makes a single non-streaming call.
 
         When this turn is tool-enabled (``turn_tools`` set) and ``tool_choice ==
         "required"``, content/reasoning deltas are buffered instead of published live,
@@ -2326,11 +1750,6 @@ def run_tools(
         below.
         """
         if stream_deltas:
-            if include_search and search_parameters is not None:
-                # _stream_completion_one_turn doesn't forward search_parameters; warn so
-                # streaming callers don't assume web grounding happened.
-                logger.warning("Live Search not supported on the streaming tool loop; skipping")
-
             gate_required = bool(turn_tools) and tool_choice == "required"
             buffered: list[tuple[str, str]] = []
 
@@ -2375,14 +1794,11 @@ def run_tools(
                 temperature=temperature,
                 tools=turn_tools,
                 tool_choice=tool_choice,
-                search_parameters=search_parameters if include_search else None,
             )
         )
 
     for round_idx in range(max_tool_rounds):
-        # Live Search is billed per request — attach it only to the first turn so a
-        # multi-round tool loop doesn't re-search (and re-bill) every round.
-        content, tool_calls = _produce_turn(current, tools, include_search=round_idx == 0)
+        content, tool_calls = _produce_turn(current, tools)
         if not tool_calls:
             if tool_choice == "required":
                 # tool_choice="required" is a floor a deployment opted into (see
@@ -2552,6 +1968,6 @@ def run_tools(
                 "content": "Based on the tool results above, provide a concise final answer.",
             }
         )
-        final, _ = _produce_turn(current, None, include_search=False)
+        final, _ = _produce_turn(current, None)
         return final or ""
     return content or ""

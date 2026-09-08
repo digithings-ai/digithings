@@ -6,8 +6,8 @@
  * `@digithings/web` is the *rendering* vocabulary — collapsible `ChatToolCall`
  * rows, a `ChatThinking` disclosure, `ChatWidgetFrame` cards. The two do not
  * line up field-for-field, so this module is the boundary adapter between
- * them: one pure function, no JSX, no DOM. `ChatActivities` renders whatever
- * it returns and holds no mapping logic of its own.
+ * them: one pure function, no JSX, no DOM. Session UI in digichat 2.0 reads
+ * `source-*` parts directly; these helpers remain for export / legacy hydrate.
  *
  * Keeping the projection separate from the component is what makes the mapping
  * testable in a plain node environment (no jsdom in either consumer's vitest

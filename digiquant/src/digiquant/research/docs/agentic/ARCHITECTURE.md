@@ -693,7 +693,7 @@ bound spend.
 
 ### Fallback behaviour
 
-If a provider-prefixed model's key is not configured (e.g. `OPENROUTER_API_KEY` unset), `resolve_request_model` logs a warning and falls back to the Ollama mode model for that call — the pipeline completes with degraded quality but never hard-fails on a missing key. Empty completions self-heal with a retry (re-asking the same model; `OPENROUTER_FALLBACK_MODELS` covers provider errors on the primary request, not empty `200` bodies); see [RUNBOOK.md "OpenRouter empty completions"](../RUNBOOK.md#openrouter-empty-completions-degraded-book-empty-completion-from--in-logs) for the operator checklist.
+If a provider-prefixed model's key is not configured (e.g. `OPENROUTER_API_KEY` unset), `resolve_request_model` logs a warning and falls back to the Ollama mode model for that call — the pipeline completes with degraded quality but never hard-fails on a missing key. Empty completions self-heal with a retry (re-asking the same model); provider errors surface to the caller — there is no fallback chain; see [RUNBOOK.md "OpenRouter empty completions"](../RUNBOOK.md#openrouter-empty-completions-degraded-book-empty-completion-from--in-logs) for the operator checklist.
 
 ### Overriding models (user configuration)
 
@@ -716,7 +716,7 @@ Tier-wide changes belong in `config/digiquant_models.yaml` (capability pools per
 | `ATLAS_MAX_ANALYSTS` | H4/H5/H6 roster fan-out cap (#1767) | CI workflow env: `"30"` |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Publishing + diagnostics | GitHub secret + local `.env` |
 
-`OPENROUTER_ALLOWED_MODELS` and `OPENROUTER_COST_QUALITY_TRADEOFF` are **not** set by hand — `apply_digiquant_openrouter_env()` derives them from the active tier at chain startup. Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test the configured providers.
+House routing (default client base) is applied by `apply_digiquant_house_env()` at chain startup. Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test the configured providers.
 
 ---
 
