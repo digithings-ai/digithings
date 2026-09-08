@@ -1671,6 +1671,14 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   Legacy single-target path unchanged when the schedule is empty.
   Forward verify: `digiquant/scripts/research/verify_nav_replay.py` rebuilds
   the causal schedule + bars from Supabase and fails non-zero on NAV breach.
+  **Single source of truth (#3695):** the engine is the sole writer of
+  `nav_history` via `verify_nav_replay.py --write` (inception-100
+  normalization; `pipeline-research-metrics.yml` runs it before metrics).
+  `refresh_performance_metrics.refresh_nav_point` only guards the engine row;
+  `pnl_pct` reads the stored engine series (finalized-accounting precedence
+  retired — it caused the Sept 2026 scale break); `update_tearsheet.py` no
+  longer writes `nav_history` / `portfolio_metrics` (simulation kept for the
+  tearsheet artifact only). Dashboard + tearsheets read the stored series.
   **Paired shadow comparison evidence (#2799 / WP10.5):**
   `dashboard/replay/allocation_comparison.py` + packaged
   `replay/shadow_criteria/v1.json` + CLI

@@ -794,12 +794,14 @@ class TestResolveScheduledMetricsDate:
 
 
 class TestMetricsWorkflowStepOrder:
-    """Pins finalizer → metrics → lookback in ``pipeline-research-metrics.yml``.
+    """Pins finalizer → engine-write → metrics → lookback in ``pipeline-research-metrics.yml``.
 
     After #2598, ``pnl_pct`` never reads ``current_book_lookback`` / legacy
     ``position_attribution``, so lookback job order cannot alter daily semantics.
-    Still keep metrics before the lookback step for operational clarity, and the
-    accounting finalizer before metrics so finalized periods are available.
+    After the single-source-of-truth cutover the Nautilus engine is the sole
+    NAV writer, so the engine-write step must precede metrics (whose guard
+    asserts the engine row exists). The accounting finalizer stays first for
+    operational continuity but no longer feeds NAV or pnl.
     """
 
     @staticmethod
@@ -828,3 +830,87 @@ class TestMetricsWorkflowStepOrder:
             "finalizer → metrics → lookback: daily pnl must not depend on lookback "
             "order (#2598 / OLY-REV-007)"
         )
+
+    def test_engine_write_precedes_metrics(self) -> None:
+        names = self._step_names()
+        engine = next(i for i, n in enumerate(names) if "nautilus engine" in n.lower())
+        metrics = next(i for i, n in enumerate(names) if "portfolio_metrics" in n)
+        assert engine < metrics, (
+            "engine-write → metrics: the metrics guard asserts the engine NAV row "
+            "exists (single source of truth)"
+        )
+
+
+class TestRefreshNavPointGuard:
+    """``refresh_nav_point`` never computes NAV — it guards the engine row."""
+
+    def test_passes_when_engine_row_exists(self, capsys: pytest.CaptureFixture) -> None:
+        sb = _fake_with({"nav_history": [{"date": "2026-09-04", "nav": 99.353349}]})
+        _mod.refresh_nav_point(sb, "2026-09-04")  # must not raise
+        assert "engine row present" in capsys.readouterr().out
+
+    def test_raises_when_engine_row_missing(self) -> None:
+        sb = _fake_with({"nav_history": []})
+        with pytest.raises(RuntimeError, match="sole NAV writer"):
+            _mod.refresh_nav_point(sb, "2026-09-04")
+
+    def test_raises_when_engine_row_null(self) -> None:
+        sb = _fake_with({"nav_history": [{"date": "2026-09-04", "nav": None}]})
+        with pytest.raises(RuntimeError, match="sole NAV writer"):
+            _mod.refresh_nav_point(sb, "2026-09-04")
+
+    def test_guard_writes_nothing(self) -> None:
+        sb = _fake_with({"nav_history": [{"date": "2026-09-04", "nav": 99.353349}]})
+        _mod.refresh_nav_point(sb, "2026-09-04")
+        assert sb.store.get("nav_history", []) == []
+
+
+def _load_verify_module():
+    """Load verify_nav_replay.py as a module (top-level imports are stdlib-only)."""
+    script = (
+        Path(__file__).resolve().parents[3]
+        / "digiquant"
+        / "scripts"
+        / "research"
+        / "verify_nav_replay.py"
+    )
+    spec = importlib.util.spec_from_file_location("verify_nav_replay", script)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_verify_mod = _load_verify_module()
+
+
+class TestWriteNavNormalization:
+    """``_write_nav`` anchors every write to the full-path inception base."""
+
+    def test_full_path_normalizes_to_inception_100(self) -> None:
+        from decimal import Decimal
+
+        sb = _fake_with({})
+        engine = {"2026-06-22": Decimal("100000000"), "2026-09-04": Decimal("99353349")}
+        n = _verify_mod._write_nav(sb, "house", engine, Decimal("100000000"))
+        assert n == 2
+        rows = {r["date"]: r["nav"] for r in sb.store["nav_history"]}
+        assert rows["2026-06-22"] == 100.0
+        assert rows["2026-09-04"] == pytest.approx(99.353349)
+
+    def test_single_date_write_uses_full_path_base(self) -> None:
+        """A --date write must not normalize to itself (that would stamp 100)."""
+        from decimal import Decimal
+
+        sb = _fake_with({})
+        n = _verify_mod._write_nav(
+            sb, "house", {"2026-09-04": Decimal("99353349")}, Decimal("100000000")
+        )
+        assert n == 1
+        assert sb.store["nav_history"][0]["nav"] == pytest.approx(99.353349)
+
+    def test_zero_inception_refuses(self) -> None:
+        from decimal import Decimal
+
+        sb = _fake_with({})
+        assert _verify_mod._write_nav(sb, "house", {"2026-09-04": Decimal("1")}, Decimal("0")) == 0
+        assert sb.store.get("nav_history", []) == []

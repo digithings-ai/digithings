@@ -1,8 +1,11 @@
 """WP10.4 — shared-cash Nautilus portfolio replay contracts (#2784).
 
 Strict internal models for isolated shadow/challenger portfolio replay.
-These are not public ``BacktestResult`` contracts and must not be used as a
-production booking path.
+These are not public ``BacktestResult`` contracts. The replay is pure
+computation — never a booking path itself. Persisting engine output to
+production books happens only through the dedicated writer step
+(``verify_nav_replay.py --write``), which owns that boundary; nothing else
+may write engine-derived numbers to Group A tables.
 """
 
 from __future__ import annotations

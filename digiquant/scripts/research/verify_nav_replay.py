@@ -5,13 +5,21 @@ OHLCV (real volumes), runs the hardened schedule replay
 (``digiquant.dashboard.replay``, schema 2.0, causal-fill convention), and
 compares the engine NAV path against recorded ``nav_history``.
 
-Exit codes: 0 = within tolerance, 1 = usage/config error, 2 = NAV breach.
+Single source of truth: with ``--write`` the engine NAV path (normalized to
+the inception-100 scale) is persisted to ``nav_history`` — the engine is the
+only writer of NAV. ``refresh_performance_metrics.refresh_nav_point`` only
+guards that the row exists; tearsheets read the stored series. Default mode
+is read-only verification.
+
+Exit codes: 0 = within tolerance (or write succeeded), 1 = usage/config
+error, 2 = NAV breach / engine failure.
 
 Requires ``nautilus_trader`` (``digiquant[nautilus]``) and Supabase env —
 ``CORE_SUPABASE_URL`` / ``SUPABASE_URL`` + ``SUPABASE_SERVICE_ROLE_KEY``
 (see ``digiquant/src/digiquant/research/config/supabase.env``).
 
-Read-only: SELECTs Group A tables pinned to the house workspace. Never writes.
+Read-only unless ``--write``: SELECTs Group A tables pinned to the house
+workspace. ``--write`` upserts ``nav_history`` (house-pinned) only.
 """
 
 from __future__ import annotations
@@ -142,10 +150,53 @@ def build_request(price_rows, position_rows, nav_rows):
     )
 
 
+def _write_nav(sb, house_id: str, engine_nav: dict[str, object], inception_nav: object) -> int:
+    """Persist the engine NAV path to ``nav_history`` on the inception-100 scale.
+
+    Normalization: ``nav[d] = 100 * engine[d] / inception_nav`` where
+    ``inception_nav`` is the engine NAV on the first bar of the full path
+    (single-date writes must anchor to the same base). Returns the number of
+    rows upserted.
+    """
+    from decimal import Decimal as _Decimal
+
+    dates = sorted(engine_nav)
+    if not dates:
+        print("WRITE: empty engine NAV path — nothing persisted")
+        return 0
+    if not inception_nav:
+        print("WRITE: zero opening engine NAV — refusing to persist")
+        return 0
+    base = _Decimal(str(inception_nav))
+    ts = datetime.now(tz=timezone.utc).isoformat()
+    rows = [
+        {
+            "workspace_id": house_id,
+            "date": d,
+            "nav": round(float(_Decimal(str(engine_nav[d])) / base * 100), 6),
+            "updated_at": ts,
+        }
+        for d in dates
+    ]
+    sb.table("nav_history").upsert(rows, on_conflict="workspace_id,date").execute()
+    print(f"WRITE: {len(rows)} nav_history rows upserted from engine ({dates[0]} → {dates[-1]})")
+    return len(rows)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fail-tol-bp", type=float, default=FAIL_TOL_BP)
     parser.add_argument("--warn-tol-bp", type=float, default=WARN_TOL_BP)
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Persist the engine NAV path to nav_history (engine is the sole NAV writer).",
+    )
+    parser.add_argument(
+        "--date",
+        default="",
+        help="With --write, persist only this date (YYYY-MM-DD); default persists the full engine path.",
+    )
     args = parser.parse_args()
 
     try:
@@ -187,6 +238,17 @@ def main() -> int:
         return 2
 
     engine_nav = {str(p.ts.date()): p.nav for p in result.nav_path}
+    if args.write:
+        full_dates = sorted(engine_nav)
+        if args.date and args.date not in engine_nav:
+            print(f"WRITE FAIL: engine path has no bar for {args.date}")
+            return 2
+        target = {args.date: engine_nav[args.date]} if args.date else dict(engine_nav)
+        n = _write_nav(sb, house_id, target, engine_nav[full_dates[0]])
+        if not n:
+            return 2
+        return 0
+
     dates = sorted(set(engine_nav) & set(recorded))
     worst_bp = 0.0
     worst_day = ""

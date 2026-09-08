@@ -7,10 +7,14 @@ Uses Supabase price_history closes + positions snapshot rows to populate:
 
   - positions: unrealized_pnl_pct, day_change_pct, since_entry_return_pct, metrics_as_of
   - position_events: cumulative_return_since_event_pct (where price exists)
-   - nav_history: one indexed NAV point per calendar day (exact-match closes;
-     legs with a missing close contribute 0, so non-trading days carry flat)
-  - portfolio_metrics: one row per calendar day for continuity (computed_from=refresh_script).
-    Rows from update_tearsheet.py (computed_from=tearsheet) are never overwritten.
+   - nav_history: GUARDED ONLY — the Nautilus schedule replay
+     (verify_nav_replay.py --write, schema 2.0, causal-fill convention) is the sole
+     writer of NAV. This script asserts the row exists and fails loudly otherwise.
+   - portfolio_metrics: one row per calendar day for continuity (computed_from=refresh_script).
+  pnl_pct reads the engine-written nav_history day return; never finalized
+  accounting periods (event-boundary realized returns are a display input, not
+  NAV — the Sept 2026 scale break). Rows from update_tearsheet.py
+  (computed_from=tearsheet) are never overwritten.
 
 Scheduled cron policy (no flags — .github/workflows/pipeline-research-metrics.yml):
   Processes **today (UTC)** only, and exits 3 when no positions book exists for that
@@ -49,10 +53,6 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from digiquant.dashboard.accounting.io import (
-    period_day_return_pct,
-    select_final_period,
-)
 from digiquant.dashboard.performance_returns import (
     PerformanceReturns,
     calculate_performance_returns,
@@ -265,25 +265,17 @@ def _performance_returns_from_history(
 
 
 def _pnl_pct_from_final_accounting(sb, as_of: str) -> Optional[float]:
-    """Day return % from a complete ``status=final`` accounting period (#2597/#2598).
+    """Retired (single-source-of-truth cutover): finalized event-boundary accounting
+    periods no longer feed NAV or ``pnl_pct``.
 
-    Authoritative daily realized return. Never reads ``current_book_lookback`` /
-    legacy ``position_attribution`` (21-day static-book diagnostic). Falls through
-    to provisional H9 ``nav_history`` only when no final period exists — job order
-    with the lookback refresh cannot alter daily ``pnl_pct`` semantics.
-    Provisional H9 rows are never selected as final.
+    The engine-written ``nav_history`` path is the sole performance truth; mixing
+    in accounting-period returns produced the Sept 2026 scale break (finals at
+    106–107 over a legacy ~100 chain). Retained as a no-op stub so older call
+    sites fail closed (always ``None`` → engine-NAV fallback) rather than
+    reintroducing the second truth.
     """
-    try:
-        period_date = date.fromisoformat(as_of[:10])
-        row = select_final_period(client=sb, period_date=period_date)
-    except Exception:
-        return None
-    if row is None:
-        return None
-    pct = period_day_return_pct(row)
-    if pct is None:
-        return None
-    return round(pct, 6)
+    del sb, as_of
+    return None
 
 
 def _sum_attribution_pnl(sb, as_of: str) -> Optional[float]:
@@ -349,13 +341,14 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
     tear-sheet risk metrics. Otherwise upserts with ``computed_from='refresh_script'``
     (or ``'refresh_script_insufficient_history'``
     when nav_history has < 20 rows):
-    - ``pnl_pct`` prefers a complete ``status=final`` accounting period (#2597/#2598),
-      then provisional H9 nav day return (#814). Never SUM of
-      ``current_book_lookback`` / legacy ``position_attribution`` (21-day diagnostic;
-      OLY-REV-007 / Task 3.3). Job order with the lookback refresh is irrelevant.
-      The nav fallback computes ``(nav - nav_prev) / nav_prev * 100`` using the
-      most recent prior nav_history row — NOT ``nav - 100``. When no prior nav
-      row exists the fallback yields None rather than a misleading value.
+    - ``pnl_pct`` reads the engine-written ``nav_history`` day return
+      ``(nav - nav_prev) / nav_prev * 100`` using the most recent prior row —
+      NOT ``nav - 100``. Never finalized accounting periods (retired
+      single-source-of-truth cutover: event-boundary realized returns caused
+      the Sept 2026 scale break). Never SUM of ``current_book_lookback`` /
+      legacy ``position_attribution`` (21-day diagnostic; OLY-REV-007 /
+      Task 3.3). When no prior nav row exists the fallback yields None
+      rather than a misleading value.
     - ``sharpe`` / ``volatility`` / ``max_drawdown`` computed from nav_history when
       there are >= 20 rows; otherwise NULL.  ``alpha`` is carried from the prior row
       when history is sufficient.  ``computed_from`` is
@@ -380,37 +373,32 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         print(f"   portfolio_metrics {as_of}: backfilled returns (tearsheet row preserved)")
         return
 
-    # pnl_pct precedence (#2597/#2598 / OLY-REV-007):
-    #   1. Finalized event-boundary accounting period (job-order independent)
-    #   2. Provisional H9 nav_history day return (continuity, never authoritative final)
-    # Never: current_book_lookback / position_attribution (21-day diagnostic).
-    pnl_pct = _pnl_pct_from_final_accounting(sb, as_of)
-    if pnl_pct is not None:
-        print(f"   portfolio_metrics {as_of}: pnl_pct from finalized accounting period")
-    if pnl_pct is None:
-        nav_res = _eq_house(sb.table("nav_history").select("nav")).eq("date", as_of).limit(1).execute()
-        nav_data = getattr(nav_res, "data", None) or []
-        nav = float(nav_data[0]["nav"]) if nav_data else None
-        # Fetch the most recent nav_history row strictly before as_of to derive a
-        # day return.  Using (nav - 100) would be total-return-since-inception and
-        # is wrong on any day past the first (#814).
-        nav_prev: Optional[float] = None
-        if nav is not None:
-            prev_nav_res = (
-                _eq_house(sb.table("nav_history").select("nav"))
-                .lt("date", as_of)
-                .order("date", desc=True)
-                .limit(1)
-                .execute()
-            )
-            prev_nav_data = getattr(prev_nav_res, "data", None) or []
-            if prev_nav_data and prev_nav_data[0].get("nav") is not None:
-                nav_prev = float(prev_nav_data[0]["nav"])
-        if nav is not None and nav_prev is not None and nav_prev > 0:
-            pnl_pct = round((nav - nav_prev) / nav_prev * 100.0, 4)
-            print(f"   portfolio_metrics {as_of}: pnl_pct from nav fallback (no final accounting)")
-        else:
-            pnl_pct = None
+    # pnl_pct: engine-written nav_history day return (single source of truth).
+    # Never: finalized accounting periods (retired stub above) or
+    # current_book_lookback / position_attribution (21-day diagnostic).
+    nav_res = _eq_house(sb.table("nav_history").select("nav")).eq("date", as_of).limit(1).execute()
+    nav_data = getattr(nav_res, "data", None) or []
+    nav = float(nav_data[0]["nav"]) if nav_data else None
+    # Fetch the most recent nav_history row strictly before as_of to derive a
+    # day return.  Using (nav - 100) would be total-return-since-inception and
+    # is wrong on any day past the first (#814).
+    nav_prev: Optional[float] = None
+    if nav is not None:
+        prev_nav_res = (
+            _eq_house(sb.table("nav_history").select("nav"))
+            .lt("date", as_of)
+            .order("date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        prev_nav_data = getattr(prev_nav_res, "data", None) or []
+        if prev_nav_data and prev_nav_data[0].get("nav") is not None:
+            nav_prev = float(prev_nav_data[0]["nav"])
+    if nav is not None and nav_prev is not None and nav_prev > 0:
+        pnl_pct = round((nav - nav_prev) / nav_prev * 100.0, 4)
+        print(f"   portfolio_metrics {as_of}: pnl_pct from engine-written nav day return")
+    else:
+        pnl_pct = None
 
     pos_res = (
         _eq_house(sb.table("positions").select("ticker,weight_pct")).eq("date", as_of).execute()
@@ -631,116 +619,22 @@ def refresh_event_cumulative(sb, as_of: str) -> int:
 
 
 def refresh_nav_point(sb, as_of: str) -> None:
-    """Append/update indexed NAV for `as_of`.
+    """Guard that the engine wrote NAV for ``as_of`` — never computes it.
 
-    When a complete ``status=final`` accounting period exists for ``as_of`` (#2597),
-    the indexed point compounds the prior nav by that period's event-boundary return.
-    Otherwise the legacy exact-date weight × close-to-close path runs (provisional
-    H9 continuity). Public curated views still label legacy estimates until Task 3.4.
-
-    On non-trading days (weekends / holidays) price_history has no rows, so
-    _fetch_closes exact-matches yield no p1 for most legs: each such leg is
-    skipped and contributes 0, leaving NAV flat — giving the portfolio page a
-    continuous daily series with no gaps. (Flat by missing-price skip, not by
-    forward-fill; price_history is trading-days only.)
-
-    If there is no positions snapshot for `as_of` (common on non-trading days),
-    the most recent prior snapshot is used for weights.
+    Single source of truth: ``verify_nav_replay.py --write`` (Nautilus schedule
+    replay, schema 2.0, causal-fill convention) is the sole writer of
+    ``nav_history``. This guard asserts the row exists and raises otherwise, so
+    a day the engine step missed fails loudly instead of silently carrying a
+    stale NAV forward.
     """
-    # Fetch the most recent NAV before as_of (needed whether trading day or not)
-    nav_res = (
-        _eq_house(sb.table("nav_history").select("date, nav"))
-        .lt("date", as_of)
-        .order("date", desc=True)
-        .limit(1)
-        .execute()
-    )
-    nav_data = getattr(nav_res, "data", None) or []
-    prev_nav = float(nav_data[0]["nav"]) if nav_data else 100.0
-
-    acct_pct = _pnl_pct_from_final_accounting(sb, as_of)
-    if acct_pct is not None:
-        new_nav = prev_nav * (1.0 + acct_pct / 100.0)
-        ts = datetime.now(tz=timezone.utc).isoformat()
-        sb.table("nav_history").upsert(
-            {
-                "workspace_id": _house_id(),
-                "date": as_of,
-                "nav": round(new_nav, 6),
-                "updated_at": ts,
-            },
-            on_conflict="workspace_id,date",
-        ).execute()
-        print(
-            f"✅ nav_history {as_of}: nav={new_nav:.4f} "
-            f"(from finalized accounting return {acct_pct}%)"
+    res = _eq_house(sb.table("nav_history").select("nav")).eq("date", as_of).limit(1).execute()
+    rows = getattr(res, "data", None) or []
+    if not rows or rows[0].get("nav") is None:
+        raise RuntimeError(
+            f"nav_history has no engine-written row for {as_of} — "
+            "run verify_nav_replay.py --write first (engine is the sole NAV writer)"
         )
-        return
-
-    # Try exact-date positions snapshot first; fall back to most recent prior snapshot.
-    pos_res = _eq_house(sb.table("positions").select("*")).eq("date", as_of).execute()
-    pos_rows = getattr(pos_res, "data", None) or []
-    if not pos_rows:
-        # No snapshot for as_of — find the most recent one
-        snap_res = (
-            _eq_house(sb.table("positions").select("date"))
-            .lt("date", as_of)
-            .order("date", desc=True)
-            .limit(1)
-            .execute()
-        )
-        snap_data = getattr(snap_res, "data", None) or []
-        if snap_data:
-            snap_date = str(snap_data[0]["date"])[:10]
-            all_res = _eq_house(sb.table("positions").select("*")).eq("date", snap_date).execute()
-            pos_rows = getattr(all_res, "data", None) or []
-
-    # Get previous trading day's price date (latest price_history date strictly
-    # before as_of; on non-trading days as_of itself has no price row, so every
-    # leg's p1 lookup misses and dr stays 0 → flat carry)
-    prev_d = _prev_trading_date(sb, "SPY", as_of)
-
-    if not prev_d or not pos_rows:
-        # No price history at all or no positions anywhere — just carry forward
-        ts = datetime.now(tz=timezone.utc).isoformat()
-        sb.table("nav_history").upsert(
-            {
-                "workspace_id": _house_id(),
-                "date": as_of,
-                "nav": round(prev_nav, 6),
-                "updated_at": ts,
-            },
-            on_conflict="workspace_id,date",
-        ).execute()
-        print(f"✅ nav_history {as_of}: nav={prev_nav:.4f} (carried forward — no data)")
-        return
-
-    dr = 0.0
-    for r in pos_rows:
-        t = r.get("ticker")
-        if not t or t == "CASH":
-            continue
-        w = float(r.get("weight_pct") or 0) / 100.0
-        c_prev_map = _fetch_closes(sb, t, [prev_d])
-        c_now_map = _fetch_closes(sb, t, [as_of])
-        p0 = c_prev_map.get(prev_d)
-        p1 = c_now_map.get(as_of)
-        # On non-trading days there is no price row for as_of, so p1 is None and
-        # the leg is skipped (dr contribution 0) — flat carry by construction
-        if p0 and p1 and p0 > 0:
-            dr += w * (p1 - p0) / p0
-    new_nav = prev_nav * (1.0 + dr)
-    ts = datetime.now(tz=timezone.utc).isoformat()
-    sb.table("nav_history").upsert(
-        {
-            "workspace_id": _house_id(),
-            "date": as_of,
-            "nav": round(new_nav, 6),
-            "updated_at": ts,
-        },
-        on_conflict="workspace_id,date",
-    ).execute()
-    print(f"✅ nav_history {as_of}: nav={new_nav:.4f} (prev={prev_nav:.4f}; provisional path)")
+    print(f"✅ nav_history {as_of}: engine row present (nav={float(rows[0]['nav']):.4f})")
 
 
 def run_one_day(sb, metrics_date: str) -> None:
