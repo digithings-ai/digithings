@@ -176,6 +176,23 @@ export const REPO_ACTIVITY_DEMO: RepoActivitySnapshot = {
       updatedAt: "2026-08-08T14:01:00Z",
     },
   ],
+  /** Synthetic 14-day series so the specimen shows graded cells. Not live data. */
+  dailyContributions: [
+    { date: "2026-08-11", count: 1 },
+    { date: "2026-08-12", count: 3 },
+    { date: "2026-08-13", count: 2 },
+    { date: "2026-08-14", count: 6 },
+    { date: "2026-08-15", count: 1 },
+    { date: "2026-08-16", count: 4 },
+    { date: "2026-08-17", count: 8 },
+    { date: "2026-08-18", count: 2 },
+    { date: "2026-08-19", count: 5 },
+    { date: "2026-08-20", count: 3 },
+    { date: "2026-08-21", count: 9 },
+    { date: "2026-08-22", count: 1 },
+    { date: "2026-08-23", count: 4 },
+    { date: "2026-08-24", count: 7 },
+  ],
 };
 
 export const REPO_ACTIVITY_DEMO_URL = "https://github.com/digithings-ai/digithings";

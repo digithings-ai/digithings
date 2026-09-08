@@ -78,6 +78,15 @@ def _snapshot(**over: Any) -> dict[str, Any]:
             }
         ],
         "latestRelease": None,
+        "dailyContributions": [
+            {
+                "date": (datetime.now(UTC) - timedelta(days=fra.YEAR_DAYS - 1 - i)).strftime(
+                    "%Y-%m-%d"
+                ),
+                "count": 0,
+            }
+            for i in range(fra.YEAR_DAYS)
+        ],
         "modules": {"digigraph": {"path": "digigraph", "lastCommit": None, "files": 1, "lines": 2}},
     }
     base.update(over)

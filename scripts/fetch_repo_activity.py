@@ -68,7 +68,7 @@ import re
 import subprocess
 import sys
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -320,12 +320,8 @@ def _to_daily(
     ]
 
 
-def _search_dates(query: str) -> list[str]:
-    """All closed_at dates for a Search issues query, paginated at 100/page.
-
-    Authenticated Search allows 30 req/min — ~65 pages per query sleeps its
-    way through ~3 min. Weekly cron only; never call this client-side.
-    """
+def _search_pages(query: str) -> list[str]:
+    """One bounded Search query, paginated at 100/page."""
     out: list[str] = []
     page = 1
     while True:
@@ -338,6 +334,57 @@ def _search_dates(query: str) -> list[str]:
             return out
         page += 1
         time.sleep(2.5)
+
+
+# `merged:>=YYYY-MM-DD` / `closed:>=YYYY-MM-DD` — the open-ended lower bound the
+# year queries carry, and the half replaced by a `START..END` range when chunking.
+_SEARCH_SINCE = re.compile(r"(merged|closed):>=(\d{4}-\d{2}-\d{2})")
+
+
+def _search_dates(query: str) -> list[str]:
+    """All closed_at dates for a Search issues query, paginated at 100/page.
+
+    Authenticated Search allows 30 req/min — ~65 pages per query sleeps its
+    way through ~3 min. Weekly cron only; never call this client-side.
+
+    GitHub Search returns only the first 1000 matches, so a year-long query on
+    a busy repo 422s past page 10 (measured 2026-09-08: 2193 merged PRs, 1195
+    closed issues in 365 days — August 2026 alone merged over 1000). On that
+    failure the window is bisected until every piece fits under the cap, and
+    the pieces concatenated. Pieces are disjoint date ranges, so nothing is
+    counted twice.
+    """
+    try:
+        return _search_pages(query)
+    except subprocess.CalledProcessError:
+        m = _SEARCH_SINCE.search(query)
+        if not m:
+            raise
+    kind = m.group(1)
+    start = datetime.strptime(m.group(2), "%Y-%m-%d").date()
+    today = datetime.now(UTC).date()
+    print(
+        f"⚠️  search window exceeds 1000 results — re-running {kind} in smaller spans",
+        file=sys.stderr,
+    )
+    out: list[str] = []
+    _search_span(query, m, kind, start, today, out)
+    return out
+
+
+def _search_span(
+    query: str, m: re.Match[str], kind: str, first: date, last: date, out: list[str]
+) -> None:
+    """Append closed_at dates for one `START..END` span, bisecting past the cap."""
+    ranged = query[: m.start()] + f"{kind}:{first.isoformat()}..{last.isoformat()}" + query[m.end() :]
+    try:
+        out.extend(_search_pages(ranged))
+    except subprocess.CalledProcessError:
+        if first >= last:
+            raise
+        mid = first + (last - first) // 2
+        _search_span(query, m, kind, first, mid, out)
+        _search_span(query, m, kind, mid + timedelta(days=1), last, out)
 
 
 def collect() -> dict:
@@ -441,6 +488,7 @@ REQUIRED = (
     "features",
     "mergedPulls",
     "openIssues",
+    "dailyContributions",
     "modules",
 )
 # Never collected — see the module docstring. Asserted so a future edit that adds
@@ -485,6 +533,23 @@ def check(max_age_days: int | None = None) -> int:
         return 1
     if not isinstance(data["mergedPulls"], list) or not isinstance(data["openIssues"], list):
         print("❌  mergedPulls and openIssues must be lists", file=sys.stderr)
+        return 1
+    dc = data["dailyContributions"]
+    if not isinstance(dc, list) or len(dc) != YEAR_DAYS:
+        print(f"❌  dailyContributions must be a list of {YEAR_DAYS} days", file=sys.stderr)
+        return 1
+    if any(
+        not isinstance(d, dict)
+        or set(d) != {"date", "count"}
+        or not isinstance(d["count"], int)
+        or isinstance(d["count"], bool)
+        or d["count"] < 0
+        for d in dc
+    ):
+        print("❌  dailyContributions entries must be {date, count >= 0}", file=sys.stderr)
+        return 1
+    if [d["date"] for d in dc] != sorted(d["date"] for d in dc):
+        print("❌  dailyContributions must be sorted oldest → newest", file=sys.stderr)
         return 1
     try:
         stamped = datetime.strptime(data["generatedAt"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
