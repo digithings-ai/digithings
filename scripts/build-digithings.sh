@@ -93,6 +93,9 @@ echo "--- exporting openwiki visualizer to dist/openwiki ---"
 npx --yes openwiki@0.5.0 visualize openwiki --export dist/openwiki
 [ -f dist/openwiki/index.html ] || { echo "ERROR: dist/openwiki/index.html missing — openwiki export failed" >&2; exit 1; }
 [ -f dist/openwiki/graph.json ] || { echo "ERROR: dist/openwiki/graph.json missing — openwiki export failed" >&2; exit 1; }
+[ -f dist/openwiki/client.js ] || { echo "ERROR: dist/openwiki/client.js missing — openwiki export shape changed?" >&2; exit 1; }
+[ -f dist/openwiki/client-lib.js ] || { echo "ERROR: dist/openwiki/client-lib.js missing — openwiki export shape changed?" >&2; exit 1; }
+[ -f dist/openwiki/styles.css ] || { echo "ERROR: dist/openwiki/styles.css missing — openwiki export shape changed?" >&2; exit 1; }
 
 # The exporter's own <meta> CSP allows only 'self' fonts, which would silently
 # downgrade the wiki to fallback fonts under the /openwiki/* header. Widen just

@@ -210,8 +210,16 @@ jobs:
           # except the openwiki visualizer (#3696): dist/openwiki (pinned
           # jsDelivr scripts + Inter via Google Fonts) and the /openwiki/*
           # _headers exception itself (lib/security-headers.mjs + contract
-          # test own that rule). Both are allowlisted, nothing else may be.
+          # test own that rule). _headers is excluded from the blanket grep
+          # because it names the exception — but a future leak into the /*
+          # policy must not hide there, so assert the refs live only at or
+          # after the /openwiki/* block (which itself must exist: without it
+          # the wiki would ship unstyled under the /* policy).
           ! grep -rq "fonts.googleapis.com" dist --exclude-dir=openwiki --exclude=_headers
+          grep -q '^/openwiki/\*$' dist/_headers \
+            || { echo "ERROR: dist/_headers missing /openwiki/* exception — wiki would break under /* CSP" >&2; exit 1; }
+          awk '/^\/openwiki\/\*$/{exit} {print}' dist/_headers | grep -q "fonts.googleapis.com" \
+            && { echo "ERROR: Google Fonts ref outside /openwiki/* in dist/_headers" >&2; exit 1; } || true
 
       # The daily freshness probe in smoke-site.yml reads this stamp off the live
       # site (#1759). Validate the stamp the build just wrote with the same
