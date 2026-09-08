@@ -51,7 +51,7 @@ and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 | Quant comparison strip (inline `BacktestResult` parsing) | Built |
 | Quant run persistence (`quant_runs` table) | Built |
 | Ecosystem side panel (service URLs + health badges) | Built |
-| Opt-in web search (tenant + user; External cites; default off) | Built |
+| Opt-in web search (tenant + user; External cites; embed session default ON) | Built |
 | Auto-migration on container boot (`DIGICHAT_AUTO_MIGRATE=1`) | Built |
 | Docker Compose profile (`digichat` + `digichat-db`) | Built |
 | OpenClaw gateway integration | Not yet (Phase 2) |
@@ -761,11 +761,13 @@ items are intentionally omitted rather than rendered as empty “Thinking”
 chrome. This behavior remains separate from the digithings digigraph path.
 
 **Response language (#2103 / #3418) — `/lang` on the public embed, not a header dropdown.**
-The composer slash `/lang en|de|it|es|fr` (client-only) updates session language and
-sends it as `X-Digi-Language` on subsequent turns. The top-right language dropdown
-was dropped once `/lang` landed. Codes still come from `src/lib/languages.ts`'s
-curated `LANGUAGES` list. The two backends have no shared system-prompt mechanism,
-so each adapter enforces the directive its own way:
+The composer slash `/language` / `/lang` (client-only) updates session language and
+sends it as `X-Digi-Language` on subsequent turns. Featured labels are English /
+Dutch / Italian / Spanish / French; the curated ISO map in `src/lib/languages.ts`
+is larger. Unknown or crafted input is dropped — never interpolated into a prompt.
+
+The two backends have no shared system-prompt mechanism, so each adapter
+enforces the directive its own way:
 
 - **digigraph** has a system-prompt slot: the BFF forwards the header and
   digigraph's `research_node` appends a `Respond only in <language>` line (plus
@@ -781,19 +783,25 @@ so each adapter enforces the directive its own way:
   the outgoing input text, resent on every turn since Foundry (not this
   adapter) holds conversation history.
 
-**Embed slash commands (#3418 / #3511 / #3556).** `@digithings/digichat-ui` `slash-commands.ts`
-owns the public palette on `/embed` (and therefore digithings.ai `/chat`):
-`/search` and `/vault` (aliases `/docs` / `/digisearch` / `/digivault`) force a locate
-then synthesize — the user string is the tool argument, forwarded as
-`X-Digi-Force-Tool` by `use-embed-digi-chat.ts` and the `/api/chat` BFF.
-`/lang`, `/help`, `/new`, `/copy`, `/export`, `/websearch`, `/settings`, and `/byok`
-(alias `/key`) never leave the browser. `/websearch` toggles opt-in External cites
-when the tenant allows it (footer checkbox removed). `/settings` opens an in-chat
-CLI settings list (Up/Down + Enter); `/byok` opens the BYOK flow after a chat has
-started. Palette keyboard: Up/Down navigate, Enter select; language presets dive
-in with Up/Down (no free-typing required). Public copy labels Vault (not Docs).
-Signed-in ChatShell keeps `/clear` `/history` `/scope` plus the same `/byok` /
-`/websearch` / `/settings` surface.
+**Embed slash commands (#3418 / #3511 / #3556 / #3733).** `@digithings/digichat-ui` `slash-commands.ts`
+owns the public palette on `/embed` (and the dashboard popup iframe). The first-party
+`digichat` Thread mounts assistant-ui `ComposerTriggerPopover` +
+`unstable_useSlashCommandAdapter` on compact embed/modal composers. Full-app `/`
+keeps the tool catalog bar and does not mount this palette.
+
+`/search` and `/vault` (`/docs`) still force a locate then synthesize — the user
+string is the tool argument, forwarded as `X-Digi-Force-Tool`. `/digisearch` and
+`/digivault` toggle session prefs (default ON); disabled catalog ids travel as
+`X-Digi-Disabled-Tools` (BFF allowlists, digigraph subtracts). `/language` (alias
+`/lang`) plus featured English / Dutch / Italian / Spanish / French resolve through
+the mirrored ISO map — unknown input is not sent upstream. `/websearch` toggles
+External cites when the tenant allows it (session default ON). `/settings` opens a
+themed session pane (tools, language, BYOK when allowed); `/byok` (`/key`) opens
+the BYOK flow. `/help`, `/new`, `/copy`, `/export` stay client-only. Reload and
+`/new` reset tools ON + English (not localStorage). In-iframe “ask digichat”
+chrome is omitted on the first-party skin; outer launcher title / new chat / close
+and marketing footer attribution stay. Signed-in ChatShell keeps `/clear`
+`/history` `/scope` plus the same `/byok` / `/websearch` / `/settings` surface.
 
 **Sources on the transcript (#3419 / 2.0).** assistant-ui `Source` parts and tool
 output document lists render inline in `CliThread`. Vault note `body` may still
@@ -1255,13 +1263,15 @@ vendored under `src/components/assistant-ui/skins/`, or first-party `digichat`
 [`frontend/digiweb/CHAT_THEME.md`](../digiweb/CHAT_THEME.md)). Product embed
 examples `config/examples/digithings-ai-embed.yaml` and `occ-embed.yaml` set
 `chrome.skin: digichat` and keep `backend.type: digigraph` with the
-digisearch / digivault catalog (web_search opt-in on digithings.ai only).
-YAML `hosts` resolve for `/embed` first paint (first-party / token rules
-unchanged). `ProductStockShell` mounts `ToolCatalogBar` from `tools.catalog`
-when the host passes `sessionKey` (embed host or thread id) so the digichat
-skin does not drop Search / Vault / Web search; toggles arm
-`X-Digi-Force-Tool` (catalog-allowlisted on the BFF). Disclosure modes
-still drive reasoning / tool UI when those parts appear in the stream.
+digisearch / digivault catalog (web_search tenant-allowed on digithings.ai;
+embed/popup session defaults all three tools ON). YAML `hosts` resolve for
+`/embed` first paint (first-party / token rules unchanged). `ProductStockShell`
+mounts `ToolCatalogBar` only for `chrome.mode: app`. Embed / modal / sidebar
+use assistant-ui `ComposerTriggerPopover` (`unstable_useSlashCommandAdapter`)
+instead; `/search` and `/vault` still arm `X-Digi-Force-Tool`, and session
+toggles send `X-Digi-Disabled-Tools` (catalog-allowlisted on the BFF).
+Disclosure modes still drive reasoning / tool UI when those parts appear
+in the stream.
 
 **Client container — pick a template (not docs-only):**
 

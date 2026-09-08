@@ -13,6 +13,7 @@ import { type BYOKProvider } from "@/hooks/use-byok-key";
 import { p } from "@/lib/base-path";
 import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/embed-gate";
 import { resolveLanguageCode } from "@/lib/languages";
+import { omitForcedCatalogIds } from "@/lib/deploy-config/force-tool";
 import {
   ACTIVITY_PART_TYPE,
   messageActivities,
@@ -184,6 +185,11 @@ type UseEmbedDigiChatOptions = {
    */
   getEnableWebSearch?: () => boolean;
   /**
+   * Send-time accessor for session-disabled catalog tools (#3733).
+   * Comma-separated catalog ids; BFF allowlists before forwarding.
+   */
+  getDisabledTools?: () => string;
+  /**
    * Optional deploy-allowlisted model id. Read at send time (same freeze
    * reason as getResponseLanguage) so the picker can change after mount.
    */
@@ -221,6 +227,7 @@ export function useEmbedDigiChat({
   onGated,
   getResponseLanguage,
   getEnableWebSearch,
+  getDisabledTools,
   getSelectedModel,
   planProof,
   getPlanProof,
@@ -287,6 +294,16 @@ export function useEmbedDigiChat({
           if (getEnableWebSearch?.()) {
             headers["X-Digi-Enable-Web-Search"] = "1";
           }
+          const disabled = omitForcedCatalogIds(
+            (getDisabledTools?.() ?? "")
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+            forceTool,
+          );
+          if (disabled.length) {
+            headers["X-Digi-Disabled-Tools"] = disabled.join(",");
+          }
           const turnMode = takePendingTurnMode(embedHost);
           if (turnMode) {
             headers["X-Digi-Turn-Mode"] = turnMode;
@@ -344,6 +361,7 @@ export function useEmbedDigiChat({
         trialUnlocked,
         getResponseLanguage,
         getEnableWebSearch,
+        getDisabledTools,
         getSelectedModel,
         getPlanProof,
       ],

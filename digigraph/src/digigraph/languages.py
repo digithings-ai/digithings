@@ -1,18 +1,61 @@
-"""Curated response-language directive for digichat `/lang` (#2103 / #3418).
+"""Response-language directive for digichat `/language` (#2103 / #3418 / #3733).
 
 Only the mapped display name below ever reaches a prompt — the raw
 X-Digi-Language header/request value is never interpolated directly, so an
 unrecognized or crafted value can at most be ignored, never inject text.
+
+Keep in exact sync with ``frontend/digichat/src/lib/languages.ts`` ``LANGUAGES``.
 """
 
 from __future__ import annotations
 
 LANGUAGE_NAMES: dict[str, str] = {
-    "en": "English",
+    "af": "Afrikaans",
+    "ar": "Arabic",
+    "bg": "Bulgarian",
+    "bn": "Bengali",
+    "ca": "Catalan",
+    "cs": "Czech",
+    "da": "Danish",
     "de": "German",
-    "it": "Italian",
+    "el": "Greek",
+    "en": "English",
     "es": "Spanish",
+    "et": "Estonian",
+    "fa": "Persian",
+    "fi": "Finnish",
     "fr": "French",
+    "ga": "Irish",
+    "he": "Hebrew",
+    "hi": "Hindi",
+    "hr": "Croatian",
+    "hu": "Hungarian",
+    "id": "Indonesian",
+    "is": "Icelandic",
+    "it": "Italian",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "lt": "Lithuanian",
+    "lv": "Latvian",
+    "ms": "Malay",
+    "nl": "Dutch",
+    "no": "Norwegian",
+    "pl": "Polish",
+    "pt": "Portuguese",
+    "ro": "Romanian",
+    "ru": "Russian",
+    "sk": "Slovak",
+    "sl": "Slovenian",
+    "sr": "Serbian",
+    "sv": "Swedish",
+    "sw": "Swahili",
+    "ta": "Tamil",
+    "th": "Thai",
+    "tr": "Turkish",
+    "uk": "Ukrainian",
+    "ur": "Urdu",
+    "vi": "Vietnamese",
+    "zh": "Chinese",
 }
 
 

@@ -41,9 +41,14 @@ export {
 
 export {
   filterForceToolHeader,
+  filterDisabledToolsHeader,
   catalogAllowsForceTool,
+  catalogAllowsDisableId,
   allowedForceTools,
+  expandDisabledCatalogIds,
+  omitForcedCatalogIds,
   FORCE_TOOL_BY_CATALOG_ID,
+  DISABLEABLE_CATALOG_IDS,
 } from "./force-tool";
 
 export {

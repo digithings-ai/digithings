@@ -7,7 +7,7 @@ deployment:
     theme: dark
     skin: digichat
     title: ask digichat
-    welcome: Ask about house research, portfolio decisions, and the page you are on.
+    welcome: Ask about this page.
     placeholder: Ask about this page
     suggestions:
       - What changed in the house book?
@@ -45,7 +45,7 @@ deployment:
       - id: digivault
         default: true
       - id: web_search
-        default: false
+        default: true
   gate:
     mode: ungated
     activityDetail: labels

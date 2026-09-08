@@ -424,6 +424,52 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-Digi-Force-Tool"]).toBeUndefined();
   });
 
+  it("forwards allowlisted X-Digi-Disabled-Tools and drops unknown tokens (#3733)", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-disabled-tools": "digisearch,rm -rf",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    const forwarded = call?.headers?.["X-Digi-Disabled-Tools"];
+    expect(forwarded).toBe("digisearch");
+  });
+
+  it("forwards X-Digi-Disabled-Tools on regenerate (session prefs, not send-only)", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-disabled-tools": "digivault",
+          "x-digi-force-tool": "digisearch",
+          "x-digi-turn-mode": "regenerate",
+          "x-digichat-session": "sess-disabled-regen",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    await res.text();
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Force-Tool"]).toBeUndefined();
+    expect(call?.headers?.["X-Digi-Disabled-Tools"]).toBe("digivault");
+  });
+
   it("returns 409 run_in_progress for concurrent regen on the same session", async () => {
     vi.mocked(createUIMessageStreamResponse).mockImplementationOnce(
       ({ headers }: { headers?: HeadersInit }) =>

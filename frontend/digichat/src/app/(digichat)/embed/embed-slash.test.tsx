@@ -28,9 +28,20 @@ describe("embed stock chrome wiring", () => {
     expect(embedClientSrc).not.toMatch(/LanguageSelect/);
   });
 
+  it("omits the in-iframe brand header on the digichat skin", () => {
+    expect(embedClientSrc).toMatch(/shouldRenderEmbedBrandHeader/);
+  });
+
   it("passes embed host sessionKey so ProductStockShell can arm force-tool", () => {
     expect(embedClientSrc).not.toMatch(/ToolCatalogBar/);
     expect(embedClientSrc).toMatch(/sessionKey=\{gate\.host\}/);
     expect(embedClientSrc).toMatch(/webSearchScope=\{webSearchScope\}/);
+  });
+
+  it("hides the in-iframe brand header on the first-party digichat skin (#3733)", () => {
+    expect(embedClientSrc).toMatch(/shouldRenderEmbedBrandHeader/);
+    expect(embedClientSrc).toMatch(/EmbedChatPrefsProvider/);
+    expect(embedClientSrc).toMatch(/EmbedSettingsPane/);
+    expect(embedClientSrc).not.toMatch(/Page context from this host is attached/);
   });
 });

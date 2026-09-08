@@ -50,13 +50,15 @@ def _resolve_openwebui_format(req: ChatCompletionRequest, request: Request) -> b
 
 
 def _resolve_allowed_tools_chat(req: ChatCompletionRequest, request: Request) -> list[str] | None:
-    """Tool allowlist from JSON body or X-Allowed-Tools header. None = use project config / DIGI_ALLOWED_TOOLS."""
+    """Tool allowlist from JSON body or X-Allowed-Tools header. None = use project config / DIGI_ALLOWED_TOOLS.
+
+    Session disables travel as WorkflowRequest.disabled_tools (X-Digi-Disabled-Tools),
+    applied *after* that allowlist in tool_policy so they cannot escalate past DIGI_ALLOWED_TOOLS.
+    """
     if req.allowed_tools is not None:
         return req.allowed_tools
     h = (request.headers.get("X-Allowed-Tools") or "").strip()
-    if h:
-        return [p.strip() for p in h.split(",") if p.strip()]
-    return None
+    return [p.strip() for p in h.split(",") if p.strip()] if h else None
 
 
 def _resolve_require_tool_calls_chat(req: ChatCompletionRequest, request: Request) -> bool | None:

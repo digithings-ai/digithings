@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  armForceToolThenHold,
   setPendingForceTool,
   setPendingTurnMode,
   takePendingForceTool,
@@ -37,5 +38,13 @@ describe("pending-chat-headers", () => {
     setPendingTurnMode("", "regenerate");
     expect(takePendingForceTool("  ")).toBeUndefined();
     expect(takePendingTurnMode("")).toBeUndefined();
+  });
+
+  it("arms slash force-tool before a gated onHold that takes it", () => {
+    let held: string | undefined;
+    armForceToolThenHold("embed-host", "digisearch", () => {
+      held = takePendingForceTool("embed-host");
+    });
+    expect(held).toBe("digisearch");
   });
 });

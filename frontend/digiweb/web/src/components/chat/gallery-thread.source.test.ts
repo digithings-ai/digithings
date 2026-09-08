@@ -30,6 +30,8 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(thread).toMatch(/state="user"/);
     expect(thread).toMatch(/welcomeBody/);
     expect(thread).toMatch(/onComposerSubmit/);
+    expect(thread).toMatch(/ComposerTriggerPopover/);
+    expect(thread).toMatch(/Unstable_TriggerPopoverRoot/);
     expect(thread).toMatch(/digichat-thread__viewport/);
     expect(thread).not.toMatch(/state="assistant"/);
     expect(thread).not.toMatch(/from ["']lucide-react["']/);
@@ -64,12 +66,16 @@ describe("gallery Thread is the product digichat skin", () => {
   it("portaled More-menu CSS is gated so catalog skins keep their menus", () => {
     const gate =
       ':is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-content';
+    const popoverGate =
+      ':is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover';
     const chatbot = read(
       "../../../../reference/app/(chatbot)/chatbot/chatbot.css",
     );
     const aui = read("../../styles/chat-aui.css");
     expect(chatbot).toContain(gate);
     expect(aui).toContain(gate);
+    expect(chatbot).toContain(popoverGate);
+    expect(aui).toContain(popoverGate);
     expect(chatbot).not.toMatch(/^\.aui-action-bar-more-content \{/m);
     expect(aui).not.toMatch(/^\.aui-action-bar-more-content \{/m);
   });

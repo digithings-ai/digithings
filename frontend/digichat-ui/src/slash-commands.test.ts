@@ -25,7 +25,7 @@ describe("parseSlashInput", () => {
   it("keeps /docs as a vault alias", () => {
     expect(parseSlashInput("/docs notes")).toMatchObject({
       kind: "command",
-      command: { id: "vault", forceTool: "digivault_search_notes" },
+      command: { id: "vault", forceTool: "digivault" },
       arg: "notes",
     });
   });
@@ -44,16 +44,19 @@ describe("parseSlashInput", () => {
     expect(parsed.arg).not.toMatch(/please/i);
   });
 
-  it("aliases /digisearch and /digivault onto the public commands", () => {
-    expect(parseSlashInput("/digisearch jwt")).toMatchObject({
+  it("aliases /docs onto vault force, and treats /digisearch /digivault as toggles", () => {
+    expect(parseSlashInput("/docs notes")).toMatchObject({
       kind: "command",
-      command: { id: "search", forceTool: "digisearch" },
-      arg: "jwt",
+      command: { id: "vault", forceTool: "digivault" },
+      arg: "notes",
     });
-    expect(parseSlashInput("/digivault original notes")).toMatchObject({
+    expect(parseSlashInput("/digisearch")).toMatchObject({
       kind: "command",
-      command: { id: "vault", forceTool: "digivault_search_notes" },
-      arg: "original notes",
+      command: { id: "toggle-digisearch", kind: "toggle" },
+    });
+    expect(parseSlashInput("/digivault")).toMatchObject({
+      kind: "command",
+      command: { id: "toggle-digivault", kind: "toggle" },
     });
   });
 
@@ -74,6 +77,11 @@ describe("parseSlashInput", () => {
       kind: "command",
       command: { id: "lang" },
       arg: "de",
+    });
+    expect(parseSlashInput("/language dutch")).toMatchObject({
+      kind: "command",
+      command: { id: "lang" },
+      arg: "dutch",
     });
   });
 
@@ -116,7 +124,7 @@ describe("matchingSlashCommands", () => {
     const hints = matches.map((c) => c.hint);
     expect(hints).toContain("Search the knowledge base");
     expect(hints).toContain("Vault");
-    expect(hints).toContain("Web search");
+    expect(hints).toContain("Toggle web search");
     expect(hints).toContain("BYOK");
     expect(hints).toContain("Settings");
   });
@@ -135,6 +143,7 @@ describe("matchingSlashCommands", () => {
     expect(matchingSlashCommands("/sear").map((c) => c.id)).toEqual(["search"]);
     expect(matchingSlashCommands("/search foo")).toEqual([]);
     expect(matchingSlashCommands("/va").map((c) => c.id)).toEqual(["vault"]);
+    expect(matchingSlashCommands("/digis").map((c) => c.id)).toEqual(["toggle-digisearch"]);
   });
 
   it("lists /copy and /export in the palette and narrows by prefix (#3658)", () => {
@@ -155,12 +164,13 @@ describe("slashHelpText", () => {
     const help = slashHelpText({ webSearch: true, byok: true });
     expect(help).toContain("/search — Search the knowledge base");
     expect(help).toContain("/vault — Vault");
-    expect(help).toContain("/websearch — Web search");
+    expect(help).toContain("/websearch — Toggle web search");
     expect(help).toContain("/byok — BYOK");
     expect(help).toContain("/settings — Settings");
-    expect(help).not.toContain("digisearch");
     expect(help).not.toContain("digivault_get_note");
     expect(help).not.toContain("/docs —");
+    expect(help).toContain("/digisearch — Toggle corpus search");
+    expect(help).toContain("/digivault — Toggle vault");
   });
 
   it("lists /copy and /export with client copy (#3658)", () => {
@@ -174,15 +184,16 @@ describe("slashHelpText", () => {
 });
 
 describe("isLangCode", () => {
-  it("accepts the curated list only", () => {
-    expect(isLangCode("de")).toBe(true);
+  it("accepts the featured list only", () => {
+    expect(isLangCode("nl")).toBe(true);
+    expect(isLangCode("de")).toBe(false);
     expect(isLangCode("klingon")).toBe(false);
   });
 });
 
 describe("LANG_LABELS", () => {
-  it("names every curated code in English", () => {
-    expect(LANG_LABELS.de).toBe("German");
+  it("names every featured code in English", () => {
+    expect(LANG_LABELS.nl).toBe("Dutch");
     expect(LANG_LABELS.en).toBe("English");
   });
 });
