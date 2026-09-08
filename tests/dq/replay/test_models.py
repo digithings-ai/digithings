@@ -8,6 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from digiquant.dashboard.replay import models as replay_models
 from digiquant.dashboard.replay.models import (
     FORBIDDEN_IMPORT_PREFIXES,
     ExecutionPolicy,
@@ -22,6 +23,7 @@ from digiquant.dashboard.replay.models import (
     inconclusive_result,
     max_drawdown_from_nav_path,
 )
+from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
 
@@ -282,3 +284,59 @@ def test_legacy_path_allows_empty_targets_exit_to_cash() -> None:
         target_weights=(),
     )
     assert req.schema_version == "1.0"
+
+
+def test_schedule_rejects_seed_holdings() -> None:
+    # A seed would consume the first sync bar and silently drop a day-one
+    # schedule entry (same-bar execution never recurs).
+    with pytest.raises(ValueError, match="initial_holdings must be empty"):
+        _sched_request(
+            initial_holdings=(HoldingQuantity(ticker="AAPL", quantity=Decimal("10")),),
+        )
+
+
+def test_schedule_rejects_nonzero_commission() -> None:
+    with pytest.raises(ValueError, match="commission_rate must be 0"):
+        _sched_request(
+            execution=ExecutionPolicy(commission_rate=Decimal("0.001"), next_bar_execution=False),
+        )
+
+
+def test_schedule_rejects_partial_fill_fraction() -> None:
+    with pytest.raises(ValueError, match="fill_fraction must be 1"):
+        _sched_request(
+            execution=ExecutionPolicy(fill_fraction=Decimal("0.5"), next_bar_execution=False),
+        )
+
+
+def test_entry_validates_weights_standalone() -> None:
+    # Entry-level shape rules hold without series context (membership stays
+    # parent-side); unsorted weights fail at construction.
+    with pytest.raises(ValueError, match="must be sorted by ticker"):
+        ScheduledTargetWeights(
+            effective_date=date(2024, 1, 2),
+            weights=(
+                TargetWeight(ticker="MSFT", weight=Decimal("0.5")),
+                TargetWeight(ticker="AAPL", weight=Decimal("0.5")),
+            ),
+        )
+
+
+def test_entry_rejects_overweight_standalone() -> None:
+    with pytest.raises(ValueError, match="cannot exceed 1"):
+        ScheduledTargetWeights(
+            effective_date=date(2024, 1, 2),
+            weights=(
+                TargetWeight(ticker="AAPL", weight=Decimal("0.6")),
+                TargetWeight(ticker="MSFT", weight=Decimal("0.6")),
+            ),
+        )
+
+
+def test_schema_version_is_literal_pinned() -> None:
+    with pytest.raises(ValidationError):
+        _sched_request(schema_version="9.9")
+
+
+def test_scheduled_target_weights_exported() -> None:
+    assert "ScheduledTargetWeights" in replay_models.__all__

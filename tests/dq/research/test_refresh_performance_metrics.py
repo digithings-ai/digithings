@@ -884,14 +884,14 @@ _verify_mod = _load_verify_module()
 
 
 class TestWriteNavNormalization:
-    """``_write_nav`` anchors every write to the full-path inception base."""
+    """``_write_nav`` derives the inception base from the full path itself."""
 
     def test_full_path_normalizes_to_inception_100(self) -> None:
         from decimal import Decimal
 
         sb = _fake_with({})
         engine = {"2026-06-22": Decimal("100000000"), "2026-09-04": Decimal("99353349")}
-        n = _verify_mod._write_nav(sb, "house", engine, Decimal("100000000"))
+        n = _verify_mod._write_nav(sb, "house", engine)
         assert n == 2
         rows = {r["date"]: r["nav"] for r in sb.store["nav_history"]}
         assert rows["2026-06-22"] == 100.0
@@ -902,15 +902,15 @@ class TestWriteNavNormalization:
         from decimal import Decimal
 
         sb = _fake_with({})
-        n = _verify_mod._write_nav(
-            sb, "house", {"2026-09-04": Decimal("99353349")}, Decimal("100000000")
-        )
+        engine = {"2026-06-22": Decimal("100000000"), "2026-09-04": Decimal("99353349")}
+        n = _verify_mod._write_nav(sb, "house", engine, {"2026-09-04"})
         assert n == 1
         assert sb.store["nav_history"][0]["nav"] == pytest.approx(99.353349)
+        assert sb.store["nav_history"][0]["date"] == "2026-09-04"
 
     def test_zero_inception_refuses(self) -> None:
         from decimal import Decimal
 
         sb = _fake_with({})
-        assert _verify_mod._write_nav(sb, "house", {"2026-09-04": Decimal("1")}, Decimal("0")) == 0
+        assert _verify_mod._write_nav(sb, "house", {"2026-09-04": Decimal("0")}) == 0
         assert sb.store.get("nav_history", []) == []

@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Annotated, TypeAlias
+from typing import Annotated, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -148,6 +148,18 @@ class ScheduledTargetWeights(ReplayContractModel):
             return tuple(value)
         return value
 
+    @model_validator(mode="after")
+    def _validate_entry(self) -> ScheduledTargetWeights:
+        # Entry-level shape rules (sorted / unique / sum <= 1). Ticker
+        # membership needs series context, so the parent request re-checks
+        # the full entry via _validate_weight_tuple.
+        _validate_weight_tuple(
+            self.weights,
+            label="weights",
+            tickers={t.ticker for t in self.weights},
+        )
+        return self
+
 
 class HoldingQuantity(ReplayContractModel):
     """Current share quantity for one ticker at the decision cutoff."""
@@ -169,7 +181,7 @@ class ExecutionPolicy(ReplayContractModel):
 class PortfolioReplayRequest(ReplayContractModel):
     """Validated input for one shared-cash multi-instrument replay arm."""
 
-    schema_version: str = "1.0"
+    schema_version: Literal["1.0", "2.0"] = "1.0"
     request_id: NonEmptyId
     starting_cash: FiniteNonNegDec
     series: tuple[InstrumentBarSeries, ...]
@@ -226,10 +238,21 @@ class PortfolioReplayRequest(ReplayContractModel):
                 raise ValueError("schema_version must be '2.0' with a weight_schedule")
             if self.target_weights:
                 raise ValueError("target_weights must be empty with a weight_schedule")
+            if self.initial_holdings:
+                # A seed would consume the first sync bar and silently drop a
+                # day-one schedule entry (same-bar execution never recurs).
+                # The schedule's first entry IS the day-one book — seed nothing.
+                raise ValueError("initial_holdings must be empty with a weight_schedule")
             if self.execution.next_bar_execution:
                 raise ValueError(
                     "execution.next_bar_execution must be False with a weight_schedule"
                 )
+            if self.execution.commission_rate != 0:
+                # The official book is a zero-fee replay; a fee-dragged 2.0
+                # book must never validate as the production schedule.
+                raise ValueError("execution.commission_rate must be 0 with a weight_schedule")
+            if self.execution.fill_fraction != 1:
+                raise ValueError("execution.fill_fraction must be 1 with a weight_schedule")
             bar_dates = {b.ts.date() for b in self.series[0].bars}
             entry_dates = [entry.effective_date for entry in schedule]
             if entry_dates != sorted(entry_dates):
@@ -303,7 +326,7 @@ class NavPoint(ReplayContractModel):
 class PortfolioReplayResult(ReplayContractModel):
     """Strict internal portfolio result from one spawned shared-cash engine."""
 
-    schema_version: str = "1.0"
+    schema_version: Literal["1.0", "2.0"] = "1.0"
     request_id: NonEmptyId
     request_content_hash: NonEmptyId
     status: PortfolioReplayStatus
@@ -393,7 +416,7 @@ def inconclusive_result(
     status: PortfolioReplayStatus,
     message: str,
     starting_cash: Decimal = Decimal("0"),
-    schema_version: str = "1.0",
+    schema_version: Literal["1.0", "2.0"] = "1.0",
 ) -> PortfolioReplayResult:
     """Build a typed non-ok result with no fabricated portfolio numbers."""
     if status == PortfolioReplayStatus.OK:
@@ -745,6 +768,7 @@ __all__ = [
     "ReplayContractModel",
     "ReplayInputManifest",
     "ReplayPairSpec",
+    "ScheduledTargetWeights",
     "SharedInputIdentity",
     "TargetWeight",
     "WalkForwardFold",

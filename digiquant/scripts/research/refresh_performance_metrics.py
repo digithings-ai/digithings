@@ -8,8 +8,10 @@ Uses Supabase price_history closes + positions snapshot rows to populate:
   - positions: unrealized_pnl_pct, day_change_pct, since_entry_return_pct, metrics_as_of
   - position_events: cumulative_return_since_event_pct (where price exists)
    - nav_history: GUARDED ONLY — the Nautilus schedule replay
-     (verify_nav_replay.py --write, schema 2.0, causal-fill convention) is the sole
-     writer of NAV. This script asserts the row exists and fails loudly otherwise.
+     (verify_nav_replay.py --write, schema 2.0, causal-fill convention) is the
+     last writer of NAV under the documented workflow order (the booking path
+     still writes provisional rows at book time). This script asserts the row
+     exists and fails loudly otherwise.
    - portfolio_metrics: one row per calendar day for continuity (computed_from=refresh_script).
   pnl_pct reads the engine-written nav_history day return; never finalized
   accounting periods (event-boundary realized returns are a display input, not
@@ -32,7 +34,8 @@ Operator densification (--fill-calendar-through — run_db_first.py / manual onl
   the absent-positions signal a missing-book detector needs (#1746, #1766).  It also
   only advances *forward* from max(positions.date), so it cannot repair earlier holes.
 
-Does not replace update_tearsheet.py NAV simulation history; it aligns end-of-day
+NAV is engine-written (verify_nav_replay.py --write, last writer under the
+workflow order); this script guards the row exists and aligns end-of-day
 metrics with stored closes so the dashboard matches market data.
 
 Usage:
@@ -104,7 +107,12 @@ def _sb():
 
 
 def _fetch_closes(sb, ticker: str, dates: List[str]) -> Dict[str, float]:
-    """date -> close for ticker for given ISO dates (best effort)."""
+    """date -> close for ticker for given ISO dates (best effort).
+
+    Unscoped by workspace_id by design: market-data rows are null-workspace
+    (HOUSE_BOOK_SCOPE.md convention), and the read must see whatever the
+    ingest wrote — the same rows the engine replay consumes.
+    """
     if not dates:
         return {}
     res = (
@@ -622,10 +630,11 @@ def refresh_nav_point(sb, as_of: str) -> None:
     """Guard that the engine wrote NAV for ``as_of`` — never computes it.
 
     Single source of truth: ``verify_nav_replay.py --write`` (Nautilus schedule
-    replay, schema 2.0, causal-fill convention) is the sole writer of
-    ``nav_history``. This guard asserts the row exists and raises otherwise, so
-    a day the engine step missed fails loudly instead of silently carrying a
-    stale NAV forward.
+    replay, schema 2.0, causal-fill convention) is the last writer of
+    ``nav_history`` under the documented workflow order (the booking path still
+    writes provisional rows at book time). This guard asserts the row exists
+    and raises otherwise, so a day the engine step missed fails loudly instead
+    of silently carrying a stale NAV forward.
     """
     res = _eq_house(sb.table("nav_history").select("nav")).eq("date", as_of).limit(1).execute()
     rows = getattr(res, "data", None) or []
@@ -638,8 +647,15 @@ def refresh_nav_point(sb, as_of: str) -> None:
 
 
 def run_one_day(sb, metrics_date: str) -> None:
-    """Carry-forward snapshot (if needed), refresh position metrics, NAV, portfolio_metrics."""
+    """Fail-closed on missing engine NAV, then positions/event/metrics.
+
+    The engine row is asserted FIRST: a day the engine step missed aborts
+    before any positions/event/metrics writes, so a retry after the engine
+    catches up replays the whole day from scratch (carry-forward makes the
+    deferral lossless).
+    """
     print(f"\n📊 {metrics_date}")
+    refresh_nav_point(sb, metrics_date)
     carry_forward_positions(sb, metrics_date)
     u = refresh_positions_metrics(sb, metrics_date)
     print(f"   positions performance columns updated: {u}")

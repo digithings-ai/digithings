@@ -115,10 +115,12 @@ def _run_engine(request: PortfolioReplayRequest) -> PortfolioReplayResult:
             )
         prepared_bars[series.ticker] = bars
 
-    # Schema 1.0: one target set executed once (legacy path, unchanged).
+    # Schema 1.0: one target set executed once (legacy trigger semantics;
+    # submission now sells-first for both paths — see _submit_rebalance_orders).
     # Schema 2.0: ordered {effective_date: weights} executed per entry bar —
     # submission and execution share the bar (causal convention: the book
-    # dated D earns the move into D+1, never retroactively).
+    # dated D earns the move into D+1, never retroactively). Daily bars
+    # assumed: one execution per date (first sync bar wins).
     if request.weight_schedule:
         schedule: dict[date, dict[str, Decimal]] = {
             entry.effective_date: {t.ticker: t.weight for t in entry.weights}

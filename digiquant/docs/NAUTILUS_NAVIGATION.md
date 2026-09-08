@@ -74,8 +74,9 @@ BacktestEngine with zero-fee, same-bar fills:
   bar date in the series (subset check — prevents silent no-ops).
 - **Convention:** a schedule date is both the submission and execution date —
   the row dated D is submitted at D's close and fills at D's close (causal
-  forward writer; matches legacy methodology, verified to <1e-6 on
-  2026-06→09 restatement #3695).
+  forward writer; matches legacy methodology. The 2026-06→09 restatement run
+  matched the arithmetic chain to <1e-6; the enforced forward guard band is
+  25bp fail / 1bp warn — see `verify_nav_replay.py`).
 - **Ordering:** sells-before-buys two-pass per rebalance avoids
   `AccountBalanceNegative` halts on fully-invested books.
 - **Bar volume:** Nautilus market fills are constrained by bar volume — the
@@ -83,7 +84,9 @@ BacktestEngine with zero-fee, same-bar fills:
   volume is a test-only hazard).
 - **Fractional lots:** `Equity` hardcodes `size_precision=0` (no fractional
   units), so the harness runs at scaled notional ($100M) with integer
-  `ROUND_DOWN` lots, then normalizes — engine NAV == arithmetic chain.
+  `ROUND_DOWN` lots, then normalizes — on the restatement run engine NAV
+  matched the arithmetic chain to <1e-6 (integer-lot dust ≈0.05bp/lot at
+  $100M scale).
 - **Verify script:** `digiquant/scripts/research/verify_nav_replay.py`
   rebuilds the causal schedule + bars from Supabase and compares engine NAV
   vs `nav_history` (non-zero exit on breach).

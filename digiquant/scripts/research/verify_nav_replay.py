@@ -7,9 +7,12 @@ compares the engine NAV path against recorded ``nav_history``.
 
 Single source of truth: with ``--write`` the engine NAV path (normalized to
 the inception-100 scale) is persisted to ``nav_history`` — the engine is the
-only writer of NAV. ``refresh_performance_metrics.refresh_nav_point`` only
-guards that the row exists; tearsheets read the stored series. Default mode
-is read-only verification.
+last writer under the documented workflow order (the booking path still writes
+provisional rows at book time; the engine step runs after and overwrites them,
+and a read-only verify runs after metrics so drift fails loudly).
+``refresh_performance_metrics.refresh_nav_point`` only guards that the row
+exists; tearsheets read the stored series. Default mode is read-only
+verification.
 
 Exit codes: 0 = within tolerance (or write succeeded), 1 = usage/config
 error, 2 = NAV breach / engine failure.
@@ -31,7 +34,11 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
-FAIL_TOL_BP = 25.0  # breach: engine vs recorded daily return differs by >25bp
+FAIL_TOL_BP = 25.0  # breach: engine vs recorded daily return differs by >25bp.
+# Rationale: the restatement replay matched to <1e-6, but this guard compares
+# against *stored* rows that may carry integer-lot quantization noise at $100M
+# scale (~0.05bp/lot) plus operator touch-ups. 25bp keeps the red band for
+# real methodology breaks (e.g. stale-book scale errors), not dust.
 WARN_TOL_BP = 1.0  # warning band: integer-lot quantization noise lives here
 SCALED_NOTIONAL_USD = 100_000_000.0  # scaled cash so integer lots ≈ arithmetic chain
 
@@ -58,9 +65,14 @@ def _get_client():
     except ImportError as exc:
         raise SystemExit(f"pip install supabase ({exc})")
     url = os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL", "")).strip()
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    key = os.environ.get(
+        "CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    ).strip()
     if not url or not key:
-        raise SystemExit("CORE_SUPABASE_URL/SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
+        raise SystemExit(
+            "CORE_SUPABASE_URL/SUPABASE_URL and "
+            "CORE_SUPABASE_SERVICE_KEY/SUPABASE_SERVICE_ROLE_KEY required"
+        )
     return create_client(url, key)
 
 
@@ -150,33 +162,41 @@ def build_request(price_rows, position_rows, nav_rows):
     )
 
 
-def _write_nav(sb, house_id: str, engine_nav: dict[str, object], inception_nav: object) -> int:
-    """Persist the engine NAV path to ``nav_history`` on the inception-100 scale.
+def _write_nav(
+    sb,
+    house_id: str,
+    full_engine_nav: dict[str, object],
+    dates_to_write: set[str] | None = None,
+) -> int:
+    """Persist engine NAV rows to ``nav_history`` on the inception-100 scale.
 
-    Normalization: ``nav[d] = 100 * engine[d] / inception_nav`` where
-    ``inception_nav`` is the engine NAV on the first bar of the full path
-    (single-date writes must anchor to the same base). Returns the number of
-    rows upserted.
+    Normalization: ``nav[d] = 100 * engine[d] / base`` where ``base`` is
+    ALWAYS the engine NAV on the FIRST bar of the full path — the function
+    derives it internally, so a single-date caller cannot self-normalize to
+    100 by passing a one-row path. ``dates_to_write`` only slices which rows
+    are upserted (None = full path). Returns the number of rows upserted.
     """
     from decimal import Decimal as _Decimal
 
-    dates = sorted(engine_nav)
+    dates = sorted(full_engine_nav)
     if not dates:
         print("WRITE: empty engine NAV path — nothing persisted")
         return 0
-    if not inception_nav:
+    base = _Decimal(str(full_engine_nav[dates[0]]))
+    if not base:
         print("WRITE: zero opening engine NAV — refusing to persist")
         return 0
-    base = _Decimal(str(inception_nav))
+    wanted = dates_to_write if dates_to_write is not None else set(dates)
     ts = datetime.now(tz=timezone.utc).isoformat()
     rows = [
         {
             "workspace_id": house_id,
             "date": d,
-            "nav": round(float(_Decimal(str(engine_nav[d])) / base * 100), 6),
+            "nav": round(float(_Decimal(str(full_engine_nav[d])) / base * 100), 6),
             "updated_at": ts,
         }
         for d in dates
+        if d in wanted
     ]
     sb.table("nav_history").upsert(rows, on_conflict="workspace_id,date").execute()
     print(f"WRITE: {len(rows)} nav_history rows upserted from engine ({dates[0]} → {dates[-1]})")
@@ -198,6 +218,8 @@ def main() -> int:
         help="With --write, persist only this date (YYYY-MM-DD); default persists the full engine path.",
     )
     args = parser.parse_args()
+    if args.date and not args.write:
+        parser.error("--date requires --write (verify mode compares the full path)")
 
     try:
         from digiquant.dashboard.replay.models import PortfolioReplayStatus
@@ -239,12 +261,11 @@ def main() -> int:
 
     engine_nav = {str(p.ts.date()): p.nav for p in result.nav_path}
     if args.write:
-        full_dates = sorted(engine_nav)
         if args.date and args.date not in engine_nav:
             print(f"WRITE FAIL: engine path has no bar for {args.date}")
             return 2
-        target = {args.date: engine_nav[args.date]} if args.date else dict(engine_nav)
-        n = _write_nav(sb, house_id, target, engine_nav[full_dates[0]])
+        target = {args.date} if args.date else None
+        n = _write_nav(sb, house_id, engine_nav, target)
         if not n:
             return 2
         return 0
