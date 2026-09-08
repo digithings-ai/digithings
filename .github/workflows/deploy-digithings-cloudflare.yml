@@ -215,11 +215,14 @@ jobs:
           # policy must not hide there, so assert the refs live only at or
           # after the /openwiki/* block (which itself must exist: without it
           # the wiki would ship unstyled under the /* policy).
-          ! grep -rq "fonts.googleapis.com" dist --exclude-dir=openwiki --exclude=_headers
+          if grep -rq "fonts.googleapis.com" dist --exclude-dir=openwiki --exclude=_headers; then
+            echo "ERROR: Google Fonts ref outside dist/openwiki in dist/ export" >&2; exit 1
+          fi
           grep -q '^/openwiki/\*$' dist/_headers \
             || { echo "ERROR: dist/_headers missing /openwiki/* exception — wiki would break under /* CSP" >&2; exit 1; }
-          awk '/^\/openwiki\/\*$/{exit} {print}' dist/_headers | grep -q "fonts.googleapis.com" \
-            && { echo "ERROR: Google Fonts ref outside /openwiki/* in dist/_headers" >&2; exit 1; } || true
+          if awk '/^\/openwiki\/\*$/{exit} {print}' dist/_headers | grep -q "fonts.googleapis.com"; then
+            echo "ERROR: Google Fonts ref outside /openwiki/* in dist/_headers" >&2; exit 1
+          fi
 
       # The daily freshness probe in smoke-site.yml reads this stamp off the live
       # site (#1759). Validate the stamp the build just wrote with the same
