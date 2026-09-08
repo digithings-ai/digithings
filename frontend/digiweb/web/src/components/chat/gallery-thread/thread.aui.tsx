@@ -54,8 +54,6 @@ import {
 } from "react";
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
 
-type SlashPopoverProps = ComponentPropsWithoutRef<typeof ComposerTriggerPopover>;
-
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
 /**
@@ -111,7 +109,6 @@ export type ThreadProps = {
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
-type SlashPopoverProps = ComponentPropsWithoutRef<typeof ComposerTriggerPopover>;
 export type ThreadSlashTrigger = {
   adapter: SlashPopoverProps["adapter"];
   action: NonNullable<SlashPopoverProps["action"]>;
