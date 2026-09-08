@@ -438,7 +438,7 @@ def run_research_then_portfolio(
     research watchlist; ``None`` fans out over the full watchlist.
 
     ``portfolio_held`` are the prior-book holdings; they are threaded to the
-    7C/7CD cap so a holding is never dropped by ``ATLAS_MAX_ANALYSTS`` and
+    7C/7CD cap so a holding is never dropped by ``DIGIQUANT_MAX_ANALYSTS`` and
     auto-exited by the PM (the Jun-18 IJR regression, #936).
 
     ``deps.research.publish`` is overridden to ``None`` for the research pass —

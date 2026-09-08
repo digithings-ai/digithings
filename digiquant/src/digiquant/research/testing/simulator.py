@@ -36,7 +36,7 @@ What this module provides:
 
 Hard constraints honored:
 - Imports nothing from the real ``supabase`` Python client.
-- No file I/O, no network. ``ATLAS_MAX_ANALYSTS`` is honored when set
+- No file I/O, no network. ``DIGIQUANT_MAX_ANALYSTS`` is honored when set
   (phase 7C / 7C-D / debate caps respect it as in production).
 - Every default response is the smallest valid Pydantic body; tests
   that care about specific values supply ``overrides``.

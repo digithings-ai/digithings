@@ -1932,7 +1932,7 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   Split from research in epic #471 per [ADR-0015](../docs/adr/0015-research-vs-portfolio.md);
   topology canonical in [ADR-0020](../docs/adr/0020-dashboard-mvp-daily-delta.md).
   **H4 is the sole fan-out cap chokepoint** — `roster_cap.capped_tickers` bounds the
-  H5/H6 roster width to `max(ATLAS_MAX_ANALYSTS, len(prior_book))`; the prior book is
+  H5/H6 roster width to `max(DIGIQUANT_MAX_ANALYSTS, len(prior_book))`; the prior book is
   the only sanctioned overshoot (#936) and thesis vehicles are prioritised within the
   cap rather than exempt from it (#1767). The `build_h5_asset_analyst` /
   `build_h6_deliberation` compile-time builders also call it, but are test-only —
