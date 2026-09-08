@@ -4,10 +4,15 @@
  * like the live stack (website embed and digiquant dashboard).
  */
 
+/** JSON-object args so fixture parts match assistant-ui `ReadonlyJSONObject`. */
+export type FixtureToolArgs = {
+  readonly [key: string]: string | number | boolean | null;
+};
+
 export type FixtureTool = {
   toolCallId: string;
   toolName: string;
-  args: Record<string, unknown>;
+  args: FixtureToolArgs;
   argsText: string;
   result: string;
 };
@@ -24,7 +29,7 @@ type WebsiteKind = "digichat" | "embeds" | "digigraph" | "search-vault";
 function tool(
   toolCallId: string,
   toolName: string,
-  args: Record<string, unknown>,
+  args: FixtureToolArgs,
   result: string,
 ): FixtureTool {
   return {

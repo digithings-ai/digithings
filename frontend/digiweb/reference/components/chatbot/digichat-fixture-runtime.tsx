@@ -14,6 +14,7 @@ import {
   Suggestions,
   useLocalRuntime,
   type ChatModelAdapter,
+  type ReadonlyJSONObject,
   type SuggestionConfig,
 } from "@assistant-ui/react";
 import { useSyncExternalStore, type ReactNode } from "react";
@@ -25,7 +26,7 @@ function asToolPart(tool: FixtureTool, result?: string) {
     type: "tool-call" as const,
     toolCallId: tool.toolCallId,
     toolName: tool.toolName,
-    args: tool.args,
+    args: tool.args as ReadonlyJSONObject,
     argsText: tool.argsText,
     ...(result !== undefined
       ? { result, status: { type: "complete" as const } }

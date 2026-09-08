@@ -124,7 +124,7 @@ function ToolFallbackDuration({
       )}
       {...props}
     >
-      {formatToolDuration(elapsedMs)}
+      {formatToolDuration(ms)}
     </span>
   );
 }

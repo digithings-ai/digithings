@@ -38,6 +38,7 @@ describe("gallery Thread is the product digichat skin", () => {
   it("tools stay collapsed unless they require action", () => {
     const fallback = read("gallery-thread/tool-fallback.aui.tsx");
     expect(fallback).toMatch(/useState\(isRequiresAction\)/);
+    expect(fallback).toMatch(/formatToolDuration\(ms\)/);
     expect(fallback).not.toMatch(/isSettled/);
     expect(fallback).not.toMatch(/wantOpen/);
     expect(fallback).toMatch(/toolName/);
@@ -71,6 +72,12 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(aui).toContain(gate);
     expect(chatbot).not.toMatch(/^\.aui-action-bar-more-content \{/m);
     expect(aui).not.toMatch(/^\.aui-action-bar-more-content \{/m);
+  });
+
+  it("gallery DotMatrix re-exports the chat subpath, not the main barrel", () => {
+    const reexport = read("../../../../reference/components/ui/dot-matrix.tsx");
+    expect(reexport).toMatch(/from ["']@digithings\/web\/chat\/dot-matrix["']/);
+    expect(reexport).not.toMatch(/from ["']@digithings\/web["']/);
   });
 
   it("web package exposes Thread on a chat subpath, not the main barrel", () => {

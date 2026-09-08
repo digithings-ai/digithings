@@ -2,7 +2,7 @@
 
 /**
  * Gallery DotMatrix is the promoted first-party cube matrix.
- * Source of truth: @digithings/web chat/DotMatrix.
+ * Source of truth: @digithings/web/chat/dot-matrix (never the main barrel).
  */
 export {
   DotMatrix,
@@ -10,4 +10,4 @@ export {
   litCellsFor,
   type DotMatrixProps,
   type DotMatrixState,
-} from "@digithings/web";
+} from "@digithings/web/chat/dot-matrix";
