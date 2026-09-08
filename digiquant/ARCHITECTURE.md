@@ -1660,6 +1660,32 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   I/O; crash/timeout → typed inconclusive (never a fabricated book). Must not
   call `nautilus_runner._run_multi_symbol_backtest`. Shadow/challenger only —
   production H8/H9 must not import `dashboard.replay`.
+  **Schedule replay, schema 2.0 (#3695):** `models.py` adds
+  `ScheduledTargetWeights(effective_date, weights)` + optional
+  `PortfolioReplayRequest.weight_schedule` (requires `schema_version="2.0"`,
+  empty `target_weights`, `next_bar_execution=False`; every effective_date
+  must equal a bar date). `nautilus_portfolio.py` executes each entry once at
+  its bar's close with same-bar fills (sells-before-buys two-pass), i.e. the
+  row dated D is submitted and filled at D's close — the causal convention
+  the house-book restatement (June→Sept 2026) was validated against (engine
+  matched the arithmetic chain to <1e-6 on that run; the enforced forward
+  guard band is 25bp fail / 1bp warn — see verify_nav_replay.py).
+  Legacy single-target trigger semantics unchanged when the schedule is empty
+  (submission now uses the sells-first ordering for both paths).
+  Forward verify: `digiquant/scripts/research/verify_nav_replay.py` rebuilds
+  the causal schedule + bars from Supabase and fails non-zero on NAV breach.
+  **Single source of truth (#3695):** the engine is the last writer of
+  `nav_history` under normal ordering via `verify_nav_replay.py --write`
+  (inception-100 normalization; `pipeline-research-metrics.yml` runs it before
+  metrics). The booking path (`portfolio_materialize.py`) still writes
+  provisional house rows at book time, so "sole writer" means last-writer
+  under the documented step order — a read-only `verify_nav_replay` (no
+  `--write`) step runs after metrics so drift fails loudly.
+  `refresh_performance_metrics.refresh_nav_point` only guards the engine row;
+  `pnl_pct` reads the stored engine series (finalized-accounting precedence
+  retired — it caused the Sept 2026 scale break); `update_tearsheet.py` no
+  longer writes `nav_history` / `portfolio_metrics` (simulation kept for the
+  tearsheet artifact only). Dashboard + tearsheets read the stored series.
   **Paired shadow comparison evidence (#2799 / WP10.5):**
   `dashboard/replay/allocation_comparison.py` + packaged
   `replay/shadow_criteria/v1.json` + CLI

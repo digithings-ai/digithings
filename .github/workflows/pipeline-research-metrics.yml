@@ -73,14 +73,22 @@ jobs:
       # plus `digiquant[research]` installed, and keeps NautilusTrader out of a job that
       # never needs it. digibase and digikey arrive as declared dependencies of
       # digiquant, so the hand-ordered install script is no longer needed here.
+      # `--package digiquant --extra research --extra nautilus`: the engine-write
+      # step below runs the Nautilus schedule replay as the last NAV writer
+      # under the step order below (single source of truth). Nautilus stays out
+      # of the metrics script itself, which only guards the engine row.
       - name: Install from lockfile
-        run: uv sync --frozen --package digiquant --extra research
+        run: uv sync --frozen --package digiquant --extra research --extra nautilus
 
-      # STEP ORDER (#2597/#2598): accounting finalizer BEFORE metrics. Once a complete
-      # status=final period exists, metrics consume it for pnl_pct / indexed NAV.
-      # Lookback refresh (current_book_lookback) runs after metrics for the diagnostic
-      # surface only — it must never feed daily pnl_pct (OLY-REV-007 / Task 3.3).
-      # Job order is therefore irrelevant for daily semantics once the finalizer lands.
+      # STEP ORDER (single source of truth): accounting finalizer (shadow; private
+      # tables) → engine NAV write (last writer of nav_history under this order;
+      # the booking path still writes provisional rows at book time) → metrics
+      # (guards the engine row, derives pnl/stats from the stored series) →
+      # read-only verify (drift fails loudly) →
+      # lookback (current_book_lookback diagnostic only — must never feed daily
+      # pnl_pct, OLY-REV-007 / Task 3.3). Finalized accounting periods no longer
+      # feed NAV or pnl (Sept 2026 scale break); the finalizer stays first for
+      # operational continuity only.
       # Exit 3 from the metrics step = no positions book for today UTC (stale-book
       # guard, #1746). That red run is the intended signal, not a flake.
       - name: Finalize period accounting (shadow; private tables)
@@ -99,6 +107,20 @@ jobs:
           fi
         continue-on-error: true
 
+      - name: Write NAV from Nautilus engine (engine NAV writer)
+        env:
+          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RUN_DATE: ${{ inputs.date }}
+        run: |
+          if [ -n "$RUN_DATE" ]; then
+            uv run --frozen --no-sync python digiquant/scripts/research/verify_nav_replay.py --write --date "$RUN_DATE"
+          else
+            uv run --frozen --no-sync python digiquant/scripts/research/verify_nav_replay.py --write
+          fi
+
       - name: Refresh portfolio_metrics (Sharpe / vol / drawdown / NAV continuity)
         env:
           CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
@@ -114,6 +136,20 @@ jobs:
           else
             uv run --frozen --no-sync python digiquant/scripts/research/refresh_performance_metrics.py --supabase
           fi
+
+      # Read-only (no --write): replays the full engine path and fails non-zero
+      # if the stored nav_history drifted (e.g. a late booking-path write landed
+      # after the engine step). No --date: --date without --write is rejected,
+      # and the full-path compare covers the target date anyway. Guards the
+      # last-writer invariant without writing.
+      - name: Verify NAV against engine replay (read-only)
+        env:
+          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          uv run --frozen --no-sync python digiquant/scripts/research/verify_nav_replay.py
 
       - name: Refresh current_book_lookback (21-day diagnostic; not realized)
         # Run even if metrics refresh failed — lookback is independent of daily pnl.

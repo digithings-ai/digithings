@@ -79,7 +79,9 @@ class TestSyncPositionsFromRebalance:
 
 
 class TestUpdateTearsheetPush:
-    def test_group_a_tables_use_widened_conflict(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_group_a_tables_use_widened_conflict_nav_metrics_retired(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         if str(_SCRIPTS) not in sys.path:
             sys.path.insert(0, str(_SCRIPTS))
         import update_tearsheet as ut
@@ -116,12 +118,11 @@ class TestUpdateTearsheetPush:
         pos = sb.store["positions"]
         assert pos[0]["_on_conflict"] == "workspace_id,date,ticker"
         assert pos[0]["workspace_id"] == _HOUSE
-        nav = sb.store["nav_history"]
-        assert nav[0]["_on_conflict"] == "workspace_id,date"
-        assert nav[0]["workspace_id"] == _HOUSE
-        metrics = sb.store["portfolio_metrics"]
-        assert metrics[0]["_on_conflict"] == "workspace_id,date"
-        assert metrics[0]["workspace_id"] == _HOUSE
+        # nav_history + portfolio_metrics writes are RETIRED (single-source-of-truth
+        # cutover #3695): the Nautilus schedule replay owns nav_history and the
+        # refresh script owns daily metrics, so the tearsheet path must not write them.
+        assert "nav_history" not in sb.store
+        assert "portfolio_metrics" not in sb.store
         events = sb.store["position_events"]
         assert events[0]["_on_conflict"] == "workspace_id,date,ticker"
         assert events[0]["workspace_id"] == _HOUSE
@@ -211,7 +212,7 @@ class TestLegacyConflictTargetsGone:
             "backfill_execution_prices.py": 'on_conflict="workspace_id,date,ticker"',
             "reconcile_position_events_from_positions.py": 'on_conflict="workspace_id,date,ticker"',
             "materialize_snapshot.py": 'on_conflict="workspace_id,date,ticker"',
-            "update_tearsheet.py": 'on_conflict="workspace_id,date"',
+            "update_tearsheet.py": 'on_conflict="workspace_id,date,ticker"',
         }
         for name, needle in widened.items():
             text = (_SCRIPTS / name).read_text(encoding="utf-8")
@@ -220,6 +221,10 @@ class TestLegacyConflictTargetsGone:
         assert 'on_conflict="date,ticker"' not in tear
         assert 'nav_history").upsert(chunk, on_conflict="date")' not in tear
         assert 'portfolio_metrics").upsert([metrics], on_conflict="date")' not in tear
+        # SSOT cutover #3695: tearsheet retired its nav_history/portfolio_metrics
+        # writers entirely (engine replay + refresh script own them).
+        assert 'nav_history").upsert' not in tear
+        assert 'portfolio_metrics").upsert' not in tear
         assert 'on_conflict="date,file_path"' not in tear
         assert 'on_conflict="workspace_id,date,document_key"' in tear
         sync = (_SCRIPTS / "sync_positions_from_rebalance.py").read_text(encoding="utf-8")

@@ -244,7 +244,15 @@ class TestWorkflowDailyCadence:
         assert '--run-type "monthly"' not in text
 
     def test_dashboard_workflow_schedule_is_daily(self) -> None:
-        text = _PIPELINE_WORKFLOW.read_text(encoding="utf-8")
-        assert 'cron: "17 9 * * *"' in text
-        assert 'cron: "17 12 * * *"' in text
-        assert 'cron: "0 12 * * *"' not in text
+        """Daily cadence is Worker-driven since #3579: digithings-cron dispatches the
+        `olympus-daily` repository_dispatch jobs (house-run-*) and pipeline-digiquant.yml
+        listens for that event type (no GHA `schedule:` key remains)."""
+        import re
+
+        jobs_ts = _REPO_ROOT / "frontend" / "digithings-cron" / "src" / "jobs.ts"
+        text = jobs_ts.read_text(encoding="utf-8")
+        house_runs = re.findall(r'rd\(\s*"house-run-[^"]+"\s*,\s*"([^"]+)"', text)
+        assert house_runs, "digithings-cron must keep dispatching olympus-daily house runs"
+        workflow_text = _PIPELINE_WORKFLOW.read_text(encoding="utf-8")
+        assert "olympus-daily" in workflow_text
+        assert 'cron: "0 12 * * *"' not in workflow_text

@@ -680,44 +680,47 @@ class TestRefreshEventCumulativeHouseScope:
         assert by_id["overlay-1"]["cumulative_return_since_event_pct"] is None
 
 
+_WORKER_JOBS_TS = (
+    Path(__file__).resolve().parents[3] / "frontend" / "digithings-cron" / "src" / "jobs.ts"
+)
+
+
+def _worker_job_cron(job_id: str) -> str:
+    """Cron string for a digithings-cron job id (the production clock since #3579).
+
+    Both wd()/rd() helpers take (id, cron, ...) so one pattern covers both.
+    """
+    import re
+
+    text = _WORKER_JOBS_TS.read_text(encoding="utf-8")
+    m = re.search(rf'\(\s*"{re.escape(job_id)}"\s*,\s*"([^"]+)"', text)
+    assert m, f"job {job_id!r} not found in {_WORKER_JOBS_TS}"
+    return m.group(1)
+
+
 class TestMetricsCronRunsEveryDay:
     """The schedule half of #1833. The book cron is daily; the metrics cron was MON-SAT, so a
-    Sunday book was written and then never enriched — NULL permanently, not just until 22:00."""
+    Sunday book was written and then never enriched — NULL permanently, not just until 22:00.
+
+    Since #3579 the production clock is the Cloudflare Worker digithings-cron
+    (frontend/digithings-cron/src/jobs.ts), not a GHA `schedule:` key — so these
+    tests assert on the Worker's `research-metrics` job, which dispatches
+    pipeline-research-metrics.yml via workflow_dispatch."""
 
     def test_the_cron_has_no_weekday_restriction(self) -> None:
-        import yaml
-
-        wf = (
-            Path(__file__).resolve().parents[3]
-            / ".github"
-            / "workflows"
-            / "pipeline-research-metrics.yml"
+        cron = _worker_job_cron("research-metrics")
+        dow = cron.split()[4]
+        assert dow == "*", (
+            f"research-metrics cron day-of-week is {dow!r}; a restricted schedule leaves the book "
+            "for an excluded day permanently unenriched (#1833)"
         )
-        doc = yaml.safe_load(wf.read_text(encoding="utf-8"))
-        crons = [s["cron"] for s in doc[True]["schedule"]]  # `on:` parses as boolean True
-        assert crons, "the metrics workflow must keep a schedule"
-        for cron in crons:
-            dow = cron.split()[4]
-            assert dow == "*", (
-                f"metrics cron day-of-week is {dow!r}; a restricted schedule leaves the book "
-                "for an excluded day permanently unenriched (#1833)"
-            )
 
     def test_it_still_runs_after_the_eod_price_ingest(self) -> None:
         """22:00 UTC is load-bearing: the price cron writes closes at 21:00, so an earlier
         metrics run would carry the *previous* day forward on every trading day."""
-        import yaml
-
-        wf = (
-            Path(__file__).resolve().parents[3]
-            / ".github"
-            / "workflows"
-            / "pipeline-research-metrics.yml"
-        )
-        doc = yaml.safe_load(wf.read_text(encoding="utf-8"))
-        for cron in [s["cron"] for s in doc[True]["schedule"]]:
-            minute, hour = cron.split()[0], cron.split()[1]
-            assert (int(hour), int(minute)) >= (22, 0), f"{cron} runs before the 21:00 ingest"
+        cron = _worker_job_cron("research-metrics")
+        minute, hour = cron.split()[0], cron.split()[1]
+        assert (int(hour), int(minute)) >= (22, 0), f"{cron} runs before the 21:00 ingest"
 
 
 class TestResolveScheduledMetricsDate:
@@ -794,12 +797,14 @@ class TestResolveScheduledMetricsDate:
 
 
 class TestMetricsWorkflowStepOrder:
-    """Pins finalizer → metrics → lookback in ``pipeline-research-metrics.yml``.
+    """Pins finalizer → engine-write → metrics → lookback in ``pipeline-research-metrics.yml``.
 
     After #2598, ``pnl_pct`` never reads ``current_book_lookback`` / legacy
     ``position_attribution``, so lookback job order cannot alter daily semantics.
-    Still keep metrics before the lookback step for operational clarity, and the
-    accounting finalizer before metrics so finalized periods are available.
+    After the single-source-of-truth cutover the Nautilus engine is the sole
+    NAV writer, so the engine-write step must precede metrics (whose guard
+    asserts the engine row exists). The accounting finalizer stays first for
+    operational continuity but no longer feeds NAV or pnl.
     """
 
     @staticmethod
@@ -828,3 +833,164 @@ class TestMetricsWorkflowStepOrder:
             "finalizer → metrics → lookback: daily pnl must not depend on lookback "
             "order (#2598 / OLY-REV-007)"
         )
+
+    def test_engine_write_precedes_metrics(self) -> None:
+        names = self._step_names()
+        engine = next(i for i, n in enumerate(names) if "nautilus engine" in n.lower())
+        metrics = next(i for i, n in enumerate(names) if "portfolio_metrics" in n)
+        assert engine < metrics, (
+            "engine-write → metrics: the metrics guard asserts the engine NAV row "
+            "exists (single source of truth)"
+        )
+
+
+class TestRefreshNavPointGuard:
+    """``refresh_nav_point`` never computes NAV — it guards the engine row."""
+
+    def test_passes_when_engine_row_exists(self, capsys: pytest.CaptureFixture) -> None:
+        sb = _fake_with({"nav_history": [{"date": "2026-09-04", "nav": 99.353349}]})
+        _mod.refresh_nav_point(sb, "2026-09-04")  # must not raise
+        assert "engine row present" in capsys.readouterr().out
+
+    def test_raises_when_engine_row_missing(self) -> None:
+        sb = _fake_with({"nav_history": []})
+        with pytest.raises(RuntimeError, match="sole NAV writer"):
+            _mod.refresh_nav_point(sb, "2026-09-04")
+
+    def test_raises_when_engine_row_null(self) -> None:
+        sb = _fake_with({"nav_history": [{"date": "2026-09-04", "nav": None}]})
+        with pytest.raises(RuntimeError, match="sole NAV writer"):
+            _mod.refresh_nav_point(sb, "2026-09-04")
+
+    def test_guard_writes_nothing(self) -> None:
+        sb = _fake_with({"nav_history": [{"date": "2026-09-04", "nav": 99.353349}]})
+        _mod.refresh_nav_point(sb, "2026-09-04")
+        assert sb.store.get("nav_history", []) == []
+
+
+def _load_verify_module():
+    """Load verify_nav_replay.py as a module (top-level imports are stdlib-only)."""
+    script = (
+        Path(__file__).resolve().parents[3]
+        / "digiquant"
+        / "scripts"
+        / "research"
+        / "verify_nav_replay.py"
+    )
+    spec = importlib.util.spec_from_file_location("verify_nav_replay", script)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_verify_mod = _load_verify_module()
+
+
+class TestWriteNavNormalization:
+    """``_write_nav`` derives the inception base from the passed path itself.
+
+    NOTE: the 2026-06-22 base below is a unit-test convention only. In prod
+    the pre-cutoff rows were deleted (#3695) and ``_slice_write_path`` forces
+    the base to the first bar >= 2026-07-17 — see ``TestSliceWritePath``.
+    """
+
+    def test_full_path_normalizes_to_inception_100(self) -> None:
+        from decimal import Decimal
+
+        sb = _fake_with({})
+        engine = {"2026-06-22": Decimal("100000000"), "2026-09-04": Decimal("99353349")}
+        n = _verify_mod._write_nav(sb, "house", engine)
+        assert n == 2
+        rows = {r["date"]: r["nav"] for r in sb.store["nav_history"]}
+        assert rows["2026-06-22"] == 100.0
+        assert rows["2026-09-04"] == pytest.approx(99.353349)
+
+    def test_single_date_write_uses_full_path_base(self) -> None:
+        """A --date write must not normalize to itself (that would stamp 100)."""
+        from decimal import Decimal
+
+        sb = _fake_with({})
+        engine = {"2026-06-22": Decimal("100000000"), "2026-09-04": Decimal("99353349")}
+        n = _verify_mod._write_nav(sb, "house", engine, {"2026-09-04"})
+        assert n == 1
+        assert sb.store["nav_history"][0]["nav"] == pytest.approx(99.353349)
+        assert sb.store["nav_history"][0]["date"] == "2026-09-04"
+
+    def test_zero_inception_refuses(self) -> None:
+        from decimal import Decimal
+
+        sb = _fake_with({})
+        assert _verify_mod._write_nav(sb, "house", {"2026-09-04": Decimal("0")}) == 0
+        assert sb.store.get("nav_history", []) == []
+
+
+class TestSliceWritePath:
+    """Inception floor: pre-cutoff dates can never reach ``_write_nav`` (#3695)."""
+
+    def test_full_path_drops_pre_inception_bars(self) -> None:
+        from decimal import Decimal
+
+        engine = {
+            "2026-06-23": Decimal("99546640"),
+            "2026-07-17": Decimal("99431364"),
+            "2026-09-04": Decimal("99353349"),
+        }
+        path, target = _verify_mod._slice_write_path(engine, "2026-07-17")
+        assert sorted(path) == ["2026-07-17", "2026-09-04"]
+        assert target is None
+
+    def test_single_date_subset(self) -> None:
+        from decimal import Decimal
+
+        engine = {
+            "2026-07-17": Decimal("99431364"),
+            "2026-09-04": Decimal("99353349"),
+        }
+        path, target = _verify_mod._slice_write_path(engine, "2026-07-17", "2026-09-04")
+        assert target == {"2026-09-04"}
+        assert sorted(path) == ["2026-07-17", "2026-09-04"]
+
+    def test_pre_inception_date_raises(self) -> None:
+        from decimal import Decimal
+
+        engine = {
+            "2026-06-26": Decimal("99546640"),
+            "2026-07-17": Decimal("99431364"),
+        }
+        with pytest.raises(ValueError, match="predates inception"):
+            _verify_mod._slice_write_path(engine, "2026-07-17", "2026-06-26")
+
+    def test_unknown_date_raises(self) -> None:
+        from decimal import Decimal
+
+        engine = {"2026-07-17": Decimal("99431364")}
+        with pytest.raises(ValueError, match="has no bar"):
+            _verify_mod._slice_write_path(engine, "2026-07-17", "2026-09-99")
+
+    def test_all_pre_cutoff_yields_empty_path(self) -> None:
+        """All bars < inception → empty path; ``_write_nav`` persists nothing."""
+        from decimal import Decimal
+
+        engine = {"2026-06-23": Decimal("99546640")}
+        path, target = _verify_mod._slice_write_path(engine, "2026-07-17")
+        assert path == {}
+        assert target is None
+        sb = _fake_with({})
+        assert _verify_mod._write_nav(sb, "house", path) == 0
+        assert sb.store.get("nav_history", []) == []
+
+    def test_slice_then_write_rebases_inception_to_100(self) -> None:
+        """End-to-end: slice the raw engine path, then write — 07-17 == 100.0."""
+        from decimal import Decimal
+
+        engine = {
+            "2026-06-23": Decimal("99546640"),
+            "2026-07-17": Decimal("99431364"),
+            "2026-09-04": Decimal("99353349"),
+        }
+        path, target = _verify_mod._slice_write_path(engine, "2026-07-17")
+        sb = _fake_with({})
+        assert _verify_mod._write_nav(sb, "house", path, target) == 2
+        rows = {r["date"]: r["nav"] for r in sb.store["nav_history"]}
+        assert rows["2026-07-17"] == 100.0
+        assert "2026-06-23" not in rows
