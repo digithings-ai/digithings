@@ -34,6 +34,12 @@ describe("gallery chatbot.css product share", () => {
     expect(css).toMatch(/html:has\(\[data-thread-skin="digichat"\]\)/);
   });
 
+  it("themes the slash trigger popover and /settings pane for the product skin", () => {
+    expect(css).toContain(".aui-composer-trigger-popover");
+    expect(css).toContain("[data-embed-settings]");
+    expect(css).toContain('html:has([data-thread-skin="digichat"])');
+  });
+
   it("remaps --font-mono to Geist on the product skin only", () => {
     const aui = readFileSync(join(here, "../../styles/chat-aui.css"), "utf8");
     const skinBlock = aui.slice(aui.indexOf('[data-thread-skin="digichat"]'));

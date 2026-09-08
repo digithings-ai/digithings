@@ -416,9 +416,11 @@ export async function POST(req: Request) {
   // X-Digi-Force-Tool is send-only — ignore leftover slash force on regen/edit (#3475).
   // Catalog allowlist from deployment config is source of truth (fail closed).
   const forceToolRaw = req.headers.get("x-digi-force-tool")?.trim();
-  if (forceToolRaw && !isMutatingTurnMode(turnMode)) {
+  const disabledToolsRaw = req.headers.get("x-digi-disabled-tools")?.trim();
+  if ((forceToolRaw || disabledToolsRaw) && !isMutatingTurnMode(turnMode)) {
     try {
-      const { filterForceToolHeader } = await import("@/lib/deploy-config");
+      const { filterForceToolHeader, filterDisabledToolsHeader, omitForcedCatalogIds } =
+        await import("@/lib/deploy-config");
       const {
         resolveDeploymentForHost,
         getDigichatConfig,
@@ -429,8 +431,15 @@ export async function POST(req: Request) {
       if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
       const allowed = filterForceToolHeader(dep, forceToolRaw);
       if (allowed) upstreamHeaders["X-Digi-Force-Tool"] = allowed;
+      const disabled = omitForcedCatalogIds(
+        filterDisabledToolsHeader(dep, disabledToolsRaw),
+        allowed,
+      );
+      if (disabled.length) {
+        upstreamHeaders["X-Digi-Disabled-Tools"] = disabled.join(",");
+      }
     } catch {
-      // Invalid deploy config — do not forward force-tool (fail closed).
+      // Invalid deploy config — do not forward force-tool / disabled-tools (fail closed).
     }
   }
 

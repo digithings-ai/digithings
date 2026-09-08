@@ -97,7 +97,12 @@ def _with_digi_request_context(http_request: Request, req: WorkflowRequest) -> W
     subject = updates.get("digi_subject")
     if subject:
         updates["session_id"] = workflow_thread_id(subject, req.session_id)
-    return req.model_copy(update=updates)
+    copied = req.model_copy(update=updates)
+    disabled_raw = (http_request.headers.get("X-Digi-Disabled-Tools") or "").strip()
+    if disabled_raw:
+        tokens = [p.strip() for p in disabled_raw.split(",") if p.strip()]
+        copied = copied.model_copy(update={"disabled_tools": tokens})
+    return copied
 
 
 def _thread_config(http_request: Request, thread_id: str) -> dict:

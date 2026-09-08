@@ -100,8 +100,7 @@ export type DigichatPopupConfig = {
   mobileFullscreen?: boolean;
 };
 
-const RESEARCH_PORTFOLIO_WELCOME =
-  'Ask about house research, portfolio decisions, and the page you are on.';
+const RESEARCH_PORTFOLIO_WELCOME = 'Ask about this page.';
 
 const RESEARCH_PORTFOLIO_SUGGESTIONS = [
   'What changed in the house book?',

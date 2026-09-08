@@ -480,6 +480,56 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Force-Tool", ()
   });
 });
 
+describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Disabled-Tools", () => {
+  it("omits the header when the getter is empty", async () => {
+    const { headers } = await callPrepareSendMessagesRequest({
+      getDisabledTools: () => "",
+    });
+    expect(headers.has("X-Digi-Disabled-Tools")).toBe(false);
+  });
+
+  it("reads disabled catalog ids at send time", async () => {
+    let disabled = "";
+    const { unmount } = renderHookLocally(() =>
+      useEmbedDigiChat(baseEmbedOptions({ getDisabledTools: () => disabled })),
+    );
+    const config = readCapturedTransportConfig();
+    if (!config) {
+      throw new Error("AssistantChatTransport was never constructed by useEmbedDigiChat");
+    }
+    const first = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(first.headers).has("X-Digi-Disabled-Tools")).toBe(false);
+    disabled = "digisearch,digivault";
+    const second = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(second.headers).get("X-Digi-Disabled-Tools")).toBe("digisearch,digivault");
+    unmount();
+  });
+
+  it("omits a forced catalog id from the disabled list", async () => {
+    const host = "https://example.com";
+    const { unmount } = renderHookLocally(() =>
+      useEmbedDigiChat(
+        baseEmbedOptions({
+          embedHost: host,
+          getDisabledTools: () => "digisearch,digivault",
+        }),
+      ),
+    );
+    const config = readCapturedTransportConfig();
+    if (!config) {
+      throw new Error("AssistantChatTransport was never constructed by useEmbedDigiChat");
+    }
+    setPendingForceTool(host, "digisearch");
+    const { headers } = await config.prepareSendMessagesRequest({
+      messages: [],
+      body: undefined,
+    });
+    expect(new Headers(headers).get("X-Digi-Force-Tool")).toBe("digisearch");
+    expect(new Headers(headers).get("X-Digi-Disabled-Tools")).toBe("digivault");
+    unmount();
+  });
+});
+
 describe("useEmbedDigiChat reset (/new)", () => {
   const host = "https://example.com";
   const storageKey = `digichat_embed_conversation:${host}`;

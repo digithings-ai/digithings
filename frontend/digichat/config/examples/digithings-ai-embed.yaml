@@ -10,7 +10,7 @@ hosts:
       theme: dark
       skin: digichat
       title: ask digichat
-      welcome: Ask about digithings — agents, digigraph, and the stack.
+      welcome: Ask about digithings.
       placeholder: Ask a question
       suggestions:
         - What is digigraph?
@@ -44,7 +44,7 @@ hosts:
           default: true
           label: Vault
         - id: web_search
-          default: false
+          default: true
           label: Web search
     gate:
       mode: ungated

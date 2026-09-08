@@ -1,10 +1,10 @@
 /**
- * Embed slash commands (#3418, #3511, #3556). Client-only: /lang, /help, /new,
- * /copy, /export, /websearch, /settings, /byok never leave the browser.
- * /search and /vault force a locate tool with the user string as the argument —
- * the model is not hinted.
+ * Embed slash commands (#3418, #3511, #3556, #3733). Client-only: /lang,
+ * /help, /new, /copy, /export, /websearch, /settings, /byok never leave the
+ * browser. `/search` and `/vault` force a locate tool with the user string as
+ * the argument. `/digisearch` and `/digivault` toggle session prefs.
  */
-export const LANG_CODES = ["en", "de", "it", "es", "fr"] as const;
+export const LANG_CODES = ["en", "nl", "it", "es", "fr"] as const;
 export type LangCode = (typeof LANG_CODES)[number];
 
 export type SlashId =
@@ -13,6 +13,8 @@ export type SlashId =
   | "new"
   | "search"
   | "vault"
+  | "toggle-digisearch"
+  | "toggle-digivault"
   | "copy"
   | "export"
   | "websearch"
@@ -25,17 +27,17 @@ export type SlashDef = {
   needsArg: boolean;
   /** Public copy on the embed palette. */
   hint: string;
-  forceTool?: "digisearch" | "digivault_search_notes";
+  forceTool?: "digisearch" | "digivault";
   /** When set, selecting the command opens a discrete Up/Down choice list. */
   choiceOptions?: readonly { value: string; label: string }[];
   /** Toggle commands flip state on Enter without an argument. */
   kind?: "toggle" | "action" | "force" | "client";
 };
 
-/** Display names kept in sync with digichat `LANGUAGES` / digigraph `LANGUAGE_NAMES`. */
+/** Featured submenu labels. Full ISO map lives in digichat `languages.ts`. */
 export const LANG_LABELS: Record<LangCode, string> = {
   en: "English",
-  de: "German",
+  nl: "Dutch",
   it: "Italian",
   es: "Spanish",
   fr: "French",
@@ -47,8 +49,22 @@ export const LANG_CHOICES: readonly { value: LangCode; label: string }[] = LANG_
 
 export const SLASH_COMMANDS: readonly SlashDef[] = [
   {
+    id: "toggle-digisearch",
+    names: ["/digisearch"],
+    needsArg: false,
+    hint: "Toggle corpus search",
+    kind: "toggle",
+  },
+  {
+    id: "toggle-digivault",
+    names: ["/digivault"],
+    needsArg: false,
+    hint: "Toggle vault",
+    kind: "toggle",
+  },
+  {
     id: "search",
-    names: ["/search", "/digisearch"],
+    names: ["/search"],
     needsArg: true,
     hint: "Search the knowledge base",
     forceTool: "digisearch",
@@ -56,17 +72,17 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
   },
   {
     id: "vault",
-    names: ["/vault", "/docs", "/digivault"],
+    names: ["/vault", "/docs"],
     needsArg: true,
     hint: "Vault",
-    forceTool: "digivault_search_notes",
+    forceTool: "digivault",
     kind: "force",
   },
   {
     id: "lang",
-    names: ["/lang"],
-    needsArg: true,
-    hint: "Switch language (en, de, it, es, fr)",
+    names: ["/language", "/lang"],
+    needsArg: false,
+    hint: "Switch reply language",
     choiceOptions: LANG_CHOICES,
     kind: "client",
   },
@@ -74,7 +90,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "websearch",
     names: ["/websearch"],
     needsArg: false,
-    hint: "Web search",
+    hint: "Toggle web search",
     kind: "toggle",
   },
   {
@@ -114,6 +130,10 @@ export type SlashVisibility = {
   webSearch?: boolean;
   /** When false, /byok is hidden. Default true when omitted. */
   byok?: boolean;
+  /** When false, /digisearch toggle is hidden. Default true. */
+  digisearch?: boolean;
+  /** When false, /digivault toggle is hidden. Default true. */
+  digivault?: boolean;
 };
 
 export type ParsedSlash =
@@ -139,6 +159,8 @@ export function parseSlashInput(raw: string): ParsedSlash {
 function isVisible(cmd: SlashDef, visibility?: SlashVisibility): boolean {
   if (cmd.id === "websearch") return visibility?.webSearch === true;
   if (cmd.id === "byok") return visibility?.byok !== false;
+  if (cmd.id === "toggle-digisearch") return visibility?.digisearch !== false;
+  if (cmd.id === "toggle-digivault") return visibility?.digivault !== false;
   return true;
 }
 

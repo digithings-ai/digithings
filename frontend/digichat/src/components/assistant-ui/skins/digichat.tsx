@@ -5,9 +5,58 @@ import "@digithings/web/styles/chat-widgets.css";
 import "@digithings/web/styles/chat-aui.css";
 import "@digithings/web/styles/chatbot.css";
 
+import { useCallback, useMemo, type FormEvent } from "react";
+import {
+  unstable_useSlashCommandAdapter,
+  useAui,
+} from "@assistant-ui/react";
+import {
+  Copy,
+  Download,
+  Folder,
+  Globe,
+  HelpCircle,
+  Key,
+  Languages,
+  Plus,
+  Search,
+  Settings,
+  Slash,
+} from "lucide-react";
+import {
+  copyMarkdownWithFallback,
+  downloadMarkdown,
+  serializeAssistantMarkdown,
+  serializeThreadMarkdown,
+  slashHelpText,
+  type TranscriptTurn,
+} from "@digithings/digichat-ui";
 import { DigichatThread } from "@digithings/web/chat/thread";
 import { useComposerCopy, useSkinChrome } from "@/components/stock/skin-chrome";
-import { useStockComposerGateSubmit } from "@/components/stock/stock-send-gate";
+import { useStockComposerGateSubmit, useStockSendGate } from "@/components/stock/stock-send-gate";
+import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
+import {
+  buildProductSlashCommands,
+  executeSlashDef,
+  matchSlashAllowingArgs,
+  slashSubmitAction,
+  visibilityFromPrefs,
+} from "@/lib/product-slash-commands";
+import { setPendingForceTool } from "@/lib/pending-chat-headers";
+
+const SLASH_ICON_MAP = {
+  Globe,
+  Search,
+  Folder,
+  Languages,
+  Settings,
+  Key,
+  HelpCircle,
+  Plus,
+  Copy,
+  Download,
+  Slash,
+};
 
 /**
  * First-party digichat Thread. Explicit ThreadSkinView branch — never fall
@@ -19,7 +68,118 @@ export function DigichatSkin() {
     "Ask digichat…",
   );
   const { mode } = useSkinChrome();
-  const onComposerSubmit = useStockComposerGateSubmit();
+  const gateSubmit = useStockComposerGateSubmit();
+  const gate = useStockSendGate();
+  const prefs = useEmbedChatPrefsOptional();
+  const aui = useAui();
+  const slashPrefs = useMemo(() => {
+    if (!prefs) return null;
+    return {
+      ...prefs,
+      newThread: () => {
+        prefs.newThread();
+        aui.threads.switchToNewThread();
+      },
+    };
+  }, [prefs, aui]);
+  const enableSlash = Boolean(slashPrefs) && mode !== "app";
+
+  const copyExport = useMemo(
+    () => ({
+      copy: () => {
+        const turns = threadTurns(aui.thread().getState().messages);
+        const last = [...turns].reverse().find((t) => t.role === "assistant");
+        if (!last) return;
+        void copyMarkdownWithFallback(serializeAssistantMarkdown(last.content, last.sources));
+      },
+      exportThread: () => {
+        const md = serializeThreadMarkdown(threadTurns(aui.thread().getState().messages));
+        if (md) downloadMarkdown("digichat.md", md);
+      },
+    }),
+    [aui],
+  );
+
+  const commands = useMemo(() => {
+    if (!enableSlash || !slashPrefs) return [];
+    return buildProductSlashCommands(slashPrefs).map((c) => {
+      if (c.id === "copy") return { ...c, execute: copyExport.copy };
+      if (c.id === "export") return { ...c, execute: copyExport.exportThread };
+      if (c.id === "help") {
+        return {
+          ...c,
+          execute: () => {
+            aui.composer.setText(slashHelpText(visibilityFromPrefs(slashPrefs)));
+          },
+        };
+      }
+      if (c.id === "search") {
+        return {
+          ...c,
+          execute: () => {
+            queueMicrotask(() => aui.composer.setText("/search "));
+          },
+        };
+      }
+      if (c.id === "vault") {
+        return {
+          ...c,
+          execute: () => {
+            queueMicrotask(() => aui.composer.setText("/vault "));
+          },
+        };
+      }
+      return c;
+    });
+  }, [enableSlash, slashPrefs, copyExport, aui]);
+
+  const slash = unstable_useSlashCommandAdapter({
+    commands,
+    removeOnExecute: true,
+    iconMap: SLASH_ICON_MAP,
+    fallbackIcon: Slash,
+  });
+
+  const onComposerSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      if (slashPrefs) {
+        const text = aui.composer.getState().text;
+        const action = slashSubmitAction(text);
+        if (action.kind === "block") {
+          event.preventDefault();
+          return;
+        }
+        if (action.kind === "force") {
+          event.preventDefault();
+          if (gate?.shouldHold(action.text)) {
+            aui.composer.setText("");
+            void aui.composer.clearAttachments();
+            gate.onHold(action.text);
+            return;
+          }
+          setPendingForceTool(slashPrefs.sessionKey, action.forceTool);
+          aui.composer.setText(action.text);
+          gate?.onAllowSend?.();
+          aui.composer.send();
+          return;
+        }
+        if (action.kind === "run") {
+          event.preventDefault();
+          if (action.command.id === "copy") copyExport.copy();
+          else if (action.command.id === "export") copyExport.exportThread();
+          else if (action.command.id === "help") {
+            aui.composer.setText(slashHelpText(visibilityFromPrefs(slashPrefs)));
+            return;
+          } else executeSlashDef(action.command, action.arg, slashPrefs);
+          aui.composer.setText("");
+          return;
+        }
+      }
+      gateSubmit?.(event);
+    },
+    [slashPrefs, aui, gate, gateSubmit, copyExport],
+  );
+
   return (
     <DigichatThread
       welcome={welcome}
@@ -27,6 +187,27 @@ export function DigichatSkin() {
       placeholder={placeholder}
       onComposerSubmit={onComposerSubmit}
       composerLayout={mode === "app" ? "expanded" : "compact"}
+      slash={enableSlash ? { ...slash, matcher: matchSlashAllowingArgs } : undefined}
     />
   );
+}
+
+function threadTurns(messages: readonly unknown[]): TranscriptTurn[] {
+  const out: TranscriptTurn[] = [];
+  for (const raw of messages) {
+    if (!raw || typeof raw !== "object") continue;
+    const m = raw as { role?: string; content?: unknown; parts?: unknown };
+    if (m.role !== "user" && m.role !== "assistant") continue;
+    const parts = Array.isArray(m.content) ? m.content : m.parts;
+    const text = Array.isArray(parts)
+      ? parts
+          .filter((p): p is { type: string; text?: string } => !!p && typeof p === "object")
+          .filter((p) => p.type === "text" && typeof p.text === "string")
+          .map((p) => p.text ?? "")
+          .join("")
+      : "";
+    if (!text.trim()) continue;
+    out.push({ role: m.role, content: text });
+  }
+  return out;
 }

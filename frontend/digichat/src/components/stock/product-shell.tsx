@@ -65,7 +65,8 @@ export type ProductShellProps = {
   sendGate?: StockSendGateHandlers | null;
   /**
    * Host / thread key for X-Digi-Force-Tool (must match takePendingForceTool).
-   * When set, tools.catalog renders above the Thread (not on layout templates).
+   * When set and chrome.mode is `app`, tools.catalog renders above the Thread.
+   * Embed / modal / sidebar use slash commands instead (#3733).
    */
   sessionKey?: string;
   /** localStorage scope for web search; defaults to sessionKey. */
@@ -273,8 +274,8 @@ export function ProductStockShell({
             >
               {ownsPage ? null : sideSlot}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                {ownsPage ? null : headerSlot}
-                {!ownsPage && sessionKey ? (
+                {ownsPage || cfg.chrome.skin === "digichat" ? null : headerSlot}
+                {!ownsPage && sessionKey && cfg.chrome.mode === "app" ? (
                   <ToolCatalogBar
                     clientConfig={cfg}
                     sessionKey={sessionKey}

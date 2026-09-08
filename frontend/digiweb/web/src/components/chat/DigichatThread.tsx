@@ -13,6 +13,7 @@ import {
   type ThreadComponents,
   type ThreadGroupPart,
   type ThreadProps,
+  type ThreadSlashTrigger,
 } from "./gallery-thread/thread.aui";
 
 export type DigichatThreadProps = {
@@ -25,6 +26,8 @@ export type DigichatThreadProps = {
   onComposerSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   composerLayout?: ComposerLayout;
   components?: ThreadComponents;
+  /** Native `/` trigger popover (`unstable_useSlashCommandAdapter`). */
+  slash?: ThreadSlashTrigger;
 };
 
 export function DigichatThread({
@@ -35,6 +38,7 @@ export function DigichatThread({
   onComposerSubmit,
   composerLayout,
   components,
+  slash,
 }: DigichatThreadProps) {
   return (
     <Thread
@@ -45,6 +49,7 @@ export function DigichatThread({
       onComposerSubmit={onComposerSubmit}
       composerLayout={composerLayout}
       components={components}
+      slash={slash}
     />
   );
 }
@@ -55,4 +60,5 @@ export {
   type ThreadComponents,
   type ThreadGroupPart,
   type ThreadProps,
+  type ThreadSlashTrigger,
 };

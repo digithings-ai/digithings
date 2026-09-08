@@ -15,15 +15,20 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  isWebSearchEnabled,
-  readWebSearchPref,
-} from "@/lib/web-search-pref";
+import { isWebSearchEnabled } from "@/lib/web-search-pref";
 import { Key, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ByokCliFlow } from "@/components/byok-cli-flow";
 import { ContactMailto } from "@digithings/web";
 import { ProductStockShell } from "@/components/stock/product-shell";
+import {
+  DEFAULT_EMBED_CHAT_PREFS,
+  EmbedChatPrefsProvider,
+  disabledCatalogIds,
+  type EmbedChatPrefs,
+  type EmbedChatPrefsApi,
+} from "@/components/stock/embed-chat-prefs";
+import { EmbedSettingsPane } from "@/components/stock/embed-settings-pane";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { clientConfigFromEmbedTenant } from "@/lib/deploy-config";
 import { skinOwnsPageChrome } from "@/lib/thread-skins";
@@ -70,8 +75,8 @@ import {
   useEmbedTenantConfig,
   type EmbedTenantClientConfig,
 } from "@/hooks/use-embed-tenant-config";
-import { resolveAttributionPlacement, resolveEmbedUiFlags } from "@/lib/embed-ui-flags";
-import { detectBrowserLanguageCode } from "@/lib/languages";
+import { resolveAttributionPlacement, resolveEmbedUiFlags, shouldRenderEmbedBrandHeader } from "@/lib/embed-ui-flags";
+import { DEFAULT_LANGUAGE_CODE, tryResolveLanguageInput } from "@/lib/languages";
 import { applyEmbedSeed } from "@/lib/embed-seed-apply";
 import {
   READY_MESSAGE,
@@ -338,35 +343,23 @@ function EmbedChat({
     () => clientConfigFromEmbedTenant(tenantCfg),
     [tenantCfg],
   );
-  const [language] = useState(
-    () => stockClient.chrome.defaultLanguage || detectBrowserLanguageCode(),
-  );
+  const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(DEFAULT_EMBED_CHAT_PREFS);
+  const [prefsOpen, setPrefsOpen] = useState(false);
   const [model] = useState(
     () => stockClient.models.default ?? stockClient.models.available[0] ?? "",
   );
   // useEmbedDigiChat's transport is frozen on first render (#1339) — a
-  // `language` value passed by plain value would stay stuck at whatever
-  // detectBrowserLanguageCode() returned at mount, so `/lang` would never
-  // reach the outgoing header (#2103 / #3418). Mutate the ref directly in
-  // the render body (the "useLatest" idiom) rather than in a useEffect — an
-  // effect would lag one render behind and could race a fast pick-then-send. The value is
-  // deliberately NOT persisted anywhere (no localStorage/sessionStorage): the
-  // approved design is session-only, resetting to a fresh browser-locale
-  // auto-detect on every reload.
-  const languageRef = useRef(language);
+  // `language` value passed by plain value would stay stuck at mount, so `/lang`
+  // would never reach the outgoing header (#2103 / #3418). Mutate the ref in
+  // the render body (the "useLatest" idiom). Session-only: English + tools ON
+  // on every reload (#3733).
+  const chatPrefsRef = useRef(chatPrefs);
   const modelRef = useRef(model);
-  // Deliberate "useLatest" escape hatch: mutating .current here (not in an
-  // effect) is what makes send-time reads see the value from the render that
-  // just committed, with zero lag. useEffectEvent can't replace this — its
-  // returned function may only be called from an Effect/Effect Event in the
-  // SAME component and may not be passed down, but getResponseLanguage is
-  // deliberately passed down into useEmbedDigiChat and invoked later from
-  // prepareSendMessagesRequest.
   // eslint-disable-next-line react-hooks/refs -- see comment above
-  languageRef.current = language;
+  chatPrefsRef.current = chatPrefs;
   // eslint-disable-next-line react-hooks/refs -- send-time model read
   modelRef.current = model;
-  const getResponseLanguage = useCallback(() => languageRef.current, []);
+  const getResponseLanguage = useCallback(() => chatPrefsRef.current.language, []);
   const getSelectedModel = useCallback(() => {
     const id = modelRef.current.trim();
     return id || undefined;
@@ -376,40 +369,19 @@ function EmbedChat({
   planProofRef.current = planProof ?? null;
   const getPlanProof = useCallback(() => planProofRef.current, []);
 
-  // Opt-in web search (#3420) — tenant allow + user localStorage pref; default off.
-  // Adjust during render when scope changes (same pattern as trialUnlockedFor).
   const webSearchScope = tenantCfg.slug || host?.trim() || "embed";
-  const [webSearchState, setWebSearchState] = useState<{
-    scope: string;
-    pref: boolean;
-  }>(() => ({ scope: webSearchScope, pref: false }));
-  if (webSearchState.scope !== webSearchScope) {
-    setWebSearchState({
-      scope: webSearchScope,
-      pref: typeof window !== "undefined" ? readWebSearchPref(webSearchScope) : false,
-    });
-  }
-  // Hydrate from localStorage once on the client (SSR starts false).
-  const [webHydrated, setWebHydrated] = useState(false);
-  if (typeof window !== "undefined" && !webHydrated) {
-    setWebHydrated(true);
-    const stored = readWebSearchPref(webSearchScope);
-    if (stored !== webSearchState.pref) {
-      setWebSearchState({ scope: webSearchScope, pref: stored });
-    }
-  }
-  const webSearchPref = webSearchState.pref;
-  const webSearchUserRef = useRef(webSearchPref);
-  // eslint-disable-next-line react-hooks/refs -- send-time read via getEnableWebSearch
-  webSearchUserRef.current = webSearchPref;
   const tenantAllowsWeb = uiFlags.webSearch;
   const getEnableWebSearch = useCallback(
     () =>
       isWebSearchEnabled({
         tenantAllows: tenantAllowsWeb,
-        userPref: webSearchUserRef.current,
+        userPref: chatPrefsRef.current.webSearch,
       }),
     [tenantAllowsWeb],
+  );
+  const getDisabledTools = useCallback(
+    () => disabledCatalogIds(chatPrefsRef.current).join(","),
+    [],
   );
   // trial_form still hides BYOK until parent unlock — product rule for DataTap only
   // backend_only never shows BYOK even if misconfigured showByok
@@ -548,6 +520,7 @@ function EmbedChat({
     onGated: isTrialForm ? onGated : undefined,
     getResponseLanguage,
     getEnableWebSearch,
+    getDisabledTools,
     getSelectedModel,
     getPlanProof,
     // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
@@ -653,8 +626,9 @@ function EmbedChat({
     consumePageContext,
   ]);
 
-  const openSettings = useCallback(() => {
+  const openByok = useCallback(() => {
     setQuotaPrompt(false);
+    setPrefsOpen(false);
     setSettingsOpen(true);
   }, []);
 
@@ -880,23 +854,16 @@ function EmbedChat({
   }, [isTrialForm, host, unlockTrial]);
 
   const welcomeIntro = useMemo(() => {
-    let base: string;
-    if (uiParams.welcome) base = uiParams.welcome;
-    else if (tenantCfg.welcome) base = tenantCfg.welcome;
-    else if (ungated) {
-      base =
-        "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
-    } else {
-      base = DEFAULT_WELCOME.replace(
-        "the first few turns are free",
-        `the first ${EMBED_FREE_TURN_LIMIT} are free`,
-      );
+    if (uiParams.welcome) return uiParams.welcome;
+    if (tenantCfg.welcome) return tenantCfg.welcome;
+    if (ungated) {
+      return "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
     }
-    if (pageContextAttached) {
-      return `${base}\n\nPage context from this host is attached — ask about what you see on the page.`;
-    }
-    return base;
-  }, [uiParams.welcome, tenantCfg.welcome, ungated, pageContextAttached]);
+    return DEFAULT_WELCOME.replace(
+      "the first few turns are free",
+      `the first ${EMBED_FREE_TURN_LIMIT} are free`,
+    );
+  }, [uiParams.welcome, tenantCfg.welcome, ungated]);
 
   const placeholder = uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…";
   const suggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
@@ -1002,8 +969,12 @@ function EmbedChat({
   const footerAttribution = attributionAt === "footer";
   const headerAttribution = attributionAt === "header";
 
-  // Language is `/lang` on the composer (#3418) — the top-right dropdown is gone.
-  const headerSlot = headerTitle ? (
+  // Language is `/language` on the composer (#3418 / #3733). First-party
+  // digichat skin uses launcher chrome — skip the in-iframe title row.
+  const headerSlot = shouldRenderEmbedBrandHeader({
+    skin: stockClient.chrome.skin,
+    headerTitle,
+  }) ? (
     <header className="dc-brand">
       <span>{headerTitle}</span>
       {headerAttribution ? (
@@ -1085,8 +1056,46 @@ function EmbedChat({
   const pageContextAttachment = pageContextCreateAttachment(pageContextSnapshot);
   const pageContextTs = pageContextSnapshot?.ts ?? null;
 
+  const catalog = stockClient.tools.catalog;
+  const prefsApi = useMemo<EmbedChatPrefsApi>(
+    () => ({
+      prefs: chatPrefs,
+      setWebSearch: (value) => setChatPrefs((p) => ({ ...p, webSearch: value })),
+      setDigisearch: (value) => setChatPrefs((p) => ({ ...p, digisearch: value })),
+      setVault: (value) => setChatPrefs((p) => ({ ...p, vault: value })),
+      setLanguage: (code) => {
+        const resolved = tryResolveLanguageInput(code) ?? DEFAULT_LANGUAGE_CODE;
+        setChatPrefs((p) => ({ ...p, language: resolved }));
+      },
+      reset: () =>
+        setChatPrefs({
+          ...DEFAULT_EMBED_CHAT_PREFS,
+          language: DEFAULT_LANGUAGE_CODE,
+        }),
+      tenantAllowsWeb,
+      showByok,
+      hasDigisearch: catalog.length === 0 || catalog.some((e) => e.id === "digisearch"),
+      hasVault: catalog.length === 0 || catalog.some((e) => e.id === "digivault"),
+      sessionKey: gate.host,
+      openSettings: () => {
+        setSettingsOpen(false);
+        setPrefsOpen(true);
+      },
+      openByok: () => {
+        setPrefsOpen(false);
+        setQuotaPrompt(false);
+        setSettingsOpen(true);
+      },
+      newThread: () => {
+        setChatPrefs({ ...DEFAULT_EMBED_CHAT_PREFS, language: DEFAULT_LANGUAGE_CODE });
+        chat.reset();
+      },
+    }),
+    [chatPrefs, tenantAllowsWeb, showByok, catalog, gate.host, chat.reset],
+  );
+
   return (
-    <>
+    <EmbedChatPrefsProvider value={prefsApi}>
       <ProductStockShell
         runtime={chat.runtime}
         clientConfig={stockClient}
@@ -1095,7 +1104,7 @@ function EmbedChat({
         sessionKey={gate.host}
         webSearchScope={webSearchScope}
         onWebSearchChange={(on) => {
-          setWebSearchState({ scope: webSearchScope, pref: on });
+          setChatPrefs((p) => ({ ...p, webSearch: on }));
         }}
         welcome={hideIntroForSeed ? undefined : welcomeIntro || undefined}
         suggestions={suggestions}
@@ -1119,7 +1128,7 @@ function EmbedChat({
               >
                 {handshakeError ?? chat.error}
                 {showByokOnError && !handshakeError ? (
-                  <button type="button" className="dc-inline-link ml-2" onClick={openSettings}>
+                  <button type="button" className="dc-inline-link ml-2" onClick={openByok}>
                     Add your API key
                   </button>
                 ) : null}
@@ -1129,6 +1138,20 @@ function EmbedChat({
           </>
         }
       />
+      {prefsOpen ? (
+        <EmbedSettingsPane
+          onClose={() => setPrefsOpen(false)}
+          onByok={
+            showByok
+              ? () => {
+                  setPrefsOpen(false);
+                  setQuotaPrompt(false);
+                  setSettingsOpen(true);
+                }
+              : undefined
+          }
+        />
+      ) : null}
       {showByok && settingsOpen ? (
         <div
           className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background p-3 shadow-lg"
@@ -1147,7 +1170,7 @@ function EmbedChat({
           />
         </div>
       ) : null}
-    </>
+    </EmbedChatPrefsProvider>
   );
 }
 

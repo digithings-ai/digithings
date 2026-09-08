@@ -153,7 +153,35 @@ describe("ProductStockShell", () => {
     );
   });
 
-  it("keeps Search / Vault / Web search on the digichat skin", async () => {
+  it("omits the tool catalog on embed / modal / sidebar (#3733)", () => {
+    const runtime = {} as AssistantRuntime;
+    render(
+      <ProductStockShell
+        runtime={runtime}
+        sessionKey="embed-host"
+        clientConfig={{
+          ...DEFAULT_CLIENT_CONFIG,
+          chrome: {
+            ...DEFAULT_CLIENT_CONFIG.chrome,
+            mode: "embed",
+            skin: "digichat",
+          },
+          tools: {
+            allowUserToggle: true,
+            catalog: [
+              { id: "digisearch", default: true, label: "Search" },
+              { id: "digivault", default: true, label: "Vault" },
+              { id: "web_search", default: true, label: "Web search" },
+            ],
+          },
+          gate: { ...DEFAULT_CLIENT_CONFIG.gate, webSearch: true },
+        }}
+      />,
+    );
+    expect(document.querySelector("[data-tool-catalog]")).toBeNull();
+  });
+
+  it("keeps Search / Vault / Web search on the full-app digichat skin", async () => {
     takePendingForceTool("embed-host");
     const user = userEvent.setup();
     const runtime = {} as AssistantRuntime;
@@ -165,6 +193,7 @@ describe("ProductStockShell", () => {
           ...DEFAULT_CLIENT_CONFIG,
           chrome: {
             ...DEFAULT_CLIENT_CONFIG.chrome,
+            mode: "app",
             skin: "digichat",
           },
           tools: {

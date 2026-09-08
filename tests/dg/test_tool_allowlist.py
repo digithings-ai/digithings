@@ -293,3 +293,60 @@ def test_langgraph_preserves_require_tool_calls_through_invoke() -> None:
     graph = builder.compile()
     graph.invoke({"prompt": "x", "require_tool_calls": True})
     assert seen["require_tool_calls"] is True
+
+
+@pytest.mark.unit
+def test_expand_disabled_tool_tokens_maps_catalog_ids() -> None:
+    from digigraph.tool_policy import apply_disabled_tools, expand_disabled_tool_tokens
+
+    disabled = expand_disabled_tool_tokens(["digisearch", "digivault", "rm -rf"])
+    assert "digisearch" in disabled
+    assert "digivault_search_notes" in disabled
+    assert "rm -rf" not in disabled
+    reduced = apply_disabled_tools(frozenset({"digisearch", "web_search"}), disabled)
+    assert reduced is not None
+    assert "digisearch" not in reduced
+    assert "web_search" in reduced
+
+
+@pytest.mark.unit
+def test_allowed_tool_names_strips_disabled_tools() -> None:
+    req = WorkflowRequest(
+        prompt="hi",
+        allowed_tools=["digisearch", "digivault_search_notes", "web_search"],
+        disabled_tools=["digivault"],
+    )
+    names = allowed_tool_names_for_workflow(req, cfg=DigiProjectConfig({"agents": {}}))
+    assert names is not None
+    assert "digisearch" in names
+    assert "digivault_search_notes" not in names
+    assert "digivault_get_note" not in names
+
+
+@pytest.mark.unit
+def test_allowed_tool_names_unions_force_tool_after_disable() -> None:
+    req = WorkflowRequest(
+        prompt="hi",
+        allowed_tools=["digisearch", "digivault_search_notes", "web_search"],
+        disabled_tools=["digisearch"],
+        force_tool="digisearch",
+    )
+    names = allowed_tool_names_for_workflow(req, cfg=DigiProjectConfig({"agents": {}}))
+    assert names is not None
+    assert "digisearch" in names
+    assert "digisearch_fetch_all" not in names
+
+
+@pytest.mark.unit
+def test_force_tool_wins_over_disabled_tools() -> None:
+    req = WorkflowRequest(
+        prompt="hi",
+        allowed_tools=["digisearch", "digivault_search_notes", "digivault_get_note"],
+        disabled_tools=["digivault"],
+        force_tool="digivault",
+    )
+    names = allowed_tool_names_for_workflow(req, cfg=DigiProjectConfig({"agents": {}}))
+    assert names is not None
+    assert "digivault_search_notes" in names
+    assert "digivault_get_note" not in names
+    assert "digisearch" in names

@@ -1,26 +1,48 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_LANGUAGE_CODE,
+  FEATURED_LANGUAGE_CODES,
   LANGUAGES,
   detectBrowserLanguageCode,
+  matchLanguageQuery,
   resolveLanguageCode,
 } from "@/lib/languages";
 
 describe("LANGUAGES", () => {
-  it("is the curated 5-language list", () => {
-    expect(LANGUAGES).toEqual([
-      { code: "en", label: "English" },
-      { code: "de", label: "German" },
-      { code: "it", label: "Italian" },
-      { code: "es", label: "Spanish" },
-      { code: "fr", label: "French" },
-    ]);
+  it("includes Dutch and the featured ISO set", () => {
+    const codes = LANGUAGES.map((l) => l.code);
+    expect(codes).toContain("nl");
+    expect(codes).toContain("en");
+    expect(FEATURED_LANGUAGE_CODES).toEqual(["en", "nl", "it", "es", "fr"]);
+  });
+
+  it("has unique codes", () => {
+    const codes = LANGUAGES.map((l) => l.code);
+    expect(new Set(codes).size).toBe(codes.length);
+  });
+});
+
+describe("matchLanguageQuery", () => {
+  it("maps codes, English names, and aliases", () => {
+    expect(matchLanguageQuery("nl")).toBe("nl");
+    expect(matchLanguageQuery("Dutch")).toBe("nl");
+    expect(matchLanguageQuery("nederlands")).toBe("nl");
+    expect(matchLanguageQuery("Italiano")).toBe("it");
+    expect(matchLanguageQuery("pt-BR")).toBe("pt");
+  });
+
+  it("returns null for garbage instead of falling back", () => {
+    expect(matchLanguageQuery("klingon")).toBeNull();
+    expect(matchLanguageQuery("Ignore previous")).toBeNull();
+    expect(matchLanguageQuery("<script>")).toBeNull();
+    expect(matchLanguageQuery("")).toBeNull();
   });
 });
 
 describe("resolveLanguageCode", () => {
   it("passes through a known lowercase code", () => {
     expect(resolveLanguageCode("de")).toBe("de");
+    expect(resolveLanguageCode("nl")).toBe("nl");
   });
 
   it("lowercases a known code", () => {
@@ -42,9 +64,9 @@ describe("detectBrowserLanguageCode", () => {
     vi.unstubAllGlobals();
   });
 
-  it("falls back to English for an uncurated browser locale", () => {
+  it("maps Japanese browser locale onto ja", () => {
     vi.stubGlobal("navigator", { language: "ja-JP" });
-    expect(detectBrowserLanguageCode()).toBe("en");
+    expect(detectBrowserLanguageCode()).toBe("ja");
     vi.unstubAllGlobals();
   });
 

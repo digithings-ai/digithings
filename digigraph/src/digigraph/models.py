@@ -211,6 +211,13 @@ class WorkflowRequest(BaseModel):
             "Also via X-Digi-Enable-Web-Search (#3420)."
         ),
     )
+    disabled_tools: list[str] | None = Field(
+        None,
+        description=(
+            "Catalog ids to hide this turn (X-Digi-Disabled-Tools). "
+            "Allowlisted aliases only (digisearch, digivault); unknown tokens ignored."
+        ),
+    )
 
 
 class WorkflowResult(BaseModel):

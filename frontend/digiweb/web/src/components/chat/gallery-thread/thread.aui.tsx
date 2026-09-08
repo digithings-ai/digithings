@@ -41,6 +41,10 @@ import {
   type FileMessagePartComponent,
   type ImageMessagePartComponent,
   type ToolCallMessagePartComponent,
+  type Unstable_DirectiveFormatter,
+  type Unstable_TriggerAdapter,
+  type Unstable_TriggerItem,
+  type Unstable_TriggerMatcher,
   useAuiState,
 } from "@assistant-ui/react";
 import {
@@ -51,6 +55,7 @@ import {
   type FormEvent,
   type PropsWithChildren,
 } from "react";
+import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -99,6 +104,23 @@ export type ThreadProps = {
   className?: string | undefined;
   /** Embed send-gate / system page-context attach. */
   onComposerSubmit?: (event: FormEvent<HTMLFormElement>) => void;
+  /**
+   * Native assistant-ui slash adapter (`unstable_useSlashCommandAdapter`).
+   * Mounted on compact embed/modal composers only.
+   */
+  slash?: ThreadSlashTrigger | undefined;
+};
+
+/** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
+export type ThreadSlashTrigger = {
+  adapter: Unstable_TriggerAdapter;
+  action: {
+    onExecute: (item: Unstable_TriggerItem) => void;
+    removeOnExecute?: boolean;
+    formatter?: Unstable_DirectiveFormatter;
+  };
+  iconMap?: Record<string, FC<{ className?: string }>>;
+  matcher?: Unstable_TriggerMatcher;
 };
 
 const DEFAULT_THREAD_ACTIONS: Required<ThreadActions> = {
@@ -120,6 +142,7 @@ type ThreadChrome = {
   welcomeBody: readonly string[];
   onComposerSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   className?: string;
+  slash?: ThreadSlashTrigger;
 };
 
 const DEFAULT_CHROME: ThreadChrome = {
@@ -174,6 +197,7 @@ export const Thread: FC<ThreadProps> = ({
   welcomeBody,
   className,
   onComposerSubmit,
+  slash,
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -184,6 +208,7 @@ export const Thread: FC<ThreadProps> = ({
     welcomeBody: welcomeBody ?? DEFAULT_CHROME.welcomeBody,
     onComposerSubmit,
     className,
+    slash,
   };
   return (
     <ThreadChromeContext.Provider value={chrome}>
@@ -348,8 +373,8 @@ const Composer: FC<{
   layout: ComposerLayout;
 }> = ({ autoFocus, placeholder = "Send a message...", layout }) => {
   const compact = layout === "compact";
-  const { onComposerSubmit } = useContext(ThreadChromeContext);
-  return (
+  const { onComposerSubmit, slash } = useContext(ThreadChromeContext);
+  const bar = (
     <ComposerPrimitive.Root
       className="aui-composer-root relative flex w-full flex-col"
       onSubmit={onComposerSubmit}
@@ -387,7 +412,23 @@ const Composer: FC<{
           {compact ? null : <ComposerAction />}
         </div>
       </ComposerPrimitive.AttachmentDropzone>
+      {slash ? (
+        <ComposerTriggerPopover
+          char="/"
+          adapter={slash.adapter}
+          action={slash.action}
+          iconMap={slash.iconMap}
+          matcher={slash.matcher}
+          emptyItemsLabel="No matching commands"
+        />
+      ) : null}
     </ComposerPrimitive.Root>
+  );
+  if (!slash) return bar;
+  return (
+    <ComposerPrimitive.Unstable_TriggerPopoverRoot>
+      {bar}
+    </ComposerPrimitive.Unstable_TriggerPopoverRoot>
   );
 };
 
