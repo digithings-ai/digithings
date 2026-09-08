@@ -14,9 +14,11 @@
 #   that appends a row to project_fields.tsv.
 #
 # Job 2 (stub-tsv-phase): fires on `issues.labeled` when the client-pilot label
-#   is applied to an issue that is NOT labeled `housekeeping`. Opens the same
-#   kind of stub PR. Skips if the issue already has `agent-task` (job 1 covers
-#   that case). (phase-N labels were deleted in the 2026-09 board cleanup.)
+#   is applied to an issue whose title does NOT start with `[housekeeping`.
+#   Opens the same kind of stub PR. Skips if the issue already has `agent-task`
+#   (job 1 covers that case). (phase-N labels were deleted in the 2026-09 board
+#   cleanup; the housekeeping label was deleted in the 2026-09 label
+#   simplification — exemption is by title prefix now.)
 #
 # Job 3 (reap-stub-branch): fires on `pull_request.closed` (merged or closed
 #   unmerged) for any `bot/stub-tsv-<N>` head branch and deletes it via the API.
@@ -46,7 +48,9 @@ jobs:
     name: Append inferred row to project_fields.tsv
     # Paused: do not open bot/stub-tsv-* PRs unless repo var STUB_TSV_ENABLED=true.
     # Original: github.event.label.name == 'agent-task'
-    if: vars.STUB_TSV_ENABLED == 'true'
+    # [housekeeping-titled issues are exempt (label retired 2026-09) — same rule
+    # as stub-tsv-phase; maintenance trackers carry agent-task.
+    if: vars.STUB_TSV_ENABLED == 'true' && !startsWith(github.event.issue.title, '[housekeeping')
     runs-on: ubuntu-latest
 
     steps:
@@ -117,7 +121,6 @@ jobs:
 
             Refs #${{ github.event.issue.number }}
             Fixes #128
-          labels: "housekeeping"
           add-paths: scripts/project_fields.tsv
 
   reap-stub-branch:
@@ -150,13 +153,13 @@ jobs:
     name: Append inferred row for non-agent-task client-pilot issues
     # Paused: require STUB_TSV_ENABLED=true. Original condition kept below for restore.
     # Fire when the client-pilot label is applied, but NOT for agent-task (job 1 covers that)
-    # and NOT for housekeeping issues (those are exempt from project-field requirements).
+    # and NOT for [housekeeping-titled issues (those are exempt from project-field requirements).
     # (phase-N labels were deleted in the 2026-09 board cleanup.)
     if: |
       vars.STUB_TSV_ENABLED == 'true' &&
       github.event.label.name != 'agent-task' &&
-      github.event.label.name != 'housekeeping' &&
-      github.event.label.name == 'client-pilot'
+      github.event.label.name == 'client-pilot' &&
+      !startsWith(github.event.issue.title, '[housekeeping')
     runs-on: ubuntu-latest
 
     steps:
@@ -166,11 +169,12 @@ jobs:
           ref: develop
           fetch-depth: 1
 
-      - name: Guard — skip if already in TSV, housekeeping, or agent-task
+      - name: Guard — skip if already in TSV, [housekeeping-titled, or agent-task
         id: guard
         env:
           LABELS: ${{ toJson(github.event.issue.labels) }}
           ISSUE: ${{ github.event.issue.number }}
+          TITLE: ${{ github.event.issue.title }}
         run: |
           TSV="scripts/project_fields.tsv"
 
@@ -194,12 +198,14 @@ jobs:
             exit 0
           fi
 
-          # Skip if housekeeping label is present.
-          if echo "$LABEL_NAMES" | grep -qw "housekeeping"; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "#${ISSUE} is housekeeping — exempt from project-field requirements."
-            exit 0
-          fi
+          # Skip if the title marks it housekeeping (label retired 2026-09).
+          case "$TITLE" in
+            '[housekeeping'*)
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "#${ISSUE} is [housekeeping-titled — exempt from project-field requirements."
+              exit 0
+              ;;
+          esac
 
           echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "No row for #${ISSUE} — will infer and append."
@@ -252,5 +258,4 @@ jobs:
 
             Refs #${{ github.event.issue.number }}
             Fixes #128
-          labels: "housekeeping"
           add-paths: scripts/project_fields.tsv

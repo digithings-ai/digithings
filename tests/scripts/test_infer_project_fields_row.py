@@ -86,6 +86,9 @@ def test_retired_phase_labels_fall_back_to_default(mod: Any, label: str) -> None
         ("component:digiquant", "digiquant"),
         ("component:digikey", "digikey"),
         ("component:digismith", "digismith"),
+        ("component:digiclaw", "digiclaw"),
+        ("component:digibase", "digibase"),
+        ("component:digivault", "digivault"),
     ],
 )
 def test_component_labels_set_board_area(mod: Any, label: str, area: str) -> None:
@@ -120,9 +123,22 @@ def test_retired_phase0_confirms_no_special_kind_or_priority(
 
 
 @pytest.mark.unit
-def test_risk_high_selects_opus(mod: Any) -> None:
-    row = mod.infer_row(8, _labels("agent-task", "risk:high"))
+def test_claude_tier_component_selects_opus(mod: Any) -> None:
+    """Label simplification 2026-09: model follows the dispatch tier (digikey is claude-tier)."""
+    row = mod.infer_row(8, _labels("agent-task", "component:digikey"))
     assert row[5] == "opus"
+
+
+@pytest.mark.unit
+def test_cursor_tier_component_selects_sonnet(mod: Any) -> None:
+    row = mod.infer_row(8, _labels("agent-task", "component:digiquant"))
+    assert row[5] == "sonnet"
+
+
+@pytest.mark.unit
+def test_retired_risk_label_no_longer_selects_opus(mod: Any) -> None:
+    row = mod.infer_row(8, _labels("agent-task", "risk:high"))
+    assert row[5] == "sonnet"
 
 
 @pytest.mark.unit
@@ -134,7 +150,7 @@ def test_first_matching_component_wins(mod: Any) -> None:
 
 @pytest.mark.unit
 def test_cli_prints_tab_separated_row(mod: Any) -> None:
-    labels = json.dumps(_labels("agent-task", "component:digigraph", "risk:high"))
+    labels = json.dumps(_labels("agent-task", "component:digigraph"))
     done = subprocess.run(
         [sys.executable, str(SCRIPT), "99", labels],
         capture_output=True,
@@ -143,7 +159,7 @@ def test_cli_prints_tab_separated_row(mod: Any) -> None:
     )
     assert done.returncode == 0, done.stderr
     assert done.stdout.strip() == "\t".join(
-        ("99", "Phase 3 — Domain unification", "digigraph", "Task", "P2", "opus")
+        ("99", "Phase 3 — Domain unification", "digigraph", "Task", "P2", "sonnet")
     )
 
 

@@ -2,6 +2,8 @@ import {
   convertToModelMessages,
   streamText,
   smoothStream,
+  toUIMessageStream,
+  createUIMessageStreamResponse,
   type UIMessage,
 } from "ai";
 import {
@@ -33,13 +35,17 @@ import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import {
   embedConfigOf,
   isEmbedChatRequest,
+  resolveAnonymousInstallChat,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
+import { isPlanTierSatisfied } from "@/lib/embed-tenants";
+import { verifyPlanProof } from "@/lib/plan-proof";
 import {
   acquireChatRunLock,
   releaseChatRunLockOnResponseEnd,
 } from "@/lib/chat-run-lock";
 import { isMutatingTurnMode, parseDigiTurnMode } from "@/lib/turn-mode";
+import { uiMessagesForUpstream } from "@/lib/ui-stream-parts";
 
 export const maxDuration = 120;
 
@@ -73,7 +79,9 @@ export async function POST(req: Request) {
   const tenantCtx =
     authResult instanceof Response && isEmbedChatRequest(req)
       ? resolveEmbedChatTenant(req)
-      : await resolveChatTenantContext(req, authResult);
+      : authResult instanceof Response
+        ? (resolveAnonymousInstallChat() ?? authResult)
+        : await resolveChatTenantContext(req, authResult);
   if (tenantCtx instanceof Response) {
     return tenantCtx;
   }
@@ -148,6 +156,42 @@ export async function POST(req: Request) {
   };
 
   const embedConfig = embedConfigOf(tenantCtx);
+
+  // Desk+ tier gate (#3662, Chris lock): when the embed config declares a
+  // requiredPlanTier, the caller must present a valid HMAC-signed plan proof
+  // token (X-Embed-Plan-Proof header) OR an authenticated digichat session
+  // with plan_tier in app_metadata.  Raw client-asserted X-Embed-Plan-Tier
+  // headers and ?plan_tier= query params are NEVER trusted — they are
+  // spoofable.  Fail closed when proof is absent or tier below threshold.
+  // Scoped to tenants with requiredPlanTier set — digithings.ai and all
+  // other tenants are untouched.
+  if (embedConfig?.requiredPlanTier) {
+    let callerTier: string | null = null;
+
+    // Prefer: HMAC-signed plan proof token from the dashboard popup.
+    const proofToken = req.headers.get("x-embed-plan-proof")?.trim();
+    if (proofToken) {
+      const proofSecret = process.env.DIGICHAT_PLAN_PROOF_SECRET?.trim();
+      if (proofSecret) {
+        callerTier = verifyPlanProof(proofToken, proofSecret);
+      }
+    }
+
+    // Fallback: authenticated digichat session with plan_tier in JWT claims.
+    if (!callerTier && authResult && !(authResult instanceof Response)) {
+      callerTier = authResult.plan_tier ?? null;
+    }
+
+    // NEVER trust raw X-Embed-Plan-Tier / ?plan_tier= — client-asserted and spoofable.
+
+    if (!isPlanTierSatisfied(embedConfig, callerTier)) {
+      return jsonError(
+        403,
+        "plan_tier_required",
+        `Chat requires ${embedConfig.requiredPlanTier}+ plan tier.`,
+      );
+    }
+  }
 
   // trial_form gate: DataTap-branded embed that, after EMBED_FREE_TURN_LIMIT free
   // turns, defers the locked presentation to the embedding page (which shows the
@@ -254,11 +298,12 @@ export async function POST(req: Request) {
   let coreMessages;
   try {
     coreMessages = await convertToModelMessages(
-      messages.map((m) => {
+      uiMessagesForUpstream(messages).map((m) => {
         const { id: _omit, ...rest } = m;
         void _omit;
         return rest;
-      }) as Omit<UIMessage, "id">[]
+      }) as Omit<UIMessage, "id">[],
+      { ignoreIncompleteToolCalls: true },
     );
   } catch (err) {
     runLock.release();
@@ -300,7 +345,51 @@ export async function POST(req: Request) {
 
   const eco = await getEcosystemEndpoints();
   const provider = createDigiGraphClient(eco.digigraphUrl, upstreamBearer);
-  const model = provider(digigraphModelName());
+
+  // Deploy `models.available` allowlist (fail closed when non-empty).
+  // Prefer X-Digi-Model; BYOK model is separate and still forwarded below.
+  let modelId = digigraphModelName();
+  const requestedModel = req.headers.get("x-digi-model")?.trim() || undefined;
+  try {
+    const { allowlistModelId } = await import("@/lib/deploy-config");
+    const {
+      resolveDeploymentForHost,
+      getDigichatConfig,
+      embedTenantToDeployment,
+    } = await import("@/lib/deploy-config/loader");
+    const embedHost = req.headers.get("x-embed-host");
+    let dep = resolveDeploymentForHost(embedHost, getDigichatConfig());
+    if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
+    if (dep?.models && (dep.models.available?.length ?? 0) > 0) {
+      const allowed = allowlistModelId(dep.models, requestedModel);
+      if (requestedModel && allowed === undefined) {
+        runLock.release();
+        return new Response(
+          JSON.stringify({
+            error: "model_not_allowed",
+            message: "Requested model is not in the deployment allowlist.",
+          }),
+          { status: 400, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (allowed) modelId = allowed;
+    } else if (requestedModel) {
+      modelId = requestedModel;
+    }
+  } catch {
+    // Invalid deploy config with an explicit request → fail closed.
+    if (requestedModel) {
+      runLock.release();
+      return new Response(
+        JSON.stringify({
+          error: "model_not_allowed",
+          message: "Deployment model allowlist could not be loaded.",
+        }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      );
+    }
+  }
+  const model = provider(modelId);
 
   const upstreamHeaders: Record<string, string> = {
     "X-Session-Id": sessionId,
@@ -325,9 +414,24 @@ export async function POST(req: Request) {
     upstreamHeaders["X-Digi-Language"] = languageCode;
   }
   // X-Digi-Force-Tool is send-only — ignore leftover slash force on regen/edit (#3475).
-  const forceTool = req.headers.get("x-digi-force-tool")?.trim();
-  if (forceTool && !isMutatingTurnMode(turnMode)) {
-    upstreamHeaders["X-Digi-Force-Tool"] = forceTool;
+  // Catalog allowlist from deployment config is source of truth (fail closed).
+  const forceToolRaw = req.headers.get("x-digi-force-tool")?.trim();
+  if (forceToolRaw && !isMutatingTurnMode(turnMode)) {
+    try {
+      const { filterForceToolHeader } = await import("@/lib/deploy-config");
+      const {
+        resolveDeploymentForHost,
+        getDigichatConfig,
+        embedTenantToDeployment,
+      } = await import("@/lib/deploy-config/loader");
+      const embedHost = req.headers.get("x-embed-host");
+      let dep = resolveDeploymentForHost(embedHost, getDigichatConfig());
+      if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
+      const allowed = filterForceToolHeader(dep, forceToolRaw);
+      if (allowed) upstreamHeaders["X-Digi-Force-Tool"] = allowed;
+    } catch {
+      // Invalid deploy config — do not forward force-tool (fail closed).
+    }
   }
 
   // Opt-in web search (#3420): client must ask AND tenant/env must allow.
@@ -388,7 +492,8 @@ export async function POST(req: Request) {
   });
 
   return finish(
-    result.toUIMessageStreamResponse({
+    createUIMessageStreamResponse({
+      stream: toUIMessageStream({ stream: result.stream }),
       headers: responseHeaders,
     }),
   );

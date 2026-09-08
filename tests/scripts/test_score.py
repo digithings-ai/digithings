@@ -93,9 +93,7 @@ def test_dimension_score_drops_one_per_finding() -> None:
 def test_parse_diff_lines_numbers_added_and_skips_removed() -> None:
     diff = _unified(
         "pkg/mod.py",
-        "+alpha\n"
-        "-gone\n"
-        "+beta\n",
+        "+alpha\n-gone\n+beta\n",
         start=10,
     )
     entries = score.parse_diff_lines(diff)
@@ -117,13 +115,12 @@ def test_scan_flags_pandas_import_on_added_python_line() -> None:
 
 
 def test_scan_ignores_pandas_on_removed_line() -> None:
-    diff = _unified("digisearch/src/digisearch/x.py", "-import pandas as pd\n+import polars as pl\n")
+    diff = _unified(
+        "digisearch/src/digisearch/x.py", "-import pandas as pd\n+import polars as pl\n"
+    )
     results = score.scan(diff)
     pandas_hits = [
-        f
-        for dim in results.values()
-        for f in dim.findings
-        if "pandas" in f.description.lower()
+        f for dim in results.values() for f in dim.findings if "pandas" in f.description.lower()
     ]
     assert pandas_hits == []
 
@@ -132,10 +129,7 @@ def test_scan_skips_pandas_check_on_non_python_files() -> None:
     diff = _unified("README.md", "+import pandas as pd\n")
     results = score.scan(diff)
     pandas_hits = [
-        f
-        for dim in results.values()
-        for f in dim.findings
-        if "pandas" in f.description.lower()
+        f for dim in results.values() for f in dim.findings if "pandas" in f.description.lower()
     ]
     assert pandas_hits == []
 
@@ -202,10 +196,7 @@ def test_scan_respects_file_score_allow_pragma() -> None:
         diff = _unified(rel, "+import pandas\n")
         results = score.scan(diff)
         pandas_hits = [
-            f
-            for dim in results.values()
-            for f in dim.findings
-            if "pandas" in f.description.lower()
+            f for dim in results.values() for f in dim.findings if "pandas" in f.description.lower()
         ]
         assert pandas_hits == []
     finally:
@@ -253,7 +244,9 @@ def test_main_diff_file_empty_exits_zero(tmp_path: Path, monkeypatch: pytest.Mon
     assert code == 0
 
 
-def test_main_diff_file_with_violation_exits_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_diff_file_with_violation_exits_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     # Accuracy threshold is 9 — a single TODO drops score to 9 (still pass).
     # Stack enough accuracy hits to fail (≥2 TODOs → score 8 < 9).
     body = "+TODO one\n+FIXME two\n"
@@ -269,3 +262,19 @@ def test_main_diff_file_with_violation_exits_one(tmp_path: Path, monkeypatch: py
     assert code == 1
     assert out["passed"] is False
     assert out["dimensions"]["accuracy"]["score"] <= 8
+
+
+def test_scan_todo_requires_word_boundary() -> None:
+    """``TODO_TOOL`` must not match the TODO/FIXME accuracy heuristic (#3528)."""
+    identifier = _unified(
+        "digigraph/src/digigraph/orchestration/builtin.py",
+        "+TODO_TOOL = {}\n+register(TODO_TOOL)\n",
+    )
+    comment = _unified(
+        "digigraph/src/digigraph/orchestration/builtin.py",
+        "+# TODO: wire remaining tools\n",
+    )
+    id_hits = score.scan(identifier)["accuracy"].findings
+    comment_hits = score.scan(comment)["accuracy"].findings
+    assert not any("TODO/FIXME" in f.description for f in id_hits)
+    assert any("TODO/FIXME" in f.description for f in comment_hits)

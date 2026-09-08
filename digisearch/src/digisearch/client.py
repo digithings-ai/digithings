@@ -43,31 +43,22 @@ class DigiSearch:
         return None
 
     def _get_embedder(self) -> Any | None:
-        """Get default embedding provider from config.
+        """Resolve EmbeddingCache → BatchEmbedder → provider from config/env.
 
-        Falls back to MiniLMEmbedder (same model Chroma historically bundled)
-        so Chroma construction sites always receive an explicit provider (#2437).
+        Raises :class:`digisearch.embedding.factory.EmbeddingConfigError` when
+        embed is explicitly configured but cannot be loaded (no silent no-op).
         """
-        prov = self.config.get_embedding_provider()
-        if prov == "openai":
-            try:
-                from digisearch.embedding.providers.openai import OpenAIEmbedder
+        from digisearch.embedding.factory import resolve_embedding_pipeline
 
-                model = self.config.get_embedding_model()
-                return OpenAIEmbedder(model=model)
-            except ImportError:
-                return None
-        try:
-            from digisearch.embedding.providers.minilm import get_default_minilm_embedder
-
-            return get_default_minilm_embedder()
-        except ImportError:
-            return None
+        return resolve_embedding_pipeline(self.config)
 
     def query(
         self, text: str, index_name: str = "default", top_k: int = 10, mode: str = "hybrid"
     ) -> list[Result]:
         """Search index. Uses configured backend or stub."""
+        from digisearch.embedding.factory import normalize_query_mode
+
+        mode = normalize_query_mode(mode)
         idx = self.get_index(index_name)
         if idx:
             q = Query(text=text, top_k=top_k, mode=mode)
@@ -78,14 +69,19 @@ class DigiSearch:
         return query_index(q, index_name=index_name).results
 
     def ingest(self, doc: Document, index_name: str = "default") -> int:
-        """Ingest document into index. Returns chunks created."""
+        """Index an already-chunked document. Returns chunks created.
+
+        Filesystem parse → chunk → embed lives in
+        :func:`digisearch.pipeline.ingest.ingest_source`. This method only
+        writes ``doc.chunks`` to a configured DigiIndex or the backend router.
+        """
         idx = self.get_index(index_name)
         if idx and doc.chunks:
             idx.add(doc.chunks)
             return len(doc.chunks)
-        from digisearch.search._stub import route_add_chunks
+        from digisearch.pipeline.ingest import index_chunks
 
-        route_add_chunks(index_name, doc.chunks)
+        index_chunks(index_name, doc.chunks)
         return len(doc.chunks)
 
     def as_mcp_server(self) -> object:

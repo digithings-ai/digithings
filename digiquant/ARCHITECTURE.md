@@ -223,6 +223,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` selector: `btc_power_law` / `generic_valuation` / `rolling_z` (`sdca/providers.py`). Oscillators are computed from **that ticker's** OHLCV. `indicator_weights` JSON `{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Macro extras need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
 | `digiquant_fetch_bitview_series` | Fetch Bitview/BRK on-chain `day1` series (`mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`) into `data/onchain/bitview/` parquet. JSON API only (no HTML scrape). `nupl` is refused (monotone of MVRV). Fail-soft + timeout. Hosted bitview.space is optional / no SLA. Coin Metrics community CC BY-NC is **not** fetched and must not be republished commercially. Refs #1086 |
 | `digiquant_fit_sdca_weights` | Stage A cycle-window weight fit for an `SdcaAssetProfile` (`btc_v1` / `eth_research_v1` / `profile_json`), then `regularize_weights`. Not a second optimizer: Stage B is `digiquant_run_optimize` with `strategy_name=sdca` and frozen `*_weight` keys in `strategy_params`. Returns `{weights, regularized_weights, regularized_weight_params, score, ...}` or `{"error": ...}` |
+| `digiquant_compile_research_portfolio` | digigraph product-graph dry path (#3415): compile research + portfolio LangGraphs with no LLM / no book write. Returns `{dry_run, graphs[], idempotency_key, ...}` via orchestrator_invoke |
 | `digiquant_generate_slapper_tearsheet` | Runs the NautilusTrader backtest for the Slapper family and writes TV-style tearsheet JSON to the digiquant.io frontend. Delegates each strategy to `generate_tearsheets.run_strategy_isolated` (spawn-per-strategy, #1389 — a second in-process engine would SIGABRT the long-lived server); resolves calibrations file → Supabase (example only via `allow_example_calibrations`), accepts `signal_delay_days` (#1462), and returns `{"entries", "failures"}` with per-strategy errors as data. Does **not** write `index.json` (the CLI `main()` owns that) |
 | `digiquant_validate_slapper_vs_tradingview` | Trade-level parity check of a Slapper strategy against a TradingView "List of Trades" CSV export |
 | `dashboard_run_policy_replay` | Register a policy replay run (summary IDs only; never activates) |
@@ -1256,6 +1257,15 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
 ([#930](https://github.com/digithings-ai/digithings/issues/930), spec
 [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md)):
 
+**digigraph product graphs (#3415).** Production direction is digigraph-hosted
+`research-portfolio-chain` (`digigraph.graph.product_graphs`) invoking digiquant
+over HTTP (`digiquant_compile_research_portfolio` dry path first; full apply
+cutover later). The CLI `python -m digiquant.portfolio.chain` remains the apply
+entry until that cutover. Prompt / structured-output walk for the same pass:
+[#3424](https://github.com/digithings-ai/digithings/issues/3424) —
+`digiquant.dashboard.prompt_walk_inventory` and
+`research/docs/PROMPT_STRUCTURED_OUTPUT_WALK.md`.
+
 - **research** (`digiquant/src/digiquant/research/`) — research only. **A0–A4:**
   preflight → triage → phases 1–5 segments → phase6 consolidate → phase7 digest.
   Preflight (#2609 Track B) pins a versioned `ProfileConfig` onto
@@ -1263,7 +1273,20 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   selects the digithings **house** default (always-on, immutable); an overlay pin
   fails closed when the exact `olympus_profile_config.id` is missing. Overlays must
   not fork the graph or cancel the house run. Models:
-  `digiquant.dashboard.profile_config`.
+  `digiquant.dashboard.profile_config`. Optional nested
+  `pipeline_schedule` / `execution_policy` (#3611) record workspace stage-day intent
+  and calendar-vetoable execution constraints inside the same append-only payload
+  (no new table). Stage gates (#3618) resolve today's `PipelineSchedule` inside
+  `digiquant.portfolio.chain.run_research_then_portfolio` (and the overlay path that
+  calls it): disabled research / deliberation stages are skipped (preflight hydrates
+  overlay `ProfileConfig` before the research skip). Typed outcomes
+  (`ran` | `disabled` | `deferred` | `failed`) persist on
+  `ResearchState.pipeline_stage_outcomes` and the diagnostics breakdown key
+  `pipeline_stages`. Execution is not invoked in this compose (`execute_at_open`
+  remains a separate job); the report records schedule eligibility / disable /
+  calendar-deferral. Calendar deferral is a typed thin hook
+  (`MarketCalendarContext`) — when unavailable, execution gates on schedule only.
+  Models: `digiquant.portfolio.stage_gates`. Market-hours venue I/O remains follow-on.
   Shared research corpus (#2613 Track B / WP12-class) uses tenant-agnostic keys
   `theme:` / `asset:` / `segment:` in `olympus_research_corpus` with
   publish-if-missing only — house writes defaults; overlays never fork per-user
@@ -1896,8 +1919,8 @@ portfolio imports from research runtime.
 
 **Not in v1:** a portfolio-lite env fork, `build_portfolio_phases_lite`, `run_type=baseline|delta`
 graph forks, `phase7cd` bull/bear stack, phase9 evolution LLM on the daily path, or a
-`monthly` synthesis cron. Operator full refresh uses `--refresh-scope all` (Sunday cron
-sets this automatically) — not a separate graph.
+`monthly` synthesis cron. Operator full refresh uses `--refresh-scope all`
+(manual `workflow_dispatch` / CLI) — not a separate graph or Sunday force.
 
 #### Responsibility boundary (research vs portfolio positioning)
 
@@ -2025,7 +2048,19 @@ difference in percentage points. All metric writers use
 must read these fields when present. The dashboard Performance view fills only missing
 fields with the same deterministic first/latest calculation over live `nav_history` and
 the benchmark closes inside that exact NAV window, and labels the result as a live-history
-or mixed fallback. Rows in
+or mixed fallback.
+
+**Dashboard UI SSOT (#3580).** Brief and Tearsheet share one accounting NAV view
+(`public_accounting_nav_history`) and shared pure helpers
+(`frontend/dashboard/lib/performance-ssot.ts`). Tearsheet loads via
+`getPerformanceBundle`; Brief rebuilds persisted headlines from the same view
+already in `getFullDashboardData` snapshots. Invested % prefers the accounting tip;
+book as-of is `committedBookDate`. Live marks on Brief are explicitly badged and must
+not silently replace the persisted tip. Metrics lag (`portfolio_metrics` behind the
+NAV tip) and `legacy_estimate` contract are visible chrome — do not extend flat
+legacy as if healthy. Writer unblock on `main` (`uv.lock` `atlas` → `research`) is
+tracked in #3563 / #3467.
+Rows in
 `current_book_lookback` (legacy alias view `position_attribution`) are a trailing-window
 diagnostic with an explicit lookback interval — not inception-to-date contribution and
 not realized daily P&L (#2598). The Performance cumulative contribution chart instead
@@ -2091,7 +2126,8 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   plus `digiquant.research.graph.ResearchInput` (`cadence=daily`, `refresh_scope`).
 - **One daily topology** — triage always runs; per-segment `skip`/`edit`/`full` via
   `resolve_edit_mode` + triage signals. Operator full refresh: `refresh_scope=all`
-  or Sunday cron (see `.github/workflows/pipeline-digiquant.yml`).
+  via manual `workflow_dispatch` / CLI (see `.github/workflows/pipeline-digiquant.yml`).
+  House clocks run daily with `refresh_scope=none` by default.
 - Skills under `digiquant/src/digiquant/research/skills/` (alt-data, institutional,
   macro, asset-class, equity, sector-research, digest, …).
   Loaded via `digiquant.research.skills.load_skill`.
@@ -2664,6 +2700,16 @@ the grants would refuse anyway.
   via the public `marks: dict[str, float | Decimal]` signature) take the same decline —
   `_rejection_reason` checks `is_finite()` before any comparison so the executor does not
   raise (#2497).
+- **Venue session gate (#3612).** Before mark-based rejection or fill writes,
+  `execute_pending_orders` may consult :mod:`digiquant.execution.market_hours` (pure
+  calendar resolution over `trading_calendar` rows + `ticker_venues`). Closed sessions
+  (weekend, holiday, early close / outside hours) and fail-closed missing calendar data
+  leave the order `pending` and append a `DeferredOrder` on `ExecutionResult.deferred` —
+  never a terminal `data_unavailable` solely because the market is closed. CRYPTO is
+  24×7 without a row; FX weekends close from the weekday alone. `execute_at_open` loads
+  calendar rows and prints deferred outcomes. Preflight injects
+  `market_context["venue_sessions"]` for PM awareness (kept under portfolio/ticker
+  `data_layer_scope`). Live-venue refusals in `execution/policy.py` are untouched.
 
 `execute_at_open.py` tries the ledger first and reaches the prose builders only when it
 declines. `build_events_from_paper_fills` returns `(None, reason)` for "the ledger has no
@@ -3376,7 +3422,11 @@ Tests: `tests/dq/brokers/test_ibkr_adapter.py` (mocked transport only).
 
 `digiquant/src/digiquant/execution/` (K4) routes approved portfolio order intents to an
 external paper venue after H9 / `execute_at_open`, and mirrors acks / fills / positions
-append-only (D10). The internal `paper_internal` path is unchanged.
+append-only (D10). The internal `paper_internal` path is unchanged. Venue-session
+calendar resolution for deferred execution is `execution/market_hours.py` (#3612) —
+pure helpers over `trading_calendar` + `ticker_venues`; import that submodule
+directly (not via package `__init__`) to avoid circular imports with `execution_io`.
+Live-venue refusals in `execution/policy.py` are unchanged by the calendar gate.
 
 **Venue resolution (`policy.py`).** `resolve_venue(workspace_id, *, active_paper_brokers)`
 performs **no I/O**. House / system — `workspace_id is None` **or** the well-known

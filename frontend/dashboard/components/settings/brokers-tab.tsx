@@ -17,6 +17,10 @@ import {
   type FillView,
   type SettingsApiOptions,
 } from '@/lib/settings-api';
+import {
+  SETTINGS_LOAD_ERROR_MESSAGE,
+  SettingsLoadError,
+} from './settings-load-error';
 
 export type BrokersTabProps = {
   api: SettingsApiOptions | null;
@@ -63,6 +67,7 @@ export function BrokersTab({
   const [rows, setRows] = useState<BrokerConnectionView[]>([]);
   const [fills, setFills] = useState<FillView[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [broker, setBroker] = useState<'alpaca' | 'ibkr'>('alpaca');
   const [keyId, setKeyId] = useState('');
   const [secret, setSecret] = useState('');
@@ -86,8 +91,9 @@ export function BrokersTab({
         setOauthClientId('');
       }
       setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load connections');
+      setLoadError(null);
+    } catch {
+      setLoadError(SETTINGS_LOAD_ERROR_MESSAGE);
     }
   }, [api, listFn, fillsFn, appUrlsFn]);
 
@@ -235,6 +241,9 @@ export function BrokersTab({
         </button>
       </div>
 
+      {loadError ? (
+        <SettingsLoadError message={loadError} onRetry={() => void refresh()} />
+      ) : null}
       {error ? (
         <p className="text-sm text-down" role="alert" data-testid="brokers-error">
           {error}

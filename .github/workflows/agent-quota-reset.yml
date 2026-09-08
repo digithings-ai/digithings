@@ -2,8 +2,10 @@ name: "Agent: quota reset"
 
 # RETIRED 2026-09 (board cleanup): quota parking dropped in favor of Project
 # status + explicit manual pickup (`make task ISSUE=N`). Monthly schedule
-# disabled; manual dispatch kept as a no-op backstop (jobs tolerate the
-# deleted quota:*/pending:quota labels).
+# disabled; manual dispatch kept as a no-op backstop.
+#
+# Label simplification 2026-09: exec:* labels deleted; re-dispatch bounces
+# agent-task instead. Tier routing lives in scripts/project_routing.json.
 #
 # Can still be triggered manually via workflow_dispatch, but it will find
 # nothing to do unless the labels are recreated.
@@ -40,12 +42,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO:     ${{ github.repository }}
         run: |
-          # Find issues with pending:quota + exec:cursor, bounce the exec:cursor
-          # label to re-fire the dispatch workflow.
-          ISSUES=$(gh issue list --repo "$REPO" --state open --label "pending:quota" --label "exec:cursor" --json number --jq '.[].number')
+          # Bounce the agent-task label to re-fire dispatch (see
+          # agent-dispatch-replay.yml for the dry-run version of this).
+          ISSUES=$(gh issue list --repo "$REPO" --state open --label "agent-task" --json number --jq '.[].number')
           for N in $ISSUES; do
-            echo "Re-dispatching cursor task #$N"
-            gh issue edit "$N" --repo "$REPO" --remove-label "pending:quota" || true
-            gh issue edit "$N" --repo "$REPO" --remove-label "exec:cursor" || true
-            gh issue edit "$N" --repo "$REPO" --add-label "exec:cursor"
+            echo "Re-dispatching task #$N"
+            gh issue edit "$N" --repo "$REPO" --remove-label "agent-task" || true
+            gh issue edit "$N" --repo "$REPO" --add-label "agent-task"
           done

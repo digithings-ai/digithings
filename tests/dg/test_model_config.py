@@ -196,10 +196,10 @@ class TestResolveRequestModel:
             == "openrouter/mistral/mistral-7b"
         )
 
-    def test_provider_falls_back_to_ollama_when_key_missing(
+    def test_provider_missing_key_raises_value_error(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """Missing provider key → Ollama mode model (legacy silent fallback, not a raise)."""
+        """Missing provider key → raise ValueError (no silent Ollama fallback)."""
         _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
@@ -207,7 +207,31 @@ class TestResolveRequestModel:
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.delenv("OLLAMA_MODEL", raising=False)
         monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")  # not :11434 → no strip
-        assert resolve_request_model("openrouter/mistral/mistral-7b") == "ollama/qwen3:8b"
+        with pytest.raises(ValueError, match="Provider 'openrouter' key \(OPENROUTER_API_KEY\)"):
+            resolve_request_model("openrouter/mistral/mistral-7b")
+
+    def test_house_digiquant_slug_not_clobbered_by_mode_defaults(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Unprefixed house pins (#3414) must survive resolve_request_model.
+
+        Regression: after stripping ``openrouter/`` from digiquant pools, phase
+        models like ``deepseek/deepseek-v4-flash`` fell through to
+        ``resolve_effective_model``, which prefers ``model_modes`` local defaults
+        (``ollama/qwen3:8b``). OpenRouter then rejects the call as an invalid
+        model id — observed on decision_log reflector / preflight_reflect.
+        """
+        _clear_explicit_llm_env(monkeypatch)
+        (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+        monkeypatch.setenv("DIGI_LLM_MODE", "test")
+        monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+        monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+        monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+        assert resolve_request_model("deepseek/deepseek-v4-flash") == "deepseek/deepseek-v4-flash"
+        assert resolve_request_model("perplexity/sonar") == "perplexity/sonar"
+        # Explicit local ollama requests still go through effective-model resolution.
+        assert resolve_request_model("ollama/qwen3:8b") == "ollama/qwen3:8b"
 
     def test_plain_model_uses_effective_model(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
