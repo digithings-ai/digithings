@@ -64,6 +64,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -279,6 +280,61 @@ def _search_items(payload: object, limit: int) -> list[dict]:
         if len(out) >= limit:
             break
     return out
+
+
+YEAR_DAYS = 371  # 53 weeks, matches RepoHeatmap's default
+
+
+def _day_key(stamp: str | None) -> str | None:
+    return stamp[:10] if stamp else None
+
+
+def _to_daily(
+    commits: list[dict],
+    merged: list[str],
+    closed: list[str],
+    end: datetime,
+    total: int = YEAR_DAYS,
+) -> list[dict]:
+    counts: dict[str, int] = {}
+
+    def add(stamp: str | None) -> None:
+        day = _day_key(stamp)
+        if day:
+            counts[day] = counts.get(day, 0) + 1
+
+    for c in commits:
+        add((c.get("commit") or {}).get("committer", {}).get("date"))
+    for s in (*merged, *closed):
+        add(s)
+    start = (end - timedelta(days=total - 1)).date()
+    return [
+        {
+            "date": (start + timedelta(days=i)).isoformat(),
+            "count": counts.get((start + timedelta(days=i)).isoformat(), 0),
+        }
+        for i in range(total)
+    ]
+
+
+def _search_dates(query: str) -> list[str]:
+    """All closed_at dates for a Search issues query, paginated at 100/page.
+
+    Authenticated Search allows 30 req/min — ~65 pages per query sleeps its
+    way through ~3 min. Weekly cron only; never call this client-side.
+    """
+    out: list[str] = []
+    page = 1
+    while True:
+        payload = _gh("api", f"search/issues?q={query}&per_page=100&page={page}")
+        items = payload.get("items", []) if isinstance(payload, dict) else []
+        if not items:
+            return out
+        out.extend(it["closed_at"] for it in items if isinstance(it, dict) and it.get("closed_at"))
+        if len(items) < 100:
+            return out
+        page += 1
+        time.sleep(2.5)
 
 
 def collect() -> dict:

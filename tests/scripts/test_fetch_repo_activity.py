@@ -439,6 +439,57 @@ def test_text_lines_scores_binaries_and_unreadable_paths_as_zero(tmp_path: Path)
     assert fra._text_lines(tmp_path / "empty.py") == 0
 
 
+# ── daily bucketing (Task 2) ───────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+def test_to_daily_sums_three_sources_per_utc_day() -> None:
+    end = datetime(2026, 8, 24, tzinfo=UTC)
+    days = fra._to_daily(
+        commits=[{"commit": {"committer": {"date": "2026-08-21T10:00:00Z"}}}],
+        merged=["2026-08-21T17:35:10Z", "2026-08-21T09:00:00Z"],
+        closed=["2026-08-20T08:00:00Z"],
+        end=end, total=14,
+    )
+    by_date = {d["date"]: d["count"] for d in days}
+    assert by_date["2026-08-21"] == 3
+    assert by_date["2026-08-20"] == 1
+    assert by_date["2026-08-19"] == 0
+    assert len(days) == 14
+
+
+@pytest.mark.unit
+def test_search_dates_paginates_and_skips_missing_closed_at(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Search paginator collects closed_at across pages without network."""
+    pages = [
+        {"items": [{"closed_at": "2026-08-21T10:00:00Z"}, {"closed_at": None}]},
+        {"items": []},
+    ]
+    monkeypatch.setattr(fra, "_gh", lambda *a: pages.pop(0))
+    assert fra._search_dates("repo:x+is:issue") == ["2026-08-21T10:00:00Z"]
+
+
+@pytest.mark.unit
+def test_search_dates_stops_on_short_page_without_sleeping(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A short page ends pagination; no backoff sleep on the terminal page."""
+    calls: list[str] = []
+    sleeps: list[float] = []
+
+    def fake_gh(*args: str) -> dict[str, Any]:
+        calls.append(args[1])
+        return {"items": [{"closed_at": "2026-08-20T08:00:00Z"}]}
+
+    monkeypatch.setattr(fra, "_gh", fake_gh)
+    monkeypatch.setattr(fra.time, "sleep", lambda s: sleeps.append(s))
+    assert fra._search_dates("repo:x+is:pr") == ["2026-08-20T08:00:00Z"]
+    assert len(calls) == 1
+    assert sleeps == []
+
+
 # ── wiring ──────────────────────────────────────────────────────────────────
 
 
