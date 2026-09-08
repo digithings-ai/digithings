@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Refresh machine-readable provider model-route snapshots.
+"""Refresh a full provider model inventory: pricing, limits, capabilities.
 
-Only providers with credentials/endpoints already configured are queried. The
-first iteration covers the pure snapshot helpers; network fetching and snapshot
-output land behind their own tests.
+Only providers with credentials/endpoints already configured are queried.
+Capability + pricing shortlist comes from the public models.dev catalog;
+live provider list endpoints record what each account can actually call.
+
+The snapshot is a menu for humans: tier assignment (cheap/mid/flagship) and
+per-phase model choice stay manual in ``config/digiquant_models.yaml``.
 """
 
 from __future__ import annotations
@@ -56,28 +59,6 @@ def _as_float(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return parsed
-
-
-def select_cheapest_tool_capable(routes: list[ModelRoute], min_context: int = 64000) -> ModelRoute:
-    """Select the cheapest tool-capable route meeting the context floor."""
-    eligible = [
-        route
-        for route in routes
-        if route.supports_tools
-        and route.context_length >= min_context
-        and route.prompt_price is not None
-        and route.completion_price is not None
-    ]
-    if not eligible:
-        raise ValueError("no tool-capable route meets the context floor")
-    return sorted(
-        eligible,
-        key=lambda route: (
-            (route.prompt_price or 0.0) + (route.completion_price or 0.0),
-            route.prompt_price or 0.0,
-            route.model,
-        ),
-    )[0]
 
 
 def normalize_id_list(payload: Mapping[str, Any], provider: str) -> list[ModelRoute]:
@@ -297,18 +278,18 @@ def live_model_ids(payload: Mapping[str, Any]) -> list[str]:
     return []
 
 
-def build_catalog_snapshot(
+def build_inventory_snapshot(
     routes: list[ModelRoute],
     live: Mapping[str, list[str]],
     providers: list[str],
     min_context: int = 64000,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
-    """Build a snapshot from catalog routes plus live availability ids."""
-    try:
-        cheapest = select_cheapest_tool_capable(routes, min_context=min_context)
-    except ValueError:
-        cheapest = None
+    """Build a full inventory snapshot: every catalog route plus live ids.
+
+    Tier assignment stays manual (``config/digiquant_models.yaml``) — this
+    snapshot is the menu humans choose from, not an auto-picker.
+    """
     return {
         "generated_at": generated_at or datetime.now(timezone.utc).isoformat(),
         "providers": sorted(providers),
@@ -316,8 +297,32 @@ def build_catalog_snapshot(
         "source": "models.dev catalog + live provider lists",
         "routes": [asdict(route) for route in routes],
         "live": {provider: sorted(ids) for provider, ids in live.items()},
-        "cheapest": asdict(cheapest) if cheapest is not None else None,
     }
+
+
+def _price_per_million(price_per_token: float | None) -> str:
+    if price_per_token is None:
+        return "n/a"
+    return f"{price_per_token * 1_000_000:.2f}"
+
+
+def render_table(routes: list[ModelRoute], live: Mapping[str, list[str]]) -> str:
+    """Render routes as a human-readable pricing/capability table grouped by provider."""
+    lines = ["provider | model | $/1M in | $/1M out | ctx | tools | json | live"]
+    by_provider: dict[str, list[ModelRoute]] = {}
+    for route in routes:
+        by_provider.setdefault(route.provider, []).append(route)
+    for provider in sorted(by_provider):
+        live_ids = set(live.get(provider, []))
+        for route in sorted(by_provider[provider], key=lambda r: r.model):
+            lines.append(
+                f"{provider} | {route.model} | {_price_per_million(route.prompt_price)} | "
+                f"{_price_per_million(route.completion_price)} | {route.context_length} | "
+                f"{'yes' if route.supports_tools else 'no'} | "
+                f"{'yes' if route.supports_structured_output else 'no'} | "
+                f"{'yes' if route.model in live_ids else 'no'}"
+            )
+    return "\n".join(lines)
 
 
 def write_snapshot(snapshot: Mapping[str, Any], out: Path) -> Path:
@@ -400,7 +405,7 @@ def main(argv: list[str] | None = None, client: Any | None = None) -> int:
 
     catalog = fetch_models_dev_catalog(http_client)
     routes = normalize_models_dev_catalog(catalog, providers)
-    snapshot = build_catalog_snapshot(routes, live, providers, min_context=args.min_context)
+    snapshot = build_inventory_snapshot(routes, live, providers, min_context=args.min_context)
     if args.out:
         out = Path(args.out)
     else:
@@ -408,11 +413,8 @@ def main(argv: list[str] | None = None, client: Any | None = None) -> int:
         out = _REPO_ROOT / "reports" / f"model_routes_{today}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     write_snapshot(snapshot, out)
-    cheapest = snapshot["cheapest"]
-    if cheapest is not None:
-        print(f"cheapest tool-capable route: {cheapest['model']}")
-    else:
-        print("no tool-capable route met the context floor")
+    print(f"wrote {len(routes)} routes across {len(providers)} providers to {out}")
+    print(render_table(routes, live))
     return 0
 
 

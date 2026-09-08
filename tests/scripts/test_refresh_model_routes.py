@@ -33,31 +33,6 @@ def test_only_configured_providers_are_queried(monkeypatch: pytest.MonkeyPatch) 
     assert "groq" not in providers
 
 
-def test_cheapest_tool_capable_route_wins() -> None:
-    mod = _load()
-    routes = [
-        mod.ModelRoute(
-            provider="openrouter",
-            model="expensive/tool-model",
-            prompt_price=0.01,
-            completion_price=0.03,
-            context_length=200000,
-            supports_tools=True,
-            supports_structured_output=True,
-        ),
-        mod.ModelRoute(
-            provider="openrouter",
-            model="cheap/tool-model",
-            prompt_price=0.00000027,
-            completion_price=0.0000011,
-            context_length=1000000,
-            supports_tools=True,
-            supports_structured_output=True,
-        ),
-    ]
-    assert mod.select_cheapest_tool_capable(routes, min_context=64000).model == "cheap/tool-model"
-
-
 def test_write_snapshot_creates_json(tmp_path: Path) -> None:
     mod = _load()
     snapshot = {"providers": ["openrouter"], "routes": [], "cheapest": None}
@@ -187,21 +162,36 @@ def test_fetch_models_dev_catalog_uses_public_url() -> None:
     assert seen["headers"] == {}
 
 
-def test_build_catalog_snapshot_selects_cheapest_and_records_live() -> None:
+def test_build_inventory_snapshot_lists_every_route_and_live_ids() -> None:
     mod = _load()
     routes = mod.normalize_models_dev_catalog(_catalog_payload(), ["openrouter"])
-    snapshot = mod.build_catalog_snapshot(
+    snapshot = mod.build_inventory_snapshot(
         routes,
         live={"openrouter": ["cheap/tool-model"]},
         providers=["openrouter"],
         min_context=64000,
     )
-    assert snapshot["cheapest"]["model"] == "cheap/tool-model"
+    assert [r["model"] for r in snapshot["routes"]] == [
+        "cheap/tool-model",
+        "expensive/tool-model",
+    ]
     assert snapshot["live"] == {"openrouter": ["cheap/tool-model"]}
+    assert "cheapest" not in snapshot
 
 
-def test_main_prefers_catalog_capabilities_over_live_ids(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_render_table_shows_pricing_and_capabilities() -> None:
+    mod = _load()
+    routes = mod.normalize_models_dev_catalog(_catalog_payload(), ["openrouter", "fireworks"])
+    table = mod.render_table(routes, live={"openrouter": ["cheap/tool-model"]})
+    assert "cheap/tool-model" in table
+    assert "0.27" in table  # $/1M input, human units
+    assert "tools" in table.lower()
+    assert "openrouter" in table
+    assert "fireworks" in table
+
+
+def test_main_writes_full_inventory_and_prints_table(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     mod = _load()
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
@@ -225,8 +215,13 @@ def test_main_prefers_catalog_capabilities_over_live_ids(
     out = tmp_path / "model_routes.json"
     assert mod.main(["--out", str(out)], client=_Client()) == 0
     snapshot = __import__("json").loads(out.read_text(encoding="utf-8"))
-    assert snapshot["cheapest"]["model"] == "cheap/tool-model"
+    assert [r["model"] for r in snapshot["routes"]] == [
+        "cheap/tool-model",
+        "expensive/tool-model",
+    ]
     assert snapshot["live"]["openrouter"] == ["cheap/tool-model"]
+    assert "cheapest" not in snapshot
+    assert "cheap/tool-model" in capsys.readouterr().out
 
 
 def test_id_list_normalization_keeps_provider_login() -> None:
