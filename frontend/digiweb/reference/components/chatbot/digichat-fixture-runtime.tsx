@@ -14,7 +14,6 @@ import {
   Suggestions,
   useLocalRuntime,
   type ChatModelAdapter,
-  type ReadonlyJSONObject,
   type SuggestionConfig,
 } from "@assistant-ui/react";
 import { useSyncExternalStore, type ReactNode } from "react";
@@ -26,7 +25,7 @@ function asToolPart(tool: FixtureTool, result?: string) {
     type: "tool-call" as const,
     toolCallId: tool.toolCallId,
     toolName: tool.toolName,
-    args: tool.args as ReadonlyJSONObject,
+    args: tool.args,
     argsText: tool.argsText,
     ...(result !== undefined
       ? { result, status: { type: "complete" as const } }
@@ -34,7 +33,7 @@ function asToolPart(tool: FixtureTool, result?: string) {
   };
 }
 
-const adapter: ChatModelAdapter = {
+const adapter = {
   async *run({ messages, abortSignal }) {
     const scenario = pickFixtureScenario(lastUserText(messages));
     await pause(900, abortSignal);
@@ -89,7 +88,7 @@ const adapter: ChatModelAdapter = {
       await pause(40, abortSignal);
     }
   },
-};
+} as ChatModelAdapter;
 
 function pause(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
