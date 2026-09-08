@@ -28,6 +28,39 @@ export type ThreadSkin = (typeof THREAD_SKINS)[number];
 
 export const DEFAULT_THREAD_SKIN: ThreadSkin = "base";
 
+/** First-party marketing / OCC hosts. Unset `skin` → `digichat`, not catalog `base`. */
+export const FIRST_PARTY_DEFAULT_SKIN_HOSTS: ReadonlySet<string> = new Set([
+  "digithings.ai",
+  "www.digithings.ai",
+  "occ.digithings.ai",
+]);
+
+export const FIRST_PARTY_DEFAULT_SKIN_SLUGS: ReadonlySet<string> = new Set([
+  "digithings",
+  "digithings-ai",
+  "occ",
+]);
+
+/**
+ * Runtime default for a tenant host/slug when YAML / DIGICHAT_EMBED_TENANTS
+ * omit `skin`. Third-party tenants stay on catalog `base`. Explicit `skin`
+ * must still win at the call site.
+ */
+export function defaultThreadSkinForTenant(opts: {
+  host?: string | null;
+  slug?: string | null;
+  aliases?: readonly string[] | null;
+}): ThreadSkin {
+  const hosts = [opts.host, ...(opts.aliases ?? [])];
+  for (const raw of hosts) {
+    const host = raw?.trim().toLowerCase().split("/")[0].split(":")[0].replace(/\.$/, "");
+    if (host && FIRST_PARTY_DEFAULT_SKIN_HOSTS.has(host)) return "digichat";
+  }
+  const slug = opts.slug?.trim().toLowerCase();
+  if (slug && FIRST_PARTY_DEFAULT_SKIN_SLUGS.has(slug)) return "digichat";
+  return DEFAULT_THREAD_SKIN;
+}
+
 export const CLONE_SKINS = [
   "chatgpt",
   "claude",

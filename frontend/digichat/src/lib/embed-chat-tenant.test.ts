@@ -340,6 +340,29 @@ describe("product embed YAML hosts", () => {
     expect(painted.webSearch).toBe(false);
   });
 
+  it("paints first-party DIGICHAT_EMBED_TENANTS as digichat when skin is omitted", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", "");
+    vi.stubEnv(
+      "DIGICHAT_EMBED_TENANTS",
+      JSON.stringify({
+        "digithings.ai": {
+          slug: "digithings",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "unused-for-first-party",
+        },
+      }),
+    );
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    const painted = resolveEmbedClientConfigForPaint(
+      undefined,
+      "https://digithings.ai",
+    );
+    expect(painted.skin).toBe("digichat");
+    expect(painted.slug).toBe("digithings");
+  });
+
   it("does not leak the first YAML host to an unknown parent", () => {
     vi.stubEnv("DIGICHAT_CONFIG_PATH", DIGITHINGS_EMBED_YAML);
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");

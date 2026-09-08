@@ -14,7 +14,7 @@
 
 import type { ActivityDetail } from "@/lib/chat-activity";
 import {
-  DEFAULT_THREAD_SKIN,
+  defaultThreadSkinForTenant,
   isThreadSkin,
   threadSkinChoices,
   type ThreadSkin,
@@ -323,7 +323,13 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     backend: backendCfg,
     gateMode: v.gateMode,
     theme: (v.theme as "dark" | "light" | undefined) ?? "dark",
-    skin: skin ?? DEFAULT_THREAD_SKIN,
+    skin:
+      skin ??
+      defaultThreadSkinForTenant({
+        host: hostKey,
+        slug: v.slug,
+        aliases: v.aliases as string[] | undefined,
+      }),
     accent,
     attribution: v.attribution === true,
     token: v.token,

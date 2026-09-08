@@ -1240,7 +1240,7 @@ part-driven vs chrome-driven is indexed in digiweb
 | `features.reasoning` / `features.toolCalls` | `off \| collapsed \| expanded \| locked_open` | Booleans coerce: `true → collapsed`, `false → off` |
 | `chrome.defaultLanguage` | curated codes (`languages.ts`) | Seeds the stock language picker |
 | `chrome.transcript.userAlign` | `right \| left` | Stock web default `right` |
-| `chrome.skin` | `base \| chatgpt \| claude \| grok \| gemini \| perplexity \| react-ink \| expo-react-native \| base-assistant-ui \| webpage-assistant \| product-page-assistant \| digichat` | The 11 assistant-ui catalog template ids plus first-party `digichat`. Overlay: `DIGICHAT_CHROME_SKIN`. Baked YAML: `/app/config/examples/skins/<id>.yaml`. Default remains `base`. |
+| `chrome.skin` | `base \| chatgpt \| claude \| grok \| gemini \| perplexity \| react-ink \| expo-react-native \| base-assistant-ui \| webpage-assistant \| product-page-assistant \| digichat` | The 11 assistant-ui catalog template ids plus first-party `digichat`. Overlay: `DIGICHAT_CHROME_SKIN`. Baked YAML: `/app/config/examples/skins/<id>.yaml`. Catalog / third-party default remains `base`. Unset `skin` on digithings.ai / OCC hosts (and slugs `digithings`, `digithings-ai`, `occ`) defaults to `digichat` so production `DIGICHAT_EMBED_TENANTS` without `skin` still mounts DigichatThread. |
 | `models.default` / `models.available` / `models.allowPicker` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`); empty `available` = no restriction |
 | `features.modelPicker` | bool | Also enables picker when `models.allowPicker` unset |
 | `gate.showLanguageSelector` | bool | Reserved; language chrome is not mounted on the stock baseline |
@@ -1317,7 +1317,10 @@ advisory for operators who skip `--config`).
 `DIGICHAT_HOST_<SLUG>_TOKEN`. `DIGICHAT_CHROME_SKIN` overlays `chrome.skin` on
 the primary deployment (or every host when there is no `deployment` block).
 `DIGICHAT_EMBED_TENANTS` JSON remains a **compat hydrate** into the same schema
-until dogfood cutover. Tenants JSON may also set `"skin": "chatgpt"`.
+until dogfood cutover. Tenants JSON may also set `"skin": "chatgpt"`. First-party
+hosts (`digithings.ai`, `www.digithings.ai`, `occ.digithings.ai`) default omitted
+`skin` to `digichat` — live wrangler JSON that never set `skin` must not fall
+through to catalog `base`.
 
 **Client projection:** `toDigichatClientConfig` / `GET /api/deploy/chrome` strip
 tokens, Foundry endpoints, MCP URLs, and consume URLs. Widget.js and the

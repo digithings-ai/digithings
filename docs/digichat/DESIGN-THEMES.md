@@ -14,8 +14,10 @@ Live: design-reference `/chatbot` (port 4013). Source of look: copied
 ## Product skin: `digichat`
 
 `chrome.skin: digichat` is the 12th id next to the 11 official catalog
-templates. Default remains `base` until an explicit cutover. Promote a
-gallery look into that id only after it is approved on `/chatbot`.
+templates. Catalog / third-party default remains `base`. First-party hosts
+(digithings.ai / OCC) default unset `skin` to `digichat` so production
+`DIGICHAT_EMBED_TENANTS` still mounts DigichatThread. Promote a gallery look
+into that id only after it is approved on `/chatbot`.
 
 ```bash
 DIGICHAT_CONFIG_PATH=/app/config/examples/skins/digichat.yaml

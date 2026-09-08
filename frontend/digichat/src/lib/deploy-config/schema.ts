@@ -126,7 +126,9 @@ export const ChromeSchema = z
     theme: ThemeSchema.default("light"),
     /**
      * Which Thread to mount (11 official catalog ids + first-party `digichat`).
-     * Overlay: `DIGICHAT_CHROME_SKIN`. Default remains `base`.
+     * Overlay: `DIGICHAT_CHROME_SKIN`. Catalog default remains `base`.
+     * First-party hosts default omitted `skin` to `digichat` in the tenants
+     * parser (`defaultThreadSkinForTenant`).
      */
     skin: ThreadSkinInputSchema.default(DEFAULT_THREAD_SKIN),
     launcher: LauncherSchema.optional(),
