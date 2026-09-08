@@ -178,6 +178,20 @@ def _coerce_bool(value: Any, *, default: bool = True) -> bool:
     return str(value).strip().lower() not in ("false", "0", "no", "")
 
 
+def _references_technicals_close(args: dict[str, Any]) -> bool:
+    """True when query args reference a 'close' column on price_technicals."""
+    columns = str(args.get("columns", "*"))
+    if any(part.strip().lower() == "close" for part in columns.split(",")):
+        return True
+    if str(args.get("order", "")).strip().lower() == "close":
+        return True
+    for filter_arg in ("eq", "gte", "lte", "in_"):
+        filt = args.get(filter_arg)
+        if isinstance(filt, dict) and any(str(key).strip().lower() == "close" for key in filt):
+            return True
+    return False
+
+
 def build_data_tool_dispatcher(
     client: Any,
     run_date: date | None = None,
@@ -218,6 +232,14 @@ def build_data_tool_dispatcher(
                     "Allowed tables: price_history, price_technicals, "
                     "macro_series_observations, positions, nav_history, theses, "
                     "thesis_vehicles, position_events, portfolio_metrics, trading_calendar."
+                )
+            # Server-side guard: price_technicals never had a 'close' column (#3078).
+            # Fail fast with a redirect instead of burning a tool round on a 42703
+            # and inviting the model to retry the same doomed query.
+            if table == "price_technicals" and _references_technicals_close(args):
+                return (
+                    "Error: price_technicals has no 'close' column. "
+                    "Query price_history for OHLCV (open/high/low/close/volume)."
                 )
             # Server-side rewrite: the LLM sometimes sorts/filters macro_series_observations
             # by 'date' (the generic name) instead of 'obs_date' (the real column). Silently

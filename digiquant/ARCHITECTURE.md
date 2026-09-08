@@ -2218,10 +2218,14 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   Transient Supabase faults (disconnects, `PGRST002`, 502s) retry 3× with short
   backoff (`digiquant.supabase_retry`) in data tools, retrieval queries, and
   `query_returns_window`; anything else (notably 42703) still fails fast.
-  H6 amendment envelopes unwrap one `{terms|amendment|forecast_amendment}` level,
-  tenor fills from the H5 base, and the registry reason is always the short
-  `h6_challenge_revision` (never `summary.conclusion`, which tripped the 2000-char
-  CHECK). H9 cost evidence reads `hist_vol_21`/`atr_pct` from `price_technicals`
+   H6 amendment envelopes unwrap one `{terms|amendment|forecast_amendment}` level,
+   tenor fills from the H5 base, and the registry reason is always the short
+   `h6_challenge_revision` (never `summary.conclusion`, which tripped the 2000-char
+   CHECK). Invalid amendment economics **raise** instead of falling back to a
+   REJECTED/base-preserved outcome (#3078) — a structurally invalid amendment is
+   a model-output error that must surface, not be absorbed. `query_data`
+   rejects `close` on `price_technicals` before Supabase with a redirect to
+   `price_history` (#3078). H9 cost evidence reads `hist_vol_21`/`atr_pct` from `price_technicals`
   (second read joined onto the history row), never from `price_history`.
   `conviction_delta` clamps to ±2 before validation; `DocumentPatch` drops ops
   missing `op`/`path` before validation; bias synonyms map hawkish→bearish,
