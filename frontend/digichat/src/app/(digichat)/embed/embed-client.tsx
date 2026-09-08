@@ -960,6 +960,44 @@ function EmbedChat({
     ],
   );
 
+  const catalog = stockClient.tools.catalog;
+  const prefsApi = useMemo<EmbedChatPrefsApi>(
+    () => ({
+      prefs: chatPrefs,
+      setWebSearch: (value) => setChatPrefs((p) => ({ ...p, webSearch: value })),
+      setDigisearch: (value) => setChatPrefs((p) => ({ ...p, digisearch: value })),
+      setVault: (value) => setChatPrefs((p) => ({ ...p, vault: value })),
+      setLanguage: (code) => {
+        const resolved = tryResolveLanguageInput(code) ?? DEFAULT_LANGUAGE_CODE;
+        setChatPrefs((p) => ({ ...p, language: resolved }));
+      },
+      reset: () =>
+        setChatPrefs({
+          ...DEFAULT_EMBED_CHAT_PREFS,
+          language: DEFAULT_LANGUAGE_CODE,
+        }),
+      tenantAllowsWeb,
+      showByok,
+      hasDigisearch: catalog.length === 0 || catalog.some((e) => e.id === "digisearch"),
+      hasVault: catalog.length === 0 || catalog.some((e) => e.id === "digivault"),
+      sessionKey: gate.host,
+      openSettings: () => {
+        setSettingsOpen(false);
+        setPrefsOpen(true);
+      },
+      openByok: () => {
+        setPrefsOpen(false);
+        setQuotaPrompt(false);
+        setSettingsOpen(true);
+      },
+      newThread: () => {
+        setChatPrefs({ ...DEFAULT_EMBED_CHAT_PREFS, language: DEFAULT_LANGUAGE_CODE });
+        chat.reset();
+      },
+    }),
+    [chatPrefs, tenantAllowsWeb, showByok, catalog, gate.host, chat.reset],
+  );
+
 
   /* At most one credit, and the footer wins — see resolveAttributionPlacement. */
   const attributionAt = resolveAttributionPlacement({
@@ -1055,44 +1093,6 @@ function EmbedChat({
   const pageContextSnapshot = pageContextAttached ? pageContextRef.current : null;
   const pageContextAttachment = pageContextCreateAttachment(pageContextSnapshot);
   const pageContextTs = pageContextSnapshot?.ts ?? null;
-
-  const catalog = stockClient.tools.catalog;
-  const prefsApi = useMemo<EmbedChatPrefsApi>(
-    () => ({
-      prefs: chatPrefs,
-      setWebSearch: (value) => setChatPrefs((p) => ({ ...p, webSearch: value })),
-      setDigisearch: (value) => setChatPrefs((p) => ({ ...p, digisearch: value })),
-      setVault: (value) => setChatPrefs((p) => ({ ...p, vault: value })),
-      setLanguage: (code) => {
-        const resolved = tryResolveLanguageInput(code) ?? DEFAULT_LANGUAGE_CODE;
-        setChatPrefs((p) => ({ ...p, language: resolved }));
-      },
-      reset: () =>
-        setChatPrefs({
-          ...DEFAULT_EMBED_CHAT_PREFS,
-          language: DEFAULT_LANGUAGE_CODE,
-        }),
-      tenantAllowsWeb,
-      showByok,
-      hasDigisearch: catalog.length === 0 || catalog.some((e) => e.id === "digisearch"),
-      hasVault: catalog.length === 0 || catalog.some((e) => e.id === "digivault"),
-      sessionKey: gate.host,
-      openSettings: () => {
-        setSettingsOpen(false);
-        setPrefsOpen(true);
-      },
-      openByok: () => {
-        setPrefsOpen(false);
-        setQuotaPrompt(false);
-        setSettingsOpen(true);
-      },
-      newThread: () => {
-        setChatPrefs({ ...DEFAULT_EMBED_CHAT_PREFS, language: DEFAULT_LANGUAGE_CODE });
-        chat.reset();
-      },
-    }),
-    [chatPrefs, tenantAllowsWeb, showByok, catalog, gate.host, chat.reset],
-  );
 
   return (
     <EmbedChatPrefsProvider value={prefsApi}>

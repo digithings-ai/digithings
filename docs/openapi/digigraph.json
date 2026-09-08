@@ -332,6 +332,21 @@
             "description": "Per-request digisearch index. Client-writable on this model but, when DIGI_TENANT_CORPUS_MAP is set, overwritten server-side from the authenticated tenant's map entry (headers/body cannot select another tenant's corpus). When the map is unset, X-Digi-Corpus-Index may set it.",
             "title": "digisearch index"
           },
+          "disabled_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Catalog ids to hide this turn (X-Digi-Disabled-Tools). Allowlisted aliases only (digisearch, digivault); unknown tokens ignored.",
+            "title": "Disabled Tools"
+          },
           "enable_web_search": {
             "default": false,
             "description": "Opt-in digigraph ``web_search`` tool (digillm). Default off. Also via X-Digi-Enable-Web-Search (#3420).",
