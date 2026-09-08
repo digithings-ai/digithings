@@ -43,6 +43,7 @@ ALLOWLIST = {
     # tenant embed accent overrides — ACCENT_CSS moved here with the client
     # tree when /embed/page.tsx became the server shell (#2001).
     "frontend/digichat/src/app/embed/embed-client.tsx",
+    "frontend/digichat/src/app/(digichat)/embed/embed-client.tsx",
     "frontend/digiweb/web/src/components/ThemeProvider.tsx",  # SSR theme-color meta
     # Canvas scenes compose runtime colors from token-derived channels
     # (migrate-vs-leave: canvas art stays concrete).
@@ -58,6 +59,24 @@ ALLOWLIST = {
 }
 
 TEST_FILE = re.compile(r"(\.test\.|\.spec\.|/__tests__/|/test/)")
+
+# Vendor / stock copies — not product chrome. Catalog skins under
+# assistant-ui-templates and the (baseline) Next stock app must not trip
+# the design-canon ratchet (same idea as eslint ignores).
+CANON_SKIP_PREFIXES = (
+    "frontend/digichat/reference/",
+    "frontend/digichat/src/app/(baseline)/",
+    # Catalog Thread skins — vendor livery, not product chrome. Do not restyle.
+    "frontend/digichat/src/components/assistant-ui/skins/",
+    # assistant-ui reference chatbot copies (Phase 1–2 stock gallery).
+    "frontend/digiweb/reference/components/assistant-ui/",
+    "frontend/digiweb/reference/components/chatbot/",
+    "frontend/digiweb/reference/app/(chatbot)/",
+)
+
+
+def is_canon_skipped(rel: str) -> bool:
+    return any(rel.startswith(p) for p in CANON_SKIP_PREFIXES)
 
 # 1. Raw palette utilities: any variant prefix chain, any Tailwind color
 #    family with a numeric shade. Token-backed utilities never match (no
@@ -163,7 +182,7 @@ def tracked_frontend_files() -> list[str]:
         text=True,
         check=True,
     ).stdout
-    return [line for line in out.splitlines() if line]
+    return [line for line in out.splitlines() if line and not is_canon_skipped(line)]
 
 
 def main() -> int:

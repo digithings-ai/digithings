@@ -97,10 +97,10 @@ export function SyncedTearsheet({
     };
 
     const palette = () => ({
-      inkMute: cssVar("--ink-mute", "#8A9097"),
-      hair: cssVar("--hair", "rgba(255,255,255,0.1)"),
+      inkMute: cssVar("--ink-mute", "#7D8389"),
+      hair: cssVar("--hair", "rgba(255,255,255,0.09)"),
       accent: cssVar("--accent", "#3dd6c4"),
-      down: cssVar("--down", "#E0654B"),
+      down: cssVar("--down", "#E5533E"),
       mono: cssVar("--font-mono", "monospace"),
     });
     let p = palette();

@@ -50,9 +50,9 @@ and **`documents`**.
 
 | Control | Behavior |
 |---------|----------|
-| **Cron** | `.github/workflows/pipeline-digiquant.yml` — `17 9/10/11/12 * * *` UTC (off-peak retries) |
-| **Sunday** | `refresh_scope=all` (operator full refresh) |
-| **Weekdays** | `refresh_scope=none` — continuity via `skip`/`edit`/`full` per artifact |
+| **Cron** | digithings-cron house clocks → `pipeline-digiquant.yml` — `17 9/10/11/12 * * *` UTC daily |
+| **Default** | `refresh_scope=none` — continuity via `skip`/`edit`/`full` per artifact |
+| **Full refresh** | Manual `workflow_dispatch` / `--refresh-scope all` (no Sunday force) |
 | **CLI** | `python -m digiquant.portfolio.chain --cadence daily [--refresh-scope …]` |
 | **Cost** | `OLYMPUS_MODEL_TIER` (`cheap` \| `balanced` \| `quality`) — not graph forks |
 
@@ -79,7 +79,7 @@ phase-scoped blinding (spec §6.1).
 ### Sunday — Weekly Baseline (historical entry point)
 
 Entry point was: `python -m digiquant.portfolio.chain --run-type baseline`  
-**Current:** `--cadence daily --refresh-scope all` (Sunday cron sets `all` automatically).
+**Current:** `--cadence daily` by default; `--refresh-scope all` only via manual dispatch/CLI.
 
 ### Mon–Sat — Daily Delta (historical)
 
@@ -97,7 +97,7 @@ Do not schedule `monthly` runs or `phase_monthly` on the daily chain.
 
 Before any phase executes, the agent performs a structured context load:
 
-1. **Confirm cadence** — `python -m digiquant.portfolio.chain --cadence daily` (Sunday: `refresh_scope=all` via cron or `--refresh-scope all`)
+1. **Confirm cadence** — `python -m digiquant.portfolio.chain --cadence daily` (optional `--refresh-scope all` for operator full refresh)
 2. **Load config** — `config/watchlist.md`, `config/preferences.md`
 3. **Load prior context from Supabase** — query `daily_snapshots` and `documents` for recent dates
 4. **Load yesterday's snapshot from Supabase** — establishes continuity baseline for today's changes
@@ -693,7 +693,7 @@ bound spend.
 
 ### Fallback behaviour
 
-If a provider-prefixed model's key is not configured (e.g. `OPENROUTER_API_KEY` unset), `resolve_request_model` logs a warning and falls back to the Ollama mode model for that call — the pipeline completes with degraded quality but never hard-fails on a missing key. Empty completions self-heal with a retry (re-asking the same model; `OPENROUTER_FALLBACK_MODELS` covers provider errors on the primary request, not empty `200` bodies); see [RUNBOOK.md "OpenRouter empty completions"](../RUNBOOK.md#openrouter-empty-completions-degraded-book-empty-completion-from--in-logs) for the operator checklist.
+If a provider-prefixed model's key is not configured (e.g. `OPENROUTER_API_KEY` unset), `resolve_request_model` logs a warning and falls back to the Ollama mode model for that call — the pipeline completes with degraded quality but never hard-fails on a missing key. Empty completions self-heal with a retry (re-asking the same model); provider errors surface to the caller — there is no fallback chain; see [RUNBOOK.md "OpenRouter empty completions"](../RUNBOOK.md#openrouter-empty-completions-degraded-book-empty-completion-from--in-logs) for the operator checklist.
 
 ### Overriding models (user configuration)
 
@@ -716,7 +716,7 @@ Tier-wide changes belong in `config/digiquant_models.yaml` (capability pools per
 | `ATLAS_MAX_ANALYSTS` | H4/H5/H6 roster fan-out cap (#1767) | CI workflow env: `"30"` |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Publishing + diagnostics | GitHub secret + local `.env` |
 
-`OPENROUTER_ALLOWED_MODELS` and `OPENROUTER_COST_QUALITY_TRADEOFF` are **not** set by hand — `apply_digiquant_openrouter_env()` derives them from the active tier at chain startup. Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test the configured providers.
+House routing (default client base) is applied by `apply_digiquant_house_env()` at chain startup. Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test the configured providers.
 
 ---
 

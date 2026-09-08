@@ -379,6 +379,19 @@ def _outcome_row(outcome: ForecastOutcome) -> dict[str, Any]:
     }
 
 
+_RETURN_FRACTION_QUANTUM = Decimal("0.00000001")  # ReturnFraction decimal_places=8
+
+
+def _quantize_return_fraction(value: Decimal) -> Decimal:
+    """Clamp a computed return to ``ReturnFraction`` digit/place limits.
+
+    Decimal division of prices routinely exceeds ``max_digits=16`` /
+    ``decimal_places=8`` on :class:`ForecastOutcome` fields; Pydantic then raises
+    ``decimal_max_digits`` during preflight_reflect outcome assembly.
+    """
+    return value.quantize(_RETURN_FRACTION_QUANTUM)
+
+
 def _build_resolved_outcome(
     *,
     base: ForecastAssessment,
@@ -391,8 +404,10 @@ def _build_resolved_outcome(
     maturity_snapshot: SessionPriceSnapshot,
     forecast_mean_return: Decimal,
 ) -> ForecastOutcome:
-    realized = (maturity_snapshot.price - reference_snapshot.price) / reference_snapshot.price
-    residual = realized - forecast_mean_return
+    realized = _quantize_return_fraction(
+        (maturity_snapshot.price - reference_snapshot.price) / reference_snapshot.price
+    )
+    residual = _quantize_return_fraction(realized - forecast_mean_return)
     positive = realized > Decimal("0")
     event_time = maturity_snapshot.observed_at
     known_at = maturity_snapshot.known_at

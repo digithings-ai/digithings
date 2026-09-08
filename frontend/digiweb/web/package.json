@@ -19,6 +19,12 @@
     "./styles/chat-core.css": "./src/styles/chat-core.css",
     "./styles/chat-math.css": "./src/styles/chat-math.css",
     "./styles/chat-widgets.css": "./src/styles/chat-widgets.css",
+    "./styles/chat-aui.css": "./src/styles/chat-aui.css",
+    "./styles/digichat-launcher.css": "./src/styles/digichat-launcher.css",
+    "./chat/thread": "./src/components/chat/DigichatThread.tsx",
+    "./chat/thread-list": "./src/components/chat/DigichatThreadList.tsx",
+    "./chat/launcher": "./src/components/chat/DigichatLauncher.tsx",
+    "./chat/surfaces": "./src/components/chat/chat-surfaces.ts",
     "./styles/controls-core.css": "./src/styles/controls-core.css",
     "./styles/controls-overlay.css": "./src/styles/controls-overlay.css",
     "./styles/finance-composites.css": "./src/styles/finance-composites.css",
@@ -38,7 +44,8 @@
   },
   "peerDependencies": {
     "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react-dom": "^19.2.4",
+    "@assistant-ui/react": "^0.15.18"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",
@@ -54,6 +61,7 @@
     "simple-icons": "^15.18.0"
   },
   "devDependencies": {
+    "@assistant-ui/react": "^0.15.18",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "happy-dom": "^20.11.1",

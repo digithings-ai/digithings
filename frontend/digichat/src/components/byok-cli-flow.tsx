@@ -25,6 +25,7 @@ import {
 } from "@/lib/byok-ping";
 import { p } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
+import { SegmentedControl } from "@digithings/web";
 
 type Step = "provider" | "key" | "model" | "validating" | "done";
 
@@ -598,23 +599,20 @@ export function ByokCliFlow({
                 />
               ) : null}
               {tieredOptions ? (
-                <div className="dc-byok-tier-tabs" role="tablist" aria-label="Model tier">
-                  {(["free", "opensource", "flagship", "all", "custom"] as const).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      role="tab"
-                      aria-selected={tier === t}
-                      className={cn("dc-byok-tier-tab", tier === t && "dc-byok-tier-tab-active")}
-                      onClick={() => {
-                        setTier(t);
-                        setModelHi(0);
-                      }}
-                    >
-                      {t} ({t === "custom" ? customIds.size : tieredOptions[t].length})
-                    </button>
-                  ))}
-                </div>
+                <SegmentedControl
+                  aria-label="Model tier"
+                  value={tier}
+                  onChange={(t) => {
+                    setTier(t);
+                    setModelHi(0);
+                  }}
+                  options={(["free", "opensource", "flagship", "all", "custom"] as const).map(
+                    (t) => ({
+                      value: t,
+                      label: `${t} (${t === "custom" ? customIds.size : tieredOptions[t].length})`,
+                    }),
+                  )}
+                />
               ) : null}
               {!customModel ? (
                 <TermOptionList

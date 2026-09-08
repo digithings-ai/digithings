@@ -6,13 +6,16 @@ import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { PerformanceTearsheetView } from '@/components/tearsheet/DashboardTearsheetView';
 import { EntitledSurface } from '@/components/entitled-surface';
-import { fetchPerformanceTearsheet } from '@/lib/observability-queries';
+import { getPerformanceBundle } from '@/lib/observability-queries';
+import type { PerformanceSsotMeta } from '@/lib/performance-ssot';
 import { useCan } from '@/lib/use-entitlement';
 import type { PerformanceTearsheet } from '@/components/tearsheet/types';
 
 /**
  * Tearsheet — persisted cumulative returns and stored holding-attribution
- * windows. The screen does not recalculate headline metrics from raw NAV.
+ * windows. Loads via `getPerformanceBundle` (same NAV adapter as Brief #3580).
+ * The screen does not recalculate headline metrics from raw NAV outside that
+ * shared builder.
  *
  * Tier: `house_weights_nav` (Baseline+). Skip the tearsheet fetch when locked
  * (fail-closed + saves quota).
@@ -20,14 +23,18 @@ import type { PerformanceTearsheet } from '@/components/tearsheet/types';
 export default function PerformancePage() {
   const allowed = useCan('house_weights_nav');
   const [data, setData] = useState<PerformanceTearsheet | null>(null);
+  const [ssot, setSsot] = useState<PerformanceSsotMeta | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!allowed) return;
     let alive = true;
-    fetchPerformanceTearsheet()
-      .then((d) => {
-        if (alive) setData(d);
+    getPerformanceBundle()
+      .then((bundle) => {
+        if (alive) {
+          setData(bundle.tearsheet);
+          setSsot(bundle.ssot);
+        }
       })
       .catch((e: unknown) => {
         if (alive) setError(e instanceof Error ? e.message : 'Failed to load performance data');
@@ -52,7 +59,7 @@ export default function PerformancePage() {
             // bare: .ts-page already owns the container + padding (#1548)
             <PageSkeleton bare />
           ) : (
-            <PerformanceTearsheetView data={data} />
+            <PerformanceTearsheetView data={data} ssot={ssot} />
           )}
         </EntitledSurface>
       </div>

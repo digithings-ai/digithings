@@ -57,6 +57,9 @@ RUN uv pip install --system "litellm[proxy]==1.72.6" "fastapi<0.116"
 
 # Profile A LiteLLM + digigraph config
 COPY infra/digichat-release/config /app/config
+# House Cheaper Inference overlay + merge script (boot-time merge when key set)
+COPY config/litellm.cheaperinference.yaml /app/config/litellm.cheaperinference.yaml
+COPY scripts/merge_litellm_cheaperinference.py /app/scripts/merge_litellm_cheaperinference.py
 COPY frontend/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
      /etc/supervisor/conf.d/digithings.conf
 COPY frontend/digithings-stack-cloudflare/container/entrypoint.sh /entrypoint.sh

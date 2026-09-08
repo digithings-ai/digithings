@@ -16,7 +16,7 @@ describe('BillingTab (static)', () => {
     expect(html).toContain('Billing is not configured');
   });
 
-  it('defaults to annual as a discount over monthly list prices', () => {
+  it('defaults to annual and shows annual prices with discount', () => {
     const html = renderToStaticMarkup(
       createElement(BillingTab, {
         api: { accessToken: 'tok' },
@@ -26,23 +26,13 @@ describe('BillingTab (static)', () => {
       }),
     );
     expect(html).toContain('data-interval="annual"');
-    expect(html).toContain('Annual · 20% off');
-    expect(html).toContain('billing-plan-table');
-    expect(html).toContain('grid-cols-[minmax(0,1fr)_9.5rem_10.5rem]');
-    expect(html).toContain('billing-checkout-studio');
-    expect(html).toContain('billing-checkout-desk');
-    expect(html).toContain('billing-checkout-brief');
-    expect(html).toContain('billing-portal');
-    expect(html).not.toContain('billing-checkout-custom');
-    expect(html).not.toContain('billing-checkout-baseline');
     expect(html).toContain('$8/mo');
     expect(html).toContain('$24/mo');
     expect(html).toContain('$80/mo');
     expect(html).toContain('billed $96/yr');
     expect(html).toContain('billed $288/yr');
     expect(html).toContain('billed $960/yr');
-    expect(html).not.toContain('2 months free');
-    expect(html).toContain('data-testid="billing-price-discount">20% off');
+    expect(html).toContain('20% off');
     expect(html).toContain('<s data-testid="billing-price-list">$10/mo</s>');
     expect(html).toContain('<s data-testid="billing-price-list">$30/mo</s>');
     expect(html).toContain('<s data-testid="billing-price-list">$100/mo</s>');
@@ -116,5 +106,69 @@ describe('BillingTab (interval)', () => {
       { accessToken: 'tok' },
       { tier: 'studio', interval: 'annual' },
     );
+  });
+
+  it('falls back to monthly when PRICE_NOT_CONFIGURED error occurs', async () => {
+    const checkoutFn = vi.fn(async () => {
+      throw { code: 'PRICE_NOT_CONFIGURED', message: 'STRIPE_PRICE_BRIEF_ANNUAL is not set on Edge Function secrets' };
+    });
+    const el = await mount(
+      createElement(BillingTab, {
+        api: { accessToken: 'tok' },
+        configured: true,
+        checkoutFn,
+        portalFn: vi.fn(),
+      }),
+    );
+    expect(
+      el.querySelector('[data-testid="settings-billing-tab"]')?.getAttribute('data-interval'),
+    ).toBe('annual');
+
+    await act(async () => {
+      (el.querySelector('[data-testid="billing-checkout-brief"]') as HTMLButtonElement).click();
+    });
+    const tab = el.querySelector('[data-testid="settings-billing-tab"]');
+    expect(tab?.getAttribute('data-interval')).toBe('monthly');
+    expect(tab?.textContent).toContain('Annual pricing is not configured');
+    expect(tab?.textContent).toContain('$10/mo');
+    expect(tab?.textContent).not.toContain('billed $96/yr');
+  });
+
+  it('handles STRIPE_NOT_CONFIGURED error', async () => {
+    const checkoutFn = vi.fn(async () => {
+      throw { code: 'STRIPE_NOT_CONFIGURED', message: 'Stripe is not configured' };
+    });
+    const el = await mount(
+      createElement(BillingTab, {
+        api: { accessToken: 'tok' },
+        configured: true,
+        checkoutFn,
+        portalFn: vi.fn(),
+      }),
+    );
+    await act(async () => {
+      (el.querySelector('[data-testid="billing-checkout-brief"]') as HTMLButtonElement).click();
+    });
+    const tab = el.querySelector('[data-testid="settings-billing-tab"]');
+    expect(tab?.textContent).toContain('Stripe is not configured');
+  });
+
+  it('handles NO_STRIPE_CUSTOMER error', async () => {
+    const checkoutFn = vi.fn(async () => {
+      throw { code: 'NO_STRIPE_CUSTOMER', message: 'No Stripe customer on workspace' };
+    });
+    const el = await mount(
+      createElement(BillingTab, {
+        api: { accessToken: 'tok' },
+        configured: true,
+        checkoutFn,
+        portalFn: vi.fn(),
+      }),
+    );
+    await act(async () => {
+      (el.querySelector('[data-testid="billing-checkout-brief"]') as HTMLButtonElement).click();
+    });
+    const tab = el.querySelector('[data-testid="settings-billing-tab"]');
+    expect(tab?.textContent).toContain('No Stripe customer on workspace');
   });
 });

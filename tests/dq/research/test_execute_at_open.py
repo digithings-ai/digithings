@@ -94,6 +94,14 @@ class _FakeQuery:
         self._filters.append(("lt", col, val))
         return self
 
+    def lte(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("lte", col, val))
+        return self
+
+    def gte(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("gte", col, val))
+        return self
+
     def in_(self, col: str, vals: list[Any]) -> "_FakeQuery":
         self._filters.append(("in", col, list(vals)))
         return self
@@ -139,6 +147,10 @@ class _FakeQuery:
                 rows = [r for r in rows if r.get(col) != val]
             elif op == "lt":
                 rows = [r for r in rows if str(r.get(col, "")) < str(val)]
+            elif op == "lte":
+                rows = [r for r in rows if str(r.get(col, "")) <= str(val)]
+            elif op == "gte":
+                rows = [r for r in rows if str(r.get(col, "")) >= str(val)]
             elif op == "in":
                 rows = [r for r in rows if r.get(col) in val]
             else:  # pragma: no cover - guard against an untested op sneaking in
@@ -529,6 +541,18 @@ _EXEC_D = "2026-07-31"
 _NOW = datetime(2026, 7, 31, 13, 31, tzinfo=timezone.utc)
 
 
+def _open_nyse_calendar(exec_d: str) -> list[dict[str, Any]]:
+    """Open NYSE session for fill-math tests that go through ``execute_at_open``.
+
+    ``build_events_from_paper_fills`` always loads ``trading_calendar`` and enables
+    the #3612 venue-session gate (empty load = fail-closed defer). These fixtures
+    assert fills/rejections, not holidays, so they seed a Friday NYSE open row.
+    CRYPTO (IBIT) stays open without a row. Closed/missing-calendar coverage lives
+    in ``tests/dq/portfolio/test_execution_io.py::TestSessionDeferral``.
+    """
+    return [{"date": exec_d, "venue": "NYSE", "is_trading_day": True, "reason": None}]
+
+
 def _lid(tag: str) -> str:
     """A stable, readable uuid for fixture rows (the writer computes its own by uuid5)."""
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"digithings/test/2420/{tag}"))
@@ -650,6 +674,7 @@ class _Ledger:
                 "positions": position_rows,
                 "nav_history": nav_history,
                 "price_history": list(self.prices) + seed_closes,
+                "trading_calendar": _open_nyse_calendar(self.exec_d),
                 _TABLES["commits"]: (
                     [{"id": _lid("commit"), "run_date": self.run_d}] if with_commit else []
                 ),

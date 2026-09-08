@@ -6,8 +6,8 @@
  * `@digithings/web` is the *rendering* vocabulary — collapsible `ChatToolCall`
  * rows, a `ChatThinking` disclosure, `ChatWidgetFrame` cards. The two do not
  * line up field-for-field, so this module is the boundary adapter between
- * them: one pure function, no JSX, no DOM. `ChatActivities` renders whatever
- * it returns and holds no mapping logic of its own.
+ * them: one pure function, no JSX, no DOM. Session UI in digichat 2.0 reads
+ * `source-*` parts directly; these helpers remain for export / legacy hydrate.
  *
  * Keeping the projection separate from the component is what makes the mapping
  * testable in a plain node environment (no jsdom in either consumer's vitest
@@ -112,9 +112,9 @@ const TOOL_LABELS: Record<string, string> = {
   digisearch: "Search the knowledge base",
   azure_ai_search: "Search the knowledge base",
   rag_sources: "Search the knowledge base",
-  digivault: "Find original documents",
-  digivault_search_notes: "Find original documents",
-  digivault_get_note: "Load document",
+  digivault: "Vault",
+  digivault_search_notes: "Vault",
+  digivault_get_note: "Load vault note",
   web_search: "Web search (External)",
 };
 

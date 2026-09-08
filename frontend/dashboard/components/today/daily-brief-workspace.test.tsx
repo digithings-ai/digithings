@@ -421,4 +421,76 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('Invested');
     expect(html).not.toContain('locked-surface');
   });
+
+  it('hides finalized accounting when live overlay numbers are on the scoreboard', () => {
+    const html = renderToStaticMarkup(
+      <DailyBriefWorkspace
+        {...populatedProps}
+        liveMarks
+        performanceSsot={{
+          navContract: 'finalized_accounting',
+          navAsOf: '2026-08-05',
+          tipDayReturnPct: 0,
+          tipInvestedPct: 30.2,
+          tipCashPct: 69.8,
+          metricsAsOf: '2026-08-05',
+          metricsLagDays: 0,
+          metricsLagging: false,
+          bookAsOf: '2026-08-05',
+          marksUnstamped: false,
+          investedDefinition: 'accounting_nav_tip',
+        }}
+      />
+    );
+    expect(html).toContain('live marks');
+    expect(html).not.toContain('finalized accounting');
+  });
+
+  it('badges NAV-behind-metrics divergence as nav lag', () => {
+    const html = renderToStaticMarkup(
+      <DailyBriefWorkspace
+        {...populatedProps}
+        performanceSsot={{
+          navContract: 'legacy_estimate',
+          navAsOf: '2026-08-04',
+          tipDayReturnPct: 0,
+          tipInvestedPct: 30.2,
+          tipCashPct: 69.8,
+          metricsAsOf: '2026-08-06',
+          metricsLagDays: -2,
+          metricsLagging: true,
+          bookAsOf: '2026-08-04',
+          marksUnstamped: false,
+          investedDefinition: 'accounting_nav_tip',
+        }}
+      />
+    );
+    expect(html).toContain('nav lag');
+    expect(html).not.toContain('>metrics lag<');
+  });
+
+  it('uses accounting-tip cash % even when reconcileBook would clamp invested', () => {
+    const html = renderToStaticMarkup(
+      <DailyBriefWorkspace
+        {...populatedProps}
+        investedPct={137}
+        performanceSsot={{
+          navContract: 'legacy_estimate',
+          navAsOf: '2026-08-05',
+          tipDayReturnPct: 0,
+          tipInvestedPct: 137,
+          tipCashPct: 12,
+          metricsAsOf: '2026-08-05',
+          metricsLagDays: 0,
+          metricsLagging: false,
+          bookAsOf: '2026-08-05',
+          marksUnstamped: false,
+          investedDefinition: 'accounting_nav_tip',
+        }}
+      />
+    );
+    expect(html).toContain('137%');
+    expect(html).toContain('12% cash · accounting tip');
+    expect(html).not.toMatch(/>Invested<\/dt><dd[^>]*>100%</);
+  });
 });

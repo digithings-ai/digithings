@@ -64,10 +64,10 @@ export default function PipelineRunHealth({
       className="group border-b border-hair bg-surface"
     >
       <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-2.5 transition-colors hover:bg-ink/[0.02] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 md:px-4 [&::-webkit-details-marker]:hidden">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
+        <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.1em] text-ink-mute">
           Run health
         </span>
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px] tabular-nums text-ink-soft">
+        <span className="min-w-0 flex-1 truncate font-mono text-xs tabular-nums text-ink-soft">
           {date} · {summary}
         </span>
         <ChevronDown
@@ -97,7 +97,7 @@ export default function PipelineRunHealth({
             {dayOk ? (
               <FreshnessBanner latest={dayOk} />
             ) : (
-              <div className="rounded-[12px] border border-hair px-4 py-3 text-sm text-warn">
+              <div className="border border-hair px-4 py-3 font-mono text-xs text-warn">
                 No successful run on {date} — see segment counts below.
               </div>
             )}

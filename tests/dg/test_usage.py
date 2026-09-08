@@ -340,19 +340,18 @@ def test_detailed_grounding_projection_matches_aggregate_token_semantics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("XAI_API_KEY", "xai-test")
-    response = SimpleNamespace(
-        model="grok-served",
-        output_text="grounded",
-        output=[],
-        usage=SimpleNamespace(
-            input_tokens=13,
-            output_tokens=4,
-            cost="0.0031",
-            model_extra={},
-        ),
+    message = MagicMock(content="grounded")
+    response = MagicMock()
+    response.choices = [MagicMock(message=message)]
+    response.model = "grok-served"
+    response.usage = SimpleNamespace(
+        prompt_tokens=0,
+        completion_tokens=0,
+        cost="0.0031",
+        prompt_tokens_details=None,
     )
     fake_client = MagicMock()
-    fake_client.responses.create.return_value = response
+    fake_client.chat.completions.create.return_value = response
     usage.start()
     set_telemetry_observer(usage.DETAILED_USAGE_OBSERVER)
 

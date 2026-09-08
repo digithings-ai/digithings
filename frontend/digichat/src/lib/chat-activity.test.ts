@@ -767,3 +767,29 @@ it("messageActivities projects activity parts and ignores digigraphTrace", () =>
   expect(rows.some((r) => r.kind === "tool_result")).toBe(true);
   expect(JSON.stringify(rows)).not.toContain("should-not-render");
 });
+
+it("messageActivities projects 2.0 standard tool/source/data-status parts", () => {
+  const message = {
+    id: "a2",
+    role: "assistant",
+    parts: [
+      {
+        type: "tool-rag_sources",
+        toolCallId: "tool-1",
+        state: "output-available",
+        input: { query: "auth" },
+        output: {
+          status: "completed",
+          query: "auth",
+          documents: [{ title: "Auth", path: "doc-1", tier: "t", year: 2024 }],
+          hitCount: 1,
+        },
+      },
+      { type: "source-document", sourceId: "s1", mediaType: "text/plain", title: "Auth", filename: "doc-1" },
+      { type: "data-status", data: { status: "completed", label: "Research brief", brief: { themes: [{ label: "T", summary: "S" }] } } },
+    ],
+  } as unknown as UIMessage;
+  const rows = messageActivities(message);
+  expect(rows.some((r) => r.kind === "tool_result" && r.hits[0]?.title === "Auth")).toBe(true);
+  expect(rows.some((r) => r.kind === "brief")).toBe(true);
+});

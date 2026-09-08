@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:55af8d4c68c875571db8d3408d629e2029ddb572a3092412846999976f15acea",
+  "claims": [
+    {
+      "id": "claim_bb78f6fb791340829971aef0844e8ae7",
+      "statement": "digibase.http_client centralizes a bounded httpx envelope (connect 5s, read 30s, write 10s, pool 5s) with async_client/sync_client factories that forward overrides verbatim.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/http_client.py#L1-L60",
+          "version": "repo-lines-v1:sha256:df63566386f47dced16dd9ba8cab051a8965b3b7568a2705ece75afa0e536b5e:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwODVjYzBiYWIwODJlODhiNTY3OWZlOGY2NTM0ZGQ2NGU3YWQ0ZmIxODUyM2U3YzdkMTUyZDFkMmQzOGJmNGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA2NTU2MmU1YjM2NDA5MDE0MzYxY2JjMWNhMjk3ZGM3NGQ0ZjZjMWU4NTk4ZTU2NWEwNmFkOGM3YjVkNDJlODMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ4OTVlOTIwNDY0Nzk0NTY3N2U3NWViMDIyNDZkYTc0YzY5YjY1MjNmZWYwNGI4NzU3NWE0ZTQyZjBjY2MzM2YifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_861e8197db3e4787907e71ba2cf1af25",
+      "statement": "Connector writes use the abstract ConnectorPayload (operation + data) in / ConnectorResult (success, external_id, error) out protocol.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/connectors/base.py#L1-L23",
+          "version": "repo-lines-v1:sha256:99716b46c5c35a357b5e720be82a7c9775a57a2c30afbb1f60a5242a3632033b:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ODA2YTEzNjViOTZhNzAzNTJlYzMzNWYyMzUwMTY2OTk3NjM4MzkzZTMzMWRkZjI2OTM4ODlhYjJhMDVkMGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwYTFiZDFiNjkyY2FhYWM3MGU0NDAxNzNlNmE5YzM2YzM2MWYyMTlkZDdhZGFkZGJiNzg4MzM2OTJiMDEwOWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b96faecf8b1244a79aa0a5dac5546c61",
+      "statement": "SupabaseConnector (digibase[supabase] extra) wraps an injected client with upsert, filtered select, and guarded delete plus write audit, raising SupabaseNotConfiguredError instead of carrying an implicit None client.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/connectors/supabase.py#L39-L130",
+          "version": "repo-lines-v1:sha256:d1e976d0fec3a27263dcc9dd22da16b27b4ea73e9b4d6a586fa7cac648049969:eyJzZWxlY3RlZExpbmVDb3VudCI6OTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkODcwN2RiNWMxNGRjNjFmNzVmNTc3YjFiNzFmOGUxZDc1NGY0Y2Y3NTcwYjVjM2IwYzg0NGM3ODAwOTUyZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5OTFmMGI0N2Q4NzVkNGMwY2FhZTM3NTljZDhlMjJlNDMwYTZjYTEzYmU0MGI5NDkzZTZjMmNjYWVjMDA0MGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU0MzJlMTJlMmY5YjBhYmE5YWFlNjM2Yzc1ZjE2ODBkMjY0ZjM2ZTljZDc0NGRmZjk4MWYwZmYyMzBhOTI5MTYifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

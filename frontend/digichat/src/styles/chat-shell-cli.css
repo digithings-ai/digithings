@@ -1,0 +1,18 @@
+/**
+ * CLI / session / terminal sheets — loaded ONLY by ChatShell (persistence: server).
+ * Product /embed and stock / must not import this file (see product-isolation.test.ts).
+ */
+
+@import "@digithings/design/tokens.css";
+@import "@digithings/web/styles/web-theme.css";
+@import "@digithings/design/app-shell-terminal/styles.css";
+@import "@digithings/web/styles/chat-core.css";
+@import "@digithings/web/styles/chat-math.css";
+@import "@digithings/web/styles/chat-widgets.css";
+@import "@digithings/web/styles/terminal-loaders.css";
+@import "@digithings/web/styles/controls-core.css";
+@import "@digithings/web/styles/controls-overlay.css";
+@import "@digithings/digichat-ui/styles/cursor.css";
+@import "@digithings/digichat-ui/styles/session.css";
+@import "@assistant-ui/react-markdown/styles/dot.css";
+@import "./assistant-ui-cli.css";

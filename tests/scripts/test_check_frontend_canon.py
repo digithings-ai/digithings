@@ -254,3 +254,19 @@ def test_main_clean_tree_returns_zero(mod, tmp_path, monkeypatch, capsys) -> Non
 
     assert mod.main() == 0
     assert "clean" in capsys.readouterr().out
+
+
+def test_canon_skips_vendor_template_copies(mod) -> None:
+    assert mod.is_canon_skipped(
+        "frontend/digichat/reference/assistant-ui-templates/foo.tsx"
+    )
+    assert mod.is_canon_skipped("frontend/digichat/src/app/(baseline)/page.tsx")
+    assert mod.is_canon_skipped(
+        "frontend/digichat/src/components/assistant-ui/skins/chatgpt.tsx"
+    )
+    assert mod.is_canon_skipped(
+        "frontend/digiweb/reference/components/chatbot/chatbot-theme.tsx"
+    )
+    assert not mod.is_canon_skipped(
+        "frontend/digichat/src/app/(digichat)/embed/embed-client.tsx"
+    )

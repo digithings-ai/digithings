@@ -31,6 +31,9 @@ digiweb is built to be read by coding agents, not just people:
 - **[`MANIFEST.json`](MANIFEST.json)** — a machine-readable index of every
   component in the reference: name, path, family, and a one-line purpose.
   Regenerate it with `node scripts/build-manifest.mjs` after adding a component.
+- **[`ASSISTANT_UI_ELEMENTS.md`](ASSISTANT_UI_ELEMENTS.md)** — full assistant-ui
+  elements catalog (slug → purpose → `shadcn add` → digichat attach kind). Not
+  part of `MANIFEST.json`; fetch from the registry when a deploy needs a card.
 - **The `digiweb` skill** (`/digiweb`) — routes any agent doing digithings /
   digiquant frontend work through this suite: consult the manifest, reuse a
   component, or add a new one here. Authored in
@@ -43,6 +46,9 @@ digiweb is built to be read by coding agents, not just people:
 npm run dev --workspace design-reference     # http://127.0.0.1:4013
 # or the repo's preview tooling: launch config "design-reference"
 ```
+
+Chat gallery (official assistant-ui `Thread`, CSS-variable theme):
+[`CHAT_THEME.md`](CHAT_THEME.md), design-reference `/chatbot`.
 
 ## Conventions
 
