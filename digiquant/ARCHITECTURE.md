@@ -1660,6 +1660,17 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   I/O; crash/timeout → typed inconclusive (never a fabricated book). Must not
   call `nautilus_runner._run_multi_symbol_backtest`. Shadow/challenger only —
   production H8/H9 must not import `dashboard.replay`.
+  **Schedule replay, schema 2.0 (#3695):** `models.py` adds
+  `ScheduledTargetWeights(effective_date, weights)` + optional
+  `PortfolioReplayRequest.weight_schedule` (requires `schema_version="2.0"`,
+  empty `target_weights`, `next_bar_execution=False`; every effective_date
+  must equal a bar date). `nautilus_portfolio.py` executes each entry once at
+  its bar's close with same-bar fills (sells-before-buys two-pass), i.e. the
+  row dated D is submitted and filled at D's close — the causal convention
+  the house-book restatement (June→Sept 2026) was validated against (<1e-6).
+  Legacy single-target path unchanged when the schedule is empty.
+  Forward verify: `digiquant/scripts/research/verify_nav_replay.py` rebuilds
+  the causal schedule + bars from Supabase and fails non-zero on NAV breach.
   **Paired shadow comparison evidence (#2799 / WP10.5):**
   `dashboard/replay/allocation_comparison.py` + packaged
   `replay/shadow_criteria/v1.json` + CLI

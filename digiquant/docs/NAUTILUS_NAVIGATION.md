@@ -62,7 +62,33 @@ Follow this pattern when implementing custom strategies:
 - **Config types:** Use `PositiveInt`, `PositiveFloat` from `nautilus_trader.config` for numeric params.
 - **Instrument:** Use `TestInstrumentProvider.equity(symbol, venue)` for backtest; instrument must exist before strategy runs.
 
-## 7. External Links
+## 7. Schedule replay (dated weight schedule, schema 2.0)
+
+`digiquant/dashboard/replay/` snapshots the house book through the
+BacktestEngine with zero-fee, same-bar fills:
+
+- **Schema 2.0:** `PortfolioReplayRequest.weight_schedule` is a tuple of
+  `ScheduledTargetWeights(effective_date, weights)`. Non-empty schedule
+  requires `schema_version="2.0"`, empty `target_weights`, and
+  `execution.next_bar_execution=False`. Every `effective_date` must equal a
+  bar date in the series (subset check — prevents silent no-ops).
+- **Convention:** a schedule date is both the submission and execution date —
+  the row dated D is submitted at D's close and fills at D's close (causal
+  forward writer; matches legacy methodology, verified to <1e-6 on
+  2026-06→09 restatement #3695).
+- **Ordering:** sells-before-buys two-pass per rebalance avoids
+  `AccountBalanceNegative` halts on fully-invested books.
+- **Bar volume:** Nautilus market fills are constrained by bar volume — the
+  verify harness must use real `price_history` volumes (default 1M model
+  volume is a test-only hazard).
+- **Fractional lots:** `Equity` hardcodes `size_precision=0` (no fractional
+  units), so the harness runs at scaled notional ($100M) with integer
+  `ROUND_DOWN` lots, then normalizes — engine NAV == arithmetic chain.
+- **Verify script:** `digiquant/scripts/research/verify_nav_replay.py`
+  rebuilds the causal schedule + bars from Supabase and compares engine NAV
+  vs `nav_history` (non-zero exit on breach).
+
+## 8. External Links
 
 - [Official docs](https://nautilustrader.io/docs/latest/)
 - [Concepts](https://nautilustrader.io/docs/latest/concepts)

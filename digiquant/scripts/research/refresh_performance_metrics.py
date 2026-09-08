@@ -7,7 +7,8 @@ Uses Supabase price_history closes + positions snapshot rows to populate:
 
   - positions: unrealized_pnl_pct, day_change_pct, since_entry_return_pct, metrics_as_of
   - position_events: cumulative_return_since_event_pct (where price exists)
-  - nav_history: one indexed NAV point per calendar day (uses forward-filled prices)
+   - nav_history: one indexed NAV point per calendar day (exact-match closes;
+     legs with a missing close contribute 0, so non-trading days carry flat)
   - portfolio_metrics: one row per calendar day for continuity (computed_from=refresh_script).
     Rows from update_tearsheet.py (computed_from=tearsheet) are never overwritten.
 
@@ -637,9 +638,11 @@ def refresh_nav_point(sb, as_of: str) -> None:
     Otherwise the legacy exact-date weight × close-to-close path runs (provisional
     H9 continuity). Public curated views still label legacy estimates until Task 3.4.
 
-    On non-trading days (weekends / holidays) price_history carries forward the
-    prior close, so every position's return is 0 and NAV stays flat — giving the
-    portfolio page a continuous daily series with no gaps.
+    On non-trading days (weekends / holidays) price_history has no rows, so
+    _fetch_closes exact-matches yield no p1 for most legs: each such leg is
+    skipped and contributes 0, leaving NAV flat — giving the portfolio page a
+    continuous daily series with no gaps. (Flat by missing-price skip, not by
+    forward-fill; price_history is trading-days only.)
 
     If there is no positions snapshot for `as_of` (common on non-trading days),
     the most recent prior snapshot is used for weights.
@@ -692,8 +695,9 @@ def refresh_nav_point(sb, as_of: str) -> None:
             all_res = _eq_house(sb.table("positions").select("*")).eq("date", snap_date).execute()
             pos_rows = getattr(all_res, "data", None) or []
 
-    # Get previous day's price date (will be yesterday for every calendar day now
-    # that price_history is forward-filled; on non-trading days p0 == p1 → dr=0)
+    # Get previous trading day's price date (latest price_history date strictly
+    # before as_of; on non-trading days as_of itself has no price row, so every
+    # leg's p1 lookup misses and dr stays 0 → flat carry)
     prev_d = _prev_trading_date(sb, "SPY", as_of)
 
     if not prev_d or not pos_rows:
@@ -721,7 +725,8 @@ def refresh_nav_point(sb, as_of: str) -> None:
         c_now_map = _fetch_closes(sb, t, [as_of])
         p0 = c_prev_map.get(prev_d)
         p1 = c_now_map.get(as_of)
-        # On non-trading days price_history ffill means p0 == p1, so dr stays 0
+        # On non-trading days there is no price row for as_of, so p1 is None and
+        # the leg is skipped (dr contribution 0) — flat carry by construction
         if p0 and p1 and p0 > 0:
             dr += w * (p1 - p0) / p0
     new_nav = prev_nav * (1.0 + dr)
