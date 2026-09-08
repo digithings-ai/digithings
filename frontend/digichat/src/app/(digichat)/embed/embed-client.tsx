@@ -992,7 +992,7 @@ function EmbedChat({
       },
       newThread: () => {
         setChatPrefs({ ...DEFAULT_EMBED_CHAT_PREFS, language: DEFAULT_LANGUAGE_CODE });
-        chat.reset();
+        chat.reset?.();
       },
     }),
     [chatPrefs, tenantAllowsWeb, showByok, catalog, gate.host, chat.reset],
