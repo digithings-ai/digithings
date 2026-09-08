@@ -368,6 +368,9 @@ value alone: the SDK's own `max_retries=2` (3 HTTP attempts) x `_create_with_ret
 `DIGILLM_PROVIDER_MAX_ATTEMPTS` attempts (default 12; the daily pipeline sets 2 —
 one retry only, #3078), each attempt bounded by the read timeout. Lowering
 `DIGILLM_REQUEST_TIMEOUT_SECONDS` is the only single-knob way to shrink that product.
+Orthogonal to the budget, `DIGILLM_MAX_CONCURRENT_CALLS` (default 8) caps how many
+logical calls may be in flight at once — burst smoothing for fan-out stages, not
+a time bound (#3738).
 
 ### Usage observer contract
 

@@ -874,6 +874,46 @@ def _h6_node_factory(
                 evidence_bundle_store=evidence_bundle_store,
                 research_state_store=research_state_store,
             )
+            # Inside the degrade-ticker try (#3738): the hard-fail raise in
+            # _resolve_from_debate must carry this ticker, never kill the chain.
+            effective, amendment = _resolve_from_debate(
+                state=state,
+                ticker=ticker,
+                analyst=analyst,
+                amendment_terms_raw=amendment_terms,
+                # Registry reason stays short: conclusion lives on the deliberation
+                # document itself; using it here tripped the 2000-char CHECK (#3299).
+                amendment_reason="h6_challenge_revision",
+            )
+            summary = _attach_evidence_amendment(
+                summary,
+                base_bundle=base_bundle,
+                amendment_result=evidence_amendment,
+            )
+            summary = _attach_forecast_lineage(
+                summary,
+                effective=effective,
+                amendment=amendment,
+            )
+            summary = _attach_selection(summary, selection)
+            result: dict[str, Any] = {
+                "phase_portfolio": PhasePortfolioState(
+                    deliberation_summaries={ticker: summary.model_dump(mode="json")}
+                )
+            }
+            if summary.escalated:
+                result["errors"] = [
+                    PhaseError(
+                        phase=PHASE_NAME,
+                        node=f"{NODE_ID}-{ticker}",
+                        message=(
+                            f"H6 deliberation for {ticker} hit max_rounds cap "
+                            f"({summary.cap_reason or 'max_rounds'})"
+                        ),
+                        retryable=False,
+                    )
+                ]
+            return result
         except Exception as exc:  # LLM-output failure degrades this ticker, never the chain (#1665)
             stance_map = {"buy": "bullish", "sell": "bearish"}
             logger.warning(
@@ -920,44 +960,6 @@ def _h6_node_factory(
                     )
                 ],
             }
-        effective, amendment = _resolve_from_debate(
-            state=state,
-            ticker=ticker,
-            analyst=analyst,
-            amendment_terms_raw=amendment_terms,
-            # Registry reason stays short: conclusion lives on the deliberation
-            # document itself; using it here tripped the 2000-char CHECK (#3299).
-            amendment_reason="h6_challenge_revision",
-        )
-        summary = _attach_evidence_amendment(
-            summary,
-            base_bundle=base_bundle,
-            amendment_result=evidence_amendment,
-        )
-        summary = _attach_forecast_lineage(
-            summary,
-            effective=effective,
-            amendment=amendment,
-        )
-        summary = _attach_selection(summary, selection)
-        result: dict[str, Any] = {
-            "phase_portfolio": PhasePortfolioState(
-                deliberation_summaries={ticker: summary.model_dump(mode="json")}
-            )
-        }
-        if summary.escalated:
-            result["errors"] = [
-                PhaseError(
-                    phase=PHASE_NAME,
-                    node=f"{NODE_ID}-{ticker}",
-                    message=(
-                        f"H6 deliberation for {ticker} hit max_rounds cap "
-                        f"({summary.cap_reason or 'max_rounds'})"
-                    ),
-                    retryable=False,
-                )
-            ]
-        return result
 
     return _node
 

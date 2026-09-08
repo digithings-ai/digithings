@@ -41,6 +41,7 @@ import logging
 import os
 import random
 import re
+import threading
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -156,6 +157,48 @@ def _provider_max_attempts() -> int:
 # error (#3078): after this many *consecutive* same-tool+same-error failures,
 # run_tools raises instead of feeding another identical error back to the model.
 _SAME_TOOL_ERROR_LIMIT = int(os.environ.get("DIGILLM_SAME_TOOL_ERROR_LIMIT", "") or 2)
+
+
+# ── Provider concurrency cap ────────────────────────────────────────────────
+# Burst smoothing (#3738): fan-out stages fire all LLM calls at once, and a
+# 429 burst with the 1-retry budget degrades many segments simultaneously.
+# Every provider call funnels through ``_create_with_retry`` (no tool
+# implementation calls back into the LLM, so the semaphore cannot deadlock),
+# and the slot is held for the whole logical call including short backoffs.
+# Default 8; the daily pipeline pins ``DIGILLM_MAX_CONCURRENT_CALLS``.
+_CONCURRENT_CALLS_DEFAULT = 8
+
+
+def _max_concurrent_calls() -> int:
+    """Max in-flight provider calls (default 8, minimum 1)."""
+    try:
+        return max(
+            int(
+                (os.environ.get("DIGILLM_MAX_CONCURRENT_CALLS") or "").strip()
+                or _CONCURRENT_CALLS_DEFAULT
+            ),
+            1,
+        )
+    except ValueError:
+        logger.warning(
+            "invalid DIGILLM_MAX_CONCURRENT_CALLS=%r; using default 8",
+            os.environ.get("DIGILLM_MAX_CONCURRENT_CALLS"),
+        )
+        return _CONCURRENT_CALLS_DEFAULT
+
+
+_PROVIDER_SEMAPHORE: threading.BoundedSemaphore | None = None
+_PROVIDER_SEMAPHORE_LIMIT = 0
+
+
+def _provider_semaphore() -> threading.BoundedSemaphore:
+    """Process-wide slot gate, rebuilt when the env-derived limit changes."""
+    global _PROVIDER_SEMAPHORE, _PROVIDER_SEMAPHORE_LIMIT
+    limit = _max_concurrent_calls()
+    if _PROVIDER_SEMAPHORE is None or _PROVIDER_SEMAPHORE_LIMIT != limit:
+        _PROVIDER_SEMAPHORE = threading.BoundedSemaphore(limit)
+        _PROVIDER_SEMAPHORE_LIMIT = limit
+    return _PROVIDER_SEMAPHORE
 
 
 # ── Provider registry ─────────────────────────────────────────────────────────
@@ -1167,7 +1210,9 @@ def _create_with_retry(
     transient = (RateLimitError, InternalServerError, APIConnectionError, APITimeoutError)
     max_attempts = _provider_max_attempts()
     delay = 5.0
-    with _logical_attempt_scope() as scope:
+    # The semaphore smooths fan-out bursts into a steady flow (#3738); it is
+    # held for the whole logical call, backoffs included.
+    with _provider_semaphore(), _logical_attempt_scope() as scope:
         requested_model = _requested_model or str(kwargs.get("model") or "unknown")
         provider = _provider_name(_provider)
         kwargs = _with_byok_litellm_pass_through(kwargs)

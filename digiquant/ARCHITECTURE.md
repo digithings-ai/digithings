@@ -2221,9 +2221,10 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
    H6 amendment envelopes unwrap one `{terms|amendment|forecast_amendment}` level,
    tenor fills from the H5 base, and the registry reason is always the short
    `h6_challenge_revision` (never `summary.conclusion`, which tripped the 2000-char
-   CHECK). Invalid amendment economics **raise** instead of falling back to a
+   CHECK). Invalid amendment economics **raise at unit level** instead of falling back to a
    REJECTED/base-preserved outcome (#3078) — a structurally invalid amendment is
-   a model-output error that must surface, not be absorbed. `query_data`
+   a model-output error that must surface, not be absorbed; the H6 node catches it
+   and degrades that ticker to carried + PhaseError, never killing the chain (#3738). `query_data`
    rejects `close` on `price_technicals` before Supabase with a redirect to
    `price_history` (#3078). H9 cost evidence reads `hist_vol_21`/`atr_pct` from `price_technicals`
   (second read joined onto the history row), never from `price_history`.

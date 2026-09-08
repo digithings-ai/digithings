@@ -221,6 +221,10 @@ jobs:
           # upstream fails the attempt in minutes, not hours.
           DIGILLM_PROVIDER_MAX_ATTEMPTS: 2
           DIGILLM_EMPTY_RETRY_MAX: 1
+          # Burst smoothing (#3738): at most 8 provider calls in flight — a wide
+          # analyst fan-out would otherwise 429 the provider all at once and burn
+          # the 1-retry budget across many segments in the same minute.
+          DIGILLM_MAX_CONCURRENT_CALLS: 8
           DRY_RUN: ${{ inputs.dry_run }}
           DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
