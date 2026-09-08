@@ -44,10 +44,11 @@ Keep defaults. Prefer a CSS-variable change over a slot override; prefer a
    (attach · input · send on one row). Send is a squared enter keycap: quiet
    outline while empty, ink fill once there is text. Click and Enter both
    send (`submitMode="enter"`). Do not assemble a second Composer element.
-4. **Transcript** — both roles left. Marker column `>` user, `▸` assistant
-   (same grid as `ChatMessage`: `1.25rem` + body). No user bubble. Registry
-   action bars stay. Streaming markdown uses a block caret (`::after`), not
-   the registry `●` from `dot.css`. The More menu is portaled: hairline border,
+4. **Transcript** — both roles left. Marker column is cubes, not characters:
+   `user` (open `>`), `assistant` (filled `▸`), `example` (right-shifted `>`)
+   on starter rows. No user bubble. Registry action bars stay; every chrome mark
+   is a 5×5 snap cube. Streaming markdown uses a block caret (`::after`), not the
+   registry `●` from `dot.css`. The More menu is portaled: hairline border,
    radius 0, mute mono label — no accent fill.
 5. **Reasoning** — registry `ReasoningRoot` `variant="ghost"`. Lowercase mono
    label, hairline rail on the trace (gapped below the header). Body is smaller
@@ -55,15 +56,18 @@ Keep defaults. Prefer a CSS-variable change over a slot override; prefer a
    second caret. Tool group is label-only. Tool status uses the cube-matrix
    check (not Lucide). Code-fence copy uses the same squared glyph as the
    action bar.
-6. **Loader** — assistant-ui DotMatrix forked in `components/ui/dot-matrix.tsx`.
-   Cubes snap on/off (no opacity ease). Motion states: `loading` (rim orbit),
-   `thinking` (ring in/out), `tool` (inner orbit), `executing` (row scan),
-   `searching` (column scan), `compacting` (filled shrink). Glyphs: `warning`,
-   `error`, `success`. Unlit cells keep a hairline so the grid reads. Thread
-   `indicator` uses `loading` at the same 0.85rem as a tool-call matrix.
-   Hide that indicator while any tool-call part is running so parallel
-   tools keep their own cubes and the thread does not double them. Do not
-   use the shadcn Spinner.
+6. **Loader** — `DotMatrix` lives in `@digithings/web/chat/dot-matrix` (re-exported
+   from `components/ui/dot-matrix.tsx`). Cubes snap on/off (no opacity ease).
+   Motion states: `loading` (rim orbit), `thinking` (ring in/out), `tool`
+   (inner orbit), `executing` (row scan), `searching` (column scan),
+   `compacting` (filled shrink). Status glyphs: `warning`, `error`, `success`.
+   Chrome glyphs: `copy`, `edit`, `attach`, `send`, `more`, `refresh`, `export`,
+   `download`, `stop`, `remove`, `scroll`, `prev`, `next`, `dictate`, `plus`,
+   `expand`, plus role marks `user` / `assistant` / `example` / `system`.
+   Unlit cells keep a hairline so the grid reads. Thread `indicator` uses
+   `loading` at the same 0.85rem as a tool-call matrix. Hide that indicator while
+   any tool-call part is running so parallel tools keep their own cubes and the
+   thread does not double them. Do not use the shadcn Spinner.
 7. **Markdown / code** — headings stay body size, weight 500. Tables: mute
    header row, row hairlines, no fill. Fences: one hairline frame, no wash;
    language label mute; copy is the squared action glyph.
@@ -91,9 +95,10 @@ Keep defaults. Prefer a CSS-variable change over a slot override; prefer a
 
 ## Product
 
-`chrome.skin: digichat` is the only first-party look. It consumes this gallery's
-`chatbot.css` (via `@digithings/web/styles/chatbot.css`) and the same Thread
-grammar: welcome in `ViewportFooter`, radius 0, Geist Mono, both roles left.
-Catalog / third-party default remains `base`. First-party hosts default unset
-`skin` to `digichat`. Do not add a third custom theme. Do not restyle the 11
-catalog templates.
+`chrome.skin: digichat` is the only first-party look. It **renders this
+gallery Thread** — the same `@digithings/web/chat/thread` subpath the isolated
+`/chatbot` page imports (never the `@digithings/web` main barrel). CSS is
+`@digithings/web/styles/chatbot.css`. Welcome in `ViewportFooter`, radius 0,
+Geist Mono, both roles left, cube status/action glyphs. Catalog / third-party
+default remains `base`. First-party hosts default unset `skin` to `digichat`.
+Do not add a third custom theme. Do not restyle the 11 catalog templates.
