@@ -3,10 +3,13 @@ import type { NextConfig } from "next";
 import {
   DIGICHAT_APP_SECURITY_HEADERS,
   DIGICHAT_EMBED_BAKED_SECURITY_HEADERS,
-} from "./src/lib/security-headers";
+} from "./src/lib/security-headers-bake";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Separate `next dev` lock when previewing a second config (e.g. a baked skin YAML)
+  // without stopping the dogfood server on :3005.
+  distDir: process.env.DIGICHAT_DIST_DIR || ".next",
   // Serve under a subpath when set (e.g. /chat for digithings.ai/chat). Unset →
   // root, so self-host (`make up-digichat`), local dev, and the legacy deploy are
   // unchanged. Must match NEXT_PUBLIC_DIGICHAT_BASE_PATH (see src/lib/base-path.ts).
@@ -20,6 +23,10 @@ const nextConfig: NextConfig = {
   // root from surrounding lockfiles, which breaks in git worktrees and would
   // silently move server.js out from under the Dockerfile's COPY paths (#675).
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  // The dev badge is fixed to a viewport corner, and /embed is routinely viewed
+  // inside a ~400px popup frame where every corner is chrome — it landed on the
+  // composer and hid the placeholder. Dev-only; the error overlay is unaffected.
+  devIndicators: false,
   turbopack: {
     root: path.join(__dirname, "../.."),
   },

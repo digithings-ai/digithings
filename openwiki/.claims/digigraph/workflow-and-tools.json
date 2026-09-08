@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:4cab81ab84aa68acb75b81ad2cddc5823cff32aed031f378bf56637695fb53c2",
+  "claims": [
+    {
+      "id": "claim_9b31e0592c0e46fea3e1ce1ae3bf988a",
+      "statement": "Supervisor, strategy-validator, backtest, and optimize nodes traverse via conditional edges that skip or repeat stages by profile and result.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/graph/graph.py#L332-L347",
+          "version": "repo-lines-v1:sha256:66b993031bf6b85a99d6aa644fce5e94d78e3a48965f5aff44821d3cbd6e6273:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQyYmQzYmEwM2FkMGE3YjZhYTc3NzUwOTgzMzk1ZmNkYzg0N2JkMjE1OGYzNzU5OTE3ZDFhYjc2ZTM3ZDQ0YmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJiZDU1YjIxNjU5NmVkNzkwOTczOTFhMjg1MTA1ZDI4ODM3MmMxYWM3YTM4MzAzZWFlNTRiNTkzYTYzNmJlMzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJiYWIxYmI5MjFhZWY0YjgzOTA4Y2FmMTAxNTYxYjE2OGY3YmRmNzFiY2FlNWExYTQ1N2M4YmY0OTcwNmUxZTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg1MzcxOTIxNDIzMmI4YWM1OGYxZTg4NjBmMDY2NWY3MmRhNTExMDZmMjdiMjEyNzVlYjVkNGUwYzVjZTEwOGYifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/graph/nodes.py#L60-L260",
+          "version": "repo-lines-v1:sha256:9cb302530ccdf4e2e1b3331890b0c5673df8f31fc4b35b0ea758412e1a4b97d6:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAxLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI1MGY5ZTUzNDQzMGFmZWU1YjBlYjI1MzI2MjRjMTdlNWE2NWM3ZmNkYzViYTdjMTQ0ODQyYzhiODRiMDQ4MTg1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI2NzNjZDk3NDJkNGUzZGY4NjkyMDZlYzYyOThlMmUzN2FiOTAyMmQxMDRhNzZhOTYxZmQzMzJiNjk4MzgzYWYxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI3MmVmODgxNGQ5Njg1MDM4NTA2NDAyNmU2OThhNDZmY2RmNjViNGNkMDIxN2RkNWE5M2Q4MjM4ZGY1NGUxZDE0IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJmNjQxNmE3OGI3OGU4OWU4YjhjY2UxM2ExMzZjNDBmNmM5MmNmNTY2ZDRhZmJkNzZmNWYyZGY1MDg2OGI3ODYyIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_f999e92572924c088d26be33d798c483",
+      "statement": "tool_policy computes the per-workflow allowlist consumed as ToolContext.allowed_tool_names and enforced at registry dispatch.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L71-L112",
+          "version": "repo-lines-v1:sha256:dd06d7db98b95da25f418e23bb9a5787e3bf7d46eed59588f7958f441139872c:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkZjk4YzAzZDAzNWVjNzIyYzAyNGIyYjVlNDA1YzMwYzg5NmJhZjEwZTMxMTdlOGNmZTcxMjkxNzY3Mjg4NmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkMjlmNDU4YzM4YTYxNTdhODA2MmEwNzdkYzNiYmQxZjk3Y2M3ZjY2MzZlZjAwZTU5Y2U0NzU2YmQ3Y2VmYWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZjMWYwMmZkN2VjMWQ0NjJjMGNiODE4Yjk0OGZmZTRmNzE1YjJjMmM0MzI2MzBjMjMyZGZlMzRkNDI3NDNmYTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE5MGVmNWNmNGNmYWQ1ODY2MzZhZWE0YmI3MmE4NjQxY2IzZDUwOTJjNGIzNjIxYTliMDc1YzY5YjRlNDVkZjMifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/tool_policy.py#L39-L102",
+          "version": "repo-lines-v1:sha256:b59db0297d5b88a0953ea123675657c115c3dae05235aa599a3790ec2120509f:eyJzZWxlY3RlZExpbmVDb3VudCI6NjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiOGM1MDZhMWE3NGJhYzBmM2FlNjhmYjY2ODAzYzdhNmVkY2ZiMWVmY2U1MjRhODUwOTk5MGJmNjk3MjY5ZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiYTg5ZTE3MTM2M2U0OTQyMzkzYjk0NzRhMGEyZTY4ZDA5N2Y2ZDAyYzg1YWIxM2U2NjIzMjkzNmMxNWIwNjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM3NTRhYjU2NGE3YmFhN2Y1ZjNjMmMwOTRiNGMxZTcwN2FiOGZhNzU0YThiOTc2Y2IxNWRhYjM2MzViNGY4ZjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU5MDkwYzc5MzE2ZWIwNDY4Nzc1MGIyOWJmNmRkOGQ4MjdhM2RkN2MyYTgxYjhhYjQwNTUwNmQ5NTNjZTdiODEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5f8994e019b64e7380f2382c485019a7",
+      "statement": "digistore put/get/list/profile manage session-scoped named datasets with traversal-safe paths, returning dataset_refs the LLM cites across turns.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/digistore.py#L35-L131",
+          "version": "repo-lines-v1:sha256:69d950dba648e8c7036d9edafe7c9f5d3aa3cc26f456e3330ef254a6dce81ba8:eyJzZWxlY3RlZExpbmVDb3VudCI6OTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEwNTZlZjIxZGE0MzMzZThiZmJmOTZkMDY4ZmRlZTJiMmY2Njc2NGNjYWIxZDk2MGNhMTIzMDUzZDY3YTVmZTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJlY2NjOGQzYWVjN2E4NGJkNGNkMjk1MGUzY2UxMTM5ZTAzN2UzNmRhNWIyZmUxOGNkYmY4MTBlNDJmMDM3NjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI1MjU5YjY1OTA3NThmODllMzUwMzRkZmNkNjdiYjQwMjIwZDMxY2Y1ZjQzOTYzN2JjZThjMGI5MDk0NDM1ZTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBhNjU0NzVhZDBkMzc0OWZlZGU3ZGFlMzI5MWVmYzc4ZTFiNmU4NDYwMGY3MDc2ZGQ5NGZiZTE2ZGEyN2YzNjEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cd4bceaa502d40d88b6a4b513d72cb1f",
+      "statement": "Two-tier compaction truncates tool results then summarizes tagged messages, offloading originals to the session workspace and keeping only a lean compaction event on WorkflowState, tuned via CompactionConfig and DIGI_COMPACTION_*.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/compaction.py#L42-L237",
+          "version": "repo-lines-v1:sha256:270739bd073b119c84265ac193d80a47bc71eef6301321a4cfe8eea8da2dbee2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTk2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0NTVhZjZlOTI4MjNkMGJhYWZhNGRmN2FhNjY2OTRmZmI4ZTVkYTViOTU5MWE2NzIyYWE3ZWZhYjY0ZjViODMwIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJlNWEwMDI2ZTc5YTAyZGVhOTg1ZjBkNGJkNDZjNWE5YTQ0ZjU1YTE4NjE3ZmQ4MzFjM2VmYTQzMzZhODY0ZmQ3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlNzViNWYxZGUxZmRiYTBlNjQ0ODQ0ZWM3MmIzNDQzNzgyYzNhMDU0Y2ZhMDAwODI4OGE0NDVmZGY1YTIxOWIxIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI3ZGJmYWZlMDZkZGI2MzQzMzFjOTAyODliZWYyNmI5Y2Y5ZGNjMjFjZjk5NzcxZjY2YzI0OWI0ZTNkNjBjOTMxIn0"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

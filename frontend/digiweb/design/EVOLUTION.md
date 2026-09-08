@@ -8,14 +8,19 @@
 > DqNav/DigiNav hydration fix (#1291/#1296). **Reverted:** digithings hero
 > trust-strip + ProductFrame + 4-module bento (#1210/#1211), digiquant hero CTAs +
 > trust-strip + stat row + feature bento (#1213/#1214), the closing-CTA wiring on
-> both sites (#1227), the digichat `/welcome` route (#1218), and the Olympus status
+> both sites (#1227), the digichat `/welcome` route (#1218), and the dashboard status
 > dot (#1231). The shared CSS/JS **primitives below still exist** in `frontend/digiweb/design/`
 > (unused except by `/#pricing`); the checklist marks reflect what was *built*, not
 > what is currently wired live. See #1308.
 
-This file synthesizes three external north stars — [Graphite](references/graphite.com.md),
-[Cursor](references/cursor.com.md), [x.ai](references/x.ai.md) — with our current
-implementation and sets **evolution paths** per surface. "Current implementation"
+This file synthesizes external north stars — [Graphite](references/graphite.com.md),
+[Cursor](references/cursor.com.md), [x.ai](references/x.ai.md), plus the 2026-08
+utilitarian set [Herdr](references/herdr.dev.md), [AgentMail](references/agentmail.to.md),
+[Omarchy](references/omarchy.org.md) — with our current implementation and sets
+**evolution paths** per surface. Active blend lock + preference ledger:
+[`BLEND.md`](BLEND.md). Live picker: design-reference `/iterate`.
+
+"Current implementation"
 is two layers: `tokens.css` + `site/site.css` (shared CSS foundation — brand,
 buttons, terminal block, sections, and the CSS-only primitives built here in
 Phase B) consumed directly by the v7 landings (`frontend/digithings-web`,
@@ -46,20 +51,26 @@ we build next.
 
 ---
 
-## 1. The three references in one sentence each
+## 1. The references in one sentence each
 
 | Reference | Essence | Risk if copied literally |
 |-----------|---------|--------------------------|
 | **Graphite** | Motion-forward scroll storytelling with real product UI in dark frames | Page fatigue; orange/zinc is not our brand |
 | **Cursor** | Light, scannable bento layout; product screenshots; literal CTAs | Loses our terminal/quant identity; too generic SaaS |
 | **xAI** | Brutalist dark infrastructure; mono display; capability demos; no decoration | Too austere for digiquant storytelling; dark-only |
+| **Herdr** | Diegetic multi-pane terminal hero; ink/paper dual ground; sharp chrome | Zero-radius + lavender spot as a second brand |
+| **AgentMail** | Sparse dark API hero; white CTA; live code/inbox proof | Inter-as-display; announcement-bar chrome |
+| **Omarchy** | Mono-everything utilitarian; terminal colour punctuation; playful product shot | Synthwave / pixel decoration; multi-CTA icon grids |
 
-**Our blend:**
+**Our blend (2026-08, iterating):**
 
-> **Cursor’s page map and section discipline.**  
-> **Graphite’s one scroll story and motion craft.**  
-> **xAI’s mono infrastructure voice on dashboards and API surfaces.**  
-> **Our existing atmosphere** (mesh, grain, module accents, open-core honesty).
+> **Instrument Panel tokens and colour domains.**  
+> **Herdr’s diegetic terminal proof and sharp chrome option.**  
+> **AgentMail’s sparse split hero and white/ink loud CTA.**  
+> **Omarchy’s mono confidence (not its nostalgia).**  
+> **Cursor’s section discipline · xAI’s restraint · Graphite motion only when earned.**
+
+Pick concrete treatments on `/iterate` before locking into `DESIGN.md` / `tokens.css`.
 
 ---
 
@@ -70,12 +81,12 @@ we build next.
 | Pattern | Where | Reference overlap |
 |---------|-------|-------------------|
 | `[data-theme]` semantic tokens | `tokens.css` → all Next sites | Graphite surfaces, Cursor light |
-| Scroll-pinned Olympus pipeline | `digiquant-web` PipelineScene | Graphite feature stack |
+| Scroll-pinned dashboard pipeline | `digiquant-web` PipelineScene | Graphite feature stack |
 | Hero mesh + parallax | `HeroMesh.tsx` both landings | Stripe/Graphite atmosphere |
 | Mono kickers `// section` | `site.css` `.kicker` | xAI eyebrows |
 | Module accent palette | `tokens.css` `--accent-*` | Unique to us — keep |
 | Terminal / CLI identity | digichat, manifests, `terminal.js` | xAI mono voice |
-| Glass dashboard | Olympus | **Deprecate toward flat** (xAI) |
+| Glass dashboard | dashboard | **Deprecate toward flat** (xAI) |
 | Hamburger nav + persistent theme/GitHub | `DigiNav`, `DqNav` | Cursor mobile utilitarian |
 | Shared primitives | `scroll-trigger`, `typography-motion`, `quant-native` | Graphite motion infra |
 
@@ -89,7 +100,7 @@ we build next.
 | Multiple scroll sections without progress rail | Graphite | Medium |
 | No unified **motion tokens** (`--ease-glide`) | Graphite | Medium |
 | Inter still in legacy token docs | — | Medium → Geist everywhere |
-| Olympus still glass-heavy | xAI | Medium |
+| dashboard still glass-heavy | xAI | Medium |
 | twelve-x not aligned to shared subpage chrome docs | Cursor tabs | Low |
 | No changelog/news band on landings | Cursor | Low |
 
@@ -103,7 +114,7 @@ we build next.
 digithings.ai         ◐          ●        ○
 digiquant.io          ●          ◐        ○
 digichat              ○          ●        ◐
-Olympus dashboard     ○          ◐        ●
+dashboard     ○          ◐        ●
 twelve-x              ○          ◐        ●
 API / docs pages      ○          ◐        ●
 
@@ -134,15 +145,15 @@ API / docs pages      ○          ◐        ●
 
 | Keep | Borrow | Evolve toward |
 |------|--------|---------------|
-| Olympus scroll-pinned scene | Graphite progress rail on pin | **Only** pinned section on page |
+| dashboard scroll-pinned scene | Graphite progress rail on pin | **Only** pinned section on page |
 | Tearsheets / real strategy data | Cursor bento for Pipeline · Strategies · Pricing | `ProductFrame` tearsheet crops |
-| Fraunces hero | Cursor literal CTAs (`open olympus`) | Stat strip (xAI counters) |
+| Fraunces hero | Cursor literal CTAs (`open dashboard`) | Stat strip (xAI counters) |
 | Teal/cyan accent | — | Module green only inside quant UI |
 
 **Evolution path:**
 
 1. Demote extra scroll sections → bento grid
-2. Add Graphite-style progress indicator to Olympus pin
+2. Add Graphite-style progress indicator to dashboard pin
 3. Hero CTA + “fund in a box” trust strip
 4. Wire stat counters to real metrics when available
 
@@ -158,7 +169,7 @@ API / docs pages      ○          ◐        ●
 
 **Evolution path:** Minimize marketing wrapper; chat surface **is** the pitch (Cursor model).
 
-### Olympus (`frontend/olympus/`)
+### dashboard (`frontend/dashboard/`)
 
 **Mode:** Professional dashboard — **creativity stops here**
 
@@ -171,7 +182,7 @@ API / docs pages      ○          ◐        ●
 
 **Evolution path:** Flatten `glass-card` → `surface` + hairline; mono uppercase labels for metrics; align with `quant-native` utilities.
 
-### twelve-x (`frontend/olympus/components/twelve-x/`)
+### twelve-x (`frontend/dashboard/components/twelve-x/`)
 
 **Mode:** Data-dense FX research utility
 
@@ -181,7 +192,7 @@ API / docs pages      ○          ◐        ●
 | Matrix / consensus views | — | Outline pills for filters |
 | Real Supabase data | xAI counter strip for key metrics | — |
 
-**Evolution path:** Treat as **xAI + Cursor utility** — no mesh, no serif, no scroll storytelling. Document patterns in Olympus ARCHITECTURE when subpage chrome changes.
+**Evolution path:** Treat as **xAI + Cursor utility** — no mesh, no serif, no scroll storytelling. Document patterns in dashboard ARCHITECTURE when subpage chrome changes.
 
 ---
 
@@ -192,7 +203,7 @@ API / docs pages      ○          ◐        ●
 | Role | Font | Weight | Reference |
 |------|------|--------|-----------|
 | Marketing hero display | Fraunces *or* Instrument Serif | 400 | Editorial (us) + Cursor tight tracking |
-| Dashboard display | Instrument Serif | 400 | Olympus today |
+| Dashboard display | Instrument Serif | 400 | dashboard today |
 | Body | Geist Sans | 400–500 | Cursor, xAI Universal Sans |
 | Labels / eyebrows | Geist Mono, uppercase, tracked | 400 | xAI |
 | Data / metrics | Geist Mono, tabular nums | 400–600 | xAI, quant-native |
@@ -306,12 +317,12 @@ Add to `tokens.css` when implementing primitives:
 ### Phase C — Landing realignment
 
 - [x] digithings hero: trust-strip + ProductFrame (#1210); bento module grid — 4 primary modules, accent-coloured, real links, added *above* the retained interactive `digithings ps` manifest (hybrid, #1211)
-- [~] digiquant hero: literal CTAs (Open Olympus / Browse strategies) + trust-strip + real-value stat row (#1213); additive Pipeline·Strategies·Pricing feature bento after the hero, teal accent, real links — kept **both** pinned scrollies (OlympusScene + StrategySuite) rather than the AC's "one pin" (avoids regressing the flagship + #1198; per sign-off) (#1214). Graphite progress rail on the Olympus pin (#1215) — **satisfied by the existing `PipelineScene`**: `.dqp-rail` already renders a scroll-synced fill + engine nodes in `--accent` cyan, reduced-motion-safe, mobile-simplified at 820px (verified live: 55% scroll → 54.99% fill). Refactoring onto the shared `ScrollyFeatures` primitive would be pure regression risk, so left as-is.
+- [~] digiquant hero: literal CTAs (Open dashboard / Browse strategies) + trust-strip + real-value stat row (#1213); additive Pipeline·Strategies·Pricing feature bento after the hero, teal accent, real links — kept **both** pinned scrollies (DashboardScene + StrategySuite) rather than the AC's "one pin" (avoids regressing the flagship + #1198; per sign-off) (#1214). Graphite progress rail on the dashboard pin (#1215) — **satisfied by the existing `PipelineScene`**: `.dqp-rail` already renders a scroll-synced fill + engine nodes in `--accent` cyan, reduced-motion-safe, mobile-simplified at 820px (verified live: 55% scroll → 54.99% fill). Refactoring onto the shared `ScrollyFeatures` primitive would be pure regression risk, so left as-is.
 - [ ] Changelog band (both sites) — #1212 **deferred**: no real releases source (no CHANGELOG.md / GitHub releases / tags); needs a data source + product call before shipping a public band (won't fabricate).
 
 ### Phase D — Dashboard flattening
 
-- [x] Olympus glass → surface migration (#1216) — **audit: already flat**. `.glass-card` is a legacy *name* for a flat `--surface` panel (1px `--hair` border, subtle intentional depth shadow, not glass); `backdrop-blur` is confined to sticky/overlay chrome (nav, mobile app bar, command palette, sidebar), never content. Surface system documented in `frontend/olympus/app/globals.css` (Olympus has no ARCHITECTURE.md/AGENTS.md to update). No visual change — anti-pattern #8 already satisfied.
+- [x] dashboard glass → surface migration (#1216) — **audit: already flat**. `.glass-card` is a legacy *name* for a flat `--surface` panel (1px `--hair` border, subtle intentional depth shadow, not glass); `backdrop-blur` is confined to sticky/overlay chrome (nav, mobile app bar, command palette, sidebar), never content. Surface system documented in `frontend/dashboard/app/globals.css` (dashboard has no ARCHITECTURE.md/AGENTS.md to update). No visual change — anti-pattern #8 already satisfied.
 - [x] twelve-x xAI utility polish (#1217) — **audit: already there**. Section/table headers use `uppercase tracking-wider` mono-style labels (`ConsensusDataTable`, `IntelligenceTab`, `MoversStrip`); metrics use `font-mono tabular-nums`; chips/panels are flat (`.glass-card` = flat panel, per #1216); `MoversStrip` is already a real-data headline FX metric strip. No mesh/serif/scrolly. Forcing the shared `StatCounter` over the working `MoversStrip` would be churn — left as-is.
 - [x] digichat full token adoption (#240, closed) + product-as-hero `/welcome` marketing route with a BYOK/API `CodeSampleBand` (#1218). Public route (frozen chat-UI hero, cyan accent); shared `.code-sample-band` CSS scoped under `.welcome-codeband` with local dark `--term-*` values (digichat doesn't set `:root[data-theme]`). No purple in v2 tokens — cyan only (AC wording flagged).
 
@@ -320,13 +331,13 @@ Add to `tokens.css` when implementing primitives:
 - [x] `HorizontalScrollBand` primitive (`.h-scroll`) — #1221
 - [x] `ClosingCtaBand` primitive (`.closing-cta`) — #1222. CSS-only centered pre-footer band (headline + primary `.btn` + optional mono secondary), `--section-y`/`--wrap-wide`, composes with `.reveal-up`. Copy slots + digithings/digiquant variants documented in `site/README.md`; smoke demo added. Landing wiring is #1227.
 - [x] `FaqAccordion` + `PricingMatrix` primitives — #1223. FAQ = native `<details>`/`<summary>` (`.faq`/`.faq__item`/`.faq__q`/`.faq__a`), shared `name` → exclusive accordion, CSS chevron (reduced-motion safe). Pricing = `.pricing` grid + `.pricing__tier` (3 honest open-core tiers, featured variant) + optional `.pricing-table` (✓/— cells). Content shapes + smoke demo + `site/README.md` documented; honest-copy policy (no fake usage caps).
-- [x] `HeroFeaturePicker` primitive (`.hero-picker` + `hero-picker.js`) — #1224. WAI-ARIA icon-tab row (53×53px) swapping `.hero-picker__panel` ProductFrame previews; roving tabindex (←/→/Home/End), `aria-controls`/`aria-selected`, static crops only. Smoke demo (Olympus · Strategies · Pipeline) + `site/README.md`. React hero wiring is a follow-up (#1213).
+- [x] `HeroFeaturePicker` primitive (`.hero-picker` + `hero-picker.js`) — #1224. WAI-ARIA icon-tab row (53×53px) swapping `.hero-picker__panel` ProductFrame previews; roving tabindex (←/→/Home/End), `aria-controls`/`aria-selected`, static crops only. Smoke demo (dashboard · Strategies · Pipeline) + `site/README.md`. React hero wiring is a follow-up (#1213).
 - [x] `AnnouncementBar` primitive (content-gated) — #1225. 48px full-width `.announcement` bar + `announcement.js`; renders only for enabled content (empty/`{enabled:false}` → nothing, so OFF by default), stretched-link when `href` set (scheme-guarded), dismiss persists per-`id` in localStorage, escaped text. No animation (reduced-motion safe). `announcement-example.json` shape + smoke demo + `site/README.md` (enable procedure). React landing wiring deferred (content-driven).
 - [x] digiquant.io pricing FAQ + tier matrix — #1226. Converted the homepage `#contact` section into `#pricing`: `PricingMatrix` (3 honest tiers — Self-hosted MIT / Managed waitlist / Enterprise contact) + `FaqAccordion` (self-host reqs · NautilusTrader license · BYOK · no fake limits), content in `app/_pricing.ts`. Bento "// pricing" cell + nav/footer now point to `#pricing` ("Contact"→"Pricing"). Self-host CTA reuses `CloneRepoButton`; Managed/Enterprise use `contact@digiquant.io`. Standalone `/contact` route + `_contact.ts` left as-is (follow-up).
-- [x] both landings closing CTA wiring — #1227. `ClosingCtaBand` wired before the footer on both sites via `<Reveal className="closing-cta">` (reveal-up + reduced-motion via the shared Reveal). digithings.ai: "Build your agent stack in the open." → **Ask digichat** (/chat) · Read the docs (/docs). digiquant.io: "One graph, research to execution." → **Open Olympus** (/#olympus) · Browse strategies (/strategies). Internal links use `next/link`.
+- [x] both landings closing CTA wiring — #1227. `ClosingCtaBand` wired before the footer on both sites via `<Reveal className="closing-cta">` (reveal-up + reduced-motion via the shared Reveal). digithings.ai: "Build your agent stack in the open." → **Ask digichat** (/chat) · Read the docs (/docs). digiquant.io: "One graph, research to execution." → **Open dashboard** (/#dashboard) · Browse strategies (/strategies). Internal links use `next/link`.
 - [x] `TrustStrip` integration logo variant (`.trust-strip--logos`) — #1229. x.ai-style integration-mark row (real stack: NautilusTrader · LangGraph · LiteLLM · Polars), grayscale/muted default → color on hover, composes on the base strip. Smoke demo (text wordmarks; production uses real logo `<img>` + `alt`) + `site/README.md`. No stock/fabricated logos.
 - [x] `CaseStudyCard` primitive (P3, content-gated) — #1230. `.case-study` flat card (`{org} × digithings` label, quote, attribution + optional logo), composes in bento/capability-grid/`.h-scroll`. Content-gated — ships dormant, `.case-study--example` watermark for demos only, real attribution required in production. Smoke demo (watermarked example row) + `site/README.md` content shape.
-- [x] Olympus status dot → digismith (P3) — #1231. Sidebar-footer operator dot polling digismith `GET /v1/status` every 60s (`lib/digismith-status.ts` + `components/status-dot.tsx`). Env-gated on `NEXT_PUBLIC_DIGISMITH_URL` (unset → not rendered, so local dev without the stack is unaffected); non-blocking client fetch; green (ok) / amber (degraded) / red (error) / grey (unreachable — graceful); no PII in the label. Documented in Olympus README (no ARCHITECTURE.md exists). Maintainer-approved the new Olympus→digismith dependency; deploy needs CORS + CSP `connect-src`.
+- [x] dashboard status dot → digismith (P3) — #1231. Sidebar-footer operator dot polling digismith `GET /v1/status` every 60s (`lib/digismith-status.ts` + `components/status-dot.tsx`). Env-gated on `NEXT_PUBLIC_DIGISMITH_URL` (unset → not rendered, so local dev without the stack is unaffected); non-blocking client fetch; green (ok) / amber (degraded) / red (error) / grey (unreachable — graceful); no PII in the label. Documented in dashboard README (no ARCHITECTURE.md exists). Maintainer-approved the new dashboard→digismith dependency; deploy needs CORS + CSP `connect-src`.
 
 ---
 
@@ -353,11 +364,11 @@ From user iteration log + reference analysis:
 | [`references/README.md`](references/README.md) | Index of external scans |
 | [`demos/digiquant-landing/DESIGN_DECISIONS.md`](demos/digiquant-landing/DESIGN_DECISIONS.md) | v7 iteration punchlist |
 | [`site/README.md`](site/README.md) | Theme contract + JS modules |
-| [`references/olympus-subpage-chrome.md`](references/olympus-subpage-chrome.md) | Olympus subpage chrome — tab bar, tabs-vs-sidebar, typography, surfaces (#1220) |
+| [`references/dashboard-subpage-chrome.md`](references/dashboard-subpage-chrome.md) | dashboard subpage chrome — tab bar, tabs-vs-sidebar, typography, surfaces (#1220) |
 | [`docs/adr/0009-frontend-umbrella.md`](../../docs/adr/0009-frontend-umbrella.md) | Monorepo layout |
 | `frontend/digithings-web/components/landing/` | digithings landing components |
 | `frontend/digiquant-web/components/landing/` | digiquant landing components |
-| `frontend/olympus/components/twelve-x/` | twelve-x research UI |
+| `frontend/dashboard/components/twelve-x/` | twelve-x research UI |
 
 ---
 

@@ -1,6 +1,6 @@
 /**
- * Pipeline — a workflow visualization ported from the olympus dashboard's
- * pipeline section (frontend/olympus/components/pipeline). A left→right flow of
+ * Pipeline — a workflow visualization ported from the dashboard's
+ * pipeline section (frontend/dashboard/components/pipeline). A left→right flow of
  * stages with a parallel fan-out group; each step carries its diagnostics
  * (wall time · tokens · model), connectors show how one feeds the next, and
  * selecting a node opens its inputs/outputs and full diagnostics. Works for
@@ -49,7 +49,7 @@ const COLUMNS: PipelineColumn[] = [
     id: "c5",
     kind: "step",
     nodes: [
-      { id: "execute", label: "execute", status: "queued", ms: "—", tokens: "—", model: "kairos · gated", inputs: "passed tearsheet", outputs: "— (human gate)", cost: "—" },
+      { id: "execute", label: "execute", status: "queued", ms: "—", tokens: "—", model: "execution · gated", inputs: "passed tearsheet", outputs: "— (human gate)", cost: "—" },
     ],
   },
 ];
@@ -68,7 +68,7 @@ export function PipelineReference() {
       <p className="kicker">{"// pipeline"}</p>
       <h2 className="title">Workflows, step by step.</h2>
       <p className="section-copy">
-        The olympus dashboard&apos;s pipeline view, for any sequential or parallel workflow: stages
+        The dashboard&apos;s pipeline view, for any sequential or parallel workflow: stages
         flow left to right, a fan-out group runs in parallel, and each step carries its diagnostics
         — wall time, token usage, model. Select a node to read what fed in, what came out, and the
         full cost. Reduced to a display template here.

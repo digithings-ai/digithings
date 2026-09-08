@@ -5,15 +5,15 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.models import PolicyBundle, PolicyFamily, PolicyVersionRef
-from digiquant.olympus.replay.policy_registry import (
+from digiquant.dashboard.replay.models import PolicyBundle, PolicyFamily, PolicyVersionRef
+from digiquant.dashboard.replay.policy_registry import (
     PolicyRegistry,
     PolicyRegistryError,
     PolicyRegistryMissingError,
     PolicyRegistryUnavailableError,
     RegisteredPolicyVersion,
 )
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 pytestmark = pytest.mark.unit
 

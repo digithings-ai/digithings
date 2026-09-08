@@ -2,7 +2,7 @@
  * Browser Supabase client singleton for digiquant.io (#1461).
  *
  * digiquant.io is a static Cloudflare Pages export — the anon key ships in the
- * bundle. Mirrors olympus/lib/supabase.ts in spirit: the client is exported as
+ * bundle. Mirrors dashboard/lib/supabase.ts in spirit: the client is exported as
  * possibly-`null` so the static build succeeds WITHOUT the public env vars set.
  * It lights up once Cloudflare Pages has `NEXT_PUBLIC_SUPABASE_URL` +
  * `NEXT_PUBLIC_SUPABASE_ANON_KEY` (a human deploy step). Until then the live

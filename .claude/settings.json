@@ -11,6 +11,9 @@
   },
   "autoCompactEnabled": true,
   "autoCompactWindow": 250000,
+  "enabledPlugins": {
+    "cloudflare@claude-plugins-official": true
+  },
   "hooks": {
     "PreToolUse": [
       {

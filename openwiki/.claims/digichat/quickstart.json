@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f948dc524c2840755afe1135beb139636e2d9e2453334e6917955017f7ebc616",
+  "claims": [
+    {
+      "id": "claim_023f86cf79c246d296855d1dab1eb298",
+      "statement": "digichat dev pairs make stack-local backends with make digichat-dev on port 3000, requiring .env.local with matching AUTH_URL origin and the identical DIGIKEY_BFF_TOKEN.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/digichat/OPERATIONS.md#L76-L110",
+          "version": "repo-lines-v1:sha256:20afec39099fa0d0081f8766c4f8271d973dca2cf4cfe633efb4c980c170aee5:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkMDg0NzMyMzcxMGJjMmI2NmYzNGMwYTY1YjQxYWU2YzU2OTZkNzE0ZjM4NGYxMzFmZDk3ZDI0YzE4NzhlYWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEwZTc4NDRmNDQ4MzNjMTMwZTlkZDhiNTAwNzQ1MDk1ZGE1ZmMxYjdmNjEwMWY5MjhlNzJjZDM0YmZhMzcyYjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjllODlhZWUyNmM5OTUzODIyZTk1MWM0MDcyODNjMWExMmI1ODhhMzQyNDI4MTFhMDZhMDE4ZjNjYjQ0NDBlYjAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3a1c3e1e1cbd4f3ba63ece3da068455a",
+      "statement": "Frontend gates run from frontend/digichat/: npm run test (Vitest), npm run lint (ESLint), npm run build (type-check plus production build).",
+      "evidence": [
+        {
+          "resource": "repo://frontend/digichat/AGENTS.md#L60-L80",
+          "version": "repo-lines-v1:sha256:2c70a5cb8f152bad955a00c332942e3c9bf3a63d1d214f81b0b44bf3063026ab:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmYjZiOTNmN2E2YjEwNWZkYjdlMzQ4NTY0MWVlNjgxNTdhODM5MWU3ODQ2Y2I1YjM0NTNkNzg2ZTZiMDJmY2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJjNWRjOWY1OTQ3NDk1YWQzNGYxYTAwMWRmM2NhOWRhNjM1MGUxZmM0YTlkODNkNGYzMWQzMzBkYWY3Y2ZjYjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_17a36903f8a44a4384914373767caf23",
+      "statement": "The browser never holds upstream credentials; all LLM calls, token exchanges, and probes run in server Route Handlers.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/digichat/ARCHITECTURE.md#L10-L15",
+          "version": "repo-lines-v1:sha256:97cf4fbe0b08944b9a98245fcea27db5e88834f1b75d3c3aeabeb55103e50de5:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2Y4NDNkZjJlZGY1MDM4OGQyNDIyMzI5ODEzYzhjMzk4YWFmMDc0OTEyMjBkNThhZTRjMWUxMDQyOGVhMjQ5ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWJiM2UzZWJjMWZkZmY5YjhhZTBiYTkyZDQ1YmY2NjNjMzk3YTZhNmIzYmM4MTI0ZmRlMjllZmQzOTIyY2ZhZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2I4MGRmMjdkMjk0YWNiYWQ4ZTk5NWExNzU5ZTdjYjk2YjYyOGViOTYzMDMzNWY0YjNjYmNkNWE3ZDIwYTkxMCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

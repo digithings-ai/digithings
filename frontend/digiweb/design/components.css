@@ -336,7 +336,7 @@ p:last-child {
   width: 8px;
   height: 2px;
   background: var(--accent);
-  border-radius: 2px;
+  border-radius: 0;
 }
 
 .module-features code {
@@ -425,7 +425,7 @@ p:last-child {
 .prompt-chip {
   padding: 0.5rem 0.9rem;
   border: 1px solid var(--border-color);
-  border-radius: 999px;
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.02);
   color: var(--text-secondary);
   font-family: var(--font-family);

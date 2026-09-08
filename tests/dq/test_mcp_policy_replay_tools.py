@@ -12,20 +12,20 @@ from digiquant.orchestrator_tools import build_orchestrator_tool_manifest
 pytestmark = pytest.mark.unit
 
 _REQUIRED = {
-    "olympus_run_policy_replay",
-    "olympus_get_policy_replay",
-    "olympus_get_policy_comparison",
-    "olympus_evaluate_policy_gate",
-    "olympus_get_policy_gate_evaluation",
+    "dashboard_run_policy_replay",
+    "dashboard_get_policy_replay",
+    "dashboard_get_policy_comparison",
+    "dashboard_evaluate_policy_gate",
+    "dashboard_get_policy_gate_evaluation",
 }
 
 _BANNED = {
-    "olympus_promote_policy",
-    "olympus_activate_policy",
-    "olympus_set_live_policy",
-    "olympus_rollback_live_policy",
-    "olympus_record_policy_governance_decision",
-    "olympus_record_governance_decision",
+    "dashboard_promote_policy",
+    "dashboard_activate_policy",
+    "dashboard_set_live_policy",
+    "dashboard_rollback_live_policy",
+    "dashboard_record_policy_governance_decision",
+    "dashboard_record_governance_decision",
 }
 
 

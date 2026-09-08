@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:a6e30e739376bc6bdddf9dfb0c24c63cda54ba3b42be9061ab565285072270b8",
+  "claims": [
+    {
+      "id": "claim_477ea9b029ee4557a413119186d4c091",
+      "statement": "HttpFetcher offers fetch and size-capped download over httpx with a Playwright cookie hand-off, and the package never uses requests.",
+      "evidence": [
+        {
+          "resource": "repo://digifetch/src/digifetch/http.py#L100-L197",
+          "version": "repo-lines-v1:sha256:e575a3b957013b6ecf4f51fe115a3a9cdac8f1a70b253c4d3f2ff1ac9c49a7e9:eyJzZWxlY3RlZExpbmVDb3VudCI6OTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzN2RlNjAwNmQ5YTQ2NjU5OTMwZDBmMjk3YWVmOWE1MDlhZmE5NDViYWEyZmZlZjI4MTQ5MGMzNjdkOTJlZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImExODY4MDJkZmQ0YzE4ODgyOGI0MzI1YWY1YjIxOTg5YjBhYzFkZTVkOTc1ZjE0ZWU0MWJkNjliNjVkNGMxNjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiNDY4YWQwYWJkNWRmODYyMGJiOTRiZGZmZTg1ZjQyMTEwZWNkYThhZjc2NGE0ZDVjM2JhMDZiYWE1Zjc3M2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE2Y2JhNGMzN2VmNjY3NjU1NzQ1NTNhOTJkMTIwNTljMjNhNDY5ODBkZjlmZWM0NjZmZTkzNTk3ZjNjMGEwNjUifQ"
+        },
+        {
+          "resource": "repo://digifetch/src/digifetch/http.py#L83-L100",
+          "version": "repo-lines-v1:sha256:4f9ff820049dcaddb4d72626691d23c4e9da584945c9c2b0d182b4a9b49406a7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkyOWJkZTg2YmU3YmZiYjgyOWNjYmQ2MjNiMjJhODlmZWYwZGZlMzU1Y2Q3MDQ1ZDg2MmJlOGZjOTUwZWZjNDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzN2RlNjAwNmQ5YTQ2NjU5OTMwZDBmMjk3YWVmOWE1MDlhZmE5NDViYWEyZmZlZjI4MTQ5MGMzNjdkOTJlZGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRmYWRiYmIzNTVlOWZiNDMzNDQzMzljODZlNmM5ODM5ZjI5MDhlY2FkMTEyNGRlNmRkZWVjYzYxM2EwZmQzZTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgzOTdmOTU4MDMxNzI2YmJmOWE0NTJhMTQ0MjI1OTBlZGZiNWVmOGY2NDUyZGM3YjE3ZjJlYTBiOGNkY2NmOTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a8fe17238a2d44a995fa163fa8561d95",
+      "statement": "RetryPolicy with with_retry composes injected-sleep backoff around fallible calls, paired with a standalone polite per-host rate limiter.",
+      "evidence": [
+        {
+          "resource": "repo://digifetch/src/digifetch/retry.py#L41-L92",
+          "version": "repo-lines-v1:sha256:6a77d75afc8b39766597ab87a05b6d0a06dc89e0fa1c0ca66878739e871c3ca2:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllYTM1OGMxNTBmY2ZmMjNjYzlhNzE4YTAwZWZjYjcwYWE5NmEzNWM1ZGIwN2ZmMmQ3MDdiYjk4MDVkZjQ0ZDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVmZWZiMzVkNjIwNzkyY2MxNzg1ZjM0MzJlODgyNWQ3ZDg0YjBlYzI0YTFlZmRhOTk4NjZlNzUwOWVjMGUxMWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcwY2UzZjI0YWI0N2MyZjVhOWQzMzdmMzc3ZWQ4NTczZmE1NjU4NDA3NjQwMmYxYWYwNTRhM2RlZDYxOTQ2MmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI0Zjc2Y2VjMDBlZmQ1YWFiYjlmMjFlMGM2ZWY5NjlhMzVlYTViNGI1ZjUyZTBkMzk3YzkyZTc1ZDMwMmM3ODkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6073eb2612d3400791a571fb7bc14116",
+      "statement": "Browser symbols resolve through a lazy PEP 562 shim so import digifetch never launches or imports a browser, and the 0.1.0 interface is provisional with twelve-x as the single consumer.",
+      "evidence": [
+        {
+          "resource": "repo://digifetch/ARCHITECTURE.md#L10-L30",
+          "version": "repo-lines-v1:sha256:9f13a1036079002bfbeacd6302651eba7e1fb2f9b4dc583049c7ac0b2665cf5c:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA2ZjdkMWE3YWI4OTVhMGUyYWY2ODBiZDcxY2Q4MDhmNDQ4ZWMwMmYzNTI0ZGI4MWQ5MGMyZTg4ZmJjYzg3Y2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIxZjg0MGEzY2MxZTUzNDFlYTcwNGU4NjQyYWU1M2E2ZjRmNGJmODhmODg4NTcxYjkzMGNkMGYzMWE3YmViMWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVmNDM4OGYwYjVhMGYyZWVkOGJjYTNmMmI4ZjQ4ZTJjNmY1YTg3NGY5YjU3NWI1NTA2Mjc4ZTAwY2YxNTVlM2IiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNmMTA5ZTI5MjE2ZDFmMzk4MTVlODBiMTgzMWRiZmI4MDExYTQ5ZGRkNjQxMjhjYjMyY2YxOWI4YWNiMjc5ZDkifQ"
+        },
+        {
+          "resource": "repo://digifetch/src/digifetch/__init__.py#L20-L56",
+          "version": "repo-lines-v1:sha256:41cf040d722cbdc1f4374417db29919ade0ce7fc0a9976811e17e2c99da40295:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg5MmUzYzcyNzI2ZWJlYmQ2OWY0MzkxNTJlOWY4MjUzMTI3NjA0MDUyMTI0MjdhZDg5YzAzMGY1ZmM2MTRjYjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ2MjRjOTM4ZGZlOGM5OTU4M2YwZDJhNzQxOWQzN2U1NzI1NGJmMWY0MjgxYjFjMDIxNjJmOWZlMDAwZWI5MmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ1OGI2OWFjYzBmNjdmMGIwMDk5NGUyYTczYzZmNDFlYzIwZGM2NDRjNDJjMzA5YmUwYTNlMDlkZjcxMzM2MGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdhMDdmNDk1OWU4Njk3ZWU1NmY0NWM4NzU1OTI1M2UzNjE0NzhmMWY4M2RlNTAxMTgyYWZhMWFlNWU0ZjI2NjYifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

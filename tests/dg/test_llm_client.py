@@ -238,3 +238,41 @@ def test_llm_client_wires_digillm_detailed_observer() -> None:
     from digigraph import usage
 
     assert _digillm_client._telemetry_observer is usage.DETAILED_USAGE_OBSERVER
+
+
+@pytest.mark.unit
+class TestGroundingWrappers:
+    """web_search/openrouter_web_search/x_search synthesize via plain completion."""
+
+    def _resp(self, content: str) -> MagicMock:
+        resp = MagicMock()
+        resp.choices = [MagicMock(message=MagicMock(content=content))]
+        return resp
+
+    def test_extracts_citations_from_cited_summary(self) -> None:
+        with (
+            patch.object(llm_client, "resolve_request_model", return_value="m"),
+            patch.object(
+                llm_client,
+                "_digillm_completion",
+                return_value=self._resp("fact [s](https://e.test/x)"),
+            ) as comp,
+        ):
+            out = llm_client.web_search("m", "query")
+        assert out == ("fact [s](https://e.test/x)", ["https://e.test/x"])
+        assert comp.call_args[1]["usage_kind"] == "web_search"
+
+    def test_fail_soft_none_on_provider_error(self) -> None:
+        with (
+            patch.object(llm_client, "resolve_request_model", return_value="m"),
+            patch.object(llm_client, "_digillm_completion", side_effect=RuntimeError("down")),
+        ):
+            assert llm_client.openrouter_web_search("m", "query") is None
+            assert llm_client.x_search("m", "query") is None
+
+    def test_empty_content_returns_none(self) -> None:
+        with (
+            patch.object(llm_client, "resolve_request_model", return_value="m"),
+            patch.object(llm_client, "_digillm_completion", return_value=self._resp("   ")),
+        ):
+            assert llm_client.web_search("m", "query") is None

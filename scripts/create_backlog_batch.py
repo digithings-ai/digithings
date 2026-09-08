@@ -23,15 +23,15 @@ OWNER = "digithings-ai"
 
 # Component → project number mapping (from project_routing.json)
 PROJECT_MAP = {
-    "root":       1,
-    "digiquant":  2,
-    "digigraph":  3,
+    "root": 1,
+    "digiquant": 2,
+    "digigraph": 3,
     "digisearch": 4,
-    "digichat":   5,
-    "digikey":    6,
-    "digismith":  7,
-    "digiclaw":   8,
-    "digibase":   9,
+    "digichat": 5,
+    "digikey": 6,
+    "digismith": 7,
+    "digiclaw": 8,
+    "digibase": 9,
 }
 
 # ── Issue definitions ──────────────────────────────────────────────────────────
@@ -40,12 +40,15 @@ PROJECT_MAP = {
 # ──────────────────────────────────────────────────────────────────────────────
 
 ISSUES = [
-
     # ── Cross-cutting epics (Project #1 — digithings) ─────────────────────────
-
     dict(
-        component="root", type="feat", risk="med", priority="high", complexity="L",
-        model="opus", milestone=None,
+        component="root",
+        type="feat",
+        risk="med",
+        priority="high",
+        complexity="L",
+        model="opus",
+        milestone=None,
         labels_extra=["type:feature", "complexity:L", "priority:high"],
         title="[Epic] digilink — connection and translation layer",
         body="""\
@@ -73,10 +76,14 @@ Currently each module exposes its own REST API independently with no shared tran
 - [ ] `ARCHITECTURE.md`
 """,
     ),
-
     dict(
-        component="root", type="feat", risk="low", priority="high", complexity="L",
-        model="sonnet", milestone=None,
+        component="root",
+        type="feat",
+        risk="low",
+        priority="high",
+        complexity="L",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:L", "priority:high"],
         title="[Epic] digistore — standalone storage abstraction module",
         body="""\
@@ -100,10 +107,14 @@ Extract and build digistore as a proper standalone module — the unified storag
 - [ ] `ARCHITECTURE.md`
 """,
     ),
-
     dict(
-        component="root", type="feat", risk="high", priority="critical", complexity="XL",
-        model="opus", milestone=None,
+        component="root",
+        type="feat",
+        risk="high",
+        priority="critical",
+        complexity="XL",
+        model="opus",
+        milestone=None,
         labels_extra=["type:feature", "complexity:XL", "priority:critical"],
         title="[Epic] digikey — SSO federation and org/project membership",
         body="""\
@@ -132,27 +143,31 @@ Enterprise client onboarding (e.g. a company using Microsoft) requires employees
 - [ ] `digikey/ARCHITECTURE.md`
 """,
     ),
-
     dict(
-        component="root", type="feat", risk="med", priority="high", complexity="XL",
-        model="opus", milestone=None,
+        component="root",
+        type="feat",
+        risk="med",
+        priority="high",
+        complexity="XL",
+        model="opus",
+        milestone=None,
         labels_extra=["type:feature", "complexity:XL", "priority:high"],
         title="[Epic] digiclaw — OpenClaw integration and autonomous agent scheduling",
         body="""\
 ## Goal
-Build out digiclaw from its current heartbeat/audit MVP into the always-on agent orchestration layer: OpenClaw runtime integration, agent definition schema, cron/continuous scheduling, and the Atlas daily cycle running automatically without manual execution.
+Build out digiclaw from its current heartbeat/audit MVP into the always-on agent orchestration layer: OpenClaw runtime integration, agent definition schema, cron/continuous scheduling, and the research daily cycle running automatically without manual execution.
 
 ## Sub-tasks (in digiclaw project board)
 - [ ] OpenClaw runtime integration
 - [ ] Agent definition schema and registry
 - [ ] Cron and continuous scheduling
-- [ ] Atlas daily cycle automation — digiclaw scheduled job
+- [ ] research daily cycle automation — digiclaw scheduled job
 - [ ] Strategy performance monitor agent
 - [ ] ADDM — Adaptive Drift Detection Monitor (rewrite from stub)
 - [ ] digiclaw dashboard — agent status and audit log viewer
 
 ## Acceptance Criteria
-- [ ] Atlas daily delta, weekly full-gen, and monthly rollup run automatically on schedule
+- [ ] research daily delta, weekly full-gen, and monthly rollup run automatically on schedule
 - [ ] A new agent can be defined in a YAML file and scheduled without code changes
 - [ ] Audit log captures every autonomous action with timestamp and outcome
 - [ ] `docs/vision/digiclaw.md` reflects implementation state
@@ -162,15 +177,19 @@ Build out digiclaw from its current heartbeat/audit MVP into the always-on agent
 - [ ] `digiclaw/ARCHITECTURE.md`
 """,
     ),
-
     dict(
-        component="root", type="feat", risk="low", priority="medium", complexity="M",
-        model="sonnet", milestone=None,
+        component="root",
+        type="feat",
+        risk="low",
+        priority="medium",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:medium"],
         title="[Epic] digithings.ai and digiquant.io — live website demos",
         body="""\
 ## Goal
-Deploy two embedded digichat instances — one on digithings.ai (platform overview, digithings docs indexed, 3-question free tier) and one on digiquant.io (investment profiling entry flow, paywall into Kairos). Both showcase BYOK model selection and the digithings modularity story.
+Deploy two embedded digichat instances — one on digithings.ai (platform overview, digithings docs indexed, 3-question free tier) and one on digiquant.io (investment profiling entry flow, paywall into execution). Both showcase BYOK model selection and the digithings modularity story.
 
 ## Sub-tasks (in digichat and digisearch project boards)
 - [ ] digithings-guide index — digithings docs indexed and live
@@ -187,23 +206,26 @@ Deploy two embedded digichat instances — one on digithings.ai (platform overvi
 - [ ] `website/` and `digichat/` deployment configs
 """,
     ),
-
     # ── digiquant (Project #2) ─────────────────────────────────────────────────
-
     dict(
-        component="digiquant", type="feat", risk="high", priority="critical", complexity="XL",
-        model="opus", milestone="Phase 2 — Strategy Development Loop",
+        component="digiquant",
+        type="feat",
+        risk="high",
+        priority="critical",
+        complexity="XL",
+        model="opus",
+        milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:feature", "complexity:XL", "priority:critical", "stage:ideation"],
-        title="[FEATURE] Migrate Atlas research cycles to digigraph sub-graphs",
+        title="[FEATURE] Migrate research cycles to digigraph sub-graphs",
         body="""\
 ## Goal
-Rebuild Atlas from manual instruction files and scripts into a deterministic digigraph sub-graph execution graph. The result: a reliable, scheduled Atlas pipeline with parallel research layer execution (data → sector → macro), batched API calls, Pydantic structured outputs at every node, and prompt caching to minimise cost.
+Rebuild research from manual instruction files and scripts into a deterministic digigraph sub-graph execution graph. The result: a reliable, scheduled research pipeline with parallel research layer execution (data → sector → macro), batched API calls, Pydantic structured outputs at every node, and prompt caching to minimise cost.
 
 ## From scratch
-YES — current Atlas is ad-hoc scripts requiring manual execution and backfilling. A full digigraph implementation is needed, not a refactor.
+YES — current research is ad-hoc scripts requiring manual execution and backfilling. A full digigraph implementation is needed, not a refactor.
 
 ## Acceptance Criteria
-- [ ] Atlas sub-graph runs without manual intervention when triggered
+- [ ] research sub-graph runs without manual intervention when triggered
 - [ ] Research executes in parallel across data, sector, and macro layers
 - [ ] All LLM calls use structured outputs (Pydantic v2 models)
 - [ ] Prompt caching enabled on all repeated-context calls
@@ -212,27 +234,31 @@ YES — current Atlas is ad-hoc scripts requiring manual execution and backfilli
 - [ ] `digiquant/ARCHITECTURE.md` and `digigraph/ARCHITECTURE.md` updated
 
 ## Files affected (new)
-- `digigraph/src/digigraph/graph/atlas/__init__.py`
-- `digigraph/src/digigraph/graph/atlas/research.py`
-- `digigraph/src/digigraph/graph/atlas/models.py`
-- `digigraph/src/digigraph/graph/atlas/prompts.py`
+- `digigraph/src/digigraph/graph/research/__init__.py`
+- `digigraph/src/digigraph/graph/research/research.py`
+- `digigraph/src/digigraph/graph/research/models.py`
+- `digigraph/src/digigraph/graph/research/prompts.py`
 
 ## Dependencies
-None — this is the foundation for Hermes, Kairos, and digiclaw Atlas runner.
+None — this is the foundation for portfolio, execution, and digiclaw research runner.
 
-## Parallelizable: NO — blocks Hermes (#8), Atlas runner (#47)
+## Parallelizable: NO — blocks portfolio (#8), research runner (#47)
 ## Model: opus — complex orchestration, parallel sub-graph design
 """,
     ),
-
     dict(
-        component="digiquant", type="feat", risk="med", priority="high", complexity="M",
-        model="sonnet", milestone="Phase 2 — Strategy Development Loop",
+        component="digiquant",
+        type="feat",
+        risk="med",
+        priority="high",
+        complexity="M",
+        model="sonnet",
+        milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:feature", "complexity:M", "priority:high"],
-        title="[FEATURE] Atlas delta update system — line-level document patching",
+        title="[FEATURE] research delta update system — line-level document patching",
         body="""\
 ## Goal
-Implement the delta update system for Atlas research documents: rather than regenerating entire documents daily, agents produce line-level edit instructions (append/replace/delete at specific locations). This minimises token spend while keeping the research library current.
+Implement the delta update system for research documents: rather than regenerating entire documents daily, agents produce line-level edit instructions (append/replace/delete at specific locations). This minimises token spend while keeping the research library current.
 
 ## From scratch
 YES — new capability, no existing implementation.
@@ -245,29 +271,33 @@ YES — new capability, no existing implementation.
 - [ ] Unit tests for delta application edge cases (insert, replace, delete, append)
 
 ## Files affected (new)
-- `digigraph/src/digigraph/graph/atlas/delta.py`
-- `tests/dg/test_atlas_delta.py`
+- `digigraph/src/digigraph/graph/research/delta.py`
+- `tests/dg/test_research_delta.py`
 
-## Dependencies: Atlas sub-graphs (#6)
-## Parallelizable: NO — part of Atlas migration sequence
+## Dependencies: research sub-graphs (#6)
+## Parallelizable: NO — part of research migration sequence
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digiquant", type="feat", risk="high", priority="critical", complexity="XL",
-        model="opus", milestone="Phase 2 — Strategy Development Loop",
+        component="digiquant",
+        type="feat",
+        risk="high",
+        priority="critical",
+        complexity="XL",
+        model="opus",
+        milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:feature", "complexity:XL", "priority:critical"],
-        title="[FEATURE] Hermes portfolio deliberation pipeline",
+        title="[FEATURE] portfolio deliberation pipeline",
         body="""\
 ## Goal
-Build the Hermes deliberation pipeline as digigraph sub-graphs: a multi-agent system that takes Atlas research, constructs investment theses, maps them to acceptable assets (filtered by user profile), runs parallel analyst agents per asset (bull/bear/headwinds/tailwinds), deliberates with a portfolio manager agent, and produces a final portfolio weight output.
+Build the portfolio deliberation pipeline as digigraph sub-graphs: a multi-agent system that takes research, constructs investment theses, maps them to acceptable assets (filtered by user profile), runs parallel analyst agents per asset (bull/bear/headwinds/tailwinds), deliberates with a portfolio manager agent, and produces a final portfolio weight output.
 
 ## From scratch
-YES — Hermes does not exist yet. Full build.
+YES — portfolio does not exist yet. Full build.
 
 ## Acceptance Criteria
-- [ ] Thesis layer: Atlas research → structured investment theses with validity requirements and exit triggers
+- [ ] Thesis layer: research → structured investment theses with validity requirements and exit triggers
 - [ ] Asset mapping: thesis → acceptable assets filtered by user investment profile (Pydantic v2)
 - [ ] Analyst agents: parallel execution, one per asset, structured recommendation output
 - [ ] Portfolio manager: sequential deliberation with each analyst, aware of full portfolio state
@@ -278,34 +308,38 @@ YES — Hermes does not exist yet. Full build.
 - [ ] `digiquant/ARCHITECTURE.md` updated
 
 ## Files affected (new)
-- `digigraph/src/digigraph/graph/hermes/__init__.py`
-- `digigraph/src/digigraph/graph/hermes/thesis.py`
-- `digigraph/src/digigraph/graph/hermes/analyst.py`
-- `digigraph/src/digigraph/graph/hermes/portfolio_manager.py`
-- `digigraph/src/digigraph/graph/hermes/models.py`
+- `digigraph/src/digigraph/graph/portfolio/__init__.py`
+- `digigraph/src/digigraph/graph/portfolio/thesis.py`
+- `digigraph/src/digigraph/graph/portfolio/analyst.py`
+- `digigraph/src/digigraph/graph/portfolio/portfolio_manager.py`
+- `digigraph/src/digigraph/graph/portfolio/models.py`
 - `digiquant/src/digiquant/portfolio_math.py`
 
-## Dependencies: Atlas sub-graphs (#6)
-## Parallelizable: NO — depends on Atlas
+## Dependencies: research sub-graphs (#6)
+## Parallelizable: NO — depends on research
 ## Model: opus — multi-agent orchestration, financial logic
 """,
     ),
-
     dict(
-        component="digiquant", type="feat", risk="med", priority="high", complexity="L",
-        model="sonnet", milestone="Phase 2 — Strategy Development Loop",
+        component="digiquant",
+        type="feat",
+        risk="med",
+        priority="high",
+        complexity="L",
+        model="sonnet",
+        milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:feature", "complexity:L", "priority:high"],
-        title="[FEATURE] Kairos strategy exploration digichat interface",
+        title="[FEATURE] execution strategy exploration digichat interface",
         body="""\
 ## Goal
-Build the Kairos product-mode interface: a digichat experience where a user describes a trading idea and Kairos researches (tapping Atlas research + Hermes recommendations), derives candidate strategies, sends them through VectorBT sweep rounds, refines with NautilusTrader, and presents results. Multi-strategy parallel research rounds at scale.
+Build the execution product-mode interface: a digichat experience where a user describes a trading idea and execution researches (tapping research + portfolio recommendations), derives candidate strategies, sends them through VectorBT sweep rounds, refines with NautilusTrader, and presents results. Multi-strategy parallel research rounds at scale.
 
 ## From scratch
-YES — the product interface does not exist. Current Kairos is developer-facing CLI/scripts only.
+YES — the product interface does not exist. Current execution is developer-facing CLI/scripts only.
 
 ## Acceptance Criteria
 - [ ] User can describe a strategy idea in natural language via digichat
-- [ ] Kairos sub-graph retrieves relevant Atlas research and Hermes recommendations
+- [ ] execution sub-graph retrieves relevant research and portfolio recommendations
 - [ ] VectorBT runs parameter sweep (multiple variations in parallel)
 - [ ] Top candidates passed to NautilusTrader for final backtest validation
 - [ ] Results (metrics, equity curve link) returned to digichat
@@ -313,20 +347,24 @@ YES — the product interface does not exist. Current Kairos is developer-facing
 - [ ] `digiquant/ARCHITECTURE.md` updated
 
 ## Files affected (new)
-- `digigraph/src/digigraph/graph/kairos/__init__.py`
-- `digigraph/src/digigraph/graph/kairos/research.py`
-- `digigraph/src/digigraph/graph/kairos/sweep.py`
-- `digichat/src/components/kairos/` (frontend components)
+- `digigraph/src/digigraph/graph/execution/__init__.py`
+- `digigraph/src/digigraph/graph/execution/research.py`
+- `digigraph/src/digigraph/graph/execution/sweep.py`
+- `digichat/src/components/execution/` (frontend components)
 
-## Dependencies: Atlas migration (#6), VectorBT integration (#13)
+## Dependencies: research migration (#6), VectorBT integration (#13)
 ## Parallelizable: PARTIAL — backend sub-graph and frontend can run in parallel after spec
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digiquant", type="feat", risk="low", priority="high", complexity="M",
-        model="sonnet", milestone="Phase 2 — Strategy Development Loop",
+        component="digiquant",
+        type="feat",
+        risk="low",
+        priority="high",
+        complexity="M",
+        model="sonnet",
+        milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:integration", "complexity:M", "priority:high"],
         title="[INTEGRATION] OpenBB as digistore data retrieval layer",
         body="""\
@@ -350,15 +388,19 @@ Integrate OpenBB SDK as the data aggregation layer beneath digistore. OpenBB uni
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digiquant", type="feat", risk="med", priority="high", complexity="M",
-        model="opus", milestone="Phase 2 — Strategy Development Loop",
+        component="digiquant",
+        type="feat",
+        risk="med",
+        priority="high",
+        complexity="M",
+        model="opus",
+        milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] Live strategy deployment — Alpaca and QuantConnect connectors",
         body="""\
 ## Goal
-Build deployment connectors that take a validated Kairos strategy (passed NautilusTrader backtest + Alpaca paper trading) and deploy it to live execution on Alpaca or QuantConnect. Includes mandatory paper → live gate with human approval.
+Build deployment connectors that take a validated execution strategy (passed NautilusTrader backtest + Alpaca paper trading) and deploy it to live execution on Alpaca or QuantConnect. Includes mandatory paper → live gate with human approval.
 
 ## Non-negotiables
 - Human approval gate REQUIRED before any live deployment — non-bypassable
@@ -378,20 +420,24 @@ Build deployment connectors that take a validated Kairos strategy (passed Nautil
 - `digiquant/src/digiquant/deployment/quantconnect.py`
 - `digiquant/src/digiquant/deployment/base.py`
 
-## Dependencies: None — independent of Atlas/Hermes
+## Dependencies: None — independent of research/portfolio
 ## Parallelizable: YES
 ## Model: opus — live trading code, human gate required
 """,
     ),
-
     dict(
-        component="digiquant", type="feat", risk="low", priority="medium", complexity="M",
-        model="sonnet", milestone="Phase 2 — Strategy Development Loop",
+        component="digiquant",
+        type="feat",
+        risk="low",
+        priority="medium",
+        complexity="M",
+        model="sonnet",
+        milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:feature", "complexity:M", "priority:medium"],
         title="[INFRA] VectorBT integration for fast strategy ideation sweeps",
         body="""\
 ## Goal
-Add VectorBT as the fast strategy ideation layer alongside NautilusTrader. VectorBT is 10-100x faster for parameter sweeps — use it for exploring many strategy variations quickly during Kairos research rounds. NautilusTrader remains for final validation and live execution.
+Add VectorBT as the fast strategy ideation layer alongside NautilusTrader. VectorBT is 10-100x faster for parameter sweeps — use it for exploring many strategy variations quickly during execution research rounds. NautilusTrader remains for final validation and live execution.
 
 ## Acceptance Criteria
 - [ ] VectorBT installed in `digiquant/` dev dependencies
@@ -410,20 +456,24 @@ Add VectorBT as the fast strategy ideation layer alongside NautilusTrader. Vecto
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digiquant", type="feat", risk="med", priority="medium", complexity="S",
-        model="sonnet", milestone="Phase 2 — Strategy Development Loop",
+        component="digiquant",
+        type="feat",
+        risk="med",
+        priority="medium",
+        complexity="S",
+        model="sonnet",
+        milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:feature", "complexity:S", "priority:medium"],
         title="[FEATURE] digiquant.io investment profiling entry flow",
         body="""\
 ## Goal
-Build the digiquant.io free-tier entry experience: a structured investment profiling chat that collects user preferences (risk tolerance, time horizon, asset classes, investment goals), saves the profile to digistore, and shows what Atlas/Hermes could produce for their profile. Paywall trigger: "Ready to build your first strategy? Start with Kairos."
+Build the digiquant.io free-tier entry experience: a structured investment profiling chat that collects user preferences (risk tolerance, time horizon, asset classes, investment goals), saves the profile to digistore, and shows what research/portfolio could produce for their profile. Paywall trigger: "Ready to build your first strategy? Start with execution."
 
 ## Acceptance Criteria
 - [ ] Investment profiling sub-graph collects profile via structured digichat conversation
 - [ ] User profile saved to digistore (Supabase) as `InvestmentProfile` Pydantic model
-- [ ] Sample Atlas research summary shown relevant to their stated interests
+- [ ] Sample research summary shown relevant to their stated interests
 - [ ] Paywall trigger rendered at end of free flow
 - [ ] Free tier: no API key required (cheap model, limited tokens)
 - [ ] Profile persists across sessions for returning users
@@ -432,17 +482,20 @@ Build the digiquant.io free-tier entry experience: a structured investment profi
 - `digigraph/src/digigraph/graph/subgraphs/investment_profiling.py` (new)
 - `digichat/src/components/profiling/` (new)
 
-## Dependencies: Hermes (#8)
+## Dependencies: portfolio (#8)
 ## Parallelizable: NO
 ## Model: sonnet
 """,
     ),
-
     # ── digigraph (Project #3) ─────────────────────────────────────────────────
-
     dict(
-        component="digigraph", type="fix", risk="high", priority="critical", complexity="M",
-        model="opus", milestone=None,
+        component="digigraph",
+        type="fix",
+        risk="high",
+        priority="critical",
+        complexity="M",
+        model="opus",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:critical"],
         title="[SECURITY] digigraph security hardening — IMPROVEMENT_PLAN Phase 1",
         body="""\
@@ -476,10 +529,14 @@ Close the 8 critical security gaps identified in `docs/IMPROVEMENT_PLAN_V2.md` P
 ## Model: opus
 """,
     ),
-
     dict(
-        component="digigraph", type="feat", risk="med", priority="high", complexity="M",
-        model="sonnet", milestone=None,
+        component="digigraph",
+        type="feat",
+        risk="med",
+        priority="high",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] Investor document builder sub-graph",
         body="""\
@@ -499,19 +556,23 @@ Build a proprietary digigraph sub-graph that takes an investment thesis, selecte
 - `tests/dg/test_investor_doc.py`
 
 ## Dependencies: None — independent sub-graph
-## Parallelizable: YES — independent of Atlas/Hermes
+## Parallelizable: YES — independent of research/portfolio
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digigraph", type="feat", risk="low", priority="high", complexity="M",
-        model="sonnet", milestone=None,
+        component="digigraph",
+        type="feat",
+        risk="low",
+        priority="high",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] Scholarly article synthesis sub-graph",
         body="""\
 ## Goal
-Build a sub-graph that ingests scholarly articles (PDFs or URLs), extracts key findings, and synthesises them into a structured research note saved to the digistore research library. Feeds the Atlas knowledge base with academic-quality content.
+Build a sub-graph that ingests scholarly articles (PDFs or URLs), extracts key findings, and synthesises them into a structured research note saved to the digistore research library. Feeds the research knowledge base with academic-quality content.
 
 ## Acceptance Criteria
 - [ ] Sub-graph accepts: list of article URLs or file paths
@@ -530,10 +591,14 @@ Build a sub-graph that ingests scholarly articles (PDFs or URLs), extracts key f
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digigraph", type="feat", risk="low", priority="high", complexity="M",
-        model="sonnet", milestone=None,
+        component="digigraph",
+        type="feat",
+        risk="low",
+        priority="high",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] Exploration agent sub-graph — exhaustive index search",
         body="""\
@@ -558,15 +623,19 @@ Build a fast, cheap exploration agent sub-graph that exhaustively searches a dig
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digigraph", type="feat", risk="med", priority="medium", complexity="L",
-        model="opus", milestone=None,
+        component="digigraph",
+        type="feat",
+        risk="med",
+        priority="medium",
+        complexity="L",
+        model="opus",
+        milestone=None,
         labels_extra=["type:research", "complexity:L", "priority:medium"],
         title="[FEATURE] Graphiti graph memory integration",
         body="""\
 ## Goal
-Integrate Graphiti (temporal knowledge graph) as an optional persistent memory backend for digigraph. Enables cross-session knowledge accumulation — agents remember what they learned, who said what, and how the world has changed over time. Particularly valuable for Atlas (remembering past research conclusions) and Hermes (tracking thesis evolution).
+Integrate Graphiti (temporal knowledge graph) as an optional persistent memory backend for digigraph. Enables cross-session knowledge accumulation — agents remember what they learned, who said what, and how the world has changed over time. Particularly valuable for research (remembering past research conclusions) and portfolio (tracking thesis evolution).
 
 ## Acceptance Criteria
 - [ ] Graphiti installed as optional dependency (`digigraph[memory]`)
@@ -586,10 +655,14 @@ Integrate Graphiti (temporal knowledge graph) as an optional persistent memory b
 ## Model: opus — novel architecture pattern
 """,
     ),
-
     dict(
-        component="digigraph", type="feat", risk="low", priority="medium", complexity="M",
-        model="sonnet", milestone=None,
+        component="digigraph",
+        type="feat",
+        risk="low",
+        priority="medium",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:medium"],
         title="[FEATURE] Remote MCP enumeration — discover external MCP servers at runtime",
         body="""\
@@ -612,10 +685,14 @@ Extend the digigraph tool registry to enumerate and integrate external MCP serve
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digigraph", type="feat", risk="low", priority="medium", complexity="S",
-        model="sonnet", milestone=None,
+        component="digigraph",
+        type="feat",
+        risk="low",
+        priority="medium",
+        complexity="S",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:S", "priority:medium"],
         title="[FEATURE] OpenAI Responses API support",
         body="""\
@@ -638,12 +715,15 @@ Add support for the OpenAI Responses API (stateful conversations, built-in tools
 ## Model: sonnet
 """,
     ),
-
     # ── digisearch (Project #4) ────────────────────────────────────────────────
-
     dict(
-        component="digisearch", type="feat", risk="low", priority="medium", complexity="M",
-        model="sonnet", milestone=None,
+        component="digisearch",
+        type="feat",
+        risk="low",
+        priority="medium",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:medium"],
         title="[FEATURE] Expand vector backend registry — Qdrant, Weaviate, LanceDB",
         body="""\
@@ -667,10 +747,14 @@ Add three new vector store backends to digisearch's pluggable registry: Qdrant (
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digisearch", type="feat", risk="low", priority="high", complexity="M",
-        model="sonnet", milestone=None,
+        component="digisearch",
+        type="feat",
+        risk="low",
+        priority="high",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] Selective indexing — draft/final state tracking from digistore",
         body="""\
@@ -693,10 +777,14 @@ Implement selective indexing rules: digisearch only indexes finalized documents 
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digisearch", type="feat", risk="med", priority="high", complexity="M",
-        model="opus", milestone=None,
+        component="digisearch",
+        type="feat",
+        risk="med",
+        priority="high",
+        complexity="M",
+        model="opus",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] Index access control via digikey JWT scopes",
         body="""\
@@ -721,32 +809,40 @@ Add JWT-based access control to digisearch: the JWT issued by digikey contains w
 ## Model: opus — security-sensitive
 """,
     ),
-
     dict(
-        component="digisearch", type="feat", risk="low", priority="high", complexity="M",
-        model="sonnet", milestone=None,
+        component="digisearch",
+        type="feat",
+        risk="low",
+        priority="high",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:integration", "complexity:M", "priority:high"],
-        title="[INTEGRATION] digiquant research library indexing — Atlas documents",
+        title="[INTEGRATION] digiquant research library indexing — research documents",
         body="""\
 ## Goal
-Configure digisearch to index finalized Atlas research documents from digistore, enabling the Kairos exploration agent and digichat to semantically search the research library.
+Configure digisearch to index finalized research documents from digistore, enabling the execution exploration agent and digichat to semantically search the research library.
 
 ## Acceptance Criteria
-- [ ] Atlas finalised documents trigger digisearch re-index via digistore event
+- [ ] research finalised documents trigger digisearch re-index via digistore event
 - [ ] Research library searchable via `search_strategies()` MCP tool
 - [ ] Correct metadata filtering: query by date, doc_type, sector, asset_class
-- [ ] Integration test: finalize an Atlas doc → verify searchable in digisearch
+- [ ] Integration test: finalize an research doc → verify searchable in digisearch
 - [ ] `digiquant/ARCHITECTURE.md` updated (digisearch integration section)
 
-## Dependencies: Atlas migration (#6), digistore (#57), Selective indexing (#24)
+## Dependencies: research migration (#6), digistore (#57), Selective indexing (#24)
 ## Parallelizable: NO
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digisearch", type="feat", risk="low", priority="medium", complexity="S",
-        model="sonnet", milestone=None,
+        component="digisearch",
+        type="feat",
+        risk="low",
+        priority="medium",
+        complexity="S",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:infra", "complexity:S", "priority:medium"],
         title="[INFRA] digithings-guide index — digithings docs indexed for digithings.ai demo",
         body="""\
@@ -768,12 +864,15 @@ Deploy the digithings-guide digisearch index (already defined in `docs/projects/
 ## Model: sonnet
 """,
     ),
-
     # ── digichat (Project #5) ──────────────────────────────────────────────────
-
     dict(
-        component="digichat", type="feat", risk="low", priority="high", complexity="M",
-        model="sonnet", milestone=None,
+        component="digichat",
+        type="feat",
+        risk="low",
+        priority="high",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] Model selector settings panel — multi-provider BYOK",
         body="""\
@@ -798,10 +897,14 @@ Build a model selector settings panel in digichat where users configure their LL
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digichat", type="feat", risk="med", priority="high", complexity="M",
-        model="opus", milestone=None,
+        component="digichat",
+        type="feat",
+        risk="med",
+        priority="high",
+        complexity="M",
+        model="opus",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] Microsoft SSO and Google OIDC login via digikey",
         body="""\
@@ -824,10 +927,14 @@ Add SSO login options to digichat using digikey as the identity broker. Users fr
 ## Model: opus
 """,
     ),
-
     dict(
-        component="digichat", type="feat", risk="low", priority="high", complexity="M",
-        model="sonnet", milestone=None,
+        component="digichat",
+        type="feat",
+        risk="low",
+        priority="high",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] Adaptive UI — scope-driven tool and index visibility",
         body="""\
@@ -851,10 +958,14 @@ Make digichat's UI adapt to the user's digikey JWT scopes: tools, indexes, and s
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digichat", type="feat", risk="low", priority="medium", complexity="S",
-        model="sonnet", milestone=None,
+        component="digichat",
+        type="feat",
+        risk="low",
+        priority="medium",
+        complexity="S",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:S", "priority:medium"],
         title="[FEATURE] digithings.ai demo — docs indexed, 3-question free tier",
         body="""\
@@ -874,10 +985,14 @@ Deploy the digithings.ai digichat demo instance: digithings own docs indexed, 3 
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digichat", type="feat", risk="low", priority="medium", complexity="S",
-        model="sonnet", milestone=None,
+        component="digichat",
+        type="feat",
+        risk="low",
+        priority="medium",
+        complexity="S",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:S", "priority:medium"],
         title="[FEATURE] Conversation history and session management UI",
         body="""\
@@ -901,12 +1016,15 @@ Build conversation history UI: users can see past conversations, resume them, re
 ## Model: sonnet
 """,
     ),
-
     # ── digikey (Project #6) ───────────────────────────────────────────────────
-
     dict(
-        component="digikey", type="feat", risk="high", priority="critical", complexity="L",
-        model="opus", milestone=None,
+        component="digikey",
+        type="feat",
+        risk="high",
+        priority="critical",
+        complexity="L",
+        model="opus",
+        milestone=None,
         labels_extra=["type:feature", "complexity:L", "priority:critical"],
         title="[FEATURE] Microsoft OIDC/SAML SSO integration",
         body="""\
@@ -935,10 +1053,14 @@ YES — SSO infrastructure does not exist in digikey.
 ## Model: opus — security-critical identity path
 """,
     ),
-
     dict(
-        component="digikey", type="feat", risk="high", priority="high", complexity="M",
-        model="opus", milestone=None,
+        component="digikey",
+        type="feat",
+        risk="high",
+        priority="high",
+        complexity="M",
+        model="opus",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] Google OIDC integration",
         body="""\
@@ -960,10 +1082,14 @@ Add Google OIDC as a second SSO provider in digikey, using the SSO framework est
 ## Model: opus
 """,
     ),
-
     dict(
-        component="digikey", type="feat", risk="high", priority="critical", complexity="L",
-        model="opus", milestone=None,
+        component="digikey",
+        type="feat",
+        risk="high",
+        priority="critical",
+        complexity="L",
+        model="opus",
+        milestone=None,
         labels_extra=["type:feature", "complexity:L", "priority:critical"],
         title="[FEATURE] Organization and project membership API",
         body="""\
@@ -991,10 +1117,14 @@ YES — digikey currently has users and API keys but no org/project concept.
 ## Model: opus
 """,
     ),
-
     dict(
-        component="digikey", type="feat", risk="high", priority="critical", complexity="M",
-        model="opus", milestone=None,
+        component="digikey",
+        type="feat",
+        risk="high",
+        priority="critical",
+        complexity="M",
+        model="opus",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:critical"],
         title="[FEATURE] Resource-level JWT claims — index and sub-graph access scopes",
         body="""\
@@ -1020,10 +1150,14 @@ Extend digikey's JWT issuance to include resource-level claims: which specific d
 ## Model: opus
 """,
     ),
-
     dict(
-        component="digikey", type="fix", risk="high", priority="critical", complexity="M",
-        model="opus", milestone=None,
+        component="digikey",
+        type="fix",
+        risk="high",
+        priority="critical",
+        complexity="M",
+        model="opus",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:critical"],
         title="[SECURITY] JWT revocation — jti blocklist in Redis",
         body="""\
@@ -1050,10 +1184,14 @@ Implement JWT revocation via a jti (JWT ID) blocklist stored in Redis. Currently
 ## Model: opus — security-critical
 """,
     ),
-
     dict(
-        component="digikey", type="fix", risk="med", priority="high", complexity="M",
-        model="opus", milestone=None,
+        component="digikey",
+        type="fix",
+        risk="med",
+        priority="high",
+        complexity="M",
+        model="opus",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[SECURITY] Scheduled JWKS rotation with zero-downtime overlap",
         body="""\
@@ -1077,12 +1215,15 @@ Implement scheduled JWKS key rotation that maintains a transition period where b
 ## Model: opus
 """,
     ),
-
     # ── digismith (Project #7) ─────────────────────────────────────────────────
-
     dict(
-        component="digismith", type="feat", risk="low", priority="high", complexity="M",
-        model="sonnet", milestone=None,
+        component="digismith",
+        type="feat",
+        risk="low",
+        priority="high",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] Prometheus /metrics endpoint rollout to all services",
         body="""\
@@ -1106,10 +1247,14 @@ Roll out Prometheus `/metrics` endpoints to all digithings services using the sh
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digismith", type="feat", risk="low", priority="high", complexity="M",
-        model="sonnet", milestone=None,
+        component="digismith",
+        type="feat",
+        risk="low",
+        priority="high",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] X-Request-ID correlation ID propagation across all services",
         body="""\
@@ -1132,10 +1277,14 @@ Propagate X-Request-ID headers through all service-to-service calls so a single 
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digismith", type="feat", risk="low", priority="high", complexity="S",
-        model="sonnet", milestone=None,
+        component="digismith",
+        type="feat",
+        risk="low",
+        priority="high",
+        complexity="S",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:S", "priority:high"],
         title="[FEATURE] PII redaction middleware before LangSmith tracing",
         body="""\
@@ -1158,10 +1307,14 @@ Add PII redaction middleware in digismith that strips sensitive fields (API keys
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digismith", type="feat", risk="low", priority="medium", complexity="M",
-        model="sonnet", milestone=None,
+        component="digismith",
+        type="feat",
+        risk="low",
+        priority="medium",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:medium"],
         title="[FEATURE] Structured logging throughout digisearch",
         body="""\
@@ -1183,12 +1336,15 @@ Add structured JSON logging throughout digisearch — currently it has zero stru
 ## Model: sonnet
 """,
     ),
-
     # ── digiclaw (Project #8) ──────────────────────────────────────────────────
-
     dict(
-        component="digiclaw", type="feat", risk="med", priority="high", complexity="L",
-        model="opus", milestone=None,
+        component="digiclaw",
+        type="feat",
+        risk="med",
+        priority="high",
+        complexity="L",
+        model="opus",
+        milestone=None,
         labels_extra=["type:infra", "complexity:L", "priority:high"],
         title="[INFRA] OpenClaw runtime integration",
         body="""\
@@ -1215,10 +1371,14 @@ YES — digiclaw currently has no OpenClaw integration.
 ## Model: opus — novel architecture integration
 """,
     ),
-
     dict(
-        component="digiclaw", type="feat", risk="low", priority="high", complexity="M",
-        model="sonnet", milestone=None,
+        component="digiclaw",
+        type="feat",
+        risk="low",
+        priority="high",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] Agent definition schema and registry",
         body="""\
@@ -1243,10 +1403,14 @@ Define the schema for digiclaw agent definitions (YAML files) and build the regi
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digiclaw", type="feat", risk="low", priority="high", complexity="M",
-        model="sonnet", milestone=None,
+        component="digiclaw",
+        type="feat",
+        risk="low",
+        priority="high",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] Cron and continuous scheduling",
         body="""\
@@ -1270,36 +1434,44 @@ Build the scheduling layer for digiclaw: agents can be scheduled on a cron expre
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digiclaw", type="feat", risk="med", priority="critical", complexity="M",
-        model="sonnet", milestone=None,
+        component="digiclaw",
+        type="feat",
+        risk="med",
+        priority="critical",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:critical"],
-        title="[FEATURE] Atlas daily cycle automation — digiclaw scheduled job",
+        title="[FEATURE] research daily cycle automation — digiclaw scheduled job",
         body="""\
 ## Goal
-Define and deploy the Atlas daily cycle as a digiclaw scheduled job: delta updates at 06:00 UTC daily, full regeneration weekly (configurable), monthly rollup on the 1st. Eliminates manual Atlas execution entirely.
+Define and deploy the research daily cycle as a digiclaw scheduled job: delta updates at 06:00 UTC daily, full regeneration weekly (configurable), monthly rollup on the 1st. Eliminates manual research execution entirely.
 
 ## Acceptance Criteria
-- [ ] `digiclaw/agents/atlas_daily.yaml` agent definition with correct schedule
-- [ ] Agent triggers the Atlas digigraph sub-graph via MCP/API call
+- [ ] `digiclaw/agents/research_daily.yaml` agent definition with correct schedule
+- [ ] Agent triggers the research digigraph sub-graph via MCP/API call
 - [ ] Run result (success/failure, documents updated, token cost) written to audit log
 - [ ] Alert triggered (via digismith or webhook) if run fails 2x consecutively
-- [ ] Integration test: trigger agent manually, verify Atlas sub-graph runs
+- [ ] Integration test: trigger agent manually, verify research sub-graph runs
 
 ## Files affected (new)
-- `digiclaw/agents/atlas_daily.yaml`
-- `digiclaw/src/digiclaw/jobs/atlas_daily.py`
+- `digiclaw/agents/research_daily.yaml`
+- `digiclaw/src/digiclaw/jobs/research_daily.py`
 
-## Dependencies: Scheduler (#46) + Atlas digigraph migration (#6)
+## Dependencies: Scheduler (#46) + research digigraph migration (#6)
 ## Parallelizable: NO
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digiclaw", type="feat", risk="low", priority="medium", complexity="M",
-        model="sonnet", milestone=None,
+        component="digiclaw",
+        type="feat",
+        risk="low",
+        priority="medium",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:medium"],
         title="[FEATURE] Strategy performance monitor agent",
         body="""\
@@ -1323,10 +1495,14 @@ Build a digiclaw agent that continuously monitors live strategy performance agai
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digiclaw", type="feat", risk="high", priority="medium", complexity="L",
-        model="opus", milestone=None,
+        component="digiclaw",
+        type="feat",
+        risk="high",
+        priority="medium",
+        complexity="L",
+        model="opus",
+        milestone=None,
         labels_extra=["type:feature", "complexity:L", "priority:medium"],
         title="[FEATURE] ADDM — Adaptive Drift Detection Monitor (rewrite from stub)",
         body="""\
@@ -1353,12 +1529,15 @@ YES — current ADDM is a stub. Full implementation needed.
 ## Model: opus — statistical methods, novel detection logic
 """,
     ),
-
     # ── digibase (Project #9) ──────────────────────────────────────────────────
-
     dict(
-        component="digibase", type="chore", risk="low", priority="medium", complexity="M",
-        model="sonnet", milestone=None,
+        component="digibase",
+        type="chore",
+        risk="low",
+        priority="medium",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:infra", "complexity:M", "priority:medium"],
         title="[CHORE] Extend OTel wiring — all services emit OpenTelemetry traces",
         body="""\
@@ -1381,12 +1560,15 @@ Extend digibase's optional OTel wiring so that all services emit OpenTelemetry t
 ## Model: sonnet
 """,
     ),
-
     # ── digilink (tracked in digigraph project for now) ────────────────────────
-
     dict(
-        component="digigraph", type="feat", risk="med", priority="high", complexity="XL",
-        model="opus", milestone=None,
+        component="digigraph",
+        type="feat",
+        risk="med",
+        priority="high",
+        complexity="XL",
+        model="opus",
+        milestone=None,
         labels_extra=["type:infra", "complexity:XL", "priority:high"],
         title="[INFRA] digilink module scaffold — capability registry and adapter framework",
         body="""\
@@ -1423,10 +1605,14 @@ REST  ·  MCP tool  ·  CLI command  ·  Docker entrypoint  ·  Webhook
 ## Model: opus — novel module architecture
 """,
     ),
-
     dict(
-        component="digigraph", type="feat", risk="low", priority="high", complexity="M",
-        model="sonnet", milestone=None,
+        component="digigraph",
+        type="feat",
+        risk="low",
+        priority="high",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
         title="[FEATURE] digilink — MCP adapter generation from OpenAPI specs",
         body="""\
@@ -1449,10 +1635,14 @@ Build the MCP adapter in digilink that auto-generates MCP tool definitions from 
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digigraph", type="feat", risk="low", priority="medium", complexity="M",
-        model="sonnet", milestone=None,
+        component="digigraph",
+        type="feat",
+        risk="low",
+        priority="medium",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:medium"],
         title="[FEATURE] digilink — CLI wrapper auto-generation from REST endpoints",
         body="""\
@@ -1474,10 +1664,14 @@ Build the CLI adapter in digilink that auto-generates Click/Typer CLI commands f
 ## Model: sonnet
 """,
     ),
-
     dict(
-        component="digigraph", type="feat", risk="low", priority="medium", complexity="M",
-        model="sonnet", milestone=None,
+        component="digigraph",
+        type="feat",
+        risk="low",
+        priority="medium",
+        complexity="M",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:medium"],
         title="[FEATURE] digilink — desktop AI connector library (Claude Desktop, Cursor, Windsurf)",
         body="""\
@@ -1500,12 +1694,15 @@ Build pre-packaged connector configurations for the major desktop AI apps (Claud
 ## Model: sonnet
 """,
     ),
-
     # ── digistore (tracked separately, scaffold first) ─────────────────────────
-
     dict(
-        component="digigraph", type="feat", risk="med", priority="high", complexity="L",
-        model="sonnet", milestone=None,
+        component="digigraph",
+        type="feat",
+        risk="med",
+        priority="high",
+        complexity="L",
+        model="sonnet",
+        milestone=None,
         labels_extra=["type:infra", "complexity:L", "priority:high"],
         title="[INFRA] digistore standalone module scaffold",
         body="""\
@@ -1548,20 +1745,60 @@ def create_issue(issue: dict, dry_run: bool = False) -> str | None:
     component = issue["component"]
     title = issue["title"]
     body = issue["body"]
-    risk = issue["risk"]
     labels_extra = issue.get("labels_extra", [])
     milestone = issue.get("milestone")
 
-    base_labels = f"agent-task,component:{component},risk:{risk}"
+    # Board cleanup 2026-09: complexity:*, stage:*, enhancement, model:*,
+    # exec:copilot labels were deleted from the repo — drop them here so
+    # re-runs don't fail on unknown labels. (enhancement folds to type:feature;
+    # model choice is session policy, not a label.) phase-*/quota:*/pending:*
+    # never appear in batch entries but are filtered too as cheap insurance.
+    # Label simplification 2026-09: risk:*/type:*/exec:/pipeline:/phase: retired
+    # too — priority:* survives (kept family).
+    retired_prefixes = (
+        "complexity:",
+        "stage:",
+        "model:",
+        "phase-",
+        "quota:",
+        "pending:",
+        "risk:",
+        "type:",
+        "exec:",
+        "pipeline:",
+        "phase:",
+    )
+    retired_exact = {
+        "enhancement",
+        "exec:copilot",
+        "needs-human",
+        "needs-human-review",
+        "maintenance",
+        "housekeeping",
+        "agentic-workflows",
+    }
+    labels_extra = [
+        lbl
+        for lbl in labels_extra
+        if lbl not in retired_exact and not lbl.startswith(retired_prefixes)
+    ]
+
+    base_labels = f"agent-task,component:{component}"
     if labels_extra:
         base_labels += "," + ",".join(labels_extra)
 
     cmd = [
-        "gh", "issue", "create",
-        "--repo", REPO,
-        "--title", title,
-        "--label", base_labels,
-        "--body", body,
+        "gh",
+        "issue",
+        "create",
+        "--repo",
+        REPO,
+        "--title",
+        title,
+        "--label",
+        base_labels,
+        "--body",
+        body,
     ]
     if milestone:
         cmd += ["--milestone", milestone]
@@ -1588,9 +1825,9 @@ def add_to_project(url: str, component: str, dry_run: bool = False) -> None:
         print(f"  DRY RUN: add to project #{project_num}")
         return
     result = subprocess.run(
-        ["gh", "project", "item-add", str(project_num),
-         "--owner", OWNER, "--url", url],
-        capture_output=True, text=True
+        ["gh", "project", "item-add", str(project_num), "--owner", OWNER, "--url", url],
+        capture_output=True,
+        text=True,
     )
     if result.returncode == 0:
         print(f"  → Project #{project_num}")
@@ -1636,7 +1873,9 @@ def main():
                     break
 
             kind = "Epic" if "[Epic]" in issue["title"] else "Task"
-            area = issue["component"].capitalize() if issue["component"] != "root" else "Cross-cutting"
+            area = (
+                issue["component"].capitalize() if issue["component"] != "root" else "Cross-cutting"
+            )
             model = issue.get("model", "sonnet")
             tsv_rows.append(f"{issue_num}\t\t{area}\t{kind}\t{prio_field}\t{model}")
 
@@ -1644,7 +1883,7 @@ def main():
             if not args.dry_run:
                 time.sleep(0.5)
 
-    print(f"\n\n{'='*60}")
+    print(f"\n\n{'=' * 60}")
     print(f"Created {len(created)} issues.")
 
     if tsv_rows:

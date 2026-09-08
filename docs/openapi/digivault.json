@@ -93,6 +93,28 @@
         "title": "CreateNoteRequest",
         "type": "object"
       },
+      "CreateNotesBatchRequest": {
+        "additionalProperties": false,
+        "description": "Note upserts and stale-child pruning sharing one vault index load.",
+        "properties": {
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/CreateNoteRequest"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "prunes": {
+            "items": {
+              "$ref": "#/components/schemas/PruneChildrenRequest"
+            },
+            "title": "Prunes",
+            "type": "array"
+          }
+        },
+        "title": "CreateNotesBatchRequest",
+        "type": "object"
+      },
       "FunctionParametersSchema": {
         "properties": {
           "properties": {
@@ -543,6 +565,50 @@
         "title": "OrchestratorToolsResponse",
         "type": "object"
       },
+      "PruneChildrenRequest": {
+        "additionalProperties": false,
+        "description": "Delete stale segment notes for one parent within one vault subdirectory.",
+        "properties": {
+          "keep_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keep Names",
+            "type": "array"
+          },
+          "parent_doc": {
+            "minLength": 1,
+            "title": "Parent Doc",
+            "type": "string"
+          },
+          "subdir": {
+            "default": "",
+            "title": "Subdir",
+            "type": "string"
+          }
+        },
+        "required": [
+          "parent_doc"
+        ],
+        "title": "PruneChildrenRequest",
+        "type": "object"
+      },
+      "PruneChildrenResponse": {
+        "properties": {
+          "deleted": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Deleted",
+            "type": "array"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "PruneChildrenResponse",
+        "type": "object"
+      },
       "RenameRequest": {
         "additionalProperties": false,
         "properties": {
@@ -747,6 +813,45 @@
         "summary": "Create Note"
       }
     },
+    "/v1/notes/batch": {
+      "post": {
+        "description": "Upsert notes through one index load for efficient bulk ingest.",
+        "operationId": "create_notes_batch_v1_notes_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNotesBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Notes Batch"
+      }
+    },
     "/v1/notes/by-path": {
       "post": {
         "description": "Load one note whole (body + frontmatter), addressed by ``vault_path``. D1-only.\n\n``path_prefix`` is an enforced authorization boundary, not an advisory filter: two\nclient corpora can share this deployment, and without this check a caller scoped to\none prefix could read another client's notes just by passing an arbitrary\n``vault_path``. There is no filesystem/Supabase fallback here \u2014 a by-path fetch\nonly makes sense against the corpus that owns the path (#2239).\n\n``path_prefix`` itself is also now checked against the caller's authenticated\ntenant (``_fetch_note_by_path``'s ``tenant_slug`` param) when\n``DIGI_TENANT_CORPUS_MAP`` is configured \u2014 closing the gap where ``digivault:read``\nalone let any caller name *any* prefix, not just their own corpus's (found in\nCodeRabbit's review of PR #2293; see ``tenant_scope.py``).\n\n``path_prefix`` resolution goes through ``resolve_path_prefix`` (shared with\n``D1Store.search``/``list_notes``) rather than a local ``prefix and ...`` check \u2014\na #2239 review found the local check treated \"a prefix was given but normalizes\nto empty\" (``\"\"``, ``\"/\"``, ``\"///\"``, ``\"   \"``, ``\".md\"``) the same as \"no\nscoping requested,\" which fails open: with a ``\"\"`` key present in\n``D1_DATABASE_MAP`` every one of those inputs returned another corpus's note\nbody with HTTP 200. ``resolve_path_prefix`` raises for exactly that case, which\nthis handler turns into ``400`` \u2014 a caller/config error, not a scope this route\ncan silently ignore. ``path_prefix`` itself is a required field (``422`` if\nomitted) for the same underlying reason: ``D1_DATABASE_MAP`` may never carry a\n``\"\"`` entry, so an omitted ``path_prefix`` could never resolve to a corpus and\nwould only ever ``503`` at request time \u2014 rejected up front instead (#2239 review).\n\nThe authorization check itself (prefix resolution, the 403 boundary, opening and\nquerying the store) lives in ``_fetch_note_by_path`` \u2014 shared with the\n``digivault_get_note`` orchestrator tool dispatched from ``orchestrator_invoke``\nbelow, so both surfaces enforce the same boundary from one place (#2239).",
@@ -796,6 +901,45 @@
           }
         },
         "summary": "Get Note By Path"
+      }
+    },
+    "/v1/notes/prune-children": {
+      "post": {
+        "description": "Remove stale segment children for one parent, scoped to a vault subdirectory.",
+        "operationId": "prune_children_v1_notes_prune_children_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PruneChildrenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PruneChildrenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Prune Children"
       }
     },
     "/v1/notes/{name}": {

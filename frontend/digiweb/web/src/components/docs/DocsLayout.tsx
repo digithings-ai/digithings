@@ -79,7 +79,7 @@ export function DocsLayout({
               key={it.id}
               href={`#${it.id}`}
               aria-current={active === it.id ? "true" : undefined}
-              className={`rounded-[7px] border-l-2 px-[0.6rem] py-[0.28rem] font-mono text-[0.82rem] no-underline transition-colors duration-150 ease-brand ${
+              className={`rounded-none border-l-2 px-[0.6rem] py-[0.28rem] font-mono text-[0.82rem] no-underline transition-colors duration-150 ease-brand ${
                 active === it.id
                   ? "border-l-accent bg-accent-weak text-ink"
                   : "border-l-transparent text-ink-soft hover:bg-accent-weak hover:text-ink"
@@ -98,7 +98,7 @@ export function DocsLayout({
       <aside className="docs-side">{sideNav}</aside>
 
       <div className="docs-content flex min-w-0 flex-col gap-[clamp(1.6rem,3.5vw,2.6rem)]">
-        <details className="docs-side-mobile mb-[1.3rem] rounded-[10px] border border-hair px-[0.85rem] py-[0.55rem]">
+        <details className="docs-side-mobile mb-[1.3rem] rounded-none border border-hair px-[0.85rem] py-[0.55rem]">
           <summary className="cursor-pointer font-mono text-[0.7rem] uppercase tracking-[0.12em] text-ink-mute">
             {contentsLabel}
           </summary>
