@@ -49,7 +49,7 @@ describe("RepoActivity snapshot render", () => {
     expect(html).toContain("issues open");
     expect(html).toContain("// merged recently");
     expect(html).toContain("// open issues");
-    expect(html).toContain("// merge heat — last 16 weeks");
+    expect(html).toContain("// contributions — last year");
     expect(html).toContain("ra-heat");
     expect(html).toContain("#2432");
     expect(html).toContain("#3445");
