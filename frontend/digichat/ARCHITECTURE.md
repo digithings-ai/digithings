@@ -280,7 +280,7 @@ probe).
 
 ### Health
 
-**`GET /api/health`** — unauthenticated. Probes `{base}/health` for all enabled services (4 s AbortController timeout per service). Probes Postgres with `SELECT 1`. Returns `{ ok, checks, version }`. HTTP 200 when healthy, 503 when any required service is unreachable.
+**`GET /api/health`** — unauthenticated. Probes `{base}/health` for all enabled services (4 s AbortController timeout per service). Probes Postgres with `SELECT 1`. Returns `{ ok, checks, version }`. `version` is `DIGICHAT_VERSION` when set and non-empty; otherwise `frontend/digichat/package.json` `version` (Cloudflare Container and GHCR images also bake that value into `/etc/digichat-version` and `ENV DIGICHAT_VERSION`). HTTP 200 when healthy, 503 when any required service is unreachable.
 
 ### Auth
 
@@ -1249,7 +1249,8 @@ part-driven vs chrome-driven is indexed in digiweb
 Web UI mounts `ThreadSkinView` (`ProductStockShell` on `/embed` and `/`).
 `chrome.skin` selects one of the 11 official assistant-ui catalog templates
 vendored under `src/components/assistant-ui/skins/`, or first-party `digichat`
-(`DigichatThread` from `@digithings/web/chat/thread` — contract:
+(`DigichatThread` from `@digithings/web/chat/thread` consumes gallery
+`/chatbot` grammar via `@digithings/web/styles/chatbot.css` — contract:
 [`frontend/digiweb/CHAT_THEME.md`](../digiweb/CHAT_THEME.md)). Product embed
 examples `config/examples/digithings-ai-embed.yaml` and `occ-embed.yaml` set
 `chrome.skin: digichat` and keep `backend.type: digigraph` with the
@@ -1390,7 +1391,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`) | Optional |
 | `DIGICHAT_TRUSTED_PROXIES` | Comma-separated IP addresses/CIDRs whose socket peers may supply `cf-connecting-ip` or `X-Forwarded-For` for anonymous-embed rate limiting. Unset preserves historical header behavior. The bundled production entrypoint captures the direct socket peer and isolates Next on loopback; do not set this unless that entrypoint remains in the request path. In a Cloudflare Container, trust the container ingress/overlay peer, not Cloudflare's published edge ranges. | Optional |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password (Compose default: `digichat`) | Change in production |
-| `DIGICHAT_VERSION` | Version string returned in health response | Optional |
+| `DIGICHAT_VERSION` | Version string returned in health response | Optional override. Unset/blank → `package.json` version. Cloudflare Container (`Dockerfile.digichat-cloudflare`) and GHCR (`frontend/digichat/Dockerfile`) bake it from `package.json` at image build (`ARG`/`ENV` + `/etc/digichat-version`). Not a dashboard secret. |
 | `NEXTAUTH_SECRET` | Legacy Auth.js secret alias (same value as `AUTH_SECRET`) | If using legacy env |
 | `NEXTAUTH_URL` | Legacy Auth.js URL alias (same value as `AUTH_URL`) | If using legacy env |
 
@@ -1399,7 +1400,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 Three-stage build:
 1. `deps` (node:22-alpine): `npm ci` to populate `node_modules`.
 2. `builder` (node:22-alpine): copies deps, copies source, runs `next build`. `NEXT_TELEMETRY_DISABLED=1`.
-3. `runner` (node:22-alpine): copies only `public/`, `.next/standalone/`, `.next/static/`. Adds `curl` for the Compose healthcheck. Runs as non-root `nextjs` user (uid 1001). `next.config.ts` sets `output: "standalone"` to enable this.
+3. `runner` (node:22-alpine): copies only `public/`, `.next/standalone/`, `.next/static/`. Adds `curl` for the Compose healthcheck. Runs as non-root `nextjs` user (uid 1001). `next.config.ts` sets `output: "standalone"` to enable this. Both this Dockerfile and `Dockerfile.digichat-cloudflare` write `/etc/digichat-version` from `package.json` (or `ARG DIGICHAT_VERSION`) and set `ENV DIGICHAT_VERSION`.
 
 The standalone output is a self-contained Node.js server (`server.js`) with only production
 dependencies. Image size is significantly smaller than a non-standalone build.

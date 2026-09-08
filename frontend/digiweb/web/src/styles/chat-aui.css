@@ -28,10 +28,28 @@
   --color-warn: var(--warn);
 }
 
+[data-thread-skin="digichat"] {
+  --radius: 0;
+  --radius-thread: 0;
+  --composer-radius: 0;
+  /* Gallery chatbot.css uses var(--font-mono). Catalog :root keeps IBM Plex. */
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+[data-thread-skin="digichat"] .digichat-composer textarea:focus,
+[data-thread-skin="digichat"] .digichat-composer textarea:focus-visible,
+[data-thread-skin="digichat"] .aui-composer-input:focus,
+[data-thread-skin="digichat"] .aui-composer-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .digichat-thread {
-  --accent: var(--accent-digichat, #e2708a);
-  --accent-weak: color-mix(in srgb, var(--accent) 14%, transparent);
-  --on-accent: #06110f;
+  --accent: var(--ink);
+  --accent-weak: color-mix(in srgb, var(--ink) 14%, transparent);
+  --on-accent: var(--bg);
   --bg: #0a0e0c;
   --surface: #121417;
   --surface-2: #171a1e;
@@ -65,7 +83,9 @@
   --primary: var(--ink);
   --primary-foreground: var(--bg);
   --ring: var(--accent);
-  font-family: var(--font-geist-mono, var(--font-mono), ui-monospace, monospace);
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
   background: var(--term-bg);
   color: var(--term-ink);
   max-width: var(--thread-max-width);
@@ -108,10 +128,10 @@
   border-radius: 0;
 }
 
-.digichat-chip:hover,
-.digichat-chip:focus-visible {
-  border-color: var(--hair-2);
+.digichat-example:hover,
+.digichat-example:focus-visible {
   color: var(--ink);
+  outline: none;
 }
 
 .digichat-action:hover,

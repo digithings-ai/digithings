@@ -15,9 +15,11 @@ export default function ChatbotPage() {
           This page is the default assistant-ui <code>Thread</code> from the
           registry — welcome, messages, markdown, reasoning, tools, composer —
           with no custom message tree. Shell: radius 0, monochrome ink.
-          Welcome: official <code>components.Welcome</code> slot. Copy is
-          deploy-config shaped (title + body). No starter chips unless
-          configured. Two composers: expanded (toolbar under the input) and
+          Welcome: official <code>components.Welcome</code> slot, in the
+          footer immediately above the composer. Copy is
+          deploy-config shaped (title + body). Optional <code>&gt;</code>{" "}
+          starters from config — not chips, not a top-of-thread empty state.
+          Two composers: expanded (toolbar under the input) and
           compact (attach · field · send on one row). Send stays quiet until
           there is text, then fills. Enter and the send key both submit.
           Transcript: both roles left, <code>&gt;</code> user / <code>▸</code>{" "}

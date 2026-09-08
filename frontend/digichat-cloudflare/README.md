@@ -147,6 +147,7 @@ NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai
 
 ```bash
 curl -sf https://digithings.ai/api/health
+# `"version"` must match frontend/digichat/package.json (baked into the image)
 curl -s -o /dev/null -w '%{http_code}\n' 'https://digithings.ai/embed?host=digithings.ai'
 # Browser: https://digithings.ai/chat and /chat/occ
 ```

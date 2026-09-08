@@ -1,7 +1,7 @@
 /**
  * Gallery stand-in for `chrome.welcome` + `chrome.suggestions` in deploy YAML.
- * Same shape as digichat WelcomeCopySchema. Default: introduce the product,
- * no starter chips. Clients add chips in config when they want them.
+ * Same shape as digichat WelcomeCopySchema. Default: introduce the product.
+ * Starters render as a `>` list above the composer, not chips.
  */
 export type GalleryWelcomeCopy = {
   title: string;
@@ -17,8 +17,11 @@ export const GALLERY_WELCOME: GalleryWelcomeCopy = {
   body: "The chat surface for this stack. Scoped to the tools and data in this deployment — not a general-purpose chatbot.",
 };
 
-/** Empty on purpose: starters are opt-in via deploy config. */
-export const GALLERY_SUGGESTIONS: readonly GalleryWelcomeSuggestion[] = [];
+/** Opt-in starters — `>` lines immediately above the composer. */
+export const GALLERY_SUGGESTIONS: readonly GalleryWelcomeSuggestion[] = [
+  "backtest ETH-USD",
+  "what can this deployment do?",
+];
 
 /** `chrome.placeholder` — same string as config/examples/skins/digichat.yaml */
 export const GALLERY_PLACEHOLDER = "Ask digichat…";
