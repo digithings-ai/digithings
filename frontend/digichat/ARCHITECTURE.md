@@ -1249,7 +1249,8 @@ part-driven vs chrome-driven is indexed in digiweb
 Web UI mounts `ThreadSkinView` (`ProductStockShell` on `/embed` and `/`).
 `chrome.skin` selects one of the 11 official assistant-ui catalog templates
 vendored under `src/components/assistant-ui/skins/`, or first-party `digichat`
-(`DigichatThread` from `@digithings/web/chat/thread` — contract:
+(`DigichatThread` from `@digithings/web/chat/thread` consumes gallery
+`/chatbot` grammar via `@digithings/web/styles/chatbot.css` — contract:
 [`frontend/digiweb/CHAT_THEME.md`](../digiweb/CHAT_THEME.md)). Product embed
 examples `config/examples/digithings-ai-embed.yaml` and `occ-embed.yaml` set
 `chrome.skin: digichat` and keep `backend.type: digigraph` with the

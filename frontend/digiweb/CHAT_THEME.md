@@ -33,10 +33,11 @@ Keep defaults. Prefer a CSS-variable change over a slot override; prefer a
 ## Increments
 
 1. **Shell** — radius 0, monochrome ink on canvas (`chatbot.css`, `--composer-radius`).
-2. **Welcome** — `Thread` `components.Welcome`. Left-aligned title + body from
-   deploy-shaped config (`GALLERY_WELCOME` / `chrome.welcome`). No kicker. No
-   starter chips unless `chrome.suggestions` is set. Not the standalone EmptyState
-   element (that duplicates the composer).
+2. **Welcome** — `Thread` `components.Welcome` in `ViewportFooter`,
+   immediately above the composer. Bottom-aligned in the thread. Left-aligned
+   title + body from deploy-shaped config (`GALLERY_WELCOME` / `chrome.welcome`).
+   Optional `>` example list from `chrome.suggestions`. No kicker. No chips.
+   Not the standalone EmptyState element (that duplicates the composer).
 3. **Composer** — registry `ComposerPrimitive` in Thread. `placeholder` from
    `chrome.placeholder` (`Ask digichat…`). Two layouts on `Thread`:
    `expanded` (input, then attach + send on the next row) and `compact`
@@ -90,6 +91,9 @@ Keep defaults. Prefer a CSS-variable change over a slot override; prefer a
 
 ## Product
 
-`chrome.skin: digichat` remains a separate product id (default is still
-`base`). Promote a gallery look into the product only after it is approved
-here.
+`chrome.skin: digichat` is the only first-party look. It consumes this gallery's
+`chatbot.css` (via `@digithings/web/styles/chatbot.css`) and the same Thread
+grammar: welcome in `ViewportFooter`, radius 0, Geist Mono, both roles left.
+Catalog / third-party default remains `base`. First-party hosts default unset
+`skin` to `digichat`. Do not add a third custom theme. Do not restyle the 11
+catalog templates.

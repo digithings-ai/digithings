@@ -20,6 +20,7 @@
     "./styles/chat-math.css": "./src/styles/chat-math.css",
     "./styles/chat-widgets.css": "./src/styles/chat-widgets.css",
     "./styles/chat-aui.css": "./src/styles/chat-aui.css",
+    "./styles/chatbot.css": "./src/styles/chatbot.css",
     "./styles/digichat-launcher.css": "./src/styles/digichat-launcher.css",
     "./chat/thread": "./src/components/chat/DigichatThread.tsx",
     "./chat/thread-list": "./src/components/chat/DigichatThreadList.tsx",

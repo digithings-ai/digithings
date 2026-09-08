@@ -97,7 +97,8 @@ const ThreadComponentsContext =
   createContext<ThreadComponents>(EMPTY_COMPONENTS);
 
 // Startup exposes a loading placeholder thread; treat it as a new chat so
-// the composer mounts centered. Loads after startup keep the docked layout.
+// Welcome docks in the footer above the composer. Loads after startup keep
+// the docked layout.
 const isNewChatView = (s: AssistantState) =>
   s.thread.messages.length === 0 &&
   (!s.thread.isLoading || s.threads.isLoading);
@@ -136,12 +137,9 @@ export const Thread: FC<ThreadProps> = ({
   placeholder,
   composerLayout = "expanded",
 }) => {
-  const isEmpty = useAuiState(isNewChatView);
-
   return (
     <ThreadComponentsContext.Provider value={components}>
       <ThreadRoot
-        isEmpty={isEmpty}
         autoFocus={autoFocus}
         placeholder={placeholder}
         composerLayout={composerLayout}
@@ -151,11 +149,10 @@ export const Thread: FC<ThreadProps> = ({
 };
 
 const ThreadRoot: FC<{
-  isEmpty: boolean;
   autoFocus: boolean;
   placeholder?: string | undefined;
   composerLayout: ComposerLayout;
-}> = ({ isEmpty, autoFocus, placeholder, composerLayout }) => {
+}> = ({ autoFocus, placeholder, composerLayout }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
 
   return (
@@ -173,15 +170,7 @@ const ThreadRoot: FC<{
         data-slot="aui_thread-viewport"
         className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
       >
-        <div
-          className={cn(
-            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
-            isEmpty && "justify-center",
-          )}
-        >
-          <AuiIf condition={isNewChatView}>
-            <Welcome />
-          </AuiIf>
+        <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
           <AuiIf condition={isHistoryLoadingView}>
             <ThreadHistorySkeleton />
           </AuiIf>
@@ -195,29 +184,25 @@ const ThreadRoot: FC<{
             </ThreadPrimitive.Messages>
           </div>
 
-          <ThreadPrimitive.ViewportFooter
-            className={cn(
-              "aui-thread-viewport-footer bg-background flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
-              !isEmpty &&
-                "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
-            )}
-          >
+          <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer bg-background sticky bottom-0 mt-auto flex flex-col gap-4 overflow-visible pb-4 md:pb-6">
             <ThreadScrollToBottom />
             <ThreadFollowupSuggestions />
+            <AuiIf condition={isNewChatView}>
+              <div
+                data-slot="aui_thread-empty"
+                className="aui-thread-empty flex flex-col gap-3"
+              >
+                <Welcome />
+                <AuiIf condition={(s) => s.composer.isEmpty}>
+                  <ThreadSuggestions />
+                </AuiIf>
+              </div>
+            </AuiIf>
             <Composer
               autoFocus={autoFocus}
               placeholder={placeholder}
               layout={composerLayout}
             />
-            <AuiIf
-              condition={(s) =>
-                isNewChatView(s) &&
-                s.composer.isEmpty &&
-                s.thread.suggestions.length > 0
-              }
-            >
-              <ThreadSuggestions />
-            </AuiIf>
           </ThreadPrimitive.ViewportFooter>
         </div>
       </ThreadPrimitive.Viewport>
@@ -252,7 +237,10 @@ const ThreadScrollToBottom: FC = () => {
 
 const ThreadWelcome: FC = () => {
   return (
-    <div className="aui-thread-welcome-root mb-6 flex flex-col items-center px-4 text-center">
+    <div
+      data-slot="aui_thread-welcome"
+      className="aui-thread-welcome-root flex flex-col items-start text-left"
+    >
       <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
         How can I help you today?
       </h1>
@@ -262,7 +250,7 @@ const ThreadWelcome: FC = () => {
 
 const ThreadSuggestions: FC = () => {
   return (
-    <div className="aui-thread-welcome-suggestions flex w-full flex-wrap items-center justify-center gap-2 px-4">
+    <div className="aui-thread-welcome-suggestions flex w-full flex-col items-stretch gap-0.5">
       <ThreadPrimitive.Suggestions>
         {() => <ThreadSuggestionItem />}
       </ThreadPrimitive.Suggestions>
@@ -272,17 +260,20 @@ const ThreadSuggestions: FC = () => {
 
 const ThreadSuggestionItem: FC = () => {
   return (
-    <div className="aui-thread-welcome-suggestion-display fade-in slide-in-from-bottom-2 animate-in fill-mode-both duration-200">
-      <SuggestionPrimitive.Trigger send asChild>
-        <Button
-          variant="ghost"
-          className="aui-thread-welcome-suggestion text-foreground hover:bg-muted border-border/60 h-auto gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors"
-        >
+    <SuggestionPrimitive.Trigger send asChild>
+      <button
+        type="button"
+        className="aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full grid-cols-[1.25rem_minmax(0,1fr)] items-baseline gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-left text-sm font-normal duration-200"
+      >
+        <span className="aui-msg-marker" aria-hidden="true">
+          {">"}
+        </span>
+        <span className="aui-thread-welcome-suggestion-text min-w-0">
           <SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1" />
           <SuggestionPrimitive.Description className="aui-thread-welcome-suggestion-text-2 empty:hidden" />
-        </Button>
-      </SuggestionPrimitive.Trigger>
-    </div>
+        </span>
+      </button>
+    </SuggestionPrimitive.Trigger>
   );
 };
 
