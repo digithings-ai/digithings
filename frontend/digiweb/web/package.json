@@ -19,7 +19,6 @@
     "./styles/chat-core.css": "./src/styles/chat-core.css",
     "./styles/chat-math.css": "./src/styles/chat-math.css",
     "./styles/chat-widgets.css": "./src/styles/chat-widgets.css",
-    "./styles/digichat-launcher.css": "./src/styles/digichat-launcher.css",
     "./styles/controls-core.css": "./src/styles/controls-core.css",
     "./styles/controls-overlay.css": "./src/styles/controls-overlay.css",
     "./styles/finance-composites.css": "./src/styles/finance-composites.css",
@@ -44,6 +43,7 @@
   "dependencies": {
     "@base-ui/react": "^1.3.0",
     "@digithings/design": "*",
+    "heat-graph": "^0.0.17",
     "katex": "^0.16.47",
     "lightweight-charts": "^5.2.0",
     "mermaid": "^11.16.0",
