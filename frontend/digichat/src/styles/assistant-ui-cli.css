@@ -1,0 +1,24 @@
+/**
+ * assistant-ui CLI skin — bind primitives to existing session tokens.
+ * Markdown/tool chrome comes from assistant-ui; this file only flavors it.
+ */
+[data-thread-root],
+.dc-session {
+  font-family: var(--font-family-mono);
+}
+
+.aui-md {
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.aui-md pre {
+  overflow: auto;
+  padding: 0.5rem 0;
+}
+
+.aui-md code {
+  font-family: var(--font-family-mono);
+}

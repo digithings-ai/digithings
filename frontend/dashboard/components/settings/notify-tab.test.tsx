@@ -198,6 +198,127 @@ describe('NotifyTab', () => {
     expect(html).toContain('notify-log');
     expect(getFn).not.toHaveBeenCalled();
   });
+
+  it('surfaces soft 503 custom unavailable msg and Retry', async () => {
+    const getFn = vi.fn(async () => {
+      throw new SettingsHttpError({
+        status: 503,
+        code: 'NOT_READY',
+        message: 'notification_prefs is not available until K5',
+      });
+    });
+    const patchFn = vi.fn();
+    const logFn = vi.fn(async () => []);
+    const el = await mount(
+      createElement(NotifyTab, {
+        api: { accessToken: 'tok' },
+        getFn,
+        patchFn,
+        logFn,
+      }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getFn).toHaveBeenCalledOnce();
+    expect(el.querySelector('[data-testid="settings-load-error"]')?.textContent).toMatch(
+      /unavailable/i,
+    );
+    const retry = el.querySelector('[data-testid="settings-load-error-retry"]');
+    expect(retry).toBeTruthy();
+    await act(async () => {
+      retry?.click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(patchFn).not.toHaveBeenCalled();
+  });
+
+  it('surfaces hard load error (SETTINGS_LOAD_ERROR_MESSAGE + Retry)', async () => {
+    const getFn = vi.fn(async () => {
+      throw new SettingsHttpError({
+        status: 500,
+        code: 'INTERNAL_ERROR',
+        message: 'unexpected error',
+      });
+    });
+    const patchFn = vi.fn();
+    const logFn = vi.fn(async () => []);
+    const el = await mount(
+      createElement(NotifyTab, {
+        api: { accessToken: 'tok' },
+        getFn,
+        patchFn,
+        logFn,
+      }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getFn).toHaveBeenCalledOnce();
+    expect(el.querySelector('[data-testid="settings-load-error"]')?.textContent).toContain(
+      'Unable to load settings.',
+    );
+    const retry = el.querySelector('[data-testid="settings-load-error-retry"]');
+    expect(retry).toBeTruthy();
+  });
+
+  it('displays empty log (notify-empty-log) when no events', async () => {
+    const getFn = vi.fn(async () => ({
+      workspace_id: 'ws-a',
+      email: 'pm@example.com',
+      daily_digest: true,
+      holding_change_alerts: false,
+      execution_alerts: false,
+      digest_hour_utc: 12,
+      updated_at: '2026-08-30T00:00:00Z',
+    }));
+    const logFn = vi.fn(async () => []);
+    const el = await mount(
+      createElement(NotifyTab, {
+        api: { accessToken: 'tok' },
+        getFn,
+        patchFn: vi.fn(),
+        logFn,
+      }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(el.querySelector('[data-testid="notify-empty-log"]')?.textContent).toContain(
+      'No digest events logged yet.',
+    );
+    expect(el.querySelector('[data-testid="notify-log-row"]')).toBeNull();
+  });
+
+  it('toggle purpose helper strings are present', () => {
+    const html = renderToStaticMarkup(
+      createElement(NotifyTab, {
+        api: { accessToken: 'tok' },
+        getFn: vi.fn(async () => ({
+          workspace_id: 'ws-a',
+          email: '',
+          daily_digest: false,
+          holding_change_alerts: false,
+          execution_alerts: false,
+          digest_hour_utc: 12,
+          updated_at: null,
+        })),
+        patchFn: vi.fn(),
+        logFn: vi.fn(async () => []),
+      }),
+    );
+    expect(html).toContain('Daily digest');
+    expect(html).toContain('Once/day portfolio/activity summary');
+    expect(html).toContain('Holding-change alerts');
+    expect(html).toContain('Email when holdings change');
+    expect(html).toContain('Execution alerts');
+    expect(html).toContain('Email when orders/executions happen');
+  });
 });
 
 describe('BillingTab', () => {

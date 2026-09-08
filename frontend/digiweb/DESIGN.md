@@ -116,6 +116,8 @@ As of 2026-08-30 the Instrument Panel tightens to utilitarian terminal simplicit
 
 Phases 2–3 product-local debt is stripped on this branch (marketing Fraunces heroes, digichat shadcn radius, dashboard `.glass-card` and `rounded-*` chrome). Gallery `uv-` CSS stays reference-only.
 
+First-party chat look: [`CHAT_THEME.md`](CHAT_THEME.md) (`chrome.skin: digichat`). Gallery: design-reference `/chatbot`.
+
 That restraint is structural, not stylistic. A dashboard, a landing page, and a terminal-style chatbot all draw from the *same* instrument-panel vocabulary — the module color that dresses digigraph's marketing hero is the identical `--accent` variable a digiquant chart reads to tint its equity line, just scoped differently. Color is a wiring diagram, not a moodboard: every hue in the system routes to an explicit meaning (a module's identity, a gain, a loss, a diff) and never means two things in the same place.
 
 digiweb explicitly rejects the AI-slop default aesthetic: no purple-to-blue gradient heroes, no glassmorphism, no floating gradient blobs, no Inter-as-brand-font, no decorative box-shadow lifted off nothing in particular. Depth comes from hairline borders and tonal layering; when a shadow does appear, it means something specific (see Elevation & Depth).
@@ -259,7 +261,7 @@ Borders are uniformly 1px hairline; the only thicker strokes are decorative chev
 ### Inputs / Fields
 - **Style:** `0` radius, hairline border, `--bg`-colored fill (canvas cut into the surrounding surface), mono type regardless of field type.
 - **Focus:** border tints toward accent (~55%) plus a 3–4px accent-tinted glow ring.
-- **Error:** the entire recipe swaps to `--down` — border, ring, and (via a wrapper class hook) the field's own text.
+- **Error:** the entire recipe swaps to `--danger` — border, ring, and (via a wrapper class hook) the field's own text. (`--up`/`--down` are P&L-only per the tokens.css house rule; `--danger` is the distinct non-financial red.)
 - **Disabled:** `opacity: 0.5–0.55`, `not-allowed` cursor.
 
 ### Navigation
@@ -281,7 +283,7 @@ NavShell settles (gains a blurred hairline backdrop) after 8px of scroll and eit
 ## Do's and Don'ts
 
 ### Do:
-- **Do** build under the `[data-theme]`-scoped token system (`--bg` / `--surface` / `--ink` family, `--r-sm/md/lg` = 8/12/16px) — this is the normative, currently-shipping scale.
+- **Do** build under the `[data-theme]`-scoped token system (`--bg` / `--surface` / `--ink` family, `--r-sm/md/lg` = 0) — this is the normative, currently-shipping scale.
 - **Do** treat Geist Mono as the production display/body default; treat `serif-legacy` / Fraunces as reference-app furniture or a rare editorial escape hatch, not a target to copy onto product heroes.
 - **Do** keep money colors (`--up`/`--down`/`--warn`) fixed to their own token or literal, never `var(--accent)` — a livery switch must never repaint a P&L number.
 - **Do** give every interactive control the same focus recipe: `outline: none` plus a 2–4px `color-mix(var(--accent) or var(--down), ~50%, transparent)` box-shadow ring.

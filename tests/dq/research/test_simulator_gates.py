@@ -257,6 +257,7 @@ class TestWorkflowDailyCadence:
                 flags=re.DOTALL,
             )
         )
-        assert pairs.get("house-run-09") == "17 9 * * MON-FRI"
-        assert pairs.get("house-run-12") == "17 12 * * MON-FRI"
+        for hour in (9, 10, 11, 12):
+            assert pairs.get(f"house-run-{hour:02d}") == f"17 {hour} * * *"
+        assert "house-run-sun" not in pairs
         assert "0 12 * * *" not in pairs.values()

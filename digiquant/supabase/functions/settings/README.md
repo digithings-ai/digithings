@@ -50,14 +50,14 @@ must pass `_shared/vault-vectors.json` (copied from K3's `tests/dq/vault/vectors
 including `negative_cases`.
 
 Profile schema re-validation imports the real
-`digiquant/docs/schemas/{investment_profile,asset_preferences}.v1.json` files
-(no hand-copied TS transcription).
+`digiquant/docs/schemas/{investment_profile,asset_preferences,pipeline_schedule,execution_policy}.v1.json`
+files (no hand-copied TS transcription).
 
 ## Routes
 
 | Method | Path | Behavior |
 |--------|------|----------|
-| `GET` | `/profile` | Load tip `olympus_profile_config` for workspace member (`?workspace_id=` / `?profile_key=` optional, default key `workspace`). **Empty contract:** no tip → **200** with `version_id`/`recorded_at` null, empty `label`, null investment/assets — read-only, never inserts. `house` key → **400**. Missing table → **503 `NOT_READY`**. No Studio-tier write gate (read for hydrate). Includes workspace `plan_tier` + `subscription_status` + `has_stripe_subscription` (boolean only; never `stripe_customer_id` / `stripe_subscription_id`). **Observer bootstrap:** if the JWT user has no `workspace_members` row, the handler calls `ensure_personal_workspace` (migration 107) before resolve — creates a free personal workspace + owner membership (never system/house). |
+| `GET` | `/profile` | Load tip `olympus_profile_config` for workspace member (`?workspace_id=` / `?profile_key=` optional, default key `workspace`). **Empty contract:** no tip → **200** with `version_id`/`recorded_at` null, empty `label`, null investment/assets/pipeline_schedule/execution_policy — read-only, never inserts. `house` key → **400**. Missing table → **503 `NOT_READY`**. No Studio-tier write gate (read for hydrate). Includes workspace `plan_tier` + `subscription_status` + `has_stripe_subscription` (boolean only; never `stripe_customer_id` / `stripe_subscription_id`). **Observer bootstrap:** if the JWT user has no `workspace_members` row, the handler calls `ensure_personal_workspace` (migration 107) before resolve — creates a free personal workspace + owner membership (never system/house). |
 | `PATCH` | `/profile` | Tier gate; schema re-validate; append workspace-scoped version; reject `house` key; 409 on version/supersedes conflict |
 | `GET` | `/brokers` | Fingerprint projection only |
 | `POST` | `/brokers/connect` | Tier gate; `api_key` or Alpaca `oauth` (server-pinned `redirect_uri`); seal via vault; reconnect = revoke-then-insert |
@@ -79,8 +79,12 @@ Writes (PATCH profile, broker/key connect) use **effective** plan (see **Tier ga
 
 `GET /profile` still returns **`workspaces.plan_tier`** plus `has_stripe_subscription` (boolean only). Remaining-hop Stripe proof requires that workspace column in `{studio, enterprise}`, `subscription_status=active`, **and** the Stripe boolean. A creator `plan_floor=studio` on a `free` workspace must not prove checkout. Grant-only `studio` without Stripe ids must not prove checkout. Brief or Desk Stripe must not prove overlay checkout. UI `can()` is presentation only.
 
-Profile GET returns `watchlist`, `themes`, and `research_budget_usd` from the tip
-payload (SETTINGS-IA Pipeline tab). PATCH accepts the same fields (budget ≥ 0 or null).
+Profile GET returns `watchlist`, `themes`, `research_budget_usd`,
+`pipeline_schedule`, and `execution_policy` from the tip payload (SETTINGS-IA
+Pipeline tab). PATCH accepts the same fields (budget ≥ 0 or null; schedule/policy
+re-validated against exported v1 JSON schemas). Schedule defaults (when set) enable
+research + deliberation + execution daily; execution remains calendar-vetoable via
+`ExecutionPolicy` (`venue_calendar` + `defer`) — never a calendar override.
 
 See `docs/agent-backlog/execution-tenancy/SETTINGS-IA.md`.
 

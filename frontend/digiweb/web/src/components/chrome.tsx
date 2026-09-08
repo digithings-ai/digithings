@@ -141,9 +141,16 @@ export function Colophon({
   );
 }
 
-export function ModuleCard({ m }: { m: ModuleNode }) {
+export function ModuleCard({
+  m,
+  hrefForModule = (id: string) => `/modules/${id}`,
+}: {
+  m: ModuleNode;
+  /** Host-owned module URL. Defaults to the `/modules/[id]` host contract. */
+  hrefForModule?: (id: string) => string;
+}) {
   return (
-    <a className={`mod-card t-${m.tier}`} href={`/modules/${m.id}`}>
+    <a className={`mod-card t-${m.tier}`} href={hrefForModule(m.id)}>
       <div className="mod-card-top">
         <Emblem id={m.emblem} size={26} />
         <span className={`dg-tier t-${m.tier}`}>{m.tier}</span>

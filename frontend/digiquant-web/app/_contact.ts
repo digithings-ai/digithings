@@ -16,5 +16,5 @@ export const CONTACT_MANAGED_FEATURES = [
   "Everything in self-managed, kept running",
 ] as const;
 
-export const MANAGED_CONTACT_MAILTO =
-  "mailto:contact@digiquant.io?subject=Managed%20digiquant";
+export const MANAGED_CONTACT_EMAIL = "contact@digiquant.io";
+export const MANAGED_CONTACT_SUBJECT = "Managed%20digiquant";

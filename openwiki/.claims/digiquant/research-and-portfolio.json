@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:9087a2872972bef83f3d2a0f40d38a01543b4d90ddc6cf37681cbde83a1727d8",
+  "claims": [
+    {
+      "id": "claim_c305def821d044c4a2ac07f098d86b14",
+      "statement": "The portfolio sub-graph runs H1-H9 thesis-to-allocation phases via build_portfolio_phases_thesis, with H7 emitting a direction memo without weights, H8 sizing, and H9 as the commit terminal.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/src/digiquant/portfolio/docs/PORTFOLIO_SUBGRAPH.md#L1-L40",
+          "version": "repo-lines-v1:sha256:9ea846596c6efa7c3047f654df2379658b4179e6c84b17b6722d8acfc7c64a89:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEzZjI0ZTc4M2YwZWMxODEwNzY5NWY2NGU5Mzg5ZGZhZTlmNDI5YjAxOWVjOGNiNmMyMWI4ZjZkOGIwNmFjZWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE1YTdkMDNmMDhkNmQxYjlkZmRiNDVmZThiZjA5NTg2YTJhYjRjMDA4OGMwMzM0YjY5MWI0M2ZjMGFkOWYwNzgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjliNGI0NGE2OGQ5MGZmMWJhNjY1Yzc3MmEyYjk0NDJkY2Y2MWQ5MzQ1MDE4YTI4NGM3ZWNhZDM5MDA1MDFlMDYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_da8e4c9ecdc54f1b921c3867ed82a33d",
+      "statement": "Daily cadence is one graph with cost control via model tier plus per-artifact edit modes (skip/edit/full with prior resolution and stale-gap forcing), and attention plans stay shadow-only.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/AGENTS.md#L90-L140",
+          "version": "repo-lines-v1:sha256:316d07c77e2a3b8e9d700550d015e919446c292c4179c16d278bda4750598432:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU3Y2U5ZWQ0MTY0MjEwYzZjZWJjOWQxNGMzNzYzOTUwYTM2MjM2NGNkNDFmNjUyNjRlMjU5ODA0MGQ4ZTkwOWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk2ZGQzMjM0NzU2ODQ3MDg1ZmY3YWI5YWU2ZGJhZGVmMjkwNzU4NTgyZGZlZmJlM2YyMTBmZmZjNDA1YTU2N2IifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f0bd13e705144048bc36b13d1ea99924",
+      "statement": "Group A book reads and writes pin workspace_id with house as the omitted default, mirrored dashboard-side by houseBook().",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/AGENTS.md#L30-L60",
+          "version": "repo-lines-v1:sha256:30e499184003d8df152ed4a000b739844971bdb80224737b017e9145a6e1e230:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1ODJiOTE5MjQ2YjVhYzExNzcyYmZjZDY3YjY3OTNlYzQ4NzE2Zjk3ODY2YTdmM2Q5NTJlYThjNzcyOTk4MjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY5ZTIzNjZjOGY5NmVkNzk2ZDc5MjY0YWU1ZDdmNmViYWI0M2RhMDc0ODFjODU1OTIyYzY2YjUwODAyNjc1ZmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUwODY0NWRiNjJiZmIyZTExMjE5MThmMzAzZjZhODliZjMzNThlOTVlMWUxMTQ3MzFmZjNmZTA5MGYzYjhjZTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBkNzgwMDcwNzRhNDVlYjBlYWY5OWYyMzI1ZjYwMjViOGJkM2EzMDZkNjY4ZWNmNWFmZjY0Y2RkNDg0MDEwNmQifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

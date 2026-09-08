@@ -58,7 +58,7 @@
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: clamp(0.35rem, 0.9vw, 0.65rem);
   }
-  .ts-kpi { min-width: 0; border: 1px solid var(--hair); border-radius: var(--r-md); background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: clamp(0.6rem, 1.1vw, 0.9rem) clamp(0.5rem, 1vw, 0.85rem); display: flex; flex-direction: column; gap: 0.2rem; }
+  .ts-kpi { min-width: 0; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface); padding: clamp(0.6rem, 1.1vw, 0.9rem) clamp(0.5rem, 1vw, 0.85rem); display: flex; flex-direction: column; gap: 0.2rem; }
   .ts-kpi-label { font-size: 0.7rem; color: var(--ink-mute); letter-spacing: 0.1em; text-transform: uppercase; font-family: var(--font-mono); }
   .ts-kpi-value { font-family: var(--font-mono); font-size: clamp(1.2rem, 1.05rem + 0.9vw, 1.65rem); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; color: var(--ink); overflow-wrap: anywhere; }
   .ts-kpi-sub { font-size: 0.76rem; color: var(--ink-mute); overflow-wrap: anywhere; }
@@ -71,7 +71,7 @@
 
 /* ---- panels, legends, tabs ---- */
 @layer components {
-  .ts-panel { border: 1px solid var(--hair); border-radius: 0; background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: 1.25rem 1.3rem 1.35rem; margin-bottom: 1.1rem; }
+  .ts-panel { border: 1px solid var(--hair); border-radius: 0; background: var(--surface); padding: 1.25rem 1.3rem 1.35rem; margin-bottom: 1.1rem; }
   .ts-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; padding-bottom: 0.55rem; border-bottom: 1px solid var(--hair); flex-wrap: wrap; }
   .ts-panel-chart-main { padding-bottom: 1rem; }
   .ts-panel-tools { display: inline-flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; justify-content: flex-end; }
@@ -109,6 +109,9 @@
 @keyframes ts-tab-in {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ts-tab-pane { animation: none; }
 }
 .ts-metrics-table th[scope="row"] { font-weight: 500; color: var(--ink-soft); white-space: nowrap; }
 .ts-metrics-table th[scope="col"] { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); }

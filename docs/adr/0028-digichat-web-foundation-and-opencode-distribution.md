@@ -3,9 +3,20 @@
 ## Status
 
 Accepted — 2026-09-05 (amended the same day: owner selected assistant-ui and
-the AI SDK UI message stream; the bake-off is closed).
+the AI SDK UI message stream; the bake-off is closed). Amended again the same
+day: the assistant-ui + AI SDK v7 + standard data-parts implementation is
+**digichat 2.0**, not a 1.x/1.5 ship.
 
 Supersedes [ADR-0027](0027-opencode-digichat-cli-foundation.md).
+
+**Release line (owner, 2026-09-05):** the published package is
+`frontend/digichat` **1.4.0**. Non-UI BFF/auth/embed-policy work may still
+ship as **1.5** on `develop`. Do not merge the 2.0 UI/stream migration into
+`develop` until a 2.0 release is intended — release-please on `develop` would
+otherwise fold it into 1.5 or force a major too early. Do not add 1.x UI
+features that 2.0 will replace (composer/palette/overlays/chrome; hold
+[#3565](https://github.com/digithings-ai/digithings/issues/3565)). Agents
+must not ship UI nits on the 1.4/1.5 line.
 
 ## Context
 
@@ -105,9 +116,15 @@ remains whichever UI is selected.
    [digichat renderer contract](../architecture/digichat-renderer-contract.md).
    **ACP is rejected as the canonical renderer contract** (editor/workspace
    JSON-RPC, stdio-first, no citation/RAG part model) and is reserved as an
-   optional coding-agent/editor gateway. **AG-UI is not the pick**; it is an
-   explicit later adapter if a CopilotKit-class UI must attach to the same
-   backend.
+   optional coding-agent/editor gateway. **AG-UI is deferred and not needed**
+   for this path: assistant-ui consumes the AI SDK UI stream natively. Do not
+   add `@ag-ui/*`.
+7. **2.0 wire format uses standard AI SDK UI parts only.** Today's 1.4
+   `data-digichatActivity` branded part stays on the 1.x line. The 2.0
+   migration maps tool/activity/status onto standard `data-*` / tool /
+   `source-*` / `reasoning` parts so a generic `useChat` client needs no
+   digichat vocabulary. Keep the information (retrieval, vault, progress);
+   drop branding from the wire.
 
 `assistant-ui` is selected because it is an MIT-licensed UI rather than an
 orchestrator, exposes unstyled composable React primitives, and lets
@@ -170,8 +187,9 @@ distribution provides the useful coding-CLI channel without either cost.
 Rejected. An earlier draft of this ADR deferred a “renderer-neutral” protocol
 and left room to formalize a house dialect. The owner wants the generally used
 open-source contract so the digichat backend can be used from any UI.
-`data-digichatActivity` stays as an AI SDK `data-*` part schema on that public
-stream, not as a second wire format.
+On 1.4/1.5, `data-digichatActivity` remains an AI SDK `data-*` part schema on
+that public stream (not a second wire format). **2.0 drops the branded type**
+and maps the same information onto standard UI parts.
 
 ### OpenAI Chat Completions or Responses as the UI contract
 
@@ -195,10 +213,9 @@ as an editor/workspace gateway only.
 
 ### AG-UI as the canonical renderer contract
 
-Not selected now. assistant-ui can speak AG-UI through
-`@assistant-ui/react-ag-ui`, and AG-UI has a LangGraph integration, but the
-native assistant-ui + existing BFF path is the AI SDK UI stream. Add AG-UI
-later if another OSS UI requires it.
+Rejected for this product. AG-UI is CopilotKit’s alternate agent-to-frontend
+protocol. assistant-ui’s selected path consumes the AI SDK UI stream natively,
+so an AG-UI adapter is not required. Do not add `@ag-ui/*`.
 
 ### Other packaged chat foundations
 
@@ -240,8 +257,10 @@ right architecture.
 
 **Negative / tradeoffs:**
 
-- A real assistant-ui migration (theme to CLI look, keep activity parts,
-  likely AI SDK v6 → v7) still has to land; this ADR does not implement it.
+- A real assistant-ui migration (theme to CLI look, standard UI parts,
+  AI SDK v6 → v7) is **digichat 2.0** on a long-lived draft branch; this ADR
+  does not implement it and must not be treated as permission to merge that
+  work into the 1.5 train.
 - Web and any future terminal client remain distinct delivery surfaces. They
   share the BFF UI-stream contract, not a PTY or ACP session.
 - An OpenCode distribution needs authenticated MCP ingress; the current
@@ -250,17 +269,20 @@ right architecture.
 
 **Follow-up:**
 
-- Implement assistant-ui + keep the AI SDK UI message stream:
-  [#3626](https://github.com/digithings-ai/digithings/issues/3626).
-- Define bot-profile/control-plane models and forwarding independently.
-- Hold [#3565](https://github.com/digithings-ai/digithings/issues/3565) until
-  the assistant-ui migration lands. Its product semantics remain useful, but
-  overlay/palette implementation on `digichat-ui` would be throwaway.
+- Implement assistant-ui + AI SDK v7 + standard UI parts as **digichat 2.0**
+  on a draft PR that must **not** merge to `develop` until the 2.0 cut:
+  [#3626](https://github.com/digithings-ai/digithings/issues/3626). Use
+  `feat(digichat)!:` / `BREAKING CHANGE` so release-please treats it as 2.0
+  when it lands.
+- 1.5 on `develop` stays **non-UI** (BFF, auth, persistence, tenant/embed
+  policy, adapters). Do not land composer/palette/overlay/chrome on 1.x.
+- Hold [#3565](https://github.com/digithings-ai/digithings/issues/3565)
+  permanently on the 1.x chrome. Its product semantics remain useful on 2.0,
+  but overlay/palette work on `digichat-ui` would be throwaway.
 - Continue [#3602](https://github.com/digithings-ai/digithings/issues/3602);
   structural DOM sanitization for dashboard-to-digichat page context is
   renderer-independent.
-- Optional later: AG-UI adapter on the BFF for CopilotKit-class clients. ACP
-  remains optional editor/workspace gateway only.
+- AG-UI is out of scope. ACP remains optional editor/workspace gateway only.
 
 Issue #3568 was closed as Done through PR #3570 while its “follow-up spike issue
 opened” criterion remained unchecked; no spike report exists. ADR-0027

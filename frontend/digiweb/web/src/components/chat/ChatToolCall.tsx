@@ -9,8 +9,8 @@
  * it. Uncontrolled by default (`defaultOpen`) or controlled via
  * `open`/`onOpenChange`. Output arrives as `lines` (string, or
  * `{ text, tone }` for up/down reads) and/or arbitrary `children` rendered
- * after them — enough surface for digichat-ui's ChatActivities to rebuild its
- * tool_call / tool_result / trace kinds on this primitive. A call with no
+ * after them — enough surface for digichat’s assistant-ui tool part UI (and
+ * any other chat surface) to rebuild tool_call / tool_result / trace kinds. A call with no
  * body renders its head as a plain row (no button). The left rail, color-mix
  * borders, and the running pulse live in styles/chat-widgets.css (import it
  * once app-wide; see the wiring note there). Click the head to expand —

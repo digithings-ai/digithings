@@ -27,7 +27,7 @@ describe("FooterReference copy", () => {
 
 describe("Chrome page socials reference", () => {
   it("mounts SocialsReference after ModuleCardReference and before FooterReference", () => {
-    const src = load("app/chrome/page.tsx");
+    const src = load("app/(gallery)/chrome/page.tsx");
     expect(src).toContain('import { SocialsReference } from "@/components/socials-reference"');
     const moduleIdx = src.indexOf("<ModuleCardReference />");
     const socialsIdx = src.indexOf("<SocialsReference />");

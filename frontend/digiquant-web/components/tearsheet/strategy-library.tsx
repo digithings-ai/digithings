@@ -56,7 +56,15 @@ export function filterLibrary(
   return sortEntries(typed, sort);
 }
 
-export function StrategyLibrary({ strategies }: { strategies: StrategyIndexEntry[] }) {
+export function StrategyLibrary({
+  strategies,
+  loading = false,
+}: {
+  strategies: StrategyIndexEntry[];
+  /** True until the first index fetch settles — renders a neutral loading
+   *  state (identical server-side) instead of the honest-empty copy. */
+  loading?: boolean;
+}) {
   const [sort, setSort] = useState<SortKey>("cagr");
   const [typeFilter, setTypeFilter] = useState<PublicTypeFilter>("all");
 
@@ -90,7 +98,7 @@ export function StrategyLibrary({ strategies }: { strategies: StrategyIndexEntry
 
       {visible.length === 0 ? (
         <p className="dq-sub" role="status">
-          No strategies of this type in the library.
+          {loading ? "Loading strategies…" : "No strategies of this type in the library."}
         </p>
       ) : (
         <section className="ts-lib-grid" aria-label="Published strategies">

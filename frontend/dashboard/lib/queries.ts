@@ -56,10 +56,8 @@ import {
   type AccountingNavRow,
 } from './accounting-views';
 import {
-  digestItemsToStrings,
   extractDigestContextBullets,
-  parseActionableItems,
-  parseRiskItems,
+  resolveBriefFieldsFromDigest,
 } from './snapshot-context';
 import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
 import { getDocLibraryTier } from './library-doc-tier';
@@ -1353,6 +1351,9 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     pipeline_observability = await fetchPipelineObservabilityForDate(dashboardDate);
   }
 
+  // #3641: structured Brief slots if present, else parse stitched markdown body.
+  const brief = resolveBriefFieldsFromDigest(digest);
+
   return {
     portfolio: {
       meta: {
@@ -1374,14 +1375,14 @@ export async function getFullDashboardData(): Promise<DashboardData> {
         //   → digest.headline (always-present one-liner)
         //   → 'Unknown' (safe final fallback; never the paragraph)
         regime: String(
-          digest.regime_label ?? regime.label ?? regime.regime ?? digest.headline ?? 'Unknown'
+          digest.regime_label ?? regime.label ?? regime.regime ?? brief.headline ?? 'Unknown'
         ),
         regime_label: String(regime.bias ?? regime.regime_label ?? digest.bias ?? 'neutral'),
-        summary: String(regime.summary ?? digest.headline ?? ''),
-        actionable: digestItemsToStrings(digest.actionable_summary),
-        risks: digestItemsToStrings(digest.risk_radar),
-        actionableItems: parseActionableItems(digest.actionable_summary),
-        riskItems: parseRiskItems(digest.risk_radar),
+        summary: String(regime.summary ?? brief.headline ?? ''),
+        actionable: brief.actionable,
+        risks: brief.risks,
+        actionableItems: brief.actionableItems,
+        riskItems: brief.riskItems,
         theses,
         next_review: 'Daily',
       },

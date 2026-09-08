@@ -88,13 +88,13 @@ export const JOBS: readonly Job[] = [
     inputs: { mode: "eod-macro" },
   }),
 
-  // --- digithings: house-run via leftover event id "olympus-daily" ---
-  rd("house-run-09", "17 9 * * MON-FRI", DIGITHINGS, "olympus-daily"),
-  rd("house-run-10", "17 10 * * MON-FRI", DIGITHINGS, "olympus-daily"),
-  rd("house-run-11", "17 11 * * MON-FRI", DIGITHINGS, "olympus-daily"),
-  rd("house-run-12", "17 12 * * MON-FRI", DIGITHINGS, "olympus-daily"),
-  // Sunday preserves pipeline-digiquant.yml's weekly refresh_scope="all".
-  rd("house-run-sun", "17 12 * * SUN", DIGITHINGS, "olympus-daily"),
+  // --- digithings: house-run via repository_dispatch digiquant-baseline ---
+  // Research/portfolio retries run every day; ordinary source cadence decides
+  // refresh. Manual workflow_dispatch still owns explicit refresh_scope.
+  rd("house-run-09", "17 9 * * *", DIGITHINGS, "digiquant-baseline"),
+  rd("house-run-10", "17 10 * * *", DIGITHINGS, "digiquant-baseline"),
+  rd("house-run-11", "17 11 * * *", DIGITHINGS, "digiquant-baseline"),
+  rd("house-run-12", "17 12 * * *", DIGITHINGS, "digiquant-baseline"),
 
   wd("research-metrics", "5 22 * * *", DIGITHINGS, "pipeline-research-metrics.yml"),
   wd("tearsheets", "12 0 * * *", DIGITHINGS, "pipeline-digiquant-tearsheets.yml"),
@@ -131,7 +131,7 @@ export const JOBS: readonly Job[] = [
   // --- twelve-x (FX Hub); schedule removal is a follow-up in that repo ---
   wd("twelve-x-asia", "7 0 * * MON-FRI", TWELVE_X, "daily_run_asia.yml"),
   wd("twelve-x-london", "12 7 * * MON-FRI", TWELVE_X, "daily_run_london.yml"),
-  // Shares cron "17 12 * * MON-FRI" with house-run-12 (1 cron → N jobs).
+  // Weekday FX Hub clock; house-run-12 is daily (`17 12 * * *`) and separate.
   wd("twelve-x-new-york", "17 12 * * MON-FRI", TWELVE_X, "daily_run_new_york.yml"),
   wd("twelve-x-market-context-intraday", "4 */4 * * *", TWELVE_X, "market_context_ingest.yml", {
     inputs: { bucket: "intraday" },

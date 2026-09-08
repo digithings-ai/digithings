@@ -10,12 +10,12 @@ name: "Pipeline: digiquant research"
 # House must finish before the 09:30 America/New_York open so at-open execution
 # can read today's book. Primary is 09:17 UTC (05:17 ET / 11:17 Italy in CEST);
 # retries at 10:17 / 11:17 / 12:17 skip when today's run already succeeded.
-# `repository_dispatch` type `olympus-daily` is the external watchdog hook
-# (Cloudflare cron / ops runner) — not a substitute for `workflow_dispatch`.
+# `repository_dispatch` type `digiquant-baseline` is the external watchdog hook
+# (Cloudflare Worker digithings-cron / ops runner) — not a substitute for `workflow_dispatch`.
 
 on:
   repository_dispatch:
-    types: [olympus-daily]
+    types: [digiquant-baseline]
   workflow_dispatch:
     inputs:
       refresh_scope:
@@ -68,12 +68,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          today_dow=$(date -u +%u)   # 1=Mon .. 7=Sun
-
+          # Ordinary cron/repository_dispatch runs use refresh_scope=none.
+          # Only manual workflow_dispatch may force a refresh override.
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "${INPUT_REFRESH_SCOPE:-}" ]; then
             refresh_scope="${INPUT_REFRESH_SCOPE}"
-          elif [ "$today_dow" -eq 7 ]; then
-            refresh_scope="all"
           else
             refresh_scope="none"
           fi
@@ -185,8 +183,9 @@ jobs:
           "${ARGS[@]}" || echo "::warning::Fed rate-decision odds ingest failed (fail-soft) — pipeline continues"
 
       - name: Validate AI provider routing
-        # Hard ceiling for the whole preflight LLM probe block (#2531). A hung provider must
-        # fail this step cleanly, not burn the job's 240-minute timeout → cancelled.
+        # Fail-fast house: no provider pings — env + Supabase only (dry-runs are
+        # skipped in this step via --skip-dry-run). timeout-minutes stays so a
+        # hung Supabase probe fails this step cleanly (#2531).
         timeout-minutes: 10
         env:
           CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
@@ -195,15 +194,10 @@ jobs:
           SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          # Per-attempt read timeout for digillm during preflight only (#2528/#2531). The real
-          # pipeline run step keeps digillm's 600s default.
-          DIGILLM_REQUEST_TIMEOUT_SECONDS: "20"
-          # Same pool as the "Run dashboard research pipeline" step below (#1622). OPENROUTER_ALLOWED_MODELS
-          # is applied in-process by validate-providers.py via apply_digiquant_openrouter_env() — same
-          # as portfolio chain startup (#2532). Fallback routing applies to the initial request as well
-          # as empty-response retries (#2540); check_openrouter_function_tools() surfaces model
-          # substitution instead of hard-failing when it matches production tolerance.
-          OPENROUTER_FALLBACK_MODELS: &digiquant_openrouter_fallback_models "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-pro,meta-llama/llama-4-maverick"
+          CHEAPERINFERENCE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
+          CHEAPERINFERENCE_API_BASE: ${{ vars.CHEAPERINFERENCE_API_BASE || secrets.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
+          # House routing is applied in-process by validate-providers.py
+          # via apply_digiquant_house_env() — same as portfolio chain startup (#2532).
         run: |
           uv run --frozen --no-sync python digiquant/scripts/research/validate-providers.py --skip-dry-run
 
@@ -218,16 +212,15 @@ jobs:
           SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          # #1622: provider-error fallback chain. digillm attaches models+route=fallback to
-          # every openrouter/ request when this is set (primary call, not only empty retries).
-          # That covers provider errors (5xx, rate limits, endpoint refusals) — not empty 200s
-          # with blank content (#2520). Cheap→capable, all endpoint-gate-verified.
-          OPENROUTER_FALLBACK_MODELS: *digiquant_openrouter_fallback_models
+          CHEAPERINFERENCE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
+          CHEAPERINFERENCE_API_BASE: ${{ vars.CHEAPERINFERENCE_API_BASE || secrets.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
+          # Fail-fast: provider errors surface to the caller — no models+route=fallback
+          # chain. Cheap→capable pool is enforced by config/digiquant_models.yaml tiers.
           DRY_RUN: ${{ inputs.dry_run }}
           DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-          LANGSMITH_PROJECT: olympus-daily
+          LANGSMITH_PROJECT: digiquant-baseline
           # WP10.1 (#2758): post-H9 immutable shadow allocation JSON under artifacts/
           # (uploaded below). Export is fail-soft; disable with OLYMPUS_SHADOW_ARTIFACT_MODE=off.
           OLYMPUS_SHADOW_ARTIFACT_MODE: export

@@ -240,6 +240,38 @@ def _data_layer_snapshot(
             # (pre-migration window) or any postgrest/network error must never block the run.
             logger.warning("onchain positioning persist failed (%s); continuing", exc)
 
+    # Venue-session snapshot for PM / deliberation (#3612). Fail-soft on calendar
+    # reads: inject whatever resolve_venue_session returns (equity missing rows →
+    # fail_closed closed) so the PM can describe deferred intent without claiming
+    # immediate execution. Does not depend on PipelineSchedule / ExecutionPolicy.
+    try:
+        from datetime import datetime, time
+        from zoneinfo import ZoneInfo
+
+        from digiquant.execution.market_hours import venue_sessions_snapshot
+
+        cal_rows: list[dict[str, Any]] = []
+        try:
+            start = (run_date - _days(3)).isoformat()
+            end = (run_date + _days(21)).isoformat()
+            resp = (
+                deps.client.table("trading_calendar")
+                .select("date,venue,is_trading_day,reason")
+                .gte("date", start)
+                .lte("date", end)
+                .execute()
+            )
+            cal_rows = [r for r in (resp.data or []) if isinstance(r, dict)]
+        except _SUPABASE_READ_ERRORS as exc:
+            logger.warning(
+                "trading_calendar unavailable for venue_sessions (%s); fail-closed snapshot",
+                exc,
+            )
+        eval_at = datetime.combine(run_date, time(9, 35), tzinfo=ZoneInfo("America/New_York"))
+        market_context["venue_sessions"] = venue_sessions_snapshot(eval_at, cal_rows)
+    except Exception as exc:  # never block preflight on session helpers
+        logger.warning("venue_sessions unavailable (%s); continuing without slot", exc)
+
     # Institutional ingest/publish probe for the Phase 2 circuit-breaker (#928).
     # Fail-soft: a probe error must never trip the breaker — keep the
     # institutional nodes running (streak 0, available True) so a transient read
