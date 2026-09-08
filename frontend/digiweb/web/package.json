@@ -26,6 +26,7 @@
     "./chat/thread-list": "./src/components/chat/DigichatThreadList.tsx",
     "./chat/launcher": "./src/components/chat/DigichatLauncher.tsx",
     "./chat/surfaces": "./src/components/chat/chat-surfaces.ts",
+    "./chat/dot-matrix": "./src/components/chat/DotMatrix.tsx",
     "./styles/controls-core.css": "./src/styles/controls-core.css",
     "./styles/controls-overlay.css": "./src/styles/controls-overlay.css",
     "./styles/finance-composites.css": "./src/styles/finance-composites.css",
@@ -49,17 +50,24 @@
     "@assistant-ui/react": "^0.15.18"
   },
   "dependencies": {
+    "@assistant-ui/react-markdown": "^0.14.14",
     "@base-ui/react": "^1.3.0",
     "@digithings/design": "*",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "katex": "^0.16.47",
     "lightweight-charts": "^5.2.0",
+    "lucide-react": "^0.577.0",
     "mermaid": "^11.16.0",
     "motion": "^12.23.12",
+    "radix-ui": "^1.6.7",
     "react-markdown": "^10.1.0",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
-    "simple-icons": "^15.18.0"
+    "simple-icons": "^15.18.0",
+    "tailwind-merge": "^3.6.0",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@assistant-ui/react": "^0.15.18",
