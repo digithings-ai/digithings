@@ -8,15 +8,15 @@ import {
   type FC,
   type PropsWithChildren,
 } from "react";
-import { DotMatrix } from "@/components/ui/dot-matrix";
+import { DotMatrix } from "../DotMatrix";
 import { cva, type VariantProps } from "class-variance-authority";
 import { useScrollLock } from "@assistant-ui/react";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
+} from "./ui/collapsible";
+import { cn } from "./cn";
 
 const ANIMATION_DURATION = 200;
 

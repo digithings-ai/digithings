@@ -6,7 +6,7 @@ import "@digithings/web/styles/chat-aui.css";
 import "@digithings/web/styles/chatbot.css";
 
 import { DigichatThread } from "@digithings/web/chat/thread";
-import { useComposerCopy } from "@/components/stock/skin-chrome";
+import { useComposerCopy, useSkinChrome } from "@/components/stock/skin-chrome";
 import { useStockComposerGateSubmit } from "@/components/stock/stock-send-gate";
 
 /**
@@ -18,6 +18,7 @@ export function DigichatSkin() {
     "What should we inspect?",
     "Ask digichat…",
   );
+  const { mode } = useSkinChrome();
   const onComposerSubmit = useStockComposerGateSubmit();
   return (
     <DigichatThread
@@ -25,6 +26,7 @@ export function DigichatSkin() {
       welcomeBody={welcomeBody}
       placeholder={placeholder}
       onComposerSubmit={onComposerSubmit}
+      composerLayout={mode === "app" ? "expanded" : "compact"}
     />
   );
 }

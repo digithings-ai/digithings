@@ -188,6 +188,7 @@ export function ProductStockShell({
     () => ({
       skin: cfg.chrome.skin,
       theme: cfg.chrome.theme,
+      mode: cfg.chrome.mode,
       title: cfg.chrome.title,
       welcome: welcome?.trim() || cfg.chrome.welcome,
       welcomeBody: cfg.chrome.welcomeBody ?? [],
@@ -199,6 +200,7 @@ export function ProductStockShell({
     [
       cfg.chrome.skin,
       cfg.chrome.theme,
+      cfg.chrome.mode,
       cfg.chrome.title,
       cfg.chrome.welcome,
       cfg.chrome.welcomeBody,
