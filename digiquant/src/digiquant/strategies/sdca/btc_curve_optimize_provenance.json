@@ -1,0 +1,78 @@
+{
+  "best": {
+    "shape": {
+      "buy_max_rate": 35.4864,
+      "buy_knee_risk": 24.0981,
+      "sell_knee_risk": 71.8844,
+      "sell_max_rate": 20.9816,
+      "buy_curvature": 1.2769,
+      "sell_curvature": 4.0424
+    },
+    "total_return_pct": 5050.976721737749,
+    "vs_lump_pct": 778.6356333912645,
+    "vs_flat_dca_pct": 943.6956258305033,
+    "concentration": {
+      "buy_notional": 29389.947808457575,
+      "sell_notional": 36144.58919520527,
+      "buy_frac_cheap": 1.0,
+      "sell_frac_rich": 1.0,
+      "buy_frac_deep": 0.2024163383516858,
+      "sell_frac_deep": 0.9021883252282823,
+      "buy_mean_risk": 18.769287164588274,
+      "sell_mean_risk": 89.97531344327759,
+      "sell_notional_2025": 23208.169537104928,
+      "sell_days_2025": 156,
+      "min_cash": 0.09120948209143072,
+      "min_units": 0.0
+    },
+    "feasible": true,
+    "reject_reasons": []
+  },
+  "baseline": {
+    "shape": {
+      "buy_max_rate": 3.0,
+      "buy_knee_risk": 25.0,
+      "sell_knee_risk": 70.0,
+      "sell_max_rate": 3.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 2.0
+    },
+    "total_return_pct": 1538.4006667991264,
+    "vs_lump_pct": 179.472668076059,
+    "vs_flat_dca_pct": 231.97424521055493,
+    "concentration": {
+      "buy_notional": 4175.914026894682,
+      "sell_notional": 9783.353790755444,
+      "buy_frac_cheap": 1.0,
+      "sell_frac_rich": 1.0,
+      "buy_frac_deep": 0.17816426464922938,
+      "sell_frac_deep": 0.6425778879756197,
+      "buy_mean_risk": 18.979870241395734,
+      "sell_mean_risk": 85.36310977736575,
+      "sell_notional_2025": 4065.544389217026,
+      "sell_days_2025": 156,
+      "min_cash": 332.22170991696987,
+      "min_units": 0.0
+    },
+    "feasible": true,
+    "reject_reasons": []
+  },
+  "beats_baseline_return": true,
+  "beats_baseline_concentration": true,
+  "persist_ok": true,
+  "num_evaluations": 1553,
+  "num_feasible": 1553,
+  "frozen_weights": {
+    "valuation": 1.0,
+    "m2": 0.5,
+    "rs_eth": 0.0,
+    "dxy": 0.5,
+    "weekly_rsi": 0.0,
+    "weekly_macd": 0.0,
+    "sma_band": 0.0
+  },
+  "evaluator": "curve_simulator",
+  "beats_flat_dca_oos": false,
+  "unconstrained_return_pct": 6961.166398926417,
+  "notes": "Frozen index weights {'valuation': 1.0, 'm2': 0.5, 'rs_eth': 0.0, 'dxy': 0.5, 'weekly_rsi': 0.0, 'weekly_macd': 0.0, 'sma_band': 0.0}. Objective=total_return_pct among concentration-beating trials evaluator=curve_simulator. Unconstrained max return=6961.1664 shape={'buy_max_rate': 35.0, 'buy_knee_risk': 25.0, 'sell_knee_risk': 70.0, 'sell_max_rate': 25.0, 'buy_curvature': 1.0, 'sell_curvature': 2.0}. vs-flat-DCA logged only (best=943.6956). beats_flat_dca_oos is not set from this in-sample search. Do not --push-supabase from this command."
+}

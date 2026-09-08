@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { Footer, Reveal } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "../_nav";
+import { Reveal } from "@digithings/web";
+import { DtFooter } from "@/components/DtFooter";
 import { PageHead } from "../_company/prose";
-import { ContactMailto } from "@/components/ContactMailto";
+import { ContactMailto } from "@digithings/web";
+import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {
@@ -97,7 +98,7 @@ export default function TeamPage() {
                       alt={`${m.name}, ${m.role.toLowerCase()} of digithings`}
                       width={m.avatarSize}
                       height={m.avatarSize}
-                      className="h-[112px] w-[112px] rounded-[14px] border border-hair"
+                      className="h-[112px] w-[112px] rounded-none border border-hair"
                     />
                     <div className="grid gap-[0.2rem]">
                       <h3>{m.name}</h3>
@@ -142,7 +143,7 @@ export default function TeamPage() {
               <Link className="btn btn-ghost" href="/services">
                 View services
               </Link>
-              <ContactMailto className="btn btn-ghost" subject="digithings%20inquiry">
+              <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-ghost" subject="digithings%20inquiry">
                 Contact digithings
               </ContactMailto>
             </div>
@@ -150,7 +151,7 @@ export default function TeamPage() {
         </section>
       </main>
 
-      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
+      <DtFooter />
     </>
   );
 }

@@ -25,7 +25,7 @@ const useIsoLayoutEffect =
   typeof document !== "undefined" ? useLayoutEffect : useEffect;
 
 export type ProductFrameProps = {
-  /** Mono overlay tag naming the crop — "atlas · research". */
+  /** Mono overlay tag naming the crop — "research · research". */
   tag?: string;
   /** Fixed artboard width the children are authored against (px). */
   artboardWidth?: number;

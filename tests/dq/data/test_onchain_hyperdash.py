@@ -259,6 +259,7 @@ class TestHyperdashScraper:
     ) -> None:
         # Kill-switch off (the default) → no provider construction, no network: empty result.
         monkeypatch.delenv("ATLAS_ONCHAIN_POSITIONING", raising=False)
+        monkeypatch.delenv("DIGIQUANT_ONCHAIN_POSITIONING", raising=False)
 
         def _boom(*_a: Any, **_k: Any) -> Any:
             raise AssertionError("must not construct a live scraper when the switch is off")

@@ -77,6 +77,23 @@ class ChatCompletionRequest(BaseModel):
             "lower one the deployment already mandates."
         ),
     )
+    force_tool: str | None = Field(
+        None,
+        description=(
+            "Optional per-request locate tool to run with the user string as its query. "
+            "Also accepted via X-Digi-Force-Tool. Aliases: search/digisearch, "
+            "docs/digivault. Injected — the model is not asked to write the query."
+        ),
+    )
+    enable_web_search: bool = Field(
+        False,
+        description=(
+            "Opt-in public web search via the digigraph ``web_search`` tool (digillm). "
+            "Default off — corpus-only. Also accepted via X-Digi-Enable-Web-Search. "
+            "When off, the model must not call web; when on, External cites supplement "
+            "vault/search hits and never replace them (#3420)."
+        ),
+    )
 
 
 class WorkflowRequest(BaseModel):
@@ -178,6 +195,21 @@ class WorkflowRequest(BaseModel):
     evidence_tier_preference: list[str] | None = Field(
         None,
         description="Preferred evidence_tier values (peer_reviewed, working_paper, …) added as a filter.",
+    )
+    force_tool: str | None = Field(
+        None,
+        description=(
+            "Optional per-request locate tool to run with the user string as its query "
+            "(X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. The model "
+            "is not hinted — the call is injected, then it synthesizes."
+        ),
+    )
+    enable_web_search: bool = Field(
+        False,
+        description=(
+            "Opt-in digigraph ``web_search`` tool (digillm). Default off. "
+            "Also via X-Digi-Enable-Web-Search (#3420)."
+        ),
     )
 
 

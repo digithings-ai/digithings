@@ -57,7 +57,13 @@ export function GraphSVG({ activeId, onPick }: { activeId: string | null; onPick
   );
 }
 
-function ModulePanel({ m }: { m: ModuleNode }) {
+function ModulePanel({
+  m,
+  hrefForModule,
+}: {
+  m: ModuleNode;
+  hrefForModule: (id: string) => string;
+}) {
   return (
     <div className="dg-panel" key={m.id}>
       <div className="dg-panel-head">
@@ -72,12 +78,17 @@ function ModulePanel({ m }: { m: ModuleNode }) {
       {m.dockerCmd && (
         <div className="dg-docker"><span className="prompt">$</span> {m.dockerCmd}</div>
       )}
-      <a className="dg-more" href={`/modules/${m.id}`}>man {m.id} →</a>
+      <a className="dg-more" href={hrefForModule(m.id)}>man {m.id} →</a>
     </div>
   );
 }
 
-export function ScrollyGraph() {
+export function ScrollyGraph({
+  hrefForModule = (id: string) => `/modules/${id}`,
+}: {
+  /** Host-owned module URL. Defaults to the `/modules/[id]` host contract. */
+  hrefForModule?: (id: string) => string;
+}) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [idx, setIdx] = useState(0);
   const [hover, setHover] = useState<string | null>(null);
@@ -103,7 +114,7 @@ export function ScrollyGraph() {
         {ordered.map((m) => (
           <article className="dg-step" key={m.id}>
             <GraphMini activeId={m.id} />
-            <ModulePanel m={m} />
+            <ModulePanel m={m} hrefForModule={hrefForModule} />
           </article>
         ))}
       </div>
@@ -123,9 +134,9 @@ export function ScrollyGraph() {
               const lbl = g?.getAttribute("aria-label");
               if (lbl) setHover(modules.find((m) => m.name === lbl)?.id ?? null);
             }}>
-            <GraphSVG activeId={activeId} onPick={(id) => { location.href = `/modules/${id}`; }} />
+            <GraphSVG activeId={activeId} onPick={(id) => { location.href = hrefForModule(id); }} />
           </div>
-          <ModulePanel m={activeMod} />
+            <ModulePanel m={activeMod} hrefForModule={hrefForModule} />
         </div>
         <div className="dg-rail" aria-hidden="true">
           {ordered.map((m, i) => (

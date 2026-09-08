@@ -11,7 +11,22 @@ export {
 } from "./motion/scrolly";
 export { Emblem, emblems } from "./components/emblems";
 export { StackLogo, StackRow } from "./components/StackLogo";
-export { GitHubGlyph } from "./components/icons";
+export { GitHubGlyph, GoogleGlyph, LinkedInGlyph, XGlyph } from "./components/icons";
+export {
+  SocialRow,
+  DIGITHINGS_SOCIALS,
+  type SocialRowProps,
+  type SocialProfile,
+  type SocialNetwork,
+} from "./components/SocialRow";
+export {
+  AuthCard,
+  passwordStrength,
+  type AuthCardLayout,
+  type AuthCardMode,
+  type AuthCardProps,
+  type AuthOAuthProvider,
+} from "./components/account/AuthCard";
 export { ScrollyGraph, GraphSVG } from "./components/graph";
 export {
   Nav,
@@ -56,6 +71,10 @@ export { DeckStack, DeckCard, type DeckStackProps, type DeckCardProps } from "./
 export { ChatTranscript, type ChatTranscriptProps } from "./components/chat/ChatTranscript";
 export { ChatMessage, type ChatMessageProps, type ChatRole, type ChatTone } from "./components/chat/ChatMessage";
 export { ChatStreamCursor, type ChatStreamCursorProps } from "./components/chat/ChatStreamCursor";
+export {
+  DigichatLauncher,
+  type DigichatLauncherProps,
+} from "./components/chat/DigichatLauncher";
 export { ChatMarkdown, type ChatMarkdownProps } from "./components/chat/ChatMarkdown";
 export {
   ChatMarkdownSource,
@@ -123,6 +142,26 @@ export {
   SheetFooter,
   SheetTitle,
   SheetDescription,
+  Dialog,
+  DialogTrigger,
+  DialogClose,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableCaption,
+  Breadcrumbs,
+  Pagination,
   Tooltip,
   TooltipTrigger,
   TooltipContent,
@@ -134,6 +173,10 @@ export {
   type DropdownMenuContentProps,
   type DropdownMenuItemProps,
   type SheetContentProps,
+  type DialogContentProps,
+  type TableDensity,
+  type Crumb,
+  type PaginationProps,
   type TooltipContentProps,
 } from "./components/controls";
 
@@ -169,6 +212,38 @@ export {
 } from "./components/controls/DatePager";
 export { TagsInput, TagChip, type TagsInputProps, type TagChipProps } from "./components/controls/TagsInput";
 export { SearchBar, type SearchBarProps } from "./components/controls/SearchBar";
+// Newer controls import by file rather than the family barrel above; both
+// barrels export the same names, direct file imports skip one hop.
+export { Field, type FieldProps } from "./components/controls/Field";
+export {
+  Checkbox,
+  RadioGroup,
+  Radio,
+  Switch,
+  type CheckboxProps,
+  type RadioGroupProps,
+  type RadioProps,
+  type SwitchProps,
+} from "./components/controls/Selection";
+export {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectPopup,
+  SelectItem,
+  SelectItemIndicator,
+  SelectSeparator,
+  type SelectProps,
+  type SelectTriggerProps,
+  type SelectPopupProps,
+} from "./components/controls/Select";
+export { Slider, sliderFill, type SliderProps } from "./components/controls/Slider";
+
+// conviction family — dashboard F6 vocabulary, promoted verbatim
+export { ConvictionMeter, SignedConvictionBadge } from "./components/conviction";
+
+// contact family — Cloudflare-safe mailto link, promoted from the app forks
+export { ContactMailto, buildMailtoHref } from "./components/contact";
 
 // finance-charts family (#1450)
 export {
@@ -278,6 +353,9 @@ export {
 export {
   CandlestickChart,
   TimeSeries,
+  MultiTimeSeries,
+  RiskBandStrip,
+  AllocationStepChart,
   SignedBars,
   ContributionReturnChart,
   TradeReturnChart,
@@ -294,6 +372,8 @@ export {
   TearsheetCardKpi,
   LiveBadge,
   LOOKBACK_OPTIONS,
+  MIN_VIEW,
+  clampView,
   viewWindowForPreset,
   viewWindowLastYear,
   matchLookbackPreset,
@@ -316,12 +396,24 @@ export {
   informationRatioFromDaily,
   olsBeta,
   overlappingDailyReturns,
+  navHistoryForLiveOverlap,
   relativeMetricsFromReturnSeries,
   sinceInceptionPctFromNav,
   MIN_OVERLAP_DAYS,
   TEARSHEET_DEMO,
+  RISK_BANDS,
+  riskBandLabel,
+  dcaRateCopy,
+  type RiskBand,
   type CandlestickChartProps,
   type TimeSeriesProps,
+  type MultiTimeSeriesProps,
+  type OverlaySeries,
+  type RiskBandStripProps,
+  type AllocationStepChartProps,
+  type AllocationFillMarker,
+  type OverlayTone,
+  type ChartLegendKind,
   type SignedBarsProps,
   type ContributionReturnChartProps,
   type ContributionReturnPoint,
@@ -350,6 +442,29 @@ export {
   type LivePerformanceKpisInput,
 } from "./components/finance-tearsheet";
 
+// repo-activity family (#3445) — snapshot-first GitHub velocity, compact + detailed
+export {
+  RepoActivity,
+  fetchRepoActivityLive,
+  cloneParts,
+  grouped,
+  isoDay,
+  DEFAULT_LIVE_TIMEOUT_MS,
+  REPO_ACTIVITY_DEMO,
+  REPO_ACTIVITY_DEMO_CLONE,
+  REPO_ACTIVITY_DEMO_CONTRIBUTING,
+  REPO_ACTIVITY_DEMO_URL,
+  type RepoActivityProps,
+  type RepoActivityLiveConfig,
+  type RepoActivitySnapshot,
+  type RepoFeature,
+  type RepoIssueItem,
+  type RepoModuleActivity,
+  type RepoPullItem,
+  type RepoRelease,
+  type FetchRepoActivityLiveOptions,
+} from "./components/repo-activity";
+
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";
 export { subsystems, subsystemById, type Subsystem } from "./data/subsystems";
 
@@ -360,7 +475,12 @@ export {
   type CommandPaletteGroup,
   type CommandPaletteItem,
 } from "./components/command-palette";
-export { OlympusMark, Wordmark, type OlympusMarkProps, type WordmarkProps } from "./components/symbols/marks";
+export {
+  DigiquantMark,
+  Wordmark,
+  type DigiquantMarkProps,
+  type WordmarkProps,
+} from "./components/symbols/marks";
 // Terminal identity — the `digi` + block-cursor lockup and the hairline display
 // cut. Supersedes `Wordmark` for new work; `Wordmark`/`Colophon` stay for the
 // surfaces already using them.

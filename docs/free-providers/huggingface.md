@@ -10,7 +10,7 @@ free_tier_type: credit-based
 access_requirements:
   - email
 data_privacy_on_free: unknown
-verified_at: 2026-07-19
+verified_at: 2026-08-30
 source_urls:
   - https://huggingface.co/docs/api-inference/en/rate-limits
   - https://huggingface.co/docs/api-inference/en/index
@@ -82,7 +82,7 @@ model_list:
 | DIGI_LLM_MODE tier | Not in primary chain — embeddings only |
 | Single-shot 100k | Not recommended — credit limits too low |
 | Privacy safe | Unknown (routes to third parties) |
-| Atlas/Hermes role | **Not in research pipeline** — embeddings for digisearch only |
+| research/portfolio role | **Not in research pipeline** — embeddings for digisearch only |
 
 ---
 
@@ -107,3 +107,4 @@ PRO plan at $9/month includes $2 inference credits. Inference Endpoints: dedicat
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
+| 2026-08-30 | Automated snapshot sync | provider-review scan |

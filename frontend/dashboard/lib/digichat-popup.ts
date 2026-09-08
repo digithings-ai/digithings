@@ -1,0 +1,418 @@
+/**
+ * digichat popup embed for the digiquant dashboard (#3422 / #3581 / #3662).
+ *
+ * Desk+ (plan “pro” in the issue = Desk / glass-box) get a bottom-right launcher
+ * that iframes digichat `/embed?layout=embed` — same popup contract as digichat
+ * `widget.js` (#3421), implemented in-React so CSP stays `script-src 'self'`.
+ * Baseline (free/brief) sees the same launcher but an upgrade CTA panel with
+ * chat disabled — never an iframe, so non-entitled tiers never burn turns and
+ * never meet the free-3 gate (Chris lock: no free-3 quota on this popup).
+ *
+ * Grounding, web search, three-tier models, and digigraph→digillm live in the
+ * digichat tenant registry (`DIGICHAT_EMBED_TENANTS` for digiquant.io) — not here.
+ */
+
+import {
+  extractPageContext as extractPageContextShared,
+  extractPageHtml as extractPageHtmlShared,
+  sanitizePageHtml as sanitizePageHtmlShared,
+} from '../../digichat/src/lib/page-context-sanitize'; // canonical allowlist (#3602)
+import { can, type PlanTier } from './entitlements';
+
+export type { PlanTier };
+
+/** Production digichat origin when env is unset (Containers on digithings.ai). */
+export const DEFAULT_DIGICHAT_EMBED_ORIGIN = 'https://digithings.ai';
+
+/** Registry host key for digiquant.io /dashboard embeds. */
+export const DEFAULT_DIGICHAT_EMBED_HOST = 'digiquant.io';
+
+/**
+ * Origins allowed by dashboard CSP `frame-src` (see security-headers.mjs).
+ * Keep in sync — popup fails closed when ORIGIN is outside this set.
+ */
+export const DIGICHAT_POPUP_FRAME_ORIGINS: readonly string[] = [
+  'https://digithings.ai',
+  'https://www.digithings.ai',
+  'https://digichat.digithings.ai',
+  'http://127.0.0.1:3005',
+  'http://localhost:3005',
+];
+
+/** digiquant phosphor for embed `?accent=` — digichat URL requires #rrggbb. */
+export const DIGICHAT_POPUP_ACCENT = '#3dd6c4'; // canon-allow: digichat ?accent= embed URL
+
+export const DIGICHAT_READY = 'digichat:ready';
+export const DIGICHAT_PAGE_CONTEXT = 'digichat:page-context';
+export const DIGICHAT_THEME = 'digichat:theme';
+/** Plan tier message type for the authenticated tier proof (#3662). */
+export const DIGICHAT_PLAN_TIER = 'digichat:plan-tier';
+
+/** Keep in sync with digichat `DEFAULT_POPUP_PAGE_CONTEXT_MAX_CHARS`. */
+export const PAGE_CONTEXT_MAX_CHARS = 8_000;
+
+/**
+ * Sanitized HTML snapshot cap. Keep in sync with digichat
+ * `MAX_PAGE_CONTEXT_HTML_CHARS` — larger than text so structure survives.
+ */
+export const PAGE_CONTEXT_HTML_MAX_CHARS = 12_000;
+
+/** Launcher label matches digithings-web desktop CTA (`DtNav` / `.dc-nav-cta`). */
+export const DIGICHAT_LAUNCHER_LABEL = 'ask digichat';
+
+/** Open-state launcher label — same control toggles close / minimize. */
+export const DIGICHAT_LAUNCHER_CLOSE_LABEL = 'close';
+
+/**
+ * Baseline (free/brief) upgrade panel (#3662, Chris lock: no free-3 quota).
+ * Non-entitled tiers may open the launcher, but the panel shows this upgrade
+ * CTA with chat disabled — never an iframe, so baseline never burns turns.
+ * Copy matches `LockedSurface` (`/settings#billing` upgrade route); digi
+ * names stay lowercase per repo convention.
+ */
+export const DIGICHAT_UPGRADE_TITLE = 'digichat unlocks with Desk';
+
+export const DIGICHAT_UPGRADE_BODY =
+  'House research and portfolio chat is a Desk feature. ' +
+  'Upgrade to ask digichat about the house book and the page you are on.';
+
+export const DIGICHAT_UPGRADE_CTA_LABEL = 'Upgrade in Settings → Billing';
+
+export const DIGICHAT_UPGRADE_CTA_HREF = '/settings#billing';
+
+export type DigichatPopupTheme = 'light' | 'dark';
+
+export type DigichatPopupConfig = {
+  origin: string;
+  host: string;
+  token?: string;
+  /** Always rectangular “ask digichat” chrome (#3581); `dot` kept for env back-compat. */
+  mode: 'dot' | 'bar';
+  pageContext: boolean;
+  accent: string;
+  welcome: string;
+  suggestions: string[];
+  placeholder: string;
+  /** From digichat GET /api/deploy/chrome when available. */
+  launcherLabel?: string;
+  launcherCloseLabel?: string;
+  launcherHotkey?: string;
+  mobileFullscreen?: boolean;
+};
+
+const RESEARCH_PORTFOLIO_WELCOME =
+  'Ask about house research, portfolio decisions, and the page you are on.';
+
+const RESEARCH_PORTFOLIO_SUGGESTIONS = [
+  'What changed in the house book?',
+  "Summarize today's research digest",
+  'Why is this position sized this way?',
+] as const;
+
+/**
+ * Desk+ unlocks glass-box research + portfolio deliberation — the issue’s
+ * “pro and above, not basic” gate (Brief alone is not enough).
+ *
+ * This gates the *chat* (iframe), not the launcher itself: baseline tiers see
+ * the launcher with an upgrade CTA panel instead (#3662).
+ */
+export function canUseDigichatPopup(tier: PlanTier): boolean {
+  return can(tier, 'glassbox_economics');
+}
+
+/**
+ * Direct `process.env.NEXT_PUBLIC_*` reads so Turbopack/Next can compile-time
+ * inline them into the client bundle (same pattern as `lib/supabase.ts`).
+ * Passing whole `process.env` and indexing `env.NEXT_PUBLIC_*` does **not**
+ * get inlined — SSR then shows the launcher and hydration removes it (#3561).
+ */
+export function digichatPopupEnvFromProcess(): Record<string, string | undefined> {
+  return {
+    NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: process.env.NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN,
+    NEXT_PUBLIC_DIGICHAT_EMBED_HOST: process.env.NEXT_PUBLIC_DIGICHAT_EMBED_HOST,
+    NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN: process.env.NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN,
+    NEXT_PUBLIC_DIGICHAT_POPUP: process.env.NEXT_PUBLIC_DIGICHAT_POPUP,
+    NEXT_PUBLIC_DIGICHAT_POPUP_MODE: process.env.NEXT_PUBLIC_DIGICHAT_POPUP_MODE,
+    NEXT_PUBLIC_DIGICHAT_PAGE_CONTEXT: process.env.NEXT_PUBLIC_DIGICHAT_PAGE_CONTEXT,
+  };
+}
+
+/**
+ * @returns absolute origin, or null if unset/invalid
+ */
+export function resolveDigichatEmbedOrigin(
+  env: Record<string, string | undefined> = digichatPopupEnvFromProcess(),
+): string | null {
+  const raw = env.NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN?.trim();
+  if (!raw) return null;
+  try {
+    const origin = new URL(raw).origin;
+    if (origin.startsWith('http://') || origin.startsWith('https://')) return origin;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Origin for iframe + CSP: env when valid, else production default. */
+export function digichatEmbedOriginForDashboard(
+  env: Record<string, string | undefined> = digichatPopupEnvFromProcess(),
+): string {
+  return resolveDigichatEmbedOrigin(env) ?? DEFAULT_DIGICHAT_EMBED_ORIGIN;
+}
+
+/** True when origin is listed in dashboard CSP frame-src. */
+export function isDigichatOriginAllowedByCsp(origin: string): boolean {
+  return (DIGICHAT_POPUP_FRAME_ORIGINS as readonly string[]).includes(origin);
+}
+
+/**
+ * Tokenless hosts: loopback, first-party digithings marketing/OCC, and the
+ * operator dashboard at digiquant.io (#3638). Unknown third-party hosts still
+ * need NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN so a wrong-tenant embed stays off.
+ */
+export function embedHostRequiresToken(host: string): boolean {
+  const h = host.trim().toLowerCase();
+  if (!h) return true;
+  if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]') return false;
+  if (h === 'digithings.ai' || h === 'www.digithings.ai' || h === 'occ.digithings.ai') {
+    return false;
+  }
+  if (h === 'digiquant.io' || h === 'www.digiquant.io') return false;
+  return true;
+}
+
+/**
+ * Default-on for the dashboard (#3638). Kill with NEXT_PUBLIC_DIGICHAT_POPUP=0.
+ * Fails closed when the resolved origin is outside CSP frame-src, or when a
+ * third-party embed host needs a token and none is configured.
+ */
+export function isDigichatPopupEnabled(
+  env: Record<string, string | undefined> = digichatPopupEnvFromProcess(),
+): boolean {
+  if (env.NEXT_PUBLIC_DIGICHAT_POPUP === '0') return false;
+  const origin = digichatEmbedOriginForDashboard(env);
+  if (!isDigichatOriginAllowedByCsp(origin)) return false;
+  const host =
+    env.NEXT_PUBLIC_DIGICHAT_EMBED_HOST?.trim() || DEFAULT_DIGICHAT_EMBED_HOST;
+  const token = env.NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN?.trim();
+  if (embedHostRequiresToken(host) && !token) return false;
+  return true;
+}
+
+export function readDigichatPopupConfig(
+  env: Record<string, string | undefined> = digichatPopupEnvFromProcess(),
+): DigichatPopupConfig | null {
+  if (!isDigichatPopupEnabled(env)) return null;
+  const origin = digichatEmbedOriginForDashboard(env);
+  const host =
+    env.NEXT_PUBLIC_DIGICHAT_EMBED_HOST?.trim() || DEFAULT_DIGICHAT_EMBED_HOST;
+  const token = env.NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN?.trim() || undefined;
+  // Default rectangular “ask digichat” chrome (#3581). Opt into legacy round
+  // launcher only with POPUP_MODE=dot.
+  const mode =
+    env.NEXT_PUBLIC_DIGICHAT_POPUP_MODE?.trim().toLowerCase() === 'dot'
+      ? 'dot'
+      : 'bar';
+  const pageContext = env.NEXT_PUBLIC_DIGICHAT_PAGE_CONTEXT !== '0';
+  return {
+    origin,
+    host,
+    token,
+    mode,
+    pageContext,
+    accent: DIGICHAT_POPUP_ACCENT,
+    welcome: RESEARCH_PORTFOLIO_WELCOME,
+    suggestions: [...RESEARCH_PORTFOLIO_SUGGESTIONS],
+    placeholder: 'ask about research or portfolio…',
+    launcherLabel: DIGICHAT_LAUNCHER_LABEL,
+    launcherCloseLabel: DIGICHAT_LAUNCHER_CLOSE_LABEL,
+  };
+}
+
+/** Chrome fields from digichat deploy config (client-safe). */
+export type DigichatChromeApiResponse = {
+  slug?: string;
+  mode?: string;
+  theme?: string;
+  title?: string;
+  welcome?: string;
+  suggestions?: string[];
+  placeholder?: string;
+  launcher?: {
+    hotkey?: string;
+    mobileFullscreen?: boolean;
+    label?: string;
+    closeLabel?: string;
+    mode?: 'dot' | 'bar';
+  };
+};
+
+/**
+ * Merge GET /api/deploy/chrome into a popup config so labels/hotkeys are not
+ * hardcoded only in the dashboard. Env/local defaults remain the fallback.
+ */
+export function mergeDigichatChromeIntoPopup(
+  cfg: DigichatPopupConfig,
+  chrome: DigichatChromeApiResponse | null | undefined,
+): DigichatPopupConfig {
+  if (!chrome) return cfg;
+  const launcher = chrome.launcher;
+  return {
+    ...cfg,
+    mode: launcher?.mode === 'dot' || launcher?.mode === 'bar' ? launcher.mode : cfg.mode,
+    welcome: chrome.welcome?.trim() || cfg.welcome,
+    suggestions:
+      chrome.suggestions && chrome.suggestions.length > 0
+        ? chrome.suggestions
+        : cfg.suggestions,
+    placeholder: chrome.placeholder?.trim() || cfg.placeholder,
+    launcherLabel: launcher?.label?.trim() || cfg.launcherLabel || DIGICHAT_LAUNCHER_LABEL,
+    launcherCloseLabel:
+      launcher?.closeLabel?.trim() || cfg.launcherCloseLabel || DIGICHAT_LAUNCHER_CLOSE_LABEL,
+    launcherHotkey: launcher?.hotkey?.trim() || cfg.launcherHotkey,
+    mobileFullscreen: launcher?.mobileFullscreen ?? cfg.mobileFullscreen,
+  };
+}
+
+/** Fetch client-safe chrome from digichat; returns null on network/parse failure. */
+export async function fetchDigichatChromeConfig(
+  origin: string,
+  host: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<DigichatChromeApiResponse | null> {
+  try {
+    const url = new URL(`${origin.replace(/\/$/, '')}/api/deploy/chrome`);
+    url.searchParams.set('host', host);
+    const res = await fetchImpl(url.toString(), {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as DigichatChromeApiResponse;
+  } catch {
+    return null;
+  }
+}
+
+export function buildDigichatEmbedSrc(
+  cfg: DigichatPopupConfig,
+  theme: DigichatPopupTheme,
+): string {
+  const url = new URL(`${cfg.origin.replace(/\/$/, '')}/embed`);
+  url.searchParams.set('host', cfg.host);
+  url.searchParams.set('layout', 'embed');
+  url.searchParams.set('theme', theme);
+  url.searchParams.set('accent', cfg.accent);
+  if (cfg.token) url.searchParams.set('token', cfg.token);
+  if (cfg.welcome) url.searchParams.set('welcome', cfg.welcome);
+  if (cfg.placeholder) url.searchParams.set('placeholder', cfg.placeholder);
+  if (cfg.suggestions.length) {
+    url.searchParams.set('suggestions', cfg.suggestions.join('|'));
+  }
+  return url.toString();
+}
+
+export function readDocumentTheme(
+  el: { getAttribute(name: string): string | null } = typeof document !==
+  'undefined'
+    ? document.documentElement
+    : { getAttribute: () => null },
+): DigichatPopupTheme {
+  return el.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+}
+
+export function extractVisiblePageText(
+  maxChars = PAGE_CONTEXT_MAX_CHARS,
+  bodyText?: string | null,
+): string {
+  if (bodyText !== undefined) {
+    return (bodyText ?? '').replace(/\s+/g, ' ').trim().slice(0, maxChars);
+  }
+  return extractPageContextShared(undefined, PAGE_CONTEXT_HTML_MAX_CHARS, maxChars).text;
+}
+
+/**
+ * Structural allowlist — same walk as digichat `page-context-sanitize.ts`.
+ * Posted to the embed as HTML + text; never re-hydrate as live page DOM.
+ */
+export function sanitizePageHtml(
+  raw: string,
+  maxChars = PAGE_CONTEXT_HTML_MAX_CHARS,
+): string {
+  return sanitizePageHtmlShared(raw, maxChars);
+}
+
+export function extractPageContext(
+  maxHtml = PAGE_CONTEXT_HTML_MAX_CHARS,
+  maxText = PAGE_CONTEXT_MAX_CHARS,
+): { html: string; text: string } {
+  return extractPageContextShared(undefined, maxHtml, maxText);
+}
+
+/**
+ * Prefer `main` / `[role=main]`, else `body`. Live computed-style walk so
+ * CSS-hidden nodes never enter the payload (#3602).
+ */
+export function extractPageHtml(
+  maxChars = PAGE_CONTEXT_HTML_MAX_CHARS,
+  doc: Document | null | undefined =
+    typeof document !== 'undefined' ? document : null,
+): string {
+  return extractPageHtmlShared(maxChars, doc ?? null);
+}
+
+export function buildPageContextMessage(
+  text: string,
+  opts?: {
+    html?: string;
+    screenshotDataUrl?: string;
+    ts?: number;
+  },
+): {
+  type: typeof DIGICHAT_PAGE_CONTEXT;
+  text: string;
+  ts: number;
+  html?: string;
+  screenshotDataUrl?: string;
+} {
+  const ts = opts?.ts ?? Date.now();
+  const payload: {
+    type: typeof DIGICHAT_PAGE_CONTEXT;
+    text: string;
+    ts: number;
+    html?: string;
+    screenshotDataUrl?: string;
+  } = { type: DIGICHAT_PAGE_CONTEXT, text, ts };
+  const htmlRaw = opts?.html?.trim();
+  if (htmlRaw) {
+    const html = sanitizePageHtml(htmlRaw, PAGE_CONTEXT_HTML_MAX_CHARS);
+    if (html) payload.html = html;
+  }
+  if (opts?.screenshotDataUrl) payload.screenshotDataUrl = opts.screenshotDataUrl;
+  return payload;
+}
+
+export function buildThemeMessage(
+  theme: DigichatPopupTheme,
+  ts = Date.now(),
+): { type: typeof DIGICHAT_THEME; theme: DigichatPopupTheme; ts: number } {
+  return { type: DIGICHAT_THEME, theme, ts };
+}
+
+/**
+ * Build a plan-session postMessage for the digichat iframe (#3662).
+ *
+ * The iframe receives the dashboard Supabase access_token after digichat:ready,
+ * exchanges it at /api/plan-proof (server verifies claims via /auth/v1/user),
+ * and includes the HMAC proof in X-Embed-Plan-Proof on every chat request.
+ * Raw client-asserted X-Embed-Plan-Tier headers are NEVER trusted.
+ * `tier` is a UI hint only — digichat ignores it for authorization.
+ */
+export function buildPlanTierMessage(
+  tier: PlanTier,
+  accessToken: string,
+): { type: typeof DIGICHAT_PLAN_TIER; tier: PlanTier; accessToken: string } {
+  return { type: DIGICHAT_PLAN_TIER, tier, accessToken };
+}

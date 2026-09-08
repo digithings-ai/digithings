@@ -1,7 +1,7 @@
 """Thin client factory for the digiquant strategy store (#1064).
 
 The strategy store lives in the unified digiquant **"core"** project — the project
-historically used by Olympus/Atlas (`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`),
+historically used by dashboard/research (`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`),
 repurposed as the suite-wide shared backend (free-tier 2-project limit; see
 ``docs/adr/0021-digiquant-supabase-project-topology.md``).
 
@@ -23,7 +23,7 @@ CORE_URL_ENV = "CORE_SUPABASE_URL"
 CORE_SERVICE_KEY_ENV = "CORE_SUPABASE_SERVICE_KEY"
 SUPABASE_URL_ENV = "SUPABASE_URL"
 SUPABASE_SERVICE_ROLE_KEY_ENV = "SUPABASE_SERVICE_ROLE_KEY"
-# Atlas local `.env` uses this legacy name (pre-standardization).
+# research local `.env` uses this legacy name (pre-standardization).
 SUPABASE_SERVICE_KEY_ENV = "SUPABASE_SERVICE_KEY"
 DIGIQUANT_URL_ENV = "SUPABASE_URL_DIGIQUANT"  # legacy (pre-#1090)
 DIGIQUANT_SERVICE_ROLE_KEY_ENV = "SUPABASE_SERVICE_ROLE_KEY_DIGIQUANT"  # legacy (pre-#1090)

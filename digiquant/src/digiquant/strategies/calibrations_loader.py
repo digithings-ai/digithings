@@ -16,6 +16,16 @@ CALIBRATIONS_EXAMPLE = _STRATEGIES_DIR / "calibrations.example.json"
 CalibrationSource = Literal["file", "supabase", "example"]
 
 
+def entry_is_slapper(entry: dict[str, Any], settings: dict[str, Any]) -> bool:
+    """True when the settings entry is the Slapper family (needs private calibrations)."""
+    default = settings.get("defaults", {}).get("strategy_type", "slapper")
+    return str(entry.get("strategy_type") or default or "slapper") == "slapper"
+
+
+def _entry_is_slapper(entry: dict[str, Any], settings: dict[str, Any]) -> bool:
+    return entry_is_slapper(entry, settings)
+
+
 def load_calibrations_file(path: Path | None = None) -> dict[str, dict[str, Any]]:
     """Read the gitignored ``calibrations.json`` (or an explicit path)."""
     p = path or CALIBRATIONS_FILE
@@ -50,7 +60,11 @@ def load_calibrations_from_supabase(
     if not ids:
         settings_path = _STRATEGIES_DIR / "settings.json"
         settings = json.loads(settings_path.read_text())
-        ids = list(settings.get("strategies", {}).keys())
+        ids = [
+            str(sid)
+            for sid, entry in settings.get("strategies", {}).items()
+            if isinstance(entry, dict) and _entry_is_slapper(entry, settings)
+        ]
 
     out: dict[str, dict[str, Any]] = {}
     missing: list[str] = []
@@ -67,9 +81,7 @@ def load_calibrations_from_supabase(
     return out
 
 
-def merge_trade_start(
-    calibration: dict[str, Any], trade_start: str | None
-) -> dict[str, Any]:
+def merge_trade_start(calibration: dict[str, Any], trade_start: str | None) -> dict[str, Any]:
     """Layer public ``trade_start`` from settings.json onto a calibration dict."""
     merged = dict(calibration)
     if trade_start:

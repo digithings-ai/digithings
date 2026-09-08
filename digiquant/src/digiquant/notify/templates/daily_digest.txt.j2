@@ -1,0 +1,9 @@
+dashboard daily digest — {{ run_date }}
+Workspace: {{ workspace_name }}
+
+{% for section in sections %}
+## {{ section.title }}
+{{ section.body }}
+
+{% endfor %}
+Unsubscribe or manage notifications: {{ unsubscribe_url }}

@@ -4,7 +4,7 @@
  * #2272: TabStrip's default (`linkPanels=true`, no `sharedPanel`) points every
  * tab's aria-controls at ITS OWN id — correct only when the consumer mounts
  * one role="tabpanel" per tab. Two shipped consumers (AttributionWorkspace,
- * OlympusTearsheetView) instead mount a single, content-swapping panel keyed
+ * PerformanceTearsheetView) instead mount a single, content-swapping panel keyed
  * to the active tab, so every INACTIVE tab's aria-controls dangled a
  * reference to an id that only exists while it is active. `sharedPanel`
  * fixes this by pointing every tab at the currently active tab's id instead.

@@ -9,7 +9,7 @@
  *   canvasId  — DOM id of the <canvas> element to draw into. Required.
  *   density   — star count. Defaults to 180 on desktop, 80 on mobile
  *               (<= 480px wide), matching the original website behavior.
- *   theme     — `'dark'` (default, clear canvas) | `'auto'` (Olympus: fill
+ *   theme     — `'dark'` (default, clear canvas) | `'auto'` (dashboard: fill
  *               from `html.light` / `html.dark` and star contrast).
  *
  * Returns:

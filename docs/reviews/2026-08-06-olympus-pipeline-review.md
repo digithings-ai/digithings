@@ -52,7 +52,7 @@ The governing rule is:
 The canonical design is one daily graph. Cost and continuity vary per artifact through
 `skip | edit | full`; graph topology does not fork by cadence or cost tier. See the
 [daily thesis design](../superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) and the
-[Hermes operator guide](../../digiquant/src/digiquant/olympus/hermes/docs/AGENTS.md).
+[Hermes operator guide](../../digiquant/src/digiquant/portfolio/docs/AGENTS.md).
 
 | Stage | Owner | Purpose | Principal output |
 |---|---|---|---|
@@ -143,13 +143,13 @@ theses, decisions, actions, and outcomes. Prose from different epistemic layers 
 treated as if it carried the same authority.
 
 The loader for the latest beliefs document exists in
-[`supabase_io.py`](../../digiquant/src/digiquant/olympus/atlas/supabase_io.py), but no canonical
+[`supabase_io.py`](../../digiquant/src/digiquant/research/supabase_io.py), but no canonical
 caller was found. H7 does not explicitly consume that document. Newly resolved reflections also
 occur after prior context is assembled, so they are normally visible only on a later run.
 
 ### 4.2 Evaluation targets the recommendation, not the portfolio behavior
 
-[`decision_log.py`](../../digiquant/src/digiquant/olympus/atlas/decision_log.py) resolves H5 calls
+[`decision_log.py`](../../digiquant/src/digiquant/research/decision_log.py) resolves H5 calls
 after a holding window and records return, benchmark alpha, and a short reflection. It does not
 evaluate the actual H7 direction change, H8 weight change, or complete position/thesis episode.
 
@@ -164,7 +164,7 @@ This prevents questions such as:
 
 The agent-facing portfolio snapshot contains latest NAV and aggregate metrics, but omits the
 position attribution already computed by
-[`attribution.py`](../../digiquant/src/digiquant/olympus/atlas/attribution.py), turnover, holding
+[`attribution.py`](../../digiquant/src/digiquant/research/attribution.py), turnover, holding
 episodes, thesis-level contribution, confidence calibration, and action counterfactuals.
 
 An LLM asked to explain one aggregate snapshot will generate plausible hindsight narratives. It
@@ -411,7 +411,7 @@ attempt-aware production row in this sample is 2026-08-05. Therefore:
   corresponding event did not occur.
 
 The implementation and migration explain this explicitly in
-[`diagnostics.py`](../../digiquant/src/digiquant/olympus/atlas/diagnostics.py) and
+[`diagnostics.py`](../../digiquant/src/digiquant/research/diagnostics.py) and
 [`065_atlas_run_diagnostics_attempt.sql`](../../digiquant/supabase/migrations/065_atlas_run_diagnostics_attempt.sql).
 
 ### 12.2 Recorded economics
@@ -536,7 +536,7 @@ The difference is explained by deterministic policy, but not by persisted lineag
 5. H7's 75%/7-long statement therefore disagrees with the authoritative 70.47%/8-long book.
 
 The source of the exit omission is visible in
-[`phase7e_risk_sizing.py`](../../digiquant/src/digiquant/olympus/hermes/phases/phase7e_risk_sizing.py):
+[`phase7e_risk_sizing.py`](../../digiquant/src/digiquant/portfolio/phases/phase7e_risk_sizing.py):
 on the H7 memo path, synthesized actions iterate the sized tickers but do not emit prior holdings
 that sizing removed. The actual book remains authoritative, but the human- and agent-facing reason
 record is incomplete.
@@ -582,7 +582,7 @@ artifact provenance therefore cannot be reconciled.
 ### 12.6 Attention width
 
 The latest run deep-analyzed 30 tickers and H7 ranked 31. The cap helper in
-[`roster_cap.py`](../../digiquant/src/digiquant/olympus/hermes/roster_cap.py) defaults
+[`roster_cap.py`](../../digiquant/src/digiquant/portfolio/roster_cap.py) defaults
 `ATLAS_MAX_ANALYSTS` to `0`, which means no cap. No production workflow or Olympus config setting
 for that variable was found. Production also has no `breakdown.roster` rows yet, so analyst width
 cannot be correlated with cost historically from diagnostics alone.
