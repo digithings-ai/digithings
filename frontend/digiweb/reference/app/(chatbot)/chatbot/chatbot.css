@@ -632,8 +632,9 @@
   color: var(--ink);
 }
 
-/* Portaled More menu sits outside .aui-root — style it on the chatbot page. */
-.aui-action-bar-more-content {
+/* Portaled More menu sits outside .aui-root. html:has() so catalog skins
+   keep their own menus when product imports this sheet. */
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-content {
   border-radius: 0;
   border: 1px solid var(--hair);
   background: var(--bg);
@@ -641,7 +642,7 @@
   box-shadow: none;
 }
 
-.aui-action-bar-more-item {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item {
   border-radius: 0;
   font-family: var(--font-mono);
   font-size: 0.68rem;
@@ -650,11 +651,11 @@
   background: transparent;
 }
 
-.aui-action-bar-more-item:hover,
-.aui-action-bar-more-item:focus,
-.aui-action-bar-more-item:focus-visible,
-.aui-action-bar-more-item[data-highlighted],
-.aui-action-bar-more-item[data-state="open"] {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:hover,
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:focus,
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:focus-visible,
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item[data-highlighted],
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item[data-state="open"] {
   background: transparent;
   background-color: transparent;
   color: var(--ink);
@@ -1133,7 +1134,7 @@
 }
 
 /* Portaled image preview sits outside .aui-root. */
-.aui-attachment-preview-dialog-content {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-attachment-preview-dialog-content {
   border-radius: 0;
   border: 1px solid var(--hair);
   background: var(--bg);
@@ -1141,7 +1142,7 @@
   padding: 0.55rem;
 }
 
-.aui-attachment-preview-dialog-content [data-slot="dialog-close"] {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-attachment-preview-dialog-content [data-slot="dialog-close"] {
   border-radius: 0;
   background: transparent;
   color: var(--ink-mute);
@@ -1149,7 +1150,7 @@
   opacity: 1;
 }
 
-.aui-attachment-preview-dialog-content [data-slot="dialog-close"]:hover {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-attachment-preview-dialog-content [data-slot="dialog-close"]:hover {
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
 }

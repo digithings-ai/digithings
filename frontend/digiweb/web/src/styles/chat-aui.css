@@ -447,8 +447,8 @@
   }
 }
 
-/* Portaled menus leave .digichat-thread. Class names are first-party only. */
-.aui-action-bar-more-content {
+/* Portaled menus leave .digichat-thread. Scope so catalog skins keep popover. */
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-content {
   background: var(--bg, #0a0e0c);
   color: var(--ink, #eceef0);
   border: 1px solid var(--hair, rgba(255, 255, 255, 0.09));
@@ -456,15 +456,15 @@
   box-shadow: none;
 }
 
-.aui-action-bar-more-item {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item {
   background: transparent;
   color: var(--ink-mute, #6b7177);
 }
 
-.aui-action-bar-more-item:hover,
-.aui-action-bar-more-item:focus,
-.aui-action-bar-more-item:focus-visible,
-.aui-action-bar-more-item[data-highlighted] {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:hover,
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:focus,
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:focus-visible,
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item[data-highlighted] {
   background: transparent;
   background-color: transparent;
   color: var(--ink, #eceef0);

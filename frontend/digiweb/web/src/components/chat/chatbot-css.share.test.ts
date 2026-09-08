@@ -29,6 +29,8 @@ describe("gallery chatbot.css product share", () => {
 
   it("does not restyle catalog dialogs globally", () => {
     expect(css).not.toMatch(/^\s*\[data-slot="dialog-overlay"\]/m);
+    expect(css).not.toMatch(/^\.aui-action-bar-more-content/m);
+    expect(css).not.toMatch(/^\.aui-attachment-preview-dialog-content \{/m);
     expect(css).toMatch(/html:has\(\[data-thread-skin="digichat"\]\)/);
   });
 
