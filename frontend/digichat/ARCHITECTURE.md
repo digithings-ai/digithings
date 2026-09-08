@@ -1399,7 +1399,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 
 Three-stage build:
 1. `deps` (node:22-alpine): `npm ci` to populate `node_modules`.
-2. `builder` (node:22-alpine): copies deps, copies source, runs `next build`. `NEXT_TELEMETRY_DISABLED=1`.
+2. `builder` (node:22-alpine): copies deps, copies source, runs `next build`. `NEXT_TELEMETRY_DISABLED=1`. Both Dockerfiles also COPY `frontend/digiweb/reference/app/(chatbot)/chatbot/chatbot.css` — the product `chrome.skin: digichat` sheet `@import`s that path from `frontend/digiweb/web/src/styles/chatbot.css`, and `COPY frontend/digiweb/web` does not include `reference/` (#3717).
 3. `runner` (node:22-alpine): copies only `public/`, `.next/standalone/`, `.next/static/`. Adds `curl` for the Compose healthcheck. Runs as non-root `nextjs` user (uid 1001). `next.config.ts` sets `output: "standalone"` to enable this. Both this Dockerfile and `Dockerfile.digichat-cloudflare` write `/etc/digichat-version` from `package.json` (or `ARG DIGICHAT_VERSION`) and set `ENV DIGICHAT_VERSION`.
 
 The standalone output is a self-contained Node.js server (`server.js`) with only production
