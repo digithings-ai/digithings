@@ -52,6 +52,12 @@ export {
 } from "./force-tool";
 
 export {
+  isAllowedMcpServerUrl,
+  mcpServersHeaderValue,
+  operatorMcpServersForUpstream,
+} from "./mcp-servers";
+
+export {
   clientConfigFromEmbedTenant,
   clientConfigFromDeployment,
 } from "./embed-bridge";

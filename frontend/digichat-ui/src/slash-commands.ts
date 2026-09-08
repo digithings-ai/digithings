@@ -1,37 +1,48 @@
 /**
- * Embed slash commands (#3418, #3511, #3556, #3733). Client-only: /lang,
- * /help, /new, /copy, /export, /websearch, /settings, /byok never leave the
- * browser. `/search` and `/vault` force a locate tool with the user string as
- * the argument. `/digisearch` and `/digivault` toggle session prefs.
+ * Product slash commands (#3418, #3511, #3556, #3733, #3736).
+ * Client-only actions never leave the browser. Catalog tools use one public
+ * name with two gestures: empty = session toggle, remainder = force this send.
  */
 export const LANG_CODES = ["en", "nl", "it", "es", "fr"] as const;
 export type LangCode = (typeof LANG_CODES)[number];
+
+export type SlashCategory = "tools" | "session" | "actions" | "setup";
 
 export type SlashId =
   | "lang"
   | "help"
   | "new"
-  | "search"
-  | "vault"
-  | "toggle-digisearch"
-  | "toggle-digivault"
+  | "clear"
+  | "digisearch"
+  | "digivault"
   | "copy"
   | "export"
   | "websearch"
   | "settings"
-  | "byok";
+  | "byok"
+  | "models"
+  | "thinking"
+  | "sessions"
+  | "compact"
+  | "undo"
+  | "redo"
+  | "mcp";
 
 export type SlashDef = {
-  id: SlashId;
+  id: SlashId | string;
   names: readonly string[];
   needsArg: boolean;
   /** Public copy on the embed palette. */
   hint: string;
-  forceTool?: "digisearch" | "digivault";
+  forceTool?: string;
   /** When set, selecting the command opens a discrete Up/Down choice list. */
   choiceOptions?: readonly { value: string; label: string }[];
-  /** Toggle commands flip state on Enter without an argument. */
-  kind?: "toggle" | "action" | "force" | "client";
+  /**
+   * tool — empty Enter toggles; with a query forces (or enables web search).
+   * toggle — always flips, ignores extra words.
+   */
+  kind?: "toggle" | "action" | "tool" | "client";
+  category?: SlashCategory;
 };
 
 /** Featured submenu labels. Full ISO map lives in digichat `languages.ts`. */
@@ -47,36 +58,48 @@ export const LANG_CHOICES: readonly { value: LangCode; label: string }[] = LANG_
   (code) => ({ value: code, label: LANG_LABELS[code] }),
 );
 
+export const SLASH_CATEGORIES: readonly { id: SlashCategory; label: string }[] = [
+  { id: "tools", label: "Tools" },
+  { id: "session", label: "Session" },
+  { id: "actions", label: "Actions" },
+  { id: "setup", label: "Setup" },
+];
+
 export const SLASH_COMMANDS: readonly SlashDef[] = [
   {
-    id: "toggle-digisearch",
+    id: "digisearch",
     names: ["/digisearch"],
     needsArg: false,
-    hint: "Toggle corpus search",
-    kind: "toggle",
+    hint: "Corpus search — empty toggles, or /digisearch query",
+    forceTool: "digisearch",
+    kind: "tool",
+    category: "tools",
   },
   {
-    id: "toggle-digivault",
+    id: "digivault",
     names: ["/digivault"],
     needsArg: false,
-    hint: "Toggle vault",
-    kind: "toggle",
-  },
-  {
-    id: "search",
-    names: ["/search"],
-    needsArg: true,
-    hint: "Search the knowledge base",
-    forceTool: "digisearch",
-    kind: "force",
-  },
-  {
-    id: "vault",
-    names: ["/vault", "/docs"],
-    needsArg: true,
-    hint: "Vault",
+    hint: "Vault — empty toggles, or /digivault query",
     forceTool: "digivault",
-    kind: "force",
+    kind: "tool",
+    category: "tools",
+  },
+  {
+    id: "websearch",
+    names: ["/websearch"],
+    needsArg: false,
+    hint: "Web search — empty toggles, or /websearch query",
+    forceTool: "web_search",
+    kind: "tool",
+    category: "tools",
+  },
+  {
+    id: "mcp",
+    names: ["/mcp"],
+    needsArg: false,
+    hint: "MCP tools",
+    kind: "action",
+    category: "tools",
   },
   {
     id: "lang",
@@ -85,20 +108,31 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     hint: "Switch reply language",
     choiceOptions: LANG_CHOICES,
     kind: "client",
+    category: "setup",
   },
   {
-    id: "websearch",
-    names: ["/websearch"],
+    id: "models",
+    names: ["/models"],
     needsArg: false,
-    hint: "Toggle web search",
+    hint: "Pick model and effort",
+    kind: "action",
+    category: "setup",
+  },
+  {
+    id: "thinking",
+    names: ["/thinking"],
+    needsArg: false,
+    hint: "Show or hide reasoning",
     kind: "toggle",
+    category: "setup",
   },
   {
     id: "byok",
-    names: ["/byok", "/key"],
+    names: ["/byok", "/key", "/connect"],
     needsArg: false,
     hint: "BYOK",
     kind: "action",
+    category: "setup",
   },
   {
     id: "settings",
@@ -106,6 +140,55 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     needsArg: false,
     hint: "Settings",
     kind: "action",
+    category: "setup",
+  },
+  {
+    id: "sessions",
+    names: ["/sessions", "/resume", "/continue"],
+    needsArg: false,
+    hint: "Switch conversation",
+    kind: "action",
+    category: "session",
+  },
+  {
+    id: "new",
+    names: ["/new"],
+    needsArg: false,
+    hint: "Start a new conversation",
+    kind: "client",
+    category: "session",
+  },
+  {
+    id: "clear",
+    names: ["/clear"],
+    needsArg: false,
+    hint: "New conversation (alias of /new)",
+    kind: "client",
+    category: "session",
+  },
+  {
+    id: "compact",
+    names: ["/compact", "/summarize"],
+    needsArg: false,
+    hint: "Summarize this thread to free context",
+    kind: "client",
+    category: "session",
+  },
+  {
+    id: "undo",
+    names: ["/undo"],
+    needsArg: false,
+    hint: "Previous assistant branch",
+    kind: "client",
+    category: "actions",
+  },
+  {
+    id: "redo",
+    names: ["/redo"],
+    needsArg: false,
+    hint: "Regenerate last answer",
+    kind: "client",
+    category: "actions",
   },
   {
     id: "copy",
@@ -113,6 +196,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     needsArg: false,
     hint: "Copy last answer as markdown",
     kind: "client",
+    category: "actions",
   },
   {
     id: "export",
@@ -120,20 +204,27 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     needsArg: false,
     hint: "Download thread as markdown",
     kind: "client",
+    category: "actions",
   },
-  { id: "help", names: ["/help"], needsArg: false, hint: "Show commands", kind: "client" },
-  { id: "new", names: ["/new"], needsArg: false, hint: "Start a new conversation", kind: "client" },
+  {
+    id: "help",
+    names: ["/help"],
+    needsArg: false,
+    hint: "Show commands",
+    kind: "client",
+    category: "actions",
+  },
 ];
 
 export type SlashVisibility = {
-  /** When false/undefined, /websearch is hidden from the palette. */
   webSearch?: boolean;
-  /** When false, /byok is hidden. Default true when omitted. */
   byok?: boolean;
-  /** When false, /digisearch toggle is hidden. Default true. */
   digisearch?: boolean;
-  /** When false, /digivault toggle is hidden. Default true. */
   digivault?: boolean;
+  /** Full-app thread list. Embed hides /sessions. */
+  sessions?: boolean;
+  models?: boolean;
+  mcp?: boolean;
 };
 
 export type ParsedSlash =
@@ -142,13 +233,19 @@ export type ParsedSlash =
   | { kind: "command"; command: SlashDef; arg: string }
   | { kind: "unknown"; name: string };
 
-export function parseSlashInput(raw: string): ParsedSlash {
+function allDefs(extra?: readonly SlashDef[]): SlashDef[] {
+  if (!extra?.length) return [...SLASH_COMMANDS];
+  const seen = new Set(SLASH_COMMANDS.map((c) => c.id));
+  return [...SLASH_COMMANDS, ...extra.filter((c) => !seen.has(c.id))];
+}
+
+export function parseSlashInput(raw: string, extra?: readonly SlashDef[]): ParsedSlash {
   const text = raw.trim();
   if (!text.startsWith("/")) return { kind: "none" };
   const [name, ...rest] = text.split(/\s+/);
   const arg = rest.join(" ").trim();
   const needle = name.toLowerCase();
-  const command = SLASH_COMMANDS.find((c) => c.names.some((n) => n === needle));
+  const command = allDefs(extra).find((c) => c.names.some((n) => n === needle));
   if (!command) return { kind: "unknown", name };
   if (command.needsArg && !arg) {
     return { kind: "incomplete", command, prefix: `${command.names[0]} ` };
@@ -159,8 +256,11 @@ export function parseSlashInput(raw: string): ParsedSlash {
 function isVisible(cmd: SlashDef, visibility?: SlashVisibility): boolean {
   if (cmd.id === "websearch") return visibility?.webSearch === true;
   if (cmd.id === "byok") return visibility?.byok !== false;
-  if (cmd.id === "toggle-digisearch") return visibility?.digisearch !== false;
-  if (cmd.id === "toggle-digivault") return visibility?.digivault !== false;
+  if (cmd.id === "digisearch") return visibility?.digisearch !== false;
+  if (cmd.id === "digivault") return visibility?.digivault !== false;
+  if (cmd.id === "sessions") return visibility?.sessions === true;
+  if (cmd.id === "models") return visibility?.models !== false;
+  if (cmd.id === "mcp") return visibility?.mcp !== false;
   return true;
 }
 
@@ -168,19 +268,24 @@ function isVisible(cmd: SlashDef, visibility?: SlashVisibility): boolean {
 export function matchingSlashCommands(
   input: string,
   visibility?: SlashVisibility,
+  extra?: readonly SlashDef[],
 ): SlashDef[] {
   const q = input.trim().toLowerCase();
   if (!q.startsWith("/")) return [];
   if (/\s/.test(q)) return [];
-  return SLASH_COMMANDS.filter(
+  return allDefs(extra).filter(
     (c) =>
       isVisible(c, visibility) &&
       c.names.some((n) => n.startsWith(q) || q.startsWith(n)),
   );
 }
 
-export function slashHelpText(visibility?: SlashVisibility): string {
-  return SLASH_COMMANDS.filter((c) => isVisible(c, visibility))
+export function slashHelpText(
+  visibility?: SlashVisibility,
+  extra?: readonly SlashDef[],
+): string {
+  return allDefs(extra)
+    .filter((c) => isVisible(c, visibility))
     .map((c) => `${c.names[0]} — ${c.hint}`)
     .join("\n");
 }
@@ -230,4 +335,22 @@ export function formatCliSettingLine(row: CliSettingRow, selected: boolean): str
     return `${mark} ${row.label}: ${current} — ${row.description}`;
   }
   return `${mark} ${row.label} → ${row.actionLabel} — ${row.description}`;
+}
+
+/** Extra catalog/MCP tool as a slash def (`/datatap` empty=toggle). */
+export function catalogToolSlashDef(entry: {
+  id: string;
+  label?: string;
+}): SlashDef {
+  const id = entry.id.trim().toLowerCase();
+  const label = entry.label?.trim() || id;
+  return {
+    id,
+    names: [`/${id}`],
+    needsArg: false,
+    hint: `${label} — empty toggles, or /${id} query`,
+    forceTool: id,
+    kind: "tool",
+    category: "tools",
+  };
 }

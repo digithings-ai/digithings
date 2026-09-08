@@ -103,9 +103,11 @@ export type ThreadProps = {
   onComposerSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   /**
    * Native assistant-ui slash adapter (`unstable_useSlashCommandAdapter`).
-   * Mounted on compact embed/modal composers only.
+   * Mounted when the product skin has session prefs (embed, modal, and app).
    */
   slash?: ThreadSlashTrigger | undefined;
+  /** Native `@` mention adapter (`unstable_useMentionAdapter`). */
+  mention?: ThreadMentionTrigger | undefined;
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -115,6 +117,12 @@ export type ThreadSlashTrigger = {
   action: NonNullable<SlashPopoverProps["action"]>;
   iconMap?: SlashPopoverProps["iconMap"];
   matcher?: SlashPopoverProps["matcher"];
+};
+
+export type ThreadMentionTrigger = {
+  adapter: SlashPopoverProps["adapter"];
+  directive: NonNullable<SlashPopoverProps["directive"]>;
+  iconMap?: SlashPopoverProps["iconMap"];
 };
 
 const DEFAULT_THREAD_ACTIONS: Required<ThreadActions> = {
@@ -137,6 +145,7 @@ type ThreadChrome = {
   onComposerSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   className?: string;
   slash?: ThreadSlashTrigger;
+  mention?: ThreadMentionTrigger;
 };
 
 const DEFAULT_CHROME: ThreadChrome = {
@@ -192,6 +201,7 @@ export const Thread: FC<ThreadProps> = ({
   className,
   onComposerSubmit,
   slash,
+  mention,
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -203,6 +213,7 @@ export const Thread: FC<ThreadProps> = ({
     onComposerSubmit,
     className,
     slash,
+    mention,
   };
   return (
     <ThreadChromeContext.Provider value={chrome}>
@@ -367,7 +378,7 @@ const Composer: FC<{
   layout: ComposerLayout;
 }> = ({ autoFocus, placeholder = "Send a message...", layout }) => {
   const compact = layout === "compact";
-  const { onComposerSubmit, slash } = useContext(ThreadChromeContext);
+  const { onComposerSubmit, slash, mention } = useContext(ThreadChromeContext);
   const bar = (
     <ComposerPrimitive.Root
       className="aui-composer-root relative flex w-full flex-col"
@@ -416,9 +427,18 @@ const Composer: FC<{
           emptyItemsLabel="No matching commands"
         />
       ) : null}
+      {mention ? (
+        <ComposerTriggerPopover
+          char="@"
+          adapter={mention.adapter}
+          directive={mention.directive}
+          iconMap={mention.iconMap}
+          emptyItemsLabel="No matching tools"
+        />
+      ) : null}
     </ComposerPrimitive.Root>
   );
-  if (!slash) return bar;
+  if (!slash && !mention) return bar;
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
       {bar}

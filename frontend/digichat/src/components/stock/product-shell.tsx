@@ -30,6 +30,7 @@ import {
 } from "@/lib/deploy-config";
 import { cn } from "@/lib/utils";
 import { skinOwnsPageChrome } from "@/lib/thread-skins";
+import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
 import {
   StockSendGateProvider,
   type StockSendGateHandlers,
@@ -105,12 +106,14 @@ export function buildProductRuntimeAdapters(
 function FeatureCss({
   features,
   hideModelPicker,
+  hideThinking,
 }: {
   features: DigichatClientFeatures;
   hideModelPicker: boolean;
+  hideThinking: boolean;
 }) {
   const rules: string[] = [];
-  if (!disclosureIsVisible(features.reasoning)) {
+  if (!disclosureIsVisible(features.reasoning) || hideThinking) {
     rules.push(
       '[data-stock-product] [data-slot="aui_reasoning"], [data-stock-product] .aui-reasoning-root { display: none !important; }',
     );
@@ -174,6 +177,8 @@ export function ProductStockShell({
   const features = cfg.features;
   const mode = persistence ?? cfg.persistence;
   const adapters = useMemo(() => buildProductRuntimeAdapters(features), [features]);
+  const chatPrefs = useEmbedChatPrefsOptional();
+  const hideThinking = chatPrefs?.prefs.thinking === false;
 
   const deployUi = useMemo<DeployUiValue>(
     () => ({
@@ -254,6 +259,7 @@ export function ProductStockShell({
             <FeatureCss
               features={features}
               hideModelPicker={!skinChrome.modelPicker}
+              hideThinking={hideThinking}
             />
             <div
               data-stock-product

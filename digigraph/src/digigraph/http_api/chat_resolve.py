@@ -79,10 +79,25 @@ def _resolve_require_tool_calls_chat(req: ChatCompletionRequest, request: Reques
 
 def _resolve_force_tool_chat(req: ChatCompletionRequest, request: Request) -> str | None:
     """Locate tool to inject from JSON body or X-Digi-Force-Tool. None = model-driven."""
+    from digigraph.orchestration.mcp_client import (
+        merge_mcp_servers,
+        parse_mcp_servers_json,
+        resolve_mcp_force_id,
+    )
     from digigraph.retrieval import resolve_force_tool
 
-    return resolve_force_tool(req.force_tool) or resolve_force_tool(
+    aliased = resolve_force_tool(req.force_tool) or resolve_force_tool(
         request.headers.get("X-Digi-Force-Tool")
+    )
+    if aliased:
+        return aliased
+    servers = merge_mcp_servers(
+        parse_mcp_servers_json(
+            request.headers.get("X-Digi-Mcp-Servers") or request.headers.get("x-digi-mcp-servers")
+        )
+    )
+    return resolve_mcp_force_id(req.force_tool, servers) or resolve_mcp_force_id(
+        request.headers.get("X-Digi-Force-Tool"), servers
     )
 
 

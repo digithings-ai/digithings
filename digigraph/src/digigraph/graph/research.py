@@ -384,6 +384,26 @@ def _run_document_rag_path(
         )
         or None,
     )
+    mcp_servers = [s for s in (state.get("mcp_servers") or []) if isinstance(s, dict)]
+    context.extra_mcp_servers = mcp_servers
+    from digigraph.orchestration.mcp_client import (
+        expand_mcp_disabled_tokens,
+        extra_tool_names_for_servers,
+        resolve_mcp_force_id,
+    )
+    from digigraph.orchestration.registry import list_tool_names
+
+    mcp_force = None
+    if not resolve_force_tool(state.get("force_tool")):
+        mcp_force = resolve_mcp_force_id(state.get("force_tool"), mcp_servers)
+    if mcp_servers:
+        extra_names = extra_tool_names_for_servers(mcp_servers)
+        disabled_extra = expand_mcp_disabled_tokens(state.get("disabled_tools"), extra_names)
+        live_extra = frozenset(n for n in extra_names if n not in disabled_extra)
+        if disabled_extra and context.allowed_tool_names is None:
+            context.allowed_tool_names = frozenset(list_tool_names()) | live_extra
+        elif live_extra and context.allowed_tool_names is not None:
+            context.allowed_tool_names = context.allowed_tool_names | live_extra
     tools_for_llm = get_tools_for_skills(skill_ids, context)
     collected_stored: dict[str, dict] = {}
     collected_rag: list[dict] = []
@@ -440,6 +460,11 @@ def _run_document_rag_path(
         return result
 
     user_content = str(prompt)
+    if mcp_force:
+        user_content = (
+            f"The user invoked /{mcp_force} for this turn. "
+            f"You must use tools whose names start with {mcp_force}__.\n\n" + user_content
+        )
 
     # Project mode only: prepend NL filter hints so the LLM folds them into
     # digisearch tool args. Opt out via DIGI_FILTER_HINTS=0. extract_filter_hints is fail-open.
@@ -540,7 +565,7 @@ def _run_document_rag_path(
         on_tool_step=stream_callback,
         tool_choice="auto"
         if forced
-        else ("required" if state.get("require_tool_calls") else "auto"),
+        else ("required" if (state.get("require_tool_calls") or mcp_force) else "auto"),
     )
 
     planning_mode = bool(cfg.get_planning_mode()) if cfg else False

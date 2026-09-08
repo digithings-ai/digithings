@@ -24,11 +24,15 @@ import { ProductStockShell } from "@/components/stock/product-shell";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   EmbedChatPrefsProvider,
+  catalogToolsFromClient,
   disabledCatalogIds,
+  extraOffFromCatalog,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
 } from "@/components/stock/embed-chat-prefs";
 import { EmbedSettingsPane } from "@/components/stock/embed-settings-pane";
+import { EmbedMcpPane } from "@/components/stock/embed-mcp-pane";
+import { EmbedModelsPane } from "@/components/stock/embed-models-pane";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { clientConfigFromEmbedTenant } from "@/lib/deploy-config";
 import { skinOwnsPageChrome } from "@/lib/thread-skins";
@@ -343,25 +347,24 @@ function EmbedChat({
     () => clientConfigFromEmbedTenant(tenantCfg),
     [tenantCfg],
   );
-  const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(DEFAULT_EMBED_CHAT_PREFS);
+  const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
+    ...DEFAULT_EMBED_CHAT_PREFS,
+    extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
+  }));
   const [prefsOpen, setPrefsOpen] = useState(false);
-  const [model] = useState(
-    () => stockClient.models.default ?? stockClient.models.available[0] ?? "",
-  );
+  const [mcpOpen, setMcpOpen] = useState(false);
+  const [modelsOpen, setModelsOpen] = useState(false);
   // useEmbedDigiChat's transport is frozen on first render (#1339) — a
   // `language` value passed by plain value would stay stuck at mount, so `/lang`
   // would never reach the outgoing header (#2103 / #3418). Mutate the ref in
   // the render body (the "useLatest" idiom). Session-only: English + tools ON
   // on every reload (#3733).
   const chatPrefsRef = useRef(chatPrefs);
-  const modelRef = useRef(model);
   // eslint-disable-next-line react-hooks/refs -- see comment above
   chatPrefsRef.current = chatPrefs;
-  // eslint-disable-next-line react-hooks/refs -- send-time model read
-  modelRef.current = model;
   const getResponseLanguage = useCallback(() => chatPrefsRef.current.language, []);
   const getSelectedModel = useCallback(() => {
-    const id = modelRef.current.trim();
+    const id = chatPrefsRef.current.model.trim();
     return id || undefined;
   }, []);
   const planProofRef = useRef(planProof);
@@ -961,41 +964,101 @@ function EmbedChat({
   );
 
   const catalog = stockClient.tools.catalog;
+  const catalogTools = useMemo(() => catalogToolsFromClient(stockClient), [stockClient]);
+  const showModels =
+    stockClient.models.allowPicker === true || stockClient.features.modelPicker === true;
   const prefsApi = useMemo<EmbedChatPrefsApi>(
     () => ({
       prefs: chatPrefs,
       setWebSearch: (value) => setChatPrefs((p) => ({ ...p, webSearch: value })),
       setDigisearch: (value) => setChatPrefs((p) => ({ ...p, digisearch: value })),
       setVault: (value) => setChatPrefs((p) => ({ ...p, vault: value })),
+      setExtraTool: (id, value) =>
+        setChatPrefs((p) => ({ ...p, extra: { ...p.extra, [id]: value } })),
+      extraToolOn: (id) => chatPrefs.extra[id] !== false,
       setLanguage: (code) => {
         const resolved = tryResolveLanguageInput(code) ?? DEFAULT_LANGUAGE_CODE;
         setChatPrefs((p) => ({ ...p, language: resolved }));
       },
+      setThinking: (value) => setChatPrefs((p) => ({ ...p, thinking: value })),
+      setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
+      setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort: effort })),
       reset: () =>
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: DEFAULT_LANGUAGE_CODE,
+          extra: extraOffFromCatalog(catalogTools),
         }),
       tenantAllowsWeb,
       showByok,
+      showModels,
       hasDigisearch: catalog.length === 0 || catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.length === 0 || catalog.some((e) => e.id === "digivault"),
+      hasSessions: false,
+      allowUserMcp: stockClient.mcp.allowUserServers === true,
+      allowAddMcp: stockClient.mcp.allowAddForm === true,
+      catalogTools,
       sessionKey: gate.host,
       openSettings: () => {
         setSettingsOpen(false);
+        setMcpOpen(false);
+        setModelsOpen(false);
         setPrefsOpen(true);
+      },
+      openMcp: () => {
+        setSettingsOpen(false);
+        setPrefsOpen(false);
+        setModelsOpen(false);
+        setMcpOpen(true);
       },
       openByok: () => {
         setPrefsOpen(false);
+        setMcpOpen(false);
+        setModelsOpen(false);
         setQuotaPrompt(false);
         setSettingsOpen(true);
       },
+      openModels: () => {
+        setSettingsOpen(false);
+        setPrefsOpen(false);
+        setMcpOpen(false);
+        setModelsOpen(true);
+      },
+      openSessions: () => {},
       newThread: () => {
-        setChatPrefs({ ...DEFAULT_EMBED_CHAT_PREFS, language: DEFAULT_LANGUAGE_CODE });
+        setChatPrefs({
+          ...DEFAULT_EMBED_CHAT_PREFS,
+          language: DEFAULT_LANGUAGE_CODE,
+          extra: extraOffFromCatalog(catalogTools),
+        });
         chat.reset?.();
       },
+      compactThread: () => {
+        setChatPrefs({
+          ...DEFAULT_EMBED_CHAT_PREFS,
+          language: DEFAULT_LANGUAGE_CODE,
+          extra: extraOffFromCatalog(catalogTools),
+        });
+        chat.reset?.();
+      },
+      undo: () => {},
+      redo: () => {
+        chat.regenerate?.();
+      },
     }),
-    [chatPrefs, tenantAllowsWeb, showByok, catalog, gate.host, chat.reset],
+    [
+      chatPrefs,
+      tenantAllowsWeb,
+      showByok,
+      showModels,
+      catalog,
+      catalogTools,
+      gate.host,
+      chat.reset,
+      chat.regenerate,
+      stockClient.mcp.allowUserServers,
+      stockClient.mcp.allowAddForm,
+    ],
   );
 
 
@@ -1150,6 +1213,13 @@ function EmbedChat({
                 }
               : undefined
           }
+        />
+      ) : null}
+      {mcpOpen ? <EmbedMcpPane onClose={() => setMcpOpen(false)} /> : null}
+      {modelsOpen ? (
+        <EmbedModelsPane
+          models={stockClient.models.available}
+          onClose={() => setModelsOpen(false)}
         />
       ) : null}
       {showByok && settingsOpen ? (

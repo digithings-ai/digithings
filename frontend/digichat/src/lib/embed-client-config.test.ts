@@ -149,6 +149,25 @@ describe("toEmbedClientConfig", () => {
     expect(toEmbedClientConfig(registry.get("digithings.ai")!).skin).toBe("digichat");
     expect(toEmbedClientConfig(registry.get("dev.datatap.stream")!).skin).toBe("base");
   });
+
+  it("strips operator MCP URLs from the client projection", () => {
+    const cfg = toEmbedClientConfig({
+      slug: "datatap",
+      token: "secret",
+      theme: "dark",
+      attribution: false,
+      gateMode: "ungated",
+      activityDetail: "labels",
+      backend: { type: "digigraph" },
+      mcp: {
+        servers: [{ id: "datatap", url: "https://mcp.datatap.example/mcp", label: "DataTap" }],
+        allowUserServers: false,
+      },
+    });
+    const serialized = JSON.stringify(cfg);
+    expect(serialized).not.toContain("mcp.datatap.example");
+    expect(cfg.mcp?.servers).toEqual([{ id: "datatap", label: "DataTap" }]);
+  });
 });
 
 describe("toEmbedClientConfig — showLanguageSelector", () => {

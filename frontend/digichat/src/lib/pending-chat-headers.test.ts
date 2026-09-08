@@ -3,8 +3,10 @@ import {
   armForceToolThenHold,
   setPendingForceTool,
   setPendingTurnMode,
+  setPendingWebSearchForce,
   takePendingForceTool,
   takePendingTurnMode,
+  takePendingWebSearchForce,
 } from "./pending-chat-headers";
 
 describe("pending-chat-headers", () => {
@@ -46,5 +48,13 @@ describe("pending-chat-headers", () => {
       held = takePendingForceTool("embed-host");
     });
     expect(held).toBe("digisearch");
+  });
+
+  it("isolates web-search force by key and clears on take", () => {
+    setPendingWebSearchForce("thread-a");
+    setPendingWebSearchForce("thread-b", true);
+    expect(takePendingWebSearchForce("thread-a")).toBe(true);
+    expect(takePendingWebSearchForce("thread-a")).toBe(false);
+    expect(takePendingWebSearchForce("thread-b")).toBe(true);
   });
 });

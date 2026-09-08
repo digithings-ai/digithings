@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Session-only embed/popup prefs (#3733). Reload and `/new` reset:
- * tools on, language English. Not localStorage.
+ * Session-only embed/popup prefs (#3733 / #3736). Reload and `/new` reset:
+ * tools on, language English, thinking on. Not localStorage.
  */
 
 import { createContext, useContext, type ReactNode } from "react";
@@ -12,31 +12,58 @@ export type EmbedChatPrefs = {
   webSearch: boolean;
   digisearch: boolean;
   vault: boolean;
+  /** Extra catalog / MCP server ids → enabled. Missing key means on. */
+  extra: Record<string, boolean>;
   language: string;
+  thinking: boolean;
+  model: string;
+  effort: string;
 };
 
 export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
   webSearch: true,
   digisearch: true,
   vault: true,
+  extra: {},
   language: DEFAULT_LANGUAGE_CODE,
+  thinking: true,
+  model: "",
+  effort: "medium",
 };
+
+export type CatalogToolRow = { id: string; label?: string; default?: boolean };
 
 export type EmbedChatPrefsApi = {
   prefs: EmbedChatPrefs;
   setWebSearch: (value: boolean) => void;
   setDigisearch: (value: boolean) => void;
   setVault: (value: boolean) => void;
+  setExtraTool: (id: string, value: boolean) => void;
+  extraToolOn: (id: string) => boolean;
   setLanguage: (code: string) => void;
+  setThinking: (value: boolean) => void;
+  setModel: (id: string) => void;
+  setEffort: (effort: string) => void;
   reset: () => void;
   tenantAllowsWeb: boolean;
   showByok: boolean;
+  showModels: boolean;
   hasDigisearch: boolean;
   hasVault: boolean;
+  hasSessions: boolean;
+  allowUserMcp: boolean;
+  allowAddMcp: boolean;
+  catalogTools: CatalogToolRow[];
   sessionKey: string;
   openSettings: () => void;
+  openMcp: () => void;
   openByok: () => void;
+  openModels: () => void;
+  openSessions: () => void;
   newThread: () => void;
+  compactThread: () => void | Promise<void>;
+  undo: () => void;
+  redo: () => void;
 };
 
 const EmbedChatPrefsContext = createContext<EmbedChatPrefsApi | null>(null);
@@ -70,5 +97,38 @@ export function disabledCatalogIds(prefs: EmbedChatPrefs): string[] {
   const out: string[] = [];
   if (!prefs.digisearch) out.push("digisearch");
   if (!prefs.vault) out.push("digivault");
+  for (const [id, on] of Object.entries(prefs.extra)) {
+    if (!on && id.trim()) out.push(id);
+  }
   return out;
+}
+
+/** Catalog + operator MCP ids for slash/settings (never URLs). */
+export function catalogToolsFromClient(cfg: {
+  tools: { catalog: CatalogToolRow[] };
+  mcp: { servers: CatalogToolRow[] };
+}): CatalogToolRow[] {
+  const seen = new Set<string>();
+  const out: CatalogToolRow[] = [];
+  for (const t of [...cfg.tools.catalog, ...cfg.mcp.servers]) {
+    const id = t.id.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      ...(t.label ? { label: t.label } : {}),
+      ...(typeof t.default === "boolean" ? { default: t.default } : {}),
+    });
+  }
+  return out;
+}
+
+/** Extra catalog/MCP ids with `default: false` start off for this session. */
+export function extraOffFromCatalog(tools: readonly CatalogToolRow[]): Record<string, boolean> {
+  const extra: Record<string, boolean> = {};
+  for (const t of tools) {
+    if (t.id === "digisearch" || t.id === "digivault" || t.id === "web_search") continue;
+    if (t.default === false) extra[t.id] = false;
+  }
+  return extra;
 }

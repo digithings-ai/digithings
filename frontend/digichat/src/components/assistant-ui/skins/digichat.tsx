@@ -6,25 +6,37 @@ import "@digithings/web/styles/chat-aui.css";
 import "@digithings/web/styles/chatbot.css";
 
 import { useCallback, useMemo, type FormEvent } from "react";
-import { unstable_useSlashCommandAdapter, useAui } from "@assistant-ui/react";
+import {
+  unstable_useMentionAdapter,
+  unstable_useSlashCommandAdapter,
+  useAui,
+} from "@assistant-ui/react";
 import {
   Copy,
   Download,
+  FileText,
   Folder,
   Globe,
   HelpCircle,
   Key,
   Languages,
+  Lightbulb,
+  Menu,
   Plus,
   Search,
   Settings,
   Slash,
+  Sparkles,
+  Undo,
+  Redo,
+  Wrench,
 } from "lucide-react";
 import {
   copyMarkdownWithFallback,
   downloadMarkdown,
   serializeAssistantMarkdown,
   serializeThreadMarkdown,
+  slashHelpText,
   type TranscriptTurn,
 } from "@digithings/digichat-ui";
 import { DigichatThread, type ThreadSlashTrigger } from "@digithings/web/chat/thread";
@@ -33,11 +45,18 @@ import { useStockComposerGateSubmit, useStockSendGate } from "@/components/stock
 import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
 import {
   buildProductSlashCommands,
+  categorizedSlashAdapter,
+  extraSlashDefs,
   executeSlashDef,
-  slashItemPrefixMatch,
+  shouldInsertToolDraft,
   slashSubmitAction,
+  visibilityFromPrefs,
 } from "@/lib/product-slash-commands";
-import { armForceToolThenHold, setPendingForceTool } from "@/lib/pending-chat-headers";
+import {
+  armForceToolThenHold,
+  setPendingForceTool,
+  setPendingWebSearchForce,
+} from "@/lib/pending-chat-headers";
 
 const SLASH_ICON_MAP = {
   Globe,
@@ -51,6 +70,13 @@ const SLASH_ICON_MAP = {
   Copy,
   Download,
   Slash,
+  Wrench,
+  Sparkles,
+  Lightbulb,
+  Undo,
+  Redo,
+  Menu,
+  FileText,
 };
 
 /**
@@ -77,7 +103,11 @@ export function DigichatSkin() {
       },
     };
   }, [prefs, aui]);
-  const enableSlash = Boolean(slashPrefs) && mode !== "app";
+  const enableSlash = Boolean(slashPrefs);
+  const extra = useMemo(
+    () => (slashPrefs ? extraSlashDefs(slashPrefs) : []),
+    [slashPrefs],
+  );
 
   const copyExport = useMemo(
     () => ({
@@ -100,25 +130,45 @@ export function DigichatSkin() {
     return buildProductSlashCommands(slashPrefs).map((c) => {
       if (c.id === "copy") return { ...c, execute: copyExport.copy };
       if (c.id === "export") return { ...c, execute: copyExport.exportThread };
-      if (c.id === "search") {
+      if (c.id === "help") {
         return {
           ...c,
           execute: () => {
-            queueMicrotask(() => aui.composer.setText("/search "));
+            queueMicrotask(() =>
+              aui.composer.setText(slashHelpText(visibilityFromPrefs(slashPrefs), extra)),
+            );
           },
         };
       }
-      if (c.id === "vault") {
+      if (c.id === "compact") {
         return {
           ...c,
           execute: () => {
-            queueMicrotask(() => aui.composer.setText("/vault "));
+            const md = serializeThreadMarkdown(threadTurns(aui.thread().getState().messages));
+            slashPrefs.reset();
+            slashPrefs.newThread();
+            if (!md.trim()) return;
+            queueMicrotask(() => {
+              aui.composer.setText(
+                `Summarize this conversation so we can continue with a smaller context.\n\n${md}`,
+              );
+              aui.composer.send();
+            });
+          },
+        };
+      }
+      if (shouldInsertToolDraft(c.id, extra)) {
+        const draft = `${c.label?.startsWith("/") ? c.label : `/${c.id}`} `;
+        return {
+          ...c,
+          execute: () => {
+            queueMicrotask(() => aui.composer.setText(draft));
           },
         };
       }
       return c;
     });
-  }, [enableSlash, slashPrefs, copyExport, aui]);
+  }, [enableSlash, slashPrefs, copyExport, aui, extra]);
 
   const slash = unstable_useSlashCommandAdapter({
     commands,
@@ -127,25 +177,44 @@ export function DigichatSkin() {
     fallbackIcon: Slash,
   });
   const slashTrigger = useMemo((): ThreadSlashTrigger => {
-    const inner = slash.adapter;
     return {
-      adapter: {
-        ...inner,
-        search: (query: string) => {
-          const raw = inner.search?.(query) ?? [];
-          return raw.filter((item) => slashItemPrefixMatch(item, query));
-        },
-      },
+      adapter: categorizedSlashAdapter(slash.adapter),
       action: slash.action,
       iconMap: slash.iconMap,
     };
   }, [slash]);
 
+  const mentionItems = useMemo(
+    () =>
+      (slashPrefs?.catalogTools ?? [])
+        .filter((t) => t.id !== "web_search" || slashPrefs.tenantAllowsWeb)
+        .map((t) => ({
+          id: t.id,
+          label: t.label?.trim() || t.id,
+          description: `Use ${t.label?.trim() || t.id}`,
+        })),
+    [slashPrefs],
+  );
+  const mention = unstable_useMentionAdapter({
+    items: mentionItems,
+  });
+  const mentionTrigger = useMemo(
+    () =>
+      mentionItems.length
+        ? {
+            adapter: mention.adapter,
+            directive: mention.directive,
+            iconMap: slash.iconMap,
+          }
+        : undefined,
+    [mention, mentionItems.length, slash.iconMap],
+  );
+
   const onComposerSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       if (slashPrefs) {
         const text = aui.composer.getState().text;
-        const action = slashSubmitAction(text);
+        const action = slashSubmitAction(text, extra);
         if (action.kind === "block") {
           event.preventDefault();
           return;
@@ -166,6 +235,20 @@ export function DigichatSkin() {
           aui.composer.send();
           return;
         }
+        if (action.kind === "force-web") {
+          event.preventDefault();
+          setPendingWebSearchForce(slashPrefs.sessionKey, true);
+          if (gate?.shouldHold(action.text)) {
+            aui.composer.setText("");
+            void aui.composer.clearAttachments();
+            gate.onHold(action.text);
+            return;
+          }
+          aui.composer.setText(action.text);
+          gate?.onAllowSend?.();
+          aui.composer.send();
+          return;
+        }
         if (action.kind === "run") {
           event.preventDefault();
           if (action.command.id === "copy") copyExport.copy();
@@ -177,7 +260,7 @@ export function DigichatSkin() {
       }
       gateSubmit?.(event);
     },
-    [slashPrefs, aui, gate, gateSubmit, copyExport],
+    [slashPrefs, aui, gate, gateSubmit, copyExport, extra],
   );
 
   return (
@@ -188,6 +271,7 @@ export function DigichatSkin() {
       onComposerSubmit={onComposerSubmit}
       composerLayout={mode === "app" ? "expanded" : "compact"}
       slash={enableSlash ? slashTrigger : undefined}
+      mention={enableSlash ? mentionTrigger : undefined}
     />
   );
 }

@@ -18,7 +18,14 @@ export function clientConfigFromEmbedTenant(
   base: DigichatClientConfig = DEFAULT_CLIENT_CONFIG,
 ): DigichatClientConfig {
   const webSearch = embed.webSearch === true;
-  const catalog = [...base.tools.catalog];
+  const catalog =
+    embed.tools?.catalog?.length
+      ? embed.tools.catalog.map((e) => ({
+          id: e.id,
+          default: e.default !== false,
+          ...(e.label ? { label: e.label } : {}),
+        }))
+      : [...base.tools.catalog];
   if (webSearch && !catalog.some((t) => t.id === "web_search")) {
     catalog.push({ id: "web_search", default: false, label: "Web search" });
   }
@@ -46,9 +53,25 @@ export function clientConfigFromEmbedTenant(
     },
     persistence: "none",
     auth: "anonymous",
+    models: {
+      ...(embed.models?.default ? { default: embed.models.default } : base.models),
+      available: embed.models?.available ?? base.models.available,
+      allowPicker:
+        embed.models?.allowPicker === true ||
+        (embed.models?.allowPicker !== false && base.features.modelPicker),
+    },
     tools: {
-      allowUserToggle: true,
+      allowUserToggle: embed.tools?.allowUserToggle ?? true,
       catalog,
+    },
+    mcp: {
+      servers: (embed.mcp?.servers ?? []).map((s) => ({
+        id: s.id,
+        ...(s.label ? { label: s.label } : {}),
+        ...(typeof s.default === "boolean" ? { default: s.default } : {}),
+      })),
+      allowUserServers: embed.mcp?.allowUserServers === true,
+      allowAddForm: embed.mcp?.allowUserServers === true && embed.mcp?.allowAddForm === true,
     },
     gate: {
       ...base.gate,

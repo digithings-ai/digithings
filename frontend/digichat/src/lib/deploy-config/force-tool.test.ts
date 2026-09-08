@@ -41,6 +41,16 @@ describe("filterForceToolHeader", () => {
     expect(filterForceToolHeader(dep, "digivault")).toBe("digivault");
     expect(filterForceToolHeader(dep, "not-a-tool")).toBeUndefined();
   });
+
+  it("allowlists extra operator MCP ids", () => {
+    const mcpDep = {
+      ...dep,
+      mcp: { servers: [{ id: "datatap", url: "https://mcp.datatap.example/mcp" }] },
+    } as DigichatDeployment;
+    expect(filterForceToolHeader(mcpDep, "datatap")).toBe("datatap");
+    expect(filterDisabledToolsHeader(mcpDep, "datatap,evil")).toEqual(["datatap"]);
+    expect(omitForcedCatalogIds(["datatap", "digisearch"], "datatap")).toEqual(["digisearch"]);
+  });
 });
 
 describe("omitForcedCatalogIds", () => {

@@ -219,16 +219,27 @@ export const ToolsSchema = z
 
 export const McpServerSchema = z
   .object({
-    id: z.string().min(1),
+    id: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9_-]{0,63}$/, "mcp server id must be lowercase slug"),
     /** BFF-only URL — never projected to the browser */
     url: z.string().url(),
     label: z.string().optional(),
+    default: z.boolean().optional(),
   })
   .strict();
 
 export const McpSchema = z
   .object({
     servers: z.array(McpServerSchema).default([]),
+    /**
+     * When true, the client may connect *personal* Streamable HTTP MCP servers
+     * via assistant-ui (`@assistant-ui/react-mcp`). Operator `servers` URLs
+     * still never leave the BFF. Default false (public digichat).
+     */
+    allowUserServers: z.boolean().default(false),
+    /** Show the add-custom-server form. Ignored unless allowUserServers. */
+    allowAddForm: z.boolean().default(false),
   })
   .strict();
 

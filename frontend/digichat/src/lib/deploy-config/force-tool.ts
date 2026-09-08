@@ -23,24 +23,35 @@ export const CATALOG_ID_BY_FORCE_TOOL: Readonly<Record<string, string>> = {
 export function catalogAllowsForceTool(
   catalog: readonly ToolCatalogEntry[] | undefined,
   forceTool: string | null | undefined,
+  mcpIds?: readonly string[],
 ): boolean {
   const raw = forceTool?.trim();
   if (!raw) return false;
   // Legacy compat: empty catalog → allow digisearch/digivault only (pre-config installs).
-  if (!catalog?.length) {
+  if (!catalog?.length && !mcpIds?.length) {
     return raw === "digisearch" || raw === "digivault";
   }
   const catalogId = CATALOG_ID_BY_FORCE_TOOL[raw] ?? raw;
-  return catalog.some((e) => e.id === catalogId || FORCE_TOOL_BY_CATALOG_ID[e.id] === raw);
+  if (catalog?.some((e) => e.id === catalogId || FORCE_TOOL_BY_CATALOG_ID[e.id] === raw)) {
+    return true;
+  }
+  return (mcpIds ?? []).includes(catalogId);
 }
 
 export function allowedForceTools(dep: DigichatDeployment | null | undefined): string[] {
   const catalog = dep?.tools?.catalog;
-  if (!catalog?.length) return [];
   const out = new Set<string>();
-  for (const e of catalog) {
-    const mapped = FORCE_TOOL_BY_CATALOG_ID[e.id];
-    if (mapped) out.add(mapped);
+  if (!catalog?.length) {
+    out.add("digisearch");
+    out.add("digivault");
+  } else {
+    for (const e of catalog) {
+      const mapped = FORCE_TOOL_BY_CATALOG_ID[e.id] ?? (e.id !== "web_search" ? e.id : undefined);
+      if (mapped) out.add(mapped);
+    }
+  }
+  for (const s of dep?.mcp?.servers ?? []) {
+    if (s.id.trim()) out.add(s.id.trim());
   }
   return [...out];
 }
@@ -51,7 +62,8 @@ export function filterForceToolHeader(
 ): string | undefined {
   const raw = forceTool?.trim();
   if (!raw) return undefined;
-  return catalogAllowsForceTool(dep?.tools?.catalog, raw) ? raw : undefined;
+  const mcpIds = (dep?.mcp?.servers ?? []).map((s) => s.id);
+  return catalogAllowsForceTool(dep?.tools?.catalog, raw, mcpIds) ? raw : undefined;
 }
 
 /** Catalog ids a user may disable for the session (#3733). */
@@ -75,16 +87,35 @@ const DISABLE_ALIASES: Readonly<Record<string, string>> = {
   docs: "digivault",
 };
 
+function extraDisableableIds(dep: DigichatDeployment | null | undefined): Set<string> {
+  const out = new Set<string>();
+  for (const e of dep?.tools?.catalog ?? []) {
+    const id = e.id.trim().toLowerCase();
+    if (id && id !== "web_search") out.add(id);
+  }
+  for (const s of dep?.mcp?.servers ?? []) {
+    const id = s.id.trim().toLowerCase();
+    if (id) out.add(id);
+  }
+  return out;
+}
+
 export function catalogAllowsDisableId(
   catalog: readonly ToolCatalogEntry[] | undefined,
   catalogId: string,
+  extraIds?: ReadonlySet<string>,
 ): boolean {
-  const mapped = DISABLE_ALIASES[catalogId.trim().toLowerCase()];
-  if (!mapped) return false;
-  if (!catalog?.length) {
-    return mapped === "digisearch" || mapped === "digivault";
+  const mapped = DISABLE_ALIASES[catalogId.trim().toLowerCase()] ?? catalogId.trim().toLowerCase();
+  if (!mapped || mapped === "web_search") return false;
+  if (DISABLEABLE_CATALOG_IDS.includes(mapped as DisableableCatalogId)) {
+    if (!catalog?.length) {
+      return mapped === "digisearch" || mapped === "digivault";
+    }
+    return catalog.some((e) => e.id === mapped || FORCE_TOOL_BY_CATALOG_ID[e.id] === mapped);
   }
-  return catalog.some((e) => e.id === mapped || FORCE_TOOL_BY_CATALOG_ID[e.id] === mapped);
+  if (extraIds?.has(mapped)) return true;
+  if (catalog?.some((e) => e.id === mapped)) return true;
+  return false;
 }
 
 /**
@@ -97,12 +128,14 @@ export function filterDisabledToolsHeader(
 ): string[] {
   if (!raw?.trim()) return [];
   const catalog = dep?.tools?.catalog;
+  const extra = extraDisableableIds(dep);
   const out: string[] = [];
   const seen = new Set<string>();
   for (const token of raw.split(",")) {
-    const mapped = DISABLE_ALIASES[token.trim().toLowerCase()];
+    const rawId = token.trim().toLowerCase();
+    const mapped = DISABLE_ALIASES[rawId] ?? rawId;
     if (!mapped || seen.has(mapped)) continue;
-    if (!catalogAllowsDisableId(catalog, mapped)) continue;
+    if (!catalogAllowsDisableId(catalog, mapped, extra)) continue;
     seen.add(mapped);
     out.push(mapped);
   }
@@ -136,7 +169,7 @@ export function omitForcedCatalogIds(
           catalogId === "docs" ||
           catalogId === "digivault_search_notes"
         ? "digivault"
-        : undefined;
+        : catalogId;
   if (!skip) return [...disabled];
   return disabled.filter((id) => id !== skip);
 }

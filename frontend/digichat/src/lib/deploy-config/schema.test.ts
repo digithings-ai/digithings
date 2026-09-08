@@ -185,6 +185,7 @@ describe("DigichatConfigSchema", () => {
       "digithings-ai-embed.yaml",
       "occ-embed.yaml",
       "dashboard-modal.yaml",
+      "datatap-mcp.yaml",
       "local-app.yaml",
       "local-app-memory.yaml",
       "local-cli.yaml",
@@ -248,6 +249,17 @@ describe("DigichatConfigSchema", () => {
     expect(occHost?.tools?.catalog.map((t) => t.id)).toEqual(["digisearch", "digivault"]);
     expect(occHost?.tools?.catalog.some((t) => t.id === "web_search")).toBe(false);
     expect(allowedForceTools(occHost)).toEqual(["digisearch", "digivault"]);
+  });
+
+  it("parses operator MCP servers on the DataTap example without leaking URLs", () => {
+    const cfg = parseDigichatConfig(
+      loadYaml(readFileSync(resolve(examplesDir, "datatap-mcp.yaml"), "utf8")),
+      "datatap-mcp.yaml",
+    );
+    const dep = cfg.deployment;
+    expect(dep?.mcp?.servers.map((s) => s.id)).toEqual(["datatap"]);
+    expect(dep?.mcp?.allowUserServers).toBe(false);
+    expect(allowedForceTools(dep)).toEqual(["digisearch", "digivault", "datatap"]);
   });
 
   it("ships a complete YAML install for every catalog template id", () => {

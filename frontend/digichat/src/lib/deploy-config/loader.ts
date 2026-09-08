@@ -99,7 +99,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
     cli: { enabled: false },
     backend: cfg.backend,
     tools: { allowUserToggle: true, catalog },
-    mcp: { servers: [] },
+    mcp: cfg.mcp ?? { servers: [], allowUserServers: false, allowAddForm: false },
     gate: {
       mode: cfg.gateMode,
       activityDetail: cfg.activityDetail,
@@ -140,6 +140,9 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     layout: dep.chrome.mode === "app" || dep.chrome.mode === "sidebar" ? "page" : "embed",
     llmAccess: dep.gate.llmAccess,
     token: dep.token ?? "",
+    tools: dep.tools,
+    mcp: dep.mcp,
+    models: dep.models,
     ...(dep.gate.requiredPlanTier
       ? { requiredPlanTier: dep.gate.requiredPlanTier }
       : {}),

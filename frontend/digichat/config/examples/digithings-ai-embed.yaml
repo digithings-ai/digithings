@@ -31,7 +31,12 @@ hosts:
       toolCalls: true
       sources: true
       branchPicker: true
-      modelPicker: false
+      modelPicker: true
+    models:
+      default: openai/gpt-oss-20b:free
+      available:
+        - openai/gpt-oss-20b:free
+      allowPicker: true
     backend:
       type: digigraph
     tools:
@@ -46,6 +51,9 @@ hosts:
         - id: web_search
           default: true
           label: Web search
+    mcp:
+      allowUserServers: false
+      allowAddForm: false
     gate:
       mode: ungated
       activityDetail: labels

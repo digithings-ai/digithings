@@ -77,6 +77,11 @@ import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
 import { resetChatRunLocksForTests } from "@/lib/chat-run-lock";
 import { EMBED_FREE_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { streamText, createUIMessageStreamResponse } from "ai";
+import { parseDigichatConfig } from "@/lib/deploy-config";
+import {
+  resetDigichatConfigForTests,
+  setDigichatConfigForTests,
+} from "@/lib/deploy-config/loader";
 
 describe("POST /api/chat", () => {
   const env = process.env;
@@ -468,6 +473,44 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     };
     expect(call?.headers?.["X-Digi-Force-Tool"]).toBeUndefined();
     expect(call?.headers?.["X-Digi-Disabled-Tools"]).toBe("digivault");
+  });
+
+  it("forwards operator MCP YAML and ignores client-supplied X-Digi-Mcp-Servers (#3736)", async () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "datatap",
+        backend: { type: "digigraph" },
+        mcp: {
+          servers: [{ id: "datatap", url: "https://mcp.datatap.example/mcp" }],
+        },
+      },
+    });
+    setDigichatConfigForTests(cfg);
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-mcp-servers": '[{"id":"evil","url":"https://evil.example/mcp"}]',
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      const forwarded = call?.headers?.["X-Digi-Mcp-Servers"];
+      expect(forwarded).toContain("mcp.datatap.example");
+      expect(forwarded).toContain("datatap");
+      expect(forwarded).not.toContain("evil");
+    } finally {
+      resetDigichatConfigForTests();
+    }
   });
 
   it("returns 409 run_in_progress for concurrent regen on the same session", async () => {

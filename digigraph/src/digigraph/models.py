@@ -200,8 +200,9 @@ class WorkflowRequest(BaseModel):
         None,
         description=(
             "Optional per-request locate tool to run with the user string as its query "
-            "(X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. The model "
-            "is not hinted — the call is injected, then it synthesizes."
+            "(X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. Extra "
+            "operator MCP server ids (from X-Digi-Mcp-Servers) are also accepted: those "
+            "hint the model with tool_choice=required rather than injecting a locate call."
         ),
     )
     enable_web_search: bool = Field(
@@ -215,9 +216,28 @@ class WorkflowRequest(BaseModel):
         None,
         description=(
             "Catalog ids to hide this turn (X-Digi-Disabled-Tools). "
-            "Allowlisted aliases only (digisearch, digivault); unknown tokens ignored."
+            "Built-in aliases (digisearch, digivault) plus extra operator MCP server ids. "
+            "Unknown tokens ignored. Always overwritten from the header on HTTP."
         ),
     )
+    mcp_servers: list["McpServerRef"] | None = Field(
+        None,
+        description=(
+            "Operator Streamable HTTP MCP servers for this turn (X-Digi-Mcp-Servers). "
+            "Client-writable on this model but never trusted as-is: HTTP handlers "
+            "overwrite from the BFF header (and DIGI_MCP_SERVERS env). URLs never "
+            "come from an untrusted JSON body."
+        ),
+    )
+
+
+class McpServerRef(BaseModel):
+    """Trusted ``{id, url}`` pair forwarded by the BFF (#3736)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    url: str = Field(..., min_length=1, max_length=2048)
 
 
 class WorkflowResult(BaseModel):

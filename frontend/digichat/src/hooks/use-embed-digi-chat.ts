@@ -24,6 +24,7 @@ import {
   setPendingTurnMode,
   takePendingForceTool,
   takePendingTurnMode,
+  takePendingWebSearchForce,
 } from "@/lib/pending-chat-headers";
 import {
   shapeUserMessageParts,
@@ -35,6 +36,7 @@ export {
   setPendingTurnMode,
   takePendingForceTool,
   takePendingTurnMode,
+  takePendingWebSearchForce,
 };
 
 /** Read ?token= / ?host= at send time — useChat transport is frozen on first render (#1339). */
@@ -291,7 +293,8 @@ export function useEmbedDigiChat({
           if (forceTool) {
             headers["X-Digi-Force-Tool"] = forceTool;
           }
-          if (getEnableWebSearch?.()) {
+          const forceWeb = takePendingWebSearchForce(embedHost);
+          if (getEnableWebSearch?.() || forceWeb) {
             headers["X-Digi-Enable-Web-Search"] = "1";
           }
           const disabled = omitForcedCatalogIds(

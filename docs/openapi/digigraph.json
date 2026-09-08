@@ -129,6 +129,31 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "McpServerRef": {
+        "additionalProperties": false,
+        "description": "Trusted ``{id, url}`` pair forwarded by the BFF (#3736).",
+        "properties": {
+          "id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url"
+        ],
+        "title": "McpServerRef",
+        "type": "object"
+      },
       "ProductGraphRunRequest": {
         "additionalProperties": false,
         "description": "HTTP body for ``POST /v1/product_graphs/{name}/runs``.",
@@ -344,7 +369,7 @@
                 "type": "null"
               }
             ],
-            "description": "Catalog ids to hide this turn (X-Digi-Disabled-Tools). Allowlisted aliases only (digisearch, digivault); unknown tokens ignored.",
+            "description": "Catalog ids to hide this turn (X-Digi-Disabled-Tools). Built-in aliases (digisearch, digivault) plus extra operator MCP server ids. Unknown tokens ignored. Always overwritten from the header on HTTP.",
             "title": "Disabled Tools"
           },
           "enable_web_search": {
@@ -377,8 +402,23 @@
                 "type": "null"
               }
             ],
-            "description": "Optional per-request locate tool to run with the user string as its query (X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. The model is not hinted \u2014 the call is injected, then it synthesizes.",
+            "description": "Optional per-request locate tool to run with the user string as its query (X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. Extra operator MCP server ids (from X-Digi-Mcp-Servers) are also accepted: those hint the model with tool_choice=required rather than injecting a locate call.",
             "title": "Force Tool"
+          },
+          "mcp_servers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/McpServerRef"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Operator Streamable HTTP MCP servers for this turn (X-Digi-Mcp-Servers). Client-writable on this model but never trusted as-is: HTTP handlers overwrite from the BFF header (and DIGI_MCP_SERVERS env). URLs never come from an untrusted JSON body.",
+            "title": "Mcp Servers"
           },
           "prompt": {
             "description": "User idea, e.g. 'Build me a mean-reversion stat-arb on tech'",

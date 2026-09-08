@@ -3,7 +3,7 @@
 **Service:** digigraph
 **Port:** 8000 (HTTP), 8766 (MCP streamable-http)
 **Role:** Orchestration hub — LangGraph state machine, tool registry, OpenAI-compatible API, SSE streaming
-**Status:** Phase 1 implemented; Phase 2 features (Graphiti memory, remote MCP enumeration, distributed checkpoints) are roadmap items
+**Status:** Phase 1 implemented; Phase 2 features (Graphiti memory, distributed checkpoints) are roadmap items. Operator Streamable HTTP MCP (trusted BFF header) is built (#3736).
 
 ---
 
@@ -56,7 +56,7 @@ The following is built and functional as of this architecture review (March 2026
 | Logical provider-call purpose and lineage | Built | `llm_client.py`, `usage.py`, `graph/research_agent.py`, `digillm` contracts |
 | Planning executor (topo-sort + parallel steps) | Built | `planning/executor.py` |
 | Graphiti graph memory | **Not built** | Phase 2 roadmap |
-| Remote MCP server enumeration | **Not built** | Phase 2 roadmap |
+| Operator remote MCP (trusted BFF `X-Digi-Mcp-Servers`) | **Built** | `orchestration/mcp_client.py`; YAML in digichat |
 | Auth-bound checkpoints (per-key RBAC) | **Not built** | Phase 2 roadmap |
 | OpenAI Responses API | **Not built** | Phase 2 roadmap |
 
@@ -258,7 +258,9 @@ real node executions rather than compiled graph nodes.
 | `vault_path_prefix` | `str \| None` | Per-request digivault path prefix (`X-Digi-Vault-Prefix` / tenant map); same unconditional-None write as `digisearch_index`. |
 | `research_system_prompt_override` | `str \| None` | Optional research system prompt from tenant corpus map; same unconditional-None write as `digisearch_index`. |
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`). **Must** be declared — LangGraph drops undeclared keys. See `digigraph.languages`. |
-| `force_tool` | `str \| None` | Per-request locate tool to inject with the user string as its query (`X-Digi-Force-Tool`; aliases `search`/`digisearch`, `docs`/`digivault`). **Must** be declared. Resolved by `digigraph.retrieval.resolve_force_tool`. |
+| `force_tool` | `str \| None` | Per-request locate tool to inject with the user string as its query (`X-Digi-Force-Tool`; aliases `search`/`digisearch`, `docs`/`digivault`). Extra operator MCP **server ids** are accepted too: those hint the model with `tool_choice="required"` rather than injecting a locate. **Must** be declared. |
+| `mcp_servers` | `list[dict]` | Operator Streamable HTTP MCP `{id, url}` pairs (`X-Digi-Mcp-Servers`). **Must** be declared. Always overwritten from the BFF header (empty list clears a prior tenant). URLs never come from an untrusted JSON body. |
+| `disabled_tools` | `list[str] \| None` | Catalog ids to hide this turn (`X-Digi-Disabled-Tools`), including extra MCP server ids. **Must** be declared. |
 | `supervisor_depth_remaining` | `int` | Depth budget for supervisor loop |
 | `supervisor_route` | `str \| None` | Next route chosen by supervisor |
 | `_compaction_event` | `dict \| None` | Lean two-tier compaction event (#399); originals in session workspace. **Must** be declared — LangGraph drops undeclared keys. |
@@ -282,8 +284,9 @@ Pydantic v2 model for `POST /workflow` and internal use:
 | `digi_trace_key_prefix` / `digi_trace_tenant` / `digi_trace_project_id` / `digi_trace_jti` | `str \| None` | digikey audit fields |
 | `evidence_tier_preference` | `list[str] \| None` | Evidence tier filter |
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`); see 4.1 |
-| `force_tool` | `str \| None` | Optional locate tool to inject (`X-Digi-Force-Tool`); aliases `search`/`digisearch`, `docs`/`digivault`. The model is not hinted — see 5.2 |
-| `disabled_tools` | `list[str] \| None` | Catalog ids to hide this turn (`X-Digi-Disabled-Tools`). Allowlisted aliases only (digisearch, digivault); unknown tokens ignored. Applied after the allowlist, then `force_tool` is unioned back so `/search` still locates when the toggle is off. |
+| `force_tool` | `str \| None` | Optional locate tool (`X-Digi-Force-Tool`); aliases `search`/`digisearch`, `docs`/`digivault`. Catalog locate is injected (the model is not hinted). Extra operator MCP server ids hint + `tool_choice="required"` instead. |
+| `disabled_tools` | `list[str] \| None` | Catalog ids to hide this turn (`X-Digi-Disabled-Tools`). Built-in aliases (digisearch, digivault) plus extra operator MCP server ids. Unknown tokens ignored. Always overwritten from the header on HTTP. Applied after the allowlist; `force_tool` is unioned back so a one-shot `/digisearch <query>` still locates when the toggle is off. |
+| `mcp_servers` | `list[McpServerRef] \| None` | Operator Streamable HTTP MCP servers (`X-Digi-Mcp-Servers`). Client-writable on the model but **never trusted as-is**: HTTP handlers overwrite from the BFF header (and `DIGI_MCP_SERVERS` env). Empty list clears a prior tenant. |
 | `enable_web_search` | `bool` | Opt-in `web_search` (`X-Digi-Enable-Web-Search`); default off at this API. Embed sessions send it when the tenant allows and the session pref is on. |
 | `digi_subject` | `str \| None` | Client-writable, but never trusted as-is: `server.py`'s `_digi_fields_from_request` unconditionally overwrites it with the verified `auth.subject` (or clears it to `None` when auth is absent or its subject claim is empty) before it reaches graph state — see §6.10 |
 
@@ -443,7 +446,7 @@ START
                                                                └─ optimize enabled → optimize → END
 ```
 
-Retrieval is model-driven by default: `research_node` (document RAG path) hands the full tool set to `run_tools` with a `max_tool_rounds=4` budget and lets the model decide whether and when to call `digisearch` / `digivault_search_notes`. After a locate, `auto_load_notes` (`retrieval.py`) calls `digivault_get_note` (batch ≤20 vault paths) so the model synthesizes from full notes instead of asking permission to read what it already found. `RagSourceItem.body` is stamped only on get_note (`include_body=True`, cap `MAX_RAG_SOURCE_BODY_CHARS`) and overlaid onto duplicate locate keys in `merge_loaded_notes` / `merge_rag_sources_accumulator`; WorkflowState strips `body` before checkpoint so the pane reads the stream, not graph state. Slash `/search` and `/docs` on the public embed set `force_tool` / `X-Digi-Force-Tool`: `last_user_turn()` (`chat_prompt.py`) extracts the current user string from the flattened `User:` / `Assistant:` transcript so the tool `query` is that turn, not the whole history. The locate is injected *before* the LLM turn **only when** `allowed_tool_names` is unrestricted (`None`) or includes the resolved tool — otherwise tenants with an allowlist would still get a started `tool_call` / Searching… row and a deny blob in `force_tool_messages` even though `execute()` would refuse the call. Then `run_tools` synthesizes with `tool_choice="auto"` (even when `require_tool_calls` is set). `agents.always_retrieve_tools` is dead configuration — `DigiProjectConfig.get_always_retrieve_tools()` still exists and still parses the key, but nothing calls it, since the prefetch it used to gate was removed. All shipped `digiproject.yaml` files have had the key dropped. If the model calls no tools (and no force-tool ran), `run_tools` runs a single streamed completion (no tool rounds). **`max_tool_rounds=4` bounds tool-calling rounds, not completions outright**: `digillm.client.run_tools` (`digillm/src/digillm/client.py:2138-2147`) fires one additional tool-free completion when the round budget is exhausted and the model still hasn't produced final content, so a fully-exhausted budget costs up to **5** completions, not 4.
+Retrieval is model-driven by default: `research_node` (document RAG path) hands the full tool set to `run_tools` with a `max_tool_rounds=4` budget and lets the model decide whether and when to call `digisearch` / `digivault_search_notes`. After a locate, `auto_load_notes` (`retrieval.py`) calls `digivault_get_note` (batch ≤20 vault paths) so the model synthesizes from full notes instead of asking permission to read what it already found. `RagSourceItem.body` is stamped only on get_note (`include_body=True`, cap `MAX_RAG_SOURCE_BODY_CHARS`) and overlaid onto duplicate locate keys in `merge_loaded_notes` / `merge_rag_sources_accumulator`; WorkflowState strips `body` before checkpoint so the pane reads the stream, not graph state. Slash `/digisearch` and `/digivault` on the public embed set `force_tool` / `X-Digi-Force-Tool`: `last_user_turn()` (`chat_prompt.py`) extracts the current user string from the flattened `User:` / `Assistant:` transcript so the tool `query` is that turn, not the whole history. The locate is injected *before* the LLM turn **only when** `allowed_tool_names` is unrestricted (`None`) or includes the resolved tool — otherwise tenants with an allowlist would still get a started `tool_call` / Searching… row and a deny blob in `force_tool_messages` even though `execute()` would refuse the call. Extra operator MCP server ids (`X-Digi-Mcp-Servers`) are **not** injected: `research_node` prepends a user hint and sets `tool_choice="required"` so the model must call `{id}__*` tools. Then `run_tools` synthesizes with `tool_choice="auto"` after a catalog locate (even when `require_tool_calls` is set). `agents.always_retrieve_tools` is dead configuration — `DigiProjectConfig.get_always_retrieve_tools()` still exists and still parses the key, but nothing calls it, since the prefetch it used to gate was removed. All shipped `digiproject.yaml` files have had the key dropped. If the model calls no tools (and no force-tool ran), `run_tools` runs a single streamed completion (no tool rounds). **`max_tool_rounds=4` bounds tool-calling rounds, not completions outright**: `digillm.client.run_tools` (`digillm/src/digillm/client.py:2138-2147`) fires one additional tool-free completion when the round budget is exhausted and the model still hasn't produced final content, so a fully-exhausted budget costs up to **5** completions, not 4.
 
 `agents.research_brief` (default `true`; env `DIGI_RESEARCH_BRIEF=0/1` overrides) controls whether `build_research_subgraph()` wires `research_brief_builder` after `research_inner`. When false, the subgraph ends when the answer stream completes — dogfood chat uses this to avoid a post-answer `completion_text` latency tax.
 
@@ -619,9 +622,15 @@ An allowlist of `[]` (empty list) blocks all tools, forcing research-only mode. 
 coerced to unrestricted by a falsy check.
 
 `WorkflowRequest.disabled_tools` (`X-Digi-Disabled-Tools`) then subtracts catalog
-search/vault aliases. Unknown tokens are ignored. If `force_tool` is set, that
-locate tool is unioned back so a one-shot `/search <query>` still runs when the
-session toggle is off.
+search/vault aliases **and** extra operator MCP server ids (`id` and `id__*`).
+Unknown tokens are ignored. If `force_tool` is set, that locate / MCP id is
+unioned back so a one-shot `/digisearch <query>` still runs when the session
+toggle is off.
+
+Operator MCP tools are listed from Streamable HTTP servers declared by the
+trusted BFF (`X-Digi-Mcp-Servers`, optionally merged with `DIGI_MCP_SERVERS`).
+Names are prefixed `{server_id}__{tool}`. Arbitrary user-add remains opt-in on
+the digichat client (`mcp.allowUserServers`) and never supplies URLs to this API.
 
 #### 6.2.1 Tool Choice Requirement
 
@@ -1042,7 +1051,7 @@ The following are explicitly documented as roadmap items:
 | Feature | Gap | Current Workaround |
 |---------|-----|-------------------|
 | **Graphiti graph memory** | Not implemented; `ARCHITECTURE.md` describes Neo4j + Graphiti for temporal strategy memory | Strategies are not persisted between conversations |
-| **Remote MCP enumeration** | digigraph cannot discover or integrate arbitrary third-party MCP servers | Only in-process registry + digisearch/digiquant vertical HTTP |
+| **Remote MCP enumeration** | Arbitrary visitor-added MCP URLs are not accepted on this API | Operator YAML + `X-Digi-Mcp-Servers` (SSRF-guarded). Personal browser MCP is opt-in on digichat (`allowUserServers`) and never forwarded here |
 | **OpenAI Responses API** | Not implemented; Chat Completions is the only LLM protocol | LiteLLM `/v1/responses` compatibility noted as future path |
 | **Distributed checkpoints** | MemorySaver/SQLite are single-node; Postgres has no advisory locks | Single digigraph instance |
 | **Per-user RBAC** | JWT subject not bound to checkpoint or tool access | Shared `thread_id` namespace; allowlists are per-request not per-user |

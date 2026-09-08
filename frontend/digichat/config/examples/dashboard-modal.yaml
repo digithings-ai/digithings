@@ -34,7 +34,12 @@ deployment:
     toolCalls: true
     sources: true
     branchPicker: true
-    modelPicker: false
+    modelPicker: true
+  models:
+    default: openai/gpt-oss-20b:free
+    available:
+      - openai/gpt-oss-20b:free
+    allowPicker: true
   backend:
     type: digigraph
   tools:
@@ -46,6 +51,9 @@ deployment:
         default: true
       - id: web_search
         default: true
+  mcp:
+    allowUserServers: false
+    allowAddForm: false
   gate:
     mode: ungated
     activityDetail: labels
