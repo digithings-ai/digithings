@@ -9,6 +9,7 @@ import { useCallback, useMemo, type FormEvent } from "react";
 import {
   unstable_useSlashCommandAdapter,
   useAui,
+  type Unstable_TriggerItem,
 } from "@assistant-ui/react";
 import {
   Copy,
@@ -28,7 +29,6 @@ import {
   downloadMarkdown,
   serializeAssistantMarkdown,
   serializeThreadMarkdown,
-  slashHelpText,
   type TranscriptTurn,
 } from "@digithings/digichat-ui";
 import { DigichatThread } from "@digithings/web/chat/thread";
@@ -38,10 +38,10 @@ import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
 import {
   buildProductSlashCommands,
   executeSlashDef,
+  slashItemPrefixMatch,
   slashSubmitAction,
-  visibilityFromPrefs,
 } from "@/lib/product-slash-commands";
-import { setPendingForceTool } from "@/lib/pending-chat-headers";
+import { armForceToolThenHold, setPendingForceTool } from "@/lib/pending-chat-headers";
 
 const SLASH_ICON_MAP = {
   Globe,
@@ -104,14 +104,6 @@ export function DigichatSkin() {
     return buildProductSlashCommands(slashPrefs).map((c) => {
       if (c.id === "copy") return { ...c, execute: copyExport.copy };
       if (c.id === "export") return { ...c, execute: copyExport.exportThread };
-      if (c.id === "help") {
-        return {
-          ...c,
-          execute: () => {
-            aui.composer.setText(slashHelpText(visibilityFromPrefs(slashPrefs)));
-          },
-        };
-      }
       if (c.id === "search") {
         return {
           ...c,
@@ -138,6 +130,24 @@ export function DigichatSkin() {
     iconMap: SLASH_ICON_MAP,
     fallbackIcon: Slash,
   });
+  const slashTrigger = useMemo(() => {
+    const inner = slash.adapter;
+    return {
+      ...slash,
+      adapter: {
+        ...inner,
+        search: (query: string) => {
+          const raw = inner.search(query);
+          const keep = (items: Unstable_TriggerItem[]) =>
+            items.filter((item) => slashItemPrefixMatch(item, query));
+          if (raw != null && typeof (raw as Promise<Unstable_TriggerItem[]>).then === "function") {
+            return Promise.resolve(raw).then(keep);
+          }
+          return keep((raw ?? []) as Unstable_TriggerItem[]);
+        },
+      },
+    };
+  }, [slash]);
 
   const onComposerSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
@@ -153,7 +163,9 @@ export function DigichatSkin() {
           if (gate?.shouldHold(action.text)) {
             aui.composer.setText("");
             void aui.composer.clearAttachments();
-            gate.onHold(action.text);
+            armForceToolThenHold(slashPrefs.sessionKey, action.forceTool, () => {
+              gate.onHold(action.text);
+            });
             return;
           }
           setPendingForceTool(slashPrefs.sessionKey, action.forceTool);
@@ -166,10 +178,7 @@ export function DigichatSkin() {
           event.preventDefault();
           if (action.command.id === "copy") copyExport.copy();
           else if (action.command.id === "export") copyExport.exportThread();
-          else if (action.command.id === "help") {
-            aui.composer.setText(slashHelpText(visibilityFromPrefs(slashPrefs)));
-            return;
-          } else executeSlashDef(action.command, action.arg, slashPrefs);
+          else executeSlashDef(action.command, action.arg, slashPrefs);
           aui.composer.setText("");
           return;
         }
@@ -186,7 +195,7 @@ export function DigichatSkin() {
       placeholder={placeholder}
       onComposerSubmit={onComposerSubmit}
       composerLayout={mode === "app" ? "expanded" : "compact"}
-      slash={enableSlash ? slash : undefined}
+      slash={enableSlash ? slashTrigger : undefined}
     />
   );
 }

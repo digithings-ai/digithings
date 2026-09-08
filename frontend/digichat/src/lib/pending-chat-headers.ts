@@ -43,3 +43,13 @@ export function takePendingTurnMode(key: string): PendingMutatingTurn | undefine
   pendingTurnModeByKey.delete(id);
   return mode;
 }
+
+/** Set send-only force-tool before a gated `onHold` that takes it. */
+export function armForceToolThenHold(
+  key: string,
+  tool: string,
+  onHold: () => void,
+): void {
+  setPendingForceTool(key, tool);
+  onHold();
+}

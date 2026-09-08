@@ -32,6 +32,9 @@ export function catalogForceTool(forceTool: string | undefined): string | undefi
 }
 
 export function slashSubmitAction(raw: string): SlashSubmitAction {
+  if (raw.includes("\n") && raw.trim().startsWith("/")) {
+    return { kind: "block" };
+  }
   const parsed = parseSlashInput(raw);
   if (parsed.kind === "none") return { kind: "pass" };
   if (parsed.kind === "unknown") return { kind: "block" };
@@ -95,7 +98,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       description = `Reply language (${languageLabel(prefs.language)})`;
     }
 
-    const id = def.names[0].replace(/^\//, "");
+    const id = def.id === "lang" ? "language" : def.id;
     rows.push({
       id,
       label: def.names[0],
@@ -186,4 +189,16 @@ export function languageSelectOptions(): { value: string; label: string }[] {
     label: l.label,
   }));
   return [...head, ...rest];
+}
+
+/** Prefix-match popover rows so `/search` does not highlight `/digisearch`. */
+export function slashItemPrefixMatch(
+  item: { id: string; label?: string },
+  query: string,
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  if (item.id.toLowerCase().startsWith(q)) return true;
+  const label = (item.label ?? "").replace(/^\//, "").toLowerCase();
+  return label.startsWith(q);
 }

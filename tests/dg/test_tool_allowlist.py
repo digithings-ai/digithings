@@ -350,3 +350,12 @@ def test_force_tool_wins_over_disabled_tools() -> None:
     assert "digivault_search_notes" in names
     assert "digivault_get_note" not in names
     assert "digisearch" in names
+
+
+@pytest.mark.unit
+def test_disabled_tools_subtracts_after_env_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DIGI_ALLOWED_TOOLS", "digisearch,digivault_search_notes")
+    req = WorkflowRequest(prompt="hi", disabled_tools=["digisearch"])
+    names = allowed_tool_names_for_workflow(req, cfg=DigiProjectConfig({"agents": {}}))
+    assert names == frozenset({"digivault_search_notes"})
+    assert "visualization_agent" not in names

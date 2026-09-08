@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseSlashInput } from "@digithings/digichat-ui";
+import { parseSlashInput, slashHelpText } from "@digithings/digichat-ui";
 import { DEFAULT_EMBED_CHAT_PREFS, type EmbedChatPrefsApi } from "@/components/stock/embed-chat-prefs";
 import {
   buildProductSlashCommands,
   catalogForceTool,
   executeSlashDef,
+  slashItemPrefixMatch,
   slashSubmitAction,
 } from "./product-slash-commands";
 
@@ -61,6 +62,17 @@ describe("slashSubmitAction", () => {
   it("blocks unknown slash lines instead of sending them", () => {
     expect(slashSubmitAction("/not-a-command")).toEqual({ kind: "block" });
   });
+
+  it("does not treat a slashHelpText dump as /digisearch", () => {
+    const help = slashHelpText({
+      webSearch: true,
+      byok: true,
+      digisearch: true,
+      digivault: true,
+    });
+    expect(help.startsWith("/digisearch")).toBe(true);
+    expect(slashSubmitAction(help)).toEqual({ kind: "block" });
+  });
 });
 
 describe("catalogForceTool", () => {
@@ -75,7 +87,7 @@ describe("buildProductSlashCommands", () => {
     const cmds = buildProductSlashCommands(api());
     const ids = cmds.map((c) => c.id);
     expect(ids).toContain("websearch");
-    expect(ids).toContain("digisearch");
+    expect(ids).toContain("toggle-digisearch");
     expect(ids).toContain("search");
     expect(ids).toContain("dutch");
     expect(ids).toContain("language");
@@ -94,6 +106,18 @@ describe("buildProductSlashCommands", () => {
   });
 });
 
+describe("slashItemPrefixMatch", () => {
+  it("does not treat /search as a match for /digisearch", () => {
+    expect(slashItemPrefixMatch({ id: "search", label: "/search" }, "search")).toBe(true);
+    expect(
+      slashItemPrefixMatch({ id: "toggle-digisearch", label: "/digisearch" }, "search"),
+    ).toBe(false);
+    expect(
+      slashItemPrefixMatch({ id: "toggle-digisearch", label: "/digisearch" }, "digi"),
+    ).toBe(true);
+  });
+});
+
 describe("executeSlashDef", () => {
   it("resets prefs and starts a new thread on /new", () => {
     const a = api();
@@ -101,5 +125,13 @@ describe("executeSlashDef", () => {
     executeSlashDef(def, "", a);
     expect(a.reset).toHaveBeenCalledOnce();
     expect(a.newThread).toHaveBeenCalledOnce();
+  });
+
+  it("does not toggle tools on /help (skin inserts the help text)", () => {
+    const a = api();
+    const def = { id: "help" as const, names: ["/help"], needsArg: false, hint: "" };
+    executeSlashDef(def, "", a);
+    expect(a.openSettings).not.toHaveBeenCalled();
+    expect(a.setDigisearch).not.toHaveBeenCalled();
   });
 });

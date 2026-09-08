@@ -49,40 +49,16 @@ def _resolve_openwebui_format(req: ChatCompletionRequest, request: Request) -> b
     return bool(getattr(req, "openwebui_format", False))
 
 
-def _resolve_disabled_tools_chat(request: Request) -> frozenset[str]:
-    """Catalog tools the embed session turned off (X-Digi-Disabled-Tools). Fail closed."""
-    from digigraph.tool_policy import expand_disabled_tool_tokens
-
-    h = (request.headers.get("X-Digi-Disabled-Tools") or "").strip()
-    if not h:
-        return frozenset()
-    return expand_disabled_tool_tokens([p.strip() for p in h.split(",") if p.strip()])
-
-
 def _resolve_allowed_tools_chat(req: ChatCompletionRequest, request: Request) -> list[str] | None:
     """Tool allowlist from JSON body or X-Allowed-Tools header. None = use project config / DIGI_ALLOWED_TOOLS.
 
-    X-Digi-Disabled-Tools subtracts search/vault (and aliases) from that set (#3733).
+    Session disables travel as WorkflowRequest.disabled_tools (X-Digi-Disabled-Tools),
+    applied *after* that allowlist in tool_policy so they cannot escalate past DIGI_ALLOWED_TOOLS.
     """
     if req.allowed_tools is not None:
-        allowed: list[str] | None = req.allowed_tools
-    else:
-        h = (request.headers.get("X-Allowed-Tools") or "").strip()
-        allowed = [p.strip() for p in h.split(",") if p.strip()] if h else None
-    disabled = _resolve_disabled_tools_chat(request)
-    forced = _resolve_force_tool_chat(req, request)
-    if forced:
-        disabled = frozenset(n for n in disabled if n != forced)
-    if not disabled:
-        return allowed
-    from digigraph.orchestration import builtin  # noqa: F401 — register tools
-    from digigraph.tool_policy import apply_disabled_tools
-
-    base = frozenset(allowed) if allowed is not None else None
-    reduced = apply_disabled_tools(base, disabled)
-    if reduced is None:
-        return None
-    return sorted(reduced)
+        return req.allowed_tools
+    h = (request.headers.get("X-Allowed-Tools") or "").strip()
+    return [p.strip() for p in h.split(",") if p.strip()] if h else None
 
 
 def _resolve_require_tool_calls_chat(req: ChatCompletionRequest, request: Request) -> bool | None:
