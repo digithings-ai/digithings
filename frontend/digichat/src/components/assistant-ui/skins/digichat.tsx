@@ -6,11 +6,7 @@ import "@digithings/web/styles/chat-aui.css";
 import "@digithings/web/styles/chatbot.css";
 
 import { useCallback, useMemo, type FormEvent } from "react";
-import {
-  unstable_useSlashCommandAdapter,
-  useAui,
-  type Unstable_TriggerItem,
-} from "@assistant-ui/react";
+import { unstable_useSlashCommandAdapter, useAui } from "@assistant-ui/react";
 import {
   Copy,
   Download,
@@ -31,7 +27,7 @@ import {
   serializeThreadMarkdown,
   type TranscriptTurn,
 } from "@digithings/digichat-ui";
-import { DigichatThread } from "@digithings/web/chat/thread";
+import { DigichatThread, type ThreadSlashTrigger } from "@digithings/web/chat/thread";
 import { useComposerCopy, useSkinChrome } from "@/components/stock/skin-chrome";
 import { useStockComposerGateSubmit, useStockSendGate } from "@/components/stock/stock-send-gate";
 import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
@@ -130,31 +126,18 @@ export function DigichatSkin() {
     iconMap: SLASH_ICON_MAP,
     fallbackIcon: Slash,
   });
-  const slashTrigger = useMemo(() => {
+  const slashTrigger = useMemo((): ThreadSlashTrigger => {
     const inner = slash.adapter;
     return {
-      ...slash,
       adapter: {
         ...inner,
         search: (query: string) => {
-          const searchFn = inner.search;
-          if (typeof searchFn !== "function") return [];
-          const raw: unknown = searchFn(query);
-          const keep = (items: readonly Unstable_TriggerItem[]) =>
-            items.filter((item) => slashItemPrefixMatch(item, query));
-          if (
-            raw !== null &&
-            typeof raw === "object" &&
-            "then" in raw &&
-            typeof (raw as PromiseLike<readonly Unstable_TriggerItem[]>).then === "function"
-          ) {
-            return Promise.resolve(raw as PromiseLike<readonly Unstable_TriggerItem[]>).then(
-              keep,
-            );
-          }
-          return keep(Array.isArray(raw) ? raw : []);
+          const raw = inner.search?.(query) ?? [];
+          return raw.filter((item) => slashItemPrefixMatch(item, query));
         },
       },
+      action: slash.action,
+      iconMap: slash.iconMap,
     };
   }, [slash]);
 
