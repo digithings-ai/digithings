@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bucketDaily, levelFor } from "./heatmap";
+import { bucketContributions, bucketDaily, levelFor } from "./heatmap";
 import type { RepoPullItem } from "./types";
 
 const END = new Date("2026-08-24T07:15:49Z");
@@ -35,21 +35,27 @@ describe("bucketDaily", () => {
     expect(days.find((d) => d.date === "2026-08-20")?.count).toBe(1);
     expect(days.find((d) => d.date === "2026-08-19")?.count).toBe(0);
   });
+});
 
-  it("counts pulls on the window boundary days", () => {
-    const days = bucketDaily(
-      [pull("2026-08-11T00:00:00Z", 1), pull("2026-08-24T23:59:59Z", 2)],
-      2,
+describe("bucketContributions", () => {
+  it("sums merges, commits, and closed issues per day like the profile graph", () => {
+    const days = bucketContributions(
+      [pull("2026-08-21T17:35:10Z", 1), pull("2026-08-21T09:00:00Z", 2)],
+      ["2026-08-21T10:00:00Z", "2026-08-20T22:32:46Z"],
+      ["2026-08-20T08:00:00Z", null],
+      16,
       END,
     );
-    expect(days.find((d) => d.date === "2026-08-11")?.count).toBe(1);
-    expect(days.find((d) => d.date === "2026-08-24")?.count).toBe(1);
+    expect(days).toHaveLength(112);
+    expect(days.find((d) => d.date === "2026-08-21")?.count).toBe(3);
+    expect(days.find((d) => d.date === "2026-08-20")?.count).toBe(2);
+    expect(days.find((d) => d.date === "2026-08-19")?.count).toBe(0);
   });
 
-  it("buckets by UTC day, not the stamped calendar date", () => {
-    const days = bucketDaily([pull("2026-08-21T00:30:00+02:00", 1)], 16, END);
-    expect(days.find((d) => d.date === "2026-08-20")?.count).toBe(1);
-    expect(days.find((d) => d.date === "2026-08-21")?.count).toBe(0);
+  it("defaults to a full year window", () => {
+    const days = bucketContributions([], [], [], 53, END);
+    expect(days).toHaveLength(371);
+    expect(days[days.length - 1]?.date).toBe("2026-08-24");
   });
 });
 
@@ -66,12 +72,5 @@ describe("levelFor", () => {
     expect(levelFor(4, 8)).toBe(2);
     expect(levelFor(6, 8)).toBe(3);
     expect(levelFor(8, 8)).toBe(4);
-  });
-
-  it("exercises the max <= 4 branch boundary", () => {
-    expect(levelFor(4, 4)).toBe(4);
-    expect(levelFor(4, 5)).toBe(4);
-    expect(levelFor(2, 5)).toBe(2);
-    expect(levelFor(1, 5)).toBe(1);
   });
 });

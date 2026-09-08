@@ -44,12 +44,13 @@ export function RepoActivityReference() {
         contributingUrl={REPO_ACTIVITY_DEMO_CONTRIBUTING}
       />
 
-      <p className="kicker ra-specimen-kicker ra-specimen-kicker-next">{"// merge heat"}</p>
+      <p className="kicker ra-specimen-kicker ra-specimen-kicker-next">{"// contributions"}</p>
       <p className="section-copy">
-        The heat element alone: sixteen weeks of merged PRs as perfect squares — no radius, no
-        borders — empty track to full accent in stepped mixes. Weeks run oldest left.
+        The heat element alone: a full year of contributions as small perfect squares — no radius,
+        no borders, no gradients — empty track to full accent in categorical steps. Weeks run
+        oldest left.
       </p>
-      <RepoHeatmap pulls={REPO_ACTIVITY_DEMO.mergedPulls} weeks={16} />
+      <RepoHeatmap pulls={REPO_ACTIVITY_DEMO.mergedPulls} weeks={53} />
     </section>
   );
 }

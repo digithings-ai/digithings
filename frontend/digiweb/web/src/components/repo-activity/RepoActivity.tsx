@@ -178,8 +178,12 @@ function Detailed({
         </ul>
       </div>
       <div className="ra-group">
-        <p className="ra-kicker">{"// merge heat — last 16 weeks"}</p>
-        <RepoHeatmap pulls={data.mergedPulls} weeks={16} />
+        <p className="ra-kicker">{"// contributions — last year"}</p>
+        <RepoHeatmap
+          pulls={data.mergedPulls}
+          data={data.dailyContributions}
+          weeks={53}
+        />
       </div>
       <div className="ra-meta">
         <ReleaseLink release={data.latestRelease} />
