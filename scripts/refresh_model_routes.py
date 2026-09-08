@@ -58,43 +58,6 @@ def _as_float(value: Any) -> float | None:
     return parsed
 
 
-def normalize_openrouter_models(payload: Mapping[str, Any]) -> list[ModelRoute]:
-    """Normalize an OpenRouter ``GET /api/v1/models`` payload to routes."""
-    data = payload.get("data")
-    if not isinstance(data, list):
-        return []
-    routes: list[ModelRoute] = []
-    for entry in data:
-        if not isinstance(entry, Mapping):
-            continue
-        model_id = entry.get("id")
-        pricing = entry.get("pricing")
-        if not model_id or not isinstance(pricing, Mapping):
-            continue
-        prompt_price = _as_float(pricing.get("prompt"))
-        completion_price = _as_float(pricing.get("completion"))
-        if prompt_price is None or completion_price is None:
-            continue
-        try:
-            context_length = int(entry.get("context_length") or 0)
-        except (TypeError, ValueError):
-            continue
-        supported = entry.get("supported_parameters") or []
-        parameters = set(supported) if isinstance(supported, list) else set()
-        routes.append(
-            ModelRoute(
-                provider="openrouter",
-                model=str(model_id),
-                prompt_price=prompt_price,
-                completion_price=completion_price,
-                context_length=context_length,
-                supports_tools="tools" in parameters,
-                supports_structured_output="structured_outputs" in parameters,
-            )
-        )
-    return routes
-
-
 def select_cheapest_tool_capable(routes: list[ModelRoute], min_context: int = 64000) -> ModelRoute:
     """Select the cheapest tool-capable route meeting the context floor."""
     eligible = [
@@ -205,18 +168,6 @@ def normalize_fireworks_models(payload: Mapping[str, Any]) -> list[ModelRoute]:
     return routes
 
 
-_NORMALIZERS = {
-    "openrouter": normalize_openrouter_models,
-    "litellm": lambda payload: normalize_id_list(payload, provider="litellm"),
-    "cheaperinference": lambda payload: normalize_id_list(payload, provider="cheaperinference"),
-    "deepseek": lambda payload: normalize_id_list(payload, provider="deepseek"),
-    "groq": lambda payload: normalize_id_list(payload, provider="groq"),
-    "together": lambda payload: normalize_id_list(payload, provider="together"),
-    "fireworks": normalize_fireworks_models,
-    "ollama": lambda payload: normalize_ollama_tags(payload, provider="ollama"),
-    "ollama-cloud": lambda payload: normalize_ollama_tags(payload, provider="ollama-cloud"),
-}
-
 _OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 _MODELS_DEV_CATALOG_URL = "https://models.dev/catalog.json"
 
@@ -226,7 +177,6 @@ _MODELS_DEV_PROVIDER_ALIASES = {
     "fireworks-ai": "fireworks",
 }
 
-_LIVE_FETCHERS = ("litellm", "cheaperinference", "deepseek", "groq", "together")
 _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 _DEEPSEEK_API_BASE = "https://api.deepseek.com"
 _GROQ_API_BASE = "https://api.groq.com/openai/v1"
@@ -366,31 +316,6 @@ def build_catalog_snapshot(
         "source": "models.dev catalog + live provider lists",
         "routes": [asdict(route) for route in routes],
         "live": {provider: sorted(ids) for provider, ids in live.items()},
-        "cheapest": asdict(cheapest) if cheapest is not None else None,
-    }
-
-
-def build_snapshot(
-    provider_payloads: Mapping[str, Mapping[str, Any]],
-    min_context: int = 64000,
-    generated_at: str | None = None,
-) -> dict[str, Any]:
-    """Build a snapshot dict from already-fetched provider list payloads."""
-    routes: list[ModelRoute] = []
-    for provider, payload in provider_payloads.items():
-        normalizer = _NORMALIZERS.get(provider)
-        if normalizer is None:
-            continue
-        routes.extend(normalizer(payload))
-    try:
-        cheapest = select_cheapest_tool_capable(routes, min_context=min_context)
-    except ValueError:
-        cheapest = None
-    return {
-        "generated_at": generated_at or datetime.now(timezone.utc).isoformat(),
-        "providers": sorted(provider_payloads),
-        "min_context": min_context,
-        "routes": [asdict(route) for route in routes],
         "cheapest": asdict(cheapest) if cheapest is not None else None,
     }
 

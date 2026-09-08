@@ -33,23 +33,6 @@ def test_only_configured_providers_are_queried(monkeypatch: pytest.MonkeyPatch) 
     assert "groq" not in providers
 
 
-def test_openrouter_normalization_marks_tool_support() -> None:
-    mod = _load()
-    payload = {
-        "data": [
-            {
-                "id": "deepseek/deepseek-v4-flash",
-                "context_length": 1000000,
-                "pricing": {"prompt": "0.00000027", "completion": "0.0000011"},
-                "supported_parameters": ["tools", "structured_outputs"],
-            }
-        ]
-    }
-    routes = mod.normalize_openrouter_models(payload)
-    assert routes[0].supports_tools is True
-    assert routes[0].context_length == 1000000
-
-
 def test_cheapest_tool_capable_route_wins() -> None:
     mod = _load()
     routes = [
@@ -73,31 +56,6 @@ def test_cheapest_tool_capable_route_wins() -> None:
         ),
     ]
     assert mod.select_cheapest_tool_capable(routes, min_context=64000).model == "cheap/tool-model"
-
-
-def test_build_snapshot_selects_cheapest_route() -> None:
-    mod = _load()
-    payloads = {
-        "openrouter": {
-            "data": [
-                {
-                    "id": "expensive/tool-model",
-                    "context_length": 200000,
-                    "pricing": {"prompt": 0.01, "completion": 0.03},
-                    "supported_parameters": ["tools", "structured_outputs"],
-                },
-                {
-                    "id": "cheap/tool-model",
-                    "context_length": 1000000,
-                    "pricing": {"prompt": 0.00000027, "completion": 0.0000011},
-                    "supported_parameters": ["tools", "structured_outputs"],
-                },
-            ]
-        }
-    }
-    snapshot = mod.build_snapshot(payloads, min_context=64000)
-    assert snapshot["providers"] == ["openrouter"]
-    assert snapshot["cheapest"]["model"] == "cheap/tool-model"
 
 
 def test_write_snapshot_creates_json(tmp_path: Path) -> None:
