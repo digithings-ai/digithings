@@ -57,18 +57,18 @@ afterEach(() => {
 });
 
 describe("DigichatThread", () => {
-  it("left-aligns the terminal pane with a > composer glyph", async () => {
+  it("left-aligns the gallery Thread pane", async () => {
     const { host, unmount } = await mount();
     const thread = host.querySelector(".digichat-thread");
     expect(thread).toBeTruthy();
     expect(thread?.getAttribute("data-user-align")).toBe("left");
+    expect(host.querySelector(".aui-root")).toBeTruthy();
     expect(host.textContent).toContain("inspect this");
-    expect(host.textContent).toContain(">");
     expect(host.querySelector('[aria-label="Message"]')).toBeTruthy();
     unmount();
   });
 
-  it("docks welcome and > examples in the footer above the composer", async () => {
+  it("docks welcome and example cubes in the footer above the composer", async () => {
     const { host, unmount } = await mount([
       "Scoped to the tools and data in this deployment.",
     ]);
@@ -83,7 +83,7 @@ describe("DigichatThread", () => {
     expect(footer?.textContent).toContain("run a backtest");
     expect(host.querySelector(".aui-composer-input")).toBeTruthy();
     expect(host.querySelector('[data-slot="aui_composer-shell"]')).toBeTruthy();
-    expect(getComputedStyle(host.querySelector(".aui-composer-input")!).borderRadius).toBeDefined();
+    expect(host.querySelector('[data-state="example"]')).toBeTruthy();
     expect(host.textContent).not.toContain("// digichat");
     expect(host.querySelector(".digichat-chip")).toBeNull();
     const footerHtml = footer?.innerHTML ?? "";
