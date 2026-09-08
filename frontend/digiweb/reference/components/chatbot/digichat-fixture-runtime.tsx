@@ -120,7 +120,7 @@ function toSuggestionConfig(item: WelcomeSuggestion): SuggestionConfig {
   return { title: item.title, label: item.label ?? "", prompt: item.prompt };
 }
 
-/** Opt-in welcome starters. Empty = no chips (default template). */
+/** Opt-in welcome starters. Empty = no `>` example list. */
 const DEFAULT_CHIPS: readonly WelcomeSuggestion[] = [];
 
 const subscribe = () => () => {};

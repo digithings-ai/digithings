@@ -1,10 +1,7 @@
-/* Chatbot gallery — official assistant-ui Thread, themed through CSS
-   variables. Increment 1: radius 0, monochrome (ink on canvas). */
+/* Chatbot gallery + product `chrome.skin: digichat`.
+   Grammar is shared. The specimen frame (height/border) is gallery-only. */
 
 .aui-theme-stage {
-  --accent: var(--ink);
-  --on-accent: var(--bg);
-  --radius: 0;
   height: min(72vh, 46rem);
   margin-top: 1.3rem;
   overflow: hidden;
@@ -16,26 +13,39 @@
   height: 100%;
 }
 
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) {
+  --accent: var(--ink);
+  --on-accent: var(--bg);
+  --radius: 0;
+  --composer-radius: 0;
+}
+
 /* Registry Thread uses rounded-full / rounded-xl on chips, bubbles, send.
-   Flatten inside the stage only — do not fork those class names yet. */
-.aui-theme-stage .aui-root,
-.aui-theme-stage .aui-root * {
+   Flatten the official Thread and the product skin — not the 11 catalog ids. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-root,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-root *,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .digichat-thread,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .digichat-thread * {
   border-radius: 0;
 }
 
-/* Increment 2 — welcome slot. Left-aligned, config-driven title + body. */
-.aui-theme-stage .aui-thread-welcome-root {
+/* Increment 2 — welcome slot. Official `components.Welcome` in the footer,
+   immediately above the composer. Left-aligned title + body. Optional `>`
+   example list — not chips, not a top-of-thread empty state. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-root {
   align-items: flex-start;
+  margin: 0;
+  padding: 0;
   text-align: left;
 }
 
-.aui-theme-stage .aui-thread-welcome-message-inner {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-message-inner {
   font-family: var(--font-mono);
   font-weight: 400;
   color: var(--ink);
 }
 
-.aui-theme-stage .aui-thread-welcome-copy {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-copy {
   margin: 0.7rem 0 0;
   max-width: 46ch;
   font-family: var(--font-mono);
@@ -44,24 +54,60 @@
   color: var(--ink-soft);
 }
 
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-suggestions {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0.1rem;
+  padding: 0;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-suggestion {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.55rem;
+  width: 100%;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.2rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  white-space: normal;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-suggestion:hover,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-suggestion:focus-visible {
+  background: transparent;
+  color: var(--ink);
+  outline: none;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-empty {
+  padding: 0;
+}
+
 /* Increment 3 — composer. Official ComposerPrimitive in Thread; restyle here.
    Placeholder comes from chrome.placeholder. Radius already 0 on .aui-root *. */
 
-/* Empty Thread uses justify-center. A taller draft then recenters the whole
-   column. Dock the footer so typing cannot shove the view. */
-.aui-theme-stage [data-slot="aui_thread-viewport"] > div {
-  justify-content: flex-start;
-}
-
-.aui-theme-stage .aui-thread-viewport-footer {
+/* Footer docks at the bottom. Empty-state copy lives inside it, above the
+   composer, so typing cannot shove the welcome around. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-viewport-footer {
   margin-top: auto;
 }
 
-.aui-theme-stage [data-slot="aui_thread-viewport"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"] {
   overflow-anchor: none;
 }
 
-.aui-theme-stage .aui-composer-input {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input {
   font-family: var(--font-mono);
   font-size: 0.88rem;
   line-height: 1.5;
@@ -71,26 +117,26 @@
   caret-shape: block;
 }
 
-.aui-theme-stage .aui-composer-input::placeholder {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input::placeholder {
   color: var(--ink-mute);
 }
 
 /* web-theme.css paints :focus-visible as a 2px offset box. Do not. */
-.aui-theme-stage .aui-composer-input:focus,
-.aui-theme-stage .aui-composer-input:focus-visible,
-.aui-theme-stage .aui-edit-composer-input:focus,
-.aui-theme-stage .aui-edit-composer-input:focus-visible {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input:focus,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input:focus-visible,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-edit-composer-input:focus,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-edit-composer-input:focus-visible {
   outline: none;
   box-shadow: none;
 }
 
-.aui-theme-stage .aui-edit-composer-root {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-edit-composer-root {
   border: none;
   background: transparent;
   box-shadow: none;
 }
 
-.aui-theme-stage .aui-edit-composer-input {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-edit-composer-input {
   font-family: var(--font-mono);
   font-size: 0.88rem;
   color: var(--ink);
@@ -98,17 +144,17 @@
   caret-shape: block;
 }
 
-.aui-theme-stage [data-slot="aui_composer-shell"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_composer-shell"] {
   border-color: var(--hair);
   background: var(--bg);
 }
 
-.aui-theme-stage [data-slot="aui_composer-shell"]:focus-within {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_composer-shell"]:focus-within {
   border-color: var(--hair);
 }
 
 /* Empty: quiet keycap. Ready: ink fill invites click. Enter still sends. */
-.aui-theme-stage .aui-composer-send {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-send {
   border: 1px solid var(--hair);
   border-bottom-width: 2px;
   background: transparent;
@@ -116,32 +162,32 @@
   opacity: 1;
 }
 
-.aui-theme-stage .aui-composer-send:disabled {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-send:disabled {
   opacity: 1;
 }
 
-.aui-theme-stage .aui-composer-send:not(:disabled) {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-send:not(:disabled) {
   background: var(--ink);
   color: var(--bg);
   border-color: var(--ink);
 }
 
-.aui-theme-stage .aui-composer-send:not(:disabled):hover {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-send:not(:disabled):hover {
   background: var(--ink);
   color: var(--bg);
 }
 
-.aui-theme-stage[data-composer-layout="compact"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"])[data-composer-layout="compact"] {
   height: min(52vh, 34rem);
 }
 
-.aui-theme-stage .aui-composer-cancel {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-cancel {
   background: var(--ink);
   color: var(--bg);
 }
 
 /* Increment 4 — transcript. ChatMessage grammar: both left, `>` / `▸`. */
-.aui-theme-stage .aui-msg-marker {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-msg-marker {
   font-family: var(--font-mono);
   font-size: 0.88rem;
   line-height: 1.5;
@@ -149,7 +195,7 @@
   user-select: none;
 }
 
-.aui-theme-stage .aui-user-message-content {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-user-message-content {
   font-family: var(--font-mono);
   font-size: 0.88rem;
   color: var(--ink);
@@ -158,27 +204,27 @@
   padding: 0;
 }
 
-.aui-theme-stage .aui-assistant-message-content,
-.aui-theme-stage .aui-assistant-message-content .aui-md {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-assistant-message-content,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-assistant-message-content .aui-md {
   font-family: var(--font-mono);
   font-size: 0.88rem;
   color: var(--ink-soft);
 }
 
 /* Markdown stream cursor: block bar, same as the composer caret. */
-.aui-theme-stage :where(.aui-md[data-status="running"]):empty::after,
-.aui-theme-stage :where(.aui-md[data-status="running"])
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"]):empty::after,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"])
   > :where(:not(ol):not(ul):not(pre)):last-child::after,
-.aui-theme-stage :where(.aui-md[data-status="running"]) > pre:last-child code::after,
-.aui-theme-stage :where(.aui-md[data-status="running"])
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"]) > pre:last-child code::after,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"])
   > :where(:is(ol, ul):last-child)
   > :where(li:last-child:not(:has(* > li)))::after,
-.aui-theme-stage :where(.aui-md[data-status="running"])
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"])
   > :where(:is(ol, ul):last-child)
   > :where(li:last-child)
   > :where(:is(ol, ul):last-child)
   > :where(li:last-child:not(:has(* > li)))::after,
-.aui-theme-stage :where(.aui-md[data-status="running"])
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"])
   > :where(:is(ol, ul):last-child)
   > :where(li:last-child)
   > :where(:is(ol, ul):last-child)
@@ -205,53 +251,54 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .aui-theme-stage .aui-md[data-status="running"]::after,
-  .aui-theme-stage .aui-md[data-status="running"] *::after {
+  :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md[data-status="running"]::after,
+  :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md[data-status="running"] *::after {
     animation: none;
   }
 }
 
-/* Increment 6 — cube matrix. Snap on/off; color by data-state. */
-[data-slot="dot-matrix"] {
+/* Increment 6 — cube matrix. Snap on/off; color by data-state.
+   Scoped so catalog Base's DotMatrix is not restyled when product imports this. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"], .cube-matrix-legend) [data-slot="dot-matrix"] {
   color: var(--ink);
   vertical-align: -0.15em;
 }
 
-[data-slot="dot-matrix"][data-state="idle"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"], .cube-matrix-legend) [data-slot="dot-matrix"][data-state="idle"] {
   color: var(--ink-mute);
 }
 
-[data-slot="dot-matrix"][data-state="warning"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"], .cube-matrix-legend) [data-slot="dot-matrix"][data-state="warning"] {
   color: var(--warn);
 }
 
-[data-slot="dot-matrix"][data-state="error"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"], .cube-matrix-legend) [data-slot="dot-matrix"][data-state="error"] {
   color: var(--danger);
 }
 
-[data-slot="dot-matrix"][data-state="success"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"], .cube-matrix-legend) [data-slot="dot-matrix"][data-state="success"] {
   color: var(--up);
 }
 
-[data-slot="dot-matrix-grid"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"], .cube-matrix-legend) [data-slot="dot-matrix-grid"] {
   overflow: visible;
 }
 
 /* Unlit cells keep a hairline so the 5×5 grid is always there. */
-[data-slot="dot-matrix-dot"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"], .cube-matrix-legend) [data-slot="dot-matrix-dot"] {
   stroke: color-mix(in srgb, var(--ink) 34%, transparent);
   stroke-width: 0.22;
 }
 
-.aui-theme-stage [data-slot="aui_assistant-message-indicator"] [data-slot="dot-matrix"],
-.aui-theme-stage [data-slot="tool-fallback-trigger"] [data-slot="dot-matrix"],
-.aui-theme-stage .aui-message-error-root [data-slot="dot-matrix"],
-.aui-theme-stage .aui-attachment-chip [data-slot="dot-matrix"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_assistant-message-indicator"] [data-slot="dot-matrix"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger"] [data-slot="dot-matrix"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root [data-slot="dot-matrix"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-attachment-chip [data-slot="dot-matrix"] {
   width: 0.85rem;
   height: 0.85rem;
 }
 
-.aui-theme-stage .aui-message-error-root {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root {
   align-items: flex-start;
   gap: 0.55rem;
   padding: 0;
@@ -262,7 +309,7 @@
   font-size: 0.82rem;
 }
 
-.aui-theme-stage .aui-message-error-root [data-slot="dot-matrix"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root [data-slot="dot-matrix"] {
   margin-top: 0.12rem;
 }
 
@@ -296,20 +343,21 @@
   color: var(--ink-mute);
 }
 
-.aui-theme-stage .aui-assistant-action-bar-root button,
-.aui-theme-stage .aui-user-action-bar-root button {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-assistant-action-bar-root button,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-user-action-bar-root button {
   color: var(--ink-mute);
 }
 
-.aui-theme-stage .aui-assistant-action-bar-root button:hover,
-.aui-theme-stage .aui-user-action-bar-root button:hover,
-.aui-theme-stage .aui-assistant-action-bar-root button[data-state="open"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-assistant-action-bar-root button:hover,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-user-action-bar-root button:hover,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-assistant-action-bar-root button[data-state="open"] {
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
 }
 
-/* Portaled More menu sits outside .aui-root — style it on the chatbot page. */
-.aui-action-bar-more-content {
+/* Portaled More menu sits outside .aui-root. html:has() so catalog skins
+   keep their own menus when product imports this sheet. */
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-content {
   border-radius: 0;
   border: 1px solid var(--hair);
   background: var(--bg);
@@ -317,7 +365,7 @@
   box-shadow: none;
 }
 
-.aui-action-bar-more-item {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item {
   border-radius: 0;
   font-family: var(--font-mono);
   font-size: 0.68rem;
@@ -326,25 +374,25 @@
   background: transparent;
 }
 
-.aui-action-bar-more-item:hover,
-.aui-action-bar-more-item:focus,
-.aui-action-bar-more-item:focus-visible {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:hover,
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:focus,
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:focus-visible {
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink-soft);
   outline: none;
 }
 
-.aui-theme-stage .aui-user-action-bar-slot {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-user-action-bar-slot {
   width: 1.5rem;
   min-height: 1.5rem;
 }
 
 /* Increment 5 — reasoning. Ghost disclosure, square caret, hairline rail. */
-.aui-theme-stage [data-slot="reasoning-root"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-root"] {
   margin-bottom: 1rem;
 }
 
-.aui-theme-stage [data-slot="reasoning-trigger"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger"] {
   max-width: none;
   gap: 0.45rem;
   padding: 0;
@@ -358,32 +406,32 @@
   transform: none;
 }
 
-.aui-theme-stage [data-slot="reasoning-trigger"]:hover {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger"]:hover {
   color: var(--ink-soft);
 }
 
-.aui-theme-stage [data-slot="reasoning-trigger"]:focus,
-.aui-theme-stage [data-slot="reasoning-trigger"]:focus-visible {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger"]:focus,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger"]:focus-visible {
   outline: none;
   box-shadow: none;
 }
 
-.aui-theme-stage [data-slot="reasoning-trigger-icon"],
-.aui-theme-stage [data-slot="reasoning-trigger-chevron"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger-icon"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger-chevron"] {
   display: none;
 }
 
-.aui-theme-stage [data-slot="reasoning-trigger-label"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger-label"] {
   background: none;
   animation: none;
   color: inherit;
 }
 
-.aui-theme-stage [data-slot="tool-group-root"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-root"] {
   margin-bottom: 1.25rem;
 }
 
-.aui-theme-stage [data-slot="tool-group-trigger"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger"] {
   gap: 0;
   padding: 0;
   font-family: var(--font-mono);
@@ -396,30 +444,30 @@
   transform: none;
 }
 
-.aui-theme-stage [data-slot="tool-group-trigger"]:hover {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger"]:hover {
   color: var(--ink-soft);
 }
 
-.aui-theme-stage [data-slot="tool-group-trigger-chevron"],
-.aui-theme-stage [data-slot="tool-group-trigger-loader"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-chevron"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-loader"] {
   display: none;
 }
 
-.aui-theme-stage [data-slot="tool-group-trigger-label"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-label"] {
   font-weight: 400;
 }
 
-.aui-theme-stage [data-slot="reasoning-fade"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-fade"] {
   display: none;
 }
 
-.aui-theme-stage [data-slot="reasoning-content"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-content"] {
   font-size: 0.68rem;
   line-height: 1.4;
   color: var(--ink-mute);
 }
 
-.aui-theme-stage [data-slot="reasoning-text"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"] {
   max-height: 12rem;
   margin-top: 0.45rem;
   padding: 0.2rem 0 0.15rem 0.85rem;
@@ -430,17 +478,17 @@
   color: var(--ink-mute);
 }
 
-.aui-theme-stage [data-slot="reasoning-text"] .aui-md,
-.aui-theme-stage [data-slot="reasoning-text"] .aui-reasoning-text-content {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"] .aui-md,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"] .aui-reasoning-text-content {
   font-size: 0.68rem;
   color: var(--ink-mute);
 }
 
-.aui-theme-stage [data-slot="reasoning-text"] .aui-reasoning-text-content > * + * {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"] .aui-reasoning-text-content > * + * {
   margin-top: 0.35rem;
 }
 
-.aui-theme-stage [data-slot="tool-fallback-trigger"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger"] {
   gap: 0.4rem;
   padding: 0;
   font-family: var(--font-mono);
@@ -450,40 +498,40 @@
   transform: none;
 }
 
-.aui-theme-stage [data-slot="tool-fallback-trigger"]:hover {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger"]:hover {
   color: var(--ink-soft);
 }
 
-.aui-theme-stage [data-slot="tool-fallback-trigger-label"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger-label"] {
   font-weight: 400;
   font-size: inherit;
 }
 
-.aui-theme-stage [data-slot="tool-fallback-trigger-chevron"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger-chevron"] {
   display: none;
 }
 
-.aui-theme-stage [data-slot="tool-fallback-duration"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-duration"] {
   font-family: var(--font-mono);
   font-size: 0.68rem;
   color: var(--ink-mute);
 }
 
-.aui-theme-stage [data-slot="tool-fallback-content"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-content"] {
   font-size: 0.68rem;
   color: var(--ink-mute);
 }
 
-.aui-theme-stage [data-slot="tool-fallback-content"] > div {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-content"] > div {
   margin-top: 0.4rem;
   padding: 0.45rem 0.55rem 0.5rem;
   border: 1px solid var(--hair);
   gap: 0.5rem;
 }
 
-.aui-theme-stage .aui-tool-fallback-args-header,
-.aui-theme-stage .aui-tool-fallback-result-header,
-.aui-theme-stage .aui-tool-fallback-error-header {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-header,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-header,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-error-header {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 0.68rem;
@@ -493,9 +541,9 @@
   color: var(--ink-mute);
 }
 
-.aui-theme-stage .aui-tool-fallback-args-value,
-.aui-theme-stage .aui-tool-fallback-result-content,
-.aui-theme-stage .aui-tool-fallback-error-reason {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-error-reason {
   margin: 0.2rem 0 0;
   background: transparent;
   padding: 0;
@@ -508,12 +556,12 @@
 }
 
 /* Increment 7 — markdown / code. Hairline frames, no card wash. */
-.aui-theme-stage .aui-md-h1,
-.aui-theme-stage .aui-md-h2,
-.aui-theme-stage .aui-md-h3,
-.aui-theme-stage .aui-md-h4,
-.aui-theme-stage .aui-md-h5,
-.aui-theme-stage .aui-md-h6 {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-h1,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-h2,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-h3,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-h4,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-h5,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-h6 {
   margin-top: 0.85rem;
   margin-bottom: 0.35rem;
   font-size: inherit;
@@ -521,21 +569,21 @@
   color: var(--ink);
 }
 
-.aui-theme-stage .aui-md-p {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-p {
   margin-top: 0.55rem;
   margin-bottom: 0.55rem;
 }
 
-.aui-theme-stage .aui-md-a {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-a {
   color: var(--ink-soft);
   text-decoration-color: var(--hair-2);
 }
 
-.aui-theme-stage .aui-md-a:hover {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-a:hover {
   color: var(--ink);
 }
 
-.aui-theme-stage .aui-md-blockquote {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-blockquote {
   margin: 0.55rem 0;
   padding: 0 0 0 0.85rem;
   border: none;
@@ -543,12 +591,12 @@
   color: var(--ink-mute);
 }
 
-.aui-theme-stage .aui-md-strong {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-strong {
   font-weight: 500;
   color: var(--ink);
 }
 
-.aui-theme-stage .aui-code-header-root {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-code-header-root {
   margin-top: 0.7rem;
   padding: 0.3rem 0.55rem;
   border: 1px solid var(--hair);
@@ -557,7 +605,7 @@
   background: transparent;
 }
 
-.aui-theme-stage .aui-code-header-language {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-code-header-language {
   font-family: var(--font-mono);
   font-size: 0.68rem;
   font-weight: 400;
@@ -565,16 +613,16 @@
   color: var(--ink-mute);
 }
 
-.aui-theme-stage .aui-code-header-root button {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-code-header-root button {
   color: var(--ink-mute);
 }
 
-.aui-theme-stage .aui-code-header-root button:hover {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-code-header-root button:hover {
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
 }
 
-.aui-theme-stage .aui-md-pre {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-pre {
   margin: 0;
   padding: 0.55rem 0.65rem 0.65rem;
   border: 1px solid var(--hair);
@@ -585,7 +633,7 @@
   color: var(--ink-soft);
 }
 
-.aui-theme-stage .aui-md-inline-code {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-inline-code {
   padding: 0 0.2em;
   border: 1px solid var(--hair);
   border-radius: 0;
@@ -594,11 +642,11 @@
   color: var(--ink);
 }
 
-.aui-theme-stage .aui-md-table-wrapper {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-table-wrapper {
   margin: 0.7rem 0;
 }
 
-.aui-theme-stage .aui-md-th {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-th {
   padding: 0.28rem 0.7rem 0.28rem 0;
   border: none;
   border-bottom: 1px solid var(--hair);
@@ -611,28 +659,28 @@
   color: var(--ink-mute);
 }
 
-.aui-theme-stage .aui-md-td {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-td {
   padding: 0.35rem 0.7rem 0.35rem 0;
   border: none;
   border-bottom: 1px solid var(--hair);
   color: var(--ink-soft);
 }
 
-.aui-theme-stage .aui-md-th:last-child,
-.aui-theme-stage .aui-md-td:last-child {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-th:last-child,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-td:last-child {
   padding-right: 0;
 }
 
-.aui-theme-stage .aui-md-tr:last-child .aui-md-td {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-tr:last-child .aui-md-td {
   border-bottom: none;
 }
 
-.aui-theme-stage .aui-md-hr {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-hr {
   border-color: var(--hair);
 }
 
 /* Increment 9 — attachments. Filename chip, not a thumbnail tile. */
-.aui-theme-stage .aui-attachment-chip {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-attachment-chip {
   display: inline-flex;
   max-width: 16rem;
   align-items: center;
@@ -646,26 +694,26 @@
   color: var(--ink-soft);
 }
 
-.aui-theme-stage .aui-attachment-chip-hit {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-attachment-chip-hit {
   display: inline-flex;
   min-width: 0;
   outline: none;
 }
 
-.aui-theme-stage .aui-attachment-chip-name {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-attachment-chip-name {
   color: var(--ink-soft);
 }
 
-.aui-theme-stage .aui-attachment-chip-type::before {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-attachment-chip-type::before {
   content: "· ";
   color: var(--ink-mute);
 }
 
-.aui-theme-stage .aui-attachment-chip-type {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-attachment-chip-type {
   color: var(--ink-mute);
 }
 
-.aui-theme-stage .aui-attachment-chip-remove {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-attachment-chip-remove {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -677,36 +725,36 @@
   cursor: pointer;
 }
 
-.aui-theme-stage .aui-attachment-chip-remove:hover {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-attachment-chip-remove:hover {
   color: var(--ink);
 }
 
-.aui-theme-stage .aui-attachment-root.is-error .aui-attachment-chip {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-attachment-root.is-error .aui-attachment-chip {
   border-color: var(--danger);
   color: var(--danger);
 }
 
-.aui-theme-stage .aui-composer-add-attachment {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-add-attachment {
   color: var(--ink-mute);
 }
 
-.aui-theme-stage .aui-composer-add-attachment:hover {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-add-attachment:hover {
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
 }
 
-.aui-theme-stage [data-slot="aui_composer-shell"][data-dragging="true"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_composer-shell"][data-dragging="true"] {
   border-style: dashed;
   border-color: var(--hair);
   background: var(--bg);
 }
 
-.aui-theme-stage .aui-user-message-attachments {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-user-message-attachments {
   margin-bottom: 0.35rem;
 }
 
 /* Portaled image preview sits outside .aui-root. */
-.aui-attachment-preview-dialog-content {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-attachment-preview-dialog-content {
   border-radius: 0;
   border: 1px solid var(--hair);
   background: var(--bg);
@@ -714,7 +762,7 @@
   padding: 0.55rem;
 }
 
-.aui-attachment-preview-dialog-content [data-slot="dialog-close"] {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-attachment-preview-dialog-content [data-slot="dialog-close"] {
   border-radius: 0;
   background: transparent;
   color: var(--ink-mute);
@@ -722,17 +770,17 @@
   opacity: 1;
 }
 
-.aui-attachment-preview-dialog-content [data-slot="dialog-close"]:hover {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-attachment-preview-dialog-content [data-slot="dialog-close"]:hover {
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
 }
 
-[data-slot="dialog-overlay"] {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-slot="dialog-overlay"] {
   background: color-mix(in srgb, var(--ink) 28%, transparent);
 }
 
 /* Increment 10 — chrome. Desk list + contained launcher. */
-.aui-theme-stage.aui-chrome-desk {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]).aui-chrome-desk {
   height: min(72vh, 46rem);
 }
 
@@ -827,13 +875,13 @@
   color: var(--ink-mute);
 }
 
-.aui-theme-stage.aui-chrome-launcher-stage {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]).aui-chrome-launcher-stage {
   position: relative;
   height: min(72vh, 46rem);
   overflow: hidden;
 }
 
-.aui-theme-stage.aui-chrome-launcher-stage > .digichat-launcher {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]).aui-chrome-launcher-stage > .digichat-launcher {
   height: auto;
 }
 

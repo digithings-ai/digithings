@@ -48,6 +48,9 @@ describe("thread skins", () => {
     expect(parseThreadSkin("base-assistant-ui")).toBe("base-assistant-ui");
     expect(parseThreadSkin("not-a-skin")).toBe("base");
     expect(parseThreadSkin("ink")).toBe("base");
+    expect(parseThreadSkin("cli")).toBe("base");
+    expect(parseThreadSkin("utilitarian")).toBe("base");
+    expect(parseThreadSkin("terminal")).toBe("base");
     expect(isThreadSkin("claude")).toBe(true);
     expect(isThreadSkin("react-ink")).toBe(true);
     expect(isThreadSkin("not-a-skin")).toBe(false);

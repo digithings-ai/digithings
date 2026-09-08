@@ -17,6 +17,7 @@ export type SkinChromeValue = {
   theme: "dark" | "light";
   title?: string;
   welcome?: string;
+  welcomeBody?: readonly string[];
   placeholder?: string;
   suggestions: readonly string[];
   accent: { color: string; foreground: string } | null;
@@ -45,6 +46,7 @@ export function useComposerCopy(fallbackWelcome: string, fallbackPlaceholder: st
   return {
     title: chrome.title?.trim() || undefined,
     welcome: chrome.welcome?.trim() || fallbackWelcome,
+    welcomeBody: chrome.welcomeBody ?? [],
     placeholder: chrome.placeholder?.trim() || fallbackPlaceholder,
     suggestions: chrome.suggestions,
   };

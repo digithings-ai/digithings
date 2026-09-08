@@ -48,7 +48,7 @@ export function ChatbotThreadSpecimen({
       <h2 className="title">{heading ?? "Send a line."}</h2>
       <p className="section-copy">
         {copy ??
-          "The fixture streams reasoning, a tool call, then markdown so the default slots are visible. Turns use the ChatMessage grammar: both left, `>` user, `▸` assistant — not bubbles. Copy, regenerate, and attach are the registry actions. Welcome copy and optional starters come from deploy-shaped config."}
+          "The fixture streams reasoning, a tool call, then markdown so the default slots are visible. Turns use the ChatMessage grammar: both left, `>` user, `▸` assistant — not bubbles. Copy, regenerate, and attach are the registry actions. Welcome copy sits above the composer; optional `>` starters come from deploy-shaped config."}
       </p>
       <div
         className="aui-theme-stage"

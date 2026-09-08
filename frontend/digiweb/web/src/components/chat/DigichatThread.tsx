@@ -39,6 +39,8 @@ import { DIGICHAT_GLYPHS, digichatSurfaces } from "./chat-surfaces";
 
 export type DigichatThreadProps = {
   welcome?: string;
+  /** Subparagraphs under the headline. Deploy `chrome.welcome.body`. */
+  welcomeBody?: readonly string[];
   placeholder?: string;
   className?: string;
   /** Embed send-gate / system page-context attach. Form onSubmit. */
@@ -70,6 +72,7 @@ function toolStatus(part: {
 
 export function DigichatThread({
   welcome = "What should we inspect?",
+  welcomeBody = [],
   placeholder = "Ask digichat…",
   className,
   onComposerSubmit,
@@ -78,13 +81,17 @@ export function DigichatThread({
     <ThreadPrimitive.Root
       className={cx(digichatSurfaces.thread, className)}
       data-user-align="left"
-      style={{ ["--thread-max-width" as string]: "44rem" }}
+      style={{
+        ["--thread-max-width" as string]: "44rem",
+        ["--composer-radius" as string]: "0",
+        ["--composer-padding" as string]: "8px",
+        ["--composer-bg" as string]: "var(--surface)",
+      }}
     >
-      <ThreadPrimitive.Viewport className={digichatSurfaces.viewport}>
-        <AuiIf condition={(s) => s.thread.isEmpty}>
-          <Welcome headline={welcome} />
-        </AuiIf>
-
+      <ThreadPrimitive.Viewport
+        data-slot="aui_thread-viewport"
+        className={digichatSurfaces.viewport}
+      >
         <ThreadPrimitive.Messages>
           {({ message }) => {
             if (message.role === "system") return <SystemMessage />;
@@ -98,6 +105,11 @@ export function DigichatThread({
           <ThreadPrimitive.ScrollToBottom className={digichatSurfaces.scrollBtn}>
             ↓ scroll
           </ThreadPrimitive.ScrollToBottom>
+          <AuiIf condition={(s) => s.thread.isEmpty}>
+            <div data-slot="aui_thread-empty" className={digichatSurfaces.empty}>
+              <Welcome headline={welcome} body={welcomeBody} />
+            </div>
+          </AuiIf>
           <Composer placeholder={placeholder} onSubmit={onComposerSubmit} />
         </ThreadPrimitive.ViewportFooter>
       </ThreadPrimitive.Viewport>
@@ -105,15 +117,28 @@ export function DigichatThread({
   );
 }
 
-function Welcome({ headline }: { headline: string }) {
+function Welcome({
+  headline,
+  body,
+}: {
+  headline: string;
+  body: readonly string[];
+}) {
   return (
-    <div className={digichatSurfaces.welcome}>
-      <p className={digichatSurfaces.welcomeKicker}>{"// digichat"}</p>
+    <div data-slot="aui_thread-welcome" className={digichatSurfaces.welcome}>
       <p className={digichatSurfaces.welcomeTitle}>{headline}</p>
-      <div className={digichatSurfaces.suggestions}>
+      {body.map((line) => (
+        <p key={line} className={digichatSurfaces.welcomeBody}>
+          {line}
+        </p>
+      ))}
+      <div className={digichatSurfaces.examples}>
         <ThreadPrimitive.Suggestions>
           {() => (
-            <SuggestionPrimitive.Trigger send className={digichatSurfaces.chip}>
+            <SuggestionPrimitive.Trigger send className={digichatSurfaces.example}>
+              <span className={digichatSurfaces.exampleMark} aria-hidden="true">
+                {DIGICHAT_GLYPHS.user}
+              </span>
               <SuggestionPrimitive.Title />
             </SuggestionPrimitive.Trigger>
           )}
@@ -346,7 +371,11 @@ function Composer({
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <ComposerPrimitive.Root className={digichatSurfaces.composer} onSubmit={onSubmit}>
+    <ComposerPrimitive.Root
+      className={digichatSurfaces.composer}
+      data-slot="aui_composer-shell"
+      onSubmit={onSubmit}
+    >
       <ComposerPrimitive.AttachmentDropzone className="contents">
         <ComposerPrimitive.Attachments>
           {() => <DigichatAttachmentChip removable />}
