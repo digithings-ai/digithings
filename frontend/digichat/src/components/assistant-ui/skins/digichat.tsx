@@ -137,13 +137,22 @@ export function DigichatSkin() {
       adapter: {
         ...inner,
         search: (query: string) => {
-          const raw = inner.search(query);
-          const keep = (items: Unstable_TriggerItem[]) =>
+          const searchFn = inner.search;
+          if (typeof searchFn !== "function") return [];
+          const raw: unknown = searchFn(query);
+          const keep = (items: readonly Unstable_TriggerItem[]) =>
             items.filter((item) => slashItemPrefixMatch(item, query));
-          if (raw != null && typeof (raw as Promise<Unstable_TriggerItem[]>).then === "function") {
-            return Promise.resolve(raw).then(keep);
+          if (
+            raw !== null &&
+            typeof raw === "object" &&
+            "then" in raw &&
+            typeof (raw as PromiseLike<readonly Unstable_TriggerItem[]>).then === "function"
+          ) {
+            return Promise.resolve(raw as PromiseLike<readonly Unstable_TriggerItem[]>).then(
+              keep,
+            );
           }
-          return keep((raw ?? []) as Unstable_TriggerItem[]);
+          return keep(Array.isArray(raw) ? raw : []);
         },
       },
     };
