@@ -216,6 +216,11 @@ jobs:
           CHEAPERINFERENCE_API_BASE: ${{ vars.CHEAPERINFERENCE_API_BASE || secrets.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
           # Fail-fast: provider errors surface to the caller — no models+route=fallback
           # chain. Cheap→capable pool is enforced by config/digiquant_models.yaml tiers.
+          # Per-error budget (#3078): one retry only — provider attempts and
+          # empty-response self-heal are both capped at a single retry so a sick
+          # upstream fails the attempt in minutes, not hours.
+          DIGILLM_PROVIDER_MAX_ATTEMPTS: 2
+          DIGILLM_EMPTY_RETRY_MAX: 1
           DRY_RUN: ${{ inputs.dry_run }}
           DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}

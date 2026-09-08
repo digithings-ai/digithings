@@ -306,46 +306,31 @@ def _resolve_from_debate(
             ),
             None,
         )
-    try:
-        payload = unwrap_forecast_terms_payload(amendment_terms_raw)
-        if not isinstance(payload, dict):
-            raise TypeError("amendment terms must be an object")
-        terms = ForecastTerms.model_validate(fill_forecast_tenor_from_base(payload, base.terms))
-        amendment = materialize_forecast_amendment(
+    # Hard fail (#3078): invalid amendment economics propagate to the caller —
+    # never absorbed into a REJECTED fallback that would silently keep trading
+    # on the stale base while the run reports success.
+    payload = unwrap_forecast_terms_payload(amendment_terms_raw)
+    if not isinstance(payload, dict):
+        raise TypeError("amendment terms must be an object")
+    terms = ForecastTerms.model_validate(fill_forecast_tenor_from_base(payload, base.terms))
+    amendment = materialize_forecast_amendment(
+        base=base,
+        terms=terms,
+        reason=amendment_reason or "h6_challenge_revision",
+        source_run_id=str(state.run_id),
+        provider_invocation_id=f"h6:{ticker}:{state.run_id}",
+        effective_at=cutoff,
+        known_at=cutoff,
+    )
+    return (
+        resolve_effective_forecast(
             base=base,
-            terms=terms,
-            reason=amendment_reason or "h6_challenge_revision",
-            source_run_id=str(state.run_id),
-            provider_invocation_id=f"h6:{ticker}:{state.run_id}",
-            effective_at=cutoff,
+            amendment=amendment,
+            amendment_outcome=AmendmentOutcome.ACCEPTED,
             known_at=cutoff,
-        )
-        return (
-            resolve_effective_forecast(
-                base=base,
-                amendment=amendment,
-                amendment_outcome=AmendmentOutcome.ACCEPTED,
-                known_at=cutoff,
-            ),
-            amendment,
-        )
-    except Exception as exc:
-        logger.warning(
-            "H6 amendment for %s rejected (%s: %s); preserving base forecast",
-            ticker,
-            type(exc).__name__,
-            exc,
-        )
-        return (
-            resolve_effective_forecast(
-                base=base,
-                amendment=None,
-                amendment_outcome=AmendmentOutcome.REJECTED,
-                degradation_reason="amendment_rejected",
-                known_at=cutoff,
-            ),
-            None,
-        )
+        ),
+        amendment,
+    )
 
 
 def _portfolio_phase_inputs(state: PortfolioState, ticker: str) -> dict[str, Any]:
