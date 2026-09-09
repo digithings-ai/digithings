@@ -36,6 +36,7 @@ class _Query:
     store: dict[str, list[dict[str, Any]]]
     _filters: list[tuple[str, Any]] = field(default_factory=list)
     _pending_update: dict[str, Any] | None = None
+    fail: bool = False
 
     def select(self, cols: str) -> "_Query":
         return self
@@ -43,6 +44,12 @@ class _Query:
     def eq(self, col: str, val: Any) -> "_Query":
         self._filters.append((col, val))
         return self
+
+    def insert(self, row: dict[str, Any]) -> "_Query":
+        if self.fail:
+            raise RuntimeError(f"injected failure on {self.table_name}")
+        self.store.setdefault(self.table_name, []).append(dict(row))
+        return _Query(table_name=self.table_name, store=self.store)
 
     def update(self, payload: dict[str, Any]) -> "_Query":
         self._pending_update = dict(payload)
@@ -61,9 +68,13 @@ class _Query:
 @dataclass
 class FakeClient:
     store: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    fail_tables: set[str] = field(default_factory=set)
 
     def table(self, name: str) -> _Query:
-        return _Query(table_name=name, store=self.store)
+        return _Query(table_name=name, store=self.store, fail=name in self.fail_tables)
+
+    def fail_on_table(self, name: str) -> None:
+        self.fail_tables.add(name)
 
 
 class FakeStore:
@@ -148,7 +159,7 @@ class TestArchiveThread:
         assert isinstance(manifest, ArchiveManifest)
         assert len(manifest.entries) == 2
         for entry in manifest.entries:
-            assert store.objects[entry.key] == parse_postgrest_bytea(
+            assert decompress_payload(store.objects[entry.key]) == parse_postgrest_bytea(
                 "\\x0102ff" if entry.key.endswith("/v1.bin") else "\\x00aa"
             )
             assert len(entry.sha256) == 64
@@ -196,6 +207,35 @@ class TestArchiveThread:
         archive_thread(client, FakeStore(), "run1::portfolio")
         kept = [r for r in client.store["checkpoint_blobs"] if r["thread_id"] == "run2::portfolio"]
         assert kept[0]["blob"] == "\\x99"
+
+    def test_archive_writes_registry_rows(self) -> None:
+        client = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "run1::portfolio"}],
+                "checkpoint_blobs": [_blob_row()],
+                "checkpoint_writes": [_write_row()],
+            }
+        )
+        store = FakeStore()
+        manifest = archive_thread(client, store, "run1::portfolio")
+        rows = client.table("archive_objects").select("*").execute().data
+        assert len(rows) == len(manifest.entries) == 2
+        assert all(r["sha256"] for r in rows)
+        assert all(r["owner"] == "house" for r in rows)
+
+    def test_registry_failure_keeps_supabase_row(self) -> None:
+        client = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "run1::portfolio"}],
+                "checkpoint_blobs": [_blob_row()],
+                "checkpoint_writes": [],
+            }
+        )
+        client.fail_on_table("archive_objects")
+        with pytest.raises(Exception):
+            archive_thread(client, FakeStore(), "run1::portfolio")
+        blobs = client.table("checkpoint_blobs").select("*").execute().data
+        assert any(b["blob"] is not None for b in blobs)
 
 
 class TestRestoreThread:

@@ -170,12 +170,35 @@ def _row_filters(table: str, row: dict[str, Any]) -> list[tuple[str, Any]]:
     return [(col, row.get(col)) for col in BLOB_KEY_COLUMNS[table]]
 
 
-def archive_thread(client: Any, store: StorageBackend, thread_id: str) -> ArchiveManifest:
-    """Offload one thread's payloads: put → verify → NULL the ``bytea`` cell.
+def record_pointer(client: Any, entry: ArchiveEntry, owner: str = "house") -> None:
+    """Insert one ``archive_objects`` pointer row; raises before any NULL-ing.
+
+    ``source_table`` is the stable key segment (``checkpoints/<thread>/<table>/...``),
+    ``source_key`` the row filters as a JSON object. A failed insert propagates to
+    the caller so the Supabase row is kept.
+    """
+    source_table = entry.key.split("/")[2]
+    client.table("archive_objects").insert(
+        {
+            "source_table": source_table,
+            "source_key": dict(entry.filters),
+            "r2_key": entry.key,
+            "sha256": entry.sha256,
+            "size": entry.size,
+            "owner": owner,
+        }
+    ).execute()
+
+
+def archive_thread(
+    client: Any, store: StorageBackend, thread_id: str, owner: str = "house"
+) -> ArchiveManifest:
+    """Offload one thread's payloads: compress → put → verify → registry → NULL the ``bytea`` cell.
 
     Rows already NULL are skipped. Any verification failure raises
     :class:`ArchiveVerifyError` before touching Supabase, so a corrupt upload
-    can never orphan a trace.
+    can never orphan a trace. A registry-insert failure raises before the NULL
+    update, so the Supabase row is kept.
     """
     entries: list[ArchiveEntry] = []
     for table in BLOB_TABLES:
@@ -185,19 +208,22 @@ def archive_thread(client: Any, store: StorageBackend, thread_id: str) -> Archiv
             if payload is None:
                 continue
             key = blob_key(thread_id, table, str(row.get("channel")), _row_version(table, row))
-            digest = hashlib.sha256(payload).hexdigest()
-            store.put(key, payload)
+            stored = compress_payload(payload)
+            digest = hashlib.sha256(stored).hexdigest()
+            store.put(key, stored)
             if hashlib.sha256(store.get(key)).hexdigest() != digest:
                 raise ArchiveVerifyError(f"read-back mismatch for {key}; Supabase row kept")
+            entry = ArchiveEntry(
+                key=key, sha256=digest, size=len(stored), filters=tuple(_row_filters(table, row))
+            )
+            record_pointer(client, entry, owner)
             query = client.table(table).update({"blob": None})
             filters = _row_filters(table, row)
             for col, val in filters:
                 query = query.eq(col, val)
             query.execute()
-            entries.append(
-                ArchiveEntry(key=key, sha256=digest, size=len(payload), filters=tuple(filters))
-            )
-            logger.info("archived %s (%d bytes)", key, len(payload))
+            entries.append(entry)
+            logger.info("archived %s (%d bytes)", key, len(stored))
     return ArchiveManifest(thread_id=thread_id, entries=tuple(entries), archived_at=_now_iso())
 
 
@@ -207,9 +233,10 @@ def restore_thread(client: Any, store: StorageBackend, manifest: ArchiveManifest
         parts = entry.key.split("/")
         # checkpoints/<thread>/<table>/... — table is the stable segment.
         table = parts[2]
-        payload = store.get(entry.key)
-        if hashlib.sha256(payload).hexdigest() != entry.sha256:
+        stored = store.get(entry.key)
+        if hashlib.sha256(stored).hexdigest() != entry.sha256:
             raise ArchiveVerifyError(f"stored object corrupted: {entry.key}")
+        payload = decompress_payload(stored)
         query = client.table(table).update({"blob": payload})
         for col, val in entry.filters:
             query = query.eq(col, val)
@@ -268,6 +295,7 @@ __all__ = [
     "list_threads",
     "main",
     "parse_postgrest_bytea",
+    "record_pointer",
     "restore_thread",
     "threads_older_than",
 ]
