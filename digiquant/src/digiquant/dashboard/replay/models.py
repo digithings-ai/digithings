@@ -1,16 +1,19 @@
 """WP10.4 — shared-cash Nautilus portfolio replay contracts (#2784).
 
 Strict internal models for isolated shadow/challenger portfolio replay.
-These are not public ``BacktestResult`` contracts and must not be used as a
-production booking path.
+These are not public ``BacktestResult`` contracts. The replay is pure
+computation — never a booking path itself. Persisting engine output to
+production books happens only through the dedicated writer step
+(``verify_nav_replay.py --write``), which owns that boundary; nothing else
+may write engine-derived numbers to Group A tables.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Annotated, TypeAlias
+from typing import Annotated, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -108,6 +111,56 @@ class TargetWeight(ReplayContractModel):
     weight: UnitInterval
 
 
+def _validate_weight_tuple(
+    weights: tuple[TargetWeight, ...], *, label: str, tickers: set[str]
+) -> Decimal:
+    """Shared per-entry weight rules: sorted, unique, known, sum <= 1."""
+    names = [t.ticker for t in weights]
+    if names != sorted(names):
+        raise ValueError(f"{label} must be sorted by ticker")
+    if len(names) != len(set(names)):
+        raise ValueError(f"{label} tickers must be unique")
+    unknown = set(names) - tickers
+    if unknown:
+        raise ValueError(f"{label} tickers missing from series: {sorted(unknown)}")
+    weight_sum = sum((t.weight for t in weights), Decimal("0"))
+    if weight_sum > Decimal("1") + Decimal("1e-12"):
+        raise ValueError(f"sum of {label} cannot exceed 1")
+    return weight_sum
+
+
+class ScheduledTargetWeights(ReplayContractModel):
+    """Dated target-weight entry for schema-2.0 schedule-driven replay.
+
+    ``effective_date`` is both the submission and the execution date:
+    the engine submits the entry's weights at that bar and fills land
+    the same bar (causal convention — the book dated D earns the move
+    into D+1, never retroactively).
+    """
+
+    effective_date: date
+    weights: tuple[TargetWeight, ...]
+
+    @field_validator("weights", mode="before")
+    @classmethod
+    def _coerce_weights(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    @model_validator(mode="after")
+    def _validate_entry(self) -> ScheduledTargetWeights:
+        # Entry-level shape rules (sorted / unique / sum <= 1). Ticker
+        # membership needs series context, so the parent request re-checks
+        # the full entry via _validate_weight_tuple.
+        _validate_weight_tuple(
+            self.weights,
+            label="weights",
+            tickers={t.ticker for t in self.weights},
+        )
+        return self
+
+
 class HoldingQuantity(ReplayContractModel):
     """Current share quantity for one ticker at the decision cutoff."""
 
@@ -128,15 +181,18 @@ class ExecutionPolicy(ReplayContractModel):
 class PortfolioReplayRequest(ReplayContractModel):
     """Validated input for one shared-cash multi-instrument replay arm."""
 
-    schema_version: str = "1.0"
+    schema_version: Literal["1.0", "2.0"] = "1.0"
     request_id: NonEmptyId
     starting_cash: FiniteNonNegDec
     series: tuple[InstrumentBarSeries, ...]
-    target_weights: tuple[TargetWeight, ...]
+    target_weights: tuple[TargetWeight, ...] = ()
     initial_holdings: tuple[HoldingQuantity, ...] = ()
+    weight_schedule: tuple[ScheduledTargetWeights, ...] = ()
     execution: ExecutionPolicy = ExecutionPolicy()
 
-    @field_validator("series", "target_weights", "initial_holdings", mode="before")
+    @field_validator(
+        "series", "target_weights", "initial_holdings", "weight_schedule", mode="before"
+    )
     @classmethod
     def _coerce_tuples(cls, value: object) -> object:
         if isinstance(value, list):
@@ -171,6 +227,50 @@ class PortfolioReplayRequest(ReplayContractModel):
         weight_sum = sum((t.weight for t in self.target_weights), Decimal("0"))
         if weight_sum > Decimal("1") + Decimal("1e-12"):
             raise ValueError("sum of target_weights cannot exceed 1")
+
+        schedule = self.weight_schedule
+        if not schedule:
+            if self.schema_version != "1.0":
+                raise ValueError("schema_version must be '1.0' without a weight_schedule")
+            # Empty target_weights is a valid exit-to-cash book in legacy mode.
+        else:
+            if self.schema_version != "2.0":
+                raise ValueError("schema_version must be '2.0' with a weight_schedule")
+            if self.target_weights:
+                raise ValueError("target_weights must be empty with a weight_schedule")
+            if self.initial_holdings:
+                # A seed would consume the first sync bar and silently drop a
+                # day-one schedule entry (same-bar execution never recurs).
+                # The schedule's first entry IS the day-one book — seed nothing.
+                raise ValueError("initial_holdings must be empty with a weight_schedule")
+            if self.execution.next_bar_execution:
+                raise ValueError(
+                    "execution.next_bar_execution must be False with a weight_schedule"
+                )
+            if self.execution.commission_rate != 0:
+                # The official book is a zero-fee replay; a fee-dragged 2.0
+                # book must never validate as the production schedule.
+                raise ValueError("execution.commission_rate must be 0 with a weight_schedule")
+            if self.execution.fill_fraction != 1:
+                raise ValueError("execution.fill_fraction must be 1 with a weight_schedule")
+            bar_dates = {b.ts.date() for b in self.series[0].bars}
+            entry_dates = [entry.effective_date for entry in schedule]
+            if entry_dates != sorted(entry_dates):
+                raise ValueError("weight_schedule must be sorted by effective_date")
+            if len(set(entry_dates)) != len(entry_dates):
+                raise ValueError("weight_schedule effective_dates must be unique")
+            unknown_dates = sorted(set(entry_dates) - bar_dates)
+            if unknown_dates:
+                raise ValueError(
+                    "weight_schedule dates missing from series bars: "
+                    f"{[d.isoformat() for d in unknown_dates]}"
+                )
+            for entry in schedule:
+                _validate_weight_tuple(
+                    entry.weights,
+                    label=f"weight_schedule[{entry.effective_date.isoformat()}]",
+                    tickers=set(tickers),
+                )
 
         holding_tickers = [h.ticker for h in self.initial_holdings]
         if holding_tickers != sorted(holding_tickers):
@@ -226,7 +326,7 @@ class NavPoint(ReplayContractModel):
 class PortfolioReplayResult(ReplayContractModel):
     """Strict internal portfolio result from one spawned shared-cash engine."""
 
-    schema_version: str = "1.0"
+    schema_version: Literal["1.0", "2.0"] = "1.0"
     request_id: NonEmptyId
     request_content_hash: NonEmptyId
     status: PortfolioReplayStatus
@@ -316,11 +416,13 @@ def inconclusive_result(
     status: PortfolioReplayStatus,
     message: str,
     starting_cash: Decimal = Decimal("0"),
+    schema_version: Literal["1.0", "2.0"] = "1.0",
 ) -> PortfolioReplayResult:
     """Build a typed non-ok result with no fabricated portfolio numbers."""
     if status == PortfolioReplayStatus.OK:
         raise ValueError("inconclusive_result cannot use status=ok")
     return PortfolioReplayResult(
+        schema_version=schema_version,
         request_id=request_id,
         request_content_hash=request_content_hash,
         status=status,
@@ -666,6 +768,7 @@ __all__ = [
     "ReplayContractModel",
     "ReplayInputManifest",
     "ReplayPairSpec",
+    "ScheduledTargetWeights",
     "SharedInputIdentity",
     "TargetWeight",
     "WalkForwardFold",

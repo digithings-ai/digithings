@@ -30,4 +30,11 @@ describe("assistant-ui skin isolation", () => {
     expect(index).toMatch(/skin === ["']digichat["']/);
     expect(index).toMatch(/DigichatSkin/);
   });
+
+  it("first-party skin imports the gallery Thread subpath, not the web barrel", () => {
+    const skin = readFileSync(join(here, "digichat.tsx"), "utf8");
+    expect(skin).toMatch(/from ["']@digithings\/web\/chat\/thread["']/);
+    expect(skin).not.toMatch(/from ["']@digithings\/web["']/);
+    expect(skin).not.toMatch(/ChatMarkdown/);
+  });
 });

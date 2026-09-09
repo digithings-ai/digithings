@@ -19,7 +19,6 @@ from digiquant.portfolio.graph import (
     build_portfolio_phases_thesis,
 )
 from digiquant.portfolio.models.forecast import (
-    AmendmentOutcome,
     ForecastTerms,
     PriceAnchor,
     PriceAnchorStatus,
@@ -40,6 +39,7 @@ from digiquant.research.phases.publish_phase import PublishDeps
 from digiquant.research.phases.triage_phase import TriageDeps
 from digiquant.research.state import PhasePortfolioState, ResearchConfigBundle, ResearchState
 from digiquant.research.testing.simulator import simulated_pipeline
+from pydantic import ValidationError
 
 from tests.dq.portfolio.incumbent_risk_fixtures import (
     assert_book_matches_golden,
@@ -358,7 +358,8 @@ def test_phase1_cutoff_excludes_late_known_outcomes_from_calibration() -> None:
     assert cal["unavailable_reason"] == "empty_cohort"
 
 
-def test_phase1_invalid_amendment_preserves_base_effective() -> None:
+def test_phase1_invalid_amendment_fails_hard() -> None:
+    """Invalid amendment economics raise — never absorbed into a REJECTED fallback (#3078)."""
     from datetime import date
 
     from tests.dq.portfolio.phase1_e2e_fixtures import (
@@ -393,18 +394,14 @@ def test_phase1_invalid_amendment_preserves_base_effective() -> None:
         "forecast_assessment": assessment.model_dump(mode="json"),
         "forecast": terms.model_dump(mode="json"),
     }
-    effective, amendment = _resolve_from_debate(
-        state=state,
-        ticker="AAPL",
-        analyst=analyst,
-        amendment_terms_raw=invalid_forecast_amendment_dict(),
-        amendment_reason="invalid probabilities",
-    )
-    assert amendment is None
-    assert effective is not None
-    assert effective.amendment_outcome is AmendmentOutcome.REJECTED
-    assert effective.effective_id == assessment.forecast_id
-    assert effective.degradation_reason == "amendment_rejected"
+    with pytest.raises(ValidationError):
+        _resolve_from_debate(
+            state=state,
+            ticker="AAPL",
+            analyst=analyst,
+            amendment_terms_raw=invalid_forecast_amendment_dict(),
+            amendment_reason="invalid probabilities",
+        )
 
 
 def test_phase1_unpriceable_action_is_typed_not_zero() -> None:

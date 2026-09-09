@@ -1683,6 +1683,32 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   I/O; crash/timeout → typed inconclusive (never a fabricated book). Must not
   call `nautilus_runner._run_multi_symbol_backtest`. Shadow/challenger only —
   production H8/H9 must not import `dashboard.replay`.
+  **Schedule replay, schema 2.0 (#3695):** `models.py` adds
+  `ScheduledTargetWeights(effective_date, weights)` + optional
+  `PortfolioReplayRequest.weight_schedule` (requires `schema_version="2.0"`,
+  empty `target_weights`, `next_bar_execution=False`; every effective_date
+  must equal a bar date). `nautilus_portfolio.py` executes each entry once at
+  its bar's close with same-bar fills (sells-before-buys two-pass), i.e. the
+  row dated D is submitted and filled at D's close — the causal convention
+  the house-book restatement (June→Sept 2026) was validated against (engine
+  matched the arithmetic chain to <1e-6 on that run; the enforced forward
+  guard band is 25bp fail / 1bp warn — see verify_nav_replay.py).
+  Legacy single-target trigger semantics unchanged when the schedule is empty
+  (submission now uses the sells-first ordering for both paths).
+  Forward verify: `digiquant/scripts/research/verify_nav_replay.py` rebuilds
+  the causal schedule + bars from Supabase and fails non-zero on NAV breach.
+  **Single source of truth (#3695):** the engine is the last writer of
+  `nav_history` under normal ordering via `verify_nav_replay.py --write`
+  (inception-100 normalization; `pipeline-research-metrics.yml` runs it before
+  metrics). The booking path (`portfolio_materialize.py`) still writes
+  provisional house rows at book time, so "sole writer" means last-writer
+  under the documented step order — a read-only `verify_nav_replay` (no
+  `--write`) step runs after metrics so drift fails loudly.
+  `refresh_performance_metrics.refresh_nav_point` only guards the engine row;
+  `pnl_pct` reads the stored engine series (finalized-accounting precedence
+  retired — it caused the Sept 2026 scale break); `update_tearsheet.py` no
+  longer writes `nav_history` / `portfolio_metrics` (simulation kept for the
+  tearsheet artifact only). Dashboard + tearsheets read the stored series.
   **Paired shadow comparison evidence (#2799 / WP10.5):**
   `dashboard/replay/allocation_comparison.py` + packaged
   `replay/shadow_criteria/v1.json` + CLI
@@ -1901,18 +1927,22 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   `None`, unknown required `bias` stays rejected.
 - **portfolio** (`digiquant/src/digiquant/portfolio/`) — thesis-aware portfolio loop.
   **H1–H9:** market thesis review → exploration → vehicle map → opportunity screener →
-  unified asset analyst (×N) → PM↔analyst deliberation (×N) → PM direction memo →
-  deterministic risk sizing (H8 / legacy 7E) → `commit_run` terminal booking.
+  coverage director (H4.5) → unified asset analyst (×N) → PM↔analyst deliberation (×N) →
+  PM direction memo → deterministic risk sizing (H8 / legacy 7E) → `commit_run` terminal booking.
   Split from research in epic #471 per [ADR-0015](../docs/adr/0015-research-vs-portfolio.md);
   topology canonical in [ADR-0020](../docs/adr/0020-dashboard-mvp-daily-delta.md).
   **H4 is the sole fan-out cap chokepoint** — `roster_cap.capped_tickers` bounds the
-  H5/H6 roster width to `max(ATLAS_MAX_ANALYSTS, len(prior_book))`; the prior book is
+  H5/H6 roster width to `max(DIGIQUANT_MAX_ANALYSTS, len(prior_book))`; the prior book is
   the only sanctioned overshoot (#936) and thesis vehicles are prioritised within the
   cap rather than exempt from it (#1767). The `build_h5_asset_analyst` /
   `build_h6_deliberation` compile-time builders also call it, but are test-only —
   `graph.py` wires the runtime `build_h5_from_state` / `build_h6_from_state` fan-outs.
   Roster width lands in `atlas_run_diagnostics.breakdown` via
-  `portfolio/roster_diagnostics.roster_breakdown`.
+  `portfolio/roster_diagnostics.roster_breakdown`. H4.5 coverage director (#3739) narrows
+  the H4 roster behaviorally (refresh / explore / skip with reasons, reasoning-tier
+  judgment, `portfolio/coverage/director: reasoning` pin) and can never widen it —
+  H4 remains the sole width ceiling; an LLM failure keeps H4's roster with a
+  non-retryable PhaseError.
 
 The handoff seam is `digiquant.research.snapshot.DigestPayload` — the only symbol
 portfolio imports from research runtime.
@@ -1947,12 +1977,13 @@ flowchart TB
     H2["H2 market thesis exploration"]
     H3["H3 thesis vehicle map"]
     H4["H4 opportunity screener"]
+    H45["H4.5 coverage director"]
     H5["H5 asset analyst ×N"]
     H6["H6 deliberation ×N"]
     H7["H7 PM direction memo"]
     H8["H8 risk sizing (7E)"]
     H9["H9 commit_run"]
-    H1 --> H2 --> H3 --> H4 --> H5 --> H6 --> H7 --> H8 --> H9
+    H1 --> H2 --> H3 --> H4 --> H45 --> H5 --> H6 --> H7 --> H8 --> H9
   end
 
   A4 -->|"DigestPayload"| H1
@@ -2192,10 +2223,15 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   Transient Supabase faults (disconnects, `PGRST002`, 502s) retry 3× with short
   backoff (`digiquant.supabase_retry`) in data tools, retrieval queries, and
   `query_returns_window`; anything else (notably 42703) still fails fast.
-  H6 amendment envelopes unwrap one `{terms|amendment|forecast_amendment}` level,
-  tenor fills from the H5 base, and the registry reason is always the short
-  `h6_challenge_revision` (never `summary.conclusion`, which tripped the 2000-char
-  CHECK). H9 cost evidence reads `hist_vol_21`/`atr_pct` from `price_technicals`
+   H6 amendment envelopes unwrap one `{terms|amendment|forecast_amendment}` level,
+   tenor fills from the H5 base, and the registry reason is always the short
+   `h6_challenge_revision` (never `summary.conclusion`, which tripped the 2000-char
+   CHECK). Invalid amendment economics **raise at unit level** instead of falling back to a
+   REJECTED/base-preserved outcome (#3078) — a structurally invalid amendment is
+   a model-output error that must surface, not be absorbed; the H6 node catches it
+   and degrades that ticker to carried + PhaseError, never killing the chain (#3738). `query_data`
+   rejects `close` on `price_technicals` before Supabase with a redirect to
+   `price_history` (#3078). H9 cost evidence reads `hist_vol_21`/`atr_pct` from `price_technicals`
   (second read joined onto the history row), never from `price_history`.
   `conviction_delta` clamps to ±2 before validation; `DocumentPatch` drops ops
   missing `op`/`path` before validation; bias synonyms map hawkish→bearish,
@@ -2391,11 +2427,11 @@ assuming it is always present.
   phase (`_run_terminal_phase`) so a late crash is recorded as a `PhaseError` and the run still
   reaches publish + materialize + the diagnostics write with last-good state. LLM usage is
   captured (`usage.start`/`snapshot`/`reset`) across the whole run.
-- `cli_main` exits non-zero when `is_degraded` (failed-segment share > `ATLAS_DEGRADED_RUN_PCT`,
+- `cli_main` exits non-zero when `is_degraded` (failed-segment share > `DIGIQUANT_DEGRADED_RUN_PCT`,
   default 50%) so CI's outer retry fires on a starved run — one bad sector does not trip it.
 - **Technicals freshness (Pillar 1F).** `data/prices/refresh.recompute_technicals_from_history`
   recomputes `price_technicals` from raw OHLCV in `price_history` (look-ahead-guarded,
-  network-free, idempotent). Preflight may call this when stale (`ATLAS_REFRESH_ON_DEMAND`).
+  network-free, idempotent). Preflight may call this when stale (`DIGIQUANT_REFRESH_ON_DEMAND`).
   The daily prices cron (`pipeline-digiquant-prices.yml`) is the primary freshness mechanism.
   Three contracts the recompute must honour (#1752):
   - **Read window ≠ write window.** The read spans `[write_start − warmup_days, as_of]`; only
@@ -3169,7 +3205,7 @@ detectable and is the only way a future collision would be visible.
   `RUN_DIAGNOSTICS_LIMIT` rose 30 → 90 because a retried date now consumes several slots.
 
 **Escalation rules on `status`** (each records itself in `breakdown.degraded_reasons`):
-any failed research segment (STRICT — supersedes the `ATLAS_DEGRADED_RUN_PCT` share rule for
+any failed research segment (STRICT — supersedes the `DIGIQUANT_DEGRADED_RUN_PCT` share rule for
 health purposes), more than `_PORTFOLIO_DEGRADED_PCT_DEFAULT` of the run's portfolio deliberations
 failed, and `research_produced and not book_committed` (the no-book gate — closes the
 residual detection hole behind #1766, which the #1555 commit gate misses because it only

@@ -5,9 +5,9 @@ This is the **library**: discover here, fetch from the registry when a deploy
 needs it. Do **not** vendor all ~120 cards into digichat or digiweb.
 
 digichat is the BFF (auth, stream, deploy YAML). digiweb is the frontend suite.
-Product Thread copies live in digichat `(baseline)/stock/`. Gallery skin copies
-live in digiweb `reference/components/assistant-ui/elements/`. This file is the
-single map — do not duplicate the table in digichat.
+Product Thread copies live in `@digithings/web/chat/thread` (gallery
+`thread.aui.tsx` + slots). Gallery `/chatbot` re-exports that same module.
+This file is the single map — do not duplicate the table in digichat.
 
 ## How to fetch
 
