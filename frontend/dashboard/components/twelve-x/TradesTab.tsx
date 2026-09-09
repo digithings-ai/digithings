@@ -30,6 +30,7 @@ import {
   type TradeSortKey,
 } from '@/lib/twelve-x/trade-history';
 import BoardDateRangeFilter from './BoardDateRangeFilter';
+import ExcursionRangeCell from './ExcursionRangeCell';
 
 const RESULT_FILTERS: { key: ResultFilter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -238,9 +239,10 @@ export default function TradesTab({
       </div>
       <p className="max-w-2xl px-1 text-xs text-ink-mute">
         Every trade recommendation and whether it worked. Each idea stays live until the
-        next board that posts the same pair (successor clock). Directional outcomes use
-        daily closes only for now — excursion (spike-capture) and level-touch scoring
-        follow once the high/low feed lands. Stop / target levels are quoted as published.
+        next board that posts the same currency axis, either orientation (successor clock).
+        Impact shows the observed excursion extremes with the close mark; directional
+        outcomes use daily closes. Stop / target levels are quoted as published and never
+        drive lifecycle scoring.
       </p>
 
       {history.length === 0 ? (
@@ -356,7 +358,7 @@ export default function TradesTab({
                       activeKey={sortKey}
                       sortDir={sortDir}
                       onSort={onSort}
-                      title="Signed hold return if executed (P&L %)"
+                      title="Observed excursion extremes with close mark (P&L %)"
                       align="right"
                     />
                     <SortHeader label="Result" sortKey="result" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
@@ -410,7 +412,10 @@ function TradeRow({ row }: { row: TradeHistoryRow }) {
   if (result === null) return null;
   return (
     <tr>
-      <td className="whitespace-nowrap px-3 py-2 font-mono text-ink-mute">{row.runDate}</td>
+      <td className="whitespace-nowrap px-3 py-2 font-mono text-ink-mute">
+        {row.runDate}
+        {row.continuedFrom ? <span className="ml-1">· cont. since {row.continuedFrom}</span> : null}
+      </td>
       <td className="whitespace-nowrap px-3 py-2 text-ink">{row.pair}</td>
       <td className="whitespace-nowrap px-3 py-2 text-ink">{biasLabel(row.direction)}</td>
       <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-ink">
@@ -425,8 +430,12 @@ function TradeRow({ row }: { row: TradeHistoryRow }) {
       <td className="whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums text-ink">
         {row.sessions ?? '—'}
       </td>
-      <td className="whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums text-ink">
-        {formatHoldPct(row.holdReturn)}
+      <td className="whitespace-nowrap px-3 py-2 text-right text-ink">
+        <ExcursionRangeCell
+          maxAdverse={row.maxAdverse}
+          maxFavorable={row.maxFavorable}
+          holdReturn={row.holdReturn}
+        />
       </td>
       <td className="whitespace-nowrap px-3 py-2">
         <ResultPill result={result} />

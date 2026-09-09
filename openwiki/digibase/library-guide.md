@@ -3,9 +3,6 @@ type: library-guide
 title: digibase Library Guide
 description: Shared digibase library — error envelopes, request-ID correlation, metrics, OTel, CORS, and audit redaction.
 tags: [digibase, shared-library, errors, metrics, otel, audit]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-bc62a8a6a6223eadc1325793
     resource: repo://digibase/src/digibase/audit.py
@@ -17,7 +14,10 @@ sources:
     resource: repo://digibase/src/digibase/metrics.py
   - id: openwiki-source-acc01443fc8b95f02bdc8db2
     resource: repo://digibase/src/digibase/otel.py
-generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+generated: { by: "opencode", at: "2026-09-09T14:37:17.158Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digibase Library Guide
@@ -61,7 +61,8 @@ environment, method, route, and status, exposed unauthenticated at
 ## OTel
 
 `otel.setup_otel_fastapi(app, service_name=...)` instruments the app with
-OTLP/HTTP export **only** when `OTEL_EXPORTER_OTLP_ENDPOINT` is set;
+OTLP/HTTP export **only** when `DIGI_OTEL_ENDPOINT` or
+`OTEL_EXPORTER_OTLP_ENDPOINT` is set;
 otherwise it is a strict no-op. Requires the `digibase[otel]` extra —
 missing packages log a warning and continue without tracing.
 

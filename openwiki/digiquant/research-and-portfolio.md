@@ -5,7 +5,7 @@ description: digiquant research and portfolio sub-graphs plus the dashboard back
 tags: [digiquant, research, portfolio, dashboard]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
+    at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-3cca7b16d985d38458390d9a
     resource: repo://digiquant/AGENTS.md

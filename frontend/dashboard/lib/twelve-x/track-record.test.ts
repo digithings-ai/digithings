@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatWilsonPct, wilsonInterval } from './wilson';
 import {
-  openIdeas,
+  carriedIdeas,
   summarizeConsensusAccuracy,
   summarizeConsensusStability,
   summarizeIdeaOutcomes,
@@ -49,7 +49,7 @@ function idea(
 }
 
 describe('summarizeIdeaOutcomes', () => {
-  it('counts successor-resolved directional wins; open excluded from n', () => {
+  it('counts successor-resolved directional wins; carried excluded from n', () => {
     const rows = [
       idea({
         run_date: '2026-06-12',
@@ -81,7 +81,7 @@ describe('summarizeIdeaOutcomes', () => {
       idea({
         run_date: '2026-06-26',
         rank: 1,
-        status: 'open',
+        status: 'carried',
         hit: null,
         directional_win: null,
         significant_hit: false,
@@ -101,9 +101,9 @@ describe('summarizeIdeaOutcomes', () => {
     expect(summary.resolvedCount).toBe(3);
     expect(summary.winCount).toBe(1);
     expect(summary.lossCount).toBe(2);
-    expect(summary.openCount).toBe(1);
+    expect(summary.carriedCount).toBe(1);
     expect(summary.missingCount).toBe(1);
-    expect(openIdeas(rows)).toHaveLength(1);
+    expect(carriedIdeas(rows)).toHaveLength(1);
   });
 });
 
@@ -150,7 +150,7 @@ describe('consensus stability', () => {
       clip_flag: false,
       sign_flip: false,
       abs_delta_score: 0.2,
-      accuracy_status: 'open',
+      accuracy_status: 'carried',
       currency_ret_5d: null,
       sigma_entry: null,
       hit_5d: null,
@@ -171,6 +171,6 @@ describe('consensus stability', () => {
     const acc = summarizeConsensusAccuracy(evalRows);
     expect(acc.interval.n).toBe(1);
     expect(acc.interval.k).toBe(1);
-    expect(acc.openCount).toBe(1);
+    expect(acc.carriedCount).toBe(1);
   });
 });

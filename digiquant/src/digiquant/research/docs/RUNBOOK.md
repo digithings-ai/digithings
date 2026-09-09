@@ -250,7 +250,7 @@ Capability-preserving reductions in place:
 | Per-phase shared-context filtering | `_node_factory._shared_context(context_keys=…)`, `SegmentNodeSpec.extra_context_keys` | Each node receives only the prior documents it consumes (own segment + declared extras) instead of the full latest-per-key dump (every segment + `analyst/*` + `pm-rebalance` + digests) — same information where it's used, large token cut where it isn't |
 | **Per-phase `data_layer` allowlist (#935)** | `_node_factory._shared_context(data_layer_scope=…)`, `SegmentNodeSpec.data_layer_scope` | The whole `data_layer.market_context` (every ETF's 12 technicals + every macro series) was dumped into *every* node. Now scoped: cross-asset phases (macro / asset-class / sector / equity / synthesis) keep `full`; the **PM** gets `portfolio` (macro + regime signals, no per-ticker ETF dump — it reads the book + prices via the data tools); **analyst / debate** nodes get `ticker` (compact regime signals only — they fetch their own ticker's technicals via tools). Freshness probes are scalars and always kept. Same data where it's used; large cut where the node fetches its own |
 | **Delta-aware snapshot history (#935)** | `_node_factory._shared_context(slim_snapshots=…)` (auto-on for `run_type=delta`) | On a **delta** run, the full `last_snapshots` history is collapsed inside shared_context to the latest snapshot's compact **bias row** (regime + per-asset bias) plus the **changed-segment** slugs from triage — a delta node still sees yesterday's stance without re-serializing the fat digest snapshot N times. **Baseline** runs keep the full history (the weekly baseline reviews the whole prior week). The phases that genuinely consume the history (triage / phase9 / monthly) read `state.prior_context.last_snapshots` into their own `phase_inputs`, so dropping the shared_context copy is lossless |
-| portfolio focus list | `portfolio/candidates.py` (`PORTFOLIO_FOCUS_TOP_N`, default 5) | 7C/7CD deliberate current holdings + top-scored opportunity candidates instead of the first `ATLAS_MAX_ANALYSTS` tickers of the watchlist file — same depth, applied where signal is; explicit `--watchlist` overrides |
+| portfolio focus list | `portfolio/candidates.py` (`PORTFOLIO_FOCUS_TOP_N`, default 5) | 7C/7CD deliberate current holdings + top-scored opportunity candidates instead of the first `DIGIQUANT_MAX_ANALYSTS` tickers of the watchlist file — same depth, applied where signal is; explicit `--watchlist` overrides |
 | `snapshot_lookback` 5 → 2 | `research/supabase_io.py` | Prior digests are re-serialized into every node's shared context; baseline + latest delta preserves continuity without 3 redundant copies |
 
 The shared-context block stays the **first (stable)** prompt content part with
@@ -260,7 +260,7 @@ ordering in `digigraph.graph.research_agent._format_scope_block` (#935).
 Deliberately **not** used (they reduce capability): higher triage carry
 thresholds. (`max_search_results` is unused under native dashboard grounding —
 Exa toolkit only.) A **blanket** fan-out cap is still
-rejected, but `ATLAS_MAX_ANALYSTS` is not blanket and since #1767 it is
+rejected, but `DIGIQUANT_MAX_ANALYSTS` is not blanket and since #1767 it is
 genuinely enforced: the prior book is exempt (#936) and thesis vehicles are
 prioritised round-robin *within* the cap, so the reduction falls on the
 lowest-ranked unlinked candidates rather than uniformly. It had never bound at
@@ -554,7 +554,7 @@ and since #1736 they legitimately disagree.
   honest reporting never triggers a retry storm. A day that lost 4 of 27 segments but
   committed its book is `status=degraded, degraded=false` and CI does **not** retry it.
 
-**`ATLAS_DEGRADED_RUN_PCT` has narrowed in meaning.** It no longer influences `status` (the
+**`DIGIQUANT_DEGRADED_RUN_PCT` has narrowed in meaning.** It no longer influences `status` (the
 STRICT rule above supersedes it); it now controls only *how much segment damage justifies a
 CI retry*. Raise it to make retries rarer, not to make the dashboard greener.
 
@@ -625,4 +625,34 @@ Dry-run prints weights/NAV from `positions`. `--apply` appends one house ledger
 commit and a `commit-run/{run_id}` document. Idempotent when a committed
 manifest already exists. Requires `CORE_SUPABASE_URL` /
 `CORE_SUPABASE_SERVICE_KEY` (same as the pipeline). Does not touch brokers.
+
+<!-- #3766 -->
+## Checkpoint/document archive offload (#3766)
+
+`.github/workflows/pipeline-checkpoint-archive.yml` runs
+`scripts/digiquant_archive_checkpoints.py` daily (R2 creds from the `R2_*`
+repo secrets). Operator contract:
+
+- **Ordering is archive → verify → delete.** The job uploads to R2, reads back
+  and SHA-256-verifies, writes the `archive_objects` pointer row, and only then
+  NULLs the Supabase cell. A pointer-write failure keeps the Supabase row — the
+  daily run is retry-safe and never orphans a payload without its pointer.
+- **The newest run per owner stays in Supabase.** Resume only ever touches the
+  current run id (`thread_base = resume_run_id or run_id`), so archiving
+  predecessors cannot break a retry. `--retain-days` / `--keep` narrow further.
+- **Eviction watermarks are 8.5GB high / 7GB low** on the ledger `size` sum
+  (compressed bytes). Eviction deletes oldest-first and never the latest run's
+  keys. If R2 approaches the 10GB free tier, retention shrinks automatically —
+  more owners → shorter history, no config change.
+- **Reconciliation:** `reconcile_ledger` drops ledger rows whose R2 object is
+  gone and reports orphan R2 keys; it never auto-deletes from R2. Orphans are
+  operator-deleted after confirming no pointer row references them.
+- **Read-back:** `resolve_payload(client, store, source_table, source_key)`
+  in `digiquant.ops.checkpoint_archive` — pointer lookup → R2 GET → sha256
+  verify → zstd decompress. `ArchiveNotFoundError` = no pointer row (payload
+  still live in Supabase or never archived); `ArchiveVerifyError` = checksum
+  mismatch, do not retry silently, escalate.
+- **First live archive of a new phase** (e.g. documents): dry-run first, then
+  archive one old thread/row, verify manifest + registry rows + a
+  `resolve_payload` round-trip, then proceed.
 

@@ -5,7 +5,7 @@ description: How digikey mints JWTs — grant types, scope matching and downscop
 tags: [digikey, jwt, scopes, auth]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
+    at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-5a73d428d9c326b6be1e4770
     resource: repo://digikey/AGENTS.md
