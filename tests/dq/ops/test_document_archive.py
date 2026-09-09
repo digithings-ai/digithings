@@ -18,6 +18,10 @@ class _Result:
 
 
 class _DocQuery:
+    # Mirror PostgREST's default page cap: an unbounded select returns at most
+    # 1000 rows. Production code must paginate explicitly (see DOC_SCAN_PAGE_SIZE).
+    _DEFAULT_PAGE = 1000
+
     def __init__(self, client, name):
         self._client = client
         self._table = client.tables[name]
@@ -26,6 +30,7 @@ class _DocQuery:
         self._filters = []
         self._patch = None
         self._pending_insert = None
+        self._range = None
 
     def select(self, *args):
         self._cols = args
@@ -33,6 +38,11 @@ class _DocQuery:
 
     def eq(self, col, val):
         self._filters.append((col, val))
+        return self
+
+    def range(self, start, end):
+        """Inclusive row window, mirroring postgrest-py's .range()."""
+        self._range = (start, end)
         return self
 
     def insert(self, row):
@@ -92,7 +102,13 @@ class _DocQuery:
                 "filters": list(self._filters),
             }
         )
-        return _Result(list(self._matched()))
+        rows = list(self._matched())
+        if self._range is not None:
+            start, end = self._range
+            rows = rows[start : end + 1]
+        else:
+            rows = rows[: self._DEFAULT_PAGE]
+        return _Result(rows)
 
 
 class FakeDocClient:
@@ -210,3 +226,22 @@ def test_archive_documents_native_types_serialize_to_registry():
     assert len(pointers) == 1
     assert pointers[0]["source_key"]["date"] == "2026-09-07"
     assert pointers[0]["source_key"]["workspace_id"] == str(ws)
+
+
+def test_archive_documents_scans_all_pages():
+    """The key scan must paginate: 1200 rows span two PostgREST pages."""
+    client, store = FakeDocClient(), FakeDocStore()
+    for k in ("k1", "k2"):
+        seed_documents(client, key=k, versions=[f"2026-09-{d:03d}" for d in range(1, 601)])
+    archive_documents(client, store, workspace="house")
+    pointers = (
+        client.table("archive_objects")
+        .select("*")
+        .eq("source_table", "documents")
+        .range(0, 9999)
+        .execute()
+        .data
+    )
+    assert len(pointers) == 1198
+    scans = [s for s in client.statements if s["table"] == "documents" and s["op"] == "select"]
+    assert len(scans) > 1, scans

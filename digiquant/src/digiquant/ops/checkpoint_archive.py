@@ -34,6 +34,8 @@ BLOB_KEY_COLUMNS: dict[str, tuple[str, ...]] = {
     "checkpoint_writes": ("thread_id", "checkpoint_ns", "checkpoint_id", "task_id", "idx"),
 }
 DOCUMENT_KEY_COLUMNS = ("workspace_id", "document_key", "date")
+# PostgREST caps one response page at 1000 rows: key scans must page explicitly.
+DOC_SCAN_PAGE_SIZE = 1000
 # Every table the archiver may read by key (DirectPostgresReader validates here).
 KEY_COLUMNS_BY_TABLE: dict[str, tuple[str, ...]] = {
     **BLOB_KEY_COLUMNS,
@@ -510,14 +512,23 @@ def archive_documents(
     archive always keeps the Supabase row.
     """
     key_cols = DOCUMENT_KEY_COLUMNS
-    key_rows = (
-        client.table("documents")
-        .select(",".join(key_cols))
-        .eq("workspace_id", workspace)
-        .execute()
-        .data
-        or []
-    )
+    # Page explicitly: PostgREST silently caps one response at 1000 rows.
+    key_rows: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        page = (
+            client.table("documents")
+            .select(",".join(key_cols))
+            .eq("workspace_id", workspace)
+            .range(offset, offset + DOC_SCAN_PAGE_SIZE - 1)
+            .execute()
+            .data
+            or []
+        )
+        key_rows.extend(page)
+        if len(page) < DOC_SCAN_PAGE_SIZE:
+            break
+        offset += DOC_SCAN_PAGE_SIZE
     groups: dict[str, list[dict[str, Any]]] = {}
     for key_row in key_rows:
         groups.setdefault(key_row.get("document_key"), []).append(key_row)
@@ -645,6 +656,7 @@ __all__ = [
     "BLOB_KEY_COLUMNS",
     "BLOB_TABLES",
     "DOCUMENT_KEY_COLUMNS",
+    "DOC_SCAN_PAGE_SIZE",
     "DirectPostgresReader",
     "HIGH_WATERMARK_BYTES",
     "KEY_COLUMNS_BY_TABLE",
