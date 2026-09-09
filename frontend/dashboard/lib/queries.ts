@@ -743,7 +743,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     // Curated NAV (#2599): finalized tips + labeled legacy. Rollback → nav_history / public_nav_history.
     supabase
       .from(ACCOUNTING_NAV_VIEW)
-      .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract')
+      .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract,series_seam')
       .order('date', { ascending: true }),
     houseBook(supabase, 'portfolio_metrics').order('date', { ascending: false }).limit(1).maybeSingle(),
     // Documents index (metadata only — no payload) used for the Research Library.

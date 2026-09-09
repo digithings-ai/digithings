@@ -4,7 +4,9 @@ import {
   accountingNavToHistoryShape,
   assertAccountingNavQueryOk,
   contributionsSumToDayReturn,
+  findNavSeriesSeams,
   isMissingPublicRelationError,
+  isNavSeriesSeam,
   navSeriesContractLabel,
 } from './accounting-views';
 
@@ -51,6 +53,47 @@ describe('accounting-views helpers (#2599)', () => {
   it('requires daily contributions to sum to the shown NAV day return', () => {
     expect(contributionsSumToDayReturn([0.8, 0.5, 0.2], 1.5)).toBe(true);
     expect(contributionsSumToDayReturn([0.8, 0.5], 1.5)).toBe(false);
+  });
+});
+
+describe('NAV series seam (#3767)', () => {
+  it('flags the explicit series_seam marker from migration 123', () => {
+    expect(
+      isNavSeriesSeam({ series_seam: true, source: 'finalized_accounting' }, 'legacy_nav_history')
+    ).toBe(true);
+    expect(
+      isNavSeriesSeam({ series_seam: false, source: 'finalized_accounting' }, 'finalized_accounting')
+    ).toBe(false);
+  });
+
+  it('detects a source flip for readers on an unmigrated view', () => {
+    expect(isNavSeriesSeam({ source: 'finalized_accounting' }, 'legacy_nav_history')).toBe(true);
+    expect(isNavSeriesSeam({ source: 'legacy_nav_history' }, 'legacy_nav_history')).toBe(false);
+    expect(isNavSeriesSeam({ source: 'finalized_accounting' })).toBe(false);
+  });
+
+  it('finds seam dates in the stitched Sep-8 shape (legacy run then finalized tip)', () => {
+    expect(
+      findNavSeriesSeams([
+        { date: '2026-09-06', source: 'legacy_nav_history', series_seam: false },
+        { date: '2026-09-07', source: 'legacy_nav_history', series_seam: false },
+        { date: '2026-09-08', source: 'finalized_accounting', series_seam: true },
+      ])
+    ).toEqual(['2026-09-08']);
+    // Fallback path without the migrated column still marks the flip.
+    expect(
+      findNavSeriesSeams([
+        { date: '2026-09-07', source: 'legacy_nav_history' },
+        { date: '2026-09-08', source: 'finalized_accounting' },
+      ])
+    ).toEqual(['2026-09-08']);
+    // No flip, no seam.
+    expect(
+      findNavSeriesSeams([
+        { date: '2026-09-07', source: 'legacy_nav_history' },
+        { date: '2026-09-08', source: 'legacy_nav_history' },
+      ])
+    ).toEqual([]);
   });
 });
 

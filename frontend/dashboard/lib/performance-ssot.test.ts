@@ -4,6 +4,7 @@ import { buildPerformanceTearsheet } from './observability-queries';
 import {
   MAX_DAY_RETURN_GAP_DAYS,
   buildPerformanceSsotMeta,
+  crossesNavSeam,
   isLiveMarksOverlay,
   metricsDivergenceBadgeLabel,
   navContractBadgeLabel,
@@ -227,6 +228,43 @@ describe('performance SSOT (#3580)', () => {
       { date: '2026-09-04', nav: 101, invested_pct: 40, day_return_pct: null },
     ]);
     expect(brief.dayReturnPct).toBeCloseTo(1, 6);
+  });
+
+  it('does not derive a day return across a legacy→finalized seam (#3767)', () => {
+    // Sep-8 shape: legacy 99.92 then finalized 110.75 with no stored day
+    // return must not render as a +10% session.
+    const brief = persistedHeadlinesFromNav([
+      {
+        date: '2026-09-07',
+        nav: 99.92,
+        invested_pct: 40,
+        day_return_pct: null,
+        source: 'legacy_nav_history',
+        series_seam: false,
+      },
+      {
+        date: '2026-09-08',
+        nav: 110.74928206,
+        invested_pct: 80,
+        day_return_pct: null,
+        source: 'finalized_accounting',
+        series_seam: true,
+      },
+    ]);
+    expect(brief.dayReturnPct).toBeNull();
+    expect(
+      crossesNavSeam(
+        { date: '2026-09-08', nav: 110.74928206, source: 'finalized_accounting', series_seam: true },
+        { date: '2026-09-07', nav: 99.92, source: 'legacy_nav_history' }
+      )
+    ).toBe(true);
+    // Same-series adjacent rows still derive.
+    expect(
+      crossesNavSeam(
+        { date: '2026-09-08', nav: 101, source: 'finalized_accounting', series_seam: false },
+        { date: '2026-09-07', nav: 100, source: 'finalized_accounting', series_seam: false }
+      )
+    ).toBe(false);
   });
 
   it('does not clamp an accounting-tip invested % over 100', () => {

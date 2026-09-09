@@ -709,7 +709,7 @@ export async function getPerformanceBundle(
 
   const navQuery = await supabase
     .from(ACCOUNTING_NAV_VIEW)
-    .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract')
+    .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract,series_seam')
     .order('date', { ascending: true })
     .limit(PERFORMANCE_HISTORY_LIMIT);
   if (navQuery.error) {

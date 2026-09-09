@@ -28,6 +28,12 @@ export type AccountingNavRow = {
   day_return_pct: number | null;
   source: AccountingNavSource | string;
   contract: AccountingNavContract | string;
+  /**
+   * True on the first row after a source flip (migration 123 / #3767).
+   * Charts must break the line at a seam — never draw a continuous return
+   * across legacy estimates and finalized accounting.
+   */
+  series_seam?: boolean | null;
 };
 
 /** Map a curated NAV row onto the legacy nav_history shape used by tearsheet builders. */
@@ -75,6 +81,40 @@ export function navSeriesContractLabel(
     ? [...dated].sort((a, b) => String(a.date).localeCompare(String(b.date))).at(-1)
     : rows[rows.length - 1];
   return navRowContractLabel(tip!);
+}
+
+/**
+ * True when a NAV row sits on a legacy↔finalized seam (migration 123 / #3767).
+ * Accepts the explicit `series_seam` flag or a detected source flip against
+ * the previous calendar row (for readers on an unmigrated view).
+ */
+export function isNavSeriesSeam(
+  row: { series_seam?: boolean | null; source?: string | null },
+  prevSource?: string | null
+): boolean {
+  if (row.series_seam === true) return true;
+  if (prevSource == null) return false;
+  const source = row.source ?? null;
+  return source != null && prevSource != null && source !== prevSource;
+}
+
+/**
+ * Dates where the stitched NAV series flips source (#3767). Charts break the
+ * line at these dates instead of drawing a phantom return across two series.
+ */
+export function findNavSeriesSeams(
+  rows: ReadonlyArray<{ date: string; source?: string | null; series_seam?: boolean | null }>
+): string[] {
+  const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+  const seams: string[] = [];
+  let prevSource: string | null | undefined;
+  for (const row of sorted) {
+    if (prevSource !== undefined && isNavSeriesSeam(row, prevSource)) {
+      seams.push(row.date);
+    }
+    prevSource = row.source ?? null;
+  }
+  return seams;
 }
 
 /**
