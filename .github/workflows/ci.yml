@@ -387,10 +387,10 @@ jobs:
 
       - name: Install ripgrep (pandas boundary gate)
         run: |
-          # Google Chrome's apt repo currently fails with Hash Sum mismatch and
-          # aborts `apt-get update` before ripgrep can install.
-          sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
-          sudo apt-get update -qq
+          # Skip sources.list.d (Google Chrome Hash Sum mismatch aborts update).
+          sudo apt-get update -qq \
+            -o Dir::Etc::sourcelist=/etc/apt/sources.list \
+            -o Dir::Etc::sourceparts=/dev/null
           sudo apt-get install -y -qq ripgrep
 
       - name: Pandas boundary (REM-132)
