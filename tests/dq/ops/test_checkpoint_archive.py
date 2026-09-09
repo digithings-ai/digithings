@@ -312,6 +312,71 @@ class TestArchiveThread:
         blobs = client.table("checkpoint_blobs").select("*").execute().data
         assert any(b["blob"] is not None for b in blobs)
 
+    def test_rerun_after_partial_archive_writes_no_duplicate_pointer(self) -> None:
+        # A previous run uploaded + recorded the pointer but died before NULL-ing:
+        # the blob is still non-null AND the registry row already exists.
+        probe = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "run1::portfolio"}],
+                "checkpoint_blobs": [_blob_row()],
+                "checkpoint_writes": [],
+            }
+        )
+        first = archive_thread(probe, FakeStore(), "run1::portfolio")
+        key = first.entries[0].key
+        client = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "run1::portfolio"}],
+                "checkpoint_blobs": [_blob_row()],
+                "checkpoint_writes": [],
+                "archive_objects": [
+                    {
+                        "source_table": "checkpoint_blobs",
+                        "source_key": {"thread_id": "run1::portfolio"},
+                        "r2_key": key,
+                        "sha256": first.entries[0].sha256,
+                        "size": first.entries[0].size,
+                        "owner": "house",
+                    }
+                ],
+            }
+        )
+        manifest = archive_thread(client, FakeStore(), "run1::portfolio")
+        rows = client.table("archive_objects").select("*").execute().data
+        assert [r["r2_key"] for r in rows].count(key) == 1
+        assert len(manifest.entries) == 1
+
+    def test_rerun_with_conflicting_pointer_sha_raises(self) -> None:
+        # Same r2_key but different bytes = real conflict, never silently keep.
+        probe = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "run1::portfolio"}],
+                "checkpoint_blobs": [_blob_row()],
+                "checkpoint_writes": [],
+            }
+        )
+        first = archive_thread(probe, FakeStore(), "run1::portfolio")
+        key = first.entries[0].key
+        client = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "run1::portfolio"}],
+                "checkpoint_blobs": [_blob_row()],
+                "checkpoint_writes": [],
+                "archive_objects": [
+                    {
+                        "source_table": "checkpoint_blobs",
+                        "source_key": {"thread_id": "run1::portfolio"},
+                        "r2_key": key,
+                        "sha256": "0" * 64,
+                        "size": first.entries[0].size,
+                        "owner": "house",
+                    }
+                ],
+            }
+        )
+        with pytest.raises(ArchiveVerifyError):
+            archive_thread(client, FakeStore(), "run1::portfolio")
+
 
 class TestRestoreThread:
     def test_round_trip(self) -> None:

@@ -269,9 +269,22 @@ def record_pointer(client: Any, entry: ArchiveEntry, owner: str = "house") -> No
 
     ``source_table`` is the stable key segment (``checkpoints/<thread>/<table>/...``),
     ``source_key`` the row filters as a JSON object. A failed insert propagates to
-    the caller so the Supabase row is kept.
+    the caller so the Supabase row is kept. Re-recording identical bytes is a
+    no-op so a retried run converges; the same key with different bytes raises.
     """
     source_table = entry.key.split("/")[2]
+    existing = (
+        client.table("archive_objects")
+        .select("r2_key,sha256")
+        .eq("r2_key", entry.key)
+        .execute()
+        .data
+        or []
+    )
+    for pointer in existing:
+        if pointer.get("sha256") == entry.sha256:
+            return
+        raise ArchiveVerifyError(f"archive pointer conflict for {entry.key}: Supabase row kept")
     client.table("archive_objects").insert(
         {
             "source_table": source_table,
