@@ -1135,6 +1135,22 @@ stood between the *published* anon JWT and a write.
 - **`service_role` is untouched.** It is the only writer — all production workflows, every
   Python connector, and the `prices-live` edge function.
 
+### archive_objects R2 pointer registry — migration 119 + 122 (#3766 / #3793)
+
+`public.archive_objects` is the R2 checkpoint/document offload pointer registry and
+quota ledger (`r2_key`, `sha256`, `source_key`, `owner`, compressed `size`). Created in
+**119** without client lockdown; **122** applies the service-role-only pattern:
+
+| Layer | Policy |
+|-------|--------|
+| RLS | Enabled with **zero** policies — deny for non-bypass roles. |
+| Privileges | `REVOKE ALL` from `PUBLIC` / `anon` / `authenticated`; `GRANT` SELECT/INSERT/UPDATE/DELETE to `service_role` only (after reset). |
+| Sequence | Identity `id` sequence: revoke from clients; `USAGE, SELECT` to `service_role` (118-style). |
+
+No anon/authenticated policies by design — archiver / ops use the service key. Verify:
+`SET LOCAL ROLE anon` (or `authenticated`) then `SELECT * FROM archive_objects` must fail
+(42501). Proof: `tests/dq/research/test_migration_122.py`.
+
 ## LangGraph checkpointer tables — retention added in migration 061 (#1758)
 
 Not part of the research schema: `checkpoints`, `checkpoint_writes`, `checkpoint_blobs`
