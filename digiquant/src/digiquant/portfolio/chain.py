@@ -211,7 +211,7 @@ def _invoke_resumable(
 
 
 def _degraded_run_pct() -> float:
-    """``ATLAS_DEGRADED_RUN_PCT`` (failed-segment %% that marks a run degraded); default 50."""
+    """``DIGIQUANT_DEGRADED_RUN_PCT`` (failed-segment %% that marks a run degraded); default 50."""
     try:
         return float(env_lookup(DEGRADED_RUN_PCT) or 50.0)
     except ValueError:
@@ -438,7 +438,7 @@ def run_research_then_portfolio(
     research watchlist; ``None`` fans out over the full watchlist.
 
     ``portfolio_held`` are the prior-book holdings; they are threaded to the
-    7C/7CD cap so a holding is never dropped by ``ATLAS_MAX_ANALYSTS`` and
+    7C/7CD cap so a holding is never dropped by ``DIGIQUANT_MAX_ANALYSTS`` and
     auto-exited by the PM (the Jun-18 IJR regression, #936).
 
     ``deps.research.publish`` is overridden to ``None`` for the research pass —
@@ -928,7 +928,7 @@ def cli_main(argv: list[str] | None = None) -> int:
 
     # Degraded-run gate (#726, 1B) + good-book guard (#809): a run that produced little/no
     # fresh research is worth retrying — exit non-zero so the CI outer-retry fires (one bad
-    # sector does NOT trip it; the threshold is ATLAS_DEGRADED_RUN_PCT, default 50%). BUT a
+    # sector does NOT trip it; the threshold is DIGIQUANT_DEGRADED_RUN_PCT, default 50%). BUT a
     # run that already materialized a valid sized book must NOT retry — that wasted ~20 min of
     # backoff sleeps on a good book (#809). The diagnostics row, written inside
     # run_research_then_portfolio, records the why. Monthly runs (no research segments) don't trip it.

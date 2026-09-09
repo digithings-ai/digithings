@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const publicPort = Number(process.env.PORT ?? "3000");
 const upstreamPort = Number(process.env.DIGICHAT_NEXT_INTERNAL_PORT ?? "3001");
@@ -37,6 +37,33 @@ export function forwardHeaders(headers, peerIp) {
   delete forwarded["x-digichat-peer-ip"];
   forwarded["x-digichat-peer-ip"] = peerIp;
   return forwarded;
+}
+
+const PACKAGE_JSON_BESIDE_SCRIPT = fileURLToPath(new URL("../package.json", import.meta.url));
+
+/**
+ * DIGICHAT_VERSION for GET /api/health. Prefer a non-empty env (compose/override),
+ * then the image-baked /etc/digichat-version, then this package's package.json.
+ */
+export function resolveDigichatVersion(env = process.env) {
+  const fromEnv = typeof env.DIGICHAT_VERSION === "string" ? env.DIGICHAT_VERSION.trim() : "";
+  if (fromEnv) return fromEnv;
+  const files = ["/etc/digichat-version", PACKAGE_JSON_BESIDE_SCRIPT];
+  for (const path of files) {
+    if (!existsSync(path)) continue;
+    try {
+      const raw = readFileSync(path, "utf8").trim();
+      if (path.endsWith("package.json")) {
+        const version = JSON.parse(raw).version;
+        if (typeof version === "string" && version.trim()) return version.trim();
+      } else if (raw) {
+        return raw;
+      }
+    } catch {
+      // try the next candidate
+    }
+  }
+  return "";
 }
 
 function nextServerPath() {
@@ -73,6 +100,8 @@ function waitForNext() {
 }
 
 function start() {
+  const bakedVersion = resolveDigichatVersion();
+  if (bakedVersion) process.env.DIGICHAT_VERSION = bakedVersion;
   const capturePeer = Boolean(process.env.DIGICHAT_TRUSTED_PROXIES?.trim());
   const next = spawn(process.execPath, [nextServerPath()], {
     env: {

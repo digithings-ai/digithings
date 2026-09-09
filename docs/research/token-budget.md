@@ -111,11 +111,11 @@ Each segment reads upstream macro and asset-class context, requiring coherent mu
 ### Phase 7C — Per-ticker analyst fan-out `[tier: extraction — throughput-constrained]`
 
 **Model:** `gemini/gemini-2.5-flash`  
-**Segments:** up to 25 tickers in CI (`ATLAS_MAX_ANALYSTS=25`)
+**Segments:** up to 25 tickers in CI (`DIGIQUANT_MAX_ANALYSTS=25`)
 
 > **Why Gemini Flash for extraction?** Groq's free tier TPM was reduced to 6,000 in 2026. Phase 7C alone needs ~35k tokens; combined with phases 1 and 2, a single run requires ~41k tokens — exceeding the per-minute cap by 7×. Gemini Flash (250k TPM, 10 RPM) handles the volume; the 10 RPM limit means 25 calls serialise over ~3 minutes with backoff.
 >
-> **To upgrade:** Switch to a paid Groq plan and set `analyst-: "groq/llama-3.3-70b-versatile"`, or reduce `ATLAS_MAX_ANALYSTS` to stay within 6k TPM on the free tier.
+> **To upgrade:** Switch to a paid Groq plan and set `analyst-: "groq/llama-3.3-70b-versatile"`, or reduce `DIGIQUANT_MAX_ANALYSTS` to stay within 6k TPM on the free tier.
 
 **Token budget per ticker:** ~1,000 in + ~400 out = 1,400 × 25 = **~35,000 tokens (CI)**  
 *Full watchlist (98 tickers): ~137k tokens — serialised across 7+ minutes at 20k TPM.*

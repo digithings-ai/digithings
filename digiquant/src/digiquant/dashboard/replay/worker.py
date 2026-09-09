@@ -15,6 +15,7 @@ import sys
 import traceback
 from decimal import Decimal
 from pathlib import Path
+from typing import Literal
 
 from digiquant.dashboard.replay.models import (
     PortfolioReplayRequest,
@@ -71,6 +72,7 @@ def run_portfolio_replay_isolated(
             status=PortfolioReplayStatus.TIMEOUT,
             message=f"worker exceeded timeout_s={timeout_s}",
             starting_cash=request.starting_cash,
+            schema_version=request.schema_version,
         )
 
     exitcode = proc.exitcode
@@ -81,6 +83,7 @@ def run_portfolio_replay_isolated(
             status=PortfolioReplayStatus.CRASH,
             message="worker exited with unknown exit code",
             starting_cash=request.starting_cash,
+            schema_version=request.schema_version,
         )
     if exitcode != 0:
         status = PortfolioReplayStatus.CRASH
@@ -99,6 +102,7 @@ def run_portfolio_replay_isolated(
             status=status,
             message=f"worker crashed with exitcode={exitcode}{signal_note}",
             starting_cash=request.starting_cash,
+            schema_version=request.schema_version,
         )
 
     loaded = _try_load_result(res_path)
@@ -109,6 +113,7 @@ def run_portfolio_replay_isolated(
             status=PortfolioReplayStatus.INCONCLUSIVE,
             message="worker exited 0 but result JSON missing or invalid",
             starting_cash=request.starting_cash,
+            schema_version=request.schema_version,
         )
     return loaded
 
@@ -130,12 +135,14 @@ def _worker_entry(request_path: str, result_path: str) -> None:
     request_id = "unknown"
     request_hash = "0" * 64
     starting_cash = Decimal("0")
+    schema_version: Literal["1.0", "2.0"] = "1.0"
     try:
         payload = json.loads(req_path.read_text(encoding="utf-8"))
         request = PortfolioReplayRequest.model_validate(payload)
         request_id = request.request_id
         request_hash = request.content_hash()
         starting_cash = request.starting_cash
+        schema_version = request.schema_version
         # Import inside the child so the parent never loads Nautilus.
         from digiquant.dashboard.replay.nautilus_portfolio import (
             run_shared_cash_portfolio_replay,
@@ -153,6 +160,7 @@ def _worker_entry(request_path: str, result_path: str) -> None:
             status=PortfolioReplayStatus.ERROR,
             message=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}",
             starting_cash=starting_cash,
+            schema_version=schema_version,
         )
         try:
             _write_result(res_path, result)

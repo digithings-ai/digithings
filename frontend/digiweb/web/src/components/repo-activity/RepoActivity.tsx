@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 
 import { GitHubGlyph } from "../icons";
 import { fetchRepoActivityLive } from "./fetch";
+import { RepoHeatmap } from "./RepoHeatmap";
 import {
   cloneParts,
   grouped,
@@ -175,6 +176,14 @@ function Detailed({
           <Metric n={data.pullsOpen} label="PRs open" />
           <Metric n={data.issuesOpen} label="issues open" />
         </ul>
+      </div>
+      <div className="ra-group">
+        <p className="ra-kicker">{"// contributions — last year"}</p>
+        <RepoHeatmap
+          pulls={data.mergedPulls}
+          data={data.dailyContributions}
+          weeks={53}
+        />
       </div>
       <div className="ra-meta">
         <ReleaseLink release={data.latestRelease} />

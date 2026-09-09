@@ -80,6 +80,34 @@ deployment:
       true,
     );
     expect(cfg.hosts?.["customer.example"]?.gate.requiredPlanTier).toBeUndefined();
+    expect(cfg.hosts?.["customer.example"]?.chrome.skin).toBe("base");
+  });
+
+  it("defaults first-party DIGICHAT_EMBED_TENANTS hosts to digichat when skin is omitted", () => {
+    const tenants = JSON.stringify({
+      "digithings.ai": {
+        slug: "digithings",
+        aliases: ["www.digithings.ai"],
+        token: "unused-for-first-party",
+        backend: { type: "digigraph" },
+        gateMode: "ungated",
+      },
+      "occ.digithings.ai": {
+        slug: "occ",
+        token: "unused-for-first-party",
+        backend: { type: "digigraph" },
+        gateMode: "ungated",
+      },
+    });
+    const cfg = loadDigichatConfig({
+      fileContents: null,
+      env: { DIGICHAT_EMBED_TENANTS: tenants },
+    });
+    expect(cfg.hosts?.["digithings.ai"]?.chrome.skin).toBe("digichat");
+    expect(cfg.hosts?.["www.digithings.ai"]?.chrome.skin).toBe("digichat");
+    expect(cfg.hosts?.["occ.digithings.ai"]?.chrome.skin).toBe("digichat");
+    const client = toDigichatClientConfig(cfg.hosts!["digithings.ai"]!);
+    expect(client.chrome.skin).toBe("digichat");
   });
 
   it("hydrates requiredPlanTier from DIGICHAT_EMBED_TENANTS (#3662 YAML round-trip)", () => {

@@ -77,7 +77,12 @@ def test_lookback_poison_cannot_populate_daily_pnl_pct() -> None:
     assert rows[0]["pnl_pct"] == pytest.approx(0.42, abs=1e-4)
 
 
-def test_final_accounting_still_beats_lookback_and_nav() -> None:
+def test_final_accounting_no_longer_feeds_daily_pnl() -> None:
+    """Finalized periods must NOT beat lookback/NAV retirement order (#3695).
+
+    The engine NAV series is the sole pnl source: nav 100.0 -> 101.0 = 1.0
+    wins over the persisted final period (2.0) and poisoned lookback (9.99).
+    """
     mod = _load_metrics_mod()
     client = MergingFake()
     period = compute_period(_final_hold_input())
@@ -101,8 +106,9 @@ def test_final_accounting_still_beats_lookback_and_nav() -> None:
     mod.upsert_portfolio_metrics_daily(client, PERIOD.isoformat())
     rows = client.store.get("portfolio_metrics", [])
     assert rows
-    # Final period return: (51000-50000)/50000 * 100 = 2.0 for _final_hold_input
-    assert rows[0]["pnl_pct"] == pytest.approx(2.0, abs=1e-6)
+    # Final period return would be (51000-50000)/50000 * 100 = 2.0 for
+    # _final_hold_input, but the engine NAV series wins: 1.0.
+    assert rows[0]["pnl_pct"] == pytest.approx(1.0, abs=1e-6)
 
 
 def test_workflow_documents_lookback_as_diagnostic() -> None:
