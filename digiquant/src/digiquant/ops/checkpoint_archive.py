@@ -81,6 +81,55 @@ class StorageBackend(Protocol):
 
     def put(self, key: str, data: bytes) -> None: ...
     def get(self, key: str) -> bytes: ...
+    def delete(self, key: str) -> None: ...
+    def list_keys(self, prefix: str) -> list[str]: ...
+
+
+HIGH_WATERMARK_BYTES = 8_500_000_000
+LOW_WATERMARK_BYTES = 7_000_000_000
+
+
+def bucket_usage(client: Any) -> int:
+    """Sum of archived bytes per the ``archive_objects`` ledger."""
+    rows = client.table("archive_objects").select("size").execute().data or []
+    return sum(int(r.get("size") or 0) for r in rows)
+
+
+def evict_to_watermark(
+    client: Any, store: StorageBackend, latest_keys: set[str] | None = None
+) -> list[str]:
+    """Delete oldest-first until usage <= low watermark; never evict *latest_keys*."""
+    protected = latest_keys or set()
+    if bucket_usage(client) <= HIGH_WATERMARK_BYTES:
+        return []
+    rows = client.table("archive_objects").select("*").order("archived_at").execute().data or []
+    evicted: list[str] = []
+    for row in rows:
+        if bucket_usage(client) <= LOW_WATERMARK_BYTES:
+            break
+        if row["r2_key"] in protected:
+            continue
+        store.delete(row["r2_key"])
+        client.table("archive_objects").delete().eq("r2_key", row["r2_key"]).execute()
+        evicted.append(row["r2_key"])
+        logger.info("evicted %s (%s bytes)", row["r2_key"], row["size"])
+    return evicted
+
+
+def reconcile_ledger(client: Any, store: StorageBackend) -> list[str]:
+    """Drop ledger rows with no backing object; return orphan R2 keys.
+
+    Orphan R2 objects (present in the bucket, absent from the ledger) are
+    reported for operator review — never auto-deleted.
+    """
+    ledger_keys = {
+        r["r2_key"] for r in (client.table("archive_objects").select("r2_key").execute().data or [])
+    }
+    stored_keys = set(store.list_keys("checkpoints/"))
+    for dead in sorted(ledger_keys - stored_keys):
+        client.table("archive_objects").delete().eq("r2_key", dead).execute()
+        logger.info("reconciled dead ledger row %s", dead)
+    return sorted(stored_keys - ledger_keys)
 
 
 def parse_postgrest_bytea(value: Any) -> bytes | None:
@@ -321,6 +370,17 @@ class R2Backend:
         self._s3().download_fileobj(self.bucket, key, buf)
         return buf.getvalue()
 
+    def delete(self, key: str) -> None:
+        self._s3().delete_object(Bucket=self.bucket, Key=key)
+
+    def list_keys(self, prefix: str) -> list[str]:
+        paginator = self._s3().get_paginator("list_objects_v2")
+        keys: list[str] = []
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
+            for obj in page.get("Contents", ()):
+                keys.append(obj["Key"])
+        return sorted(keys)
+
 
 __all__ = [
     "DICT_VERSION",
@@ -330,16 +390,21 @@ __all__ = [
     "ArchiveVerifyError",
     "BLOB_KEY_COLUMNS",
     "BLOB_TABLES",
+    "HIGH_WATERMARK_BYTES",
+    "LOW_WATERMARK_BYTES",
     "R2Backend",
     "StorageBackend",
     "archive_thread",
     "blob_key",
+    "bucket_usage",
     "compress_payload",
     "decompress_payload",
+    "evict_to_watermark",
     "list_threads",
     "main",
     "parse_postgrest_bytea",
     "previous_threads",
+    "reconcile_ledger",
     "record_pointer",
     "resolve_payload",
     "restore_thread",
@@ -418,12 +483,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.retain_days is not None:
         fresh = set(threads_older_than(client, args.retain_days))
         keep |= set(threads) - fresh
+    fresh_keys: set[str] = set()
     for thread_id in threads:
         if thread_id in keep:
             continue
         manifest = archive_thread(client, store, thread_id, args.owner)
         manifests.append(manifest.to_dict())
+        fresh_keys.update(entry.key for entry in manifest.entries)
         print(f"archived {thread_id}: {len(manifest.entries)} payloads")
+    evicted = evict_to_watermark(client, store, fresh_keys)
+    for key in evicted:
+        print(f"evicted {key}")
     if args.manifest_out:
         with open(args.manifest_out, "w", encoding="utf-8") as fh:
             json.dump(manifests, fh, indent=2)

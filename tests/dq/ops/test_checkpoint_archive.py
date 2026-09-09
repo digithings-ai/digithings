@@ -10,6 +10,7 @@ import pytest
 pytestmark = pytest.mark.unit
 
 from digiquant.ops.checkpoint_archive import (  # noqa: E402
+    LOW_WATERMARK_BYTES,
     ArchiveManifest,
     ArchiveNotFoundError,
     ArchiveVerifyError,
@@ -17,12 +18,15 @@ from digiquant.ops.checkpoint_archive import (  # noqa: E402
     _r2_backend_from_env,
     archive_thread,
     blob_key,
+    bucket_usage,
     compress_payload,
     decompress_payload,
+    evict_to_watermark,
     list_threads,
     main,
     parse_postgrest_bytea,
     previous_threads,
+    reconcile_ledger,
     resolve_payload,
     restore_thread,
 )
@@ -39,9 +43,19 @@ class _Query:
     store: dict[str, list[dict[str, Any]]]
     _filters: list[tuple[str, Any]] = field(default_factory=list)
     _pending_update: dict[str, Any] | None = None
+    _pending_delete: bool = False
+    _order_col: str | None = None
     fail: bool = False
 
     def select(self, cols: str) -> "_Query":
+        return self
+
+    def order(self, col: str) -> "_Query":
+        self._order_col = col
+        return self
+
+    def delete(self) -> "_Query":
+        self._pending_delete = True
         return self
 
     def eq(self, col: str, val: Any) -> "_Query":
@@ -74,6 +88,12 @@ class _Query:
             return True
 
         rows = [r for r in table if _matches(r)]
+        if self._order_col is not None:
+            rows.sort(key=lambda r: r.get(self._order_col))
+        if self._pending_delete:
+            for row in rows:
+                table.remove(row)
+            return _Resp(data=[])
         if self._pending_update is not None:
             for row in rows:
                 row.update(self._pending_update)
@@ -107,6 +127,13 @@ class FakeStore:
 
     def get(self, key: str) -> bytes:
         return self.objects[key]
+
+    def delete(self, key: str) -> None:
+        del self.objects[key]
+        self.original.pop(key, None)
+
+    def list_keys(self, prefix: str) -> list[str]:
+        return sorted(k for k in self.objects if k.startswith(prefix))
 
 
 def _blob_row(**over: Any) -> dict[str, Any]:
@@ -425,3 +452,56 @@ def test_resolve_payload_round_trip():
 def test_resolve_missing_pointer_raises_not_found():
     with pytest.raises(ArchiveNotFoundError):
         resolve_payload(FakeClient(), FakeStore(), "checkpoint_blobs", {"thread_id": "nope"})
+
+
+def _seed_ledger(client: FakeClient, keys_sizes: list[tuple[str, int]]) -> None:
+    for i, (key, size) in enumerate(keys_sizes):
+        client.table("archive_objects").insert(
+            {
+                "source_table": "checkpoint_blobs",
+                "source_key": {"thread_id": f"t{i}"},
+                "r2_key": key,
+                "sha256": "0" * 64,
+                "size": size,
+                "owner": "house",
+                "archived_at": f"2026-09-0{i + 1}T00:00:00+00:00",
+                "status": "archived",
+            }
+        ).execute()
+
+
+def test_evict_oldest_first_to_low_watermark():
+    client = FakeClient()
+    _seed_ledger(
+        client, [("r2/a", 4_000_000_000), ("r2/b", 3_000_000_000), ("r2/c", 2_000_000_000)]
+    )
+    store = FakeStore()
+    for key in ("r2/a", "r2/b", "r2/c"):
+        store.objects[key] = b"x"
+    evicted = evict_to_watermark(client, store)
+    assert evicted == ["r2/a"]
+    assert bucket_usage(client) <= LOW_WATERMARK_BYTES
+
+
+def test_evict_never_touches_latest_run():
+    client = FakeClient()
+    _seed_ledger(client, [("r2/latest-x", 9_000_000_000)])
+    store = FakeStore()
+    store.objects["r2/latest-x"] = b"x"
+    assert evict_to_watermark(client, store, {"r2/latest-x"}) == []
+
+
+def test_reconcile_removes_dead_ledger_rows():
+    client = FakeClient()
+    _seed_ledger(client, [("checkpoints/gone", 10)])
+    assert reconcile_ledger(client, FakeStore()) == []
+    rows = client.table("archive_objects").select("*").execute().data
+    assert rows == []
+
+
+def test_reconcile_reports_orphans_without_deleting():
+    client = FakeClient()
+    store = FakeStore()
+    store.objects["checkpoints/orphan/x.bin"] = b"y"
+    assert reconcile_ledger(client, store) == ["checkpoints/orphan/x.bin"]
+    assert "checkpoints/orphan/x.bin" in store.objects
