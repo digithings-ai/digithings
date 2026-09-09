@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * Live assistant-ui Thread on the chatbot gallery. Registry Thread plus a
- * local fixture runtime — no custom message tree.
+ * Live assistant-ui Thread on the chatbot gallery. Same module as product
+ * `/embed` (`@digithings/web/chat/thread`) plus a local fixture runtime.
  */
 import {
   Thread,
   type ComposerLayout,
   type ThreadComponents,
-} from "@/components/assistant-ui/elements/thread.aui";
+} from "@digithings/web/chat/thread";
 
 import { DigichatFixtureRuntime } from "./digichat-fixture-runtime";
 import { DigichatThreadWelcome } from "./digichat-thread-welcome";

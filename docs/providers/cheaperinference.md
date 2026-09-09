@@ -62,3 +62,15 @@ land — not automated in this PR.
 It is an operator error to share a single `CHEAPERINFERENCE_API_KEY` between
 different tenants expecting isolated model routing; each tenant should have its
 own key and upstream configuration.
+
+## digichat public picker (#3777)
+
+The digithings.ai `/chat` embed (`frontend/digichat/config/examples/digithings-ai-embed.yaml`)
+allowlists models at **DeepSeek V4 Flash pricing or cheaper**: default
+`deepseek/deepseek-v4-flash`, other CI cheap OSS (`deepseek-v4-flash-0731`,
+`openai/gpt-oss-120b`, `z-ai/glm-5.3-flash`), other OpenRouter OSS at that
+price (Mistral, Llama 3.1 8B, Qwen 3.7 Flash, Gemma 3, Nemotron nano, …),
+and OpenRouter `:free` chat models. Not `google/gemini-3.1-flash-lite` or
+`openai/gpt-5.6-luna`. The BFF rejects any
+other `X-Digi-Model`. CI-mapped slugs route to `api.cheaperinference.com` when the
+overlay is merged; `:free` ids stay on OpenRouter.

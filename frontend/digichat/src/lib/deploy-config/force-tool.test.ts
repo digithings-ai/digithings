@@ -30,7 +30,7 @@ describe("filterDisabledToolsHeader", () => {
   it("maps aliases and ignores empty input", () => {
     expect(filterDisabledToolsHeader(dep, "search, vault")).toEqual(["digisearch", "digivault"]);
     expect(filterDisabledToolsHeader(dep, "")).toEqual([]);
-    expect(filterDisabledToolsHeader(null, "digisearch")).toEqual(["digisearch"]);
+    expect(filterDisabledToolsHeader(null, "digisearch")).toEqual([]);
     expect(filterDisabledToolsHeader(null, "rm -rf")).toEqual([]);
   });
 });

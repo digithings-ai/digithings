@@ -15,9 +15,9 @@ pages in the same session.
 
 assistant-ui has no theme CDN. Custom look is:
 
-1. **Copied registry source** — `npx shadcn add @assistant-ui/thread` lands
-   `reference/components/assistant-ui/elements/thread.aui.tsx` and its slots
-   (markdown, reasoning, tool-fallback, attachment). That file *is* the UI.
+1. **One Thread module** — `@digithings/web/chat/thread` (`gallery-thread/thread.aui.tsx`
+   + slots). Product `/embed` and this `/chatbot` page import that subpath.
+   Do not keep a second registry copy under `reference/components/assistant-ui/`.
 2. **shadcn token names → digiweb tokens** — `bg-background`, `text-foreground`,
    `bg-primary`, `border-border` read `--color-*`. Those aliases point at
    `--bg` / `--ink` / `--accent` / `--hair` so the gallery theme toggle and
@@ -124,6 +124,7 @@ gallery Thread** — the same `@digithings/web/chat/thread` subpath the isolated
 `@digithings/web/styles/chatbot.css` (Container COPY of gallery
 `chatbot.css` is required — #3717). Welcome in `ViewportFooter`, radius 0,
 Geist Mono, both roles left, cube status/action glyphs, no assistant role
-arrow, tools collapsed when settled. Catalog / third-party default remains
+arrow, hover hints a hairline box with no rotated-square arrow (same as
+`/chatbot`), tools collapsed when settled. Catalog / third-party default remains
 `base`. First-party hosts default unset `skin` to `digichat`. Do not add a
 third custom theme. Do not restyle the 11 catalog templates.

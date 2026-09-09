@@ -12,9 +12,10 @@ export default function ChatbotPage() {
           The official Thread, <em>themed.</em>
         </h1>
         <p>
-          This page is the default assistant-ui <code>Thread</code> from the
-          registry — welcome, messages, markdown, reasoning, MCP tools,
-          composer — with no custom message tree. Shell: radius 0, monochrome
+          This page mounts the same first-party <code>Thread</code> as
+          product <code>/embed</code> (<code>@digithings/web/chat/thread</code>)
+          — welcome, messages, markdown, reasoning, MCP tools, composer — with a
+          local fixture runtime, not a second registry copy. Shell: radius 0, monochrome
           ink. Welcome: official <code>components.Welcome</code> slot, in the
           footer immediately above the composer. Copy is
           deploy-config shaped (title + body). Optional example rows from

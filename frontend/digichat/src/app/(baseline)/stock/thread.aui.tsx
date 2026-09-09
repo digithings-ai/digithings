@@ -27,6 +27,7 @@ import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useStockComposerGateSubmit } from "@/components/stock/stock-send-gate";
+import { MessageError } from "@/components/stock/message-error.aui";
 import { useDisclosureUi, useDeployUi } from "@/components/stock/deploy-ui-context";
 import {
   ActionBarMorePrimitive,
@@ -35,7 +36,6 @@ import {
   type AssistantState,
   BranchPickerPrimitive,
   ComposerPrimitive,
-  ErrorPrimitive,
   groupPartByType,
   MessagePrimitive,
   SuggestionPrimitive,
@@ -366,16 +366,6 @@ const ComposerAction: FC = () => {
         </AuiIf>
       </div>
     </div>
-  );
-};
-
-const MessageError: FC = () => {
-  return (
-    <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
-        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
-      </ErrorPrimitive.Root>
-    </MessagePrimitive.Error>
   );
 };
 

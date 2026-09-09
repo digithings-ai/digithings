@@ -572,7 +572,14 @@ def run_digigraph_workflow_streaming(
             },
             **_audit_digi_kwargs(req),
         )
-        emit(("content", f"Error: {e!s}"))
+        from digigraph.llm_errors import LLM_ERROR, sanitize_user_facing_error
+
+        message = sanitize_user_facing_error(str(e), limit=280) or "The workflow failed."
+        detail = sanitize_user_facing_error(str(e))
+        payload: dict[str, str] = {"code": LLM_ERROR, "message": message}
+        if detail and detail != message:
+            payload["detail"] = detail
+        emit(("error", payload))
         emit(("done", None))
         return
 
@@ -584,15 +591,20 @@ def run_digigraph_workflow_streaming(
     )
     error = final.get("error")
     if error:
-        err_code = final.get("error_code")
-        if err_code:
-            emit(
-                (
-                    "error",
-                    {"code": str(err_code), "message": str(error)},
-                )
-            )
-        emit(("content", f"Error: {error}"))
+        from digigraph.llm_errors import LLM_ERROR, sanitize_user_facing_error
+
+        err_code = str(final.get("error_code") or LLM_ERROR)
+        message = sanitize_user_facing_error(str(error), limit=280) or "The request failed."
+        payload: dict[str, str] = {"code": err_code, "message": message}
+        detail_raw = final.get("error_detail")
+        detail = sanitize_user_facing_error(str(detail_raw)) if detail_raw else None
+        if not detail:
+            extra = sanitize_user_facing_error(str(error))
+            if extra and extra != message:
+                detail = extra
+        if detail and detail != message:
+            payload["detail"] = detail
+        emit(("error", payload))
         emit(("done", None))
         return
 

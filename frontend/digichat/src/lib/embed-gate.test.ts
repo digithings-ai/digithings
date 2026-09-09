@@ -146,6 +146,15 @@ describe("resolveEmbedHost", () => {
     expect(resolveEmbedHost()).toBe("https://parent.example.com");
   });
 
+  it("never treats a top-level /embed tab as an embedding tenant", () => {
+    vi.stubGlobal("document", { referrer: "http://127.0.0.1:3000/embed" });
+    vi.stubGlobal("window", {
+      location: { origin: "http://127.0.0.1:3000" },
+      parent: { location: { origin: "http://127.0.0.1:3000" } },
+    });
+    expect(resolveEmbedHost()).toBe("unknown");
+  });
+
   it("never falls back to the iframe's own origin — reports 'unknown' when both referrer and window.parent access fail", () => {
     vi.stubGlobal("document", { referrer: "" });
     vi.stubGlobal("window", {

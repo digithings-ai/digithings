@@ -84,6 +84,22 @@ import {
   setDigichatConfigForTests,
 } from "@/lib/deploy-config/loader";
 
+function catalogWithSearchVault() {
+  return parseDigichatConfig({
+    version: 1,
+    deployment: {
+      slug: "local",
+      backend: { type: "digigraph" },
+      tools: {
+        catalog: [
+          { id: "digisearch", default: true },
+          { id: "digivault", default: true },
+        ],
+      },
+    },
+  });
+}
+
 describe("POST /api/chat", () => {
   const env = process.env;
 
@@ -346,23 +362,28 @@ vi.mocked(createFoundryStreamResponse).mockClear();
   });
 
   it("forwards X-Digi-Force-Tool to digigraph upstream headers", async () => {
-    const res = await POST(
-      new Request("http://localhost/api/chat", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-digi-force-tool": "digisearch",
-        },
-        body: JSON.stringify({
-          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "RS256" }] }],
+    setDigichatConfigForTests(catalogWithSearchVault());
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-force-tool": "digisearch",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "RS256" }] }],
+          }),
         }),
-      })
-    );
-    expect(res.status).toBe(200);
-    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
-      headers?: Record<string, string>;
-    };
-    expect(call?.headers?.["X-Digi-Force-Tool"]).toBe("digisearch");
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-Force-Tool"]).toBe("digisearch");
+    } finally {
+      resetDigichatConfigForTests();
+    }
   });
 
   it("forwards X-Digi-Enable-Web-Search only when DIGICHAT_WEB_SEARCH=1 (#3420)", async () => {
@@ -431,49 +452,59 @@ vi.mocked(createFoundryStreamResponse).mockClear();
   });
 
   it("forwards allowlisted X-Digi-Disabled-Tools and drops unknown tokens (#3733)", async () => {
-    const res = await POST(
-      new Request("http://localhost/api/chat", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-digi-disabled-tools": "digisearch,rm -rf",
-        },
-        body: JSON.stringify({
-          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+    setDigichatConfigForTests(catalogWithSearchVault());
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-disabled-tools": "digisearch,rm -rf",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
         }),
-      })
-    );
-    expect(res.status).toBe(200);
-    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
-      headers?: Record<string, string>;
-    };
-    const forwarded = call?.headers?.["X-Digi-Disabled-Tools"];
-    expect(forwarded).toBe("digisearch");
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      const forwarded = call?.headers?.["X-Digi-Disabled-Tools"];
+      expect(forwarded).toBe("digisearch");
+    } finally {
+      resetDigichatConfigForTests();
+    }
   });
 
   it("forwards X-Digi-Disabled-Tools on regenerate (session prefs, not send-only)", async () => {
-    const res = await POST(
-      new Request("http://localhost/api/chat", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-digi-disabled-tools": "digivault",
-          "x-digi-force-tool": "digisearch",
-          "x-digi-turn-mode": "regenerate",
-          "x-digichat-session": "sess-disabled-regen",
-        },
-        body: JSON.stringify({
-          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+    setDigichatConfigForTests(catalogWithSearchVault());
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-disabled-tools": "digivault",
+            "x-digi-force-tool": "digisearch",
+            "x-digi-turn-mode": "regenerate",
+            "x-digichat-session": "sess-disabled-regen",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
         }),
-      }),
-    );
-    expect(res.status).toBe(200);
-    await res.text();
-    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
-      headers?: Record<string, string>;
-    };
-    expect(call?.headers?.["X-Digi-Force-Tool"]).toBeUndefined();
-    expect(call?.headers?.["X-Digi-Disabled-Tools"]).toBe("digivault");
+      );
+      expect(res.status).toBe(200);
+      await res.text();
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-Force-Tool"]).toBeUndefined();
+      expect(call?.headers?.["X-Digi-Disabled-Tools"]).toBe("digivault");
+    } finally {
+      resetDigichatConfigForTests();
+    }
   });
 
   it("forwards operator MCP YAML and ignores client-supplied X-Digi-Mcp-Servers (#3736)", async () => {

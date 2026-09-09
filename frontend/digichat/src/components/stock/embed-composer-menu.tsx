@@ -257,24 +257,28 @@ export function EmbedComposerMenu({
 
   const mainRows = useMemo((): MenuRow[] => {
     const rows: MenuRow[] = [];
-    rows.push({
-      id: "tools",
-      label: slashName("tools"),
-      value: toolsMenuSummary(toolRows, (id) => connectedToolIsOn(id, toolOnInput)),
-      activate: () => {
-        setCursor(0);
-        setView("tools");
-      },
-    });
-    rows.push({
-      id: "mcp",
-      label: slashName("mcp"),
-      value: mcpMenuSummaryFromConfigs(mcpConfigs, api.extraToolOn),
-      activate: () => {
-        setCursor(0);
-        setView("mcp");
-      },
-    });
+    if (toolRows.length > 0) {
+      rows.push({
+        id: "tools",
+        label: slashName("tools"),
+        value: toolsMenuSummary(toolRows, (id) => connectedToolIsOn(id, toolOnInput)),
+        activate: () => {
+          setCursor(0);
+          setView("tools");
+        },
+      });
+    }
+    if (mcpConfigs.length > 0 || api.allowUserMcp) {
+      rows.push({
+        id: "mcp",
+        label: slashName("mcp"),
+        value: mcpMenuSummaryFromConfigs(mcpConfigs, api.extraToolOn),
+        activate: () => {
+          setCursor(0);
+          setView("mcp");
+        },
+      });
+    }
     rows.push({
       id: "thinking",
       label: slashName("thinking"),
@@ -498,18 +502,20 @@ export function EmbedComposerMenu({
         },
       };
     });
-    rows.push({
-      id: "mcp-new",
-      label: slashName("mcp new"),
-      value: "Add",
-      activate: () => {
-        setMcpDraft(emptyMcpConfig());
-        setMcpError(null);
-        setMcpSuggestIndex(-1);
-        setMcpIdDropdownOpen(false);
-        setView("mcp-edit");
-      },
-    });
+    if (api.allowAddMcp) {
+      rows.push({
+        id: "mcp-new",
+        label: slashName("mcp new"),
+        value: "Add",
+        activate: () => {
+          setMcpDraft(emptyMcpConfig());
+          setMcpError(null);
+          setMcpSuggestIndex(-1);
+          setMcpIdDropdownOpen(false);
+          setView("mcp-edit");
+        },
+      });
+    }
     return rows;
   }, [api, mcpConfigs]);
 

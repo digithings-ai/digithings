@@ -65,6 +65,8 @@ export type EmbedTenantConfig = {
   title?: string;
   /** Default welcome intro when the iframe URL has no ?welcome= */
   welcome?: string;
+  /** Subparagraphs under the welcome headline. */
+  welcomeBody?: string[];
   /** Default suggestion chips (URL ?suggestions= wins). */
   suggestions?: string[];
   /** Default input placeholder (URL ?placeholder= wins). */
@@ -109,6 +111,8 @@ export type EmbedTenantConfig = {
     allowUserServers?: boolean;
     allowAddForm?: boolean;
   };
+  /** User file picker on the composer. JSON omit stays off (Foundry/DataTap). */
+  attachments?: boolean;
   tools?: {
     allowUserToggle?: boolean;
     catalog: Array<{ id: string; default?: boolean; label?: string }>;
@@ -311,6 +315,23 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
     throw new Error(`${ctx}: webSearch must be a boolean`);
   }
+  if (v.attachments !== undefined && typeof v.attachments !== "boolean") {
+    throw new Error(`${ctx}: attachments must be a boolean`);
+  }
+  let welcomeBody: string[] | undefined;
+  if (v.welcomeBody !== undefined) {
+    if (typeof v.welcomeBody === "string") {
+      const line = v.welcomeBody.trim();
+      welcomeBody = line ? [line] : [];
+    } else if (
+      Array.isArray(v.welcomeBody) &&
+      v.welcomeBody.every((x) => typeof x === "string")
+    ) {
+      welcomeBody = (v.welcomeBody as string[]).map((s) => s.trim()).filter(Boolean);
+    } else {
+      throw new Error(`${ctx}: welcomeBody must be a string or an array of strings`);
+    }
+  }
   if (v.layout !== undefined && v.layout !== "page" && v.layout !== "embed") {
     throw new Error(`${ctx}: layout must be "page" or "embed"`);
   }
@@ -349,6 +370,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     token: v.token,
     title: typeof v.title === "string" ? v.title : undefined,
     welcome: typeof v.welcome === "string" ? v.welcome : undefined,
+    welcomeBody,
     suggestions,
     placeholder: typeof v.placeholder === "string" ? v.placeholder : undefined,
     lockedContact: typeof v.lockedContact === "string" ? v.lockedContact : undefined,
@@ -357,6 +379,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
+    attachments: typeof v.attachments === "boolean" ? v.attachments : undefined,
     layout: v.layout === "page" || v.layout === "embed" ? v.layout : undefined,
     llmAccess: LLM_ACCESS.includes(v.llmAccess as EmbedLlmAccess)
       ? (v.llmAccess as EmbedLlmAccess)

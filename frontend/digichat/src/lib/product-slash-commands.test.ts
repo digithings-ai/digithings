@@ -154,7 +154,7 @@ describe("catalogForceTool", () => {
 
 describe("buildProductSlashCommands", () => {
   it("includes catalog tools, mcp, models, and featured languages without per-row icons", () => {
-    const cmds = buildProductSlashCommands(api());
+    const cmds = buildProductSlashCommands(api({ allowUserMcp: true }));
     const ids = cmds.map((c) => c.id);
     expect(ids).toContain("websearch");
     expect(ids).toContain("digisearch");
@@ -168,9 +168,27 @@ describe("buildProductSlashCommands", () => {
     expect(cmds.every((c) => !("icon" in c) || c.icon == null)).toBe(true);
   });
 
-  it("hides websearch when the tenant disallows it", () => {
-    const ids = buildProductSlashCommands(api({ tenantAllowsWeb: false })).map((c) => c.id);
+  it("hides catalog/MCP commands when the install has no tools", () => {
+    const ids = buildProductSlashCommands(
+      api({
+        tenantAllowsWeb: false,
+        showByok: false,
+        showModels: false,
+        hasDigisearch: false,
+        hasVault: false,
+        allowUserMcp: false,
+        catalogTools: [],
+        mcpServers: [],
+      }),
+    ).map((c) => c.id);
+    expect(ids).not.toContain("digisearch");
+    expect(ids).not.toContain("digivault");
     expect(ids).not.toContain("websearch");
+    expect(ids).not.toContain("mcp");
+    expect(ids).not.toContain("tools");
+    expect(ids).not.toContain("models");
+    expect(ids).toContain("language");
+    expect(ids).toContain("thinking");
   });
 
   it("adds extra MCP catalog commands", () => {

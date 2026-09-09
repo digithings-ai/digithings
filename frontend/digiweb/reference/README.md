@@ -36,7 +36,7 @@ is the only shared chrome.
 | `/effects`         | Effects     | cursor-follow hero graph, typed terminal, scrolly module graph, research pipeline, ambient mesh, rotating prompts, clip reveal, section transitions (zoom-morph · stacking · cross-fade), arc-flight routing map (revolut-mined), pipeline workflow viz (sequential + parallel, per-step time/token/cost diagnostics; dashboard-ported) |
 | `/chrome`          | Chrome      | announcement bar, command palette, tabs (sliding indicator), toast stack, scroll-aware nav, colophon footer with glow sweep |
 | `/terminal`        | Terminal    | diegetic CLI session + budget, streaming chat transcript |
-| `/chatbot`         | Chatbot     | official assistant-ui `Thread` (registry copy), themed with digiweb CSS variables. Isolated Next root (`app/(chatbot)/`) so it does not compile the rest of the gallery. Full elements index (not a live specimen dump): [`../ASSISTANT_UI_ELEMENTS.md`](../ASSISTANT_UI_ELEMENTS.md). |
+| `/chatbot`         | Chatbot     | same first-party Thread as product `/embed` (`@digithings/web/chat/thread`), fixture runtime, themed with digiweb CSS variables. Isolated Next root (`app/(chatbot)/`) so it does not compile the rest of the gallery. Full elements index (not a live specimen dump): [`../ASSISTANT_UI_ELEMENTS.md`](../ASSISTANT_UI_ELEMENTS.md). |
 | `/symbols`         | Symbols     | module emblems, brand marks, favicon tiles, vendor logos, utility glyphs |
 | `/brand`           | Brand       | avatars, social headers, OG card, mail sign-off — local kit, not shipped on digithings.ai |
 | `/account`         | Account     | login, sign-up, payment, settings, profile templates |

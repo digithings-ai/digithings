@@ -6,7 +6,7 @@ needs it. Do **not** vendor all ~120 cards into digichat or digiweb.
 
 digichat is the BFF (auth, stream, deploy YAML). digiweb is the frontend suite.
 Product Thread copies live in `@digithings/web/chat/thread` (gallery
-`thread.aui.tsx` + slots). Gallery `/chatbot` re-exports that same module.
+`thread.aui.tsx` + slots). Gallery `/chatbot` imports that same module.
 This file is the single map — do not duplicate the table in digichat.
 
 ## How to fetch
@@ -34,7 +34,7 @@ compositions of those primitives.
 
 | Kind | Meaning |
 | ---- | ------- |
-| **in gallery** | Copied under digiweb `reference/components/assistant-ui/elements/` for `/chatbot` skin lab |
+| **in gallery** | Fixture `/chatbot` page mounts `@digithings/web/chat/thread` (not a second copy) |
 | **in product** | Copied under digichat `src/app/(baseline)/stock/` (or slotted inside that Thread) |
 | **part-driven** | Shows when the AI SDK / digigraph stream emits the matching part |
 | **chrome-driven** | Shows when deploy YAML (`features.*` / `tools.catalog` / `gate.*`) enables it |
@@ -46,8 +46,8 @@ production enable.
 
 When copying for product: land in `(baseline)/stock/`, slot into
 `thread.aui.tsx`, and import the **same** renderer from DigichatThread — no
-third tree. Gallery `/chatbot` stays the digichat **skin** lab; it does not
-host this catalog as live specimens.
+third tree. Gallery `/chatbot` stays the digichat **skin** lab on the
+product Thread module; it does not host this catalog as live specimens.
 
 ## Catalog
 

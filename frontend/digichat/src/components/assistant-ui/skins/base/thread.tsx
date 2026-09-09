@@ -9,6 +9,7 @@ import { MarkdownText } from "@/app/(baseline)/stock/markdown-text";
 import { DotMatrix } from "./ui/dot-matrix";
 import { MessageTiming } from "./elements/message-timing.aui";
 import { ToolFallback } from "@/app/(baseline)/stock/tool-fallback.aui";
+import { MessageError } from "@/components/stock/message-error.aui";
 import {
   ToolGroupContent,
   ToolGroupRoot,
@@ -40,7 +41,6 @@ import {
   type AssistantState,
   BranchPickerPrimitive,
   ComposerPrimitive,
-  ErrorPrimitive,
   groupPartByType,
   MessagePrimitive,
   ThreadPrimitive,
@@ -589,16 +589,6 @@ const ComposerAction: FC = () => {
         </AuiIf>
       </div>
     </div>
-  );
-};
-
-const MessageError: FC = () => {
-  return (
-    <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
-        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
-      </ErrorPrimitive.Root>
-    </MessagePrimitive.Error>
   );
 };
 

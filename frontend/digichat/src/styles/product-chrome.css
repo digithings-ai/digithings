@@ -76,7 +76,17 @@
   background: transparent;
 }
 
+html:has(.dc-embed-shell[data-wide="1"]),
 body:has(.dc-embed-shell[data-wide="1"]) {
+  background: transparent;
+}
+
+/* Website /chat (`wide=1`) shows the parent grain through the iframe.
+   Composer keeps --composer-bg; only the thread canvas goes transparent. */
+.dc-embed-shell[data-wide="1"] .digichat-thread,
+.dc-embed-shell[data-wide="1"] .digichat-thread__footer,
+.dc-embed-shell[data-wide="1"] .aui-thread-root,
+.dc-embed-shell[data-wide="1"] .aui-thread-viewport-footer {
   background: transparent;
 }
 

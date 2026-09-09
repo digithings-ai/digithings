@@ -18,22 +18,13 @@ export function clientConfigFromEmbedTenant(
   base: DigichatClientConfig = DEFAULT_CLIENT_CONFIG,
 ): DigichatClientConfig {
   const webSearch = embed.webSearch === true;
-  const catalog =
-    embed.tools?.catalog?.length
-      ? embed.tools.catalog.map((e) => ({
-          id: e.id,
-          default: e.default !== false,
-          ...(e.label ? { label: e.label } : {}),
-        }))
-      : [...base.tools.catalog];
+  const catalog = (embed.tools?.catalog ?? []).map((e) => ({
+    id: e.id,
+    default: e.default !== false,
+    ...(e.label ? { label: e.label } : {}),
+  }));
   if (webSearch && !catalog.some((t) => t.id === "web_search")) {
     catalog.push({ id: "web_search", default: false, label: "Web search" });
-  }
-  if (!catalog.some((t) => t.id === "digisearch")) {
-    catalog.push({ id: "digisearch", default: true, label: "Search" });
-  }
-  if (!catalog.some((t) => t.id === "digivault")) {
-    catalog.push({ id: "digivault", default: true, label: "Vault" });
   }
 
   return {
@@ -45,14 +36,19 @@ export function clientConfigFromEmbedTenant(
       theme: embed.theme,
       skin: embed.skin ?? defaultThreadSkinForTenant({ slug: embed.slug }),
       title: embed.title,
-      welcome: embed.welcome,
-      suggestions: embed.suggestions,
-      placeholder: embed.placeholder,
+      welcome: embed.welcome ?? base.chrome.welcome,
+      welcomeBody: embed.welcomeBody ?? [],
+      suggestions: embed.suggestions ?? base.chrome.suggestions,
+      placeholder: embed.placeholder ?? base.chrome.placeholder,
       accent: embed.accent,
       attribution: embed.attribution,
     },
     persistence: "none",
     auth: "anonymous",
+    features: {
+      ...base.features,
+      attachments: embed.attachments === true,
+    },
     models: {
       ...(embed.models?.default ? { default: embed.models.default } : base.models),
       available: embed.models?.available ?? base.models.available,

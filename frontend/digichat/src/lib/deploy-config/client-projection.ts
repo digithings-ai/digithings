@@ -13,11 +13,14 @@ import type {
   UserAlign,
 } from "./schema";
 import { welcomeBodyLines, welcomeTitle } from "./schema";
-import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
 import {
-  DEFAULT_THREAD_SKIN,
-  type ThreadSkin,
-} from "@/lib/thread-skins";
+  BASELINE_EMBED_PLACEHOLDER,
+  BASELINE_EMBED_SKIN,
+  BASELINE_EMBED_WELCOME,
+  BASELINE_EMBED_WELCOME_BODY,
+} from "@/lib/baseline-embed";
+import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
+import { DEFAULT_THREAD_SKIN, type ThreadSkin } from "@/lib/thread-skins";
 
 export type DigichatClientFeatures = {
   attachments: boolean;
@@ -104,7 +107,11 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
   chrome: {
     mode: "embed",
     theme: "dark",
-    skin: DEFAULT_THREAD_SKIN,
+    skin: BASELINE_EMBED_SKIN,
+    welcome: BASELINE_EMBED_WELCOME,
+    welcomeBody: [...BASELINE_EMBED_WELCOME_BODY],
+    placeholder: BASELINE_EMBED_PLACEHOLDER,
+    suggestions: [],
     accent: null,
     attribution: false,
     defaultLanguage: DEFAULT_LANGUAGE_CODE,
@@ -113,7 +120,7 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
   persistence: "none",
   auth: "anonymous",
   features: {
-    attachments: false,
+    attachments: true,
     dictation: false,
     speech: false,
     reasoning: "collapsed",

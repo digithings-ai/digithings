@@ -314,6 +314,19 @@ it("maps digigraph_error code to embed-chat-error payload", () => {
   });
 });
 
+it("relays llm_error detail for the embed disclosure", () => {
+  const payload = digigraphErrorToEmbedPayload({
+    code: "llm_error",
+    message: "No endpoints found for this model.",
+    detail: "Error code: 404",
+  });
+  expect(JSON.parse(payload)).toEqual({
+    error: "llm_error",
+    message: "No endpoints found for this model.",
+    detail: "Error code: 404",
+  });
+});
+
 it("drops upstream message for BYOK remediable digigraph_error codes", () => {
   const sensitive = "Provider openai is not supported for your X-BYOK-Provider header.";
   const payload = digigraphErrorToEmbedPayload({

@@ -338,6 +338,9 @@ _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "google/gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
     "openai/gpt-5.6-luna": "gpt-5.6-luna",
     "openai/gpt-5.6-sol": "gpt-5.6-sol",
+    "deepseek/deepseek-v4-flash-0731": "deepseek-v4-flash-0731",
+    "openai/gpt-oss-120b": "gpt-oss-120b",
+    "z-ai/glm-5.3-flash": "glm-5.3-flash",
 }
 
 

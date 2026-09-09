@@ -88,6 +88,19 @@ describe("formatEmbedChatError", () => {
 });
 
 describe("parseEmbedChatError / isFreeQuotaOrRateLimitError", () => {
+  it("surfaces llm_error message and parses API detail", () => {
+    const raw = JSON.stringify({
+      error: "llm_error",
+      message: "No endpoints found for this model.",
+      detail: "Error code: 404",
+    });
+    const parsed = parseEmbedChatError(new Error(raw));
+    expect(parsed?.code).toBe("llm_error");
+    expect(parsed?.message).toBe("No endpoints found for this model.");
+    expect(parsed?.detail).toBe("Error code: 404");
+    expect(formatEmbedChatError(new Error(raw))).toBe("No endpoints found for this model.");
+  });
+
   it("parses free_quota_exceeded", () => {
     const p = parseEmbedChatError(
       new Error(JSON.stringify({ error: "free_quota_exceeded", message: "done" })),
