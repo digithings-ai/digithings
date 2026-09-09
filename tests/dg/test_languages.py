@@ -31,6 +31,9 @@ def test_resolve_language_directive_for_known_non_english_code() -> None:
     directive = resolve_language_directive("de")
     assert directive is not None
     assert "German" in directive
+    # #3417: answering in German must not rewrite retrieval queries into German.
+    assert "retriev" in directive.lower()
+    assert "do not translate" in directive.lower()
 
 
 def test_resolve_language_directive_is_case_insensitive() -> None:
@@ -60,13 +63,12 @@ def test_initial_graph_state_carries_response_language() -> None:
 
 
 def test_initial_graph_state_sets_response_language_to_none_when_unset() -> None:
-    """response_language is a user-toggleable per-turn preference, not a static
+    """response_language must be written unconditionally (even as explicit None)
 
-    tenant-derived value like digisearch_index/vault_path_prefix/
-    research_system_prompt_override — it must be written unconditionally (even
-    as an explicit None) so a later turn with no language header actually
-    clears a prior non-English value from checkpointed state instead of
-    leaving it sticky (see #2103 final review, Fix 2).
+    so a later turn with no language header clears a prior non-English value from
+    checkpointed state instead of leaving it sticky (see #2103 final review,
+    Fix 2). Corpus overrides and digi_subject use the same unconditional-None
+    pattern so DIGI_TENANT_CORPUS_MAP clears reach the checkpoint.
     """
     state = _initial_graph_state(WorkflowRequest(prompt="hi"), "wf-lang-2")
     assert "response_language" in state

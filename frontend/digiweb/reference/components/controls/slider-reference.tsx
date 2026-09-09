@@ -5,9 +5,10 @@ import { useState } from "react";
 /**
  * Range sliders — the parameter control. A native <input type="range"> restyled
  * cross-browser: the track fills to the value with the accent (a computed
- * gradient, so it aligns exactly), a round thumb, a live mono readout, optional
- * tick marks, and a disabled state. Native means keyboard + a11y come free.
- * Accent fill reads under the monochrome default.
+ * gradient, so it aligns exactly), a square thumb (sharp-corner grammar,
+ * shared with the promoted `.ctl-slider-input` mechanic), a live mono
+ * readout, optional tick marks, and a disabled state. Native means keyboard
+ * + a11y come free. Accent fill reads under the monochrome default.
  */
 function fill(value: number, min: number, max: number) {
   const pct = ((value - min) / (max - min)) * 100;

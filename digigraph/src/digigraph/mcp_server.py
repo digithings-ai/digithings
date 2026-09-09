@@ -177,7 +177,7 @@ def create_mcp_server() -> Any:
     def chat(
         message: str,
         thread_id: str | None = None,
-        model: str = "sitaas-rag",
+        model: str = "digigraph-rag",
     ) -> str:
         """Send a single chat message to digigraph and get a response.
 
@@ -187,7 +187,7 @@ def create_mcp_server() -> Any:
         Args:
             message: The user message.
             thread_id: Optional session ID for multi-turn conversations.
-            model: Model identifier (passed through to LiteLLM router; default: sitaas-rag).
+            model: Model identifier (passed through to LiteLLM router; default: digigraph-rag).
         """
 
         try:

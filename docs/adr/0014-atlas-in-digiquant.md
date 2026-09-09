@@ -1,6 +1,6 @@
 # ADR-0014 — Atlas belongs in `digiquant/`, not `apps/`
 
-**Status:** Accepted
+**Status:** Accepted (product names historical — see [ADR-0026](0026-retire-olympus-atlas-hermes-kairos.md))
 **Date:** 2026-04-23
 **Related epic:** [#297](https://github.com/digithings-ai/digithings/issues/297) (closed 2026-04-27)
 **Amends:** [ADR-0009](0009-frontend-umbrella.md) (un-defers the Atlas frontend relocation item)

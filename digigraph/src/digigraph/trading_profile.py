@@ -79,7 +79,7 @@ def profiling_questions_for_workflow(
 def optimization_constraints_dict_from_profile(
     raw: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
-    """Derive digiquant OptimizationConstraints-shaped dict from a TradingProfile dict."""
+    """Derive digiquant constraints, converting fraction-scale drawdown to percent."""
     profile = trading_profile_from_state(raw)
     if profile is None:
         return None
@@ -87,7 +87,7 @@ def optimization_constraints_dict_from_profile(
     if profile.min_trades is not None:
         d["min_trades"] = profile.min_trades
     if profile.max_drawdown_pct is not None:
-        d["max_drawdown_pct"] = profile.max_drawdown_pct
+        d["max_drawdown_pct"] = profile.max_drawdown_pct * 100
     if profile.min_sharpe is not None:
         d["min_sharpe"] = profile.min_sharpe
     return d or None

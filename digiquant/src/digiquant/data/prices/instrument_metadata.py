@@ -1,4 +1,4 @@
-"""Yahoo instrument metadata adapter for the canonical Olympus security master."""
+"""Yahoo instrument metadata adapter for the canonical dashboard security master."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: provider jsonb payloads are heterogeneous
 )
 
-from digiquant.olympus.hermes.sector_map import asset_class, sector_bucket
-from digiquant.olympus.instrument_metadata import InstrumentMetadata
+from digiquant.dashboard.instrument_metadata import InstrumentMetadata
+from digiquant.portfolio.sector_map import asset_class, sector_bucket
 
 InfoLoader = Callable[[str], Mapping[str, Any]]
 
@@ -92,7 +92,7 @@ def fetch_instrument_metadata(
                 instrument_type="CASH",
                 asset_class="CASH",
                 category="cash",
-                provider="olympus",
+                provider="dashboard",
                 provider_metadata={"resolution": "canonical"},
                 source_updated_at=datetime.now(timezone.utc),
             )

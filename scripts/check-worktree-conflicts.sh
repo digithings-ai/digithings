@@ -5,21 +5,19 @@
 #   scripts/check-worktree-conflicts.sh ISSUE_NUMBER
 #
 # Reads the GitHub issue title/body to infer a component glob (e.g. "digigraph/**"),
-# then checks each active .worktrees/* branch to see if any changed files overlap.
-# Prints a warning table when overlaps are found. Always exits 0 (warning only, not blocking).
+# then checks each linked git worktree checkout to see if any changed files overlap.
+# Prints a warning table when overlaps are found. Always exits 0 (warning only).
 #
 # Requires: git (gh CLI optional — gracefully skips when unavailable)
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 cd "$REPO_ROOT"
 
 ISSUE="${1:-}"
 [[ -z "$ISSUE" ]] && { echo "Usage: scripts/check-worktree-conflicts.sh ISSUE_NUMBER" >&2; exit 0; }
 ISSUE="${ISSUE#\#}"
-
-WORKTREES_DIR="${REPO_ROOT}/.worktrees"
 
 COMPONENTS="digigraph digiquant digisearch digismith digiclaw digibase digivault digikey digichat"
 
@@ -38,7 +36,11 @@ infer_globs() {
 
   local matched=""
   for comp in $COMPONENTS; do
-    if echo "$text" | grep -qi "$comp"; then
+    # Not -q: under `set -o pipefail` (set above) -q exits at the first match,
+    # echo takes SIGPIPE and the pipeline reports 141, so an issue body near
+    # GitHub's 65,536-char cap would read as no match and silently narrow the
+    # advisory. Redirecting instead lets grep drain stdin.
+    if echo "$text" | grep -i "$comp" >/dev/null; then
       matched="${matched} ${comp}/**"
     fi
   done
@@ -66,6 +68,39 @@ matches_any_glob() {
   return 1
 }
 
+# Return 0 when this worktree belongs to the issue we are about to create.
+is_current_issue_worktree() {
+  local wt_dir="$1"
+  local wt_branch="$2"
+  local wt_name
+  wt_name="$(basename "$wt_dir")"
+
+  # worktree_task.sh: branch task/N-slug at .worktrees/task/N-slug/
+  if [[ "$wt_branch" == "task/${ISSUE}-"* ]]; then
+    return 0
+  fi
+  # Nested basename is N-slug; legacy flat layout is task-N-slug.
+  if [[ "$wt_name" == "${ISSUE}-"* || "$wt_name" == "task-${ISSUE}-"* ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# Collect linked worktree paths via git (authoritative; cannot drift on layout).
+collect_worktree_dirs() {
+  local wt_path wt_real
+  while IFS= read -r line; do
+    [[ "$line" == worktree\ * ]] || continue
+    wt_path="${line#worktree }"
+    wt_real="$(cd "$wt_path" && pwd -P)"
+    # Never treat the main repository checkout as a task worktree.
+    if [[ "$wt_real" == "$REPO_ROOT" ]]; then
+      continue
+    fi
+    printf '%s\n' "$wt_real"
+  done < <(git worktree list --porcelain)
+}
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 header "Worktree conflict check for issue #${ISSUE}"
@@ -84,28 +119,30 @@ set +f
 echo "Issue:  #${ISSUE}"
 echo "Globs:  ${GLOBS[*]}"
 
-# No worktrees directory — nothing to check
-if [[ ! -d "$WORKTREES_DIR" ]]; then
-  echo "No .worktrees/ directory found — nothing to compare."
+FOUND_CONFLICT=false
+CONFLICT_ROWS=""
+
+wt_dirs=()
+while IFS= read -r wt_dir; do
+  [[ -n "$wt_dir" ]] && wt_dirs+=("$wt_dir")
+done < <(collect_worktree_dirs)
+
+if ((${#wt_dirs[@]} == 0)); then
+  echo "No linked task worktrees found — nothing to compare."
   echo ""
   exit 0
 fi
 
-FOUND_CONFLICT=false
-CONFLICT_ROWS=""
-
-for wt_dir in "$WORKTREES_DIR"/*/; do
+for wt_dir in "${wt_dirs[@]}"; do
   [[ -d "$wt_dir" ]] || continue
-
-  # Skip the worktree for *this* issue (task-N-* pattern)
-  wt_name="$(basename "$wt_dir")"
-  if echo "$wt_name" | grep -q "^task-${ISSUE}-"; then
-    continue
-  fi
 
   # Get the branch name from the worktree
   wt_branch="$(git -C "$wt_dir" branch --show-current 2>/dev/null || echo "(detached)")"
   [[ -z "$wt_branch" ]] && wt_branch="(detached)"
+
+  if is_current_issue_worktree "$wt_dir" "$wt_branch"; then
+    continue
+  fi
 
   # Get changed files in this worktree vs origin/develop
   changed_files="$(git -C "$wt_dir" diff origin/develop...HEAD --name-only 2>/dev/null || true)"

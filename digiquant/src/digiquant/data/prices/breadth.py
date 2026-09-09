@@ -8,7 +8,7 @@ paid feed, no long-history pull. Polars only.
 
 ``compute_breadth`` is pure (frame in, dict out) so it unit-tests with a tiny
 fixture and no Supabase fake. The reader that fetches the window lives in
-``olympus/atlas/data/queries.py``.
+``dashboard/research/data/queries.py``.
 """
 
 from __future__ import annotations

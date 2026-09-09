@@ -87,10 +87,10 @@ def digisearch(
     bearer = str(authorization_bearer).strip() if authorization_bearer else None
     headers = outbound_service_headers(request_id, bearer)
     try:
-        # Only the network call itself is inside `with _cb:` — same scoping as the
-        # hub connectors (ARCHITECTURE.md §5.4). A 4xx/5xx or malformed body is a
-        # rejection from a live service, not evidence digisearch is down, so it
-        # must not trip the process-wide circuit for every other caller.
+        # Only the network call itself is inside `with _cb:` — same scoping as
+        # vertical_orchestrator hubs (ARCHITECTURE.md §5.4). A 4xx/5xx or malformed
+        # body is a rejection from a live service, not evidence digisearch is down,
+        # so it must not trip the process-wide circuit for every other caller.
         with _cb:
             r = _get_sync_client().post(url, json=payload, headers=headers)
         r.raise_for_status()

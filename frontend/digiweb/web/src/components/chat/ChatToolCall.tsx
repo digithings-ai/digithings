@@ -9,12 +9,12 @@
  * it. Uncontrolled by default (`defaultOpen`) or controlled via
  * `open`/`onOpenChange`. Output arrives as `lines` (string, or
  * `{ text, tone }` for up/down reads) and/or arbitrary `children` rendered
- * after them — enough surface for digichat-ui's ChatActivities to rebuild its
- * tool_call / tool_result / trace kinds on this primitive. A call with no
+ * after them — enough surface for digichat’s assistant-ui tool part UI (and
+ * any other chat surface) to rebuild tool_call / tool_result / trace kinds. A call with no
  * body renders its head as a plain row (no button). The left rail, color-mix
  * borders, and the running pulse live in styles/chat-widgets.css (import it
  * once app-wide; see the wiring note there). Click the head to expand —
- * no caret glyph; `aria-expanded` carries the disclosure state.
+ * a caret glyph plus `aria-expanded` carry the disclosure state.
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
@@ -56,15 +56,22 @@ function HeadContent({
   args,
   status,
   duration,
+  showCaret,
+  isOpen,
 }: {
   name: string;
   args?: string;
   status: ChatToolCallStatus;
   duration?: string;
+  showCaret: boolean;
+  isOpen: boolean;
 }) {
   const mark = MARKS[status];
   return (
     <>
+      {showCaret ? (
+        <span className={`tc-caret${isOpen ? " open" : ""}`} aria-hidden="true" />
+      ) : null}
       {/* `shrink-0 whitespace-nowrap`: the name is the one thing on this line
           that must never break. Without them a flex row under width pressure
           (a narrow embed, a long args string) shrinks every item somewhat
@@ -135,11 +142,25 @@ export function ChatToolCall({
           aria-expanded={isOpen}
           onClick={toggle}
         >
-          <HeadContent name={name} args={args} status={status} duration={duration} />
+          <HeadContent
+            name={name}
+            args={args}
+            status={status}
+            duration={duration}
+            showCaret
+            isOpen={isOpen}
+          />
         </button>
       ) : (
         <div className={HEAD_CLS}>
-          <HeadContent name={name} args={args} status={status} duration={duration} />
+          <HeadContent
+            name={name}
+            args={args}
+            status={status}
+            duration={duration}
+            showCaret={false}
+            isOpen={false}
+          />
         </div>
       )}
       {hasBody && isOpen ? (

@@ -41,7 +41,7 @@ export function ChatTranscript({
     "chat-transcript",
     flat ? "chat-transcript--flat" : "",
     scroll ? "chat-transcript--scroll min-h-0 overflow-y-auto overscroll-contain" : "",
-    "flex flex-col rounded-[12px] border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono",
+    "flex flex-col rounded-none border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono",
     className ?? "",
   ]
     .filter(Boolean)

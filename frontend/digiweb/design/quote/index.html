@@ -8,8 +8,8 @@
   ============================================================================
   digithings — Quote / statement of work template (HTML → PDF)
   ----------------------------------------------------------------------------
-  Companion to ../invoice/. Same monochrome house style: Geist / Geist Mono /
-  Instrument Serif voices, hairline rules, tabular figures, no colour, no mark.
+  Companion to ../invoice/. Same utilitarian house style: Geist Mono for claim,
+  body, and chrome. Hairline rules, zero radius, no glass, tabular figures.
 
   HOW TO USE
   1. Replace every [bracketed] placeholder with real values.
@@ -25,48 +25,50 @@
 -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
 /* --- Tokens (monochrome, black & white) ------------------------------------ */
 :root[data-theme="light"]{
   --bg:#FFFFFF; --surface:#FFFFFF;
   --hair:rgba(0,0,0,.11); --hair-2:rgba(0,0,0,.22);
   --ink:#1A1A1A; --ink-soft:#565656; --ink-mute:#8C8C8C;
-  --sans:"Geist",system-ui,-apple-system,sans-serif;
+  --accent:var(--ink);
   --mono:"Geist Mono","JetBrains Mono",ui-monospace,monospace;
-  --serif:"Instrument Serif",Georgia,serif;
+  --sans:var(--mono);
+  --display:var(--mono);
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%}
 body{
   background:var(--bg); color:var(--ink);
-  font-family:var(--sans); font-weight:400; font-size:11px; line-height:1.55;
+  font-family:var(--mono); font-weight:400; font-size:11px; line-height:1.55;
   -webkit-font-smoothing:antialiased; padding:40px 20px;
 }
 
 /* Voices -------------------------------------------------------------------- */
-.kick{font-family:var(--mono); font-size:8.5px; font-weight:500; letter-spacing:.22em;
-  text-transform:uppercase; color:var(--ink-mute)}
+.kick{font-family:var(--mono); font-size:9px; font-weight:400; letter-spacing:.02em;
+  color:var(--ink-mute)}
+.kick::before{content:"// "}
 .mono{font-family:var(--mono); font-variant-numeric:tabular-nums lining-nums}
 .ph{color:var(--ink-mute); font-family:var(--mono)}
 
 /* Sheet --------------------------------------------------------------------- */
 .sheet{max-width:780px; margin:0 auto; background:var(--surface);
-  border:1px solid var(--hair); box-shadow:0 18px 50px -30px rgba(0,0,0,.25)}
+  border:1px solid var(--hair); box-shadow:none}
 .pad{padding:44px 56px}
 
 /* Masthead ------------------------------------------------------------------ */
 .masthead{display:flex; justify-content:space-between; align-items:flex-start; gap:40px;
   padding-bottom:14px; border-bottom:1px solid var(--hair)}
-.brand .name{font-family:var(--serif); font-size:22px; line-height:1; letter-spacing:.01em}
+.brand .name{font-family:var(--display); font-size:22px; line-height:1; letter-spacing:.01em}
 .brand-tag{margin-top:6px; font-family:var(--mono); font-size:8.5px; letter-spacing:.2em;
   text-transform:uppercase; color:var(--ink-mute)}
 .from{margin-top:10px; color:var(--ink-soft); font-size:11px; line-height:1.75; max-width:250px}
 .from .who{color:var(--ink); font-weight:500}
 
 .doc-title{text-align:right}
-.doc-title .word{font-family:var(--serif); font-size:30px; line-height:.9; letter-spacing:.02em}
+.doc-title .word{font-family:var(--display); font-size:30px; line-height:.9; letter-spacing:.02em}
 .meta{margin-top:18px; display:grid; grid-template-columns:auto auto; gap:6px 18px;
   justify-content:end; text-align:right}
 .meta dt{font-family:var(--mono); font-size:8.5px; letter-spacing:.16em; text-transform:uppercase;

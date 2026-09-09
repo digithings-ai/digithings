@@ -15,6 +15,6 @@ register(
         "fast_ema_period": 10,
         "slow_ema_period": 20,
     },
-    aliases=["mean_reversion_tech", "momentum_tech"],
+    aliases=["ema", "s", "mean_reversion_tech", "momentum_tech"],
     description="EMA crossover, market orders (Nautilus EMACross)",
 )

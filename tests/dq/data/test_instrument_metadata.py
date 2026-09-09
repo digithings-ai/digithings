@@ -11,7 +11,7 @@ from digiquant.data.prices.instrument_metadata import (
 pytestmark = pytest.mark.unit
 
 
-def test_maps_provider_identity_and_olympus_classification() -> None:
+def test_maps_provider_identity_and_dashboard_classification() -> None:
     metadata = metadata_from_yahoo_info(
         "xle",
         {

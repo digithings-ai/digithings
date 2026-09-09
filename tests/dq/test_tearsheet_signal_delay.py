@@ -165,7 +165,7 @@ def test_run_and_write_end_date_shift_flows_to_payload(
             (str(t)[:10], float(c))
             for t, c in zip(ohlcv["timestamp"].to_list(), ohlcv["close"].to_list())
         ]
-        return _NoPositions(), bars_list, [], {}
+        return _NoPositions(), bars_list, [], {}, None
 
     monkeypatch.setattr(history_cache, "load_cached", lambda symbol, cache_dir: df)
     monkeypatch.setattr(cal_loader, "resolve_calibrations", lambda *a, **k: {})
@@ -216,7 +216,7 @@ def test_run_and_write_default_is_undelayed(
             (str(t)[:10], float(c))
             for t, c in zip(ohlcv["timestamp"].to_list(), ohlcv["close"].to_list())
         ]
-        return _NoPositions(), bars_list, [], {}
+        return _NoPositions(), bars_list, [], {}, None
 
     monkeypatch.setattr(history_cache, "load_cached", lambda symbol, cache_dir: df)
     monkeypatch.setattr(cal_loader, "resolve_calibrations", lambda *a, **k: {})

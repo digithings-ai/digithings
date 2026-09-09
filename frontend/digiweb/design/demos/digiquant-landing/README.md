@@ -9,9 +9,9 @@ It is a self-contained HTML/CSS/JS prototype of the digiquant.io landing page:
 
 - Centered editorial hero — *"A quant hedge fund. In a box you own."* — over a
   **mouse-following animated mesh gradient** (Stripe-style), staggered reveal on load.
-- A **scroll-pinned Olympus pipeline**: one continuous, lerp-smoothed horizontal track of
-  the **real** Atlas → Hermes → Kairos research phases; engine headings crossfade; each engine
-  gets a dwell window; **Kairos is marked "In development."**
+- A **scroll-pinned dashboard pipeline**: one continuous, lerp-smoothed horizontal track of
+  the **real** research → portfolio → execution research phases; engine headings crossfade; each engine
+  gets a dwell window; **execution is marked "In development."**
 - A **vertical tearsheet strategy suite** on the **real** BTC/ETH/SOL Slapper backtests
   (data from `frontend/digiquant-web/public/strategies/index.json`); sticky tearsheet on the
   right swaps as you scroll or click; links to `/strategies/<id>`.

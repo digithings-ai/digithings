@@ -181,7 +181,7 @@ make up-digichat
 docker compose --profile litellm-cache up -d
 ```
 
-**Notes:** Set `REDIS_URL=redis://redis:6379` in `.env` when this profile is active. LiteLLM config (`config/litellm.yaml`) must be updated to use `type: redis` under `cache_params`. See `config/MODELS.md`.
+**Notes:** Set `REDIS_URL=redis://redis:6379` in `.env` when this profile is active (compose `env_file` passes it through). Do **not** export an empty `REDIS_URL=` — current LiteLLM `main-stable` treats that as a Redis URL and exits 3. Leave the variable unset when the cache Redis is not running. LiteLLM config (`config/litellm.yaml`) must be updated to use `type: redis` under `cache_params`. See `config/MODELS.md`.
 
 ---
 

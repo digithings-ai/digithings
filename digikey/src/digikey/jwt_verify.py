@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 class JwtVerificationError(Exception):
     """JWT signature, claims, or JWKS retrieval failed."""
 
+
 _DEFAULT_JWKS_CACHE_SEC = 300
 _jwks_client: PyJWKClient | None = None
 _jwks_client_url: str | None = None
@@ -113,6 +114,10 @@ def _payload_to_claims(payload: dict[str, Any]) -> TokenClaims:
         project_id=str(payload["project_id"]) if payload.get("project_id") else None,
         project_config_ref=str(payload["project_config_ref"])
         if payload.get("project_config_ref")
+        else None,
+        profile_id=str(payload["profile_id"]) if payload.get("profile_id") else None,
+        profile_version=int(payload["profile_version"])
+        if payload.get("profile_version") is not None
         else None,
         scopes=scopes,
         key_pub=str(payload["key_pub"]) if payload.get("key_pub") else None,

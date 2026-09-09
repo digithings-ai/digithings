@@ -60,17 +60,13 @@ jobs:
         id: check
         env:
           BEFORE: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BEFORE" 2>/dev/null; then
-            echo "workflow_dispatch, first push, or unresolvable prior commit -- deploying."
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          changed_files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
-
-          if echo "$changed_files" | grep -qE '^(frontend/digichat-cloudflare/|Dockerfile\.digichat-cloudflare$)'; then
-            echo "Container wrapper itself changed -- deploying."
+          # workflow_dispatch has no `before` SHA — a human explicitly asked to deploy.
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "workflow_dispatch — deploying."
             echo "deploy=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -80,6 +76,47 @@ jobs:
             echo "frontend/digichat/package.json has no .version field -- refusing to guess." >&2
             exit 1
           fi
+          target_message="digichat-v${current_version}"
+
+          # When `before` is missing or not in the fetched history (first push, force-push
+          # to main), git-diff gating is unreliable. Fall back to live target state:
+          # compare against the latest Worker deployment message (mirrors
+          # publish-digichat-image.yml's manifest inspect gate).
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BEFORE" 2>/dev/null; then
+            echo "Unresolvable prior commit — using live deployment message instead of git diff."
+            live_message=""
+            if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+              live_message=$(npx --yes wrangler@4.28.0 deployments list --name digithings-digichat --json 2>/dev/null | jq -r '.[0].annotations."workers/message" // empty' || true)
+            fi
+            echo "Live deployment message: ${live_message:-<none>}; target: $target_message"
+            if [ -n "$live_message" ] && [ "$live_message" = "$target_message" ]; then
+              echo "deploy=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+
+          # grep is deliberately not -q, and stdout is redirected instead: under
+          # `set -o pipefail`, -q exits at the first match, the writer takes SIGPIPE
+          # and the pipeline reports 141, so a large changed-file list reads as NO
+          # match. The exact threshold is grep-version-dependent -- measured ~56KB
+          # on GNU grep 3.11 and ~131KB on 3.8 -- so it can sit below the 64KB pipe
+          # buffer. This step runs under the implicit `bash -e {0}` (no pipefail),
+          # so -q would be correct today, and pipefail is not the house style here
+          # either (34 of 232 run: steps set it). But $BEFORE spans a whole
+          # develop->main promotion, and the largest on main is 76,083 bytes /
+          # 1,724 paths (#832, 2026-06-18, predating this gate; 26,657 is the max
+          # since it existed) -- past every threshold above. Draining
+          # stdin means the gate cannot silently invert if pipefail is added later.
+          if echo "$changed_files" | grep -E '^(frontend/digichat-cloudflare/|Dockerfile\.digichat-cloudflare$)' >/dev/null; then
+            echo "Container wrapper itself changed -- deploying."
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if git cat-file -e "$BEFORE:frontend/digichat/package.json" 2>/dev/null; then
             prev_version=$(git show "$BEFORE:frontend/digichat/package.json" | jq -r .version)
           else
@@ -114,6 +151,11 @@ jobs:
         # node_modules isn't there -- verified locally both ways.
         run: npm ci
 
+      - name: Read digichat version
+        if: steps.check.outputs.deploy == 'true'
+        id: version
+        run: echo "version=$(jq -r .version frontend/digichat/package.json)" >> "$GITHUB_OUTPUT"
+
       - name: Deploy
         if: steps.check.outputs.deploy == 'true'
         uses: cloudflare/wrangler-action@v3
@@ -121,12 +163,19 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: frontend/digichat-cloudflare
-          command: deploy
-          # wrangler-action's own default (no `wranglerVersion` given) installed a
-          # hardcoded 3.90.0 on its first real run here (#2199), silently ignoring
-          # this project's own `"wrangler": "^4.28.0"` devDependency -- 3.x predates
-          # Cloudflare Containers entirely, so it printed "Unexpected fields found
-          # in top-level field: containers" and deployed only the Worker routing
-          # shell, never rebuilding the actual Container image. Pin to the same
-          # range package.json declares so both installs agree on what's supported.
-          wranglerVersion: "^4.28.0"
+          command: deploy --message digichat-v${{ steps.version.outputs.version }}
+          # Sync house-default upstream key into the Worker/Container env (same
+          # pattern as deploy-digithings-cron.yml → GH_DISPATCH_TOKEN).
+          # Only non-empty Actions secrets — empty optional names fail the action.
+          secrets: |
+            CHEAPERINFERENCE_API_KEY
+            OPENROUTER_API_KEY
+        env:
+          CHEAPERINFERENCE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Do not set wrangler-action `with.wranglerVersion` to 4.28.0 — that
+          # CLI rejects `deploy --message` (run 34213316753). Omit the pin so
+          # `npx --no-install wrangler` uses the workspace install from
+          # `npm ci` (lockfile 4.120.x), which accepts --message and builds
+          # Containers. wrangler-action@v3's own default is still 3.90.0.
+          # wranglerVersion floor: 4.28.0 (package.json ^4.28.0)

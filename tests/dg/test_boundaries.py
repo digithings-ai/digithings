@@ -193,3 +193,47 @@ def test_round_boundary_reaches_browser_as_its_own_trace_type() -> None:
     # is harmless: server.py's SSE loop has no branch matching a raw "round_boundary"
     # event_type, so it is silently ignored there. What matters is that the WRAPPED
     # trace event above exists at all.
+
+
+@pytest.mark.unit
+def test_tool_call_reaches_browser_as_a_started_trace() -> None:
+    """#3417: digichat sets X-Suppress-Tool-Stream, so raw tool_call events never
+    become SSE content. Without a wrapped ``trace`` the embed shows a bare caret
+    until rag_sources arrives already-checked. The started trace is the running
+    affordance.
+    """
+    queue: Queue = Queue()
+
+    def fake_stream(
+        initial, config=None, stream_mode=None, version=None, durability=None, subgraphs=None
+    ):
+        yield {
+            "type": "custom",
+            "ns": (),
+            "data": (
+                "tool_call",
+                {"name": "digisearch", "arguments": {"query": "RS256 token exchange"}},
+            ),
+        }
+
+    mock_graph = MagicMock()
+    mock_graph.stream.side_effect = fake_stream
+    mock_graph.get_state.return_value = MagicMock(values={})
+
+    with patch("digigraph.workflow.build_workflow_graph", return_value=mock_graph):
+        run_digigraph_workflow_streaming(WorkflowRequest(prompt="RS256 token exchange"), queue)
+
+    events = []
+    while not queue.empty():
+        events.append(queue.get())
+
+    started = [
+        data
+        for (kind, data) in events
+        if kind == "trace" and isinstance(data, dict) and data.get("type") == "tool_call"
+    ]
+    assert len(started) == 1
+    payload = started[0]["payload"]
+    assert payload["tool"] == "digisearch"
+    assert payload["query"] == "RS256 token exchange"
+    assert payload["status"] == "started"

@@ -3,59 +3,28 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import typer
 
 app = typer.Typer(help="digisearch – RAG, document search for Digi ecosystem")
 
 
-def _pick_chunker(name: str) -> Any:
-    from digisearch.ingestion.chunkers.fixed import FixedSizeChunker
-    from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
+def _ingest_paths(paths: list[Path], index: str, chunker_name: str | None) -> int:
+    from digisearch.pipeline.ingest import IngestError, ingest_paths
 
-    if name == "recursive":
-        return SegmentAwareChunker()
-    if name == "fixed":
-        return FixedSizeChunker(chunk_size=512)
-    return SegmentAwareChunker()
-
-
-def _sidecar_path_for(file_path: Path) -> Path:
-    y = file_path.parent / f"{file_path.stem}.yaml"
-    if y.is_file():
-        return y
-    return file_path.parent / f"{file_path.stem}.yml"
-
-
-def _ingest_paths(paths: list[Path], index: str, chunker_name: str) -> int:
-    from digisearch.core.evidence_metadata import (
-        load_sidecar_yaml,
-        merge_document_metadata_into_chunks,
-        metadata_from_sidecar_dict,
-    )
-    from digisearch.ingestion.registry import ParserRegistry
-    from digisearch.search._stub import add_chunks
-
-    registry = ParserRegistry()
-    ch = _pick_chunker(chunker_name)
-    total = 0
-    for p in paths:
-        if not p.is_file() or not registry.get_parser(str(p)):
-            continue
-        try:
-            doc = registry.parse(p)
-            side = _sidecar_path_for(p)
-            side_meta = metadata_from_sidecar_dict(load_sidecar_yaml(side))
-            doc.metadata = {**(doc.metadata or {}), **side_meta}
-            chunks = ch.chunk(doc)
-            merge_document_metadata_into_chunks(doc, chunks)
-            doc.chunks = chunks
-            add_chunks(index, chunks)
-            total += len(chunks)
-            typer.echo(f"Ingested {p.name}: {len(chunks)} chunks")
-        except Exception as e:
-            typer.echo(f"Skip {p}: {e}", err=True)
+    try:
+        total, results = ingest_paths(
+            paths,
+            index_name=index,
+            chunker_name=chunker_name,
+            skip_errors=True,
+        )
+    except IngestError as exc:
+        typer.echo(f"Ingest failed: {exc.message}", err=True)
+        return 0
+    for result in results:
+        name = Path(result.source).name if result.source else result.doc_id
+        typer.echo(f"Ingested {name}: {result.chunks_created} chunks")
     return total
 
 
@@ -63,7 +32,12 @@ def _ingest_paths(paths: list[Path], index: str, chunker_name: str) -> int:
 def ingest(
     index: str = typer.Option("default", "--index", "-i", help="Index name"),
     source: Path = typer.Argument(..., help="File or directory to ingest"),
-    chunker: str = typer.Option("recursive", "--chunker", "-c", help="recursive | fixed | sentence"),
+    chunker: str | None = typer.Option(
+        None,
+        "--chunker",
+        "-c",
+        help="semantic | token | recursive | fixed (default: DIGISEARCH_CHUNKER or semantic)",
+    ),
 ) -> None:
     """Ingest documents into an index (stub in-process). Loads ``{stem}.yaml`` / ``.yml`` sidecars."""
     sources = list(source.rglob("*")) if source.is_dir() else [source]
@@ -75,8 +49,15 @@ def ingest(
 @app.command("ingest-batch")
 def ingest_batch(
     index: str = typer.Option("default", "--index", "-i", help="Index name"),
-    directory: Path = typer.Argument(..., help="Directory of PDFs/Markdown and optional YAML sidecars"),
-    chunker: str = typer.Option("recursive", "--chunker", "-c", help="recursive | fixed | sentence"),
+    directory: Path = typer.Argument(
+        ..., help="Directory of PDFs/Markdown and optional YAML sidecars"
+    ),
+    chunker: str | None = typer.Option(
+        None,
+        "--chunker",
+        "-c",
+        help="semantic | token | recursive | fixed (default: DIGISEARCH_CHUNKER or semantic)",
+    ),
 ) -> None:
     """Batch-ingest every supported file under a directory (PDF + YAML sidecar pattern)."""
     paths = sorted(directory.rglob("*"))
@@ -107,8 +88,14 @@ def query(
 ) -> None:
     """Run a search query."""
     from digisearch.core.models import Query
+    from digisearch.embedding.factory import normalize_query_mode
     from digisearch.search._stub import query_index
 
+    try:
+        mode = normalize_query_mode(mode)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
     q = Query(text=text, top_k=top_k, mode=mode)
     response = query_index(q, index_name=index)
     for i, r in enumerate(response.results, 1):

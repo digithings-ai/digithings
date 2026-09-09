@@ -1,4 +1,7 @@
-# Markdown link integrity + agent-instruction surface drift check + gh-aw compile check
+# Markdown link integrity + agent-instruction surface drift check.
+# The former `gh aw compile --trial` gate was removed when Copilot/gh-aw
+# workflows were retired (#1904 / ADR-0017 superseded). Replacement drift
+# check is `python scripts/agents_init.py --check` below (#1182).
 name: "CI: docs"
 
 on:

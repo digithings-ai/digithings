@@ -42,7 +42,7 @@ export function BentoCell({
 }) {
   return (
     <article
-      className={`bento-cell flex flex-col justify-between rounded-[12px] border border-hair p-[1.1rem] bento-${span}${
+      className={`bento-cell flex flex-col justify-between rounded-none border border-hair p-[1.1rem] bento-${span}${
         livery ? ` accent-${livery}` : ""
       }${className ? ` ${className}` : ""}`}
     >

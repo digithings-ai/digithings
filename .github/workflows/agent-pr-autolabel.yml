@@ -60,17 +60,20 @@ jobs:
             exit 0
           fi
           TEXT=$(echo "$PR" | jq -r '.body + "\n" + .title')
-          if ! printf '%s' "$TEXT" | grep -Eqi '(fixes|closes|resolves)[[:space:]]+#[0-9]+'; then
+          # Not -q: under `set -o pipefail` (set above) -q exits at the first match,
+          # printf takes SIGPIPE and the pipeline reports 141 -- so a body near
+          # GitHub's 65,536-char cap can read as unlinked: the threshold is
+          # grep-version-dependent (~56KB on GNU grep 3.11, ~131KB on 3.8), so it
+          # can sit below that cap. Redirecting lets grep drain stdin.
+          if ! printf '%s' "$TEXT" | grep -Ei '(fixes|closes|resolves)[[:space:]]+#[0-9]+' >/dev/null; then
             echo "PR #$NUM not issue-linked — skipping autolabel"
             exit 0
           fi
-          ISSUE_NUM=$(printf '%s' "$TEXT" | grep -Eoi '(fixes|closes|resolves)[[:space:]]+#[0-9]+' | head -1 | grep -Eo '[0-9]+')
-          BLOCKED=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json labels \
-            --jq '[.labels[].name] | (index("risk:high") != null) or (index("needs-human") != null)')
-          if [[ "$BLOCKED" == "true" ]]; then
-            echo "Issue #$ISSUE_NUM is human-gated — skipping autolabel"
-            exit 0
-          fi
+          # Label simplification 2026-09: no label-based human gate remains.
+          # Merge-time safety is path-based: verify_agent_automerge_pr.py runs in
+          # agent-pr-automerge.yml before auto-merge is enabled (deny-list covers
+          # digikey/, brokers/, live-trading, workflows). Autolabel itself only
+          # marks CI-green agent PRs as candidates.
           HEAD_BRANCH=$(echo "$PR" | jq -r '.headRefName')
           HEAD_SHA=$(echo "$PR" | jq -r '.headRefOid')
           if ! python3 scripts/agent_pr_checks.py "$REPO" "$NUM" "$HEAD_BRANCH" "$HEAD_SHA"; then

@@ -79,6 +79,11 @@ export class DigiStackContainer extends Container {
     GROQ_API_KEY: env.GROQ_API_KEY ?? "",
     OPENROUTER_API_KEY: env.OPENROUTER_API_KEY ?? "",
     OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
+    // Hosted Cheaper Inference (house default when key set; see docs/providers/cheaperinference.md)
+    CHEAPERINFERENCE_API_KEY: env.CHEAPERINFERENCE_API_KEY ?? "",
+    CHEAPERINFERENCE_API_BASE:
+      env.CHEAPERINFERENCE_API_BASE ?? "https://api.cheaperinference.com/v1",
+    DIGI_HOUSE_UPSTREAM: env.DIGI_HOUSE_UPSTREAM ?? "",
     LITELLM_PROXY_API_KEY: env.LITELLM_PROXY_API_KEY ?? "",
     LITELLM_MASTER_KEY: env.LITELLM_MASTER_KEY ?? "",
   };
@@ -151,6 +156,9 @@ export interface Env {
   GROQ_API_KEY?: string;
   OPENROUTER_API_KEY?: string;
   OPENAI_API_KEY?: string;
+  CHEAPERINFERENCE_API_KEY?: string;
+  CHEAPERINFERENCE_API_BASE?: string;
+  DIGI_HOUSE_UPSTREAM?: string;
   LITELLM_PROXY_API_KEY?: string;
   LITELLM_MASTER_KEY?: string;
 }

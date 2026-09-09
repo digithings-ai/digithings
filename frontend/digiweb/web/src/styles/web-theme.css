@@ -46,27 +46,29 @@
   --ease-brand: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Base element defaults shared by the React apps. */
+/* Base element defaults shared by the React apps.
+   Utilitarian v0.1: mono is the default voice (claims, body, chrome). */
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: var(--font-sans);
-  line-height: 1.65;
-  letter-spacing: -0.011em;
+  font-family: var(--font-mono);
+  line-height: 1.55;
+  letter-spacing: -0.015em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Theme flip only — color/background, not layout properties. */
   transition: background 0.4s var(--ease), color 0.4s var(--ease);
 }
 ::selection { background: var(--accent); color: var(--on-accent); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 0; }
 
 /* ── stack logos / chips ─────────────────────────────────────────────── */
 .stack-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.6rem; }
-.stack-chip { display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid var(--hair); background: var(--surface); border-radius: 8px; padding: 0.32rem 0.6rem; font-family: var(--font-mono); font-size: 0.74rem; color: var(--ink-soft); transition: border-color .18s var(--ease), color .18s var(--ease); }
+.stack-chip { display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid var(--hair); background: var(--surface); border-radius: 0; padding: 0.32rem 0.6rem; font-family: var(--font-mono); font-size: 0.74rem; color: var(--ink-soft); transition: border-color .18s var(--ease), color .18s var(--ease); }
 .stack-chip:hover { border-color: var(--hair-2); color: var(--ink); }
 .stack-ico { color: var(--ink-mute); transition: color .18s var(--ease); }
 .stack-chip:hover .stack-ico { color: var(--brand, var(--accent)); }
-.stack-mono { display: inline-grid; place-items: center; min-width: 15px; height: 15px; font-size: 0.6rem; font-weight: 600; color: var(--ink-mute); border: 1px solid var(--hair-2); border-radius: 4px; padding: 0 2px; }
+.stack-mono { display: inline-grid; place-items: center; min-width: 15px; height: 15px; font-size: 0.6rem; font-weight: 600; color: var(--ink-mute); border: 1px solid var(--hair-2); border-radius: 0; padding: 0 2px; }
 .stack-row.compact .stack-name { display: none; }
 .stack-row.compact .stack-chip { padding: 0.3rem; }
 
@@ -78,7 +80,7 @@ body {
 .mod-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.3rem; }
 .mod-card h3 { font-size: 1.14rem; font-weight: 600; letter-spacing: -0.02em; }
 .mod-card .role { font-size: 0.8rem; color: var(--ink-soft); }
-.dg-tier { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); border: 1px solid var(--hair); border-radius: 999px; padding: 0.16rem 0.5rem; }
+.dg-tier { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); border: 1px solid var(--hair); border-radius: 0; padding: 0.16rem 0.5rem; }
 .dg-tier.t-core { color: var(--accent); border-color: var(--accent-weak); }
 .dg-tier.t-roadmap { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
 
@@ -112,12 +114,12 @@ body {
 .dg-panel-head { display: flex; align-items: center; gap: 0.9rem; }
 .dg-panel-head h3 { font-family: var(--font-display); font-weight: 400; font-size: 1.9rem; letter-spacing: -0.01em; }
 .dg-tag { color: var(--ink-soft); margin: 0.7rem 0 0.4rem; }
-.dg-docker { font-family: var(--font-mono); font-size: 0.78rem; color: var(--term-ink); background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 8px; padding: 0.5rem 0.7rem; margin-top: 0.8rem; overflow-x: auto; white-space: nowrap; }
+.dg-docker { font-family: var(--font-mono); font-size: 0.78rem; color: var(--term-ink); background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 0; padding: 0.5rem 0.7rem; margin-top: 0.8rem; overflow-x: auto; white-space: nowrap; }
 .dg-docker .prompt { color: var(--accent); }
 .dg-more { display: inline-block; margin-top: 0.9rem; font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent); }
 
 /* code block (module init snippet) */
-.codeblock { background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 12px; padding: 1.1rem 1.3rem; font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.9; color: var(--term-ink); overflow-x: auto; white-space: pre-wrap; }
+.codeblock { background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 0; padding: 1.1rem 1.3rem; font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.9; color: var(--term-ink); overflow-x: auto; white-space: pre-wrap; }
 
 /* mobile / reduced-motion stepper */
 .dg-stepper { display: flex; flex-direction: column; gap: 2rem; max-width: var(--wrap); margin-inline: auto; padding-inline: var(--gutter); }

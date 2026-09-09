@@ -130,5 +130,6 @@ open "http://127.0.0.1:3000/embed?host=occ.digithings.ai&layout=page"
 
 - Scope: [`SCOPE.md`](SCOPE.md)
 - Gap log: [`GAPLOG.md`](GAPLOG.md)
+- Corpus audit (crawl completeness + EN/DE bilingual coverage): [`AUDIT-CORPUS-BILINGUAL.md`](AUDIT-CORPUS-BILINGUAL.md)
 - Runbook: [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../../digichat/CLIENT-DOCS-ONBOARD.md)
 - Dogfood pattern: [`docs/projects/digithings/README.md`](../digithings/README.md)
