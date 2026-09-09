@@ -253,22 +253,23 @@ __all__ = [
 ]
 
 
-R2_ENDPOINT_ENV = "CHECKPOINT_ARCHIVE_R2_ENDPOINT"
-R2_BUCKET_ENV = "CHECKPOINT_ARCHIVE_R2_BUCKET"
-R2_ACCESS_KEY_ENV = "CHECKPOINT_ARCHIVE_R2_ACCESS_KEY"
-R2_SECRET_KEY_ENV = "CHECKPOINT_ARCHIVE_R2_SECRET_KEY"
+R2_ACCOUNT_ENV = "R2_ACCOUNT_ID"
+R2_BUCKET_ENV = "R2_BUCKET"
+R2_ACCESS_KEY_ENV = "R2_ACCESS_KEY_ID"
+R2_SECRET_KEY_ENV = "R2_SECRET_ACCESS_KEY"
 
 
 def _r2_backend_from_env() -> R2Backend | None:
     """Build the R2 backend from env; ``None`` when any var is missing."""
     import os
 
-    endpoint = (os.environ.get(R2_ENDPOINT_ENV) or "").strip()
+    account = (os.environ.get(R2_ACCOUNT_ENV) or "").strip()
     bucket = (os.environ.get(R2_BUCKET_ENV) or "").strip()
     access = (os.environ.get(R2_ACCESS_KEY_ENV) or "").strip()
     secret = (os.environ.get(R2_SECRET_KEY_ENV) or "").strip()
-    if not (endpoint and bucket and access and secret):
+    if not (account and bucket and access and secret):
         return None
+    endpoint = f"https://{account}.r2.cloudflarestorage.com"
     return R2Backend(endpoint_url=endpoint, bucket=bucket, access_key=access, secret_key=secret)
 
 
@@ -310,9 +311,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     store = _r2_backend_from_env()
     if store is None:
-        print(
-            "missing R2 credentials; set CHECKPOINT_ARCHIVE_R2_ENDPOINT/BUCKET/ACCESS_KEY/SECRET_KEY"
-        )
+        print("missing R2 credentials; set R2_ACCOUNT_ID/R2_BUCKET/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY")
         return 2
     manifests: list[dict[str, Any]] = []
     keep = set(args.keep)

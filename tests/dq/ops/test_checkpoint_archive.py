@@ -13,6 +13,7 @@ from digiquant.ops.checkpoint_archive import (  # noqa: E402
     ArchiveManifest,
     ArchiveVerifyError,
     R2Backend,
+    _r2_backend_from_env,
     archive_thread,
     blob_key,
     list_threads,
@@ -283,10 +284,10 @@ class TestMain:
             }
         )
         monkeypatch.setattr("digiquant.data.store.client.build_digiquant_client", lambda: client)
-        monkeypatch.setenv("CHECKPOINT_ARCHIVE_R2_ENDPOINT", "https://x.r2.test")
-        monkeypatch.setenv("CHECKPOINT_ARCHIVE_R2_BUCKET", "bkt")
-        monkeypatch.setenv("CHECKPOINT_ARCHIVE_R2_ACCESS_KEY", "k")
-        monkeypatch.setenv("CHECKPOINT_ARCHIVE_R2_SECRET_KEY", "s")
+        monkeypatch.setenv("R2_ACCOUNT_ID", "x")
+        monkeypatch.setenv("R2_BUCKET", "bkt")
+        monkeypatch.setenv("R2_ACCESS_KEY_ID", "k")
+        monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "s")
         monkeypatch.setattr("digiquant.ops.checkpoint_archive.R2Backend", lambda **kw: FakeStore())
         out = tmp_path / "manifests.json"
         assert main(["--retain-days", "2", "--manifest-out", str(out)]) == 0
@@ -294,3 +295,21 @@ class TestMain:
         assert blobs["old-run"] is None  # archived
         assert blobs["new-run"] == "\\x02"  # retained
         assert out.is_file()
+
+
+def test_r2_backend_from_new_env_names(monkeypatch):
+    monkeypatch.setenv("R2_ACCOUNT_ID", "abc123")
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "key")
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "secret")
+    monkeypatch.setenv("R2_BUCKET", "digithings-archive")
+    for old in (
+        "CHECKPOINT_ARCHIVE_R2_ENDPOINT",
+        "CHECKPOINT_ARCHIVE_R2_BUCKET",
+        "CHECKPOINT_ARCHIVE_R2_ACCESS_KEY",
+        "CHECKPOINT_ARCHIVE_R2_SECRET_KEY",
+    ):
+        monkeypatch.delenv(old, raising=False)
+    backend = _r2_backend_from_env()
+    assert backend is not None
+    assert backend.endpoint_url == "https://abc123.r2.cloudflarestorage.com"
+    assert backend.bucket == "digithings-archive"
