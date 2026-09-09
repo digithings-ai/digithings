@@ -33,6 +33,7 @@ from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights, build_extra_indicators
 from digiquant.strategies.sdca.optimize import drop_extras_missing_sources, load_sdca_extra_sources
 from digiquant.strategies.sdca.presets import load_preset
+from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
 from digiquant.strategies.sdca.risk_index import build_risk_index
 
 logger = logging.getLogger(__name__)
@@ -973,13 +974,18 @@ def load_frozen_index(
     trade_start: str = "2018-01-01",
     ticker: str = "BTC-USD",
     weights: SdcaCompositeWeights | None = None,
+    oscillators: SdcaOscillatorSpec | None = None,
 ) -> tuple[pl.Series, pl.Series, pl.Series, SdcaCompositeWeights]:
     """Composite risk on the delayed cache, sliced from ``trade_start``.
 
     ``weights`` defaults to today's published ``settings.json`` mix; pass an
     explicit ``SdcaCompositeWeights`` to freeze a different composite instead
     (e.g. a diagnostic search's winning mix not yet promoted into
-    ``settings.json``).
+    ``settings.json``). ``oscillators`` likewise defaults to
+    ``SdcaOscillatorSpec()``'s production periods; pass an explicit spec to
+    freeze indicator construction periods a Stage-2-style period search has
+    already picked, instead of silently falling back to defaults tuned for a
+    different indicator formula.
     """
     ohlcv = load_cached(ticker, cache_dir)
     if ohlcv is None or ohlcv.is_empty():
@@ -992,7 +998,7 @@ def load_frozen_index(
     requested = weights if weights is not None else published_indicator_weights()
     sources = load_sdca_extra_sources(cache_dir)
     resolved = drop_extras_missing_sources(requested, sources)
-    extras = build_extra_indicators(dates, ohlcv["close"], resolved, sources)
+    extras = build_extra_indicators(dates, ohlcv["close"], resolved, sources, oscillators=oscillators)
     index = build_risk_index(
         dates,
         ohlcv["close"],
