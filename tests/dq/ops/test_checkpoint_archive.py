@@ -16,6 +16,8 @@ from digiquant.ops.checkpoint_archive import (  # noqa: E402
     _r2_backend_from_env,
     archive_thread,
     blob_key,
+    compress_payload,
+    decompress_payload,
     list_threads,
     main,
     parse_postgrest_bytea,
@@ -313,3 +315,14 @@ def test_r2_backend_from_new_env_names(monkeypatch):
     assert backend is not None
     assert backend.endpoint_url == "https://abc123.r2.cloudflarestorage.com"
     assert backend.bucket == "digithings-archive"
+
+
+def test_zstd_round_trip():
+    data = b'{"channel":"messages","ts":"2026-09-09T00:00:00+00:00"}' * 100
+    assert decompress_payload(compress_payload(data)) == data
+
+
+def test_zstd_version_byte_rejects_unknown():
+    blob = b"\x7f" + compress_payload(b"hello")[1:]
+    with pytest.raises(ArchiveVerifyError):
+        decompress_payload(blob)

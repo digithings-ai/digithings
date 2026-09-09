@@ -34,6 +34,23 @@ class ArchiveVerifyError(RuntimeError):
     """Read-back hash mismatch — the Supabase row is left untouched."""
 
 
+DICT_VERSION = 1
+
+
+def compress_payload(data: bytes) -> bytes:
+    import zstandard as zstd
+
+    return bytes([DICT_VERSION]) + zstd.compress(data, level=3)
+
+
+def decompress_payload(blob: bytes) -> bytes:
+    import zstandard as zstd
+
+    if not blob or blob[0] != DICT_VERSION:
+        raise ArchiveVerifyError(f"unsupported archive dict version: {blob[:1]!r}")
+    return zstd.decompress(blob[1:])
+
+
 class StorageBackend(Protocol):
     """Object-store surface the archiver needs (R2, or a fake in tests)."""
 
@@ -236,6 +253,7 @@ class R2Backend:
 
 
 __all__ = [
+    "DICT_VERSION",
     "ArchiveEntry",
     "ArchiveManifest",
     "ArchiveVerifyError",
@@ -245,6 +263,8 @@ __all__ = [
     "StorageBackend",
     "archive_thread",
     "blob_key",
+    "compress_payload",
+    "decompress_payload",
     "list_threads",
     "main",
     "parse_postgrest_bytea",
@@ -311,7 +331,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     store = _r2_backend_from_env()
     if store is None:
-        print("missing R2 credentials; set R2_ACCOUNT_ID/R2_BUCKET/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY")
+        print(
+            "missing R2 credentials; set R2_ACCOUNT_ID/R2_BUCKET/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY"
+        )
         return 2
     manifests: list[dict[str, Any]] = []
     keep = set(args.keep)
