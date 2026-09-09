@@ -711,13 +711,18 @@ def _seed_ledger(client: FakeClient, keys_sizes: list[tuple[str, int]]) -> None:
 def test_evict_oldest_first_to_low_watermark():
     client = FakeClient()
     _seed_ledger(
-        client, [("r2/a", 4_000_000_000), ("r2/b", 3_000_000_000), ("r2/c", 2_000_000_000)]
+        client,
+        [
+            ("checkpoints/a", 4_000_000_000),
+            ("checkpoints/b", 3_000_000_000),
+            ("checkpoints/c", 2_000_000_000),
+        ],
     )
     store = FakeStore()
-    for key in ("r2/a", "r2/b", "r2/c"):
+    for key in ("checkpoints/a", "checkpoints/b", "checkpoints/c"):
         store.objects[key] = b"x"
     evicted = evict_to_watermark(client, store)
-    assert evicted == ["r2/a"]
+    assert evicted == ["checkpoints/a"]
     assert bucket_usage(client) <= LOW_WATERMARK_BYTES
 
 
