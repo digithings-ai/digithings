@@ -11,11 +11,11 @@ vi.mock("@/lib/chat-route-context", () => ({
 }));
 
 vi.mock("@/lib/bff-rate-limit", () => ({
-  checkBffRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
+  checkBffRateLimit: vi.fn(() => ({ allowed: true })),
 }));
 
 vi.mock("@/lib/embed-ip-rate-limit", () => ({
-  checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
+  checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true })),
   clientIpForRateLimit: vi.fn(() => "127.0.0.1"),
 }));
 
@@ -68,6 +68,7 @@ vi.mock("ai", async () => {
 
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
+import type { EmbedChatTenantContext } from "@/lib/embed-chat-tenant";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
@@ -77,6 +78,11 @@ import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
 import { resetChatRunLocksForTests } from "@/lib/chat-run-lock";
 import { EMBED_FREE_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { streamText, createUIMessageStreamResponse } from "ai";
+import { parseDigichatConfig } from "@/lib/deploy-config";
+import {
+  resetDigichatConfigForTests,
+  setDigichatConfigForTests,
+} from "@/lib/deploy-config/loader";
 
 describe("POST /api/chat", () => {
   const env = process.env;
@@ -89,8 +95,8 @@ describe("POST /api/chat", () => {
       bearer: "jwt-token",
       litellmProxyApiKey: null,
     });
-    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
-    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true });
     resetEmbedTrialQuotaForTests();
     resetChatRunLocksForTests();
 vi.mocked(createFoundryStreamResponse).mockClear();
@@ -275,7 +281,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         },
         activityDetail: "full",
       },
-    });
+    } as EmbedChatTenantContext);
     const res = await POST(
       new Request("http://localhost/api/chat", {
         method: "POST",
@@ -470,6 +476,93 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-Digi-Disabled-Tools"]).toBe("digivault");
   });
 
+  it("forwards operator MCP YAML and ignores client-supplied X-Digi-Mcp-Servers (#3736)", async () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "datatap",
+        backend: { type: "digigraph" },
+        mcp: {
+          servers: [{ id: "datatap", url: "https://mcp.datatap.example/mcp" }],
+        },
+      },
+    });
+    setDigichatConfigForTests(cfg);
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-mcp-servers": '[{"id":"evil","url":"https://evil.example/mcp"}]',
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      const forwarded = call?.headers?.["X-Digi-Mcp-Servers"];
+      expect(forwarded).toContain("mcp.datatap.example");
+      expect(forwarded).toContain("datatap");
+      expect(forwarded).not.toContain("evil");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("merges allowlisted session overlay and ignores operator URL override (#3736)", async () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "datatap",
+        backend: { type: "digigraph" },
+        mcp: {
+          allowUserServers: true,
+          servers: [{ id: "datatap", url: "https://mcp.datatap.example/mcp" }],
+        },
+      },
+    });
+    setDigichatConfigForTests(cfg);
+    try {
+      const overlay = JSON.stringify([
+        { id: "datatap", url: "https://evil.example/mcp", token: "tok" },
+        { id: "linear", url: "https://mcp.linear.app/mcp", auth: "oauth" },
+        { id: "loop", url: "http://127.0.0.1:8080/mcp" },
+      ]);
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-mcp-session": overlay,
+            "x-digi-mcp-servers": '[{"id":"evil","url":"https://evil.example/mcp"}]',
+            "x-digi-effort": "high",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      const forwarded = call?.headers?.["X-Digi-Mcp-Servers"] ?? "";
+      expect(forwarded).toContain("mcp.datatap.example");
+      expect(forwarded).toContain("tok");
+      expect(forwarded).toContain("mcp.linear.app");
+      expect(forwarded).not.toContain("evil.example");
+      expect(forwarded).not.toContain("127.0.0.1");
+      expect(call?.headers?.["X-Digi-Effort"]).toBe("high");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
   it("returns 409 run_in_progress for concurrent regen on the same session", async () => {
     vi.mocked(createUIMessageStreamResponse).mockImplementationOnce(
       ({ headers }: { headers?: HeadersInit }) =>
@@ -565,7 +658,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
         activityDetail: "full",
       },
-    });
+    } as EmbedChatTenantContext);
     const res = await POST(
       new Request("http://localhost/api/chat", {
         method: "POST",
@@ -601,7 +694,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
         activityDetail: "full",
       },
-    });
+    } as EmbedChatTenantContext);
     const res = await POST(
       new Request("http://localhost/api/chat", {
         method: "POST",

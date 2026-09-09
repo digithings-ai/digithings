@@ -52,6 +52,16 @@ export {
 } from "./force-tool";
 
 export {
+  isAllowedMcpServerUrl,
+  resolveMcpOAuthResourceUrl,
+  mcpServersHeaderValue,
+  operatorMcpServersForUpstream,
+  parseMcpSessionOverlay,
+  mergeMcpSessionOverlay,
+  mcpUpstreamHeaderValue,
+} from "./mcp-servers";
+
+export {
   clientConfigFromEmbedTenant,
   clientConfigFromDeployment,
 } from "./embed-bridge";

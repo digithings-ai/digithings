@@ -413,38 +413,60 @@ export async function POST(req: Request) {
   if (languageCode !== "en") {
     upstreamHeaders["X-Digi-Language"] = languageCode;
   }
+  const effortRaw = (req.headers.get("x-digi-effort") || "").trim().toLowerCase();
+  if (effortRaw === "low" || effortRaw === "medium" || effortRaw === "high") {
+    upstreamHeaders["X-Digi-Effort"] = effortRaw;
+  }
   // X-Digi-Force-Tool is send-only — ignore leftover slash force on regen/edit (#3475).
   // Session X-Digi-Disabled-Tools still forwards on Redo / edit (#3735 review).
   // Catalog allowlist from deployment config is source of truth (fail closed).
+  // Operator MCP URLs come only from YAML — never from the browser (#3736).
   const forceToolRaw = req.headers.get("x-digi-force-tool")?.trim();
   const disabledToolsRaw = req.headers.get("x-digi-disabled-tools")?.trim();
-  if (forceToolRaw || disabledToolsRaw) {
-    try {
-      const { filterForceToolHeader, filterDisabledToolsHeader, omitForcedCatalogIds } =
-        await import("@/lib/deploy-config");
-      const {
-        resolveDeploymentForHost,
-        getDigichatConfig,
-        embedTenantToDeployment,
-      } = await import("@/lib/deploy-config/loader");
-      const embedHost = req.headers.get("x-embed-host");
-      let dep = resolveDeploymentForHost(embedHost, getDigichatConfig());
-      if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
-      const allowed =
-        forceToolRaw && !isMutatingTurnMode(turnMode)
-          ? filterForceToolHeader(dep, forceToolRaw)
-          : undefined;
-      if (allowed) upstreamHeaders["X-Digi-Force-Tool"] = allowed;
-      const disabled = omitForcedCatalogIds(
-        filterDisabledToolsHeader(dep, disabledToolsRaw),
-        allowed,
-      );
-      if (disabled.length) {
-        upstreamHeaders["X-Digi-Disabled-Tools"] = disabled.join(",");
-      }
-    } catch {
-      // Invalid deploy config — do not forward force-tool / disabled-tools (fail closed).
+  try {
+    const {
+      filterForceToolHeader,
+      filterDisabledToolsHeader,
+      omitForcedCatalogIds,
+      mcpServersHeaderValue,
+      operatorMcpServersForUpstream,
+      parseMcpSessionOverlay,
+      mergeMcpSessionOverlay,
+      mcpUpstreamHeaderValue,
+    } = await import("@/lib/deploy-config");
+    const {
+      resolveDeploymentForHost,
+      getDigichatConfig,
+      embedTenantToDeployment,
+    } = await import("@/lib/deploy-config/loader");
+    const embedHost = req.headers.get("x-embed-host");
+    let dep = resolveDeploymentForHost(embedHost, getDigichatConfig());
+    if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
+    const operator = operatorMcpServersForUpstream(dep);
+    const overlay = parseMcpSessionOverlay(req.headers.get("x-digi-mcp-session"));
+    const merged = mergeMcpSessionOverlay({
+      operator,
+      overlay,
+      allowSessionUrls: dep?.mcp?.allowUserServers === true,
+    });
+    const mcpHeader = mcpUpstreamHeaderValue(merged) ?? mcpServersHeaderValue(dep);
+    if (mcpHeader) {
+      upstreamHeaders["X-Digi-Mcp-Servers"] = mcpHeader;
     }
+    const allowed =
+      forceToolRaw && !isMutatingTurnMode(turnMode)
+        ? filterForceToolHeader(dep, forceToolRaw)
+        : undefined;
+    if (allowed) upstreamHeaders["X-Digi-Force-Tool"] = allowed;
+    const disabled = omitForcedCatalogIds(
+      filterDisabledToolsHeader(dep, disabledToolsRaw),
+      allowed,
+    );
+    if (disabled.length) {
+      upstreamHeaders["X-Digi-Disabled-Tools"] = disabled.join(",");
+    }
+  } catch {
+    // Invalid deploy config — do not forward force-tool / disabled-tools / MCP.
   }
 
   // Opt-in web search (#3420): client must ask AND tenant/env must allow.

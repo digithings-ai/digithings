@@ -16,7 +16,7 @@ Do not reintroduce a second transcript renderer here.
 
 | File | What it is |
 |---|---|
-| `src/slash-commands.ts` | Public slash palette: `/search`, `/vault` (alias `/docs`), `/lang`, `/websearch`, `/byok`, `/settings`, plus `/help` `/new` `/copy` `/export`. |
+| `src/slash-commands.ts` | Public slash palette: `/digisearch`, `/digivault`, `/websearch`, `/mcp`, `/tools`, `/lang`, `/provider` (`/byok`), `/settings`, plus `/help` `/new` `/copy` `/export`. |
 | `src/activity-view.ts` | Pure helpers (`citationHits`, …) for markdown export / legacy hydrate. No JSX. |
 | `src/transcript-markdown.ts` | Shared serializer for last-answer + full-thread markdown export. |
 | `src/components/DigiChatMark.tsx` | Brand mark / wordmark (digithings-web nav). |

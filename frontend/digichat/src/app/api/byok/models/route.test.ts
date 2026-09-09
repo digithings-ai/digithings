@@ -10,7 +10,7 @@ vi.mock("@/lib/embed-chat-tenant", async (importOriginal) => {
   return { ...actual, resolveEmbedChatTenant: vi.fn(actual.resolveEmbedChatTenant) };
 });
 vi.mock("@/lib/embed-ip-rate-limit", () => ({
-  checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
+  checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true })),
 }));
 vi.mock("@/lib/bff-rate-limit", () => ({
   checkBffRateLimit: vi.fn(() => ({ allowed: true })),
@@ -61,7 +61,7 @@ describe("GET /api/byok/models", () => {
       ownerUserSub: "embed:anonymous",
       embedConfig: null,
     });
-    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true });
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 5 });
     const res = await GET(
       req("/api/byok/models?provider=openrouter", { "x-embed-host": "https://digithings.ai" }),

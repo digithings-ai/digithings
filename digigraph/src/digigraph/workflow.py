@@ -88,6 +88,15 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     initial["response_language"] = req.response_language
     initial["force_tool"] = req.force_tool
     initial["enable_web_search"] = bool(req.enable_web_search)
+    # Unconditional — empty list must clear a prior tenant's MCP URLs.
+    initial["mcp_servers"] = [
+        s.model_dump(exclude_none=True)
+        if hasattr(s, "model_dump")
+        else {"id": s["id"], "url": s["url"]}
+        for s in (req.mcp_servers or [])
+    ]
+    initial["disabled_tools"] = list(req.disabled_tools) if req.disabled_tools else None
+    initial["effort"] = req.effort
     return initial
 
 

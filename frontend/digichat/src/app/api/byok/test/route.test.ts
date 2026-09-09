@@ -17,7 +17,7 @@ vi.mock("@/lib/embed-chat-tenant", async (importOriginal) => {
 });
 
 vi.mock("@/lib/embed-ip-rate-limit", () => ({
-  checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
+  checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true })),
 }));
 
 vi.mock("@/lib/bff-rate-limit", () => ({
@@ -32,10 +32,7 @@ import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 describe("POST /api/byok/test", () => {
   beforeEach(() => {
     vi.mocked(requireDigiChatAuth).mockResolvedValue(mockAuthCtx);
-    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({
-      allowed: true,
-      retryAfterSec: 0,
-    });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true });
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true });
   });
 
@@ -64,7 +61,7 @@ describe("POST /api/byok/test", () => {
       ownerUserSub: "embed:anonymous",
       embedConfig: null,
     });
-    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true });
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 5 });
     const res = await POST(
       new Request("http://localhost/api/byok/test", {

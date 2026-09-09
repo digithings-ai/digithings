@@ -59,6 +59,7 @@ function readCapturedTransportConfig() {
 // entirely rather than executing its real (foreign-copy) hook internals.
 vi.mock("@ai-sdk/react", () => ({
   useChat: vi.fn(() => ({
+    id: "test-chat",
     messages: [],
     sendMessage: vi.fn(),
     status: "ready",
@@ -530,6 +531,31 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Disabled-Tools"
   });
 });
 
+describe("useEmbedDigiChat prepareSendMessagesRequest — MCP session overlay and effort", () => {
+  it("sets X-Digi-Mcp-Session and X-Digi-Effort at send time", async () => {
+    let overlay = "";
+    let effort = "medium";
+    const { unmount } = renderHookLocally(() =>
+      useEmbedDigiChat(
+        baseEmbedOptions({
+          getMcpSession: () => overlay || undefined,
+          getEffort: () => effort,
+        }),
+      ),
+    );
+    const config = readCapturedTransportConfig();
+    if (!config) throw new Error("AssistantChatTransport was never constructed");
+    const first = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(first.headers).has("X-Digi-Mcp-Session")).toBe(false);
+    overlay = '[{"id":"linear","url":"https://mcp.linear.app/mcp"}]';
+    effort = "high";
+    const second = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(second.headers).get("X-Digi-Mcp-Session")).toContain("linear");
+    expect(new Headers(second.headers).get("X-Digi-Effort")).toBe("high");
+    unmount();
+  });
+});
+
 describe("useEmbedDigiChat reset (/new)", () => {
   const host = "https://example.com";
   const storageKey = `digichat_embed_conversation:${host}`;
@@ -551,7 +577,7 @@ describe("useEmbedDigiChat reset (/new)", () => {
     window.sessionStorage.setItem(storageKey, "foundry-conv-123");
     setPendingForceTool(host, "digisearch");
 
-    chat.reset();
+    chat.reset?.();
 
     expect(window.sessionStorage.getItem(storageKey)).toBeNull();
     expect(takePendingForceTool(host)).toBeUndefined();
@@ -611,6 +637,7 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
     const { useChat } = await import("@ai-sdk/react");
     const regenerate = vi.fn();
     vi.mocked(useChat).mockReturnValueOnce({
+      id: "test-chat",
       messages: [],
       sendMessage: vi.fn(),
       status: "ready",
@@ -618,7 +645,7 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
       regenerate,
       setMessages: vi.fn(),
       stop: vi.fn(),
-    } as ReturnType<typeof useChat>);
+    } as unknown as ReturnType<typeof useChat>);
 
     let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
     const { unmount } = renderHookLocally(() => {
@@ -640,6 +667,7 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
       { id: "a1", role: "assistant", parts: [{ type: "text", text: "old answer" }] },
     ];
     vi.mocked(useChat).mockReturnValueOnce({
+      id: "test-chat",
       messages: prior,
       sendMessage,
       status: "ready",
@@ -647,7 +675,7 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
       regenerate: vi.fn(),
       setMessages,
       stop: vi.fn(),
-    } as ReturnType<typeof useChat>);
+    } as unknown as ReturnType<typeof useChat>);
 
     let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
     const { unmount } = renderHookLocally(() => {
@@ -669,6 +697,7 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
     const sendMessage = vi.fn();
     const setMessages = vi.fn();
     vi.mocked(useChat).mockReturnValueOnce({
+      id: "test-chat",
       messages: [
         { id: "u1", role: "user", parts: [{ type: "text", text: "q" }] },
       ],
@@ -678,7 +707,7 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
       regenerate: vi.fn(),
       setMessages,
       stop: vi.fn(),
-    } as ReturnType<typeof useChat>);
+    } as unknown as ReturnType<typeof useChat>);
 
     let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
     const { unmount } = renderHookLocally(() => {

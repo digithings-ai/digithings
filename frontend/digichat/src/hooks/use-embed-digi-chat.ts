@@ -24,6 +24,7 @@ import {
   setPendingTurnMode,
   takePendingForceTool,
   takePendingTurnMode,
+  takePendingWebSearchForce,
 } from "@/lib/pending-chat-headers";
 import {
   shapeUserMessageParts,
@@ -35,6 +36,7 @@ export {
   setPendingTurnMode,
   takePendingForceTool,
   takePendingTurnMode,
+  takePendingWebSearchForce,
 };
 
 /** Read ?token= / ?host= at send time — useChat transport is frozen on first render (#1339). */
@@ -206,6 +208,10 @@ type UseEmbedDigiChatOptions = {
    * getSelectedModel / getResponseLanguage). Dashboard mint is async after mount.
    */
   getPlanProof?: () => string | null | undefined;
+  /** Send-time MCP session overlay (id+token, optional session url). */
+  getMcpSession?: () => string | undefined;
+  /** Send-time effort: low | medium | high. */
+  getEffort?: () => string | undefined;
   /**
    * When false, omit regenerate/editLastUser so assistant-ui hides the
    * chrome. Digigraph and Foundry both support turn mutation once the BFF
@@ -229,6 +235,8 @@ export function useEmbedDigiChat({
   getEnableWebSearch,
   getDisabledTools,
   getSelectedModel,
+  getMcpSession,
+  getEffort,
   planProof,
   getPlanProof,
   allowClientTurnMutation = true,
@@ -291,7 +299,8 @@ export function useEmbedDigiChat({
           if (forceTool) {
             headers["X-Digi-Force-Tool"] = forceTool;
           }
-          if (getEnableWebSearch?.()) {
+          const forceWeb = takePendingWebSearchForce(embedHost);
+          if (getEnableWebSearch?.() || forceWeb) {
             headers["X-Digi-Enable-Web-Search"] = "1";
           }
           const disabled = omitForcedCatalogIds(
@@ -303,6 +312,14 @@ export function useEmbedDigiChat({
           );
           if (disabled.length) {
             headers["X-Digi-Disabled-Tools"] = disabled.join(",");
+          }
+          const mcpSession = getMcpSession?.()?.trim();
+          if (mcpSession) {
+            headers["X-Digi-Mcp-Session"] = mcpSession;
+          }
+          const effort = getEffort?.()?.trim().toLowerCase();
+          if (effort === "low" || effort === "medium" || effort === "high") {
+            headers["X-Digi-Effort"] = effort;
           }
           const turnMode = takePendingTurnMode(embedHost);
           if (turnMode) {
@@ -363,6 +380,8 @@ export function useEmbedDigiChat({
         getEnableWebSearch,
         getDisabledTools,
         getSelectedModel,
+        getMcpSession,
+        getEffort,
         getPlanProof,
       ],
   );

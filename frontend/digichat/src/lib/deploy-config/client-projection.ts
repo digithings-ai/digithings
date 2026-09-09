@@ -80,8 +80,12 @@ export type DigichatClientConfig = {
     allowUserToggle: boolean;
     catalog: DigichatClientTool[];
   };
-  /** MCP server ids/labels only */
-  mcp: { servers: Array<{ id: string; label?: string }> };
+  /** MCP server ids/labels only — never URLs */
+  mcp: {
+    servers: Array<{ id: string; label?: string; default?: boolean }>;
+    allowUserServers: boolean;
+    allowAddForm: boolean;
+  };
   gate: {
     mode: "turn_limited" | "ungated" | "trial_form";
     activityDetail: "off" | "labels" | "full";
@@ -121,7 +125,7 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
   models: { available: [], allowPicker: false },
   cli: { enabled: false },
   tools: { allowUserToggle: true, catalog: [] },
-  mcp: { servers: [] },
+  mcp: { servers: [], allowUserServers: false, allowAddForm: false },
   gate: {
     mode: "turn_limited",
     activityDetail: "labels",
@@ -136,7 +140,9 @@ function projectCatalog(entries: ToolCatalogEntry[] | undefined): DigichatClient
   if (!entries?.length) return [];
   return entries.map((e) => ({
     id: e.id,
-    default: e.default === true,
+    // Omitted YAML `default` means session-on (#3733 / #3736). Only explicit
+    // `default: false` starts the tool off.
+    default: e.default !== false,
     ...(e.label ? { label: e.label } : {}),
   }));
 }
@@ -197,7 +203,10 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       servers: (dep.mcp?.servers ?? []).map((s) => ({
         id: s.id,
         ...(s.label ? { label: s.label } : {}),
+        ...(typeof s.default === "boolean" ? { default: s.default } : {}),
       })),
+      allowUserServers: dep.mcp?.allowUserServers === true,
+      allowAddForm: dep.mcp?.allowUserServers === true && dep.mcp?.allowAddForm === true,
     },
     gate: {
       mode: dep.gate.mode,

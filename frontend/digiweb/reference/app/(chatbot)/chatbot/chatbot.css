@@ -682,19 +682,30 @@
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover [data-highlighted],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [data-highlighted] {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [data-highlighted],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [aria-selected="true"],
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [aria-selected="true"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [data-cursor="true"],
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [data-cursor="true"] {
   background: transparent;
+  background-color: transparent;
   color: var(--ink);
+  outline: 1px solid var(--hair);
+  outline-offset: -1px;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-embed-settings] {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-embed-settings],
+[data-thread-skin="digichat"][data-embed-settings],
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu {
   border-radius: 0;
   border-color: var(--hair);
   background: var(--bg);
   color: var(--ink);
   box-shadow: none;
   font-family: var(--font-mono);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings] h2,

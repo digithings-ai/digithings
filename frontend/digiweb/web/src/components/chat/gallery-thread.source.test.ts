@@ -32,6 +32,8 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(thread).toMatch(/onComposerSubmit/);
     expect(thread).toMatch(/ComposerTriggerPopover/);
     expect(thread).toMatch(/Unstable_TriggerPopoverRoot/);
+    expect(thread).toMatch(/char="@"/);
+    expect(thread).toMatch(/mention\?: ThreadMentionTrigger/);
     expect(thread).toMatch(/digichat-thread__viewport/);
     expect(thread).not.toMatch(/state="assistant"/);
     expect(thread).not.toMatch(/from ["']lucide-react["']/);
