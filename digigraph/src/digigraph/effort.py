@@ -10,8 +10,7 @@ EFFORTS = frozenset({"low", "medium", "high"})
 _DIRECTIVES: dict[str, str] = {
     "low": "Work at low reasoning effort: keep the answer short and direct.",
     "high": (
-        "Work at high reasoning effort: check edge cases and prefer a careful, "
-        "complete answer."
+        "Work at high reasoning effort: check edge cases and prefer a careful, complete answer."
     ),
 }
 

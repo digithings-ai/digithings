@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any  # score:allow untyped any — Starlette headers / request extras
 
 from fastapi import HTTPException, Request
 

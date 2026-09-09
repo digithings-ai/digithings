@@ -6,7 +6,7 @@ applies the same EmbedChatPrefsApi mutators as slash commands.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any  # score:allow untyped any — MCP tool JSON args / results
 
 from digigraph.orchestration.registry import ToolContext
 

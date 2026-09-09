@@ -21,7 +21,7 @@ import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any  # score:allow untyped any — MCP JSON payloads / tool results
 from urllib.parse import urlparse
 
 log = logging.getLogger(__name__)
