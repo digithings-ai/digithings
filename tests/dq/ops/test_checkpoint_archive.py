@@ -11,6 +11,7 @@ pytestmark = pytest.mark.unit
 
 from digiquant.ops.checkpoint_archive import (  # noqa: E402
     ArchiveManifest,
+    ArchiveNotFoundError,
     ArchiveVerifyError,
     R2Backend,
     _r2_backend_from_env,
@@ -21,6 +22,7 @@ from digiquant.ops.checkpoint_archive import (  # noqa: E402
     list_threads,
     main,
     parse_postgrest_bytea,
+    resolve_payload,
     restore_thread,
 )
 
@@ -57,7 +59,20 @@ class _Query:
 
     def execute(self) -> _Resp:
         table = self.store.setdefault(self.table_name, [])
-        rows = [r for r in table if all(r.get(c) == v for c, v in self._filters)]
+
+        def _matches(row: dict[str, Any]) -> bool:
+            for col, val in self._filters:
+                if col.startswith("source_key->>"):
+                    sub = col.split("->>", 1)[1]
+                    if not isinstance(row.get("source_key"), dict):
+                        return False
+                    if row["source_key"].get(sub) != val:
+                        return False
+                elif row.get(col) != val:
+                    return False
+            return True
+
+        rows = [r for r in table if _matches(r)]
         if self._pending_update is not None:
             for row in rows:
                 row.update(self._pending_update)
@@ -82,9 +97,12 @@ class FakeStore:
 
     def __init__(self) -> None:
         self.objects: dict[str, bytes] = {}
+        self.original: dict[str, bytes] = {}
 
     def put(self, key: str, data: bytes) -> None:
         self.objects[key] = bytes(data)
+        # Archiver stores compressed bytes; remember the raw form for asserts.
+        self.original[key] = decompress_payload(bytes(data))
 
     def get(self, key: str) -> bytes:
         return self.objects[key]
@@ -366,3 +384,22 @@ def test_zstd_version_byte_rejects_unknown():
     blob = b"\x7f" + compress_payload(b"hello")[1:]
     with pytest.raises(ArchiveVerifyError):
         decompress_payload(blob)
+
+
+def test_resolve_payload_round_trip():
+    client = FakeClient(
+        store={
+            "checkpoint_blobs": [_blob_row()],
+            "checkpoint_writes": [_write_row()],
+        }
+    )
+    store = FakeStore()
+    archive_thread(client, store, "run1::portfolio")
+    entry = client.table("archive_objects").select("*").execute().data[0]
+    raw = resolve_payload(client, store, entry["source_table"], entry["source_key"])
+    assert raw == store.original[entry["r2_key"]]
+
+
+def test_resolve_missing_pointer_raises_not_found():
+    with pytest.raises(ArchiveNotFoundError):
+        resolve_payload(FakeClient(), FakeStore(), "checkpoint_blobs", {"thread_id": "nope"})

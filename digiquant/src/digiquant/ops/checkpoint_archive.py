@@ -34,6 +34,10 @@ class ArchiveVerifyError(RuntimeError):
     """Read-back hash mismatch — the Supabase row is left untouched."""
 
 
+class ArchiveNotFoundError(RuntimeError):
+    """No pointer row — caller should read Supabase directly."""
+
+
 DICT_VERSION = 1
 
 
@@ -49,6 +53,27 @@ def decompress_payload(blob: bytes) -> bytes:
     if not blob or blob[0] != DICT_VERSION:
         raise ArchiveVerifyError(f"unsupported archive dict version: {blob[:1]!r}")
     return zstd.decompress(blob[1:])
+
+
+def resolve_payload(
+    client: Any, store: StorageBackend, source_table: str, source_key: dict[str, Any]
+) -> bytes:
+    """Read-through: pointer → R2 GET → sha256 verify → decompress.
+
+    Raises :class:`ArchiveNotFoundError` when no pointer row exists — the
+    caller is expected to have already checked Supabase directly.
+    """
+    query = client.table("archive_objects").eq("source_table", source_table)
+    for col, val in source_key.items():
+        query = query.eq(f"source_key->>{col}", val)
+    rows = query.execute().data or []
+    if not rows:
+        raise ArchiveNotFoundError(f"no archive pointer for {source_table} {source_key}")
+    row = rows[0]
+    blob = store.get(row["r2_key"])
+    if hashlib.sha256(blob).hexdigest() != row["sha256"]:
+        raise ArchiveVerifyError(f"stored object corrupted: {row['r2_key']}")
+    return decompress_payload(blob)
 
 
 class StorageBackend(Protocol):
@@ -283,6 +308,7 @@ __all__ = [
     "DICT_VERSION",
     "ArchiveEntry",
     "ArchiveManifest",
+    "ArchiveNotFoundError",
     "ArchiveVerifyError",
     "BLOB_KEY_COLUMNS",
     "BLOB_TABLES",
@@ -296,6 +322,7 @@ __all__ = [
     "main",
     "parse_postgrest_bytea",
     "record_pointer",
+    "resolve_payload",
     "restore_thread",
     "threads_older_than",
 ]
