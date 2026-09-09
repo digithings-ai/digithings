@@ -6,13 +6,14 @@
  */
 import {
   RepoActivity,
+  RepoHeatmap,
   REPO_ACTIVITY_DEMO,
   REPO_ACTIVITY_DEMO_CLONE,
   REPO_ACTIVITY_DEMO_CONTRIBUTING,
   REPO_ACTIVITY_DEMO_URL,
 } from "@digithings/web";
 
-export { RepoActivity } from "@digithings/web";
+export { RepoActivity, RepoHeatmap } from "@digithings/web";
 
 export function RepoActivityReference() {
   return (
@@ -42,6 +43,14 @@ export function RepoActivityReference() {
         cloneCommand={REPO_ACTIVITY_DEMO_CLONE}
         contributingUrl={REPO_ACTIVITY_DEMO_CONTRIBUTING}
       />
+
+      <p className="kicker ra-specimen-kicker ra-specimen-kicker-next">{"// contributions"}</p>
+      <p className="section-copy">
+        The heat element alone: a full year of contributions as small perfect squares — no radius,
+        no borders, no gradients — empty track to full accent in categorical steps. Weeks run
+        oldest left.
+      </p>
+      <RepoHeatmap pulls={REPO_ACTIVITY_DEMO.mergedPulls} weeks={53} />
     </section>
   );
 }

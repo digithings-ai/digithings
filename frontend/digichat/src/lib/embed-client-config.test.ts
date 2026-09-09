@@ -143,6 +143,12 @@ describe("toEmbedClientConfig", () => {
     const registry = parseEmbedTenants(REGISTRY);
     expect(toEmbedClientConfig(registry.get("digithings.ai")!).backendType).toBe("digigraph");
   });
+
+  it("projects digichat skin for first-party tenants when DIGICHAT_EMBED_TENANTS omits skin", () => {
+    const registry = parseEmbedTenants(REGISTRY);
+    expect(toEmbedClientConfig(registry.get("digithings.ai")!).skin).toBe("digichat");
+    expect(toEmbedClientConfig(registry.get("dev.datatap.stream")!).skin).toBe("base");
+  });
 });
 
 describe("toEmbedClientConfig — showLanguageSelector", () => {

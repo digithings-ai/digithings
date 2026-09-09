@@ -184,7 +184,7 @@ Legacy `build_portfolio_phases` aliases the thesis path. **Removed from graph:**
 ## H4 dispatch budget (regime-adaptive, Stage 2 — #1043 / #1017)
 
 `_h4_node` calls `budget_controller.assess_budget(state, client, static_cap)` to size the
-analyst roster instead of relying solely on the static `ATLAS_MAX_ANALYSTS`. A deterministic
+analyst roster instead of relying solely on the static `DIGIQUANT_MAX_ANALYSTS`. A deterministic
 classifier (`budget_controller.py`) maps three signals research already produces — VIX
 term-structure state, market breadth (`pct_above_50dma`), and cross-sectional return
 dispersion derived for free from `state.price_deltas` — to a regime:
@@ -194,10 +194,10 @@ dispersion derived for free from `state.price_deltas` — to a regime:
 - **neutral** (incl. sparse signals) → budget = cap, explore floor 1 (today's default).
 
 The result feeds `compute_focus_roster(..., adaptive_max_analysts=budget, min_new_candidates=explore_floor)`
-→ `roster_cap.capped_tickers`. **Invariants:** *cost-safe* — `budget ≤ ATLAS_MAX_ANALYSTS`
+→ `roster_cap.capped_tickers`. **Invariants:** *cost-safe* — `budget ≤ DIGIQUANT_MAX_ANALYSTS`
 always (the adaptive budget only tightens, never increases spend); *fail-soft* — any missing
 signal, absent client, or reader error degrades to the static cap and logs (never raises).
-Env knobs: `ATLAS_MAX_ANALYSTS` (the cap/baseline, read only through
+Env knobs: `DIGIQUANT_MAX_ANALYSTS` (the cap/baseline, read only through
 `roster_cap.configured_max_analysts()`), `RESEARCH_BUDGET_STRESS_FLOOR` (default 3),
 `RESEARCH_BUDGET_DISPERSION_HI` (default 0.015). Deferred (cost-/measurement-gated): budget > cap
 in dispersion regimes, a dedicated cross-asset dispersion metric, and the `dispatch_outcomes`
@@ -210,7 +210,7 @@ started emitting a vehicle map until #1767, `compute_focus_roster` passed
 `active_held ∪ every thesis-map ticker` as `capped_tickers(held=…)`. Held tickers are
 exempt from the cap by #936, so a populated map (40 tickers on 2026-07-31, 46 on 07-29)
 pushed the protected set past the cap on every such day, `capped_tickers` took its
-over-budget branch, and **`ATLAS_MAX_ANALYSTS` never capped anything** — 39 analysts
+over-budget branch, and **`DIGIQUANT_MAX_ANALYSTS` never capped anything** — 39 analysts
 dispatched against a configured 25, and roster width tracked spend 1:1 ($0.86 at width 8,
 $4.00 at width 39).
 
@@ -235,7 +235,7 @@ Two consequences, both deliberate:
 **Known limitation.** There is **no conviction signal anywhere in the H3 output** —
 `candidate_rank` is a position inside the mapping, not a score, and `ThesisVehicleMapping`
 has no score field — so "prioritise the thesis map" can only mean *breadth*: cover as many
-theses as the budget allows before deepening any one. At `ATLAS_MAX_ANALYSTS=30`, roughly
+theses as the budget allows before deepening any one. At `DIGIQUANT_MAX_ANALYSTS=30`, roughly
 7 of 27 theses get no vehicle analysed on a wide day (25 would leave 12). The cap and the
 thesis map are sized for different worlds; this makes the cap real without resolving that.
 

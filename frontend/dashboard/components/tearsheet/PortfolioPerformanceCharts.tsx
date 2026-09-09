@@ -54,7 +54,7 @@ export function PortfolioContributionChart({
       </div>
       {points.length < 2 ? (
         <div className="flex h-72 items-center justify-center px-6 text-sm text-ink-mute">
-          A second NAV and position snapshot is needed to draw contribution history.
+          A second performance and position snapshot is needed to draw contribution history.
         </div>
       ) : (
         <ContributionReturnChart

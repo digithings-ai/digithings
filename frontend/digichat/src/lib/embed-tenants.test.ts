@@ -61,6 +61,51 @@ describe("parseEmbedTenants", () => {
     expect(reg.get("datatapstream.com")?.skin).toBe("base");
   });
 
+  it("defaults unset skin to digichat for first-party hosts, base otherwise", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "digithings.ai": {
+          slug: "digithings",
+          aliases: ["www.digithings.ai"],
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+        },
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "occ-t",
+        },
+        "client.example": {
+          slug: "acme",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "c",
+        },
+      }),
+    );
+    expect(reg.get("digithings.ai")?.skin).toBe("digichat");
+    expect(reg.get("www.digithings.ai")?.skin).toBe("digichat");
+    expect(reg.get("occ.digithings.ai")?.skin).toBe("digichat");
+    expect(reg.get("client.example")?.skin).toBe("base");
+  });
+
+  it("keeps an explicit first-party skin, including catalog base", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "digithings.ai": {
+          slug: "digithings",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          skin: "base",
+        },
+      }),
+    );
+    expect(reg.get("digithings.ai")?.skin).toBe("base");
+  });
+
   it("accepts an official thread skin", () => {
     const reg = parseEmbedTenants(
       JSON.stringify({
@@ -420,6 +465,7 @@ describe("parseEmbedTenants", () => {
     expect(t.gateMode).toBe("ungated");
     expect(t.showByok).toBe(true);
     expect(t.layout).toBe("page");
+    expect(t.skin).toBe("digichat");
   });
 
   it("parses llmAccess free_then_byok for digithings-style tenants", () => {
