@@ -249,7 +249,7 @@ class TestChainHeldInvariant:
     """``run_research_then_portfolio`` threads prior-book holdings into the 7C/7CD cap (#936).
 
     The Jun-18 regression: a held name (IJR) fell outside the
-    ``ATLAS_MAX_ANALYSTS`` window and was dropped from the fan-out, so the PM
+    ``DIGIQUANT_MAX_ANALYSTS`` window and was dropped from the fan-out, so the PM
     auto-exited it. ``portfolio_held`` must reach ``build_portfolio_graph(..., held=...)``
     so the held-aware cap can keep it.
     """

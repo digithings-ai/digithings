@@ -24,7 +24,7 @@ For segments that still need a paid search as a *safety net* (not a daily
 input), set `SegmentNodeSpec.live_search_is_fallback=True` alongside
 `live_search=True`. `build_grounding` then gates the `web_search` pre-pass on
 `_ingested_macro_stale(run_date)`: it fires only when the freshest ingested FRED
-observation is older than `ATLAS_MACRO_STALE_DAYS` (default 7) — i.e. the daily
+observation is older than `DIGIQUANT_MACRO_STALE_DAYS` (default 7) — i.e. the daily
 ingestion cron is genuinely broken. On a healthy run the paid call is skipped
 and the segment grounds on its data tools. The probe fail-softs to "stale"
 (fire paid) on any error, so grounding is never silently dropped.

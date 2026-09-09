@@ -12,28 +12,34 @@ export const DIGICHAT_GLYPHS = {
 
 export const digichatSurfaces = {
   thread:
-    "digichat-thread flex h-full min-h-0 flex-col bg-term-bg font-mono text-term-ink",
+    "digichat-thread aui-root aui-thread-root flex h-full min-h-0 flex-col bg-term-bg font-mono text-term-ink",
   viewport:
     "digichat-thread__viewport flex min-h-0 flex-1 flex-col gap-[0.7rem] overflow-y-auto overscroll-contain px-[1.15rem] pt-[1rem] pb-[1.2rem]",
-  footer: "digichat-thread__footer sticky bottom-0 flex flex-col gap-[0.45rem] bg-term-bg pt-[0.4rem] pb-[0.2rem]",
-  welcome: "flex flex-col gap-[0.7rem] py-[1.2rem]",
-  welcomeKicker: "m-0 font-mono text-[0.62rem] tracking-[0.06em] text-term-mute",
-  welcomeTitle: "m-0 max-w-[36rem] font-mono text-[1.05rem] font-normal leading-[1.4] tracking-[-0.02em] text-term-ink",
-  suggestions: "flex flex-wrap gap-[0.45rem]",
-  chip: "digichat-chip cursor-pointer rounded-none border border-hair bg-transparent px-[0.7rem] py-[0.35rem] text-left font-mono text-[0.72rem] text-ink-soft",
+  footer:
+    "digichat-thread__footer aui-thread-viewport-footer sticky bottom-0 mt-auto flex flex-col gap-[0.45rem] bg-term-bg pt-[0.4rem] pb-[0.2rem]",
+  empty: "digichat-thread__empty aui-thread-empty flex flex-col gap-[0.7rem]",
+  welcome: "aui-thread-welcome-root flex flex-col gap-[0.45rem]",
+  welcomeTitle:
+    "aui-thread-welcome-message-inner m-0 max-w-[36rem] font-mono text-[1.05rem] font-normal leading-[1.4] tracking-[-0.02em] text-term-ink",
+  welcomeBody:
+    "aui-thread-welcome-copy m-0 max-w-[46ch] font-mono text-[0.82rem] font-normal leading-[1.45] text-term-mute",
+  examples: "aui-thread-welcome-suggestions flex flex-col gap-[0.1rem]",
+  example:
+    "digichat-example aui-thread-welcome-suggestion grid cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)] items-baseline gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-[0.15rem] text-left font-mono text-[0.82rem] text-ink-soft",
+  exampleMark: "select-none font-mono text-[0.88rem] leading-[1.45] text-term-ink",
   turn: "digichat-turn flex flex-col items-stretch gap-[0.2rem]",
   composer:
-    "digichat-composer flex flex-col gap-[0.45rem] rounded-none border border-hair bg-surface px-[0.85rem] pt-[0.75rem] pb-[0.6rem]",
+    "digichat-composer aui-composer-root flex flex-col gap-[0.45rem] rounded-none border border-hair bg-surface px-[0.85rem] pt-[0.75rem] pb-[0.6rem]",
   composerRow: "flex items-start gap-[0.55rem]",
-  composerGlyph: "shrink-0 select-none font-mono text-[0.9rem] leading-[1.5] text-accent",
+  composerGlyph: "shrink-0 select-none font-mono text-[0.9rem] leading-[1.5] text-ink",
   composerInput:
-    "min-h-[1.5rem] w-full resize-none border-0 bg-transparent font-mono text-[0.9rem] leading-[1.5] text-ink outline-none",
+    "aui-composer-input min-h-[1.5rem] w-full resize-none border-0 bg-transparent font-mono text-[0.9rem] leading-[1.5] text-ink outline-none",
   composerTray: "flex items-center justify-between gap-[0.75rem]",
   action:
     "digichat-action inline-flex cursor-pointer items-center rounded-none border-0 bg-transparent p-0 font-mono text-[0.66rem] tracking-[0.02em] text-ink-mute",
   actionRow:
     "digichat-action-row mt-[0.25rem] ml-[1.8rem] flex flex-wrap items-center gap-[0.75rem]",
-  send: "inline-flex h-8 cursor-pointer items-center justify-center rounded-none border-0 bg-ink px-[0.85rem] font-mono text-[0.72rem] text-bg disabled:opacity-40",
+  send: "aui-composer-send inline-flex h-8 cursor-pointer items-center justify-center rounded-none font-mono text-[0.72rem]",
   stop: "inline-flex h-8 cursor-pointer items-center justify-center rounded-none border border-hair bg-transparent px-[0.85rem] font-mono text-[0.72rem] text-ink",
   scrollBtn:
     "digichat-scroll-btn mx-auto cursor-pointer rounded-none border border-hair bg-surface px-[0.6rem] py-[0.2rem] font-mono text-[0.66rem] text-ink-mute",

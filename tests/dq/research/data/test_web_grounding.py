@@ -112,10 +112,10 @@ def test_fetch_web_grounding_raises_when_required(monkeypatch: pytest.MonkeyPatc
 
 @pytest.mark.unit
 def test_build_grounding_live_search_without_data_tools(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Web grounding must not be gated on ATLAS_DATA_TOOLS (#946)."""
+    """Web grounding must not be gated on DIGIQUANT_RESEARCH_DATA_TOOLS (#946)."""
     from digiquant.research.phases import _node_factory as nf
 
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "0")
     grounding = {"summary": "ok", "sources": [], "as_of": "2026-06-09"}
     with patch(
         "digiquant.research.data.web_grounding.fetch_web_grounding",

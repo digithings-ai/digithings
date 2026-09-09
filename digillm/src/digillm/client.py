@@ -41,6 +41,7 @@ import logging
 import os
 import random
 import re
+import threading
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -117,6 +118,87 @@ except ImportError:  # pragma: no cover - exercised only when digismith is absen
 
 # Cap tool result text injected into the next LLM turn (full blobs stay upstream).
 _MAX_TOOL_MESSAGE_CHARS = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "12000"))
+
+
+# ── Banned models ─────────────────────────────────────────────────────────────
+# Central source of truth for model ids that must never run (#3078). A banned
+# id reaching digillm means routing above it failed — raise immediately with a
+# clear error instead of billing a call the house policy forbids.
+_BANNED_MODELS = frozenset({"ollama/qwen3:8b"})
+
+
+def _reject_banned_model(model: str) -> None:
+    """Raise :class:`ValueError` when *model* is a banned id (see :data:`_BANNED_MODELS`)."""
+    if (model or "").strip() in _BANNED_MODELS:
+        raise ValueError(
+            f"model {model!r} is banned by house policy (#3078); "
+            "resolve a cheap-inference route through digillm instead"
+        )
+
+
+# ── Provider retry budget ─────────────────────────────────────────────────────
+# Per-error time budget (#3078): one logical provider call gets this many total
+# attempts (initial + retries). Default 12 preserves the historical behavior;
+# the daily pipeline sets ``DIGILLM_PROVIDER_MAX_ATTEMPTS=2`` (one retry only).
+def _provider_max_attempts() -> int:
+    """Total attempts for one provider call (default 12, minimum 1)."""
+    try:
+        return max(int((os.environ.get("DIGILLM_PROVIDER_MAX_ATTEMPTS") or "").strip() or 12), 1)
+    except ValueError:
+        logger.warning(
+            "invalid DIGILLM_PROVIDER_MAX_ATTEMPTS=%r; using default 12",
+            os.environ.get("DIGILLM_PROVIDER_MAX_ATTEMPTS"),
+        )
+        return 12
+
+
+# ── Same-tool error breaker ───────────────────────────────────────────────────
+# Stop instead of retrying when the same tool fails repeatedly with the same
+# error (#3078): after this many *consecutive* same-tool+same-error failures,
+# run_tools raises instead of feeding another identical error back to the model.
+_SAME_TOOL_ERROR_LIMIT = int(os.environ.get("DIGILLM_SAME_TOOL_ERROR_LIMIT", "") or 2)
+
+
+# ── Provider concurrency cap ────────────────────────────────────────────────
+# Burst smoothing (#3738): fan-out stages fire all LLM calls at once, and a
+# 429 burst with the 1-retry budget degrades many segments simultaneously.
+# Every provider call funnels through ``_create_with_retry`` (no tool
+# implementation calls back into the LLM, so the semaphore cannot deadlock),
+# and the slot is held for the whole logical call including short backoffs.
+# Default 8; the daily pipeline pins ``DIGILLM_MAX_CONCURRENT_CALLS``.
+_CONCURRENT_CALLS_DEFAULT = 8
+
+
+def _max_concurrent_calls() -> int:
+    """Max in-flight provider calls (default 8, minimum 1)."""
+    try:
+        return max(
+            int(
+                (os.environ.get("DIGILLM_MAX_CONCURRENT_CALLS") or "").strip()
+                or _CONCURRENT_CALLS_DEFAULT
+            ),
+            1,
+        )
+    except ValueError:
+        logger.warning(
+            "invalid DIGILLM_MAX_CONCURRENT_CALLS=%r; using default 8",
+            os.environ.get("DIGILLM_MAX_CONCURRENT_CALLS"),
+        )
+        return _CONCURRENT_CALLS_DEFAULT
+
+
+_PROVIDER_SEMAPHORE: threading.BoundedSemaphore | None = None
+_PROVIDER_SEMAPHORE_LIMIT = 0
+
+
+def _provider_semaphore() -> threading.BoundedSemaphore:
+    """Process-wide slot gate, rebuilt when the env-derived limit changes."""
+    global _PROVIDER_SEMAPHORE, _PROVIDER_SEMAPHORE_LIMIT
+    limit = _max_concurrent_calls()
+    if _PROVIDER_SEMAPHORE is None or _PROVIDER_SEMAPHORE_LIMIT != limit:
+        _PROVIDER_SEMAPHORE = threading.BoundedSemaphore(limit)
+        _PROVIDER_SEMAPHORE_LIMIT = limit
+    return _PROVIDER_SEMAPHORE
 
 
 # ── Provider registry ─────────────────────────────────────────────────────────
@@ -1126,9 +1208,11 @@ def _create_with_retry(
     )
 
     transient = (RateLimitError, InternalServerError, APIConnectionError, APITimeoutError)
-    max_attempts = 12
+    max_attempts = _provider_max_attempts()
     delay = 5.0
-    with _logical_attempt_scope() as scope:
+    # The semaphore smooths fan-out bursts into a steady flow (#3738); it is
+    # held for the whole logical call, backoffs included.
+    with _provider_semaphore(), _logical_attempt_scope() as scope:
         requested_model = _requested_model or str(kwargs.get("model") or "unknown")
         provider = _provider_name(_provider)
         kwargs = _with_byok_litellm_pass_through(kwargs)
@@ -1260,7 +1344,9 @@ def completion(
 
     Raises:
         RuntimeError: when a registered provider's API key env var is unset.
+        ValueError: when ``model`` is a banned id (house policy, #3078).
     """
+    _reject_banned_model(model)
     provider, _ = _parse_provider_prefix(model)
     client = get_client_for_model(model)
     effective_model = _effective_model_id(model)
@@ -1722,10 +1808,36 @@ def run_tools(
 
     Returns:
         The model's final response content.
+
+    Raises:
+        ValueError: when ``model`` is a banned id (house policy, #3078).
+        RuntimeError: when the same tool fails with the same error
+            ``DIGILLM_SAME_TOOL_ERROR_LIMIT`` times consecutively (#3078).
     """
+    _reject_banned_model(model)
     current: list[ChatCompletionMessage] = list(messages)
     content = ""
     safe = parallel_safe_tools or set()
+    failure_streak: tuple[str, str, int] | None = None
+
+    def _note_tool_success() -> None:
+        nonlocal failure_streak
+        failure_streak = None
+
+    def _note_tool_error(name: str, error: BaseException) -> None:
+        """Track consecutive same-tool+same-error failures; raise at the limit."""
+        nonlocal failure_streak
+        signature = f"{type(error).__name__}: {error}"
+        if failure_streak is not None and failure_streak[:2] == (name, signature):
+            count = failure_streak[2] + 1
+        else:
+            count = 1
+        failure_streak = (name, signature, count)
+        if count >= _SAME_TOOL_ERROR_LIMIT:
+            raise RuntimeError(
+                f"run_tools: tool {name!r} failed {count}x consecutively with the "
+                f"same error; failing fast instead of retrying: {signature}"
+            )
 
     def _produce_turn(
         turn_messages: list[ChatCompletionMessage],
@@ -1867,6 +1979,7 @@ def run_tools(
         run_parallel = len(parsed) > 1 and all(name in safe for (_, name, _) in parsed)
         if run_parallel:
             results: dict[int, str | dict[str, Any]] = {}
+            tool_errors: dict[int, BaseException] = {}
             # A pool worker starts with an *empty* context, so every ContextVar bound
             # per-request -- the BYOK key/base-url override above all (:func:`set_byok`)
             # -- reads as its default inside it. A parallel-safe tool that itself calls
@@ -1893,6 +2006,7 @@ def run_tools(
                         results[i] = future.result()
                     except (RuntimeError, OSError, ValueError, TypeError, KeyError) as e:
                         results[i] = {"content": str(e)}
+                        tool_errors[i] = e
             ordered = [(parsed[i], results[i]) for i in range(len(parsed))]
         else:
             ordered = []
@@ -1906,10 +2020,18 @@ def run_tools(
                     # a raised exception here must become a recoverable tool result, not
                     # abort the whole run and discard every tool result already gathered
                     # this round.
+                    _note_tool_error(name, e)
                     result = {"content": str(e)}
+                else:
+                    _note_tool_success()
                 ordered.append(((tc_id, name, args), result))
 
-        for (tc_id, name, args), result in ordered:
+        for idx, ((tc_id, name, args), result) in enumerate(ordered):
+            if run_parallel:
+                if idx in tool_errors:
+                    _note_tool_error(name, tool_errors[idx])
+                else:
+                    _note_tool_success()
             if on_tool_step is not None:
                 if run_parallel:
                     on_tool_step("tool_call", {"name": name, "arguments": args})

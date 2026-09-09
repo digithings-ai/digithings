@@ -470,7 +470,15 @@ class FocusRosterEntry(BaseModel):
     """One ticker on the portfolio H4 focus roster."""
 
     ticker: str
-    roster_reason: Literal["thesis_mapped", "technical", "held", "momentum", "other"]
+    roster_reason: Literal[
+        "thesis_mapped",
+        "technical",
+        "held",
+        "momentum",
+        "other",
+        "director_refresh",
+        "director_explore",
+    ]
     linked_market_thesis_id: str | None = None
     rationale: str = ""
 

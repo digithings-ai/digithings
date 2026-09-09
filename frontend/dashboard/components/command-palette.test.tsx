@@ -28,7 +28,7 @@ describe('buildCommandItems (F2 palette — static rows only)', () => {
     expect(items.find((i) => i.id === 'go-perf')).toMatchObject({
       title: 'Portfolio — Tearsheet',
       href: '/portfolio/performance',
-      hint: 'NAV, returns & position performance',
+      hint: 'Returns & position performance',
     });
     expect(items.find((i) => i.id === 'go-ledger')).toMatchObject({
       href: '/portfolio/ledger',

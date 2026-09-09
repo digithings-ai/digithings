@@ -852,29 +852,25 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
                 print(f"   Supabase warning (position_events chunk {i}): {e}")
         print(f"   Supabase: {len(event_rows)} position_events upserted")
 
-    # ---- nav_history ----
+    # ---- nav_history: RETIRED (single-source-of-truth cutover) ----
+    # The Nautilus schedule replay (verify_nav_replay.py --write) is the sole
+    # writer of nav_history. This tearsheet path previously overwrote the
+    # engine/restated series with its own yfinance simulation — a second truth.
     if history:
-        nav_rows = [
-            {"workspace_id": house, "date": h["date"], "nav": h["nav"]} for h in history
-        ]
-        for i in range(0, len(nav_rows), 500):
-            chunk = nav_rows[i : i + 500]
-            try:
-                sb.table("nav_history").upsert(chunk, on_conflict="workspace_id,date").execute()
-            except _REMOTE_UPSERT_ERRORS as e:
-                print(f"   Supabase warning (nav_history chunk {i}): {e}")
-        print(f"   Supabase: {len(nav_rows)} nav_history rows upserted")
+        print(
+            "   Supabase: nav_history write SKIPPED (engine is the sole writer; "
+            f"{len(history)} simulated points discarded)"
+        )
 
-    # ---- portfolio_metrics ----
+    # ---- portfolio_metrics: RETIRED (single-source-of-truth cutover) ----
+    # Daily metrics are written by refresh_performance_metrics.py from the
+    # engine-written nav_history series. The tearsheet's simulation-derived row
+    # was a third computation path for the same numbers.
     if metrics:
-        try:
-            sb.table("portfolio_metrics").upsert(
-                [{**metrics, "workspace_id": house}],
-                on_conflict="workspace_id,date",
-            ).execute()
-            print(f"   Supabase: portfolio_metrics upserted for {metrics['date']}")
-        except _REMOTE_UPSERT_ERRORS as e:
-            print(f"   Supabase warning (portfolio_metrics): {e}")
+        print(
+            "   Supabase: portfolio_metrics write SKIPPED (refresh script owns "
+            f"daily metrics from engine NAV; simulated row for {metrics['date']} discarded)"
+        )
 
     # ---- documents ----
     doc_rows = []

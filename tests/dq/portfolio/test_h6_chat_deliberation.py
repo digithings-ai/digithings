@@ -73,7 +73,7 @@ class TestH6AnalystSkillLoad:
     def test_analyst_turn_does_not_load_h5_asset_analyst_skill(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "2")
+        monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "2")
         loaded: list[str] = []
 
         def fake_load(slug: str) -> str:

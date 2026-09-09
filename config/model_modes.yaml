@@ -20,11 +20,14 @@
 #   xai/…              → XAI_API_KEY        → https://api.x.ai/v1 (OpenAI-compat)
 #
 # Local dev: DIGI_MODEL_MODES_FILE=model_modes.local.yaml + OPENAI_API_BASE.
+#
+# House policy (#3078): ``ollama/qwen3:8b`` is banned and refused by digillm —
+# it must never appear here. Tier defaults follow the cheap-inference route.
 
 defaults:
-  test: ollama/qwen3:8b
-  medium: ollama/qwen3:8b
-  best: ollama/qwen3:8b
+  test: deepseek/deepseek-v4-flash
+  medium: deepseek/deepseek-v4-flash
+  best: deepseek/deepseek-v4-flash
 
 # Optional per-phase overrides — empty by default; digiquant_models.yaml owns routing.
 phase_models:

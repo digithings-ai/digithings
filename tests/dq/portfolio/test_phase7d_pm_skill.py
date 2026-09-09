@@ -25,7 +25,7 @@ def _no_data_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     # Default to the tool-less completion path so completion_text mocks are deterministic
     # regardless of the developer's Supabase env. The explicit tool-path test monkeypatches
     # build_grounding directly, so it is unaffected by this.
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "0")
 
 
 # ── skill selection ──────────────────────────────────────────────────────────

@@ -28,6 +28,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { TerminalMark } from "../symbols/terminal-marks";
+import { DotMatrix } from "./DotMatrix";
 
 const WORDMARK = "digichat";
 const TYPE_MS = 48;
@@ -54,6 +55,8 @@ export type DigichatLauncherProps = {
   className?: string;
   /** Optional CSS custom properties such as panel dimensions or offsets. */
   style?: CSSProperties;
+  /** Reset the in-process thread. Gallery / product pass `switchToNewThread`. */
+  onNewChat?: () => void;
 };
 
 export function DigichatLauncher({
@@ -65,6 +68,7 @@ export function DigichatLauncher({
   onOpenChange,
   className,
   style,
+  onNewChat,
 }: DigichatLauncherProps) {
   /* A portal cannot render on the server. useSyncExternalStore supplies a
      hydration-safe client signal without a mount effect whose sole purpose is
@@ -237,26 +241,26 @@ export function DigichatLauncher({
         >
           <header className="digichat-launcher__header">
             <span>{title}</span>
-            <button
-              ref={closeRef}
-              type="button"
-              className="digichat-launcher__close"
-              aria-label="Close digichat"
-              onClick={() => closePanel()}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="14"
-                height="14"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                aria-hidden="true"
+            <div className="digichat-launcher__header-actions">
+              <button
+                type="button"
+                className="digichat-launcher__new"
+                aria-label="New chat"
+                data-tooltip="New chat"
+                onClick={onNewChat}
               >
-                <path d="M6 6l12 12M18 6 6 18" />
-              </svg>
-            </button>
+                <DotMatrix state="newChat" label="New chat" className="size-3.5" />
+              </button>
+              <button
+                ref={closeRef}
+                type="button"
+                className="digichat-launcher__close"
+                aria-label="Close digichat"
+                onClick={() => closePanel()}
+              >
+                <DotMatrix state="remove" label="Close" className="size-3.5" />
+              </button>
+            </div>
           </header>
           <div className="digichat-launcher__body">{children}</div>
         </section>
