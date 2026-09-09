@@ -3,9 +3,6 @@ type: frontend-architecture
 title: digichat Architecture
 description: BFF design of the digichat chat UI — Next.js route handlers, backend adapters, shared UI package, and the never-in-browser credential invariant.
 tags: [digichat, bff, nextjs, frontend]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-8e3c7688ec1299cb0d4d2721
     resource: repo://frontend/digichat/ARCHITECTURE.md
@@ -14,6 +11,9 @@ sources:
   - id: openwiki-source-64650938c858fae1d37aa390
     resource: repo://frontend/digichat/src/lib/ecosystem.test.ts
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digichat Architecture

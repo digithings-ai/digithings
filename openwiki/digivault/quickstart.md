@@ -3,15 +3,15 @@ type: quickstart
 title: digivault Quickstart
 description: Use the digivault CLI and core Vault API, verify the FastAPI-free import, and run the test gates.
 tags: [digivault, quickstart]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-a18bc9b1229d0282f121b666
     resource: repo://digivault/AGENTS.md
   - id: openwiki-source-177aa6b06017b843d46bc98a
     resource: repo://digivault/ARCHITECTURE.md
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digivault Quickstart

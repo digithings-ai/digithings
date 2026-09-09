@@ -486,3 +486,16 @@ Skills, subagents, and slash commands under `.claude/` are generated from `agent
 Active slash commands: `/score`, `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`, `/review <pr-number>`, and the OpenSpec trio `/opsx-propose`, `/opsx-apply`, `/opsx-archive`.
 
 When the session also has plugin skills (`deslop`, `fix-ci`, `make-pr-easy-to-review`, `finishing-a-development-branch`, `review-and-ship`, test-driven-development, …), pick those instead of inventing a numbered ritual. See [How to work](#how-to-work).
+
+<!-- OPENWIKI:START -->
+
+## OpenWiki
+
+This repository has a generated `openwiki/` evidence index. It is optional just-in-time context, not required startup reading.
+
+- Treat source code and tests as authoritative. A brief's unknowns and review items are verification gaps, not automatic requirements.
+- Prefer the narrowest quiet validation that proves the changed behavior. Preserve complete failure output.
+
+The scheduled OpenWiki GitHub Actions workflow refreshes the repository wiki. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
+
+<!-- OPENWIKI:END -->

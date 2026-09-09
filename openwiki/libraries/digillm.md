@@ -3,9 +3,6 @@ type: library-guide
 title: digillm Library
 description: digillm provider-agnostic LLM client — routing, tool loop, cache, structured output, and telemetry.
 tags: [digillm, llm, openai-compatible, library]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-404f95ee629d95d7c5c2422a
     resource: repo://digillm/ARCHITECTURE.md
@@ -14,6 +11,9 @@ sources:
   - id: openwiki-source-662707e0deb8d4a37c70adca
     resource: repo://digillm/src/digillm/telemetry.py
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digillm Library
