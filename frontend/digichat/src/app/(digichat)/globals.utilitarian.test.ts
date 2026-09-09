@@ -13,9 +13,9 @@ function read(path: string): string {
 }
 
 /**
- * 2.0 product chrome is stock Inter / IBM Plex (see product-isolation.test.ts).
- * 1.5 utilitarian-terminal (Geist Mono body, zero radius, ink/paper .dc-send)
- * stays on ChatShell CLI sheets only — not the product globals.
+ * Catalog skins keep Inter / IBM Plex on product globals (see product-isolation).
+ * `chrome.skin: digichat` loads Geist Mono as `--font-geist-mono` and consumes
+ * gallery `chatbot.css` — not the 1.5 CLI session sheets.
  */
 describe("product chrome vs 1.5 utilitarian-terminal", () => {
   const css = read(globalsPath);
@@ -29,10 +29,12 @@ describe("product chrome vs 1.5 utilitarian-terminal", () => {
     expect(css).not.toMatch(/--primary:\s*var\(--ink\)/);
   });
 
-  it("does not put font-mono on the document body", () => {
+  it("does not put Geist Mono on the document body", () => {
     const layout = read(layoutPath);
     expect(layout).not.toMatch(/<body[^>]*font-mono/);
     expect(layout).toMatch(/inter\.className/);
+    expect(layout).toMatch(/geistMono\.variable/);
+    expect(layout).not.toMatch(/geistMono\.className/);
   });
 
   it("does not fill the embed BYOK CTA with module accent", () => {

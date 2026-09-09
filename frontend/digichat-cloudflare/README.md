@@ -80,6 +80,7 @@ Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/ap
     "showByok": true,
     "showStatusBar": true,
     "layout": "page",
+    "skin": "digichat",
     "llmAccess": "free_then_byok",
     "activityDetail": "full",
     "attribution": false,
@@ -92,6 +93,7 @@ Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/ap
     "showByok": true,
     "showStatusBar": true,
     "layout": "page",
+    "skin": "digichat",
     "activityDetail": "full",
     "title": "OCC help assistant",
     "welcome": "Ask about Online Compliance Center policies, procedures, and help articles.",
@@ -114,6 +116,7 @@ Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/ap
 | Host keys | `DIGICHAT_EMBED_TENANTS` object keys (and `aliases`) must match iframe `?host=` / `X-Embed-Host`. |
 | `DIGICHAT_EMBED_HOSTS` | Comma-separated parent hostnames allowed to frame `/embed`. Must include every live parent (marketing `digithings.ai` / `www` / `occ.digithings.ai`, plus `digiquant.io` if the dashboard popup iframes this origin). Not a secret. |
 | First-party token | `digithings.ai`, `www.digithings.ai`, and `occ.digithings.ai` skip `X-Embed-Token` when registered. The JSON schema still requires a `token` field — use a non-secret placeholder; do not invent or commit a real secret. |
+| First-party skin | Unset `skin` on those hosts defaults to `digichat` (DigichatThread). Set `"skin": "digichat"` in the wrangler secret anyway so the live JSON matches the YAML examples. Third-party tenants still default to catalog `base`. |
 | Other hosts | Parent snippet / `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` must equal that tenant’s registry `token`. Put the real JSON only via `wrangler secret put DIGICHAT_EMBED_TENANTS`. |
 | Tools | `backend.type: digigraph` (and OCC `digisearchIndex` / `vaultPathPrefix`) is how digisearch + digivault reach Profile A. digichat only probes digigraph (`DIGICHAT_ENABLED_SERVICES`); it does not talk to those services directly. |
 
@@ -144,6 +147,7 @@ NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai
 
 ```bash
 curl -sf https://digithings.ai/api/health
+# `"version"` must match frontend/digichat/package.json (baked into the image)
 curl -s -o /dev/null -w '%{http_code}\n' 'https://digithings.ai/embed?host=digithings.ai'
 # Browser: https://digithings.ai/chat and /chat/occ
 ```
