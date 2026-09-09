@@ -247,6 +247,8 @@ describe("client projection", () => {
 
     dep.mcp = {
       servers: [{ id: "extra", url: "https://mcp.example.com/sse", label: "Extra" }],
+      allowUserServers: false,
+      allowAddForm: false,
     };
 
     const client = toDigichatClientConfig(dep);
@@ -259,6 +261,8 @@ describe("client projection", () => {
     expect(json).not.toContain("requiredPlanTier");
     expect(client.backendType).toBe("foundry");
     expect(client.mcp.servers).toEqual([{ id: "extra", label: "Extra" }]);
+    expect(client.mcp.servers[0]).not.toHaveProperty("url");
+    expect(client.mcp.allowUserServers).toBe(false);
   });
 
   it("chrome projection exposes launcher without secrets", () => {

@@ -43,6 +43,15 @@ export type EmbedTenantClientConfig = {
   showLanguageSelector?: boolean;
   /** Tenant allows opt-in web search UI (#3420). Default false. */
   webSearch?: boolean;
+  /** Catalog entries — no MCP URLs */
+  tools?: { catalog: Array<{ id: string; default?: boolean; label?: string }> };
+  /** Operator MCP ids/labels only */
+  mcp?: {
+    servers: Array<{ id: string; label?: string; default?: boolean }>;
+    allowUserServers?: boolean;
+    allowAddForm?: boolean;
+  };
+  models?: { default?: string; available?: string[]; allowPicker?: boolean };
   /**
    * Discriminator only — never project Foundry endpoints / digigraph URLs.
    * CliThread uses this to enable regenerate/edit when the BFF turn
@@ -92,6 +101,19 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     showLanguageSelector: cfg.showLanguageSelector ?? true,
     // Default OFF — corpus-only until tenant + user both opt in (#3420).
     webSearch: cfg.webSearch === true,
+    tools: cfg.tools,
+    mcp: cfg.mcp
+      ? {
+          servers: cfg.mcp.servers.map((s) => ({
+            id: s.id,
+            ...(s.label ? { label: s.label } : {}),
+            ...(typeof s.default === "boolean" ? { default: s.default } : {}),
+          })),
+          allowUserServers: cfg.mcp.allowUserServers === true,
+          allowAddForm: cfg.mcp.allowUserServers === true && cfg.mcp.allowAddForm === true,
+        }
+      : undefined,
+    models: cfg.models,
     backendType: cfg.backend.type,
   };
 }

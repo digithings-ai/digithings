@@ -30,6 +30,7 @@ import {
 } from "@/lib/deploy-config";
 import { cn } from "@/lib/utils";
 import { skinOwnsPageChrome } from "@/lib/thread-skins";
+import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
 import {
   StockSendGateProvider,
   type StockSendGateHandlers,
@@ -43,6 +44,7 @@ import {
   type SkinChromeValue,
 } from "@/components/stock/skin-chrome";
 import { ToolCatalogBar } from "@/components/stock/tool-catalog-bar";
+import { SessionPrefsToolBridge } from "@/components/stock/session-prefs-tool-bridge";
 
 export type ProductShellProps = {
   runtime: AssistantRuntime;
@@ -65,7 +67,8 @@ export type ProductShellProps = {
   sendGate?: StockSendGateHandlers | null;
   /**
    * Host / thread key for X-Digi-Force-Tool (must match takePendingForceTool).
-   * When set, tools.catalog renders above the Thread (not on layout templates).
+   * When set and chrome.mode is `app`, tools.catalog renders above the Thread.
+   * Embed / modal / sidebar use slash commands instead (#3733).
    */
   sessionKey?: string;
   /** localStorage scope for web search; defaults to sessionKey. */
@@ -104,12 +107,14 @@ export function buildProductRuntimeAdapters(
 function FeatureCss({
   features,
   hideModelPicker,
+  hideThinking,
 }: {
   features: DigichatClientFeatures;
   hideModelPicker: boolean;
+  hideThinking: boolean;
 }) {
   const rules: string[] = [];
-  if (!disclosureIsVisible(features.reasoning)) {
+  if (!disclosureIsVisible(features.reasoning) || hideThinking) {
     rules.push(
       '[data-stock-product] [data-slot="aui_reasoning"], [data-stock-product] .aui-reasoning-root { display: none !important; }',
     );
@@ -173,6 +178,8 @@ export function ProductStockShell({
   const features = cfg.features;
   const mode = persistence ?? cfg.persistence;
   const adapters = useMemo(() => buildProductRuntimeAdapters(features), [features]);
+  const chatPrefs = useEmbedChatPrefsOptional();
+  const hideThinking = chatPrefs?.prefs.thinking === false;
 
   const deployUi = useMemo<DeployUiValue>(
     () => ({
@@ -253,7 +260,9 @@ export function ProductStockShell({
             <FeatureCss
               features={features}
               hideModelPicker={!skinChrome.modelPicker}
+              hideThinking={hideThinking}
             />
+            <SessionPrefsToolBridge />
             <div
               data-stock-product
               data-chrome-mode={cfg.chrome.mode}
@@ -273,8 +282,8 @@ export function ProductStockShell({
             >
               {ownsPage ? null : sideSlot}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                {ownsPage ? null : headerSlot}
-                {!ownsPage && sessionKey ? (
+                {ownsPage || cfg.chrome.skin === "digichat" ? null : headerSlot}
+                {!ownsPage && sessionKey && cfg.chrome.mode === "app" ? (
                   <ToolCatalogBar
                     clientConfig={cfg}
                     sessionKey={sessionKey}

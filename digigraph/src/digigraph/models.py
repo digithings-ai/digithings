@@ -200,8 +200,9 @@ class WorkflowRequest(BaseModel):
         None,
         description=(
             "Optional per-request locate tool to run with the user string as its query "
-            "(X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. The model "
-            "is not hinted — the call is injected, then it synthesizes."
+            "(X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. Extra "
+            "operator MCP server ids (from X-Digi-Mcp-Servers) are also accepted: those "
+            "hint the model with tool_choice=required rather than injecting a locate call."
         ),
     )
     enable_web_search: bool = Field(
@@ -211,6 +212,42 @@ class WorkflowRequest(BaseModel):
             "Also via X-Digi-Enable-Web-Search (#3420)."
         ),
     )
+    disabled_tools: list[str] | None = Field(
+        None,
+        description=(
+            "Catalog ids to hide this turn (X-Digi-Disabled-Tools). "
+            "Built-in aliases (digisearch, digivault) plus extra operator MCP server ids. "
+            "Unknown tokens ignored. Always overwritten from the header on HTTP."
+        ),
+    )
+    mcp_servers: list["McpServerRef"] | None = Field(
+        None,
+        description=(
+            "Streamable HTTP MCP servers for this turn (X-Digi-Mcp-Servers). "
+            "Client-writable on this model but never trusted as-is: HTTP handlers "
+            "overwrite from the BFF header (operator YAML plus SSRF-guarded session "
+            "overlay, and DIGI_MCP_SERVERS env). URLs never come from an untrusted "
+            "JSON body. Optional auth/token are session overlay only."
+        ),
+    )
+    effort: str | None = Field(
+        None,
+        description=(
+            "Per-request reasoning effort (X-Digi-Effort). One of low, medium, high. "
+            "Unrecognized values are ignored. Always overwritten from the header on HTTP."
+        ),
+    )
+
+
+class McpServerRef(BaseModel):
+    """Trusted Streamable HTTP MCP server forwarded by the BFF (#3736)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    url: str = Field(..., min_length=1, max_length=2048)
+    auth: str | None = Field(None, max_length=16)
+    token: str | None = Field(None, max_length=4096)
 
 
 class WorkflowResult(BaseModel):

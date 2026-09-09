@@ -18,6 +18,7 @@ from digigraph.compaction import (
     compact_messages,
     compaction_config_from_env,
 )
+from digigraph.effort import resolve_effort_directive
 from digigraph.filter_hints import extract_filter_hints
 from digigraph.graph.state import WorkflowState
 from digigraph.languages import resolve_language_directive
@@ -330,6 +331,7 @@ def _run_document_rag_path(
     index_name: str,
     index_display_name: str,
     prompt: str,
+    language_directive: str | None = None,
 ) -> dict:
     run_data_dir = None
     try:
@@ -354,11 +356,19 @@ def _run_document_rag_path(
     # when this request enabled web search so corpus-only deploys stay corpus-only.
     if state.get("enable_web_search") and "web" not in skill_ids:
         skill_ids.append("web")
+    # Session prefs tools (same trust as slash) — always on so the model can
+    # change language/model/effort/tools/MCP; the client applies the result.
+    if "session" not in skill_ids:
+        skill_ids.append("session")
 
     # Distinguish None (unrestricted) from [] (deny-all). A falsy check coerces
     # empty allowlist → None and silently opens every tool — the documented
     # contract is the opposite (ARCHITECTURE § tool allowlist; tool_policy).
     _allowed_names = frozen_from_state_list(state.get("allowed_tool_names"))
+    if _allowed_names is not None:
+        from digigraph.orchestration.session_prefs_tools import SESSION_TOOL_NAMES
+
+        _allowed_names = _allowed_names | SESSION_TOOL_NAMES
     _ctx_rid = state.get("request_id")
     _ctx_wid = state.get("workflow_id")
     # Normalize before constructing ToolContext (#2295 review): an empty or
@@ -384,6 +394,26 @@ def _run_document_rag_path(
         )
         or None,
     )
+    mcp_servers = [s for s in (state.get("mcp_servers") or []) if isinstance(s, dict)]
+    context.extra_mcp_servers = mcp_servers
+    from digigraph.orchestration.mcp_client import (
+        expand_mcp_disabled_tokens,
+        extra_tool_names_for_servers,
+        resolve_mcp_force_id,
+    )
+    from digigraph.orchestration.registry import list_tool_names
+
+    mcp_force = None
+    if not resolve_force_tool(state.get("force_tool")):
+        mcp_force = resolve_mcp_force_id(state.get("force_tool"), mcp_servers)
+    if mcp_servers:
+        extra_names = extra_tool_names_for_servers(mcp_servers)
+        disabled_extra = expand_mcp_disabled_tokens(state.get("disabled_tools"), extra_names)
+        live_extra = frozenset(n for n in extra_names if n not in disabled_extra)
+        if disabled_extra and context.allowed_tool_names is None:
+            context.allowed_tool_names = frozenset(list_tool_names()) | live_extra
+        elif live_extra and context.allowed_tool_names is not None:
+            context.allowed_tool_names = context.allowed_tool_names | live_extra
     tools_for_llm = get_tools_for_skills(skill_ids, context)
     collected_stored: dict[str, dict] = {}
     collected_rag: list[dict] = []
@@ -440,6 +470,11 @@ def _run_document_rag_path(
         return result
 
     user_content = str(prompt)
+    if mcp_force:
+        user_content = (
+            f"The user invoked /{mcp_force} for this turn. "
+            f"You must use tools whose names start with {mcp_force}__.\n\n" + user_content
+        )
 
     # Project mode only: prepend NL filter hints so the LLM folds them into
     # digisearch tool args. Opt out via DIGI_FILTER_HINTS=0. extract_filter_hints is fail-open.
@@ -476,6 +511,9 @@ def _run_document_rag_path(
                 "data_prep_agent, data_manipulation_agent, or data_engineer_agent.]\n\n"
                 + user_content
             )
+
+    if language_directive:
+        user_content = f"{language_directive}\n\n{user_content}"
 
     # The model drives retrieval: it chooses whether to search, writes its own query,
     # and may follow a digisearch hit with digivault_get_note to read the whole note.
@@ -540,7 +578,7 @@ def _run_document_rag_path(
         on_tool_step=stream_callback,
         tool_choice="auto"
         if forced
-        else ("required" if state.get("require_tool_calls") else "auto"),
+        else ("required" if (state.get("require_tool_calls") or mcp_force) else "auto"),
     )
 
     planning_mode = bool(cfg.get_planning_mode()) if cfg else False
@@ -605,6 +643,7 @@ def _run_quant_or_augmented_path(
     is_document_mode: bool,
     request_id: str | None = None,
     authorization_bearer: str | None = None,
+    language_directive: str | None = None,
 ) -> dict:
     doc_context = digisearch(
         str(prompt),
@@ -614,9 +653,11 @@ def _run_quant_or_augmented_path(
         authorization_bearer=authorization_bearer,
     )
     user_content = str(prompt)
+    if language_directive:
+        user_content = f"{language_directive}\n\n{user_content}"
     if doc_context:
         user_content = (
-            f"[Document context from digisearch]\n{doc_context}\n\n[User prompt]\n{prompt}"
+            f"[Document context from digisearch]\n{doc_context}\n\n[User prompt]\n{user_content}"
         )
 
     try:
@@ -718,9 +759,11 @@ def research_node(state: WorkflowState) -> dict:
         system_prompt = str(override_prompt).strip()
     is_document_mode = system_prompt != RESEARCH_SYSTEM
 
+    # Language / effort are per-turn user preferences on this query, not the
+    # tenant system prompt — retrieval / tool routing stay English (#3736).
     language_directive = resolve_language_directive(state.get("response_language"))
-    if language_directive:
-        system_prompt = f"{system_prompt}\n\n{language_directive}"
+    effort_directive = resolve_effort_directive(state.get("effort"))
+    prompt_directive = "\n\n".join(p for p in (language_directive, effort_directive) if p) or None
 
     if is_document_mode and _digisearch_available():
         try:
@@ -731,6 +774,7 @@ def research_node(state: WorkflowState) -> dict:
                 index_name=index_name,
                 index_display_name=index_display_name,
                 prompt=str(prompt),
+                language_directive=prompt_directive,
             )
         except Exception as e:
             err_msg, err_code = _user_facing_llm_error(e)
@@ -770,4 +814,5 @@ def research_node(state: WorkflowState) -> dict:
         is_document_mode=is_document_mode,
         request_id=_norm_rid,
         authorization_bearer=state.get("digi_bearer"),
+        language_directive=prompt_directive,
     )

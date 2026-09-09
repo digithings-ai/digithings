@@ -7,7 +7,7 @@ deployment:
     theme: dark
     skin: digichat
     title: ask digichat
-    welcome: Ask about house research, portfolio decisions, and the page you are on.
+    welcome: Ask about this page.
     placeholder: Ask about this page
     suggestions:
       - What changed in the house book?
@@ -34,7 +34,12 @@ deployment:
     toolCalls: true
     sources: true
     branchPicker: true
-    modelPicker: false
+    modelPicker: true
+  models:
+    default: openai/gpt-oss-20b:free
+    available:
+      - openai/gpt-oss-20b:free
+    allowPicker: true
   backend:
     type: digigraph
   tools:
@@ -45,7 +50,10 @@ deployment:
       - id: digivault
         default: true
       - id: web_search
-        default: false
+        default: true
+  mcp:
+    allowUserServers: false
+    allowAddForm: false
   gate:
     mode: ungated
     activityDetail: labels

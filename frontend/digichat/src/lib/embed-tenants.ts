@@ -101,6 +101,20 @@ export type EmbedTenantConfig = {
   /** page = full content chrome inside iframe; embed = compact iframe child. */
   layout?: "page" | "embed";
   /**
+   * Operator MCP servers (URLs stay server-side). Projected to the browser
+   * as ids/labels only.
+   */
+  mcp?: {
+    servers: Array<{ id: string; url: string; label?: string; default?: boolean }>;
+    allowUserServers?: boolean;
+    allowAddForm?: boolean;
+  };
+  tools?: {
+    allowUserToggle?: boolean;
+    catalog: Array<{ id: string; default?: boolean; label?: string }>;
+  };
+  models?: { default?: string; available?: string[]; allowPicker?: boolean };
+  /**
    * LLM spend policy for this embed. Independent of gateMode — digithings.ai
    * is `ungated` + `free_then_byok` so free-quota errors still open BYOK.
    */

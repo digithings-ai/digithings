@@ -642,6 +642,14 @@
   box-shadow: none;
 }
 
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover {
+  border-radius: 0;
+  border: 1px solid var(--hair);
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: none;
+}
+
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item {
   border-radius: 0;
   font-family: var(--font-mono);
@@ -661,6 +669,59 @@
   color: var(--ink);
   outline: none;
   box-shadow: none;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover,
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover {
+  border-radius: 0;
+  border: 1px solid var(--hair);
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: none;
+  font-family: var(--font-mono);
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover [data-highlighted],
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [data-highlighted],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [aria-selected="true"],
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [aria-selected="true"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [data-cursor="true"],
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [data-cursor="true"] {
+  background: transparent;
+  background-color: transparent;
+  color: var(--ink);
+  outline: 1px solid var(--hair);
+  outline-offset: -1px;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings],
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-embed-settings],
+[data-thread-skin="digichat"][data-embed-settings],
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu {
+  border-radius: 0;
+  border-color: var(--hair);
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: none;
+  font-family: var(--font-mono);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings] h2,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings] label,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings] button,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings] p {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings] select {
+  border-radius: 0;
+  border-color: var(--hair);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-mono);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-user-action-bar-slot {
@@ -1333,7 +1394,8 @@
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-slot="dropdown-menu-content"],
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-slot="popover-content"],
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-content,
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-attachment-preview-dialog-content {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-attachment-preview-dialog-content,
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover {
   z-index: 110;
 }
 

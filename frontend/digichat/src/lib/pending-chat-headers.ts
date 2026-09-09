@@ -15,6 +15,7 @@ export type PendingMutatingTurn = Exclude<DigiTurnMode, "send">;
 
 const pendingForceByKey = new Map<string, string>();
 const pendingTurnModeByKey = new Map<string, PendingMutatingTurn>();
+const pendingWebSearchForceByKey = new Set<string>();
 
 export function setPendingForceTool(key: string, tool?: string): void {
   const id = key.trim();
@@ -42,4 +43,29 @@ export function takePendingTurnMode(key: string): PendingMutatingTurn | undefine
   const mode = pendingTurnModeByKey.get(id);
   pendingTurnModeByKey.delete(id);
   return mode;
+}
+
+/** `/websearch query` enables web search for this send only. */
+export function setPendingWebSearchForce(key: string, on = true): void {
+  const id = key.trim();
+  if (!id) return;
+  if (on) pendingWebSearchForceByKey.add(id);
+  else pendingWebSearchForceByKey.delete(id);
+}
+
+export function takePendingWebSearchForce(key: string): boolean {
+  const id = key.trim();
+  const on = pendingWebSearchForceByKey.has(id);
+  pendingWebSearchForceByKey.delete(id);
+  return on;
+}
+
+/** Set send-only force-tool before a gated `onHold` that takes it. */
+export function armForceToolThenHold(
+  key: string,
+  tool: string,
+  onHold: () => void,
+): void {
+  setPendingForceTool(key, tool);
+  onHold();
 }

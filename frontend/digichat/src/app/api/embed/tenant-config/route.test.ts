@@ -54,6 +54,15 @@ describe("GET /api/embed/tenant-config", () => {
       showLanguageSelector: true,
       webSearch: false,
       backendType: "foundry",
+      tools: {
+        allowUserToggle: true,
+        catalog: [
+          { id: "digisearch", default: true, label: "Search corpus" },
+          { id: "digivault", default: true, label: "Vault" },
+        ],
+      },
+      mcp: { servers: [], allowUserServers: false, allowAddForm: false },
+      models: { available: [] },
     });
     expect(JSON.stringify(body)).not.toContain("example.services.ai.azure.com");
     expect(JSON.stringify(body)).not.toContain("datatapstream-secret");

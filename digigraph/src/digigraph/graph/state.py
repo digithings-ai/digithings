@@ -61,8 +61,15 @@ class WorkflowState(TypedDict, total=False):
     response_language: str | None
     # Per-request locate tool to inject with the user string as its query (#3418).
     force_tool: str | None
+    # Operator MCP servers for this turn (BFF header). Must be declared so a
+    # prior tenant's URLs cannot stick on the checkpoint (#3736 / CWE-639).
+    mcp_servers: list[dict[str, str]]
+    # Raw catalog disable tokens (including extra MCP ids). Same sticky-key rule.
+    disabled_tools: list[str] | None
     # Opt-in digillm web search (#3420). Default off — never silent RAG mix.
     enable_web_search: bool
+    # Per-request reasoning effort (X-Digi-Effort). Must be declared.
+    effort: str | None
     # Optional supervisor / routing (when DIGI_SUPERVISOR=1).
     supervisor_depth_remaining: int
     supervisor_route: str | None

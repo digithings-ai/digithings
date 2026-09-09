@@ -43,6 +43,8 @@ deployment:
         label: Web search
   mcp:
     servers: []
+    allowUserServers: false
+    allowAddForm: false
   gate:
     mode: ungated
     activityDetail: full

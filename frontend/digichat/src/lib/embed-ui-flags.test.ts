@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveAttributionPlacement, resolveEmbedUiFlags } from "./embed-ui-flags";
+import { resolveAttributionPlacement, resolveEmbedUiFlags, shouldRenderEmbedBrandHeader } from "./embed-ui-flags";
 
 describe("resolveEmbedUiFlags", () => {
   it("keeps showByok true under ungated", () => {
@@ -109,5 +109,20 @@ describe("resolveAttributionPlacement", () => {
         expect(["footer", "header", "none"]).toContain(at);
       }
     }
+  });
+});
+
+describe("shouldRenderEmbedBrandHeader", () => {
+  it("hides the in-iframe title on the first-party digichat skin", () => {
+    expect(
+      shouldRenderEmbedBrandHeader({ skin: "digichat", headerTitle: "ask digichat" }),
+    ).toBe(false);
+  });
+
+  it("keeps a titled header on other skins", () => {
+    expect(
+      shouldRenderEmbedBrandHeader({ skin: "base", headerTitle: "DataTap" }),
+    ).toBe(true);
+    expect(shouldRenderEmbedBrandHeader({ skin: "base", headerTitle: "" })).toBe(false);
   });
 });

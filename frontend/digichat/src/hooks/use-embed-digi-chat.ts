@@ -13,6 +13,7 @@ import { type BYOKProvider } from "@/hooks/use-byok-key";
 import { p } from "@/lib/base-path";
 import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/embed-gate";
 import { resolveLanguageCode } from "@/lib/languages";
+import { omitForcedCatalogIds } from "@/lib/deploy-config/force-tool";
 import {
   ACTIVITY_PART_TYPE,
   messageActivities,
@@ -23,6 +24,7 @@ import {
   setPendingTurnMode,
   takePendingForceTool,
   takePendingTurnMode,
+  takePendingWebSearchForce,
 } from "@/lib/pending-chat-headers";
 import {
   shapeUserMessageParts,
@@ -34,6 +36,7 @@ export {
   setPendingTurnMode,
   takePendingForceTool,
   takePendingTurnMode,
+  takePendingWebSearchForce,
 };
 
 /** Read ?token= / ?host= at send time — useChat transport is frozen on first render (#1339). */
@@ -184,6 +187,11 @@ type UseEmbedDigiChatOptions = {
    */
   getEnableWebSearch?: () => boolean;
   /**
+   * Send-time accessor for session-disabled catalog tools (#3733).
+   * Comma-separated catalog ids; BFF allowlists before forwarding.
+   */
+  getDisabledTools?: () => string;
+  /**
    * Optional deploy-allowlisted model id. Read at send time (same freeze
    * reason as getResponseLanguage) so the picker can change after mount.
    */
@@ -200,6 +208,10 @@ type UseEmbedDigiChatOptions = {
    * getSelectedModel / getResponseLanguage). Dashboard mint is async after mount.
    */
   getPlanProof?: () => string | null | undefined;
+  /** Send-time MCP session overlay (id+token, optional session url). */
+  getMcpSession?: () => string | undefined;
+  /** Send-time effort: low | medium | high. */
+  getEffort?: () => string | undefined;
   /**
    * When false, omit regenerate/editLastUser so assistant-ui hides the
    * chrome. Digigraph and Foundry both support turn mutation once the BFF
@@ -221,7 +233,10 @@ export function useEmbedDigiChat({
   onGated,
   getResponseLanguage,
   getEnableWebSearch,
+  getDisabledTools,
   getSelectedModel,
+  getMcpSession,
+  getEffort,
   planProof,
   getPlanProof,
   allowClientTurnMutation = true,
@@ -284,8 +299,27 @@ export function useEmbedDigiChat({
           if (forceTool) {
             headers["X-Digi-Force-Tool"] = forceTool;
           }
-          if (getEnableWebSearch?.()) {
+          const forceWeb = takePendingWebSearchForce(embedHost);
+          if (getEnableWebSearch?.() || forceWeb) {
             headers["X-Digi-Enable-Web-Search"] = "1";
+          }
+          const disabled = omitForcedCatalogIds(
+            (getDisabledTools?.() ?? "")
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+            forceTool,
+          );
+          if (disabled.length) {
+            headers["X-Digi-Disabled-Tools"] = disabled.join(",");
+          }
+          const mcpSession = getMcpSession?.()?.trim();
+          if (mcpSession) {
+            headers["X-Digi-Mcp-Session"] = mcpSession;
+          }
+          const effort = getEffort?.()?.trim().toLowerCase();
+          if (effort === "low" || effort === "medium" || effort === "high") {
+            headers["X-Digi-Effort"] = effort;
           }
           const turnMode = takePendingTurnMode(embedHost);
           if (turnMode) {
@@ -344,7 +378,10 @@ export function useEmbedDigiChat({
         trialUnlocked,
         getResponseLanguage,
         getEnableWebSearch,
+        getDisabledTools,
         getSelectedModel,
+        getMcpSession,
+        getEffort,
         getPlanProof,
       ],
   );
