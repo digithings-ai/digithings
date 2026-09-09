@@ -2943,14 +2943,31 @@ twelve-x **events tab reads it via the main dashboard client** (`getUpcomingEven
 other FX research tables stay on `twelveXSupabase`. Cutover is gated: the frontend
 read goes live only once the repointed ingest has populated `core`.
 
-**Checkpoint storage budget (#3761).** LangGraph's PostgresSaver snapshots full
+**Checkpoint + document archive v2 (#3766).** LangGraph's PostgresSaver snapshots full
 channel state per step, so each daily run leaves ~50–100MB of `bytea` in
 `checkpoint_blobs` / `checkpoint_writes` — the tables that pushed `core` past its
 500MB quota (price/macro/documents are already deduped). `digiquant.ops.checkpoint_archive`
-offloads finished threads' payloads to Cloudflare R2 (SHA-256-verified read-back, then
-NULLs the cells); metadata rows stay, and `restore_thread` reinserts payloads for
-forensics. `.github/workflows/pipeline-checkpoint-archive.yml` runs it daily with
-`--retain-days 2`. The live checkpointer path is untouched.
+offloads finished threads' payloads to Cloudflare R2 as zstd level-3 blobs with a
+version byte (`compress_payload` / `decompress_payload`), keyed
+`checkpoints/<thread>/<table>/<checkpoint_id>.zst`. Every upload is SHA-256-verified
+on read-back, then `record_pointer` writes an `archive_objects` registry row
+(migration 119: `source_table`, `source_key`, `r2_key`, `sha256`, `size`, `owner`,
+`status`) **before** the Supabase cell is NULLed — pointer failure keeps the Supabase
+row, so a payload is never orphaned without its pointer. `previous_threads` keeps the
+newest run per owner live in Supabase (resume only ever touches the current run id);
+`--retain-days` / `--keep` intersect that set. `evict_to_watermark` deletes
+oldest-first down from the 8.5GB high watermark to the 7GB low watermark (ledger
+`size` sum), never touching the latest run's keys; `reconcile_ledger` drops dead
+ledger rows and reports orphan R2 keys without auto-deleting them. `resolve_payload`
+is the read-through contract: pointer lookup → R2 GET → sha256 verify
+(`ArchiveVerifyError`) → decompress (`ArchiveNotFoundError` when no pointer row).
+Documents phase (migration 120): pointer-per-row for non-latest
+`(workspace_id, document_key, date)` versions under
+`documents/<ws>/<date>/<key>.zst`, newest date per key stays live. Creds are
+`R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`, endpoint
+built as `https://<account>.r2.cloudflarestorage.com`.
+`.github/workflows/pipeline-checkpoint-archive.yml` runs it daily. The live
+checkpointer path is untouched.
 
 **RLS.** Every strategy-store table RLS-enabled. Public reference + tearsheet tables grant
 `anon SELECT USING (true)`; writers use the service role (RLS bypass). `strategy_calibrations`
