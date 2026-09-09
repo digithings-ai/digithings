@@ -137,7 +137,7 @@ class TestPhase5FailSoftIntegration:
         from digigraph.graph.pipeline_builder import build_pipeline
 
         # Force the no-tools path so completion_text is the LLM seam we mock.
-        monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
+        monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "0")
 
         compiled = build_pipeline(ResearchState, build_phase5())
         state = self._seed()

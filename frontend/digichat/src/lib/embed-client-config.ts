@@ -20,6 +20,7 @@ import {
 } from "@/lib/embed-tenants";
 import {
   DEFAULT_THREAD_SKIN,
+  defaultThreadSkinForTenant,
   type ThreadSkin,
 } from "@/lib/thread-skins";
 
@@ -74,7 +75,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     slug: cfg.slug,
     gateMode: cfg.gateMode,
     theme: cfg.theme,
-    skin: cfg.skin ?? DEFAULT_THREAD_SKIN,
+    skin: cfg.skin ?? defaultThreadSkinForTenant({ slug: cfg.slug }),
     accent: cfg.accent ?? null,
     attribution: cfg.attribution,
     title: cfg.title,

@@ -208,9 +208,17 @@ chat_completion(
 - **Empty-response self-heal.** A 200-OK with no usable output (empty `choices` /
   blank content and no `tool_calls`) is treated as a transient provider hiccup and
   retried with a short backoff (`DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_DELAY`).
-  Provider errors surface to the caller — there is no fallback chain. Empty
-  retries re-ask the same model. A persistent blank is returned unchanged
-  (callers stay graceful).
+   Provider errors surface to the caller — there is no fallback chain. Empty
+   retries re-ask the same model. A persistent blank is returned unchanged
+   (callers stay graceful).
+- **Banned models (#3078).** `completion` and `run_tools` reject banned ids
+  (`ollama/qwen3:8b`) with `ValueError` before any provider call — digillm is
+  the central source of truth, so a routing layer above it can never silently
+  run a forbidden model.
+- **Same-tool error breaker (#3078).** `run_tools` raises `RuntimeError` after
+  `DIGILLM_SAME_TOOL_ERROR_LIMIT` (default 2) *consecutive* same-tool+same-error
+  failures instead of feeding another identical error back to the model. Any
+  successful tool call resets the streak.
 
 ### `chat_completion_with_tools`
 
@@ -357,8 +365,12 @@ stale timeout and falsify the cache's "recreated when env changes" contract.
 
 The silence budget for one `completion` is the product of three layers, not this
 value alone: the SDK's own `max_retries=2` (3 HTTP attempts) x `_create_with_retry`'s
-12 attempts, each attempt bounded by the read timeout. Lowering
+`DIGILLM_PROVIDER_MAX_ATTEMPTS` attempts (default 12; the daily pipeline sets 2 —
+one retry only, #3078), each attempt bounded by the read timeout. Lowering
 `DIGILLM_REQUEST_TIMEOUT_SECONDS` is the only single-knob way to shrink that product.
+Orthogonal to the budget, `DIGILLM_MAX_CONCURRENT_CALLS` (default 8) caps how many
+logical calls may be in flight at once — burst smoothing for fan-out stages, not
+a time bound (#3738).
 
 ### Usage observer contract
 

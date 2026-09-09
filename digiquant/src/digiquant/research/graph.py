@@ -487,7 +487,7 @@ def resolve_cli_inputs(args) -> dict:
             # so the portfolio 7C/7CD per-ticker fan-out actually runs (#694) — the
             # graphs are compiled from ResearchInput.watchlist, and an empty tuple
             # silently skipped every analyst/debate node on scheduled runs.
-            # ATLAS_MAX_ANALYSTS still caps the fan-out at phase-build time.
+            # DIGIQUANT_MAX_ANALYSTS still caps the fan-out at phase-build time.
             watchlist = tuple(_parse_watchlist_md())
     baseline_date = args.baseline_date
     cadence, refresh_scope = _resolve_cadence_inputs(args)

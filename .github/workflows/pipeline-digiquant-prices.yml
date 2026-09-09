@@ -4,10 +4,10 @@ name: "Pipeline: digiquant prices"
 # Scheduled price + technicals ingest via the migrated digiquant.data.prices
 # package (issue #149, Wave 1 Unit E). Four separate jobs:
 #
-#   * intraday  — every 15 min across the US cash session (13:00–21:45 UTC; see DST note)
-#   * at-open   — position_events at the 09:30 ET open (13:35 + 14:35 UTC, one gated out)
+#   * intraday  — every 15 min across the US cash session (13:07–21:52 UTC; see DST note)
+#   * at-open   — position_events at the 09:30 ET open (13:40 + 14:40 UTC, one gated out)
 #   * fx-refresh — latest Yahoo daily FX candle every 2h through the FX week
-#   * eod-macro — once per weekday at 21:25 UTC, after the close in both ET offsets,
+#   * eod-macro — once per weekday at 21:27 UTC, after the close in both ET offsets,
 #                 and because FRED is day-delayed.
 #
 # All three jobs are triggerable manually via workflow_dispatch.
@@ -128,7 +128,7 @@ jobs:
                 marker,
                 '## Persistent tracker for digiquant-prices intraday failures',
                 '',
-                'Scheduled intraday price pipeline (`*/15 13-21 * * MON-FRI`) has been failing.',
+                'Scheduled intraday price pipeline (`7,22,37,52 13-21 * * 1-5`) has been failing.',
                 'This issue is updated on each failed run instead of opening new issues.',
                 '',
                 '**Likely causes:** upstream yfinance rate-limit, Supabase outage, schema drift.',
@@ -341,7 +341,7 @@ jobs:
                 marker,
                 '## Persistent tracker for digiquant-prices EOD macro failures',
                 '',
-                'Scheduled EOD macro ingest (`25 21 * * MON-FRI`) has been failing.',
+                'Scheduled EOD macro ingest (`27 21 * * 1-5`) has been failing.',
                 'This issue is updated on each failed run instead of opening new issues.',
                 '',
                 '**Likely causes:** FRED API_KEY missing/rotated, yfinance rate-limit, Supabase RLS misconfig.',
