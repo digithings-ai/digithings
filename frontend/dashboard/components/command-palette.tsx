@@ -52,7 +52,7 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
   const theses = data?.portfolio?.strategy?.theses ?? [];
   const docs = data?.docs ?? [];
   const base: CmdItem[] = [
-    { id: 'go-today', title: 'Brief', hint: "Today's decision & NAV", href: '/', icon: LayoutDashboard },
+    { id: 'go-today', title: 'Brief', hint: "Today's decision & performance", href: '/', icon: LayoutDashboard },
     {
       id: 'go-holdings',
       title: 'Portfolio — Holdings',
@@ -70,7 +70,7 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
     {
       id: 'go-perf',
       title: 'Portfolio — Tearsheet',
-      hint: 'NAV, returns & position performance',
+      hint: 'Returns & position performance',
       href: '/portfolio/performance',
       icon: LineChart,
     },

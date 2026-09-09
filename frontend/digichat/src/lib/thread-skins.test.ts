@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CLONE_SKINS,
   DEFAULT_THREAD_SKIN,
+  defaultThreadSkinForTenant,
   isCloneSkin,
   isThreadSkin,
   LAYOUT_SKINS,
@@ -47,6 +48,9 @@ describe("thread skins", () => {
     expect(parseThreadSkin("base-assistant-ui")).toBe("base-assistant-ui");
     expect(parseThreadSkin("not-a-skin")).toBe("base");
     expect(parseThreadSkin("ink")).toBe("base");
+    expect(parseThreadSkin("cli")).toBe("base");
+    expect(parseThreadSkin("utilitarian")).toBe("base");
+    expect(parseThreadSkin("terminal")).toBe("base");
     expect(isThreadSkin("claude")).toBe(true);
     expect(isThreadSkin("react-ink")).toBe(true);
     expect(isThreadSkin("not-a-skin")).toBe(false);
@@ -63,5 +67,17 @@ describe("thread skins", () => {
     expect(skinOwnsPageChrome("webpage-assistant")).toBe(true);
     expect(skinOwnsPageChrome("chatgpt")).toBe(false);
     expect(skinOwnsPageChrome("base")).toBe(false);
+  });
+
+  it("defaults unset first-party hosts/slugs to digichat, others to base", () => {
+    expect(defaultThreadSkinForTenant({ host: "digithings.ai" })).toBe("digichat");
+    expect(defaultThreadSkinForTenant({ host: "www.digithings.ai" })).toBe("digichat");
+    expect(defaultThreadSkinForTenant({ host: "occ.digithings.ai" })).toBe("digichat");
+    expect(defaultThreadSkinForTenant({ aliases: ["www.digithings.ai"] })).toBe("digichat");
+    expect(defaultThreadSkinForTenant({ slug: "digithings" })).toBe("digichat");
+    expect(defaultThreadSkinForTenant({ slug: "occ" })).toBe("digichat");
+    expect(defaultThreadSkinForTenant({ host: "datatapstream.com" })).toBe("base");
+    expect(defaultThreadSkinForTenant({ slug: "datatapstream" })).toBe("base");
+    expect(defaultThreadSkinForTenant({})).toBe("base");
   });
 });
