@@ -131,14 +131,38 @@
       },
       "McpServerRef": {
         "additionalProperties": false,
-        "description": "Trusted ``{id, url}`` pair forwarded by the BFF (#3736).",
+        "description": "Trusted Streamable HTTP MCP server forwarded by the BFF (#3736).",
         "properties": {
+          "auth": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth"
+          },
           "id": {
             "maxLength": 64,
             "minLength": 1,
             "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
             "title": "Id",
             "type": "string"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
           },
           "url": {
             "maxLength": 2048,
@@ -372,6 +396,18 @@
             "description": "Catalog ids to hide this turn (X-Digi-Disabled-Tools). Built-in aliases (digisearch, digivault) plus extra operator MCP server ids. Unknown tokens ignored. Always overwritten from the header on HTTP.",
             "title": "Disabled Tools"
           },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-request reasoning effort (X-Digi-Effort). One of low, medium, high. Unrecognized values are ignored. Always overwritten from the header on HTTP.",
+            "title": "Effort"
+          },
           "enable_web_search": {
             "default": false,
             "description": "Opt-in digigraph ``web_search`` tool (digillm). Default off. Also via X-Digi-Enable-Web-Search (#3420).",
@@ -417,7 +453,7 @@
                 "type": "null"
               }
             ],
-            "description": "Operator Streamable HTTP MCP servers for this turn (X-Digi-Mcp-Servers). Client-writable on this model but never trusted as-is: HTTP handlers overwrite from the BFF header (and DIGI_MCP_SERVERS env). URLs never come from an untrusted JSON body.",
+            "description": "Streamable HTTP MCP servers for this turn (X-Digi-Mcp-Servers). Client-writable on this model but never trusted as-is: HTTP handlers overwrite from the BFF header (operator YAML plus SSRF-guarded session overlay, and DIGI_MCP_SERVERS env). URLs never come from an untrusted JSON body. Optional auth/token are session overlay only.",
             "title": "Mcp Servers"
           },
           "prompt": {
