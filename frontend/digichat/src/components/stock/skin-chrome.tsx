@@ -7,16 +7,17 @@
  */
 
 import { createContext, useContext } from "react";
-import {
-  DEFAULT_THREAD_SKIN,
-  type ThreadSkin,
-} from "@/lib/thread-skins";
+import { DEFAULT_THREAD_SKIN, type ThreadSkin } from "@/lib/thread-skins";
+import type { ChromeMode } from "@/lib/deploy-config";
 
 export type SkinChromeValue = {
   skin: ThreadSkin;
   theme: "dark" | "light";
+  /** Deploy `chrome.mode`. Compact composer on embed / modal / sidebar. */
+  mode: ChromeMode;
   title?: string;
   welcome?: string;
+  welcomeBody?: readonly string[];
   placeholder?: string;
   suggestions: readonly string[];
   accent: { color: string; foreground: string } | null;
@@ -26,6 +27,7 @@ export type SkinChromeValue = {
 export const DEFAULT_SKIN_CHROME: SkinChromeValue = {
   skin: DEFAULT_THREAD_SKIN,
   theme: "light",
+  mode: "embed",
   suggestions: [],
   accent: null,
   modelPicker: false,
@@ -45,6 +47,7 @@ export function useComposerCopy(fallbackWelcome: string, fallbackPlaceholder: st
   return {
     title: chrome.title?.trim() || undefined,
     welcome: chrome.welcome?.trim() || fallbackWelcome,
+    welcomeBody: chrome.welcomeBody ?? [],
     placeholder: chrome.placeholder?.trim() || fallbackPlaceholder,
     suggestions: chrome.suggestions,
   };

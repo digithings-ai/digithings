@@ -80,8 +80,11 @@ labelled as one.
    - **claim accuracy** — every factual assertion about this repo checked against
      the source. This lens has caught more real defects here than any other: a
      "Low Risk" 3-line copy PR shipped two false public claims to production
-   - **regression** — removed or renamed exports still imported somewhere; a CSS
-     selector other pages depend on
+    - **regression** — removed or renamed exports still imported somewhere; new
+      exports added to a sub-barrel but not re-exported from the package root
+      (explicit named re-exports, e.g. `web/src/index.ts` — the reference app
+      imports from the root, so a missing re-export fails CI typecheck); a CSS
+      selector other pages depend on
    - **security** — auth, keys, scopes, injection, anything under `digikey/`
    - **CI/deploy** — will it build; does a named workflow actually do what a
      comment says

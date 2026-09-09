@@ -90,7 +90,9 @@ def test_the_deploy_step_targets_the_right_directory_and_command() -> None:
         if s.get("uses", "").startswith("cloudflare/wrangler-action")
     )
     assert deploy_step["with"]["workingDirectory"] == "frontend/digichat-cloudflare"
-    assert deploy_step["with"]["command"] == "deploy"
+    command = deploy_step["with"]["command"]
+    assert command.split()[0] == "deploy"
+    assert "--message" in command
 
 
 def test_the_deploy_step_uses_repo_secrets_not_hardcoded_credentials() -> None:
@@ -103,30 +105,31 @@ def test_the_deploy_step_uses_repo_secrets_not_hardcoded_credentials() -> None:
     assert deploy_step["with"]["accountId"] == "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
 
 
-def test_the_deploy_step_pins_a_wrangler_version_that_supports_containers() -> None:
-    """wrangler-action's own default (no `wranglerVersion` given) installed a
-    hardcoded 3.90.0 on this workflow's first real run -- 3.x predates Cloudflare
-    Containers entirely and silently ignored the `[[containers]]` config instead
-    of failing, deploying only the Worker routing shell and never rebuilding the
-    actual Container image. Must match (or exceed) the floor the project's own
-    frontend/digichat-cloudflare/package.json declares."""
+@pytest.mark.unit
+def test_the_deploy_step_does_not_pin_wrangler_4_28_0_on_with() -> None:
+    """wrangler 4.28.0 rejects `deploy --message` (run 34213316753 / #3720).
+    Do not set wrangler-action `with.wranglerVersion` to that floor — omit
+    it so `npx --no-install` uses the `npm ci` workspace wrangler (4.120.x).
+    package.json keeps `^4.28.0` as the range floor."""
     deploy_step = next(
         s
         for s in _deploy_job()["steps"]
         if s.get("uses", "").startswith("cloudflare/wrangler-action")
     )
-    pinned = deploy_step["with"]["wranglerVersion"]
-    assert pinned, "wranglerVersion must be set explicitly, not left to the action's default"
+    pinned = deploy_step.get("with", {}).get("wranglerVersion")
+    assert pinned is None, (
+        f"with.wranglerVersion={pinned!r} — 4.28.0 rejects --message; omit the pin"
+    )
+    assert "--message" in deploy_step["with"]["command"]
 
     declared = json.loads(
         (REPO_ROOT / "frontend" / "digichat-cloudflare" / "package.json").read_text(
             encoding="utf-8"
         )
     )["devDependencies"]["wrangler"]
-    assert pinned == declared, (
-        f"workflow pins wrangler {pinned!r} but package.json declares {declared!r} -- "
-        "keep both in agreement so a local `npm ci` and the CI deploy resolve the same wrangler."
-    )
+    assert declared.lstrip("^~").startswith("4."), declared
+    yaml_text = WORKFLOW.read_text(encoding="utf-8")
+    assert "4.28.0" in yaml_text
 
 
 def test_workspace_dependencies_are_installed_before_deploying() -> None:

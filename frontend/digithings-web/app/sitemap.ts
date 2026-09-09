@@ -16,6 +16,7 @@ const STATIC_ROUTES = [
   "/legal/privacy",
   "/docs",
   "/docs/api",
+  "/openwiki",
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

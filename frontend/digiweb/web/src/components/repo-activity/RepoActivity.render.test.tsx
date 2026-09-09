@@ -26,6 +26,8 @@ describe("RepoActivity snapshot render", () => {
     expect(html).not.toContain("#2489");
     expect(html).not.toContain("PRs open");
     expect(html).not.toContain("current backlog");
+    expect(html).not.toContain("merge heat");
+    expect(html).not.toContain("ra-heat");
     expect(html).not.toContain("#3445");
     expect(html).not.toMatch(/stars|forks|watchers/i);
   });
@@ -47,6 +49,8 @@ describe("RepoActivity snapshot render", () => {
     expect(html).toContain("issues open");
     expect(html).toContain("// merged recently");
     expect(html).toContain("// open issues");
+    expect(html).toContain("// contributions — last year");
+    expect(html).toContain("ra-heat");
     expect(html).toContain("#2432");
     expect(html).toContain("#3445");
     expect(html).toContain("git clone https://github.com/digithings-ai/");

@@ -4,12 +4,31 @@
  * Chrome specimens: desk (list + compact thread) and contained launcher.
  * Does not import the @digithings/web barrel.
  */
+import { useAui } from "@assistant-ui/react";
 import { DigichatLauncher } from "@digithings/web/chat/launcher";
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { ChatbotThreadList } from "./chatbot-thread-list";
 import { GALLERY_THREAD_COMPONENTS } from "./chatbot-thread-specimen";
 import { DigichatFixtureRuntime } from "./digichat-fixture-runtime";
 import { GALLERY_PLACEHOLDER, GALLERY_SUGGESTIONS } from "./digichat-welcome-config";
+
+function GalleryLauncher() {
+  const aui = useAui();
+  return (
+    <DigichatLauncher
+      portal={false}
+      title="digichat"
+      onNewChat={() => aui.threads.switchToNewThread()}
+    >
+      <Thread
+        autoFocus={false}
+        components={GALLERY_THREAD_COMPONENTS}
+        placeholder={GALLERY_PLACEHOLDER}
+        composerLayout="compact"
+      />
+    </DigichatLauncher>
+  );
+}
 
 export function ChatbotChromeSpecimen() {
   return (
@@ -19,8 +38,8 @@ export function ChatbotChromeSpecimen() {
         <h2 className="title">Desk.</h2>
         <p className="section-copy">
           Terminal nav on the left, compact Thread on the right.{" "}
-          <code>+ new</code> starts another conversation. The list is not a
-          ChatGPT rail — mute label, <code>·</code> title, hairline only.
+          New chat starts another conversation. The list is not a
+          ChatGPT rail — <code>digichat</code> label, title only, hairline only.
         </p>
         <div
           className="aui-theme-stage aui-chrome-desk"
@@ -51,16 +70,9 @@ export function ChatbotChromeSpecimen() {
           className="aui-theme-stage aui-chrome-launcher-stage"
           data-composer-layout="compact"
         >
-          <DigichatLauncher portal={false} title="digichat">
-            <DigichatFixtureRuntime suggestions={GALLERY_SUGGESTIONS}>
-              <Thread
-                autoFocus={false}
-                components={GALLERY_THREAD_COMPONENTS}
-                placeholder={GALLERY_PLACEHOLDER}
-                composerLayout="compact"
-              />
-            </DigichatFixtureRuntime>
-          </DigichatLauncher>
+          <DigichatFixtureRuntime suggestions={GALLERY_SUGGESTIONS}>
+            <GalleryLauncher />
+          </DigichatFixtureRuntime>
         </div>
       </section>
     </>
