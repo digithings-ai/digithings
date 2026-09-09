@@ -16,7 +16,10 @@ class BacktestResult(BaseModel):
     total_pnl: float = Field(0.0, description="Total PnL (account currency)")
     total_return_pct: float = Field(0.0, description="Total return %")
     sharpe_ratio: float | None = Field(None, description="Sharpe ratio if computable")
-    max_drawdown_pct: float | None = Field(None, description="Max drawdown %")
+    max_drawdown_pct: float | None = Field(
+        None,
+        description="Max drawdown as negative percent, e.g. -15 for -15%",
+    )
     num_trades: int = Field(0, description="Number of trades")
     per_symbol_pnl: dict[str, float] = Field(
         default_factory=dict,
@@ -30,7 +33,10 @@ class OptimizationConstraints(BaseModel):
     """Hard limits for optimization; candidates violating these are rejected."""
 
     min_trades: int | None = Field(None, description="Minimum number of trades required")
-    max_drawdown_pct: float | None = Field(None, description="Max drawdown e.g. -0.15 for -15%")
+    max_drawdown_pct: float | None = Field(
+        None,
+        description="Max drawdown as negative percent, e.g. -15 for -15%",
+    )
     min_sharpe: float | None = Field(None, description="Minimum Sharpe ratio")
     min_return_pct: float | None = Field(None, description="Minimum total return %")
     max_trades_per_year: float | None = Field(None, description="Cap trade frequency")

@@ -44,7 +44,7 @@ export function PerfMetrics({
   return (
     <div
       data-cols={columns}
-      className={`perf-metrics grid ${COLS[columns]} overflow-hidden rounded-[12px] border border-hair bg-surface max-[720px]:grid-cols-2${
+      className={`perf-metrics grid ${COLS[columns]} overflow-hidden rounded-none border border-hair bg-surface max-[720px]:grid-cols-2${
         className ? ` ${className}` : ""
       }`}
     >

@@ -31,6 +31,54 @@ from scripts.sync_architecture_vault import (  # reuse mapping + connector
 )
 
 
+def _prune_stale_children(
+    connector: object, table: str, rows: list[dict[str, object]]
+) -> list[str]:
+    """Delete remote children absent from the authoritative local rows, per parent directory."""
+    hubs = [
+        row
+        for row in rows
+        if isinstance(row.get("slug"), str)
+        and isinstance(row.get("vault_path"), str)
+        and (
+            not isinstance(row.get("frontmatter"), dict) or not row["frontmatter"].get("parent_doc")
+        )
+    ]
+    deleted: list[str] = []
+    for hub in hubs:
+        parent = str(hub["slug"])
+        hub_path = str(hub["vault_path"])
+        directory = hub_path.rpartition("/")[0]
+        expected = {
+            str(row["vault_path"])
+            for row in rows
+            if isinstance(row.get("frontmatter"), dict)
+            and row["frontmatter"].get("parent_doc") == parent
+            and str(row.get("vault_path", "")).rpartition("/")[0] == directory
+        }
+        result = connector.select(  # type: ignore[attr-defined]
+            table, columns="vault_path", eq={"frontmatter->>parent_doc": parent}
+        )
+        if not result.success:
+            raise RuntimeError(f"Failed to list remote children for {parent!r}: {result.error}")
+        stale = sorted(
+            str(row["vault_path"])
+            for row in result.rows
+            if isinstance(row.get("vault_path"), str)
+            and str(row["vault_path"]).rpartition("/")[0] == directory
+            and str(row["vault_path"]) not in expected
+        )
+        if not stale:
+            continue
+        delete_result = connector.delete(table, in_={"vault_path": stale})  # type: ignore[attr-defined]
+        if not delete_result.success:
+            raise RuntimeError(
+                f"Failed to prune remote children for {parent!r}: {delete_result.error}"
+            )
+        deleted.extend(stale)
+    return deleted
+
+
 def _assert_not_confidential(vault_dir: str) -> None:
     """Refuse confidential ``projects/`` trees; allow operator /tmp and docs vaults."""
     parts = Path(vault_dir).resolve().parts
@@ -75,11 +123,17 @@ def main(argv: list[str] | None = None) -> int:
         if isinstance(fm, dict) and fm.get("page_class") == "openapi":
             row["note_type"] = str(fm.get("type") or "api_reference")
 
-    result = _connector().upsert(args.table, rows, on_conflict="vault_path")
+    connector = _connector()
+    result = connector.upsert(args.table, rows, on_conflict="vault_path")
     if not result.success:
         print(f"Upsert failed: {result.error}", file=sys.stderr)
         return 1
-    print(f"Synced {result.rows} notes → {args.table}")
+    try:
+        deleted = _prune_stale_children(connector, args.table, rows)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(f"Synced {result.rows} notes → {args.table}; pruned {len(deleted)} stale children")
     return 0
 
 

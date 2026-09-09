@@ -31,7 +31,7 @@ For each acceptance criterion, one at a time:
 - **One criterion, one commit.** Each commit should have a one-line message matching `feat(component): <criterion summary>`.
 - **Red-green-refactor in that order.** Never write implementation before a failing test is visible.
 - **If a criterion can't be tested** (e.g., "UX should feel snappy"), stop and ask the user to make it testable — or mark it explicitly as "manual verification only" and note that in the PR body.
-- **Respect the non-negotiables** in `CLAUDE.md`: Polars only, Pydantic v2, LangGraph for orchestration, LiteLLM for LLM routing, NautilusTrader for backtest.
+- **Respect the non-negotiables** in `AGENTS.md`: Polars only, Pydantic v2, LangGraph for orchestration, LiteLLM for LLM routing, NautilusTrader for backtest.
 - **Structured errors, not silent failures.** Any `except` that isn't re-raising must log with context.
 
 ## When tests already exist for the behavior
@@ -42,7 +42,6 @@ If grep finds a test that already covers the acceptance criterion but is current
 
 - If the test requires a fixture or mock you cannot construct without guessing, stop and ask.
 - If the test requires a live service (digigraph running on :8000), switch to `pytest -m e2e` and tell the user to `make up` first — do not try to mock around an e2e test.
-- If `make score` fails twice after implementation, escalate per `docs/agents/AGENT_WORKFLOW.md`.
 
 ## Never
 

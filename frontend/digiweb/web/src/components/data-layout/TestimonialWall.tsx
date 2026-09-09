@@ -55,14 +55,14 @@ export function TestimonialWall({
         {quotes.map((q) => (
           <figure
             key={q.name}
-            className="m-0 flex flex-col justify-between gap-[1.1rem] rounded-[12px] border border-hair bg-surface p-[1.3rem]"
+            className="m-0 flex flex-col justify-between gap-[1.1rem] rounded-none border border-hair bg-surface p-[1.3rem]"
           >
             <blockquote className="m-0 font-display font-normal text-[1.02rem] leading-[1.4] text-ink">
               {q.quote}
             </blockquote>
             <figcaption className="flex items-center gap-[0.7rem]">
               <span
-                className="flex size-[34px] flex-shrink-0 items-center justify-center rounded-full bg-accent-weak font-mono text-[0.62rem] tracking-[0.04em] text-accent"
+                className="flex size-[34px] flex-shrink-0 items-center justify-center rounded-none bg-accent-weak font-mono text-[0.62rem] tracking-[0.04em] text-accent"
                 aria-hidden="true"
               >
                 {initials(q.name)}

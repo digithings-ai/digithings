@@ -7,11 +7,13 @@ tags:
   - core
   - quant
 relevance:
-  - olympus
+  - dashboard
   - digichat
 ---
 # digiquant
 > The quantitative finance platform — from macro research to deployed trading strategies, powered by AI agents.
+
+**Names (ADR-0026):** the product is digiquant. The three jobs are research, portfolio, and execution. Historical package paths (`digiquant.dashboard.{research,portfolio,execution}`) stay until a dedicated rename PR.
 
 ## What it is
 
@@ -27,39 +29,41 @@ digiquant makes this accessible to independent researchers, small funds, and ind
 
 ## Products
 
-### Atlas
+Three jobs, one product. There is no second brand beside digiquant ([ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md)). Package paths still use the historical names until a dedicated rename PR.
 
-Atlas is the macro research engine and the knowledge foundation everything else builds on.
+### Research
+
+The macro research engine and the knowledge foundation everything else builds on (`digiquant.research`, phases A0–A4).
 
 It runs daily research cycles across parallel layers — data ingestion, sector analysis, macro synthesis — producing a persistent, structured research library and a daily market digest. Three temporal cycles govern how that library is maintained:
 
-- **Daily delta updates** — line-level edits to existing documents, minimizing token cost. Rather than regenerating full documents every day, Atlas patches only what changed. This is the core cost optimization of the system.
+- **Daily delta updates** — line-level edits to existing documents, minimizing token cost. Rather than regenerating full documents every day, the graph patches only what changed. This is the core cost optimization of the system.
 - **Weekly full document regeneration** — complete rewrites to ensure coherence and catch accumulated drift.
 - **Monthly lookback rollup** — synthesizes the month's deltas and weeklies into a durable archival summary.
 
-Atlas is built as digigraph sub-graphs with parallel execution, batched API calls, structured Pydantic outputs at every node, and prompt caching. The delta system keeps daily operating costs predictable at scale — a key design constraint for a platform intended to run autonomously and continuously.
+Research is built as digigraph sub-graphs with parallel execution, batched API calls, structured Pydantic outputs at every node, and prompt caching. The delta system keeps daily operating costs predictable at scale — a key design constraint for a platform intended to run autonomously and continuously.
 
-### Hermes
+### Portfolio
 
-Hermes is the portfolio management orchestration layer. It takes Atlas research and translates it into portfolio action through a structured deliberation pipeline:
+The portfolio management orchestration layer (`digiquant.portfolio`, phases H1–H9). It takes the research library and translates it into portfolio action through a structured deliberation pipeline:
 
-1. **Research ingestion** — pulls the current Atlas research library as context.
+1. **Research ingestion** — pulls the current research library as context.
 2. **Investment thesis construction** — generates theses with explicit validity requirements and exit triggers.
 3. **Asset mapping** — filters candidate assets by the user's investment profile (risk tolerance, sector preferences, geographic constraints, account type).
 4. **Parallel analyst deliberation** — spawns parallel agent instances per asset, each producing a bull case, bear case, headwinds/tailwinds analysis, and a formal recommendation.
 5. **Portfolio manager synthesis** — a top-level agent deliberates across all analyst outputs, aware of the full current portfolio state and user preferences, and produces a final portfolio with weights and rationale.
 
-Hermes uses PyPortfolioOpt for the quantitative portfolio math — mean-variance optimization, Black-Litterman, and Hierarchical Risk Parity — alongside LLM deliberation. Structured outputs at every node keep token costs predictable and outputs auditable. The separation between analyst agents and the portfolio manager agent mirrors institutional investment committee structures.
+The portfolio graph uses PyPortfolioOpt for the quantitative math — mean-variance optimization, Black-Litterman, and Hierarchical Risk Parity — alongside LLM deliberation. Structured outputs at every node keep token costs predictable and outputs auditable. The separation between analyst agents and the portfolio manager agent mirrors institutional investment committee structures.
 
-### Kairos
+### Execution
 
-Kairos is the hands-on strategy building toolkit, named after the Greek concept of the opportune moment — the recognition that algorithmic trading is fundamentally about identifying and seizing the exact right entry and exit window.
+The hands-on strategy building and order-intent toolkit (`digiquant.execution`). Algorithmic trading is about identifying and seizing the exact right entry and exit window. Live venue cutover stays human-gated.
 
-Kairos operates in two modes:
+Execution operates in two modes:
 
 **Developer mode** — a well-documented toolkit for researchers and engineers who want direct control. Operated via CLI or coding agent (Claude Code, Cursor), with the full strategy development pipeline exposed as composable components.
 
-**Product mode** — a digichat interface where a user describes a trading idea in natural language. Kairos researches the idea, derives candidate strategies, runs parallel backtests across multiple variations, optimizes parameters, and presents results with performance metrics, risk analysis, and deployment options. No code required.
+**Product mode** — a digichat interface where a user describes a trading idea in natural language. The system researches the idea, derives candidate strategies, runs parallel backtests across multiple variations, optimizes parameters, and presents results with performance metrics, risk analysis, and deployment options. No code required.
 
 The strategy development pipeline enforces a progression:
 
@@ -68,7 +72,7 @@ The strategy development pipeline enforces a progression:
 3. **Alpaca paper trading** — realistic fills in a live market environment without capital at risk.
 4. **Live deployment** — to Alpaca or QuantConnect. No skipping steps in the progression.
 
-Multi-strategy parallel research rounds accelerate ideation at scale — Kairos can explore a broad strategy space autonomously before surfacing the most promising candidates for human review.
+Multi-strategy parallel research rounds accelerate ideation at scale — the execution graph can explore a broad strategy space autonomously before surfacing the most promising candidates for human review.
 
 ## How it fits in the ecosystem
 
@@ -78,9 +82,9 @@ Data and state flow across the broader stack:
 
 - **digistore** holds the research library, strategy definitions, backtest results, and portfolio state.
 - **digisearch** indexes finalized research documents for semantic retrieval, so agents can pull relevant research context on demand.
-- **digiclaw** runs Atlas and Hermes on their daily and weekly schedules autonomously — digiquant's scheduled execution layer.
-- **digichat** is the user-facing interface for Kairos product mode and for querying Atlas research interactively.
-- **Olympus** (`frontend/olympus`) is the dedicated dashboard for the trio — Atlas's "Morning Read", Hermes's deliberations and risk debate, and portfolio/NAV tracking — and the surface where the human approval gate will be exercised once Hermes ships (see Current state below). See [[olympus|olympus.md]]. Atlas, Hermes, and Kairos run inside digiquant as `digiquant.olympus` (ADR-0014, ADR-0015).
+- **digiclaw** runs the research and portfolio graphs on their daily and weekly schedules autonomously — digiquant's scheduled execution layer.
+- **digichat** is the user-facing chat interface for querying research interactively.
+- **Dashboard** (`frontend/dashboard`) is the operator surface — morning read, deliberations and risk debate, portfolio/NAV tracking — and the surface where the human approval gate will be exercised once that flow ships. See [[dashboard|dashboard.md]]. Sub-graphs live in `digiquant.dashboard` (ADR-0014, ADR-0015); product names are digiquant + research / portfolio / execution ([ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md)).
 
 ## Data philosophy
 
@@ -104,7 +108,7 @@ This stack provides broad coverage across equities, macro, crypto, and alternati
 
 **VectorBT** — vectorized backtesting for rapid strategy ideation. 10–100x faster than event-driven backtesting for parameter sweeps and strategy screening. Used exclusively for research; never for production validation. The performance gap between VectorBT and NautilusTrader is the reason for the two-stage validation pipeline — use the fast tool to explore the space, use the faithful tool to validate candidates.
 
-**PyPortfolioOpt** — portfolio optimization math. Mean-variance, Black-Litterman, and Hierarchical Risk Parity are implemented here and called by Hermes during portfolio construction.
+**PyPortfolioOpt** — portfolio optimization math. Mean-variance, Black-Litterman, and Hierarchical Risk Parity are implemented here and called during portfolio construction.
 
 **Polars only** — no pandas anywhere in the pipeline. Polars' lazy evaluation and columnar execution model handle financial time series data efficiently. The constraint is non-negotiable: pandas is a dependency target, not a data processing tool.
 
@@ -125,32 +129,30 @@ Three optimization engines are available: grid search, random search, and Bayesi
 
 Five export targets are supported: NautilusTrader, TradingView PineScript, Alpaca, QuantConnect, and JSON.
 
-Atlas exists as instruction files and manual scripts. The research methodology is defined and has been run manually, but it is not yet a deterministic digigraph execution graph with scheduled autonomous execution.
-
-Hermes and Kairos product interfaces are not yet built. The portfolio optimization math (PyPortfolioOpt) is integrated; the deliberation pipeline and the digichat interface are roadmap items.
+The research methodology is defined and has been run as scheduled digigraph sub-graphs. The portfolio deliberation pipeline and the execution/digichat interface continue to mature; live venue cutover stays human-gated.
 
 ## 12-month roadmap
 
-**Months 1–3 — Atlas to digigraph**
-Migrate the Atlas research methodology from instruction files to deterministic, parallel digigraph sub-graph execution. Wire in digiclaw for scheduled daily, weekly, and monthly cycle triggers. Deliver the first autonomous daily digest.
+**Months 1–3 — Research graph**
+Migrate research methodology from instruction files to deterministic, parallel digigraph sub-graph execution. Wire in digiclaw for scheduled daily, weekly, and monthly cycle triggers. Deliver the first autonomous daily digest.
 
-**Months 3–6 — Hermes deliberation pipeline**
-Build the full Hermes pipeline as digigraph sub-graphs: thesis construction, parallel analyst agents, portfolio manager synthesis, PyPortfolioOpt integration. Deliver portfolio output with weights and rationale driven by Atlas research.
+**Months 3–6 — Portfolio deliberation pipeline**
+Build the full portfolio pipeline as digigraph sub-graphs: thesis construction, parallel analyst agents, portfolio manager synthesis, PyPortfolioOpt integration. Deliver portfolio output with weights and rationale driven by research.
 
-**Months 4–7 — Kairos digichat interface**
-Build the Kairos product-mode digichat interface for strategy exploration. Users describe a trading idea; Kairos returns backtest results, optimization curves, and deployment options. Integrate VectorBT → NautilusTrader progression into the interface.
+**Months 4–7 — Execution digichat interface**
+Build the product-mode digichat interface for strategy exploration. Users describe a trading idea and get backtest results, optimization curves, and deployment options. Integrate VectorBT → NautilusTrader progression into the interface.
 
 **Months 5–8 — OpenBB integration**
-Integrate OpenBB as digistore's primary data retrieval layer. Replace ad-hoc data fetching across Atlas, Hermes, and Kairos with a single OpenBB-backed interface. Expand data source coverage.
+Integrate OpenBB as digistore's primary data retrieval layer. Replace ad-hoc data fetching across research, portfolio, and execution with a single OpenBB-backed interface. Expand data source coverage.
 
 **Months 7–10 — Strategy library expansion**
-Run Kairos parallel research rounds autonomously to expand the strategy library beyond the current six strategies. Systematic coverage across asset classes, time frames, and market regimes.
+Run parallel research rounds autonomously to expand the strategy library beyond the current six strategies. Systematic coverage across asset classes, time frames, and market regimes.
 
 **Months 8–11 — Live deployment**
 Live strategy deployment to Alpaca and QuantConnect. Full paper-to-live progression enforced by the deployment gate. Human approval required before any live capital commitment.
 
 **Months 10–12 — digiquant.io entry flow**
-Build the digiquant.io investment profiling entry flow. Free tier gives access to Atlas research and basic backtesting. Paywall gates access to Hermes portfolio management and Kairos strategy building. This is the consumer-facing monetization surface for digiquant.
+Build the digiquant.io investment profiling entry flow. Free tier gives access to research and basic backtesting. Paywall gates access to portfolio management and strategy building. This is the consumer-facing monetization surface for digiquant.
 
 ## Open source vs. proprietary
 
@@ -165,9 +167,9 @@ digiquant follows the digithings open-core model. The infrastructure layer is op
 - Optimization engine implementations (grid, random, Bayesian)
 
 **Proprietary:**
-- Atlas research sub-graphs and the delta patching system
-- Hermes deliberation pipeline and the analyst agent prompting system
-- Kairos strategy library (the accumulated output of research rounds)
+- Research sub-graphs and the delta patching system
+- Portfolio deliberation pipeline and the analyst agent prompting system
+- Strategy library (the accumulated output of research rounds)
 - Specific strategy implementations with tuned parameters
 - Execution layer and deployment gate logic
 - digiquant.io investment profiling and paywall infrastructure

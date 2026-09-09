@@ -139,6 +139,17 @@ def _build_input_dirs(build_script: Path) -> set[str]:
     return closure
 
 
+#: The thin cron Worker deploys from a push-gated workflow with no pull_request
+#: trigger, so _trigger_paths (which reads on.pull_request.paths) cannot see it.
+_WORKER_DEPLOY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "deploy-digithings-cron.yml"
+
+
+def _push_paths(workflow: Path) -> list[str]:
+    """The `on.push.paths` globs of a push-gated deploy workflow."""
+    parsed: dict[Any, Any] = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+    return list(parsed[True].get("push", {}).get("paths", []))
+
+
 def _trigger_paths(workflow: Path) -> list[str]:
     # PyYAML resolves a bare top-level `on:` key to the boolean True (YAML 1.1), so the
     # trigger block is not reachable under the string "on".
@@ -189,6 +200,10 @@ def test_every_workspace_manifest_is_watched_by_some_filter() -> None:
     )
     watched = {glob for globs in filters.values() if isinstance(globs, list) for glob in globs}
     watched.update(glob for p in DEPLOY_CHECKS for glob in _trigger_paths(p.values[0]))
+    # The cron Worker deploys from a push-gated workflow (no pull_request trigger),
+    # so its paths live under on.push.paths — a third cover the union must count,
+    # or every new push-deployed workspace reopens the orphan hole.
+    watched.update(_push_paths(_WORKER_DEPLOY_WORKFLOW))
 
     orphans = sorted(
         f"{directory}/package.json"

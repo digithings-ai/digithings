@@ -101,7 +101,7 @@ class TestResearchNode:
                 "profile": {"row_count": 42, "columns": ["ticker", "date", "close"]},
             }
         }
-        _custom_prompt = "You are a SITAAS research assistant. Use digisearch."
+        _custom_prompt = "You are a research assistant. Use digisearch."
         with patch("digigraph.graph.research._digisearch_available", return_value=True):
             with patch(
                 "digigraph.graph.research._load_research_settings",
@@ -122,7 +122,7 @@ class TestResearchNode:
 
     def test_stored_datasets_absent_leaves_user_content_unchanged(self) -> None:
         """Without stored_datasets in state, user_content is plain prompt."""
-        _custom_prompt = "You are a SITAAS research assistant. Use digisearch."
+        _custom_prompt = "You are a research assistant. Use digisearch."
         with patch("digigraph.graph.research._digisearch_available", return_value=True):
             with patch(
                 "digigraph.graph.research._load_research_settings",

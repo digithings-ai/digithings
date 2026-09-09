@@ -35,9 +35,15 @@ def issue_access_token(
     legacy_static: bool = False,
     audience: str | None = None,
     ttl_sec: int | None = None,
+    profile_id: str | None = None,
+    profile_version: int | None = None,
 ) -> tuple[str, str]:
     """
     Returns (jwt, jti).
+
+    ``profile_id`` / ``profile_version`` are optional profile pointers (#308).
+    Both are omitted from the payload when absent so clients can treat missing
+    claims as "no profile yet — route to intake." Never emit one without the other.
     """
     aud = audience or (os.environ.get("DIGIKEY_AUDIENCE") or DEFAULT_AUDIENCE).strip()
     ttl = (
@@ -67,6 +73,10 @@ def issue_access_token(
         claims["project_config_ref"] = project_config_ref
     if key_pub:
         claims["key_pub"] = key_pub
+    # Pairwise: only emit when both are present and version is a positive int.
+    if profile_id and profile_version is not None and int(profile_version) >= 1:
+        claims["profile_id"] = str(profile_id).strip()
+        claims["profile_version"] = int(profile_version)
     claims["scope"] = " ".join(scopes)
     token = jwt.encode(
         claims, private_key_to_pem(private_key), algorithm="RS256", headers={"kid": kid}

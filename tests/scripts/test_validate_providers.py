@@ -1,24 +1,25 @@
-"""Unit tests for the OpenRouter connectivity retry in scripts/atlas/validate-providers.py (#1633).
+"""Unit tests for the slimmed digiquant/scripts/research/validate-providers.py.
 
-Both the 2026-08-11 and 2026-08-12 daily olympus runs died at this single-shot, unretried
-``openrouter/auto`` ping returning an empty completion — even though the real digillm-routed
-checks in the same run (structured output, function tools, web search) passed cleanly, proving
-the pipeline itself was healthy and only this preflight ping was flaky. These tests pin the
-retry contract without touching OpenRouter.
+Fail-fast house (Cheaper Inference): the preflight runs no LLM checks — provider
+errors surface from the real run. What remains is env-var gating, the bounded
+digillm/production-tier environment setup, and graph dry-runs. These tests pin
+that contract without touching any provider.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any  # score:allow untyped any — dynamically loaded module + fake SDK stand-ins
+from typing import Any  # score:allow untyped any — dynamically loaded module
+from unittest.mock import patch
 
-import openai
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-_SCRIPT = REPO_ROOT / "digiquant" / "scripts" / "atlas" / "validate-providers.py"
+_SCRIPT = REPO_ROOT / "digiquant" / "scripts" / "research" / "validate-providers.py"
 
 pytestmark = pytest.mark.unit
 
@@ -38,102 +39,88 @@ def vp() -> Any:
 
 
 @pytest.fixture(autouse=True)
-def _no_sleep(monkeypatch: pytest.MonkeyPatch, vp: Any) -> list[float]:
-    """Retries sleep 5s each; capture delays so tests can assert on them, not wall time."""
-    delays: list[float] = []
-    monkeypatch.setattr(vp.time, "sleep", delays.append)
-    return delays
+def _env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-service-key")
+    monkeypatch.setenv("CHEAPERINFERENCE_API_KEY", "ci_live_test")
 
 
 @pytest.fixture(autouse=True)
-def _api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def _hermetic_environ() -> Generator[None, None, None]:
+    """Restore real env after each test.
+
+    ``_configure_preflight_environment`` (via ``apply_digiquant_house_env``)
+    mutates ``os.environ`` for real — including ``OPENAI_API_BASE``. Without a
+    restore that leak changes digillm routing for whichever suite runs next.
+    """
+    snapshot = dict(os.environ)
+    yield
+    os.environ.clear()
+    os.environ.update(snapshot)
+
+
+def test_check_env_vars_passes_with_house_key(vp: Any) -> None:
+    vp.results.clear()
+    assert vp.check_env_vars() is True
+
+
+def test_check_env_vars_fails_without_house_key(vp: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CHEAPERINFERENCE_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    vp.results.clear()
+    assert vp.check_env_vars() is False
+
+
+def test_check_env_vars_passes_with_openrouter_key_only(
+    vp: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OR-only runs are valid — either upstream key satisfies the house gate."""
+    monkeypatch.delenv("CHEAPERINFERENCE_API_KEY", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    vp.results.clear()
+    assert vp.check_env_vars() is True
+
+
+def test_preflight_configures_bounded_digillm_env(vp: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """digillm reads timeout/retry env at import — preflight must set them first (#2528/#2531)."""
+    monkeypatch.delenv("DIGILLM_REQUEST_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("DIGILLM_EMPTY_RETRY_MAX", raising=False)
+    vp._configure_preflight_environment()
+    assert os.environ["DIGILLM_REQUEST_TIMEOUT_SECONDS"] == str(
+        vp._PREFLIGHT_REQUEST_TIMEOUT_SECONDS
+    )
+    assert os.environ["DIGILLM_EMPTY_RETRY_MAX"] == str(vp._PREFLIGHT_EMPTY_RETRY_MAX)
+
+
+def test_preflight_applies_house_env(vp: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Preflight must call apply_digiquant_house_env so dry-runs match production (#2532).
+
+    The house function only points the default client (no model-policy env) —
+    assert the rewrite ran and that no dead provider-knob env was written.
+    """
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.delenv("CHEAPERINFERENCE_API_KEY", raising=False)
+    vp._configure_preflight_environment()
+    assert os.environ.get("OPENAI_API_BASE", "") == "https://openrouter.ai/api/v1"
+    assert "OPENROUTER_ALLOWED_MODELS" not in os.environ
+    assert "OPENROUTER_COST_QUALITY_TRADEOFF" not in os.environ
 
 
-class _FakeCompletions:
-    """Minimal chat.completions stand-in that replays a scripted sequence of contents."""
-
-    def __init__(self, contents: list[str]) -> None:
-        self._contents = list(contents)
-        self.calls = 0
-        self.request_kwargs: list[dict[str, Any]] = []
-
-    def create(self, **kwargs: Any) -> Any:
-        self.calls += 1
-        self.request_kwargs.append(kwargs)
-        content = self._contents.pop(0)
-        message = type("Message", (), {"content": content})()
-        choice = type("Choice", (), {"message": message})()
-        return type("Completion", (), {"choices": [choice]})()
-
-
-class _FakeClient:
-    def __init__(self, contents: list[str]) -> None:
-        self.chat = type("Chat", (), {"completions": _FakeCompletions(contents)})()
-
-
-def _patch_client(monkeypatch: pytest.MonkeyPatch, contents: list[str]) -> _FakeClient:
-    client = _FakeClient(contents)
-    constructor_kwargs: dict[str, Any] = {}
-
-    def _fake_openai(**kwargs: Any) -> _FakeClient:
-        constructor_kwargs.update(kwargs)
-        return client
-
-    monkeypatch.setattr(openai, "OpenAI", _fake_openai)
-    client.constructor_kwargs = constructor_kwargs  # type: ignore[attr-defined]
-    return client
-
-
-def test_immediate_success_makes_one_call_no_retry(
-    monkeypatch: pytest.MonkeyPatch, vp: Any, _no_sleep: list[float]
-) -> None:
-    """No retry storm on the happy path."""
-    client = _patch_client(monkeypatch, ["ok"])
-    assert vp.check_openrouter("openrouter/auto") is True
-    assert client.chat.completions.calls == 1
-    assert _no_sleep == []
-
-
-def test_empty_then_success_retries_once(
-    monkeypatch: pytest.MonkeyPatch, vp: Any, _no_sleep: list[float]
-) -> None:
-    """A single empty completion is retried, not treated as a hard failure — the #1633 fix."""
-    client = _patch_client(monkeypatch, ["", "ok"])
-    assert vp.check_openrouter("openrouter/auto") is True
-    assert client.chat.completions.calls == 2
-    assert _no_sleep == [vp._OPENROUTER_PING_RETRY_DELAY]
-
-
-def test_persistent_empty_exhausts_retries_and_fails(
-    monkeypatch: pytest.MonkeyPatch, vp: Any, _no_sleep: list[float]
-) -> None:
-    """A genuinely dead provider still fails the preflight after a fixed, bounded retry budget."""
-    client = _patch_client(monkeypatch, ["", "", "", ""])
-    assert vp.check_openrouter("openrouter/auto") is False
-    assert vp._OPENROUTER_PING_RETRY_MAX == 3
-    assert client.chat.completions.calls == 4
-    assert _no_sleep == [vp._OPENROUTER_PING_RETRY_DELAY] * 3
-
-
-def test_client_is_bounded_and_does_not_stack_sdk_retries(
-    monkeypatch: pytest.MonkeyPatch, vp: Any
-) -> None:
-    """The client must own a fixed timeout and not stack the SDK's own retry-on-error on top of
-    our loop, or a single hung connection could blow well past the intended ~80s worst case."""
-    client = _patch_client(monkeypatch, ["ok"])
-    vp.check_openrouter("openrouter/auto")
-    assert client.constructor_kwargs["timeout"] == vp._OPENROUTER_PING_TIMEOUT  # type: ignore[attr-defined]
-    assert client.constructor_kwargs["max_retries"] == 0  # type: ignore[attr-defined]
-
-
-def test_request_targets_the_given_model_with_a_short_deterministic_prompt(
-    monkeypatch: pytest.MonkeyPatch, vp: Any
-) -> None:
-    """The ping must stay a cheap, deterministic 1-token check against the requested model."""
-    client = _patch_client(monkeypatch, ["ok"])
-    vp.check_openrouter("openrouter/some-model")
-    request = client.chat.completions.request_kwargs[0]
-    assert request["model"] == "openrouter/some-model"
-    assert request["messages"] == [{"role": "user", "content": "Reply with the single word: ok"}]
-    assert request["temperature"] == 0
+def test_no_llm_checks_remain(vp: Any) -> None:
+    """Fail-fast: the preflight must not define any provider ping checks."""
+    for name in (
+        "check_openrouter",
+        "check_openrouter_structured",
+        "check_openrouter_function_tools",
+        "check_openrouter_web_search",
+    ):
+        assert not hasattr(vp, name), f"{name} must be removed"
+    with (
+        patch.object(sys, "argv", ["validate-providers.py"]),
+        patch.object(vp, "check_supabase", return_value=True),
+        patch.object(vp, "check_dry_run", return_value=True),
+    ):
+        vp.results.clear()
+        assert vp.main() == 0

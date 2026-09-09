@@ -34,7 +34,7 @@ Import sites: **zero changes** — every consumer still imports from
 | `separator.tsx` | No shared Separator. |
 | `sidebar.tsx` | shadcn sidebar system (cva + useRender + local Sheet/Tooltip/Button/Input/Separator/Skeleton composition). Not currently mounted by any digichat page. |
 | `skeleton.tsx` | No shared Skeleton. |
-| `textarea.tsx` | No shared Textarea (the reference `.ff-input` grammar has no multiline specimen promoted yet). |
+| `textarea.tsx` | No shared Textarea (the reference `.ff-input` grammar has no multiline specimen promoted yet). Local `rounded-none` — utilitarian v0.1. |
 
 Dependency outcome: `@base-ui/react` **stays** in `package.json` —
 `scroll-area.tsx`, `separator.tsx`, and `sidebar.tsx` still import it
@@ -85,11 +85,6 @@ specificity/order of the OLD dress):
    Same 24-viewBox geometry, `stroke-width` 2, `currentColor`, sized by the
    same `svg:not([class*='size-'])` rules — expected pixel-identical, worth
    one glance.
-3. **ui/sidebar.tsx** (not mounted anywhere today): its mobile
-   `SheetContent className="bg-sidebar …"` now beats the component-baked
-   `bg-bg` via compiled utility order (`.bg-sidebar` sorts after `.bg-bg`)
-   rather than tailwind-merge — same winner today, but order-dependent; if
-   the sidebar is ever mounted, re-verify.
 
 ## Dropped exports
 

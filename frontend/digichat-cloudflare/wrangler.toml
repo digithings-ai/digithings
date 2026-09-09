@@ -20,6 +20,9 @@ zone_name = "digithings.ai"
 pattern = "digithings.ai/api/byok*"
 zone_name = "digithings.ai"
 [[routes]]
+pattern = "digithings.ai/api/plan-proof*"
+zone_name = "digithings.ai"
+[[routes]]
 pattern = "digithings.ai/api/health"
 zone_name = "digithings.ai"
 [[routes]]
@@ -30,6 +33,9 @@ zone_name = "digithings.ai"
 class_name = "DigiChatContainer"
 # Build context is monorepo root (two levels up from this package).
 image = "../../Dockerfile.digichat-cloudflare"
+# DIGICHAT_VERSION for GET /api/health is baked from frontend/digichat/package.json
+# inside Dockerfile.digichat-cloudflare. Do not pin it here or as a dashboard secret
+# (it would drift). Optional override: image_vars = { DIGICHAT_VERSION = "…" }.
 max_instances = 5
 
 [[durable_objects.bindings]]
@@ -46,6 +52,9 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGIGRAPH_INTERNAL_URL   # reachable digigraph base URL
 #   DIGIKEY_URL
 #   DIGIKEY_BFF_TOKEN
+#   DIGICHAT_PLAN_PROOF_SECRET
+#   DIGICHAT_DASHBOARD_SUPABASE_URL
+#   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY
 # Optional: DIGICHAT_DATABASE_URL if you enable Auth.js / conversations DB
 #
 # digigraph + LiteLLM + digikey + digivault + digisearch are NOT inside this

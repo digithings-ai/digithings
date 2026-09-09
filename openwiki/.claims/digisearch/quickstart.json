@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:25272785e9e81ae489d0ae520ac52d8b61dfbd849966cd2b774aa44af3ccdc72",
+  "claims": [
+    {
+      "id": "claim_9ef5ec4829944f73a633eae7a77fc1b8",
+      "statement": "Stub CLI smokes ingest and query the edgar sample under DIGISEARCH_ALLOW_STUB=1, which is test-only with production enforced to real backends at startup.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/AGENTS.md#L60-L90",
+          "version": "repo-lines-v1:sha256:abbf26a0a8d4c45bd0b0cc59bfb74002583e4dcef67e323d5d163a832c03d033:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEwYWM3MzRhNjNlNjhkOGE2OWI4ZjE5OWI1OWMxNDgyYzg3NWMxYjgyNjQxODEyMjhjNDFhYWI1MTQzZDA4MmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiYjNjNTJhMGE0MzMyZWViZjczODNjNTY5OWY4YTdiM2RhNjVjNGZlMmY5ZTgzMTUyZWNjZGVlZGI4YTYyYWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcwMThhMjYzZGFlNmRlN2RkYzVmOGRmMjY0M2NlN2ZjYTM3NDcyMWY1MDM0NWRlZjFmNGY1ZDY1YThiNWI2NjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIzZmJhODhlMzZhZWUwY2EzYWI2NDJhODVhNmE2MDM5MTg5NDgwMmMzZGZmODg2NDQzYmI1Y2Y0ZGM1ZTYxZTYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f9ec8eb957de4c08a8061ca42df205e9",
+      "statement": "Verification is /health plus pytest -m unit -k digisearch (and -k chunking) with ruff check and format --check, needing CHROMA_PATH or Azure plus provider keys for production.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/AGENTS.md#L60-L90",
+          "version": "repo-lines-v1:sha256:abbf26a0a8d4c45bd0b0cc59bfb74002583e4dcef67e323d5d163a832c03d033:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEwYWM3MzRhNjNlNjhkOGE2OWI4ZjE5OWI1OWMxNDgyYzg3NWMxYjgyNjQxODEyMjhjNDFhYWI1MTQzZDA4MmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiYjNjNTJhMGE0MzMyZWViZjczODNjNTY5OWY4YTdiM2RhNjVjNGZlMmY5ZTgzMTUyZWNjZGVlZGI4YTYyYWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcwMThhMjYzZGFlNmRlN2RkYzVmOGRmMjY0M2NlN2ZjYTM3NDcyMWY1MDM0NWRlZjFmNGY1ZDY1YThiNWI2NjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIzZmJhODhlMzZhZWUwY2EzYWI2NDJhODVhNmE2MDM5MTg5NDgwMmMzZGZmODg2NDQzYmI1Y2Y0ZGM1ZTYxZTYifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

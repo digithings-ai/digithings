@@ -19,6 +19,7 @@ function jsonResponse(body: TestResult, status: number): Response {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
+      "x-content-type-options": "nosniff",
       // Responses here can carry information derived from a submitted secret
       // key (validation result, provider error text) -- never cache.
       "cache-control": "no-store",
@@ -58,10 +59,22 @@ function validateKey(key: string, provider: ProviderId): string | null {
  * Defense in depth in case a provider ever echoes the submitted key back in
  * an error: strip any occurrence of the raw key and cap the length so a
  * pathological upstream response can't balloon the reply either.
+ *
+ * Callers must combine this with `||`, never `??`. It returns `""` unchanged
+ * for an empty message — `""` is not nullish, so `??` keeps it and ships
+ * `{"ok":false,"error":""}` instead of falling back to the HTTP-status text.
  */
 function sanitizeUpstreamError(message: string | undefined, key: string): string | undefined {
   if (!message) return message;
-  let sanitized = key ? message.split(key).join("[redacted]") : message;
+  // Redact the percent-encoded form too. Gemini's key rides in the request URL
+  // via encodeURIComponent, so an error quoting that URL echoes the encoded key,
+  // which a literal split(key) would miss. encodeURIComponent is the identity for
+  // a canonical `AIza…[A-Za-z0-9_-]{35}` key — this covers the non-canonical ones
+  // validateKey's `startsWith("AI")` check still lets through.
+  let sanitized = message;
+  for (const form of new Set([key, encodeURIComponent(key)])) {
+    if (form) sanitized = sanitized.split(form).join("[redacted]");
+  }
   if (sanitized.length > MAX_UPSTREAM_ERROR_LEN) {
     sanitized = `${sanitized.slice(0, MAX_UPSTREAM_ERROR_LEN)}…`;
   }
@@ -94,7 +107,7 @@ async function testOpenRouter(key: string): Promise<TestResult> {
     return {
       ok: false,
       error:
-        sanitizeUpstreamError(body.error?.message, key) ??
+        sanitizeUpstreamError(body.error?.message, key) ||
         `OpenRouter returned HTTP ${resp.status}`,
     };
   }
@@ -109,7 +122,7 @@ async function testOpenAI(key: string): Promise<TestResult> {
     const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
     return {
       ok: false,
-      error: sanitizeUpstreamError(body.error?.message, key) ?? `OpenAI returned HTTP ${resp.status}`,
+      error: sanitizeUpstreamError(body.error?.message, key) || `OpenAI returned HTTP ${resp.status}`,
     };
   }
   const data = (await resp.json()) as { data?: { id: string }[] };
@@ -125,7 +138,7 @@ async function testAnthropic(key: string): Promise<TestResult> {
     return {
       ok: false,
       error:
-        sanitizeUpstreamError(body.error?.message, key) ?? `Anthropic returned HTTP ${resp.status}`,
+        sanitizeUpstreamError(body.error?.message, key) || `Anthropic returned HTTP ${resp.status}`,
     };
   }
   const data = (await resp.json()) as { data?: { id: string }[] };
@@ -133,14 +146,14 @@ async function testAnthropic(key: string): Promise<TestResult> {
 }
 
 async function testGemini(key: string): Promise<TestResult> {
-  const resp = await fetchWithTimeout(
-    `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`,
-  );
+  const resp = await fetchWithTimeout("https://generativelanguage.googleapis.com/v1beta/models", {
+    headers: { "x-goog-api-key": key },
+  });
   if (!resp.ok) {
     const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
     return {
       ok: false,
-      error: sanitizeUpstreamError(body.error?.message, key) ?? `Gemini returned HTTP ${resp.status}`,
+      error: sanitizeUpstreamError(body.error?.message, key) || `Gemini returned HTTP ${resp.status}`,
     };
   }
   return { ok: true, model: "gemini-2.5-flash" };
@@ -154,7 +167,7 @@ async function testXai(key: string): Promise<TestResult> {
     const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
     return {
       ok: false,
-      error: sanitizeUpstreamError(body.error?.message, key) ?? `x.ai returned HTTP ${resp.status}`,
+      error: sanitizeUpstreamError(body.error?.message, key) || `x.ai returned HTTP ${resp.status}`,
     };
   }
   const data = (await resp.json()) as { data?: { id: string }[] };
@@ -193,7 +206,7 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
     raw !== "openrouter" &&
     raw !== "xai"
   ) {
-    return jsonResponse({ ok: false, error: `Unknown BYOK provider: ${raw}` }, 400);
+    return jsonResponse({ ok: false, error: "Unknown BYOK provider." }, 400);
   }
   const provider: ProviderId = raw;
 
@@ -221,6 +234,13 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
     }
     return jsonResponse(result, result.ok ? 200 : 400);
   } catch (e) {
-    return jsonResponse({ ok: false, error: abortMessage(e) }, 500);
+    // Sanitize here too, not just on the upstream-error paths. A fetch/network
+    // failure message can quote the request URL, and Gemini's key rides in that
+    // URL (`...models?key=`), so an unsanitized `e.message` echoes the caller's
+    // key straight back in a 500 body.
+    // `||`, not `??`: sanitizeUpstreamError("") returns "" — not nullish — so `??`
+    // would ship `{"ok":false,"error":""}` whenever e.message is empty.
+    const detail = sanitizeUpstreamError(abortMessage(e), key) || "Request failed";
+    return jsonResponse({ ok: false, error: detail }, 500);
   }
 }

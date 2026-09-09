@@ -58,7 +58,7 @@ export type SyncedTearsheetProps = {
   className?: string;
   /**
    * Let page scroll/wheel/touch-drag pass through instead of panning or
-   * zooming the chart. Off by default — this component rides real Olympus
+   * zooming the chart. Off by default — this component rides real dashboard
    * dashboard surfaces (e.g. a workspace's drawdown view) where pan/zoom on
    * the chart is an intended interaction. Turn it on only for a display
    * specimen embedded in scrolling prose (see synced-tearsheet-reference.tsx)
@@ -97,10 +97,10 @@ export function SyncedTearsheet({
     };
 
     const palette = () => ({
-      inkMute: cssVar("--ink-mute", "#8A9097"),
-      hair: cssVar("--hair", "rgba(255,255,255,0.1)"),
+      inkMute: cssVar("--ink-mute", "#7D8389"),
+      hair: cssVar("--hair", "rgba(255,255,255,0.09)"),
       accent: cssVar("--accent", "#3dd6c4"),
-      down: cssVar("--down", "#E0654B"),
+      down: cssVar("--down", "#E5533E"),
       mono: cssVar("--font-mono", "monospace"),
     });
     let p = palette();

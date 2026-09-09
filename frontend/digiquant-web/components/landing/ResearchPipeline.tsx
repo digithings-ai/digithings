@@ -54,9 +54,9 @@ const FLOW: { n: string; title: string; body: string; tool: string }[] = [
     n: "07",
     title: "Export",
     body:
-      "Export the strategy to TradingView as Pine v5. Live execution is not built: there is no " +
-      "paper or live path, and every broker adapter is a stub.",
-    tool: "Kairos · planned",
+      "Export the strategy to TradingView as Pine v5. Live trading is not on yet — " +
+      "paper and live venues wait on a human gate.",
+    tool: "execution · planned",
   },
 ];
 
@@ -142,15 +142,13 @@ export function ResearchPipeline() {
                 >
                   <span className="dqpipe-rail" aria-hidden="true" />
                   <div className="dqpipe-card">
-                    {/* execution step numbers wear the money-up phosphor */}
-                    <span
-                      className={`font-mono text-[0.8rem] tracking-[0.1em] ${isExec ? "text-up" : "text-accent"}`}
-                    >
+                    {/* step numbers wear the accent phosphor (sequence, not P&L) */}
+                    <span className="font-mono text-[0.8rem] tracking-[0.1em] text-accent">
                       {s.n}
                     </span>
                     <h3>{s.title}</h3>
                     <p>{s.body}</p>
-                    <span className="self-start rounded-full border border-hair px-[0.6rem] py-[0.2rem] font-mono text-[0.68rem] uppercase tracking-[0.06em] text-ink-mute">
+                    <span className="self-start rounded-none border border-hair px-[0.6rem] py-[0.2rem] font-mono text-[0.68rem] uppercase tracking-[0.06em] text-ink-mute">
                       {s.tool}
                     </span>
                   </div>

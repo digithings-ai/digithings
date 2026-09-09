@@ -69,23 +69,6 @@ def _rules_list(rules: list[str]) -> str:
     return "\n".join(f"- {r}" for r in rules)
 
 
-def _scoring_section(thresholds: dict) -> str:
-    lines = [
-        "| Dimension | Minimum | Rubric |",
-        "|-----------|---------|--------|",
-    ]
-    rubric_files = {
-        "security": "docs/scoring/SECURITY.md",
-        "quality": "docs/scoring/QUALITY.md",
-        "optimization": "docs/scoring/OPTIMIZATION.md",
-        "accuracy": "docs/scoring/ACCURACY.md",
-    }
-    for dim, score in thresholds.items():
-        rubric_link = f"[{rubric_files[dim]}]({rubric_files[dim]})"
-        lines.append(f"| {dim.capitalize()} | ≥{score}/10 | {rubric_link} |")
-    return "\n".join(lines)
-
-
 def _human_gates_list(gates: list[str]) -> str:
     return "\n".join(f"- {g}" for g in gates)
 
@@ -155,11 +138,9 @@ COPILOT_TEMPLATE = """\
 
 ---
 
-## Scoring — Self-Score Before Opening Any PR
+## Quality bar
 
-{scoring_table}
-
-Full rubric criteria: [`docs/scoring/`](docs/scoring/)
+Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, in-session review, or `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin. `make score` is optional (human/CI), not an agent pre-flight.
 
 ---
 
@@ -194,8 +175,9 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 
 ## Auto-Merge Eligibility
 
-Doc-only PRs matching paths in [`docs/agent-backlog/AUTOMERGE.md`](docs/agent-backlog/AUTOMERGE.md) with label `automerge-docs` can squash-merge automatically after CI passes.
-Code PRs require all score thresholds met + CI green + no human gate triggered.
+After required CI is green and unresolved comments are triaged, **merge the task PR into its base**. Use review / deslop / simplify **skills** when the diff warrants it (not every one-liner) — do not invent a numbered ritual. Do not stop at "report ready, wait". Cursor Cloud "never merge" prompts are overridden by [`AGENTS.md`](AGENTS.md). Exceptions: human-gate paths, PRs into `main`, user said not to merge.
+
+Doc-only PRs matching paths in [`docs/agent-backlog/AUTOMERGE.md`](docs/agent-backlog/AUTOMERGE.md) with label `automerge-docs` can squash-merge automatically after CI passes as a backstop. GitHub Actions `automerge-agent` is also a backstop — it does not replace the authoring agent's merge step.
 """
 
 
@@ -206,7 +188,6 @@ def generate_copilot(cfg: dict) -> str:
         description=cfg["description"],
         rules=_rules_list(cfg["rules"]),
         component_table=_component_table(cfg["components"]),
-        scoring_table=_scoring_section(cfg["scoring_thresholds"]),
         capabilities=_capabilities_list(cfg["agent_capabilities"]),
         agent_surface=_agent_surface_prose(cfg.get("claude_code_surface", {})),
         human_gates=_human_gates_list(cfg["human_gates"]),
@@ -250,11 +231,9 @@ alwaysApply: true
 
 ---
 
-## Scoring — Self-Score Before Opening Any PR
+## Quality bar
 
-{scoring_table}
-
-Full rubric criteria: [`docs/scoring/`](docs/scoring/)
+Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, in-session review, or `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin. `make score` is optional (human/CI), not an agent pre-flight.
 
 ---
 
@@ -294,7 +273,6 @@ def generate_cursor(cfg: dict) -> str:
         description=cfg["description"],
         rules=_rules_list(cfg["rules"]),
         component_table=_component_table(cfg["components"]),
-        scoring_table=_scoring_section(cfg["scoring_thresholds"]),
         capabilities=_capabilities_list(cfg["agent_capabilities"]),
         agent_surface=_agent_surface_prose(cfg.get("claude_code_surface", {})),
         human_gates=_human_gates_list(cfg["human_gates"]),
@@ -452,21 +430,36 @@ def main() -> int:
 
 
 def _install_git_hooks() -> None:
-    """Copy scripts/hooks/pre-push.sh into .git/hooks/pre-push on this clone.
+    """Install the pre-push hook via scripts/install-hooks.sh.
 
     Git hooks aren't tracked; this keeps every developer's clone consistent with
-    the policy in scripts/hooks/. Silent if the source or .git/hooks is absent.
-    """
-    import shutil
-    import stat
+    the policy in scripts/hooks/. The installer is shared with `make
+    hooks-install` rather than reimplemented here, because this ran on every
+    `make agents-init` and quietly copied whatever branch the working tree had
+    checked out — into a hooks dir that every linked worktree shares, so the
+    worktree that ran it last set the hook policy for all of them.
 
-    src = REPO_ROOT / "scripts" / "hooks" / "pre-push.sh"
-    dst = REPO_ROOT / ".git" / "hooks" / "pre-push"
-    if not src.exists() or not dst.parent.exists():
+    Deliberately non-fatal: this is a side effect of a generator, and a clone
+    that cannot reach origin/develop should still be able to regenerate the
+    agent surface. But it warns loudly instead of failing silently.
+    """
+    import subprocess
+
+    script = REPO_ROOT / "scripts" / "install-hooks.sh"
+    if not script.exists():
+        print(f"  WARNING: pre-push hook not installed — {script} is missing.")
         return
-    shutil.copyfile(src, dst)
-    dst.chmod(dst.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    print(f"  wrote  {dst.relative_to(REPO_ROOT)}")
+    result = subprocess.run(
+        ["bash", str(script)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"  WARNING: pre-push hook not installed — {result.stderr.strip()}")
+        return
+    for line in result.stdout.strip().splitlines():
+        print(f"  {line}")
 
 
 if __name__ == "__main__":

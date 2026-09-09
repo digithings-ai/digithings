@@ -1,0 +1,69 @@
+name: "Test: research graph"
+
+# Unit tests + ruff for the research sub-graph package and its scheduler
+# workflows. Complements `digiquant tests` — that job installs
+# only `digiquant[dev]`, which doesn't pull `digigraph`, so research tests get
+# skipped there (see tests/dq/research/conftest.py). This workflow needs the full
+# monorepo workspace so the research pipeline tests actually run.
+#
+# Installs from the committed uv.lock rather than resolving fresh (#1714, #1715).
+# `uv sync --all-packages` replaces scripts/install-workspace.sh here: that script
+# exists because sibling packages (digismith, digillm) are hard dependencies that
+# are not on PyPI, so a naive `pip install -e ./digigraph` cannot resolve them and
+# the install had to be hand-ordered topologically. A uv workspace resolves
+# siblings natively, so the ordering problem the script solved no longer exists.
+# The script is still used by the pipelines that check out `ref: main`, which has
+# no uv.lock yet.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: Ruff check
+        run: |
+          uv run --frozen --no-sync ruff check \
+            digiquant/src/digiquant/research \
+            digiquant/src/digiquant/portfolio \
+            digiquant/src/digiquant/dashboard/learning \
+            digiquant/src/digiquant/dashboard/replay/walk_forward.py \
+            tests/dq/research \
+            tests/dq/portfolio \
+            tests/dq/learning \
+            tests/dq/replay/test_walk_forward.py \
+            tests/dq/replay/phase4_e2e_fixtures.py \
+            tests/dq/replay/test_phase4_end_to_end.py
+
+      - name: Ruff format check
+        run: |
+          uv run --frozen --no-sync ruff format --check \
+            digiquant/src/digiquant/research \
+            digiquant/src/digiquant/portfolio \
+            digiquant/src/digiquant/dashboard/learning \
+            digiquant/src/digiquant/dashboard/replay/walk_forward.py \
+            tests/dq/research \
+            tests/dq/portfolio \
+            tests/dq/learning \
+            tests/dq/replay/test_walk_forward.py \
+            tests/dq/replay/phase4_e2e_fixtures.py \
+            tests/dq/replay/test_phase4_end_to_end.py
+
+      - name: Pytest
+        run: |
+          uv run --frozen --no-sync pytest -m unit \
+            tests/dq/research/ tests/dq/portfolio/ tests/dq/learning/ tests/dq/replay/test_walk_forward.py tests/dq/replay/test_phase4_end_to_end.py -v --tb=short

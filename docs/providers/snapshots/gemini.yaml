@@ -1,5 +1,5 @@
 provider: gemini
-last_checked: 2026-07-19
+last_checked: 2026-08-30
 source: agent-research
 
 free_tier:
@@ -17,8 +17,8 @@ free_tier:
       max_output_tokens: 65536
       status: active
       verified: true
-      last_verified: 2026-07-19
-      last_verified_latency_ms: 788
+      last_verified: 2026-08-30
+      last_verified_latency_ms: 8449
       verification_error: null
     - name: gemini-2.5-flash-lite
       context_window: 1048576
@@ -43,6 +43,15 @@ free_tier:
       max_input_tokens: 2048
       max_output_tokens: null
       status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: gemini-3-flash-preview
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 65536
+      status: active            # LOW CONFIDENCE, new this cycle: one aggregator lists this as free-tier eligible (1500 RPD); not corroborated against an authoritative Google page yet
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -159,4 +168,4 @@ verification:
   probe_model_alias: gemini-flash
   github_secret_key: GEMINI_API_KEY
 
-notes: "PROBE 2026-07-19: gemini-2.5-flash verified ok (788ms). MAJOR UPDATES 2026-06: 2.5-flash paid price raised to $0.30/$2.50 (was $0.15/$0.60). 2.5-pro free tier (2 RPM) removed April 1 2026 — now paid-only at $1.25/$10 (<200k) or $2.50/$15 (>200k); confirmed still true 2026-07-19, corroborated by multiple independent sources. Gemini 3 generation: model-id CORRECTION 2026-07-19 — 'gemini-3-flash' and 'gemini-3.1-pro' are actually preview-only ids (gemini-3-flash-preview, gemini-3.1-pro-preview); gemini-3.5-flash and a new gemini-3.1-flash-lite are the stable ids (flash-lite pricing not yet confirmed, not added to this snapshot). gemini-3.1-flash-lite-preview has also been retired in favor of the stable gemini-3.1-flash-lite. Gemini 2.0 Flash/Lite shut down June 1 2026 — confirmed still true. Free-tier flash-lite RPM corrected to 30 (not 15, same as flash) at the same 1500 RPD/1M TPM; exact free-tier numbers for the Gemini 3.x preview ids could not be corroborated from a single authoritative source this cycle (Google's rate-limits page is JS-rendered) — treat as approximate pending a live AI Studio dashboard check. PRIVACY: free tier trains on prompts — never send portfolio/thesis data on free tier; use paid billing for Phases 7/7D."
+notes: "PROBE 2026-08-30: gemini-2.5-flash verified ok, but latency jumped to 8449ms from 788ms on 2026-07-19 — a single data point, not yet treated as a reliability regression, but worth rechecking next cycle before drawing conclusions. NEW THIS CYCLE (low confidence): a secondary aggregator now lists gemini-3-flash-preview as free-tier eligible (1500 RPD) alongside 2.5-flash/2.5-flash-lite — added as a tentative entry pending confirmation against an authoritative Google page; if confirmed, this is a materially better free option (newer model, same quota) worth revisiting for any decision currently pinned to 2.5-flash. MAJOR UPDATES 2026-06 (unchanged, still valid): 2.5-flash paid price raised to $0.30/$2.50 (was $0.15/$0.60). 2.5-pro free tier (2 RPM) removed April 1 2026 — now paid-only at $1.25/$10 (<200k) or $2.50/$15 (>200k). Gemini 3 generation: model-id CORRECTION 2026-07-19 — 'gemini-3-flash' and 'gemini-3.1-pro' are actually preview-only ids (gemini-3-flash-preview, gemini-3.1-pro-preview); gemini-3.5-flash and a new gemini-3.1-flash-lite are the stable ids (flash-lite pricing not yet confirmed, not added to this snapshot). gemini-3.1-flash-lite-preview has also been retired in favor of the stable gemini-3.1-flash-lite. Gemini 2.0 Flash/Lite shut down June 1 2026. Free-tier flash-lite RPM corrected to 30 (not 15, same as flash) at the same 1500 RPD/1M TPM; exact free-tier numbers for the Gemini 3.x preview ids still not corroborated from a single authoritative source (Google's rate-limits page is JS-rendered) — treat as approximate pending a live AI Studio dashboard check. PRIVACY: free tier trains on prompts — never send portfolio/thesis data on free tier; use paid billing for Phases 7/7D."

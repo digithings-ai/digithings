@@ -1,5 +1,5 @@
 provider: cerebras
-last_checked: 2026-07-19
+last_checked: 2026-08-30
 source: agent-research
 
 free_tier:
@@ -15,16 +15,16 @@ free_tier:
       context_window: 128000
       max_input_tokens: 8192    # hard-capped on free tier
       max_output_tokens: 8192
-      status: deprecated        # absent from current official free-tier rate-limits page; probe returns 404 model_not_found
+      status: deprecated        # second consecutive cycle absent from official free-tier rate-limits page; probe still 404s
       verified: false
-      last_verified: 2026-07-19
-      last_verified_latency_ms: 116
+      last_verified: 2026-08-30
+      last_verified_latency_ms: 294
       verification_error: "Error code: 404 - {'message': 'Model does not exist or you do not have access to it.', 'type': 'not_found_error', 'param': 'model', 'code': 'model_not_found'}"
     - name: llama-4-scout
       context_window: 131072
       max_input_tokens: 8192    # hard-capped on free tier
       max_output_tokens: 8192
-      status: active
+      status: deprecated        # confirmed absent from current free-tier docs for a second cycle running (2026-07-19 and 2026-08-30)
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -33,7 +33,7 @@ free_tier:
       context_window: 32768
       max_input_tokens: 8192    # hard-capped on free tier
       max_output_tokens: 8192
-      status: active
+      status: deprecated        # confirmed absent from current free-tier docs for a second cycle running (2026-07-19 and 2026-08-30)
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -51,15 +51,33 @@ free_tier:
       context_window: 131072
       max_input_tokens: 64000   # 64K cap on free tier (exception to 8K rule)
       max_output_tokens: 8192
-      status: active
+      status: deprecated        # confirmed absent from current free-tier docs for a second cycle running (2026-07-19 and 2026-08-30)
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: zai-glm-4.7
+      context_window: 131072
+      max_input_tokens: 8192
+      max_output_tokens: 8192
+      status: active            # new: confirmed on current free-tier roster alongside gpt-oss-120b
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: gemma-4-31b
+      context_window: 131072
+      max_input_tokens: 8192
+      max_output_tokens: 8192
+      status: active            # new: confirmed on current free-tier roster alongside gpt-oss-120b
       verified: null
       last_verified: null
       last_verified_latency_ms: null
       verification_error: null
   rate_limits:
-    rpm: 30
+    rpm: 30              # LOW CONFIDENCE: official docs cite 5 RPM/30K TPM for gpt-oss-120b; third-party trackers still cite 30 RPM/60-100K TPM. Unresolved a second cycle running.
     rpd: null              # not RPD-limited; bounded by 1M tokens/day total budget
-    tpm: 60000             # 60k-100k tokens/minute on free tier
+    tpm: 60000             # 60k-100k tokens/minute on free tier (see rpm note on source conflict)
     input_tpm: null
     concurrent_requests: null
     reset_window: calendar_day
@@ -128,4 +146,4 @@ verification:
   probe_model_alias: cerebras-llama-70b
   github_secret_key: CEREBRAS_API_KEY
 
-notes: "Fastest inference on market (>2000 tok/s; gpt-oss-120b ~3000 tok/s). PROBE FAILURE 2026-07-19: llama-3.3-70b returns 404 model_not_found — cross-referenced against Cerebras's current rate-limits docs, which no longer list llama-3.3-70b, llama-4-scout, qwen-3-32b, or qwen3-235b on the free tier at all; the only free-tier models found this cycle are gpt-oss-120b, zai-glm-4.7, and gemma-4-31b at 5 RPM / 30K TPM / 1M TPD. CONFLICTING SOURCES: some trackers still describe the old no-CC 1M-tokens/day / 30 RPM / 8K-ctx-cap free tier; Cerebras's own docs now describe a 'Free Trial' requiring a verified payment method for $5 in credits (30-day expiry). Did not overwrite rate_limits with unconfirmed numbers — flagging for a direct signup-flow check next cycle. Paid per-token rate card also could not be reverified this pass (pricing page now emphasizes Code Pro $50/mo / Code Max $200/mo subscription tiers, both listed 'sold out')."
+notes: "Fastest inference on market (>2000 tok/s; gpt-oss-120b ~3000 tok/s). PROBE FAILURE 2026-08-30 (second cycle running): llama-3.3-70b again returns 404 model_not_found (294ms) — now treated as confirmed rather than tentative; llama-4-scout, qwen-3-32b, and qwen3-235b marked deprecated for the same reason (absent from official free-tier docs both cycles, no probe coverage to independently reverify). Added zai-glm-4.7 and gemma-4-31b to the free roster per this cycle's research, matching last cycle's finding that gpt-oss-120b + zai-glm-4.7 + gemma-4-31b are the only models the official rate-limits page lists for free tier. ACTION NEEDED: scripts/provider_review/probe.py:41 still targets the dead 'llama-3.3-70b' alias — repoint to openai/gpt-oss-120b so the probe exercises a live free-tier model. CONFLICTING SOURCES (unresolved a second cycle): official docs cite 5 RPM/30K TPM/1M TPD for gpt-oss-120b; several third-party trackers still cite the older 30 RPM/60-100K TPM/8K-ctx-cap figures recorded in rate_limits above. Did not overwrite rate_limits with the lower official-docs numbers without a direct signup-flow check — flagged again for next cycle. Paid per-token rate card also not reverified this pass (pricing page still emphasizes Code Pro $50/mo / Code Max $200/mo subscription tiers)."

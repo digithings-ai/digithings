@@ -93,7 +93,7 @@ export function FeaturePickerReference() {
           <p className="mt-[0.3rem] text-[0.92rem] text-ink">{current.role}</p>
           <p className="mt-[0.2rem] text-[0.85rem] text-ink-soft">{current.tagline}</p>
         </div>
-        <span className="absolute right-[1rem] top-[1rem] rounded-full border border-hair px-[0.5rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+        <span className="absolute right-[1rem] top-[1rem] rounded-none border border-hair px-[0.5rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
           {current.tier === "core" ? "core module" : "supporting"}
         </span>
       </m.div>

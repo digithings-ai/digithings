@@ -331,17 +331,17 @@
       <div class="palette">
         <div class="palette-bar">
           <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
-          <div class="path mono"><b>digiquant</b> · session/atlas-hermes-kairos · localhost:8001</div>
+          <div class="path mono"><b>digiquant</b> · session/research-portfolio-execution · localhost:8001</div>
           <div class="badge mono">SELF-HOSTED</div>
         </div>
         <div class="palette-body">
           <div class="term" id="term" aria-label="Terminal session demo">
-            <div class="line" style="animation-delay:.1s"><span class="prompt">dq&nbsp;❯</span><span class="cmd">atlas research --universe sp500 --since 30d</span></div>
+            <div class="line" style="animation-delay:.1s"><span class="prompt">dq&nbsp;❯</span><span class="cmd">research --universe sp500 --since 30d</span></div>
             <div class="line" style="animation-delay:.5s"><span class="out"><span class="ok">✓</span> ingested 4,812 docs · 61 filings · 9 macro prints</span></div>
-            <div class="line" style="animation-delay:.9s"><span class="out">→ surfaced <span class="num">14</span> candidate theses <span class="tag">[atlas]</span></span></div>
-            <div class="line" style="animation-delay:1.3s"><span class="prompt">dq&nbsp;❯</span><span class="cmd">hermes deliberate --theses 14 --carry prior</span></div>
-            <div class="line" style="animation-delay:1.7s"><span class="out"><span class="ok">✓</span> conviction-weighted · sized 6 vehicles <span class="tag">[hermes]</span></span></div>
-            <div class="line" style="animation-delay:2.1s"><span class="prompt">dq&nbsp;❯</span><span class="cmd">kairos backtest --engine nautilus --gate human</span></div>
+            <div class="line" style="animation-delay:.9s"><span class="out">→ surfaced <span class="num">14</span> candidate theses <span class="tag">[research]</span></span></div>
+            <div class="line" style="animation-delay:1.3s"><span class="prompt">dq&nbsp;❯</span><span class="cmd">portfolio deliberate --theses 14 --carry prior</span></div>
+            <div class="line" style="animation-delay:1.7s"><span class="out"><span class="ok">✓</span> conviction-weighted · sized 6 vehicles <span class="tag">[portfolio]</span></span></div>
+            <div class="line" style="animation-delay:2.1s"><span class="prompt">dq&nbsp;❯</span><span class="cmd">execution backtest --engine nautilus --gate human</span></div>
             <div class="line" style="animation-delay:2.5s"><span class="out">Sharpe <span class="num">2.31</span> · MaxDD <span class="down">-8.4%</span> · CAGR <span class="up">+27.6%</span></span></div>
             <div class="line" style="animation-delay:2.9s"><span class="out"><span class="tag">⏸ awaiting human approval to deploy</span><span class="cursor"></span></span></div>
           </div>
@@ -377,7 +377,7 @@
 
         <div class="stage reveal d1">
           <div class="idx mono"><span>01 / INGEST</span><span class="live">live</span></div>
-          <h3><span>Atlas</span></h3>
+          <h3><span>research</span></h3>
           <div class="role mono">researches</div>
           <p>Reads filings, news, macro prints and the order book. Surfaces structured theses with evidence trails — not vibes, citations.</p>
           <div class="feed mono">
@@ -389,7 +389,7 @@
 
         <div class="stage reveal d2">
           <div class="idx mono"><span>02 / WEIGH</span><span class="live">live</span></div>
-          <h3><span>Hermes</span></h3>
+          <h3><span>portfolio</span></h3>
           <div class="role mono">deliberates</div>
           <p>Carries prior conviction forward, debates competing theses, and mark-to-markets weights into sized vehicles on a rebalancing cadence.</p>
           <div class="feed mono">
@@ -401,7 +401,7 @@
 
         <div class="stage reveal d3">
           <div class="idx mono"><span>03 / EXECUTE</span><span class="live">gated</span></div>
-          <h3><span>Kairos</span></h3>
+          <h3><span>execution</span></h3>
           <div class="role mono">executes</div>
           <p>Backtests, optimizes, and routes orders on NautilusTrader — but only after a human approves the gate. Live paths never move on their own.</p>
           <div class="feed mono">
@@ -518,7 +518,7 @@
         </div>
         <div class="cmdline">
           <span class="accent">$</span>
-          <span id="ctaCmd">docker compose up digiquant &amp;&amp; dq atlas research</span>
+          <span id="ctaCmd">docker compose up digiquant &amp;&amp; dq research</span>
           <span class="cursor" style="height:13px"></span>
           <span class="copy" id="copyBtn">copy</span>
         </div>
@@ -532,7 +532,7 @@
     <div class="foot-grid">
       <div class="foot-brand">
         <a href="#" class="brand"><span class="logo" aria-hidden="true"></span>Digi<b>Quant</b></a>
-        <p>Quant-native AI trading infrastructure. Atlas researches, Hermes deliberates, Kairos executes — open core, self-hosted, human-gated.</p>
+        <p>Quant-native AI trading infrastructure. researches, portfolio deliberates, execution executes — open core, self-hosted, human-gated.</p>
         <div class="foot-meta">
           <span>v2.4.1</span><span>NautilusTrader 1.x</span><span>MIT core</span>
         </div>

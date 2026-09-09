@@ -1,0 +1,241 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { ChevronLeft, ChevronRight, LogOut, Search } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/web';
+import { DashboardMark } from '@/components/dashboard-mark';
+import { useAppShell } from '@/components/app-shell-context';
+import SidebarSettings from '@/components/sidebar-settings';
+import { useAuth } from '@/lib/auth-context';
+import { NAV, type NavItem } from '@/lib/nav';
+import { dashboardBasePath } from '@/lib/supabase';
+import { useCanAccessProduct } from '@/lib/use-entitlement';
+
+function routeActive(pathname: string, base: string, href: string): boolean {
+  const norm = pathname.replace(/\/+$/, '') || '/';
+  if (href === '/') {
+    // Only the real home route — not every top-level path (those have one segment too).
+    const baseNorm = base.replace(/\/+$/, '');
+    if (baseNorm) {
+      if (norm === baseNorm) return true;
+      if (norm.startsWith(`${baseNorm}/`)) {
+        const afterBase = norm.slice(baseNorm.length + 1);
+        return afterBase.split('/').filter(Boolean).length === 0;
+      }
+      return false;
+    }
+    return norm.split('/').filter(Boolean).length === 0;
+  }
+  if (href === '/portfolio') {
+    // Portfolio absorbs the legacy /performance route (now a tab).
+    return /\/portfolio(\/|$)/.test(pathname) || /\/performance(\/|$)/.test(pathname);
+  }
+  if (href === '/pipeline') {
+    // Pipeline replaces Why + System; absorbs legacy /why, /research, /library,
+    // /system, /observability, /architecture routes.
+    return (
+      /\/pipeline(\/|$)/.test(pathname) ||
+      /\/why(\/|$)/.test(pathname) ||
+      /\/research(\/|$)/.test(pathname) ||
+      /\/library(\/|$)/.test(pathname) ||
+      /\/system(\/|$)/.test(pathname) ||
+      /\/observability(\/|$)/.test(pathname) ||
+      /\/architecture(\/|$)/.test(pathname)
+    );
+  }
+  const candidates = [href, `${base}${href}`, `${href}/`, `${base}${href}/`].filter(
+    (p, i, a) => p && a.indexOf(p) === i
+  );
+  return candidates.some((p) => norm === p || norm.endsWith(p));
+}
+
+export default function Sidebar() {
+  const pathname = usePathname();
+  const base = dashboardBasePath();
+  const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNavOpen, openCommandPalette } =
+    useAppShell();
+  const { authEnabled, user, signOut } = useAuth();
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const canFxHub = useCanAccessProduct('fx_hub');
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname, setMobileNavOpen]);
+
+  async function handleSignOut() {
+    setSignOutError(null);
+    try {
+      await signOut();
+    } catch (err) {
+      setSignOutError(err instanceof Error ? err.message : 'Sign-out failed');
+    }
+  }
+
+  const identityLabel =
+    user?.email?.trim() ||
+    (typeof user?.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : null) ||
+    (typeof user?.user_metadata?.name === 'string' ? user.user_metadata.name : null) ||
+    'Signed in';
+
+  const renderLink = (item: NavItem) => {
+    const { href, label, icon: Icon, demoted } = item;
+    const isActive = routeActive(pathname, base, href);
+    const link = (
+      <Link
+        key={href}
+        href={href}
+        onClick={() => setMobileNavOpen(false)}
+        aria-current={isActive ? 'page' : undefined}
+        data-demoted={demoted ? 'true' : undefined}
+        className={`
+          flex items-center gap-3 py-3 text-sm font-medium transition-all
+          ${sidebarCollapsed ? 'md:justify-center md:px-3' : 'px-6'}
+          ${
+            isActive
+              ? 'text-ink bg-ink/[0.04] qn-sidebar-link-active'
+              : demoted
+                ? 'text-ink-mute hover:text-ink-soft hover:bg-ink/[0.02]'
+                : 'text-ink-soft hover:text-ink hover:bg-ink/[0.03]'
+          }
+        `}
+      >
+        <Icon size={demoted ? 18 : 20} className="shrink-0" />
+        <span className={`qn-sidebar-label ${sidebarCollapsed ? 'md:sr-only' : ''}`}>{label}</span>
+      </Link>
+    );
+    if (!sidebarCollapsed) return link;
+    // Collapsed rail: the label is sr-only, so surface it as the shared
+    // @digithings/web Tooltip (hover + focus, announced) instead of title=.
+    return (
+      <Tooltip key={href}>
+        <TooltipTrigger render={link} />
+        <TooltipContent side="right">{label}</TooltipContent>
+      </Tooltip>
+    );
+  };
+
+  const primary = NAV.filter((n) => {
+    if (n.demoted) return false;
+    if (n.href === '/twelve-x' && !canFxHub) return false;
+    return true;
+  });
+  const demoted = NAV.filter((n) => n.demoted);
+
+  return (
+    <>
+      {mobileNavOpen ? (
+        <div
+          className="fixed inset-0 z-[999] bg-black/60 md:hidden"
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden
+        />
+      ) : null}
+
+      <aside
+        id="app-sidebar-nav"
+        aria-label="Sidebar"
+        className={`
+          bg-surface/95 backdrop-blur-md border-r border-hair
+          flex flex-col shrink-0
+          fixed top-0 left-0 h-screen z-[1000] transition-all duration-300 ease-out
+          w-[260px]
+          ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:translate-x-0 md:relative md:z-auto
+          ${sidebarCollapsed ? 'md:w-[72px]' : 'md:w-[260px]'}
+        `}
+      >
+        <div className="border-b border-hair shrink-0 px-6 py-5 min-h-[72px] flex flex-col justify-center">
+          <div
+            className={`flex items-center justify-between gap-2 w-full ${sidebarCollapsed ? 'md:hidden' : ''}`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0" aria-label="digiquant">
+              <DashboardMark className="shrink-0" />
+            </div>
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="hidden md:flex p-2 text-ink-mute hover:text-ink hover:bg-ink/[0.06] border border-hair shrink-0"
+              aria-label="Collapse sidebar"
+            >
+              <ChevronLeft size={18} />
+            </button>
+          </div>
+          <div
+            className={`${sidebarCollapsed ? 'hidden md:flex' : 'hidden'} flex-col items-center gap-3 w-full py-1`}
+          >
+            <DashboardMark className="shrink-0" />
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="p-2 text-ink-mute hover:text-ink hover:bg-ink/[0.06] border border-hair"
+              aria-label="Expand sidebar"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+
+        <nav aria-label="Primary" className="flex-1 py-4 flex flex-col">
+          {sidebarCollapsed ? null : (
+            <button
+              type="button"
+              onClick={openCommandPalette}
+              className="hidden md:flex items-center gap-2 mx-6 mb-1 border border-hair px-3 py-1.5 text-xs text-ink-mute hover:text-ink-soft hover:bg-ink/[0.03] transition-colors"
+              aria-label="Search"
+            >
+              <Search size={14} className="shrink-0" />
+              <span className="flex-1 text-left">Search…</span>
+              <kbd className="font-mono text-[10px] text-ink-mute">⌘K</kbd>
+            </button>
+          )}
+          <TooltipProvider delay={200}>
+            {primary.map(renderLink)}
+            {demoted.length > 0 ? (
+              <div className="mt-auto pt-4 border-t border-hair/60">{demoted.map(renderLink)}</div>
+            ) : null}
+          </TooltipProvider>
+        </nav>
+
+        <div
+          className={`border-t border-hair mt-auto overflow-visible relative z-10 ${
+            sidebarCollapsed ? 'md:px-2 px-6 py-4' : 'px-6 py-4'
+          }`}
+        >
+          {authEnabled && user ? (
+            <div
+              className={`acct-session-rail ${sidebarCollapsed ? 'md:items-center' : ''}`}
+              data-testid="sidebar-auth-identity"
+            >
+              <p
+                className={`acct-session-email ${sidebarCollapsed ? 'md:sr-only' : ''}`}
+                title={identityLabel}
+              >
+                {identityLabel}
+              </p>
+              <p className={`acct-session-meta ${sidebarCollapsed ? 'md:sr-only' : ''}`}>signed in</p>
+              <button
+                type="button"
+                onClick={() => void handleSignOut()}
+                className={`btn-ghost inline-flex items-center justify-center gap-2 px-3 py-1.5 text-xs ${
+                  sidebarCollapsed ? 'md:justify-center md:px-2' : ''
+                }`}
+                aria-label="Sign out"
+              >
+                <LogOut size={14} className="shrink-0" />
+                <span className={sidebarCollapsed ? 'md:sr-only' : ''}>Sign out</span>
+              </button>
+              {signOutError ? (
+                <p className="acct-error" role="alert">
+                  {signOutError}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          <SidebarSettings sidebarCollapsed={sidebarCollapsed} />
+        </div>
+      </aside>
+    </>
+  );
+}
