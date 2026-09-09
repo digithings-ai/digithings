@@ -283,6 +283,29 @@ def record_pointer(client: Any, entry: ArchiveEntry, owner: str = "house") -> No
     ).execute()
 
 
+# Rows per PostgREST statement: blobs run ~650KB, so small pages keep each
+# statement under the Supabase statement timeout (prod 57014 on one thread).
+SELECT_PAGE_SIZE = 10
+
+
+def _fetch_thread_rows(
+    client: Any, table: str, thread_id: str, page_size: int = SELECT_PAGE_SIZE
+) -> list[dict[str, Any]]:
+    """Fetch one thread's rows in stable key-column order, one page per statement."""
+    order_cols = [c for c in BLOB_KEY_COLUMNS[table] if c != "thread_id"]
+    rows: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        query = client.table(table).select("*").eq("thread_id", thread_id)
+        for col in order_cols:
+            query = query.order(col)
+        page = query.range(offset, offset + page_size - 1).execute().data or []
+        rows.extend(page)
+        if len(page) < page_size:
+            return rows
+        offset += page_size
+
+
 def archive_thread(
     client: Any, store: StorageBackend, thread_id: str, owner: str = "house"
 ) -> ArchiveManifest:
@@ -295,7 +318,7 @@ def archive_thread(
     """
     entries: list[ArchiveEntry] = []
     for table in BLOB_TABLES:
-        rows = client.table(table).select("*").eq("thread_id", thread_id).execute().data or []
+        rows = _fetch_thread_rows(client, table, thread_id)
         for row in rows:
             payload = parse_postgrest_bytea(row.get("blob"))
             if payload is None:
@@ -462,6 +485,7 @@ __all__ = [
     "BLOB_TABLES",
     "HIGH_WATERMARK_BYTES",
     "LOW_WATERMARK_BYTES",
+    "SELECT_PAGE_SIZE",
     "R2Backend",
     "StorageBackend",
     "archive_thread",

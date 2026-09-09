@@ -44,14 +44,20 @@ class _Query:
     _filters: list[tuple[str, Any]] = field(default_factory=list)
     _pending_update: dict[str, Any] | None = None
     _pending_delete: bool = False
-    _order_col: str | None = None
+    _order_cols: list[str] = field(default_factory=list)
+    _range: tuple[int, int] | None = None
     fail: bool = False
 
     def select(self, cols: str) -> "_Query":
         return self
 
     def order(self, col: str) -> "_Query":
-        self._order_col = col
+        self._order_cols.append(col)
+        return self
+
+    def range(self, start: int, end: int) -> "_Query":
+        """Inclusive range, matching supabase-py/PostgREST semantics."""
+        self._range = (start, end)
         return self
 
     def delete(self) -> "_Query":
@@ -88,8 +94,12 @@ class _Query:
             return True
 
         rows = [r for r in table if _matches(r)]
-        if self._order_col is not None:
-            rows.sort(key=lambda r: r.get(self._order_col))
+        if self._order_cols:
+            cols = self._order_cols
+            rows.sort(key=lambda r: tuple(r.get(c) for c in cols))
+        if self._range is not None:
+            start, end = self._range
+            rows = rows[start : end + 1]
         if self._pending_delete:
             for row in rows:
                 table.remove(row)
@@ -519,3 +529,21 @@ def test_reconcile_reports_orphans_without_deleting():
     store.objects["checkpoints/orphan/x.bin"] = b"y"
     assert reconcile_ledger(client, store) == ["checkpoints/orphan/x.bin"]
     assert "checkpoints/orphan/x.bin" in store.objects
+
+
+def test_fetch_thread_rows_paginates_across_pages():
+    from digiquant.ops.checkpoint_archive import _fetch_thread_rows
+
+    client = FakeClient()
+    for i in range(5):
+        client.store.setdefault("checkpoint_blobs", []).append(
+            {
+                "thread_id": "t1",
+                "checkpoint_ns": f"ns{i}",
+                "channel": "c",
+                "version": 1,
+                "blob": b"x",
+            }
+        )
+    rows = _fetch_thread_rows(client, "checkpoint_blobs", "t1", page_size=2)
+    assert [r["checkpoint_ns"] for r in rows] == [f"ns{i}" for i in range(5)]
