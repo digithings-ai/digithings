@@ -23,23 +23,23 @@ tags:
 - OpenClaw runtime: the agent execution layer underneath digiclaw
 
 **Confirmed use cases:**
-- Atlas runner: the daily delta research cycle, weekly full generation, and monthly rollup are digiclaw-scheduled jobs — this is what makes Atlas run reliably without manual execution
+- Research runner: the daily delta research cycle, weekly full generation, and monthly rollup are digiclaw-scheduled jobs — this is what makes research run reliably without manual execution
 - Strategy monitor: watches a deployed live strategy's P&L, flags drift, takes defined actions on threshold breach
-- Strategy explorer: runs Kairos autonomously in the background, continuously iterating on strategy ideas and populating the research library
+- Strategy explorer: runs the execution graph autonomously in the background, continuously iterating on strategy ideas and populating the research library
 - Code reviewer: scheduled agent that reviews recent commits against quality criteria and files issues on failures
 
 **Why the audit trail matters:** When autonomous agents make decisions — modifying research files, flagging strategy drift, triggering rebalancing recommendations — there must be an immutable record. digiclaw's audit log is the accountability layer for everything that runs without a human in the loop.
 
 **ADDM (Adaptive Drift Detection Monitor):** Detects when autonomous agent outputs or running strategy behavior deviates from expected patterns — both strategy performance drift (vs. backtest baseline) and agent output quality drift (outputs changing character over time). Flags for human review before automated action.
 
-**Current state:** Heartbeat polling (digigraph, digiquant health) and JSONL audit logging implemented. OpenClaw integration, agent definition framework, and scheduling system not yet built. Atlas daily cycle still runs manually — migrating to digiclaw is a near-term priority.
+**Current state:** Heartbeat polling (digigraph, digiquant health) and JSONL audit logging implemented. OpenClaw integration, agent definition framework, and scheduling system not yet built. The research daily cycle still runs manually — migrating to digiclaw is a near-term priority.
 
 **12-month roadmap:**
 - OpenClaw integration
 - Agent definition schema and registry
 - Cron and continuous scheduling
-- Atlas daily cycle running automatically via digiclaw
+- Research daily cycle running automatically via digiclaw
 - Strategy performance monitor agent
 - digiclaw dashboard (agent status, audit log viewer)
 
-**Open source vs. proprietary:** digiclaw framework — open. The specific agent definitions (what Atlas does, how the strategy monitor reasons) — proprietary.
+**Open source vs. proprietary:** digiclaw framework — open. The specific agent definitions (what the research runner does, how the strategy monitor reasons) — proprietary.

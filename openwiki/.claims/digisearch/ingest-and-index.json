@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f009eb88e2a93ebdab3e6d3c93967aec07e0085d032315d4342d2e899025c31e",
+  "claims": [
+    {
+      "id": "claim_19a3f21ad9b844a187919d532516e1dc",
+      "statement": "Chunker selection resolves explicit name to per-index config to DIGISEARCH_CHUNKER to semantic default, through backend, document, and segment-aware ingest entry points with per-key caching.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/chunking/factory.py#L40-L132",
+          "version": "repo-lines-v1:sha256:6d3ddd87dd285a59dc4e544dc033054b563fc00e44f9bd148ba043592f8cb238:eyJzZWxlY3RlZExpbmVDb3VudCI6OTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiMTY4YTFmZmU2ZDk5ZTgwYzVhNjc0ZWU1NzE3ZGY2OTgyYzZmMDBlYTc3ZjljMWY1NjM2NjY5M2U1N2FhYjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcxNGM5ZmVhZjZlNTYzYWY3MzA3YzFhMTU3YzgxNjA5NTZkNGM5MGM1NzE1MWJhNzJkNzdiZDQwYTU0ZDU1OTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM3YjNkZmM3YmQ1MmRmNmIxMjRhOGRjMThmNWQwMjAxODhhZjYxMzNhMWM2NmJiZWRkNmUwMDdkZTUyMDc1Y2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a280c8b157fc4f5b9bc77c376922e9dd",
+      "statement": "BatchEmbedder fans out to the configured provider behind a SQLite model-namespaced content-hashed EmbeddingCache, and partial batches raise rather than dropping vectors.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/src/digisearch/embedding/batch.py#L15-L34",
+          "version": "repo-lines-v1:sha256:5caff8a78d86aae177509c76cc57e815a5d6020715d219282bfaf2db76f7bdc4:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEwZGRhN2E0ZmY4NTI5NjdkZTk0YjZlMjA1NWY2NTNhODFmNjg0N2YyMDg2OTdiMDYwNTlhMTI0OGZjNmI3MTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhNTc0OTAxYmQ2ZjRmYzBmNTU5MThmMjM5OWIyYTVkOWIzYTQ5YjMxMmEyOTdjY2Y4MTg1Mzc2M2YzN2VjMjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkyOTE2MzQ5YjJhNDY5ZGEyNzgzYjQ0MjZhMmJlNTcyMDAyY2Q4ZDRmNTU0MjM4NjgzNjIxMGMzZWZhN2M0ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJhOWQ1NWQ0ZjZiODA0YzdiMTc3MjRmY2JlZDdmODc3ZWMzYjBkY2Q0MTNkMzYyZWQ2NDdiOTgyNGRhMTljNWUifQ"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/embedding/cache.py#L16-L84",
+          "version": "repo-lines-v1:sha256:52fffaaf2110a7bb0f84fb8bd19f3910cebaac0dd47d10f8e8556f859991e2c4:eyJzZWxlY3RlZExpbmVDb3VudCI6NjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJiYzdjZTljY2Y4Y2ZlYmQ1NTFiYzQ3ZTE0YzU1N2M2NDMzYmQzYzBlZTIyZDc4YmJjNzM2ZWMyZmYxZmVmYjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhNTc0OTAxYmQ2ZjRmYzBmNTU5MThmMjM5OWIyYTVkOWIzYTQ5YjMxMmEyOTdjY2Y4MTg1Mzc2M2YzN2VjMjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJjZjZjZDk0MDVlMDg4NWVmYTQ2MjE3MzE3OTQ4NTJmYjk5ZmQ0YmFmOTEwYTMzMGJlMzZjZjM2NGNiOTBlZDMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8d403078e99649a9b153328f1d82529a",
+      "statement": "Ingest source is a validated server-side filesystem path with no traversal and no raw URLs, the bulk ingest worker is a Phase-2 stub, and Polars-only holds with no exceptions.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/AGENTS.md#L30-L60",
+          "version": "repo-lines-v1:sha256:147f9042a445fbe6aa11a5f6c54a3ef6abff3ad537550bab671ebe2a50349d5b:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2MzQwMjFmY2ViNzlmZTNlODljZGQ2NjAzZmFkZjYyMzYyYjJkYTVjYzkwYzRlNDhmMGQ0YjdlMTkzNDFhZWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEwYWM3MzRhNjNlNjhkOGE2OWI4ZjE5OWI1OWMxNDgyYzg3NWMxYjgyNjQxODEyMjhjNDFhYWI1MTQzZDA4MmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYwNjFiNWY1NmQwNTE3YTE0ZDI1MjAzYjRhZWM2NjJlYzgzNjlkOGMzODc5YzMwOWNlOTYzYWI1YTUxMGJhMmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhhZTZiM2FjZWVjMzRmZDdlYTRlY2Y1MWIzOTgxNDExMWU4N2I0OTRjMmZkMjAzNGM3MDQzN2Q2MTMxZmI2YmUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

@@ -109,7 +109,7 @@ export function TerminalBudgetReference() {
 
       <div className="mt-[1.2rem] grid grid-cols-[minmax(0,1fr)_220px] gap-[1rem] max-[900px]:grid-cols-1">
         <article
-          className="rounded-[12px] border border-hair bg-surface p-[1rem]"
+          className="rounded-none border border-hair bg-surface p-[1rem]"
           aria-label="Scripted digithings terminal"
         >
           <header className="flex justify-between font-mono text-[0.68rem] uppercase tracking-[0.08em] text-ink-soft">

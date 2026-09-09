@@ -10,7 +10,7 @@ free_tier_type: credit-based
 access_requirements:
   - email
 data_privacy_on_free: regional_law
-verified_at: 2026-07-19
+verified_at: 2026-08-30
 source_urls:
   - https://api-docs.deepseek.com/quick_start/pricing
   - https://platform.deepseek.com/api-docs
@@ -95,7 +95,7 @@ Same weights, Western data jurisdiction:
 | DIGI_LLM_MODE tier | `medium` to `best` (for reasoning tasks) |
 | Single-shot 100k | **Partial** — 65k context; 100k inputs require chunking or use V4 variants |
 | Privacy safe | **No (direct)** — China-hosted; use Fireworks/Together for sensitive inputs |
-| Atlas/Hermes role | Deep quantitative reasoning pass; EPS/guidance extraction; risk scoring |
+| research/portfolio role | Deep quantitative reasoning pass; EPS/guidance extraction; risk scoring |
 
 ---
 
@@ -105,7 +105,7 @@ Same weights, Western data jurisdiction:
 - 65k context on current V3/R1 is below 100k — chunking or map-reduce required for full 10-K analysis. DeepSeek V4 targets 1M context (verify availability).
 - The 5M token grant is one-time on new accounts — verify if it has an expiry date at signup.
 - After credits: among the cheapest frontier inference ($0.27/$1.10 per 1M in/out for V3).
-- Off-peak discount available (50% off between UTC 16:30–00:30) — use for batch Atlas runs.
+- Off-peak discount available (50% off between UTC 16:30–00:30) — use for batch research runs.
 
 ---
 
@@ -121,3 +121,4 @@ After grant: $0.27/$1.10 per 1M in/out (V3/chat); $0.55/$2.19 (R1/reasoner). Off
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
+| 2026-08-30 | Automated snapshot sync | provider-review scan |

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Footer } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "../../_nav";
+import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 import { OPENAPI_SERVICES } from "@/lib/openapiCatalog";
 
@@ -43,7 +42,7 @@ export default function OpenApiIndexPage() {
                 <li key={s.id}>
                   <Link
                     href={`/docs/api/${s.id}/`}
-                    className="flex flex-col gap-[0.2rem] rounded-[10px] border border-hair px-[1rem] py-[0.85rem] no-underline transition-colors duration-150 ease-brand hover:bg-accent-weak"
+                    className="flex flex-col gap-[0.2rem] rounded-none border border-hair px-[1rem] py-[0.85rem] no-underline transition-colors duration-150 ease-brand hover:bg-accent-weak"
                   >
                     <span className="font-mono text-[0.95rem] text-ink">
                       <span className="dt-d">digi</span>
@@ -72,7 +71,7 @@ export default function OpenApiIndexPage() {
           </div>
         </div>
       </main>
-      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
+      <DtFooter />
     </>
   );
 }

@@ -133,9 +133,11 @@ export function buildStatSlices(data: TearsheetData, pivot: StatsPivot): StatSli
   const full = fullPeriodSlice(data, equity, drawdown);
 
   if (pivot === "direction") {
-    return [
+    const cols: StatSlice[] = [
       { ...full, id: "all", label: "all", breakdown: data.overall },
-      {
+    ];
+    if (data.long != null) {
+      cols.push({
         id: "long",
         label: "long",
         startISO: data.period_start,
@@ -145,8 +147,10 @@ export function buildStatSlices(data: TearsheetData, pivot: StatsPivot): StatSli
         drawdown,
         breakdown: data.long,
         allowAlpha: false,
-      },
-      {
+      });
+    }
+    if (data.short != null) {
+      cols.push({
         id: "short",
         label: "short",
         startISO: data.period_start,
@@ -156,8 +160,9 @@ export function buildStatSlices(data: TearsheetData, pivot: StatsPivot): StatSli
         drawdown,
         breakdown: data.short,
         allowAlpha: false,
-      },
-    ];
+      });
+    }
+    return cols;
   }
 
   return [full, ...collectCalendarSlices(data, equity, drawdown)];

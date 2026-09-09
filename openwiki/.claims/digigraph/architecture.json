@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:7246c9420d2c25820ab421f318d2d13b5dae2ce04bcbb3f27615f44590e91023",
+  "claims": [
+    {
+      "id": "claim_11047ca9946043d3b18fc1c4a1cf7e84",
+      "statement": "The compiled StateGraph routes research, validate_strategy, backtest, and optimize nodes through profile-driven conditional edges, with an opt-in supervisor node ahead of research.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/graph/graph.py#L332-L347",
+          "version": "repo-lines-v1:sha256:66b993031bf6b85a99d6aa644fce5e94d78e3a48965f5aff44821d3cbd6e6273:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQyYmQzYmEwM2FkMGE3YjZhYTc3NzUwOTgzMzk1ZmNkYzg0N2JkMjE1OGYzNzU5OTE3ZDFhYjc2ZTM3ZDQ0YmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJiZDU1YjIxNjU5NmVkNzkwOTczOTFhMjg1MTA1ZDI4ODM3MmMxYWM3YTM4MzAzZWFlNTRiNTkzYTYzNmJlMzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJiYWIxYmI5MjFhZWY0YjgzOTA4Y2FmMTAxNTYxYjE2OGY3YmRmNzFiY2FlNWExYTQ1N2M4YmY0OTcwNmUxZTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg1MzcxOTIxNDIzMmI4YWM1OGYxZTg4NjBmMDY2NWY3MmRhNTExMDZmMjdiMjEyNzVlYjVkNGUwYzVjZTEwOGYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_585a79b88c3e4b44aa543ef792d4cb34",
+      "statement": "All capabilities register via register_tool/register_skill/register_mcp_server with ToolContext.allowed_tool_names enforced at dispatch; verticals publish schemas via orchestrator_tools and execute via orchestrator_invoke.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L97-L190",
+          "version": "repo-lines-v1:sha256:742abff0f037a9638e29b4ddbcf6f35f0e4db41f476d3dae9cb4a06cf1bfa02f:eyJzZWxlY3RlZExpbmVDb3VudCI6OTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0ZGFkZGM0MmMzY2Y5OWQ2ZWM1YjNjNjhlMTViNTRmM2ZlMTRkM2MzMjljMDk4Yjc5Nzk3ODk0ZDNiZjlmNDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1ZTZmMTE4MzJkYmVjNmE5NDMxZTJjZjFiODNmYmUxZTNhYWQ5OGJhN2E3YTI0Mzc0N2E5Y2Q0ODk3MDFkYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEwOGI1YmU1ZDE5MDQ3NDBhZjQ0MGNlYzAwOGE1MzhlNjY3YWY1ZWE3NjFkNWMyOTM2MDQ3NjNlMjQzYmJlMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIyN2NmZDc3ZmIyMjNmYzg1NzA5YTg4OGZjNDgzYzlkMzQyNzE4YTJmZDM3YzJmZGM1ZTUzNTAyYjljZDg0M2QifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fe68e8959d4745d98b53f69aa54545cc",
+      "statement": "digigraph coordinates but never implements vertical logic, and never imports digisearch or digiquant Python packages — all vertical calls go over HTTP.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/ARCHITECTURE.md#L12-L20",
+          "version": "repo-lines-v1:sha256:4784a5cbe5bd2b02402c0e7c23c43f95905114c8f38a205795fa23fe9d55ef4c:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDM3OWFhOTJlMmJhZjNhYjk3YTE2ZDhhZDQ1MTE4ZjY2YjcxMzQzMGQyOWNjZDJiMWY4ODM2MTU4MWMxYmM1YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODEwMWNhZDM3MGJjNDY3NzAwYjFmNjM1NzM5MzA2ZmVlYjBhZDQyNTg1MDlmZjVhNzU2YWUwYjRjZDdlYjNjNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWJiM2UzZWJjMWZkZmY5YjhhZTBiYTkyZDQ1YmY2NjNjMzk3YTZhNmIzYmM4MTI0ZmRlMjllZmQzOTIyY2ZhZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDAxZjJlYzE3NTkzYzEwNTRlYjQ2MzY3ZDg0NTNlZjI0YTE3M2NlOTZiNzExN2Q5MWY5YTY4ZDQ0ZmVmOGIwMSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_80620cd2508e4b47b47bf9661748c095",
+      "statement": "WorkflowState carries only refs and summaries with large data in digistore, LLM traffic goes through llm_client wrapping digillm, and models resolve via get_model_for_mode.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/AGENTS.md#L30-L60",
+          "version": "repo-lines-v1:sha256:9a6dd900b69e8e829051ee271f8a6296d95253de63477bcbabb98b10be21c140:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4YjAyMzIyZTM4Zjk3MzczYTQ2Nzk5ODRmN2EwNjI5MjRhYTcyYTc0NTU0NTM5ODcwNmUzYTMwZDVmZDg2ZTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2YjdmOWI5NDgwY2YwMDI1ZjkyMDlmOTVjN2NmYWNlNDQ2NjYxZjcxMmMyZGE1YjA4NWEyMWVkZDc1YTI0NTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNmODdjMDc1NThjZWRlYTQyMDFmYjhmZTcwOWM2MzJjNjYyYzU5ZGM3YjkxYTUwODkwYjhlNTJjMzhiZWY0NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU5YjQyYThlM2E1NmM4MWU5MjBlNDJiZWRiZGM4YzhmYjQ3YmUwNjRmNTU1Y2I5NDJiODE0ZDQ0OTg2YjMwOTcifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

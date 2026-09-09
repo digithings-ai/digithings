@@ -1,9 +1,9 @@
-"""Unit tests for the persisted Olympus cumulative-return contract (#1615)."""
+"""Unit tests for the persisted dashboard cumulative-return contract (#1615)."""
 
 from __future__ import annotations
 
 import pytest
-from digiquant.olympus.performance_returns import calculate_performance_returns
+from digiquant.dashboard.performance_returns import calculate_performance_returns
 
 pytestmark = pytest.mark.unit
 

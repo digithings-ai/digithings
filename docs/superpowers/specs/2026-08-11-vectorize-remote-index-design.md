@@ -71,11 +71,12 @@ Both corpora fit the free tier with roughly 8x headroom on storage.
    Workers AI (`bge-base`, 768 dims) was considered and rejected for now: it
    adds a per-query network dependency and latency for no correctness gain.
 2. **Two separate Vectorize indexes**, not one index with namespaces:
-   `digithings-docs` and `occ-help`. Isolation is then structural — an OCC
-   query physically cannot reach digithings vectors — rather than depending on
-   every call site passing the right namespace. Maps 1:1 onto the existing
-   `DIGI_TENANT_CORPUS_MAP`. The free tier allows 100 indexes, so this costs
-   nothing.
+   `digithings_docs` and `occ_help` (underscore form is canonical — verified
+   live; hyphenated names in earlier drafts were wrong). Isolation is then
+   structural — an OCC query physically cannot reach digithings vectors —
+   rather than depending on every call site passing the right namespace. Maps
+   1:1 onto the existing `DIGI_TENANT_CORPUS_MAP`. The free tier allows 100
+   indexes, so this costs nothing.
 3. **Corpus source: Supabase**, not a re-crawl. `architecture_notes` already
    holds the verified 1,279 + 328 notes. Deterministic, and it avoids
    re-crawling a client's help centre on every corpus rebuild.

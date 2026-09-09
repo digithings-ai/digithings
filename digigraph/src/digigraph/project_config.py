@@ -52,8 +52,8 @@ class AgentsLlmConfig(BaseModel):
         return _DEFAULT_LLM_KEY_ENV.get(self.provider.strip().lower(), "OPENAI_API_KEY")
 
 
-class SitaasLimits(BaseModel):
-    """Runtime limits for SITAAS / project-mode operations.
+class ProjectLimits(BaseModel):
+    """Runtime limits for project-mode operations.
 
     Precedence (highest to lowest):
       1. Environment variable (e.g. ``DIGI_MAX_ROWS_PER_FETCH``)
@@ -78,7 +78,7 @@ class SitaasLimits(BaseModel):
     )
 
     @classmethod
-    def from_config(cls, data: dict[str, Any]) -> "SitaasLimits":
+    def from_config(cls, data: dict[str, Any]) -> "ProjectLimits":
         """Build limits from ``limits:`` YAML block, then apply env-var overrides."""
         limits_yaml: dict[str, Any] = data.get("limits") or {}
         kwargs: dict[str, Any] = {}
@@ -389,16 +389,16 @@ class DigiProjectConfig:
         )
 
     def get_enabled_skills(self) -> list[str]:
-        """Skill ids to enable for the research node (e.g. search, sitaas_rag).
-        From project YAML skills.enabled, or default [\"search\", \"sitaas_rag\"] when
+        """Skill ids to enable for the research node (e.g. search, project_rag).
+        From project YAML skills.enabled, or default [\"search\", \"project_rag\"] when
         document mode and run_data_dir are in use.
         """
         skills_cfg = self._data.get("skills") or {}
         explicit = skills_cfg.get("enabled")
         if isinstance(explicit, list) and explicit:
             return [str(s) for s in explicit]
-        # Default: search + sitaas_rag so registry returns search tools and delegate agents when run_data_dir set
-        return ["search", "sitaas_rag"]
+        # Default: search + project_rag so registry returns search tools and delegate agents when run_data_dir set
+        return ["search", "project_rag"]
 
     def get_planning_mode(self) -> bool:
         """Whether to use plan-and-execute: after create_plan tool, run executor and then synthesis."""
@@ -454,9 +454,9 @@ class DigiProjectConfig:
             return raw.strip().lower() not in ("0", "false", "no", "off", "")
         return bool(raw)
 
-    def get_limits(self) -> SitaasLimits:
-        """Return SITAAS runtime limits (env overrides YAML overrides defaults)."""
-        return SitaasLimits.from_config(self._data)
+    def get_limits(self) -> ProjectLimits:
+        """Return Project-mode runtime limits (env overrides YAML overrides defaults)."""
+        return ProjectLimits.from_config(self._data)
 
     def get_workflow_profile(self) -> str:
         """Workflow topology profile. Env DIGI_WORKFLOW_PROFILE overrides YAML.

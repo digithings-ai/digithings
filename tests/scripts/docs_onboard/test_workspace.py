@@ -25,4 +25,5 @@ def test_workspace_append_pages(tmp_path: Path) -> None:
     assert loaded[0].url.endswith("/guide")
     assert ws.assets_dir.is_dir()
     assert ws.html_dir.is_dir()
+    assert ws.search_md_dir.is_dir()
     assert ws.meta_dir.is_dir()

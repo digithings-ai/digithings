@@ -9,7 +9,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { MotionProvider } from "../motion/primitives";
-import { Colophon } from "./chrome";
+import { Colophon, Footer } from "./chrome";
 
 describe("Colophon — server pass", () => {
   it("always applies the sweep's motion style during SSR", () => {
@@ -29,5 +29,28 @@ describe("Colophon — server pass", () => {
       </MotionProvider>,
     );
     expect(html).not.toContain("colo-sweep");
+  });
+});
+
+describe("Footer profiles slot", () => {
+  it("renders an optional profiles node next to the utility links", () => {
+    const html = renderToStaticMarkup(
+      <Footer
+        links={[{ label: "Docs", href: "/docs" }]}
+        meta="© 2026 digithings"
+        profiles={<span data-slot="profiles">row</span>}
+      />,
+    );
+    expect(html).toContain('data-slot="profiles"');
+    expect(html).toContain("Docs");
+    expect(html).toContain("© 2026 digithings");
+  });
+
+  it("keeps the utility row when no profiles are passed", () => {
+    const html = renderToStaticMarkup(
+      <Footer links={[{ label: "Docs", href: "/docs" }]} meta="© 2026 digithings" />,
+    );
+    expect(html).toContain("Docs");
+    expect(html).not.toContain("data-slot=\"profiles\"");
   });
 });

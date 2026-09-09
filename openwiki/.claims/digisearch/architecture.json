@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:d720fcd9ab721902da8348011502bc7f6127c7c5850a4f42bcc705b58bc4cf06",
+  "claims": [
+    {
+      "id": "claim_002c3dc0b3f5408b9e027a144b32068c",
+      "statement": "digisearch owns the full RAG pipeline from ParserRegistry through ChunkerBackend, embedding providers, DigiIndex, and the query_index router to normalized hits with optional rerank and RRF fusion.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/ARCHITECTURE.md#L26-L70",
+          "version": "repo-lines-v1:sha256:e7642cb3a963ca7cc93dce3d53a212081e26c2ad49252f1802982944d4ea3f7e:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzNThjYzE2Yzk5NTU1NWEwYjgxZGZiODg4ZjQ1MjhiNjM5NDYxMjAxMzM5MTBjM2EyMjUzZTRiNWY3MTMyMTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM2YmFhZmI4MDI0MTFlYmE2ODdmZTdmN2I1Y2Q0ZjU4NTQ5ZTU2N2JiMTkyYTRlZWZkOGQyZmY4NGExNTYyZjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNhODRiMGE2YjdiOTczOTExMmJiNjkyZTg0NjE4NzJiOGQwZDhmMGIxNjA2MzM2MGNlMzZmNDc3M2QwM2U2ZjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_be1ed153e7c843b9ad018d38b87199e1",
+      "statement": "The backend registry routes across Azure AI Search, Cloudflare Vectorize, and Chroma, with the in-memory stub running only under DIGISEARCH_ALLOW_STUB for tests.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/ARCHITECTURE.md#L60-L65",
+          "version": "repo-lines-v1:sha256:9384213b29e2b4fc89cc79e23fcfd8835b155e52d9cb7823e8c54e3d1a03e2c1:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmYyODgzY2Y1MTEwYjhiZDE3NDcwYjQyYWU2MzhiNWZmN2IyZjZjYTY4NTc1MWI1MTU1MjE4YTE5Nzg4Y2QzZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWJkNTk3ODg4NzYxYjhhMDQxMTAzZGE4NjM3ZmNkZTFmODU5NTY4MjNiNWMyY2FkOGUwYTYzYjI4MTljYmZkYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGRkNTYwM2IxMWFiNDgyMWExN2M3MTc1YjZlM2QyNTNmNTk4NDliNzZiMGQ0NGExOGY0ODA1ZjQwMzQ1ZWE5NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzEwMmU5ZmY3YWNmYTYxYzIzZTRjMTYxOTIzNGVhZDY2MGU3Nzc2MzBmYjA1OTk4MGE0ODM3MTk5MmUyZmNjNiJ9"
+        },
+        {
+          "resource": "repo://digisearch/src/digisearch/search/_stub.py#L1-L30",
+          "version": "repo-lines-v1:sha256:08c3ab7cc5b439681057e420e0982068cdc3516e1c8d00cda6896fbf7f68a75e:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg1M2U3NjkyYThiODM5M2U2MWJhMzdjZGE5YzExY2Y2MDFjMmJmNjExYTg0ZTBjNDdhNjFjMTFmZWJmOTNmZGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEyNGY2NjA1ODc4MDc2YzQ3YzI2MWI2NmIyYTBiMDZlMTAwOTBkNTgwZDJiMzU1ZTAwMTMwY2M0NDg1Y2M5YzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM2YTVjYjM3OTkyNzdkNzNmZDA2ODMyOTU1ZWJmZjQ2MGI1ZTgzZWNhNGI0ZjM3ZmYxOTJkY2Q1ZmIxYmE3ODUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d258959c79264f72ac35620f5eb48bde",
+      "statement": "As a federated vertical, digisearch owns its tool schemas and dispatch entirely while digigraph only forwards, with direct access via REST, MCP on 8765, CLI, and port 8002.",
+      "evidence": [
+        {
+          "resource": "repo://digisearch/ARCHITECTURE.md#L32-L39",
+          "version": "repo-lines-v1:sha256:6398971f363eb3df2f129f779e9e59e58249806726dc004b26bf648d3fe0a163:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGI3Y2U0NWFjMWNjNjczN2UyNWJjMWFjZjE5M2Y2NmI4ZDMwMmZmMzkyMTY4ZTczMjE3YzYyZTA1ZjA4YmFhYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWMxMzI2MTU3MzVmNjg1MTJlNjA5NDg5YjRhOTM2ZGFhNDE4MDhhYTcxMGY2YzA5NDZiM2IxMzNlMWE1Njg0OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWY0OTA5YTEwYjFlYTY2Zjk0NjQ3ODFjOTg0MjRlYWEwMzE3ZjY3MWJmZDk5YWFkNWMwNDQxMDZkNDJlMTA2ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzZhMDk4M2FmNmRkYjFjMjY4ZTcyYjFkZjRlYmJjYmIzZjg5M2ZiZWVlNTMzMTRkNDUxZmEyMzI1NWNmZTk1ZCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

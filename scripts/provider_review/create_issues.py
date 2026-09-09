@@ -18,7 +18,7 @@ from pathlib import Path
 
 FINDINGS_PATH = "/tmp/review/findings.json"
 LABEL = "provider-review"
-ISSUE_LABELS = "exec:claude,component:root,type:research,priority:medium,risk:low,provider-review"
+ISSUE_LABELS = "agent-task,component:root,priority:medium,provider-review"
 MARKER = "<!-- provider-review -->"
 DEDUP_KEY_FORMAT = "{provider}:{trigger}"
 

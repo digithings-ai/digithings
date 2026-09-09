@@ -44,7 +44,7 @@
 | `node_modules/` | Root npm workspace install | `npm install` at repo root for Olympus/design | **Gitignore** (already); do not commit | High |
 | `digiquant/data/` | OHLCV samples for backtests/Docker | Compose mount, `run_stack_local.sh`, tests/docs | **Keep README in git**; CSVs **gitignored** (correct) | High |
 | `data/` (repo root) | Atlas **price-history** CSV cache + agent-cache paths in scripts | `history_cache`, frozen `scripts/atlas/compute-technicals.py` | **Gitignore** entire tree; document as runtime cache | Medium |
-| `projects/` | Confidential per-project Docker stacks (SITAAS, twelve_x, local) | Operators; **entire tree gitignored** | **Keep locally**; never commit contents; optional allowlist `projects/README.md` (JAN-014) | High |
+| `projects/` | Confidential per-project Docker stacks (client-pilot, twelve_x, local) | Operators; **entire tree gitignored** | **Keep locally**; never commit contents; optional allowlist `projects/README.md` (JAN-014) | High |
 | `docs/projects/` | Public dogfood project specs | digigraph indexing, guides | **Keep** | High |
 | `docs/superpowers/` | Ad-hoc agent specs/plans | Human/agent planning only | **Keep**; commit untracked June 2026 files or move to issues | Medium |
 | `package.json` + `package-lock.json` | npm workspaces `frontend/*` | CI, local frontend builds | **Keep** lockfiles; **regenerate** to drop stale `apps/digiquant-atlas` entries (JAN-003) | High |
@@ -180,7 +180,7 @@ Planning docs (provider review, FX automation). Some June 2026 files were untrac
 | **JAN-026** | PR hygiene | Split or relocate large `docs/superpowers/plans/*` | S | Low |
 | **JAN-027** | Pre-commit | Size limits catch >200 KB JSON/HTML | S | Low |
 | **JAN-028** | Unify | `scripts/build-digiquant.sh` vs missing GHA workflow | M | Low |
-| **JAN-029** | Keep | `projects/sitaas`, `projects/twelve_x` — confidential, gitignored | — | — |
+| **JAN-029** | Keep | `projects/client-pilot`, `projects/twelve_x` — confidential, gitignored | — | — |
 | **JAN-030** | Keep | All six Python service trees | — | — |
 | **JAN-031** | Keep | `frontend/digiweb/design` + static landings | — | — |
 | **JAN-032** | Done | This file (`docs/reviews/2026-06-repository-janitor-audit.md`) | S | None |

@@ -8,9 +8,8 @@
  * scrolled into view (`animateIn`); reduced motion renders the whole chain
  * settled. Uncontrolled by default (`defaultOpen`) or controlled via
  * `open`/`onOpenChange`. Pass `steps` for the railed list, or `children` for
- * a custom body (e.g. digichat-ui's single reasoning blob — its
- * ChatActivities `reasoning` kind rebuilds as
- * `<ChatThinking label="reasoning"><pre>{text}</pre></ChatThinking>`).
+ * a custom body (e.g. digichat’s reasoning part —
+ * `<ChatThinking label="Reasoning"><pre>{text}</pre></ChatThinking>`).
  * Step text inherits the surrounding transcript font. Chip background/hover,
  * caret art, the pulse, the step rail, and the reveal transitions live in
  * styles/chat-widgets.css (import it once app-wide; see the wiring note
@@ -73,7 +72,7 @@ export function ChatThinking({
     <div className={`flex flex-col items-start gap-[0.55rem]${className ? ` ${className}` : ""}`}>
       <button
         type="button"
-        className={`think-chip inline-flex cursor-pointer items-center gap-[0.5rem] rounded-full border border-hair px-[0.7rem] py-[0.35rem] font-mono text-[0.7rem] text-ink-mute${
+        className={`think-chip inline-flex cursor-pointer items-center gap-[0.5rem] rounded-none border border-hair px-[0.7rem] py-[0.35rem] font-mono text-[0.7rem] text-ink-mute${
           isOpen ? " open" : ""
         }`}
         aria-expanded={isOpen}

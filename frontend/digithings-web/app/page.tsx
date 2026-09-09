@@ -1,40 +1,44 @@
 import {
   Colophon,
-  Footer,
   NumberedStages,
   OdometerStrip,
+  RepoActivity,
   Reveal,
+  SocialRow,
   StackRow,
   WordReveal,
   type NumberedStage,
   type OdometerStat,
   type StackItem,
 } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "./_nav";
-import { ContactMailto } from "@/components/ContactMailto";
+import { ContactMailto } from "@digithings/web";
+import { DT_CONTACT_EMAIL } from "@/app/_nav";
+import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { ModuleManifest } from "@/components/landing/ModuleManifest";
-import { RepoActivity } from "@/components/landing/RepoActivity";
-import { RepoStrip } from "@/components/landing/RepoStrip";
+import {
+  CONTRIBUTING_URL,
+  REPO_CLONE,
+  REPO_LIVE,
+  REPO_URL,
+  repoActivity,
+} from "@/lib/repoActivity";
 
 // v8 landing for the digithings platform — 100% reference-sourced + expressive
 // (#1450). A mouse-following mesh-gradient hero (HeroMesh + reveal-field
 // HeroGraph) opens, then every visual block is a promoted @digithings/web
-// primitive or token-backed utility: the RepoStrip activity band, a digit-roll
-// OdometerStrip metrics band, the shared TerminalManifest, the NumberedStages
-// principles spine, the RepoActivity section, and the one big WordReveal claim.
-// The mesh / graph / counters / reveal are client islands; the page stays a
-// server component and exports statically. Every motion moment honors
-// prefers-reduced-motion and reads with no JS (html.no-js fallbacks).
+// primitive or token-backed utility: a digit-roll OdometerStrip metrics band,
+// the shared TerminalManifest, the NumberedStages principles spine, the
+// RepoActivity section, and the one big WordReveal claim. The mesh / graph /
+// counters / reveal are client islands; the page stays a server component and
+// exports statically. Every motion moment honors prefers-reduced-motion and
+// reads with no JS (html.no-js fallbacks).
 //
 // The slot under the hero used to hold a drifting <Marquee> of the seven core
-// dependencies. It was removed, not restyled: it named the same libraries the
-// #integrations section names deliberately and in full, so it added no
-// information and paid for that with perpetual motion under the hero. <RepoStrip>
-// takes the slot and spends it on live repository activity instead. The Marquee
-// primitive itself stays in @digithings/web — the design reference still
-// specimens it.
+// dependencies, then a RepoStrip of snapshot figures. Both are gone: the
+// marquee named libraries the #integrations section already names, and the
+// strip restated counts that now live once in <RepoActivity> further down.
 
 // Every figure here is countable in the repo — no projections, no asterisks
 // (#1846). Each one is checked against the code, and the band must not
@@ -69,15 +73,17 @@ const METRICS: OdometerStat[] = [
 // a subset of these on a loop and added nothing. Rendered by the shared
 // StackRow/StackLogo primitives (@digithings/web): a slug present in the logos
 // registry gets its real vendor mark, anything else degrades to a monogram
-// chip. NautilusTrader, LiteLLM, Chroma and Azure AI Search publish no
-// single-path monochrome SVG, so they read as monograms — expected, not a bug.
-// Every slug below is verified against components/logos.ts.
+// chip. NautilusTrader, LiteLLM, Cheaper Inference, Chroma, Azure AI Search
+// and Assistant UI publish no single-path monochrome SVG, so they read as
+// monograms — expected, not a bug. Every slug below is verified against
+// components/logos.ts.
 const INTEGRATIONS: { label: string; items: StackItem[] }[] = [
   {
     label: "orchestration & models",
     items: [
       { name: "LangGraph", icon: "langgraph" },
       { name: "LiteLLM", icon: null, mono: "LL" },
+      { name: "Cheaper Inference", icon: null, mono: "CI" },
       { name: "MCP", icon: "modelcontextprotocol" },
       { name: "OpenAI SDK", icon: "openai" },
       { name: "Pydantic", icon: "pydantic" },
@@ -105,6 +111,7 @@ const INTEGRATIONS: { label: string; items: StackItem[] }[] = [
       { name: "Redis", icon: "redis" },
       { name: "Next.js", icon: "nextdotjs" },
       { name: "React", icon: "react" },
+      { name: "Assistant UI", icon: null, mono: "AU" },
     ],
   },
 ];
@@ -162,21 +169,21 @@ export default function Home() {
             choice of model.
           </p>
           <div className="dqhero-cta">
-            {/* Real link, not decorative copy (full-UI-suite critique, P3):
-                the hero's only affordance used to be a <p>, and the nearest
-                actual CTA (NavShell's "Ask digichat" pill) disappears at
-                exactly the scroll depth that leaves the hero (autoHide
-                yields past 180px) -- so the page's most-viewed screen handed
-                off to one with no visible action. Same copy, same look,
-                now an anchor to the next section instead of a static label. */}
+            {/* Claim + install: shared .cmdline (site.css) is the diegetic
+                proof; the loud control is ink/paper, never an accent pill. */}
+            <p className="cmdline">
+              <span className="prompt">$</span>
+              git clone https://github.com/digithings-ai/digithings.git
+            </p>
+            <a className="btn btn-primary" href="/chat">
+              Ask digichat
+            </a>
             <a className="dqhero-scroll-label" href="#metrics">
               Scroll to explore
             </a>
             <div className="dqhero-scroll" aria-hidden="true" />
           </div>
         </HeroMesh>
-
-        <RepoStrip />
 
         <section className="section" id="metrics">
           <div className="wrap">
@@ -198,8 +205,11 @@ export default function Home() {
           <div className="wrap">
             <Reveal className="section-head center">
               <span className="kicker">{"// the architecture"}</span>
-              {/* nowrap from md up so the claim holds one line; it still wraps on
-                  phones, where forcing one line would shrink it to nothing.
+              {/* No nowrap here: the head is 56ch wide and the headline at full
+                  clamp size is wider, so forcing one line overflows the box to
+                  the right and reads off-center (text-align:center anchors
+                  overflowing nowrap text at the left edge). It wraps to two
+                  centered lines instead.
                   "Nine", not "Eleven" (full-UI-suite critique, P2): the
                   #metrics section one screen above states, and the odometer
                   literally renders, "9" shipped modules — a scanning reader
@@ -209,7 +219,7 @@ export default function Home() {
                   The 9-shipped/2-roadmap split already lives in the body copy
                   below; the headline now matches the number it is standing
                   next to. */}
-              <h2 className="md:whitespace-nowrap">Nine modules. One toolkit.</h2>
+              <h2 className="text-balance">Nine modules. One toolkit.</h2>
               <p>
                 The nine that ship run standalone or compose with the rest — retrieval, quant
                 research and chat, plus the auth, tracing and audit any deployment needs. Two more
@@ -249,7 +259,31 @@ export default function Home() {
             its figures never sit adjacent to the #metrics odometer, where two
             number-bearing blocks would read as one restated twice. Plain
             .section: section-alt stays the single accent before the claim. */}
-        <RepoActivity />
+        <section className="section" id="repository">
+          <div className="wrap">
+            <Reveal className="section-head center">
+              <span className="kicker">{"// the repository"}</span>
+              <h2>Maintained in the open.</h2>
+              <p>
+                One MIT-licensed monorepo, public and moving. Below are the most recent pull
+                requests to land on{" "}
+                <code className="font-mono text-ink">{repoActivity.branch}</code> — each one you
+                can open and read, not a changelog entry we wrote about ourselves.
+              </p>
+            </Reveal>
+            <Reveal>
+              <RepoActivity
+                variant="detailed"
+                snapshot={repoActivity}
+                repoUrl={REPO_URL}
+                live={REPO_LIVE}
+                cloneCommand={REPO_CLONE}
+                contributingUrl={CONTRIBUTING_URL}
+                className="mx-auto mt-[2rem] max-w-[980px]"
+              />
+            </Reveal>
+          </div>
+        </section>
 
         <section className="section section-alt" id="principles">
           <div className="wrap">
@@ -286,33 +320,34 @@ export default function Home() {
 
         <section className="section text-center" id="contact">
           <Reveal className="wrap">
-            <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent">
-              Contact
+            <div className="section-head center">
+              <div className="kicker">Contact</div>
+              <h2>Questions, enterprise, or partnership.</h2>
+              <p>
+                The whole monorepo is MIT-licensed and public — take it and run it yourself. What
+                we sell is the integration work: fitting these modules to the stack you already
+                have, on your own infrastructure.
+              </p>
             </div>
-            <h2 className="mt-[0.6rem] font-display text-[clamp(1.6rem,3vw,2.4rem)] font-normal leading-[1.12] tracking-[-0.01em] text-ink">
-              Questions, enterprise, or partnership.
-            </h2>
-            <p className="mx-auto mt-[0.8rem] max-w-[60ch] leading-[1.6] text-ink-soft">
-              The whole monorepo is MIT-licensed and public — take it and run it yourself. What we
-              sell is the integration work: fitting these modules to the stack you already have,
-              on your own infrastructure.
-            </p>
             <div className="mt-[2rem] flex flex-wrap justify-center gap-[0.8rem]">
-              <ContactMailto className="btn btn-primary" subject="digithings%20inquiry">
+              <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-primary" subject="digithings%20inquiry">
                 Email us <span aria-hidden="true">→</span>
               </ContactMailto>
-              <ContactMailto className="btn btn-ghost" subject="digithings%20enterprise">
+              <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-ghost" subject="digithings%20enterprise">
                 Enterprise
               </ContactMailto>
             </div>
             <p className="mt-[1.4rem] font-mono text-[0.88rem] text-ink-mute">
-              <ContactMailto
+              <ContactMailto email={DT_CONTACT_EMAIL}
                 className="text-accent [text-underline-offset:2px] hover:text-ink"
                 showAddress
               >
                 Or email us directly
               </ContactMailto>
             </p>
+            <div className="mt-[1.6rem] flex justify-center">
+              <SocialRow />
+            </div>
           </Reveal>
         </section>
       </main>
@@ -320,7 +355,7 @@ export default function Home() {
       {/* sweep: the flagship page opts into the reference footer's glow
           sweep — every other consumer keeps the outline-only default. */}
       <Colophon name="digi" suffix="things" sweep />
-      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
+      <DtFooter />
     </>
   );
 }
