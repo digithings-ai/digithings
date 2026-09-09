@@ -12,31 +12,10 @@ import {
   useAui,
 } from "@assistant-ui/react";
 import {
-  Copy,
-  Download,
-  FileText,
-  Folder,
-  Globe,
-  HelpCircle,
-  Key,
-  Languages,
-  Lightbulb,
-  Menu,
-  Plus,
-  Search,
-  Settings,
-  Slash,
-  Sparkles,
-  Undo,
-  Redo,
-  Wrench,
-} from "lucide-react";
-import {
   copyMarkdownWithFallback,
   downloadMarkdown,
   serializeAssistantMarkdown,
   serializeThreadMarkdown,
-  slashHelpText,
   type TranscriptTurn,
 } from "@digithings/digichat-ui";
 import { DigichatThread, type ThreadSlashTrigger } from "@digithings/web/chat/thread";
@@ -45,39 +24,18 @@ import { useStockComposerGateSubmit, useStockSendGate } from "@/components/stock
 import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
 import {
   buildProductSlashCommands,
-  categorizedSlashAdapter,
   extraSlashDefs,
   executeSlashDef,
+  executeSlashFromComposer,
+  prefixSlashAdapter,
   shouldInsertToolDraft,
   slashSubmitAction,
-  visibilityFromPrefs,
 } from "@/lib/product-slash-commands";
 import {
   armForceToolThenHold,
   setPendingForceTool,
   setPendingWebSearchForce,
 } from "@/lib/pending-chat-headers";
-
-const SLASH_ICON_MAP = {
-  Globe,
-  Search,
-  Folder,
-  Languages,
-  Settings,
-  Key,
-  HelpCircle,
-  Plus,
-  Copy,
-  Download,
-  Slash,
-  Wrench,
-  Sparkles,
-  Lightbulb,
-  Undo,
-  Redo,
-  Menu,
-  FileText,
-};
 
 /**
  * First-party digichat Thread. Explicit ThreadSkinView branch — never fall
@@ -130,16 +88,6 @@ export function DigichatSkin() {
     return buildProductSlashCommands(slashPrefs).map((c) => {
       if (c.id === "copy") return { ...c, execute: copyExport.copy };
       if (c.id === "export") return { ...c, execute: copyExport.exportThread };
-      if (c.id === "help") {
-        return {
-          ...c,
-          execute: () => {
-            queueMicrotask(() =>
-              aui.composer.setText(slashHelpText(visibilityFromPrefs(slashPrefs), extra)),
-            );
-          },
-        };
-      }
       if (c.id === "compact") {
         return {
           ...c,
@@ -155,6 +103,66 @@ export function DigichatSkin() {
               aui.composer.send();
             });
           },
+        };
+      }
+      if (c.id === "language") {
+        return {
+          ...c,
+          execute: () =>
+            executeSlashFromComposer(
+              "lang",
+              aui.composer.getState().text,
+              slashPrefs,
+              extra,
+            ),
+        };
+      }
+      if (c.id === "effort") {
+        return {
+          ...c,
+          execute: () =>
+            executeSlashFromComposer(
+              "effort",
+              aui.composer.getState().text,
+              slashPrefs,
+              extra,
+            ),
+        };
+      }
+      if (c.id === "byok") {
+        return {
+          ...c,
+          execute: () =>
+            executeSlashFromComposer(
+              "byok",
+              aui.composer.getState().text,
+              slashPrefs,
+              extra,
+            ),
+        };
+      }
+      if (c.id === "mcp") {
+        return {
+          ...c,
+          execute: () =>
+            executeSlashFromComposer(
+              "mcp",
+              aui.composer.getState().text,
+              slashPrefs,
+              extra,
+            ),
+        };
+      }
+      if (c.id === "tools") {
+        return {
+          ...c,
+          execute: () =>
+            executeSlashFromComposer(
+              "tools",
+              aui.composer.getState().text,
+              slashPrefs,
+              extra,
+            ),
         };
       }
       if (shouldInsertToolDraft(c.id, extra)) {
@@ -173,23 +181,21 @@ export function DigichatSkin() {
   const slash = unstable_useSlashCommandAdapter({
     commands,
     removeOnExecute: true,
-    iconMap: SLASH_ICON_MAP,
-    fallbackIcon: Slash,
   });
   const slashTrigger = useMemo((): ThreadSlashTrigger => {
     return {
-      adapter: categorizedSlashAdapter(slash.adapter),
+      adapter: prefixSlashAdapter(slash.adapter),
       action: slash.action,
-      iconMap: slash.iconMap,
     };
   }, [slash]);
 
   const mentionItems = useMemo(
     () =>
       (slashPrefs?.catalogTools ?? [])
-        .filter((t) => t.id !== "web_search" || slashPrefs.tenantAllowsWeb)
+        .filter((t) => t.id !== "web_search" || Boolean(slashPrefs?.tenantAllowsWeb))
         .map((t) => ({
           id: t.id,
+          type: "tool",
           label: t.label?.trim() || t.id,
           description: `Use ${t.label?.trim() || t.id}`,
         })),
@@ -204,10 +210,9 @@ export function DigichatSkin() {
         ? {
             adapter: mention.adapter,
             directive: mention.directive,
-            iconMap: slash.iconMap,
           }
         : undefined,
-    [mention, mentionItems.length, slash.iconMap],
+    [mention, mentionItems.length],
   );
 
   const onComposerSubmit = useCallback(

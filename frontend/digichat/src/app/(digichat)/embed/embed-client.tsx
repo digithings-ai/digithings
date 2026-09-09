@@ -30,9 +30,8 @@ import {
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
 } from "@/components/stock/embed-chat-prefs";
-import { EmbedSettingsPane } from "@/components/stock/embed-settings-pane";
-import { EmbedMcpPane } from "@/components/stock/embed-mcp-pane";
-import { EmbedModelsPane } from "@/components/stock/embed-models-pane";
+import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
+import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { clientConfigFromEmbedTenant } from "@/lib/deploy-config";
 import { skinOwnsPageChrome } from "@/lib/thread-skins";
@@ -351,9 +350,9 @@ function EmbedChat({
     ...DEFAULT_EMBED_CHAT_PREFS,
     extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
   }));
-  const [prefsOpen, setPrefsOpen] = useState(false);
-  const [mcpOpen, setMcpOpen] = useState(false);
-  const [modelsOpen, setModelsOpen] = useState(false);
+  const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
+  const [providerSeed, setProviderSeed] = useState<string | undefined>();
+  const [mcpSeed, setMcpSeed] = useState<string | undefined>();
   // useEmbedDigiChat's transport is frozen on first render (#1339) — a
   // `language` value passed by plain value would stay stuck at mount, so `/lang`
   // would never reach the outgoing header (#2103 / #3418). Mutate the ref in
@@ -385,6 +384,16 @@ function EmbedChat({
   const getDisabledTools = useCallback(
     () => disabledCatalogIds(chatPrefsRef.current).join(","),
     [],
+  );
+  const getEffort = useCallback(() => chatPrefsRef.current.effort, []);
+  const getMcpSession = useCallback(
+    () =>
+      mcpSessionOverlayHeaderValue(
+        connectedMcpConfigs(stockClient.mcp.servers, chatPrefsRef.current.mcpCustom),
+        (id) => chatPrefsRef.current.extra[id] !== false,
+        stockClient.mcp.allowUserServers === true,
+      ),
+    [stockClient.mcp.servers, stockClient.mcp.allowUserServers],
   );
   // trial_form still hides BYOK until parent unlock — product rule for DataTap only
   // backend_only never shows BYOK even if misconfigured showByok
@@ -423,8 +432,6 @@ function EmbedChat({
   }, []);
 
   const [serverGated, setServerGated] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [quotaPrompt, setQuotaPrompt] = useState(false);
   /** After BYOK save following a free-quota error, regenerate with X-BYOK-* headers. */
   const pendingByokRetryRef = useRef(false);
   /** Panel opened for a model-remediable refusal while a key is already bound — no retry until save. */
@@ -525,6 +532,8 @@ function EmbedChat({
     getEnableWebSearch,
     getDisabledTools,
     getSelectedModel,
+    getMcpSession,
+    getEffort,
     getPlanProof,
     // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
     // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
@@ -577,8 +586,7 @@ function EmbedChat({
     }
     // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
     queueMicrotask(() => {
-      setQuotaPrompt(!remediateWhileBound);
-      setSettingsOpen(true);
+      setComposerMenu("provider");
     });
   }, [chat.rawError, byokIsSet, llmAccess, showByok, tenantCfg.gateMode, chat]);
 
@@ -590,8 +598,7 @@ function EmbedChat({
     const held = heldQuestionRef.current;
     if (pendingByokRetryRef.current) {
       pendingByokRetryRef.current = false;
-      setQuotaPrompt(false);
-      setSettingsOpen(false);
+      setComposerMenu(null);
       if (held) {
         heldQuestionRef.current = null;
         const forceTool = heldForceToolRef.current;
@@ -629,10 +636,9 @@ function EmbedChat({
     consumePageContext,
   ]);
 
-  const openByok = useCallback(() => {
-    setQuotaPrompt(false);
-    setPrefsOpen(false);
-    setSettingsOpen(true);
+  const openByok = useCallback((seed?: string) => {
+    setProviderSeed(seed);
+    setComposerMenu("provider");
   }, []);
 
   const onByokSaved = useCallback(
@@ -641,7 +647,7 @@ function EmbedChat({
       pendingByokRetryRef.current = true;
       setByokKey(key, provider, model);
       emit("embed_byok_saved", { provider });
-      setSettingsOpen(false);
+      setComposerMenu(null);
       // Retry effect runs once byokIsSet flips (pendingByokRetryRef set above).
     },
     [setByokKey],
@@ -879,7 +885,7 @@ function EmbedChat({
         heldQuestionRef.current = question;
         heldForceToolRef.current = opts?.forceTool;
         pendingByokRetryRef.current = true;
-        setSettingsOpen(true);
+        setComposerMenu("provider");
         return;
       }
       // Out of free turns: HOLD the question and raise the form. Dropping it
@@ -931,7 +937,7 @@ function EmbedChat({
         heldForceToolRef.current = takePendingForceTool(gate.host);
         if (decision.action === "hold_byok") {
           pendingByokRetryRef.current = true;
-          setSettingsOpen(true);
+          setComposerMenu("provider");
           return;
         }
         lastGatedPost.current = null;
@@ -976,6 +982,16 @@ function EmbedChat({
       setExtraTool: (id, value) =>
         setChatPrefs((p) => ({ ...p, extra: { ...p.extra, [id]: value } })),
       extraToolOn: (id) => chatPrefs.extra[id] !== false,
+      setMcpConfig: (config, previousId) =>
+        setChatPrefs((p) => ({
+          ...p,
+          mcpCustom: replaceMcpConfig(p.mcpCustom, previousId ?? config.id, config),
+        })),
+      removeMcpConfig: (id) =>
+        setChatPrefs((p) => ({
+          ...p,
+          mcpCustom: p.mcpCustom.filter((s) => s.id !== id),
+        })),
       setLanguage: (code) => {
         const resolved = tryResolveLanguageInput(code) ?? DEFAULT_LANGUAGE_CODE;
         setChatPrefs((p) => ({ ...p, language: resolved }));
@@ -998,31 +1014,30 @@ function EmbedChat({
       allowUserMcp: stockClient.mcp.allowUserServers === true,
       allowAddMcp: stockClient.mcp.allowAddForm === true,
       catalogTools,
+      mcpServers: stockClient.mcp.servers,
       sessionKey: gate.host,
       openSettings: () => {
-        setSettingsOpen(false);
-        setMcpOpen(false);
-        setModelsOpen(false);
-        setPrefsOpen(true);
+        setComposerMenu("settings");
       },
-      openMcp: () => {
-        setSettingsOpen(false);
-        setPrefsOpen(false);
-        setModelsOpen(false);
-        setMcpOpen(true);
+      openTools: () => {
+        setComposerMenu("tools");
       },
-      openByok: () => {
-        setPrefsOpen(false);
-        setMcpOpen(false);
-        setModelsOpen(false);
-        setQuotaPrompt(false);
-        setSettingsOpen(true);
+      openMcp: (seed?: string) => {
+        setMcpSeed(seed);
+        setComposerMenu("mcp");
+      },
+      openByok: (seed?: string) => {
+        setProviderSeed(seed);
+        setComposerMenu("provider");
       },
       openModels: () => {
-        setSettingsOpen(false);
-        setPrefsOpen(false);
-        setMcpOpen(false);
-        setModelsOpen(true);
+        setComposerMenu("models");
+      },
+      openEffort: () => {
+        setComposerMenu("effort");
+      },
+      openLanguage: () => {
+        setComposerMenu("language");
       },
       openSessions: () => {},
       newThread: () => {
@@ -1058,6 +1073,7 @@ function EmbedChat({
       chat.regenerate,
       stockClient.mcp.allowUserServers,
       stockClient.mcp.allowAddForm,
+      stockClient.mcp.servers,
     ],
   );
 
@@ -1191,7 +1207,7 @@ function EmbedChat({
               >
                 {handshakeError ?? chat.error}
                 {showByokOnError && !handshakeError ? (
-                  <button type="button" className="dc-inline-link ml-2" onClick={openByok}>
+                  <button type="button" className="dc-inline-link ml-2" onClick={() => openByok()}>
                     Add your API key
                   </button>
                 ) : null}
@@ -1201,44 +1217,22 @@ function EmbedChat({
           </>
         }
       />
-      {prefsOpen ? (
-        <EmbedSettingsPane
-          onClose={() => setPrefsOpen(false)}
-          onByok={
-            showByok
-              ? () => {
-                  setPrefsOpen(false);
-                  setQuotaPrompt(false);
-                  setSettingsOpen(true);
-                }
-              : undefined
-          }
-        />
-      ) : null}
-      {mcpOpen ? <EmbedMcpPane onClose={() => setMcpOpen(false)} /> : null}
-      {modelsOpen ? (
-        <EmbedModelsPane
+      {composerMenu ? (
+        <EmbedComposerMenu
+          kind={composerMenu}
           models={stockClient.models.available}
-          onClose={() => setModelsOpen(false)}
+          onClose={() => {
+            setComposerMenu(null);
+            setProviderSeed(undefined);
+            setMcpSeed(undefined);
+          }}
+          onActivateProvider={showByok ? onByokSaved : undefined}
+          onClearProvider={showByok ? clearByokKey : undefined}
+          providerActive={byokIsSet ? { provider: byokProvider, model: byokModel } : null}
+          initialProvider={byokIsSet ? byokProvider : undefined}
+          providerSeed={providerSeed}
+          mcpSeed={mcpSeed}
         />
-      ) : null}
-      {showByok && settingsOpen ? (
-        <div
-          className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background p-3 shadow-lg"
-          data-thread-skin={stockClient.chrome.skin}
-          role="dialog"
-          aria-label="BYOK settings"
-        >
-          <ByokCliFlow
-            onClose={() => setSettingsOpen(false)}
-            onActivate={onByokSaved}
-            onClear={clearByokKey}
-            active={byokIsSet ? { provider: byokProvider, model: byokModel } : null}
-            initialProvider={byokProvider}
-            initialModel={byokModel}
-            title={quotaPrompt ? "byok — free tier exhausted" : "byok configure"}
-          />
-        </div>
       ) : null}
     </EmbedChatPrefsProvider>
   );
@@ -1335,7 +1329,7 @@ function PaywallCard({
       <p className="mb-3 text-xs text-muted-foreground">
         Bring your own OpenRouter, OpenAI, Anthropic, or Gemini key for unlimited chat — the key
         stays in session memory only (refresh clears it). After a chat starts, type{" "}
-        <code className="font-mono">/byok</code> anytime. Or open the full digichat app.
+        <code className="font-mono">/provider</code> anytime. Or open the full digichat app.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -1345,7 +1339,7 @@ function PaywallCard({
           onClick={() => setShowBYOK(true)}
         >
           <Key className="mr-1.5 size-3.5" />
-          Bring your own key (/byok)
+          Bring your own key (/provider)
         </Button>
         <a
           href="https://digithings.ai/chat"

@@ -6,6 +6,7 @@
 import type { Unstable_SlashCommand } from "@assistant-ui/react";
 import {
   catalogToolSlashDef,
+  isEffortCode,
   parseSlashInput,
   type SlashDef,
   type SlashVisibility,
@@ -19,6 +20,7 @@ import {
   tryResolveLanguageInput,
 } from "@/lib/languages";
 import type { EmbedChatPrefsApi } from "@/components/stock/embed-chat-prefs";
+import { connectedMcpConfigs } from "@/components/stock/embed-mcp-flow";
 
 export type SlashSubmitAction =
   | { kind: "pass" }
@@ -37,9 +39,16 @@ export function catalogForceTool(forceTool: string | undefined): string | undefi
 
 export function extraSlashDefs(api: EmbedChatPrefsApi): SlashDef[] {
   const builtins = new Set(SLASH_COMMANDS.map((c) => c.id));
-  return api.catalogTools
-    .filter((t) => !builtins.has(t.id) && t.id !== "web_search")
-    .map((t) => catalogToolSlashDef(t));
+  const seen = new Set<string>();
+  const out: SlashDef[] = [];
+  const mcp = connectedMcpConfigs(api.mcpServers, api.prefs.mcpCustom);
+  for (const t of [...api.catalogTools, ...mcp]) {
+    const id = t.id.trim();
+    if (!id || seen.has(id) || builtins.has(id) || id === "web_search") continue;
+    seen.add(id);
+    out.push(catalogToolSlashDef(t));
+  }
+  return out;
 }
 
 export function slashSubmitAction(raw: string, extra?: readonly SlashDef[]): SlashSubmitAction {
@@ -75,10 +84,10 @@ export function visibilityFromPrefs(api: EmbedChatPrefsApi): SlashVisibility {
 }
 
 function toggleHint(on: boolean, onText: string, offText: string): string {
-  return on ? `On — ${onText}` : `Off — ${offText}`;
+  return on ? `On · ${onText}` : `Off · ${offText}`;
 }
 
-/** Featured language rows so `/language` prefix-matches Dutch, etc. */
+/** Featured language rows so `/dutch` etc. still resolve. */
 export function featuredLanguageCommands(
   setLanguage: (code: string) => void,
 ): Unstable_SlashCommand[] {
@@ -87,8 +96,7 @@ export function featuredLanguageCommands(
     return {
       id: label.toLowerCase(),
       label: `/${label.toLowerCase()}`,
-      description: `Language: ${label}`,
-      icon: "Languages",
+      description: `Reply in ${label}`,
       execute: () => setLanguage(code),
     };
   });
@@ -114,6 +122,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
     if (def.id === "digisearch" && vis.digisearch === false) continue;
     if (def.id === "digivault" && vis.digivault === false) continue;
     if (def.id === "sessions" && vis.sessions !== true) continue;
+    if ((def.id === "models" || def.id === "effort") && vis.models === false) continue;
 
     let description = def.hint;
     if (def.id === "websearch") {
@@ -126,6 +135,10 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       description = toggleHint(prefs.thinking, "reasoning visible", "reasoning hidden");
     } else if (def.id === "lang") {
       description = `Reply language (${languageLabel(prefs.language)})`;
+    } else if (def.id === "models") {
+      description = prefs.model || def.hint;
+    } else if (def.id === "effort") {
+      description = prefs.effort || "medium";
     } else if (def.kind === "tool" && def.id) {
       const on = api.extraToolOn(def.id);
       description = toggleHint(on, def.hint, "disabled this session");
@@ -137,7 +150,6 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       id,
       label: insertName,
       description,
-      icon: iconForSlash(def.id),
       execute: () => {
         if (def.kind === "tool") return;
         executeSlashDef(def, "", api);
@@ -171,29 +183,43 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       return;
     case "lang": {
       if (!arg) {
-        api.openSettings();
+        api.openLanguage();
         return;
       }
       const code = tryResolveLanguageInput(arg);
       if (code) api.setLanguage(code);
+      else api.openLanguage();
       return;
     }
     case "settings":
       api.openSettings();
       return;
+    case "tools":
+      api.openTools();
+      return;
     case "mcp":
-      api.openMcp();
+      api.openMcp(arg);
       return;
     case "models":
       api.openModels();
       return;
+    case "effort": {
+      if (!arg) {
+        api.openEffort();
+        return;
+      }
+      const value = arg.trim().toLowerCase();
+      if (isEffortCode(value)) api.setEffort(value);
+      return;
+    }
     case "sessions":
       api.openSessions();
       return;
     case "help":
+      // Placeholder — the slash list is the help. Do not dump into the composer.
       return;
     case "byok":
-      api.openByok();
+      api.openByok(arg);
       return;
     case "new":
     case "clear":
@@ -217,57 +243,39 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
   }
 }
 
-function iconForSlash(id: string): string {
-  switch (id) {
-    case "websearch":
-      return "Globe";
-    case "digisearch":
-      return "Search";
-    case "digivault":
-      return "Folder";
-    case "mcp":
-      return "Wrench";
-    case "lang":
-      return "Languages";
-    case "settings":
-      return "Settings";
-    case "byok":
-      return "Key";
-    case "models":
-      return "Sparkles";
-    case "thinking":
-      return "Lightbulb";
-    case "sessions":
-      return "Menu";
-    case "help":
-      return "HelpCircle";
-    case "new":
-    case "clear":
-      return "Plus";
-    case "compact":
-      return "FileText";
-    case "undo":
-      return "Undo";
-    case "redo":
-      return "Redo";
-    case "copy":
-      return "Copy";
-    case "export":
-      return "Download";
-    default:
-      return "Slash";
-  }
+export function executeSlashFromComposer(
+  id: "lang" | "effort" | "byok" | "mcp" | "tools",
+  composerText: string,
+  api: EmbedChatPrefsApi,
+  extra?: readonly SlashDef[],
+): void {
+  const parsed = parseSlashInput(composerText, extra);
+  const arg = parsed.kind === "command" && parsed.command.id === id ? parsed.arg : "";
+  const def =
+    parsed.kind === "command" && parsed.command.id === id
+      ? parsed.command
+      : SLASH_COMMANDS.find((c) => c.id === id);
+  if (def) executeSlashDef(def, arg, api);
 }
 
-export function languageSelectOptions(): { value: string; label: string }[] {
+export function languageSelectOptions(): {
+  value: string;
+  label: string;
+  native: string;
+}[] {
   const featured = new Set<string>(FEATURED_LANGUAGE_CODES);
-  const head = FEATURED_LANGUAGE_CODES.map((code) => ({
-    value: code,
-    label: languageLabel(code),
-  }));
+  const head = FEATURED_LANGUAGE_CODES.map((code) => {
+    const row = LANGUAGES.find((l) => l.code === code);
+    return {
+      value: code,
+      label: row?.label ?? code,
+      native: row?.native ?? languageLabel(code),
+    };
+  });
   const rest = LANGUAGES.filter((l) => !featured.has(l.code)).map((l) => ({
     value: l.code,
     label: l.label,
+    native: l.native,
   }));
   return [...head, ...rest];
 }
@@ -285,24 +293,25 @@ export function slashItemPrefixMatch(
 }
 
 type SlashAdapterLike = {
-  search?: (query: string) => Array<{ id: string; label?: string }>;
-  categories?: () => Array<{ id: string; label: string }>;
-  categoryItems?: (categoryId: string) => unknown[];
+  search?: (query: string) => readonly { id: string; label?: string }[];
+  categories?: () => readonly { id: string; label: string }[];
+  categoryItems?: (categoryId: string) => readonly unknown[];
 };
 
-/** Wrap the native slash adapter with Actions / Tools / Session / Setup. */
-export function categorizedSlashAdapter<T extends SlashAdapterLike>(inner: T): T {
-  const all = () => inner.search?.("") ?? [];
+/** Prefix-match only — no category folders, so `/` is a navigable item list. */
+export function prefixSlashAdapter<T extends SlashAdapterLike>(inner: T): T {
   return {
     ...inner,
-    categories: () => [...SLASH_CATEGORIES],
-    categoryItems: (categoryId: string) =>
-      all().filter((item) => slashCategoryOf(item.id) === categoryId),
+    categories: () => [],
+    categoryItems: () => [],
     search: (query: string) => {
       const raw = inner.search?.(query) ?? [];
       return raw.filter((item) => slashItemPrefixMatch(item, query));
     },
-  };
+  } as T;
 }
+
+/** @deprecated Use prefixSlashAdapter — categories were dropped from the product palette. */
+export const categorizedSlashAdapter = prefixSlashAdapter;
 
 export { SLASH_CATEGORIES };

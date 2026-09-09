@@ -530,6 +530,31 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Disabled-Tools"
   });
 });
 
+describe("useEmbedDigiChat prepareSendMessagesRequest — MCP session overlay and effort", () => {
+  it("sets X-Digi-Mcp-Session and X-Digi-Effort at send time", async () => {
+    let overlay = "";
+    let effort = "medium";
+    const { unmount } = renderHookLocally(() =>
+      useEmbedDigiChat(
+        baseEmbedOptions({
+          getMcpSession: () => overlay || undefined,
+          getEffort: () => effort,
+        }),
+      ),
+    );
+    const config = readCapturedTransportConfig();
+    if (!config) throw new Error("AssistantChatTransport was never constructed");
+    const first = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(first.headers).has("X-Digi-Mcp-Session")).toBe(false);
+    overlay = '[{"id":"linear","url":"https://mcp.linear.app/mcp"}]';
+    effort = "high";
+    const second = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(second.headers).get("X-Digi-Mcp-Session")).toContain("linear");
+    expect(new Headers(second.headers).get("X-Digi-Effort")).toBe("high");
+    unmount();
+  });
+});
+
 describe("useEmbedDigiChat reset (/new)", () => {
   const host = "https://example.com";
   const storageKey = `digichat_embed_conversation:${host}`;

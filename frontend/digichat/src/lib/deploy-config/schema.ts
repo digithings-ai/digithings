@@ -233,9 +233,9 @@ export const McpSchema = z
   .object({
     servers: z.array(McpServerSchema).default([]),
     /**
-     * When true, the client may connect *personal* Streamable HTTP MCP servers
-     * via assistant-ui (`@assistant-ui/react-mcp`). Operator `servers` URLs
-     * still never leave the BFF. Default false (public digichat).
+     * Session overlay switch: when true, `/mcp new` URLs that pass
+     * `isAllowedMcpServerUrl` are merged into the upstream MCP header.
+     * Operator YAML URLs stay server-side. Default false on public embeds.
      */
     allowUserServers: z.boolean().default(false),
     /** Show the add-custom-server form. Ignored unless allowUserServers. */

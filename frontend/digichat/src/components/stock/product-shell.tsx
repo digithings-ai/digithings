@@ -44,6 +44,7 @@ import {
   type SkinChromeValue,
 } from "@/components/stock/skin-chrome";
 import { ToolCatalogBar } from "@/components/stock/tool-catalog-bar";
+import { SessionPrefsToolBridge } from "@/components/stock/session-prefs-tool-bridge";
 
 export type ProductShellProps = {
   runtime: AssistantRuntime;
@@ -261,6 +262,7 @@ export function ProductStockShell({
               hideModelPicker={!skinChrome.modelPicker}
               hideThinking={hideThinking}
             />
+            <SessionPrefsToolBridge />
             <div
               data-stock-product
               data-chrome-mode={cfg.chrome.mode}

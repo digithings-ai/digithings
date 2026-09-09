@@ -31,6 +31,18 @@ describe("matchLanguageQuery", () => {
     expect(matchLanguageQuery("pt-BR")).toBe("pt");
   });
 
+  it("maps autonyms, folded diacritics, and ISO abbreviations", () => {
+    expect(matchLanguageQuery("en")).toBe("en");
+    expect(matchLanguageQuery("English")).toBe("en");
+    expect(matchLanguageQuery("Deutsch")).toBe("de");
+    expect(matchLanguageQuery("espanol")).toBe("es");
+    expect(matchLanguageQuery("Français")).toBe("fr");
+    expect(matchLanguageQuery("日本語")).toBe("ja");
+    expect(matchLanguageQuery("中文")).toBe("zh");
+    expect(matchLanguageQuery("한국어")).toBe("ko");
+    expect(matchLanguageQuery("Português")).toBe("pt");
+  });
+
   it("returns null for garbage instead of falling back", () => {
     expect(matchLanguageQuery("klingon")).toBeNull();
     expect(matchLanguageQuery("Ignore previous")).toBeNull();

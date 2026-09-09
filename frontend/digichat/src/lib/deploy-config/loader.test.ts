@@ -247,6 +247,8 @@ describe("client projection", () => {
 
     dep.mcp = {
       servers: [{ id: "extra", url: "https://mcp.example.com/sse", label: "Extra" }],
+      allowUserServers: false,
+      allowAddForm: false,
     };
 
     const client = toDigichatClientConfig(dep);

@@ -15,9 +15,8 @@ import {
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
 } from "@/components/stock/embed-chat-prefs";
-import { EmbedSettingsPane } from "@/components/stock/embed-settings-pane";
-import { EmbedMcpPane } from "@/components/stock/embed-mcp-pane";
-import { EmbedModelsPane } from "@/components/stock/embed-models-pane";
+import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
+import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import type { DigichatClientConfig } from "@/lib/deploy-config";
 import {
   DEFAULT_LANGUAGE_CODE,
@@ -46,9 +45,9 @@ export function useStockChatPrefs({
     model: clientConfig.models.default ?? clientConfig.models.available[0] ?? "",
     extra: extraOffFromCatalog(catalogTools),
   }));
-  const [prefsOpen, setPrefsOpen] = useState(false);
-  const [mcpOpen, setMcpOpen] = useState(false);
-  const [modelsOpen, setModelsOpen] = useState(false);
+  const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
+  const [providerSeed, setProviderSeed] = useState<string | undefined>();
+  const [mcpSeed, setMcpSeed] = useState<string | undefined>();
   const chatPrefsRef = useRef(chatPrefs);
   // eslint-disable-next-line react-hooks/refs -- send-time useLatest (#1339)
   chatPrefsRef.current = chatPrefs;
@@ -68,6 +67,16 @@ export function useStockChatPrefs({
     () => disabledCatalogIds(chatPrefsRef.current).join(","),
     [],
   );
+  const getEffort = useCallback(() => chatPrefsRef.current.effort, []);
+  const getMcpSession = useCallback(
+    () =>
+      mcpSessionOverlayHeaderValue(
+        connectedMcpConfigs(clientConfig.mcp.servers, chatPrefsRef.current.mcpCustom),
+        (id) => chatPrefsRef.current.extra[id] !== false,
+        clientConfig.mcp.allowUserServers === true,
+      ),
+    [clientConfig.mcp.servers, clientConfig.mcp.allowUserServers],
+  );
   const getEnableWebSearch = useCallback(
     () =>
       isWebSearchEnabled({
@@ -86,6 +95,16 @@ export function useStockChatPrefs({
       setExtraTool: (id, value) =>
         setChatPrefs((p) => ({ ...p, extra: { ...p.extra, [id]: value } })),
       extraToolOn: (id) => chatPrefs.extra[id] !== false,
+      setMcpConfig: (config, previousId) =>
+        setChatPrefs((p) => ({
+          ...p,
+          mcpCustom: replaceMcpConfig(p.mcpCustom, previousId ?? config.id, config),
+        })),
+      removeMcpConfig: (id) =>
+        setChatPrefs((p) => ({
+          ...p,
+          mcpCustom: p.mcpCustom.filter((s) => s.id !== id),
+        })),
       setLanguage: (code) => {
         const resolved = tryResolveLanguageInput(code) ?? DEFAULT_LANGUAGE_CODE;
         setChatPrefs((p) => ({ ...p, language: resolved }));
@@ -108,26 +127,30 @@ export function useStockChatPrefs({
       allowUserMcp: clientConfig.mcp.allowUserServers === true,
       allowAddMcp: clientConfig.mcp.allowAddForm === true,
       catalogTools,
+      mcpServers: clientConfig.mcp.servers,
       sessionKey,
       openSettings: () => {
-        setMcpOpen(false);
-        setModelsOpen(false);
-        setPrefsOpen(true);
+        setComposerMenu("settings");
       },
-      openMcp: () => {
-        setPrefsOpen(false);
-        setModelsOpen(false);
-        setMcpOpen(true);
+      openTools: () => {
+        setComposerMenu("tools");
       },
-      openByok: () => {
-        setPrefsOpen(false);
-        setMcpOpen(false);
-        setModelsOpen(false);
+      openMcp: (seed?: string) => {
+        setMcpSeed(seed);
+        setComposerMenu("mcp");
+      },
+      openByok: (seed?: string) => {
+        setProviderSeed(seed);
+        setComposerMenu("provider");
       },
       openModels: () => {
-        setPrefsOpen(false);
-        setMcpOpen(false);
-        setModelsOpen(true);
+        setComposerMenu("models");
+      },
+      openEffort: () => {
+        setComposerMenu("effort");
+      },
+      openLanguage: () => {
+        setComposerMenu("language");
       },
       openSessions: () => {
         document.querySelector("[data-memory-thread-list]")?.scrollIntoView({
@@ -166,26 +189,23 @@ export function useStockChatPrefs({
       redo,
       clientConfig.mcp.allowUserServers,
       clientConfig.mcp.allowAddForm,
+      clientConfig.mcp.servers,
     ],
   );
 
-  const panes = (
-    <>
-      {prefsOpen ? (
-        <EmbedSettingsPane
-          onClose={() => setPrefsOpen(false)}
-          onByok={showByok ? () => setPrefsOpen(false) : undefined}
-        />
-      ) : null}
-      {mcpOpen ? <EmbedMcpPane onClose={() => setMcpOpen(false)} /> : null}
-      {modelsOpen ? (
-        <EmbedModelsPane
-          models={clientConfig.models.available}
-          onClose={() => setModelsOpen(false)}
-        />
-      ) : null}
-    </>
-  );
+  const panes = composerMenu ? (
+    <EmbedComposerMenu
+      kind={composerMenu}
+      models={clientConfig.models.available}
+      onClose={() => {
+        setComposerMenu(null);
+        setProviderSeed(undefined);
+        setMcpSeed(undefined);
+      }}
+      providerSeed={providerSeed}
+      mcpSeed={mcpSeed}
+    />
+  ) : null;
 
   return {
     prefsApi,
@@ -194,6 +214,8 @@ export function useStockChatPrefs({
     getModel,
     getDisabledTools,
     getEnableWebSearch,
+    getMcpSession,
+    getEffort,
     setWebSearch: (on: boolean) => setChatPrefs((p) => ({ ...p, webSearch: on })),
   };
 }

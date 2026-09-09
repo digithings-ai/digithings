@@ -50,7 +50,7 @@ describe("parseSlashInput", () => {
     });
   });
 
-  it("parses client-only /help /new /lang /websearch /settings /byok /mcp", () => {
+  it("parses client-only /help /new /lang /websearch /settings /provider /mcp", () => {
     expect(parseSlashInput("/help")).toMatchObject({ kind: "command", command: { id: "help" } });
     expect(parseSlashInput("/new")).toMatchObject({ kind: "command", command: { id: "new" } });
     expect(parseSlashInput("/websearch")).toMatchObject({
@@ -61,15 +61,35 @@ describe("parseSlashInput", () => {
       kind: "command",
       command: { id: "settings" },
     });
+    expect(parseSlashInput("/provider")).toMatchObject({ kind: "command", command: { id: "byok" } });
     expect(parseSlashInput("/byok")).toMatchObject({ kind: "command", command: { id: "byok" } });
     expect(parseSlashInput("/key")).toMatchObject({ kind: "command", command: { id: "byok" } });
-    expect(parseSlashInput("/connect")).toMatchObject({ kind: "command", command: { id: "byok" } });
+    expect(parseSlashInput("/provider openai")).toMatchObject({
+      kind: "command",
+      command: { id: "byok" },
+      arg: "openai",
+    });
     expect(parseSlashInput("/mcp")).toMatchObject({ kind: "command", command: { id: "mcp" } });
+    expect(parseSlashInput("/mcp new")).toMatchObject({
+      kind: "command",
+      command: { id: "mcp" },
+      arg: "new",
+    });
+    expect(parseSlashInput("/tools")).toMatchObject({ kind: "command", command: { id: "tools" } });
     expect(parseSlashInput("/models")).toMatchObject({ kind: "command", command: { id: "models" } });
     expect(parseSlashInput("/lang de")).toMatchObject({
       kind: "command",
       command: { id: "lang" },
       arg: "de",
+    });
+    expect(parseSlashInput("/language Italiano")).toMatchObject({
+      kind: "command",
+      command: { id: "lang" },
+      arg: "Italiano",
+    });
+    expect(parseSlashInput("/effort")).toMatchObject({
+      kind: "command",
+      command: { id: "effort" },
     });
   });
 
@@ -114,6 +134,7 @@ describe("matchingSlashCommands", () => {
     expect(ids).toContain("byok");
     expect(ids).toContain("settings");
     expect(ids).toContain("mcp");
+    expect(ids).toContain("tools");
     expect(ids).not.toContain("sessions");
   });
 
@@ -144,9 +165,10 @@ describe("slashHelpText", () => {
     expect(help).toContain("/digisearch —");
     expect(help).toContain("/digivault —");
     expect(help).toContain("/websearch —");
-    expect(help).toContain("/byok — BYOK");
+    expect(help).toContain("/provider — API provider");
     expect(help).toContain("/settings — Settings");
-    expect(help).toContain("/mcp —");
+    expect(help).toContain("/mcp — MCP JSON / auth / new");
+    expect(help).toContain("/tools — Connected tools");
     expect(help).not.toContain("digivault_get_note");
     expect(help).not.toContain("/search —");
     expect(help).not.toContain("/docs —");
@@ -199,6 +221,13 @@ describe("SLASH_COMMANDS", () => {
       names: ["/copy"],
       needsArg: false,
       kind: "client",
+    });
+  });
+
+  it("lists /provider as the public BYOK name, with /byok and /key as aliases", () => {
+    expect(SLASH_COMMANDS.find((c) => c.id === "byok")).toMatchObject({
+      names: ["/provider", "/byok", "/key"],
+      hint: "API provider",
     });
   });
 });

@@ -21,12 +21,14 @@ export type SlashId =
   | "settings"
   | "byok"
   | "models"
+  | "effort"
   | "thinking"
   | "sessions"
   | "compact"
   | "undo"
   | "redo"
-  | "mcp";
+  | "mcp"
+  | "tools";
 
 export type SlashDef = {
   id: SlashId | string;
@@ -58,6 +60,16 @@ export const LANG_CHOICES: readonly { value: LangCode; label: string }[] = LANG_
   (code) => ({ value: code, label: LANG_LABELS[code] }),
 );
 
+export const EFFORT_CODES = ["low", "medium", "high"] as const;
+export type EffortCode = (typeof EFFORT_CODES)[number];
+export const EFFORT_CHOICES: readonly { value: EffortCode; label: string }[] = EFFORT_CODES.map(
+  (code) => ({ value: code, label: code }),
+);
+
+export function isEffortCode(value: string): value is EffortCode {
+  return (EFFORT_CODES as readonly string[]).includes(value.trim().toLowerCase());
+}
+
 export const SLASH_CATEGORIES: readonly { id: SlashCategory; label: string }[] = [
   { id: "tools", label: "Tools" },
   { id: "session", label: "Session" },
@@ -70,7 +82,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "digisearch",
     names: ["/digisearch"],
     needsArg: false,
-    hint: "Corpus search — empty toggles, or /digisearch query",
+    hint: "empty toggles, or /digisearch query",
     forceTool: "digisearch",
     kind: "tool",
     category: "tools",
@@ -79,7 +91,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "digivault",
     names: ["/digivault"],
     needsArg: false,
-    hint: "Vault — empty toggles, or /digivault query",
+    hint: "empty toggles, or /digivault query",
     forceTool: "digivault",
     kind: "tool",
     category: "tools",
@@ -88,7 +100,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "websearch",
     names: ["/websearch"],
     needsArg: false,
-    hint: "Web search — empty toggles, or /websearch query",
+    hint: "empty toggles, or /websearch query",
     forceTool: "web_search",
     kind: "tool",
     category: "tools",
@@ -97,7 +109,15 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "mcp",
     names: ["/mcp"],
     needsArg: false,
-    hint: "MCP tools",
+    hint: "MCP JSON / auth / new",
+    kind: "action",
+    category: "tools",
+  },
+  {
+    id: "tools",
+    names: ["/tools"],
+    needsArg: false,
+    hint: "Connected tools",
     kind: "action",
     category: "tools",
   },
@@ -105,7 +125,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "lang",
     names: ["/language", "/lang"],
     needsArg: false,
-    hint: "Switch reply language",
+    hint: "en / Italian / Italiano",
     choiceOptions: LANG_CHOICES,
     kind: "client",
     category: "setup",
@@ -114,8 +134,17 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "models",
     names: ["/models"],
     needsArg: false,
-    hint: "Pick model and effort",
+    hint: "Pick model",
     kind: "action",
+    category: "setup",
+  },
+  {
+    id: "effort",
+    names: ["/effort"],
+    needsArg: false,
+    hint: "low / medium / high",
+    choiceOptions: EFFORT_CHOICES,
+    kind: "client",
     category: "setup",
   },
   {
@@ -128,9 +157,9 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
   },
   {
     id: "byok",
-    names: ["/byok", "/key", "/connect"],
+    names: ["/provider", "/byok", "/key"],
     needsArg: false,
-    hint: "BYOK",
+    hint: "API provider",
     kind: "action",
     category: "setup",
   },
@@ -224,6 +253,7 @@ export type SlashVisibility = {
   /** Full-app thread list. Embed hides /sessions. */
   sessions?: boolean;
   models?: boolean;
+  effort?: boolean;
   mcp?: boolean;
 };
 
@@ -259,7 +289,7 @@ function isVisible(cmd: SlashDef, visibility?: SlashVisibility): boolean {
   if (cmd.id === "digisearch") return visibility?.digisearch !== false;
   if (cmd.id === "digivault") return visibility?.digivault !== false;
   if (cmd.id === "sessions") return visibility?.sessions === true;
-  if (cmd.id === "models") return visibility?.models !== false;
+  if (cmd.id === "models" || cmd.id === "effort") return visibility?.models !== false;
   if (cmd.id === "mcp") return visibility?.mcp !== false;
   return true;
 }

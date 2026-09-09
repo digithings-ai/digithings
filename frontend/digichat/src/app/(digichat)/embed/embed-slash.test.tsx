@@ -41,7 +41,11 @@ describe("embed stock chrome wiring", () => {
   it("hides the in-iframe brand header on the first-party digichat skin (#3733)", () => {
     expect(embedClientSrc).toMatch(/shouldRenderEmbedBrandHeader/);
     expect(embedClientSrc).toMatch(/EmbedChatPrefsProvider/);
-    expect(embedClientSrc).toMatch(/EmbedSettingsPane/);
+    expect(embedClientSrc).toMatch(/EmbedComposerMenu/);
+    expect(embedClientSrc).toMatch(/setComposerMenu\("provider"\)/);
+    expect(embedClientSrc).toMatch(/setComposerMenu\("mcp"\)/);
+    expect(embedClientSrc).toMatch(/setComposerMenu\("tools"\)/);
+    expect(embedClientSrc).not.toMatch(/aria-label="BYOK settings"/);
     expect(embedClientSrc).not.toMatch(/Page context from this host is attached/);
   });
 });

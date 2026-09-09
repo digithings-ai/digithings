@@ -1,9 +1,10 @@
 """Remote MCP tool proxy for extra servers declared by a trusted BFF (#3736).
 
-Operator YAML in digichat lists Streamable HTTP MCP URLs. The BFF forwards
-allowlisted ``{id, url}`` pairs on ``X-Digi-Mcp-Servers``. This module lists
-those tools (prefixed ``{id}__{name}``) and proxies calls. URLs never come
-from an untrusted client body.
+The BFF forwards allowlisted ``{id, url}`` pairs on ``X-Digi-Mcp-Servers``,
+optionally with ``auth`` / ``token`` after a session overlay merge. This
+module lists those tools (prefixed ``{id}__{name}``) and proxies calls.
+Visitor URLs never come from an untrusted JSON body — only the BFF header
+(and ``DIGI_MCP_SERVERS``). Tokens are never logged.
 
 ``DIGI_MCP_SERVERS`` (``id=https://…,id2=https://…``) is the process-wide
 fallback from the remote-MCP backlog item.
@@ -12,6 +13,8 @@ fallback from the remote-MCP backlog item.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import ipaddress
 import json
 import logging
 import os
@@ -24,16 +27,80 @@ from urllib.parse import urlparse
 log = logging.getLogger(__name__)
 
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
-_METADATA_HOSTS = frozenset({"169.254.169.254", "metadata.google.internal"})
+_METADATA_HOSTS = frozenset(
+    {
+        "169.254.169.254",
+        "metadata.google.internal",
+        "metadata.goog",
+        "metadata",
+        "localhost",
+    }
+)
+_REBIND_SUFFIXES = (".nip.io", ".sslip.io", ".xip.io")
+_EMBEDDED_IPV4 = re.compile(r"(?:^|\.)((?:\d{1,3}\.){3}\d{1,3})(?:\.|$)")
 _CACHE_TTL_S = 60.0
 _CALL_TIMEOUT_S = 30.0
+_MAX_MCP_JSON = 16384
+_MAX_TOKEN = 4096
+_AUTH_KINDS = frozenset({"bearer", "oauth"})
 
 _cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="digi-mcp")
 
 
+def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        return _ip_is_blocked(ip.ipv4_mapped)
+    return bool(
+        ip.is_loopback
+        or ip.is_link_local
+        or ip.is_unspecified
+        or ip.is_multicast
+        or ip.is_private
+        or ip.is_reserved
+    )
+
+
+def _parse_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    try:
+        return ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    try:
+        if host.startswith("0x"):
+            return ipaddress.IPv4Address(int(host, 16))
+        if host.isdigit():
+            return ipaddress.IPv4Address(int(host, 10))
+    except (ValueError, OverflowError):
+        return None
+    return None
+
+
+def _hostname_is_blocked(host: str) -> bool:
+    h = host.strip("[]").lower().rstrip(".")
+    if not h or h in _METADATA_HOSTS:
+        return True
+    if h.endswith(".internal") or h.endswith(".localhost"):
+        return True
+    if any(h.endswith(suf) for suf in _REBIND_SUFFIXES):
+        return True
+    parsed = _parse_ip(h)
+    if parsed is not None:
+        return _ip_is_blocked(parsed)
+    embedded = _EMBEDDED_IPV4.search(h)
+    if embedded is not None:
+        inner = _parse_ip(embedded.group(1))
+        if inner is not None and _ip_is_blocked(inner):
+            return True
+    return False
+
+
 def is_allowed_mcp_url(raw: str) -> bool:
-    """https/http, no userinfo, no cloud-metadata hosts."""
+    """https/http, no userinfo, no loopback / metadata / private-IP literals.
+
+    Docker DNS names such as ``http://datatap-mcp:8080/mcp`` stay allowed.
+    Literal RFC1918 / loopback / link-local / IPv4-mapped metadata hosts do not.
+    """
     try:
         u = urlparse(raw.strip())
     except ValueError:
@@ -43,16 +110,40 @@ def is_allowed_mcp_url(raw: str) -> bool:
     if u.username or u.password:
         return False
     host = (u.hostname or "").lower()
-    if not host or host in {"0.0.0.0", *_METADATA_HOSTS}:
-        return False
-    if host.endswith(".internal"):
+    if _hostname_is_blocked(host):
         return False
     return True
 
 
+def _auth_fields(item: dict[str, Any]) -> dict[str, str]:
+    extra: dict[str, str] = {}
+    auth = str(item.get("auth") or "").strip().lower()
+    if auth in _AUTH_KINDS:
+        extra["auth"] = auth
+    token = str(item.get("token") or "").strip()
+    if token and len(token) <= _MAX_TOKEN:
+        extra["token"] = token
+    return extra
+
+
+def mcp_http_headers(server: dict[str, str]) -> dict[str, str] | None:
+    """Authorization header for Streamable HTTP. Never log the token."""
+    token = (server.get("token") or "").strip()
+    if not token:
+        return None
+    return {"Authorization": f"Bearer {token}"}
+
+
+def mcp_list_cache_key(server: dict[str, str]) -> str:
+    """Cache identity includes a token fingerprint so auth changes miss."""
+    token = (server.get("token") or "").strip()
+    ident = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16] if token else "-"
+    return f"{server.get('id', '')}|{server.get('url', '')}|{ident}"
+
+
 def parse_mcp_servers_json(raw: str | None) -> list[dict[str, str]]:
     """Parse the BFF header. Unknown / malformed / oversize → empty."""
-    if not raw or not raw.strip() or len(raw) > 8192:
+    if not raw or not raw.strip() or len(raw) > _MAX_MCP_JSON:
         return []
     try:
         data = json.loads(raw)
@@ -72,7 +163,11 @@ def parse_mcp_servers_json(raw: str | None) -> list[dict[str, str]]:
         if not is_allowed_mcp_url(url):
             continue
         seen.add(sid)
-        out.append({"id": sid, "url": url})
+        row: dict[str, str] = {"id": sid, "url": url}
+        extra = _auth_fields(item)
+        if extra:
+            row.update(extra)
+        out.append(row)
     return out
 
 
@@ -134,7 +229,7 @@ def split_prefixed_tool_name(name: str) -> tuple[str, str] | None:
 def extra_tool_names_for_servers(servers: list[dict[str, str]]) -> list[str]:
     names: list[str] = []
     for s in servers:
-        for td in list_tools_cached(s["url"], s["id"]):
+        for td in list_tools_cached(s):
             fn = (td.get("function") or {}).get("name")
             if fn:
                 names.append(str(fn))
@@ -159,13 +254,13 @@ def expand_mcp_disabled_tokens(
     return frozenset(out)
 
 
-def list_tools_cached(url: str, server_id: str) -> list[dict[str, Any]]:
-    key = f"{server_id}|{url}"
+def list_tools_cached(server: dict[str, str]) -> list[dict[str, Any]]:
+    key = mcp_list_cache_key(server)
     now = time.monotonic()
     hit = _cache.get(key)
     if hit and now - hit[0] < _CACHE_TTL_S:
         return hit[1]
-    tools = _list_tools_blocking(url, server_id)
+    tools = _list_tools_blocking(server)
     _cache[key] = (now, tools)
     return tools
 
@@ -173,7 +268,7 @@ def list_tools_cached(url: str, server_id: str) -> list[dict[str, Any]]:
 def openai_tools_for_servers(servers: list[dict[str, str]]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for s in servers:
-        out.extend(list_tools_cached(s["url"], s["id"]))
+        out.extend(list_tools_cached(s))
     return out
 
 
@@ -186,10 +281,10 @@ def call_prefixed_tool(
     if not split:
         return {"error": "unknown_mcp_tool", "tool": name}
     sid, tool = split
-    url = next((s["url"] for s in servers if s["id"] == sid), None)
-    if not url:
+    server = next((s for s in servers if s["id"] == sid), None)
+    if not server or not server.get("url"):
         return {"error": "unknown_mcp_server", "tool": name}
-    return _call_tool_blocking(url, tool, args)
+    return _call_tool_blocking(server, tool, args)
 
 
 def _run_async(coro: Any) -> Any:
@@ -201,27 +296,32 @@ def _run_async(coro: Any) -> Any:
     return fut.result(timeout=_CALL_TIMEOUT_S + 5)
 
 
-def _list_tools_blocking(url: str, server_id: str) -> list[dict[str, Any]]:
+def _list_tools_blocking(server: dict[str, str]) -> list[dict[str, Any]]:
     try:
-        return _run_async(_list_tools_async(url, server_id))
+        return _run_async(_list_tools_async(server))
     except Exception as exc:
-        log.warning("remote MCP list_tools failed for %s: %s", server_id, exc)
+        log.warning("remote MCP list_tools failed for %s: %s", server.get("id"), exc)
         return []
 
 
-def _call_tool_blocking(url: str, tool: str, args: dict[str, Any]) -> dict[str, Any]:
+def _call_tool_blocking(
+    server: dict[str, str], tool: str, args: dict[str, Any]
+) -> dict[str, Any]:
     try:
-        return _run_async(_call_tool_async(url, tool, args))
+        return _run_async(_call_tool_async(server, tool, args))
     except Exception as exc:
         log.warning("remote MCP call failed for %s: %s", tool, exc)
         return {"error": "mcp_call_failed", "tool": tool, "message": str(exc)}
 
 
-async def _list_tools_async(url: str, server_id: str) -> list[dict[str, Any]]:
+async def _list_tools_async(server: dict[str, str]) -> list[dict[str, Any]]:
     from mcp import ClientSession
     from mcp.client.streamable_http import streamablehttp_client
 
-    async with streamablehttp_client(url) as (read, write, _):
+    url = server["url"]
+    server_id = server["id"]
+    headers = mcp_http_headers(server)
+    async with streamablehttp_client(url, headers=headers) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             listed = await session.list_tools()
@@ -244,11 +344,15 @@ async def _list_tools_async(url: str, server_id: str) -> list[dict[str, Any]]:
     return out
 
 
-async def _call_tool_async(url: str, tool: str, args: dict[str, Any]) -> dict[str, Any]:
+async def _call_tool_async(
+    server: dict[str, str], tool: str, args: dict[str, Any]
+) -> dict[str, Any]:
     from mcp import ClientSession
     from mcp.client.streamable_http import streamablehttp_client
 
-    async with streamablehttp_client(url) as (read, write, _):
+    url = server["url"]
+    headers = mcp_http_headers(server)
+    async with streamablehttp_client(url, headers=headers) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.call_tool(tool, args)

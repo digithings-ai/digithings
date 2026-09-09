@@ -41,6 +41,8 @@ function useShellThreadRuntime(
   getModel: () => string | undefined,
   getDisabledTools: () => string,
   getEnableWebSearch: () => boolean,
+  getMcpSession: () => string | undefined,
+  getEffort: () => string | undefined,
 ) {
   const transport = useMemo(
     () =>
@@ -53,14 +55,16 @@ function useShellThreadRuntime(
           h.set("X-Digichat-Session", threadKey);
           const turnMode = takePendingTurnMode(threadKey);
           if (turnMode) h.set("X-Digi-Turn-Mode", turnMode);
-          const forceTool = takePendingForceTool(threadKey);
+          // Slash remainder-force is armed on prefs sessionKey (`app:anon`),
+          // not the AI SDK chat `id` (#3741 review).
+          const forceTool = takePendingForceTool(sessionKey);
           if (forceTool && !turnMode) h.set("X-Digi-Force-Tool", forceTool);
           h.set("X-Digi-Run-Id", crypto.randomUUID());
           const lang = getLanguage().trim();
           if (lang && lang !== "en") h.set("X-Digi-Language", lang);
           const model = getModel()?.trim();
           if (model) h.set("X-Digi-Model", model);
-          const forceWeb = takePendingWebSearchForce(threadKey);
+          const forceWeb = takePendingWebSearchForce(sessionKey);
           if (getEnableWebSearch() || forceWeb) {
             h.set("X-Digi-Enable-Web-Search", "1");
           }
@@ -72,6 +76,12 @@ function useShellThreadRuntime(
             forceTool,
           );
           if (disabled.length) h.set("X-Digi-Disabled-Tools", disabled.join(","));
+          const mcpSession = getMcpSession()?.trim();
+          if (mcpSession) h.set("X-Digi-Mcp-Session", mcpSession);
+          const effort = getEffort()?.trim().toLowerCase();
+          if (effort === "low" || effort === "medium" || effort === "high") {
+            h.set("X-Digi-Effort", effort);
+          }
           return {
             body: {
               ...(typeof body === "object" && body !== null ? body : {}),
@@ -82,7 +92,7 @@ function useShellThreadRuntime(
           };
         },
       }),
-    [sessionKey, getLanguage, getModel, getDisabledTools, getEnableWebSearch],
+    [sessionKey, getLanguage, getModel, getDisabledTools, getEnableWebSearch, getMcpSession, getEffort],
   );
 
   const chat = useChat<UIMessage>({ transport });
@@ -115,6 +125,8 @@ function HomeStockClientSingle({
     prefs.getModel,
     prefs.getDisabledTools,
     prefs.getEnableWebSearch,
+    prefs.getMcpSession,
+    prefs.getEffort,
   );
 
   return (
@@ -174,6 +186,12 @@ function HomeStockClientMemory({
   const getWebRef = useRef(prefs.getEnableWebSearch);
   // eslint-disable-next-line react-hooks/refs -- useLatest
   getWebRef.current = prefs.getEnableWebSearch;
+  const getMcpRef = useRef(prefs.getMcpSession);
+  // eslint-disable-next-line react-hooks/refs -- useLatest
+  getMcpRef.current = prefs.getMcpSession;
+  const getEffortRef = useRef(prefs.getEffort);
+  // eslint-disable-next-line react-hooks/refs -- useLatest
+  getEffortRef.current = prefs.getEffort;
 
   const runtimeHook = useMemo(() => {
     return function useMemoryThreadRuntime() {
@@ -184,6 +202,8 @@ function HomeStockClientMemory({
         () => getModelRef.current(),
         () => getDisabledRef.current(),
         () => getWebRef.current(),
+        () => getMcpRef.current(),
+        () => getEffortRef.current(),
       );
     };
   }, []);

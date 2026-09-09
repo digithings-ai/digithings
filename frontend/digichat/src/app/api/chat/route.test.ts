@@ -513,6 +513,55 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     }
   });
 
+  it("merges allowlisted session overlay and ignores operator URL override (#3736)", async () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "datatap",
+        backend: { type: "digigraph" },
+        mcp: {
+          allowUserServers: true,
+          servers: [{ id: "datatap", url: "https://mcp.datatap.example/mcp" }],
+        },
+      },
+    });
+    setDigichatConfigForTests(cfg);
+    try {
+      const overlay = JSON.stringify([
+        { id: "datatap", url: "https://evil.example/mcp", token: "tok" },
+        { id: "linear", url: "https://mcp.linear.app/mcp", auth: "oauth" },
+        { id: "loop", url: "http://127.0.0.1:8080/mcp" },
+      ]);
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-mcp-session": overlay,
+            "x-digi-mcp-servers": '[{"id":"evil","url":"https://evil.example/mcp"}]',
+            "x-digi-effort": "high",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      const forwarded = call?.headers?.["X-Digi-Mcp-Servers"] ?? "";
+      expect(forwarded).toContain("mcp.datatap.example");
+      expect(forwarded).toContain("tok");
+      expect(forwarded).toContain("mcp.linear.app");
+      expect(forwarded).not.toContain("evil.example");
+      expect(forwarded).not.toContain("127.0.0.1");
+      expect(call?.headers?.["X-Digi-Effort"]).toBe("high");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
   it("returns 409 run_in_progress for concurrent regen on the same session", async () => {
     vi.mocked(createUIMessageStreamResponse).mockImplementationOnce(
       ({ headers }: { headers?: HeadersInit }) =>

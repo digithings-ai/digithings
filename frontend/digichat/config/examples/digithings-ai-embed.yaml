@@ -52,7 +52,7 @@ hosts:
           default: true
           label: Web search
     mcp:
-      allowUserServers: false
+      allowUserServers: true
       allowAddForm: false
     gate:
       mode: ungated

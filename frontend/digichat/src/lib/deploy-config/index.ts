@@ -55,6 +55,9 @@ export {
   isAllowedMcpServerUrl,
   mcpServersHeaderValue,
   operatorMcpServersForUpstream,
+  parseMcpSessionOverlay,
+  mergeMcpSessionOverlay,
+  mcpUpstreamHeaderValue,
 } from "./mcp-servers";
 
 export {

@@ -413,6 +413,10 @@ export async function POST(req: Request) {
   if (languageCode !== "en") {
     upstreamHeaders["X-Digi-Language"] = languageCode;
   }
+  const effortRaw = (req.headers.get("x-digi-effort") || "").trim().toLowerCase();
+  if (effortRaw === "low" || effortRaw === "medium" || effortRaw === "high") {
+    upstreamHeaders["X-Digi-Effort"] = effortRaw;
+  }
   // X-Digi-Force-Tool is send-only — ignore leftover slash force on regen/edit (#3475).
   // Session X-Digi-Disabled-Tools still forwards on Redo / edit (#3735 review).
   // Catalog allowlist from deployment config is source of truth (fail closed).
@@ -425,6 +429,10 @@ export async function POST(req: Request) {
       filterDisabledToolsHeader,
       omitForcedCatalogIds,
       mcpServersHeaderValue,
+      operatorMcpServersForUpstream,
+      parseMcpSessionOverlay,
+      mergeMcpSessionOverlay,
+      mcpUpstreamHeaderValue,
     } = await import("@/lib/deploy-config");
     const {
       resolveDeploymentForHost,
@@ -434,7 +442,14 @@ export async function POST(req: Request) {
     const embedHost = req.headers.get("x-embed-host");
     let dep = resolveDeploymentForHost(embedHost, getDigichatConfig());
     if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
-    const mcpHeader = mcpServersHeaderValue(dep);
+    const operator = operatorMcpServersForUpstream(dep);
+    const overlay = parseMcpSessionOverlay(req.headers.get("x-digi-mcp-session"));
+    const merged = mergeMcpSessionOverlay({
+      operator,
+      overlay,
+      allowSessionUrls: dep?.mcp?.allowUserServers === true,
+    });
+    const mcpHeader = mcpUpstreamHeaderValue(merged) ?? mcpServersHeaderValue(dep);
     if (mcpHeader) {
       upstreamHeaders["X-Digi-Mcp-Servers"] = mcpHeader;
     }

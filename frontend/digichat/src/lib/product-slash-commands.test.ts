@@ -4,11 +4,13 @@ import {
   DEFAULT_EMBED_CHAT_PREFS,
   type EmbedChatPrefsApi,
 } from "@/components/stock/embed-chat-prefs";
+import { emptyMcpConfig } from "@/components/stock/embed-mcp-flow";
 import {
   buildProductSlashCommands,
   catalogForceTool,
   executeSlashDef,
   extraSlashDefs,
+  prefixSlashAdapter,
   slashItemPrefixMatch,
   slashSubmitAction,
 } from "./product-slash-commands";
@@ -21,6 +23,8 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setVault: vi.fn(),
     setExtraTool: vi.fn(),
     extraToolOn: (id) => over.prefs?.extra?.[id] !== false,
+    setMcpConfig: vi.fn(),
+    removeMcpConfig: vi.fn(),
     setLanguage: vi.fn(),
     setThinking: vi.fn(),
     setModel: vi.fn(),
@@ -39,11 +43,15 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
       { id: "digivault", label: "Vault" },
       { id: "web_search", label: "Web search" },
     ],
+    mcpServers: [],
     sessionKey: "embed-host",
     openSettings: vi.fn(),
+    openTools: vi.fn(),
     openMcp: vi.fn(),
     openByok: vi.fn(),
     openModels: vi.fn(),
+    openEffort: vi.fn(),
+    openLanguage: vi.fn(),
     openSessions: vi.fn(),
     newThread: vi.fn(),
     compactThread: vi.fn(),
@@ -104,6 +112,16 @@ describe("slashSubmitAction", () => {
       command: { id: "lang" },
       arg: "dutch",
     });
+    expect(slashSubmitAction("/language en")).toMatchObject({
+      kind: "run",
+      command: { id: "lang" },
+      arg: "en",
+    });
+    expect(slashSubmitAction("/language Italiano")).toMatchObject({
+      kind: "run",
+      command: { id: "lang" },
+      arg: "Italiano",
+    });
   });
 
   it("passes ordinary text through", () => {
@@ -135,7 +153,7 @@ describe("catalogForceTool", () => {
 });
 
 describe("buildProductSlashCommands", () => {
-  it("includes catalog tools, mcp, models, and featured languages", () => {
+  it("includes catalog tools, mcp, models, and featured languages without per-row icons", () => {
     const cmds = buildProductSlashCommands(api());
     const ids = cmds.map((c) => c.id);
     expect(ids).toContain("websearch");
@@ -147,6 +165,7 @@ describe("buildProductSlashCommands", () => {
     expect(ids).toContain("language");
     expect(ids).not.toContain("search");
     expect(ids).not.toContain("toggle-digisearch");
+    expect(cmds.every((c) => !("icon" in c) || c.icon == null)).toBe(true);
   });
 
   it("hides websearch when the tenant disallows it", () => {
@@ -180,6 +199,21 @@ describe("slashItemPrefixMatch", () => {
   });
 });
 
+describe("prefixSlashAdapter", () => {
+  it("filters the inner search with prefix match and does not add categories", () => {
+    const inner = {
+      categories: () => [{ id: "tools", label: "Tools" }],
+      search: (_query: string) => [
+        { id: "settings", label: "/settings" },
+        { id: "digisearch", label: "/digisearch" },
+      ],
+    };
+    const wrapped = prefixSlashAdapter(inner);
+    expect(wrapped.search("se").map((i) => i.id)).toEqual(["settings"]);
+    expect(wrapped.categories()).toEqual([]);
+  });
+});
+
 describe("executeSlashDef", () => {
   it("resets prefs and starts a new thread on /new", () => {
     const a = api();
@@ -189,7 +223,7 @@ describe("executeSlashDef", () => {
     expect(a.newThread).toHaveBeenCalledOnce();
   });
 
-  it("does not toggle tools on /help (skin inserts the help text)", () => {
+  it("does not toggle tools on /help (palette is the help; do not dump into the composer)", () => {
     const a = api();
     const def = { id: "help" as const, names: ["/help"], needsArg: false, hint: "" };
     executeSlashDef(def, "", a);
@@ -197,11 +231,71 @@ describe("executeSlashDef", () => {
     expect(a.setDigisearch).not.toHaveBeenCalled();
   });
 
-  it("opens the MCP pane on /mcp", () => {
+  it("opens the language list on empty /language and sets from code, English, or autonym", () => {
+    const a = api();
+    const def = { id: "lang" as const, names: ["/language", "/lang"], needsArg: false, hint: "" };
+    executeSlashDef(def, "", a);
+    expect(a.openLanguage).toHaveBeenCalledOnce();
+    executeSlashDef(def, "en", a);
+    expect(a.setLanguage).toHaveBeenCalledWith("en");
+    executeSlashDef(def, "Italiano", a);
+    expect(a.setLanguage).toHaveBeenCalledWith("it");
+    executeSlashDef(def, "espanol", a);
+    expect(a.setLanguage).toHaveBeenCalledWith("es");
+  });
+
+  it("opens /provider and seeds a provider from the remainder", () => {
+    const a = api();
+    const def = { id: "byok" as const, names: ["/provider", "/byok", "/key"], needsArg: false, hint: "" };
+    executeSlashDef(def, "", a);
+    expect(a.openByok).toHaveBeenCalledWith("");
+    executeSlashDef(def, "openai", a);
+    expect(a.openByok).toHaveBeenCalledWith("openai");
+  });
+
+  it("opens the MCP server menu on /mcp and seeds /mcp new", () => {
     const a = api();
     const def = { id: "mcp" as const, names: ["/mcp"], needsArg: false, hint: "" };
     executeSlashDef(def, "", a);
-    expect(a.openMcp).toHaveBeenCalledOnce();
+    expect(a.openMcp).toHaveBeenCalledWith("");
+    executeSlashDef(def, "new", a);
+    expect(a.openMcp).toHaveBeenCalledWith("new");
+  });
+
+  it("opens the connected-tools menu on /tools", () => {
+    const a = api();
+    const def = { id: "tools" as const, names: ["/tools"], needsArg: false, hint: "" };
+    executeSlashDef(def, "", a);
+    expect(a.openTools).toHaveBeenCalledOnce();
+  });
+
+  it("exposes extra MCP servers as slash tools", () => {
+    const extra = extraSlashDefs(
+      api({
+        catalogTools: [{ id: "digisearch" }],
+        mcpServers: [{ id: "datatap", label: "DataTap" }],
+      }),
+    );
+    expect(extra.map((d) => d.names[0])).toEqual(["/datatap"]);
+    expect(slashSubmitAction("/datatap pipeline", extra)).toEqual({
+      kind: "force",
+      forceTool: "datatap",
+      text: "pipeline",
+    });
+  });
+
+  it("exposes session MCP configs as slash tools", () => {
+    const extra = extraSlashDefs(
+      api({
+        catalogTools: [],
+        mcpServers: [],
+        prefs: {
+          ...DEFAULT_EMBED_CHAT_PREFS,
+          mcpCustom: [{ ...emptyMcpConfig(), id: "linear", label: "Linear" }],
+        },
+      }),
+    );
+    expect(extra.map((d) => d.names[0])).toEqual(["/linear"]);
   });
 
   it("toggles extra MCP tools", () => {

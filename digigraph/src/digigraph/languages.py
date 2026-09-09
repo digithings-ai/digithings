@@ -80,3 +80,15 @@ def resolve_language_directive(code: str | None) -> str | None:
         "When calling search or vault tools, keep the retrieval query in the "
         "user's original wording; do not translate retrieval queries."
     )
+
+
+def apply_language_preference(user_content: str, code: str | None) -> str:
+    """Prefix *user_content* with the mapped language directive, if any.
+
+    The raw code never appears in the prompt — only ``LANGUAGE_NAMES`` values.
+    English / unknown codes leave the query unchanged.
+    """
+    directive = resolve_language_directive(code)
+    if not directive:
+        return user_content
+    return f"{directive}\n\n{user_content}"

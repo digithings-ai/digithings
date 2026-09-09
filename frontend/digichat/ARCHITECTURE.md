@@ -560,9 +560,10 @@ key.
 currently-live, validated key — gates the "done" step and "BYOK active" text)
 and, separately, optional `initialProvider`/`initialModel` (just seeds the
 picker's starting selection, e.g. from the cookie above, without implying a
-live key). All three call sites (`chat-panel.tsx`, `embed/embed-client.tsx`,
-`byok-settings-panel.tsx`) wire `useBYOKKey()`'s `provider`/`model` into the
-latter pair independently of `active`/`isSet`.
+live key). ChatShell / ChatPanel / PaywallCard still mount that terminal flow.
+The public embed `/provider` path uses `EmbedComposerMenu` (provider list →
+token field → model when required) and the same `validateBYOKKey` /
+`pingByokKey` / `useBYOKKey` contract.
 
 UX is a stepwise terminal sequence rendered **inline in the chat transcript**
 (stock BYOK / paywall surfaces, and the app shell `ChatPanel` when `/key`
@@ -762,17 +763,20 @@ chrome. This behavior remains separate from the digithings digigraph path.
 
 **Response language (#2103 / #3418) — `/lang` on the public embed, not a header dropdown.**
 The composer slash `/language` / `/lang` (client-only) updates session language and
-sends it as `X-Digi-Language` on subsequent turns. Featured labels are English /
-Dutch / Italian / Spanish / French; the curated ISO map in `src/lib/languages.ts`
-is larger. Unknown or crafted input is dropped — never interpolated into a prompt.
+sends it as `X-Digi-Language` on subsequent turns. Empty `/language` opens the nested
+`/language` list in the composer-docked settings menu (full ISO map). `/language en`,
+`/language Italian`, and `/language Italiano` all set the same code. Featured palette
+rows remain English / Dutch / Italian / Spanish / French; the curated ISO map in
+`src/lib/languages.ts` is larger. Unknown or crafted input is dropped — never interpolated
+into a prompt.
 
 The two backends have no shared system-prompt mechanism, so each adapter
 enforces the directive its own way:
 
-- **digigraph** has a system-prompt slot: the BFF forwards the header and
-  digigraph's `research_node` appends a `Respond only in <language>` line (plus
-  "do not translate retrieval queries") to the system prompt server-side once
-  per turn (see `digigraph/ARCHITECTURE.md` and
+- **digigraph** forwards `X-Digi-Language`. `research_node` prepends a mapped
+  `Respond only in <language>` line (plus "do not translate retrieval queries") to
+  **this turn's user query** — not the tenant system prompt — so retrieval and tool
+  routing stay English (see `digigraph/ARCHITECTURE.md` and
   `digigraph/src/digigraph/languages.py`'s `LANGUAGE_NAMES` map — kept in
   hand-sync with the frontend's `LANGUAGES` array; there is no shared module
   across the two languages).
@@ -787,7 +791,10 @@ enforces the directive its own way:
 owns the public palette. The first-party `digichat` Thread mounts assistant-ui
 `ComposerTriggerPopover` + `unstable_useSlashCommandAdapter` whenever session prefs
 are present (embed, modal popup, and full-app). Full-app `/` also keeps
-`ToolCatalogBar`. Commands are grouped Tools / Session / Actions / Setup.
+`ToolCatalogBar`. The palette is a **flat** composer-width list (command left,
+description right). No Tools / Session / Actions / Setup folders and no per-row
+Lucide icons. `/help` is a no-op placeholder — the list itself is the help; it
+must not dump into the composer.
 
 Each catalog tool has **one public name and two gestures**: empty Enter toggles the
 session pref (same as `/settings`); a remainder forces that tool for this send.
@@ -795,27 +802,44 @@ session pref (same as `/settings`); a remainder forces that tool for this send.
 sets a send-only web-search header. `/search`, `/vault`, and `/docs` are not public names.
 Menu pick inserts `/digisearch ` (trailing space) and does not fire immediately.
 Extra YAML/MCP catalog ids (`/datatap`) use the same pattern. Disabled catalog ids travel
-as `X-Digi-Disabled-Tools` (BFF allowlists, digigraph subtracts). `/mcp` opens the MCP tools
-pane. `/models` opens the model/effort pane when the install publishes `models.available`.
+as `X-Digi-Disabled-Tools` (BFF allowlists, digigraph subtracts). `/mcp`, `/models`, `/effort`,
+`/language`, `/provider`, and `/settings` open the same opaque composer-docked menu (`EmbedComposerMenu`);
+`/mcp` starts on the operator/session MCP list (status: Active / Disabled / Needs auth).
+Enter opens JSON + field editors (`/mcp new` adds a session MCP). `/tools` lists every
+connected tool as On/Off. `/models`, `/effort`,
+and `/language` start on their nested lists. Keyboard: Up/Down, Enter
+to toggle or enter a nested list, Left/Right on `/language` to cycle the full ISO map, Escape
+(the `escape` control) to go back or close.
 `/language` (alias `/lang`) plus featured English / Dutch / Italian / Spanish / French resolve
-through the mirrored ISO map. `/settings` opens the themed session pane; `/byok` (`/key`)
-opens the BYOK flow. `/sessions` is full-app only. `/help`, `/new`, `/copy`, `/export`,
+through the mirrored ISO map (codes, English labels, and autonyms). `/provider` (aliases
+`/byok`, `/key`) opens the composer-docked provider list, then a token field, then a model
+list when the provider requires one. PaywallCard / ChatShell still use `ByokCliFlow`.
+`/sessions` is full-app only. `/help`, `/new`, `/copy`, `/export`,
 `/compact`, `/undo`, `/redo` stay client-only. Reload and `/new` reset tools ON + English
 (not localStorage). No sign-in is required for these session prefs.
 
 **Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default? }` is
-forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url}`). **URLs never reach the
-browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip them). The public embed
-sets `mcp.allowUserServers: false` so visitors cannot add servers. Client-supplied
-`X-Digi-Mcp-Servers` is ignored. `mcp.allowUserServers: true` is opt-in for personal
-browser MCP (`@assistant-ui/react-mcp`); those tools never go through the BFF.
-digisearch / digivault / web_search stay orchestrator tools (HTTP to the verticals), not
-browser MCP. DataTap-style installs add extra servers in YAML (see
-`config/examples/datatap-mcp.yaml`).
+forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?}`). **Operator URLs never reach the
+browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip them). `/tools` lists every
+connected catalog + MCP tool as On/Off (each is also a slash command). `/mcp` lists MCP
+tools with status Active / Disabled / Needs auth; Enter opens the session JSON and field
+editors (including bearer paste). When `auth` is `oauth` and the token is empty, **Authenticate**
+opens a popup → `POST /api/mcp/oauth/start` (PKCE, SSRF via `isAllowedMcpServerUrl`) → AS →
+`GET /api/mcp/oauth/callback` which `postMessage`s the token into `mcpCustom`. `/mcp new`
+adds a session MCP (id, url, auth, extra fields) for this tab. Client-supplied
+`X-Digi-Mcp-Servers` is ignored. Session overlay travels on `X-Digi-Mcp-Session`
+(`{id,url?,auth,token?}[]`): operator id+token attach to the YAML URL; session URLs are merged
+only when `mcp.allowUserServers` is true (SSRF + count/size caps). Session URLs never echo
+back in the client config projection. `@assistant-ui/react-mcp` is not installed — visitor MCP
+is BFF-proxied, not browser MCP. The model can call `session_*` tools (same trust as slash) to
+mutate language/model/effort/tools/MCP; the client applies them to `EmbedChatPrefsApi`.
+`X-Digi-Effort` (low/medium/high) is forwarded to digigraph. digisearch / digivault / web_search
+stay orchestrator tools (HTTP to the verticals), not browser MCP. DataTap-style installs add
+extra servers in YAML (see `config/examples/datatap-mcp.yaml`).
 
 In-iframe “ask digichat” chrome is omitted on the first-party skin; outer launcher title /
 new chat / close and marketing footer attribution stay. Signed-in ChatShell keeps `/clear`
-`/history` `/scope` plus the same `/byok` / `/websearch` / `/settings` surface.
+`/history` `/scope` plus the same `/provider` / `/websearch` / `/settings` surface.
 
 **Sources on the transcript (#3419 / 2.0).** assistant-ui `Source` parts and tool
 output document lists render inline in `CliThread`. Vault note `body` may still
@@ -1058,6 +1082,14 @@ without credentials, and allows only loopback, `*.local`, single-label Docker se
 names, and private RFC1918 ranges. This is a reasonable SSRF guard for the ecosystem
 endpoint cookie. The allowlist can be further tightened via
 `DIGICHAT_ENDPOINT_HOST_ALLOWLIST`.
+
+Operator MCP URLs use the inverse check (`isAllowedMcpServerUrl` in
+`src/lib/deploy-config/mcp-servers.ts`, mirrored by digigraph
+`is_allowed_mcp_url`): loopback, RFC1918, metadata, and DNS-rebinding hosts
+are refused; docker hostnames such as `datatap-mcp` stay allowed. The same
+check gates OAuth discovery and session overlay URLs (`X-Digi-Mcp-Session`).
+Do not use `isAllowedServiceUrl` for MCP (opposite polarity: that helper *allows*
+loopback for ecosystem cookies).
 
 ---
 

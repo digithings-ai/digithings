@@ -68,6 +68,8 @@ class WorkflowState(TypedDict, total=False):
     disabled_tools: list[str] | None
     # Opt-in digillm web search (#3420). Default off — never silent RAG mix.
     enable_web_search: bool
+    # Per-request reasoning effort (X-Digi-Effort). Must be declared.
+    effort: str | None
     # Optional supervisor / routing (when DIGI_SUPERVISOR=1).
     supervisor_depth_remaining: int
     supervisor_route: str | None

@@ -89,10 +89,9 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
             updates["research_system_prompt_override"] = corpus.research_system_prompt
     # Per-request response language (X-Digi-Language) — a per-request signal, not a
     # tenant-derived value, so it's read directly rather than via resolve_corpus_override.
-    # Never interpolated into a prompt (resolve_language_directive only ever emits
-    # mapped display names for curated 2-char codes), but capped defensively before
-    # it reaches WorkflowRequest/checkpointed state — an arbitrarily long header value
-    # has no business sitting in checkpoint storage. Curated codes are 2 characters,
+    # The raw header is never interpolated: resolve_language_directive / apply_language_preference
+    # only ever emit mapped display names for curated 2-char codes. Capped defensively
+    # before it reaches WorkflowRequest/checkpointed state. Curated codes are 2 characters,
     # so 16 is generous headroom, not a functional constraint.
     lang = http_request.headers.get("x-digi-language")
     if lang and lang.strip():
@@ -110,7 +109,15 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
     )
     # Always write so a client body value cannot survive (same CWE-639 class as
     # digi_subject). Empty list clears a prior turn's URLs on the checkpoint.
-    updates["mcp_servers"] = [McpServerRef(id=s["id"], url=s["url"]) for s in mcp_servers]
+    updates["mcp_servers"] = [
+        McpServerRef(
+            id=s["id"],
+            url=s["url"],
+            auth=s.get("auth") or None,
+            token=s.get("token") or None,
+        )
+        for s in mcp_servers
+    ]
     disabled_raw = _hget(headers, "X-Digi-Disabled-Tools", "x-digi-disabled-tools")
     tokens = [p.strip() for p in disabled_raw.split(",") if p.strip()]
     updates["disabled_tools"] = tokens or None
@@ -118,6 +125,8 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
     resolved_force = resolve_force_tool(force_raw) or resolve_mcp_force_id(force_raw, mcp_servers)
     if resolved_force:
         updates["force_tool"] = resolved_force
+    effort = _hget(headers, "X-Digi-Effort", "x-digi-effort").strip().lower()
+    updates["effort"] = effort if effort in ("low", "medium", "high") else None
     return updates
 
 

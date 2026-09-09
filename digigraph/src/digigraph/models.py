@@ -223,21 +223,31 @@ class WorkflowRequest(BaseModel):
     mcp_servers: list["McpServerRef"] | None = Field(
         None,
         description=(
-            "Operator Streamable HTTP MCP servers for this turn (X-Digi-Mcp-Servers). "
+            "Streamable HTTP MCP servers for this turn (X-Digi-Mcp-Servers). "
             "Client-writable on this model but never trusted as-is: HTTP handlers "
-            "overwrite from the BFF header (and DIGI_MCP_SERVERS env). URLs never "
-            "come from an untrusted JSON body."
+            "overwrite from the BFF header (operator YAML plus SSRF-guarded session "
+            "overlay, and DIGI_MCP_SERVERS env). URLs never come from an untrusted "
+            "JSON body. Optional auth/token are session overlay only."
+        ),
+    )
+    effort: str | None = Field(
+        None,
+        description=(
+            "Per-request reasoning effort (X-Digi-Effort). One of low, medium, high. "
+            "Unrecognized values are ignored. Always overwritten from the header on HTTP."
         ),
     )
 
 
 class McpServerRef(BaseModel):
-    """Trusted ``{id, url}`` pair forwarded by the BFF (#3736)."""
+    """Trusted Streamable HTTP MCP server forwarded by the BFF (#3736)."""
 
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
     url: str = Field(..., min_length=1, max_length=2048)
+    auth: str | None = Field(None, max_length=16)
+    token: str | None = Field(None, max_length=4096)
 
 
 class WorkflowResult(BaseModel):

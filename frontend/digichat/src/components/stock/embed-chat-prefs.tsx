@@ -2,11 +2,13 @@
 
 /**
  * Session-only embed/popup prefs (#3733 / #3736). Reload and `/new` reset:
- * tools on, language English, thinking on. Not localStorage.
+ * /digisearch and /digivault on, /websearch off, language English, thinking on.
+ * Not localStorage.
  */
 
 import { createContext, useContext, type ReactNode } from "react";
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
+import type { SessionMcpConfig } from "@/components/stock/embed-mcp-flow";
 
 export type EmbedChatPrefs = {
   webSearch: boolean;
@@ -14,6 +16,8 @@ export type EmbedChatPrefs = {
   vault: boolean;
   /** Extra catalog / MCP server ids → enabled. Missing key means on. */
   extra: Record<string, boolean>;
+  /** Session MCP JSON (user-added + operator overlays). Reload / /new clears. */
+  mcpCustom: SessionMcpConfig[];
   language: string;
   thinking: boolean;
   model: string;
@@ -21,10 +25,11 @@ export type EmbedChatPrefs = {
 };
 
 export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
-  webSearch: true,
+  webSearch: false,
   digisearch: true,
   vault: true,
   extra: {},
+  mcpCustom: [],
   language: DEFAULT_LANGUAGE_CODE,
   thinking: true,
   model: "",
@@ -40,6 +45,8 @@ export type EmbedChatPrefsApi = {
   setVault: (value: boolean) => void;
   setExtraTool: (id: string, value: boolean) => void;
   extraToolOn: (id: string) => boolean;
+  setMcpConfig: (config: SessionMcpConfig, previousId?: string) => void;
+  removeMcpConfig: (id: string) => void;
   setLanguage: (code: string) => void;
   setThinking: (value: boolean) => void;
   setModel: (id: string) => void;
@@ -54,11 +61,16 @@ export type EmbedChatPrefsApi = {
   allowUserMcp: boolean;
   allowAddMcp: boolean;
   catalogTools: CatalogToolRow[];
+  /** Operator MCP servers (ids/labels only — never URLs). */
+  mcpServers: CatalogToolRow[];
   sessionKey: string;
   openSettings: () => void;
-  openMcp: () => void;
-  openByok: () => void;
+  openTools: () => void;
+  openMcp: (seed?: string) => void;
+  openByok: (seed?: string) => void;
   openModels: () => void;
+  openEffort: () => void;
+  openLanguage: () => void;
   openSessions: () => void;
   newThread: () => void;
   compactThread: () => void | Promise<void>;
@@ -131,4 +143,24 @@ export function extraOffFromCatalog(tools: readonly CatalogToolRow[]): Record<st
     if (t.default === false) extra[t.id] = false;
   }
   return extra;
+}
+
+/** Settings `/mcp` value: None / Off / label / "N on". */
+export function mcpMenuSummary(
+  servers: readonly CatalogToolRow[],
+  extraToolOn: (id: string) => boolean,
+): string {
+  if (!servers.length) return "None";
+  const on = servers.filter((s) => extraToolOn(s.id));
+  if (!on.length) return "Off";
+  if (on.length === 1) return on[0]!.label?.trim() || on[0]!.id;
+  return `${on.length} on`;
+}
+
+/** Enabled operator MCP servers — these join the settings tool list. */
+export function registeredMcpTools(
+  servers: readonly CatalogToolRow[],
+  extraToolOn: (id: string) => boolean,
+): CatalogToolRow[] {
+  return servers.filter((s) => extraToolOn(s.id));
 }

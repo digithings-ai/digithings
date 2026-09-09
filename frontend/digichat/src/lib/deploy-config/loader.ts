@@ -99,7 +99,11 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
     cli: { enabled: false },
     backend: cfg.backend,
     tools: { allowUserToggle: true, catalog },
-    mcp: cfg.mcp ?? { servers: [], allowUserServers: false, allowAddForm: false },
+    mcp: {
+      servers: cfg.mcp?.servers ?? [],
+      allowUserServers: cfg.mcp?.allowUserServers ?? false,
+      allowAddForm: cfg.mcp?.allowAddForm ?? false,
+    },
     gate: {
       mode: cfg.gateMode,
       activityDetail: cfg.activityDetail,
