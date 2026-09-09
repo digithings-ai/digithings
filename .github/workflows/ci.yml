@@ -386,7 +386,12 @@ jobs:
         run: uv run --frozen --no-sync bash tests/scripts/test_protected_path_bash_guard.sh
 
       - name: Install ripgrep (pandas boundary gate)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+        run: |
+          # Google Chrome's apt repo currently fails with Hash Sum mismatch and
+          # aborts `apt-get update` before ripgrep can install.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ripgrep
 
       - name: Pandas boundary (REM-132)
         run: bash scripts/check_pandas_boundary.sh
