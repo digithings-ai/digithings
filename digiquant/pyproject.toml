@@ -60,6 +60,11 @@ research = [
     # R2 payload compression (ops/checkpoint_archive.py compress_payload):
     # zstd level-3 over repetitive checkpoint JSON; deferred import.
     "zstandard>=0.23",
+    # Direct-Postgres payload reads (ops/checkpoint_archive.py
+    # DirectPostgresReader): bulk checkpoint payloads exceed the ~8s
+    # PostgREST statement budget, so phase-2 fetches go over psycopg via
+    # DIGI_CHECKPOINTER_POSTGRES_URI; deferred import.
+    "psycopg[binary]>=3.1",
 ]
 optimize = ["optuna>=3.0"]
 # M2 Liquidity strategy: global M2 money-supply from FRED + FX rates from yfinance.

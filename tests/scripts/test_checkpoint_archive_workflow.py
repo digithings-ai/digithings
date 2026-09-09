@@ -37,6 +37,7 @@ def test_secrets_wired() -> None:
         "R2_BUCKET",
         "R2_ACCESS_KEY_ID",
         "R2_SECRET_ACCESS_KEY",
+        "DIGI_CHECKPOINTER_POSTGRES_URI",
     ):
         assert name in env, name
     for old in (

@@ -312,6 +312,71 @@ class TestArchiveThread:
         blobs = client.table("checkpoint_blobs").select("*").execute().data
         assert any(b["blob"] is not None for b in blobs)
 
+    def test_rerun_after_partial_archive_writes_no_duplicate_pointer(self) -> None:
+        # A previous run uploaded + recorded the pointer but died before NULL-ing:
+        # the blob is still non-null AND the registry row already exists.
+        probe = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "run1::portfolio"}],
+                "checkpoint_blobs": [_blob_row()],
+                "checkpoint_writes": [],
+            }
+        )
+        first = archive_thread(probe, FakeStore(), "run1::portfolio")
+        key = first.entries[0].key
+        client = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "run1::portfolio"}],
+                "checkpoint_blobs": [_blob_row()],
+                "checkpoint_writes": [],
+                "archive_objects": [
+                    {
+                        "source_table": "checkpoint_blobs",
+                        "source_key": {"thread_id": "run1::portfolio"},
+                        "r2_key": key,
+                        "sha256": first.entries[0].sha256,
+                        "size": first.entries[0].size,
+                        "owner": "house",
+                    }
+                ],
+            }
+        )
+        manifest = archive_thread(client, FakeStore(), "run1::portfolio")
+        rows = client.table("archive_objects").select("*").execute().data
+        assert [r["r2_key"] for r in rows].count(key) == 1
+        assert len(manifest.entries) == 1
+
+    def test_rerun_with_conflicting_pointer_sha_raises(self) -> None:
+        # Same r2_key but different bytes = real conflict, never silently keep.
+        probe = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "run1::portfolio"}],
+                "checkpoint_blobs": [_blob_row()],
+                "checkpoint_writes": [],
+            }
+        )
+        first = archive_thread(probe, FakeStore(), "run1::portfolio")
+        key = first.entries[0].key
+        client = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "run1::portfolio"}],
+                "checkpoint_blobs": [_blob_row()],
+                "checkpoint_writes": [],
+                "archive_objects": [
+                    {
+                        "source_table": "checkpoint_blobs",
+                        "source_key": {"thread_id": "run1::portfolio"},
+                        "r2_key": key,
+                        "sha256": "0" * 64,
+                        "size": first.entries[0].size,
+                        "owner": "house",
+                    }
+                ],
+            }
+        )
+        with pytest.raises(ArchiveVerifyError):
+            archive_thread(client, FakeStore(), "run1::portfolio")
+
 
 class TestRestoreThread:
     def test_round_trip(self) -> None:
@@ -365,6 +430,31 @@ class TestR2Backend:
             secret_key="secret",
         )
         assert backend.bucket == "digithings-checkpoint-archive"
+
+
+class _PostgrestPassthrough:
+    """DirectPostgresReader-shaped double that delegates to the FakeClient.
+
+    Used by live-path main() tests so they exercise the reader lifecycle
+    without a real Postgres connection.
+    """
+
+    def __init__(self, client: FakeClient) -> None:
+        self._client = client
+
+    def fetch_row(self, table: str, key: dict[str, Any]) -> dict[str, Any]:
+        from digiquant.ops.checkpoint_archive import KEY_COLUMNS_BY_TABLE
+
+        query = self._client.table(table).select("*")
+        for col in KEY_COLUMNS_BY_TABLE[table]:
+            query = query.eq(col, key[col])
+        rows = query.execute().data or []
+        if len(rows) != 1:
+            raise ArchiveVerifyError(f"expected 1 row for {key}, got {len(rows)}")
+        return rows[0]
+
+    def close(self) -> None:
+        pass
 
 
 class TestMain:
@@ -440,13 +530,118 @@ class TestMain:
         monkeypatch.setenv("R2_BUCKET", "bkt")
         monkeypatch.setenv("R2_ACCESS_KEY_ID", "k")
         monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "s")
+        monkeypatch.setenv("DIGI_CHECKPOINTER_POSTGRES_URI", "postgresql://fake/db")
         monkeypatch.setattr("digiquant.ops.checkpoint_archive.R2Backend", lambda **kw: FakeStore())
+        monkeypatch.setattr(
+            "digiquant.ops.checkpoint_archive.DirectPostgresReader",
+            lambda uri: _PostgrestPassthrough(client),
+        )
         out = tmp_path / "manifests.json"
         assert main(["--retain-days", "2", "--manifest-out", str(out)]) == 0
         blobs = {r["thread_id"]: r["blob"] for r in client.store["checkpoint_blobs"]}
         assert blobs["old-run"] is None  # archived
         assert blobs["new-run"] == "\\x02"  # retained
         assert out.is_file()
+
+    def test_main_wires_documents_phase(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from datetime import datetime, timezone
+
+        from digiquant.dashboard.tenancy import house_workspace_id
+
+        house = str(house_workspace_id())
+        recent = datetime.now(timezone.utc).isoformat()
+        client = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "only-run", "checkpoint": {"ts": recent}}],
+                "checkpoint_blobs": [],
+                "checkpoint_writes": [],
+                "documents": [
+                    {
+                        "workspace_id": house,
+                        "document_key": "k",
+                        "date": "2026-09-07",
+                        "payload": {"a": 1},
+                    },
+                    {
+                        "workspace_id": house,
+                        "document_key": "k",
+                        "date": "2026-09-08",
+                        "payload": {"a": 2},
+                    },
+                ],
+            }
+        )
+        monkeypatch.setattr("digiquant.data.store.client.build_digiquant_client", lambda: client)
+        monkeypatch.setenv("R2_ACCOUNT_ID", "x")
+        monkeypatch.setenv("R2_BUCKET", "bkt")
+        monkeypatch.setenv("R2_ACCESS_KEY_ID", "k")
+        monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "s")
+        monkeypatch.setenv("DIGI_CHECKPOINTER_POSTGRES_URI", "postgresql://fake/db")
+        monkeypatch.setattr("digiquant.ops.checkpoint_archive.R2Backend", lambda **kw: FakeStore())
+        monkeypatch.setattr(
+            "digiquant.ops.checkpoint_archive.DirectPostgresReader",
+            lambda uri: _PostgrestPassthrough(client),
+        )
+        assert main([]) == 0
+        out = capsys.readouterr().out
+        assert "archived documents: 1 payloads" in out
+        live = {r["date"]: r["payload"] for r in client.store["documents"]}
+        assert live["2026-09-07"] is None  # archived
+        assert live["2026-09-08"] == {"a": 2}  # retained
+        pointers = client.store["archive_objects"]
+        assert len(pointers) == 1 and pointers[0]["source_table"] == "documents"
+
+    def test_main_workspace_default_resolves_house_uuid(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from datetime import datetime, timezone
+
+        sentinel = "11111111-2222-4333-8444-555555555555"
+        recent = datetime.now(timezone.utc).isoformat()
+        client = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "only-run", "checkpoint": {"ts": recent}}],
+                "checkpoint_blobs": [],
+                "checkpoint_writes": [],
+                "documents": [
+                    {
+                        "workspace_id": sentinel,
+                        "document_key": "k",
+                        "date": "2026-09-07",
+                        "payload": {"a": 1},
+                    },
+                    {
+                        "workspace_id": sentinel,
+                        "document_key": "k",
+                        "date": "2026-09-08",
+                        "payload": {"a": 2},
+                    },
+                ],
+            }
+        )
+        monkeypatch.setattr(
+            "digiquant.ops.checkpoint_archive.house_workspace_id",
+            lambda: sentinel,
+        )
+        monkeypatch.setattr("digiquant.data.store.client.build_digiquant_client", lambda: client)
+        monkeypatch.setenv("R2_ACCOUNT_ID", "x")
+        monkeypatch.setenv("R2_BUCKET", "bkt")
+        monkeypatch.setenv("R2_ACCESS_KEY_ID", "k")
+        monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "s")
+        monkeypatch.setenv("DIGI_CHECKPOINTER_POSTGRES_URI", "postgresql://fake/db")
+        monkeypatch.setattr("digiquant.ops.checkpoint_archive.R2Backend", lambda **kw: FakeStore())
+        monkeypatch.setattr(
+            "digiquant.ops.checkpoint_archive.DirectPostgresReader",
+            lambda uri: _PostgrestPassthrough(client),
+        )
+        assert main([]) == 0
+        out = capsys.readouterr().out
+        assert "archived documents: 1 payloads" in out
+        live = {r["date"]: r["payload"] for r in client.store["documents"]}
+        assert live["2026-09-07"] is None  # archived
+        assert live["2026-09-08"] == {"a": 2}  # retained
 
 
 def test_r2_backend_from_new_env_names(monkeypatch):
@@ -591,3 +786,97 @@ def test_fetch_thread_rows_duplicate_keys_raise():
     client.store.setdefault("checkpoint_blobs", []).append(dict(row))
     with pytest.raises(ArchiveVerifyError):
         _fetch_thread_rows(client, "checkpoint_blobs", "t1")
+
+
+class _FakePgConn:
+    """Double for a psycopg connection: factory + cursor surface in one."""
+
+    def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
+        self._rows = rows if rows is not None else [_blob_row()]
+        self.uri = ""
+        self.sql = ""
+        self.params: tuple[Any, ...] = ()
+        self.closed = False
+
+    def __call__(self, uri: str) -> "_FakePgConn":
+        self.uri = uri
+        return self
+
+    def cursor(self, **kwargs: Any) -> "_FakePgConn":
+        return self
+
+    def execute(self, sql: str, params: tuple[Any, ...] | None = None) -> "_FakePgConn":
+        self.sql = sql
+        self.params = params or ()
+        return self
+
+    def fetchall(self) -> list[dict[str, Any]]:
+        return [dict(r) for r in self._rows]
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class TestDirectPostgresReader:
+    def test_fetch_thread_rows_uses_direct_reader_for_payloads(self) -> None:
+        from digiquant.ops.checkpoint_archive import _fetch_thread_rows
+
+        rows = [_blob_row(channel="a"), _blob_row(channel="b")]
+        client = FakeClient(store={"checkpoint_blobs": [dict(r) for r in rows]})
+        fetched: list[dict[str, Any]] = []
+
+        class FakeDirectReader:
+            def fetch_row(self, table: str, key: dict[str, Any]) -> dict[str, Any]:
+                assert table == "checkpoint_blobs"
+                fetched.append(dict(key))
+                return next(r for r in rows if all(r[c] == key[c] for c in key))
+
+        got = _fetch_thread_rows(
+            client, "checkpoint_blobs", "run1::portfolio", payload_reader=FakeDirectReader()
+        )
+        assert got == rows
+        assert len(fetched) == 2
+        assert set(fetched[0]) == {"thread_id", "checkpoint_ns", "channel", "version"}
+        # The phase-1 key scan was the only PostgREST statement.
+        assert len(client.log) == 1
+
+    def test_direct_reader_rejects_unknown_table(self) -> None:
+        from digiquant.ops.checkpoint_archive import ArchiveVerifyError, DirectPostgresReader
+
+        reader = DirectPostgresReader("postgresql://u:p@h/db", connect=_FakePgConn())
+        with pytest.raises(ArchiveVerifyError):
+            reader.fetch_row("pg_shadow", {"thread_id": "t"})
+
+    def test_direct_reader_parameterizes_values(self) -> None:
+        from digiquant.ops.checkpoint_archive import DirectPostgresReader
+
+        conn = _FakePgConn()
+        reader = DirectPostgresReader("postgresql://u:p@h/db", connect=conn)
+        key = {
+            "thread_id": "t",
+            "checkpoint_ns": "",
+            "channel": "c'; DROP TABLE checkpoint_blobs;--",
+            "version": "v",
+        }
+        reader.fetch_row("checkpoint_blobs", key)
+        assert "%s" in conn.sql
+        assert "DROP" not in conn.sql
+        assert conn.params == ("t", "", "c'; DROP TABLE checkpoint_blobs;--", "v")
+
+    def test_direct_reader_wrong_row_count_raises(self) -> None:
+        from digiquant.ops.checkpoint_archive import ArchiveVerifyError, DirectPostgresReader
+
+        reader = DirectPostgresReader("postgresql://u:p@h/db", connect=_FakePgConn(rows=[]))
+        with pytest.raises(ArchiveVerifyError):
+            reader.fetch_row("checkpoint_blobs", {"thread_id": "t"})
+
+    def test_main_requires_postgres_uri(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "digiquant.data.store.client.build_digiquant_client", lambda: FakeClient()
+        )
+        monkeypatch.setenv("R2_ACCOUNT_ID", "x")
+        monkeypatch.setenv("R2_BUCKET", "bkt")
+        monkeypatch.setenv("R2_ACCESS_KEY_ID", "k")
+        monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "s")
+        monkeypatch.delenv("DIGI_CHECKPOINTER_POSTGRES_URI", raising=False)
+        assert main([]) == 2

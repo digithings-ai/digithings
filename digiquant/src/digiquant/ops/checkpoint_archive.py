@@ -16,9 +16,13 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
+import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Protocol
+
+from digiquant.dashboard.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +32,14 @@ BLOB_TABLES = ("checkpoint_blobs", "checkpoint_writes")
 BLOB_KEY_COLUMNS: dict[str, tuple[str, ...]] = {
     "checkpoint_blobs": ("thread_id", "checkpoint_ns", "channel", "version"),
     "checkpoint_writes": ("thread_id", "checkpoint_ns", "checkpoint_id", "task_id", "idx"),
+}
+DOCUMENT_KEY_COLUMNS = ("workspace_id", "document_key", "date")
+# PostgREST caps one response page at 1000 rows: key scans must page explicitly.
+DOC_SCAN_PAGE_SIZE = 1000
+# Every table the archiver may read by key (DirectPostgresReader validates here).
+KEY_COLUMNS_BY_TABLE: dict[str, tuple[str, ...]] = {
+    **BLOB_KEY_COLUMNS,
+    "documents": DOCUMENT_KEY_COLUMNS,
 }
 
 
@@ -263,32 +275,147 @@ def _row_filters(table: str, row: dict[str, Any]) -> list[tuple[str, Any]]:
     return [(col, row.get(col)) for col in BLOB_KEY_COLUMNS[table]]
 
 
+def _jsonable(value: Any) -> Any:
+    """Coerce direct-Postgres native types to the JSON strings PostgREST returns.
+
+    psycopg yields ``datetime.date``/``datetime`` and ``uuid.UUID`` objects
+    where the PostgREST path yields ISO strings; the registry insert body is
+    JSON-encoded, so normalize at this choke point for both callers.
+    """
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    return value
+
+
+def _insert_pointer(
+    client: Any,
+    source_table: str,
+    source_key: dict[str, Any],
+    r2_key: str,
+    sha256: str,
+    size: int,
+    owner: str,
+) -> None:
+    """Idempotent ``archive_objects`` insert; raises before any Supabase mutate.
+
+    Re-recording identical bytes is a no-op so a retried run converges; the
+    same key with different bytes raises so the Supabase row is kept.
+    """
+    existing = (
+        client.table("archive_objects").select("r2_key,sha256").eq("r2_key", r2_key).execute().data
+        or []
+    )
+    for pointer in existing:
+        if pointer.get("sha256") == sha256:
+            return
+        raise ArchiveVerifyError(f"archive pointer conflict for {r2_key}: Supabase row kept")
+    client.table("archive_objects").insert(
+        {
+            "source_table": source_table,
+            "source_key": {key: _jsonable(val) for key, val in source_key.items()},
+            "r2_key": r2_key,
+            "sha256": sha256,
+            "size": size,
+            "owner": owner,
+        }
+    ).execute()
+
+
 def record_pointer(client: Any, entry: ArchiveEntry, owner: str = "house") -> None:
     """Insert one ``archive_objects`` pointer row; raises before any NULL-ing.
 
     ``source_table`` is the stable key segment (``checkpoints/<thread>/<table>/...``),
     ``source_key`` the row filters as a JSON object. A failed insert propagates to
-    the caller so the Supabase row is kept.
+    the caller so the Supabase row is kept. Re-recording identical bytes is a
+    no-op so a retried run converges; the same key with different bytes raises.
     """
-    source_table = entry.key.split("/")[2]
-    client.table("archive_objects").insert(
-        {
-            "source_table": source_table,
-            "source_key": dict(entry.filters),
-            "r2_key": entry.key,
-            "sha256": entry.sha256,
-            "size": entry.size,
-            "owner": owner,
-        }
-    ).execute()
+    _insert_pointer(
+        client,
+        entry.key.split("/")[2],
+        dict(entry.filters),
+        entry.key,
+        entry.sha256,
+        entry.size,
+        owner,
+    )
+
+
+try:  # Optional: only needed for the live direct-Postgres read path.
+    from psycopg.rows import dict_row as _dict_row
+except ImportError:  # Test doubles and PostgREST-only installs land here.
+    _dict_row = None
+
+
+def _psycopg_connect(uri: str) -> Any:
+    """Open a direct Postgres connection; deferred import keeps the base install lean."""
+    try:
+        import psycopg
+    except ImportError as exc:
+        raise RuntimeError(
+            "psycopg is required for direct Postgres reads "
+            "(install the digiquant research extra: pip install 'digiquant[research]')"
+        ) from exc
+    return psycopg.connect(uri)
+
+
+class DirectPostgresReader:
+    """Fetch payload rows over a direct Postgres connection.
+
+    Every PostgREST statement runs under the authenticator role's 8s
+    ``statement_timeout`` — large checkpoint blobs can never transfer that
+    way. This reader runs the same single-row SELECTs over a direct
+    connection (the path LangGraph's PostgresSaver writes through), where
+    the database-level timeout applies.
+    """
+
+    def __init__(self, uri: str, connect: Any = None) -> None:
+        self._uri = uri
+        self._connect = connect or _psycopg_connect
+        self._conn: Any = None
+
+    def fetch_row(self, table: str, key: dict[str, Any]) -> dict[str, Any]:
+        """Fetch exactly one row by full key; raises on any other count."""
+        if table not in KEY_COLUMNS_BY_TABLE:
+            raise ArchiveVerifyError(f"refusing direct read of unexpected table {table!r}")
+        key_cols = KEY_COLUMNS_BY_TABLE[table]
+        predicate = " AND ".join(f'"{col}" IS NOT DISTINCT FROM %s' for col in key_cols)
+        sql = f'SELECT * FROM "{table}" WHERE {predicate}'
+        params = tuple(key.get(col) for col in key_cols)
+        if self._conn is None:
+            self._conn = self._connect(self._uri)
+        kwargs = {"row_factory": _dict_row} if _dict_row is not None else {}
+        cur = self._conn.cursor(**kwargs)
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        if len(rows) != 1:
+            raise ArchiveVerifyError(
+                f"expected 1 row for {table} {key}, found {len(rows)}; Supabase row kept"
+            )
+        return dict(rows[0])
+
+    def close(self) -> None:
+        """Close the underlying connection; safe to call more than once."""
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
 
 
 # Portfolio blob rows reach ~16MB each, so even small multi-row pages can exceed
 # the Supabase statement timeout (prod 57014). Fetch in two phases: one key-only
 # scan (tiny rows), then one single-row statement per payload row — each
 # statement carries at most one row, the minimum PostgREST can transfer.
-def _fetch_thread_rows(client: Any, table: str, thread_id: str) -> list[dict[str, Any]]:
-    """Fetch one thread's rows: key-only scan, then one single-row fetch per key."""
+# Payload rows that large still exceed PostgREST's 8s authenticator timeout, so
+# callers pass a DirectPostgresReader to fetch phase-2 rows directly instead.
+def _fetch_thread_rows(
+    client: Any, table: str, thread_id: str, payload_reader: Any = None
+) -> list[dict[str, Any]]:
+    """Fetch one thread's rows: key-only scan, then one single-row fetch per key.
+
+    When ``payload_reader`` is given, payload rows come from it (direct
+    Postgres); otherwise each payload row is a PostgREST single-row fetch.
+    """
     key_cols = BLOB_KEY_COLUMNS[table]
     keys = (
         client.table(table).select(",".join(key_cols)).eq("thread_id", thread_id).execute().data
@@ -296,6 +423,9 @@ def _fetch_thread_rows(client: Any, table: str, thread_id: str) -> list[dict[str
     )
     rows: list[dict[str, Any]] = []
     for key in keys:
+        if payload_reader is not None:
+            rows.append(payload_reader.fetch_row(table, key))
+            continue
         query = client.table(table).select("*")
         for col in key_cols:
             query = query.eq(col, key.get(col))
@@ -309,7 +439,11 @@ def _fetch_thread_rows(client: Any, table: str, thread_id: str) -> list[dict[str
 
 
 def archive_thread(
-    client: Any, store: StorageBackend, thread_id: str, owner: str = "house"
+    client: Any,
+    store: StorageBackend,
+    thread_id: str,
+    owner: str = "house",
+    payload_reader: Any = None,
 ) -> ArchiveManifest:
     """Offload one thread's payloads: compress → put → verify → registry → NULL the ``bytea`` cell.
 
@@ -320,7 +454,7 @@ def archive_thread(
     """
     entries: list[ArchiveEntry] = []
     for table in BLOB_TABLES:
-        rows = _fetch_thread_rows(client, table, thread_id)
+        rows = _fetch_thread_rows(client, table, thread_id, payload_reader=payload_reader)
         for row in rows:
             payload = parse_postgrest_bytea(row.get("blob"))
             if payload is None:
@@ -360,25 +494,62 @@ def document_key(workspace: str, date: str, key: str) -> str:
 
 
 def archive_documents(
-    client: Any, store: StorageBackend, workspace: str, owner: str = "house"
+    client: Any,
+    store: StorageBackend,
+    workspace: str,
+    owner: str = "house",
+    payload_reader: Any = None,
 ) -> int:
     """Offload older document versions: compress → put → verify → registry → NULL the payload cell.
 
     Groups ``documents`` rows by ``document_key`` within *workspace*, keeps the
-    newest ``date`` live, and archives every older version. Rows already NULL
-    (prior pointers) are skipped. Any verification failure raises
+    newest ``date`` live, and archives every older version. The 58MB table is
+    never pulled whole: one key-only scan first, then one single-row fetch per
+    older version (via ``payload_reader`` when given, else PostgREST). Rows
+    already NULL (prior pointers) are skipped. Any verification failure raises
     :class:`ArchiveVerifyError` before touching Supabase, and a
     registry-insert failure raises before the NULL update, so a failed
     archive always keeps the Supabase row.
     """
-    rows = client.table("documents").select("*").eq("workspace_id", workspace).execute().data or []
+    key_cols = DOCUMENT_KEY_COLUMNS
+    # Page explicitly: PostgREST silently caps one response at 1000 rows.
+    key_rows: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        page = (
+            client.table("documents")
+            .select(",".join(key_cols))
+            .eq("workspace_id", workspace)
+            .range(offset, offset + DOC_SCAN_PAGE_SIZE - 1)
+            .execute()
+            .data
+            or []
+        )
+        key_rows.extend(page)
+        if len(page) < DOC_SCAN_PAGE_SIZE:
+            break
+        offset += DOC_SCAN_PAGE_SIZE
     groups: dict[str, list[dict[str, Any]]] = {}
-    for row in rows:
-        groups.setdefault(row.get("document_key"), []).append(row)
+    for key_row in key_rows:
+        groups.setdefault(key_row.get("document_key"), []).append(key_row)
     archived = 0
     for key, versions in groups.items():
         versions.sort(key=lambda r: str(r.get("date")))
-        for row in versions[:-1]:
+        for key_row in versions[:-1]:
+            row_key = {col: key_row.get(col) for col in key_cols}
+            if payload_reader is not None:
+                row = payload_reader.fetch_row("documents", row_key)
+            else:
+                query = client.table("documents").select("*")
+                for col, val in row_key.items():
+                    query = query.eq(col, val)
+                matches = query.execute().data or []
+                if len(matches) != 1:
+                    raise ArchiveVerifyError(
+                        f"expected 1 row for documents {row_key}, found {len(matches)}; "
+                        "Supabase row kept"
+                    )
+                row = matches[0]
             if row.get("payload") is None:
                 continue
             r2_key = document_key(workspace, str(row.get("date")), str(key))
@@ -387,20 +558,19 @@ def archive_documents(
             store.put(r2_key, stored)
             if hashlib.sha256(store.get(r2_key)).hexdigest() != digest:
                 raise ArchiveVerifyError(f"read-back mismatch for {r2_key}; Supabase row kept")
-            client.table("archive_objects").insert(
+            _insert_pointer(
+                client,
+                "documents",
                 {
-                    "source_table": "documents",
-                    "source_key": {
-                        "workspace_id": workspace,
-                        "document_key": key,
-                        "date": row.get("date"),
-                    },
-                    "r2_key": r2_key,
-                    "sha256": digest,
-                    "size": len(stored),
-                    "owner": owner,
-                }
-            ).execute()
+                    "workspace_id": workspace,
+                    "document_key": key,
+                    "date": row.get("date"),
+                },
+                r2_key,
+                digest,
+                len(stored),
+                owner,
+            )
             query = client.table("documents").update({"payload": None})
             for col, val in (
                 ("workspace_id", workspace),
@@ -485,8 +655,13 @@ __all__ = [
     "ArchiveVerifyError",
     "BLOB_KEY_COLUMNS",
     "BLOB_TABLES",
+    "DOCUMENT_KEY_COLUMNS",
+    "DOC_SCAN_PAGE_SIZE",
+    "DirectPostgresReader",
     "HIGH_WATERMARK_BYTES",
+    "KEY_COLUMNS_BY_TABLE",
     "LOW_WATERMARK_BYTES",
+    "PG_URI_ENV",
     "R2Backend",
     "StorageBackend",
     "archive_thread",
@@ -513,6 +688,7 @@ R2_ACCOUNT_ENV = "R2_ACCOUNT_ID"
 R2_BUCKET_ENV = "R2_BUCKET"
 R2_ACCESS_KEY_ENV = "R2_ACCESS_KEY_ID"
 R2_SECRET_KEY_ENV = "R2_SECRET_ACCESS_KEY"
+PG_URI_ENV = "DIGI_CHECKPOINTER_POSTGRES_URI"
 
 
 def _r2_backend_from_env() -> R2Backend | None:
@@ -532,7 +708,8 @@ def _r2_backend_from_env() -> R2Backend | None:
 def main(argv: list[str] | None = None) -> int:
     """CLI: ``--dry-run`` lists threads; otherwise archives all but ``--keep``.
 
-    Returns 0 on success, 2 when credentials (Supabase or R2) are missing.
+    Returns 0 on success, 2 when credentials (Supabase, R2, or direct
+    Postgres) are missing.
     """
     import argparse
     import json
@@ -553,6 +730,11 @@ def main(argv: list[str] | None = None) -> int:
         help="archive only threads whose newest checkpoint is older than N days",
     )
     parser.add_argument("--owner", default="house", help="owner tag for registry rows")
+    parser.add_argument(
+        "--workspace",
+        default=None,
+        help="documents workspace id to archive (default: house workspace)",
+    )
     args = parser.parse_args(argv)
 
     from digiquant.data.store.client import build_digiquant_client
@@ -581,15 +763,31 @@ def main(argv: list[str] | None = None) -> int:
             "missing R2 credentials; set R2_ACCOUNT_ID/R2_BUCKET/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY"
         )
         return 2
+    pg_uri = (os.environ.get(PG_URI_ENV) or "").strip()
+    if not pg_uri:
+        print(f"missing direct Postgres URI; set {PG_URI_ENV}")
+        return 2
     manifests: list[dict[str, Any]] = []
     fresh_keys: set[str] = set()
-    for thread_id in threads:
-        if thread_id in keep:
-            continue
-        manifest = archive_thread(client, store, thread_id, args.owner)
-        manifests.append(manifest.to_dict())
-        fresh_keys.update(entry.key for entry in manifest.entries)
-        print(f"archived {thread_id}: {len(manifest.entries)} payloads")
+    reader = DirectPostgresReader(pg_uri)
+    try:
+        for thread_id in threads:
+            if thread_id in keep:
+                continue
+            manifest = archive_thread(client, store, thread_id, args.owner, payload_reader=reader)
+            manifests.append(manifest.to_dict())
+            fresh_keys.update(entry.key for entry in manifest.entries)
+            print(f"archived {thread_id}: {len(manifest.entries)} payloads")
+        docs = archive_documents(
+            client,
+            store,
+            args.workspace or str(house_workspace_id()),
+            args.owner,
+            payload_reader=reader,
+        )
+        print(f"archived documents: {docs} payloads")
+    finally:
+        reader.close()
     evicted = evict_to_watermark(client, store, fresh_keys)
     for key in evicted:
         print(f"evicted {key}")
