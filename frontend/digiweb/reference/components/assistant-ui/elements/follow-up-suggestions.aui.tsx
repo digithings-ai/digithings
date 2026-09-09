@@ -3,6 +3,8 @@
 import { AuiIf, useAuiState, ThreadPrimitive } from "@assistant-ui/react";
 import { useCallback, useEffect, useRef, useState, type FC } from "react";
 
+import { DotMatrix } from "@/components/ui/dot-matrix";
+
 const FollowupSuggestionsRow: FC = () => {
   const suggestions = useAuiState((s) => s.thread.suggestions);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -56,6 +58,11 @@ const FollowupSuggestionsRow: FC = () => {
             prompt={suggestion.prompt}
             send
           >
+            <DotMatrix
+              state="example"
+              label="Example"
+              className="aui-thread-followup-suggestion-mark size-3.5"
+            />
             {suggestion.title ?? suggestion.prompt}
             {suggestion.label && (
               <span className="aui-thread-followup-suggestion-label text-muted-foreground ms-1">

@@ -29,8 +29,22 @@
 .digichat-launcher__panel,
 .digichat-launcher__body {
   /* The trigger keeps line-height: 0. The panel must not inherit it —
-     welcome copy stacks on one row and autosize textareas explode. */
+     welcome copy stacks on one row and autosize textareas explode. Compact
+     composer input sets its own line-height so field-sizing stays one row. */
   line-height: 1.45;
+  /* Match the /chatbot thread: --bg / --ink, not a light shadcn popover. */
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --popover: var(--bg);
+  --popover-foreground: var(--ink);
+  --card: var(--bg);
+  --composer-bg: var(--bg);
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-popover: var(--bg);
+  --color-card: var(--bg);
+  background: var(--bg);
+  color: var(--ink);
 }
 
 .digichat-launcher--contained {
@@ -160,6 +174,13 @@
   letter-spacing: 0.04em;
 }
 
+.digichat-launcher__header-actions {
+  display: inline-flex;
+  align-items: stretch;
+  flex: none;
+}
+
+.digichat-launcher__new,
 .digichat-launcher__close {
   display: inline-flex;
   width: var(--digichat-launcher-size);
@@ -174,12 +195,43 @@
   background: transparent;
   color: var(--ink-mute);
   cursor: pointer;
-  transition: color 0.18s var(--ease), background-color 0.18s var(--ease);
+  transition: color 0.18s var(--ease);
 }
 
-.digichat-launcher__close:hover {
-  background: var(--surface-2);
+.digichat-launcher__new {
+  position: relative;
+}
+
+.digichat-launcher__new:hover,
+.digichat-launcher__new:focus-visible,
+.digichat-launcher__close:hover,
+.digichat-launcher__close:focus-visible {
+  background: transparent;
   color: var(--ink);
+}
+
+.digichat-launcher__new::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  z-index: 120;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 0.68rem/1.2 var(--font-mono);
+  letter-spacing: 0;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.digichat-launcher__new:hover::after,
+.digichat-launcher__new:focus-visible::after {
+  opacity: 1;
 }
 
 .digichat-launcher__body {
@@ -255,6 +307,40 @@
   }
 }
 
+/* Compact Thread inside the panel: one input row until a newline.
+   Overrides registry min-h-7 / leading-7 / gap-2 / 8px composer padding.
+   Empty and one-line typed share 1lh — do not shorten :placeholder-shown. */
+.digichat-launcher [data-slot="aui_composer-shell"][data-layout="compact"] {
+  --composer-padding: 4px;
+  gap: 0;
+  padding: 4px 6px;
+}
+
+.digichat-launcher [data-slot="aui_composer-shell"][data-layout="compact"] .aui-composer-main {
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.digichat-launcher [data-slot="aui_composer-shell"][data-layout="compact"] textarea.aui-composer-input {
+  box-sizing: border-box;
+  field-sizing: content;
+  min-height: 1lh;
+  padding-block: 0;
+  line-height: 1.375rem;
+  overflow-x: hidden;
+  overflow-y: hidden;
+}
+
+.digichat-launcher [data-slot="aui_composer-shell"][data-layout="compact"] textarea.aui-composer-input:placeholder-shown {
+  field-sizing: fixed;
+  height: 1lh;
+  min-height: 1lh;
+  max-height: 1lh;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .digichat-launcher__mark rect,
   .digichat-launcher__cursor,
@@ -266,6 +352,7 @@
   }
 
   .digichat-launcher__trigger,
+  .digichat-launcher__new,
   .digichat-launcher__close {
     transition: none;
   }

@@ -21,8 +21,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
+import subprocess
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any  # score:allow untyped any — dynamically loaded module
 
@@ -78,6 +80,15 @@ def _snapshot(**over: Any) -> dict[str, Any]:
             }
         ],
         "latestRelease": None,
+        "dailyContributions": [
+            {
+                "date": (datetime.now(UTC) - timedelta(days=fra.YEAR_DAYS - 1 - i)).strftime(
+                    "%Y-%m-%d"
+                ),
+                "count": 0,
+            }
+            for i in range(fra.YEAR_DAYS)
+        ],
         "modules": {"digigraph": {"path": "digigraph", "lastCommit": None, "files": 1, "lines": 2}},
     }
     base.update(over)
@@ -285,6 +296,19 @@ def test_features_reads_scope_summary_and_pr_from_a_squash_subject() -> None:
 
 
 @pytest.mark.unit
+def test_features_strips_a_stale_ref_left_by_a_referenced_subject() -> None:
+    feats = fra._features(
+        [
+            _commit(
+                "feat(settings): polish empty/error/soft-503 UX (#3681) (#3684)",
+            )
+        ]
+    )
+    assert feats[0]["summary"] == "polish empty/error/soft-503 UX"
+    assert feats[0]["pr"] == 3684
+
+
+@pytest.mark.unit
 def test_features_keeps_unscoped_and_breaking_feats() -> None:
     feats = fra._features(
         [_commit("feat: a bare feature (#12)"), _commit("feat(api)!: broke it (#13)")]
@@ -437,6 +461,152 @@ def test_text_lines_scores_binaries_and_unreadable_paths_as_zero(tmp_path: Path)
     assert fra._text_lines(tmp_path / "does-not-exist") == 0
     (tmp_path / "empty.py").write_text("", encoding="utf-8")
     assert fra._text_lines(tmp_path / "empty.py") == 0
+
+
+# ── daily bucketing (Task 2) ───────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+def test_to_daily_sums_three_sources_per_utc_day() -> None:
+    end = datetime(2026, 8, 24, tzinfo=UTC)
+    days = fra._to_daily(
+        commits=[{"commit": {"committer": {"date": "2026-08-21T10:00:00Z"}}}],
+        merged=["2026-08-21T17:35:10Z", "2026-08-21T09:00:00Z"],
+        closed=["2026-08-20T08:00:00Z"],
+        end=end, total=14,
+    )
+    by_date = {d["date"]: d["count"] for d in days}
+    assert by_date["2026-08-21"] == 3
+    assert by_date["2026-08-20"] == 1
+    assert by_date["2026-08-19"] == 0
+    assert len(days) == 14
+
+
+@pytest.mark.unit
+def test_search_dates_paginates_and_skips_missing_closed_at(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Search paginator collects closed_at across pages without network."""
+    pages = [
+        {"items": [{"closed_at": "2026-08-21T10:00:00Z"}, {"closed_at": None}]},
+        {"items": []},
+    ]
+    monkeypatch.setattr(fra, "_gh", lambda *a: pages.pop(0))
+    assert fra._search_dates("repo:x+is:issue") == ["2026-08-21T10:00:00Z"]
+
+
+@pytest.mark.unit
+def test_search_dates_stops_on_short_page_without_sleeping(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A short page ends pagination; no backoff sleep on the terminal page."""
+    calls: list[str] = []
+    sleeps: list[float] = []
+
+    def fake_gh(*args: str) -> dict[str, Any]:
+        calls.append(args[1])
+        return {"items": [{"closed_at": "2026-08-20T08:00:00Z"}]}
+
+    monkeypatch.setattr(fra, "_gh", fake_gh)
+    monkeypatch.setattr(fra.time, "sleep", lambda s: sleeps.append(s))
+    assert fra._search_dates("repo:x+is:pr") == ["2026-08-20T08:00:00Z"]
+    assert len(calls) == 1
+    assert sleeps == []
+
+
+# ── search-cap bisection (Task 4 review) ─────────────────────────────────────
+
+
+_CAP_STDERR = "gh: Only the first 1000 search results are available (HTTP 422)"
+
+
+def _cap_error() -> subprocess.CalledProcessError:
+    """The 1000-result-cap failure `gh` raises past page 10 of a big window."""
+    return subprocess.CalledProcessError(1, ["gh", "api"], "", _CAP_STDERR)
+
+
+@pytest.mark.unit
+def test_search_dates_bisects_the_cap_without_gaps_or_double_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bisected spans must partition the window: every day once, none missing.
+
+    The unbounded query 422s; any span longer than a day 422s; day-sized spans
+    succeed with one stamp per day. The concatenated pieces must then be exactly
+    the full window — no double-count from overlapping ranges, no gap from a
+    dropped one. Stubbed at `_gh`, so no network; the real `_search_pages` and
+    bisection run unmodified.
+    """
+    today = datetime.now(UTC).date()
+    start = today - timedelta(days=7)
+    query = f"repo:x+is:pr+is:merged+merged:>={start.isoformat()}"
+
+    def fake_gh(*args: str) -> dict[str, Any]:
+        found = re.search(r"(\d{4}-\d{2}-\d{2})(?:\.\.(\d{4}-\d{2}-\d{2}))?", args[1])
+        assert found and found.group(1)
+        if found.group(2) is None:
+            raise _cap_error()
+        first = date.fromisoformat(found.group(1))
+        last = date.fromisoformat(found.group(2))
+        if (last - first).days > 1:
+            raise _cap_error()
+        days = (last - first).days + 1
+        return {
+            "items": [
+                {"closed_at": f"{(first + timedelta(days=i)).isoformat()}T12:00:00Z"}
+                for i in range(days)
+            ]
+        }
+
+    monkeypatch.setattr(fra, "_gh", fake_gh)
+    got = fra._search_dates(query)
+    expected = [f"{(start + timedelta(days=i)).isoformat()}T12:00:00Z" for i in range(8)]
+    assert sorted(got) == expected
+    assert len(got) == len(set(got)) == 8
+
+
+@pytest.mark.unit
+def test_search_dates_reraises_a_single_day_still_over_the_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A day that still 422s must raise, never silently truncate the heatmap."""
+
+    def fake_gh(*args: str) -> dict[str, Any]:
+        raise _cap_error()
+
+    monkeypatch.setattr(fra, "_gh", fake_gh)
+    today = datetime.now(UTC).date().isoformat()
+    with pytest.raises(subprocess.CalledProcessError):
+        fra._search_dates(f"repo:x+is:pr+is:merged+merged:>={today}")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "gh: Bad credentials (HTTP 401)",
+        "gh: API rate limit exceeded (HTTP 403)",
+        "gh: failed to connect to api.github.com (network unreachable)",
+    ],
+)
+def test_search_dates_passes_non_cap_failures_through_without_bisect(
+    stderr: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Auth, rate-limit and network failures raise at once — one call, no retries.
+
+    Bisecting those would fan a single failure into a retry storm that masks the
+    original error, so only the 1000-result-cap signal may trigger the fallback.
+    """
+    calls: list[str] = []
+
+    def fake_gh(*args: str) -> dict[str, Any]:
+        calls.append(args[1])
+        raise subprocess.CalledProcessError(1, ["gh", "api"], "", stderr)
+
+    monkeypatch.setattr(fra, "_gh", fake_gh)
+    with pytest.raises(subprocess.CalledProcessError):
+        fra._search_dates("repo:x+is:pr+is:merged+merged:>=2026-01-01")
+    assert len(calls) == 1
 
 
 # ── wiring ──────────────────────────────────────────────────────────────────

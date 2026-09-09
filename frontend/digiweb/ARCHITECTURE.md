@@ -82,9 +82,12 @@ closes immediately. After the first open, the hidden panel keeps its children
 mounted so an iframe conversation survives close/reopen. It portals to
 `document.body` by default to escape transformed/backdrop-filter app shells;
 `portal={false}` contains reference specimens. Product can mount
-`DigichatThread` (`@digithings/web/chat/thread`) as `children`. The
-design-reference `/chatbot` gallery iterates on the official assistant-ui
-`Thread` via CSS variables — see [`CHAT_THEME.md`](CHAT_THEME.md). The full
+`DigichatThread` (`@digithings/web/chat/thread`) as `children`. That subpath
+**is** the gallery `/chatbot` Thread (`gallery-thread/thread.aui.tsx` + slots),
+not a second ChatMarkdown tree. Import the subpath — never the
+`@digithings/web` main barrel (webpack OOM). The design-reference `/chatbot`
+gallery iterates on that same Thread via CSS variables — see
+[`CHAT_THEME.md`](CHAT_THEME.md). The full
 assistant-ui elements catalog (every `/elements` slug, purpose, fetch command,
 and digichat attach kind) lives in
 [`ASSISTANT_UI_ELEMENTS.md`](ASSISTANT_UI_ELEMENTS.md) — discover there, copy

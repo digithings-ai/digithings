@@ -925,7 +925,7 @@ def resolve_request_model(request_model: str) -> str:
       registered provider prefixes; digillm sends them to ``OPENAI_API_BASE``
       (LiteLLM, or the CLI/GHA OpenRouter rewrite). They must not fall through
       to ``resolve_effective_model``, which prefers ``OLLAMA_MODEL`` /
-      ``model_modes`` local defaults (``ollama/qwen3:8b``) and would hand
+      ``model_modes`` local defaults and would hand
       OpenRouter an invalid model id.
     - anything else → ``resolve_effective_model(request_model)``.
     """
@@ -955,7 +955,7 @@ def resolve_request_model(request_model: str) -> str:
     # House digiquant pins (#3414) are unprefixed OpenRouter-style slugs such as
     # ``deepseek/deepseek-v4-flash``. They are not registered providers, so the
     # branch above does not keep them. Without this guard, ``resolve_effective_model``
-    # clobbers them with ``model_modes`` local defaults (``ollama/qwen3:8b``), which
+    # clobbers them with ``OLLAMA_MODEL`` / ``model_modes`` local defaults, which
     # OpenRouter rejects ("not a valid model ID") on decision_log reflector and every
     # other digiquant phase that goes through digigraph → digillm.
     if "/" in request_model and not request_model.startswith("ollama/"):

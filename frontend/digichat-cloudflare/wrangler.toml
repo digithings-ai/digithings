@@ -33,6 +33,9 @@ zone_name = "digithings.ai"
 class_name = "DigiChatContainer"
 # Build context is monorepo root (two levels up from this package).
 image = "../../Dockerfile.digichat-cloudflare"
+# DIGICHAT_VERSION for GET /api/health is baked from frontend/digichat/package.json
+# inside Dockerfile.digichat-cloudflare. Do not pin it here or as a dashboard secret
+# (it would drift). Optional override: image_vars = { DIGICHAT_VERSION = "…" }.
 max_instances = 5
 
 [[durable_objects.bindings]]
