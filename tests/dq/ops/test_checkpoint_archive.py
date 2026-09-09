@@ -22,6 +22,7 @@ from digiquant.ops.checkpoint_archive import (  # noqa: E402
     list_threads,
     main,
     parse_postgrest_bytea,
+    previous_threads,
     resolve_payload,
     restore_thread,
 )
@@ -286,6 +287,19 @@ class TestRestoreThread:
         assert revived == manifest
 
 
+class TestPreviousThreads:
+    def test_previous_threads_excludes_newest(self) -> None:
+        client = FakeClient(
+            store={
+                "checkpoints": [
+                    {"thread_id": "t-old", "checkpoint": {"ts": "2026-09-01T00:00:00+00:00"}},
+                    {"thread_id": "t-new", "checkpoint": {"ts": "2026-09-08T00:00:00+00:00"}},
+                ]
+            }
+        )
+        assert previous_threads(client) == ["t-old"]
+
+
 class TestR2Backend:
     def test_construction_holds_config(self) -> None:
         backend = R2Backend(
@@ -301,11 +315,19 @@ class TestMain:
     def test_dry_run_lists_threads_without_uploading(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        client = FakeClient(store={"checkpoints": [{"thread_id": "a"}, {"thread_id": "b"}]})
+        # Dry-run lists the archive set (previous threads); the newest is excluded.
+        client = FakeClient(
+            store={
+                "checkpoints": [
+                    {"thread_id": "a", "checkpoint": {"ts": "2026-09-01T00:00:00+00:00"}},
+                    {"thread_id": "b", "checkpoint": {"ts": "2026-09-08T00:00:00+00:00"}},
+                ]
+            }
+        )
         monkeypatch.setattr("digiquant.data.store.client.build_digiquant_client", lambda: client)
         assert main(["--dry-run"]) == 0
         out = capsys.readouterr().out
-        assert "a" in out and "b" in out
+        assert "a" in out and "b" not in out
 
     def test_missing_credentials_fails_fast(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("digiquant.data.store.client.build_digiquant_client", lambda: None)

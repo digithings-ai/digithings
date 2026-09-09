@@ -185,6 +185,24 @@ def list_threads(client: Any) -> list[str]:
     return sorted({str(row["thread_id"]) for row in rows if row.get("thread_id")})
 
 
+def previous_threads(client: Any, owner: str = "house") -> list[str]:
+    """All threads except the newest — Supabase keeps the latest run per owner."""
+    _ = owner  # owner scoping lands with multi-user threads; single house owner today
+    rows = client.table("checkpoints").select("thread_id,checkpoint").execute().data or []
+    newest: dict[str, datetime] = {}
+    for row in rows:
+        thread_id = row.get("thread_id")
+        if not thread_id:
+            continue
+        ts = _thread_max_ts(row.get("checkpoint")) or datetime.min.replace(tzinfo=timezone.utc)
+        if thread_id not in newest or ts > newest[thread_id]:
+            newest[thread_id] = ts
+    if not newest:
+        return []
+    latest = max(newest, key=lambda t: newest[t])
+    return sorted(t for t in newest if t != latest)
+
+
 def _row_version(table: str, row: dict[str, Any]) -> str:
     if table == "checkpoint_blobs":
         return f"{row.get('channel')}/{row.get('version')}"
@@ -321,6 +339,7 @@ __all__ = [
     "list_threads",
     "main",
     "parse_postgrest_bytea",
+    "previous_threads",
     "record_pointer",
     "resolve_payload",
     "restore_thread",
@@ -371,6 +390,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="archive only threads whose newest checkpoint is older than N days",
     )
+    parser.add_argument("--owner", default="house", help="owner tag for registry rows")
     args = parser.parse_args(argv)
 
     from digiquant.data.store.client import build_digiquant_client
@@ -379,7 +399,10 @@ def main(argv: list[str] | None = None) -> int:
     if client is None:
         print("missing Supabase credentials; set CORE_SUPABASE_URL/CORE_SUPABASE_SERVICE_KEY")
         return 2
-    threads = list_threads(client)
+    # Archive set: previous runs only — the newest thread is never archived by a
+    # run (it becomes "previous" on the next run). --keep/--retain-days further
+    # restrict, never widen.
+    threads = previous_threads(client, args.owner)
     if args.dry_run:
         for thread_id in threads:
             print(thread_id)
@@ -398,7 +421,7 @@ def main(argv: list[str] | None = None) -> int:
     for thread_id in threads:
         if thread_id in keep:
             continue
-        manifest = archive_thread(client, store, thread_id)
+        manifest = archive_thread(client, store, thread_id, args.owner)
         manifests.append(manifest.to_dict())
         print(f"archived {thread_id}: {len(manifest.entries)} payloads")
     if args.manifest_out:
