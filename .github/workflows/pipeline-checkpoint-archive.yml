@@ -11,12 +11,10 @@
 # :17 past 09–12 UTC) plus buffer, so the just-finished run's thread is left
 # alone by --retain-days 2 and only older threads archive.
 #
-# Expected red until the owner completes the R2 prerequisites (issue #3761):
-# 1. Enable R2 in the Cloudflare dashboard (API is 403/code 10042 until then).
-# 2. Create bucket `digithings-checkpoint-archive`.
-# 3. Add GH secrets CHECKPOINT_ARCHIVE_R2_ENDPOINT/BUCKET/ACCESS_KEY/SECRET_KEY
-#    (endpoint is https://<account-id>.r2.cloudflarestorage.com).
-# Missing creds fail closed (exit 2) — that is the production signal, not a skip.
+# R2 prerequisites completed 2026-09-09 (issue #3761): R2 enabled, bucket
+# `digithings-archive` created, GH secrets R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/
+# R2_SECRET_ACCESS_KEY/R2_BUCKET present. Missing creds fail closed
+# (exit 2) — that is the production signal, not a skip.
 # CORE_SUPABASE_* (or SUPABASE_*) service-role creds follow the standard
 # execution-cron-check fallback chain.
 #
@@ -45,10 +43,10 @@ jobs:
       CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      CHECKPOINT_ARCHIVE_R2_ENDPOINT: ${{ secrets.CHECKPOINT_ARCHIVE_R2_ENDPOINT }}
-      CHECKPOINT_ARCHIVE_R2_BUCKET: ${{ secrets.CHECKPOINT_ARCHIVE_R2_BUCKET }}
-      CHECKPOINT_ARCHIVE_R2_ACCESS_KEY: ${{ secrets.CHECKPOINT_ARCHIVE_R2_ACCESS_KEY }}
-      CHECKPOINT_ARCHIVE_R2_SECRET_KEY: ${{ secrets.CHECKPOINT_ARCHIVE_R2_SECRET_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
