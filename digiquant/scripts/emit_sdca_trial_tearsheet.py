@@ -155,25 +155,29 @@ def build_synthetic_settings(
     long_only: bool,
     indicator_weights: dict,
     risk_model: str,
+    oscillators: dict | None = None,
 ) -> dict:
     """settings.json shape, defaults copied from disk, strategies replaced by one trial entry."""
     import generate_tearsheets as gt
 
     base = gt.load_settings()
     settings = {"defaults": copy.deepcopy(base["defaults"])}
+    sdca_cfg: dict = {
+        "preset": preset_name,
+        "risk_model": risk_model,
+        "long_only": long_only,
+        "initial_cash": float(settings["defaults"]["initial_capital"]),
+        "indicator_weights": indicator_weights,
+    }
+    if oscillators:
+        sdca_cfg["oscillators"] = oscillators
     settings["strategies"] = {
         _TRIAL_STRATEGY_KEY: {
             "symbol": symbol,
             "label": label,
             "kind": "dca",
             "strategy_type": "sdca",
-            "sdca": {
-                "preset": preset_name,
-                "risk_model": risk_model,
-                "long_only": long_only,
-                "initial_cash": float(settings["defaults"]["initial_capital"]),
-                "indicator_weights": indicator_weights,
-            },
+            "sdca": sdca_cfg,
         }
     }
     return settings
@@ -188,6 +192,14 @@ def main() -> None:
         required=True,
         help='JSON object, e.g. \'{"power_law": 1.0, "m2": 0.5, "dxy": 0.5}\'. '
         "Unlisted fields default to 0.0 (power_law defaults to 1.0).",
+    )
+    parser.add_argument(
+        "--oscillators",
+        help="JSON object of SdcaOscillatorSpec field overrides, e.g. "
+        '\'{"monthly_rsi_length": 2, "rsi_length": 5}\'. Unlisted fields default to '
+        "production periods. Use to freeze indicator construction periods a period "
+        "search has already picked (otherwise weekly_monthly_rsi/macd etc. build at "
+        "default periods, which may not match what was actually optimized).",
     )
     preset_group = parser.add_mutually_exclusive_group()
     preset_group.add_argument("--preset", help="Named preset from presets.json, e.g. btc_optimized")
@@ -235,6 +247,15 @@ def main() -> None:
     if not isinstance(indicator_weights, dict):
         parser.error("--indicator-weights must be a JSON object")
 
+    oscillators = None
+    if args.oscillators:
+        try:
+            oscillators = json.loads(args.oscillators)
+        except json.JSONDecodeError as exc:
+            parser.error(f"--oscillators is not valid JSON: {exc}")
+        if not isinstance(oscillators, dict):
+            parser.error("--oscillators must be a JSON object")
+
     curve_nodes = None
     if args.curve_nodes:
         try:
@@ -280,6 +301,7 @@ def main() -> None:
         long_only=args.long_only,
         indicator_weights=indicator_weights,
         risk_model=args.risk_model,
+        oscillators=oscillators,
     )
 
     logger.info(

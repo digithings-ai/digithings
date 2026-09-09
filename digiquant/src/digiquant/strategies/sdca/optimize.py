@@ -28,7 +28,7 @@ from digiquant.strategies.sdca.indicator_catalog import (
     load_date_value_frame,
     missing_extra_names,
 )
-from digiquant.strategies.sdca.price_oscillators import price_oscillator_z_vectors
+from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec, price_oscillator_z_vectors
 from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.walk_forward import (
     SENSITIVITY_SPIKE_PCT,
@@ -215,18 +215,25 @@ def load_sdca_extra_z(
     *,
     data_path: str | Path | None,
     data_dir: str | Path | None,
+    oscillators: SdcaOscillatorSpec | None = None,
 ) -> dict[str, list[float | None]]:
     """Load independent extras from sibling files next to the BTC OHLCV CSV.
 
     Looks for ``M2SL.csv``/``M2.csv``, ``ETH-USD.csv``, ``DTWEXBGS.csv``/``DXY.csv``.
     Missing files omit that extra (trials that need it are skipped).
+
+    ``oscillators`` defaults to ``SdcaOscillatorSpec()``'s production periods;
+    pass an explicit spec to freeze the price-oscillator extras (weekly_rsi,
+    weekly_macd, sma_band, monthly_rsi, monthly_macd, weekly_monthly_rsi,
+    weekly_monthly_macd) at periods a period search has already picked,
+    instead of silently reverting to defaults tuned for a different formula.
     """
     root = Path(data_path).parent if data_path is not None else None
     if root is None and data_dir is not None:
         root = Path(data_dir)
     date_s = pl.Series("date", list(dates), dtype=pl.Date)
     price_s = pl.Series("price", list(prices), dtype=pl.Float64)
-    extra: dict[str, list[float | None]] = price_oscillator_z_vectors(date_s, price_s)
+    extra: dict[str, list[float | None]] = price_oscillator_z_vectors(date_s, price_s, oscillators)
     sources = load_sdca_extra_sources(root)
     weights = SdcaCompositeWeights(
         power_law=1.0,

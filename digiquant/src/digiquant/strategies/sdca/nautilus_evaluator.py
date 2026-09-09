@@ -16,6 +16,7 @@ from pathlib import Path
 import pandas as pd
 import polars as pl
 from nautilus_trader.backtest.engine import BacktestEngine
+from nautilus_trader.config import BacktestEngineConfig, LoggingConfig
 from nautilus_trader.model.currencies import USDT
 from nautilus_trader.model.data import BarSpecification, BarType
 from nautilus_trader.model.enums import AccountType, BarAggregation, OmsType, PriceType
@@ -120,7 +121,10 @@ def evaluate_sdca_trial_nautilus(
                 curve_nodes=shape.to_nodes(),
             )
         )
-        engine = BacktestEngine()
+        # bypass_logging: NautilusTrader's Rust logger can only be initialized once
+        # per process. A walk-forward evaluates many trials/folds, so each engine
+        # after the first would panic on re-init without this (#3174).
+        engine = BacktestEngine(config=BacktestEngineConfig(logging=LoggingConfig(bypass_logging=True)))
         engine.add_venue(
             venue=instrument.id.venue,
             oms_type=OmsType.NETTING,

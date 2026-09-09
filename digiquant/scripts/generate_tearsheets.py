@@ -740,6 +740,7 @@ def run_and_write(
             indicator_display_name,
         )
         from digiquant.strategies.sdca.presets import load_preset
+        from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
 
         sdca_cfg = entry.get("sdca") or {}
         preset_name = str(sdca_cfg.get("preset") or "balanced")
@@ -754,6 +755,10 @@ def run_and_write(
             weekly_rsi=float(raw_w.get("weekly_rsi", 0.0)),
             weekly_macd=float(raw_w.get("weekly_macd", 0.0)),
             sma_band=float(raw_w.get("sma_band", 0.0)),
+            monthly_rsi=float(raw_w.get("monthly_rsi", 0.0)),
+            monthly_macd=float(raw_w.get("monthly_macd", 0.0)),
+            weekly_monthly_rsi=float(raw_w.get("weekly_monthly_rsi", 0.0)),
+            weekly_monthly_macd=float(raw_w.get("weekly_monthly_macd", 0.0)),
         )
         ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
         idx_dates = ohlcv[ts_col]
@@ -767,6 +772,8 @@ def run_and_write(
 
         sources = load_sdca_extra_sources(cache_dir)
         weights = drop_extras_missing_sources(published_weights, sources)
+        raw_osc = sdca_cfg.get("oscillators") or {}
+        oscillators = SdcaOscillatorSpec(**raw_osc) if raw_osc else None
         dropped_this_run = [
             name
             for name in ("m2", "dxy", "rs_eth")
@@ -779,7 +786,7 @@ def run_and_write(
         # Public payload never claims an OOS beat (Stage 1 curve_simulator sidecar
         # is not a Nautilus walk-forward result).
         beats_flat_dca_oos = False
-        extras = build_extra_indicators(idx_dates, ohlcv["close"], weights, sources)
+        extras = build_extra_indicators(idx_dates, ohlcv["close"], weights, sources, oscillators=oscillators)
         index = materialize_sdca_risk_index(
             ohlcv,
             tmp_risk,
@@ -803,6 +810,10 @@ def run_and_write(
             published_weights.weekly_rsi,
             published_weights.weekly_macd,
             published_weights.sma_band,
+            published_weights.monthly_rsi,
+            published_weights.monthly_macd,
+            published_weights.weekly_monthly_rsi,
+            published_weights.weekly_monthly_macd,
         )
         extras_unused = all(w == 0.0 for w in extra_weights)
         provenance_notes.append(
