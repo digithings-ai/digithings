@@ -33,7 +33,6 @@ import {
   type AssistantState,
   BranchPickerPrimitive,
   ComposerPrimitive,
-  ErrorPrimitive,
   groupPartByType,
   MessagePrimitive,
   SuggestionPrimitive,
@@ -53,6 +52,7 @@ import {
   type PropsWithChildren,
 } from "react";
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
+import { MessageError } from "./message-error.aui";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -535,17 +535,6 @@ const ComposerAction: FC = () => {
       <ComposerAddAttachment />
       <ComposerSendControls />
     </div>
-  );
-};
-
-const MessageError: FC = () => {
-  return (
-    <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root mt-2 flex items-start gap-2 text-sm">
-        <DotMatrix state="error" label="Error" />
-        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
-      </ErrorPrimitive.Root>
-    </MessagePrimitive.Error>
   );
 };
 

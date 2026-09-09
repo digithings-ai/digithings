@@ -33,7 +33,6 @@
    would otherwise scan the parent monorepo and sibling worktrees. */
 @source "./(gallery)";
 @source "../components";
-@source not "../components/assistant-ui";
 @source not "../components/ui";
 @source not "../components/chatbot";
 @source "../../web/src/components/docs";

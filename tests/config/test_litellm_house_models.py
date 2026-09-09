@@ -229,11 +229,14 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
     names = _model_names(overlay)
     expected = {
         "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v4-flash-0731",
         "deepseek/deepseek-v4-pro",
         "google/gemini-3.7-flash",
         "google/gemini-3.1-flash-lite",
         "openai/gpt-5.6-luna",
         "openai/gpt-5.6-sol",
+        "openai/gpt-oss-120b",
+        "z-ai/glm-5.3-flash",
     }
     missing = sorted(expected - names)
     assert not missing, f"CI overlay missing house slugs: {missing}"
@@ -252,6 +255,39 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
         assert params.get("api_key") == "os.environ/CHEAPERINFERENCE_API_KEY", entry["model_name"]
         assert params.get("api_base") == "os.environ/CHEAPERINFERENCE_API_BASE", entry["model_name"]
         assert str(params.get("model", "")).startswith("openai/"), entry["model_name"]
+
+
+def test_digichat_public_picker_is_v4_flash_or_cheaper() -> None:
+    """digithings.ai picker (#3777): V4 Flash-or-cheaper OSS plus OpenRouter :free."""
+    overlay_names = _model_names(CONFIG / "litellm.cheaperinference.yaml")
+    litellm_names = _model_names(CONFIG / "litellm.yaml")
+    embed = yaml.safe_load(
+        (
+            REPO_ROOT / "frontend/digichat/config/examples/digithings-ai-embed.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    models = embed["hosts"]["digithings.ai"]["models"]
+    available = list(models["available"])
+    assert models["allowPicker"] is True
+    assert models["default"] == "deepseek/deepseek-v4-flash"
+    assert models["default"] in available
+    expensive = {
+        "deepseek/deepseek-v4-pro",
+        "google/gemini-3.7-flash",
+        "google/gemini-3.1-flash-lite",
+        "openai/gpt-5.6-sol",
+        "openai/gpt-5.6-luna",
+    }
+    assert not (set(available) & expensive)
+    assert "mistralai/mistral-nemo" in available
+    assert "openai/gpt-oss-20b:free" not in available
+    assert any(str(m).endswith(":free") for m in available)
+    assert len(available) >= 20
+    missing_or = sorted(set(available) - litellm_names)
+    assert not missing_or, f"picker ids missing from litellm.yaml: {missing_or}"
+    paid = [m for m in available if not str(m).endswith(":free")]
+    missing_ci = sorted(set(paid) - overlay_names - litellm_names)
+    assert not missing_ci, f"paid picker ids missing from overlay/litellm: {missing_ci}"
 
 
 def test_cheaperinference_overlay_has_no_bare_api_base() -> None:

@@ -35,12 +35,13 @@ export type DigigraphTracePayload = {
 export type DigigraphErrorPayload = {
   code?: string;
   message?: string;
+  detail?: string;
 };
 
 /** Map digigraph's `{ code, message }` to embed-chat-error's `{ error, message }`. */
 export function digigraphErrorToEmbedPayload(err: DigigraphErrorPayload): string {
   const code = typeof err.code === "string" && err.code.length ? err.code : "digigraph_error";
-  const payload: { error: string; message?: string } = { error: code };
+  const payload: { error: string; message?: string; detail?: string } = { error: code };
   // BYOK remediable codes carry trusted copy in embed-chat-error — never relay
   // digigraph's message (it can echo caller headers or other upstream detail).
   if (
@@ -49,6 +50,13 @@ export function digigraphErrorToEmbedPayload(err: DigigraphErrorPayload): string
     !BYOK_MODEL_REMEDIABLE_CODES.has(code)
   ) {
     payload.message = err.message;
+  }
+  if (
+    typeof err.detail === "string" &&
+    err.detail.length &&
+    !BYOK_MODEL_REMEDIABLE_CODES.has(code)
+  ) {
+    payload.detail = err.detail;
   }
   return JSON.stringify(payload);
 }

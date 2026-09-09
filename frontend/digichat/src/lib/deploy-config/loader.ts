@@ -15,10 +15,17 @@ import { load as loadYaml } from "js-yaml";
 import {
   parseDigichatConfig,
   parseWelcomeCopy,
+  welcomeBodyLines,
   welcomeTitle,
   type DigichatConfig,
   type DigichatDeployment,
 } from "./schema";
+import {
+  BASELINE_EMBED_PLACEHOLDER,
+  BASELINE_EMBED_SKIN,
+  BASELINE_EMBED_WELCOME,
+  BASELINE_EMBED_WELCOME_BODY,
+} from "@/lib/baseline-embed";
 import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
 import {
   isThreadSkin,
@@ -55,17 +62,21 @@ function parseYamlOrJson(raw: string, ctx: string): unknown {
 
 /** Map legacy EmbedTenantConfig → DigichatDeployment (compat hydrate). */
 export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeployment {
-  const catalog: NonNullable<DigichatDeployment["tools"]>["catalog"] = [];
-  if (cfg.webSearch === true) {
+  const catalog: NonNullable<DigichatDeployment["tools"]>["catalog"] = [
+    ...(cfg.tools?.catalog ?? []),
+  ];
+  if (cfg.webSearch === true && !catalog.some((t) => t.id === "web_search")) {
     catalog.push({ id: "web_search", default: false, label: "Web search" });
   }
-  catalog.push(
-    { id: "digisearch", default: true, label: "Search corpus" },
-    { id: "digivault", default: true, label: "Vault" },
-  );
 
   const chromeMode =
     cfg.layout === "page" ? ("app" as const) : ("embed" as const);
+
+  const welcome = parseWelcomeCopy(
+    cfg.welcomeBody?.length
+      ? { title: cfg.welcome?.trim() || BASELINE_EMBED_WELCOME, body: cfg.welcomeBody }
+      : cfg.welcome,
+  );
 
   return {
     slug: cfg.slug,
@@ -75,7 +86,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       theme: cfg.theme,
       skin: cfg.skin ?? defaultThreadSkinForTenant({ slug: cfg.slug, aliases: cfg.aliases }),
       title: cfg.title,
-      welcome: parseWelcomeCopy(cfg.welcome),
+      welcome,
       suggestions: cfg.suggestions,
       placeholder: cfg.placeholder,
       accent: cfg.accent,
@@ -86,7 +97,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
     persistence: "none",
     auth: "anonymous",
     features: {
-      attachments: false,
+      attachments: cfg.attachments === true,
       dictation: false,
       speech: false,
       reasoning: "collapsed",
@@ -95,10 +106,18 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       modelPicker: false,
       branchPicker: true,
     },
-    models: { available: [] },
+    models: {
+      ...(cfg.models?.default ? { default: cfg.models.default } : {}),
+      available: [...(cfg.models?.available ?? [])],
+      ...(typeof cfg.models?.allowPicker === "boolean"
+        ? { allowPicker: cfg.models.allowPicker }
+        : {}),
+    },
     cli: { enabled: false },
     backend: cfg.backend,
-    tools: { allowUserToggle: true, catalog },
+    ...(catalog.length
+      ? { tools: { allowUserToggle: cfg.tools?.allowUserToggle ?? true, catalog } }
+      : {}),
     mcp: {
       servers: cfg.mcp?.servers ?? [],
       allowUserServers: cfg.mcp?.allowUserServers ?? false,
@@ -132,12 +151,14 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     attribution: dep.chrome.attribution === true,
     title: dep.chrome.title,
     welcome: welcomeTitle(dep.chrome.welcome),
+    welcomeBody: welcomeBodyLines(dep.chrome.welcome),
     suggestions: dep.chrome.suggestions,
     placeholder: dep.chrome.placeholder,
     lockedContact: dep.gate.lockedContact,
     activityDetail: dep.gate.activityDetail,
     showByok: dep.gate.showByok,
     showLanguageSelector: dep.gate.showLanguageSelector,
+    attachments: dep.features.attachments === true,
     webSearch:
       dep.gate.webSearch === true ||
       dep.tools?.catalog?.some((t) => t.id === "web_search") === true,
@@ -290,7 +311,16 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
         version: 1,
         deployment: {
           slug: "local",
-          chrome: { mode: "embed", theme: "light" },
+          chrome: {
+            mode: "embed",
+            theme: "dark",
+            skin: BASELINE_EMBED_SKIN,
+            welcome: {
+              title: BASELINE_EMBED_WELCOME,
+              body: BASELINE_EMBED_WELCOME_BODY,
+            },
+            placeholder: BASELINE_EMBED_PLACEHOLDER,
+          },
           persistence: "none",
           auth: "anonymous",
           backend: { type: "digigraph" },

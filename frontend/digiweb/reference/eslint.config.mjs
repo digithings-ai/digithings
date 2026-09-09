@@ -11,7 +11,6 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     // Vendor assistant-ui / catalog copies — not product lint surface.
-    "components/assistant-ui/**",
     "components/ui/dot-matrix.tsx",
     "app/(chatbot)/**",
     "components/chatbot/**",

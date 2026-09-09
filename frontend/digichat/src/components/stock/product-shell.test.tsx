@@ -62,7 +62,7 @@ describe("ProductStockShell", () => {
     expect(screen.getByTestId("stock-thread")).toBeTruthy();
     const root = document.querySelector("[data-stock-product]");
     expect(root?.getAttribute("data-chrome-mode")).toBe("embed");
-    expect(root?.getAttribute("data-thread-skin")).toBe("base");
+    expect(root?.getAttribute("data-thread-skin")).toBe("digichat");
     expect(root?.getAttribute("data-persistence")).toBe("none");
   });
 

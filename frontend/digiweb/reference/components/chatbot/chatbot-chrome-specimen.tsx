@@ -2,11 +2,11 @@
 
 /**
  * Chrome specimens: desk (list + compact thread) and contained launcher.
- * Does not import the @digithings/web barrel.
+ * Thread and launcher are chat subpaths — not the @digithings/web barrel.
  */
 import { useAui } from "@assistant-ui/react";
 import { DigichatLauncher } from "@digithings/web/chat/launcher";
-import { Thread } from "@/components/assistant-ui/elements/thread.aui";
+import { Thread } from "@digithings/web/chat/thread";
 import { ChatbotThreadList } from "./chatbot-thread-list";
 import { GALLERY_THREAD_COMPONENTS } from "./chatbot-thread-specimen";
 import { DigichatFixtureRuntime } from "./digichat-fixture-runtime";

@@ -149,7 +149,7 @@ export const ChromeSchema = z
 
 export const FeaturesSchema = z
   .object({
-    attachments: z.boolean().default(false),
+    attachments: z.boolean().default(true),
     dictation: z.boolean().default(false),
     speech: z.boolean().default(false),
     reasoning: DisclosureModeInputSchema.default("collapsed"),
@@ -281,7 +281,7 @@ export const DeploymentSchema = z
     persistence: PersistenceSchema.default("none"),
     auth: AuthModeSchema.default("anonymous"),
     features: FeaturesSchema.default({
-      attachments: false,
+      attachments: true,
       dictation: false,
       speech: false,
       reasoning: "collapsed",

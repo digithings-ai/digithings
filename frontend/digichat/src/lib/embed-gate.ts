@@ -33,9 +33,15 @@ export function resolveEmbedHost(explicitHost?: string | null): string {
   if (explicitHost) return explicitHost;
   // In SSR / tests, fall back to a stable default.
   if (typeof window === "undefined") return "unknown";
+  const ownOrigin =
+    typeof window.location?.origin === "string" ? window.location.origin : "";
   try {
     const ref = document.referrer;
-    if (ref) return new URL(ref).origin;
+    if (ref) {
+      const origin = new URL(ref).origin;
+      // Top-level /embed (or a same-origin link) is this app, not a tenant.
+      if (origin && origin !== ownOrigin) return origin;
+    }
   } catch {
     // referrer may be malformed or cross-origin-blocked
   }
@@ -43,12 +49,14 @@ export function resolveEmbedHost(explicitHost?: string | null): string {
     // Accessing window.parent.location will throw for cross-origin iframes —
     // that's the expected case in production (#1372): a genuine embed is
     // always cross-origin, so this branch is only ever useful for same-origin
-    // dev embeds. Never fall back to window.location.origin here — that's
-    // this app's OWN origin, never a signal about who is embedding it.
-    return window.parent.location.origin;
+    // *iframes* whose parent is a different path. Never treat this app's own
+    // origin as the embedding host — a top-level /embed tab has parent === self.
+    const parentOrigin = window.parent.location.origin;
+    if (parentOrigin && parentOrigin !== ownOrigin) return parentOrigin;
   } catch {
-    return "unknown";
+    // cross-origin parent, as expected in production
   }
+  return "unknown";
 }
 
 function storageKey(host: string): string {

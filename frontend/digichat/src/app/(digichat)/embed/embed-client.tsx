@@ -972,7 +972,8 @@ function EmbedChat({
   const catalog = stockClient.tools.catalog;
   const catalogTools = useMemo(() => catalogToolsFromClient(stockClient), [stockClient]);
   const showModels =
-    stockClient.models.allowPicker === true || stockClient.features.modelPicker === true;
+    (stockClient.models.allowPicker === true || stockClient.features.modelPicker === true) &&
+    stockClient.models.available.length > 0;
   const prefsApi = useMemo<EmbedChatPrefsApi>(
     () => ({
       prefs: chatPrefs,
@@ -1008,8 +1009,8 @@ function EmbedChat({
       tenantAllowsWeb,
       showByok,
       showModels,
-      hasDigisearch: catalog.length === 0 || catalog.some((e) => e.id === "digisearch"),
-      hasVault: catalog.length === 0 || catalog.some((e) => e.id === "digivault"),
+      hasDigisearch: catalog.some((e) => e.id === "digisearch"),
+      hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions: false,
       allowUserMcp: stockClient.mcp.allowUserServers === true,
       allowAddMcp: stockClient.mcp.allowAddForm === true,
@@ -1121,17 +1122,6 @@ function EmbedChat({
     </p>
   ) : null;
 
-  const showByokOnError =
-    !handshakeError &&
-    !trialLocked &&
-    shouldSuggestByokOnEmbedError({
-      llmAccess,
-      showByok,
-      gateMode: tenantCfg.gateMode,
-      errorCode: parseEmbedChatError(chat.rawError)?.code,
-      errorMessage: chat.error,
-    });
-
   // turn_limited: only raise paywall when the visitor asks past the free
   // limit (gateRequest.requested). Showing it on gate.locked alone replaced
   // the Thread after the third answer — so they could never type the fourth
@@ -1199,18 +1189,13 @@ function EmbedChat({
               contextTs={pageContextTs}
               onComposerSend={consumePageContext}
             />
-            {handshakeError || (!trialLocked && chat.error) ? (
+            {handshakeError ? (
               <div
                 role="alert"
                 className="border-t border-border/40 px-3 py-2 text-sm"
                 style={{ color: "var(--danger, var(--destructive))" }}
               >
-                {handshakeError ?? chat.error}
-                {showByokOnError && !handshakeError ? (
-                  <button type="button" className="dc-inline-link ml-2" onClick={() => openByok()}>
-                    Add your API key
-                  </button>
-                ) : null}
+                {handshakeError}
               </div>
             ) : null}
             {footerSlot}

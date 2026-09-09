@@ -36,6 +36,7 @@ describe("DigichatConfigSchema", () => {
     expect(cfg.deployment?.cli.enabled).toBe(false);
     expect(cfg.deployment?.models.available).toEqual([]);
     expect(cfg.deployment?.gate.activityDetail).toBe("labels");
+    expect(cfg.deployment?.features.attachments).toBe(true);
   });
 
   it("coerces reasoning/toolCalls booleans", () => {
@@ -233,6 +234,16 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.tools?.catalog.find((t) => t.id === "web_search")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digisearch")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digivault")?.default).toBe(true);
+    expect(dt?.models.allowPicker).toBe(true);
+    expect(dt?.models.default).toBe("deepseek/deepseek-v4-flash");
+    expect(dt?.models.available).toContain("deepseek/deepseek-v4-flash");
+    expect(dt?.models.available).toContain("openai/gpt-oss-20b");
+    expect(dt?.models.available).toContain("mistralai/mistral-nemo");
+    expect(dt?.models.available).toContain("google/gemma-4-31b-it:free");
+    expect(dt?.models.available).not.toContain("openai/gpt-oss-20b:free");
+    expect(dt?.models.available).not.toContain("google/gemini-3.1-flash-lite");
+    expect(dt?.models.available).not.toContain("openai/gpt-5.6-luna");
+    expect(dt?.models.available.length).toBeGreaterThan(10);
     expect(allowedForceTools(dt)).toEqual(["digisearch", "digivault"]);
 
     const occ = parseDigichatConfig(
@@ -273,6 +284,9 @@ describe("DigichatConfigSchema", () => {
       if (id === "digichat") {
         expect(cfg.deployment?.chrome.transcript.userAlign).toBe("left");
         expect(cfg.deployment?.chrome.theme).toBe("dark");
+        expect(welcomeTitle(cfg.deployment?.chrome.welcome)).toBe("Ask a question");
+        expect(cfg.deployment?.tools?.catalog ?? []).toEqual([]);
+        expect(cfg.deployment?.features.attachments).toBe(true);
       }
     }
   });

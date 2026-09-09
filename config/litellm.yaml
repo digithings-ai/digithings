@@ -40,6 +40,211 @@ model_list:
         - api_base: "^https://openrouter\\.ai/api/v1/?$"
   - model_name: openrouter/openai/gpt-oss-20b:free
     litellm_params: *or_gpt_oss_20b_free
+  # digithings.ai public picker cheap/free OSS (#3777) — OpenRouter until CI overlay merge
+  - model_name: openai/gpt-oss-20b
+    litellm_params: &or_openai_gpt_oss_20b
+      model: openrouter/openai/gpt-oss-20b
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/openai/gpt-oss-20b
+    litellm_params: *or_openai_gpt_oss_20b
+  - model_name: openai/gpt-oss-120b
+    litellm_params: &or_openai_gpt_oss_120b
+      model: openrouter/openai/gpt-oss-120b
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/openai/gpt-oss-120b
+    litellm_params: *or_openai_gpt_oss_120b
+  - model_name: deepseek/deepseek-v4-flash-0731
+    litellm_params: &or_deepseek_deepseek_v4_flash_0731
+      model: openrouter/deepseek/deepseek-v4-flash-0731
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/deepseek/deepseek-v4-flash-0731
+    litellm_params: *or_deepseek_deepseek_v4_flash_0731
+  - model_name: z-ai/glm-5.3-flash
+    litellm_params: &or_z_ai_glm_5_3_flash
+      model: openrouter/z-ai/glm-5.3-flash
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/z-ai/glm-5.3-flash
+    litellm_params: *or_z_ai_glm_5_3_flash
+  - model_name: cohere/north-mini-code:free
+    litellm_params: &or_cohere_north_mini_code_free
+      model: openrouter/cohere/north-mini-code:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/cohere/north-mini-code:free
+    litellm_params: *or_cohere_north_mini_code_free
+  - model_name: dots-studio/dots-3-note-preview:free
+    litellm_params: &or_dots_studio_dots_3_note_preview_free
+      model: openrouter/dots-studio/dots-3-note-preview:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/dots-studio/dots-3-note-preview:free
+    litellm_params: *or_dots_studio_dots_3_note_preview_free
+  - model_name: google/gemma-4-26b-a4b-it:free
+    litellm_params: &or_google_gemma_4_26b_a4b_it_free
+      model: openrouter/google/gemma-4-26b-a4b-it:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/google/gemma-4-26b-a4b-it:free
+    litellm_params: *or_google_gemma_4_26b_a4b_it_free
+  - model_name: google/gemma-4-31b-it:free
+    litellm_params: &or_google_gemma_4_31b_it_free
+      model: openrouter/google/gemma-4-31b-it:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/google/gemma-4-31b-it:free
+    litellm_params: *or_google_gemma_4_31b_it_free
+  - model_name: inclusionai/ling-3.0-flash-fin:free
+    litellm_params: &or_inclusionai_ling_3_0_flash_fin_free
+      model: openrouter/inclusionai/ling-3.0-flash-fin:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/inclusionai/ling-3.0-flash-fin:free
+    litellm_params: *or_inclusionai_ling_3_0_flash_fin_free
+  - model_name: inclusionai/ling-3.0-flash-sante:free
+    litellm_params: &or_inclusionai_ling_3_0_flash_sante_free
+      model: openrouter/inclusionai/ling-3.0-flash-sante:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/inclusionai/ling-3.0-flash-sante:free
+    litellm_params: *or_inclusionai_ling_3_0_flash_sante_free
+  - model_name: liquid/lfm-2.5-2.6b:free
+    litellm_params: &or_liquid_lfm_2_5_2_6b_free
+      model: openrouter/liquid/lfm-2.5-2.6b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/liquid/lfm-2.5-2.6b:free
+    litellm_params: *or_liquid_lfm_2_5_2_6b_free
+  - model_name: nex-agi/nex-n2.5-mini:free
+    litellm_params: &or_nex_agi_nex_n2_5_mini_free
+      model: openrouter/nex-agi/nex-n2.5-mini:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/nex-agi/nex-n2.5-mini:free
+    litellm_params: *or_nex_agi_nex_n2_5_mini_free
+  - model_name: nex-agi/nex-n2.5-pro:free
+    litellm_params: &or_nex_agi_nex_n2_5_pro_free
+      model: openrouter/nex-agi/nex-n2.5-pro:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/nex-agi/nex-n2.5-pro:free
+    litellm_params: *or_nex_agi_nex_n2_5_pro_free
+  - model_name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+    litellm_params: &or_nvidia_nemotron_3_nano_omni_30b_a3b_reasoning_free
+      model: openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+    litellm_params: *or_nvidia_nemotron_3_nano_omni_30b_a3b_reasoning_free
+  - model_name: nvidia/nemotron-3-super-120b-a12b:free
+    litellm_params: &or_nvidia_nemotron_3_super_120b_a12b_free
+      model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+    litellm_params: *or_nvidia_nemotron_3_super_120b_a12b_free
+  - model_name: nvidia/nemotron-3-ultra-550b-a55b:free
+    litellm_params: &or_nvidia_nemotron_3_ultra_550b_a55b_free
+      model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
+    litellm_params: *or_nvidia_nemotron_3_ultra_550b_a55b_free
+  - model_name: nvidia/nemotron-3.5-lightning:free
+    litellm_params: &or_nvidia_nemotron_3_5_lightning_free
+      model: openrouter/nvidia/nemotron-3.5-lightning:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/nvidia/nemotron-3.5-lightning:free
+    litellm_params: *or_nvidia_nemotron_3_5_lightning_free
+  - model_name: poolside/laguna-s-2.1:free
+    litellm_params: &or_poolside_laguna_s_2_1_free
+      model: openrouter/poolside/laguna-s-2.1:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/poolside/laguna-s-2.1:free
+    litellm_params: *or_poolside_laguna_s_2_1_free
+  - model_name: poolside/laguna-xs-2.1:free
+    litellm_params: &or_poolside_laguna_xs_2_1_free
+      model: openrouter/poolside/laguna-xs-2.1:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/poolside/laguna-xs-2.1:free
+    litellm_params: *or_poolside_laguna_xs_2_1_free
+  - model_name: thinkingmachines/inkling-small:free
+    litellm_params: &or_thinkingmachines_inkling_small_free
+      model: openrouter/thinkingmachines/inkling-small:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/thinkingmachines/inkling-small:free
+    litellm_params: *or_thinkingmachines_inkling_small_free
+  - model_name: thinkingmachines/inkling:free
+    litellm_params: &or_thinkingmachines_inkling_free
+      model: openrouter/thinkingmachines/inkling:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/thinkingmachines/inkling:free
+    litellm_params: *or_thinkingmachines_inkling_free
+  # Cheap OSS at ~V4 Flash OpenRouter prices (#3777)
+  - model_name: google/gemma-3-12b-it
+    litellm_params: &or_google_gemma_3_12b_it
+      model: openrouter/google/gemma-3-12b-it
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/google/gemma-3-12b-it
+    litellm_params: *or_google_gemma_3_12b_it
+  - model_name: inclusionai/ling-3.0-flash
+    litellm_params: &or_inclusionai_ling_3_0_flash
+      model: openrouter/inclusionai/ling-3.0-flash
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/inclusionai/ling-3.0-flash
+    litellm_params: *or_inclusionai_ling_3_0_flash
+  - model_name: meta-llama/llama-3.1-8b-instruct
+    litellm_params: &or_meta_llama_llama_3_1_8b_instruct
+      model: openrouter/meta-llama/llama-3.1-8b-instruct
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/meta-llama/llama-3.1-8b-instruct
+    litellm_params: *or_meta_llama_llama_3_1_8b_instruct
+  - model_name: mistralai/mistral-nemo
+    litellm_params: &or_mistralai_mistral_nemo
+      model: openrouter/mistralai/mistral-nemo
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/mistralai/mistral-nemo
+    litellm_params: *or_mistralai_mistral_nemo
+  - model_name: mistralai/mistral-small-3.2-24b-instruct
+    litellm_params: &or_mistralai_mistral_small_3_2_24b_instruct
+      model: openrouter/mistralai/mistral-small-3.2-24b-instruct
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/mistralai/mistral-small-3.2-24b-instruct
+    litellm_params: *or_mistralai_mistral_small_3_2_24b_instruct
+  - model_name: nvidia/nemotron-3-nano-30b-a3b
+    litellm_params: &or_nvidia_nemotron_3_nano_30b_a3b
+      model: openrouter/nvidia/nemotron-3-nano-30b-a3b
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/nvidia/nemotron-3-nano-30b-a3b
+    litellm_params: *or_nvidia_nemotron_3_nano_30b_a3b
+  - model_name: qwen/qwen3-30b-a3b-instruct-2507
+    litellm_params: &or_qwen_qwen3_30b_a3b_instruct_2507
+      model: openrouter/qwen/qwen3-30b-a3b-instruct-2507
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/qwen/qwen3-30b-a3b-instruct-2507
+    litellm_params: *or_qwen_qwen3_30b_a3b_instruct_2507
+  - model_name: qwen/qwen3.7-flash
+    litellm_params: &or_qwen_qwen3_7_flash
+      model: openrouter/qwen/qwen3.7-flash
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/qwen/qwen3.7-flash
+    litellm_params: *or_qwen_qwen3_7_flash
   - model_name: openrouter/auto
     litellm_params:
       model: openrouter/openrouter/auto

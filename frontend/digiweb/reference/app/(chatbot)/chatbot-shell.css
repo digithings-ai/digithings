@@ -6,10 +6,12 @@
 @import "@digithings/web/styles/digichat-launcher.css";
 @import "tw-animate-css";
 
-@source "../../components/assistant-ui";
 @source "../../components/ui";
 @source "../../components/chatbot";
 @source "./chatbot";
+/* Product Thread is @digithings/web/chat/thread. Scan that family only —
+   not the rest of @digithings/web (webpack OOM). */
+@source "../../../web/src/components/chat";
 
 @theme inline {
   --color-background: var(--bg);

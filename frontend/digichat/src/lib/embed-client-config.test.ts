@@ -80,7 +80,7 @@ describe("resolveEmbedClientConfigFromParams", () => {
     );
   });
 
-  it("falls back to gated defaults for an unregistered or missing host", () => {
+  it("falls back to baseline defaults for an unregistered or missing host", () => {
     withRegistry();
     expect(resolveEmbedClientConfigFromParams("datatap-dev-secret", "https://evil.example")).toEqual(
       DEFAULT_EMBED_TENANT_CONFIG,
@@ -210,7 +210,15 @@ describe("toEmbedClientConfig — showLanguageSelector", () => {
 });
 
 describe("DEFAULT_EMBED_TENANT_CONFIG", () => {
-  it("is false — an unresolved/gated tenant never shows it", () => {
+  it("is the unconfigured container default, not a tenant brand", () => {
     expect(DEFAULT_EMBED_TENANT_CONFIG.showLanguageSelector).toBe(false);
+    expect(DEFAULT_EMBED_TENANT_CONFIG.skin).toBe("digichat");
+    expect(DEFAULT_EMBED_TENANT_CONFIG.welcome).toBe("Ask a question");
+    expect(DEFAULT_EMBED_TENANT_CONFIG.welcomeBody).toEqual([
+      "Ask about anything you need help with.",
+    ]);
+    expect(DEFAULT_EMBED_TENANT_CONFIG.attachments).toBe(true);
+    expect(DEFAULT_EMBED_TENANT_CONFIG.showByok).toBe(false);
+    expect(DEFAULT_EMBED_TENANT_CONFIG.webSearch).toBe(false);
   });
 });

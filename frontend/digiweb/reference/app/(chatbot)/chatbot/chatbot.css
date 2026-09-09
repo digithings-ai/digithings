@@ -1441,7 +1441,10 @@ html:has(.aui-theme-stage) :focus-visible {
   border: 1px solid var(--hair);
 }
 
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-slot="tooltip-content"] > svg,
+/* Product tooltip.tsx omits Arrow. Hide leftovers: Radix wraps the svg in a
+   plain span (no data-radix-popper-arrow-wrapper anymore); shadcn diamonds
+   use rotate-45 without "arrow" in the class name. */
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-slot="tooltip-content"] svg,
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-slot="tooltip-content"] [class*="arrow"],
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-slot="tooltip-content"] [data-radix-popper-arrow-wrapper] {
   display: none;

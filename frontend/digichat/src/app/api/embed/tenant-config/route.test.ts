@@ -3,6 +3,7 @@ import { GET } from "./route";
 import { DATATAPSTREAM_SUGGESTION_POOL } from "@/lib/embed-suggestion-pools";
 import { resetEmbedTenantRegistryForTests } from "@/lib/embed-tenants";
 import { resetDigichatConfigForTests } from "@/lib/deploy-config/loader";
+import { DEFAULT_EMBED_TENANT_CONFIG } from "@/lib/embed-client-config";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -53,14 +54,8 @@ describe("GET /api/embed/tenant-config", () => {
       layout: "embed",
       showLanguageSelector: true,
       webSearch: false,
+      attachments: false,
       backendType: "foundry",
-      tools: {
-        allowUserToggle: true,
-        catalog: [
-          { id: "digisearch", default: true, label: "Search corpus" },
-          { id: "digivault", default: true, label: "Vault" },
-        ],
-      },
       mcp: { servers: [], allowUserServers: false, allowAddForm: false },
       models: { available: [] },
     });
@@ -68,7 +63,7 @@ describe("GET /api/embed/tenant-config", () => {
     expect(JSON.stringify(body)).not.toContain("datatapstream-secret");
   });
 
-  it("returns legacy defaults for a registered host when the token is missing (#1339)", async () => {
+  it("returns baseline defaults for a registered host when the token is missing (#1339)", async () => {
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
     resetEmbedTenantRegistryForTests();
     const res = await GET(
@@ -77,34 +72,12 @@ describe("GET /api/embed/tenant-config", () => {
       })
     );
     const body = await res.json();
-    expect(body).toEqual({
-      slug: "embed",
-      gateMode: "turn_limited",
-      theme: "dark",
-      skin: "base",
-      accent: null,
-      attribution: false,
-      showByok: false,
-      layout: "embed",
-      showLanguageSelector: false,
-      webSearch: false,
-    });
+    expect(body).toEqual(DEFAULT_EMBED_TENANT_CONFIG);
   });
 
-  it("returns legacy defaults for unknown hosts", async () => {
+  it("returns baseline defaults for unknown hosts", async () => {
     const res = await GET(new Request("http://127.0.0.1/api/embed/tenant-config"));
-    expect(await res.json()).toEqual({
-      slug: "embed",
-      gateMode: "turn_limited",
-      theme: "dark",
-      skin: "base",
-      accent: null,
-      attribution: false,
-      showByok: false,
-      layout: "embed",
-      showLanguageSelector: false,
-      webSearch: false,
-    });
+    expect(await res.json()).toEqual(DEFAULT_EMBED_TENANT_CONFIG);
   });
 
   const DIGITHINGS_REGISTRY = JSON.stringify({

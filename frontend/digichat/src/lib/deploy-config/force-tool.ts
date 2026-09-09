@@ -27,10 +27,6 @@ export function catalogAllowsForceTool(
 ): boolean {
   const raw = forceTool?.trim();
   if (!raw) return false;
-  // Legacy compat: empty catalog → allow digisearch/digivault only (pre-config installs).
-  if (!catalog?.length && !mcpIds?.length) {
-    return raw === "digisearch" || raw === "digivault";
-  }
   const catalogId = CATALOG_ID_BY_FORCE_TOOL[raw] ?? raw;
   if (catalog?.some((e) => e.id === catalogId || FORCE_TOOL_BY_CATALOG_ID[e.id] === raw)) {
     return true;
@@ -41,14 +37,9 @@ export function catalogAllowsForceTool(
 export function allowedForceTools(dep: DigichatDeployment | null | undefined): string[] {
   const catalog = dep?.tools?.catalog;
   const out = new Set<string>();
-  if (!catalog?.length) {
-    out.add("digisearch");
-    out.add("digivault");
-  } else {
-    for (const e of catalog) {
-      const mapped = FORCE_TOOL_BY_CATALOG_ID[e.id] ?? (e.id !== "web_search" ? e.id : undefined);
-      if (mapped) out.add(mapped);
-    }
+  for (const e of catalog ?? []) {
+    const mapped = FORCE_TOOL_BY_CATALOG_ID[e.id] ?? (e.id !== "web_search" ? e.id : undefined);
+    if (mapped) out.add(mapped);
   }
   for (const s of dep?.mcp?.servers ?? []) {
     if (s.id.trim()) out.add(s.id.trim());
@@ -108,10 +99,7 @@ export function catalogAllowsDisableId(
   const mapped = DISABLE_ALIASES[catalogId.trim().toLowerCase()] ?? catalogId.trim().toLowerCase();
   if (!mapped || mapped === "web_search") return false;
   if (DISABLEABLE_CATALOG_IDS.includes(mapped as DisableableCatalogId)) {
-    if (!catalog?.length) {
-      return mapped === "digisearch" || mapped === "digivault";
-    }
-    return catalog.some((e) => e.id === mapped || FORCE_TOOL_BY_CATALOG_ID[e.id] === mapped);
+    return catalog?.some((e) => e.id === mapped || FORCE_TOOL_BY_CATALOG_ID[e.id] === mapped) === true;
   }
   if (extraIds?.has(mapped)) return true;
   if (catalog?.some((e) => e.id === mapped)) return true;
@@ -120,7 +108,7 @@ export function catalogAllowsDisableId(
 
 /**
  * Fail-closed parse of X-Digi-Disabled-Tools. Unknown tokens dropped.
- * Empty catalog → allow digisearch/digivault only (same as force-tool).
+ * Empty catalog → nothing disableable unless listed on the deployment.
  */
 export function filterDisabledToolsHeader(
   dep: DigichatDeployment | null | undefined,

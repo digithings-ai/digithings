@@ -524,9 +524,9 @@
   color: var(--ink);
 }
 
-[data-thread-skin="digichat"] [data-slot="tooltip-content"] > svg,
-[data-thread-skin="digichat"] [data-slot="tooltip-content"] [class*="arrow"],
-.digichat-launcher [data-slot="tooltip-content"] > svg,
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-slot="tooltip-content"] svg,
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-slot="tooltip-content"] [class*="arrow"],
+.digichat-launcher [data-slot="tooltip-content"] svg,
 .digichat-launcher [data-slot="tooltip-content"] [class*="arrow"] {
   display: none;
 }

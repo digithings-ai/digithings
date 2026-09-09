@@ -220,10 +220,14 @@ deployment:
     ).toThrow(/DIGICHAT_CHROME_SKIN/);
   });
 
-  it("uses dev default when no file and no tenants", () => {
+  it("uses the unconfigured container default when no file and no tenants", () => {
     const cfg = loadDigichatConfig({ fileContents: null, env: {} });
     expect(cfg.deployment?.slug).toBe("local");
     expect(cfg.deployment?.chrome.mode).toBe("embed");
+    expect(cfg.deployment?.chrome.skin).toBe("digichat");
+    expect(cfg.deployment?.chrome.theme).toBe("dark");
+    expect(cfg.deployment?.features.attachments).toBe(true);
+    expect(cfg.deployment?.tools?.catalog ?? []).toEqual([]);
   });
 });
 
@@ -299,13 +303,20 @@ describe("force-tool allowlist", () => {
       theme: "light",
       attribution: false,
       activityDetail: "labels",
+      tools: {
+        allowUserToggle: true,
+        catalog: [
+          { id: "digisearch", default: true, label: "Search" },
+          { id: "digivault", default: true, label: "Vault" },
+        ],
+      },
     });
     expect(filterForceToolHeader(dep, "digisearch")).toBe("digisearch");
     expect(filterForceToolHeader(dep, "digivault")).toBe("digivault");
     expect(filterForceToolHeader(dep, "not-a-tool")).toBeUndefined();
   });
 
-  it("legacy-allows digisearch/digivault when catalog empty", () => {
+  it("does not allow digisearch when the catalog is empty", () => {
     const dep = embedTenantToDeployment({
       slug: "x",
       token: "t",
@@ -315,8 +326,8 @@ describe("force-tool allowlist", () => {
       attribution: false,
       activityDetail: "labels",
     });
-    dep.tools = { allowUserToggle: true, catalog: [] };
-    expect(filterForceToolHeader(dep, "digisearch")).toBe("digisearch");
+    expect(dep.tools?.catalog ?? []).toEqual([]);
+    expect(filterForceToolHeader(dep, "digisearch")).toBeUndefined();
     expect(filterForceToolHeader(dep, "not-a-tool")).toBeUndefined();
   });
 });
@@ -417,6 +428,26 @@ describe("matchHostDeployment", () => {
     expect(client.tools.catalog.map((t) => t.id)).toEqual(
       expect.arrayContaining(["digisearch", "digivault", "web_search"]),
     );
+    expect(client.features.attachments).toBe(false);
+  });
+
+  it("does not inject Search/Vault onto an empty catalog", () => {
+    const client = clientConfigFromEmbedTenant({
+      slug: "embed",
+      gateMode: "ungated",
+      theme: "dark",
+      skin: "digichat",
+      accent: null,
+      attribution: false,
+      attachments: true,
+      showByok: false,
+      layout: "embed",
+      showLanguageSelector: false,
+      webSearch: false,
+    });
+    expect(client.tools.catalog).toEqual([]);
+    expect(client.features.attachments).toBe(true);
+    expect(client.chrome.skin).toBe("digichat");
   });
 });
 

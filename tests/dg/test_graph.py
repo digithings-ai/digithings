@@ -108,9 +108,10 @@ def test_graph_research_returns_error_when_llm_raises() -> None:
         out = g.invoke({"prompt": "stat arb tech"}, config={"configurable": {"thread_id": "test"}})
     assert out.get("strategy_name") is None
     assert out.get("research_note") == "error"
-    # Raw exception text is not streamed to clients (may include Compose DNS names).
-    assert out.get("error") == "Research failed. Please try again shortly."
-    assert "unavailable" not in str(out.get("error", ""))
+    # Raw Compose DNS is not streamed; provider/API text is.
+    assert out.get("error_code") == "llm_error"
+    assert "Research failed" not in str(out.get("error", ""))
+    assert "unavailable" in str(out.get("error", ""))
 
 
 @pytest.mark.unit

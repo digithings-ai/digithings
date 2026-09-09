@@ -255,6 +255,8 @@ export type SlashVisibility = {
   models?: boolean;
   effort?: boolean;
   mcp?: boolean;
+  /** Connected-tools palette. Hide when the install has no catalog/MCP. */
+  tools?: boolean;
 };
 
 export type ParsedSlash =
@@ -291,6 +293,7 @@ function isVisible(cmd: SlashDef, visibility?: SlashVisibility): boolean {
   if (cmd.id === "sessions") return visibility?.sessions === true;
   if (cmd.id === "models" || cmd.id === "effort") return visibility?.models !== false;
   if (cmd.id === "mcp") return visibility?.mcp !== false;
+  if (cmd.id === "tools") return visibility?.tools !== false;
   return true;
 }
 

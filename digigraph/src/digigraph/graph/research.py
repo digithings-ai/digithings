@@ -242,58 +242,50 @@ def _is_likely_network_failure(exc: Exception) -> bool:
     return False
 
 
-def _user_facing_llm_error(exc: Exception) -> tuple[str, str | None]:
-    """Return ``(message, error_code)`` for an LLM failure.
+def _research_fail(
+    message: str,
+    *,
+    code: str | None = None,
+    detail: str | None = None,
+    research_response: str | None = None,
+) -> dict:
+    """Research-node error payload that always carries a digichat error_code."""
+    from digigraph.llm_errors import LLM_ERROR
 
-    ``error_code`` is a stable digichat contract value (e.g. ``free_quota_exceeded``)
-    or ``None`` when the failure is unclassified.
-    """
-    from digigraph.llm_errors import (
-        FREE_QUOTA_EXCEEDED,
-        RATE_LIMIT,
-        classify_llm_error,
-        free_quota_message,
-        rate_limit_message,
-    )
+    out: dict = {
+        "strategy_name": None,
+        "symbols": None,
+        "research_note": "error",
+        "error": message,
+        "error_code": code or LLM_ERROR,
+    }
+    if research_response is not None:
+        out["research_response"] = research_response
+    if detail:
+        out["error_detail"] = detail
+    return out
 
-    code = classify_llm_error(exc)
-    if code == FREE_QUOTA_EXCEEDED:
-        return free_quota_message(), FREE_QUOTA_EXCEEDED
-    if code == RATE_LIMIT:
-        return rate_limit_message(), RATE_LIMIT
 
-    msg = str(exc).lower()
-    if "context window exceeds limit" in msg or "context_length_exceeded" in msg:
-        return (
-            "The conversation or context is too long for this model. "
-            "Try: start a new chat, use a model with a larger context (e.g. set DIGI_LLM_MODE=medium), or shorten your question.",
-            None,
-        )
-    if "invalid api key" in msg or "authentication" in msg or "401" in msg:
-        return (
-            "API authentication failed. Check your model provider settings (e.g. OLLAMA_API_KEY, OPENAI_API_KEY).",
-            None,
-        )
+def _user_facing_llm_error(exc: Exception) -> tuple[str, str, str | None]:
+    """Return ``(message, error_code, detail)`` for an LLM failure."""
+    from digigraph.llm_errors import user_facing_llm_failure
+
     if _is_likely_network_failure(exc):
-        base = (os.environ.get("OPENAI_API_BASE") or "").strip() or "(unset — OpenAI default URL)"
         vert = _vertical_url_host_hints()
         if vert:
-            # Operator diagnostics only — never stream Docker Compose hostnames to embed clients.
+            # Operator diagnostics only — never stream Docker Compose hostnames.
             logger.warning("research network failure host hints: %s", vert)
+        from digigraph.llm_errors import LLM_ERROR, sanitize_user_facing_error
+
         return (
-            "A network connection failed during research (LLM and/or tools calling digisearch). "
-            f"OPENAI_API_BASE is {base}. "
-            "Start LiteLLM (http://127.0.0.1:4000/v1) or Ollama (http://127.0.0.1:11434/v1) and ensure digigraph can reach it. "
-            "Document/RAG also needs digisearch orchestrator at DIGISEARCH_URL (host: http://127.0.0.1:8002). "
-            "If you use `make stack-local`, host.docker.internal in OPENAI_API_BASE is rewritten to 127.0.0.1. "
-            "See docs/LOCAL_STACK.md.",
-            None,
+            "Could not reach the model provider. Try again shortly.",
+            LLM_ERROR,
+            sanitize_user_facing_error(str(exc)) or None,
         )
     tail = _vertical_url_host_hints()
     if tail:
         logger.warning("research failure host hints: %s", tail)
-    # Never echo raw exception text (may include Compose service DNS names like digisearch:8002).
-    return "Research failed. Please try again shortly.", None
+    return user_facing_llm_failure(exc)
 
 
 def _plan_result_preview(result: str | dict) -> str:
@@ -606,13 +598,10 @@ def _run_document_rag_path(
         state["plan"] = None
 
     if not content or not str(content).strip():
-        return {
-            "strategy_name": None,
-            "symbols": None,
-            "research_note": "error",
-            "research_response": None,
-            "error": "LLM returned empty response. The search may have run; try rephrasing your question.",
-        }
+        return _research_fail(
+            "LLM returned empty response. The search may have run; try rephrasing your question.",
+            research_response=None,
+        )
     out_state: dict = {
         "strategy_name": None,
         "symbols": None,
@@ -669,13 +658,7 @@ def _run_quant_or_augmented_path(
             ],
         )
         if not content or not str(content).strip():
-            return {
-                "strategy_name": None,
-                "symbols": None,
-                "research_note": "error",
-                "research_response": None,
-                "error": "LLM returned empty response.",
-            }
+            return _research_fail("LLM returned empty response.", research_response=None)
 
         if is_document_mode:
             return {
@@ -688,13 +671,10 @@ def _run_quant_or_augmented_path(
         try:
             data = _parse_llm_json_object(content)
         except json.JSONDecodeError as parse_err:
-            return {
-                "strategy_name": None,
-                "symbols": None,
-                "research_note": "error",
-                "research_response": (content or "").strip()[:12000],
-                "error": f"LLM returned invalid JSON: {parse_err!s}",
-            }
+            return _research_fail(
+                f"LLM returned invalid JSON: {parse_err!s}",
+                research_response=(content or "").strip()[:12000],
+            )
 
         data = _unwrap_quant_payload(data)
         strategy_name = _pick_strategy_name(data)
@@ -704,17 +684,14 @@ def _run_quant_or_augmented_path(
             if symbols:
                 break
         if not strategy_name or not symbols:
-            return {
-                "strategy_name": None,
-                "symbols": None,
-                "research_note": "error",
-                "research_response": (content or "").strip()[:12000],
-                "error": (
+            return _research_fail(
+                (
                     "LLM response missing strategy_name or symbols (non-empty list). "
                     "Name at least one ticker (e.g. AAPL) and a strategy style, or switch workflow to "
                     "research_rag / document mode if you only want Q&A without backtest."
                 ),
-            }
+                research_response=(content or "").strip()[:12000],
+            )
         out: dict = {
             "strategy_name": str(strategy_name),
             "symbols": symbols,
@@ -725,29 +702,15 @@ def _run_quant_or_augmented_path(
             out["strategy_params"] = sp
         return out
     except Exception as e:
-        err_msg, err_code = _user_facing_llm_error(e)
-        out: dict = {
-            "strategy_name": None,
-            "symbols": None,
-            "research_note": "error",
-            "research_response": None,
-            "error": err_msg,
-        }
-        if err_code:
-            out["error_code"] = err_code
-        return out
+        err_msg, err_code, err_detail = _user_facing_llm_error(e)
+        return _research_fail(err_msg, code=err_code, detail=err_detail)
 
 
 def research_node(state: WorkflowState) -> dict:
     """Data Science Family (Phase 1): LLM infers strategy/symbols or document-mode RAG with tools."""
     prompt = state.get("prompt")
     if not prompt or not str(prompt).strip():
-        return {
-            "strategy_name": None,
-            "symbols": None,
-            "research_note": "error",
-            "error": "prompt required (non-empty).",
-        }
+        return _research_fail("prompt required (non-empty).")
 
     cfg, index_name, index_display_name, system_prompt = _load_research_settings()
     override_index = state.get("digisearch_index")
@@ -777,17 +740,8 @@ def research_node(state: WorkflowState) -> dict:
                 language_directive=prompt_directive,
             )
         except Exception as e:
-            err_msg, err_code = _user_facing_llm_error(e)
-            out: dict = {
-                "strategy_name": None,
-                "symbols": None,
-                "research_note": "error",
-                "research_response": None,
-                "error": err_msg,
-            }
-            if err_code:
-                out["error_code"] = err_code
-            return out
+            err_msg, err_code, err_detail = _user_facing_llm_error(e)
+            return _research_fail(err_msg, code=err_code, detail=err_detail)
 
     # Scope warning, not a guard. `require_tool_calls` is wired into exactly one
     # tool loop -- the document RAG path above. This path, and the sub-agent runners
