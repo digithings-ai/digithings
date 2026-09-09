@@ -10,14 +10,24 @@ import pytest
 pytestmark = pytest.mark.unit
 
 from digiquant.ops.checkpoint_archive import (  # noqa: E402
+    LOW_WATERMARK_BYTES,
     ArchiveManifest,
+    ArchiveNotFoundError,
     ArchiveVerifyError,
     R2Backend,
+    _r2_backend_from_env,
     archive_thread,
     blob_key,
+    bucket_usage,
+    compress_payload,
+    decompress_payload,
+    evict_to_watermark,
     list_threads,
     main,
     parse_postgrest_bytea,
+    previous_threads,
+    reconcile_ledger,
+    resolve_payload,
     restore_thread,
 )
 
@@ -33,13 +43,30 @@ class _Query:
     store: dict[str, list[dict[str, Any]]]
     _filters: list[tuple[str, Any]] = field(default_factory=list)
     _pending_update: dict[str, Any] | None = None
+    _pending_delete: bool = False
+    _order_col: str | None = None
+    fail: bool = False
 
     def select(self, cols: str) -> "_Query":
+        return self
+
+    def order(self, col: str) -> "_Query":
+        self._order_col = col
+        return self
+
+    def delete(self) -> "_Query":
+        self._pending_delete = True
         return self
 
     def eq(self, col: str, val: Any) -> "_Query":
         self._filters.append((col, val))
         return self
+
+    def insert(self, row: dict[str, Any]) -> "_Query":
+        if self.fail:
+            raise RuntimeError(f"injected failure on {self.table_name}")
+        self.store.setdefault(self.table_name, []).append(dict(row))
+        return _Query(table_name=self.table_name, store=self.store)
 
     def update(self, payload: dict[str, Any]) -> "_Query":
         self._pending_update = dict(payload)
@@ -47,7 +74,26 @@ class _Query:
 
     def execute(self) -> _Resp:
         table = self.store.setdefault(self.table_name, [])
-        rows = [r for r in table if all(r.get(c) == v for c, v in self._filters)]
+
+        def _matches(row: dict[str, Any]) -> bool:
+            for col, val in self._filters:
+                if col.startswith("source_key->>"):
+                    sub = col.split("->>", 1)[1]
+                    if not isinstance(row.get("source_key"), dict):
+                        return False
+                    if row["source_key"].get(sub) != val:
+                        return False
+                elif row.get(col) != val:
+                    return False
+            return True
+
+        rows = [r for r in table if _matches(r)]
+        if self._order_col is not None:
+            rows.sort(key=lambda r: r.get(self._order_col))
+        if self._pending_delete:
+            for row in rows:
+                table.remove(row)
+            return _Resp(data=[])
         if self._pending_update is not None:
             for row in rows:
                 row.update(self._pending_update)
@@ -58,9 +104,13 @@ class _Query:
 @dataclass
 class FakeClient:
     store: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    fail_tables: set[str] = field(default_factory=set)
 
     def table(self, name: str) -> _Query:
-        return _Query(table_name=name, store=self.store)
+        return _Query(table_name=name, store=self.store, fail=name in self.fail_tables)
+
+    def fail_on_table(self, name: str) -> None:
+        self.fail_tables.add(name)
 
 
 class FakeStore:
@@ -68,12 +118,22 @@ class FakeStore:
 
     def __init__(self) -> None:
         self.objects: dict[str, bytes] = {}
+        self.original: dict[str, bytes] = {}
 
     def put(self, key: str, data: bytes) -> None:
         self.objects[key] = bytes(data)
+        # Archiver stores compressed bytes; remember the raw form for asserts.
+        self.original[key] = decompress_payload(bytes(data))
 
     def get(self, key: str) -> bytes:
         return self.objects[key]
+
+    def delete(self, key: str) -> None:
+        del self.objects[key]
+        self.original.pop(key, None)
+
+    def list_keys(self, prefix: str) -> list[str]:
+        return sorted(k for k in self.objects if k.startswith(prefix))
 
 
 def _blob_row(**over: Any) -> dict[str, Any]:
@@ -145,7 +205,7 @@ class TestArchiveThread:
         assert isinstance(manifest, ArchiveManifest)
         assert len(manifest.entries) == 2
         for entry in manifest.entries:
-            assert store.objects[entry.key] == parse_postgrest_bytea(
+            assert decompress_payload(store.objects[entry.key]) == parse_postgrest_bytea(
                 "\\x0102ff" if entry.key.endswith("/v1.bin") else "\\x00aa"
             )
             assert len(entry.sha256) == 64
@@ -194,6 +254,35 @@ class TestArchiveThread:
         kept = [r for r in client.store["checkpoint_blobs"] if r["thread_id"] == "run2::portfolio"]
         assert kept[0]["blob"] == "\\x99"
 
+    def test_archive_writes_registry_rows(self) -> None:
+        client = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "run1::portfolio"}],
+                "checkpoint_blobs": [_blob_row()],
+                "checkpoint_writes": [_write_row()],
+            }
+        )
+        store = FakeStore()
+        manifest = archive_thread(client, store, "run1::portfolio")
+        rows = client.table("archive_objects").select("*").execute().data
+        assert len(rows) == len(manifest.entries) == 2
+        assert all(r["sha256"] for r in rows)
+        assert all(r["owner"] == "house" for r in rows)
+
+    def test_registry_failure_keeps_supabase_row(self) -> None:
+        client = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "run1::portfolio"}],
+                "checkpoint_blobs": [_blob_row()],
+                "checkpoint_writes": [],
+            }
+        )
+        client.fail_on_table("archive_objects")
+        with pytest.raises(Exception):
+            archive_thread(client, FakeStore(), "run1::portfolio")
+        blobs = client.table("checkpoint_blobs").select("*").execute().data
+        assert any(b["blob"] is not None for b in blobs)
+
 
 class TestRestoreThread:
     def test_round_trip(self) -> None:
@@ -225,6 +314,19 @@ class TestRestoreThread:
         assert revived == manifest
 
 
+class TestPreviousThreads:
+    def test_previous_threads_excludes_newest(self) -> None:
+        client = FakeClient(
+            store={
+                "checkpoints": [
+                    {"thread_id": "t-old", "checkpoint": {"ts": "2026-09-01T00:00:00+00:00"}},
+                    {"thread_id": "t-new", "checkpoint": {"ts": "2026-09-08T00:00:00+00:00"}},
+                ]
+            }
+        )
+        assert previous_threads(client) == ["t-old"]
+
+
 class TestR2Backend:
     def test_construction_holds_config(self) -> None:
         backend = R2Backend(
@@ -240,11 +342,33 @@ class TestMain:
     def test_dry_run_lists_threads_without_uploading(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        client = FakeClient(store={"checkpoints": [{"thread_id": "a"}, {"thread_id": "b"}]})
+        # Dry-run lists the archive set (previous threads); the newest is excluded,
+        # and --retain-days further restricts to stale threads only.
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
+        client = FakeClient(
+            store={
+                "checkpoints": [
+                    {
+                        "thread_id": "a",
+                        "checkpoint": {"ts": (now - timedelta(days=5)).isoformat()},
+                    },
+                    {
+                        "thread_id": "b",
+                        "checkpoint": {"ts": (now - timedelta(days=1)).isoformat()},
+                    },
+                    {
+                        "thread_id": "c",
+                        "checkpoint": {"ts": (now - timedelta(hours=1)).isoformat()},
+                    },
+                ]
+            }
+        )
         monkeypatch.setattr("digiquant.data.store.client.build_digiquant_client", lambda: client)
-        assert main(["--dry-run"]) == 0
+        assert main(["--dry-run", "--retain-days", "2"]) == 0
         out = capsys.readouterr().out
-        assert "a" in out and "b" in out
+        assert "a" in out and "b" not in out and "c" not in out
 
     def test_missing_credentials_fails_fast(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("digiquant.data.store.client.build_digiquant_client", lambda: None)
@@ -283,10 +407,10 @@ class TestMain:
             }
         )
         monkeypatch.setattr("digiquant.data.store.client.build_digiquant_client", lambda: client)
-        monkeypatch.setenv("CHECKPOINT_ARCHIVE_R2_ENDPOINT", "https://x.r2.test")
-        monkeypatch.setenv("CHECKPOINT_ARCHIVE_R2_BUCKET", "bkt")
-        monkeypatch.setenv("CHECKPOINT_ARCHIVE_R2_ACCESS_KEY", "k")
-        monkeypatch.setenv("CHECKPOINT_ARCHIVE_R2_SECRET_KEY", "s")
+        monkeypatch.setenv("R2_ACCOUNT_ID", "x")
+        monkeypatch.setenv("R2_BUCKET", "bkt")
+        monkeypatch.setenv("R2_ACCESS_KEY_ID", "k")
+        monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "s")
         monkeypatch.setattr("digiquant.ops.checkpoint_archive.R2Backend", lambda **kw: FakeStore())
         out = tmp_path / "manifests.json"
         assert main(["--retain-days", "2", "--manifest-out", str(out)]) == 0
@@ -294,3 +418,104 @@ class TestMain:
         assert blobs["old-run"] is None  # archived
         assert blobs["new-run"] == "\\x02"  # retained
         assert out.is_file()
+
+
+def test_r2_backend_from_new_env_names(monkeypatch):
+    monkeypatch.setenv("R2_ACCOUNT_ID", "abc123")
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "key")
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "secret")
+    monkeypatch.setenv("R2_BUCKET", "digithings-archive")
+    for old in (
+        "CHECKPOINT_ARCHIVE_R2_ENDPOINT",
+        "CHECKPOINT_ARCHIVE_R2_BUCKET",
+        "CHECKPOINT_ARCHIVE_R2_ACCESS_KEY",
+        "CHECKPOINT_ARCHIVE_R2_SECRET_KEY",
+    ):
+        monkeypatch.delenv(old, raising=False)
+    backend = _r2_backend_from_env()
+    assert backend is not None
+    assert backend.endpoint_url == "https://abc123.r2.cloudflarestorage.com"
+    assert backend.bucket == "digithings-archive"
+
+
+def test_zstd_round_trip():
+    data = b'{"channel":"messages","ts":"2026-09-09T00:00:00+00:00"}' * 100
+    assert decompress_payload(compress_payload(data)) == data
+
+
+def test_zstd_version_byte_rejects_unknown():
+    blob = b"\x7f" + compress_payload(b"hello")[1:]
+    with pytest.raises(ArchiveVerifyError):
+        decompress_payload(blob)
+
+
+def test_resolve_payload_round_trip():
+    client = FakeClient(
+        store={
+            "checkpoint_blobs": [_blob_row()],
+            "checkpoint_writes": [_write_row()],
+        }
+    )
+    store = FakeStore()
+    archive_thread(client, store, "run1::portfolio")
+    entry = client.table("archive_objects").select("*").execute().data[0]
+    raw = resolve_payload(client, store, entry["source_table"], entry["source_key"])
+    assert raw == store.original[entry["r2_key"]]
+
+
+def test_resolve_missing_pointer_raises_not_found():
+    with pytest.raises(ArchiveNotFoundError):
+        resolve_payload(FakeClient(), FakeStore(), "checkpoint_blobs", {"thread_id": "nope"})
+
+
+def _seed_ledger(client: FakeClient, keys_sizes: list[tuple[str, int]]) -> None:
+    for i, (key, size) in enumerate(keys_sizes):
+        client.table("archive_objects").insert(
+            {
+                "source_table": "checkpoint_blobs",
+                "source_key": {"thread_id": f"t{i}"},
+                "r2_key": key,
+                "sha256": "0" * 64,
+                "size": size,
+                "owner": "house",
+                "archived_at": f"2026-09-0{i + 1}T00:00:00+00:00",
+                "status": "archived",
+            }
+        ).execute()
+
+
+def test_evict_oldest_first_to_low_watermark():
+    client = FakeClient()
+    _seed_ledger(
+        client, [("r2/a", 4_000_000_000), ("r2/b", 3_000_000_000), ("r2/c", 2_000_000_000)]
+    )
+    store = FakeStore()
+    for key in ("r2/a", "r2/b", "r2/c"):
+        store.objects[key] = b"x"
+    evicted = evict_to_watermark(client, store)
+    assert evicted == ["r2/a"]
+    assert bucket_usage(client) <= LOW_WATERMARK_BYTES
+
+
+def test_evict_never_touches_latest_run():
+    client = FakeClient()
+    _seed_ledger(client, [("r2/latest-x", 9_000_000_000)])
+    store = FakeStore()
+    store.objects["r2/latest-x"] = b"x"
+    assert evict_to_watermark(client, store, {"r2/latest-x"}) == []
+
+
+def test_reconcile_removes_dead_ledger_rows():
+    client = FakeClient()
+    _seed_ledger(client, [("checkpoints/gone", 10)])
+    assert reconcile_ledger(client, FakeStore()) == []
+    rows = client.table("archive_objects").select("*").execute().data
+    assert rows == []
+
+
+def test_reconcile_reports_orphans_without_deleting():
+    client = FakeClient()
+    store = FakeStore()
+    store.objects["checkpoints/orphan/x.bin"] = b"y"
+    assert reconcile_ledger(client, store) == ["checkpoints/orphan/x.bin"]
+    assert "checkpoints/orphan/x.bin" in store.objects

@@ -1,4 +1,4 @@
-"""Pin pipeline-checkpoint-archive.yml spec (issue #3761)."""
+"""Pin pipeline-checkpoint-archive.yml spec (issues #3761, #3766)."""
 
 from __future__ import annotations
 
@@ -33,12 +33,19 @@ def test_secrets_wired() -> None:
     for name in (
         "CORE_SUPABASE_URL",
         "CORE_SUPABASE_SERVICE_KEY",
+        "R2_ACCOUNT_ID",
+        "R2_BUCKET",
+        "R2_ACCESS_KEY_ID",
+        "R2_SECRET_ACCESS_KEY",
+    ):
+        assert name in env, name
+    for old in (
         "CHECKPOINT_ARCHIVE_R2_ENDPOINT",
         "CHECKPOINT_ARCHIVE_R2_BUCKET",
         "CHECKPOINT_ARCHIVE_R2_ACCESS_KEY",
         "CHECKPOINT_ARCHIVE_R2_SECRET_KEY",
     ):
-        assert name in env, name
+        assert old not in env, old
 
 
 def test_runs_archiver_with_retention() -> None:

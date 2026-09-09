@@ -626,3 +626,33 @@ commit and a `commit-run/{run_id}` document. Idempotent when a committed
 manifest already exists. Requires `CORE_SUPABASE_URL` /
 `CORE_SUPABASE_SERVICE_KEY` (same as the pipeline). Does not touch brokers.
 
+<!-- #3766 -->
+## Checkpoint/document archive offload (#3766)
+
+`.github/workflows/pipeline-checkpoint-archive.yml` runs
+`scripts/digiquant_archive_checkpoints.py` daily (R2 creds from the `R2_*`
+repo secrets). Operator contract:
+
+- **Ordering is archive → verify → delete.** The job uploads to R2, reads back
+  and SHA-256-verifies, writes the `archive_objects` pointer row, and only then
+  NULLs the Supabase cell. A pointer-write failure keeps the Supabase row — the
+  daily run is retry-safe and never orphans a payload without its pointer.
+- **The newest run per owner stays in Supabase.** Resume only ever touches the
+  current run id (`thread_base = resume_run_id or run_id`), so archiving
+  predecessors cannot break a retry. `--retain-days` / `--keep` narrow further.
+- **Eviction watermarks are 8.5GB high / 7GB low** on the ledger `size` sum
+  (compressed bytes). Eviction deletes oldest-first and never the latest run's
+  keys. If R2 approaches the 10GB free tier, retention shrinks automatically —
+  more owners → shorter history, no config change.
+- **Reconciliation:** `reconcile_ledger` drops ledger rows whose R2 object is
+  gone and reports orphan R2 keys; it never auto-deletes from R2. Orphans are
+  operator-deleted after confirming no pointer row references them.
+- **Read-back:** `resolve_payload(client, store, source_table, source_key)`
+  in `digiquant.ops.checkpoint_archive` — pointer lookup → R2 GET → sha256
+  verify → zstd decompress. `ArchiveNotFoundError` = no pointer row (payload
+  still live in Supabase or never archived); `ArchiveVerifyError` = checksum
+  mismatch, do not retry silently, escalate.
+- **First live archive of a new phase** (e.g. documents): dry-run first, then
+  archive one old thread/row, verify manifest + registry rows + a
+  `resolve_payload` round-trip, then proceed.
+
