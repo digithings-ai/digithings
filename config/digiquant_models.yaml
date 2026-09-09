@@ -152,6 +152,7 @@ phase_capabilities:
   master-digest: reasoning
   monthly-digest: reasoning
   portfolio/pm-direction: reasoning
+  portfolio/coverage/director: reasoning
   beliefs-distillation: research
 
 phase_capability_prefixes:

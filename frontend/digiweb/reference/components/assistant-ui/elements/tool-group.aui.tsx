@@ -8,7 +8,7 @@ import {
   type FC,
   type PropsWithChildren,
 } from "react";
-import { ChevronDownIcon, LoaderIcon } from "lucide-react";
+import { DotMatrix } from "@/components/ui/dot-matrix";
 import { cva, type VariantProps } from "class-variance-authority";
 import { useScrollLock } from "@assistant-ui/react";
 import {
@@ -116,10 +116,9 @@ function ToolGroupTrigger({
       {...props}
     >
       {active && (
-        <LoaderIcon
-          data-slot="tool-group-trigger-loader"
-          className="aui-tool-group-trigger-loader size-3 shrink-0 animate-spin [animation-duration:0.6s]"
-        />
+        <span data-slot="tool-group-trigger-loader" className="aui-tool-group-trigger-loader inline-flex shrink-0">
+          <DotMatrix state="loading" label="Tools running" className="size-3.5" />
+        </span>
       )}
       <span
         data-slot="tool-group-trigger-label"
@@ -133,16 +132,18 @@ function ToolGroupTrigger({
       >
         {label}
       </span>
-      <ChevronDownIcon
+      <span
         data-slot="tool-group-trigger-chevron"
         className={cn(
-          "aui-tool-group-trigger-chevron size-3 shrink-0",
+          "aui-tool-group-trigger-chevron inline-flex shrink-0",
           "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
           "-rotate-90",
           "group-data-open/trigger:rotate-0",
           "group-data-panel-open/trigger:rotate-0",
         )}
-      />
+      >
+        <DotMatrix state="expand" label="Toggle tools" className="size-3.5" />
+      </span>
     </CollapsibleTrigger>
   );
 }

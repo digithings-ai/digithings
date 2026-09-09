@@ -353,7 +353,7 @@ class HyperdashScraper:
 
 
 def _onchain_enabled() -> bool:
-    """Opt-in kill-switch for the LIVE Hyperdash scrape (env ATLAS_ONCHAIN_POSITIONING).
+    """Opt-in kill-switch for the LIVE Hyperdash scrape (env DIGIQUANT_ONCHAIN_POSITIONING).
 
     Defaults OFF so unit tests never hit the network just by invoking preflight (the scrape is an
     external HTTP call, unlike the DB-backed fed_odds path). The research workflows set it to "1" to
@@ -372,7 +372,7 @@ def get_onchain_cohort_positioning(
 ) -> CohortPositioning:
     """Fetch + compute the on-chain cohort divergence. Always returns a value (empty on failure).
 
-    With no ``provider`` the default Hyperdash scrape runs only when ``ATLAS_ONCHAIN_POSITIONING``
+    With no ``provider`` the default Hyperdash scrape runs only when ``DIGIQUANT_ONCHAIN_POSITIONING``
     is enabled (see :func:`_onchain_enabled`); otherwise it short-circuits to an empty result with
     no network call. An injected ``provider`` always runs (tests / alternative sources). Callers
     gate on ``result.error is None and result.has_data``.

@@ -22,9 +22,9 @@ const VALUE_PROP: Record<ArtifactClass, string> = {
   digest_summary:
     'Digest conclusions are included on the free plan as a teaser. Full glass-box detail unlocks on Desk.',
   portfolio_teaser:
-    'A light portfolio glimpse is included on the free plan. Weights, NAV, and connections unlock on paid tiers.',
+    'A light portfolio glimpse is included on the free plan. Weights, performance, and connections unlock on paid tiers.',
   house_weights_nav:
-    'House weights, NAV, tearsheet, ledger, and attribution unlock on Brief.',
+    'House weights, performance, tearsheet, ledger, and attribution unlock on Brief.',
   glassbox_economics:
     'Pipeline attempt and spend economics unlock on Desk.',
   private_book: 'Your private book unlocks on Studio.',
