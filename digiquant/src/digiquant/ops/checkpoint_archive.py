@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
@@ -283,12 +284,80 @@ def record_pointer(client: Any, entry: ArchiveEntry, owner: str = "house") -> No
     ).execute()
 
 
+try:  # Optional: only needed for the live direct-Postgres read path.
+    from psycopg.rows import dict_row as _dict_row
+except ImportError:  # Test doubles and PostgREST-only installs land here.
+    _dict_row = None
+
+
+def _psycopg_connect(uri: str) -> Any:
+    """Open a direct Postgres connection; deferred import keeps the base install lean."""
+    try:
+        import psycopg
+    except ImportError as exc:
+        raise RuntimeError(
+            "psycopg is required for direct Postgres reads "
+            "(install the digiquant research extra: pip install 'digiquant[research]')"
+        ) from exc
+    return psycopg.connect(uri)
+
+
+class DirectPostgresReader:
+    """Fetch payload rows over a direct Postgres connection.
+
+    Every PostgREST statement runs under the authenticator role's 8s
+    ``statement_timeout`` — large checkpoint blobs can never transfer that
+    way. This reader runs the same single-row SELECTs over a direct
+    connection (the path LangGraph's PostgresSaver writes through), where
+    the database-level timeout applies.
+    """
+
+    def __init__(self, uri: str, connect: Any = None) -> None:
+        self._uri = uri
+        self._connect = connect or _psycopg_connect
+        self._conn: Any = None
+
+    def fetch_row(self, table: str, key: dict[str, Any]) -> dict[str, Any]:
+        """Fetch exactly one row by full primary key; raises on any other count."""
+        if table not in BLOB_TABLES:
+            raise ArchiveVerifyError(f"refusing direct read of unexpected table {table!r}")
+        key_cols = BLOB_KEY_COLUMNS[table]
+        predicate = " AND ".join(f'"{col}" IS NOT DISTINCT FROM %s' for col in key_cols)
+        sql = f'SELECT * FROM "{table}" WHERE {predicate}'
+        params = tuple(key.get(col) for col in key_cols)
+        if self._conn is None:
+            self._conn = self._connect(self._uri)
+        kwargs = {"row_factory": _dict_row} if _dict_row is not None else {}
+        cur = self._conn.cursor(**kwargs)
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        if len(rows) != 1:
+            raise ArchiveVerifyError(
+                f"expected 1 row for {table} {key}, found {len(rows)}; Supabase row kept"
+            )
+        return dict(rows[0])
+
+    def close(self) -> None:
+        """Close the underlying connection; safe to call more than once."""
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
+
+
 # Portfolio blob rows reach ~16MB each, so even small multi-row pages can exceed
 # the Supabase statement timeout (prod 57014). Fetch in two phases: one key-only
 # scan (tiny rows), then one single-row statement per payload row — each
 # statement carries at most one row, the minimum PostgREST can transfer.
-def _fetch_thread_rows(client: Any, table: str, thread_id: str) -> list[dict[str, Any]]:
-    """Fetch one thread's rows: key-only scan, then one single-row fetch per key."""
+# Payload rows that large still exceed PostgREST's 8s authenticator timeout, so
+# callers pass a DirectPostgresReader to fetch phase-2 rows directly instead.
+def _fetch_thread_rows(
+    client: Any, table: str, thread_id: str, payload_reader: Any = None
+) -> list[dict[str, Any]]:
+    """Fetch one thread's rows: key-only scan, then one single-row fetch per key.
+
+    When ``payload_reader`` is given, payload rows come from it (direct
+    Postgres); otherwise each payload row is a PostgREST single-row fetch.
+    """
     key_cols = BLOB_KEY_COLUMNS[table]
     keys = (
         client.table(table).select(",".join(key_cols)).eq("thread_id", thread_id).execute().data
@@ -296,6 +365,9 @@ def _fetch_thread_rows(client: Any, table: str, thread_id: str) -> list[dict[str
     )
     rows: list[dict[str, Any]] = []
     for key in keys:
+        if payload_reader is not None:
+            rows.append(payload_reader.fetch_row(table, key))
+            continue
         query = client.table(table).select("*")
         for col in key_cols:
             query = query.eq(col, key.get(col))
@@ -309,7 +381,11 @@ def _fetch_thread_rows(client: Any, table: str, thread_id: str) -> list[dict[str
 
 
 def archive_thread(
-    client: Any, store: StorageBackend, thread_id: str, owner: str = "house"
+    client: Any,
+    store: StorageBackend,
+    thread_id: str,
+    owner: str = "house",
+    payload_reader: Any = None,
 ) -> ArchiveManifest:
     """Offload one thread's payloads: compress → put → verify → registry → NULL the ``bytea`` cell.
 
@@ -320,7 +396,7 @@ def archive_thread(
     """
     entries: list[ArchiveEntry] = []
     for table in BLOB_TABLES:
-        rows = _fetch_thread_rows(client, table, thread_id)
+        rows = _fetch_thread_rows(client, table, thread_id, payload_reader=payload_reader)
         for row in rows:
             payload = parse_postgrest_bytea(row.get("blob"))
             if payload is None:
@@ -485,8 +561,10 @@ __all__ = [
     "ArchiveVerifyError",
     "BLOB_KEY_COLUMNS",
     "BLOB_TABLES",
+    "DirectPostgresReader",
     "HIGH_WATERMARK_BYTES",
     "LOW_WATERMARK_BYTES",
+    "PG_URI_ENV",
     "R2Backend",
     "StorageBackend",
     "archive_thread",
@@ -513,6 +591,7 @@ R2_ACCOUNT_ENV = "R2_ACCOUNT_ID"
 R2_BUCKET_ENV = "R2_BUCKET"
 R2_ACCESS_KEY_ENV = "R2_ACCESS_KEY_ID"
 R2_SECRET_KEY_ENV = "R2_SECRET_ACCESS_KEY"
+PG_URI_ENV = "DIGI_CHECKPOINTER_POSTGRES_URI"
 
 
 def _r2_backend_from_env() -> R2Backend | None:
@@ -532,7 +611,8 @@ def _r2_backend_from_env() -> R2Backend | None:
 def main(argv: list[str] | None = None) -> int:
     """CLI: ``--dry-run`` lists threads; otherwise archives all but ``--keep``.
 
-    Returns 0 on success, 2 when credentials (Supabase or R2) are missing.
+    Returns 0 on success, 2 when credentials (Supabase, R2, or direct
+    Postgres) are missing.
     """
     import argparse
     import json
@@ -581,15 +661,23 @@ def main(argv: list[str] | None = None) -> int:
             "missing R2 credentials; set R2_ACCOUNT_ID/R2_BUCKET/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY"
         )
         return 2
+    pg_uri = (os.environ.get(PG_URI_ENV) or "").strip()
+    if not pg_uri:
+        print(f"missing direct Postgres URI; set {PG_URI_ENV}")
+        return 2
     manifests: list[dict[str, Any]] = []
     fresh_keys: set[str] = set()
-    for thread_id in threads:
-        if thread_id in keep:
-            continue
-        manifest = archive_thread(client, store, thread_id, args.owner)
-        manifests.append(manifest.to_dict())
-        fresh_keys.update(entry.key for entry in manifest.entries)
-        print(f"archived {thread_id}: {len(manifest.entries)} payloads")
+    reader = DirectPostgresReader(pg_uri)
+    try:
+        for thread_id in threads:
+            if thread_id in keep:
+                continue
+            manifest = archive_thread(client, store, thread_id, args.owner, payload_reader=reader)
+            manifests.append(manifest.to_dict())
+            fresh_keys.update(entry.key for entry in manifest.entries)
+            print(f"archived {thread_id}: {len(manifest.entries)} payloads")
+    finally:
+        reader.close()
     evicted = evict_to_watermark(client, store, fresh_keys)
     for key in evicted:
         print(f"evicted {key}")
