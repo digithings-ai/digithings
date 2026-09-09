@@ -155,8 +155,8 @@ def build_coverage_document(
 def _coverage_markdown(document: dict[str, Any]) -> str:
     body = document.get("body") if isinstance(document.get("body"), dict) else {}
     date_str = str(document.get("date") or "")
-    summary = str((body or {}).get("summary") or "").strip()
-    selected = (body or {}).get("selected") or []
+    summary = str(body.get("summary") or "").strip()
+    selected = body.get("selected") or []
     lines = [f"# Coverage directive {date_str}", ""]
     if summary:
         lines.extend([summary, ""])
@@ -206,10 +206,11 @@ def _coverage_director_node(
     kept, excluded = apply_coverage(roster, directive)
     # Merge H4's exclusion ledger rows that still apply (tickers nobody selected).
     kept_tickers = {e.ticker for e in kept}
+    excluded_tickers = {e.ticker for e in excluded}
     merged_excluded = list(excluded) + [
         row
         for row in (state.phase_portfolio.focus_roster_excluded or [])
-        if row.ticker not in kept_tickers and row.ticker not in {e.ticker for e in excluded}
+        if row.ticker not in kept_tickers and row.ticker not in excluded_tickers
     ]
     logger.info(
         "H4.5 coverage directive (%d refresh/explore, %d skip): %s",
