@@ -65,7 +65,7 @@ export function summarizeIdeaOutcomes(rows: FxIdeaEvalRow[]): IdeaOutcomeSummary
     resolvedCount: all.n,
     winCount: all.k,
     lossCount: all.n - all.k,
-    openCount: rows.filter((r) => r.status === 'open').length,
+    openCount: rows.filter((r) => r.status === 'carried').length,
     missingCount: rows.filter((r) => r.status === 'missing_rates').length,
     significantCount: rows.filter(
       (r) => isResolvedStatus(r.status) && r.significant_hit === true,
@@ -147,13 +147,13 @@ export function summarizeConsensusAccuracy(
   return {
     interval: wilsonInterval(k, n),
     significantInterval: wilsonInterval(sigK, sigN),
-    openCount: subset.filter((r) => r.accuracy_status === 'open').length,
+    openCount: subset.filter((r) => r.accuracy_status === 'carried').length,
     missingCount: subset.filter((r) => r.accuracy_status === 'missing_rates').length,
   };
 }
 
-export function openIdeas(rows: FxIdeaEvalRow[]): FxIdeaEvalRow[] {
+export function carriedIdeas(rows: FxIdeaEvalRow[]): FxIdeaEvalRow[] {
   return rows
-    .filter((r) => r.status === 'open')
+    .filter((r) => r.status === 'carried')
     .sort((a, b) => b.run_date.localeCompare(a.run_date) || a.rank - b.rank);
 }

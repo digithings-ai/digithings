@@ -1,7 +1,7 @@
 /**
  * Pure assembly for the Trades history table: full idea rows joined to
- * lifecycle eval rows. Close-based verdicts only — excursion (bias) and
- * level-touch verdicts arrive with the high/low feed + eval migration.
+ * lifecycle eval rows. Close-based verdicts plus excursion (bias) and
+ * level-touch outputs; levels never drive lifecycle scoring.
  */
 import type { FxIdeaEvalRow, FxLevelProvenance, FxTradeIdeaRow } from './types';
 import { formatLevelValue, hasTradeLevels, parseTradeLevels } from './trade-levels';
@@ -28,6 +28,10 @@ export interface TradeHistoryRow {
   sessions: number | null;
   /** Signed trade-direction hold return (fraction, e.g. 0.012 = +1.2%). */
   holdReturn: number | null;
+  /** Best direction-signed excursion seen while live (fraction vs entry). */
+  maxFavorable: number | null;
+  /** Worst direction-signed excursion seen while live (fraction vs entry). */
+  maxAdverse: number | null;
   directionalWin: boolean | null;
 }
 
@@ -82,9 +86,53 @@ function evalKey(runDate: string, rank: number): string {
 
 function lifecycleOf(status: string | undefined): TradeLifecycle {
   if (!status) return 'unscored';
-  if (status === 'open') return 'live';
+  if (status === 'carried') return 'live';
   if (status === 'missing_rates') return 'no_data';
+  // 'dropped' (bookkeeper verdict) and anything else land here: closed, and
+  // hidden downstream since carried/dropped rows carry no directional verdict.
   return 'closed';
+}
+
+/**
+ * Orientation-independent currency-axis key: `JPY/USD long` and
+ * `USD/JPY short` share an axis, mirroring twelve-x `axis_key`.
+ */
+export function axisKey(pair: string | null | undefined): string {
+  const parts = (pair ?? '').toUpperCase().split('/');
+  if (parts.length !== 2 || !parts[0].trim() || !parts[1].trim()) return (pair ?? '').toUpperCase();
+  return [...parts.map((p) => p.trim())].sort().join('/');
+}
+
+/**
+ * Net carried lifecycle rows to one per currency axis for the Trades board:
+ * the latest board wins; winners spanning ≥2 boards carry `continued_from`
+ * (earliest board date) + `n_boards`. Non-carried rows pass through.
+ * Input rows are not mutated.
+ */
+export function netCarriedIdeas(rows: FxIdeaEvalRow[]): FxIdeaEvalRow[] {
+  const passthrough: FxIdeaEvalRow[] = [];
+  const byAxis = new Map<string, FxIdeaEvalRow[]>();
+  for (const row of rows) {
+    if (row.status !== 'carried' || row.horizon_days !== 0) {
+      passthrough.push(row);
+      continue;
+    }
+    const key = axisKey(row.pair);
+    const group = byAxis.get(key) ?? [];
+    group.push(row);
+    byAxis.set(key, group);
+  }
+  const kept: FxIdeaEvalRow[] = [...passthrough];
+  for (const group of byAxis.values()) {
+    const sorted = [...group].sort((a, b) => a.run_date.localeCompare(b.run_date) || a.rank - b.rank);
+    const winner = sorted[sorted.length - 1];
+    kept.push(
+      sorted.length > 1
+        ? { ...winner, continued_from: sorted[0].run_date, n_boards: sorted.length }
+        : winner,
+    );
+  }
+  return kept;
 }
 
 /** Signed hold return as a one-decimal percent, or an em dash when unknown. */
@@ -163,6 +211,8 @@ export function assembleTradeHistory(
         exitDate: ev?.exit_date ?? null,
         sessions: ev?.n_sessions ?? null,
         holdReturn: ev?.hold_return ?? ev?.ret ?? null,
+        maxFavorable: ev?.max_favorable ?? null,
+        maxAdverse: ev?.max_adverse ?? null,
         directionalWin: ev?.directional_win ?? ev?.hit ?? null,
       } satisfies TradeHistoryRow;
     })

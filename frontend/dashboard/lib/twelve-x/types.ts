@@ -428,7 +428,7 @@ export interface FxIdeaEvalRow {
   horizon_days: number;
   pair: string;
   direction: string;
-  status: 'open' | 'resolved' | 'missing_rates' | string;
+  status: 'carried' | 'dropped' | 'resolved' | 'missing_rates' | string;
   entry_date: string | null;
   exit_date: string | null;
   entry_fix: number | null;
@@ -443,6 +443,21 @@ export interface FxIdeaEvalRow {
   significant_hit: boolean | null;
   n_sessions: number;
   as_of: string;
+  /** Close-based excursion outputs (migration 021); absent when unscored. */
+  bias_verdict?: string | null;
+  max_favorable?: number | null;
+  max_adverse?: number | null;
+  decisive_session?: string | null;
+  entry_fill_session?: string | null;
+  stop_price?: number | null;
+  target_prices?: number[] | null;
+  level_outcome?: string | null;
+  /**
+   * Continuation badge from per-axis netting (not a DB column): earliest
+   * board date / board count when ≥2 carried boards collapse into one row.
+   */
+  continued_from?: string | null;
+  n_boards?: number | null;
 }
 
 /**
@@ -466,7 +481,7 @@ export interface FxConsensusEvalRow {
   clip_flag: boolean | null;
   sign_flip: boolean | null;
   abs_delta_score: number | null;
-  accuracy_status: 'open' | 'scored' | 'missing_rates' | 'n/a' | string;
+  accuracy_status: 'carried' | 'scored' | 'missing_rates' | 'n/a' | string;
   currency_ret_5d: number | null;
   sigma_entry: number | null;
   hit_5d: boolean | null;

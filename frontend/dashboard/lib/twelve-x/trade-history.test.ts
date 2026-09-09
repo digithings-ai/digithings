@@ -7,6 +7,7 @@ import {
   filterTradeHistory,
   formatHoldPct,
   formatPctRight,
+  netCarriedIdeas,
   sortTradeHistory,
   summarizeFilteredTrades,
   tradeResult,
@@ -92,7 +93,7 @@ describe('assembleTradeHistory', () => {
           rank: 2,
           pair: 'EUR/GBP',
           direction: 'short',
-          status: 'open',
+          status: 'carried',
           exit_date: null,
           exit_fix: null,
           directional_win: null,
@@ -146,7 +147,7 @@ describe('displayableTradeHistory / tradeResult', () => {
           rank: 1,
           pair: 'EUR/USD',
           direction: 'short',
-          status: 'open',
+          status: 'carried',
           directional_win: null,
           hit: null,
           hold_return: 0.004,
@@ -160,6 +161,88 @@ describe('displayableTradeHistory / tradeResult', () => {
       '2026-07-24:right',
       '2026-07-25:live',
     ]);
+  });
+});
+
+describe('lifecycleOf status mapping', () => {
+  it("maps 'carried' to live and 'dropped' to closed-and-hidden", () => {
+    const rows = assembleTradeHistory(
+      [
+        idea({ run_date: '2026-07-24', rank: 1 }),
+        idea({ run_date: '2026-07-25', rank: 1 }),
+      ],
+      [
+        evalRow({
+          run_date: '2026-07-24',
+          rank: 1,
+          status: 'carried',
+          exit_date: null,
+          exit_fix: null,
+          directional_win: null,
+          hit: null,
+        }),
+        evalRow({
+          run_date: '2026-07-25',
+          rank: 1,
+          status: 'dropped',
+          exit_date: null,
+          exit_fix: null,
+          directional_win: null,
+          hit: null,
+        }),
+      ],
+    );
+    expect(rows[1].lifecycle).toBe('live');
+    expect(tradeResult(rows[1])).toBe('live');
+    expect(rows[0].lifecycle).toBe('closed');
+    expect(tradeResult(rows[0])).toBeNull();
+    expect(displayableTradeHistory(rows)).toHaveLength(1);
+  });
+});
+
+describe('assembleTradeHistory excursion passthrough', () => {
+  it('carries max favorable/adverse extremes onto the history row', () => {
+    const rows = assembleTradeHistory(
+      [idea({ run_date: '2026-07-24', rank: 1 })],
+      [
+        evalRow({
+          run_date: '2026-07-24',
+          rank: 1,
+          max_favorable: 0.02,
+          max_adverse: -0.008,
+        }),
+      ],
+    );
+    expect(rows[0].maxFavorable).toBe(0.02);
+    expect(rows[0].maxAdverse).toBe(-0.008);
+  });
+});
+
+describe('netCarriedIdeas', () => {
+  it('keeps one carried row per currency axis with a continuation badge', () => {
+    const live = (over: Record<string, unknown>) =>
+      evalRow({
+        status: 'carried',
+        exit_date: null,
+        exit_fix: null,
+        directional_win: null,
+        hit: null,
+        ...over,
+      } as Parameters<typeof evalRow>[0]);
+    const kept = netCarriedIdeas([
+      live({ run_date: '2026-07-06', rank: 1, pair: 'JPY/USD', direction: 'long' }),
+      live({ run_date: '2026-09-04', rank: 2, pair: 'USD/JPY', direction: 'short' }),
+      live({ run_date: '2026-09-04', rank: 1, pair: 'EUR/USD', direction: 'long' }),
+      evalRow({ run_date: '2026-08-01', rank: 1, pair: 'GBP/USD' }),
+    ]);
+    expect(kept).toHaveLength(3);
+    const winner = kept.find((r) => r.pair === 'USD/JPY');
+    expect(winner?.run_date).toBe('2026-09-04');
+    expect(winner?.continued_from).toBe('2026-07-06');
+    expect(winner?.n_boards).toBe(2);
+    const single = kept.find((r) => r.pair === 'EUR/USD');
+    expect(single?.continued_from).toBeUndefined();
+    expect(single?.n_boards).toBeUndefined();
   });
 });
 
@@ -187,7 +270,7 @@ describe('filterTradeHistory + summarizeFilteredTrades', () => {
           run_date: '2026-07-31',
           rank: 1,
           pair: 'GBP/USD',
-          status: 'open',
+          status: 'carried',
           hold_return: 0.002,
           directional_win: null,
           hit: null,
