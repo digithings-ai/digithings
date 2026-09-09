@@ -94,12 +94,19 @@ def fakes() -> tuple[Any, FakeR2, FakeRegistry]:
 
 
 def test_put_generation_verifies_before_pointer(fakes: Any) -> None:
+    from digiquant.data.prices.r2_history import latest_pointer_key
+
     store, r2, registry = fakes
+    pointer = latest_pointer_key("SPY")
     r2.corrupt_next_get = True
     with pytest.raises(ArchiveVerifyError):
         store.put_generation("market-data/price/SPY/2026-09-08.parquet", b"data-bytes")
-    assert r2.latest_pointer("market-data/price/SPY") is None
+    with pytest.raises(KeyError):
+        store.read_latest(pointer)
     assert registry.rows == []
+    gen = store.put_generation("market-data/price/SPY/2026-09-08.parquet", b"data-bytes")
+    store.swap_latest_pointer(pointer, gen.key)
+    assert store.read_latest(pointer) == gen.key
 
 
 def test_put_generation_registers_pointer_on_success(fakes: Any) -> None:

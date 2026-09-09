@@ -728,10 +728,10 @@ def test_evict_oldest_first_to_low_watermark():
 
 def test_evict_never_touches_latest_run():
     client = FakeClient()
-    _seed_ledger(client, [("r2/latest-x", 9_000_000_000)])
+    _seed_ledger(client, [("checkpoints/latest-x", 9_000_000_000)])
     store = FakeStore()
-    store.objects["r2/latest-x"] = b"x"
-    assert evict_to_watermark(client, store, {"r2/latest-x"}) == []
+    store.objects["checkpoints/latest-x"] = b"x"
+    assert evict_to_watermark(client, store, {"checkpoints/latest-x"}) == []
 
 
 def test_reconcile_removes_dead_ledger_rows():
@@ -748,6 +748,15 @@ def test_reconcile_reports_orphans_without_deleting():
     store.objects["checkpoints/orphan/x.bin"] = b"y"
     assert reconcile_ledger(client, store) == ["checkpoints/orphan/x.bin"]
     assert "checkpoints/orphan/x.bin" in store.objects
+
+
+def test_reconcile_reports_dead_market_data_without_deleting():
+    client = FakeClient()
+    _seed_ledger(client, [("market-data/price/SPY/2026-09-08.parquet", 10)])
+    store = FakeStore()  # no backing object: dead market-data pointer
+    assert reconcile_ledger(client, store) == ["market-data/price/SPY/2026-09-08.parquet"]
+    rows = client.table("archive_objects").select("*").execute().data
+    assert [r["r2_key"] for r in rows] == ["market-data/price/SPY/2026-09-08.parquet"]
 
 
 def test_fetch_thread_rows_two_phase_single_row_statements():
