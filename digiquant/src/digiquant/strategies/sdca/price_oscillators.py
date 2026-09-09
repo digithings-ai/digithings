@@ -8,20 +8,28 @@ the in-progress week's Friday/Sunday close.
 Sign convention matches ``power_law_z``: cheap / buy = +z, rich / sell = −z,
 clipped to ``[-3, 3]``.
 
-``weekly_rsi`` is a **dead-zone** map (mid-cycle 30–80 → z≈0, RSI 85 is
-max-sell) fed into an **agreement-scaled confluence** of weekly (long-term)
-and daily (medium-term) RSI (``rsi_confluence_z``): a weighted blend of the
-two dead-zone z-scores, amplified when the timeframes agree in sign and
-damped toward 0 when they conflict. ``mtf_rsi_z`` (weekly/monthly blend,
-naive 0.5/0.5 average) stays as a diagnostic — superseded for real use by
+``weekly_rsi`` is a **continuous** map (2026-09-07: Chris found the prior
+mid-cycle 30–80 dead zone read as a flat line that "never caught" a move —
+RSI 50 is neutral, z ramps toward ±3 as RSI approaches ``_RSI_EXTREME_LOW``/
+``_RSI_EXTREME_HIGH``, curved via ``_RSI_CURVE_POWER`` so it stays gentle near 50
+and only steepens near the extremes) fed into an **agreement-scaled
+confluence** of weekly (long-term) and daily (medium-term) RSI
+(``rsi_confluence_z``): a weighted blend of the two continuous z-scores,
+amplified when the timeframes agree in sign and damped toward 0 when they
+conflict. ``mtf_rsi_z`` (weekly/monthly blend, naive 0.5/0.5 average) stays
+as a diagnostic — superseded for real use by
 ``weekly_monthly_rsi_confluence_z`` below, which applies the same
 agreement-scaled blend used everywhere else instead of a naive average. Do
-not affine-map ``(50−RSI)/50`` — that pegs a bull at the floor.
+not affine-map ``(50−RSI)/50`` (linear, constant slope) — that pegs a bull
+at the floor for the whole run; the curved (power ``_RSI_CURVE_POWER``) map
+keeps ordinary 55–75 RSI readings mild and reserves the floor for genuine
+extremes.
 
 ``monthly_rsi_confluence_z``/``monthly_macd_confluence_z`` swap the long-term
 leg for **completed calendar months** instead of weeks (``monthly_rsi_z``,
-``monthly_macd_z``) — a slower cadence for the same dead-zone/log-MACD
-mapping, still confluenced against the same daily (medium-term) leg. These
+``monthly_macd_z``) — a slower cadence for the same continuous-RSI/
+dead-zone-log-MACD mapping (RSI has no dead zone; MACD still does — see
+below), still confluenced against the same daily (medium-term) leg. These
 are research-only right now: dormant, zero-weight fields on
 ``SdcaCompositeWeights`` (the minimal hook the period-search machinery
 needs) but not in ``EXTRA_INDICATOR_NAMES``/``build_extra_indicators``/
@@ -100,10 +108,10 @@ _RS_ETH_FAST_MIN_SAMPLES = 15
 _POWER_LAW_TREND_WINDOW = 180
 _SIGMA_FLOOR = 1e-12
 _WEEK_DAYS = 6  # Monday start + 6 days → Sunday (ISO week complete)
-_RSI_DEAD_LOW = 30.0
-_RSI_DEAD_HIGH = 80.0
+_RSI_MID = 50.0
 _RSI_EXTREME_LOW = 20.0
 _RSI_EXTREME_HIGH = 85.0
+_RSI_CURVE_POWER = 4.0
 _LMACD_BOTTOM_DEAD = -0.02
 _LMACD_BOTTOM_EXTREME = -0.10
 _LMACD_TOP_ANCHOR_YEAR = 2013
@@ -273,28 +281,27 @@ def _causal_z(values: pl.Series, *, window: int, min_samples: int) -> pl.Series:
     return ((values - mu) / sigma.clip(lower_bound=_SIGMA_FLOOR)).clip(-3.0, 3.0)
 
 
-def rsi_deadzone_z(
-    rsi: pl.Series,
-    *,
-    dead_low: float = _RSI_DEAD_LOW,
-    dead_high: float = _RSI_DEAD_HIGH,
-    extreme_low: float = _RSI_EXTREME_LOW,
-    extreme_high: float = _RSI_EXTREME_HIGH,
-) -> pl.Series:
-    """Map RSI onto ``[-3, 3]`` with a mid-cycle dead zone and a capped blow-off."""
-    low_span = dead_low - extreme_low
-    high_span = extreme_high - dead_high
+def rsi_continuous_z(rsi: pl.Series) -> pl.Series:
+    """Map RSI onto ``[-3, 3]`` as a continuous curve through the RSI=50 midpoint.
+
+    A power curve (``_RSI_CURVE_POWER``), not a dead zone: z is exactly 0
+    only at RSI=50 and varies continuously on both sides, saturating at ±3
+    as RSI approaches ``_RSI_EXTREME_LOW``/``_RSI_EXTREME_HIGH``. The power
+    keeps the slope shallow near 50 (an ordinary mid-bull RSI of 55-75 stays
+    mild) and steep near the extremes — see module docstring: a naive linear
+    map through 50 pegs a bull at the floor for the whole run.
+    """
     rsi_col = pl.col("rsi")
-    cheap = ((dead_low - rsi_col) / low_span * 3.0).clip(0.0, 3.0)
-    rich = ((dead_high - rsi_col) / high_span * 3.0).clip(-3.0, 0.0)
+    low_span = _RSI_MID - _RSI_EXTREME_LOW
+    high_span = _RSI_EXTREME_HIGH - _RSI_MID
+    cheap_frac = ((_RSI_MID - rsi_col) / low_span).clip(0.0, 1.0)
+    rich_frac = ((rsi_col - _RSI_MID) / high_span).clip(0.0, 1.0)
     mapped = (
         pl.when(rsi_col.is_null())
         .then(None)
-        .when(rsi_col < dead_low)
-        .then(cheap)
-        .when(rsi_col > dead_high)
-        .then(rich)
-        .otherwise(0.0)
+        .otherwise(
+            (cheap_frac**_RSI_CURVE_POWER) * 3.0 - (rich_frac**_RSI_CURVE_POWER) * 3.0
+        )
         .alias("rsi_z")
     )
     return pl.DataFrame({"rsi": rsi}).select(mapped)["rsi_z"]
@@ -305,21 +312,11 @@ def weekly_rsi_z(
     close: pl.Series,
     *,
     length: int = _RSI_LENGTH,
-    dead_low: float = _RSI_DEAD_LOW,
-    dead_high: float = _RSI_DEAD_HIGH,
-    extreme_low: float = _RSI_EXTREME_LOW,
-    extreme_high: float = _RSI_EXTREME_HIGH,
 ) -> pl.Series:
-    """Weekly Wilder RSI → dead-zone z, as-of onto daily dates."""
+    """Weekly Wilder RSI → continuous z, as-of onto daily dates."""
     weekly = completed_weekly_closes(dates, close)
     rsi = _wilder_rsi(weekly["close"], length=length)
-    z = rsi_deadzone_z(
-        rsi,
-        dead_low=dead_low,
-        dead_high=dead_high,
-        extreme_low=extreme_low,
-        extreme_high=extreme_high,
-    )
+    z = rsi_continuous_z(rsi)
     return _asof_to_daily(dates, weekly["week_end"], z).alias("weekly_rsi")
 
 
@@ -328,21 +325,11 @@ def monthly_rsi_z(
     close: pl.Series,
     *,
     length: int = _RSI_LENGTH,
-    dead_low: float = _RSI_DEAD_LOW,
-    dead_high: float = _RSI_DEAD_HIGH,
-    extreme_low: float = _RSI_EXTREME_LOW,
-    extreme_high: float = _RSI_EXTREME_HIGH,
 ) -> pl.Series:
-    """Monthly Wilder RSI (completed months) → same dead-zone z as weekly."""
+    """Monthly Wilder RSI (completed months) → same continuous z as weekly."""
     monthly = completed_monthly_closes(dates, close)
     rsi = _wilder_rsi(monthly["close"], length=length)
-    z = rsi_deadzone_z(
-        rsi,
-        dead_low=dead_low,
-        dead_high=dead_high,
-        extreme_low=extreme_low,
-        extreme_high=extreme_high,
-    )
+    z = rsi_continuous_z(rsi)
     return _asof_to_daily(dates, monthly["month_end"], z).alias("monthly_rsi")
 
 
@@ -351,30 +338,10 @@ def mtf_rsi_z(
     close: pl.Series,
     *,
     length: int = _RSI_LENGTH,
-    dead_low: float = _RSI_DEAD_LOW,
-    dead_high: float = _RSI_DEAD_HIGH,
-    extreme_low: float = _RSI_EXTREME_LOW,
-    extreme_high: float = _RSI_EXTREME_HIGH,
 ) -> pl.Series:
-    """Equal blend of weekly + monthly dead-zone RSI. Weekly fills monthly warmup."""
-    weekly = weekly_rsi_z(
-        dates,
-        close,
-        length=length,
-        dead_low=dead_low,
-        dead_high=dead_high,
-        extreme_low=extreme_low,
-        extreme_high=extreme_high,
-    )
-    monthly = monthly_rsi_z(
-        dates,
-        close,
-        length=length,
-        dead_low=dead_low,
-        dead_high=dead_high,
-        extreme_low=extreme_low,
-        extreme_high=extreme_high,
-    )
+    """Equal blend of weekly + monthly continuous RSI. Weekly fills monthly warmup."""
+    weekly = weekly_rsi_z(dates, close, length=length)
+    monthly = monthly_rsi_z(dates, close, length=length)
     blended: list[float | None] = []
     for week_z, month_z in zip(weekly.to_list(), monthly.to_list(), strict=True):
         if week_z is None and month_z is None:
@@ -397,10 +364,6 @@ def monthly_rsi_confluence_z(
     monthly_weight: float = _RSI_CONFLUENCE_WEEKLY_WEIGHT,
     agreement_boost: float = _RSI_CONFLUENCE_AGREEMENT_BOOST,
     disagreement_damp: float = _RSI_CONFLUENCE_DISAGREEMENT_DAMP,
-    dead_low: float = _RSI_DEAD_LOW,
-    dead_high: float = _RSI_DEAD_HIGH,
-    extreme_low: float = _RSI_EXTREME_LOW,
-    extreme_high: float = _RSI_EXTREME_HIGH,
 ) -> pl.Series:
     """Monthly (long-term) + daily (medium-term) RSI, amplified on agreement.
 
@@ -411,24 +374,8 @@ def monthly_rsi_confluence_z(
     period-search machinery, but not in ``EXTRA_INDICATOR_NAMES``/
     ``build_extra_indicators``/settings.json.
     """
-    monthly = monthly_rsi_z(
-        dates,
-        close,
-        length=monthly_length,
-        dead_low=dead_low,
-        dead_high=dead_high,
-        extreme_low=extreme_low,
-        extreme_high=extreme_high,
-    )
-    daily = daily_rsi_z(
-        dates,
-        close,
-        length=daily_length,
-        dead_low=dead_low,
-        dead_high=dead_high,
-        extreme_low=extreme_low,
-        extreme_high=extreme_high,
-    )
+    monthly = monthly_rsi_z(dates, close, length=monthly_length)
+    daily = daily_rsi_z(dates, close, length=daily_length)
     return agreement_scaled_blend(
         monthly,
         daily,
@@ -448,10 +395,6 @@ def weekly_monthly_rsi_confluence_z(
     monthly_weight: float = _RSI_CONFLUENCE_WEEKLY_WEIGHT,
     agreement_boost: float = _RSI_CONFLUENCE_AGREEMENT_BOOST,
     disagreement_damp: float = _RSI_CONFLUENCE_DISAGREEMENT_DAMP,
-    dead_low: float = _RSI_DEAD_LOW,
-    dead_high: float = _RSI_DEAD_HIGH,
-    extreme_low: float = _RSI_EXTREME_LOW,
-    extreme_high: float = _RSI_EXTREME_HIGH,
 ) -> pl.Series:
     """Monthly (long-term) + weekly (medium-term) RSI, amplified on agreement.
 
@@ -463,24 +406,8 @@ def weekly_monthly_rsi_confluence_z(
     short-term momentum check. Research-only: not yet in
     ``EXTRA_INDICATOR_NAMES``/``build_extra_indicators``/settings.json.
     """
-    monthly = monthly_rsi_z(
-        dates,
-        close,
-        length=monthly_length,
-        dead_low=dead_low,
-        dead_high=dead_high,
-        extreme_low=extreme_low,
-        extreme_high=extreme_high,
-    )
-    weekly = weekly_rsi_z(
-        dates,
-        close,
-        length=weekly_length,
-        dead_low=dead_low,
-        dead_high=dead_high,
-        extreme_low=extreme_low,
-        extreme_high=extreme_high,
-    )
+    monthly = monthly_rsi_z(dates, close, length=monthly_length)
+    weekly = weekly_rsi_z(dates, close, length=weekly_length)
     return agreement_scaled_blend(
         monthly,
         weekly,
@@ -496,12 +423,8 @@ def daily_rsi_z(
     close: pl.Series,
     *,
     length: int = _RSI_DAILY_LENGTH,
-    dead_low: float = _RSI_DEAD_LOW,
-    dead_high: float = _RSI_DEAD_HIGH,
-    extreme_low: float = _RSI_EXTREME_LOW,
-    extreme_high: float = _RSI_EXTREME_HIGH,
 ) -> pl.Series:
-    """Daily Wilder RSI (medium-term) → dead-zone z. No as-of broadcast needed.
+    """Daily Wilder RSI (medium-term) → continuous z. No as-of broadcast needed.
 
     Wilder's smoothing is already causal on the daily series, unlike the
     weekly/monthly legs which aggregate first and then join-asof onto daily
@@ -510,13 +433,7 @@ def daily_rsi_z(
     if dates.len() != close.len():
         raise ValueError("dates and close must be the same length")
     rsi = _wilder_rsi(close, length=length)
-    return rsi_deadzone_z(
-        rsi,
-        dead_low=dead_low,
-        dead_high=dead_high,
-        extreme_low=extreme_low,
-        extreme_high=extreme_high,
-    ).alias("daily_rsi")
+    return rsi_continuous_z(rsi).alias("daily_rsi")
 
 
 def agreement_scaled_blend(
@@ -570,41 +487,21 @@ def rsi_confluence_z(
     weekly_weight: float = _RSI_CONFLUENCE_WEEKLY_WEIGHT,
     agreement_boost: float = _RSI_CONFLUENCE_AGREEMENT_BOOST,
     disagreement_damp: float = _RSI_CONFLUENCE_DISAGREEMENT_DAMP,
-    dead_low: float = _RSI_DEAD_LOW,
-    dead_high: float = _RSI_DEAD_HIGH,
-    extreme_low: float = _RSI_EXTREME_LOW,
-    extreme_high: float = _RSI_EXTREME_HIGH,
 ) -> pl.Series:
     """Weekly (long-term) + daily (medium-term) RSI, amplified on agreement.
 
-    A ``weekly_weight``/``1 - weekly_weight`` blend of the two dead-zone
+    A ``weekly_weight``/``1 - weekly_weight`` blend of the two continuous
     z-scores is the anchor. When both legs share sign, the blend is scaled
     up toward ``1 + agreement_boost`` (more so the closer their magnitudes
     are — full agreement, not just same-sign noise). When they disagree in
     sign, the blend is damped to ``disagreement_damp`` of its value — the
     timeframes are fighting, so the sub-score should say less, not more.
-    Either leg sitting at the dead-zone (z == 0) passes the other through
-    unscaled: a silent timeframe is not a disagreement. Result stays
-    clipped to ``[-3, 3]``.
+    Either leg sitting at exactly 0 (only possible at RSI=50) passes the
+    other through unscaled: a silent timeframe is not a disagreement. Result
+    stays clipped to ``[-3, 3]``.
     """
-    weekly = weekly_rsi_z(
-        dates,
-        close,
-        length=weekly_length,
-        dead_low=dead_low,
-        dead_high=dead_high,
-        extreme_low=extreme_low,
-        extreme_high=extreme_high,
-    )
-    daily = daily_rsi_z(
-        dates,
-        close,
-        length=daily_length,
-        dead_low=dead_low,
-        dead_high=dead_high,
-        extreme_low=extreme_low,
-        extreme_high=extreme_high,
-    )
+    weekly = weekly_rsi_z(dates, close, length=weekly_length)
+    daily = daily_rsi_z(dates, close, length=daily_length)
     return agreement_scaled_blend(
         weekly,
         daily,
@@ -983,7 +880,7 @@ __all__ = [
     "mtf_rsi_z",
     "price_oscillator_z_vectors",
     "rsi_confluence_z",
-    "rsi_deadzone_z",
+    "rsi_continuous_z",
     "sma_band_confluence_z",
     "sma_band_z",
     "weekly_macd_z",

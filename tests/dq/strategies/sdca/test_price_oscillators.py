@@ -29,7 +29,7 @@ from digiquant.strategies.sdca.price_oscillators import (
     monthly_rsi_confluence_z,
     monthly_rsi_z,
     rsi_confluence_z,
-    rsi_deadzone_z,
+    rsi_continuous_z,
     sma_band_confluence_z,
     sma_band_z,
     weekly_macd_z,
@@ -65,16 +65,21 @@ class TestCompletedWeeklyCloses:
         assert first["close"][0] == pytest.approx(16.0)
 
 
-class TestRsiDeadzone:
-    def test_mid_cycle_maps_to_zero(self) -> None:
+class TestRsiContinuous:
+    def test_fifty_is_the_only_zero(self) -> None:
         rsi = pl.Series([30.0, 50.0, 80.0, 20.0, 85.0, 100.0])
-        z = rsi_deadzone_z(rsi).to_list()
-        assert z[0] == pytest.approx(0.0)
-        assert z[1] == pytest.approx(0.0)
-        assert z[2] == pytest.approx(0.0)
+        z = rsi_continuous_z(rsi).to_list()
+        assert z[0] > 0.0  # RSI 30 < 50 → still cheap, no flat dead zone
+        assert z[1] == pytest.approx(0.0)  # RSI 50 is the sole zero crossing
+        assert z[2] < 0.0  # RSI 80 > 50 → still rich, no flat dead zone
         assert z[3] == pytest.approx(3.0)
         assert z[4] == pytest.approx(-3.0)
         assert z[5] == pytest.approx(-3.0)
+
+    def test_no_flat_segment_strictly_monotonic(self) -> None:
+        rsi = pl.Series([float(v) for v in range(21, 85)])
+        z = rsi_continuous_z(rsi).to_list()
+        assert all(a > b for a, b in zip(z, z[1:]))
 
 
 class TestWeeklyRsiZ:
