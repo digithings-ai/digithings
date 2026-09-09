@@ -35,13 +35,14 @@ file exists to not have:
 * **velocity, windowed** — ``commits``, ``pullsMerged``, ``issuesClosed`` — the last
   30 days on ``main``, the deployed branch (not the repo's GitHub default, which is
   ``develop``). Every one of these queries carries a date bound.
-* **current state, NOT windowed** — ``issuesOpen`` and ``latestRelease``. An open
-  issue count is a point in time by nature: "opened in the last 30 days and still
-  open" was 30 against a real backlog of 197, and it answers a question nobody asked.
-  So these are deliberately unbounded, and any surface rendering them must scope them
-  separately from the windowed three. The first draft of the band put ``issuesOpen``
-  inside a ``// last 30 days`` heading, which presented a lifetime figure as a
-  monthly one.
+* **current state, NOT windowed** — ``issuesOpen``, ``pullsOpen`` and
+  ``latestRelease``. An open issue count is a point in time by nature: "opened in
+  the last 30 days and still open" was 30 against a real backlog of 197, and it
+  answers a question nobody asked. So these are deliberately unbounded, and any
+  surface rendering them must scope them separately from the windowed three. The
+  first draft of the band put ``issuesOpen`` inside a ``// last 30 days`` heading,
+  which presented a lifetime figure as a monthly one. ``openIssues`` is the same
+  unwindowed backlog, sorted by most recently updated, for the detailed list.
 * **code shape** — per-module ``files`` and ``lines`` — counted from the local
   checkout at the commit this snapshot is generated at, because the API's tree
   exposes blob *bytes*, never lines.
@@ -49,6 +50,9 @@ file exists to not have:
 So the snapshot does not claim one uniform "as of main" for everything, and nothing
 here says it does. The page prints ``generatedAt``, which is the honest anchor for
 all three.
+
+The heat is snapshot-sourced because client-side pagination would exhaust the
+unauthenticated budget; weekly refresh keeps it fresh.
 
 Usage:
     scripts/fetch_repo_activity.py                      # write the snapshot
@@ -63,7 +67,8 @@ import json
 import re
 import subprocess
 import sys
-from datetime import UTC, datetime, timedelta
+import time
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -88,7 +93,9 @@ def _shown(path: Path) -> str:
 
 
 def _gh(*args: str) -> object:
-    out = subprocess.check_output(["gh", *args], text=True, cwd=REPO_ROOT)
+    # stderr is captured (not inherited) so a CalledProcessError carries gh's
+    # message — _is_search_cap_error matches the 1000-result-cap signal in it.
+    out = subprocess.check_output(["gh", *args], text=True, cwd=REPO_ROOT, stderr=subprocess.PIPE)
     return json.loads(out)
 
 
@@ -202,6 +209,10 @@ def _commits_since(since: str) -> list[dict]:
 # rows this list was showing, which made the page's "the most recent features to land
 # on main" false. #1901 is a prior fix for the same merge-vs-squash shape elsewhere.
 _FEAT = re.compile(r"^feat(?:\(([^)]+)\))?!?: (.+?)(?:\s*\(#(\d+)\))?$")
+# A subject that already carried a ref (cherry-pick, revert, "fixes #N" remnant)
+# can leave a stale `(#N)` inside the summary after _FEAT strips the trailing
+# one. The page renders summaries raw, so strip every trailing ref, not just one.
+_TRAILING_REF = re.compile(r"(?:\s*\(#\d+\))+$")
 
 
 def _pr_for_commit(sha: str) -> int | None:
@@ -235,6 +246,7 @@ def _features(commits: list[dict], limit: int = 6) -> list[dict]:
         if not m:
             continue
         scope, summary, pr_text = m.group(1), m.group(2), m.group(3)
+        summary = _TRAILING_REF.sub("", summary).strip()
         pr = int(pr_text) if pr_text else _pr_for_commit(c.get("sha") or "")
         if pr is None or pr in seen:
             continue
@@ -252,18 +264,176 @@ def _features(commits: list[dict], limit: int = 6) -> list[dict]:
     return feats
 
 
+def _search_items(payload: object, limit: int) -> list[dict]:
+    """Number / title / url rows from a Search issues payload."""
+    items = payload.get("items") if isinstance(payload, dict) else None
+    if not isinstance(items, list):
+        return []
+    out: list[dict] = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        number = it.get("number")
+        title = it.get("title")
+        url = it.get("html_url")
+        if not isinstance(number, int) or not title or not url:
+            continue
+        out.append(
+            {
+                "number": number,
+                "title": title,
+                "url": url,
+                "updatedAt": it.get("updated_at"),
+                "closedAt": it.get("closed_at"),
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out
+
+
+YEAR_DAYS = 371  # 53 weeks, matches RepoHeatmap's default
+
+
+def _day_key(stamp: str | None) -> str | None:
+    return stamp[:10] if stamp else None
+
+
+def _to_daily(
+    commits: list[dict],
+    merged: list[str],
+    closed: list[str],
+    end: datetime,
+    total: int = YEAR_DAYS,
+) -> list[dict]:
+    counts: dict[str, int] = {}
+
+    def add(stamp: str | None) -> None:
+        day = _day_key(stamp)
+        if day:
+            counts[day] = counts.get(day, 0) + 1
+
+    for c in commits:
+        add((c.get("commit") or {}).get("committer", {}).get("date"))
+    for s in (*merged, *closed):
+        add(s)
+    start = (end - timedelta(days=total - 1)).date()
+    return [
+        {
+            "date": (start + timedelta(days=i)).isoformat(),
+            "count": counts.get((start + timedelta(days=i)).isoformat(), 0),
+        }
+        for i in range(total)
+    ]
+
+
+def _search_pages(query: str) -> list[str]:
+    """One bounded Search query, paginated at 100/page."""
+    out: list[str] = []
+    page = 1
+    while True:
+        payload = _gh("api", f"search/issues?q={query}&per_page=100&page={page}")
+        items = payload.get("items", []) if isinstance(payload, dict) else []
+        if not items:
+            return out
+        out.extend(it["closed_at"] for it in items if isinstance(it, dict) and it.get("closed_at"))
+        if len(items) < 100:
+            return out
+        page += 1
+        time.sleep(2.5)
+
+
+# `merged:>=YYYY-MM-DD` / `closed:>=YYYY-MM-DD` — the open-ended lower bound the
+# year queries carry, and the half replaced by a `START..END` range when chunking.
+_SEARCH_SINCE = re.compile(r"(merged|closed):>=(\d{4}-\d{2}-\d{2})")
+
+
+def _is_search_cap_error(exc: subprocess.CalledProcessError) -> bool:
+    """Whether *exc* is GitHub Search's 1000-result cap, not any other failure.
+
+    A bare `except CalledProcessError` fanned every `gh` failure (bad auth,
+    rate-limit, network) into bisected retries — a retry storm masking the
+    original error. Only the cap 422s ("Only the first 1000 search results are
+    available"); everything else must raise immediately, unretried.
+    """
+    hay = " ".join(
+        part for part in (str(exc.output or ""), str(exc.stderr or ""), str(exc)) if part
+    ).lower()
+    return "422" in hay or "1000" in hay or "only the first" in hay
+
+
+def _search_dates(query: str) -> list[str]:
+    """All closed_at dates for a Search issues query, paginated at 100/page.
+
+    Authenticated Search allows 30 req/min — ~65 pages per query sleeps its
+    way through ~3 min. Weekly cron only; never call this client-side.
+
+    GitHub Search returns only the first 1000 matches, so a year-long query on
+    a busy repo 422s past page 10 (measured 2026-09-08: 2193 merged PRs, 1195
+    closed issues in 365 days — August 2026 alone merged over 1000). On that
+    failure alone the window is bisected until every piece fits under the cap,
+    and the pieces concatenated. Pieces are disjoint date ranges, so nothing is
+    counted twice. Any other `gh` failure raises at once, with no retries.
+    """
+    try:
+        return _search_pages(query)
+    except subprocess.CalledProcessError as exc:
+        if not _is_search_cap_error(exc):
+            raise
+        m = _SEARCH_SINCE.search(query)
+        if not m:
+            raise
+    kind = m.group(1)
+    start = datetime.strptime(m.group(2), "%Y-%m-%d").date()
+    today = datetime.now(UTC).date()
+    print(
+        f"⚠️  search window exceeds 1000 results — re-running {kind} in smaller spans",
+        file=sys.stderr,
+    )
+    out: list[str] = []
+    _search_span(query, m, kind, start, today, out)
+    return out
+
+
+def _search_span(
+    query: str, m: re.Match[str], kind: str, first: date, last: date, out: list[str]
+) -> None:
+    """Append closed_at dates for one `START..END` span, bisecting past the cap.
+
+    A single day still over the cap re-raises rather than truncating — dropping
+    it would silently undercount the heatmap. Non-cap failures raise at once.
+    """
+    ranged = (
+        query[: m.start()] + f"{kind}:{first.isoformat()}..{last.isoformat()}" + query[m.end() :]
+    )
+    try:
+        out.extend(_search_pages(ranged))
+    except subprocess.CalledProcessError as exc:
+        if not _is_search_cap_error(exc):
+            raise
+        if first >= last:
+            raise
+        mid = first + (last - first) // 2
+        _search_span(query, m, kind, first, mid, out)
+        _search_span(query, m, kind, mid + timedelta(days=1), last, out)
+
+
 def collect() -> dict:
     since = _since()
     commits = _commits_since(since)
 
     merged = _gh(
         "api",
-        f"search/issues?q=repo:{SLUG}+is:pr+is:merged+merged:>={since[:10]}&per_page=1",
+        f"search/issues?q=repo:{SLUG}+is:pr+is:merged+merged:>={since[:10]}&per_page=6&sort=updated",
     )
     closed = _gh(
         "api",
         f"search/issues?q=repo:{SLUG}+is:issue+is:closed+closed:>={since[:10]}&per_page=1",
     )
+    year_since = (datetime.now(UTC) - timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    year_commits = _commits_since(year_since)
+    year_merged = _search_dates(f"repo:{SLUG}+is:pr+is:merged+merged:>={year_since[:10]}")
+    year_closed = _search_dates(f"repo:{SLUG}+is:issue+is:closed+closed:>={year_since[:10]}")
     # Deliberately UNBOUNDED, unlike the three above — the whole open backlog, not
     # what opened this month. Consumers must label it as current state; see the
     # module docstring.
@@ -275,7 +445,11 @@ def collect() -> dict:
     # a page that promises "every figure is countable in the repo".
     open_issues = _gh(
         "api",
-        f"search/issues?q=repo:{SLUG}+is:issue+is:open&per_page=1",
+        f"search/issues?q=repo:{SLUG}+is:issue+is:open&per_page=6&sort=updated",
+    )
+    open_prs = _gh(
+        "api",
+        f"search/issues?q=repo:{SLUG}+is:pr+is:open&per_page=1",
     )
 
     releases = _gh("api", f"repos/{SLUG}/releases?per_page=1")
@@ -297,10 +471,30 @@ def collect() -> dict:
         "features": _features(commits),
         "pullsMerged": int(merged.get("total_count", 0)) if isinstance(merged, dict) else 0,
         "issuesClosed": int(closed.get("total_count", 0)) if isinstance(closed, dict) else 0,
+        "pullsOpen": int(open_prs.get("total_count", 0)) if isinstance(open_prs, dict) else 0,
         "issuesOpen": int(open_issues.get("total_count", 0))
         if isinstance(open_issues, dict)
         else 0,
+        "mergedPulls": [
+            {
+                "number": row["number"],
+                "title": row["title"],
+                "url": row["url"],
+                "mergedAt": row["closedAt"],
+            }
+            for row in _search_items(merged, 6)
+        ],
+        "openIssues": [
+            {
+                "number": row["number"],
+                "title": row["title"],
+                "url": row["url"],
+                "updatedAt": row["updatedAt"],
+            }
+            for row in _search_items(open_issues, 6)
+        ],
         "branch": BRANCH,
+        "dailyContributions": _to_daily(year_commits, year_merged, year_closed, datetime.now(UTC)),
         "latestRelease": (
             {
                 "tag": latest.get("tag_name"),
@@ -320,8 +514,12 @@ REQUIRED = (
     "commits",
     "pullsMerged",
     "issuesClosed",
+    "pullsOpen",
     "issuesOpen",
     "features",
+    "mergedPulls",
+    "openIssues",
+    "dailyContributions",
     "modules",
 )
 # Never collected — see the module docstring. Asserted so a future edit that adds
@@ -364,6 +562,26 @@ def check(max_age_days: int | None = None) -> int:
     if not isinstance(data["modules"], dict) or not data["modules"]:
         print("❌  snapshot has no per-module activity", file=sys.stderr)
         return 1
+    if not isinstance(data["mergedPulls"], list) or not isinstance(data["openIssues"], list):
+        print("❌  mergedPulls and openIssues must be lists", file=sys.stderr)
+        return 1
+    dc = data["dailyContributions"]
+    if not isinstance(dc, list) or len(dc) != YEAR_DAYS:
+        print(f"❌  dailyContributions must be a list of {YEAR_DAYS} days", file=sys.stderr)
+        return 1
+    if any(
+        not isinstance(d, dict)
+        or set(d) != {"date", "count"}
+        or not isinstance(d["count"], int)
+        or isinstance(d["count"], bool)
+        or d["count"] < 0
+        for d in dc
+    ):
+        print("❌  dailyContributions entries must be {date, count >= 0}", file=sys.stderr)
+        return 1
+    if [d["date"] for d in dc] != sorted(d["date"] for d in dc):
+        print("❌  dailyContributions must be sorted oldest → newest", file=sys.stderr)
+        return 1
     try:
         stamped = datetime.strptime(data["generatedAt"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
     except ValueError as exc:
@@ -398,7 +616,11 @@ def main() -> int:
     print(f"wrote {_shown(OUT)}")
     print(f"  {data['commits']} commits / {data['windowDays']}d on {data['branch']}")
     print(f"  {data['pullsMerged']} PRs merged, {data['issuesClosed']} issues closed")
-    print(f"  {data['issuesOpen']} issues open")
+    print(f"  {data['pullsOpen']} PRs open, {data['issuesOpen']} issues open")
+    for p in data["mergedPulls"]:
+        print(f"  merged #{p['number']}: {p['title'][:56]}")
+    for issue in data["openIssues"]:
+        print(f"  open #{issue['number']}: {issue['title'][:56]}")
     rel = data["latestRelease"]
     print(f"  latest release: {rel['tag']} ({rel['publishedAt'][:10]})" if rel else "  no releases")
     for f in data["features"]:

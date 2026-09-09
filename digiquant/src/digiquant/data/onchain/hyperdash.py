@@ -13,7 +13,7 @@ include **equity perps** (``xyz:SP500``, ``xyz:XYZ100``) alongside crypto, so th
 Boundaries (deliberate):
 - The endpoint is undocumented/internal and may drift, so EVERY failure mode (network, HTTP
   error, GraphQL error, shape change) fails soft to an empty result — a Hyperdash outage must
-  never block an Atlas run. The signal is an overlay that adjusts conviction/sizing; it never
+  never block an research run. The signal is an overlay that adjusts conviction/sizing; it never
   originates a trade.
 - HTTP is split from computation: ``cohort_summary_to_positioning`` is a pure, HTTP-free parser +
   divergence calculator (unit-tested against a captured-shape fixture); ``HyperdashScraper.fetch``
@@ -25,6 +25,7 @@ Boundaries (deliberate):
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import (  # score:allow untyped any — scored-lint: heterogeneous GraphQL/JSON payload shapes
     Any,
@@ -352,16 +353,18 @@ class HyperdashScraper:
 
 
 def _onchain_enabled() -> bool:
-    """Opt-in kill-switch for the LIVE Hyperdash scrape (env ATLAS_ONCHAIN_POSITIONING).
+    """Opt-in kill-switch for the LIVE Hyperdash scrape (env DIGIQUANT_ONCHAIN_POSITIONING).
 
     Defaults OFF so unit tests never hit the network just by invoking preflight (the scrape is an
-    external HTTP call, unlike the DB-backed fed_odds path). The Atlas workflows set it to "1" to
+    external HTTP call, unlike the DB-backed fed_odds path). The research workflows set it to "1" to
     enable the signal in CI/prod; the owner can flip it off instantly if the third-party endpoint
     becomes unavailable or its ToS changes — no code change. An injected ``provider`` bypasses the
     switch entirely (tests + alternative providers)."""
-    import os
-
-    return os.environ.get("ATLAS_ONCHAIN_POSITIONING", "0").strip().lower() in ("1", "true", "yes")
+    if "DIGIQUANT_ONCHAIN_POSITIONING" in os.environ:
+        raw = os.environ.get("DIGIQUANT_ONCHAIN_POSITIONING", "0")
+    else:
+        raw = os.environ.get("ATLAS_ONCHAIN_POSITIONING", "0")
+    return raw.strip().lower() in ("1", "true", "yes")
 
 
 def get_onchain_cohort_positioning(
@@ -369,7 +372,7 @@ def get_onchain_cohort_positioning(
 ) -> CohortPositioning:
     """Fetch + compute the on-chain cohort divergence. Always returns a value (empty on failure).
 
-    With no ``provider`` the default Hyperdash scrape runs only when ``ATLAS_ONCHAIN_POSITIONING``
+    With no ``provider`` the default Hyperdash scrape runs only when ``DIGIQUANT_ONCHAIN_POSITIONING``
     is enabled (see :func:`_onchain_enabled`); otherwise it short-circuits to an empty result with
     no network call. An injected ``provider`` always runs (tests / alternative sources). Callers
     gate on ``result.error is None and result.has_data``.

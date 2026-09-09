@@ -1,8 +1,79 @@
 {
   "mcpServers": {
-    "supabase": {
+    "github": {
+      "command": "/bin/bash",
+      "args": [
+        "-c",
+        "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"; export GITHUB_PERSONAL_ACCESS_TOKEN=\"$(gh auth token)\"; exec github-mcp-server stdio"
+      ],
+      "type": "stdio"
+    },
+    "supabase-twelve-x": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=lfghjucjrsabiqwxerxv"
+    },
+    "supabase-core": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=rwagjbkvxkdwqmouagad"
+    },
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "playwright": {
+      "command": "/bin/bash",
+      "args": [
+        "-c",
+        "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"; exec npx -y @playwright/mcp@0.0.79"
+      ],
+      "type": "stdio"
+    },
+    "chrome-devtools": {
+      "command": "/bin/bash",
+      "args": [
+        "-c",
+        "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"; exec npx -y chrome-devtools-mcp@1.7.0"
+      ],
+      "type": "stdio"
+    },
+    "x": {
+      "type": "http",
+      "url": "https://api.x.com/mcp",
+      "auth": {
+        "CLIENT_ID": "NGdZYmo4VVp2T1BnRG55NlExOGQ6MTpjaQ",
+        "scopes": [
+          "tweet.read",
+          "users.read",
+          "follows.read",
+          "space.read",
+          "mute.read",
+          "like.read",
+          "list.read",
+          "list.write",
+          "block.read",
+          "block.write",
+          "bookmark.read",
+          "bookmark.write",
+          "billing.write",
+          "offline.access"
+        ]
+      }
+    },
+    "cloudflare-docs": {
+      "type": "http",
+      "url": "https://docs.mcp.cloudflare.com/mcp"
+    },
+    "cloudflare-bindings": {
+      "type": "http",
+      "url": "https://bindings.mcp.cloudflare.com/mcp"
+    },
+    "cloudflare-builds": {
+      "type": "http",
+      "url": "https://builds.mcp.cloudflare.com/mcp"
+    },
+    "cloudflare-observability": {
+      "type": "http",
+      "url": "https://observability.mcp.cloudflare.com/mcp"
     }
   }
 }

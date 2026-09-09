@@ -38,7 +38,7 @@
     gap: 1rem;
     padding: 0.7rem 0.8rem 0.7rem 1rem;
     border: 1px solid var(--hair);
-    border-radius: 10px;
+    border-radius: 0;
     background: var(--surface);
     color: var(--ink-mute);
     font-family: var(--font-mono);
@@ -71,7 +71,7 @@
     display: flex;
     flex-direction: column;
     border: 1px solid var(--hair);
-    border-radius: 14px;
+    border-radius: 0;
     background: color-mix(in srgb, var(--surface) 92%, var(--bg));
     box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.55);
     overflow: hidden;
@@ -121,7 +121,7 @@
     gap: 0.6rem;
     padding: 0.5rem 0.6rem;
     border: none;
-    border-radius: 8px;
+    border-radius: 0;
     background: transparent;
     color: var(--ink-soft);
     font-family: var(--font-mono);
@@ -139,7 +139,7 @@
   .cp-dot {
     width: 7px;
     height: 7px;
-    border-radius: 999px;
+    border-radius: 0;
     flex-shrink: 0;
     background: var(--accent);
   }
@@ -189,7 +189,7 @@
     padding: 0 0.3rem;
     border: 1px solid var(--hair);
     border-bottom-width: 2px;
-    border-radius: 5px;
+    border-radius: 0;
     background: color-mix(in srgb, var(--ink) 5%, transparent);
     font-family: var(--font-mono);
     font-size: 0.62rem;
@@ -199,9 +199,9 @@
   }
 }
 
-/* ── dress="glass" — the olympus dashboard's shipped ⌘K look, translated
+/* ── dress="glass" — the dashboard's shipped ⌘K look, translated
       exactly from its Tailwind utilities (#1548). Black-based scrim/shadow
-      literals are depth cues, not themed colors (same ruling as olympus's
+      literals are depth cues, not themed colors (same ruling as dashboard's
       --shadow-glass); color-mix(in oklab, …) matches Tailwind v4's opacity
       modifier compilation (bg-accent/15, ring-accent/35, bg-ink/[0.06]). ── */
 
@@ -224,7 +224,7 @@
     width: 100%;
     max-width: 32rem;
     max-height: none;
-    border-radius: 12px;
+    border-radius: 0;
     background: var(--term-bg);
     box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.5);
   }

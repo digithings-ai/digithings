@@ -58,3 +58,16 @@ class TestAdminKeysValidation:
             headers={"Authorization": "Bearer wrong"},
         )
         assert r.status_code == 422
+
+    @pytest.mark.parametrize("tenant", [" ", "\t", "  \n"])
+    def test_whitespace_only_tenant_slug_returns_422(self, client: TestClient, tenant: str) -> None:
+        """Whitespace passed min_length=1 then stripped to "" — mint empty-tenant JWT."""
+        r = client.post(
+            "/v1/admin/keys",
+            json={"tenant_slug": tenant, "scopes": ["digigraph:chat"]},
+            headers={"Authorization": "Bearer wrong"},
+        )
+        # Pydantic rejects before admin auth — same 422 class as missing tenant.
+        assert r.status_code == 422
+        body = r.json()
+        assert body.get("error", {}).get("code") == "validation_error" or "tenant_slug" in str(body)

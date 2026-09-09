@@ -117,13 +117,13 @@
       <div class="product-frame__surface">
         <div style="display:flex; align-items:center; gap:0.6em; padding-bottom:0.75em; border-bottom:1px solid var(--hair); margin-bottom:0.75em;">
           <span style="width:0.7em; height:0.7em; border-radius:50%; background:var(--up); display:inline-block;"></span>
-          <strong>olympus · pipeline</strong>
+          <strong>desk · pipeline</strong>
         </div>
         <p style="color:var(--ink-soft); margin:0 0 0.6em;">Sample UI content standing in for a real screenshot or embedded product frame. Font size below is container-query scaled.</p>
-        <code style="font-family:var(--font-mono);">atlas.route(intent) -&gt; hermes.plan()</code>
+        <code style="font-family:var(--font-mono);">research.route(intent) -&gt; portfolio.plan()</code>
       </div>
     </div>
-    <p class="product-frame__caption">Fig. 1 — Atlas → Hermes routing (placeholder)</p>
+    <p class="product-frame__caption">Fig. 1 — Research → Portfolio routing (placeholder)</p>
   </section>
 
   <section class="smoke-section site-demo">
@@ -137,7 +137,7 @@
       </a>
       <a class="bento__cell" href="#" onclick="return false;">
         <div class="bento__kicker">// quant</div>
-        <div class="bento__title">Atlas + Hermes</div>
+        <div class="bento__title">Research + Portfolio</div>
         <p class="bento__body">Tiered research and execution sub-graphs inside digiquant.</p>
         <span class="bento__cta">Learn more <span aria-hidden="true">&rarr;</span></span>
       </a>
@@ -252,9 +252,9 @@ await client.chat.send("hello");</code></pre>
             <div class="product-frame__surface">
               <div style="display:flex; align-items:center; gap:0.6em; padding-bottom:0.6em; border-bottom:1px solid var(--hair); margin-bottom:0.6em;">
                 <span style="width:0.7em; height:0.7em; border-radius:50%; background:var(--up); display:inline-block;"></span>
-                <strong>digiquant · atlas</strong>
+                <strong>digiquant · research</strong>
               </div>
-              <code style="font-family:var(--font-mono);">atlas.backtest(strategy)</code>
+              <code style="font-family:var(--font-mono);">research.backtest(strategy)</code>
             </div>
           </div>
         </div>
@@ -312,7 +312,7 @@ await client.chat.send("hello");</code></pre>
     <div class="label">hero-picker — icon tabs swap the ProductFrame preview; click or focus + &larr;/&rarr;/Home/End; aria-controls panels</div>
     <div class="hero-picker">
       <div class="hero-picker__tabs" role="tablist" aria-label="Preview context">
-        <button class="hero-picker__tab" role="tab" id="hp-tab-olympus" aria-controls="hp-panel-olympus" aria-selected="true" aria-label="Olympus dashboard">
+        <button class="hero-picker__tab" role="tab" id="hp-tab-dashboard" aria-controls="hp-panel-dashboard" aria-selected="true" aria-label="digiquant dashboard">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
         </button>
         <button class="hero-picker__tab" role="tab" id="hp-tab-strategies" aria-controls="hp-panel-strategies" aria-selected="false" tabindex="-1" aria-label="Strategies">
@@ -323,12 +323,12 @@ await client.chat.send("hello");</code></pre>
         </button>
       </div>
       <div class="hero-picker__panels">
-        <div class="hero-picker__panel" role="tabpanel" id="hp-panel-olympus" aria-labelledby="hp-tab-olympus">
+        <div class="hero-picker__panel" role="tabpanel" id="hp-panel-dashboard" aria-labelledby="hp-tab-dashboard">
           <div class="product-frame">
             <div class="product-frame__surface">
               <div style="display:flex; align-items:center; gap:0.6em; padding-bottom:0.6em; border-bottom:1px solid var(--hair); margin-bottom:0.6em;">
                 <span style="width:0.7em; height:0.7em; border-radius:50%; background:var(--accent); display:inline-block;"></span>
-                <strong>olympus · portfolio</strong>
+                <strong>dashboard · portfolio</strong>
               </div>
               <code style="font-family:var(--font-mono);">exposure · pnl · signals</code>
             </div>
@@ -352,7 +352,7 @@ await client.chat.send("hello");</code></pre>
                 <span style="width:0.7em; height:0.7em; border-radius:50%; background:var(--accent-digiquant); display:inline-block;"></span>
                 <strong>pipeline · run</strong>
               </div>
-              <code style="font-family:var(--font-mono);">atlas.route -&gt; hermes.plan -&gt; execute</code>
+              <code style="font-family:var(--font-mono);">research.route -&gt; portfolio.plan -&gt; execute</code>
             </div>
           </div>
         </div>
@@ -460,9 +460,9 @@ await client.chat.send("hello");</code></pre>
     <div class="closing-cta reveal-up">
       <div class="closing-cta__inner">
         <h2 class="closing-cta__title">One graph, research to execution.</h2>
-        <p class="closing-cta__sub">Backtest, optimize, and route strategies on NautilusTrader with Atlas and Hermes.</p>
+        <p class="closing-cta__sub">Backtest, optimize, and route strategies on NautilusTrader — research to execution.</p>
         <div class="closing-cta__actions">
-          <a class="btn btn-primary" href="#" onclick="return false;">Open Olympus</a>
+          <a class="btn btn-primary" href="#" onclick="return false;">Open dashboard</a>
           <a class="closing-cta__secondary" href="#" onclick="return false;">Browse strategies <span aria-hidden="true">&rarr;</span></a>
         </div>
       </div>
@@ -527,9 +527,9 @@ await client.chat.send("hello");</code></pre>
     initTicker({
       elementId: 'qn-ticker',
       symbols: [
-        { sym: 'ATLAS', price: '184.22', delta: '+0.42%' },
-        { sym: 'HERMES', price: ' 98.11', delta: '-0.18%' },
-        { sym: 'KAIROS', price: '342.07', delta: '+1.14%' },
+        { sym: 'RESEARCH', price: '184.22', delta: '+0.42%' },
+        { sym: 'PORTFOLIO', price: ' 98.11', delta: '-0.18%' },
+        { sym: 'EXECUTION', price: '342.07', delta: '+1.14%' },
       ],
       cadence: 40,
     });

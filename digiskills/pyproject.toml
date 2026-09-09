@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "digiskills"
-version = "0.2.0"
+version = "0.2.1"
 description = "digiskills – compiles a codebase/docs source into an installable Agent Skill package (SKILL.md + references) for digithings"
 readme = "ARCHITECTURE.md"
 requires-python = ">=3.12"

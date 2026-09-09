@@ -18,7 +18,7 @@ The core value proposition: a declarative project spec — config file plus inde
 **Three customer shapes:**
 
 1. **Independent researcher or quant** — personal toolkit for strategy development, research synthesis, and portfolio management. Low barrier; deploy locally or via managed hosting.
-2. **Consultancy client (SITAAS pattern)** — config plus index plus API key produces a deployed, client-facing product in hours. The first pilot is SITAAS, deployed with Microsoft SSO and domain-specific RAG over internal documents.
+2. **Consultancy client (client pilot pattern)** — config plus index plus API key produces a deployed, client-facing product in hours. The first pilot is the client pilot, deployed with Microsoft SSO and domain-specific RAG over internal documents.
 3. **Developer** — open-core modules to build and extend. Proprietary agents and skills available as paid add-ons.
 
 ## The problem it solves
@@ -45,10 +45,10 @@ Shipped and in active use:
 LangGraph-based workflow engine with a supervisor node, research and analysis sub-graphs, dynamic tool registry, OpenAI-compatible API, server-sent event (SSE) streaming, JWT auth, per-IP rate limiting, LLM routing (LiteLLM today, migrating to the shared digillm library), digismith tracing, and an MCP server. Parallel tool execution and tool allowlist/policy enforcement included.
 
 ### digiquant — quantitative finance platform
-NautilusTrader-backed strategy engine with backtest and optimisation nodes wired into digigraph. Connects to OpenBB for market data. Atlas (research), Hermes (portfolio), and Kairos (strategy execution) are in active development as sub-graph modules.
+NautilusTrader-backed strategy engine with backtest and optimisation nodes wired into digigraph. Connects to OpenBB for market data. Research, portfolio, and execution sub-graphs are in active development.
 
 ### digisearch — RAG and retrieval pipeline
-Document ingestion, chunking, embedding, and hybrid vector/keyword search. Pluggable backends. Powers the SITAAS internal document search deployment.
+Document ingestion, chunking, embedding, and hybrid vector/keyword search. Pluggable backends. Powers the client pilot's internal document search deployment.
 
 ### digichat — chat interface and BFF
 Next.js production chat UI (`frontend/digichat`) — BYOK (bring-your-own-key) flow, model selector, Auth.js authentication, Drizzle ORM, adaptive UI scoped by access level. Not deployed publicly yet; the digithings.ai demo still runs a separate bespoke widget pending the gateway cutover ([ADR-0018](../adr/0018-digichat-path-routing.md), epic [#1248](https://github.com/digithings-ai/digithings/issues/1248)).
@@ -74,17 +74,17 @@ Shared headless-fetch engine: browser session lifecycle, composable retry/backof
 ### digidev — agentic-coding workflow kit
 Drop-in kit that gives AI coding agents a structured task backlog, a 4-dimension scoring gate, PreToolUse guardrails, and generated MCP config for existing tools (Jira, Linear, Slack, Notion, Supabase, GitLab). Installs onto any repo; this monorepo dogfoods it.
 
-### Olympus — finance dashboard
-Human-facing dashboard (`frontend/olympus`) for the digiquant sub-graph trio — Atlas research, Hermes deliberation, Kairos strategy work — with a "Morning Read" overview, risk-debate surfaces, and portfolio/NAV tracking. The locus of the human approval gate before execution.
+### digiquant dashboard
+Human-facing operator surface (`frontend/dashboard`) for research, portfolio deliberation, and execution — with a "Morning Read" overview, risk-debate surfaces, and portfolio/NAV tracking. The locus of the human approval gate before execution. Public path is `/dashboard/` (ADR-0026). See [ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md).
 
 **Note — not yet shipped:** digistore (unified storage abstraction over Supabase, SQLite, S3/MinIO) and digilink (the protocol translation and connector layer) are designed and specced but not yet implemented as standalone modules. Their functions exist today within individual services. (By contrast, digillm and digifetch *have* shipped as standalone libraries.)
 
 ## Capabilities — 12-month roadmap
 
-- **Atlas** running daily research cycles autonomously — parallel, batched, prompt-cached, fully integrated as a digigraph sub-graph
-- **Hermes** maintaining live portfolio allocations with deliberation sub-graph and human approval gate before any execution
-- **Kairos** enabling chat-based strategy development through digichat — a quant researcher's interactive strategy workbench
-- **SITAAS** fully deployed with Microsoft SSO, proper domain RAG, and a client-facing chat interface
+- **Research** running daily cycles autonomously — parallel, batched, prompt-cached, fully integrated as a digigraph sub-graph
+- **Portfolio** maintaining live allocations with a deliberation sub-graph and human approval gate before any execution
+- **Execution** enabling strategy work and (later) venue routing — live cutover stays human-gated
+- **Client pilot** fully deployed with Microsoft SSO, proper domain RAG, and a client-facing chat interface
 - **digilink** formalised as a module — MCP adapter generation from OpenAPI specs, CLI wrapper auto-generation, desktop AI app connector library (Claude Desktop, Cursor, Windsurf)
 - **digistore** shipping as a unified storage abstraction with Supabase, SQLite, and S3/MinIO backends behind a single interface
 - **Graphiti graph memory** integrated into digigraph for persistent, structured knowledge across sessions
@@ -107,8 +107,8 @@ Human-facing dashboard (`frontend/olympus`) for the digiquant sub-graph trio —
 - digistore storage abstraction (when shipped)
 
 **Proprietary (commercial):**
-- Domain-specific sub-graph implementations: Atlas research cycles, Hermes portfolio deliberation, Kairos strategy execution
-- Olympus dashboard as the product surface for those sub-graphs
+- Domain-specific sub-graph implementations: research cycles, portfolio deliberation, execution routing
+- digiquant dashboard as the product surface for those sub-graphs
 - Strategy library and backtest configuration templates
 - Investor document builder and scholarly synthesis sub-graphs
 - Premium digidev agents and skills
@@ -123,5 +123,5 @@ One document per module — positioning, current state, 12-month roadmap, and op
 
 - [[digigraph|digigraph]] · [[digiquant|digiquant]] · [[digisearch|digisearch]] · [[digichat|digichat]]
 - [[digikey|digikey]] · [[digismith|digismith]] · [[digiclaw|digiclaw]] · [[digibase|digibase]] · [[digivault|digivault]]
-- [[digillm|digillm]] · [[digifetch|digifetch]] · [[digidev|digidev]] · [[olympus|Olympus]]
+- [[digillm|digillm]] · [[digifetch|digifetch]] · [[digidev|digidev]] · [[dashboard|digiquant dashboard]]
 - [[digilink|digilink]] · [[digistore|digistore]] *(designed, not yet shipped)*

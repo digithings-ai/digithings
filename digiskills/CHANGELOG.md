@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/digithings-ai/digithings/compare/digiskills-v0.2.0...digiskills-v0.2.1) (2026-08-15)
+
+
+### Bug Fixes
+
+* **digiskills:** move pytest/ruff into a uv dependency-group ([ab275e0](https://github.com/digithings-ai/digithings/commit/ab275e072eda20343653ef7e7e151c30a96ac22b))
+* **digiskills:** move pytest/ruff into a uv dependency-group ([bdd2a8a](https://github.com/digithings-ai/digithings/commit/bdd2a8a1e7b41b355ef967c77b2357e3095d1f9e))
+
 ## [0.2.0](https://github.com/digithings-ai/digithings/compare/digiskills-v0.1.0...digiskills-v0.2.0) (2026-07-10)
 
 

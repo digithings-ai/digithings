@@ -199,37 +199,57 @@ export interface PositionRow {
 
 const asStr = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 
-/** Enrich a raw position row with its live mark. `isLive` is true ONLY for a non-stale quote. */
+/**
+ * Enrich a raw position row with its live mark.
+ *
+ * `isLive` is true ONLY for a non-stale quote (a real tick). A stale
+ * `public_price_latest` seed is still the contracted after-hours / pre-metrics
+ * fallback (migration 050): when the book has not stamped `current_price` yet,
+ * the seed fills mark, day, and since-entry so the blotter is not an em-dash
+ * wall. CASH stays priceless. No quote + no stamp → fail closed to null.
+ */
 export function positionRowToLive(row: PositionRow, quotes: LivePriceMap): LivePosition {
   const ticker = typeof row.ticker === "string" ? row.ticker.trim().toUpperCase() : "";
-  const currentPrice = num(row.current_price);
-  const q = quotes[ticker];
+  const storedMark = num(row.current_price);
+  const storedDay = num(row.day_change_pct);
+  const storedSince = num(row.since_entry_return_pct);
+  const entry = num(row.entry_price);
+  const q = ticker === "CASH" ? undefined : quotes[ticker];
   const isLive = Boolean(q && !q.stale && Number.isFinite(q.price) && q.price > 0);
+  const quotePrice = q && Number.isFinite(q.price) && q.price > 0 ? q.price : null;
+  const currentPrice = storedMark ?? quotePrice;
+  const sinceFromMark =
+    storedSince ??
+    (entry != null && entry > 0 && currentPrice != null
+      ? ((currentPrice - entry) / entry) * 100
+      : null);
   return {
     ticker,
     name: asStr(row.name),
     category: asStr(row.category),
     sectorBucket: asStr(row.sector_bucket),
     weightPct: num(row.weight_pct) ?? 0,
-    entryPrice: num(row.entry_price),
+    entryPrice: entry,
     entryDate: asStr(row.entry_date),
     currentPrice,
-    dayChangePct: num(row.day_change_pct),
+    dayChangePct: storedDay ?? (quotePrice != null && q ? q.changePct : null),
     unrealizedPnlPct: num(row.unrealized_pnl_pct),
-    sinceEntryReturnPct: num(row.since_entry_return_pct),
+    sinceEntryReturnPct: sinceFromMark,
     metricsAsOf: asStr(row.metrics_as_of),
     livePrice: isLive ? q!.price : currentPrice,
     isLive,
   };
 }
 
-/** `public_nav_history` row → {@link NavPoint} | null (drops rows with no date/nav). */
+/** `public_accounting_nav_history` / `public_nav_history` row → {@link NavPoint} | null. */
 export function navRowToPoint(row: {
   date?: unknown;
   nav?: unknown;
   cash_pct?: unknown;
   invested_pct?: unknown;
   day_return_pct?: unknown;
+  source?: unknown;
+  contract?: unknown;
 }): NavPoint | null {
   const date = asStr(row.date);
   const nav = num(row.nav);
@@ -240,6 +260,8 @@ export function navRowToPoint(row: {
     cashPct: num(row.cash_pct),
     investedPct: num(row.invested_pct),
     dayReturnPct: num(row.day_return_pct),
+    source: asStr(row.source),
+    contract: asStr(row.contract),
   };
 }
 

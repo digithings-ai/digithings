@@ -1,4 +1,4 @@
-"""Unit tests for digiclaw audit logging (Phase 3)."""
+"""Unit tests for digiclaw audit logging (Phase 3 / CHR-151)."""
 
 from __future__ import annotations
 
@@ -7,11 +7,12 @@ import os
 from pathlib import Path
 
 import pytest
+from digibase.audit import AuditEvent
 
 
 @pytest.mark.unit
 def test_audit_log_writes_jsonl(tmp_path: Path) -> None:
-    """audit_log appends one JSON line per call; redacts secret keys."""
+    """Thin wrapper: digiclaw.audit.audit_log delegates to digibase.emit_event."""
     os.environ["AUDIT_LOG_PATH"] = str(tmp_path / "events.jsonl")
     try:
         from digiclaw.audit import audit_log
@@ -24,5 +25,6 @@ def test_audit_log_writes_jsonl(tmp_path: Path) -> None:
         assert data["agent_id"] == "test_agent"
         assert data["payload"]["foo"] == "bar"
         assert data["payload"]["api_key"] == "[REDACTED]"
+        AuditEvent.model_validate(data)
     finally:
         os.environ.pop("AUDIT_LOG_PATH", None)

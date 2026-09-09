@@ -125,10 +125,10 @@ UI previews — not abstract feature bullets.
 |-------|-------|-------|
 | Mono eyebrows (`// section`, uppercase kicker) | Already have `.kicker` in `site.css` | 320px display on dashboard |
 | Outline pill buttons on dark | Ghost `.btn` + hairline | Pill-only system (we need rects for tables) |
-| Capability cards with real UI | Grok → digigraph workflow, digichat, Atlas | Pure black `#000` canvas |
+| Capability cards with real UI | Grok → digigraph workflow, digichat, research | Pure black `#000` canvas |
 | API section with copy-paste code | digikey token exchange, `make stack-local` | Dark-only (we ship light mode) |
 | Stat counters | Module count, backtest runs, open issues | Fake scale metrics |
-| No shadow elevation | Olympus glass → flatten over time | Removing all atmosphere from **landings** |
+| No shadow elevation | dashboard glass → flatten over time | Removing all atmosphere from **landings** |
 | One filled primary CTA | Per-page: download stack vs ask digichat | Multiple competing primaries |
 
 ---
@@ -140,7 +140,7 @@ UI previews — not abstract feature bullets.
 | digithings.ai | API/docs band with code sample; mono kickers |
 | digiquant.io | Stat strip (strategies, backtests, OSS); modality cards |
 | digichat | Chat-as-capability-card; terminal mono buttons |
-| Olympus | Flat panels, hairline borders, mono labels, no shadow stack |
+| dashboard | Flat panels, hairline borders, mono labels, no shadow stack |
 | twelve-x | **Primary reference** — data density, mono metrics, outline chrome |
 
 ---

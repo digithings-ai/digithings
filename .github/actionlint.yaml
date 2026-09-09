@@ -16,12 +16,9 @@
 # somebody should fix.
 
 paths:
-  # gh-aw generated lock files — output of `gh aw compile`, whose fidelity is
-  # already enforced by the `gh aw compile --trial` drift check in ci-docs.yml.
-  # Hand-edits here get reverted by the next compile, so there is nothing we can
-  # act on: the findings are `queue:` under `concurrency:` (a GitHub feature
-  # newer than actionlint's schema), plus SC2016/SC2086 inside generated shell.
-  # Fixes belong upstream in github/gh-aw, not in this repo.
+  # No `.lock.yml` workflows remain after gh-aw retirement (#1904 / #1182).
+  # Keep this ignore only so a stray lock file cannot fail actionlint if one
+  # is reintroduced briefly during a revive experiment.
   .github/workflows/*.lock.yml:
     ignore:
       - '.*'

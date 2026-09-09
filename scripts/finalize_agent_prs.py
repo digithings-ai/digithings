@@ -5,7 +5,7 @@ Evaluate open agent PRs and emit actions for the daily PR finalizer workflow.
 States:
   ready_merge   — CI green, no blocking review, eligible paths → add automerge-agent
   needs_fix     — CI failed → dispatch fix agent
-  needs_human   — risk:high, needs-human, protected paths, or unresolved human review
+  needs_human   — claude-tier issue, minimal-gate/protected paths, or unresolved human review
   waiting       — pending CI or PR too new
   skip          — not an agent PR or already merged/closed
 """
@@ -98,6 +98,22 @@ def _issue_labels(repo: str, issue_number: int) -> list[str]:
     return [label["name"] for label in data.get("labels", [])]
 
 
+def _issue_tier(repo: str, issue_number: int) -> str:
+    """Dispatch tier for the linked issue's component (tiers in project_routing.json).
+
+    Fail CLOSED: unreadable config routes to claude-tier (supervised), never to
+    auto-execution.
+    """
+    try:
+        routing = json.loads((REPO_ROOT / "scripts" / "project_routing.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return "claude"
+    tiers = routing.get("tiers", {})
+    names = _issue_labels(repo, issue_number)
+    comp = next((n for n in names if n.startswith("component:")), None)
+    return tiers.get(comp, tiers.get("default", "claude"))
+
+
 def _linked_issue(body: str, title: str) -> int | None:
     match = ISSUE_LINK_RE.search(f"{body}\n{title}")
     return int(match.group(1)) if match else None
@@ -178,13 +194,15 @@ def evaluate_pr(repo: str, pr: dict, *, fetch_base: bool) -> PrAction:
     if issue_num is None:
         return PrAction(number, branch, "needs_human", "no Fixes #N linkage", fix_via="none")
 
-    issue_labels = _issue_labels(repo, issue_num)
-    if "risk:high" in issue_labels or "needs-human" in issue_labels:
+    # Label simplification 2026-09: no label-based human gate remains. Claude-tier
+    # (human-supervised) components route here instead; merge-time safety for the
+    # rest is path-based (_protected_paths_ok + verify_agent_automerge_pr.py).
+    if _issue_tier(repo, issue_num) == "claude":
         return PrAction(
             number,
             branch,
             "needs_human",
-            f"issue #{issue_num} is human-gated",
+            f"issue #{issue_num} is claude-tier (human-supervised)",
             issue_number=issue_num,
             fix_via="none",
         )
@@ -241,11 +259,6 @@ def evaluate_pr(repo: str, pr: dict, *, fetch_base: bool) -> PrAction:
                 issue_number=issue_num,
                 fix_via="none",
             )
-
-    if "needs-human-review" in labels:
-        return PrAction(
-            number, branch, "needs_human", "PR labeled needs-human-review", issue_number=issue_num
-        )
 
     if "automerge-agent" in labels:
         return PrAction(

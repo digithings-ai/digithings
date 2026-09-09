@@ -5,8 +5,8 @@ Requires the ``digiskills[ingest]`` extra (``digifetch``). Lazily imported —
 :class:`UrlCorpusBuilder` does.
 
 A single URL fetch failure does not abort the whole build: it is skipped and
-the corpus is marked ``truncated`` (mirrors the fail-soft convention used by
-``digillm.web_search`` — best-effort grounding, not an all-or-nothing gate).
+the corpus is marked ``truncated`` (fail-soft convention — best-effort ingest,
+not an all-or-nothing gate).
 
 Security (P3 pre-flight hardening, see ARCHITECTURE.md): every URL is
 checked against :func:`digiskills.security.is_allowed_scrape_url` before

@@ -142,6 +142,82 @@ def test_create_note_overwrite_upsert(vault_dir: Path) -> None:
     assert "page_class" in raw
 
 
+def test_batch_note_upsert_is_exposed_by_openapi() -> None:
+    paths = server.app.openapi()["paths"]
+    assert "/v1/notes/batch" in paths
+    assert "post" in paths["/v1/notes/batch"]
+
+
+def test_batch_note_upsert_keeps_links_consistent(vault_dir: Path) -> None:
+    result = server.create_notes_batch(
+        server.CreateNotesBatchRequest(
+            notes=[
+                server.CreateNoteRequest(name="c", body="see [[d]]\n"),
+                server.CreateNoteRequest(name="d", body="see [[c]]\n"),
+            ]
+        )
+    )
+
+    assert [note.name for note in result.notes] == ["c", "d"]
+    assert result.notes[0].backlinks == ("d",)
+    assert result.notes[1].backlinks == ("c",)
+    assert server.get_backlinks("c").backlinks == ["d"]
+    assert server.get_backlinks("d").backlinks == ["c"]
+
+
+def test_batch_note_upsert_omits_notes_pruned_in_same_batch(vault_dir: Path) -> None:
+    result = server.create_notes_batch(
+        server.CreateNotesBatchRequest(
+            notes=[
+                server.CreateNoteRequest(
+                    name="guide__stale",
+                    frontmatter={"parent_doc": "guide"},
+                    body="stale\n",
+                )
+            ],
+            prunes=[server.PruneChildrenRequest(parent_doc="guide", keep_names=[])],
+        )
+    )
+
+    assert result.notes == []
+    assert not (vault_dir / "guide__stale.md").exists()
+
+
+def test_prune_children_handler_deletes_only_stale_children(vault_dir: Path) -> None:
+    vault = Vault(vault_dir)
+    vault.write_note(
+        "guide__stale",
+        frontmatter={"parent_doc": "guide"},
+        body="stale\n",
+        subdir="clients/acme",
+    )
+    vault.write_note(
+        "guide__current",
+        frontmatter={"parent_doc": "guide"},
+        body="current\n",
+        subdir="clients/acme",
+    )
+    vault.write_note(
+        "other__stale",
+        frontmatter={"parent_doc": "other"},
+        body="keep\n",
+        subdir="clients/acme",
+    )
+
+    result = server.prune_children(
+        server.PruneChildrenRequest(
+            parent_doc="guide",
+            keep_names=["guide__current"],
+            subdir="clients/acme",
+        )
+    )
+
+    assert result.deleted == ["guide__stale"]
+    assert Vault(vault_dir).get_note("guide__stale") is None
+    assert Vault(vault_dir).get_note("guide__current") is not None
+    assert Vault(vault_dir).get_note("other__stale") is not None
+
+
 def test_lint_handler(vault_dir: Path) -> None:
     report = server.lint()
     assert report.ok is True
@@ -761,12 +837,15 @@ def test_orchestrator_invoke_search_notes_empty_path_prefix_still_requires_prefi
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """#2239 second review, Important finding (row 1 of the 5-row matrix): a healthy
-    `D1_DATABASE_MAP` plus an empty-ish caller-supplied `path_prefix` (`""`, coalesced
-    to `None` by server.py's `... or None` handling) must still be treated exactly like
-    an omitted `path_prefix` — `ok=False` with the actionable message, short-circuiting
-    before the store is even opened. This used to succeed unscoped whenever the fake
-    store happened not to raise, because the check only fired reactively inside an
-    `except D1StoreError` — the hoisted check now fires unconditionally."""
+    `D1_DATABASE_MAP` plus an empty-ish caller-supplied `path_prefix` (`""`) must never
+    reach the store unscoped. The invariant this pins is that it short-circuits before
+    the store is even opened; it used to succeed unscoped whenever the fake store
+    happened not to raise, because the check only fired inside an `except D1StoreError`.
+
+    The *shape* of the rejection changed with the #2407 follow-up and again in
+    #2408: a present-but-empty prefix now returns ok=False (HTTP 200) at the
+    endpoint, matching digivault_get_note — not a raised 400 that digigraph's
+    raise_for_status() would strip to a bare status code."""
     monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
     _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
     called: dict = {}
@@ -786,7 +865,7 @@ def test_orchestrator_invoke_search_notes_empty_path_prefix_still_requires_prefi
         _fake_request(),
     )
     assert resp.ok is False
-    assert resp.error == "path_prefix is required when the D1 backend is configured"
+    assert "normalizes to empty" in (resp.error or "")
     assert called == {}  # _open_d1_store must never be reached
 
 
@@ -1878,3 +1957,108 @@ def test_orchestrator_invoke_get_note_single_path_unchanged_when_vault_paths_abs
     assert resp.data == note.model_dump(mode="json")
     assert "notes" not in resp.data
     assert "errors" not in resp.data
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("empty_prefix", ["", "/", "   ", "///", ".md"])
+def test_orchestrator_invoke_search_notes_rejects_empty_normalizing_prefix_at_endpoint(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, empty_prefix: str
+) -> None:
+    """#2407/#2408: present-but-empty prefix is refused at the endpoint (ok=False)."""
+    root = tmp_path / "vault"
+    root.mkdir()
+    v = Vault(root)
+    v.create_note(
+        "secret",
+        subdir="clients/acme",
+        frontmatter={"title": "Acme confidential plan"},
+        body="Acme confidential merger acquisition roadmap secret plan.",
+    )
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(root))
+    monkeypatch.delenv("DIGI_TENANT_CORPUS_MAP", raising=False)
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes",
+            arguments={"query": "Acme confidential merger", "path_prefix": empty_prefix},
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is False
+    assert "normalizes to empty" in (resp.error or "")
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_search_notes_rejects_md_md_prefix_via_local_vault(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`.md.md` survives one normalize pass (→ `.md`); local search rejects on the second."""
+    root = tmp_path / "vault"
+    root.mkdir()
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(root))
+    monkeypatch.delenv("DIGI_TENANT_CORPUS_MAP", raising=False)
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes",
+                arguments={"query": "Acme confidential merger", "path_prefix": ".md.md"},
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 400
+    assert "empty" in str(exc.value.detail)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("empty_prefix", ["", "/", "   ", "///", ".md"])
+def test_orchestrator_invoke_search_notes_rejects_empty_normalizing_prefix_ok_false_for_d1(
+    monkeypatch: pytest.MonkeyPatch, empty_prefix: str
+) -> None:
+    """#2408: empty-normalizing prefix returns ok=False on D1, matching digivault_get_note."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    monkeypatch.setattr(
+        server,
+        "_open_d1_store",
+        lambda prefix: (_ for _ in ()).throw(AssertionError("must not open store")),
+    )
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes",
+            arguments={"query": "jwt", "path_prefix": empty_prefix},
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is False
+    assert resp.tool == "digivault_search_notes"
+    assert "normalizes to empty" in (resp.error or "")
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_search_notes_omitted_prefix_still_searches(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Omitting path_prefix remains the deliberate opt-out from scoping."""
+    root = tmp_path / "vault"
+    root.mkdir()
+    v = Vault(root)
+    v.create_note(
+        "secret",
+        subdir="clients/acme",
+        frontmatter={"title": "Acme confidential plan"},
+        body="Acme confidential merger acquisition roadmap secret plan.",
+    )
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(root))
+    monkeypatch.delenv("DIGI_TENANT_CORPUS_MAP", raising=False)
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes",
+            arguments={"query": "Acme confidential merger"},
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+    assert resp.data["hits"]

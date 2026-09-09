@@ -207,8 +207,9 @@ curl -sL -o /dev/null -w 'home %{http_code} %{content_type}\n' https://digithing
 #    home-page terminal manifest in #1414 — /docs/ is what smoke-site.yml probes)
 curl -sL -o /dev/null -w 'docs %{http_code} %{content_type}\n' https://digithings.ai/docs/
 
-# 4. Stable design asset: 200 + image/png (the #671 SPA-fallback canary)
-curl -sL -o /dev/null -w 'og %{http_code} %{content_type}\n' https://digithings.ai/design/assets/og.png
+# 4. Stable OG asset: 200 + image/png (the #671 SPA-fallback canary;
+#    public/og.png at the static-export root — not /design/assets/)
+curl -sL -o /dev/null -w 'og %{http_code} %{content_type}\n' https://digithings.ai/og.png
 
 # 5. Deploy freshness (#1759): the build stamp must be JSON, and `built_at`
 #    must be the deploy you just shipped — a frozen Pages project passes 1–4.

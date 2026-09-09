@@ -13,6 +13,12 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
+import {
+  defaultThreadSkinForTenant,
+  isThreadSkin,
+  threadSkinChoices,
+  type ThreadSkin,
+} from "@/lib/thread-skins";
 
 /**
  * digichat Node backends: digigraph (digithings stack) or foundry (client Azure).
@@ -51,6 +57,8 @@ export type EmbedTenantConfig = {
   backend: EmbedBackendConfig;
   gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
+  /** Which vendored assistant-ui Thread to mount. */
+  skin?: ThreadSkin;
   accent?: { color: string; foreground: string };
   attribution: boolean;
   /** Branded embed header title (e.g. "Chat for Help"). */
@@ -84,6 +92,12 @@ export type EmbedTenantConfig = {
    * Only an explicit `false` here turns it off for this tenant.
    */
   showLanguageSelector?: boolean;
+  /**
+   * When true, this tenant may offer opt-in web search (#3420). Default off —
+   * corpus-only. User preference is a separate localStorage flag; both must
+   * be on before digichat sends X-Digi-Enable-Web-Search.
+   */
+  webSearch?: boolean;
   /** page = full content chrome inside iframe; embed = compact iframe child. */
   layout?: "page" | "embed";
   /**
@@ -108,6 +122,17 @@ export type EmbedTenantConfig = {
    * serves tenants that have no such service.
    */
   gate?: { consumeUrl: string };
+  /**
+   * Minimum plan tier required to chat via this embed. When set, /api/chat
+   * enforces a 403 unless the caller presents a verified Desk+ tier via
+   * HMAC `X-Embed-Plan-Proof` (from POST /api/plan-proof after Supabase
+   * app_metadata.plan_tier claims check) or an authenticated digichat session
+   * with claims plan_tier. Raw `X-Embed-Plan-Tier` / `?plan_tier=` are NEVER
+   * trusted (#3664). Used by the digiquant.io dashboard popup to fail-closed
+   * when plan_tier is absent or below Desk+. Absent for tenants with no tier
+   * gating.
+   */
+  requiredPlanTier?: "desk" | "studio" | "enterprise";
 };
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -201,6 +226,16 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: theme must be "dark" or "light"`);
   }
 
+  let skin: ThreadSkin | undefined;
+  if (v.skin !== undefined) {
+    if (!isThreadSkin(v.skin)) {
+      throw new Error(
+        `${ctx}: skin must be one of ${threadSkinChoices()}`,
+      );
+    }
+    skin = v.skin;
+  }
+
   let accent: EmbedTenantConfig["accent"];
   if (v.accent !== undefined) {
     const a = v.accent as Record<string, unknown> | null;
@@ -259,6 +294,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.showLanguageSelector !== undefined && typeof v.showLanguageSelector !== "boolean") {
     throw new Error(`${ctx}: showLanguageSelector must be a boolean`);
   }
+  if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
+    throw new Error(`${ctx}: webSearch must be a boolean`);
+  }
   if (v.layout !== undefined && v.layout !== "page" && v.layout !== "embed") {
     throw new Error(`${ctx}: layout must be "page" or "embed"`);
   }
@@ -270,12 +308,28 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     }
   }
 
+  const REQUIRED_PLAN_TIERS = ["desk", "studio", "enterprise"] as const;
+  if (
+    v.requiredPlanTier !== undefined &&
+    (typeof v.requiredPlanTier !== "string" ||
+      !REQUIRED_PLAN_TIERS.includes(v.requiredPlanTier as "desk" | "studio" | "enterprise"))
+  ) {
+    throw new Error(`${ctx}: requiredPlanTier must be "desk", "studio", or "enterprise"`);
+  }
+
   return {
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
     backend: backendCfg,
     gateMode: v.gateMode,
     theme: (v.theme as "dark" | "light" | undefined) ?? "dark",
+    skin:
+      skin ??
+      defaultThreadSkinForTenant({
+        host: hostKey,
+        slug: v.slug,
+        aliases: v.aliases as string[] | undefined,
+      }),
     accent,
     attribution: v.attribution === true,
     token: v.token,
@@ -288,11 +342,15 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
+    webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
     layout: v.layout === "page" || v.layout === "embed" ? v.layout : undefined,
     llmAccess: LLM_ACCESS.includes(v.llmAccess as EmbedLlmAccess)
       ? (v.llmAccess as EmbedLlmAccess)
       : undefined,
     gate,
+    ...(REQUIRED_PLAN_TIERS.includes(v.requiredPlanTier as "desk" | "studio" | "enterprise")
+      ? { requiredPlanTier: v.requiredPlanTier as "desk" | "studio" | "enterprise" }
+      : {}),
   };
 }
 
@@ -348,4 +406,86 @@ export function resolveEmbedTenantByHost(
   const host = normalizeEmbedHost(hostOrOrigin);
   if (!host) return null;
   return getEmbedTenantRegistry().get(host) ?? null;
+}
+
+/**
+ * Canonical host for the digiquant dashboard popup embed (#3662).
+ *
+ * The dashboard iframes `/embed?host=digiquant.io` from `digiquant.io/dashboard`.
+ * Baseline entitlement lives in the dashboard (`canUseDigichatPopup` → Desk+);
+ * this registry entry only carries the chat itself, so it must never impose a
+ * free-turn gate of its own.
+ */
+export const DIGIQUANT_DASHBOARD_EMBED_HOST = "digiquant.io";
+
+/**
+ * Dashboard tenant contract (#3662, Chris lock: no free-3 quota on the
+ * digiquant dashboard popup).
+ *
+ * - `gateMode: "ungated"` — entitled (Desk+) chat is never capped at 3. The
+ *   free-turn machinery (`EMBED_FREE_TURN_LIMIT` / `embed-turn-quota.ts` /
+ *   `trial_form` / `turn_limited`) must not apply to this host.
+ * - `llmAccess: "operator"` — spend rides operator/backend keys; no visitor
+ *   BYOK handoff inside the dashboard popup.
+ * - no `gate.consumeUrl` — no per-message server-side quota for entitled users.
+ *
+ * Non-entitled tiers (free/brief baseline) never reach this config with a
+ * working chat: the dashboard renders an upgrade CTA instead of the iframe,
+ * so they never burn turns. `digithings.ai` marketing trial
+ * (`free_then_byok`) is a separate tenant and is intentionally untouched.
+ */
+const DESK_PLUS_PLAN_TIERS = new Set(["desk", "studio", "enterprise"]);
+
+/**
+ * Dashboard tenant contract (#3662, Chris lock: no free-3 quota on the
+ * digiquant dashboard popup).
+ *
+ * - `gateMode: "ungated"` — entitled (Desk+) chat is never capped at 3. The
+ *   free-turn machinery (`EMBED_FREE_TURN_LIMIT` / `embed-turn-quota.ts` /
+ *   `trial_form` / `turn_limited`) must not apply to this host.
+ * - `llmAccess: "operator"` — spend rides operator/backend keys; no visitor
+ *   BYOK handoff inside the dashboard popup.
+ * - no `gate.consumeUrl` — no per-message server-side quota for entitled users.
+ * - `showByok: true` — BYOK surface visible for entitled users.
+ * - `requiredPlanTier: "desk"` — fail-closed: refuse (403 plan_tier_required)
+ *   unless plan_tier is Desk+, Studio, or enterprise. Deny when plan_tier
+ *   absent OR free/brief.
+ *
+ * Non-entitled tiers (free/brief baseline) never reach this config with a
+ * working chat: the dashboard renders an upgrade CTA instead of the iframe,
+ * so they never burn turns. `digithings.ai` marketing trial
+ * (`free_then_byok`) is a separate tenant and is intentionally untouched.
+ */
+export function isDigiquantDashboardTenantConfig(cfg: EmbedTenantConfig): boolean {
+  return (
+    cfg.gateMode === "ungated" &&
+    cfg.llmAccess === "operator" &&
+    cfg.gate === undefined &&
+    cfg.showByok === true &&
+    cfg.requiredPlanTier !== undefined &&
+    DESK_PLUS_PLAN_TIERS.has(cfg.requiredPlanTier)
+  );
+}
+
+/** Plan-tier ordering for the runtime tier gate (lower index = lower tier). */
+const PLAN_TIER_ORDER = ["free", "brief", "desk", "studio", "enterprise"] as const;
+
+/**
+ * Returns true when the caller's tier satisfies the embed config's
+ * `requiredPlanTier`.  When `requiredPlanTier` is unset the gate is
+ * inactive (returns true).  Unknown tiers rank below "free" so
+ * undefined/spoofed values are denied.
+ */
+export function isPlanTierSatisfied(
+  cfg: EmbedTenantConfig | null | undefined,
+  callerTier: string | null | undefined,
+): boolean {
+  const required = cfg?.requiredPlanTier;
+  if (!required) return true;
+  const requiredIdx = PLAN_TIER_ORDER.indexOf(required);
+  if (requiredIdx < 0) return false;
+  const callerIdx = callerTier
+    ? PLAN_TIER_ORDER.indexOf(callerTier as (typeof PLAN_TIER_ORDER)[number])
+    : -1;
+  return callerIdx >= requiredIdx;
 }

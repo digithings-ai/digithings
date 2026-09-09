@@ -1,0 +1,68 @@
+'use client';
+
+import { SafeMarkdown } from '@/components/SafeMarkdown';
+import { isEvolutionSourcesEmpty } from '@/lib/library-doc-tier';
+
+type Rating = { name?: string; reliability?: string; notes?: string };
+
+export default function EvolutionSourcesDocumentView({
+  payload,
+  fallbackMarkdown,
+}: {
+  payload: Record<string, unknown> | null;
+  fallbackMarkdown: string;
+}) {
+  if (!payload || isEvolutionSourcesEmpty(payload)) {
+    return (
+      <div className="border border-dashed border-hair bg-term-bg/30 p-6 text-center text-ink-mute text-sm">
+        <p className="font-medium text-ink-soft mb-1">Draft — no source ratings yet</p>
+        <p className="text-xs">
+          This outline was published without scores. Open the Evolution tab when the scorecard is filled in, or view raw
+          markdown below.
+        </p>
+        <SafeMarkdown className="mt-4 text-left opacity-80">{fallbackMarkdown}</SafeMarkdown>
+      </div>
+    );
+  }
+
+  const p = payload;
+  const date = String(p.date || '');
+  const title = String(p.title || 'Sources');
+  const body =
+    typeof p.body === 'object' && p.body !== null && !Array.isArray(p.body)
+      ? (p.body as Record<string, unknown>)
+      : {};
+  const notes = String(body.notes || '');
+  const ratings = Array.isArray(body.source_ratings) ? (body.source_ratings as Rating[]) : [];
+
+  return (
+    <div className="space-y-6 text-sm">
+      <div>
+        <h2 className="text-lg font-semibold text-ink">{title}</h2>
+        {date ? <p className="text-xs text-ink-mute font-mono mt-1">{date}</p> : null}
+      </div>
+      {notes ? (
+        <div>
+          <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Notes</h3>
+          <SafeMarkdown>{notes}</SafeMarkdown>
+        </div>
+      ) : null}
+      <div>
+        <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Ratings</h3>
+        <ul className="space-y-3">
+          {ratings.map((r, i) => (
+            <li key={i} className="border border-hair bg-term-bg/40 p-3">
+              <p className="font-medium text-accent">
+                {r.name ?? '—'}{' '}
+                {r.reliability ? (
+                  <span className="text-ink-mute font-normal text-xs">({r.reliability})</span>
+                ) : null}
+              </p>
+              {r.notes ? <p className="text-ink-soft text-sm mt-1 whitespace-pre-wrap">{r.notes}</p> : null}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}

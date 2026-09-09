@@ -20,7 +20,8 @@
     "./app-shell-terminal/styles.css": "./app-shell-terminal/styles.css",
     "./html-escape.js": "./html-escape.js",
     "./site/site.css": "./site/site.css",
-    "./site/*": "./site/*"
+    "./site/*": "./site/*",
+    "./releases.json": "./releases.json"
   },
   "files": [
     "tokens.css",
@@ -34,6 +35,7 @@
     "typography-motion",
     "quant-native",
     "app-shell-terminal",
-    "site"
+    "site",
+    "releases.json"
   ]
 }

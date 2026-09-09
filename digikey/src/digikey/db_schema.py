@@ -71,5 +71,34 @@ class JtiIssuedRow(Base):
     )
 
 
+class UserProfilePointerRow(Base):
+    """
+    Minimal per-user profile pointer for JWT claims (#308).
+
+    Stores only identity + monotonic version. Investment-profile / asset-
+    preference payloads are owned by #307 (and eventually digistore). Soft-
+    delete via ``deleted_at`` so a later CRUD layer can tombstone without
+    leaving stale JWT pointers.
+    """
+
+    __tablename__ = "digikey_user_profile_pointers"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    subject: Mapped[str] = mapped_column(String(256), nullable=False, unique=True, index=True)
+    tenant_slug: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    profile_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)

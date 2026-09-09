@@ -1,139 +1,32 @@
 "use client";
 
-/** Terminal-styled chat pane — `useChat` transport, markdown/trace/chart parts, slash commands. */
+/** First-party chat host: transport, persistence, BYOK. Stock Thread via ProductStockShell. */
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useMemo, useState } from "react";
 import { useChat } from "@ai-sdk/react";
-import {
-  DefaultChatTransport,
-  isReasoningUIPart,
-  isTextUIPart,
-  type UIMessage,
-} from "ai";
-import { ArrowDown, Copy, RefreshCw, Square, Wrench, Key } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import type { UIMessage } from "ai";
+import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
 import { QuantComparisonStrip } from "@/components/quant-comparison-strip";
 import { ByokCliFlow } from "@/components/byok-cli-flow";
-import { EChartsCard } from "@/components/echarts-card";
-import { parseChartEnvelope } from "@/lib/chart-spec";
+import {
+  ProductStockShell,
+  buildProductRuntimeAdapters,
+} from "@/components/stock/product-shell";
 import { p } from "@/lib/base-path";
-import { ACTIVITY_PART_TYPE, messageActivities } from "@/lib/chat-activity";
-import { byokRequiresModel, useBYOKKey } from "@/hooks/use-byok-key";
-import { cn } from "@/lib/utils";
-import { ChatActivities } from "@digithings/digichat-ui";
-import { ChatMarkdown, type CodeBlockOverride } from "@digithings/web";
-
-const MAX_INPUT_LINES = 5;
-
-// The one digichat-specific fence shape the shared <ChatMarkdown> renderer
-// (also used by digichat's own /embed, digithings-web, and digiweb — mermaid,
-// syntax-highlighted code with copy, LaTeX) has no reason to know about: a
-// ```json block whose content parses as a chart envelope renders as a live
-// chart instead of source text. Everything else — including a ```json block
-// that is NOT a chart spec — falls through to the shared renderer's own
-// default handling (undefined return), which now means it gets real syntax
-// highlighting instead of the bare, unstyled <code> this used to render.
-const renderChartCodeBlock: CodeBlockOverride = (lang, code) => {
-  if (lang !== "json") return undefined;
-  const spec = parseChartEnvelope(code);
-  return spec ? <EChartsCard spec={spec} /> : undefined;
-};
-
-function messagePlainText(message: UIMessage): string {
-  if (!message.parts?.length) return "";
-  return message.parts.filter(isTextUIPart).map((p) => p.text).join("");
-}
-
-function toolLabel(part: unknown): string {
-  if (part && typeof part === "object" && "toolName" in part) {
-    const n = (part as { toolName?: string }).toolName;
-    if (typeof n === "string" && n) return n;
-  }
-  if (part && typeof part === "object" && "type" in part) {
-    return String((part as { type: string }).type);
-  }
-  return "Tool";
-}
-
-function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming?: boolean }) {
-  if (message.role === "user") {
-    const text = messagePlainText(message);
-    return (
-      <ChatMarkdown
-        source={text}
-        renderCodeBlock={renderChartCodeBlock}
-        className="text-[var(--text-primary)]"
-      />
-    );
-  }
-
-  const activities = messageActivities(message);
-  return (
-    <div className="space-y-3">
-      {activities.length ? <ChatActivities activities={activities} /> : null}
-      {message.parts.map((part, i) => {
-        const isLast = i === message.parts.length - 1;
-        if (part.type === ACTIVITY_PART_TYPE || part.type === "data-digigraphTrace") return null;
-        if (isReasoningUIPart(part)) {
-          return (
-            <Collapsible key={i} className="rounded-lg border border-border/60 bg-muted/30">
-              <CollapsibleTrigger className="flex w-full cursor-pointer items-center px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/50">
-                Reasoning
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap border-t border-border/40 px-3 py-2 font-mono text-xs leading-relaxed text-muted-foreground">
-                  {part.text}
-                </pre>
-              </CollapsibleContent>
-            </Collapsible>
-          );
-        }
-        if (isTextUIPart(part)) {
-          return (
-            <ChatMarkdown
-              key={i}
-              source={part.text}
-              renderCodeBlock={renderChartCodeBlock}
-              className={cn(
-                "text-[var(--text-primary)]",
-                isLast && isStreaming && "dc-term-streaming",
-              )}
-            />
-          );
-        }
-        if (part.type === "tool-invocation" || part.type === "dynamic-tool") {
-          const label = toolLabel(part);
-          return (
-            <Collapsible key={i} className="overflow-hidden">
-              <CollapsibleTrigger className="dc-term-chip cursor-pointer">
-                <Wrench className="size-3 shrink-0 opacity-80" />
-                <span className="truncate">{label}</span>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <pre className="mt-2 max-h-56 overflow-auto rounded-md border border-border/40 bg-term-bg p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
-                  {JSON.stringify(part, null, 2)}
-                </pre>
-              </CollapsibleContent>
-            </Collapsible>
-          );
-        }
-        return null;
-      })}
-    </div>
-  );
-}
+import { useBYOKKey } from "@/hooks/use-byok-key";
+import {
+  isWebSearchEnabled,
+  readWebSearchPref,
+  writeWebSearchPref,
+} from "@/lib/web-search-pref";
+import {
+  takePendingForceTool,
+  takePendingTurnMode,
+} from "@/lib/pending-chat-headers";
+import {
+  DEFAULT_CLIENT_CONFIG,
+  type DigichatClientConfig,
+} from "@/lib/deploy-config";
 
 type SystemNote = { id: string; text: string };
 
@@ -143,17 +36,20 @@ export type ChatPanelProps = {
   initialMessages: UIMessage[];
   onMessagesCommit: (threadId: string, messages: UIMessage[]) => void;
   onTitleDerived?: (threadId: string, title: string) => void;
+  onAllowTruncate?: (threadId: string) => void;
   headerSlot?: React.ReactNode;
   byokMode?: boolean;
   onByokModeChange?: (open: boolean) => void;
-  /**
-   * Slash-command hook. Receives the raw text (starts with `/`).
-   * Return true if the command was handled — the panel will NOT send it
-   * to the chat transport. Return false to fall through to the panel's
-   * own handling (unknown commands render as a system note).
-   */
-  onSlashCommand?: (raw: string) => boolean;
+  /** Deploy client projection (features, tools, chrome). */
+  clientConfig?: DigichatClientConfig;
 };
+
+function messagePlainText(message: UIMessage): string {
+  return (message.parts ?? [])
+    .filter((p): p is { type: "text"; text: string } => p.type === "text")
+    .map((p) => p.text)
+    .join("");
+}
 
 export function ChatPanel({
   threadId,
@@ -161,17 +57,13 @@ export function ChatPanel({
   initialMessages,
   onMessagesCommit,
   onTitleDerived,
+  onAllowTruncate,
   headerSlot,
   byokMode = false,
   onByokModeChange,
-  onSlashCommand,
+  clientConfig = DEFAULT_CLIENT_CONFIG,
 }: ChatPanelProps) {
-  const [text, setText] = useState("");
   const [systemNotes, setSystemNotes] = useState<SystemNote[]>([]);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const stickToBottomRef = useRef(true);
-  const [showJump, setShowJump] = useState(false);
   const {
     key: byokKey,
     provider: byokProvider,
@@ -181,18 +73,42 @@ export function ChatPanel({
     clearKey: clearByokKey,
   } = useBYOKKey();
 
+  const webSearchAllowed =
+    clientConfig.gate.webSearch === true ||
+    clientConfig.tools.catalog.some((t) => t.id === "web_search") ||
+    (typeof process.env.NEXT_PUBLIC_DIGICHAT_WEB_SEARCH === "string" &&
+      process.env.NEXT_PUBLIC_DIGICHAT_WEB_SEARCH === "1");
+  const [webSearchPref, setWebSearchPref] = useState(() =>
+    webSearchAllowed && typeof window !== "undefined" ? readWebSearchPref("auth") : false,
+  );
+
   const transport = useMemo(
     () =>
-      new DefaultChatTransport<UIMessage>({
+      new AssistantChatTransport<UIMessage>({
         api: p("/api/chat"),
         credentials: "include",
         prepareSendMessagesRequest: ({ messages, id, body, headers }) => {
           const h = new Headers(headers as HeadersInit | undefined);
           h.set("X-Digichat-Session", threadId);
+          const turnMode = takePendingTurnMode(threadId);
+          if (turnMode) {
+            h.set("X-Digi-Turn-Mode", turnMode);
+          }
+          const forceTool = takePendingForceTool(threadId);
+          if (forceTool && !turnMode) {
+            h.set("X-Digi-Force-Tool", forceTool);
+          }
+          h.set("X-Digi-Run-Id", crypto.randomUUID());
+          if (
+            webSearchAllowed &&
+            isWebSearchEnabled({ tenantAllows: true, userPref: webSearchPref })
+          ) {
+            h.set("X-Digi-Enable-Web-Search", "1");
+          }
           if (byokKey) {
             h.set("X-BYOK-Key", byokKey);
             h.set("X-BYOK-Provider", byokProvider);
-            if (byokRequiresModel(byokProvider) && byokModel.trim()) {
+            if (byokModel.trim()) {
               h.set("X-BYOK-Model", byokModel.trim());
             }
           }
@@ -202,319 +118,92 @@ export function ChatPanel({
           };
         },
       }),
-    [threadId, byokKey, byokProvider, byokModel],
+    [threadId, byokKey, byokProvider, byokModel, webSearchAllowed, webSearchPref],
   );
 
-  const { messages, sendMessage, status, stop, error, regenerate } =
-    useChat<UIMessage>({
-      id: threadId,
-      messages: initialMessages,
-      transport,
-      onFinish: ({ messages: next }) => {
-        onMessagesCommit(threadId, next);
-        const userTexts = next
-          .filter((m) => m.role === "user")
-          .map(messagePlainText)
-          .filter(Boolean);
-        const first = userTexts[0];
-        if (
-          first &&
-          (threadTitle === "New chat" || threadTitle.trim() === "") &&
-          onTitleDerived
-        ) {
-          const t = first.slice(0, 52) + (first.length > 52 ? "…" : "");
-          onTitleDerived(threadId, t);
-        }
-      },
-    });
-
-  const busy = status === "streaming" || status === "submitted";
-  const isStreaming = status === "streaming";
-
-  const updateStickiness = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const atBottom = gap < 72;
-    stickToBottomRef.current = atBottom;
-    setShowJump(!atBottom);
-  }, []);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onScroll = () => updateStickiness();
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [updateStickiness]);
-
-  useEffect(() => {
-    if (!stickToBottomRef.current) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: status === "streaming" ? "auto" : "smooth" });
-  }, [messages, status, systemNotes.length]);
-
-  useLayoutEffect(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const style = getComputedStyle(ta);
-    const lineHeight = parseFloat(style.lineHeight) || 21;
-    const padding =
-      parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-    const maxHeight = lineHeight * MAX_INPUT_LINES + padding;
-    ta.style.height = "0px";
-    const next = Math.min(ta.scrollHeight, maxHeight);
-    ta.style.height = `${next}px`;
-    ta.style.overflowY = ta.scrollHeight > maxHeight ? "auto" : "hidden";
-  }, [text]);
-
-  const pushSystemNote = useCallback((msg: string) => {
-    setSystemNotes((prev) => [...prev, { id: crypto.randomUUID(), text: msg }]);
-  }, []);
-
-  const onSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      const t = text.trim();
-      if (!t || busy) return;
-
-      if (t.startsWith("/")) {
-        setText("");
-        const [name] = t.split(/\s+/);
-        if (name === "/help") {
-          pushSystemNote(
-            "available: /help, /clear, /key, /model <id>, /history, /settings, /scope",
-          );
-          return;
-        }
-        if (name === "/scope") {
-          // Full JWT scope surfacing lands with #202 (SSO); this is a no-op visual placeholder.
-          pushSystemNote("scope: (signed-in session) — scope surfacing lands with SSO in #202.");
-          return;
-        }
-        if (name === "/model") {
-          pushSystemNote("model selector is part of /key.");
-          return;
-        }
-        if (name === "/key" || name === "/settings") {
-          onByokModeChange?.(true);
-          return;
-        }
-        if (onSlashCommand && onSlashCommand(t)) {
-          return;
-        }
-        pushSystemNote(`Unknown command \`${name}\`. Type /help.`);
-        return;
+  const chat = useChat<UIMessage>({
+    id: threadId,
+    messages: initialMessages,
+    transport,
+    onFinish: ({ messages: next }) => {
+      onMessagesCommit(threadId, next);
+      const userTexts = next
+        .filter((m) => m.role === "user")
+        .map(messagePlainText)
+        .filter(Boolean);
+      const first = userTexts[0];
+      if (first && (threadTitle === "New chat" || threadTitle.trim() === "") && onTitleDerived) {
+        const t = first.slice(0, 52) + (first.length > 52 ? "…" : "");
+        onTitleDerived(threadId, t);
       }
-
-      setText("");
-      await sendMessage({ text: t });
     },
-    [text, busy, sendMessage, onSlashCommand, onByokModeChange, pushSystemNote],
+  });
+  const { messages, error } = chat;
+  const runtimeAdapters = useMemo(
+    () => buildProductRuntimeAdapters(clientConfig.features),
+    [clientConfig.features],
   );
+  const runtime = useAISDKRuntime(chat, { adapters: runtimeAdapters });
 
-  const onCopyMessage = useCallback(async (m: UIMessage) => {
-    const plain = messagePlainText(m);
-    try {
-      await navigator.clipboard.writeText(plain);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-  const canRegenerate = !busy && !!lastAssistant && messages.length > 0 && status === "ready";
-
-  const startsWithSlash = text.trimStart().startsWith("/");
+  const persistence =
+    clientConfig.persistence === "server" || clientConfig.persistence === "memory"
+      ? clientConfig.persistence
+      : "none";
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
-      {headerSlot}
-
-      <div className="relative min-h-0 flex-1">
-        <div ref={scrollRef} className="h-full overflow-y-auto rounded-md border border-border/40 dc-term-pane">
-          {messages.length === 0 && systemNotes.length === 0 && !byokMode ? (
-            <div className="dc-term-row dc-term-row-assistant">
-              <span className="dc-term-marker">▸</span>
-              <div className="dc-term-body" style={{ color: "var(--text-secondary)" }}>
-                digichat ready. Ask a question or type <code className="font-mono">/help</code> for commands.
+    <>
+      <ProductStockShell
+        runtime={runtime}
+        clientConfig={clientConfig}
+        persistence={persistence === "server" ? "none" : persistence}
+        sessionKey={threadId}
+        webSearchScope="auth"
+        onWebSearchChange={(on) => {
+          writeWebSearchPref("auth", on);
+          setWebSearchPref(on);
+        }}
+        headerSlot={
+          <>
+            {headerSlot}
+            {systemNotes.length > 0 ? (
+              <div className="space-y-1 px-3 py-2 text-xs text-muted-foreground">
+                {systemNotes.map((n) => (
+                  <div key={n.id}>{n.text}</div>
+                ))}
               </div>
-            </div>
-          ) : null}
-
-          {messages.map((m) => {
-            const isUser = m.role === "user";
-            const isLastAssistant = m.role === "assistant" && m.id === lastAssistant?.id;
-            return (
-              <div
-                key={m.id}
-                className={cn(
-                  "dc-term-row group/message",
-                  isUser ? "dc-term-row-user" : "dc-term-row-assistant",
-                )}
-              >
-                <span className="dc-term-marker" aria-hidden>
-                  {isUser ? ">" : "▸"}
-                </span>
-                <div className="dc-term-body">
-                  <MessageBody
-                    message={m}
-                    isStreaming={isStreaming && isLastAssistant}
-                  />
-                  <div
-                    className={cn(
-                      "mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100",
-                      isLastAssistant && !isUser && "opacity-100",
-                    )}
-                  >
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-[11px] text-muted-foreground"
-                      onClick={() => onCopyMessage(m)}
-                    >
-                      <Copy className="mr-1 size-3" />
-                      copy
-                    </Button>
-                    {isLastAssistant ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 text-[11px] text-muted-foreground"
-                        disabled={!canRegenerate}
-                        onClick={() => void regenerate()}
-                      >
-                        <RefreshCw className="mr-1 size-3" />
-                        regen
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-
-          {systemNotes.map((n) => (
-            <div key={n.id} className="dc-term-row dc-term-row-assistant">
-              <span className="dc-term-marker" aria-hidden>·</span>
-              <div className="dc-term-body" style={{ color: "var(--text-secondary)", fontFamily: "var(--font-family-mono)", fontSize: 12 }}>
-                {n.text}
-              </div>
-            </div>
-          ))}
-
-          {error ? (
-            <div className="dc-term-row dc-term-row-assistant">
-              {/* error state rides the four-state system (--down) — a livery is an identity, never a semantic (canon §16) */}
-              <span className="dc-term-marker" style={{ color: "var(--down)" }}>✗</span>
-              <div className="dc-term-body" style={{ color: "var(--down)" }}>
+            ) : null}
+          </>
+        }
+        footerSlot={
+          <>
+            {error?.message ? (
+              <div role="alert" className="px-3 py-2 text-sm text-destructive">
                 {error.message}
               </div>
-            </div>
-          ) : null}
-
-          {byokMode ? (
-            <ByokCliFlow
-              onClose={() => onByokModeChange?.(false)}
-              onActivate={(key, provider, model) => {
-                setByokKey(key, provider, model);
-                onByokModeChange?.(false);
-              }}
-              onClear={clearByokKey}
-              active={
-                byokIsSet
-                  ? { provider: byokProvider, model: byokModel }
-                  : null
-              }
-              initialProvider={byokProvider}
-              initialModel={byokModel}
-            />
-          ) : null}
+            ) : null}
+            <QuantComparisonStrip messages={messages} conversationId={threadId} />
+          </>
+        }
+      />
+      {byokMode ? (
+        <div
+          className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background p-3 shadow-lg"
+          role="dialog"
+          aria-label="BYOK"
+        >
+          <ByokCliFlow
+            onClose={() => onByokModeChange?.(false)}
+            onActivate={(key, provider, model) => {
+              setByokKey(key, provider, model);
+              onByokModeChange?.(false);
+            }}
+            onClear={clearByokKey}
+            active={byokIsSet ? { provider: byokProvider, model: byokModel } : null}
+            initialProvider={byokProvider}
+            initialModel={byokModel}
+          />
         </div>
-
-        {showJump ? (
-          <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2">
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="pointer-events-auto shadow-md"
-              onClick={() => {
-                const el = scrollRef.current;
-                if (!el) return;
-                el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-                stickToBottomRef.current = true;
-                setShowJump(false);
-              }}
-            >
-              <ArrowDown className="mr-1 size-4" />
-              New messages
-            </Button>
-          </div>
-        ) : null}
-      </div>
-
-      <QuantComparisonStrip messages={messages} conversationId={threadId} />
-
-      <form onSubmit={onSubmit} className="app-input mt-2">
-        <span className={cn("app-input-marker", startsWithSlash && "dc-input-slash-glyph")}>
-          {startsWithSlash ? "/" : ">"}
-        </span>
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="ask digichat"
-          className="app-input-field"
-          rows={1}
-          disabled={busy || byokMode}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void onSubmit(e);
-            }
-          }}
-        />
-        <span className="slash-hint" aria-hidden>
-          {byokIsSet ? (
-            <Key className="inline size-3 opacity-80" aria-label="BYOK key set" />
-          ) : null}
-          {busy ? (
-            <button
-              type="button"
-              onClick={() => stop()}
-              className="ml-2 underline-offset-2 hover:underline"
-              style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", fontFamily: "inherit" }}
-            >
-              <Square className="inline size-3" /> stop
-            </button>
-          ) : (
-            <kbd>↵</kbd>
-          )}
-        </span>
-      </form>
-    </div>
-  );
-}
-
-/** Kept for back-compat with any external importers. Renders a simple mono strip. */
-export function ChatChrome({
-  threadTitle,
-  userSubtitle,
-  leading,
-}: {
-  threadTitle: string;
-  userSubtitle: string;
-  leading?: React.ReactNode;
-}) {
-  return (
-    <header className="app-topbar">
-      {leading}
-      <span className="app-topbar-title">{threadTitle || "digichat"}</span>
-      <span className="app-topbar-meta">{userSubtitle}</span>
-    </header>
+      ) : null}
+    </>
   );
 }
