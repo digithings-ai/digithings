@@ -13,9 +13,278 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# ── Market-data backend: Supabase vs versioned R2 history (#3780, Task 4) ──
+#
+# ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` routes the price/macro tools through the
+# R2HistoryStore generations + manifest sealed at ``manifest["as_of"]``, merged
+# with a live overlap and settled-close semantics. Default ``supabase`` keeps
+# the current bodies byte-for-byte (extracted as ``_supabase_*`` below).
+
+_BACKEND = os.environ.get("DIGIQUANT_MARKET_DATA_BACKEND", "supabase")
+_TTL_SECONDS = 900
+_ttl: dict[tuple, tuple[float, str]] = {}
+
+# Calendar days of live overlap fetched ahead of the R2 manifest seal.
+_R2_LIVE_OVERLAP_DAYS = 30
+
+
+def _market_data_backend() -> str:
+    """Live read of the backend flag (``_BACKEND`` is the import-time snapshot)."""
+    return os.environ.get("DIGIQUANT_MARKET_DATA_BACKEND", "supabase").strip().lower()
+
+
+def _ttl_get(key: tuple) -> str | None:
+    hit = _ttl.get(key)
+    if hit and time.time() - hit[0] < _TTL_SECONDS:
+        return hit[1]
+    return None
+
+
+def _supabase_technicals(ticker: str, lookback: int) -> str:
+    """Current Supabase body, extracted unchanged (non-R2 path)."""
+    from digiquant.research.data.queries import get_price_technicals
+    from digiquant.research.supabase_io import SupabaseConfig, build_client
+
+    try:
+        client = build_client(SupabaseConfig.from_env())
+        result = get_price_technicals(client=client, ticker=ticker, lookback=lookback)
+    except Exception as exc:  # surface as JSON to the caller, never crash
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+    return json.dumps(result, default=str)
+
+
+def _supabase_macro(series_ids: list[str], lookback: int) -> str:
+    """Current Supabase body, extracted unchanged (non-R2 path)."""
+    from digiquant.research.data.queries import get_macro_series
+    from digiquant.research.supabase_io import SupabaseConfig, build_client
+
+    try:
+        client = build_client(SupabaseConfig.from_env())
+        result = get_macro_series(client=client, series_ids=series_ids, lookback=lookback)
+    except Exception as exc:  # surface as JSON to the caller, never crash
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+    return json.dumps(result, default=str)
+
+
+def _get_r2_store() -> Any:
+    """Build the read-path ``R2HistoryStore`` from env (patchable seam for tests)."""
+    from digiquant.data.prices.r2_history import R2HistoryStore
+    from digiquant.ops.checkpoint_archive import (
+        R2_ACCESS_KEY_ENV,
+        R2_ACCOUNT_ENV,
+        R2_BUCKET_ENV,
+        R2_SECRET_KEY_ENV,
+        R2Backend,
+    )
+
+    account = (os.environ.get(R2_ACCOUNT_ENV) or "").strip()
+    bucket = (os.environ.get(R2_BUCKET_ENV) or "").strip()
+    access = (os.environ.get(R2_ACCESS_KEY_ENV) or "").strip()
+    secret = (os.environ.get(R2_SECRET_KEY_ENV) or "").strip()
+    if not (account and bucket and access and secret):
+        raise RuntimeError(
+            "missing R2 credentials; set R2_ACCOUNT_ID/R2_BUCKET/R2_ACCESS_KEY_ID/"
+            "R2_SECRET_ACCESS_KEY"
+        )
+    backend = R2Backend(
+        endpoint_url=f"https://{account}.r2.cloudflarestorage.com",
+        bucket=bucket,
+        access_key=access,
+        secret_key=secret,
+    )
+
+    def _read_only_registry_insert(
+        source_table: str, source_key: dict, r2_key: str, sha256: str, size: int
+    ) -> None:
+        raise RuntimeError("market-data MCP read path must not write registry rows")
+
+    return R2HistoryStore(backend, _read_only_registry_insert)
+
+
+def _read_manifest() -> dict:
+    """Read the R2 market-data manifest (version-checked by the store)."""
+    return _get_r2_store().read_manifest()  # type: ignore[no-any-return]
+
+
+def _read_r2_window(ticker: str, as_of: str, manifest: dict | None = None) -> list[dict]:
+    """Date-ascending indicator dicts for *ticker* sealed at *as_of*.
+
+    R2 history (SHA-verified via the manifest) + live overlap fetched from
+    ``(manifest_as_of, as_of]`` → :func:`merge_history_live` with
+    ``sealed=False`` (settled close: the live ``as_of`` bar is excluded) →
+    :func:`compute_indicators`. An ``as_of`` at or before the manifest seal
+    skips the live fetch entirely. A missing ``latest`` pointer (KeyError)
+    maps to an unknown-ticker ``LookupError`` for the MCP error envelope.
+    """
+    import io
+    from datetime import date as _date
+    from datetime import timedelta as _td
+
+    import polars as pl
+
+    from digiquant.data.prices.merge import merge_history_live
+    from digiquant.data.prices.r2_history import latest_pointer_key, normalize_ticker
+    from digiquant.data.prices.technicals import compute_indicators
+
+    manifest = manifest if manifest is not None else _read_manifest()
+    manifest_as_of = str(manifest["as_of"])
+    store = _get_r2_store()
+    datasets = manifest.get("datasets") or {}
+    entry = datasets.get(ticker) or datasets.get(normalize_ticker(ticker))
+    if entry is not None:
+        payload = store.get_generation(str(entry["object"]), str(entry["sha256"]))
+    else:
+        try:
+            gen_key = store.read_latest(latest_pointer_key(ticker))
+        except KeyError:
+            raise LookupError(f"unknown ticker {ticker!r}") from None
+        sha: str | None = None
+        for cand in datasets.values():
+            if isinstance(cand, dict) and cand.get("object") == gen_key:
+                sha = cand.get("sha256")
+                break
+        if sha is None:
+            raise LookupError(f"unknown ticker {ticker!r}")
+        payload = store.get_generation(gen_key, str(sha))
+
+    hist = pl.read_parquet(io.BytesIO(payload))
+    if "date" not in hist.columns and "timestamp" in hist.columns:
+        hist = hist.rename({"timestamp": "date"})
+    hist = hist.with_columns(pl.col("date").cast(pl.Date)).sort("date")
+
+    if as_of <= manifest_as_of:
+        live = pl.DataFrame({"date": pl.Series("date", [], dtype=pl.Date)})
+    else:
+        try:
+            from digiquant.data.prices.fetchers import fetch_batch
+
+            manifest_d = _date.fromisoformat(manifest_as_of)
+            as_of_d = _date.fromisoformat(as_of)
+            live_start = max(manifest_d + _td(days=1), as_of_d - _td(days=_R2_LIVE_OVERLAP_DAYS))
+            fetched = fetch_batch(
+                [ticker],
+                start=live_start.isoformat(),
+                end=(as_of_d + _td(days=1)).isoformat(),
+            )
+            frame = fetched.frames.get(ticker)
+            if frame is None or frame.is_empty():
+                live = pl.DataFrame({"date": pl.Series("date", [], dtype=pl.Date)})
+            else:
+                live = frame.with_columns(pl.col("timestamp").cast(pl.Date).alias("date"))
+        except Exception:
+            live = pl.DataFrame({"date": pl.Series("date", [], dtype=pl.Date)})
+
+    merged = merge_history_live(hist, live, manifest_as_of, as_of, sealed=False)
+    if merged.is_empty():
+        return []
+    ohlcv = merged.rename({"date": "timestamp"}) if "timestamp" not in merged.columns else merged
+    indicators = compute_indicators(ohlcv)
+    return (
+        indicators.with_columns(merged["date"], merged["close"].alias("close"))
+        .sort("date")
+        .to_dicts()
+    )
+
+
+def _read_r2_macro_window(
+    series_ids: list[str], as_of: str, manifest: dict | None = None
+) -> dict[str, dict]:
+    """Per-series ``{latest, window}`` macro observations sealed at *as_of*.
+
+    Fail-soft per series (unknown series → empty window, mirroring the
+    Supabase path) so one bad id never fails the whole tool call.
+    """
+    import io
+
+    import polars as pl
+
+    from digiquant.data.prices.r2_history import macro_latest_pointer_key
+
+    manifest = manifest if manifest is not None else _read_manifest()
+    datasets = manifest.get("datasets") or {}
+    store = _get_r2_store()
+    out: dict[str, dict] = {}
+    for sid in series_ids:
+        try:
+            gen_key = store.read_latest(macro_latest_pointer_key("fred", sid))
+            sha = None
+            for cand in datasets.values():
+                if isinstance(cand, dict) and cand.get("object") == gen_key:
+                    sha = cand.get("sha256")
+                    break
+            if sha is None:
+                out[sid] = {"latest": {}, "window": []}
+                continue
+            frame = pl.read_parquet(io.BytesIO(store.get_generation(gen_key, str(sha))))
+            date_col = "obs_date" if "obs_date" in frame.columns else "date"
+            rows = (
+                frame.with_columns(pl.col(date_col).cast(pl.Date))
+                .filter(pl.col(date_col) <= pl.lit(as_of).cast(pl.Date))
+                .sort(date_col)
+                .to_dicts()
+            )
+            out[sid] = {"latest": rows[-1] if rows else {}, "window": rows}
+        except KeyError:
+            out[sid] = {"latest": {}, "window": []}
+    return out
+
+
+def digiquant_get_price_technicals(
+    ticker: str, lookback: int = 20, as_of: str | None = None
+) -> str:
+    """Technicals for *ticker*, Supabase-backed by default or R2-backed with the flag."""
+    try:
+        lookback = min(int(lookback), 500)
+        if _market_data_backend() != "r2":
+            return _supabase_technicals(ticker, lookback)
+        manifest = _read_manifest()
+        if manifest["version"] != 1:
+            return json.dumps({"error": f"unsupported manifest version {manifest['version']}"})
+        resolved = as_of or manifest["as_of"]
+        cache_key = ("technicals", ticker, resolved, manifest["version"])
+        cached = _ttl_get(cache_key)
+        if cached is not None:
+            return cached
+        rows = _read_r2_window(ticker, resolved, manifest)
+        payload = json.dumps({"as_of": resolved, "rows": rows[-lookback:]}, default=str)
+        _ttl[cache_key] = (time.time(), payload)
+        return payload
+    except Exception as exc:
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+
+def digiquant_get_macro_series(
+    series_ids: list[str], lookback: int = 6, as_of: str | None = None
+) -> str:
+    """Macro observations for *series_ids*, Supabase-backed by default or R2-backed."""
+    try:
+        lookback = min(int(lookback), 500)
+        if _market_data_backend() != "r2":
+            return _supabase_macro(series_ids, lookback)
+        manifest = _read_manifest()
+        if manifest["version"] != 1:
+            return json.dumps({"error": f"unsupported manifest version {manifest['version']}"})
+        resolved = as_of or manifest["as_of"]
+        cache_key = ("macro", tuple(series_ids), resolved, manifest["version"])
+        cached = _ttl_get(cache_key)
+        if cached is not None:
+            return cached
+        per_series = _read_r2_macro_window(series_ids, resolved, manifest)
+        series = {
+            sid: {"latest": payload["latest"], "window": payload["window"][-lookback:]}
+            for sid, payload in per_series.items()
+        }
+        payload = json.dumps({"as_of": resolved, "series": series}, default=str)
+        _ttl[cache_key] = (time.time(), payload)
+        return payload
+    except Exception as exc:
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -157,39 +426,37 @@ def create_mcp_server() -> Any:
         )
         return json.dumps(raw, indent=2)
 
+    import digiquant.mcp_server as _mcp_module
+
+    _technicals_impl = _mcp_module.digiquant_get_price_technicals
+
     @mcp.tool()
-    def digiquant_get_price_technicals(ticker: str, lookback: int = 20) -> str:
+    def digiquant_get_price_technicals(
+        ticker: str, lookback: int = 20, as_of: str | None = None
+    ) -> str:
         """Latest technical indicators + recent daily window for a ticker (JSON).
 
         Reads the maintained ``price_technicals`` table in Supabase. Returns
         ``{"error": ...}`` if the data layer is unavailable.
+        With ``DIGIQUANT_MARKET_DATA_BACKEND=r2``, reads the versioned R2
+        history sealed at ``as_of`` (default: manifest seal) instead.
         """
-        from digiquant.research.data.queries import get_price_technicals
-        from digiquant.research.supabase_io import SupabaseConfig, build_client
+        return _technicals_impl(ticker, lookback=lookback, as_of=as_of)
 
-        try:
-            client = build_client(SupabaseConfig.from_env())
-            result = get_price_technicals(client=client, ticker=ticker, lookback=lookback)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-        return json.dumps(result, default=str)
+    _macro_impl = _mcp_module.digiquant_get_macro_series
 
     @mcp.tool()
-    def digiquant_get_macro_series(series_ids: list[str], lookback: int = 6) -> str:
+    def digiquant_get_macro_series(
+        series_ids: list[str], lookback: int = 6, as_of: str | None = None
+    ) -> str:
         """Latest values + recent window for FRED macro series ids (JSON).
 
         Reads the maintained ``macro_series_observations`` table in Supabase.
         Returns ``{"error": ...}`` if the data layer is unavailable.
+        With ``DIGIQUANT_MARKET_DATA_BACKEND=r2``, reads the versioned R2
+        history sealed at ``as_of`` (default: manifest seal) instead.
         """
-        from digiquant.research.data.queries import get_macro_series
-        from digiquant.research.supabase_io import SupabaseConfig, build_client
-
-        try:
-            client = build_client(SupabaseConfig.from_env())
-            result = get_macro_series(client=client, series_ids=series_ids, lookback=lookback)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-        return json.dumps(result, default=str)
+        return _macro_impl(series_ids, lookback=lookback, as_of=as_of)
 
     @mcp.tool()
     def digiquant_query_data(
