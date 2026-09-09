@@ -26,7 +26,7 @@ from digiquant.research.state import (
 def _no_data_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     # Deterministic tool-less completion path for completion_text mocks regardless of the
     # developer's Supabase env (the risk/PM nodes now wire data tools when available).
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "0")
 
 
 def _state_for_debate() -> ResearchState:

@@ -280,7 +280,7 @@ class TestDurableH5H6LineageRoundTrip:
     ) -> None:
         monkeypatch.setenv("OLYMPUS_EVIDENCE_BUNDLE_WRITER", "on")
         monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
-        monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "2")
+        monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "2")
 
         store = EvidenceBundleStore()
         grounding_calls: list[bool] = []

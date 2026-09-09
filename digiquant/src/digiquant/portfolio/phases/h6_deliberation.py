@@ -175,7 +175,7 @@ def _maybe_attempt_missing_fact_amendment(
 
 
 def deliberation_max_rounds() -> int:
-    """``ATLAS_DELIBERATION_MAX_ROUNDS`` env override; default 6."""
+    """``DIGIQUANT_DELIBERATION_MAX_ROUNDS`` env override; default 6."""
     raw = env_lookup(DELIBERATION_MAX_ROUNDS).strip()
     if not raw:
         return DEFAULT_DELIBERATION_MAX_ROUNDS
@@ -186,7 +186,7 @@ def deliberation_max_rounds() -> int:
 
 
 def deliberation_min_rounds() -> int:
-    """``ATLAS_DELIBERATION_MIN_ROUNDS`` env override; default 2.
+    """``DIGIQUANT_DELIBERATION_MIN_ROUNDS`` env override; default 2.
 
     The PM may not register convergence before this many rounds. The floor of 2 forces at
     least one real challenge + analyst response, stopping the round-1 rubber-stamp the
@@ -494,7 +494,7 @@ def run_deliberation_loop(
     evidence_bundle_store: EvidenceBundleStore | None = None,
     research_state_store: ResearchStateStore | None = None,
 ) -> tuple[DeliberationSummary, dict[str, Any] | None, H6AmendmentResult | None]:
-    """PM↔analyst loop until ``converged=true`` or ``ATLAS_DELIBERATION_MAX_ROUNDS`` cap.
+    """PM↔analyst loop until ``converged=true`` or ``DIGIQUANT_DELIBERATION_MAX_ROUNDS`` cap.
 
     Returns the summary, the last analyst-proposed complete ``forecast_amendment``
     terms dict (or ``None``), and optional WP11.4 evidence-amendment provenance.
@@ -570,7 +570,7 @@ def run_deliberation_loop(
         )
         # #945: the PM may not converge before ``min_rounds`` (default 2) — forcing at least
         # one challenge + analyst response so the debate isn't a round-1 rubber-stamp. Set
-        # ATLAS_DELIBERATION_MIN_ROUNDS=1 to restore the instant-convergence quiet path.
+        # DIGIQUANT_DELIBERATION_MIN_ROUNDS=1 to restore the instant-convergence quiet path.
         if converged_signal and round_number >= min_rounds:
             close = (pm_turn.conclusion or pm_turn.challenge).strip()
             transcript.append(

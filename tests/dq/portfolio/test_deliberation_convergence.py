@@ -106,7 +106,7 @@ class TestDeliberationConvergence:
     def test_max_rounds_forces_convergence_with_phase_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("ATLAS_DELIBERATION_MAX_ROUNDS", "1")
+        monkeypatch.setenv("DIGIQUANT_DELIBERATION_MAX_ROUNDS", "1")
         compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -149,10 +149,10 @@ class TestDeliberationConvergence:
     def test_min_rounds_one_allows_instant_pm_convergence(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # The floor is opt-out: ATLAS_DELIBERATION_MIN_ROUNDS=1 restores the cheap quiet path
+        # The floor is opt-out: DIGIQUANT_DELIBERATION_MIN_ROUNDS=1 restores the cheap quiet path
         # — a PM that converges on its first turn returns WITHOUT an analyst turn. (The
         # default floor is 2, exercised by the test below.)
-        monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "1")
+        monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "1")
         compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
 
@@ -185,7 +185,7 @@ class TestDeliberationConvergence:
         # With the floor raised to 2, a PM that wants to converge on round 1 is forced to
         # record its challenge and the analyst must respond before convergence is honored —
         # no more round-1 rubber-stamp (#945).
-        monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "2")
+        monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "2")
         compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
 
@@ -424,7 +424,7 @@ class TestH6SelectionWiring:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
-        monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "2")
+        monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "2")
         compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
 

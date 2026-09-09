@@ -68,7 +68,7 @@ logger = logging.getLogger(__name__)
 
 
 def _data_tools_enabled() -> bool:
-    """Master kill-switch for tool grounding (env ATLAS_DATA_TOOLS, default on)."""
+    """Master kill-switch for tool grounding (env DIGIQUANT_RESEARCH_DATA_TOOLS, default on)."""
     return env_lookup(RESEARCH_DATA_TOOLS, default="1").strip().lower() not in ("0", "false", "")
 
 
@@ -99,7 +99,7 @@ _MACRO_STALE_DAYS_DEFAULT = 7
 as stale and fire the paid fallback. The freshest series are daily (VIXCLS, DFF,
 DGS10), so a healthy daily cron keeps the max obs_date within a normal market
 close gap (≤ a long holiday weekend); only a genuinely broken ingestion exceeds
-a week. Override via ``ATLAS_MACRO_STALE_DAYS``."""
+a week. Override via ``DIGIQUANT_MACRO_STALE_DAYS``."""
 
 
 def _macro_stale_days() -> int:
@@ -109,7 +109,7 @@ def _macro_stale_days() -> int:
             return max(0, int(raw))
         except ValueError:
             logger.warning(
-                "invalid ATLAS_MACRO_STALE_DAYS=%r; using default %d",
+                "invalid DIGIQUANT_MACRO_STALE_DAYS=%r; using default %d",
                 raw,
                 _MACRO_STALE_DAYS_DEFAULT,
             )
@@ -121,7 +121,7 @@ def _ingested_macro_stale(run_date: Any) -> bool:
 
     Returns ``True`` (→ use the paid fallback) unless the layer is *confirmed
     fresh*: the latest ``macro_series_observations.obs_date`` is within
-    ``ATLAS_MACRO_STALE_DAYS`` of ``run_date``. Every failure mode — kill-switch
+    ``DIGIQUANT_MACRO_STALE_DAYS`` of ``run_date``. Every failure mode — kill-switch
     off, no client, query error, empty table, unparseable/exotic ``run_date`` —
     fail-soft to ``True`` so a ``live_search_is_fallback`` segment never silently
     loses its grounding (Phase D capability guarantee). Only the confirmed-fresh
@@ -189,7 +189,7 @@ def build_grounding(
     tools — which is the Phase D cost cut. A stale/broken ingested layer still
     falls through to the paid call, so grounding is never silently dropped.
 
-    Honors the ``ATLAS_DATA_TOOLS`` kill-switch. Shared by ``build_segment_node``
+    Honors the ``DIGIQUANT_RESEARCH_DATA_TOOLS`` kill-switch. Shared by ``build_segment_node``
     and the bespoke phase nodes (equity / sectors) so the gating + wiring live in
     one place.
     """

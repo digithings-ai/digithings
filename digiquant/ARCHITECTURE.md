@@ -2427,11 +2427,11 @@ assuming it is always present.
   phase (`_run_terminal_phase`) so a late crash is recorded as a `PhaseError` and the run still
   reaches publish + materialize + the diagnostics write with last-good state. LLM usage is
   captured (`usage.start`/`snapshot`/`reset`) across the whole run.
-- `cli_main` exits non-zero when `is_degraded` (failed-segment share > `ATLAS_DEGRADED_RUN_PCT`,
+- `cli_main` exits non-zero when `is_degraded` (failed-segment share > `DIGIQUANT_DEGRADED_RUN_PCT`,
   default 50%) so CI's outer retry fires on a starved run — one bad sector does not trip it.
 - **Technicals freshness (Pillar 1F).** `data/prices/refresh.recompute_technicals_from_history`
   recomputes `price_technicals` from raw OHLCV in `price_history` (look-ahead-guarded,
-  network-free, idempotent). Preflight may call this when stale (`ATLAS_REFRESH_ON_DEMAND`).
+  network-free, idempotent). Preflight may call this when stale (`DIGIQUANT_REFRESH_ON_DEMAND`).
   The daily prices cron (`pipeline-digiquant-prices.yml`) is the primary freshness mechanism.
   Three contracts the recompute must honour (#1752):
   - **Read window ≠ write window.** The read spans `[write_start − warmup_days, as_of]`; only
@@ -3205,7 +3205,7 @@ detectable and is the only way a future collision would be visible.
   `RUN_DIAGNOSTICS_LIMIT` rose 30 → 90 because a retried date now consumes several slots.
 
 **Escalation rules on `status`** (each records itself in `breakdown.degraded_reasons`):
-any failed research segment (STRICT — supersedes the `ATLAS_DEGRADED_RUN_PCT` share rule for
+any failed research segment (STRICT — supersedes the `DIGIQUANT_DEGRADED_RUN_PCT` share rule for
 health purposes), more than `_PORTFOLIO_DEGRADED_PCT_DEFAULT` of the run's portfolio deliberations
 failed, and `research_produced and not book_committed` (the no-book gate — closes the
 residual detection hole behind #1766, which the #1555 commit gate misses because it only
