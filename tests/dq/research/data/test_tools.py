@@ -140,3 +140,25 @@ def test_query_data_description_mentions_house_workspace_default():
     description = query_data_tool["function"]["description"]
     assert "house workspace_id" in description
     assert "eq.workspace_id" in description
+
+
+@pytest.mark.unit
+def test_price_technicals_close_rejected_before_supabase():
+    """Requesting 'close' from price_technicals must fail fast with a redirect (#3078).
+
+    The column never existed there — letting it reach Supabase burns a tool
+    round on a 42703 and invites the model to retry the same doomed query.
+    """
+
+    class _ExplodingClient:
+        def table(self, *_args: object, **_kwargs: object) -> object:
+            raise AssertionError("must not reach Supabase")
+
+    dispatch = build_data_tool_dispatcher(_ExplodingClient())  # type: ignore[arg-type]
+    err = dispatch(
+        "query_data",
+        {"table": "price_technicals", "columns": "date,close,rsi_14", "eq": {"ticker": "SPY"}},
+    )
+    assert "Error" in err
+    assert "price_history" in err
+    assert "close" in err

@@ -1,0 +1,75 @@
+# Checkpoint payload archive: Supabase stays metadata-light, blobs live in R2 (#3761).
+#
+# Supabase `core` sits at 588MB / 500MB quota; ~200MB is LangGraph checkpoint
+# bytea across old run threads (price/macro/documents are already deduped —
+# no consolidation headroom). This job offloads finished threads' payloads to
+# Cloudflare R2 (verified by SHA-256 read-back), then NULLs the bytea cells.
+# Metadata rows stay; restore path is `restore_thread` in
+# digiquant/ops/checkpoint_archive.py.
+#
+# Schedule 13:30 UTC runs after the morning daily-pipeline window (crons at
+# :17 past 09–12 UTC) plus buffer, so the just-finished run's thread is left
+# alone by --retain-days 2 and only older threads archive.
+#
+# R2 prerequisites completed 2026-09-09 (issue #3761): R2 enabled, bucket
+# `digithings-archive` created, GH secrets R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/
+# R2_SECRET_ACCESS_KEY/R2_BUCKET present. Missing creds fail closed
+# (exit 2) — that is the production signal, not a skip.
+# CORE_SUPABASE_* (or SUPABASE_*) service-role creds follow the standard
+# execution-cron-check fallback chain.
+#
+# Installed at .github/workflows/pipeline-checkpoint-archive.yml — must match
+# this spec byte-for-byte (tests/scripts/test_checkpoint_archive_workflow.py).
+name: "Pipeline: checkpoint archive"
+
+on:
+  schedule:
+    - cron: "30 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checkpoint-archive
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install from lockfile
+        run: uv sync --frozen --package digiquant --extra research
+
+      - name: Archive checkpoint payloads older than 2 days
+        run: |
+          set -euo pipefail
+          uv run --frozen --no-sync python scripts/digiquant_archive_checkpoints.py \
+            --retain-days 2 \
+            --manifest-out /tmp/checkpoint-archive-manifests.json
+
+      - name: Upload manifests
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkpoint-archive-manifests
+          path: /tmp/checkpoint-archive-manifests.json
+          retention-days: 90

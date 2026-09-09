@@ -19,6 +19,7 @@ import {
   SMART_BIAS_SLUG,
   type SmartBiasJoinRow,
 } from './divergence';
+import { netCarriedIdeas } from './trade-history';
 import type {
   ConfluenceCatalyst,
   ConsensusDelta,
@@ -597,13 +598,13 @@ export async function getIdeaEval(): Promise<FxIdeaEvalRow[]> {
     sb
       .from('fx_idea_eval')
       .select(
-        'run_date, rank, horizon_days, pair, direction, status, entry_date, exit_date, entry_fix, exit_fix, ret, hold_return, sigma_entry, hit, directional_win, significant_hit, n_sessions, as_of',
+        'run_date, rank, horizon_days, pair, direction, status, entry_date, exit_date, entry_fix, exit_fix, ret, hold_return, sigma_entry, hit, directional_win, significant_hit, n_sessions, as_of, bias_verdict, max_favorable, max_adverse, decisive_session, entry_fill_session, stop_price, target_prices, level_outcome',
       )
       .eq('horizon_days', 0)
       .order('run_date', { ascending: true })
       .order('rank', { ascending: true }),
   );
-  return rows ?? [];
+  return netCarriedIdeas(rows ?? []);
 }
 
 /** Consensus jump + accuracy eval rows. Eval tables only — no core FX / raw PMT. */

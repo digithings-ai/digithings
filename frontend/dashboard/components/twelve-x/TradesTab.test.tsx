@@ -136,6 +136,21 @@ describe('TradesTab', () => {
     expect(html).not.toMatch(/<select[\s>]/);
     expect(html).not.toContain('<option value="all">All pairs</option>');
   });
+
+  it('renders a continuation marker for badged rows and nothing extra otherwise', () => {
+    const plain = renderToStaticMarkup(
+      createElement(TradesTab, { ideas, ideaEval }),
+    );
+    expect(plain).not.toContain('cont. since');
+
+    const badgedEval = ideaEval.map((r) =>
+      r.run_date === '2026-07-24' ? { ...r, continued_from: '2026-07-06', n_boards: 2 } : r,
+    );
+    const badged = renderToStaticMarkup(
+      createElement(TradesTab, { ideas, ideaEval: badgedEval }),
+    );
+    expect(badged).toContain('· cont. since 2026-07-06');
+  });
 });
 
 describe('formatBoardRangeLabel', () => {
