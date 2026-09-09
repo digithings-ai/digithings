@@ -552,7 +552,7 @@ preflight (freshness probe; no pre-loaded values)
   The digillm Exa `openrouter:web_search` server tool remains a **toolkit**
   fallback for non-native models and is **not** used by dashboard (#2567).
   Any search error degrades to ungrounded research (no crash).
-- **Env gate**: `ATLAS_DATA_TOOLS` (default on; set `0`/`false` to disable all tool grounding). If Supabase is unavailable, `build_grounding` degrades to tool-less rather than crashing the phase.
+- **Env gate**: `DIGIQUANT_RESEARCH_DATA_TOOLS` (default on; set `0`/`false` to disable all tool grounding). If Supabase is unavailable, `build_grounding` degrades to tool-less rather than crashing the phase.
 
 Function-tools and `response_format=json_schema` are mutually exclusive in one OpenAI-API call, so the structured-output contract is preserved by prompt + Pydantic validate-retry rather than by `response_format` on the tool path.
 

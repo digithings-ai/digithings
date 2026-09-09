@@ -11,7 +11,7 @@ from digiquant.research.phases import _node_factory
 
 @pytest.mark.unit
 def test_build_grounding_includes_research_tools(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
     monkeypatch.setattr(_node_factory, "_research_data_client", lambda: object())
 
     tools, execute_tool, _grounding = _node_factory.build_grounding(
@@ -30,7 +30,7 @@ def test_build_grounding_includes_research_tools(monkeypatch: pytest.MonkeyPatch
 
 @pytest.mark.unit
 def test_build_grounding_h5_blinds_portfolio_tool(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
     monkeypatch.setattr(_node_factory, "_research_data_client", lambda: object())
 
     tools, _execute, _ = _node_factory.build_grounding(

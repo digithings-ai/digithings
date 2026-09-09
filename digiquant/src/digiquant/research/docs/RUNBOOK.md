@@ -554,7 +554,7 @@ and since #1736 they legitimately disagree.
   honest reporting never triggers a retry storm. A day that lost 4 of 27 segments but
   committed its book is `status=degraded, degraded=false` and CI does **not** retry it.
 
-**`ATLAS_DEGRADED_RUN_PCT` has narrowed in meaning.** It no longer influences `status` (the
+**`DIGIQUANT_DEGRADED_RUN_PCT` has narrowed in meaning.** It no longer influences `status` (the
 STRICT rule above supersedes it); it now controls only *how much segment damage justifies a
 CI retry*. Raise it to make retries rarer, not to make the dashboard greener.
 

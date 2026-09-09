@@ -126,7 +126,7 @@ class TestH6AmendmentWiring:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
-        monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "1")
+        monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "1")
         store = EvidenceBundleStore()
         bundle_dump, evidence = _bundle_dump()
         store.append_base_bundle(TickerEvidenceBundle.model_validate(bundle_dump))
@@ -181,7 +181,7 @@ class TestH6AmendmentWiring:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
-        monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "1")
+        monkeypatch.setenv("DIGIQUANT_DELIBERATION_MIN_ROUNDS", "1")
         bundle_dump, _evidence = _bundle_dump()
         state = _state()
 
