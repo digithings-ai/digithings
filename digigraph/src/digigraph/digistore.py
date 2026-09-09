@@ -47,16 +47,31 @@ def digistore_put(session_id: str | None, name: str, rows: list[dict]) -> str:
     return str(path.resolve())
 
 
+def _session_dir(base: Path, session_id: str | None) -> Path:
+    """Resolved session root: ``{run_data_dir}/{sanitized_session_id}/``."""
+    return (base / _sanitize_session_id(session_id)).resolve()
+
+
+def _assert_under_session(path: Path, session_dir: Path) -> None:
+    """Reject refs that leave the caller's session (cross-session IDOR)."""
+    if not path.is_relative_to(session_dir):
+        raise ValueError("dataset_ref must be under the current session directory")
+
+
 def digistore_get(session_id: str | None, name_or_ref: str) -> Path:
     """
     Resolve name or path to absolute Path. Accepts logical name (e.g. search_1)
     or path (absolute or relative to session). Raises ValueError if not found or invalid.
+
+    Paths must stay under ``{run_data_dir}/{session_id}/`` — absolute refs and
+    ``../other_session/...`` relative walks that only clear the run-data root
+    are rejected (session-scoped contract).
     """
     root = get_run_data_dir()
     if not root:
         raise ValueError("run_data_dir not set; cannot resolve dataset_ref")
     base = Path(root).resolve()
-    safe_sid = _sanitize_session_id(session_id)
+    session_dir = _session_dir(base, session_id)
     ref = name_or_ref.strip()
     if not ref:
         raise ValueError("dataset_ref is empty")
@@ -65,6 +80,7 @@ def digistore_get(session_id: str | None, name_or_ref: str) -> Path:
         path = candidate.resolve()
         if not path.is_relative_to(base):
             raise ValueError("dataset_ref must be under run_data_dir")
+        _assert_under_session(path, session_dir)
         if not path.exists():
             raise ValueError(f"dataset_ref file not found: {path}")
         return path
@@ -72,18 +88,19 @@ def digistore_get(session_id: str | None, name_or_ref: str) -> Path:
     # Relative: try session/datasets/name.json then session/ref
     if "/" not in ref and "\\" not in ref:
         candidates = [
-            base / safe_sid / "datasets" / f"{ref}.json",
-            base / safe_sid / ref,
+            session_dir / "datasets" / f"{ref}.json",
+            session_dir / ref,
         ]
         for p in candidates:
             resolved = p.resolve()
-            if resolved.exists() and resolved.is_relative_to(base):
+            if resolved.exists() and resolved.is_relative_to(session_dir):
                 return resolved
         raise ValueError(f"dataset_ref not found: {ref}")
 
-    path = (base / safe_sid / ref).resolve()
+    path = (session_dir / ref).resolve()
     if not path.is_relative_to(base):
         raise ValueError("dataset_ref must be under run_data_dir")
+    _assert_under_session(path, session_dir)
     if not path.exists():
         raise ValueError(f"dataset_ref file not found: {path}")
     return path

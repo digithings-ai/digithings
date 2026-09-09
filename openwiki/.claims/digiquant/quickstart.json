@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:60d2aa7f6f90671e06d26b8e64419c0f774879c75b9fdd3c92cd8ab4f3a32650",
+  "claims": [
+    {
+      "id": "claim_3222a0f0c65e4db694483e0f9307034d",
+      "statement": "CLI smokes run backtest and optimize against CSV OHLCV data, the service verifies via /healthz, and unit tests run under pytest -m unit -k digiquant with ruff gates.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/AGENTS.md#L60-L90",
+          "version": "repo-lines-v1:sha256:446349b30e0478c0ee6d9c95f4a4ed6c84ce19c9e364c8af5567e1cbbdbeee06:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY5ZTIzNjZjOGY5NmVkNzk2ZDc5MjY0YWU1ZDdmNmViYWI0M2RhMDc0ODFjODU1OTIyYzY2YjUwODAyNjc1ZmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcxY2ZmYzUzNTY3MDY3YmI3NTM4MzIyMjViNGM4ZjRkNGZiZmJiYjc0ZWNmZDVmZjc5NjgzN2RkOGY4OWNjNDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMwZDRkYmE2OGExNjFkMmYyNTU0MjcyYWI3M2E3NGRmMmJlMzZlZjcwN2E4Y2NlODRjMGJjYzdiNGI3ZDBkMmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_db256c8802924b599fc8b9000b6f26d3",
+      "statement": "Linux hosts must avoid real BacktestEngine runs under pytest (SIGABRT #42) and must never touch brokers/ live-trading paths without a human gate, keeping pandas imports to the allowlist.",
+      "evidence": [
+        {
+          "resource": "repo://digiquant/AGENTS.md#L30-L60",
+          "version": "repo-lines-v1:sha256:30e499184003d8df152ed4a000b739844971bdb80224737b017e9145a6e1e230:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1ODJiOTE5MjQ2YjVhYzExNzcyYmZjZDY3YjY3OTNlYzQ4NzE2Zjk3ODY2YTdmM2Q5NTJlYThjNzcyOTk4MjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY5ZTIzNjZjOGY5NmVkNzk2ZDc5MjY0YWU1ZDdmNmViYWI0M2RhMDc0ODFjODU1OTIyYzY2YjUwODAyNjc1ZmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUwODY0NWRiNjJiZmIyZTExMjE5MThmMzAzZjZhODliZjMzNThlOTVlMWUxMTQ3MzFmZjNmZTA5MGYzYjhjZTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBkNzgwMDcwNzRhNDVlYjBlYWY5OWYyMzI1ZjYwMjViOGJkM2EzMDZkNjY4ZWNmNWFmZjY0Y2RkNDg0MDEwNmQifQ"
+        },
+        {
+          "resource": "repo://digiquant/ARCHITECTURE.md#L51-L53",
+          "version": "repo-lines-v1:sha256:c66e61b3f40288209b1da530af22ac9f317a082f5d675b7b9517808dce5e1554:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmE4Yzg2YjFhODM2NTE5N2RhZWJmYjY2ODVhZmVmNjdjNDFiMGY2ODUzYjJlOTQ1OWI1OWU1ZDc3ZTJhZTYyYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWMyM2Q0MDczNzA2ZDJhNTA1YmFiNDEyOTVjODM5OTQ4MWJjNjI1Nzc3OWI3MTllODhiYWMxODRhY2IwNzhmNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTIzZDc0NTkxMmM5MGI2YTJlZDc2NWE1OGJhZDlhODhkYjZhMWZmOGM1ZmJlODJlYWZjZWEzMDFjMTU5MzI3MyJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

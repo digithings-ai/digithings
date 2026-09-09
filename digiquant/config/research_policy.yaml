@@ -1,0 +1,55 @@
+# WP13.1 — versioned research attention policy (Phase 3).
+# Thresholds live here — not in planner source code.
+schema_version: 1
+policy_version: "2026-08-26"
+reason_priority:
+  - invalidation_risk
+  - conflict
+  - decision_boundary
+  - uncertainty
+  - material
+  - exploration
+  - force_full
+  - stale_content
+  - structured_delta
+  - triage_stale
+  - triage_quiet
+  - no_prior
+  - low_value_carry
+thresholds:
+  material_weight_pct: 5.0
+  boundary_price_delta: 0.02
+  boundary_conviction: 3
+  stale_days_full: 7
+exploration:
+  min_reserved_slots: 2
+session_budget:
+  max_provider_calls: 48
+  max_searches: 24
+  max_uncached_tokens: 120000
+mode_budgets:
+  carry:
+    provider_calls: 0
+    searches: 0
+    uncached_tokens: 0
+    min_h6_rounds: 0
+  metric_patch:
+    provider_calls: 0
+    searches: 0
+    uncached_tokens: 0
+    min_h6_rounds: 0
+  section_patch:
+    provider_calls: 2
+    searches: 1
+    uncached_tokens: 8000
+    min_h6_rounds: 0
+  challenge:
+    provider_calls: 4
+    searches: 2
+    uncached_tokens: 16000
+    min_h6_rounds: 2
+  deep_refresh:
+    provider_calls: 8
+    searches: 4
+    uncached_tokens: 32000
+    min_h6_rounds: 0

@@ -4,7 +4,7 @@
 Rules:
 - Project #1 (digithings) = ROOT: epics + cross-cutting tasks only.
 - Projects #2..#9 (module projects) = module-scoped issues.
-- Project #10 (sitaas) = SITAAS items.
+- Project #10 (client-pilot) = client pilot items.
 - Project #11 (maintenance) = tooling/CI/housekeeping (component:root + type:infra, non-epic).
 
 Operations per open issue:
@@ -206,7 +206,7 @@ def classify(issue):
     """Return (target_projects: set[int], reason: str)."""
     ls = set(issue["l"])
     is_epic = "epic" in ls
-    is_sitaas = "sitaas" in ls
+    is_client_pilot = "client-pilot" in ls
     is_infra = "type:infra" in ls
 
     # Primary module project
@@ -218,7 +218,7 @@ def classify(issue):
 
     targets = set()
 
-    if is_sitaas:
+    if is_client_pilot:
         targets.add(10)
 
     if is_epic:

@@ -68,6 +68,25 @@ def test_non_agent_branch_passes_when_all_checks_green(monkeypatch: pytest.Monke
     assert "all checks SUCCESS" in reason
 
 
+def test_score_check_is_ignored_for_agent_and_non_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``score / score`` is advisory (#3528) — must not block merge-when-ready."""
+    assert "score / score" in apc.IGNORED_CHECK_NAMES
+    monkeypatch.setattr(
+        apc,
+        "_gh_json",
+        lambda *a: [
+            {"name": "Required checks passed", "state": "SUCCESS"},
+            {"name": "score / score", "state": "FAILURE"},
+        ],
+    )
+    ok_agent, reason_agent = apc.agent_checks_ok("org/repo", 5, "task/3528-slug", "abc")
+    assert ok_agent is True, reason_agent
+    ok_human, reason_human = apc.agent_checks_ok("org/repo", 5, "chore/promote", "abc")
+    assert ok_human is True, reason_human
+
+
 @pytest.mark.parametrize("branch", ["task/99-slug", "claude/work", "cursor/x", "bot/y"])
 def test_agent_branch_fails_on_any_non_success_check(
     branch: str, monkeypatch: pytest.MonkeyPatch

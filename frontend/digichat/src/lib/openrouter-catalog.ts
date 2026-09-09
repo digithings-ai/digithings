@@ -81,12 +81,7 @@ function supportsTools(entry: OpenRouterCatalogEntry): boolean {
 /** Bucket a live OpenRouter catalog into the BYOK picker's tiers. Caps total entries
  * processed — anything beyond the cap is silently dropped, never processed or returned
  * (see the design spec's Security considerations on unbounded response handling). */
-export function bucketOpenRouterModels(entries: readonly OpenRouterCatalogEntry[]): {
-  free: ByokModelOption[];
-  opensource: ByokModelOption[];
-  flagship: ByokModelOption[];
-  all: ByokModelOption[];
-} {
+export function bucketOpenRouterModels(entries: readonly OpenRouterCatalogEntry[]): OpenRouterCatalogBuckets {
   const capped = entries.slice(0, OPENROUTER_CATALOG_ENTRY_CAP);
   const all: ByokModelOption[] = [];
   const free: ByokModelOption[] = [];
@@ -107,3 +102,10 @@ export function bucketOpenRouterModels(entries: readonly OpenRouterCatalogEntry[
   }
   return { free, opensource, flagship, all };
 }
+
+export type OpenRouterCatalogBuckets = {
+  free: ByokModelOption[];
+  opensource: ByokModelOption[];
+  flagship: ByokModelOption[];
+  all: ByokModelOption[];
+};

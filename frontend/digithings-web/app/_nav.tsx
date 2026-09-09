@@ -38,6 +38,7 @@ export const Brand = () => (
 export const DT_NAV_PRIMARY: NavItem[] = [
   { label: "Docs", href: "/docs" },
   { label: "API", href: "/docs/api" },
+  { label: "Wiki", href: "/openwiki" },
   { label: "Architecture", href: "/#architecture" },
   { label: "Services", href: "/services" },
   {
@@ -47,6 +48,7 @@ export const DT_NAV_PRIMARY: NavItem[] = [
       { label: "Team", href: "/team" },
       { label: "Security", href: "/security" },
       { label: "Quality", href: "/quality" },
+      { label: "Changelog", href: "/changelog" },
     ],
   },
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
@@ -56,16 +58,19 @@ export const DT_NAV_PRIMARY: NavItem[] = [
  *  is where the long tail lives: the company pages and the website privacy
  *  notice. Software use is governed by the repository's MIT licence; paid
  *  services use their own signed agreement, so neither needs generic site
- *  terms. */
+ *  terms. Company profiles (GitHub, X, LinkedIn) are the shared <SocialRow/>,
+ *  slotted through <DtFooter/>, not a Connect column here. */
 export const DT_FOOTER: NavLink[] = [
   { label: "Architecture", href: "/#architecture" },
   { label: "Docs", href: "/docs" },
   { label: "API", href: "/docs/api" },
+  { label: "Wiki", href: "/openwiki" },
   { label: "Services", href: "/services" },
   { label: "About", href: "/about" },
   { label: "Team", href: "/team" },
   { label: "Security", href: "/security" },
   { label: "Quality", href: "/quality" },
+  { label: "Changelog", href: "/changelog" },
   { label: "Contact", href: "/#contact" },
   { label: "digichat", href: "/chat" },
   { label: "Privacy", href: "/legal/privacy" },

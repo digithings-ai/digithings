@@ -250,7 +250,7 @@ a{color:inherit; text-decoration:none}
           <span class="blk">research to execution,</span>
           <span class="blk">on rails you own.</span>
         </h1>
-        <p class="lede">digiquant runs the full loop on <b>NautilusTrader</b>: <b>Atlas</b> reads the tape, <b>Hermes</b> sizes conviction, <b>Kairos</b> executes — every signal auditable, nothing live without a human gate.</p>
+        <p class="lede">digiquant runs the full loop on <b>NautilusTrader</b>: <b>research</b> reads the tape, <b>portfolio</b> sizes conviction, <b>execution</b> executes — every signal auditable, nothing live without a human gate.</p>
         <div class="hero-cta">
           <button class="btn solid">Start a backtest</button>
           <button class="btn">See the pipeline →</button>
@@ -282,15 +282,15 @@ a{color:inherit; text-decoration:none}
       <div class="pipe-left reveal from-left">
         <div class="sec-eyebrow">The pipeline</div>
         <h2 class="sec-title">One auditable loop:<br>research → conviction → fill.</h2>
-        <p class="sec-sub">The same surface you run in Olympus. Click a stage to read what the desk is thinking right now.</p>
+        <p class="sec-sub">The same surface you run in dashboard. Click a stage to read what the desk is thinking right now.</p>
         <div class="stages" id="stages"></div>
       </div>
       <div class="reader reveal" id="reader">
-        <div class="reader-bar"><span class="who" id="readerWho">ATLAS · research</span><span id="readerTs">live · 00:41</span></div>
+        <div class="reader-bar"><span class="who" id="readerWho">RESEARCH · research</span><span id="readerTs">live · 00:41</span></div>
         <div class="reader-body" id="readerBody"></div>
       </div>
     </div>
-    <p class="note">// REAL BUILD: mount the live Olympus research-pipeline component + stream notes from Supabase — do not duplicate.</p>
+    <p class="note">// REAL BUILD: mount the live dashboard research-pipeline component + stream notes from Supabase — do not duplicate.</p>
   </div>
 </section>
 
@@ -303,7 +303,7 @@ a{color:inherit; text-decoration:none}
       <p class="sec-sub">Live books across crypto, futures and metals. Click any row — the tearsheet slides in with the price path and the last fills marked.</p>
     </div>
     <div class="strat-list reveal" id="stratList"></div>
-    <p class="note">// REAL BUILD: rows + tearsheet reuse the Olympus strategy components; price + trades from the price-table pipeline and portfolio returns.</p>
+    <p class="note">// REAL BUILD: rows + tearsheet reuse the dashboard strategy components; price + trades from the price-table pipeline and portfolio returns.</p>
   </div>
 </section>
 
@@ -455,18 +455,18 @@ addEventListener('resize', ()=>{ initHero(); drawCk(); });
 
 /* ---------- PIPELINE stages + live research ---------- */
 const STAGES=[
-  {who:'ATLAS · research', ix:'01', name:'Atlas', tag:'research', blurb:'Reads the tape, fundamentals and prior theses into ranked signals.',
+  {who:'RESEARCH · research', ix:'01', name:'research', tag:'research', blurb:'Reads the tape, fundamentals and prior theses into ranked signals.',
    note:{h:'BTCUSDT — momentum regime confirmed', meta:'thesis #4821 · confidence 0.71 · 12 sources',
      kv:[['Regime','trending / high-vol'],['Edge','funding + basis carry'],['Horizon','3–8 sessions']],
      body:['Spot–perp basis widened to <em>+34bp</em> while funding stayed positive across the last 9 windows — historically a continuation tell, not exhaustion.','Cross-checked against the 2021 and 2024 analogues; drawdown risk concentrated in the 4h liquidation band near 61.2k.']}},
-  {who:'HERMES · deliberation', ix:'02', name:'Hermes', tag:'sizing',  blurb:'Debates Atlas’ theses, sizes conviction, sets risk budget.',
+  {who:'PORTFOLIO · deliberation', ix:'02', name:'portfolio', tag:'sizing',  blurb:'Debates research’ theses, sizes conviction, sets risk budget.',
    note:{h:'Position sizing — BTCUSDT long', meta:'deliberation #2207 · 3 agents · gate: pending',
      kv:[['Kelly (capped)','0.18'],['Vol target','12% ann.'],['Max loss','1.4% NAV']],
      body:['Two of three deliberators favour a half-Kelly entry; the dissent flags correlated exposure with the ETH carry book.','Resolved by trimming notional <em>22%</em> and staging entries — risk budget held under the portfolio ceiling.']}},
-  {who:'KAIROS · execution', ix:'03', name:'Kairos', tag:'execution', blurb:'Times and routes the fill on NautilusTrader — after the human gate.',
+  {who:'EXECUTION · execution', ix:'03', name:'execution', tag:'execution', blurb:'Times and routes the fill on NautilusTrader — after the human gate.',
    note:{h:'Execution plan — staged limit', meta:'order #88-3a · venue: Binance · human gate ✓',
      kv:[['Style','passive → aggress'],['Slices','4 × 25%'],['Slippage est.','3.1 bp']],
-     body:['Awaiting human approval before working the first slice; once gated, Kairos posts passive inside the spread and escalates only if the book thins.','Every child order is logged with parent thesis #4821 for a full audit trail.']}},
+     body:['Awaiting human approval before working the first slice; once gated, execution posts passive inside the spread and escalates only if the book thins.','Every child order is logged with parent thesis #4821 for a full audit trail.']}},
 ];
 const stagesEl=document.getElementById('stages');
 STAGES.forEach((s,i)=>{

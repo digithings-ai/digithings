@@ -2,10 +2,12 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { GET } from "./route";
 import { DATATAPSTREAM_SUGGESTION_POOL } from "@/lib/embed-suggestion-pools";
 import { resetEmbedTenantRegistryForTests } from "@/lib/embed-tenants";
+import { resetDigichatConfigForTests } from "@/lib/deploy-config/loader";
 
 afterEach(() => {
   vi.unstubAllEnvs();
   resetEmbedTenantRegistryForTests();
+  resetDigichatConfigForTests();
 });
 
 const REGISTRY = JSON.stringify({
@@ -43,14 +45,18 @@ describe("GET /api/embed/tenant-config", () => {
       slug: "datatapstream",
       gateMode: "ungated",
       theme: "light",
+      skin: "base",
       accent: { color: "#b5562b", foreground: "#fff7f2" },
       attribution: true,
       suggestions: [...DATATAPSTREAM_SUGGESTION_POOL],
       showByok: false,
       layout: "embed",
       showLanguageSelector: true,
+      webSearch: false,
+      backendType: "foundry",
     });
     expect(JSON.stringify(body)).not.toContain("example.services.ai.azure.com");
+    expect(JSON.stringify(body)).not.toContain("datatapstream-secret");
   });
 
   it("returns legacy defaults for a registered host when the token is missing (#1339)", async () => {
@@ -66,11 +72,13 @@ describe("GET /api/embed/tenant-config", () => {
       slug: "embed",
       gateMode: "turn_limited",
       theme: "dark",
+      skin: "base",
       accent: null,
       attribution: false,
       showByok: false,
       layout: "embed",
       showLanguageSelector: false,
+      webSearch: false,
     });
   });
 
@@ -80,11 +88,13 @@ describe("GET /api/embed/tenant-config", () => {
       slug: "embed",
       gateMode: "turn_limited",
       theme: "dark",
+      skin: "base",
       accent: null,
       attribution: false,
       showByok: false,
       layout: "embed",
       showLanguageSelector: false,
+      webSearch: false,
     });
   });
 
@@ -111,6 +121,7 @@ describe("GET /api/embed/tenant-config", () => {
     const body = await res.json();
     expect(body.slug).toBe("digithings");
     expect(body.gateMode).toBe("ungated");
+    expect(body.skin).toBe("digichat");
   });
 
   it("projects showByok, layout to the client body", async () => {

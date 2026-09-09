@@ -17,7 +17,7 @@ export function SignalDelayChip({
   if (!days || days <= 0) return null;
   const unit = days === 1 ? "day" : "days";
   const label = detail === "full" ? `Signals delayed ${days} ${unit}` : `Signals +${days}d delayed`;
-  const tip = `Live signals are delayed ${days} ${unit}`;
+  const tip = `Signals are delayed ${days} ${unit} (backtest; not a live strategy)`;
   return (
     <span
       className={"ts-chip" + (className ? ` ${className}` : "")}

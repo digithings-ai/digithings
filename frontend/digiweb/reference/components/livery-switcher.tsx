@@ -71,7 +71,7 @@ export function LiverySwitcher() {
       <div className="mt-[1.2rem]">
         <m.div
           key={active}
-          className="flex flex-wrap items-center gap-y-[0.9rem] gap-x-[1.4rem] rounded-[12px] border border-hair bg-surface p-[1.2rem]"
+          className="flex flex-wrap items-center gap-y-[0.9rem] gap-x-[1.4rem] rounded-none border border-hair bg-surface p-[1.2rem]"
           initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}

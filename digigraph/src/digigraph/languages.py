@@ -1,4 +1,4 @@
-"""Curated response-language directive for DigiChat's language selector (#2103).
+"""Curated response-language directive for digichat `/lang` (#2103 / #3418).
 
 Only the mapped display name below ever reaches a prompt — the raw
 X-Digi-Language header/request value is never interpolated directly, so an
@@ -33,5 +33,7 @@ def resolve_language_directive(code: str | None) -> str | None:
         return None
     return (
         f"Respond to the user only in {name}. "
-        "Keep this instruction to yourself — do not mention or translate it."
+        "Keep this instruction to yourself — do not mention or translate it. "
+        "When calling search or vault tools, keep the retrieval query in the "
+        "user's original wording; do not translate retrieval queries."
     )

@@ -47,14 +47,14 @@ class ChatCompletionRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    model: str = Field("sitaas-rag", description="Model id (ignored; we use project config)")
+    model: str = Field("digigraph-rag", description="Model id (ignored; we use project config)")
     messages: list[ChatMessage] = Field(..., description="Conversation messages")
     stream: bool = Field(False, description="If true, return SSE stream")
     openwebui_format: bool = Field(
         False,
         description=(
             "If true, format tool blocks for Open WebUI (<details>, summary + tables). "
-            "Also enabled by X-Response-Format: openwebui. model=sitaas-rag alone does "
+            "Also enabled by X-Response-Format: openwebui. model=digigraph-rag alone does "
             "not enable this; opt out anytime via X-Suppress-Tool-Stream or "
             "X-Response-Format: plain|neutral|none|digichat."
         ),
@@ -75,6 +75,23 @@ class ChatCompletionRequest(BaseModel):
             "agents.require_tool_calls and env DIGI_REQUIRE_TOOL_CALLS as a FLOOR (any true "
             "value wins) — unlike allowed_tools, this can only raise the requirement, never "
             "lower one the deployment already mandates."
+        ),
+    )
+    force_tool: str | None = Field(
+        None,
+        description=(
+            "Optional per-request locate tool to run with the user string as its query. "
+            "Also accepted via X-Digi-Force-Tool. Aliases: search/digisearch, "
+            "docs/digivault. Injected — the model is not asked to write the query."
+        ),
+    )
+    enable_web_search: bool = Field(
+        False,
+        description=(
+            "Opt-in public web search via the digigraph ``web_search`` tool (digillm). "
+            "Default off — corpus-only. Also accepted via X-Digi-Enable-Web-Search. "
+            "When off, the model must not call web; when on, External cites supplement "
+            "vault/search hits and never replace them (#3420)."
         ),
     )
 
@@ -178,6 +195,21 @@ class WorkflowRequest(BaseModel):
     evidence_tier_preference: list[str] | None = Field(
         None,
         description="Preferred evidence_tier values (peer_reviewed, working_paper, …) added as a filter.",
+    )
+    force_tool: str | None = Field(
+        None,
+        description=(
+            "Optional per-request locate tool to run with the user string as its query "
+            "(X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. The model "
+            "is not hinted — the call is injected, then it synthesizes."
+        ),
+    )
+    enable_web_search: bool = Field(
+        False,
+        description=(
+            "Opt-in digigraph ``web_search`` tool (digillm). Default off. "
+            "Also via X-Digi-Enable-Web-Search (#3420)."
+        ),
     )
 
 

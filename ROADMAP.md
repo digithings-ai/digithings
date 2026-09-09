@@ -14,14 +14,14 @@ Component foundations in place:
 - **Verticals:** digisearch (RAG, ingest, search backends), digiquant (NautilusTrader backtest/optimize, Polars-only).
 - **Platform:** Docker Compose core stack, LiteLLM proxy, digismith health/`/v1/status`, optional digichat (Postgres + Next.js BFF).
 - **MCP:** digigraph, digiquant, digisearch MCP servers for IDE and external clients.
-- **First pilot:** SITAAS (projects/sitaas/) running digigraph + digisearch against an Azure AI Search unified-content index.
+- **First pilot:** the client pilot (projects/client-pilot/) running digigraph + digisearch against an Azure AI Search unified-content index.
 
 ## Phase 2 — hardening + project spec (in progress)
 
 Goal: make the ecosystem **production-credible** and **project-composable**.
 
 - **Hardening pass (cold review)** — security audit, dead-code removal, type-checking, test coverage gaps, dependency bump. Informed by `docs/CODE_REVIEW_BASELINE.md` and `docs/IMPROVEMENT_PLAN.md`.
-- **digithings Project Spec v1alpha1** — formalize SITAAS pattern (see [ADR-0001](docs/adr/0001-project-spec.md)): `digiproject.yaml` + `docker-compose.yml` + `.env.example` as the unit of a client engagement. Refactor SITAAS to the formal spec; ship `projects/template/` starter.
+- **digithings Project Spec v1alpha1** — formalize the client pilot pattern (see [ADR-0001](docs/adr/0001-project-spec.md)): `digiproject.yaml` + `docker-compose.yml` + `.env.example` as the unit of a client engagement. Refactor the client pilot to the formal spec; ship `projects/template/` starter.
 - **Observability:** Prometheus-friendly metrics, centralized dashboards; digisearch audit sink alignment.
 - **digigraph:** Auth-bound checkpoints, per-key RBAC, optional `X-Digi-Tenant` routing.
 - **digikey:** Production revocation via Redis `jti` blocklist (`DIGIKEY_BLOCKLIST_REDIS_URL`); multi-tenant RBAC remains Phase 2+.
@@ -37,25 +37,25 @@ See [ADR-0002: Domain Unification](docs/adr/0002-domain-unification.md) for the 
 - **Phase 3a** — consolidate current frontends under `digithings.ai` + `digithings.ai/chat`. Add "Chat with digithings" CTA.
 - **Phase 3b** — digichat as ecosystem guide. Build digisearch index over digithings docs; wire to digigraph; add bring-your-own-key flow in `digithings.ai/chat`.
 - **Phase 3c** — stand up `digiquant.io` domain, minimal digiquant product UI.
-- **SITAAS Phase 2** — deliver POC improvements (see `projects/sitaas/IMPROVEMENT_IDEAS.md`): surface stored_datasets to LLM, orchestrator list/profile tools, ECharts rendering, search quality improvements.
+- **Client Pilot Phase 2** — deliver POC improvements (see `projects/client-pilot/IMPROVEMENT_IDEAS.md`): surface stored_datasets to LLM, orchestrator list/profile tools, ECharts rendering, search quality improvements.
 
-## Phase 4 — Atlas on digigraph
+## Phase 4 — research on digigraph
 
-Goal: Atlas research engine runs on the digithings stack.
+Goal: research engine runs on the digithings stack.
 
-- Define Atlas research outputs as Pydantic models (analyst → PM hand-off, asset allocations, narrative bias).
-- Implement Atlas research subgraph in digigraph.
-- Migrate Atlas frontend to consume digigraph API; deploy at `digiquant.io/atlas`.
+- Define research outputs as Pydantic models (analyst → PM hand-off, asset allocations, narrative bias).
+- Implement research subgraph in digigraph.
+- Migrate research frontend to consume digigraph API; deploy at `digiquant.io/research`.
 - DB persistence layer for research runs (digibase credential broker likely first real customer).
 
-## Phase 5 — Atlas tiering & execution
+## Phase 5 — research tiering & execution
 
-Goal: turn Atlas into a product with free + paid tiers and a path from research → execution.
+Goal: turn research into a product with free + paid tiers and a path from research → execution.
 
 - **Free tier:** daily batch research per domain with analyst/PM agent deliberation; shared outputs.
 - **Paid tier:** user-level investment preferences, prompts, domains, portfolio tracking.
-- **Atlas-embedded digichat** — in-product navigation + research Q&A.
-- **Execution layer** — Atlas research biases feed digiquant strategy parameters; human gate before any live trade (non-negotiable).
+- **research-embedded digichat** — in-product navigation + research Q&A.
+- **Execution layer** — research biases feed digiquant strategy parameters; human gate before any live trade (non-negotiable).
 
 ## Phase 6 — platform roadmap
 

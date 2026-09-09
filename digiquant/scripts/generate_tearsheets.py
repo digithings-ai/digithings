@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
 """Generate TradingView-faithful tearsheets via the NautilusTrader engine.
 
-This is the digiquant flagship path for the Slapper family (BTC/ETH/SOL):
+This is the digiquant flagship path for published strategies:
 
     Coinbase OHLCV cache
-      → NautilusTrader backtest (digiquant.strategies.SlapperStrategy)
-      → round-trip trades from the engine's positions report
+      → (SDCA: materialize risk-index parquet from this same frame)
+      → NautilusTrader backtest
+      → round-trip trades from the engine's positions report (Slapper)
       → TradingView-style percent-of-equity compounding equity curve
-      → All / Long / Short performance summary
       → TearsheetData JSON in frontend/digiquant-web/public/strategies/
+
+``settings.json`` ``strategy_type`` selects the family (``slapper`` default,
+``sdca`` for ``btc_sdca``). Slapper calibrations stay in gitignored
+``calibrations.json``; SDCA records the coefficients file + preset in notes
+and does not use that gate.
 
 Structural config (symbol, capital, sizing, trade window, precision) comes from
 the PUBLIC ``strategies/settings.json``; indicator calibrations come from the
 gitignored ``calibrations.json``. The trade window (``trade_start``) is enforced
-inside the strategy, so warmup uses earlier bars while reported trades match the
-TradingView Strategy Tester window.
+inside Slapper (warmup bars, reported trades match TradingView). SDCA builds
+the risk index on the full delayed cache, then feeds Nautilus only bars from
+``trade_start`` so the spot cash book starts at ``initial_cash`` in that window.
 
 Each strategy's backtest runs in its own spawned process: NautilusTrader's Rust
 logging can only initialize once per process, so a second in-process
@@ -30,11 +36,13 @@ log, open-position state, and headline metrics are self-consistent by
 construction and none of them can leak the live position. Payloads declare the
 lag via ``signal_delay_days``.
 
-Usage:
-    python scripts/generate_tearsheets.py
-    python scripts/generate_tearsheets.py --strategy eth_slapper
-    python scripts/generate_tearsheets.py --cache-dir digiquant/data/price-history
-    python scripts/generate_tearsheets.py --signal-delay-days 3
+Usage (from repo root — same cwd as the nightly workflow):
+    python digiquant/scripts/generate_tearsheets.py
+    python digiquant/scripts/generate_tearsheets.py --strategy btc_sdca --cache-dir digiquant/data/price-history
+    python digiquant/scripts/generate_tearsheets.py --signal-delay-days 3
+    # Operator-only (not this environment): --push-supabase after a real run.
+    # Default cache is absolute under digiquant/data/price-history; --cache-dir is
+    # only needed to override (relative paths are cwd-relative).
 """
 
 from __future__ import annotations
@@ -45,6 +53,7 @@ import logging
 import multiprocessing
 import signal
 import sys
+from datetime import date as date_cls
 from datetime import timedelta
 from decimal import Decimal
 from multiprocessing.connection import Connection
@@ -54,6 +63,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import polars as pl
 
+    from digiquant.strategies.sdca.composite_risk import IndicatorWeight
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -61,6 +72,8 @@ logger = logging.getLogger(__name__)
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DIGIQUANT_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_STRATEGIES = REPO_ROOT / "frontend" / "digiquant-web" / "public" / "strategies"
+# Must match fetch_coinbase / export_sdca_macro (ROOT = digiquant/). Repo-root
+# data/price-history is a different tree — #3472 / run 33705882823.
 DEFAULT_CACHE = DIGIQUANT_ROOT / "data" / "price-history"
 SETTINGS_PATH = DIGIQUANT_ROOT / "src" / "digiquant" / "strategies" / "settings.json"
 CALIBRATIONS_PATH = DIGIQUANT_ROOT / "src" / "digiquant" / "strategies" / "calibrations.json"
@@ -79,6 +92,74 @@ _PUBLISHED_BASELINE: dict[str, dict[str, float | int]] = {
 
 def load_settings() -> dict:
     return json.loads(SETTINGS_PATH.read_text())
+
+
+def strategy_type_of(settings: dict, strategy: str) -> str:
+    """Family selector (#3170). Missing field inherits defaults.strategy_type, then slapper."""
+    entry = settings["strategies"][strategy]
+    default = settings.get("defaults", {}).get("strategy_type", "slapper")
+    return str(entry.get("strategy_type") or default or "slapper")
+
+
+def catalog_row_from_settings(settings: dict, strategy: str) -> dict:
+    """Public ``strategies`` registry row. Required FK parent of ``strategy_tearsheets``.
+
+    Slapper rows were uploaded once via ``sync_strategy_calibrations.py``. SDCA has
+    no private calibrations, so that script never inserted ``btc_sdca`` and the
+    nightly upsert 409'd (#3453). Push must ensure this row first.
+    """
+    entry = settings["strategies"][strategy]
+    defaults = settings.get("defaults", {})
+    return {
+        "id": strategy,
+        "symbol": entry["symbol"],
+        "label": entry.get("label", strategy),
+        "engine": "nautilus",
+        "config": {
+            "kind": entry.get("kind", "long_short"),
+            "strategy_type": strategy_type_of(settings, strategy),
+            "trade_start": defaults.get("trade_start"),
+            "initial_capital": defaults.get("initial_capital"),
+            "size_pct_equity": defaults.get("size_pct_equity"),
+        },
+        "enabled": True,
+    }
+
+
+def materialize_sdca_risk_index(
+    ohlcv: pl.DataFrame,
+    output_path: Path,
+    *,
+    coefficients_path: Path | None = None,
+    extra_indicators: list[IndicatorWeight] | None = None,
+    valuation_weight: float = 1.0,
+) -> pl.DataFrame:
+    """Build the SDCA ``risk_path`` parquet from *this* OHLCV frame only (#1462).
+
+    Callers must pass the already-``apply_signal_delay()``-truncated frame so
+    the index cannot leak bars beyond the published window. Default
+    ``valuation_weight=1`` and no extras matches the catalog model default.
+    Published ``btc_sdca`` extras come from ``settings.json``.
+    """
+    import polars as pl
+
+    from digiquant.strategies.sdca.btc_power_law import BtcPowerLawRiskModel, load_coefficients
+    from digiquant.strategies.sdca.risk_index import build_risk_index, write_risk_index
+
+    ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
+    dates = ohlcv[ts_col]
+    if dates.dtype != pl.Date:
+        dates = dates.cast(pl.Date)
+    model = BtcPowerLawRiskModel(load_coefficients(coefficients_path))
+    index = build_risk_index(
+        dates,
+        ohlcv["close"],
+        model,
+        extra_indicators=extra_indicators,
+        valuation_weight=valuation_weight,
+    )
+    write_risk_index(index, output_path)
+    return index
 
 
 def apply_signal_delay(ohlcv: pl.DataFrame, signal_delay_days: int) -> pl.DataFrame:
@@ -103,6 +184,27 @@ def apply_signal_delay(ohlcv: pl.DataFrame, signal_delay_days: int) -> pl.DataFr
     ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
     cutoff = ohlcv[ts_col].max() - timedelta(days=signal_delay_days)
     return ohlcv.filter(pl.col(ts_col) <= cutoff)
+
+
+def window_ohlcv_to_trade_start(ohlcv: pl.DataFrame, trade_start: str) -> pl.DataFrame:
+    """Drop bars before the published trade window.
+
+    Risk-index construction keeps the full delayed cache (power-law rails need
+    history). The Nautilus spot book starts at ``trade_start`` with
+    ``initial_cash`` so lump/flat comparisons share that window.
+    """
+    import polars as pl
+
+    if not trade_start or ohlcv.is_empty():
+        return ohlcv
+    ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
+    cutoff = date_cls.fromisoformat(trade_start)
+    dtype = ohlcv[ts_col].dtype
+    if dtype == pl.Date:
+        return ohlcv.filter(pl.col(ts_col) >= cutoff)
+    if dtype == pl.Datetime or isinstance(dtype, pl.Datetime):
+        return ohlcv.filter(pl.col(ts_col).cast(pl.Date) >= cutoff)
+    return ohlcv.filter(pl.col(ts_col).cast(pl.Utf8).str.slice(0, 10) >= trade_start)
 
 
 def _mult(direction: str, entry_price: float, price: float) -> float:
@@ -189,13 +291,16 @@ def _avg_trade_pct(trades: list[dict]) -> float:
 def run_nautilus(
     strategy: str, symbol: str, ohlcv, settings: dict, calibration: dict | None = None
 ):
-    """Run the Nautilus backtest; return (positions_report_df, bars_list, ohlc_bars, signal_log).
+    """Run the Nautilus backtest; return (positions, bars_list, ohlc_bars, signal_log, fills_report).
 
     ``bars_list`` is [(date_str, close_float), ...] for the mark-to-market curve.
     ``ohlc_bars`` is [(date_str, o, h, l, c), ...] for the candlestick chart.
     ``signal_log`` maps (entry_date, direction) -> signal type recorded by the
     strategy on entry ("mean_reversion"/"trend"/"trend+mr"/"reversal"); may be
     empty for strategies that do not populate ``_signal_log``.
+    ``fills_report`` is ``trader.generate_fills_report()`` (pandas, Nautilus
+    boundary) so the SDCA publish path can derive schema 1.3 metrics from
+    fills rather than ``SdcaBacktestReport``.
     """
     from datetime import datetime, timezone
 
@@ -206,14 +311,17 @@ def run_nautilus(
     from nautilus_trader.model.data import Bar
     from nautilus_trader.model.enums import AccountType, OmsType
     from nautilus_trader.model.identifiers import InstrumentId
-    from nautilus_trader.model.instruments import CryptoPerpetual
+    from nautilus_trader.model.instruments import CryptoPerpetual, CurrencyPair
     from nautilus_trader.model.objects import Currency, Money, Price, Quantity
 
     from digiquant.strategies import get_strategy
+    from digiquant.strategies.registry import config_declares_field
 
     d = settings["defaults"]
+    family = strategy_type_of(settings, strategy)
     venue_name = "SIM"
     base_ccy = symbol.split("-")[0]
+    quote_ccy = Currency.from_str(str(d.get("quote_currency", "USD")))
 
     ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
     ts_vals = ohlcv[ts_col].to_list()
@@ -231,30 +339,67 @@ def run_nautilus(
 
     price_prec = int(d.get("price_precision", 2))
     size_prec = int(d.get("size_precision", 8))
-    inst = CryptoPerpetual(
-        instrument_id=InstrumentId.from_str(f"{symbol}.{venue_name}"),
-        raw_symbol=ids.Symbol(symbol),
-        base_currency=Currency.from_str(base_ccy),
-        quote_currency=USD,
-        settlement_currency=USD,
-        is_inverse=False,
-        price_precision=price_prec,
-        size_precision=size_prec,
-        price_increment=Price.from_str(f"{10**-price_prec:.{price_prec}f}"),
-        size_increment=Quantity.from_str(f"{10**-size_prec:.{size_prec}f}"),
-        max_quantity=None,
-        min_quantity=Quantity.from_str(f"{10**-size_prec:.{size_prec}f}"),
-        max_notional=None,
-        min_notional=None,
-        max_price=None,
-        min_price=None,
-        margin_init=Decimal("0"),
-        margin_maint=Decimal("0"),
-        maker_fee=Decimal("0"),
-        taker_fee=Decimal("0"),
-        ts_event=0,
-        ts_init=0,
-    )
+    price_inc = Price.from_str(f"{10**-price_prec:.{price_prec}f}")
+    size_inc = Quantity.from_str(f"{10**-size_prec:.{size_prec}f}")
+    inst_id = InstrumentId.from_str(f"{symbol}.{venue_name}")
+    raw_symbol = ids.Symbol(symbol)
+    if family == "sdca":
+        # Spot cash book: buy remaining cash / sell remaining holdings.
+        # Slapper keeps the margin perpetual venue unchanged.
+        inst = CurrencyPair(
+            instrument_id=inst_id,
+            raw_symbol=raw_symbol,
+            base_currency=Currency.from_str(base_ccy),
+            quote_currency=quote_ccy,
+            price_precision=price_prec,
+            size_precision=size_prec,
+            price_increment=price_inc,
+            size_increment=size_inc,
+            lot_size=None,
+            max_quantity=None,
+            min_quantity=size_inc,
+            max_notional=None,
+            min_notional=None,
+            max_price=None,
+            min_price=None,
+            margin_init=Decimal("0"),
+            margin_maint=Decimal("0"),
+            maker_fee=Decimal("0"),
+            taker_fee=Decimal("0"),
+            ts_event=0,
+            ts_init=0,
+        )
+        account_type = AccountType.CASH
+        venue_base = None
+        start_money = Money(d["initial_capital"], quote_ccy)
+    else:
+        inst = CryptoPerpetual(
+            instrument_id=inst_id,
+            raw_symbol=raw_symbol,
+            base_currency=Currency.from_str(base_ccy),
+            quote_currency=USD,
+            settlement_currency=USD,
+            is_inverse=False,
+            price_precision=price_prec,
+            size_precision=size_prec,
+            price_increment=price_inc,
+            size_increment=size_inc,
+            max_quantity=None,
+            min_quantity=size_inc,
+            max_notional=None,
+            min_notional=None,
+            max_price=None,
+            min_price=None,
+            margin_init=Decimal("0"),
+            margin_maint=Decimal("0"),
+            maker_fee=Decimal("0"),
+            taker_fee=Decimal("0"),
+            ts_event=0,
+            ts_init=0,
+        )
+        account_type = AccountType.MARGIN
+        venue_base = USD
+        start_money = Money(d["initial_capital"], USD)
     bar_type = BarType.from_str(f"{symbol}.{venue_name}-{d.get('bar_spec', '1-DAY-LAST')}-EXTERNAL")
 
     def _epoch_ns(value) -> int:
@@ -293,27 +438,35 @@ def run_nautilus(
     engine.add_venue(
         venue=Venue(venue_name),
         oms_type=OmsType.NETTING,
-        account_type=AccountType.MARGIN,
-        base_currency=USD,
-        starting_balances=[Money(d["initial_capital"], USD)],
+        account_type=account_type,
+        base_currency=venue_base,
+        starting_balances=[start_money],
     )
     engine.add_instrument(inst)
     engine.add_data(bars)
+    injected: dict[str, object] = {
+        k: v
+        for k, v in dict(calibration or {}).items()
+        if config_declares_field(strategy, k)
+    }
+    if config_declares_field(strategy, "size_pct_equity"):
+        injected.setdefault("size_pct_equity", float(d["size_pct_equity"]))
+    trade_size = Decimal(1) if config_declares_field(strategy, "trade_size") else None
     strat, _ = get_strategy(
         strategy_name=strategy,
         instrument_id=inst.id,
         bar_type=bar_type,
-        trade_size=Decimal(1),
-        size_pct_equity=float(d["size_pct_equity"]),
-        **(calibration or {}),
+        trade_size=trade_size,
+        **injected,
     )
     engine.add_strategy(strat)
     engine.run()
     positions = engine.trader.generate_positions_report()
+    fills_report = engine.trader.generate_fills_report()
     # Read the strategy's signal-type side-channel BEFORE dispose() tears it down.
     signal_log = dict(getattr(strat, "_signal_log", {}) or {})
     engine.dispose()
-    return positions, bars_list, ohlc_bars, signal_log
+    return positions, bars_list, ohlc_bars, signal_log, fills_report
 
 
 def trades_from_positions(positions) -> list[dict]:
@@ -440,6 +593,122 @@ def build_equity_and_trades(
     return equity_curve, closed
 
 
+def _sdca_tearsheet_from_nautilus(
+    fills_report: object,
+    bars_list: list[tuple[str, float]],
+    initial_capital: float,
+    *,
+    calibration: dict | None,
+    trade_start: str,
+    risk_index: object | None = None,
+) -> tuple[object, list[tuple[str, float]], list[dict], dict, dict]:
+    """DCA metrics + MTM equity + #3168 diagnostic overlays from Nautilus fills.
+
+    Published numbers come from fills, never ``SdcaBacktestReport``. Rails/risk
+    come from the in-memory risk-index frame (diagnostic columns); the parquet
+    written for ``SdcaStrategy`` is date/risk only.
+    """
+    import polars as pl
+
+    from digiquant.strategies.sdca.chart_series import z_from_risk_index
+    from digiquant.strategies.sdca.curve import AccumDistCurve
+    from digiquant.strategies.sdca.dca_metrics import (
+        breakdown_from_daily,
+        daily_state_from_fills,
+        dca_current_signal,
+        fills_from_nautilus_report,
+        tearsheet_overlays,
+    )
+
+    windowed = [(d, c) for d, c in bars_list if not trade_start or d >= trade_start]
+    fills = fills_from_nautilus_report(fills_report)
+    state = daily_state_from_fills(fills, windowed, initial_capital)
+
+    risk_vals: list[float | None] = [None] * len(windowed)
+    rate_vals: list[float | None] = [None] * len(windowed)
+    rail_vals: list[tuple[float | None, float | None, float | None]] = [(None, None, None)] * len(
+        windowed
+    )
+
+    risk_df = None
+    if risk_index is not None and hasattr(risk_index, "columns"):
+        risk_df = risk_index
+    else:
+        risk_path = (calibration or {}).get("risk_path")
+        if risk_path:
+            risk_df = pl.read_parquet(risk_path)
+
+    nodes = (calibration or {}).get("curve_nodes")
+    indicator_z: dict = {}
+    if risk_df is not None and nodes is not None:
+        by_date: dict[str, tuple[float | None, float | None, float | None, float | None]] = {}
+        dates = [str(d)[:10] for d in risk_df["date"].to_list()]
+        risks = risk_df["risk"].to_list()
+        has_rails = all(c in risk_df.columns for c in ("low", "median", "high"))
+        lows = risk_df["low"].to_list() if has_rails else [None] * len(dates)
+        medians = risk_df["median"].to_list() if has_rails else [None] * len(dates)
+        highs = risk_df["high"].to_list() if has_rails else [None] * len(dates)
+        for day, r, lo, med, hi in zip(dates, risks, lows, medians, highs, strict=True):
+            by_date[day] = (
+                None if r is None else float(r),
+                None if lo is None else float(lo),
+                None if med is None else float(med),
+                None if hi is None else float(hi),
+            )
+        z_cols = z_from_risk_index(risk_df)
+        z_by_date: dict[str, dict[str, float | None]] = {d: {} for d in dates}
+        for name, values in z_cols.items():
+            for day, z in zip(dates, values, strict=True):
+                z_by_date[day][name] = z
+        curve = AccumDistCurve(tuple(float(n) for n in nodes))
+        for i, (day, _close) in enumerate(windowed):
+            packed = by_date.get(day)
+            if packed is None:
+                continue
+            r, lo, med, hi = packed
+            risk_vals[i] = r
+            rail_vals[i] = (lo, med, hi)
+            rate_vals[i] = None if r is None else curve.value_at_risk(r)
+        window_dates = [d for d, _c in windowed]
+        for name in z_cols:
+            indicator_z[name] = [z_by_date.get(d, {}).get(name) for d in window_dates]
+
+    dca = breakdown_from_daily(
+        prices=state["prices"],
+        portfolio_values=state["portfolio_values"],
+        daily_trade_usd=state["daily_trade_usd"],
+        net_deployed=state["net_deployed"],
+        asset_units=state["asset_units"],
+        risk=risk_vals,
+        rate=rate_vals,
+        initial_cash=initial_capital,
+    )
+    equity_curve = [(d, v) for (d, _c), v in zip(windowed, state["portfolio_values"], strict=True)]
+    overlays = tearsheet_overlays(
+        dates=[d for d, _c in windowed],
+        prices=state["prices"],
+        daily_trade_usd=state["daily_trade_usd"],
+        net_deployed=state["net_deployed"],
+        initial_cash=initial_capital,
+        rails=rail_vals,
+        risk=risk_vals,
+        asset_units=state["asset_units"],
+        indicator_z=indicator_z or None,
+        weights=(calibration or {}).get("indicator_weights"),
+        preset_name=(calibration or {}).get("preset"),
+    )
+    last_date = windowed[-1][0] if windowed else ""
+    last_price = windowed[-1][1] if windowed else None
+    signal = dca_current_signal(
+        last_date=last_date,
+        last_price=last_price,
+        last_risk=risk_vals[-1] if risk_vals else None,
+        last_rate=rate_vals[-1] if rate_vals else None,
+        units_accumulated=dca.units_accumulated,
+    )
+    return dca, equity_curve, [], overlays, signal
+
+
 def run_and_write(
     strategy: str,
     symbol: str,
@@ -471,26 +740,193 @@ def run_and_write(
     d = settings["defaults"]
     initial_capital = float(d["initial_capital"])
     trade_start = d.get("trade_start") or ""
+    family = strategy_type_of(settings, strategy)
+    entry = settings["strategies"][strategy]
 
-    calibration = resolve_calibrations(
-        strategy,
-        source=cal_source,  # type: ignore[arg-type]
-        trade_start=trade_start or None,
-    )
+    calibration: dict | None = None
+    provenance_notes: list[str] = []
+    sdca_index = None
+    beats_flat_dca_oos: bool | None = None
+    if family == "slapper":
+        calibration = resolve_calibrations(
+            strategy,
+            source=cal_source,  # type: ignore[arg-type]
+            trade_start=trade_start or None,
+        )
+        cal_label = cal_source
+    else:
+        cal_label = "n/a"
+
+    if family == "sdca":
+        import tempfile
+
+        import polars as pl
+
+        from digiquant.strategies.sdca.btc_power_law import load_coefficients
+        from digiquant.strategies.sdca.indicator_catalog import (
+            SdcaCompositeWeights,
+            build_extra_indicators,
+            indicator_display_name,
+        )
+        from digiquant.strategies.sdca.presets import load_preset
+
+        sdca_cfg = entry.get("sdca") or {}
+        preset_name = str(sdca_cfg.get("preset") or "balanced")
+        preset = load_preset(preset_name)
+        tmp_risk = Path(tempfile.mkdtemp(prefix="sdca_risk_")) / "risk.parquet"
+        raw_w = sdca_cfg.get("indicator_weights") or {}
+        published_weights = SdcaCompositeWeights(
+            valuation=float(raw_w.get("valuation", 1.0)),
+            m2=float(raw_w.get("m2", 0.0)),
+            rs_eth=float(raw_w.get("rs_eth", 0.0)),
+            dxy=float(raw_w.get("dxy", 0.0)),
+            weekly_rsi=float(raw_w.get("weekly_rsi", 0.0)),
+            weekly_macd=float(raw_w.get("weekly_macd", 0.0)),
+            sma_band=float(raw_w.get("sma_band", 0.0)),
+        )
+        ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
+        idx_dates = ohlcv[ts_col]
+        if idx_dates.dtype != pl.Date:
+            idx_dates = idx_dates.cast(pl.Date)
+        from digiquant.strategies.sdca.optimize import (
+            drop_extras_missing_sources,
+            load_btc_optimized_provenance,
+            load_sdca_extra_sources,
+        )
+
+        sources = load_sdca_extra_sources(cache_dir)
+        weights = drop_extras_missing_sources(published_weights, sources)
+        dropped_this_run = [
+            name
+            for name in ("m2", "dxy", "rs_eth")
+            if getattr(published_weights, name) > 0.0 and getattr(weights, name) == 0.0
+        ]
+        try:
+            load_btc_optimized_provenance()
+        except Exception:
+            pass
+        # Public payload never claims an OOS beat (Stage 1 curve_simulator sidecar
+        # is not a Nautilus walk-forward result).
+        beats_flat_dca_oos = False
+        extras = build_extra_indicators(idx_dates, ohlcv["close"], weights, sources)
+        index = materialize_sdca_risk_index(
+            ohlcv,
+            tmp_risk,
+            extra_indicators=extras or None,
+            valuation_weight=weights.valuation,
+        )
+        sdca_index = index
+        coefficients = load_coefficients()
+        calibration = {
+            "risk_path": str(tmp_risk),
+            "curve_nodes": preset.curve_nodes,
+            "long_only": bool(sdca_cfg.get("long_only", preset.long_only)),
+            "initial_cash": float(sdca_cfg.get("initial_cash", initial_capital)),
+            "preset": preset_name,
+            "indicator_weights": weights.model_dump(),
+        }
+        extra_weights = (
+            published_weights.m2,
+            published_weights.rs_eth,
+            published_weights.dxy,
+            published_weights.weekly_rsi,
+            published_weights.weekly_macd,
+            published_weights.sma_band,
+        )
+        extras_unused = all(w == 0.0 for w in extra_weights)
+        provenance_notes.append(
+            "SDCA risk index built from the signal-delayed OHLCV frame "
+            f"{index['date'].min()} → {index['date'].max()} "
+            f"({index.height} rows, risk_model={sdca_cfg.get('risk_model', 'btc_power_law')}, "
+            f"weights=valuation:{weights.valuation}/m2:{weights.m2}/"
+            f"rs_eth:{weights.rs_eth}/dxy:{weights.dxy}/"
+            f"weekly_rsi:{weights.weekly_rsi}/weekly_macd:{weights.weekly_macd}/"
+            f"sma_band:{weights.sma_band})."
+        )
+        if extras_unused:
+            provenance_notes.append(
+                "Published index is power-law only (valuation weight 1.0). Extra "
+                "indicators (M2, DXY, weekly RSI/MACD, SMA band, BTC/ETH RS) are "
+                "unused (weight 0) — not a multi-indicator composite."
+            )
+        else:
+            keepers = [
+                f"{indicator_display_name(name)} {weight:g}"
+                for name, weight in published_weights.model_dump().items()
+                if weight > 0.0
+            ]
+            unused = [
+                indicator_display_name(name)
+                for name, weight in published_weights.model_dump().items()
+                if name != "valuation" and weight == 0.0
+            ]
+            note = "Published index is a composite valuation index (" + " + ".join(keepers) + ")."
+            if unused:
+                note += " Unused (weight 0): " + ", ".join(unused) + "."
+            provenance_notes.append(note)
+        if dropped_this_run:
+            provenance_notes.append(
+                "This run omitted "
+                + ", ".join(dropped_this_run)
+                + " (missing source series)."
+            )
+        provenance_notes.append(
+            f"Coefficients {coefficients.fit_start} → {coefficients.fit_end} "
+            f"({coefficients.fit_rows} rows). Preset {preset_name}."
+        )
+        provenance_notes.append(
+            "Nautilus venue: spot CurrencyPair + CASH (remaining cash / remaining "
+            "holdings). Engine bars from trade_start; risk index uses the full "
+            "delayed cache. Remaining-book sizing. Not a long/short book; "
+            "not broker live-trading; backtest only."
+        )
+
+    engine_ohlcv = ohlcv
+    if family == "sdca":
+        engine_ohlcv = window_ohlcv_to_trade_start(ohlcv, trade_start)
+        if engine_ohlcv.is_empty():
+            logger.error(
+                "No bars left for %s after trade_start=%s",
+                symbol,
+                trade_start,
+            )
+            return None
+
     logger.info(
         "Running Nautilus backtest: %s (%s, %d bars, cal=%s, signal_delay=%dd)",
         strategy,
         symbol,
-        len(ohlcv),
-        cal_source,
+        len(engine_ohlcv),
+        cal_label,
         signal_delay_days,
     )
-    positions, bars_list, ohlc_bars, signal_log = run_nautilus(
-        strategy, symbol, ohlcv, settings, calibration=calibration
+    positions, bars_list, ohlc_bars, signal_log, fills_report = run_nautilus(
+        strategy, symbol, engine_ohlcv, settings, calibration=calibration
     )
-    trades = trades_from_positions(positions)
-    trades = carry_open_at_period_end(trades, bars_list, trade_start)
-    equity_curve, closed = build_equity_and_trades(trades, bars_list, initial_capital, trade_start)
+    if family == "sdca":
+        # DCA is remaining-cash / remaining-holdings, not round-trip legs.
+        # An open spot book leaves pandas NA on ts_closed; skip the slapper parser.
+        trades = []
+    else:
+        trades = trades_from_positions(positions)
+        trades = carry_open_at_period_end(trades, bars_list, trade_start)
+
+    dca_block = None
+    sdca_overlays: dict = {}
+    sdca_signal: dict | None = None
+    if family == "sdca":
+        dca_block, equity_curve, closed, sdca_overlays, sdca_signal = _sdca_tearsheet_from_nautilus(
+            fills_report,
+            bars_list,
+            initial_capital,
+            calibration=calibration,
+            trade_start=trade_start,
+            risk_index=sdca_index,
+        )
+    else:
+        equity_curve, closed = build_equity_and_trades(
+            trades, bars_list, initial_capital, trade_start
+        )
 
     longs = [t for t in closed if t["direction"] == "long"]
     shorts = [t for t in closed if t["direction"] == "short"]
@@ -506,6 +942,11 @@ def run_and_write(
 
     window = [t for t in equity_curve]
     period = f"{window[0][0]} → {window[-1][0]}" if window else ""
+    net_profit_pct = (
+        (final_equity / initial_capital - 1.0) * 100.0
+        if family == "sdca"
+        else all_m["net_profit_pct"]
+    )
     summary = {
         "strategy": strategy,
         "symbol": symbol,
@@ -513,7 +954,7 @@ def run_and_write(
         "bars": len(window),
         "initial_capital": initial_capital,
         "final_equity": final_equity,
-        "net_profit_pct": all_m["net_profit_pct"],
+        "net_profit_pct": net_profit_pct,
         "max_drawdown_pct": max_dd,
         "all": all_m,
         "long": _dir_metrics(longs, initial_capital),
@@ -532,28 +973,64 @@ def run_and_write(
         for t in closed
     ]
 
-    # Current signal = the leg still open at period end (carry_open_at_period_end
-    # marks it exit_reason="open"); "flat" if the book is closed. last_price is the
-    # as-of (signal-delayed) daily close. This is the digiquant.io position banner.
-    open_leg = next((t for t in trade_dicts if t.get("exit_reason") == "open"), None)
-    current_signal = {
-        "position": open_leg["direction"] if open_leg else "flat",
-        "entry_label": open_leg.get("entry_label", "") if open_leg else "",
-        "last_signal_date": (
-            open_leg["entry_date"] if open_leg else (window[-1][0] if window else "")
-        ),
-        "last_price": bars_list[-1][1] if bars_list else None,
-    }
+    # Current signal: slapper uses the open round-trip. SDCA is not long/short —
+    # today's risk, band, and remaining-book daily rate.
+    if sdca_signal is not None:
+        current_signal = sdca_signal
+    else:
+        open_leg = next((t for t in trade_dicts if t.get("exit_reason") == "open"), None)
+        current_signal = {
+            "position": open_leg["direction"] if open_leg else "flat",
+            "entry_label": open_leg.get("entry_label", "") if open_leg else "",
+            "last_signal_date": (
+                open_leg["entry_date"] if open_leg else (window[-1][0] if window else "")
+            ),
+            "last_price": bars_list[-1][1] if bars_list else None,
+        }
 
-    notes = [
-        f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
-        f"100% equity compounding, trade window from {trade_start}."
-    ]
+    if family == "sdca":
+        notes = [
+            f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
+            f"remaining-book SDCA from a composite valuation index "
+            f"(buy % of remaining cash / sell % of remaining holdings), "
+            f"marked to market (not 100% equity compounding), "
+            f"trade window from {trade_start}. Backtest only — not a live strategy."
+        ]
+        notes.append(
+            "Buy-and-hold (lump from trade_start) is the public benchmark. "
+            "Full-sample Nautilus vs-flat is not shown as a public comparable. "
+            f"beats_flat_dca_oos={'true' if beats_flat_dca_oos else 'false'}."
+        )
+    else:
+        notes = [
+            f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
+            f"100% equity compounding, trade window from {trade_start}."
+        ]
+    notes.extend(provenance_notes)
     if signal_delay_days:
         notes.append(
             f"Public signal delay: end date shifted back {signal_delay_days} days; "
             f"all figures are as of {window[-1][0] if window else ''}."
         )
+    dca_kwargs: dict = {}
+    if dca_block is not None:
+        dca_kwargs = {
+            "current_signal": current_signal,
+            "rails": sdca_overlays.get("rails"),
+            "risk_curve": sdca_overlays.get("risk_curve"),
+            "cost_basis_curve": sdca_overlays.get("cost_basis_curve"),
+            "capital_deployed_curve": sdca_overlays.get("capital_deployed_curve"),
+            "lump_equity_curve": sdca_overlays.get("lump_equity_curve"),
+            "flat_dca_equity_curve": sdca_overlays.get("flat_dca_equity_curve"),
+            "allocated_pct_curve": sdca_overlays.get("allocated_pct_curve"),
+            "fill_markers": sdca_overlays.get("fill_markers"),
+            "indicator_curves": sdca_overlays.get("indicator_curves"),
+            "indicator_weights": sdca_overlays.get("indicator_weights"),
+            "curve_knees": sdca_overlays.get("curve_knees"),
+            "label": entry.get("label"),
+            "kind": entry.get("kind"),
+            "beats_flat_dca_oos": beats_flat_dca_oos,
+        }
     td = from_nautilus_run(
         summary,
         trade_dicts,
@@ -562,22 +1039,24 @@ def run_and_write(
         ohlc_bars=[b for b in ohlc_bars if not trade_start or b[0] >= trade_start],
         notes=notes,
         signal_delay_days=signal_delay_days,
+        dca=dca_block,
+        **dca_kwargs,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / f"{strategy}.json"
     out_path.write_text(td.to_json())
     logger.info(
-        "  Wrote %s | net %.0f%% | maxDD %.1f%% | PF %.2f | win %.1f%% | %d trades",
+        "  Wrote %s | net %.0f%% | maxDD %.1f%% | PF %s | win %s | %d trades",
         out_path,
         td.net_profit_pct,
         td.max_drawdown_pct,
-        td.profit_factor or 0.0,
-        td.win_rate_pct,
+        f"{td.profit_factor:.2f}" if td.profit_factor is not None else "n/a",
+        f"{td.win_rate_pct:.1f}%" if td.win_rate_pct is not None else "n/a",
         td.total_trades,
     )
     baseline = _PUBLISHED_BASELINE.get(strategy)
-    if baseline is not None:
+    if baseline is not None and dca_block is None:
         exp_trades = int(baseline["trades"])
         min_pf = float(baseline["min_pf"])
         pf = float(td.profit_factor or 0.0)
@@ -605,11 +1084,17 @@ def run_and_write(
         "max_drawdown_pct": td.max_drawdown_pct,
         "profit_factor": td.profit_factor,
         "win_rate_pct": td.win_rate_pct,
-        "avg_trade_pct": _avg_trade_pct(trade_dicts),
+        "avg_trade_pct": None if dca_block is not None else _avg_trade_pct(trade_dicts),
         "total_trades": td.total_trades,
         "generated_at": td.generated_at,
         "href": f"/strategies/{td.strategy}",
     }
+    if dca_block is not None:
+        index_entry["vs_lump_pct"] = dca_block.vs_lump_pct
+        index_entry["vs_flat_dca_pct"] = dca_block.vs_flat_dca_pct
+        index_entry["capital_deployed_pct"] = dca_block.capital_deployed_pct
+        index_entry["allocated_pct"] = dca_block.allocated_pct
+        index_entry["beats_flat_dca_oos"] = beats_flat_dca_oos
 
     if push_supabase:
         _push_tearsheet_to_supabase(strategy, td, equity_curve, current_signal, index_entry)
@@ -634,18 +1119,29 @@ def _push_tearsheet_to_supabase(
     (service-role write) for any relational consumer.
     """
     from digiquant.data.store.client import build_digiquant_client
-    from digiquant.data.store.strategies import upsert_signal, upsert_tearsheet
+    from digiquant.data.store.strategies import upsert_signal, upsert_strategies, upsert_tearsheet
 
     client = build_digiquant_client()
     if client is None:
         logger.warning("Supabase push skipped — credentials missing")
         return
 
+    settings = load_settings()
+    upsert_strategies(client, [catalog_row_from_settings(settings, strategy)])
+
     payload = td.model_dump(mode="json")
     payload["current_signal"] = current_signal
     payload["label"] = index_entry["label"]
     payload["kind"] = index_entry["kind"]
     payload["avg_trade_pct"] = index_entry["avg_trade_pct"]
+    if "vs_lump_pct" in index_entry:
+        payload["vs_lump_pct"] = index_entry["vs_lump_pct"]
+        payload["vs_flat_dca_pct"] = index_entry["vs_flat_dca_pct"]
+        payload["capital_deployed_pct"] = index_entry["capital_deployed_pct"]
+        if "allocated_pct" in index_entry:
+            payload["allocated_pct"] = index_entry["allocated_pct"]
+        if "beats_flat_dca_oos" in index_entry:
+            payload["beats_flat_dca_oos"] = index_entry["beats_flat_dca_oos"]
 
     curve = [{"t": t, "v": v} for t, v in equity_curve]
     upsert_tearsheet(
@@ -825,19 +1321,22 @@ def main() -> None:
 
     from digiquant.strategies.calibrations_loader import pick_calibration_source
 
+    targets = {args.strategy: strategies[args.strategy]} if args.strategy else strategies
+    slapper_targets = [name for name in targets if strategy_type_of(settings, name) == "slapper"]
+
     if args.from_supabase:
         cal_source = "supabase"
-        # Validate early
         from digiquant.strategies.calibrations_loader import load_calibrations_from_supabase
 
-        load_calibrations_from_supabase()
-    else:
+        if slapper_targets:
+            load_calibrations_from_supabase(slapper_targets)
+    elif slapper_targets:
         cal_source = pick_calibration_source(
             prefer_supabase=False,
             allow_example=args.allow_example_calibrations,
         )
-
-    targets = {args.strategy: strategies[args.strategy]} if args.strategy else strategies
+    else:
+        cal_source = "example"
 
     entries: list[dict] = []
     failures: list[tuple[str, str]] = []

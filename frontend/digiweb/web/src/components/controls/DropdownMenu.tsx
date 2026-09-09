@@ -97,7 +97,7 @@ export function DropdownMenuContent({
           data-slot="dropdown-menu-content"
           className={cxBase(
             cx(
-              "ctl-menu-pane ctl-pop z-50 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg p-1 outline-none data-closed:overflow-hidden",
+              "ctl-menu-pane ctl-pop z-50 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-none p-1 outline-none data-closed:overflow-hidden",
               skin === "reference" && "ctl-menu-pane--ref",
             ),
             className,
@@ -147,7 +147,7 @@ export function DropdownMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cxBase(
-        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden select-none data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50",
+        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-none px-1.5 py-1 text-sm outline-hidden select-none data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50",
         className,
       )}
       {...props}
@@ -172,7 +172,7 @@ export function DropdownMenuSubTrigger({
       data-slot="dropdown-menu-sub-trigger"
       data-inset={inset}
       className={cxBase(
-        "ctl-menu-item ctl-menu-subtrigger flex cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden select-none data-inset:pl-7",
+        "ctl-menu-item ctl-menu-subtrigger flex cursor-default items-center gap-1.5 rounded-none px-1.5 py-1 text-sm outline-hidden select-none data-inset:pl-7",
         className,
       )}
       {...props}
@@ -218,7 +218,7 @@ export function DropdownMenuCheckboxItem({
       data-slot="dropdown-menu-checkbox-item"
       data-inset={inset}
       className={cxBase(
-        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50",
+        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-none py-1 pr-8 pl-1.5 text-sm outline-hidden select-none data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50",
         className,
       )}
       checked={checked}
@@ -254,7 +254,7 @@ export function DropdownMenuRadioItem({
       data-slot="dropdown-menu-radio-item"
       data-inset={inset}
       className={cxBase(
-        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50",
+        "ctl-menu-item relative flex cursor-default items-center gap-1.5 rounded-none py-1 pr-8 pl-1.5 text-sm outline-hidden select-none data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50",
         className,
       )}
       {...props}

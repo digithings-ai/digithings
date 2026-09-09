@@ -41,7 +41,7 @@ export function ScrollNavReference() {
       </p>
 
       <div
-        className="relative mt-[1.2rem] h-[22rem] overflow-y-auto rounded-[12px] border border-hair bg-surface scroll-pt-0"
+        className="relative mt-[1.2rem] h-[22rem] overflow-y-auto rounded-none border border-hair bg-surface scroll-pt-0"
         ref={stageRef}
         tabIndex={0}
         role="region"

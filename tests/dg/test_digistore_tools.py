@@ -109,7 +109,7 @@ def test_digistore_tools_exposed_when_run_data_dir_set() -> None:
         index_config={},
         state={},
     )
-    tools = get_tools_for_skills(["sitaas_rag"], ctx)
+    tools = get_tools_for_skills(["project_rag"], ctx)
     names = {t["function"]["name"] for t in tools}
     assert "digistore_list" in names
     assert "digistore_profile" in names
@@ -128,7 +128,7 @@ def test_digistore_tools_absent_without_run_data_dir() -> None:
         index_config={},
         state={},
     )
-    tools = get_tools_for_skills(["sitaas_rag"], ctx)
+    tools = get_tools_for_skills(["project_rag"], ctx)
     names = {t["function"]["name"] for t in tools}
     assert "digistore_list" not in names
     assert "digistore_profile" not in names

@@ -2,6 +2,12 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { isServiceCapabilityEnabled } from "@/lib/capabilities";
+import { version as packageVersion } from "../../../../package.json";
+
+/** Env override wins; otherwise the package version baked at build / in the image. */
+function healthVersion(): string {
+  return process.env.DIGICHAT_VERSION?.trim() || packageVersion;
+}
 
 async function pingHealth(base: string, label: string, checks: Record<string, string>) {
   try {
@@ -65,7 +71,7 @@ export async function GET() {
     {
       ok,
       checks,
-      version: process.env.DIGICHAT_VERSION ?? "0.1.0",
+      version: healthVersion(),
     },
     { status: ok ? 200 : 503 }
   );

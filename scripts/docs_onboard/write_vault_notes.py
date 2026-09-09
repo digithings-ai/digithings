@@ -118,6 +118,8 @@ class NoteWriter(Protocol):
         overwrite: bool = False,
     ) -> Any: ...
 
+    def prune_children(self, parent_doc: str, keep_names: set[str], subdir: str = "") -> Any: ...
+
 
 def _pdf_document(path: Path) -> Any:
     """Parsed digisearch Document for a PDF (carries page segments)."""
@@ -189,6 +191,17 @@ class DigivaultApiWriter:
         self.base_url = base_url.rstrip("/")
         self.bearer_token = bearer_token.strip()
         self._post_json = post_json or _post_json
+        self._batching = False
+        self._pending_notes: list[dict[str, Any]] = []
+        self._pending_prunes: dict[tuple[str, str], dict[str, Any]] = {}
+
+    def begin_batch(self) -> None:
+        """Collect writes for one efficient ``POST /v1/notes/batch`` request."""
+        if self._batching:
+            raise RuntimeError("A digivault write batch is already active")
+        self._batching = True
+        self._pending_notes = []
+        self._pending_prunes = {}
 
     def write_note(
         self,
@@ -214,7 +227,52 @@ class DigivaultApiWriter:
         headers: dict[str, str] = {}
         if self.bearer_token:
             headers["Authorization"] = f"Bearer {self.bearer_token}"
+        if self._batching:
+            self._pending_notes.append(payload)
+            return {"name": name}
         return self._post_json(f"{self.base_url}/v1/notes", payload, headers)
+
+    def prune_children(
+        self, parent_doc: str, keep_names: set[str], subdir: str = ""
+    ) -> dict[str, Any]:
+        payload = {
+            "parent_doc": parent_doc,
+            "keep_names": sorted(keep_names),
+            "subdir": subdir,
+        }
+        if self._batching:
+            # A repeated source URL has the same parent slug. Its final document
+            # state is the only one that should determine stale children.
+            self._pending_prunes[(parent_doc, subdir)] = payload
+            return {"deleted": []}
+        headers: dict[str, str] = {}
+        if self.bearer_token:
+            headers["Authorization"] = f"Bearer {self.bearer_token}"
+        return self._post_json(
+            f"{self.base_url}/v1/notes/prune-children",
+            payload,
+            headers,
+        )
+
+    def flush(self) -> dict[str, Any]:
+        """Send the active batch, if any, then return to immediate-write mode."""
+        if not self._batching:
+            return {}
+        headers: dict[str, str] = {}
+        if self.bearer_token:
+            headers["Authorization"] = f"Bearer {self.bearer_token}"
+        try:
+            if not self._pending_notes and not self._pending_prunes:
+                return {}
+            return self._post_json(
+                f"{self.base_url}/v1/notes/batch",
+                {"notes": self._pending_notes, "prunes": list(self._pending_prunes.values())},
+                headers,
+            )
+        finally:
+            self._batching = False
+            self._pending_notes = []
+            self._pending_prunes = {}
 
 
 def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
@@ -242,6 +300,8 @@ def write_vault_notes(
     """Upsert digivault notes for classified keep pages. Returns count written."""
     written = 0
     ingested_at = datetime.now(timezone.utc).isoformat()
+    if isinstance(vault, DigivaultApiWriter):
+        vault.begin_batch()
     for classified in workspace.iter_classified():
         if classified.page_class not in _VAULT_PAGE_CLASSES:
             continue
@@ -275,6 +335,7 @@ def write_vault_notes(
                 subdir=manifest.vault_subdir,
                 overwrite=True,
             )
+            vault.prune_children(slug, set(), manifest.vault_subdir)
             written += 1
             continue
         child_names: list[str] = []
@@ -304,7 +365,10 @@ def write_vault_notes(
             subdir=manifest.vault_subdir,
             overwrite=True,
         )
+        vault.prune_children(slug, set(child_names), manifest.vault_subdir)
         written += 1
+    if isinstance(vault, DigivaultApiWriter):
+        vault.flush()
     return written
 
 

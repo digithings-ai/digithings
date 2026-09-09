@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:707a47910e7619e75b7afc432789f07f271180b7b82611a17ad557c34f16cce8",
+  "claims": [
+    {
+      "id": "claim_7c4ea24fa4ba4ed8bbb32e4b60b30d6d",
+      "statement": "digivault splits into a pure core library (pydantic plus pyyaml only, FastAPI-free import) and a thin FastAPI plus MCP plus CLI service layer behind extras, reusing digikey and digibase without modifying them.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/ARCHITECTURE.md#L10-L24",
+          "version": "repo-lines-v1:sha256:218c58fa748a80858535bd7a5fd5d2625579dd8475e398171a7ac2479366b513:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzNjIxZjAzZGVjYjY2Njg5YzA3ZGQ4Zjg2M2NhOWYzZWQ0NjRiMTU5NTg4NmIyZjFkZGJlYjQ5YjVhZjY3NWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRmMDYzODI1Nzk5ZTVmN2UzNDAwZDBhM2U0YzlmMTI0NDY2NTQwNGIyMjFmNjBhODA0ZDgyMzgyM2ZhZGYyMzQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc5NGY3NDMzYWRmZGExOGMwNDU5NGViMTIxNmI2MjcwZDBlY2ZhOTc2MTI5ZmMxMmFlOGE1Mzc3MTdiOGVkYmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM2MzUzYTFiZTIzZjM1OTk3YzM0MGM0NWM3MmNlNjFmNzBjZTFkZDJlNmY4NzNhNzM4ZWJhMWMzYTI4YmRkNjIifQ"
+        },
+        {
+          "resource": "repo://digivault/pyproject.toml#L12-L30",
+          "version": "repo-lines-v1:sha256:bf08a153983e422643e4521273081098bd587a8b4a1c8de6c62f1a33682cc13f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkOTVmNWU5ZWRlMDE4MTYwNDNjMDc5N2FjZThkYTJhYzRlOTlhOGE2YTYxMGZhOTg1NzBlZjM0YjkzNTYxMDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0MDYxNmU3NTI4YTViNjZhNmU3OGUyMjAzMjQ1MWI4NDU2MWY1YmNlNGY0YTFmNzlhODA4ZjgxZTU0YjYwMWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhiZTRlZDFkYTkxYzRiZWIxOTllYmY4OGE2YjAyN2RlODcyZWIwMWYzMjcyMGExMmE4ZTMzZTBlYThkOTcxYTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIzMDhlYzRlNDYyZWViOWIxNGFlZjAyZjkyNzkzZjZmN2Y1MThkOWY0NGFmNGFkYjNhMmJjNTY5MmRkNDg3ODYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3fe2570d9a36486f8a585b77653824e7",
+      "statement": "All result types are Pydantic models (Note, NoteRow, NoteDetail, VaultSearchHit, LintReport, VaultConfig) rather than bare dicts.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/src/digivault/models.py#L14-L175",
+          "version": "repo-lines-v1:sha256:0cbf386dd17b3584a585af8a903f8547886583aa367ea2ada3d8fec5e28ae1f3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYyLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIyOTdlZGI1M2M3ZmIxZWZhMjE2MzAzZDZiNmExMWZkMjRhMjFjMGI2N2U4MmUxMWNjNzAxNDU5OGQ3MGQxNTU4IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJlZTFlM2I5MWRkY2RmNDVmNmEzZWMwNjdiYTUwNmE3ZDBlNTA3MTc5ZGUyOGI5NzViZjc0M2NhZGQ0ZTg4MTYwIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlOWY1OWIyMDg0NzQ1ZjQzYzExNTc2YWM1Njg3OGNiOTUwOTg1NjJiZmQ1Mzc0NzdiYzcyZjIwNWI1NTQ4Yjg1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkNjZmMzkwYWI5MTdmZDM3NmY0MDFjNTM0ODMxNmIwZDFlOGFhODllNDRjMjlhZTNkZjdlODY5NGE4NDUzYmRmIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_b18e0ef11af7419fb5f11795b9eb87b8",
+      "statement": "Write paths sandbox to the vault root against traversal, frontmatter round-trips losslessly, wikilink rewrites skip code regions, and new tools register only in tool_dispatch.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/AGENTS.md#L30-L60",
+          "version": "repo-lines-v1:sha256:261be608e710f9c4e2ee7a468d490e5c06f567b924a7a30afb753e58c957c90a:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4YjliNGU0ODZmYjA1Y2NiODZjMTIxNzUzMWE1YjBiODgwNmU4ZDk4MDAwYWY3YjcwMjgwNzhjZmViOWU0ZTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIzOWQyODYyZWVjYjE3ZDg4NWM3NDY4ODI1MTI4NjIzMzdkY2FiOWViYjlkZDJmMThjOWI5MTdmZWU2YjI0OTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc3ZjU0ZmQ0MzRhMjU1YTVlYzRjM2FhMjViYTg4NTdmYjJhOTA5ZjliMmU3Yzc2ZWRiZDc5ZWU2MzJlZWZjOGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc4ZTIzYTZhYWJjMzI5YWRmMjI0Y2U1ZDMzNjg5ZWQ2YWZkNjM5ZWUwZWRkN2Y5N2Y2ZDczZWRjMGU3ZjY2ODEifQ"
+        },
+        {
+          "resource": "repo://digivault/ARCHITECTURE.md#L26-L44",
+          "version": "repo-lines-v1:sha256:568754b0f580a1d450ccb6edace4349e3c92a4b1d200f8fb32621f705a7ab1c9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2NTUyM2U5ODQ0OWJmNjk3MzA4MTY2YmY0MGViMjUzNDE2YjRkNTIyZGRjZWJjMzY3ZWE0NjAxYzBlZDUzZTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2N2E3MzIwYzEwMWYzMjc0YjkzNDU1OTI2M2I4MTkxNDI3OGU5NzdiNWVjZjIyMWE2Y2JkZDMwZGQzYWRiNjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJmY2FkYzc2MWFjOGNiOGE5YWY1MjQ5YTgyMmRlNGVkMjhjMjBlYTUyNmMyNjc2ZjFlYmZlZDAyNmY4ZjlmNWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBhNDM3Y2FiMGVkNmZlOTgwZmU0Mzc0OGY0ODhjODE4YmNiMzMwZDdhMzZhZTQ1OWQ2NzcwZTk2OGFiNDQ4MDYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8b2d6a39a5474fd08ec3566cd7069e02",
+      "statement": "Search and by-path fetch prefer D1 when configured (winning over DIGIVAULT_ROOT), then local filesystem, then Supabase FTS, with digivault_get_note D1-only.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/ARCHITECTURE.md#L40-L44",
+          "version": "repo-lines-v1:sha256:af8ebd0a768dafbb7ba54f0b74e1b29e93d06e205a615e5b99c8d7591a6cc838:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWM3OGJjOTk5MDYyMGY4NDY1OTI1NTFjOGZiMzYyYTI4Y2YwMzAyMTNjOGVjYzg5YjNkZmRlNGQ2ODc2OWI2MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjY3YTczMjBjMTAxZjMyNzRiOTM0NTU5MjYzYjgxOTE0Mjc4ZTk3N2I1ZWNmMjIxYTZjYmRkMzBkZDNhZGI2NCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjRhNTVlMjMwYjcxMzMwNjNkYjg2MWEyZjViZGYzMTQyOTQ5OTU1NWFlZjA5YjJhY2Y3NWNkMDFlMWMzYWVkOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGE0MzdjYWIwZWQ2ZmU5ODBmZTQzNzQ4ZjQ4OGM4MThiY2IzMzBkN2EzNmFlNDU5ZDY3NzBlOTY4YWI0NDgwNiJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

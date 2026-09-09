@@ -6,6 +6,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
+from digivault.d1_store import resolve_path_prefix
 from digivault.frontmatter import split_frontmatter
 from digivault.supabase_store import VaultSearchHit
 from digivault.vault import Vault
@@ -85,7 +86,14 @@ def search_local_vault(
     q = _query_tokens(query)
     if not q or vault.root is None:
         return []
-    prefix = (path_prefix or "").strip().strip("/")
+    # Route through the shared helper rather than normalizing inline. A bare
+    # `(path_prefix or "").strip().strip("/")` makes a non-None prefix that
+    # normalizes to empty ("/", "   ", "///") falsy, which skips the `if prefix:`
+    # guard below and returns every note in the root -- the exact fail-open
+    # `resolve_path_prefix` exists to prevent. `enforce_tenant_path_prefix` only
+    # covers this when DIGI_TENANT_CORPUS_MAP is set; with the map unset the
+    # request reaches here unscoped. None still means "no scoping requested".
+    prefix = resolve_path_prefix(path_prefix)
     scored: list[VaultSearchHit] = []
     for note in vault.list_notes():
         rel = note.rel_path.replace("\\", "/")

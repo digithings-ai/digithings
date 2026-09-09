@@ -1,0 +1,453 @@
+'use client';
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Change } from 'diff';
+import { diffLines, diffWords } from 'diff';
+import { ChevronDown } from 'lucide-react';
+import { SafeMarkdown } from '@/components/SafeMarkdown';
+import type { DocumentDiffCompareKind, DocumentDiffPair } from '@/lib/queries';
+import { useGenericDocumentDiff } from '@/lib/hooks/use-generic-document-diff';
+
+type ViewScope = 'current' | 'difference';
+type DiffLayout = 'inline' | 'split';
+
+function isTableLine(s: string): boolean {
+  return s.trimStart().startsWith('|');
+}
+
+function lineDiffToItems(parts: Change[]): LineDiffItem[] {
+  const items: LineDiffItem[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (p.added) {
+      items.push({ kind: 'added', text: p.value });
+      continue;
+    }
+    if (p.removed) {
+      const next = parts[i + 1];
+      if (next?.added) {
+        items.push({ kind: 'wordSwap', oldText: p.value, newText: next.value });
+        i += 1;
+      } else {
+        items.push({ kind: 'removed', text: p.value });
+      }
+      continue;
+    }
+    items.push({ kind: 'equal', text: p.value });
+  }
+  return items;
+}
+
+type LineDiffItem =
+  | { kind: 'equal'; text: string }
+  | { kind: 'removed'; text: string }
+  | { kind: 'added'; text: string }
+  | { kind: 'wordSwap'; oldText: string; newText: string };
+
+function WordSwapBlock({ oldText, newText }: { oldText: string; newText: string }) {
+  const wparts = diffWords(oldText, newText);
+  const mono = isTableLine(oldText) || isTableLine(newText);
+  return (
+    <div
+      className={`whitespace-pre-wrap px-3 py-1 border-l-2 border-warn/50 bg-term-bg/60 leading-relaxed text-ink-soft/95 ${
+        mono ? 'font-mono text-[12px]' : 'text-sm font-sans'
+      }`}
+    >
+      {wparts.map((w, j) => {
+        if (w.added) {
+          return (
+            <span
+              key={j}
+              className="bg-up/15 text-up px-0.5 border-b border-up/60"
+            >
+              {w.value}
+            </span>
+          );
+        }
+        if (w.removed) {
+          return (
+            <span
+              key={j}
+              className="bg-down/15 text-down line-through decoration-down/50 px-0.5"
+            >
+              {w.value}
+            </span>
+          );
+        }
+        return <span key={j}>{w.value}</span>;
+      })}
+    </div>
+  );
+}
+
+function comparePresetLabel(kind: 'previous_day' | 'delta_baseline', anchors: { prev: string | null; base: string | null }): string {
+  if (kind === 'delta_baseline') {
+    return anchors.base ? `Delta baseline (${anchors.base})` : 'Delta baseline';
+  }
+  return anchors.prev ? `Previous run (${anchors.prev})` : 'Previous run';
+}
+
+function compareModeFootnote(pair: DocumentDiffPair): string {
+  switch (pair.compareMode) {
+    case 'baseline_doc':
+      return `Delta vs baseline file "${pair.compareKey}" from ${pair.compareDate}`;
+    case 'delta_baseline':
+      return `Same artifact at delta baseline ${pair.compareDate}`;
+    case 'custom_date':
+      return `Same artifact at ${pair.compareDate}`;
+    case 'previous_day':
+    default:
+      return `Prior run ${pair.compareDate}`;
+  }
+}
+
+function segmentOuterClass() {
+  return 'inline-flex border border-hair p-0.5 bg-term-bg/80 gap-0.5';
+}
+
+function segmentBtnClass(active: boolean) {
+  return `px-3 py-1.5 text-xs font-medium border transition-colors ${
+    active
+      ? 'border-accent/40 bg-accent/15 text-accent'
+      : 'border-transparent text-ink-mute hover:text-ink hover:bg-ink/[0.06]'
+  }`;
+}
+
+function DocumentArtifactCompareDropdown({
+  anchors,
+  compareKind,
+  customCompareDate,
+  canPrev,
+  canBase,
+  onSelectPreset,
+}: {
+  anchors: { prev: string | null; base: string | null };
+  compareKind: DocumentDiffCompareKind;
+  customCompareDate: string;
+  canPrev: boolean;
+  canBase: boolean;
+  onSelectPreset: (k: 'previous_day' | 'delta_baseline') => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const summaryLabel =
+    compareKind === 'custom_date' && /^\d{4}-\d{2}-\d{2}$/.test(customCompareDate.trim())
+      ? `Custom (${customCompareDate.trim()})`
+      : compareKind === 'delta_baseline'
+        ? comparePresetLabel('delta_baseline', anchors)
+        : comparePresetLabel('previous_day', anchors);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border border-hair bg-term-bg text-ink-soft hover:border-accent/40 hover:text-ink transition-colors"
+        aria-expanded={open ? 'true' : 'false'}
+        aria-haspopup="listbox"
+      >
+        <span className="max-w-[min(100vw-8rem,14rem)] truncate">{summaryLabel}</span>
+        <ChevronDown size={14} className={`opacity-70 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,20rem)] border border-hair bg-term-bg shadow-xl overflow-hidden">
+          <div role="listbox" aria-label="Compare document to" className="py-1">
+            <button
+              type="button"
+              role="option"
+              aria-selected={compareKind === 'previous_day' ? 'true' : 'false'}
+              disabled={!canPrev}
+              onClick={() => {
+                if (!canPrev) return;
+                onSelectPreset('previous_day');
+                setOpen(false);
+              }}
+              className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
+                !canPrev
+                  ? 'text-ink-mute opacity-40 cursor-not-allowed'
+                  : compareKind === 'previous_day'
+                    ? 'bg-accent/15 text-accent'
+                    : 'text-ink-soft hover:bg-ink/[0.06] hover:text-ink'
+              }`}
+            >
+              {comparePresetLabel('previous_day', anchors)}
+            </button>
+            <button
+              type="button"
+              role="option"
+              aria-selected={compareKind === 'delta_baseline' ? 'true' : 'false'}
+              disabled={!canBase}
+              onClick={() => {
+                if (!canBase) return;
+                onSelectPreset('delta_baseline');
+                setOpen(false);
+              }}
+              className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
+                !canBase
+                  ? 'text-ink-mute opacity-40 cursor-not-allowed'
+                  : compareKind === 'delta_baseline'
+                    ? 'bg-accent/15 text-accent'
+                    : 'text-ink-soft hover:bg-ink/[0.06] hover:text-ink'
+              }`}
+            >
+              {comparePresetLabel('delta_baseline', anchors)}
+            </button>
+          </div>
+          <p className="text-[10px] text-ink-mute px-2.5 py-1.5 border-t border-hair bg-term-bg/80">
+            Previous or baseline — or use the date field for a custom run day.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function GenericDiffDocumentView({
+  docDate,
+  documentKey,
+  payload,
+  fallbackMarkdown,
+}: {
+  docDate: string;
+  documentKey: string;
+  payload: Record<string, unknown> | null;
+  fallbackMarkdown: string;
+}) {
+  const [viewScope, setViewScope] = useState<ViewScope>('current');
+  const [diffLayout, setDiffLayout] = useState<DiffLayout>('inline');
+  const {
+    compareKind,
+    setCompareKind,
+    customCompareDate,
+    setCustomCompareDate,
+    anchorsLoading,
+    pairLoading,
+    error,
+    setError,
+    anchors,
+    pair,
+    setPair,
+    openDifferenceView,
+  } = useGenericDocumentDiff(docDate, documentKey, payload, viewScope);
+
+  const lineItems = useMemo(() => {
+    if (!pair) return [];
+    return lineDiffToItems(diffLines(pair.beforeMarkdown, pair.afterMarkdown));
+  }, [pair]);
+
+  const hasDiff = useMemo(() => lineItems.some((it) => it.kind !== 'equal'), [lineItems]);
+
+  const canPrev = !!anchors.prev;
+  const canBase = !!anchors.base;
+  const customReady = compareKind !== 'custom_date' || /^\d{4}-\d{2}-\d{2}$/.test(customCompareDate.trim());
+
+  if (anchorsLoading) {
+    return <p className="text-ink-mute text-sm">Loading document…</p>;
+  }
+
+  const toolbar = (
+    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+      <div className={segmentOuterClass()}>
+        <button
+          type="button"
+          className={segmentBtnClass(viewScope === 'current')}
+          onClick={() => {
+            setViewScope('current');
+            setPair(null);
+            setError(null);
+          }}
+        >
+          Current
+        </button>
+        <button
+          type="button"
+          className={segmentBtnClass(viewScope === 'difference')}
+          onClick={() => {
+            openDifferenceView();
+            setViewScope('difference');
+          }}
+        >
+          Difference
+        </button>
+      </div>
+
+      {viewScope === 'difference' ? (
+        <>
+          <div className={segmentOuterClass()}>
+            <button type="button" className={segmentBtnClass(diffLayout === 'inline')} onClick={() => setDiffLayout('inline')}>
+              Inline
+            </button>
+            <button type="button" className={segmentBtnClass(diffLayout === 'split')} onClick={() => setDiffLayout('split')}>
+              Side by side
+            </button>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+            <DocumentArtifactCompareDropdown
+              anchors={anchors}
+              compareKind={compareKind}
+              customCompareDate={customCompareDate}
+              canPrev={canPrev}
+              canBase={canBase}
+              onSelectPreset={(k) => {
+                setCompareKind(k);
+                setCustomCompareDate('');
+              }}
+            />
+            <label className="flex flex-col gap-0.5 min-w-[10.5rem]">
+              <span className="text-[10px] uppercase tracking-wider text-ink-mute">Or compare to date</span>
+              <input
+                type="date"
+                value={customCompareDate}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCustomCompareDate(v);
+                  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) setCompareKind('custom_date');
+                  else if (canPrev) setCompareKind('previous_day');
+                  else if (canBase) setCompareKind('delta_baseline');
+                }}
+                className="border border-hair bg-term-bg px-2 py-1.5 text-xs text-ink font-mono focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent/30"
+                aria-label="Compare this document to a custom run date"
+              />
+            </label>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+
+  if (viewScope === 'current') {
+    return (
+      <div className="space-y-4">
+        {toolbar}
+        <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
+      </div>
+    );
+  }
+
+  if (!customReady) {
+    return (
+      <div className="space-y-4">
+        {toolbar}
+        <p className="text-ink-mute text-sm">Pick a compare date, or clear the custom date field to use a preset.</p>
+      </div>
+    );
+  }
+
+  if (pairLoading) {
+    return (
+      <div className="space-y-4">
+        {toolbar}
+        <p className="text-ink-mute text-sm">Loading comparison…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-3">
+        {toolbar}
+        <p className="text-danger text-xs">{error}</p>
+        <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
+      </div>
+    );
+  }
+
+  if (!pair) {
+    return (
+      <div className="space-y-4">
+        {toolbar}
+        <p className="text-ink-mute text-sm">
+          No comparison document for this choice — showing the current version below.
+        </p>
+        <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {toolbar}
+      <p className="text-ink-mute text-[11px]" title={compareModeFootnote(pair)}>
+        Diff vs <span className="font-mono text-accent">{pair.compareDate}</span>
+        <span className="text-ink-mute"> · {compareModeFootnote(pair)}</span>
+      </p>
+
+      {diffLayout === 'inline' ? (
+        <div>
+          {!hasDiff ? (
+            <p className="text-ink-mute text-sm mb-3">No text changes vs comparison version.</p>
+          ) : (
+            <p className="text-[10px] uppercase tracking-wider text-ink-mute mb-2">
+              Line diff with word highlights where a line was replaced · removed (red) · added (green)
+            </p>
+          )}
+          <div className="border border-hair bg-term-bg/40 text-sm leading-relaxed max-h-[min(62vh,720px)] overflow-auto">
+            {lineItems.map((item, i) => {
+              if (item.kind === 'wordSwap') {
+                return <WordSwapBlock key={i} oldText={item.oldText} newText={item.newText} />;
+              }
+              const mono = isTableLine(item.text);
+              const fontClass = mono ? 'font-mono text-[12px]' : 'font-sans';
+              if (item.kind === 'added') {
+                return (
+                  <span
+                    key={i}
+                    className={`block whitespace-pre-wrap px-3 py-0.5 bg-up/10 text-up border-l-2 border-up/70 ${fontClass}`}
+                  >
+                    {item.text}
+                  </span>
+                );
+              }
+              if (item.kind === 'removed') {
+                return (
+                  <span
+                    key={i}
+                    className={`block whitespace-pre-wrap px-3 py-0.5 bg-down/10 text-down border-l-2 border-down/60 line-through decoration-down/50 ${fontClass}`}
+                  >
+                    {item.text}
+                  </span>
+                );
+              }
+              return (
+                <span
+                  key={i}
+                  className={`block whitespace-pre-wrap px-3 py-0.5 text-ink-soft/90 ${fontClass}`}
+                >
+                  {item.text}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-ink-mute mb-2">
+            Comparison (left) · current (right)
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[min(62vh,720px)] overflow-auto">
+            <div className="border border-hair bg-term-bg/30 p-3 min-h-0 overflow-auto">
+              <p className="text-[10px] font-mono text-ink-mute mb-2">Compare — {pair.compareDate}</p>
+              <SafeMarkdown>{pair.beforeMarkdown}</SafeMarkdown>
+            </div>
+            <div className="border border-hair bg-term-bg/30 p-3 min-h-0 overflow-auto">
+              <p className="text-[10px] font-mono text-ink-mute mb-2">Current — {pair.targetDate}</p>
+              <SafeMarkdown>{pair.afterMarkdown}</SafeMarkdown>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

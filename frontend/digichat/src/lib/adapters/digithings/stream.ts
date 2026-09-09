@@ -10,11 +10,15 @@ import {
 } from "@/lib/digigraph";
 import { stripToolDumpFromAnswerDelta } from "@/lib/adapters/digithings/strip-tool-dump";
 import { coreMessagesToDigigraphOpenAi } from "@/lib/digigraph-messages";
-import {
-  ACTIVITY_PART_TYPE,
-  type ActivityDetail,
-} from "@/lib/chat-activity";
+import { type ActivityDetail } from "@/lib/chat-activity";
 import { mapDigigraphTraceToSpans } from "@/lib/adapters/digithings/activity";
+import {
+  createActivityWriteContext,
+  finishStandardActivity,
+  uiMessagesForUpstream,
+  writeStandardActivity,
+} from "@/lib/ui-stream-parts";
+import { BYOK_MODEL_REMEDIABLE_CODES } from "@/lib/embed-chat-error";
 
 export type DigigraphTracePayload = {
   v?: number;
@@ -37,10 +41,53 @@ export type DigigraphErrorPayload = {
 export function digigraphErrorToEmbedPayload(err: DigigraphErrorPayload): string {
   const code = typeof err.code === "string" && err.code.length ? err.code : "digigraph_error";
   const payload: { error: string; message?: string } = { error: code };
-  if (typeof err.message === "string" && err.message.length) {
+  // BYOK remediable codes carry trusted copy in embed-chat-error — never relay
+  // digigraph's message (it can echo caller headers or other upstream detail).
+  if (
+    typeof err.message === "string" &&
+    err.message.length &&
+    !BYOK_MODEL_REMEDIABLE_CODES.has(code)
+  ) {
     payload.message = err.message;
   }
   return JSON.stringify(payload);
+}
+
+/**
+ * The one upstream-body field an embed visitor is allowed to see: a refusal code
+ * the frontend already knows how to act on.
+ *
+ * Everything else about a digigraph error body stays server-side (see the
+ * `!res.ok` branch below). These codes are the exception because
+ * `BYOK_MODEL_REMEDIABLE_CODES` — the same set, imported rather than copied, so
+ * the two cannot drift — is what `embed-chat-error` uses to open the BYOK
+ * sequence and to pick the copy. A code with no frontend copy would render as
+ * raw JSON, which is worse than the generic message.
+ *
+ * The code is relayed; the message never is. digigraph's message for
+ * `byok_default_model_provider_mismatch` reflects the caller's own
+ * `X-BYOK-Provider` header, and a 500 body can carry stack traces and prompt
+ * echoes.
+ */
+function relayableUpstreamCode(body: string): string | null {
+  if (!body.length) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  // digibase's json_error_response nests: {"error": {"code": ..., "message": ...}}.
+  // Flat {"code": ...} is accepted too, for handlers that answer without it.
+  const outer = parsed as { error?: unknown; code?: unknown };
+  const inner =
+    typeof outer.error === "object" && outer.error !== null
+      ? (outer.error as { code?: unknown })
+      : undefined;
+  const code = typeof inner?.code === "string" ? inner.code : outer.code;
+  if (typeof code !== "string" || !BYOK_MODEL_REMEDIABLE_CODES.has(code)) return null;
+  return code;
 }
 
 class DigigraphStreamContractError extends Error {
@@ -85,20 +132,23 @@ async function* iterateOpenAiSse(
 export async function createDigigraphTraceStreamResponse(opts: {
   messages: UIMessage[];
   digigraphBaseUrl: string;
+  /** Includes the upstream `Authorization`; route.ts always builds it. */
   upstreamHeaders: Record<string, string>;
   responseHeaders: Record<string, string>;
-  upstreamBearer: string;
   activityDetail: ActivityDetail;
+  /** AbortSignal from the inbound request — Stop must cancel the digigraph fetch (#3475). */
+  signal?: AbortSignal;
 }) {
-  const stripped = opts.messages.map((m) => {
+  const stripped = uiMessagesForUpstream(opts.messages).map((m) => {
     const { id: _omit, ...rest } = m;
     void _omit;
     return rest;
   }) as Omit<UIMessage, "id">[];
-  const coreMessages = await convertToModelMessages(stripped);
+  const coreMessages = await convertToModelMessages(stripped, {
+    ignoreIncompleteToolCalls: true,
+  });
   const url = digigraphChatCompletionsUrl(opts.digigraphBaseUrl);
   const model = digigraphModelName();
-  const apiKey = opts.upstreamBearer;
 
   const stream = createUIMessageStream({
     onError: (error) => (error instanceof Error ? error.message : "digigraph stream error"),
@@ -106,7 +156,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
       let textSeq = 0;
       let textId = "assistant-main";
       writer.write({ type: "text-start", id: textId });
-      let activitySeq = 0;
+      const activityCtx = createActivityWriteContext();
       const bodyPayload: Record<string, unknown> = {
         model,
         messages: coreMessagesToDigigraphOpenAi(coreMessages),
@@ -116,14 +166,25 @@ export async function createDigigraphTraceStreamResponse(opts: {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+          // Authorization comes from upstreamHeaders and nowhere else, because
+          // route.ts sets it unconditionally (`route.ts:244`, one const literal;
+          // later lines only add X-* keys). NOT because the spread would override
+          // it — a spread overrides only keys it actually contains, so an
+          // `Authorization` set here WOULD survive a caller that omitted one. That
+          // is why route.ts's unconditional set is pinned by a test rather than
+          // left to inspection: if it ever becomes conditional, this adapter must
+          // regain a fallback or digigraph gets an unauthenticated request (#2537).
           ...opts.upstreamHeaders,
           // After upstreamHeaders so dogfood never inherits Open WebUI format.
-          // digigraph still treats model=sitaas-rag as Open WebUI unless opted out.
+          // Belt-and-suspenders: digigraph's Open WebUI chrome is opt-in only
+          // (X-Response-Format: openwebui or openwebui_format=true), never implied
+          // by model id, but dogfood forces plain explicitly rather than relying
+          // on that default.
           "X-Suppress-Tool-Stream": "1",
           "X-Response-Format": "plain",
         },
         body: JSON.stringify(bodyPayload),
+        signal: opts.signal,
       });
       if (!res.ok) {
         // Log the upstream detail server-side; never stream it. A 500 body can
@@ -134,6 +195,17 @@ export async function createDigigraphTraceStreamResponse(opts: {
           `[digigraph] upstream ${res.status} ${res.statusText}`,
           detail.length > 1500 ? `${detail.slice(0, 1500)}…` : detail
         );
+        const relayable = relayableUpstreamCode(detail);
+        if (relayable) {
+          // Actionable refusal: hand the code (never the body) to the client so
+          // it can say what to do instead of a dead end. Same mechanism as the
+          // `digigraph_error` SSE branch below; both now drop upstream `message`
+          // for BYOK remediable codes (embed-chat-error owns that copy).
+          writer.write({ type: "text-end", id: textId });
+          throw new DigigraphStreamContractError(
+            digigraphErrorToEmbedPayload({ code: relayable })
+          );
+        }
         writer.write({
           type: "text-delta",
           id: textId,
@@ -190,14 +262,11 @@ export async function createDigigraphTraceStreamResponse(opts: {
           }
 
           for (const span of mapDigigraphTraceToSpans(payload, opts.activityDetail)) {
-            writer.write({
-              type: ACTIVITY_PART_TYPE,
-              id: `dg-activity-${activitySeq++}`,
-              data: span,
-            });
+            writeStandardActivity(writer, span, activityCtx);
           }
         }
       }
+      finishStandardActivity(writer, activityCtx);
       writer.write({ type: "text-end", id: textId });
     },
   });

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextvars import copy_context
 from typing import Any, Callable
 
 _PLACEHOLDER_PATTERN = re.compile(r"\{\{(\w+)\.(\w+)\}\}")
@@ -89,6 +90,42 @@ def _run_step(
         return {"content": str(e)}
 
 
+def _run_step_in_fan_out(
+    execute_tool: Callable[[str, dict[str, Any]], str | dict[str, Any]],
+    agent: str,
+    args: dict[str, Any],
+) -> str | dict[str, Any]:
+    """Run one layer step in a pool worker: credentials inherited, telemetry handles dropped.
+
+    Both logical-call layers have to be dropped, not just digillm's: digigraph's
+    ``usage._LOGICAL_CALL_CONTEXT`` holds the same mutable handle one layer up, so leaving
+    it bound would put every step in the layer back on one shared handle. digillm's own
+    fan-out runs the second clear through a registered hook; this pool copies the context
+    itself, so it calls both directly.
+    """
+    # Local imports so this module stays importable without the LLM stack, as it was
+    # before it had any reason to reach into digillm at all. ``digigraph.usage`` imports
+    # digillm itself, so it is the same weight.
+    #
+    # Guarded because these run *outside* ``_run_step``'s handler, which already counts
+    # ``ImportError`` as a one-step failure (see ``_PLAN_STEP_ERRORS``). An unguarded
+    # raise here escapes the worker instead, and ``run_plan``'s bare ``future.result()``
+    # would discard every *other* step in the layer -- where the serial branch would
+    # have degraded to one error string. Nothing is lost by skipping the detach: the
+    # modules that bind these handles are the ones that failed to import, so there is
+    # no bound handle left to share. A detach that *itself* raises stays loud.
+    try:
+        from digillm import detach_provider_call_context
+
+        from digigraph.usage import detach_logical_call_context
+    except ImportError:
+        pass
+    else:
+        detach_provider_call_context()
+        detach_logical_call_context()
+    return _run_step(execute_tool, agent, args)
+
+
 def run_plan(
     steps: list[dict[str, Any]],
     execute_tool: Callable[[str, dict[str, Any]], str | dict[str, Any]],
@@ -106,9 +143,22 @@ def run_plan(
             s, agent, args = resolved[0]
             results[s["id"]] = _run_step(execute_tool, agent, args)
             continue
+        # Each step runs inside a copy of *this* context: a pool worker starts with an
+        # empty one, so a step that reaches an LLM (the delegate agents are exactly that)
+        # would lose the per-request BYOK binding and spend the operator's key. A fresh
+        # copy per submit -- one shared Context cannot be entered by two threads at once.
+        #
+        # A copy propagates references, so it would also hand every step in the layer the
+        # same mutable logical-call telemetry handle to race -- in *both* the digillm and
+        # the digigraph logical-call var, which carry the same handle. Propagate
+        # credentials, not the handle -- hence ``_run_step_in_fan_out``, which the serial
+        # branch above deliberately does not use: it runs in this context, not a copy of
+        # it, and unbinding the caller's own handle would lose its deferred records.
         with ThreadPoolExecutor(max_workers=len(resolved)) as executor:
             future_to_sid = {
-                executor.submit(_run_step, execute_tool, agent, args): s["id"]
+                executor.submit(
+                    copy_context().run, _run_step_in_fan_out, execute_tool, agent, args
+                ): s["id"]
                 for s, agent, args in resolved
             }
             for future in as_completed(future_to_sid):
