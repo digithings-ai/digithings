@@ -548,6 +548,9 @@ class TestMain:
     ) -> None:
         from datetime import datetime, timezone
 
+        from digiquant.dashboard.tenancy import house_workspace_id
+
+        house = str(house_workspace_id())
         recent = datetime.now(timezone.utc).isoformat()
         client = FakeClient(
             store={
@@ -556,13 +559,13 @@ class TestMain:
                 "checkpoint_writes": [],
                 "documents": [
                     {
-                        "workspace_id": "house",
+                        "workspace_id": house,
                         "document_key": "k",
                         "date": "2026-09-07",
                         "payload": {"a": 1},
                     },
                     {
-                        "workspace_id": "house",
+                        "workspace_id": house,
                         "document_key": "k",
                         "date": "2026-09-08",
                         "payload": {"a": 2},
@@ -589,6 +592,56 @@ class TestMain:
         assert live["2026-09-08"] == {"a": 2}  # retained
         pointers = client.store["archive_objects"]
         assert len(pointers) == 1 and pointers[0]["source_table"] == "documents"
+
+    def test_main_workspace_default_resolves_house_uuid(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from datetime import datetime, timezone
+
+        sentinel = "11111111-2222-4333-8444-555555555555"
+        recent = datetime.now(timezone.utc).isoformat()
+        client = FakeClient(
+            store={
+                "checkpoints": [{"thread_id": "only-run", "checkpoint": {"ts": recent}}],
+                "checkpoint_blobs": [],
+                "checkpoint_writes": [],
+                "documents": [
+                    {
+                        "workspace_id": sentinel,
+                        "document_key": "k",
+                        "date": "2026-09-07",
+                        "payload": {"a": 1},
+                    },
+                    {
+                        "workspace_id": sentinel,
+                        "document_key": "k",
+                        "date": "2026-09-08",
+                        "payload": {"a": 2},
+                    },
+                ],
+            }
+        )
+        monkeypatch.setattr(
+            "digiquant.ops.checkpoint_archive.house_workspace_id",
+            lambda: sentinel,
+        )
+        monkeypatch.setattr("digiquant.data.store.client.build_digiquant_client", lambda: client)
+        monkeypatch.setenv("R2_ACCOUNT_ID", "x")
+        monkeypatch.setenv("R2_BUCKET", "bkt")
+        monkeypatch.setenv("R2_ACCESS_KEY_ID", "k")
+        monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "s")
+        monkeypatch.setenv("DIGI_CHECKPOINTER_POSTGRES_URI", "postgresql://fake/db")
+        monkeypatch.setattr("digiquant.ops.checkpoint_archive.R2Backend", lambda **kw: FakeStore())
+        monkeypatch.setattr(
+            "digiquant.ops.checkpoint_archive.DirectPostgresReader",
+            lambda uri: _PostgrestPassthrough(client),
+        )
+        assert main([]) == 0
+        out = capsys.readouterr().out
+        assert "archived documents: 1 payloads" in out
+        live = {r["date"]: r["payload"] for r in client.store["documents"]}
+        assert live["2026-09-07"] is None  # archived
+        assert live["2026-09-08"] == {"a": 2}  # retained
 
 
 def test_r2_backend_from_new_env_names(monkeypatch):

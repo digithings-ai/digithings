@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 
+from digiquant.dashboard.tenancy import house_workspace_id
+
 logger = logging.getLogger(__name__)
 
 BLOB_TABLES = ("checkpoint_blobs", "checkpoint_writes")
@@ -701,7 +703,11 @@ def main(argv: list[str] | None = None) -> int:
         help="archive only threads whose newest checkpoint is older than N days",
     )
     parser.add_argument("--owner", default="house", help="owner tag for registry rows")
-    parser.add_argument("--workspace", default="house", help="documents workspace to archive")
+    parser.add_argument(
+        "--workspace",
+        default=None,
+        help="documents workspace id to archive (default: house workspace)",
+    )
     args = parser.parse_args(argv)
 
     from digiquant.data.store.client import build_digiquant_client
@@ -745,7 +751,13 @@ def main(argv: list[str] | None = None) -> int:
             manifests.append(manifest.to_dict())
             fresh_keys.update(entry.key for entry in manifest.entries)
             print(f"archived {thread_id}: {len(manifest.entries)} payloads")
-        docs = archive_documents(client, store, args.workspace, args.owner, payload_reader=reader)
+        docs = archive_documents(
+            client,
+            store,
+            args.workspace or str(house_workspace_id()),
+            args.owner,
+            payload_reader=reader,
+        )
         print(f"archived documents: {docs} payloads")
     finally:
         reader.close()
