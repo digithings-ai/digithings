@@ -4,6 +4,7 @@ import {
   connectedTools,
   cycleMcpAuth,
   emptyMcpConfig,
+  MCP_AUTH,
   mcpConfigJson,
   mcpConfigRecord,
   mcpMenuSummaryFromConfigs,
@@ -157,6 +158,12 @@ describe("cycleMcpAuth", () => {
     expect(cycleMcpAuth("none", 1)).toBe("bearer");
     expect(cycleMcpAuth("oauth", 1)).toBe("none");
     expect(cycleMcpAuth("none", -1)).toBe("oauth");
+  });
+});
+
+describe("MCP_AUTH", () => {
+  it("lists the three composer auth modes", () => {
+    expect(MCP_AUTH).toEqual(["none", "bearer", "oauth"]);
   });
 });
 

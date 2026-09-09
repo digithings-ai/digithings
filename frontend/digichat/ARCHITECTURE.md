@@ -805,7 +805,21 @@ Extra YAML/MCP catalog ids (`/datatap`) use the same pattern. Disabled catalog i
 as `X-Digi-Disabled-Tools` (BFF allowlists, digigraph subtracts). `/mcp`, `/models`, `/effort`,
 `/language`, `/provider`, and `/settings` open the same opaque composer-docked menu (`EmbedComposerMenu`);
 `/mcp` starts on the operator/session MCP list (status: Active / Disabled / Needs auth).
-Enter opens JSON + field editors (`/mcp new` adds a session MCP). `/tools` lists every
+Enter opens JSON + field editors (`/mcp new` adds a session MCP). The **id** field stays a
+text input (custom ids allowed). Focus or typing opens a compact in-menu dropdown just
+below the field — `absolute` under a `relative` wrap inside `.dc-composer-menu`, not a
+native `<datalist>` and not viewport-`fixed`. `/mcp` edit (and the other field editors)
+use `role="dialog"` so the listbox is not swallowed by `role="menu"`; the pane uses
+`overflow-visible` so the panel overlays label/url/auth instead of pushing the form.
+About 4–5 rows show (`max-h-40`,
+`overflow-y-auto`); grouped headers (productivity / finance / social / data / infra / chat)
+scroll with the rest of the curated snapshot
+(`src/components/stock/embed-mcp-catalog.ts`). Empty id uses the compact filter helper;
+typing filters by id/label substring. Escape closes the dropdown first, then the pane.
+Picking a row (click or Enter on a highlight) autofills
+`label` / `url` / `auth` (token kept unless the id changes). Custom ids still type freely;
+operator rows keep id/url locked and hide the catalog. Snapshot only — no live Smithery / PulseMCP / registry
+fetch, and `@assistant-ui/react-mcp` is not installed. `/tools` lists every
 connected tool as On/Off. `/models`, `/effort`,
 and `/language` start on their nested lists. Keyboard: Up/Down, Enter
 to toggle or enter a nested list, Left/Right on `/language` to cycle the full ISO map, Escape
