@@ -30,6 +30,12 @@ BLOB_KEY_COLUMNS: dict[str, tuple[str, ...]] = {
     "checkpoint_blobs": ("thread_id", "checkpoint_ns", "channel", "version"),
     "checkpoint_writes": ("thread_id", "checkpoint_ns", "checkpoint_id", "task_id", "idx"),
 }
+DOCUMENT_KEY_COLUMNS = ("workspace_id", "document_key", "date")
+# Every table the archiver may read by key (DirectPostgresReader validates here).
+KEY_COLUMNS_BY_TABLE: dict[str, tuple[str, ...]] = {
+    **BLOB_KEY_COLUMNS,
+    "documents": DOCUMENT_KEY_COLUMNS,
+}
 
 
 class ArchiveVerifyError(RuntimeError):
@@ -264,6 +270,40 @@ def _row_filters(table: str, row: dict[str, Any]) -> list[tuple[str, Any]]:
     return [(col, row.get(col)) for col in BLOB_KEY_COLUMNS[table]]
 
 
+def _insert_pointer(
+    client: Any,
+    source_table: str,
+    source_key: dict[str, Any],
+    r2_key: str,
+    sha256: str,
+    size: int,
+    owner: str,
+) -> None:
+    """Idempotent ``archive_objects`` insert; raises before any Supabase mutate.
+
+    Re-recording identical bytes is a no-op so a retried run converges; the
+    same key with different bytes raises so the Supabase row is kept.
+    """
+    existing = (
+        client.table("archive_objects").select("r2_key,sha256").eq("r2_key", r2_key).execute().data
+        or []
+    )
+    for pointer in existing:
+        if pointer.get("sha256") == sha256:
+            return
+        raise ArchiveVerifyError(f"archive pointer conflict for {r2_key}: Supabase row kept")
+    client.table("archive_objects").insert(
+        {
+            "source_table": source_table,
+            "source_key": source_key,
+            "r2_key": r2_key,
+            "sha256": sha256,
+            "size": size,
+            "owner": owner,
+        }
+    ).execute()
+
+
 def record_pointer(client: Any, entry: ArchiveEntry, owner: str = "house") -> None:
     """Insert one ``archive_objects`` pointer row; raises before any NULL-ing.
 
@@ -272,29 +312,15 @@ def record_pointer(client: Any, entry: ArchiveEntry, owner: str = "house") -> No
     the caller so the Supabase row is kept. Re-recording identical bytes is a
     no-op so a retried run converges; the same key with different bytes raises.
     """
-    source_table = entry.key.split("/")[2]
-    existing = (
-        client.table("archive_objects")
-        .select("r2_key,sha256")
-        .eq("r2_key", entry.key)
-        .execute()
-        .data
-        or []
+    _insert_pointer(
+        client,
+        entry.key.split("/")[2],
+        dict(entry.filters),
+        entry.key,
+        entry.sha256,
+        entry.size,
+        owner,
     )
-    for pointer in existing:
-        if pointer.get("sha256") == entry.sha256:
-            return
-        raise ArchiveVerifyError(f"archive pointer conflict for {entry.key}: Supabase row kept")
-    client.table("archive_objects").insert(
-        {
-            "source_table": source_table,
-            "source_key": dict(entry.filters),
-            "r2_key": entry.key,
-            "sha256": entry.sha256,
-            "size": entry.size,
-            "owner": owner,
-        }
-    ).execute()
 
 
 try:  # Optional: only needed for the live direct-Postgres read path.
@@ -331,10 +357,10 @@ class DirectPostgresReader:
         self._conn: Any = None
 
     def fetch_row(self, table: str, key: dict[str, Any]) -> dict[str, Any]:
-        """Fetch exactly one row by full primary key; raises on any other count."""
-        if table not in BLOB_TABLES:
+        """Fetch exactly one row by full key; raises on any other count."""
+        if table not in KEY_COLUMNS_BY_TABLE:
             raise ArchiveVerifyError(f"refusing direct read of unexpected table {table!r}")
-        key_cols = BLOB_KEY_COLUMNS[table]
+        key_cols = KEY_COLUMNS_BY_TABLE[table]
         predicate = " AND ".join(f'"{col}" IS NOT DISTINCT FROM %s' for col in key_cols)
         sql = f'SELECT * FROM "{table}" WHERE {predicate}'
         params = tuple(key.get(col) for col in key_cols)
@@ -449,25 +475,53 @@ def document_key(workspace: str, date: str, key: str) -> str:
 
 
 def archive_documents(
-    client: Any, store: StorageBackend, workspace: str, owner: str = "house"
+    client: Any,
+    store: StorageBackend,
+    workspace: str,
+    owner: str = "house",
+    payload_reader: Any = None,
 ) -> int:
     """Offload older document versions: compress → put → verify → registry → NULL the payload cell.
 
     Groups ``documents`` rows by ``document_key`` within *workspace*, keeps the
-    newest ``date`` live, and archives every older version. Rows already NULL
-    (prior pointers) are skipped. Any verification failure raises
+    newest ``date`` live, and archives every older version. The 58MB table is
+    never pulled whole: one key-only scan first, then one single-row fetch per
+    older version (via ``payload_reader`` when given, else PostgREST). Rows
+    already NULL (prior pointers) are skipped. Any verification failure raises
     :class:`ArchiveVerifyError` before touching Supabase, and a
     registry-insert failure raises before the NULL update, so a failed
     archive always keeps the Supabase row.
     """
-    rows = client.table("documents").select("*").eq("workspace_id", workspace).execute().data or []
+    key_cols = DOCUMENT_KEY_COLUMNS
+    key_rows = (
+        client.table("documents")
+        .select(",".join(key_cols))
+        .eq("workspace_id", workspace)
+        .execute()
+        .data
+        or []
+    )
     groups: dict[str, list[dict[str, Any]]] = {}
-    for row in rows:
-        groups.setdefault(row.get("document_key"), []).append(row)
+    for key_row in key_rows:
+        groups.setdefault(key_row.get("document_key"), []).append(key_row)
     archived = 0
     for key, versions in groups.items():
         versions.sort(key=lambda r: str(r.get("date")))
-        for row in versions[:-1]:
+        for key_row in versions[:-1]:
+            row_key = {col: key_row.get(col) for col in key_cols}
+            if payload_reader is not None:
+                row = payload_reader.fetch_row("documents", row_key)
+            else:
+                query = client.table("documents").select("*")
+                for col, val in row_key.items():
+                    query = query.eq(col, val)
+                matches = query.execute().data or []
+                if len(matches) != 1:
+                    raise ArchiveVerifyError(
+                        f"expected 1 row for documents {row_key}, found {len(matches)}; "
+                        "Supabase row kept"
+                    )
+                row = matches[0]
             if row.get("payload") is None:
                 continue
             r2_key = document_key(workspace, str(row.get("date")), str(key))
@@ -476,20 +530,19 @@ def archive_documents(
             store.put(r2_key, stored)
             if hashlib.sha256(store.get(r2_key)).hexdigest() != digest:
                 raise ArchiveVerifyError(f"read-back mismatch for {r2_key}; Supabase row kept")
-            client.table("archive_objects").insert(
+            _insert_pointer(
+                client,
+                "documents",
                 {
-                    "source_table": "documents",
-                    "source_key": {
-                        "workspace_id": workspace,
-                        "document_key": key,
-                        "date": row.get("date"),
-                    },
-                    "r2_key": r2_key,
-                    "sha256": digest,
-                    "size": len(stored),
-                    "owner": owner,
-                }
-            ).execute()
+                    "workspace_id": workspace,
+                    "document_key": key,
+                    "date": row.get("date"),
+                },
+                r2_key,
+                digest,
+                len(stored),
+                owner,
+            )
             query = client.table("documents").update({"payload": None})
             for col, val in (
                 ("workspace_id", workspace),
@@ -574,8 +627,10 @@ __all__ = [
     "ArchiveVerifyError",
     "BLOB_KEY_COLUMNS",
     "BLOB_TABLES",
+    "DOCUMENT_KEY_COLUMNS",
     "DirectPostgresReader",
     "HIGH_WATERMARK_BYTES",
+    "KEY_COLUMNS_BY_TABLE",
     "LOW_WATERMARK_BYTES",
     "PG_URI_ENV",
     "R2Backend",
@@ -646,6 +701,7 @@ def main(argv: list[str] | None = None) -> int:
         help="archive only threads whose newest checkpoint is older than N days",
     )
     parser.add_argument("--owner", default="house", help="owner tag for registry rows")
+    parser.add_argument("--workspace", default="house", help="documents workspace to archive")
     args = parser.parse_args(argv)
 
     from digiquant.data.store.client import build_digiquant_client
@@ -689,6 +745,8 @@ def main(argv: list[str] | None = None) -> int:
             manifests.append(manifest.to_dict())
             fresh_keys.update(entry.key for entry in manifest.entries)
             print(f"archived {thread_id}: {len(manifest.entries)} payloads")
+        docs = archive_documents(client, store, args.workspace, args.owner, payload_reader=reader)
+        print(f"archived documents: {docs} payloads")
     finally:
         reader.close()
     evicted = evict_to_watermark(client, store, fresh_keys)

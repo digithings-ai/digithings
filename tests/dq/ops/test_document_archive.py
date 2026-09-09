@@ -14,13 +14,17 @@ class _Result:
 
 
 class _DocQuery:
-    def __init__(self, table):
-        self._table = table
+    def __init__(self, client, name):
+        self._client = client
+        self._table = client.tables[name]
+        self._name = name
+        self._cols = None
         self._filters = []
         self._patch = None
         self._pending_insert = None
 
     def select(self, *args):
+        self._cols = args
         return self
 
     def eq(self, col, val):
@@ -56,21 +60,41 @@ class _DocQuery:
         if self._pending_insert is not None:
             self._table.append(self._pending_insert)
             row, self._pending_insert = self._pending_insert, None
+            self._client.statements.append(
+                {"table": self._name, "op": "insert", "cols": None, "filters": []}
+            )
             return _Result([row])
         if self._patch is not None:
             matched = self._matched()
             for row in matched:
                 row.update(self._patch)
+            self._client.statements.append(
+                {
+                    "table": self._name,
+                    "op": "update",
+                    "cols": None,
+                    "filters": list(self._filters),
+                }
+            )
             return _Result(matched)
+        self._client.statements.append(
+            {
+                "table": self._name,
+                "op": "select",
+                "cols": self._cols,
+                "filters": list(self._filters),
+            }
+        )
         return _Result(list(self._matched()))
 
 
 class FakeDocClient:
     def __init__(self):
         self.tables = {"documents": [], "archive_objects": []}
+        self.statements = []
 
     def table(self, name):
-        return _DocQuery(self.tables[name])
+        return _DocQuery(self, name)
 
 
 class FakeDocStore:
@@ -112,3 +136,56 @@ def test_archive_documents_keeps_latest_per_key():
         client.table("archive_objects").select("*").eq("source_table", "documents").execute().data
     )
     assert len(pointers) == 1
+
+
+def test_archive_documents_key_scan_then_single_row_fetches():
+    """The 58MB documents table must never be pulled via one select('*').
+
+    Expected shape (PostgREST 8s cap): one key-only scan first, then one
+    full-row select per older version keyed by the full row key.
+    """
+    client, store = FakeDocClient(), FakeDocStore()
+    seed_documents(
+        client,
+        versions=["2026-09-07", "2026-09-08", "2026-09-09"],
+    )
+    archive_documents(client, store, workspace="house")
+    selects = [s for s in client.statements if s["table"] == "documents" and s["op"] == "select"]
+    first_cols = ",".join(selects[0]["cols"])
+    assert "payload" not in first_cols, selects[0]
+    assert set(first_cols.split(",")) == {"workspace_id", "document_key", "date"}
+    full = [s for s in selects[1:] if s["cols"] == ("*",)]
+    assert len(full) == 2, selects
+    for stmt in full:
+        keyed = {col for col, _ in stmt["filters"]}
+        assert {"workspace_id", "document_key", "date"} <= keyed, stmt
+
+
+def test_archive_documents_rerun_writes_no_duplicate_pointer():
+    """A retried run (R2 object + pointer already exist) must not duplicate pointers."""
+    client, store = FakeDocClient(), FakeDocStore()
+    seed_documents(client, versions=["2026-09-07", "2026-09-08"])
+    archive_documents(client, store, workspace="house")
+    pointers = client.table("archive_objects").select("*").execute().data
+    assert len(pointers) == 1
+    key, sha = pointers[0]["r2_key"], pointers[0]["sha256"]
+    # Fresh client: payload still live (NULL never applied), pointer already recorded.
+    rerun, restore = FakeDocClient(), FakeDocStore()
+    seed_documents(rerun, versions=["2026-09-07", "2026-09-08"])
+    rerun.tables["archive_objects"].append(
+        {
+            "source_table": "documents",
+            "source_key": {
+                "workspace_id": "house",
+                "document_key": "olympus-thesis",
+                "date": "2026-09-07",
+            },
+            "r2_key": key,
+            "sha256": sha,
+            "size": 10,
+            "owner": "house",
+        }
+    )
+    archive_documents(rerun, restore, workspace="house")
+    again = rerun.table("archive_objects").select("*").execute().data
+    assert len(again) == 1
