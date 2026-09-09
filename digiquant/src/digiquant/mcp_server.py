@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 # with a live overlap and settled-close semantics. Default ``supabase`` keeps
 # the current bodies byte-for-byte (extracted as ``_supabase_*`` below).
 
-_BACKEND = os.environ.get("DIGIQUANT_MARKET_DATA_BACKEND", "supabase")
 _TTL_SECONDS = 900
 _ttl: dict[tuple, tuple[float, str]] = {}
 
@@ -34,7 +33,7 @@ _R2_LIVE_OVERLAP_DAYS = 30
 
 
 def _market_data_backend() -> str:
-    """Live read of the backend flag (``_BACKEND`` is the import-time snapshot)."""
+    """Live read of the ``DIGIQUANT_MARKET_DATA_BACKEND`` flag (default ``supabase``)."""
     return os.environ.get("DIGIQUANT_MARKET_DATA_BACKEND", "supabase").strip().lower()
 
 
@@ -120,6 +119,11 @@ def _read_r2_window(ticker: str, as_of: str, manifest: dict | None = None) -> li
     :func:`compute_indicators`. An ``as_of`` at or before the manifest seal
     skips the live fetch entirely. A missing ``latest`` pointer (KeyError)
     maps to an unknown-ticker ``LookupError`` for the MCP error envelope.
+    A live-fetch failure raises (surfaced as the ``{"error"}`` envelope by
+    the caller) — it is never swallowed into a valid-looking window.
+    Indicator columns are attached to the merged frame via a date-ordered
+    left join, with a row-count guard so a reordering/filtering change in
+    :func:`compute_indicators` fails loud instead of misaligning.
     """
     import io
     from datetime import date as _date
@@ -132,7 +136,10 @@ def _read_r2_window(ticker: str, as_of: str, manifest: dict | None = None) -> li
     from digiquant.data.prices.technicals import compute_indicators
 
     manifest = manifest if manifest is not None else _read_manifest()
-    manifest_as_of = str(manifest["as_of"])
+    as_of_d = _date.fromisoformat(as_of)
+    manifest_d = _date.fromisoformat(str(manifest["as_of"]))
+    manifest_seal = manifest_d.isoformat()
+    resolved_as_of = as_of_d.isoformat()
     store = _get_r2_store()
     datasets = manifest.get("datasets") or {}
     entry = datasets.get(ticker) or datasets.get(normalize_ticker(ticker))
@@ -157,14 +164,12 @@ def _read_r2_window(ticker: str, as_of: str, manifest: dict | None = None) -> li
         hist = hist.rename({"timestamp": "date"})
     hist = hist.with_columns(pl.col("date").cast(pl.Date)).sort("date")
 
-    if as_of <= manifest_as_of:
-        live = pl.DataFrame({"date": pl.Series("date", [], dtype=pl.Date)})
+    if as_of_d <= manifest_d:
+        live = hist.clear()
     else:
         try:
             from digiquant.data.prices.fetchers import fetch_batch
 
-            manifest_d = _date.fromisoformat(manifest_as_of)
-            as_of_d = _date.fromisoformat(as_of)
             live_start = max(manifest_d + _td(days=1), as_of_d - _td(days=_R2_LIVE_OVERLAP_DAYS))
             fetched = fetch_batch(
                 [ticker],
@@ -173,19 +178,37 @@ def _read_r2_window(ticker: str, as_of: str, manifest: dict | None = None) -> li
             )
             frame = fetched.frames.get(ticker)
             if frame is None or frame.is_empty():
-                live = pl.DataFrame({"date": pl.Series("date", [], dtype=pl.Date)})
+                live = hist.clear()
             else:
-                live = frame.with_columns(pl.col("timestamp").cast(pl.Date).alias("date"))
-        except Exception:
-            live = pl.DataFrame({"date": pl.Series("date", [], dtype=pl.Date)})
+                staged = frame.with_columns(pl.col("timestamp").cast(pl.Date).alias("date"))
+                live = staged.select(
+                    pl.col("date").cast(pl.Date),
+                    *(
+                        pl.col(c).cast(hist.schema[c])
+                        if c in staged.columns
+                        else pl.lit(None).cast(hist.schema[c]).alias(c)
+                        for c in hist.columns
+                        if c != "date"
+                    ),
+                )
+        except Exception as exc:
+            raise RuntimeError(f"live fetch failed for {ticker!r}: {exc}") from exc
 
-    merged = merge_history_live(hist, live, manifest_as_of, as_of, sealed=False)
+    merged = merge_history_live(hist, live, manifest_seal, resolved_as_of, sealed=False)
     if merged.is_empty():
         return []
     ohlcv = merged.rename({"date": "timestamp"}) if "timestamp" not in merged.columns else merged
     indicators = compute_indicators(ohlcv)
+    if indicators.height != merged.height:
+        raise RuntimeError(
+            f"indicator/price row mismatch for {ticker!r}: "
+            f"{indicators.height} indicator rows vs {merged.height} merged rows"
+        )
     return (
-        indicators.with_columns(merged["date"], merged["close"].alias("close"))
+        merged.select(pl.col("date"), pl.col("close"))
+        .with_row_index("_mcp_pos")
+        .join(indicators.with_row_index("_mcp_pos"), on="_mcp_pos", how="left")
+        .drop("_mcp_pos")
         .sort("date")
         .to_dicts()
     )
@@ -196,8 +219,10 @@ def _read_r2_macro_window(
 ) -> dict[str, dict]:
     """Per-series ``{latest, window}`` macro observations sealed at *as_of*.
 
-    Fail-soft per series (unknown series → empty window, mirroring the
-    Supabase path) so one bad id never fails the whole tool call.
+    A series whose generation is missing from the manifest (unknown sha) or
+    whose ``latest`` pointer is absent raises ``LookupError`` — surfaced as
+    the ``{"error"}`` envelope by the caller — so backfill key mismatches
+    fail loud instead of serving empty windows.
     """
     import io
 
@@ -218,8 +243,7 @@ def _read_r2_macro_window(
                     sha = cand.get("sha256")
                     break
             if sha is None:
-                out[sid] = {"latest": {}, "window": []}
-                continue
+                raise LookupError(f"unknown macro series {sid!r}")
             frame = pl.read_parquet(io.BytesIO(store.get_generation(gen_key, str(sha))))
             date_col = "obs_date" if "obs_date" in frame.columns else "date"
             rows = (
@@ -230,7 +254,7 @@ def _read_r2_macro_window(
             )
             out[sid] = {"latest": rows[-1] if rows else {}, "window": rows}
         except KeyError:
-            out[sid] = {"latest": {}, "window": []}
+            raise LookupError(f"unknown macro series {sid!r}") from None
     return out
 
 
@@ -426,12 +450,8 @@ def create_mcp_server() -> Any:
         )
         return json.dumps(raw, indent=2)
 
-    import digiquant.mcp_server as _mcp_module
-
-    _technicals_impl = _mcp_module.digiquant_get_price_technicals
-
-    @mcp.tool()
-    def digiquant_get_price_technicals(
+    @mcp.tool(name="digiquant_get_price_technicals")
+    def digiquant_get_price_technicals_tool(
         ticker: str, lookback: int = 20, as_of: str | None = None
     ) -> str:
         """Latest technical indicators + recent daily window for a ticker (JSON).
@@ -441,12 +461,10 @@ def create_mcp_server() -> Any:
         With ``DIGIQUANT_MARKET_DATA_BACKEND=r2``, reads the versioned R2
         history sealed at ``as_of`` (default: manifest seal) instead.
         """
-        return _technicals_impl(ticker, lookback=lookback, as_of=as_of)
+        return digiquant_get_price_technicals(ticker, lookback=lookback, as_of=as_of)
 
-    _macro_impl = _mcp_module.digiquant_get_macro_series
-
-    @mcp.tool()
-    def digiquant_get_macro_series(
+    @mcp.tool(name="digiquant_get_macro_series")
+    def digiquant_get_macro_series_tool(
         series_ids: list[str], lookback: int = 6, as_of: str | None = None
     ) -> str:
         """Latest values + recent window for FRED macro series ids (JSON).
@@ -456,7 +474,7 @@ def create_mcp_server() -> Any:
         With ``DIGIQUANT_MARKET_DATA_BACKEND=r2``, reads the versioned R2
         history sealed at ``as_of`` (default: manifest seal) instead.
         """
-        return _macro_impl(series_ids, lookback=lookback, as_of=as_of)
+        return digiquant_get_macro_series(series_ids, lookback=lookback, as_of=as_of)
 
     @mcp.tool()
     def digiquant_query_data(
