@@ -164,7 +164,7 @@ describe('displayableTradeHistory / tradeResult', () => {
   });
 });
 
-describe('lifecycleOf status mapping', () => {
+describe('lifecycle mapping', () => {
   it("maps 'carried' to live and 'dropped' to closed-and-hidden", () => {
     const rows = assembleTradeHistory(
       [
@@ -192,16 +192,18 @@ describe('lifecycleOf status mapping', () => {
         }),
       ],
     );
-    expect(rows[1].lifecycle).toBe('live');
-    expect(tradeResult(rows[1])).toBe('live');
-    expect(rows[0].lifecycle).toBe('closed');
-    expect(tradeResult(rows[0])).toBeNull();
+    const liveRow = rows.find((r) => r.runDate === '2026-07-24');
+    const droppedRow = rows.find((r) => r.runDate === '2026-07-25');
+    expect(liveRow?.lifecycle).toBe('live');
+    expect(liveRow && tradeResult(liveRow)).toBe('live');
+    expect(droppedRow?.lifecycle).toBe('closed');
+    expect(droppedRow && tradeResult(droppedRow)).toBeNull();
     expect(displayableTradeHistory(rows)).toHaveLength(1);
   });
 });
 
 describe('assembleTradeHistory excursion passthrough', () => {
-  it('carries max favorable/adverse extremes onto the history row', () => {
+  it('passes max favorable/adverse extremes onto the history row', () => {
     const rows = assembleTradeHistory(
       [idea({ run_date: '2026-07-24', rank: 1 })],
       [
@@ -215,20 +217,39 @@ describe('assembleTradeHistory excursion passthrough', () => {
     );
     expect(rows[0].maxFavorable).toBe(0.02);
     expect(rows[0].maxAdverse).toBe(-0.008);
+    expect(rows[0].continuedFrom).toBeUndefined();
+    expect(rows[0].nBoards).toBeUndefined();
+  });
+
+  it('passes continuation badge fields onto the history row', () => {
+    const rows = assembleTradeHistory(
+      [idea({ run_date: '2026-07-24', rank: 1 })],
+      [
+        evalRow({
+          run_date: '2026-07-24',
+          rank: 1,
+          continued_from: '2026-07-06',
+          n_boards: 2,
+        }),
+      ],
+    );
+    expect(rows[0].continuedFrom).toBe('2026-07-06');
+    expect(rows[0].nBoards).toBe(2);
   });
 });
 
 describe('netCarriedIdeas', () => {
+  const live = (over: Record<string, unknown>) =>
+    evalRow({
+      status: 'carried',
+      exit_date: null,
+      exit_fix: null,
+      directional_win: null,
+      hit: null,
+      ...over,
+    } as Parameters<typeof evalRow>[0]);
+
   it('keeps one carried row per currency axis with a continuation badge', () => {
-    const live = (over: Record<string, unknown>) =>
-      evalRow({
-        status: 'carried',
-        exit_date: null,
-        exit_fix: null,
-        directional_win: null,
-        hit: null,
-        ...over,
-      } as Parameters<typeof evalRow>[0]);
     const kept = netCarriedIdeas([
       live({ run_date: '2026-07-06', rank: 1, pair: 'JPY/USD', direction: 'long' }),
       live({ run_date: '2026-09-04', rank: 2, pair: 'USD/JPY', direction: 'short' }),
@@ -243,6 +264,55 @@ describe('netCarriedIdeas', () => {
     const single = kept.find((r) => r.pair === 'EUR/USD');
     expect(single?.continued_from).toBeUndefined();
     expect(single?.n_boards).toBeUndefined();
+  });
+
+  it('nets same-board same-axis duplicates with no continuation badge', () => {
+    const kept = netCarriedIdeas([
+      live({ run_date: '2026-09-04', rank: 1, pair: 'USD/JPY', direction: 'long' }),
+      live({ run_date: '2026-09-04', rank: 2, pair: 'USD/JPY', direction: 'short' }),
+    ]);
+    expect(kept).toHaveLength(1);
+    expect(kept[0].pair).toBe('USD/JPY');
+    expect(kept[0].continued_from).toBeUndefined();
+    expect(kept[0].n_boards).toBeUndefined();
+  });
+
+  it('returns kept rows ordered by board date then rank', () => {
+    const kept = netCarriedIdeas([
+      live({ run_date: '2026-09-04', rank: 2, pair: 'USD/JPY', direction: 'short' }),
+      evalRow({ run_date: '2026-09-10', rank: 1, pair: 'GBP/USD' }),
+      evalRow({ run_date: '2026-07-01', rank: 1, pair: 'EUR/USD' }),
+    ]);
+    const keys = kept.map((r) => `${r.run_date}::${r.rank}`);
+    expect(keys).toEqual([...keys].sort());
+  });
+
+  it('does not mutate its input rows or array', () => {
+    const input: FxIdeaEvalRow[] = [
+      live({ run_date: '2026-07-06', rank: 1, pair: 'JPY/USD', direction: 'long' }),
+      live({ run_date: '2026-09-04', rank: 2, pair: 'USD/JPY', direction: 'short' }),
+    ];
+    const snapshot = JSON.parse(JSON.stringify(input));
+    for (const row of input) Object.freeze(row);
+    Object.freeze(input);
+    const kept = netCarriedIdeas(input);
+    expect(kept).toHaveLength(1);
+    expect(kept[0].continued_from).toBe('2026-07-06');
+    expect(input).toEqual(snapshot);
+  });
+
+  it('passes carried rows with a nonzero horizon through un-netted', () => {
+    const kept = netCarriedIdeas([
+      live({ run_date: '2026-07-06', rank: 1, pair: 'USD/JPY', horizon_days: 5 }),
+      live({ run_date: '2026-09-04', rank: 2, pair: 'USD/JPY', direction: 'short' }),
+    ]);
+    expect(kept).toHaveLength(2);
+    const horizonRow = kept.find((r) => r.horizon_days === 5);
+    expect(horizonRow?.continued_from).toBeUndefined();
+    expect(horizonRow?.n_boards).toBeUndefined();
+    const winner = kept.find((r) => r.run_date === '2026-09-04');
+    expect(winner?.continued_from).toBeUndefined();
+    expect(winner?.n_boards).toBeUndefined();
   });
 });
 

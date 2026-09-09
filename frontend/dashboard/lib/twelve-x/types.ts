@@ -443,7 +443,7 @@ export interface FxIdeaEvalRow {
   significant_hit: boolean | null;
   n_sessions: number;
   as_of: string;
-  /** Close-based excursion outputs (migration 021); absent when unscored. */
+  /** Excursion outputs scored from daily closes (migration 021); absent when unscored. */
   bias_verdict?: string | null;
   max_favorable?: number | null;
   max_adverse?: number | null;

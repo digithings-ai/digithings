@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { createElement, act } from 'react';
+import { createElement, act, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import ExcursionRangeCell from './ExcursionRangeCell';
@@ -9,7 +9,7 @@ import ExcursionRangeCell from './ExcursionRangeCell';
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
-async function mount(ui: React.ReactElement): Promise<HTMLElement> {
+async function mount(ui: ReactElement): Promise<HTMLElement> {
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
@@ -45,9 +45,9 @@ describe('ExcursionRangeCell (happy-dom)', () => {
     expect(text).not.toMatch(/stop|target/i);
     // Track is decorative; the marker sits at the hold position:
     // lo=-0.008, hi=0.02 → (0.012+0.008)/0.028 ≈ 71.4%.
-    const marker = el.querySelector('span[aria-hidden="true"] span.bg-ink') as HTMLElement;
+    const marker = el.querySelector('span.bg-ink') as HTMLElement;
     expect(marker).toBeTruthy();
-    expect(parseFloat(marker.style.left)).toBeCloseTo(71.4, 0);
+    expect(parseFloat(marker.style.left)).toBeCloseTo(71.4, 1);
   });
 
   it('falls back to an em dash with no excursion data', async () => {

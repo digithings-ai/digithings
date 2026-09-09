@@ -33,6 +33,10 @@ export interface TradeHistoryRow {
   /** Worst direction-signed excursion seen while live (fraction vs entry). */
   maxAdverse: number | null;
   directionalWin: boolean | null;
+  /** Earliest board date when ≥2 distinct carried boards net into this row. */
+  continuedFrom?: string;
+  /** Distinct carried board count backing this row; set only when ≥2. */
+  nBoards?: number;
 }
 
 export type ResultFilter = 'all' | 'wins' | 'losses' | 'live';
@@ -89,13 +93,14 @@ function lifecycleOf(status: string | undefined): TradeLifecycle {
   if (status === 'carried') return 'live';
   if (status === 'missing_rates') return 'no_data';
   // 'dropped' (bookkeeper verdict) and anything else land here: closed, and
-  // hidden downstream since carried/dropped rows carry no directional verdict.
+  // hidden downstream since dropped rows carry no directional verdict.
   return 'closed';
 }
 
 /**
- * Orientation-independent currency-axis key: `JPY/USD long` and
- * `USD/JPY short` share an axis, mirroring twelve-x `axis_key`.
+ * Orientation-independent currency-axis key: `JPY/USD` and `USD/JPY` share
+ * an axis; groups orientation-independently, same grouping as the pipeline
+ * axis_key for canonical pairs.
  */
 export function axisKey(pair: string | null | undefined): string {
   const parts = (pair ?? '').toUpperCase().split('/');
@@ -105,9 +110,9 @@ export function axisKey(pair: string | null | undefined): string {
 
 /**
  * Net carried lifecycle rows to one per currency axis for the Trades board:
- * the latest board wins; winners spanning ≥2 boards carry `continued_from`
- * (earliest board date) + `n_boards`. Non-carried rows pass through.
- * Input rows are not mutated.
+ * the latest board is kept; kept rows spanning ≥2 distinct boards attach
+ * `continued_from` (earliest board date) + `n_boards`. Non-carried rows pass
+ * through. Input rows are not mutated.
  */
 export function netCarriedIdeas(rows: FxIdeaEvalRow[]): FxIdeaEvalRow[] {
   const passthrough: FxIdeaEvalRow[] = [];
@@ -126,12 +131,14 @@ export function netCarriedIdeas(rows: FxIdeaEvalRow[]): FxIdeaEvalRow[] {
   for (const group of byAxis.values()) {
     const sorted = [...group].sort((a, b) => a.run_date.localeCompare(b.run_date) || a.rank - b.rank);
     const winner = sorted[sorted.length - 1];
+    const distinctDates = new Set(sorted.map((r) => r.run_date));
     kept.push(
-      sorted.length > 1
-        ? { ...winner, continued_from: sorted[0].run_date, n_boards: sorted.length }
+      distinctDates.size >= 2
+        ? { ...winner, continued_from: sorted[0].run_date, n_boards: distinctDates.size }
         : winner,
     );
   }
+  kept.sort((a, b) => a.run_date.localeCompare(b.run_date) || a.rank - b.rank);
   return kept;
 }
 
@@ -213,8 +220,10 @@ export function assembleTradeHistory(
         holdReturn: ev?.hold_return ?? ev?.ret ?? null,
         maxFavorable: ev?.max_favorable ?? null,
         maxAdverse: ev?.max_adverse ?? null,
-        directionalWin: ev?.directional_win ?? ev?.hit ?? null,
-      } satisfies TradeHistoryRow;
+          directionalWin: ev?.directional_win ?? ev?.hit ?? null,
+          continuedFrom: ev?.continued_from ?? undefined,
+          nBoards: ev?.n_boards ?? undefined,
+        } satisfies TradeHistoryRow;
     })
     .sort((a, b) => b.runDate.localeCompare(a.runDate) || a.rank - b.rank);
 }

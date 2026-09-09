@@ -4,8 +4,9 @@ import { formatHoldPct } from '@/lib/twelve-x/trade-history';
  * Observed excursion range for one idea, drawn in the Impact column.
  *
  * `maxAdverse` / `maxFavorable` are the worst/best direction-signed
- * excursions seen while the idea was live (fractions vs entry, close-based
- * feed); the ink marker is the close-based hold return. All three share one
+ * excursions seen while the idea was live (fractions vs entry, scored from
+ * daily closes); the ink marker is the hold return, also scored from daily
+ * closes. All three share one
  * axis running from the low extreme through 0 (entry — the accent tick) to
  * the high extreme. Display-only: levels never drive lifecycle scoring.
  */
@@ -44,7 +45,7 @@ export default function ExcursionRangeCell({
         <span className="text-up">{formatHoldPct(fav)}</span>
       </span>
       {/* The track pictures the numbers above it: hidden from assistive tech,
-          meaning carried by the sr-only label — never colour-only, no tooltip. */}
+          meaning conveyed by the sr-only label — never colour-only, no tooltip. */}
       <span className="relative h-1 w-24 bg-term-bg" aria-hidden>
         <span
           className="absolute inset-y-0 rounded-l-full bg-down/40"

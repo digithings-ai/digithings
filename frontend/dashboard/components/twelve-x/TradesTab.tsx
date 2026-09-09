@@ -412,7 +412,10 @@ function TradeRow({ row }: { row: TradeHistoryRow }) {
   if (result === null) return null;
   return (
     <tr>
-      <td className="whitespace-nowrap px-3 py-2 font-mono text-ink-mute">{row.runDate}</td>
+      <td className="whitespace-nowrap px-3 py-2 font-mono text-ink-mute">
+        {row.runDate}
+        {row.continuedFrom ? <span className="ml-1">· cont. since {row.continuedFrom}</span> : null}
+      </td>
       <td className="whitespace-nowrap px-3 py-2 text-ink">{row.pair}</td>
       <td className="whitespace-nowrap px-3 py-2 text-ink">{biasLabel(row.direction)}</td>
       <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-ink">
