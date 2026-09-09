@@ -199,6 +199,12 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   color: var(--destructive);
 }
 
+.aui-message-error-root {
+  color: var(--destructive);
+  border-color: color-mix(in oklch, var(--destructive) 40%, transparent);
+  background: color-mix(in oklch, var(--destructive) 10%, transparent);
+}
+
 .dc-paywall,
 .dc-gate-card {
   margin: 1rem auto;

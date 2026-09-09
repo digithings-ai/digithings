@@ -36,7 +36,7 @@ export const MessageError: FC = () => {
 
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/15 mt-2 rounded-md border p-3 text-sm dark:text-red-300">
+      <ErrorPrimitive.Root className="aui-message-error-root mt-2 rounded-md border border-hair bg-surface p-3 text-sm text-ink">
         <div className="min-w-0 flex-1">
           <ErrorPrimitive.Message className="aui-message-error-message whitespace-pre-wrap">
             {title}

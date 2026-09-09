@@ -58,7 +58,7 @@ export const MessageError: FC = () => {
 
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root mt-2 flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-300">
+      <ErrorPrimitive.Root className="aui-message-error-root mt-2 flex items-start gap-2 rounded-md border border-hair bg-surface px-3 py-2 text-sm text-ink">
         <DotMatrix state="error" label="Error" />
         <div className="min-w-0 flex-1">
           <ErrorPrimitive.Message className="aui-message-error-message whitespace-pre-wrap">

@@ -793,7 +793,7 @@ This closes only the `OLLAMA_MODEL`-clobber case. A deployment whose *mode defau
 
 **Free-quota errors:** provider 429 / RPD under `llm_mode: free` maps to stable code `free_quota_exceeded` (HTTP 429 + SSE `delta.digigraph_error`) for digichat BYOK handoff. Generic rate limits outside free mode use `rate_limit`.
 
-**`delta.digigraph_error` contract (streaming):** `run_digigraph_workflow_streaming` always emits `("error", {"code", "message", optional "detail"})` when `final["error"]` is set. Unclassified failures use code `llm_error`. Messages are sanitized (no Compose DNS, no secrets); `detail` is the longer provider dump for the embed disclosure. digichat's stream adapter relays `message`/`detail` except for `BYOK_MODEL_REMEDIABLE_CODES` (code only; `embed-chat-error` supplies trusted copy — #2536). Quota/rate-limit still use `free_quota_exceeded` / `rate_limit`.
+**`delta.digigraph_error` contract (streaming):** `run_digigraph_workflow_streaming` always emits `("error", {"code", "message", optional "detail"})` when `GRAPH_RUNTIME_ERRORS` fire or `final["error"]` is set — never assistant `content` prefixed with `Error:`. Unclassified failures use code `llm_error`. Messages are sanitized (no Compose DNS, no secrets); `detail` is the longer provider dump for the embed disclosure. digichat's stream adapter relays `message`/`detail` except for `BYOK_MODEL_REMEDIABLE_CODES` (code only; `embed-chat-error` supplies trusted copy — #2536). Quota/rate-limit still use `free_quota_exceeded` / `rate_limit`.
 
 CLI: `digi llm-settings` / `python -m digigraph.cli llm-settings` prints effective provider/model/key-env present (never secrets).
 

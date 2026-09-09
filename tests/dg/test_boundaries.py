@@ -50,7 +50,11 @@ def test_streaming_maps_graph_runtime_errors_to_sse_content() -> None:
     while not queue.empty():
         events.append(queue.get())
 
-    assert ("content", "Error: graph blew up") in events
+    error_events = [e for e in events if e[0] == "error"]
+    assert len(error_events) == 1
+    assert error_events[0][1]["code"] == "llm_error"
+    assert error_events[0][1]["message"] == "graph blew up"
+    assert not any(e[0] == "content" for e in events)
     assert events[-1] == ("done", None)
 
 
