@@ -6,6 +6,7 @@ import {
   digithingsCsp,
   embedOriginForChat,
   frameSrcForCsp,
+  openwikiCsp,
   renderCloudflareHeaders,
   resolveDigichatEmbedOrigin,
 } from "./security-headers.mjs";
@@ -52,8 +53,25 @@ describe("digithings-web security-headers", () => {
     expect(text).not.toMatch(/frame-src 'none'/);
     expect(text).toMatch(/frame-ancestors 'none'/);
     expect(defaultCsp).toContain("worker-src 'self' blob:");
+    expect(defaultCsp).toContain("connect-src 'self' https://api.github.com");
     expect(renderCloudflareHeaders(DEFAULT_DIGICHAT_EMBED_ORIGIN)).toContain(
       defaultCsp,
     );
+  });
+
+  // /openwiki/* exception for the openwiki visualizer export (#3696): pinned
+  // jsDelivr scripts + Google Fonts only, everything else as strict as /*.
+  it("renders an /openwiki/* exception scoped to the visualizer's needs", () => {
+    const text = renderCloudflareHeaders(DEFAULT_DIGICHAT_EMBED_ORIGIN);
+    expect(text).toContain("/openwiki/*");
+    const wiki = openwikiCsp();
+    expect(text).toContain(wiki);
+    expect(wiki).toContain("script-src 'self' https://cdn.jsdelivr.net");
+    expect(wiki).toContain("https://fonts.googleapis.com");
+    expect(wiki).toContain("https://fonts.gstatic.com");
+    expect(wiki).not.toContain("frame-src 'none'");
+    expect(wiki).toContain("frame-ancestors 'none'");
+    expect(wiki).toContain("object-src 'none'");
+    expect(wiki).not.toContain("https://api.github.com");
   });
 });

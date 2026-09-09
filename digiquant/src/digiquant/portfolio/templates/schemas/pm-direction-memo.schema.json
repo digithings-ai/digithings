@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PM Direction Memo",
+  "description": "H7 portfolio direction artifact \u2014 direction, conviction rank, and confidence in [0, 1]; weights are set by H8. ForecastReference is attached post-LLM (WP4.5); do not invent forecast IDs. Rank is order, not size.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "date",
+    "roster"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "memo": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "roster": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ticker",
+          "direction",
+          "conviction_rank"
+        ],
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "maxLength": 12
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "long",
+              "flat"
+            ]
+          },
+          "conviction_rank": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "narrative": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1,
+            "description": "How sure the PM is of this name, in [0, 1]. Rank remains order, not size."
+          },
+          "forecast_reference": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "description": "Deterministic H7\u2192effective-forecast audit link (WP4.5); never LLM-authored.",
+            "required": [
+              "ticker"
+            ],
+            "properties": {
+              "ticker": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effective_forecast_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "base_forecast_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "amendment_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "degradation_reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

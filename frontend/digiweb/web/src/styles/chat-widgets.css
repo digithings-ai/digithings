@@ -33,26 +33,44 @@
   border-left-color: color-mix(in srgb, var(--danger) 55%, var(--term-hair));
 }
 
-/* a live (running) call breathes its status mark */
-.tc-run {
-  animation: tc-run-pulse 1.2s var(--ease) infinite;
+.tc-dump {
+  max-height: 8.5rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
-@keyframes tc-run-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
+.tc-caret {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 0.55rem;
+  height: 0.55rem;
+  color: var(--term-mute, var(--ink-mute));
+  transform: none;
+  transform-origin: 50% 50%;
+}
+
+.tc-caret [data-slot="dot-matrix"] {
+  width: 0.55rem;
+  height: 0.55rem;
+}
+
+.tc-caret.open,
+button.tc-head[aria-expanded="true"] .tc-caret {
+  transform: rotate(90deg);
+}
+
+.tc-run {
+  color: var(--term-mute, var(--ink-mute));
 }
 
 /* ── thinking / reasoning disclosure (ChatThinking) ─────────────────── */
 
 .think-chip {
-  background: color-mix(in srgb, var(--surface) 60%, transparent);
-  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+  background: transparent;
+  transition: color 0.2s var(--ease);
 }
 
 .think-chip:hover {
@@ -61,12 +79,20 @@
 }
 
 .think-caret {
-  width: 0;
-  height: 0;
-  border-left: 4px solid currentColor;
-  border-top: 3px solid transparent;
-  border-bottom: 3px solid transparent;
-  transition: transform 0.2s var(--ease);
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-left: auto;
+  transform: none;
+  transform-origin: 50% 50%;
+}
+
+.think-caret [data-slot="dot-matrix"] {
+  width: 0.55rem;
+  height: 0.55rem;
 }
 
 .think-chip.open .think-caret {
@@ -74,27 +100,9 @@
 }
 
 .think-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--accent);
-}
-
-.think-dot.is-live {
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
-  animation: think-pulse 1.8s var(--ease) infinite;
-}
-
-@keyframes think-pulse {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
-  }
-  70% {
-    box-shadow: 0 0 0 5px transparent;
-  }
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-  }
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--accent);
 }
 
 .think-steps {
@@ -135,7 +143,7 @@
 }
 
 .cw-btn--primary {
-  color: var(--on-accent);
+  color: var(--bg);
 }
 
 .cw-btn--ghost:hover {
@@ -153,7 +161,8 @@
 /* ── reduced motion ─────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
-  .think-caret {
+  .think-caret,
+  .tc-caret {
     transition: none;
   }
   .tc-run,

@@ -8,12 +8,14 @@ import { strategyDisplayName } from "@/components/tearsheet/strategy-names";
 
 // Static export needs the route list (and per-route metadata) at build time,
 // while the tearsheet DATA is read live from Supabase inside <TearsheetView/>.
-// The published set is the three Slappers; keep the slug→label/symbol map here
-// so the build never depends on the live store (#1069).
+// The published set is the three Slappers plus btc_sdca (DCA). Keep the
+// slug→label/symbol map here so the build never depends on the live store (#1069).
+// Route slugs stay code ids (`btc_sdca`, `*_slapper`); public names are asset-then-type.
 const PUBLISHED: Record<string, { label: string; symbol: string }> = {
-  btc_slapper: { label: "BTC Slapper", symbol: "BTC-USD" },
-  eth_slapper: { label: "ETH Slapper", symbol: "ETH-USD" },
-  sol_slapper: { label: "SOL Slapper", symbol: "SOL-USD" },
+  btc_slapper: { label: "BTC L/S", symbol: "BTC-USD" },
+  eth_slapper: { label: "ETH L/S", symbol: "ETH-USD" },
+  sol_slapper: { label: "SOL L/S", symbol: "SOL-USD" },
+  btc_sdca: { label: "BTC-SDCA", symbol: "BTC-USD" },
 };
 
 export const dynamicParams = false;
@@ -24,9 +26,14 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const s = PUBLISHED[id];
   const name = s ? strategyDisplayName(id, s.label) : id;
-  return s
-    ? { title: `${name} · ${s.symbol} — digiquant tearsheet`, description: `Backtest tearsheet for ${name} (${s.symbol}) — equity, drawdown, and per-trade analytics.` }
-    : { title: "Strategy Tearsheet — digiquant" };
+  if (!s) return { title: "Strategy Tearsheet — digiquant" };
+  const dca = id.includes("sdca");
+  return {
+    title: `${name} · ${s.symbol} — digiquant tearsheet`,
+    description: dca
+      ? `Backtest tearsheet for ${name} (${s.symbol}) — remaining-book SDCA on a composite valuation index. Illustrative Nautilus backtest; not a live strategy.`
+      : `Backtest tearsheet for ${name} (${s.symbol}) — equity, drawdown, and per-trade analytics.`,
+  };
 }
 
 export default async function TearsheetPage({ params }: { params: Promise<{ id: string }> }) {

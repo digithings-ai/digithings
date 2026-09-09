@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:cb1466b0016ac6c6f0009b2674086dd1366d1f256115838d5a9b918e211258cf",
+  "claims": [
+    {
+      "id": "claim_e03ee801e3ae4ade8e7e554bcfbacb33",
+      "statement": "Provider prefixes register base URLs and key env vars while get_client_for_model resolves per request across default base, LiteLLM proxy, OpenRouter, and BYOK pass-throughs with request-scoped credential overrides.",
+      "evidence": [
+        {
+          "resource": "repo://digillm/src/digillm/client.py#L150-L186",
+          "version": "repo-lines-v1:sha256:2bc9c56044917f5b91a26bf240fd3201c4f4fc6e018b4f89aef00af4675db2f0:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJlNmMyZDVlMGViYWJlZGU3YjRhZjdkNDgwOWExMzRlYjM3MzA1ODM1NGM1MjcyYjUyM2M4N2QxOWFiNjc1OWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZkYTNhMTZlOTZiM2I5Njk3YTI2ZTNlZjkzMDA4OWEwYzI3YWIzNzVkNDgwZTc1ODg0OWMzNTU0MTA3NTM1YTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA5ZjkzMDgzYzE5NzEyMWI5ODI3MDBiYThhZmFiZDE3MjJjZjFkM2U3NDA0NTA5ZTgwZWZhMjcyNDdmNjJmMDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc3NDk0OTBiYjA3ZTNkZjgzOWQ4MDRlYWE3YWYyODQyMTYyMGFlZjc0YTlmYjg4ZDNiZGJiMTM2ZjFjYjkyNTAifQ"
+        },
+        {
+          "resource": "repo://digillm/src/digillm/client.py#L405-L450",
+          "version": "repo-lines-v1:sha256:1e9d40c7ce2cb9c081e87c8543390e54cfc7ecb1d7bd506db928b49f87bc0d08:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3ZTVhM2QzMzIwMzJiYmYyODUzZTg1NzU4MzA5NWQ0YTQzMzg0MDRlMmY4OGQxMGU3NzNhY2MxOTViMDQzYTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk5NzFlODdmZGIyY2M1NzRiOGE5Njk3OWU1NTQ0NDE1ZDU3MjBjNjE1NTdhMmYxMmI0MGIyYjU3MWIwNzUyYTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVlYThmYWVmM2Y1Yjg4YTQ3ZWQxNDI3NzY2MTU3ZTQyMmE5OGViYzhiODY4MjE1Y2ZiOWY3MWUwYzY3MGZjNWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRhZjdhYTVkMzU1YzIxYzhjZmM2MDZkMzAzZTllZTA4ODUxNTFjOWQ1ZjE4ZTg1MGE2YTk2OTQ3YTUxNTY4ZWUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7f29426255044c91bbf9dfe2fc87e47b",
+      "statement": "Telemetry separates NodeRunRecord, ProviderCallRecord, and ProviderAttemptRecord with fail-soft observer delivery that never breaks the call path.",
+      "evidence": [
+        {
+          "resource": "repo://digillm/src/digillm/telemetry.py#L122-L222",
+          "version": "repo-lines-v1:sha256:d82f3b23022d13badc6993f37b7b688cc9baed2cd97b0e50f162aa2a42290e1f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAxLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIwMTdmNTU5OTIxZGUyNmZlY2E3Nzc1NWZhYzVlZGY3YjdiMTY4Y2Q2OTdmYzQ4NGZhOTUyZWZjOGU1MWNlOWVhIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJmOTE4NzM2NzZlZmZiMDc5NWJjMmFjZDFlNzZjZjIxNGRiNDRiODA0YWJjYTBlMWIxNDMxZGQxNGEyMGExMGFkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI0YjUzMGVkZTRmM2U4ODJkNmU4NWU5ZTZhNzdiYmEyOTU5OTk5NzFlNjU5OTRlNGUwNDFiYzAwM2IxNTc4ZDJmIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0ZWE5YmY4N2U3MGQwMzQyY2RkNjc1M2RhMzkzMThiNzAzNTVjZWJjODJhYTk3NzZhYTQ5ZThlM2RlYTc1ZDdhIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_f984130a418f499c99d52b163e2cdc33",
+      "statement": "digillm is provider-agnostic with LiteLLM as the house swap layer, hard deps openai plus pydantic only, no FastAPI, and digismith tracing as a degrading optional.",
+      "evidence": [
+        {
+          "resource": "repo://digillm/ARCHITECTURE.md#L1-L30",
+          "version": "repo-lines-v1:sha256:86ba7b92d8c81b9cd533c954253d832c25f761886a1213dbe02390e12036a756:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNlMzNlNTc5YWRhMzA5NDIyNzQwMzZmOTM3NzUxMzUwYjIyNGU0MzYwOWMyYzMwODdhZDA2NTMyZmQ0ODAxMTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzMjY0NjViNGFjZTA1MjNiYTk3ZDg5MDVjMTY2NjEyYTRkMTg4YmY5YWE5NGNiODAyNGM5ODA0MmE3Nzg2NzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMyMmViZGEwNjJhN2I5OGJjZmUwN2M2YTZhZTIyOGQ3ZDNjZDNjZjg0ZmFkOGVjNWE2ODE0NWE0YzAyN2MyZmQifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

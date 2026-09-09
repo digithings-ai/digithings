@@ -21,7 +21,7 @@ function DocsCopyButton({ text, ariaLabel }: { text: string; ariaLabel: string }
   return (
     <button
       type="button"
-      className="docs-code-copy cursor-pointer rounded-[6px] border border-hair bg-surface/80 px-[0.4rem] py-[0.12rem] font-mono text-[0.7rem] text-ink-mute hover:text-ink"
+      className="docs-code-copy cursor-pointer rounded-none border border-hair bg-surface/80 px-[0.4rem] py-[0.12rem] font-mono text-[0.7rem] text-ink-mute hover:text-ink"
       aria-label={ariaLabel}
       onClick={() =>
         navigator.clipboard?.writeText(text).then(
@@ -49,7 +49,7 @@ export function DocsCodeBlock({
   return (
     <div className="doc-code relative mt-[0.5rem]">
       <DocsCopyButton text={code} ariaLabel={copyLabel} />
-      <pre className="m-0 overflow-x-auto rounded-[9px] border border-hair bg-ink/6 px-[0.8rem] py-[0.7rem]">
+      <pre className="m-0 overflow-x-auto rounded-none border border-hair bg-ink/6 px-[0.8rem] py-[0.7rem]">
         <code className="whitespace-pre font-mono text-[0.8rem] text-ink">{code}</code>
       </pre>
     </div>
@@ -71,7 +71,7 @@ export function CodeTabs({ samples }: { samples: CodeSample[] }) {
               type="button"
               role="tab"
               aria-selected={i === sel}
-              className={`cursor-pointer rounded-t-[7px] border border-transparent px-[0.6rem] py-[0.2rem] font-mono text-[0.72rem] transition-colors duration-150 ease-brand ${
+              className={`cursor-pointer rounded-none border border-transparent px-[0.6rem] py-[0.2rem] font-mono text-[0.72rem] transition-colors duration-150 ease-brand ${
                 i === sel ? "bg-accent-weak text-ink" : "text-ink-mute hover:text-ink-soft"
               }`}
               onClick={() => setSel(i)}

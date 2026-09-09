@@ -1,3 +1,4 @@
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Smoke: site"
 
 # Post-deploy smoke check for the static sites. Both digithings.ai and
@@ -22,8 +23,6 @@ name: "Smoke: site"
 # stale site cannot cancel or mask the other; see the comment on the second job.
 
 on:
-  schedule:
-    - cron: "17 6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -69,13 +68,21 @@ jobs:
           # manifest (build-digithings.sh now asserts that manifest instead) — so
           # probe /docs/, still a prerendered static-export route.
           probe "https://digithings.ai/docs/" "text/html"
-          # Stable non-HTML asset (public/design/assets/og.png) — the canary for
-          # the SPA-fallback MIME-masking regression #671 was written to catch.
-          probe "https://digithings.ai/design/assets/og.png" "image/png"
+          # openwiki visualizer (#3696): static export at /openwiki/. Probe the
+          # HTML shell plus graph.json — the JSON is the canary for a missing
+          # export the same way og.png guards the SPA-fallback regression.
+          probe "https://digithings.ai/openwiki/" "text/html"
+          probe "https://digithings.ai/openwiki/graph.json" "application/json"
+          # Stable non-HTML asset (public/og.png) — the canary for the
+          # SPA-fallback MIME-masking regression #671 was written to catch.
+          # Brand OG cards live at the export root (not /design/assets/); the
+          # old path 404'd and kept #800 open as a daily false alarm.
+          probe "https://digithings.ai/og.png" "image/png"
           # digiquant.io — Next.js static export (frontend/digiquant-web) +
-          # Olympus dashboard mounted at basePath /olympus.
+          # dashboard at basePath /dashboard. /dashboard/ is retired (no 308).
           probe "https://digiquant.io/" "text/html"
-          probe "https://digiquant.io/olympus/" "text/html"
+          probe "https://digiquant.io/dashboard/" "text/html"
+          probe "https://digiquant.io/og.png" "image/png"
           exit "$fail"
 
       - name: Open issue on failure
@@ -140,7 +147,7 @@ jobs:
           if [[ -n "$EXISTING" ]]; then
             gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
           else
-            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label "component:digiquant-web" --body "$BODY"
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label "component:digiquant" --body "$BODY"
           fi
 
   # digithings.ai gets its own job rather than a matrix over the two sites. A

@@ -110,12 +110,12 @@ export function PaymentBand() {
         </form>
 
         <aside
-          className="rounded-[12px] border border-hair bg-surface p-[1.1rem]"
+          className="rounded-none border border-hair bg-surface p-[1.1rem]"
           aria-label="Plan summary"
         >
           <div className="flex items-center justify-between gap-[0.8rem]">
             <p className="text-[0.95rem] text-ink">Desk plan</p>
-            <span className="inline-block whitespace-nowrap rounded-full border border-hair px-[0.6rem] py-[0.22rem] font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+            <span className="inline-block whitespace-nowrap rounded-none border border-hair px-[0.6rem] py-[0.22rem] font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
               example data · not live
             </span>
           </div>
@@ -126,7 +126,7 @@ export function PaymentBand() {
               <span>$120.00</span>
             </li>
             <li>
-              <span>hermes add-on</span>
+              <span>portfolio add-on</span>
               <span>$24.00</span>
             </li>
             <li>

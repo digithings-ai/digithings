@@ -1,6 +1,6 @@
 # digiquant/supabase/ — the `core` Supabase project
 
-The single Supabase CLI project dir for the suite-wide **`core`** backend (Olympus/Atlas
+The single Supabase CLI project dir for the suite-wide **`core`** backend (dashboard/research
 portfolio, market data, strategy store — see
 [ADR 0021](../../docs/adr/0021-digiquant-supabase-project-topology.md)). There is exactly
 **one** migration chain: the numbered files under [`migrations/`](migrations/) —
@@ -8,7 +8,7 @@ portfolio, market data, strategy store — see
 **burned — see below, do not reuse it**; new work appends the next unused prefix. [`SCHEMA.md`](SCHEMA.md) inventories the live
 tables and views.
 
-`digiquant/scripts/atlas/verify-supabase-migrations.sh` guards the chain's shape:
+`digiquant/scripts/research/verify-supabase-migrations.sh` guards the chain's shape:
 `config.toml` is present, every file matches `NNN_name.sql`, and no two files share
 a numeric prefix. It runs as the first step of `test-digiquant.yml` (the
 `digiquant/**` path filter covers this directory) and locally via `make
@@ -52,7 +52,7 @@ deploy`, or the SQL editor.
 
 | Path | What it is |
 |---|---|
-| `config.toml` | Supabase CLI project config (local alias `digiquant-atlas`) |
+| `config.toml` | Supabase CLI project config (local alias `digiquant-research`) |
 | `migrations/` | The numbered migration chain — source of truth for the schema |
 | `SCHEMA.md` | Hand-maintained inventory of live tables, views, and RLS conventions |
 | `migrations/050_public_portfolio_views.sql` | Three anon-readable views — the public portfolio read surface (#1461/#1462) |
@@ -60,6 +60,11 @@ deploy`, or the SQL editor.
 | `migrations/064_prices_live_lease.sql` | `public.prices_live_lease` + `claim_prices_live_refresh(integer)` — the single-row lease and the atomic claim that bound the Finnhub refresh **rate**; replaced the #1756 invocation secret |
 | `migrations/065_atlas_run_diagnostics_attempt.sql` | `atlas_run_diagnostics.attempt` + primary key `(run_id, attempt)`, and `attempt` appended to the `atlas_run_health` view — one row per outer-retry **attempt** so the last retry stops overwriting the expensive attempt's cost (#1762). Legacy rows carry the `0` sentinel, never `1` |
 | `functions/prices-live/` | Deno edge function: polls Finnhub, upserts one row per ticker into `public.prices_live` (#1461, #1807) |
+| `functions/stripe-webhook/` | Deno edge function: Stripe webhooks → `workspaces` billing + Auth `plan_tier` claim sync (T2). `verify_jwt=false`. |
+| `functions/create-checkout-session/` | Deno edge function: Stripe Checkout for logged-in workspace owners (T2). |
+| `functions/customer-portal/` | Deno edge function: Stripe Customer Portal session (T2). |
+| `functions/_shared/` | Shared Deno modules for billing (`stripe.ts`, `tiers.ts`, `supabase-admin.ts`, `webhook-handler.ts`). |
+| `functions/README.md` | Deploy + `supabase secrets set` + local `deno test` for billing functions. |
 
 The rest of this README is the operational guide for the **live price feed** (#1461).
 
@@ -445,7 +450,7 @@ allowlist (performance metrics only, never research notes — user ruling 2026-0
 
 ## What is public on purpose, what is locked (#1462 rulings, 2026-07-10)
 
-Many Atlas base tables carry permissive anon SELECT policies predating these rulings.
+Many research base tables carry permissive anon SELECT policies predating these rulings.
 The user resolved that split explicitly — both halves are deliberate, not oversights:
 
 - **Locked (migration 051):** the live strategy store — `strategy_signals` (current
@@ -454,9 +459,9 @@ The user resolved that split explicitly — both halves are deliberate, not over
   PR #1479). Public strategy data flows only through the delayed static JSON and
   `strategy_tearsheets` (which keeps its anon policy — the pipeline writes the delayed
   view there).
-- **Public by design:** the Atlas research internals — `documents`, `theses`,
+- **Public by design:** the research internals — `documents`, `theses`,
   `decision_log`, `deliberation_*`, and the `rationale`/`pm_notes` columns on
-  `positions`. Olympus is an open research project and its dashboard is itself an
+  `positions`. dashboard is an open research project and its dashboard is itself an
   anon-key client of these tables. Do not "fix" this exposure; the curated views above
   exist to give digiquant.io a stable, minimal read surface, not to hide the research.
 

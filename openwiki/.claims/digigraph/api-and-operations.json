@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:751544562728279638c79b05102c9911564aa7a40ce5ec5735025c73ee03d762",
+  "claims": [
+    {
+      "id": "claim_618875c28d944fe6bc1f61c287598052",
+      "statement": "digigraph serves GET /health (legacy) and GET /healthz (preferred liveness) plus POST /workflow and POST /v1/chat/completions, with thread and file routes gated behind policy flags.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/server.py#L1053-L1053",
+          "version": "repo-lines-v1:sha256:5e40b38ac1237120f43414dab0a7c2937e0529a6803149733f82afe978ad265c:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWU0MGIzOGFjMTIzNzEyMGY0MzQxNGRhYjBhN2MyOTM3ZTA1MjlhNjgwMzE0OTczM2Y4MmFmZTk3OGFkMjY1YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWU0MGIzOGFjMTIzNzEyMGY0MzQxNGRhYjBhN2MyOTM3ZTA1MjlhNjgwMzE0OTczM2Y4MmFmZTk3OGFkMjY1YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTkxMTk3MWZlYTRiZTJhY2Y5MGYxZGVmYWI3NWRmNzA5NGYwZjkwNzBkZmE4NTU5ZmY0ZjEwY2ZiNDExMjc0NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2EwZmZhNzAyN2ZjYjJkYzA1YjBmYTYzMWVlMGU0MjQyN2JlZGM0ZTc4MzM0NjRjYzFhZTQzYjNkMDI3YjZmMiJ9"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/server.py#L320-L336",
+          "version": "repo-lines-v1:sha256:b0ca59de2268fd70ecfa1ac0022ba479b7f641ded10197980a6ac62950eb4a3c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5ZGNjZmQ2NmU3MmQ2YTVkMGNlNDc1YzVlNDg0M2RmNGQwYWI0ZTMwNGU0YmVlYmRjMzk2OTUzNjY2MGRmODgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRkYzAxMjViZmE4MzIxYjAwY2Y5MmY4NTlmYTRlOTVhYTcwNDdlZTVjMjk2MjhlZmFkNmZiZmNkNDZlZWRmOGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY0NmYwZjM0Y2Y3Y2QzMjVhZGQ3NTQxNjgxMWE0NzQ5ZDQ3ZjFhN2U1MzdmYzU0NDQ4OWQ4NWE1Y2FkNmMyYWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_57b7f30600cf4523ba3de9842b97439b",
+      "statement": "DigiAuthMiddleware with digigraph_path_scopes enforces per-route JWT scopes, and the per-IP sliding-window limiter gives /workflow and chat completions a dedicated budget.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/server.py#L100-L102",
+          "version": "repo-lines-v1:sha256:be27119083b34187bdde7718c2ed096cc0a3d6fac265ebc1104a584da27c144e:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDY3MzBmNjQ5ODQyYjU4YTJlZTk1MGMzZjdhZmYzZDY5MDEzMjMzN2JjNzM4NTUzNGI2NjI3MmUyOTI3YzQ0OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTYwOWFkYjY0YzRiNjk3NTM3MWE4YTcwNzNkNjYzMTMzYjAzNmYyYWQyNGYyMWNiY2JiNmJmZjk5ODc1YzViNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzc5NWQ0NmNhODU1MDllN2M3ZThhMmJjNjhiMDYwMjRjYjVlMjk2OTI1YWViNTU4MzFlMWFhNDA5MGEwMzkxZSJ9"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/server.py#L240-L242",
+          "version": "repo-lines-v1:sha256:ea03fad63cad3a84dbf90207cad4f383bf47fe1f5c157886f0ca33ae5cee2fe8:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDRhZjMyMTg3ZmE2NDg1N2Q3OTA1YmJlZjdkNDI2MGU0ZTU2ZjcxYTYzMmEwYzZhYjNhYzcxYmY4YTY0ZjNkNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzBhOGIyZjQxNmVlYTRjYjZjMThlOTQ2MWNiMmRlNzhmMTQ3ODk0MTEyOWEzMTkxOTZiMmM3NTk3NGIyMTczZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDk5ODljZjVkNjJhMDgyNzZlYTI1MDVhYWIzMjcyYTdmMTNjYzFmMTI5MzljYmE4MTY0ZWQ3MmZhY2E1YWFlMiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_ffb32ced5251461b9c7b7f251c8b8a8d",
+      "statement": "The MCP server runs streamable-http on 8766 (or --stdio for trusted local clients) with no built-in API-key layer, requiring loopback binding plus DIGI_MCP_REQUIRE_AUTH beyond localhost.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/mcp_server.py#L9-L16",
+          "version": "repo-lines-v1:sha256:4edf6a957ce4853b581c7a1cae4c4e5b0866f463443d5e32a29ddb9d2360b0f4:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ZjOTkxMGJjNDUwOTRjZTEyYjk5OTQ2Nzg0ZDZiNGI0ZjZkZjEyN2MyNWFkYTZjNTljY2FmZjIzOGVlYjIyNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzM3OWNjNDM0OWM4ZWMyODcxODU0YzA4MGVkNjI0NTE5MjNjMTkyNWZmMDFmMDE2MjQxNDcwNDVhYmQ5NTU2MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGRhZDM0MjljMDNkNGYwMmEyMTgyN2YyNjYxZmNkYWJkOTRiMDRlNTlhMmY1M2FkODBjODQ3Mjc0NmMxYTAwOCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_62f75354c1e1490997a520a654a2c89e",
+      "statement": "policy.py centralizes DIGI_HUB_MODE legacy/federated switching plus debug, thread-API, and code-exec flags; models resolve via get_model_for_mode with no hardcoded names.",
+      "evidence": [
+        {
+          "resource": "repo://digigraph/src/digigraph/policy.py#L1-L43",
+          "version": "repo-lines-v1:sha256:74f966548a55949899aee2cf4da379737456c1b89528de0a8f9ce53a2db84945:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMyNmEwNWMxMTY1NDMwMzI5OGFlZTc2MDhlYzdhZjU0MmQ5ZTFhYzk0YjMxNzNkZTQzMzFlODJkMDg2MWEyZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5NDE2ZTA5Zjc4YmEzMTZjMDMyNTY4MjEzYjg1NWVlNzU2ZTQxNTY1ZDkxOGYwOTUxOWM4MWZkNjIwZjQwNjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

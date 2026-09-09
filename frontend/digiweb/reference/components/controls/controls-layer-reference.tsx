@@ -21,7 +21,7 @@ import {
  * Controls layer — the shipped @digithings/web control atoms in their
  * reference dress, the primitives the marketing sites and digichat both
  * consume. Everything below is the promoted layer, not a local copy: Button
- * (primary/ghost/quiet/danger/icon + loading), Badge (the tier/tone pills),
+ * (primary/ghost/quiet/danger/icon + loading), Badge (the tier/tone labels),
  * Input + Label, a Card frame, and a Tooltip in its reference skin. The core
  * atoms wear the controls-core.css dress; the tooltip wears the
  * controls-overlay.css skin — so this one specimen keeps both shared sheets

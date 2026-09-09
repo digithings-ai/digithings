@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability atlas-validate supabase-migrations-check
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check
 
 build:
 	docker compose build
@@ -26,13 +26,13 @@ down:
 test:
 	pytest -v --tb=short
 
-# Unit only (no stack required). digichat Vitest included; Olympus is npm-only (REM-130).
+# Unit only (no stack required). digichat Vitest included; dashboard is npm-only (REM-130).
 test-unit:
 	pytest -m unit -v --tb=short
 	cd frontend/digichat && npm run test --if-present
 
-# Olympus frontend (not part of test-unit — use CI olympus-test.yml or run locally):
-#   cd frontend/olympus && npm run lint && npm run test && npm run build
+# Dashboard frontend (not part of test-unit — use CI test-dashboard.yml or run locally):
+#   cd frontend/dashboard && npm run lint && npm run test && npm run build
 
 # Baseline gate — always-green imports + schemas + CLI help (no Docker, no network).
 test-baseline:
@@ -201,18 +201,18 @@ gen-api-vault:
 agents-init:
 	python3 scripts/agents_init.py
 
-# Validate Atlas providers and graph compilation before triggering a real run.
-# Pings Groq + Gemini (1-token each), checks Supabase baseline row, and runs --dry-run.
-# Usage: make atlas-validate              (full check)
-#        make atlas-validate SKIP=--skip-llm   (env + DB + dry-run only)
-atlas-validate:
-	python3 digiquant/scripts/atlas/validate-providers.py $(SKIP)
+# Validate research env + Supabase baseline row + graph compilation before a real run.
+# Fail-fast house: no provider pings — provider errors surface from the real run.
+# Usage: make research-validate              (full check)
+#        make research-validate SKIP=--skip-db   (env + dry-run only)
+research-validate:
+	python3 digiquant/scripts/research/validate-providers.py $(SKIP)
 
 # Guard the `core` Supabase migration chain: config.toml present, every file named
 # NNN_name.sql, no duplicate numeric prefix. Pure bash, no deps — the same check
 # test-digiquant.yml runs as its first step. Run before adding a migration.
 supabase-migrations-check:
-	bash digiquant/scripts/atlas/verify-supabase-migrations.sh
+	bash digiquant/scripts/research/verify-supabase-migrations.sh
 
 # Self-score staged changes against 4-dimension rubrics (Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9)
 score:
@@ -222,6 +222,19 @@ score:
 # Run this before `make score` to catch incremental quality slippage early.
 score-delta:
 	python3 scripts/score_delta.py
+
+# Repo-health panel for housekeeping shifts (advisory only — never a gate, never a pre-flight).
+# Prints 8 metric rows and exits 0. Use readiness-write to refresh docs/agents/READINESS.md.
+readiness:
+	python3 scripts/readiness.py $(ARGS)
+
+readiness-write:
+	python3 scripts/readiness.py --write
+
+# Visual dashboard artifact (gitignored build output). Regenerate and open locally;
+# bots can quote `make readiness ARGS=--format=json` and point at this file.
+readiness-html:
+	mkdir -p dist && python3 scripts/readiness.py --format html > dist/readiness.html && python3 -c "import webbrowser; webbrowser.open('dist/readiness.html')" || true
 
 # Detect unused Python imports with ruff (dry-run by default; set APPLY=1 to fix in-place)
 clean-imports:
@@ -289,8 +302,11 @@ parse-error:
 
 # Install git hooks (currently: pre-push guard against non-origin remotes + main pushes + unreviewed live-trading touches)
 hooks-install:
-	@install -m 755 scripts/hooks/pre-push.sh .git/hooks/pre-push
-	@echo "installed: .git/hooks/pre-push"
+	@scripts/install-hooks.sh
+
+.PHONY: digiquant-cron-check
+digiquant-cron-check:
+	python scripts/digiquant_cron_check.py
 
 # Run gitleaks locally against the working tree. Mirrors the CI scan so
 # developers can reproduce findings before pushing.

@@ -93,7 +93,7 @@ def test_fetch_batch_requests_yahoo_symbol_but_keys_frames_canonically() -> None
     BRK.B had zero rows in price_history since inception because the dotted
     canonical symbol was sent straight to Yahoo, which returns no data for it.
     The download must use BRK-B while the caller keeps addressing BRK.B, so DB
-    rows and the Atlas sector config continue to agree.
+    rows and the research sector config continue to agree.
 
     Kept pandas-free (Polars-only rule): the download is made to fail, which
     exercises both halves of the contract — the symbol sent over the wire, and

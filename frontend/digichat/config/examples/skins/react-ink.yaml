@@ -1,0 +1,38 @@
+version: 1
+# Official assistant-ui template `react-ink` — copy to DIGICHAT_CONFIG_PATH
+# or set DIGICHAT_CHROME_SKIN=react-ink on any valid deployment YAML.
+deployment:
+  slug: client-react-ink
+  chrome:
+    mode: app
+    theme: dark
+    skin: react-ink
+    title: demo-agent
+    welcome: Working in this project. fetchUser() is flaky in prod and has no retry logic.
+    placeholder: Type a message... (Enter to send)
+  persistence: none
+  auth: anonymous
+  features:
+    attachments: true
+    dictation: false
+    speech: false
+    reasoning: collapsed
+    toolCalls: collapsed
+    sources: true
+    branchPicker: true
+    modelPicker: false
+  backend:
+    type: digigraph
+  tools:
+    allowUserToggle: true
+    catalog:
+      - id: digisearch
+        default: true
+        label: Search
+      - id: digivault
+        default: true
+        label: Vault
+  gate:
+    mode: ungated
+    activityDetail: labels
+    llmAccess: operator

@@ -31,10 +31,8 @@ def test_tool_path_uses_run_tools_and_validates():
         temperature=0.2,
         max_tool_rounds=5,
         on_tool_step=None,
-        search_parameters=None,
     ):
         calls["tools"] = tools
-        calls["search_parameters"] = search_parameters
         # Simulate the model grounding then emitting valid JSON.
         execute_tool("get_macro_series", {"series_ids": ["DFF"]})
         return json.dumps({"regime": "risk_on", "note": "grounded"})
@@ -49,10 +47,8 @@ def test_tool_path_uses_run_tools_and_validates():
             model="xai/grok-4.3",
             tools=[{"type": "function", "function": {"name": "get_macro_series"}}],
             execute_tool=lambda n, a: executed.append(n) or "{}",
-            search_parameters={"mode": "on"},
         )
     assert result.regime == "risk_on"
-    assert calls["search_parameters"] == {"mode": "on"}
     assert calls["tools"][0]["function"]["name"] == "get_macro_series"
     assert executed == ["get_macro_series"]
 
@@ -176,7 +172,7 @@ class TestEnforcedToolFreeRetry:
     @pytest.mark.unit
     def test_provider_error_on_the_enforced_retry_reraises_the_original_parse_error(self) -> None:
         """Never-worse-than-today: the enforced retry's own failure must not become a NEW
-        failure class for the Atlas/Hermes fail-soft handlers keyed on the parse error."""
+        failure class for the research/portfolio fail-soft handlers keyed on the parse error."""
         with (
             patch.object(research_agent, "run_tools", return_value="prose, no json"),
             patch.object(

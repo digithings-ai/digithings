@@ -39,7 +39,11 @@ THRESHOLDS = {
 }
 
 # File-level opt-out: add ``# score:allow <rule>`` near the top of a file.
-# Rules: pandas, pd., bare exec(), subprocess, blocking sleep, untyped any
+# Rules: pandas, pd., bare exec(), subprocess, blocking sleep, untyped any,
+#        notimplementederror stub, todo
+# Tokens are exact (comma-separated, case-sensitive). Put justification on the
+# next comment line — never after an em-dash on the pragma line (that suffix is
+# a silent no-op; inline ``untyped any`` uses a separate line-regex path).
 #
 # Legacy path-prefix suppressions — prefer file pragmas for new allowlists.
 SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
@@ -51,10 +55,10 @@ SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
         "digigraph/src/digigraph/tools/analytics/execute_python_sandbox.py",
         "subprocess",
     ),
-    # Atlas agent scripts: yfinance/pandas_ta boundary (SIMP-038/039 deferred Polars migration)
-    ("digiquant/scripts/atlas/preload-history.py", "pandas"),
-    ("digiquant/scripts/atlas/preload-history.py", "pd."),
-    ("digiquant/scripts/atlas/update_tearsheet.py", "pandas"),
+    # research agent scripts: yfinance/pandas_ta boundary (SIMP-038/039 deferred Polars migration)
+    ("digiquant/scripts/research/preload-history.py", "pandas"),
+    ("digiquant/scripts/research/preload-history.py", "pd."),
+    ("digiquant/scripts/research/update_tearsheet.py", "pandas"),
     # RegExp.exec in terminal highlighter — not Python exec() (DESLOP-027)
     ("frontend/digiweb/design/terminal/highlight-dom.js", "bare exec()"),
     # projects/ are confidential standalone research scripts, not services
@@ -69,6 +73,7 @@ _FILE_ALLOW_CACHE: dict[str, frozenset[str]] = {}
 # Paths excluded from scoring (meta-tooling, audit prose, security policy docs).
 SCORE_SKIP_PATH_FRAGMENTS: tuple[str, ...] = (
     "scripts/score.py",
+    "docs/agent-backlog/",
     "docs/reviews/",
     "digigraph/docs/SECURITY.md",
     "digigraph/src/digigraph/tools/analytics/execute_python.py",
@@ -191,7 +196,13 @@ PATTERNS: list[tuple[re.Pattern, str, str, bool]] = [
         "accuracy",
         True,
     ),
-    (re.compile(r"TODO|FIXME|HACK|XXX"), "unresolved TODO/FIXME in diff", "accuracy", True),
+    # Word boundaries: bare ``TODO_TOOL`` / ``XXX_HASH`` must not trip this.
+    (
+        re.compile(r"\bTODO\b|\bFIXME\b|\bHACK\b|\bXXX\b"),
+        "unresolved TODO/FIXME in diff",
+        "accuracy",
+        True,
+    ),
     (
         re.compile(r"raise NotImplementedError"),
         "NotImplementedError stub in production path",
@@ -291,6 +302,10 @@ def _description_rule_key(description: str) -> str | None:
         return "blocking sleep"
     if "untyped any" in lower:
         return "untyped any"
+    if "notimplementederror stub" in lower:
+        return "notimplementederror stub"
+    if "unresolved todo" in lower or "todo/fixme" in lower:
+        return "todo"
     return None
 
 

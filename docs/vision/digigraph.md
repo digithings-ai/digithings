@@ -40,7 +40,7 @@ Choosing the right abstraction level matters for maintainability and cost:
 
 - **Skill or instruction file** — stateless, single-turn, no tool calls. Lightest option. Use for prompt templates, formatting rules, constrained generation.
 - **Agent** — multi-turn reasoning, tool use, memory, or iteration required. Use when the output depends on intermediate results.
-- **Sub-graph** — ordered pipeline with defined stages, branching, or parallel execution. Use when the *structure* of the work matters, not just the output. Atlas research cycles and Hermes portfolio deliberation are sub-graphs because their stage ordering and branching logic are as important as their outputs.
+- **Sub-graph** — ordered pipeline with defined stages, branching, or parallel execution. Use when the *structure* of the work matters, not just the output. Research cycles and portfolio deliberation are sub-graphs because their stage ordering and branching logic are as important as their outputs.
 
 Start with the lightest abstraction that works. Promote up only when the task demands it.
 
@@ -71,11 +71,11 @@ Shipped and in production:
 - OpenAI Responses API support (in addition to existing Chat Completions compatibility)
 
 **Sub-graph migrations:**
-- Atlas research cycles fully migrated from standalone scripts to digigraph sub-graphs — parallel batching, prompt caching, scheduled daily runs
-- Hermes portfolio deliberation as a digigraph sub-graph with human approval gate before any allocation change
+- Research cycles fully migrated from standalone scripts to digigraph sub-graphs — parallel batching, prompt caching, scheduled daily runs
+- Portfolio deliberation as a digigraph sub-graph with human approval gate before any allocation change
 
 **Proprietary sub-graph library expansion:**
-- Strategy development pipeline (Kairos) — chat-based, connected to digiquant
+- Strategy development pipeline (execution) — chat-based, connected to digiquant
 - Investor document builder — structured output from research inputs
 - Scholarly article synthesis — multi-source ingestion into a persistent research library
 - Exploration agent — cheap model, exhaustive index search, surfaces candidates for deeper analysis
@@ -91,7 +91,7 @@ Shipped and in production:
 - digismith integration and tracing decorators
 
 **Proprietary (commercial):**
-- Specific sub-graph implementations with domain logic: Atlas research cycles, Hermes portfolio deliberation, Kairos strategy execution
+- Specific sub-graph implementations with domain logic: research cycles, portfolio deliberation, strategy execution
 - Investor document builder, scholarly synthesis, and exploration agent sub-graphs
 - The strategy library and research prompt templates that drive the proprietary sub-graphs
 

@@ -55,7 +55,18 @@ export function Nav({ brand, links, mark }: { brand: ReactNode; links: NavLink[]
   );
 }
 
-export function Footer({ links, meta }: { links: NavLink[]; meta: string }) {
+export function Footer({
+  links,
+  meta,
+  profiles,
+}: {
+  links: NavLink[];
+  meta: string;
+  /** Quiet company-profile row (typically <SocialRow/>). Optional so existing
+   *  call sites stay a utility-link strip; socials are a dedicated primitive,
+   *  not a fake Connect column. */
+  profiles?: ReactNode;
+}) {
   return (
     <footer className="footer">
       <div className="wrap footer-inner">
@@ -65,6 +76,7 @@ export function Footer({ links, meta }: { links: NavLink[]; meta: string }) {
               rel={l.external ? "noopener noreferrer" : undefined}>{l.label}</a>
           ))}
         </nav>
+        {profiles}
         <p className="footer-meta">{meta}</p>
       </div>
     </footer>
@@ -129,9 +141,16 @@ export function Colophon({
   );
 }
 
-export function ModuleCard({ m }: { m: ModuleNode }) {
+export function ModuleCard({
+  m,
+  hrefForModule = (id: string) => `/modules/${id}`,
+}: {
+  m: ModuleNode;
+  /** Host-owned module URL. Defaults to the `/modules/[id]` host contract. */
+  hrefForModule?: (id: string) => string;
+}) {
   return (
-    <a className={`mod-card t-${m.tier}`} href={`/modules/${m.id}`}>
+    <a className={`mod-card t-${m.tier}`} href={hrefForModule(m.id)}>
       <div className="mod-card-top">
         <Emblem id={m.emblem} size={26} />
         <span className={`dg-tier t-${m.tier}`}>{m.tier}</span>
