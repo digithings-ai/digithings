@@ -64,7 +64,7 @@ def resolve_payload(
     Raises :class:`ArchiveNotFoundError` when no pointer row exists — the
     caller is expected to have already checked Supabase directly.
     """
-    query = client.table("archive_objects").eq("source_table", source_table)
+    query = client.table("archive_objects").select("*").eq("source_table", source_table)
     for col, val in source_key.items():
         query = query.eq(f"source_key->>{col}", val)
     rows = query.execute().data or []
@@ -283,27 +283,29 @@ def record_pointer(client: Any, entry: ArchiveEntry, owner: str = "house") -> No
     ).execute()
 
 
-# Rows per PostgREST statement: blobs run ~650KB, so small pages keep each
-# statement under the Supabase statement timeout (prod 57014 on one thread).
-SELECT_PAGE_SIZE = 10
-
-
-def _fetch_thread_rows(
-    client: Any, table: str, thread_id: str, page_size: int = SELECT_PAGE_SIZE
-) -> list[dict[str, Any]]:
-    """Fetch one thread's rows in stable key-column order, one page per statement."""
-    order_cols = [c for c in BLOB_KEY_COLUMNS[table] if c != "thread_id"]
+# Portfolio blob rows reach ~16MB each, so even small multi-row pages can exceed
+# the Supabase statement timeout (prod 57014). Fetch in two phases: one key-only
+# scan (tiny rows), then one single-row statement per payload row — each
+# statement carries at most one row, the minimum PostgREST can transfer.
+def _fetch_thread_rows(client: Any, table: str, thread_id: str) -> list[dict[str, Any]]:
+    """Fetch one thread's rows: key-only scan, then one single-row fetch per key."""
+    key_cols = BLOB_KEY_COLUMNS[table]
+    keys = (
+        client.table(table).select(",".join(key_cols)).eq("thread_id", thread_id).execute().data
+        or []
+    )
     rows: list[dict[str, Any]] = []
-    offset = 0
-    while True:
-        query = client.table(table).select("*").eq("thread_id", thread_id)
-        for col in order_cols:
-            query = query.order(col)
-        page = query.range(offset, offset + page_size - 1).execute().data or []
-        rows.extend(page)
-        if len(page) < page_size:
-            return rows
-        offset += page_size
+    for key in keys:
+        query = client.table(table).select("*")
+        for col in key_cols:
+            query = query.eq(col, key.get(col))
+        matches = query.execute().data or []
+        if len(matches) != 1:
+            raise ArchiveVerifyError(
+                f"expected 1 row for {table} {key}, found {len(matches)}; Supabase row kept"
+            )
+        rows.append(matches[0])
+    return rows
 
 
 def archive_thread(
@@ -485,7 +487,6 @@ __all__ = [
     "BLOB_TABLES",
     "HIGH_WATERMARK_BYTES",
     "LOW_WATERMARK_BYTES",
-    "SELECT_PAGE_SIZE",
     "R2Backend",
     "StorageBackend",
     "archive_thread",
