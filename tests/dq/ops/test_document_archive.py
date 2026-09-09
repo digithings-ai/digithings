@@ -5,6 +5,10 @@ date); the newest date per key stays live while older payloads move to R2
 with an archive_objects pointer row left behind.
 """
 
+import datetime
+import json
+import uuid
+
 from digiquant.ops.checkpoint_archive import archive_documents
 
 
@@ -58,6 +62,9 @@ class _DocQuery:
 
     def execute(self):
         if self._pending_insert is not None:
+            # Simulate httpx encode_json: bodies must be JSON-serializable,
+            # or the real PostgREST client raises TypeError on .execute().
+            json.dumps(self._pending_insert)
             self._table.append(self._pending_insert)
             row, self._pending_insert = self._pending_insert, None
             self._client.statements.append(
@@ -189,3 +196,17 @@ def test_archive_documents_rerun_writes_no_duplicate_pointer():
     archive_documents(rerun, restore, workspace="house")
     again = rerun.table("archive_objects").select("*").execute().data
     assert len(again) == 1
+
+
+def test_archive_documents_native_types_serialize_to_registry():
+    """Direct-PG rows carry date/UUID objects; the registry insert must serialize them."""
+    ws = uuid.UUID("6b753576-ced9-5319-9bfa-c5d0aacd9319")
+    client, store = FakeDocClient(), FakeDocStore()
+    seed_documents(
+        client, workspace=ws, versions=[datetime.date(2026, 9, 7), datetime.date(2026, 9, 8)]
+    )
+    archive_documents(client, store, workspace=ws)
+    pointers = client.table("archive_objects").select("*").execute().data
+    assert len(pointers) == 1
+    assert pointers[0]["source_key"]["date"] == "2026-09-07"
+    assert pointers[0]["source_key"]["workspace_id"] == str(ws)

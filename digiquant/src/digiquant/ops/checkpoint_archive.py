@@ -17,8 +17,9 @@ import hashlib
 import json
 import logging
 import os
+import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Protocol
 
 from digiquant.dashboard.tenancy import house_workspace_id
@@ -272,6 +273,20 @@ def _row_filters(table: str, row: dict[str, Any]) -> list[tuple[str, Any]]:
     return [(col, row.get(col)) for col in BLOB_KEY_COLUMNS[table]]
 
 
+def _jsonable(value: Any) -> Any:
+    """Coerce direct-Postgres native types to the JSON strings PostgREST returns.
+
+    psycopg yields ``datetime.date``/``datetime`` and ``uuid.UUID`` objects
+    where the PostgREST path yields ISO strings; the registry insert body is
+    JSON-encoded, so normalize at this choke point for both callers.
+    """
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    return value
+
+
 def _insert_pointer(
     client: Any,
     source_table: str,
@@ -297,7 +312,7 @@ def _insert_pointer(
     client.table("archive_objects").insert(
         {
             "source_table": source_table,
-            "source_key": source_key,
+            "source_key": {key: _jsonable(val) for key, val in source_key.items()},
             "r2_key": r2_key,
             "sha256": sha256,
             "size": size,
