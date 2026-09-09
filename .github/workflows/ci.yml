@@ -387,11 +387,13 @@ jobs:
 
       - name: Install ripgrep (pandas boundary gate)
         run: |
-          # Skip sources.list.d (Google Chrome Hash Sum mismatch aborts update).
-          sudo apt-get update -qq \
-            -o Dir::Etc::sourcelist=/etc/apt/sources.list \
-            -o Dir::Etc::sourceparts=/dev/null
-          sudo apt-get install -y -qq ripgrep
+          # Avoid apt-get: ubuntu runners' Chrome repo Hash Sum mismatches
+          # abort update, and Ubuntu-only sources.list has no ripgrep package.
+          tmp=$(mktemp -d)
+          curl -fsSL https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz -C "$tmp" --strip-components=1 --wildcards '*/rg'
+          sudo install -m 0755 "$tmp/rg" /usr/local/bin/rg
+          rg --version
 
       - name: Pandas boundary (REM-132)
         run: bash scripts/check_pandas_boundary.sh
