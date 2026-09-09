@@ -839,14 +839,18 @@ connected catalog + MCP tool as On/Off (each is also a slash command). `/mcp` li
 tools with status Active / Disabled / Needs auth; Enter opens the session JSON and field
 editors (including bearer paste). When `auth` is `oauth` and the token is empty, **Authenticate**
 opens a popup → `POST /api/mcp/oauth/start` (PKCE, SSRF via `isAllowedMcpServerUrl`) → AS →
-`GET /api/mcp/oauth/callback` which `postMessage`s the token into `mcpCustom`. `/mcp new`
+`GET /api/mcp/oauth/callback` which `postMessage`s the token into `mcpCustom`. Start uses
+the operator YAML URL when the id matches; a client `url` is accepted only when
+`mcp.allowUserServers` is true and the URL is `https` plus the SSRF allowlist.
+`/mcp new`
 adds a session MCP (id, url, auth, extra fields) for this tab. Client-supplied
 `X-Digi-Mcp-Servers` is ignored. Session overlay travels on `X-Digi-Mcp-Session`
 (`{id,url?,auth,token?}[]`): operator id+token attach to the YAML URL; session URLs are merged
 only when `mcp.allowUserServers` is true (SSRF + count/size caps). Session URLs never echo
 back in the client config projection. `@assistant-ui/react-mcp` is not installed — visitor MCP
 is BFF-proxied, not browser MCP. The model can call `session_*` tools (same trust as slash) to
-mutate language/model/effort/tools/MCP; the client applies them to `EmbedChatPrefsApi`.
+mutate language/model/effort/tools/MCP; `session_upsert_mcp` cannot plant a new session URL
+when `allowUserMcp` is false (operator token attach still works). The client applies them to `EmbedChatPrefsApi`.
 `X-Digi-Effort` (low/medium/high) is forwarded to digigraph. digisearch / digivault / web_search
 stay orchestrator tools (HTTP to the verticals), not browser MCP. DataTap-style installs add
 extra servers in YAML (see `config/examples/datatap-mcp.yaml`).
@@ -1099,9 +1103,12 @@ endpoint cookie. The allowlist can be further tightened via
 
 Operator MCP URLs use the inverse check (`isAllowedMcpServerUrl` in
 `src/lib/deploy-config/mcp-servers.ts`, mirrored by digigraph
-`is_allowed_mcp_url`): loopback, RFC1918, metadata, and DNS-rebinding hosts
-are refused; docker hostnames such as `datatap-mcp` stay allowed. The same
+`is_allowed_mcp_url`): loopback (including WHATWG shorthand such as `127.1`),
+RFC1918, metadata (`169.254.169.254`, `100.100.100.200`), loopback DNS
+(`localtest.me`, `lvh.me`, `vcap.me`), and DNS-rebinding hosts (`.nip.io` / `.sslip.io` / `.xip.io`)
+are refused without live DNS; docker hostnames such as `datatap-mcp` stay allowed. The same
 check gates OAuth discovery and session overlay URLs (`X-Digi-Mcp-Session`).
+`POST /api/mcp/oauth/start` additionally ignores client URLs unless `mcp.allowUserServers`.
 Do not use `isAllowedServiceUrl` for MCP (opposite polarity: that helper *allows*
 loopback for ecosystem cookies).
 

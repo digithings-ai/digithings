@@ -36,6 +36,12 @@ def test_is_allowed_mcp_url() -> None:
     assert is_allowed_mcp_url("http://10.0.0.5:8080/mcp") is False
     assert is_allowed_mcp_url("http://[fd12:3456::1]/mcp") is False
     assert is_allowed_mcp_url("http://0x7f000001/") is False
+    assert is_allowed_mcp_url("http://127.1/") is False
+    assert is_allowed_mcp_url("http://127.0.1/") is False
+    assert is_allowed_mcp_url("http://0x7f.0x0.0x0.0x1/") is False
+    assert is_allowed_mcp_url("http://localtest.me/") is False
+    assert is_allowed_mcp_url("http://foo.lvh.me/mcp") is False
+    assert is_allowed_mcp_url("http://100.100.100.200/") is False
 
 
 @pytest.mark.unit

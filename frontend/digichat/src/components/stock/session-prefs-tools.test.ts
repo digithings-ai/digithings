@@ -73,6 +73,37 @@ describe("applySessionTool", () => {
     expect(a.setMcpConfig).toHaveBeenCalled();
     expect(a.openMcp).toHaveBeenCalledWith("linear");
   });
+
+  it("refuses a new session MCP URL when allowUserMcp is off", () => {
+    const a = api({ allowUserMcp: false });
+    const result = applySessionTool(
+      "session_upsert_mcp",
+      { id: "linear", url: "https://mcp.linear.app/mcp", auth: "oauth" },
+      a,
+    );
+    expect(result.ok).toBe(false);
+    expect(a.setMcpConfig).not.toHaveBeenCalled();
+  });
+
+  it("still attaches a token to an operator id when allowUserMcp is off", () => {
+    const a = api({
+      allowUserMcp: false,
+      mcpServers: [{ id: "datatap", label: "DataTap" }],
+    });
+    const result = applySessionTool(
+      "session_upsert_mcp",
+      { id: "datatap", auth: "oauth", token: "tok" },
+      a,
+    );
+    expect(result.ok).toBe(true);
+    expect(a.setMcpConfig).toHaveBeenCalled();
+    const draft = (a.setMcpConfig as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as {
+      url?: string;
+      source?: string;
+    };
+    expect(draft.source).toBe("operator");
+    expect(draft.url).toBe("");
+  });
 });
 
 describe("sessionToolCallsFromMessages", () => {

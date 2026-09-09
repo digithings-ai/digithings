@@ -111,6 +111,21 @@ export function applySessionTool(
     if (!MCP_ID_RE.test(id)) return { ok: false, message: "id must be a lowercase slug." };
     const authRaw = str(args, "auth").toLowerCase() || "none";
     const auth = isMcpAuthKind(authRaw) ? authRaw : "none";
+    const existing = connectedMcpConfigs(api.mcpServers, api.prefs.mcpCustom).find((s) => s.id === id);
+    if (!api.allowUserMcp) {
+      if (existing?.source !== "operator") {
+        return { ok: false, message: "Session MCP is disabled." };
+      }
+      api.setMcpConfig(
+        {
+          ...existing,
+          auth,
+          token: str(args, "token") || existing.token,
+        },
+        existing.id,
+      );
+      return { ok: true, message: `Updated ${id}.` };
+    }
     const next: SessionMcpConfig = {
       ...emptyMcpConfig(),
       id,
@@ -120,7 +135,6 @@ export function applySessionTool(
       token: str(args, "token"),
       source: "session",
     };
-    const existing = connectedMcpConfigs(api.mcpServers, api.prefs.mcpCustom).find((s) => s.id === id);
     const newUrl = next.url && next.url !== (existing?.url ?? "");
     api.setMcpConfig(next, existing?.source === "session" ? existing.id : id);
     if (newUrl) {

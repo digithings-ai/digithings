@@ -53,6 +53,7 @@ export {
 
 export {
   isAllowedMcpServerUrl,
+  resolveMcpOAuthResourceUrl,
   mcpServersHeaderValue,
   operatorMcpServersForUpstream,
   parseMcpSessionOverlay,

@@ -30,14 +30,20 @@ _ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _METADATA_HOSTS = frozenset(
     {
         "169.254.169.254",
+        "100.100.100.200",
         "metadata.google.internal",
         "metadata.goog",
         "metadata",
         "localhost",
+        "localtest.me",
+        "lvh.me",
+        "vcap.me",
     }
 )
+_LOOPBACK_DNS_SUFFIXES = (".localtest.me", ".lvh.me", ".vcap.me")
 _REBIND_SUFFIXES = (".nip.io", ".sslip.io", ".xip.io")
 _EMBEDDED_IPV4 = re.compile(r"(?:^|\.)((?:\d{1,3}\.){3}\d{1,3})(?:\.|$)")
+_ALIBABA_METADATA = ipaddress.IPv4Address("100.100.100.200")
 _CACHE_TTL_S = 60.0
 _CALL_TIMEOUT_S = 30.0
 _MAX_MCP_JSON = 16384
@@ -51,6 +57,8 @@ _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="digi-mcp")
 def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
         return _ip_is_blocked(ip.ipv4_mapped)
+    if ip == _ALIBABA_METADATA:
+        return True
     return bool(
         ip.is_loopback
         or ip.is_link_local
@@ -76,17 +84,69 @@ def _parse_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None
     return None
 
 
+def _octet(part: str) -> int | None:
+    try:
+        if part.startswith("0x"):
+            n = int(part, 16)
+        elif part.isdigit():
+            n = int(part, 10)
+        else:
+            return None
+    except ValueError:
+        return None
+    return n if n >= 0 else None
+
+
+def _coerce_ipv4(host: str) -> ipaddress.IPv4Address | None:
+    """WHATWG-style IPv4 (127.1, 0x7f.0x0.0x0.0x1) — ipaddress rejects these."""
+    parsed = _parse_ip(host)
+    if isinstance(parsed, ipaddress.IPv4Address):
+        return parsed
+    parts = host.split(".")
+    if not 1 <= len(parts) <= 4:
+        return None
+    nums: list[int] = []
+    for part in parts:
+        n = _octet(part)
+        if n is None:
+            return None
+        nums.append(n)
+    try:
+        if len(nums) == 1:
+            if nums[0] > 0xFFFFFFFF:
+                return None
+            return ipaddress.IPv4Address(nums[0])
+        if len(nums) == 2:
+            if nums[0] > 255 or nums[1] > 0xFFFFFF:
+                return None
+            return ipaddress.IPv4Address((nums[0] << 24) | nums[1])
+        if len(nums) == 3:
+            if nums[0] > 255 or nums[1] > 255 or nums[2] > 0xFFFF:
+                return None
+            return ipaddress.IPv4Address((nums[0] << 24) | (nums[1] << 16) | nums[2])
+        if any(n > 255 for n in nums):
+            return None
+        return ipaddress.IPv4Address((nums[0] << 24) | (nums[1] << 16) | (nums[2] << 8) | nums[3])
+    except (ValueError, OverflowError):
+        return None
+
+
 def _hostname_is_blocked(host: str) -> bool:
     h = host.strip("[]").lower().rstrip(".")
     if not h or h in _METADATA_HOSTS:
         return True
     if h.endswith(".internal") or h.endswith(".localhost"):
         return True
+    if any(h.endswith(suf) for suf in _LOOPBACK_DNS_SUFFIXES):
+        return True
     if any(h.endswith(suf) for suf in _REBIND_SUFFIXES):
         return True
     parsed = _parse_ip(h)
     if parsed is not None:
         return _ip_is_blocked(parsed)
+    coerced = _coerce_ipv4(h)
+    if coerced is not None:
+        return _ip_is_blocked(coerced)
     embedded = _EMBEDDED_IPV4.search(h)
     if embedded is not None:
         inner = _parse_ip(embedded.group(1))
@@ -100,6 +160,8 @@ def is_allowed_mcp_url(raw: str) -> bool:
 
     Docker DNS names such as ``http://datatap-mcp:8080/mcp`` stay allowed.
     Literal RFC1918 / loopback / link-local / IPv4-mapped metadata hosts do not.
+    Shorthand IPv4 (``127.1``) and loopback DNS (``localtest.me``) are refused
+    without live DNS.
     """
     try:
         u = urlparse(raw.strip())
@@ -304,9 +366,7 @@ def _list_tools_blocking(server: dict[str, str]) -> list[dict[str, Any]]:
         return []
 
 
-def _call_tool_blocking(
-    server: dict[str, str], tool: str, args: dict[str, Any]
-) -> dict[str, Any]:
+def _call_tool_blocking(server: dict[str, str], tool: str, args: dict[str, Any]) -> dict[str, Any]:
     try:
         return _run_async(_call_tool_async(server, tool, args))
     except Exception as exc:

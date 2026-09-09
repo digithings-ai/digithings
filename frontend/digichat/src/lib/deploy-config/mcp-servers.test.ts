@@ -4,6 +4,7 @@ import {
   mcpServersHeaderValue,
   mergeMcpSessionOverlay,
   operatorMcpServersForUpstream,
+  resolveMcpOAuthResourceUrl,
 } from "./mcp-servers";
 import type { DigichatDeployment } from "./schema";
 
@@ -28,6 +29,11 @@ describe("isAllowedMcpServerUrl", () => {
     expect(isAllowedMcpServerUrl("http://10.0.0.5:8080/mcp")).toBe(false);
     expect(isAllowedMcpServerUrl("http://[fd12:3456::1]/mcp")).toBe(false);
     expect(isAllowedMcpServerUrl("http://0x7f000001/")).toBe(false);
+    expect(isAllowedMcpServerUrl("http://127.1/")).toBe(false);
+    expect(isAllowedMcpServerUrl("http://0x7f.0x0.0x0.0x1/")).toBe(false);
+    expect(isAllowedMcpServerUrl("http://localtest.me/")).toBe(false);
+    expect(isAllowedMcpServerUrl("http://foo.lvh.me/mcp")).toBe(false);
+    expect(isAllowedMcpServerUrl("http://100.100.100.200/")).toBe(false);
   });
 });
 
@@ -99,5 +105,47 @@ describe("mergeMcpSessionOverlay", () => {
         allowSessionUrls: true,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("resolveMcpOAuthResourceUrl", () => {
+  const operator = [{ id: "datatap", url: "http://datatap-mcp:8080/mcp" }];
+
+  it("uses the operator URL even when session servers are off", () => {
+    expect(
+      resolveMcpOAuthResourceUrl({
+        operator,
+        id: "datatap",
+        clientUrl: "https://evil.example/mcp",
+        allowUserServers: false,
+      }),
+    ).toBe("http://datatap-mcp:8080/mcp");
+  });
+
+  it("ignores client URLs unless allowUserServers is on", () => {
+    expect(
+      resolveMcpOAuthResourceUrl({
+        operator: [],
+        id: "linear",
+        clientUrl: "https://mcp.linear.app/mcp",
+        allowUserServers: false,
+      }),
+    ).toBe("");
+    expect(
+      resolveMcpOAuthResourceUrl({
+        operator: [],
+        id: "linear",
+        clientUrl: "https://mcp.linear.app/mcp",
+        allowUserServers: true,
+      }),
+    ).toBe("https://mcp.linear.app/mcp");
+    expect(
+      resolveMcpOAuthResourceUrl({
+        operator: [],
+        id: "linear",
+        clientUrl: "http://localtest.me/mcp",
+        allowUserServers: true,
+      }),
+    ).toBe("");
   });
 });

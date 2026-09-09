@@ -4,8 +4,8 @@ import { isEmbedChatRequest, resolveEmbedChatTenant } from "@/lib/embed-chat-ten
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import {
-  isAllowedMcpServerUrl,
   operatorMcpServersForUpstream,
+  resolveMcpOAuthResourceUrl,
 } from "@/lib/deploy-config/mcp-servers";
 import {
   getDigichatConfig,
@@ -95,8 +95,12 @@ export async function POST(req: Request): Promise<Response> {
   const embedHost = req.headers.get("x-embed-host");
   const dep = resolveDeploymentForHost(embedHost, cfg) ?? cfg.deployment;
   const operator = operatorMcpServersForUpstream(dep);
-  const op = operator.find((s) => s.id === id);
-  const resourceUrl = op?.url ?? (clientUrl && isAllowedMcpServerUrl(clientUrl) ? clientUrl : "");
+  const resourceUrl = resolveMcpOAuthResourceUrl({
+    operator,
+    id,
+    clientUrl,
+    allowUserServers: dep?.mcp?.allowUserServers === true,
+  });
   if (!resourceUrl) {
     return jsonError("MCP URL is missing or not allowed.", 400);
   }

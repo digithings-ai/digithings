@@ -11,7 +11,6 @@ import {
   useCallback,
   useEffect,
   useId,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -114,6 +113,7 @@ function initialView(kind: ComposerMenuKind): MenuView {
 }
 
 function composerHost(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
   return document.querySelector<HTMLElement>(
     '[data-thread-skin="digichat"] .aui-composer-root',
   );
@@ -172,7 +172,6 @@ export function EmbedComposerMenu({
 
   const [view, setView] = useState<MenuView>(() => initialView(kind));
   const [cursor, setCursor] = useState(0);
-  const [host, setHost] = useState<HTMLElement | null>(null);
   const [providerPick, setProviderPick] = useState<BYOKProvider>(
     () =>
       tryResolveProviderInput(providerSeed ?? "") ??
@@ -195,12 +194,13 @@ export function EmbedComposerMenu({
   const customModelRef = useRef<HTMLInputElement>(null);
   const aliveRef = useRef(true);
   const mcpDraftRef = useRef(mcpDraft);
-  mcpDraftRef.current = mcpDraft;
   const keyFormId = useId();
+  const openKey = `${kind}\0${providerSeed ?? ""}\0${mcpSeed ?? ""}`;
+  const [appliedOpen, setAppliedOpen] = useState("");
 
-  useLayoutEffect(() => {
-    setHost(composerHost());
-  }, []);
+  useEffect(() => {
+    mcpDraftRef.current = mcpDraft;
+  }, [mcpDraft]);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -209,7 +209,8 @@ export function EmbedComposerMenu({
     };
   }, []);
 
-  useEffect(() => {
+  if (appliedOpen !== openKey) {
+    setAppliedOpen(openKey);
     const next = initialView(kind);
     const providerSeeded = kind === "provider" ? tryResolveProviderInput(providerSeed ?? "") : undefined;
     const mcpOpened = kind === "mcp" ? parseMcpSeed(mcpSeed ?? "") : undefined;
@@ -252,9 +253,7 @@ export function EmbedComposerMenu({
     setMcpError(null);
     setMcpSuggestIndex(-1);
     setMcpIdDropdownOpen(false);
-    // Only when the opened pane changes — cycling language must not reset the cursor.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, providerSeed, mcpSeed]);
+  }
 
   const mainRows = useMemo((): MenuRow[] => {
     const rows: MenuRow[] = [];
@@ -675,9 +674,8 @@ export function EmbedComposerMenu({
                 ? "/provider"
                 : "Settings";
 
-  useEffect(() => {
-    setCursor((c) => (rows.length ? Math.min(c, rows.length - 1) : 0));
-  }, [rows.length]);
+  const safeCursor = rows.length ? Math.min(cursor, rows.length - 1) : 0;
+  if (safeCursor !== cursor) setCursor(safeCursor);
 
   const move = useCallback(
     (delta: number) => {
@@ -1289,6 +1287,7 @@ export function EmbedComposerMenu({
     </div>
   );
 
+  const host = composerHost();
   if (!host) return null;
   return createPortal(body, host);
 }

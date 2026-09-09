@@ -9,11 +9,16 @@ import type { DigichatDeployment } from "./schema";
 const MCP_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const METADATA_HOSTS = new Set([
   "169.254.169.254",
+  "100.100.100.200",
   "metadata.google.internal",
   "metadata.goog",
   "metadata",
   "localhost",
+  "localtest.me",
+  "lvh.me",
+  "vcap.me",
 ]);
+const LOOPBACK_DNS_SUFFIXES = [".localtest.me", ".lvh.me", ".vcap.me"];
 const REBIND_SUFFIXES = [".nip.io", ".sslip.io", ".xip.io"];
 const EMBEDDED_IPV4 = /(?:^|\.)((?:\d{1,3}\.){3}\d{1,3})(?:\.|$)/;
 
@@ -39,6 +44,46 @@ function ipv4FromIntegerHost(host: string): number[] | null {
   return null;
 }
 
+function parseHostPart(part: string): number | null {
+  if (/^0x[0-9a-f]+$/i.test(part)) {
+    const n = Number.parseInt(part, 16);
+    return Number.isInteger(n) && n >= 0 ? n : null;
+  }
+  if (/^\d+$/.test(part)) {
+    const n = Number(part);
+    return Number.isInteger(n) && n >= 0 ? n : null;
+  }
+  return null;
+}
+
+/** WHATWG-style IPv4 so 127.1 / 0x7f.0x0.0x0.0x1 match Node's URL parser. */
+function coerceIPv4(host: string): number[] | null {
+  const dotted = parseIPv4Octets(host);
+  if (dotted) return dotted;
+  const integer = ipv4FromIntegerHost(host);
+  if (integer) return integer;
+  const parts = host.split(".");
+  if (parts.length < 2 || parts.length > 4) return null;
+  const nums: number[] = [];
+  for (const p of parts) {
+    const n = parseHostPart(p);
+    if (n === null) return null;
+    nums.push(n);
+  }
+  if (nums.length === 2) {
+    if (nums[0]! > 255 || nums[1]! > 0xffffff) return null;
+    const n = ((nums[0]! << 24) | nums[1]!) >>> 0;
+    return [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+  }
+  if (nums.length === 3) {
+    if (nums[0]! > 255 || nums[1]! > 255 || nums[2]! > 0xffff) return null;
+    const n = ((nums[0]! << 24) | (nums[1]! << 16) | nums[2]!) >>> 0;
+    return [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+  }
+  if (nums.some((n) => n > 255)) return null;
+  return nums;
+}
+
 function ipv4IsBlocked(oct: number[]): boolean {
   const a = oct[0] ?? 0;
   const b = oct[1] ?? 0;
@@ -46,6 +91,7 @@ function ipv4IsBlocked(oct: number[]): boolean {
   if (a === 169 && b === 254) return true;
   if (a === 192 && b === 168) return true;
   if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 100 && b === 100 && (oct[2] ?? 0) === 100 && (oct[3] ?? 0) === 200) return true;
   if (a >= 224) return true;
   return false;
 }
@@ -69,13 +115,12 @@ function hostnameIsBlocked(host: string): boolean {
     if (h.startsWith("fc") || h.startsWith("fd")) return true;
   }
   if (h.endsWith(".internal") || h.endsWith(".localhost")) return true;
+  if (LOOPBACK_DNS_SUFFIXES.some((s) => h.endsWith(s))) return true;
   if (REBIND_SUFFIXES.some((s) => h.endsWith(s))) return true;
   const mapped = mappedIpv4(h);
   if (mapped) return ipv4IsBlocked(mapped);
-  const dotted = parseIPv4Octets(h);
-  if (dotted) return ipv4IsBlocked(dotted);
-  const integer = ipv4FromIntegerHost(h);
-  if (integer) return ipv4IsBlocked(integer);
+  const coerced = coerceIPv4(h);
+  if (coerced) return ipv4IsBlocked(coerced);
   const embedded = EMBEDDED_IPV4.exec(h);
   if (embedded) {
     const oct = parseIPv4Octets(embedded[1] ?? "");
@@ -118,6 +163,21 @@ const MAX_SESSION_SERVERS = 8;
 const MAX_OVERLAY_JSON = 8_192;
 const MAX_UPSTREAM_JSON = 16_384;
 const MAX_TOKEN = 4_096;
+
+/** Operator URL wins. Session client URLs only when allowUserServers, https-only. */
+export function resolveMcpOAuthResourceUrl(opts: {
+  operator: readonly McpServerForward[];
+  id: string;
+  clientUrl: string;
+  allowUserServers: boolean;
+}): string {
+  const op = opts.operator.find((s) => s.id === opts.id);
+  if (op?.url) return op.url;
+  if (!opts.allowUserServers) return "";
+  const url = opts.clientUrl.trim();
+  if (!url.startsWith("https://") || !isAllowedMcpServerUrl(url)) return "";
+  return url;
+}
 
 export function operatorMcpServersForUpstream(
   dep: DigichatDeployment | null | undefined,
