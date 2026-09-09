@@ -2943,6 +2943,15 @@ twelve-x **events tab reads it via the main dashboard client** (`getUpcomingEven
 other FX research tables stay on `twelveXSupabase`. Cutover is gated: the frontend
 read goes live only once the repointed ingest has populated `core`.
 
+**Checkpoint storage budget (#3761).** LangGraph's PostgresSaver snapshots full
+channel state per step, so each daily run leaves ~50–100MB of `bytea` in
+`checkpoint_blobs` / `checkpoint_writes` — the tables that pushed `core` past its
+500MB quota (price/macro/documents are already deduped). `digiquant.ops.checkpoint_archive`
+offloads finished threads' payloads to Cloudflare R2 (SHA-256-verified read-back, then
+NULLs the cells); metadata rows stay, and `restore_thread` reinserts payloads for
+forensics. `.github/workflows/pipeline-checkpoint-archive.yml` runs it daily with
+`--retain-days 2`. The live checkpointer path is untouched.
+
 **RLS.** Every strategy-store table RLS-enabled. Public reference + tearsheet tables grant
 `anon SELECT USING (true)`; writers use the service role (RLS bypass). `strategy_calibrations`
 has no anon policy — anon reads return an empty set (not a permission error) while the service

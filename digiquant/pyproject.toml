@@ -53,6 +53,10 @@ research = [
     "python-dotenv>=1",
     "httpx>=0.27",
     "supabase>=2.0",
+    # Checkpoint archiver (ops/checkpoint_archive.py R2Backend): S3-compatible
+    # uploads to R2. boto3 is the signing/transfer layer; deferred import so
+    # non-archive paths never touch it.
+    "boto3>=1.28",
 ]
 optimize = ["optuna>=3.0"]
 # M2 Liquidity strategy: global M2 money-supply from FRED + FX rates from yfinance.
