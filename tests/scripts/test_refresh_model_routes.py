@@ -241,37 +241,6 @@ def test_main_writes_full_inventory_and_prints_table(
     assert "cheap/tool-model" in capsys.readouterr().out
 
 
-def test_id_list_normalization_keeps_provider_login() -> None:
-    mod = _load()
-    routes = mod.normalize_id_list({"data": [{"id": "deepseek-chat"}]}, provider="deepseek")
-    assert [(route.provider, route.model) for route in routes] == [("deepseek", "deepseek-chat")]
-    assert routes[0].supports_tools is False
-
-
-def test_ollama_tags_normalization() -> None:
-    mod = _load()
-    payload = {"models": [{"name": "qwen3:8b"}, {"name": "deepseek-r1:14b"}]}
-    routes = mod.normalize_ollama_tags(payload, provider="ollama")
-    assert [r.model for r in routes] == ["qwen3:8b", "deepseek-r1:14b"]
-
-
-def test_fireworks_normalization_keeps_pricing_when_present() -> None:
-    mod = _load()
-    payload = {
-        "models": [
-            {
-                "name": "llama-v3p1-8b-instruct",
-                "supports_serverless": True,
-                "pricing": {"prompt": 0.0000002, "completion": 0.0000002},
-            },
-            {"name": "unpriced-model"},
-        ]
-    }
-    routes = mod.normalize_fireworks_models(payload)
-    priced = [r for r in routes if r.prompt_price is not None]
-    assert [r.model for r in priced] == ["llama-v3p1-8b-instruct"]
-
-
 def test_fetch_openai_models_uses_models_path() -> None:
     mod = _load()
     seen: dict[str, object] = {}

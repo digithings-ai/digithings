@@ -11,6 +11,7 @@ per-phase model choice stay manual in ``config/digiquant_models.yaml``.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 from dataclasses import asdict, dataclass
@@ -59,94 +60,6 @@ def _as_float(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return parsed
-
-
-def normalize_id_list(payload: Mapping[str, Any], provider: str) -> list[ModelRoute]:
-    """Normalize an OpenAI-compatible ``GET /models`` id list.
-
-    These endpoints expose no pricing or capability metadata, so routes are
-    recorded unverified (no price, no tool support) — they document what is
-    listed, not what is phase-capable.
-    """
-    data = payload.get("data")
-    if not isinstance(data, list):
-        return []
-    routes: list[ModelRoute] = []
-    for entry in data:
-        if not isinstance(entry, Mapping):
-            continue
-        model_id = entry.get("id")
-        if not model_id:
-            continue
-        routes.append(
-            ModelRoute(
-                provider=provider,
-                model=str(model_id),
-                prompt_price=None,
-                completion_price=None,
-                context_length=0,
-                supports_tools=False,
-                supports_structured_output=False,
-            )
-        )
-    return routes
-
-
-def normalize_ollama_tags(payload: Mapping[str, Any], provider: str) -> list[ModelRoute]:
-    """Normalize an Ollama ``GET /api/tags`` payload to routes (unverified)."""
-    models = payload.get("models")
-    if not isinstance(models, list):
-        return []
-    routes: list[ModelRoute] = []
-    for entry in models:
-        if not isinstance(entry, Mapping):
-            continue
-        name = entry.get("name")
-        if not name:
-            continue
-        routes.append(
-            ModelRoute(
-                provider=provider,
-                model=str(name),
-                prompt_price=None,
-                completion_price=None,
-                context_length=0,
-                supports_tools=False,
-                supports_structured_output=False,
-            )
-        )
-    return routes
-
-
-def normalize_fireworks_models(payload: Mapping[str, Any]) -> list[ModelRoute]:
-    """Normalize a Fireworks account-models payload, keeping pricing when present."""
-    models = payload.get("models")
-    if not isinstance(models, list):
-        return []
-    routes: list[ModelRoute] = []
-    for entry in models:
-        if not isinstance(entry, Mapping):
-            continue
-        name = entry.get("name")
-        if not name:
-            continue
-        pricing = entry.get("pricing")
-        prompt_price = completion_price = None
-        if isinstance(pricing, Mapping):
-            prompt_price = _as_float(pricing.get("prompt"))
-            completion_price = _as_float(pricing.get("completion"))
-        routes.append(
-            ModelRoute(
-                provider="fireworks",
-                model=str(name),
-                prompt_price=prompt_price,
-                completion_price=completion_price,
-                context_length=0,
-                supports_tools=False,
-                supports_structured_output=False,
-            )
-        )
-    return routes
 
 
 _OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
@@ -263,19 +176,21 @@ def normalize_models_dev_catalog(
 
 def live_model_ids(payload: Mapping[str, Any]) -> list[str]:
     """Extract listed model ids from a live provider list payload."""
-    data = payload.get("data")
-    if isinstance(data, list):
-        return [str(e.get("id")) for e in data if isinstance(e, Mapping) and e.get("id")]
-    models = payload.get("models")
-    if isinstance(models, list):
-        return [
-            str(name)
-            for e in models
-            if isinstance(e, Mapping)
-            for name in [e.get("id", e.get("name"))]
-            if name
-        ]
-    return []
+    entries = payload.get("data")
+    id_key: str | None = "id"
+    if not isinstance(entries, list):
+        entries = payload.get("models")
+        id_key = None  # ollama/fireworks style: "name", or "id" when present
+    if not isinstance(entries, list):
+        return []
+    ids: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            continue
+        name = entry.get(id_key) if id_key else (entry.get("id") or entry.get("name"))
+        if name:
+            ids.append(str(name))
+    return ids
 
 
 def build_inventory_snapshot(
@@ -349,8 +264,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def main(argv: list[str] | None = None, client: Any | None = None) -> int:
     """Fetch configured provider catalogs and write a snapshot file."""
-    import argparse
-
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default=None, help="Snapshot output path")
     parser.add_argument("--min-context", type=int, default=64000)
