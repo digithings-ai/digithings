@@ -241,7 +241,7 @@ def load_sdca_extra_z(
         rs_eth=1.0 if sources.eth_dates is not None else 0.0,
         dxy=1.0 if sources.dxy_dates is not None else 0.0,
     )
-    extra.update(extra_z_vectors(date_s, price_s, weights, sources))
+    extra.update(extra_z_vectors(date_s, price_s, weights, sources, oscillators=oscillators))
     return extra
 
 
