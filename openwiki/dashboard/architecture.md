@@ -5,7 +5,7 @@ description: Design of the digiquant operator dashboard — static-exported Next
 tags: [dashboard, digiquant, nextjs, frontend]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
+    at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-85317e6ee50bd801c6c5f886
     resource: repo://frontend/dashboard/app/layout.tsx

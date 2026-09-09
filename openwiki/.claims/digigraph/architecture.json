@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:7246c9420d2c25820ab421f318d2d13b5dae2ce04bcbb3f27615f44590e91023",
+  "pageVersion": "sha256:eb0cca1a8c2220aab4477a9733ce15ba0050a24cef8e8145188257729db32b49",
   "claims": [
     {
       "id": "claim_11047ca9946043d3b18fc1c4a1cf7e84",
@@ -37,14 +37,22 @@
       "statement": "WorkflowState carries only refs and summaries with large data in digistore, LLM traffic goes through llm_client wrapping digillm, and models resolve via get_model_for_mode.",
       "evidence": [
         {
-          "resource": "repo://digigraph/AGENTS.md#L30-L60",
-          "version": "repo-lines-v1:sha256:9a6dd900b69e8e829051ee271f8a6296d95253de63477bcbabb98b10be21c140:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4YjAyMzIyZTM4Zjk3MzczYTQ2Nzk5ODRmN2EwNjI5MjRhYTcyYTc0NTU0NTM5ODcwNmUzYTMwZDVmZDg2ZTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2YjdmOWI5NDgwY2YwMDI1ZjkyMDlmOTVjN2NmYWNlNDQ2NjYxZjcxMmMyZGE1YjA4NWEyMWVkZDc1YTI0NTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNmODdjMDc1NThjZWRlYTQyMDFmYjhmZTcwOWM2MzJjNjYyYzU5ZGM3YjkxYTUwODkwYjhlNTJjMzhiZWY0NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU5YjQyYThlM2E1NmM4MWU5MjBlNDJiZWRiZGM4YzhmYjQ3YmUwNjRmNTU1Y2I5NDJiODE0ZDQ0OTg2YjMwOTcifQ"
+          "resource": "repo://digigraph/AGENTS.md#L29-L29",
+          "version": "repo-lines-v1:sha256:43f951cb8f83e4aa3de9715801ccbbebae4110d381c217fac0819badab5705bd:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDNmOTUxY2I4ZjgzZTRhYTNkZTk3MTU4MDFjY2JiZWJhZTQxMTBkMzgxYzIxN2ZhYzA4MTliYWRhYjU3MDViZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDNmOTUxY2I4ZjgzZTRhYTNkZTk3MTU4MDFjY2JiZWJhZTQxMTBkMzgxYzIxN2ZhYzA4MTliYWRhYjU3MDViZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWQzNzE0ODk3MzljZGVlZjA3N2ZiN2U1MzEwZWQ3NTM0YzA1ZjZlNTcyNzA4ZGQxZDJiMThkZTFiMTljOTljNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWM0Y2ZjOWQwNDJjMWMzMWFiMWJlMDhkZDA3ZTE1MWY2ZTI3MzRiZmE2ZjFjZjY0MzNjMDFjOTM0NTUwYTRjNiJ9"
+        },
+        {
+          "resource": "repo://digigraph/AGENTS.md#L41-L41",
+          "version": "repo-lines-v1:sha256:293531a4f41318757eae9573f3f442b7f47d343a94bf8cbfd02547b43f441e3c:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjkzNTMxYTRmNDEzMTg3NTdlYWU5NTczZjNmNDQyYjdmNDdkMzQzYTk0YmY4Y2JmZDAyNTQ3YjQzZjQ0MWUzYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjkzNTMxYTRmNDEzMTg3NTdlYWU5NTczZjNmNDQyYjdmNDdkMzQzYTk0YmY4Y2JmZDAyNTQ3YjQzZjQ0MWUzYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTE2NDk1MGFmNTgzNzkyNThlZDRjYTJkNDFlMjlmOTBmNjVhNzA4MmRjNjY0ZjhkNWYwZTA4Y2YxMmEzOTEzYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDY5ODA1ZmRkZGJkZWU1ZWZmYWJjMzRhNTI5MzExODBkMTRmOGU0MWZiYzFmYmIxOThiMTZiNzNkMjk2Nzc0OSJ9"
+        },
+        {
+          "resource": "repo://digigraph/AGENTS.md#L43-L43",
+          "version": "repo-lines-v1:sha256:6c03e1c72563bf6b6c3d437f620e9457ed489ea1d3b5ca6e532b98789300d26e:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmMwM2UxYzcyNTYzYmY2YjZjM2Q0MzdmNjIwZTk0NTdlZDQ4OWVhMWQzYjVjYTZlNTMyYjk4Nzg5MzAwZDI2ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNmMwM2UxYzcyNTYzYmY2YjZjM2Q0MzdmNjIwZTk0NTdlZDQ4OWVhMWQzYjVjYTZlNTMyYjk4Nzg5MzAwZDI2ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODI5M2IxZTIzZjJiMmEyMjU0MGE2OTM0YmJmNzU2YWY4MzI0Mzk2NjU1MDA5ZjllODNkYjc1OTIwMGFhY2EzYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODZjMjhhNTliMDkzYmJjYTZmMzg0OGI2YTZmOWNlNmIxMzNmY2YzMjk0MTA3ZjcwZTk3OTMyOTRhZmM2YzllZSJ9"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-07T22:38:58.074Z"
+    "at": "2026-09-09T14:37:17.158Z"
   }
 }
