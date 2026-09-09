@@ -342,19 +342,33 @@ class TestMain:
     def test_dry_run_lists_threads_without_uploading(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        # Dry-run lists the archive set (previous threads); the newest is excluded.
+        # Dry-run lists the archive set (previous threads); the newest is excluded,
+        # and --retain-days further restricts to stale threads only.
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
         client = FakeClient(
             store={
                 "checkpoints": [
-                    {"thread_id": "a", "checkpoint": {"ts": "2026-09-01T00:00:00+00:00"}},
-                    {"thread_id": "b", "checkpoint": {"ts": "2026-09-08T00:00:00+00:00"}},
+                    {
+                        "thread_id": "a",
+                        "checkpoint": {"ts": (now - timedelta(days=5)).isoformat()},
+                    },
+                    {
+                        "thread_id": "b",
+                        "checkpoint": {"ts": (now - timedelta(days=1)).isoformat()},
+                    },
+                    {
+                        "thread_id": "c",
+                        "checkpoint": {"ts": (now - timedelta(hours=1)).isoformat()},
+                    },
                 ]
             }
         )
         monkeypatch.setattr("digiquant.data.store.client.build_digiquant_client", lambda: client)
-        assert main(["--dry-run"]) == 0
+        assert main(["--dry-run", "--retain-days", "2"]) == 0
         out = capsys.readouterr().out
-        assert "a" in out and "b" not in out
+        assert "a" in out and "b" not in out and "c" not in out
 
     def test_missing_credentials_fails_fast(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("digiquant.data.store.client.build_digiquant_client", lambda: None)

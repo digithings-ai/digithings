@@ -540,8 +540,14 @@ def main(argv: list[str] | None = None) -> int:
     # run (it becomes "previous" on the next run). --keep/--retain-days further
     # restrict, never widen.
     threads = previous_threads(client, args.owner)
+    keep = set(args.keep)
+    if args.retain_days is not None:
+        fresh = set(threads_older_than(client, args.retain_days))
+        keep |= set(threads) - fresh
     if args.dry_run:
         for thread_id in threads:
+            if thread_id in keep:
+                continue
             print(thread_id)
         return 0
     store = _r2_backend_from_env()
@@ -551,10 +557,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     manifests: list[dict[str, Any]] = []
-    keep = set(args.keep)
-    if args.retain_days is not None:
-        fresh = set(threads_older_than(client, args.retain_days))
-        keep |= set(threads) - fresh
     fresh_keys: set[str] = set()
     for thread_id in threads:
         if thread_id in keep:
