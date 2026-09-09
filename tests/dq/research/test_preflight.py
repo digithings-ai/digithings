@@ -84,8 +84,8 @@ class TestPreflight:
         return client, deps
 
     def test_on_demand_refresh_off_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # Without ATLAS_REFRESH_ON_DEMAND the stale signal stands and no recompute is attempted.
-        monkeypatch.delenv("ATLAS_REFRESH_ON_DEMAND", raising=False)
+        # Without DIGIQUANT_REFRESH_ON_DEMAND the stale signal stands and no recompute is attempted.
+        monkeypatch.delenv("DIGIQUANT_REFRESH_ON_DEMAND", raising=False)
         _client, deps = self._stale_deps()
         with patch.object(refresh_mod, "recompute_technicals_from_history") as recompute:
             out = build_preflight_node(deps)(
@@ -97,7 +97,7 @@ class TestPreflight:
     def test_on_demand_refresh_clears_fallback_when_now_fresh(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("ATLAS_REFRESH_ON_DEMAND", "1")
+        monkeypatch.setenv("DIGIQUANT_REFRESH_ON_DEMAND", "1")
         client, deps = self._stale_deps()
         run_date = date(2026, 4, 26)
 
@@ -115,7 +115,7 @@ class TestPreflight:
         assert out["data_layer"].price_technicals_latest == run_date
 
     def test_on_demand_refresh_is_fail_soft(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("ATLAS_REFRESH_ON_DEMAND", "1")
+        monkeypatch.setenv("DIGIQUANT_REFRESH_ON_DEMAND", "1")
         _client, deps = self._stale_deps()
         with patch.object(
             refresh_mod,

@@ -1,5 +1,10 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { forwardHeaders } from "../../scripts/trusted-proxy-server.mjs";
+import { forwardHeaders, resolveDigichatVersion } from "../../scripts/trusted-proxy-server.mjs";
+
+const packageVersion = JSON.parse(
+  readFileSync(new URL("../../package.json", import.meta.url), "utf8")
+).version;
 
 describe("trusted-proxy server", () => {
   it("replaces a caller-supplied internal peer header with the socket peer", () => {
@@ -32,5 +37,16 @@ describe("trusted-proxy server", () => {
     expect(headers).not.toHaveProperty("transfer-encoding");
     expect(headers).not.toHaveProperty("upgrade");
     expect(headers["x-forwarded-for"]).toBe("198.51.100.1");
+  });
+});
+
+describe("resolveDigichatVersion", () => {
+  it("prefers a non-empty DIGICHAT_VERSION env", () => {
+    expect(resolveDigichatVersion({ DIGICHAT_VERSION: " 9.9.9 " })).toBe("9.9.9");
+  });
+
+  it("falls back to this package's version when env is blank", () => {
+    expect(resolveDigichatVersion({ DIGICHAT_VERSION: "" })).toBe(packageVersion);
+    expect(packageVersion).not.toBe("0.1.0");
   });
 });
