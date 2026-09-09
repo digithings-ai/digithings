@@ -16,7 +16,7 @@ describe('LockedSurface', () => {
     expect(html).toContain('data-plan-tier="free"');
     expect(html).toContain('Observer');
     expect(html).toContain('Brief');
-    expect(html).toContain('House weights, NAV, tearsheet, ledger, and attribution unlock on Brief.');
+    expect(html).toContain('House weights, performance, tearsheet, ledger, and attribution unlock on Brief.');
     expect(html).toContain('href="/settings#billing"');
     expect(html).toContain('Upgrade in Settings → Billing');
     // No money-tone / alarm vocabulary in the locked chrome

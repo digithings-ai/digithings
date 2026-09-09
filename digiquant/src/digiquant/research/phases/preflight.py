@@ -129,7 +129,7 @@ def _market_context_tickers() -> list[str]:
 
 
 def _refresh_on_demand_enabled() -> bool:
-    """``ATLAS_REFRESH_ON_DEMAND`` — opt in to the in-graph technicals recompute (off by
+    """``DIGIQUANT_REFRESH_ON_DEMAND`` — opt in to the in-graph technicals recompute (off by
     default; the CI pre-baseline step is the primary freshness mechanism)."""
     return env_lookup(REFRESH_ON_DEMAND).strip().lower() in (
         "1",
@@ -144,7 +144,7 @@ def _refresh_stale_technicals(
 ) -> bool:
     """Recompute technicals from ``price_history`` (network-free) to clear staleness.
 
-    Opt-in via ``ATLAS_REFRESH_ON_DEMAND``; fail-soft → ``False`` (keep the stale data and
+    Opt-in via ``DIGIQUANT_REFRESH_ON_DEMAND``; fail-soft → ``False`` (keep the stale data and
     the ``"scripts"`` fallback signal). Returns True only when rows were actually upserted.
     """
     if not _refresh_on_demand_enabled():

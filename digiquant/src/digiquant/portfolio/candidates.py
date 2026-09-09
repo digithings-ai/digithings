@@ -1,7 +1,7 @@
 """Deterministic portfolio focus-list selection (#696).
 
 Phase 7C/7CD per-ticker deliberation previously fanned out over the first
-``ATLAS_MAX_ANALYSTS`` tickers of the watchlist — an arbitrary alphabetical
+``DIGIQUANT_MAX_ANALYSTS`` tickers of the watchlist — an arbitrary alphabetical
 slice. The focus list applies the same analytical depth where it matters
 instead: **current portfolio holdings** (reviewed every day, always included)
 plus the **top-scored opportunity candidates** ranked by simple, explainable
