@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Any  # score:allow untyped any — Starlette headers / request extras
+
 from fastapi import HTTPException, Request
 
-from digigraph.models import WorkflowRequest
+from digigraph.models import McpServerRef, WorkflowRequest
 from digigraph.thread_scope import (
     assert_thread_access,
     auth_subject_from_request,
@@ -13,7 +15,19 @@ from digigraph.thread_scope import (
 )
 
 
-def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
+def _hget(headers: Any, *keys: str) -> str:
+    """Read a header; dict tests are case-sensitive, Starlette is not."""
+    get = getattr(headers, "get", None)
+    if not callable(get):
+        return ""
+    for key in keys:
+        raw = get(key)
+        if raw and str(raw).strip():
+            return str(raw)
+    return ""
+
+
+def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
     from digigraph.corpus_routing import (
         TenantCorpusMapError,
         load_tenant_corpus_map,
@@ -22,7 +36,7 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
 
     bearer = getattr(http_request.state, "digi_bearer", None)
     auth = getattr(http_request.state, "digi_auth", None)
-    updates: dict[str, str | None] = {"digi_bearer": bearer}
+    updates: dict[str, Any] = {"digi_bearer": bearer}
     # digi_subject keys the cross-thread Store namespace (supervisor_node,
     # ARCHITECTURE.md §6.10) and, via workflow_thread_id, the checkpoint thread_id — so
     # it must NEVER survive from a client-supplied WorkflowRequest.digi_subject unless
@@ -75,20 +89,44 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
             updates["research_system_prompt_override"] = corpus.research_system_prompt
     # Per-request response language (X-Digi-Language) — a per-request signal, not a
     # tenant-derived value, so it's read directly rather than via resolve_corpus_override.
-    # Never interpolated into a prompt (resolve_language_directive only ever emits
-    # mapped display names for curated 2-char codes), but capped defensively before
-    # it reaches WorkflowRequest/checkpointed state — an arbitrarily long header value
-    # has no business sitting in checkpoint storage. Curated codes are 2 characters,
+    # The raw header is never interpolated: resolve_language_directive / apply_language_preference
+    # only ever emit mapped display names for curated 2-char codes. Capped defensively
+    # before it reaches WorkflowRequest/checkpointed state. Curated codes are 2 characters,
     # so 16 is generous headroom, not a functional constraint.
     lang = http_request.headers.get("x-digi-language")
     if lang and lang.strip():
         updates["response_language"] = lang.strip().lower()[:16]
+    from digigraph.orchestration.mcp_client import (
+        merge_mcp_servers,
+        parse_mcp_servers_json,
+        resolve_mcp_force_id,
+    )
     from digigraph.retrieval import resolve_force_tool
 
-    force_raw = http_request.headers.get("x-digi-force-tool")
-    resolved_force = resolve_force_tool(force_raw)
+    headers = http_request.headers
+    mcp_servers = merge_mcp_servers(
+        parse_mcp_servers_json(_hget(headers, "X-Digi-Mcp-Servers", "x-digi-mcp-servers"))
+    )
+    # Always write so a client body value cannot survive (same CWE-639 class as
+    # digi_subject). Empty list clears a prior turn's URLs on the checkpoint.
+    updates["mcp_servers"] = [
+        McpServerRef(
+            id=s["id"],
+            url=s["url"],
+            auth=s.get("auth") or None,
+            token=s.get("token") or None,
+        )
+        for s in mcp_servers
+    ]
+    disabled_raw = _hget(headers, "X-Digi-Disabled-Tools", "x-digi-disabled-tools")
+    tokens = [p.strip() for p in disabled_raw.split(",") if p.strip()]
+    updates["disabled_tools"] = tokens or None
+    force_raw = _hget(headers, "x-digi-force-tool", "X-Digi-Force-Tool")
+    resolved_force = resolve_force_tool(force_raw) or resolve_mcp_force_id(force_raw, mcp_servers)
     if resolved_force:
         updates["force_tool"] = resolved_force
+    effort = _hget(headers, "X-Digi-Effort", "x-digi-effort").strip().lower()
+    updates["effort"] = effort if effort in ("low", "medium", "high") else None
     return updates
 
 

@@ -83,12 +83,14 @@ vi.mock("@assistant-ui/react", async () => {
   const actual = await vi.importActual<typeof import("@assistant-ui/react")>(
     "@assistant-ui/react",
   );
+  const emptyAuiState = { thread: { messages: [] as unknown[] } };
   return {
     ...actual,
     AssistantRuntimeProvider: ({ children }: { children: ReactNode }) => children,
     RuntimeAdapterProvider: ({ children }: { children: ReactNode }) => children,
     AuiConfig: (c: unknown) => c,
     Suggestions: (s: unknown) => s,
+    useAuiState: <T,>(selector: (s: typeof emptyAuiState) => T) => selector(emptyAuiState),
   };
 });
 

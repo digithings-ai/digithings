@@ -219,16 +219,27 @@ export const ToolsSchema = z
 
 export const McpServerSchema = z
   .object({
-    id: z.string().min(1),
+    id: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9_-]{0,63}$/, "mcp server id must be lowercase slug"),
     /** BFF-only URL — never projected to the browser */
     url: z.string().url(),
     label: z.string().optional(),
+    default: z.boolean().optional(),
   })
   .strict();
 
 export const McpSchema = z
   .object({
     servers: z.array(McpServerSchema).default([]),
+    /**
+     * Session overlay switch: when true, `/mcp new` URLs that pass
+     * `isAllowedMcpServerUrl` are merged into the upstream MCP header.
+     * Operator YAML URLs stay server-side. Default false on public embeds.
+     */
+    allowUserServers: z.boolean().default(false),
+    /** Show the add-custom-server form. Ignored unless allowUserServers. */
+    allowAddForm: z.boolean().default(false),
   })
   .strict();
 

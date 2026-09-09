@@ -50,7 +50,7 @@ describe("/api/ecosystem/config", () => {
   });
 
   it("GET returns 401 without session", async () => {
-    vi.mocked(auth).mockResolvedValue(null);
+    vi.mocked(auth).mockResolvedValue(null as never);
     const res = await GET();
     expect(res.status).toBe(401);
   });

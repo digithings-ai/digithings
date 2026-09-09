@@ -8,6 +8,7 @@ import {
   disclosureIsLocked,
   disclosureIsVisible,
   parseDigichatConfig,
+  welcomeTitle,
 } from "./schema";
 import { allowedForceTools } from "./force-tool";
 import { THREAD_SKINS } from "@/lib/thread-skins";
@@ -184,6 +185,7 @@ describe("DigichatConfigSchema", () => {
       "digithings-ai-embed.yaml",
       "occ-embed.yaml",
       "dashboard-modal.yaml",
+      "datatap-mcp.yaml",
       "local-app.yaml",
       "local-app-memory.yaml",
       "local-cli.yaml",
@@ -205,6 +207,7 @@ describe("DigichatConfigSchema", () => {
     const raw = readFileSync(resolve(examplesDir, "dashboard-modal.yaml"), "utf8");
     const cfg = parseDigichatConfig(loadYaml(raw), "dashboard-modal.yaml");
     expect(cfg.deployment?.chrome.skin).toBe("digichat");
+    expect(welcomeTitle(cfg.deployment?.chrome.welcome)).toBe("Ask about this page.");
     expect(cfg.deployment?.chrome.mode).toBe("modal");
     expect(cfg.deployment?.features.attachments).toBe(false);
     expect(cfg.deployment?.gate.requiredPlanTier).toBe("desk");
@@ -219,6 +222,7 @@ describe("DigichatConfigSchema", () => {
     );
     const dt = digithings.hosts?.["digithings.ai"];
     expect(dt?.chrome.skin).toBe("digichat");
+    expect(welcomeTitle(dt?.chrome.welcome)).toBe("Ask about digithings.");
     expect(dt?.backend).toEqual({ type: "digigraph" });
     expect(dt?.tools?.allowUserToggle).toBe(true);
     expect(dt?.tools?.catalog.map((t) => t.id)).toEqual([
@@ -226,7 +230,7 @@ describe("DigichatConfigSchema", () => {
       "digivault",
       "web_search",
     ]);
-    expect(dt?.tools?.catalog.find((t) => t.id === "web_search")?.default).toBe(false);
+    expect(dt?.tools?.catalog.find((t) => t.id === "web_search")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digisearch")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digivault")?.default).toBe(true);
     expect(allowedForceTools(dt)).toEqual(["digisearch", "digivault"]);
@@ -245,6 +249,17 @@ describe("DigichatConfigSchema", () => {
     expect(occHost?.tools?.catalog.map((t) => t.id)).toEqual(["digisearch", "digivault"]);
     expect(occHost?.tools?.catalog.some((t) => t.id === "web_search")).toBe(false);
     expect(allowedForceTools(occHost)).toEqual(["digisearch", "digivault"]);
+  });
+
+  it("parses operator MCP servers on the DataTap example without leaking URLs", () => {
+    const cfg = parseDigichatConfig(
+      loadYaml(readFileSync(resolve(examplesDir, "datatap-mcp.yaml"), "utf8")),
+      "datatap-mcp.yaml",
+    );
+    const dep = cfg.deployment;
+    expect(dep?.mcp?.servers.map((s) => s.id)).toEqual(["datatap"]);
+    expect(dep?.mcp?.allowUserServers).toBe(false);
+    expect(allowedForceTools(dep)).toEqual(["digisearch", "digivault", "datatap"]);
   });
 
   it("ships a complete YAML install for every catalog template id", () => {

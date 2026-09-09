@@ -15,15 +15,23 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  isWebSearchEnabled,
-  readWebSearchPref,
-} from "@/lib/web-search-pref";
+import { isWebSearchEnabled } from "@/lib/web-search-pref";
 import { Key, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ByokCliFlow } from "@/components/byok-cli-flow";
 import { ContactMailto } from "@digithings/web";
 import { ProductStockShell } from "@/components/stock/product-shell";
+import {
+  DEFAULT_EMBED_CHAT_PREFS,
+  EmbedChatPrefsProvider,
+  catalogToolsFromClient,
+  disabledCatalogIds,
+  extraOffFromCatalog,
+  type EmbedChatPrefs,
+  type EmbedChatPrefsApi,
+} from "@/components/stock/embed-chat-prefs";
+import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
+import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { clientConfigFromEmbedTenant } from "@/lib/deploy-config";
 import { skinOwnsPageChrome } from "@/lib/thread-skins";
@@ -70,8 +78,8 @@ import {
   useEmbedTenantConfig,
   type EmbedTenantClientConfig,
 } from "@/hooks/use-embed-tenant-config";
-import { resolveAttributionPlacement, resolveEmbedUiFlags } from "@/lib/embed-ui-flags";
-import { detectBrowserLanguageCode } from "@/lib/languages";
+import { resolveAttributionPlacement, resolveEmbedUiFlags, shouldRenderEmbedBrandHeader } from "@/lib/embed-ui-flags";
+import { DEFAULT_LANGUAGE_CODE, tryResolveLanguageInput } from "@/lib/languages";
 import { applyEmbedSeed } from "@/lib/embed-seed-apply";
 import {
   READY_MESSAGE,
@@ -338,37 +346,24 @@ function EmbedChat({
     () => clientConfigFromEmbedTenant(tenantCfg),
     [tenantCfg],
   );
-  const [language] = useState(
-    () => stockClient.chrome.defaultLanguage || detectBrowserLanguageCode(),
-  );
-  const [model] = useState(
-    () => stockClient.models.default ?? stockClient.models.available[0] ?? "",
-  );
+  const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
+    ...DEFAULT_EMBED_CHAT_PREFS,
+    extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
+  }));
+  const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
+  const [providerSeed, setProviderSeed] = useState<string | undefined>();
+  const [mcpSeed, setMcpSeed] = useState<string | undefined>();
   // useEmbedDigiChat's transport is frozen on first render (#1339) — a
-  // `language` value passed by plain value would stay stuck at whatever
-  // detectBrowserLanguageCode() returned at mount, so `/lang` would never
-  // reach the outgoing header (#2103 / #3418). Mutate the ref directly in
-  // the render body (the "useLatest" idiom) rather than in a useEffect — an
-  // effect would lag one render behind and could race a fast pick-then-send. The value is
-  // deliberately NOT persisted anywhere (no localStorage/sessionStorage): the
-  // approved design is session-only, resetting to a fresh browser-locale
-  // auto-detect on every reload.
-  const languageRef = useRef(language);
-  const modelRef = useRef(model);
-  // Deliberate "useLatest" escape hatch: mutating .current here (not in an
-  // effect) is what makes send-time reads see the value from the render that
-  // just committed, with zero lag. useEffectEvent can't replace this — its
-  // returned function may only be called from an Effect/Effect Event in the
-  // SAME component and may not be passed down, but getResponseLanguage is
-  // deliberately passed down into useEmbedDigiChat and invoked later from
-  // prepareSendMessagesRequest.
+  // `language` value passed by plain value would stay stuck at mount, so `/lang`
+  // would never reach the outgoing header (#2103 / #3418). Mutate the ref in
+  // the render body (the "useLatest" idiom). Session-only: English + tools ON
+  // on every reload (#3733).
+  const chatPrefsRef = useRef(chatPrefs);
   // eslint-disable-next-line react-hooks/refs -- see comment above
-  languageRef.current = language;
-  // eslint-disable-next-line react-hooks/refs -- send-time model read
-  modelRef.current = model;
-  const getResponseLanguage = useCallback(() => languageRef.current, []);
+  chatPrefsRef.current = chatPrefs;
+  const getResponseLanguage = useCallback(() => chatPrefsRef.current.language, []);
   const getSelectedModel = useCallback(() => {
-    const id = modelRef.current.trim();
+    const id = chatPrefsRef.current.model.trim();
     return id || undefined;
   }, []);
   const planProofRef = useRef(planProof);
@@ -376,40 +371,29 @@ function EmbedChat({
   planProofRef.current = planProof ?? null;
   const getPlanProof = useCallback(() => planProofRef.current, []);
 
-  // Opt-in web search (#3420) — tenant allow + user localStorage pref; default off.
-  // Adjust during render when scope changes (same pattern as trialUnlockedFor).
   const webSearchScope = tenantCfg.slug || host?.trim() || "embed";
-  const [webSearchState, setWebSearchState] = useState<{
-    scope: string;
-    pref: boolean;
-  }>(() => ({ scope: webSearchScope, pref: false }));
-  if (webSearchState.scope !== webSearchScope) {
-    setWebSearchState({
-      scope: webSearchScope,
-      pref: typeof window !== "undefined" ? readWebSearchPref(webSearchScope) : false,
-    });
-  }
-  // Hydrate from localStorage once on the client (SSR starts false).
-  const [webHydrated, setWebHydrated] = useState(false);
-  if (typeof window !== "undefined" && !webHydrated) {
-    setWebHydrated(true);
-    const stored = readWebSearchPref(webSearchScope);
-    if (stored !== webSearchState.pref) {
-      setWebSearchState({ scope: webSearchScope, pref: stored });
-    }
-  }
-  const webSearchPref = webSearchState.pref;
-  const webSearchUserRef = useRef(webSearchPref);
-  // eslint-disable-next-line react-hooks/refs -- send-time read via getEnableWebSearch
-  webSearchUserRef.current = webSearchPref;
   const tenantAllowsWeb = uiFlags.webSearch;
   const getEnableWebSearch = useCallback(
     () =>
       isWebSearchEnabled({
         tenantAllows: tenantAllowsWeb,
-        userPref: webSearchUserRef.current,
+        userPref: chatPrefsRef.current.webSearch,
       }),
     [tenantAllowsWeb],
+  );
+  const getDisabledTools = useCallback(
+    () => disabledCatalogIds(chatPrefsRef.current).join(","),
+    [],
+  );
+  const getEffort = useCallback(() => chatPrefsRef.current.effort, []);
+  const getMcpSession = useCallback(
+    () =>
+      mcpSessionOverlayHeaderValue(
+        connectedMcpConfigs(stockClient.mcp.servers, chatPrefsRef.current.mcpCustom),
+        (id) => chatPrefsRef.current.extra[id] !== false,
+        stockClient.mcp.allowUserServers === true,
+      ),
+    [stockClient.mcp.servers, stockClient.mcp.allowUserServers],
   );
   // trial_form still hides BYOK until parent unlock — product rule for DataTap only
   // backend_only never shows BYOK even if misconfigured showByok
@@ -448,8 +432,6 @@ function EmbedChat({
   }, []);
 
   const [serverGated, setServerGated] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [quotaPrompt, setQuotaPrompt] = useState(false);
   /** After BYOK save following a free-quota error, regenerate with X-BYOK-* headers. */
   const pendingByokRetryRef = useRef(false);
   /** Panel opened for a model-remediable refusal while a key is already bound — no retry until save. */
@@ -548,7 +530,10 @@ function EmbedChat({
     onGated: isTrialForm ? onGated : undefined,
     getResponseLanguage,
     getEnableWebSearch,
+    getDisabledTools,
     getSelectedModel,
+    getMcpSession,
+    getEffort,
     getPlanProof,
     // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
     // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
@@ -601,8 +586,7 @@ function EmbedChat({
     }
     // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
     queueMicrotask(() => {
-      setQuotaPrompt(!remediateWhileBound);
-      setSettingsOpen(true);
+      setComposerMenu("provider");
     });
   }, [chat.rawError, byokIsSet, llmAccess, showByok, tenantCfg.gateMode, chat]);
 
@@ -614,8 +598,7 @@ function EmbedChat({
     const held = heldQuestionRef.current;
     if (pendingByokRetryRef.current) {
       pendingByokRetryRef.current = false;
-      setQuotaPrompt(false);
-      setSettingsOpen(false);
+      setComposerMenu(null);
       if (held) {
         heldQuestionRef.current = null;
         const forceTool = heldForceToolRef.current;
@@ -653,9 +636,9 @@ function EmbedChat({
     consumePageContext,
   ]);
 
-  const openSettings = useCallback(() => {
-    setQuotaPrompt(false);
-    setSettingsOpen(true);
+  const openByok = useCallback((seed?: string) => {
+    setProviderSeed(seed);
+    setComposerMenu("provider");
   }, []);
 
   const onByokSaved = useCallback(
@@ -664,7 +647,7 @@ function EmbedChat({
       pendingByokRetryRef.current = true;
       setByokKey(key, provider, model);
       emit("embed_byok_saved", { provider });
-      setSettingsOpen(false);
+      setComposerMenu(null);
       // Retry effect runs once byokIsSet flips (pendingByokRetryRef set above).
     },
     [setByokKey],
@@ -880,23 +863,16 @@ function EmbedChat({
   }, [isTrialForm, host, unlockTrial]);
 
   const welcomeIntro = useMemo(() => {
-    let base: string;
-    if (uiParams.welcome) base = uiParams.welcome;
-    else if (tenantCfg.welcome) base = tenantCfg.welcome;
-    else if (ungated) {
-      base =
-        "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
-    } else {
-      base = DEFAULT_WELCOME.replace(
-        "the first few turns are free",
-        `the first ${EMBED_FREE_TURN_LIMIT} are free`,
-      );
+    if (uiParams.welcome) return uiParams.welcome;
+    if (tenantCfg.welcome) return tenantCfg.welcome;
+    if (ungated) {
+      return "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
     }
-    if (pageContextAttached) {
-      return `${base}\n\nPage context from this host is attached — ask about what you see on the page.`;
-    }
-    return base;
-  }, [uiParams.welcome, tenantCfg.welcome, ungated, pageContextAttached]);
+    return DEFAULT_WELCOME.replace(
+      "the first few turns are free",
+      `the first ${EMBED_FREE_TURN_LIMIT} are free`,
+    );
+  }, [uiParams.welcome, tenantCfg.welcome, ungated]);
 
   const placeholder = uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…";
   const suggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
@@ -909,7 +885,7 @@ function EmbedChat({
         heldQuestionRef.current = question;
         heldForceToolRef.current = opts?.forceTool;
         pendingByokRetryRef.current = true;
-        setSettingsOpen(true);
+        setComposerMenu("provider");
         return;
       }
       // Out of free turns: HOLD the question and raise the form. Dropping it
@@ -961,7 +937,7 @@ function EmbedChat({
         heldForceToolRef.current = takePendingForceTool(gate.host);
         if (decision.action === "hold_byok") {
           pendingByokRetryRef.current = true;
-          setSettingsOpen(true);
+          setComposerMenu("provider");
           return;
         }
         lastGatedPost.current = null;
@@ -993,6 +969,114 @@ function EmbedChat({
     ],
   );
 
+  const catalog = stockClient.tools.catalog;
+  const catalogTools = useMemo(() => catalogToolsFromClient(stockClient), [stockClient]);
+  const showModels =
+    stockClient.models.allowPicker === true || stockClient.features.modelPicker === true;
+  const prefsApi = useMemo<EmbedChatPrefsApi>(
+    () => ({
+      prefs: chatPrefs,
+      setWebSearch: (value) => setChatPrefs((p) => ({ ...p, webSearch: value })),
+      setDigisearch: (value) => setChatPrefs((p) => ({ ...p, digisearch: value })),
+      setVault: (value) => setChatPrefs((p) => ({ ...p, vault: value })),
+      setExtraTool: (id, value) =>
+        setChatPrefs((p) => ({ ...p, extra: { ...p.extra, [id]: value } })),
+      extraToolOn: (id) => chatPrefs.extra[id] !== false,
+      setMcpConfig: (config, previousId) =>
+        setChatPrefs((p) => ({
+          ...p,
+          mcpCustom: replaceMcpConfig(p.mcpCustom, previousId ?? config.id, config),
+        })),
+      removeMcpConfig: (id) =>
+        setChatPrefs((p) => ({
+          ...p,
+          mcpCustom: p.mcpCustom.filter((s) => s.id !== id),
+        })),
+      setLanguage: (code) => {
+        const resolved = tryResolveLanguageInput(code) ?? DEFAULT_LANGUAGE_CODE;
+        setChatPrefs((p) => ({ ...p, language: resolved }));
+      },
+      setThinking: (value) => setChatPrefs((p) => ({ ...p, thinking: value })),
+      setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
+      setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort: effort })),
+      reset: () =>
+        setChatPrefs({
+          ...DEFAULT_EMBED_CHAT_PREFS,
+          language: DEFAULT_LANGUAGE_CODE,
+          extra: extraOffFromCatalog(catalogTools),
+        }),
+      tenantAllowsWeb,
+      showByok,
+      showModels,
+      hasDigisearch: catalog.length === 0 || catalog.some((e) => e.id === "digisearch"),
+      hasVault: catalog.length === 0 || catalog.some((e) => e.id === "digivault"),
+      hasSessions: false,
+      allowUserMcp: stockClient.mcp.allowUserServers === true,
+      allowAddMcp: stockClient.mcp.allowAddForm === true,
+      catalogTools,
+      mcpServers: stockClient.mcp.servers,
+      sessionKey: gate.host,
+      openSettings: () => {
+        setComposerMenu("settings");
+      },
+      openTools: () => {
+        setComposerMenu("tools");
+      },
+      openMcp: (seed?: string) => {
+        setMcpSeed(seed);
+        setComposerMenu("mcp");
+      },
+      openByok: (seed?: string) => {
+        setProviderSeed(seed);
+        setComposerMenu("provider");
+      },
+      openModels: () => {
+        setComposerMenu("models");
+      },
+      openEffort: () => {
+        setComposerMenu("effort");
+      },
+      openLanguage: () => {
+        setComposerMenu("language");
+      },
+      openSessions: () => {},
+      newThread: () => {
+        setChatPrefs({
+          ...DEFAULT_EMBED_CHAT_PREFS,
+          language: DEFAULT_LANGUAGE_CODE,
+          extra: extraOffFromCatalog(catalogTools),
+        });
+        chat.reset?.();
+      },
+      compactThread: () => {
+        setChatPrefs({
+          ...DEFAULT_EMBED_CHAT_PREFS,
+          language: DEFAULT_LANGUAGE_CODE,
+          extra: extraOffFromCatalog(catalogTools),
+        });
+        chat.reset?.();
+      },
+      undo: () => {},
+      redo: () => {
+        chat.regenerate?.();
+      },
+    }),
+    [
+      chatPrefs,
+      tenantAllowsWeb,
+      showByok,
+      showModels,
+      catalog,
+      catalogTools,
+      gate.host,
+      chat.reset,
+      chat.regenerate,
+      stockClient.mcp.allowUserServers,
+      stockClient.mcp.allowAddForm,
+      stockClient.mcp.servers,
+    ],
+  );
+
 
   /* At most one credit, and the footer wins — see resolveAttributionPlacement. */
   const attributionAt = resolveAttributionPlacement({
@@ -1002,8 +1086,12 @@ function EmbedChat({
   const footerAttribution = attributionAt === "footer";
   const headerAttribution = attributionAt === "header";
 
-  // Language is `/lang` on the composer (#3418) — the top-right dropdown is gone.
-  const headerSlot = headerTitle ? (
+  // Language is `/language` on the composer (#3418 / #3733). First-party
+  // digichat skin uses launcher chrome — skip the in-iframe title row.
+  const headerSlot = shouldRenderEmbedBrandHeader({
+    skin: stockClient.chrome.skin,
+    headerTitle,
+  }) ? (
     <header className="dc-brand">
       <span>{headerTitle}</span>
       {headerAttribution ? (
@@ -1086,7 +1174,7 @@ function EmbedChat({
   const pageContextTs = pageContextSnapshot?.ts ?? null;
 
   return (
-    <>
+    <EmbedChatPrefsProvider value={prefsApi}>
       <ProductStockShell
         runtime={chat.runtime}
         clientConfig={stockClient}
@@ -1095,7 +1183,7 @@ function EmbedChat({
         sessionKey={gate.host}
         webSearchScope={webSearchScope}
         onWebSearchChange={(on) => {
-          setWebSearchState({ scope: webSearchScope, pref: on });
+          setChatPrefs((p) => ({ ...p, webSearch: on }));
         }}
         welcome={hideIntroForSeed ? undefined : welcomeIntro || undefined}
         suggestions={suggestions}
@@ -1119,7 +1207,7 @@ function EmbedChat({
               >
                 {handshakeError ?? chat.error}
                 {showByokOnError && !handshakeError ? (
-                  <button type="button" className="dc-inline-link ml-2" onClick={openSettings}>
+                  <button type="button" className="dc-inline-link ml-2" onClick={() => openByok()}>
                     Add your API key
                   </button>
                 ) : null}
@@ -1129,25 +1217,24 @@ function EmbedChat({
           </>
         }
       />
-      {showByok && settingsOpen ? (
-        <div
-          className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background p-3 shadow-lg"
-          data-thread-skin={stockClient.chrome.skin}
-          role="dialog"
-          aria-label="BYOK settings"
-        >
-          <ByokCliFlow
-            onClose={() => setSettingsOpen(false)}
-            onActivate={onByokSaved}
-            onClear={clearByokKey}
-            active={byokIsSet ? { provider: byokProvider, model: byokModel } : null}
-            initialProvider={byokProvider}
-            initialModel={byokModel}
-            title={quotaPrompt ? "byok — free tier exhausted" : "byok configure"}
-          />
-        </div>
+      {composerMenu ? (
+        <EmbedComposerMenu
+          kind={composerMenu}
+          models={stockClient.models.available}
+          onClose={() => {
+            setComposerMenu(null);
+            setProviderSeed(undefined);
+            setMcpSeed(undefined);
+          }}
+          onActivateProvider={showByok ? onByokSaved : undefined}
+          onClearProvider={showByok ? clearByokKey : undefined}
+          providerActive={byokIsSet ? { provider: byokProvider, model: byokModel } : null}
+          initialProvider={byokIsSet ? byokProvider : undefined}
+          providerSeed={providerSeed}
+          mcpSeed={mcpSeed}
+        />
       ) : null}
-    </>
+    </EmbedChatPrefsProvider>
   );
 }
 
@@ -1242,7 +1329,7 @@ function PaywallCard({
       <p className="mb-3 text-xs text-muted-foreground">
         Bring your own OpenRouter, OpenAI, Anthropic, or Gemini key for unlimited chat — the key
         stays in session memory only (refresh clears it). After a chat starts, type{" "}
-        <code className="font-mono">/byok</code> anytime. Or open the full digichat app.
+        <code className="font-mono">/provider</code> anytime. Or open the full digichat app.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -1252,7 +1339,7 @@ function PaywallCard({
           onClick={() => setShowBYOK(true)}
         >
           <Key className="mr-1.5 size-3.5" />
-          Bring your own key (/byok)
+          Bring your own key (/provider)
         </Button>
         <a
           href="https://digithings.ai/chat"

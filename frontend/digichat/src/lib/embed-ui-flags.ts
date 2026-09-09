@@ -29,6 +29,15 @@ export function resolveAttributionPlacement(args: {
   return args.headerTitle ? "header" : "none";
 }
 
+/** First-party digichat skin already has launcher chrome (#3733). */
+export function shouldRenderEmbedBrandHeader(args: {
+  skin: string;
+  headerTitle?: string | null;
+}): boolean {
+  if (args.skin === "digichat") return false;
+  return Boolean(args.headerTitle?.trim());
+}
+
 export function resolveEmbedUiFlags(cfg: EmbedTenantClientConfig): {
   showByok: boolean;
   layout: "page" | "embed";

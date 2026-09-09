@@ -30,8 +30,7 @@ function installLocalStorage(store: Store = new Map()): Store {
       return store.size;
     },
   };
-  // @ts-expect-error — attach to global for the test run
-  globalThis.localStorage = api;
+  globalThis.localStorage = api as Storage;
   return store;
 }
 
