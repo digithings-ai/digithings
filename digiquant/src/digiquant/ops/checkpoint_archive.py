@@ -14,6 +14,7 @@ because archived-then-restored rows equal the originals.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -319,6 +320,75 @@ def archive_thread(
     return ArchiveManifest(thread_id=thread_id, entries=tuple(entries), archived_at=_now_iso())
 
 
+def _payload_bytes(payload: Any) -> bytes:
+    """Canonical bytes for a document payload (JSONB arrives as dict/list)."""
+    if isinstance(payload, bytes):
+        return payload
+    if isinstance(payload, str):
+        return payload.encode("utf-8")
+    return json.dumps(payload, sort_keys=True).encode("utf-8")
+
+
+def document_key(workspace: str, date: str, key: str) -> str:
+    """R2 object key layout: ``documents/<workspace>/<date>/<key>.zst``."""
+    return f"documents/{workspace}/{date}/{key}.zst"
+
+
+def archive_documents(
+    client: Any, store: StorageBackend, workspace: str, owner: str = "house"
+) -> int:
+    """Offload older document versions: compress → put → verify → registry → NULL the payload cell.
+
+    Groups ``documents`` rows by ``document_key`` within *workspace*, keeps the
+    newest ``date`` live, and archives every older version. Rows already NULL
+    (prior pointers) are skipped. Any verification failure raises
+    :class:`ArchiveVerifyError` before touching Supabase, and a
+    registry-insert failure raises before the NULL update, so a failed
+    archive always keeps the Supabase row.
+    """
+    rows = client.table("documents").select("*").eq("workspace_id", workspace).execute().data or []
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        groups.setdefault(row.get("document_key"), []).append(row)
+    archived = 0
+    for key, versions in groups.items():
+        versions.sort(key=lambda r: str(r.get("date")))
+        for row in versions[:-1]:
+            if row.get("payload") is None:
+                continue
+            r2_key = document_key(workspace, str(row.get("date")), str(key))
+            stored = compress_payload(_payload_bytes(row["payload"]))
+            digest = hashlib.sha256(stored).hexdigest()
+            store.put(r2_key, stored)
+            if hashlib.sha256(store.get(r2_key)).hexdigest() != digest:
+                raise ArchiveVerifyError(f"read-back mismatch for {r2_key}; Supabase row kept")
+            client.table("archive_objects").insert(
+                {
+                    "source_table": "documents",
+                    "source_key": {
+                        "workspace_id": workspace,
+                        "document_key": key,
+                        "date": row.get("date"),
+                    },
+                    "r2_key": r2_key,
+                    "sha256": digest,
+                    "size": len(stored),
+                    "owner": owner,
+                }
+            ).execute()
+            query = client.table("documents").update({"payload": None})
+            for col, val in (
+                ("workspace_id", workspace),
+                ("document_key", key),
+                ("date", row.get("date")),
+            ):
+                query = query.eq(col, val)
+            query.execute()
+            archived += 1
+            logger.info("archived %s (%d bytes)", r2_key, len(stored))
+    return archived
+
+
 def restore_thread(client: Any, store: StorageBackend, manifest: ArchiveManifest) -> None:
     """Reinsert archived payloads from *manifest* (forensics path)."""
     for entry in manifest.entries:
@@ -395,10 +465,12 @@ __all__ = [
     "R2Backend",
     "StorageBackend",
     "archive_thread",
+    "archive_documents",
     "blob_key",
     "bucket_usage",
     "compress_payload",
     "decompress_payload",
+    "document_key",
     "evict_to_watermark",
     "list_threads",
     "main",
