@@ -121,6 +121,7 @@ describe("GET /api/embed/tenant-config", () => {
     const body = await res.json();
     expect(body.slug).toBe("digithings");
     expect(body.gateMode).toBe("ungated");
+    expect(body.skin).toBe("digichat");
   });
 
   it("projects showByok, layout to the client body", async () => {

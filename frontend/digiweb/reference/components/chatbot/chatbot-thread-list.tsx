@@ -5,14 +5,19 @@ import {
   ThreadListPrimitive,
 } from "@assistant-ui/react";
 
+import { DotMatrix } from "@/components/ui/dot-matrix";
+
 /** Terminal-nav conversation list for the gallery chrome specimen. */
 export function ChatbotThreadList() {
   return (
     <aside className="aui-chrome-thread-list" aria-label="Conversations">
       <div className="aui-chrome-thread-list-head">
-        <span className="aui-chrome-thread-list-label">chats</span>
-        <ThreadListPrimitive.New className="aui-chrome-thread-list-new">
-          + new
+        <span className="aui-chrome-thread-list-label">digichat</span>
+        <ThreadListPrimitive.New
+          className="aui-chrome-thread-list-new"
+          aria-label="New chat"
+        >
+          <DotMatrix state="newChat" label="New chat" className="size-3.5" />
         </ThreadListPrimitive.New>
       </div>
       <ThreadListPrimitive.Root className="aui-chrome-thread-list-root">
@@ -20,9 +25,6 @@ export function ChatbotThreadList() {
           {() => (
             <ThreadListItemPrimitive.Root className="aui-chrome-thread-list-row">
               <ThreadListItemPrimitive.Trigger className="aui-chrome-thread-list-item">
-                <span className="aui-chrome-thread-list-mark" aria-hidden="true">
-                  ·{" "}
-                </span>
                 <ThreadListItemPrimitive.Title fallback="new chat" />
               </ThreadListItemPrimitive.Trigger>
             </ThreadListItemPrimitive.Root>

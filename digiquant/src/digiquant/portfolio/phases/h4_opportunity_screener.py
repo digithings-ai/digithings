@@ -130,7 +130,7 @@ def compute_focus_roster(
     when new candidates are available. Prevents roster freeze.
 
     ``adaptive_max_analysts`` (optional): when not None, overrides the
-    ATLAS_MAX_ANALYSTS environment variable as the analyst cap for this
+    DIGIQUANT_MAX_ANALYSTS environment variable as the analyst cap for this
     run. When None, falls back to the env var.
     """
     held_set = {str(t).strip().upper() for t in held if str(t).strip()}
@@ -279,7 +279,7 @@ def compute_focus_roster_excluded(
         if ticker in held_upper:
             reason = "held, no material change (below staleness threshold)"
         elif ticker in thesis_upper:
-            reason = "thesis-mapped vehicle beyond the analyst cap (ATLAS_MAX_ANALYSTS)"
+            reason = "thesis-mapped vehicle beyond the analyst cap (DIGIQUANT_MAX_ANALYSTS)"
         else:
             reason = "not thesis-mapped and below technical screen"
         excluded.append(ExcludedTicker(ticker=ticker, reason=reason))

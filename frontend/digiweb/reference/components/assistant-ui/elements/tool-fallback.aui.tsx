@@ -1,7 +1,6 @@
 "use client";
 
-import { memo, useCallback, useRef, useState } from "react";
-import { ChevronDownIcon } from "lucide-react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { DotMatrix, type DotMatrixState } from "@/components/ui/dot-matrix";
 import {
   toolApprovalAcceptsText,
@@ -92,6 +91,13 @@ const statusMatrix: Record<ToolStatus, DotMatrixState> = {
   "requires-action": "warning",
 };
 
+const statusLabels: Record<ToolStatus, string> = {
+  running: "Running",
+  complete: "Ok",
+  incomplete: "Error",
+  "requires-action": "Needs action",
+};
+
 const formatToolDuration = (ms: number) => {
   if (ms < 1000) return "<1s";
   const seconds = ms / 1000;
@@ -101,11 +107,13 @@ const formatToolDuration = (ms: number) => {
 };
 
 function ToolFallbackDuration({
+  elapsedMs,
   className,
   ...props
-}: React.ComponentProps<"span">) {
-  const elapsedMs = useToolCallElapsed();
-  if (elapsedMs === undefined) return null;
+}: React.ComponentProps<"span"> & { elapsedMs?: number }) {
+  const hooked = useToolCallElapsed();
+  const ms = elapsedMs ?? hooked;
+  if (ms === undefined) return null;
 
   return (
     <span
@@ -116,9 +124,28 @@ function ToolFallbackDuration({
       )}
       {...props}
     >
-      {formatToolDuration(elapsedMs)}
+      {formatToolDuration(ms)}
     </span>
   );
+}
+
+function useRowElapsed(isRunning: boolean) {
+  const hooked = useToolCallElapsed();
+  const started = useRef<number | null>(null);
+  const [localMs, setLocalMs] = useState(0);
+
+  useEffect(() => {
+    if (!isRunning) return;
+    started.current ??= Date.now();
+    const id = window.setInterval(() => {
+      if (started.current) setLocalMs(Date.now() - started.current);
+    }, 120);
+    return () => window.clearInterval(id);
+  }, [isRunning]);
+
+  if (hooked !== undefined) return hooked;
+  if (started.current == null) return undefined;
+  return localMs;
 }
 
 function ToolFallbackTrigger({
@@ -137,42 +164,39 @@ function ToolFallbackTrigger({
   const matrixState: DotMatrixState = isCancelled
     ? "idle"
     : statusMatrix[statusType];
-  const label = `tool(${toolName})`;
+  const statusLabel = isCancelled ? "Cancelled" : statusLabels[statusType];
+  const elapsedMs = useRowElapsed(statusType === "running");
 
   return (
     <CollapsibleTrigger
       data-slot="tool-fallback-trigger"
       className={cn(
-        "aui-tool-fallback-trigger group/trigger text-muted-foreground hover:text-foreground flex w-fit origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]",
+        "aui-tool-fallback-trigger group/trigger text-muted-foreground hover:text-foreground flex w-full items-center gap-2 py-1.5 text-sm transition-colors",
         className,
       )}
       {...props}
     >
       <DotMatrix
         state={matrixState}
-        label={label}
+        label={statusLabel}
         className="aui-tool-fallback-trigger-icon size-3.5 shrink-0"
       />
       <span
         data-slot="tool-fallback-trigger-label"
         className={cn(
-          "aui-tool-fallback-trigger-label-wrapper inline-block text-start leading-none",
+          "aui-tool-fallback-trigger-label-wrapper min-w-0 flex-1 truncate text-start leading-none",
           isCancelled && "text-muted-foreground line-through",
         )}
       >
-        {label}
+        {toolName}
       </span>
-      <ToolFallbackDuration />
-      <ChevronDownIcon
+      <ToolFallbackDuration elapsedMs={elapsedMs} />
+      <span
         data-slot="tool-fallback-trigger-chevron"
-        className={cn(
-          "aui-tool-fallback-trigger-chevron size-4 shrink-0",
-          "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-          "-rotate-90",
-          "group-data-open/trigger:rotate-0",
-          "group-data-panel-open/trigger:rotate-0",
-        )}
-      />
+        className="aui-tool-fallback-trigger-chevron inline-flex shrink-0 items-center justify-center"
+      >
+        <DotMatrix state="expand" label="Toggle tool" className="size-3.5" />
+      </span>
     </CollapsibleTrigger>
   );
 }
@@ -229,7 +253,10 @@ function ToolFallbackArgs({
       <p className="aui-tool-fallback-args-header text-muted-foreground text-xs font-medium">
         args
       </p>
-      <pre className="aui-tool-fallback-args-value bg-muted/50 text-foreground/90 rounded-md p-2.5 text-xs whitespace-pre-wrap">
+      <pre
+        data-slot="tool-fallback-dump"
+        className="aui-tool-fallback-args-value bg-muted/50 text-foreground/90 rounded-md p-2.5 text-xs whitespace-pre-wrap"
+      >
         {argsText}
       </pre>
     </div>
@@ -254,7 +281,10 @@ function ToolFallbackResult({
       <p className="aui-tool-fallback-result-header text-muted-foreground text-xs font-medium">
         result
       </p>
-      <pre className="aui-tool-fallback-result-content bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs whitespace-pre-wrap">
+      <pre
+        data-slot="tool-fallback-dump"
+        className="aui-tool-fallback-result-content bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs whitespace-pre-wrap"
+      >
         {typeof result === "string" ? result : JSON.stringify(result, null, 2)}
       </pre>
     </div>
@@ -665,17 +695,14 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled";
   const isRequiresAction = status?.type === "requires-action";
-  const isSettled =
-    status?.type === "complete" || status?.type === "incomplete";
   const shouldRenderApproval =
     isRequiresAction && offersInterruptAction(status, approval, interrupt);
-  const wantOpen = isRequiresAction || isSettled;
 
-  const [open, setOpen] = useState(wantOpen);
-  const [prevWantOpen, setPrevWantOpen] = useState(wantOpen);
-  if (wantOpen !== prevWantOpen) {
-    setPrevWantOpen(wantOpen);
-    if (wantOpen) setOpen(true);
+  const [open, setOpen] = useState(isRequiresAction);
+  const [prevRequiresAction, setPrevRequiresAction] = useState(isRequiresAction);
+  if (isRequiresAction !== prevRequiresAction) {
+    setPrevRequiresAction(isRequiresAction);
+    if (isRequiresAction) setOpen(true);
   }
 
   return (
