@@ -44,14 +44,26 @@ class _Query:
     _filters: list[tuple[str, Any]] = field(default_factory=list)
     _pending_update: dict[str, Any] | None = None
     _pending_delete: bool = False
-    _order_col: str | None = None
+    _order_cols: list[str] = field(default_factory=list)
+    _range: tuple[int, int] | None = None
     fail: bool = False
+    _selected: bool = False
+    _select_cols: str = ""
+    _action: str | None = None
+    log: list[tuple[str, tuple[tuple[str, Any], ...], int]] = field(default_factory=list)
 
     def select(self, cols: str) -> "_Query":
+        self._selected = True
+        self._select_cols = cols
         return self
 
     def order(self, col: str) -> "_Query":
-        self._order_col = col
+        self._order_cols.append(col)
+        return self
+
+    def range(self, start: int, end: int) -> "_Query":
+        """Inclusive range, matching supabase-py/PostgREST semantics."""
+        self._range = (start, end)
         return self
 
     def delete(self) -> "_Query":
@@ -66,7 +78,7 @@ class _Query:
         if self.fail:
             raise RuntimeError(f"injected failure on {self.table_name}")
         self.store.setdefault(self.table_name, []).append(dict(row))
-        return _Query(table_name=self.table_name, store=self.store)
+        return _Query(table_name=self.table_name, store=self.store, _action="insert", log=self.log)
 
     def update(self, payload: dict[str, Any]) -> "_Query":
         self._pending_update = dict(payload)
@@ -88,8 +100,12 @@ class _Query:
             return True
 
         rows = [r for r in table if _matches(r)]
-        if self._order_col is not None:
-            rows.sort(key=lambda r: r.get(self._order_col))
+        if self._order_cols:
+            cols = self._order_cols
+            rows.sort(key=lambda r: tuple(r.get(c) for c in cols))
+        if self._range is not None:
+            start, end = self._range
+            rows = rows[start : end + 1]
         if self._pending_delete:
             for row in rows:
                 table.remove(row)
@@ -98,16 +114,29 @@ class _Query:
             for row in rows:
                 row.update(self._pending_update)
             return _Resp(data=[dict(r) for r in rows])
-        return _Resp(data=[dict(r) for r in rows])
+        if self._action is not None:
+            return _Resp(data=[])
+        if not self._selected:
+            raise RuntimeError(f"select() required before execute() on {self.table_name}")
+        if self._select_cols != "*":
+            wanted = [c.strip() for c in self._select_cols.split(",")]
+            rows = [{c: r.get(c) for c in wanted} for r in rows]
+        else:
+            rows = [dict(r) for r in rows]
+        self.log.append((self._select_cols, tuple(self._filters), len(rows)))
+        return _Resp(data=rows)
 
 
 @dataclass
 class FakeClient:
     store: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     fail_tables: set[str] = field(default_factory=set)
+    log: list[tuple[str, tuple[tuple[str, Any], ...], int]] = field(default_factory=list)
 
     def table(self, name: str) -> _Query:
-        return _Query(table_name=name, store=self.store, fail=name in self.fail_tables)
+        return _Query(
+            table_name=name, store=self.store, fail=name in self.fail_tables, log=self.log
+        )
 
     def fail_on_table(self, name: str) -> None:
         self.fail_tables.add(name)
@@ -519,3 +548,46 @@ def test_reconcile_reports_orphans_without_deleting():
     store.objects["checkpoints/orphan/x.bin"] = b"y"
     assert reconcile_ledger(client, store) == ["checkpoints/orphan/x.bin"]
     assert "checkpoints/orphan/x.bin" in store.objects
+
+
+def test_fetch_thread_rows_two_phase_single_row_statements():
+    from digiquant.ops.checkpoint_archive import _fetch_thread_rows
+
+    client = FakeClient()
+    for i in range(3):
+        client.store.setdefault("checkpoint_blobs", []).append(
+            {
+                "thread_id": "t1",
+                "checkpoint_ns": f"ns{i}",
+                "channel": "c",
+                "version": 1,
+                "blob": b"x",
+            }
+        )
+    rows = _fetch_thread_rows(client, "checkpoint_blobs", "t1")
+    assert [r["checkpoint_ns"] for r in rows] == ["ns0", "ns1", "ns2"]
+    assert all(r["blob"] == b"x" for r in rows)
+    key_cols = {"thread_id", "checkpoint_ns", "channel", "version"}
+    key_scans = [e for e in client.log if set(e[0].split(",")) == key_cols]
+    assert len(key_scans) == 1
+    full_fetches = [e for e in client.log if e[0] == "*"]
+    assert len(full_fetches) == 3
+    assert all(count <= 1 for _, _, count in full_fetches)
+    assert all(("thread_id", "t1") in filters for _, filters, _ in full_fetches)
+
+
+def test_fetch_thread_rows_duplicate_keys_raise():
+    from digiquant.ops.checkpoint_archive import _fetch_thread_rows
+
+    client = FakeClient()
+    row = {
+        "thread_id": "t1",
+        "checkpoint_ns": "ns",
+        "channel": "c",
+        "version": 1,
+        "blob": b"x",
+    }
+    client.store.setdefault("checkpoint_blobs", []).append(dict(row))
+    client.store.setdefault("checkpoint_blobs", []).append(dict(row))
+    with pytest.raises(ArchiveVerifyError):
+        _fetch_thread_rows(client, "checkpoint_blobs", "t1")

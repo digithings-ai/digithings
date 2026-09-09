@@ -64,7 +64,7 @@ def resolve_payload(
     Raises :class:`ArchiveNotFoundError` when no pointer row exists — the
     caller is expected to have already checked Supabase directly.
     """
-    query = client.table("archive_objects").eq("source_table", source_table)
+    query = client.table("archive_objects").select("*").eq("source_table", source_table)
     for col, val in source_key.items():
         query = query.eq(f"source_key->>{col}", val)
     rows = query.execute().data or []
@@ -283,6 +283,31 @@ def record_pointer(client: Any, entry: ArchiveEntry, owner: str = "house") -> No
     ).execute()
 
 
+# Portfolio blob rows reach ~16MB each, so even small multi-row pages can exceed
+# the Supabase statement timeout (prod 57014). Fetch in two phases: one key-only
+# scan (tiny rows), then one single-row statement per payload row — each
+# statement carries at most one row, the minimum PostgREST can transfer.
+def _fetch_thread_rows(client: Any, table: str, thread_id: str) -> list[dict[str, Any]]:
+    """Fetch one thread's rows: key-only scan, then one single-row fetch per key."""
+    key_cols = BLOB_KEY_COLUMNS[table]
+    keys = (
+        client.table(table).select(",".join(key_cols)).eq("thread_id", thread_id).execute().data
+        or []
+    )
+    rows: list[dict[str, Any]] = []
+    for key in keys:
+        query = client.table(table).select("*")
+        for col in key_cols:
+            query = query.eq(col, key.get(col))
+        matches = query.execute().data or []
+        if len(matches) != 1:
+            raise ArchiveVerifyError(
+                f"expected 1 row for {table} {key}, found {len(matches)}; Supabase row kept"
+            )
+        rows.append(matches[0])
+    return rows
+
+
 def archive_thread(
     client: Any, store: StorageBackend, thread_id: str, owner: str = "house"
 ) -> ArchiveManifest:
@@ -295,7 +320,7 @@ def archive_thread(
     """
     entries: list[ArchiveEntry] = []
     for table in BLOB_TABLES:
-        rows = client.table(table).select("*").eq("thread_id", thread_id).execute().data or []
+        rows = _fetch_thread_rows(client, table, thread_id)
         for row in rows:
             payload = parse_postgrest_bytea(row.get("blob"))
             if payload is None:

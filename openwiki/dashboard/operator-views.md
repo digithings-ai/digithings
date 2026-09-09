@@ -3,9 +3,6 @@ type: frontend-guide
 title: Dashboard Operator Views
 description: Operator views of the digiquant dashboard — research, portfolio, tearsheet, ledger, attribution — with house book scope and fail-closed P&L.
 tags: [dashboard, digiquant, portfolio, tearsheet, ledger]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-3642bf77f250aaf3ce57767a
     resource: repo://frontend/dashboard/lib/accounting-views.ts
@@ -16,6 +13,9 @@ sources:
   - id: openwiki-source-4b479ed8d11ca62135d6071d
     resource: repo://frontend/dashboard/README.md
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # Dashboard Operator Views

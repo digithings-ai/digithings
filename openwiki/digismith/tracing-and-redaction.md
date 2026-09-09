@@ -5,7 +5,7 @@ description: How digismith traceable() activates, what tracing_enabled() reports
 tags: [digismith, tracing, langsmith, pii-redaction]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-07T22:31:53.755Z
+    at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-4b364849947e51d0e3e08109
     resource: repo://digismith/ARCHITECTURE.md
