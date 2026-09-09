@@ -59,6 +59,7 @@ function readCapturedTransportConfig() {
 // entirely rather than executing its real (foreign-copy) hook internals.
 vi.mock("@ai-sdk/react", () => ({
   useChat: vi.fn(() => ({
+    id: "test-chat",
     messages: [],
     sendMessage: vi.fn(),
     status: "ready",
@@ -576,7 +577,7 @@ describe("useEmbedDigiChat reset (/new)", () => {
     window.sessionStorage.setItem(storageKey, "foundry-conv-123");
     setPendingForceTool(host, "digisearch");
 
-    chat.reset();
+    chat.reset?.();
 
     expect(window.sessionStorage.getItem(storageKey)).toBeNull();
     expect(takePendingForceTool(host)).toBeUndefined();
@@ -636,6 +637,7 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
     const { useChat } = await import("@ai-sdk/react");
     const regenerate = vi.fn();
     vi.mocked(useChat).mockReturnValueOnce({
+      id: "test-chat",
       messages: [],
       sendMessage: vi.fn(),
       status: "ready",
@@ -643,7 +645,7 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
       regenerate,
       setMessages: vi.fn(),
       stop: vi.fn(),
-    } as ReturnType<typeof useChat>);
+    } as unknown as ReturnType<typeof useChat>);
 
     let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
     const { unmount } = renderHookLocally(() => {
@@ -665,6 +667,7 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
       { id: "a1", role: "assistant", parts: [{ type: "text", text: "old answer" }] },
     ];
     vi.mocked(useChat).mockReturnValueOnce({
+      id: "test-chat",
       messages: prior,
       sendMessage,
       status: "ready",
@@ -672,7 +675,7 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
       regenerate: vi.fn(),
       setMessages,
       stop: vi.fn(),
-    } as ReturnType<typeof useChat>);
+    } as unknown as ReturnType<typeof useChat>);
 
     let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
     const { unmount } = renderHookLocally(() => {
@@ -694,6 +697,7 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
     const sendMessage = vi.fn();
     const setMessages = vi.fn();
     vi.mocked(useChat).mockReturnValueOnce({
+      id: "test-chat",
       messages: [
         { id: "u1", role: "user", parts: [{ type: "text", text: "q" }] },
       ],
@@ -703,7 +707,7 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
       regenerate: vi.fn(),
       setMessages,
       stop: vi.fn(),
-    } as ReturnType<typeof useChat>);
+    } as unknown as ReturnType<typeof useChat>);
 
     let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
     const { unmount } = renderHookLocally(() => {

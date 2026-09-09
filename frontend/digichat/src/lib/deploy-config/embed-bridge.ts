@@ -61,7 +61,7 @@ export function clientConfigFromEmbedTenant(
         (embed.models?.allowPicker !== false && base.features.modelPicker),
     },
     tools: {
-      allowUserToggle: embed.tools?.allowUserToggle ?? true,
+      allowUserToggle: base.tools.allowUserToggle,
       catalog,
     },
     mcp: {

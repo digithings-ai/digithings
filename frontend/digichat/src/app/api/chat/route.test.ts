@@ -11,11 +11,11 @@ vi.mock("@/lib/chat-route-context", () => ({
 }));
 
 vi.mock("@/lib/bff-rate-limit", () => ({
-  checkBffRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
+  checkBffRateLimit: vi.fn(() => ({ allowed: true })),
 }));
 
 vi.mock("@/lib/embed-ip-rate-limit", () => ({
-  checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
+  checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true })),
   clientIpForRateLimit: vi.fn(() => "127.0.0.1"),
 }));
 
@@ -68,6 +68,7 @@ vi.mock("ai", async () => {
 
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
+import type { EmbedChatTenantContext } from "@/lib/embed-chat-tenant";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
@@ -94,8 +95,8 @@ describe("POST /api/chat", () => {
       bearer: "jwt-token",
       litellmProxyApiKey: null,
     });
-    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
-    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true });
     resetEmbedTrialQuotaForTests();
     resetChatRunLocksForTests();
 vi.mocked(createFoundryStreamResponse).mockClear();
@@ -280,7 +281,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         },
         activityDetail: "full",
       },
-    });
+    } as EmbedChatTenantContext);
     const res = await POST(
       new Request("http://localhost/api/chat", {
         method: "POST",
@@ -657,7 +658,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
         activityDetail: "full",
       },
-    });
+    } as EmbedChatTenantContext);
     const res = await POST(
       new Request("http://localhost/api/chat", {
         method: "POST",
@@ -693,7 +694,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
         activityDetail: "full",
       },
-    });
+    } as EmbedChatTenantContext);
     const res = await POST(
       new Request("http://localhost/api/chat", {
         method: "POST",

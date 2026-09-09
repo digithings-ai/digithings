@@ -42,11 +42,15 @@ describe("trusted-proxy server", () => {
 
 describe("resolveDigichatVersion", () => {
   it("prefers a non-empty DIGICHAT_VERSION env", () => {
-    expect(resolveDigichatVersion({ DIGICHAT_VERSION: " 9.9.9 " })).toBe("9.9.9");
+    expect(
+      resolveDigichatVersion({ DIGICHAT_VERSION: " 9.9.9 ", NODE_ENV: "test" }),
+    ).toBe("9.9.9");
   });
 
   it("falls back to this package's version when env is blank", () => {
-    expect(resolveDigichatVersion({ DIGICHAT_VERSION: "" })).toBe(packageVersion);
+    expect(resolveDigichatVersion({ DIGICHAT_VERSION: "", NODE_ENV: "test" })).toBe(
+      packageVersion,
+    );
     expect(packageVersion).not.toBe("0.1.0");
   });
 });
