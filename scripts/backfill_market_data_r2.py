@@ -206,7 +206,7 @@ class R2StoreAdapter:
         if source_table == SOURCE_TABLE_MACRO:
             dataset_id = f"{info.get('source')}__{info.get('series')}"
         else:
-            dataset_id = str(info.get("ticker", key))
+            dataset_id = normalize_ticker(str(info.get("ticker", key)))
         datasets[dataset_id] = {
             "object": gen.key,
             "sha256": gen.sha256,
@@ -312,6 +312,21 @@ def _pg_registry_insert(uri: str, connect: Any = None) -> Any:
     return insert
 
 
+def _is_missing_manifest_error(exc: Exception) -> bool:
+    """True only for a never-written manifest (fresh backfill).
+
+    boto3 surfaces a missing R2 key as a ``ClientError``-shaped error with a
+    missing-key code; credential/network failures carry other codes (or other
+    types) and must propagate instead of silently starting fresh.
+    """
+    if isinstance(exc, (FileNotFoundError, KeyError)):
+        return True
+    response = getattr(exc, "response", None)
+    error = response.get("Error", {}) if isinstance(response, dict) else {}
+    code = error.get("Code", "") if isinstance(error, dict) else ""
+    return str(code) in {"NoSuchKey", "404", "NotFound"}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--universe", default="config/watchlist.md")
@@ -355,7 +370,9 @@ def main(argv: list[str] | None = None) -> int:
         manifest = store.read_manifest()
         print(f"loaded manifest {MANIFEST_KEY} as_of={manifest.get('as_of')}")
     except Exception as exc:
-        print(f"no readable manifest ({type(exc).__name__}); starting fresh")
+        if not _is_missing_manifest_error(exc):
+            raise
+        print(f"no manifest yet ({type(exc).__name__}); starting fresh")
         manifest = build_manifest("1970-01-01", {})
     adapter = R2StoreAdapter(store, manifest)
 

@@ -23,16 +23,22 @@ def load_counts_from_manifest(manifest: dict[str, Any]) -> dict[str, int]:
 
 
 def compare_counts(supabase: dict[str, int], r2: dict[str, int]) -> dict[str, Any]:
-    """Exact (tolerance 0) per-dataset row-count comparison."""
-    mismatches = [
-        {"dataset": name, "supabase": supabase[name], "r2": r2.get(name, 0)}
-        for name in sorted(supabase)
-        if r2.get(name, 0) != supabase[name]
-    ]
+    """Exact (tolerance 0) per-dataset row-count comparison.
+
+    Stray R2 datasets fail the gate: extras are NOT tolerated, since a stray
+    dataset means the backfill wrote under an unexpected id (Task 7 gate).
+    Missing datasets are reported only in ``missing_in_r2``, never duplicated
+    into ``mismatches`` (which is reserved for present-but-unequal counts).
+    """
     missing = sorted(set(supabase) - set(r2))
     extra = sorted(set(r2) - set(supabase))
+    mismatches = [
+        {"dataset": name, "supabase": supabase[name], "r2": r2[name]}
+        for name in sorted(supabase)
+        if name in r2 and r2[name] != supabase[name]
+    ]
     return {
-        "ok": not mismatches and not missing,
+        "ok": not mismatches and not missing and not extra,
         "tolerance": 0,
         "datasets": len(supabase),
         "mismatches": mismatches,
