@@ -51,6 +51,13 @@ npx wrangler secret put DIGIKEY_BFF_TOKEN
 npx wrangler secret put DIGIKEY_ADMIN_TOKEN   # optional
 npx wrangler secret put GROQ_API_KEY
 # optional: OPENROUTER_API_KEY OPENAI_API_KEY LITELLM_PROXY_API_KEY
+# house Cheaper Inference (default when set): CHEAPERINFERENCE_API_KEY
+# optional base / force OR: CHEAPERINFERENCE_API_BASE DIGI_HOUSE_UPSTREAM=openrouter
+# When CHEAPERINFERENCE_API_KEY is set, container/entrypoint.sh merges the CI
+# LiteLLM overlay and exports ENV_LITELLM_CONFIG for the LiteLLM supervisor
+# (see docs/providers/cheaperinference.md). digithings.ai digichat and
+# digiquant.io dashboard are separate tenants — do not share one CI key expecting
+# isolated routing.
 
 npx wrangler deploy
 ```

@@ -1,4 +1,7 @@
 name: "Test: score PR diff"
+# Advisory only (#3528): exits non-zero on threshold misses so the check stays
+# visible, but ``required-checks`` / ``agent_pr_checks`` treat it as non-blocking.
+# Do not add this job name to develop branch protection.
 
 on:
   workflow_call:

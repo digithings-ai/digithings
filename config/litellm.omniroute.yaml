@@ -1,0 +1,17 @@
+# OPTIONAL LiteLLM overlay — OmniRoute (#3413). Not loaded by default.
+#
+# Merge these entries into a throwaway config, or run LiteLLM with this file
+# instead of config/litellm.yaml, only when you explicitly opt in.
+# See docs/providers/omniroute.md.
+#
+# Off by default. Do not cut digiquant house pins over to OmniRoute here.
+# Do not enable OmniRoute cookie / MITM / web-session providers.
+
+model_list:
+  - model_name: omniroute/auto
+    litellm_params:
+      model: openai/auto
+      api_base: os.environ/OMNIROUTE_API_BASE
+      api_key: os.environ/OMNIROUTE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key

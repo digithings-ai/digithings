@@ -7,7 +7,7 @@
  * with a daily-close SEED/fallback from the `public_price_latest` view so
  * values exist before the first tick and when a lane is dark.
  *
- * The two consumer lanes (StockTicker tape + Olympus live portfolio section)
+ * The two consumer lanes (StockTicker tape + dashboard live portfolio section)
  * build against these types — treat them as the contract.
  */
 
@@ -85,31 +85,41 @@ export interface LivePosition {
   weightPct: number;
   entryPrice: number | null;
   entryDate: string | null;
-  /** Daily-close mark from the snapshot (`metrics_as_of`). */
+  /** Daily-close mark: snapshot `current_price`, else a seed/live quote price. */
   currentPrice: number | null;
   dayChangePct: number | null;
   unrealizedPnlPct: number | null;
   sinceEntryReturnPct: number | null;
   metricsAsOf: string | null;
-  /** Live mark when a real (non-stale) quote exists, else `currentPrice`. */
+  /** Live tick when `!stale`, else the mark (`currentPrice`). */
   livePrice: number | null;
   /** `true` only when `livePrice` came from a live tick (`!quote.stale`). */
   isLive: boolean;
 }
 
-/** One point of the NAV series from `public_nav_history`. */
+/** One point of the NAV series from `public_accounting_nav_history` (#2599). */
 export interface NavPoint {
   date: string;
   nav: number;
   cashPct: number | null;
   investedPct: number | null;
   dayReturnPct: number | null;
+  /** finalized_accounting | legacy_nav_history — never unlabeled when present. */
+  source?: string | null;
+  /** finalized_accounting | legacy_estimate */
+  contract?: string | null;
 }
 
 /** Return shape of {@link useLivePortfolio}. */
 export interface LivePortfolioResult {
   loading: boolean;
+  /** Fatal error — positions could not load. */
   error: string | null;
+  /**
+   * Accounting NAV contract failure — positions may still be available.
+   * Surfaces {@link AccountingNavContractError} message; never silent fallback.
+   */
+  navContractError: string | null;
   /** `true` when a Supabase client exists (public env vars are set). */
   configured: boolean;
   /** The position book (latest snapshot date), each enriched with its mark. */
@@ -133,6 +143,8 @@ export interface LivePortfolioResult {
   liveVsMarkPct: number;
   /** Snapshot date the marks/weights are as of. */
   metricsAsOf: string | null;
+  /** Live-computed performance KPIs when accounting NAV history is present. */
+  kpis: import("@digithings/web").LivePerformanceKpis | null;
   /** Always `true` for this book — a research/paper portfolio, not a live fund. */
   isResearchPortfolio: boolean;
 }

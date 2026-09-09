@@ -37,7 +37,7 @@ Pages opt in by setting `data-theme="light|dark"` on `<html>` **before paint**
 </head>
 ```
 
-`localStorage('dt-theme')` is the shared key — the Olympus dashboard mirrors it
+`localStorage('dt-theme')` is the shared key — the digiquant dashboard mirrors it
 on the same origin, so a chosen theme follows the user across surfaces. In the
 Next.js apps this is handled by `ThemeProvider.tsx`/`ThemeToggle` in
 `@digithings/web`, which reads/writes the same key.
@@ -214,10 +214,10 @@ same division of responsibility as TrustStrip.
 
 **Data shape** (`{ date, version?, title, href, tag? }[]`) — see
 [`../changelog-example.json`](../changelog-example.json) for a worked
-example and `frontend/digiweb/design/smoke/index.html` for a vanilla-JS renderer.
-Source of truth for real content is whatever the consuming app already has
-(a `CHANGELOG.md` excerpt, the GitHub Releases API, or a CMS) — this
-primitive doesn't fetch or own data, only the markup/CSS contract.
+example and [`../releases.json`](../releases.json) for the live tagged
+digichat / digiskills feed the marketing `/changelog` pages consume.
+`frontend/digiweb/design/smoke/index.html` has a vanilla-JS renderer.
+This primitive doesn't fetch or own data, only the markup/CSS contract.
 
 ```html
 <div class="changelog-band">
@@ -238,7 +238,7 @@ primitive doesn't fetch or own data, only the markup/CSS contract.
 | `.changelog-row` | One entry — 1 column below 640px, `8rem 1fr` grid (date / title) at `min-width: 640px`. Hairline divider between rows. |
 | `.changelog-row__date` | Mono date (+ optional version). |
 | `.changelog-row__title` | Title, linked; hover tints `--accent`. |
-| `.changelog-row__tag` | Optional pill (`release`, `fix`, etc.). |
+| `.changelog-row__tag` | Optional hairline tag (`release`, `fix`, etc.) — zero radius, not a pill. |
 | `.changelog-band__footer` | "View all releases →" link pattern. |
 
 ## `CodeSampleBand` (CSS + `code-sample-band.js`, EVOLUTION.md Phase B)
@@ -376,7 +376,7 @@ tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-p
 |------|---------|-------|
 | `.closing-cta__title` | Headline | Literal, reads best ≤ ~20ch. |
 | `.closing-cta__sub` | Optional one-line support | ≤ ~48ch; omit for a bare title. |
-| `.closing-cta__actions` → `.btn.btn-primary` | Primary label + `href` | The single, literal action (e.g. "Start building", "Open Olympus"). |
+| `.closing-cta__actions` → `.btn.btn-primary` | Primary label + `href` | The single, literal action (e.g. "Start building", "Open dashboard"). |
 | `.closing-cta__secondary` | Optional secondary label + `href` | Mono, arrow-suffix; the `span[aria-hidden]` translates on hover, matching `.btn`/`.bento__cta`. |
 
 **Copy variants** (shown in `frontend/digiweb/design/smoke/index.html`):
@@ -384,7 +384,7 @@ tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-p
 | Surface | Title | Primary | Secondary |
 |---------|-------|---------|-----------|
 | digithings.ai | "Build your agent stack in the open." | Start building | Read the architecture → |
-| digiquant.io | "One graph, research to execution." | Open Olympus | Browse strategies → |
+| digiquant.io | "One graph, research to execution." | Open dashboard | Browse strategies → |
 
 | Class | Role |
 |-------|------|
@@ -477,7 +477,7 @@ CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
 ## `HeroFeaturePicker` (CSS + `hero-picker.js`, EVOLUTION.md Phase E)
 
 Graphite-style **icon-tab row** below the hero that swaps which `ProductFrame`
-(#1202) preview shows — e.g. Olympus / Strategies / Pipeline on digiquant.io.
+(#1202) preview shows — e.g. dashboard / Strategies / Pipeline on digiquant.io.
 **Static UI crops only** (no video swap — lighter weight per the design spec).
 Follows the WAI-ARIA "Tabs" pattern; each panel wraps a `.product-frame`, so it
 inherits the container-query sizing and never clips at browser zoom. Tabs are
@@ -486,8 +486,8 @@ icon-only (`~53×53px`, Graphite reference) — give each an `aria-label`.
 ```html
 <div class="hero-picker">
   <div class="hero-picker__tabs" role="tablist" aria-label="Preview context">
-    <button class="hero-picker__tab" role="tab" id="hp-tab-olympus"
-            aria-controls="hp-panel-olympus" aria-selected="true" aria-label="Olympus">
+    <button class="hero-picker__tab" role="tab" id="hp-tab-dashboard"
+            aria-controls="hp-panel-dashboard" aria-selected="true" aria-label="dashboard">
       <svg viewBox="0 0 24 24" aria-hidden="true"><!-- icon --></svg>
     </button>
     <button class="hero-picker__tab" role="tab" id="hp-tab-strategies"
@@ -496,8 +496,8 @@ icon-only (`~53×53px`, Graphite reference) — give each an `aria-label`.
     </button>
   </div>
   <div class="hero-picker__panels">
-    <div class="hero-picker__panel" role="tabpanel" id="hp-panel-olympus" aria-labelledby="hp-tab-olympus">
-      <div class="product-frame"><div class="product-frame__surface"><!-- Olympus crop --></div></div>
+    <div class="hero-picker__panel" role="tabpanel" id="hp-panel-dashboard" aria-labelledby="hp-tab-dashboard">
+      <div class="product-frame"><div class="product-frame__surface"><!-- dashboard crop --></div></div>
     </div>
     <div class="hero-picker__panel" role="tabpanel" id="hp-panel-strategies" aria-labelledby="hp-tab-strategies" hidden>
       <div class="product-frame"><div class="product-frame__surface"><!-- Strategies crop --></div></div>

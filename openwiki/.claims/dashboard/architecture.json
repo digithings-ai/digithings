@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:4e509aa45a0f3c262f7c446f39f68a6a1e98128791ec149289854185f6902958",
+  "claims": [
+    {
+      "id": "claim_9d93f0468d144364aa1d19dd36534c4e",
+      "statement": "The dashboard is a Next.js 16 + React 19 static-export app (output export, unoptimized images, trailingSlash) served under the sole public basePath /dashboard/, with a check:static-export build step.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/dashboard/next.config.mjs#L1-L20",
+          "version": "repo-lines-v1:sha256:661b55f7343668cdc51ac3a70ccb9b623a52f99cc9d4bb221271d8b20f00b2a5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzYjAwNDFmM2M1M2YyMWM5Y2NlOWYwYWFjOGI1NjdkODY1NjcyNDA1ZmI5ZTk2MDQ1ZmQ5YzJjMWVkOTIyN2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVjYmMxN2NhOGY3MzU5NDc2NzgzMGEzNmVlZWFjNGNlNWZlYTVkZDM4Nzg1NWVhNzRmNDUxOTE5MTk1ZDVjMTMifQ"
+        },
+        {
+          "resource": "repo://frontend/dashboard/package.json#L1-L15",
+          "version": "repo-lines-v1:sha256:4271a6140288dfdb52a524e9f9e218219fedefe78da4febca37d55712386949c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZmIwOGZkYTFhY2I5NTdiNjExNmJkMzc4MTFhMWZlNDFhMDE2MTFjMDYzMWVkYmY3ODZkNjg4OWEyN2E1NWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZkNGNiYjU0NGMyZDQ5NTkzMmI0MDg3ZmNhYmJjMThkMTg3Y2YwYzk3NjM3YWQwMmZmOWQ4ZjRiMTEyYzIyZDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZmMjM3YWFhNGY1NmNiZDRkOWM5NDRkOTA2MTdjYjU1NWEzYjNkMmY5NTVlODZiOTgxMGM0MWUwMmUzNjE5ODYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c21cfce1a0ce448687a30e66c100cde8",
+      "statement": "Styling consumes the shared design system via @digithings/design workspace tokens plus the Tailwind v4 bridge from @digithings/web (transpilePackages), layered in app/globals.css.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/dashboard/README.md#L1-L15",
+          "version": "repo-lines-v1:sha256:b1fc1d74cef3adf73a61aa947abd5fe46370b235feeb3b025b220a8baf86be2d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiYjBlMjgwMDM4ZmJmZGJhYjM0ZThlMGM3ZmEzNzY3ODU4YWM1NzNiY2YzZjM2MjMzY2Q1ZDcwZDI1ZThhYjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxMTgyNmQyNzBjN2U5YjQ0YzcxMWExN2VjNjczMTU1ZDE4MTExNTNlNTQzNjUyMDQxODJmOTQ1NTc2NTM3ZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiNzZjZTRhZDBlMGFjZDJlYzkyY2VlNGVlNTFiZTI0MDJhMTUzZGM1Y2ZkN2U2NTU5ZTY0YzA4MDY0ZTZkMjEifQ"
+        },
+        {
+          "resource": "repo://frontend/dashboard/package.json#L15-L20",
+          "version": "repo-lines-v1:sha256:c7405cfd506c2c1a7b015f0872425a9a11c0564124c27060b5eaf61656bd2772:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmQ0Y2JiNTQ0YzJkNDk1OTMyYjQwODdmY2FiYmMxOGQxODdjZjBjOTc2MzdhZDAyZmY5ZDhmNGIxMTJjMjJkOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDVjMzk3NzFjZTQ3NTc4NTAyM2Q2NGMwMDJkMzBmNDRjYmRjNzhhNzQyNmNmZjk4YTYwMTYyNzcxMDQ3MGM0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzQzN2I5NjEzZDI2YTU1N2M1MGQ5ZTRmNzYwYzlmYThjNmQwZjExYjJmOTZkOTZkOTJlZjEzMDYyNWZhZjM4NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzFjMTc2NGRjMDg2NWU3NjE5NTdkZTg5Nzg4NDVkYmE4YjE0YTY5MjhmZTA3ZTkzNDkyNzdhNDg5ZTIwMTljNyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_fdbeba59985a4e768b2bc9d7cda48e4f",
+      "statement": "The root layout self-hosts fonts via next/font for CSP compliance and scopes pages to the digiquant accent and blueprint background with a version/env label.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/dashboard/app/layout.tsx#L1-L30",
+          "version": "repo-lines-v1:sha256:fc462f25121d0d609c2346117377bfa9f8c82fd6b3447a6ef5109132ae90d341:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZjU4NjQxMTA4ZGE0OGM0YmI5MzE5MjQ2NWU5OTM3NTRjMGYxMThhZjhiYjJiMTdlM2E0YWJhZGMxMGFkMTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2YWQ2YTljOWQ1Yjk3ZWEyZWQ0NjZkZTZhZjE0NWMxY2U1M2Y4NTlmZTRlYThjMzNkMTM3ZjAzN2MzMTdhODgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ4OTIxMjU5MGQ0MmFmODIwMTc1OWMzMTg4ZGY4ZTRjOTg3OTgwMDY1OTYyMDE0MDg4Nzc1MjhlZDA5OWY0NGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cea8d7c3e4194ad2bf4f17014d8c241c",
+      "statement": "Route groups under app/ cover research, portfolio, performance, library, pipeline, and system; lib/ owns book reconciliation and auth gating with fail-closed accounting unit tests.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/dashboard/app/page.tsx#L1-L30",
+          "version": "repo-lines-v1:sha256:63776a0a6444650cbb0111d57c491631e42b1edfc29563b1672b539d76997681:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNmMzdkYjFiOGRiM2ZiZWEzNmE1ZDJhNmZmZDVmMzM5M2E1M2VmMDUwNDdlMGI1ZTZlMTRhNDM0ZTQwNmZkZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNhMzBkNDE0NDQ0NDUyYjUwZTU1Y2Y0ZTgyMGQ0ODM2OWY4ODczM2U3NTI5NWJhNzczYTNkMTg5ZDE2OGM3YjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjliYjc1ZDY3MTMyYWZlN2E5NWYxNDI1ZDgyMmNlZTEyM2I0NGZkMTQzNTViMTJmYjVmMmMyM2I4NzAxNjE1ZDkifQ"
+        },
+        {
+          "resource": "repo://frontend/dashboard/lib/book-reconciliation.ts#L1-L30",
+          "version": "repo-lines-v1:sha256:4eb75a44ad59eafe2696bdf9200b8b9c75dd6f5b31528377e30ed809b49b9572:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMTVjZDUxYjZlYmI3OTI3ZDJkMzJjMjIyYTlkYTUzN2U2MTQxNDMxNTZhYTI1NjhiNWNhOGMzZDliYzdiOWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3M2M2YTkzMTNhNTQ3ODI0MTRiMzhmNzk4YzY3NDgxMjJkMzg2ZGQ0NmI2M2ExY2M3YmQzMmNlMzliYWI0YmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjViODhiMGRmZmNhZWRhMjJlZWUzOTkwMTdjMTYzNmQ1YWE0ODI2N2NkY2NjN2NhMzVhYzExMzczMDllODhmNzYifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

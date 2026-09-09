@@ -258,7 +258,8 @@ class TestHyperdashScraper:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # Kill-switch off (the default) → no provider construction, no network: empty result.
-        monkeypatch.delenv("ATLAS_ONCHAIN_POSITIONING", raising=False)
+        monkeypatch.delenv("DIGIQUANT_ONCHAIN_POSITIONING", raising=False)
+        monkeypatch.delenv("DIGIQUANT_ONCHAIN_POSITIONING", raising=False)
 
         def _boom(*_a: Any, **_k: Any) -> Any:
             raise AssertionError("must not construct a live scraper when the switch is off")
@@ -269,7 +270,7 @@ class TestHyperdashScraper:
 
     def test_default_path_enabled_runs_scraper(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Switch on → the default HyperdashScraper runs (here with an injected fake session).
-        monkeypatch.setenv("ATLAS_ONCHAIN_POSITIONING", "1")
+        monkeypatch.setenv("DIGIQUANT_ONCHAIN_POSITIONING", "1")
         body = {"data": {"analytics": {"cohortSummary": _cohort_summary()}}}
         monkeypatch.setattr(
             "digiquant.data.onchain.hyperdash.HyperdashScraper",

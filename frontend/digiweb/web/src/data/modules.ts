@@ -95,7 +95,7 @@ export const modules: ModuleNode[] = [
     role: "Quant engine · NautilusTrader",
     tagline: "Strategy research that ends in a reproducible backtest, not a markdown file.",
     summary: [
-      "Atlas runs scheduled research and Hermes turns it into signals; backtests run on a real NautilusTrader engine with Optuna driving the parameter search.",
+      "Scheduled research turns into a sized book; backtests run on a real NautilusTrader engine with Optuna driving the parameter search.",
       "Every run writes an append-only audit trail and a tearsheet. No broker adapter ships wired — the IB, Alpaca, and QuantConnect adapters are declared stubs, so reaching a live venue is your own deliberate integration.",
     ],
     stack: [
@@ -252,7 +252,7 @@ export const modules: ModuleNode[] = [
     role: "Always-on runtime · heartbeat · audit",
     tagline: "The always-on agent runtime — heartbeats, scheduling, append-only audit.",
     summary: [
-      "A heartbeat service that keeps agents running: Atlas runner scheduling and drift detection, calling digigraph over HTTP on an interval.",
+      "A heartbeat service that keeps agents running: research-runner scheduling and drift detection, calling digigraph over HTTP on an interval.",
       "Every action lands in an append-only audit log, and it runs no LLM of its own.",
     ],
     stack: [

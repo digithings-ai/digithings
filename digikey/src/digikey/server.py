@@ -13,7 +13,7 @@ from digibase.errors import register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from fastapi import Depends, FastAPI, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 
 from digikey import __version__, blocklist
@@ -23,6 +23,7 @@ from digikey.db import init_db, session_factory
 from digikey.db_schema import ApiKeyRow, JtiIssuedRow, utcnow
 from digikey.jwt_issue import issue_access_token, public_jwks
 from digikey.key_crypto import generate_raw_key, hash_secret, verify_secret
+from digikey.profile_pointer import get_profile_pointer
 from digikey.ratelimit import rate_limit_dependency, register_rate_limit_handler
 from digikey.scopes import DEFAULT_BFF_SESSION_SCOPES, scope_grants_required
 from digikey.settings import KEY_PREFIX_LEN, admin_token, allow_dev_global_keys, bff_token
@@ -121,6 +122,19 @@ def _require_admin(request: Request) -> None:
         raise HTTPException(status_code=401, detail="admin unauthorized")
 
 
+def _nonblank_tenant_slug(value: str) -> str:
+    """Strip and reject blank tenants.
+
+    ``Field(min_length=1)`` accepts whitespace-only strings; after ``.strip()`` those
+    become ``""`` and mint JWTs that fail open into the unsigned ``X-Digi-Tenant``
+    header fallback (#2303). Match the CLI guard in ``digikey.cli``.
+    """
+    slug = value.strip()
+    if not slug:
+        raise ValueError("tenant_slug must not be blank")
+    return slug
+
+
 class AdminIssueBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -130,6 +144,11 @@ class AdminIssueBody(BaseModel):
     kind: str = Field(default="standard", pattern="^(standard|dev_global)$")
     project_id: str | None = None
     project_config_ref: str | None = None
+
+    @field_validator("tenant_slug")
+    @classmethod
+    def _tenant_slug_nonblank(cls, value: str) -> str:
+        return _nonblank_tenant_slug(value)
 
 
 class AdminIssueResponse(BaseModel):
@@ -158,6 +177,7 @@ def admin_issue_key(body: AdminIssueBody, request: Request) -> AdminIssueRespons
     row = ApiKeyRow(
         key_hash=hash_secret(raw),
         key_prefix=prefix,
+        # Validator already stripped; keep strip for clarity if model reused elsewhere.
         tenant_slug=body.tenant_slug.strip(),
         project_id=(body.project_id or "").strip() or None,
         project_config_ref=(body.project_config_ref or "").strip() or None,
@@ -220,6 +240,12 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
             raise HTTPException(status_code=401, detail="bff unauthorized")
         if not body.tenant_slug or not body.subject:
             raise HTTPException(status_code=400, detail="tenant_slug and subject required")
+        try:
+            tenant_slug = _nonblank_tenant_slug(body.tenant_slug)
+        except ValueError as exc:
+            # Whitespace-only passes the truthy check above but would mint an empty
+            # claim and unlock the unsigned tenant-header fallback (#2303).
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         scopes = list(DEFAULT_BFF_SESSION_SCOPES)
         if body.requested_scopes:
             if not scope_grants_required(scopes, body.requested_scopes):
@@ -227,11 +253,23 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
                     status_code=400, detail="requested_scopes not allowed for bff session"
                 )
             scopes = body.requested_scopes
+        # Profile pointers (#308): include on JWT when a row exists for this
+        # subject; omit both claims when missing so clients can route to intake.
+        # Full profile payload CRUD is #307 — this lookup is id/version only.
+        subject = body.subject.strip()
+        profile_id: str | None = None
+        profile_version: int | None = None
+        sf = session_factory()
+        with sf() as session:
+            pointer = get_profile_pointer(session, subject)
+            if pointer is not None:
+                profile_id = pointer.profile_id
+                profile_version = pointer.profile_version
         token, _jti = issue_access_token(
             _private_key,
             kid=_kid,
-            sub=f"bff:{body.subject}",
-            tenant_slug=body.tenant_slug.strip(),
+            sub=f"bff:{subject}",
+            tenant_slug=tenant_slug,
             scopes=scopes,
             key_pub=None,
             project_id=(body.project_id or "").strip() or None,
@@ -239,6 +277,8 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
             principal_kind="bff_session",
             audience=body.audience,
             ttl_sec=ttl,
+            profile_id=profile_id,
+            profile_version=profile_version,
         )
         llm_key = (os.environ.get("DIGIKEY_LITELLM_PROXY_KEY") or "").strip() or None
         return TokenResponse(access_token=token, expires_in=ttl, litellm_proxy_api_key=llm_key)
@@ -261,6 +301,11 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
             raise HTTPException(status_code=401, detail="key revoked")
         if row.kind == "dev_global" and not allow_dev_global_keys():
             raise HTTPException(status_code=403, detail="dev_global exchange disabled")
+        # Defense in depth for any pre-fix row that stored a blank tenant after strip.
+        try:
+            tenant_slug = _nonblank_tenant_slug(row.tenant_slug or "")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         scopes = list(row.scopes) if isinstance(row.scopes, list) else []
         if body.requested_scopes:
@@ -274,7 +319,7 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
             _private_key,
             kid=_kid,
             sub=f"key:{row.id}",
-            tenant_slug=row.tenant_slug,
+            tenant_slug=tenant_slug,
             scopes=scopes,
             key_pub=row.key_prefix,
             project_id=row.project_id,

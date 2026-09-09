@@ -1,0 +1,58 @@
+[
+  {
+    "date": "2026-08-21",
+    "version": "digichat v1.3.2",
+    "title": "Kill a dead BYOK auth argument and a refusal that named the wrong model",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v1.3.2",
+    "tag": "fix",
+    "product": "digichat"
+  },
+  {
+    "date": "2026-08-20",
+    "version": "digichat v1.3.1",
+    "title": "Tell an embed visitor a BYOK refusal is fixable",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v1.3.1",
+    "tag": "fix",
+    "product": "digichat"
+  },
+  {
+    "date": "2026-08-15",
+    "version": "digichat v1.3.0",
+    "title": "BYOK provider/model catalog and live model list at the key step",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v1.3.0",
+    "tag": "release",
+    "product": "digichat"
+  },
+  {
+    "date": "2026-08-15",
+    "version": "digiskills v0.2.1",
+    "title": "Move pytest/ruff into a uv dependency-group",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digiskills-v0.2.1",
+    "tag": "fix",
+    "product": "digiskills"
+  },
+  {
+    "date": "2026-08-13",
+    "version": "digichat v1.2.0",
+    "title": "Mermaid/code-block rendering on the primary chat page; agentic retrieval",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v1.2.0",
+    "tag": "release",
+    "product": "digichat"
+  },
+  {
+    "date": "2026-08-11",
+    "version": "digichat v1.1.0",
+    "title": "Curated language list, browser detection, and response-language header",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v1.1.0",
+    "tag": "release",
+    "product": "digichat"
+  },
+  {
+    "date": "2026-07-10",
+    "version": "digiskills v0.2.0",
+    "title": "Skill compiler core, CLI corpus-cap flags, remote-ingestion hardening",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digiskills-v0.2.0",
+    "tag": "release",
+    "product": "digiskills"
+  }
+]

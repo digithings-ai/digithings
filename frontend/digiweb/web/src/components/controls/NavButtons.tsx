@@ -5,24 +5,25 @@
  *
  * - SegmentedControl: the range switch (nb-seg / nb-seg-group). Plain
  *   buttons wearing aria-pressed inside a role="group" — deliberately NOT
- *   tablist (the semantics the reference specimen and olympus
+ *   tablist (the semantics the reference specimen and dashboard
  *   performance-date-range.tsx previously misused): the segments switch a
  *   data range on the same view, they don't own tab panels. Two dresses:
  *   "reference" (default, mono cells on surface / accent-weak selection)
- *   and "accent" (olympus's shipped look — sans font-medium cells,
+ *   and "accent" (dashboard's shipped look — sans font-medium cells,
  *   transparent track, accent/20 wash + accent text on the selection).
  * - Pager: prev/next with disabled edge states (nb-page-edge) around a
- *   middle slot — numbered PagerPage cells (aria-current="page") or any
- *   label (olympus PipelineDaySelector keeps its date label between the
- *   chevrons). Two dresses: "reference" (default, per-cell bordered) and
- *   "capsule" (olympus's shipped look — one bordered term-bg capsule with
- *   borderless chevrons, mono tabular label, disabled edges at 30%).
+ *   fixed middle column (nb-pager-middle) — numbered PagerPage cells
+ *   (aria-current="page") or any label. Date capsules use DatePager so
+ *   arrows stay pinned while the label opens a calendar. Two dresses:
+ *   "reference" (default, per-cell bordered) and "capsule" (dashboard's
+ *   shipped look — one bordered term-bg capsule with borderless chevrons,
+ *   mono tabular label, disabled edges at 30%).
  * - IconButton: the borderless 2rem glyph button (nb-icon); aria-label is
  *   required — the child is a bare svg.
  *
  * Dress lives in styles/controls-core.css, state keyed off aria attributes.
  *
- * Shaped against the olympus adoption targets:
+ * Shaped against the dashboard adoption targets:
  * components/portfolio/performance-date-range.tsx (segmented ITD/YTD/3M/1M)
  * and components/pipeline/PipelineDaySelector.tsx (prev/next day pager).
  */
@@ -44,7 +45,7 @@ export type SegmentedControlProps<T extends string = string> = Omit<
   options: ReadonlyArray<T | SegmentedOption<T>>;
   value: T;
   onChange?: (value: T) => void;
-  /** Visual dress — "reference" (default) or olympus's "accent". */
+  /** Visual dress — "reference" (default) or dashboard's "accent". */
   dress?: "reference" | "accent";
 };
 
@@ -94,7 +95,7 @@ export type PagerProps = HTMLAttributes<HTMLDivElement> & {
   nextAriaLabel?: string;
   /** Middle slot — PagerPage cells, or any label (a date, "3 / 12", …). */
   children?: ReactNode;
-  /** Visual dress — "reference" (default) or olympus's "capsule". */
+  /** Visual dress — "reference" (default) or dashboard's "capsule". */
   dress?: "reference" | "capsule";
 };
 
@@ -127,7 +128,9 @@ export function Pager({
       >
         {prevLabel}
       </button>
-      {children}
+      {/* Fixed middle column so capsule arrows stay pinned at the ends while
+          the label width varies (date strings, page counts, …). */}
+      <div className="nb-pager-middle">{children}</div>
       <button
         type="button"
         className="nb-page-edge"

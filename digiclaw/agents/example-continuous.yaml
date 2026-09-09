@@ -1,0 +1,6 @@
+name: example-continuous
+description: Demo continuous agent — loop every 60 seconds
+schedule:
+  mode: continuous
+  interval_seconds: 60
+  enabled: true

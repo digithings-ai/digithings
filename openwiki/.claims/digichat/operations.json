@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:a6edca5dcb287e4e1ead2a9eb1afcca6f7899e9020b2ffe58447a9d04a4a7276",
+  "claims": [
+    {
+      "id": "claim_dab35baa40af4350b8e3d7969e80ac49",
+      "statement": "Local dev runs host backends via make stack-local plus make digichat-dev on port 3000, requiring matching AUTH_URL origin and an identical DIGIKEY_BFF_TOKEN, without which chat returns upstream_auth.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/digichat/OPERATIONS.md#L140-L175",
+          "version": "repo-lines-v1:sha256:22a26fab45f870169919bb79311edbdc364fca21a3c99d12dbfd59950cd0b031:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk5ZTkxYjYwZGUyOGZkYjJmYTY0MWVlNWYxNmU1YWE3OTA1NGUzN2E1NzI4YmZjNWE4YTVmODFkYTEwMTgxYzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRmMzk1NmNhZDExNGNmOTEzZWE3NTAyZDU4NTY3YjhlMzU4ZjFjZDliZTQyMjAzMjcxZWFhMDAyOTA0YmRlODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY2ODc1OTI2YTkzNzlhNWZjODBhZDU3ODFkN2M2Nzc4MzZmNDk4NWY1NWQ1OTcxYmQ3ZWJjOTg4ZGI1NTM3N2MifQ"
+        },
+        {
+          "resource": "repo://frontend/digichat/OPERATIONS.md#L76-L110",
+          "version": "repo-lines-v1:sha256:20afec39099fa0d0081f8766c4f8271d973dca2cf4cfe633efb4c980c170aee5:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkMDg0NzMyMzcxMGJjMmI2NmYzNGMwYTY1YjQxYWU2YzU2OTZkNzE0ZjM4NGYxMzFmZDk3ZDI0YzE4NzhlYWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEwZTc4NDRmNDQ4MzNjMTMwZTlkZDhiNTAwNzQ1MDk1ZGE1ZmMxYjdmNjEwMWY5MjhlNzJjZDM0YmZhMzcyYjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjllODlhZWUyNmM5OTUzODIyZTk1MWM0MDcyODNjMWExMmI1ODhhMzQyNDI4MTFhMDZhMDE4ZjNjYjQ0NDBlYjAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1a780ef323454bda85127db427163044",
+      "statement": "Postgres is optional (health reports database: skipped without it); migrations in drizzle/ are additive and auto-applied at boot when DIGICHAT_AUTO_MIGRATE=1, which is why the image ships the drizzle folder.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/digichat/Dockerfile#L40-L50",
+          "version": "repo-lines-v1:sha256:54af3672ff7694a281a7d6b8a57306e3e5642a317c3739668e327fd5336bf8d8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyN2ZmMjE4OTk1NjAwNDgzYTk5ZWVjYjljMTQ1YThkMWM0ZTZiZTRiOGIzZDE1Yjk0YzFjZjQ5YzFlNzRiZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlM2Q2OTY0MjVhYWIwYzU3MjE2MzA1ZDdjZTJlNWZiNmVkOWM2NTUyMDRmNzM2NGFmMTJiM2Q3YmFiZjg1MzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg2NTg5MzA5MWZjNzU5ZTlmYTVhNTI0NDBkNGFhZDExMDY2Mzg1YmJhNDhhYmFkYTgyOTQ5NTQ5MjA0MmFhYTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://frontend/digichat/OPERATIONS.md#L68-L74",
+          "version": "repo-lines-v1:sha256:f8eea686867897b89475a0e4f7d8ecb6353b5cccabe783a29ba5d641d9afc8dc:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDc2ZWViZWRlMjU4ZmQ1Y2U5YzZmOGE0NmNhNGY2MzVlN2VmZjk4YThlMmE2ZTgxNjBiNjU2NmIwNDhjYmNjMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmMwN2ZlNzRjZTBiMmI4YmE4ZDgwM2I3YWRkMDM2YzhjYWI1OWQ4YmU0OTZkOWU2MWJlODVhOWJlYzdlMjVjMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDExODFlMWNkYmM1NmQ3ODYzYmZhOTJmZmU5ZTRmZjcxNzBhNTBjMzRmOWRmNDBmNzU2YTg0MzljN2FkNjYyOSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_31e92a8089024a1a8c4800da83c2e3c3",
+      "statement": "The container is a multi-stage Node 22 standalone build from the repo root run as non-root nextjs on port 3000, with /embed frame-ancestors resolved at request time rather than as build args.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/digichat/Dockerfile#L1-L25",
+          "version": "repo-lines-v1:sha256:9b5899662db7db8c76cc3b1a0b791b9acb03ebee4f369272fba636332457f2a7:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzOWIzMGZiMzZhY2U4MmUyY2ZjNTRkYTM4ZTY4N2Y3ZTRmZGY5MmM4MDZjZWNkNzI4ZjFiODExZTgzOTAyZjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmM2M3ZjJmNGYzMDE2YzdhY2YzOWY0OTA4ZTcxMTA3NDFiZjRhNTgyZTExN2Q4MDdmNzRkNjgzZWY3YzhmYjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIxODIyMDM0YTZkN2Y2YmZjYTczMzdkMGRmNjk3YjllNTI3MGJlYzRhZWY4NjJkYmZjYmMwNWI4YjNjNDIwYWYifQ"
+        },
+        {
+          "resource": "repo://frontend/digichat/OPERATIONS.md#L18-L30",
+          "version": "repo-lines-v1:sha256:ccb4ea0fa6d1f5029d5f517d611bfe83fc979edc621eb79769f9026a1d22d456:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmOGYzMzU4OTNhZTg1OTRhNmZkMDkxYzVkNGNmMDQ2OTRhMmI2YjkyOWE3OWJjNjc3MWYxMmQ3NzgzMmUyYWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNhYThkMmNhYzJjYjZjODhmOTE0MmFlMGM1M2Q0YjNlMGYzOTFiNTIzMmFjZGM5ZDNhMjIxMzExNzdiMTU0NTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIyODVmOGEwNmVjMjYwMzBmOWI5MmQwNjUyOWUwM2RjYTE0ZDIwODFkYTdmNmQ4MjFjOGViZDYyMzc0NzA2ZTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ad1f3ac11d6746d6b1c55f3228672f8b",
+      "statement": "Machine digi_live keys are bcrypt-hashed in Postgres under machine:<tenantSlug>, distinct from digikey dgk_live keys used for upstream JWT exchange; releases install from GHCR, not npm.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/digichat/OPERATIONS.md#L31-L60",
+          "version": "repo-lines-v1:sha256:965394781d3082d9c2e0d09bf1d65cad3609f7c36005304293e3cd4be8c7db7d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0MGY1MzRjZTA2OTM1MGIxZDg2Y2I1NjFhOWEwYzk3Nzk3MWZjMThhMjllZTU4YWNkZDBmZmM3ZjA3NTE1YjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY0NDRmNjkwYjMyNzEzYTIzODE0M2NiOTcyYzA0OGVlNWVlMzNjNTM5MzljNDFmYjljOGI0MjZjZjNiZWI4OTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZmNjQyOGNlNGU1ZGU1Y2ZjNWZkOWNhNGI3ZjIyY2FjMDIzM2EwNjdlYTBiYTU4YjE4ODY0YmVmNTU2Mzc5ZTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYyMmQ2MDhkZDQ1MzE5ZWEyMTE1YWEyYzkwMmFhZDg2NThmYzE3YTQ3YTRjODVlNzZmZmNlOTYwYWVlMTRjOTkifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

@@ -19,13 +19,10 @@
 # The snapshot reaches production at the next develop→main promotion, not on merge
 # here. That lag is why every surface rendering these figures prints the snapshot
 # date: an old snapshot reads as dated rather than as current.
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Refresh: repo activity snapshot"
 
 on:
-  schedule:
-    # Mondays 06:10 UTC — a weekly cadence against a 30-day window, so a missed run
-    # shifts the figures slightly and breaks nothing.
-    - cron: "10 6 * * 1"
   workflow_dispatch:
 
 concurrency:

@@ -314,7 +314,7 @@ def _credential_capturing_main(monkeypatch: pytest.MonkeyPatch) -> dict[str, dic
             return []
 
     class _FakeVectorizeBackend:
-        def __init__(self, index_name: str, *, account_id: str, api_token: str) -> None:
+        def __init__(self, index_name: str, *, account_id: str, api_token: str, **kwargs: Any) -> None:
             captured["vectorize"] = {"account_id": account_id, "api_token": api_token}
 
     monkeypatch.setattr(d1_store_module, "D1Store", _FakeD1Store)
@@ -696,3 +696,69 @@ def test_d1_store_error_is_a_clean_cli_error_not_a_traceback(
     )
     assert rc == 1
     assert "authentication error" in capsys.readouterr().err
+
+
+@pytest.mark.unit
+def test_apply_prints_sync_completion_metadata(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Apply pass prints operator-facing sync metadata for runbook step 3a (#2236)."""
+    import digisearch.indexes.backends.vectorize as vectorize_module
+    import digivault.d1_store as d1_store_module
+
+    import scripts.vectorize_sync as vectorize_sync_module
+
+    class _FakeD1Store:
+        def __init__(self, database_id: str, **kwargs: object) -> None:
+            pass
+
+        def list_notes(self, *, path_prefix: str) -> list[NoteRow]:
+            return []
+
+    class _FakeVectorizeBackend:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+    monkeypatch.setattr(d1_store_module, "D1Store", _FakeD1Store)
+    monkeypatch.setattr(vectorize_module, "VectorizeBackend", _FakeVectorizeBackend)
+    monkeypatch.setattr(
+        vectorize_sync_module, "assert_index_model", lambda backend, *, model_id, dimensions: None
+    )
+    monkeypatch.setattr(
+        vectorize_sync_module,
+        "sync_corpus",
+        lambda notes, chunker, embedder, sink, *, model_id, **kwargs: 3,
+    )
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "token")
+
+    rc = vectorize_sync_module.main(
+        ["--prefix", "clients/acme", "--index", "acme-docs", "--database", "db-1"]
+    )
+    assert rc == 0
+    out = capsys.readouterr()
+    assert out.out.strip() == "upserted 3 vectors → acme-docs"
+    assert "sync_completed_at=" in out.err
+
+
+@pytest.mark.unit
+def test_mutation_capturing_post_collects_upsert_mutation_ids() -> None:
+    import scripts.vectorize_sync as vectorize_sync_module
+
+    captured: list[str] = []
+
+    def _inner(
+        url: str, headers: dict[str, str], body: bytes, content_type: str
+    ) -> tuple[int, str]:
+        return 200, '{"success": true, "result": {"mutationId": "mut-42"}}'
+
+    post = vectorize_sync_module._mutation_capturing_post(_inner, captured)
+    status, text = post(
+        "https://api.cloudflare.com/client/v4/accounts/a/vectorize/v2/indexes/i/upsert",
+        {},
+        b"",
+        "application/x-ndjson",
+    )
+    assert status == 200
+    assert text
+    assert captured == ["mut-42"]

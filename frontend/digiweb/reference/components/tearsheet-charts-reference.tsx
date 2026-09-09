@@ -167,7 +167,7 @@ export function TearsheetChartsReference() {
             filler. Same tag this reference site already uses elsewhere for
             placeholder data (testimonial-wall-reference.tsx, docs-layout-
             reference.tsx, terminal-budget-reference.tsx). */}
-        <span className="inline-block rounded-full border border-hair px-[0.6rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+        <span className="inline-block rounded-none border border-hair px-[0.6rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
           Example data · not live
         </span>
         <button

@@ -50,9 +50,9 @@ add_field() {
 add_field "Phase" \
   "Phase 2 — Hardening" \
   "Phase 3 — Domain unification" \
-  "Phase 4 — Atlas on digigraph" \
-  "Phase 5 — Atlas tiering" \
-  "SITAAS pilot"
+  "Phase 4 — research on digigraph" \
+  "Phase 5 — research tiering" \
+  "Client Pilot"
 
 add_field "Area" \
   "Cross-cutting" \
@@ -65,9 +65,9 @@ add_field "Area" \
   "digibase" \
   "digiclaw" \
   "Website" \
-  "SITAAS" \
+  "Client Pilot" \
   "Docs" \
-  "Atlas"
+  "research"
 
 add_field "Kind" \
   "Epic" \

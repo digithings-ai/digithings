@@ -12,6 +12,7 @@ import logging
 import os
 import time as _time
 from collections import deque as _deque
+from collections.abc import Callable
 from threading import Lock as _Lock
 from typing import (
     Any,  # score:allow untyped any — frontmatter / orchestrator argument maps are arbitrary
@@ -35,18 +36,20 @@ from digivault.local_search import search_local_vault
 from digivault.models import LintReport, Note, NoteDetail
 from digivault.orchestrator_tools import (
     DEFAULT_SEARCH_NOTES_LIMIT,
-    TOOL_VAULT_BACKLINKS,
     TOOL_VAULT_CREATE_NOTE,
     TOOL_VAULT_GET_NOTE,
-    TOOL_VAULT_LINT,
     TOOL_VAULT_SEARCH_NOTES,
-    TOOL_VAULT_SEARCH_TAG,
     OpenAIToolDict,
     build_orchestrator_tool_manifest,
 )
 from digivault.path_scopes import SCOPE_WRITE, digivault_path_scopes
 from digivault.supabase_store import SupabaseStore, SupabaseStoreError, _first_env
 from digivault.tenant_scope import enforce_tenant_path_prefix, mapped_tenant_path_prefix
+from digivault.tool_dispatch import (
+    VAULT_HANDLERS,
+    dispatch_vault_tool,
+    register_runtime_handler,
+)
 from digivault.vault import Vault, VaultError
 
 # /v1/orchestrator_invoke is gated at SCOPE_READ (most tools are reads); the one
@@ -393,6 +396,29 @@ class SetFrontmatterRequest(BaseModel):
     updates: dict[str, Any] = Field(..., description="Frontmatter keys to merge")
 
 
+class PruneChildrenRequest(BaseModel):
+    """Delete stale segment notes for one parent within one vault subdirectory."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    parent_doc: str = Field(..., min_length=1)
+    keep_names: list[str] = Field(default_factory=list)
+    subdir: str = Field(default="")
+
+
+class PruneChildrenResponse(BaseModel):
+    deleted: list[str]
+
+
+class CreateNotesBatchRequest(BaseModel):
+    """Note upserts and stale-child pruning sharing one vault index load."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    notes: list[CreateNoteRequest] = Field(default_factory=list)
+    prunes: list[PruneChildrenRequest] = Field(default_factory=list)
+
+
 class RenameRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -543,23 +569,54 @@ def get_note(name: str) -> Note:
     return note
 
 
-@app.post("/v1/notes", response_model=Note, status_code=201)
-def create_note(req: CreateNoteRequest) -> Note:
+def _write_note_request(vault: Vault, req: CreateNoteRequest) -> Note:
+    """Write one validated request through an already-open vault."""
     fm: dict[str, Any] = dict(req.frontmatter or {})
     if req.title:
         fm["title"] = req.title
     if req.tags:
         fm["tags"] = req.tags
+    return vault.write_note(
+        req.name,
+        frontmatter=fm,
+        body=req.body,
+        subdir=req.subdir,
+        overwrite=req.overwrite,
+    )
+
+
+@app.post("/v1/notes/batch", response_model=NoteList, status_code=201)
+def create_notes_batch(req: CreateNotesBatchRequest) -> NoteList:
+    """Upsert notes through one index load for efficient bulk ingest."""
     try:
-        return _open_vault().write_note(
-            req.name,
-            frontmatter=fm,
-            body=req.body,
-            subdir=req.subdir,
-            overwrite=req.overwrite,
+        vault = _open_vault()
+        notes = [_write_note_request(vault, note) for note in req.notes]
+        for prune in req.prunes:
+            vault.prune_children(prune.parent_doc, set(prune.keep_names), subdir=prune.subdir)
+        current_notes = [vault.get_note(note.name) for note in notes]
+        return NoteList(notes=[note for note in current_notes if note is not None])
+    except VaultError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/v1/notes", response_model=Note, status_code=201)
+def create_note(req: CreateNoteRequest) -> Note:
+    try:
+        return _write_note_request(_open_vault(), req)
+    except VaultError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/v1/notes/prune-children", response_model=PruneChildrenResponse)
+def prune_children(req: PruneChildrenRequest) -> PruneChildrenResponse:
+    """Remove stale segment children for one parent, scoped to a vault subdirectory."""
+    try:
+        deleted = _open_vault().prune_children(
+            req.parent_doc, set(req.keep_names), subdir=req.subdir
         )
     except VaultError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return PruneChildrenResponse(deleted=deleted)
 
 
 @app.patch("/v1/notes/{name}/frontmatter", response_model=Note)
@@ -629,9 +686,30 @@ def orchestrator_invoke(
         # Same empty-normalizing set as digivault_get_note / resolve_path_prefix
         # (including ".md") — bare strip("/").strip() left ".md" as a non-None
         # prefix that D1Store.search rejects with ValueError (#2327 CodeRabbit).
-        path_prefix = (
-            normalize_vault_path(str(path_prefix_raw)) if path_prefix_raw is not None else ""
-        ) or None
+        # A *present* prefix that normalizes to empty is a caller bug, not a request
+        # to search everything. The earlier `... or None` collapsed both cases into
+        # "no prefix", which meant "/", "   ", "///" and ".md" silently disabled
+        # scoping on every backend — the #2359 fail-open, which the local_search
+        # hardening alone did not close because the collapse happens here, before
+        # `resolve_path_prefix` ever sees the value. 400 instead; pass no
+        # path_prefix at all (or null) to opt out deliberately.
+        if path_prefix_raw is None:
+            path_prefix = None
+        else:
+            path_prefix = normalize_vault_path(str(path_prefix_raw))
+            if not path_prefix:
+                # Match digivault_get_note: ok=False (HTTP 200), not a raised 400.
+                # digigraph's invoke_digivault_tool calls raise_for_status(), which
+                # drops the response body on a 400 — the model would see only a bare
+                # status code (#2408 / #2410 follow-up).
+                return OrchestratorInvokeResponse(
+                    ok=False,
+                    tool=tool,
+                    error=(
+                        "path_prefix was provided but normalizes to empty; "
+                        "omit it entirely to search without a prefix"
+                    ),
+                )
 
         tenant_slug = _tenant_slug(request)
         # When DIGI_TENANT_CORPUS_MAP is set, an omitted path_prefix must not fall
@@ -709,7 +787,16 @@ def orchestrator_invoke(
             except D1StoreError as exc:
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
         elif (os.environ.get("DIGIVAULT_ROOT") or "").strip():
-            hits = search_local_vault(_open_vault(), query, limit=limit, path_prefix=path_prefix)
+            try:
+                hits = search_local_vault(
+                    _open_vault(), query, limit=limit, path_prefix=path_prefix
+                )
+            except ValueError as exc:
+                # `resolve_path_prefix` rejects a non-None prefix that normalizes
+                # to empty ("/", "   ", "///", ".md") rather than failing open and
+                # searching the whole root. That is a caller bug, so 400 — not the
+                # 500 an unhandled ValueError would otherwise produce.
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
         else:
             hits = _open_supabase_store().search(query, limit=limit, path_prefix=path_prefix)
         data = {"hits": [h.model_dump(mode="json") for h in hits]}
@@ -859,33 +946,30 @@ def orchestrator_invoke(
         )
 
     vault = _open_vault()
-    try:
-        if tool == TOOL_VAULT_SEARCH_TAG:
-            notes = vault.search_by_tag(str(args.get("tag") or ""))
-            data = {"notes": [n.model_dump(mode="json") for n in notes]}
-        elif tool == TOOL_VAULT_BACKLINKS:
-            name = str(args.get("name") or "")
-            if vault.get_note(name) is None:
-                return OrchestratorInvokeResponse(
-                    ok=False, tool=tool, error=f"No such note: {name!r}"
-                )
-            data = {"name": name, "backlinks": list(vault.backlinks(name))}
-        elif tool == TOOL_VAULT_LINT:
-            data = vault.lint().model_dump(mode="json")
-        elif tool == TOOL_VAULT_CREATE_NOTE:
-            fm = {"title": args["title"]} if args.get("title") else {}
-            note = vault.create_note(
-                str(args["name"]), frontmatter=fm, body=str(args.get("body") or "")
-            )
-            data = note.model_dump(mode="json")
-        else:
-            raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
-    except VaultError as exc:
-        return OrchestratorInvokeResponse(ok=False, tool=tool, error=str(exc))
-    except KeyError as exc:
-        return OrchestratorInvokeResponse(ok=False, tool=tool, error=f"missing argument: {exc}")
-    return OrchestratorInvokeResponse(ok=True, tool=tool, data=data)
+    if tool not in VAULT_HANDLERS:
+        raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
+    result = dispatch_vault_tool(tool, args, vault)
+    if not result.ok:
+        return OrchestratorInvokeResponse(ok=False, tool=tool, error=result.error)
+    return OrchestratorInvokeResponse(ok=True, tool=tool, data=result.data)
 
+
+# Claim runtime-only tools on the canonical dispatch table so
+# ``dispatch_tool_names()`` equals ``DISPATCH_TOOL_NAMES`` once the HTTP app is
+# loaded. Bodies stay in ``orchestrator_invoke`` above (D1 / tenant / HTTPException);
+# registration is the name-set contract tests assert against — do not add a second
+# handler table here.
+def _runtime_tool_claimed(name: str) -> Callable[..., None]:
+    def _claimed(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError(f"{name} is dispatched via orchestrator_invoke, not this handle")
+
+    _claimed.__name__ = f"_claimed_{name}"
+    _claimed.__doc__ = f"Runtime claim marker for {name}."
+    return _claimed
+
+
+register_runtime_handler(TOOL_VAULT_SEARCH_NOTES, _runtime_tool_claimed(TOOL_VAULT_SEARCH_NOTES))
+register_runtime_handler(TOOL_VAULT_GET_NOTE, _runtime_tool_claimed(TOOL_VAULT_GET_NOTE))
 
 register_fastapi_error_handlers(app, service="digivault")
-setup_otel_fastapi(app, service_name="digivault")
+setup_otel_fastapi(app, service_name="digivault", service_version=__version__)

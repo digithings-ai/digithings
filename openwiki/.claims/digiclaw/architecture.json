@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:9f1f2021c9d5e3fd94ac14193eafbe08ce7c612332f431178f497690eee9be57",
+  "claims": [
+    {
+      "id": "claim_c0361c1934ea42079e1d0d28ac2d0b2e",
+      "statement": "digiclaw ships heartbeat runner, JSONL audit, and agent scheduler as a CLI with no HTTP server; channel adapters, session/queue managers, WebSocket plane, and skill execution are deferred.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/ARCHITECTURE.md#L9-L30",
+          "version": "repo-lines-v1:sha256:e09a99f41e2f84162802624d7441567182202fabf118b85421a09fe20947e4b0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzNThjYzE2Yzk5NTU1NWEwYjgxZGZiODg4ZjQ1MjhiNjM5NDYxMjAxMzM5MTBjM2EyMjUzZTRiNWY3MTMyMTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1MmQ3MTExMDNkNTBhNDM3ODMwYzZmYmNkMDRmYjRiYWI0OWEwZjgyZjZkMjZkMWM3OTFjNmU4NDg4ZGQwOTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzNzY5OTQyMjE4YjgzNzY1ZTU5MTQ5NjFkYzU5MTM4ZDE2YjA0YTliYWE0OTI4MjkzMDI1ZmVhMDg3NDQwZjAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7c4a7f5d39764acd8f6ed553e754227e",
+      "statement": "One heartbeat cycle pings digigraph and digiquant health with a 5s timeout, checks drift via digiquant /check_drift with a digikey bearer, triggers re-optimization on drift, and exits 0; the Docker sleep loop is external.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/ARCHITECTURE.md#L50-L60",
+          "version": "repo-lines-v1:sha256:8da4099069ebba82716ba503cc77681a94aec1dfb592d001a1e38cd1aa161251:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhODM4N2MwZjUxOGI2Zjc0Y2M4YjUwMGY2NWMzNDFhNzk4Nzk5YTY3MmMxYTI5MTNhMzE5MTRjYTA1NjkzZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg3YTg2OGYzODk2NDVkMmI5ODQ2Y2RhYTFhM2VlYmFkMjg4ZTU5ZDczZGI2ZDZhMTdhYzAzMzdlNGJlODQ5ZmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjUyMWUwNjNhOWViODNlZTRhOTdiMjA0YWY0NzM5Y2U1NGE0MjI1ZGJmNTllZjNiNDJmYmE4MmYyZDg2NzJhYmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjczMTM1MDFkYzViZjA0MDI3ZmNkMjZlOTY4OWUzNjZhMDdlZTAwYWNhMGI2NGZmYmJiNDQ0MmRjZjc5NGUwNDgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4d073c29988f4802b134de069698caf9",
+      "statement": "audit_log() delegates to digibase.audit.emit_event as append-only JSONL with mandatory redaction of password, api_key, token, and secret keys, and best-effort AUDIT_SINK_URL delivery.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/ARCHITECTURE.md#L32-L48",
+          "version": "repo-lines-v1:sha256:e591593ab42053f7b42cc56248278eeda560704699b7ff0daddd3a045d23ed41:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA2YmVlNzY5MGEyNzE4ZTVmZWM2OTliMGEzYmU2ZmUxZjhmYTZlYTU0MjUwNTRjZGE1MWJlNTIyNThjY2M3MmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI3MTJjNzNkOWMyNjA2MjI2ODY3YTJmMmEzZWViODVlMjczZDA2YzU1ZDA3NmJmYTI1NmYyOTcyNTkwYzFiYmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdkNjRkNjVmYjUwNzJhMDQ4YzI2N2EzMTVjOGMzZWVlMDhkYWYyMGU5OWY0YzhiZTQ2MzA1NjIwMjVhMGRmOGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8f072ee74a8f418d8dbf02776fde4a3c",
+      "statement": "The scheduler owns start/stop/pause/resume lifecycle over digiclaw/agents YAML with cron plus continuous interval ticks; event-triggered runs are schema-only and drift logs drift_check_skipped without a bearer.",
+      "evidence": [
+        {
+          "resource": "repo://digiclaw/AGENTS.md#L30-L45",
+          "version": "repo-lines-v1:sha256:0ed41d9821b34f8d7b4e0bda344c81976cf146efb51bbb1a548b7c52f99aa211:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVlZjVmOTVhMDMyMzliZDgyODQyZmIwODJkNjAwZjEzYjc5MzY2Yjk0MTkyNjUwMWU5NjQ4ZTI1YTNmYmRjMDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5MWRhNTNhNTZmOTg5NGQzZmFjZmU3NTZjYzk0MjAyZDIwZjM4MTM5NTUwZmJkMjFkOGE4MGRiNTdhM2Y5M2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMzY2RhMjA4ZWY1MDFlZTQ1MGE2NzIyN2ZlNjYzOTEwMDRiYWMyNTc1NGI4ODc2Y2ViNzNmMmM4YzMwMDBkN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM4Mjc5M2MyNTVmZGJlYTllZjc5MzVlNTlkMzRlMzY3MjU0YTk5MjBlMjZhZjA0ZWQ0YTliNDZlNTM4YjgyNTkifQ"
+        },
+        {
+          "resource": "repo://digiclaw/ARCHITECTURE.md#L9-L17",
+          "version": "repo-lines-v1:sha256:0407b76e302b70ff4cb1879ba6a67ce8ecde45a1daca90f487f6de8b8ead9ace:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjM1OGNjMTZjOTk1NTU1YTBiODFkZmI4ODhmNDUyOGI2Mzk0NjEyMDEzMzkxMGMzYTIyNTNlNGI1ZjcxMzIxNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWM1OWU4NmE5YzQ1NGFlNjIyOTAzODQxYjI0MTU0NDMxYzQzMmU2NDBiM2U0Y2I5ZjU1OTIxMzQ2NjNkZjhiYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDAxZjJlYzE3NTkzYzEwNTRlYjQ2MzY3ZDg0NTNlZjI0YTE3M2NlOTZiNzExN2Q5MWY5YTY4ZDQ0ZmVmOGIwMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODgzMTAzNmZhNTI4YTZmYTRlN2UxMjgwOWJiZTg3YWYwMGM5OGIyNDkxNTM0NTgyNGU2MjIyYjc3YmFkMGM5OCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-07T22:38:58.074Z"
+  }
+}

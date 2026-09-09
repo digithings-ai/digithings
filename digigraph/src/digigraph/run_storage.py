@@ -93,7 +93,7 @@ def resolve_dataset_ref(session_id: str | None, dataset_ref: str) -> Path:
     """
     Resolve and validate dataset_ref to a Path. Must be under run_data_dir and session-scoped.
     Accepts absolute path, relative path, or Digistore logical name (no path separators).
-    Raises ValueError if ref is invalid or escapes the allowed root.
+    Raises ValueError if ref is invalid or escapes the allowed root / session directory.
     """
     try:
         from digigraph.digistore import digistore_get
@@ -105,17 +105,20 @@ def resolve_dataset_ref(session_id: str | None, dataset_ref: str) -> Path:
     if not root:
         raise ValueError("run_data_dir not set; cannot resolve dataset_ref")
     base = Path(root).resolve()
+    safe_sid = _sanitize_session_id(session_id)
+    session_dir = (base / safe_sid).resolve()
     ref = dataset_ref.strip()
     if not ref:
         raise ValueError("dataset_ref is empty")
     candidate = Path(ref)
     if not candidate.is_absolute():
-        safe_sid = _sanitize_session_id(session_id)
-        path = (base / safe_sid / ref).resolve()
+        path = (session_dir / ref).resolve()
     else:
         path = candidate.resolve()
     if not path.is_relative_to(base):
         raise ValueError("dataset_ref must be under run_data_dir")
+    if not path.is_relative_to(session_dir):
+        raise ValueError("dataset_ref must be under the current session directory")
     if not path.exists():
         raise ValueError(f"dataset_ref file not found: {path}")
     return path

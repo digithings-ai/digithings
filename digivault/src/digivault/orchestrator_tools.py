@@ -2,11 +2,43 @@
 
 Hubs (e.g. digigraph) fetch these via ``POST /v1/orchestrator_tools`` and execute
 via ``POST /v1/orchestrator_invoke`` so vault tooling is owned by this service.
+
+Tool *names* are canonical in :mod:`digivault.tool_dispatch` — this module
+re-exports them and owns only the OpenAI-style manifest text/schemas. Handler
+bodies live in ``tool_dispatch`` (vault-local) or ``server`` (D1/search/get),
+never duplicated here.
 """
 
 from __future__ import annotations
 
 from typing import Any, TypedDict  # score:allow untyped any — OpenAI tool JSON-schema property maps
+
+from digivault.tool_dispatch import (
+    DISPATCH_TOOL_NAMES,
+    TOOL_VAULT_BACKLINKS,
+    TOOL_VAULT_CREATE_NOTE,
+    TOOL_VAULT_GET_NOTE,
+    TOOL_VAULT_LINT,
+    TOOL_VAULT_SEARCH_NOTES,
+    TOOL_VAULT_SEARCH_TAG,
+)
+
+# Documented re-export chain: callers may import names from here, but the
+# single source of truth is digivault.tool_dispatch.
+ORCHESTRATOR_TOOL_NAMES: frozenset[str] = DISPATCH_TOOL_NAMES
+
+__all__ = [
+    "DEFAULT_SEARCH_NOTES_LIMIT",
+    "ORCHESTRATOR_TOOL_NAMES",
+    "OpenAIToolDict",
+    "TOOL_VAULT_BACKLINKS",
+    "TOOL_VAULT_CREATE_NOTE",
+    "TOOL_VAULT_GET_NOTE",
+    "TOOL_VAULT_LINT",
+    "TOOL_VAULT_SEARCH_NOTES",
+    "TOOL_VAULT_SEARCH_TAG",
+    "build_orchestrator_tool_manifest",
+]
 
 
 class FunctionParametersSchema(TypedDict, total=False):
@@ -25,24 +57,6 @@ class OpenAIToolDict(TypedDict):
     type: str
     function: FunctionToolSchema
 
-
-TOOL_VAULT_SEARCH_TAG = "digivault_search_tag"
-TOOL_VAULT_BACKLINKS = "digivault_backlinks"
-TOOL_VAULT_LINT = "digivault_lint"
-TOOL_VAULT_CREATE_NOTE = "digivault_create_note"
-TOOL_VAULT_SEARCH_NOTES = "digivault_search_notes"
-TOOL_VAULT_GET_NOTE = "digivault_get_note"
-
-ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
-    {
-        TOOL_VAULT_SEARCH_TAG,
-        TOOL_VAULT_BACKLINKS,
-        TOOL_VAULT_LINT,
-        TOOL_VAULT_CREATE_NOTE,
-        TOOL_VAULT_SEARCH_NOTES,
-        TOOL_VAULT_GET_NOTE,
-    }
-)
 
 DEFAULT_SEARCH_NOTES_LIMIT = 7
 
