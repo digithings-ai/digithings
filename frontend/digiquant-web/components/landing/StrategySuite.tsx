@@ -1,6 +1,7 @@
 "use client";
 /**
- * Homepage strategy spotlight — the BTC / ETH / SOL tearsheet previews on the
+ * Homepage strategy spotlight — BTC/ETH/SOL L/S plus BTC-SDCA
+ * (btc_sdca) tearsheet previews on the
  * canonical <DeckStack/> sticky cascade (@digithings/web, promoted from the
  * design reference's card deck, #1450).
  *
@@ -43,17 +44,25 @@ import { PivotStatsTable } from "@/components/tearsheet/pivot-stats-table";
 import { SignalDelayChip } from "@/components/tearsheet/signal-delay";
 import { chartFullSpan, clipOhlc } from "@/components/tearsheet/series";
 import { avgTradePct, cagrPct, tradesPerYear } from "@/components/tearsheet/stats";
-import { symbolBase } from "@/components/tearsheet/strategy-names";
+import { symbolBase, strategyDisplayName } from "@/components/tearsheet/strategy-names";
+import { StrategyTypeChip } from "@/components/tearsheet/strategy-type-chip";
 import { type StrategyIndexEntry, type TearsheetData } from "@/components/tearsheet/types";
 import { fetchStrategyIndex, fetchTearsheet as fetchTearsheetLive } from "@/lib/live/strategies";
+import { isDcaIndexEntry, isDcaTearsheet, lastAllocatedPct, ALLOCATED_KPI_LABEL, VS_LUMP_KPI_LABEL, TOTAL_RETURN_KPI_LABEL } from "@/components/tearsheet/dca";
+import { BacktestOnlyChip } from "@/components/tearsheet/honesty";
+import { suiteSlotState } from "./suite-slot";
 
-const SLAPPER_ORDER = ["btc_slapper", "eth_slapper", "sol_slapper"] as const;
+const SUITE_ORDER = ["btc_slapper", "eth_slapper", "sol_slapper", "btc_sdca"] as const;
 
-/** Order the live index into the BTC → ETH → SOL spotlight sequence. */
-function orderSlappers(all: StrategyIndexEntry[]): StrategyIndexEntry[] {
-  return SLAPPER_ORDER.map((id) => all.find((s) => s.strategy === id)).filter(
+/** Order the live index into the BTC L/S → ETH L/S → SOL L/S → BTC-SDCA sequence. */
+function orderSuite(all: StrategyIndexEntry[]): StrategyIndexEntry[] {
+  return SUITE_ORDER.map((id) => all.find((s) => s.strategy === id)).filter(
     (s): s is StrategyIndexEntry => Boolean(s),
   );
+}
+
+function suiteRailLabel(id: string, entry?: StrategyIndexEntry): string {
+  return strategyDisplayName(id, entry?.label);
 }
 
 const PREVIEW_PANE_H = 220;
@@ -167,7 +176,7 @@ function Kpi({ label, value, className }: { label: string; value: ReactNode; cla
 /**
  * Placeholder card shown before the strategy index itself (`fetchStrategyIndex`)
  * has resolved -- keeps <DeckStack/>'s rail at a constant length of
- * SLAPPER_ORDER.length from the very first render (server included), so its
+ * SUITE_ORDER.length from the very first render (server included), so its
  * wrapper structure never changes shape once the real index lands. Without
  * this, zero <DeckCard>s existed until the client-only index fetch resolved,
  * and DeckStack's rail-length-dependent branch flipped shape mid-session --
@@ -176,7 +185,8 @@ function Kpi({ label, value, className }: { label: string; value: ReactNode; cla
  * honest label before the real symbol is known.
  */
 function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
-  const label = strategyId.split("_")[0]?.toUpperCase() || strategyId;
+  const dca = strategyId.includes("sdca");
+  const label = strategyDisplayName(strategyId);
   return (
     <>
       <header className="ts-header">
@@ -193,7 +203,15 @@ function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
             <span>{label}</span>
           </h3>
           <div className="ts-meta">
-            <span className="dqss-meta-skeleton" aria-hidden="true" />
+            <StrategyTypeChip strategy={strategyId} />
+            {dca ? (
+              <>
+                <BacktestOnlyChip />
+                <SignalDelayChip days={3} />
+              </>
+            ) : (
+              <span className="dqss-meta-skeleton" aria-hidden="true" />
+            )}
           </div>
         </div>
       </header>
@@ -203,31 +221,48 @@ function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
       </div>
 
       <KpiStrip primary ariaLabel="Headline performance">
-        <Kpi label="CAGR" value={<span className="dqss-kpi-skeleton" aria-hidden="true" />} />
+        <Kpi label={dca ? TOTAL_RETURN_KPI_LABEL : "CAGR"} value={<span className="dqss-kpi-skeleton" aria-hidden="true" />} />
         <Kpi
           label="Max drawdown"
           value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
         />
-        <Kpi
-          className="dqss-kpi-medium"
-          label="Profit factor"
-          value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
-        />
-        <Kpi
-          className="dqss-kpi-medium"
-          label="Win rate"
-          value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
-        />
-        <Kpi
-          className="dqss-kpi-optional"
-          label="Avg trade return"
-          value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
-        />
-        <Kpi
-          className="dqss-kpi-optional"
-          label="Trades / yr"
-          value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
-        />
+        {dca ? (
+          <>
+            <Kpi
+              className="dqss-kpi-medium"
+              label={VS_LUMP_KPI_LABEL}
+              value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+            />
+            <Kpi
+              className="dqss-kpi-optional"
+              label={ALLOCATED_KPI_LABEL}
+              value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+            />
+          </>
+        ) : (
+          <>
+            <Kpi
+              className="dqss-kpi-medium"
+              label="Profit factor"
+              value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+            />
+            <Kpi
+              className="dqss-kpi-medium"
+              label="Win rate"
+              value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+            />
+            <Kpi
+              className="dqss-kpi-optional"
+              label="Avg trade return"
+              value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+            />
+            <Kpi
+              className="dqss-kpi-optional"
+              label="Trades / yr"
+              value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+            />
+          </>
+        )}
       </KpiStrip>
 
       <div className="ts-mode-bar dqss-preview-mode" aria-hidden="true" />
@@ -244,6 +279,42 @@ function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
 
       <p className="dqss-preview-footer">
         <span className="dqss-full-skeleton" aria-hidden="true" />
+      </p>
+    </>
+  );
+}
+
+/** Index resolved with no row — honest empty, not a KPI skeleton that looks loaded. */
+function UnpublishedStrategyCard({ strategyId }: { strategyId: string }) {
+  const dca = strategyId.includes("sdca");
+  const label = strategyDisplayName(strategyId);
+  return (
+    <>
+      <header className="ts-header">
+        <div className="ts-header-main">
+          <h3 className="ts-h1 ts-h1-with-logo">
+            <span className="dqss-logo-skeleton" aria-hidden="true" />
+            <span>{label}</span>
+          </h3>
+          <div className="ts-meta">
+            <StrategyTypeChip strategy={strategyId} />
+            {dca ? (
+              <>
+                <BacktestOnlyChip />
+                <SignalDelayChip days={3} />
+              </>
+            ) : null}
+          </div>
+        </div>
+      </header>
+      <p className="ts-status ts-status-error" role="status">
+        Could not load tearsheet data — the live store returned nothing. Charts and KPIs
+        appear after the operator publishes this backtest.
+      </p>
+      <p className="dqss-preview-footer">
+        <Link className="dqss-full" href={`/strategies/${strategyId}`}>
+          View full tearsheet ↗
+        </Link>
       </p>
     </>
   );
@@ -275,10 +346,11 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
   }, [data]);
   const view6m = useMemo(() => viewWindowForPreset(PREVIEW_LOOKBACK, fullSpan), [fullSpan]);
 
-  const title = symbolBase(entry.symbol);
+  const title = strategyDisplayName(entry.strategy, entry.label);
   const asset = symbolBase(entry.symbol);
   const periodStart = data?.period_start ?? entry.period_start;
   const periodEnd = data?.period_end ?? entry.period_end;
+  const dca = data ? isDcaTearsheet(data) : isDcaIndexEntry(entry);
 
   const cagr = data
     ? cagrPct(data.initial_capital, data.final_equity, data.period_start, data.period_end)
@@ -294,6 +366,8 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
     periodStart,
     periodEnd,
   );
+  const vsLump = data?.dca?.vs_lump_pct ?? entry.vs_lump_pct;
+  const allocated = data ? lastAllocatedPct(data) : entry.allocated_pct ?? null;
 
   const chartReady = chartOhlc.length > 0;
   const chartLoading = !data && (status === "idle" || status === "loading");
@@ -321,7 +395,9 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
           <div className="ts-meta">
             <LiveMetricsBadge generatedAt={data?.generated_at ?? entry.generated_at} />
             <span className="ts-chip">{symbol}</span>
+            <StrategyTypeChip strategy={entry.strategy} kind={data?.kind ?? entry.kind} />
             <SignalDelayChip days={data?.signal_delay_days ?? entry.signal_delay_days} />
+            {dca ? <BacktestOnlyChip /> : null}
             <span className="ts-meta-text">
               {periodStart} → {periodEnd}
               {bars != null ? ` · ${fmtNum(bars)} bars` : ""}
@@ -339,24 +415,41 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
       </div>
 
       <KpiStrip primary ariaLabel="Headline performance">
-        <Kpi label="CAGR" value={<Toned v={cagr}>{fmtPct(cagr)}</Toned>} />
+        <Kpi label={dca ? TOTAL_RETURN_KPI_LABEL : "CAGR"} value={<Toned v={dca ? (data?.net_profit_pct ?? entry.net_profit_pct) : cagr}>{fmtPct(dca ? (data?.net_profit_pct ?? entry.net_profit_pct) : cagr)}</Toned>} />
         <Kpi label="Max drawdown" value={<span className="is-neg">{fmtPct(maxDd)}</span>} />
-        <Kpi
-          className="dqss-kpi-medium"
-          label="Profit factor"
-          value={fmtNum(profitFactor, 2)}
-        />
-        <Kpi className="dqss-kpi-medium" label="Win rate" value={fmtPct(winRate)} />
-        <Kpi
-          className="dqss-kpi-optional"
-          label="Avg trade return"
-          value={<Toned v={avgTrade}>{fmtPct(avgTrade)}</Toned>}
-        />
-        <Kpi
-          className="dqss-kpi-optional"
-          label="Trades / yr"
-          value={fmtNum(tradesYr, 1)}
-        />
+        {dca ? (
+          <>
+            <Kpi
+              className="dqss-kpi-medium"
+              label={VS_LUMP_KPI_LABEL}
+              value={<Toned v={vsLump}>{fmtPct(vsLump)}</Toned>}
+            />
+            <Kpi
+              className="dqss-kpi-optional"
+              label={ALLOCATED_KPI_LABEL}
+              value={fmtPct(allocated)}
+            />
+          </>
+        ) : (
+          <>
+            <Kpi
+              className="dqss-kpi-medium"
+              label="Profit factor"
+              value={fmtNum(profitFactor, 2)}
+            />
+            <Kpi className="dqss-kpi-medium" label="Win rate" value={fmtPct(winRate)} />
+            <Kpi
+              className="dqss-kpi-optional"
+              label="Avg trade return"
+              value={<Toned v={avgTrade}>{fmtPct(avgTrade)}</Toned>}
+            />
+            <Kpi
+              className="dqss-kpi-optional"
+              label="Trades / yr"
+              value={fmtNum(tradesYr, 1)}
+            />
+          </>
+        )}
       </KpiStrip>
 
       <div className="ts-mode-bar dqss-preview-mode">
@@ -421,13 +514,15 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
 
 export function StrategySuite() {
   const [strategies, setStrategies] = useState<StrategyIndexEntry[]>([]);
+  const [indexResolved, setIndexResolved] = useState(false);
 
   useEffect(() => {
     let alive = true;
     void fetchStrategyIndex().then((all) => {
       if (!alive) return;
-      const ordered = orderSlappers(all);
+      const ordered = orderSuite(all);
       setStrategies(ordered);
+      setIndexResolved(true);
       prefetchAllTearsheets(ordered.map((s) => s.strategy));
     });
     return () => {
@@ -456,7 +551,7 @@ export function StrategySuite() {
           </Link>
         </div>
 
-        {/* SLAPPER_ORDER (fixed at 3), not strategies.map(...): the card
+        {/* SUITE_ORDER (fixed length), not strategies.map(...): the card
             count stays constant across the whole session, so a real card
             swaps in per-slot as its data lands instead of the deck's slot
             count changing shape after mount. Verified NOT to fix #2244's
@@ -465,17 +560,20 @@ export function StrategySuite() {
             UX improvement in its own right (no empty-then-populated flash). */}
         <DeckStack
           ariaLabel="Strategy tearsheets"
-          rail={SLAPPER_ORDER.map((id) => {
+          rail={SUITE_ORDER.map((id) => {
             const entry = strategies.find((s) => s.strategy === id);
-            return entry ? symbolBase(entry.symbol) : id.split("_")[0]?.toUpperCase() || id;
+            return suiteRailLabel(id, entry);
           })}
         >
-          {SLAPPER_ORDER.map((id) => {
+          {SUITE_ORDER.map((id) => {
             const entry = strategies.find((s) => s.strategy === id);
+            const slot = suiteSlotState(indexResolved, entry);
             return (
               <DeckCard key={id} className="dqss-card">
-                {entry ? (
+                {slot === "ready" && entry ? (
                   <StrategyTearsheetCard entry={entry} />
+                ) : slot === "unpublished" ? (
+                  <UnpublishedStrategyCard strategyId={id} />
                 ) : (
                   <StrategyCardSkeleton strategyId={id} />
                 )}

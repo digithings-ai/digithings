@@ -206,10 +206,10 @@ def test_load_project_config_legacy_config_yaml(
 ) -> None:
     """load_project_config honours config.yaml with deprecation warning when no digiproject.yaml."""
     cfg_file = tmp_path / "config.yaml"
-    cfg_file.write_text("project:\n  name: sitaas-legacy\n")
+    cfg_file.write_text("project:\n  name: legacy-project\n")
     with caplog.at_level(logging.WARNING, logger="digigraph.project_config"):
         result = load_project_config(str(cfg_file))
-    assert result["project"]["name"] == "sitaas-legacy"
+    assert result["project"]["name"] == "legacy-project"
     assert "DEPRECATED" in caplog.text
 
 

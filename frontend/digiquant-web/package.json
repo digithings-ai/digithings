@@ -6,7 +6,8 @@
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@digithings/design": "*",
@@ -28,6 +29,7 @@
     "eslint-config-next": "16.2.4",
     "postcss": "^8.5.4",
     "tailwindcss": "^4.1.7",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0"
   }
 }

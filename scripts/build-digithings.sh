@@ -46,8 +46,8 @@ echo "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}"
 # an app bug. `next dev` is untouched; it never reproduced this.
 npm --workspace frontend/digithings-web run build
 
-# Assemble dist/ from the static export (includes /design/assets/og.png for the
-# stable OG URL, and self-hosted fonts under /_next/static/media).
+# Assemble dist/ from the static export (includes /og.png for the stable OG
+# URL, and self-hosted fonts under /_next/static/media).
 rm -rf dist
 mkdir -p dist
 cp -r frontend/digithings-web/out/. dist/
@@ -83,6 +83,34 @@ grep -q 'aria-label="digithings module manifest"' dist/index.html || { echo "ERR
 [ -f dist/openapi/digigraph.json ] || { echo "ERROR: dist/openapi/digigraph.json missing — OpenAPI sync did not run" >&2; exit 1; }
 [ -f dist/swagger-ui/swagger-ui-bundle.js ] || { echo "ERROR: dist/swagger-ui/swagger-ui-bundle.js missing — swagger-ui-dist not vendored" >&2; exit 1; }
 
+# openwiki visualizer (#3696): static export of the repo wiki served at /openwiki/.
+# `openwiki visualize --export` writes index.html + client.js + styles.css +
+# client-lib.js + graph.json. Graph data loads via a relative ./graph.json URL,
+# so the export is subpath-safe. Pinned CLI: the meta-CSP patch and the
+# /openwiki/* _headers exception (lib/security-headers.mjs) depend on this
+# generator's output shape — bump the pin deliberately, re-verify both.
+echo "--- exporting openwiki visualizer to dist/openwiki ---"
+npx --yes openwiki@0.5.0 visualize openwiki --export dist/openwiki
+[ -f dist/openwiki/index.html ] || { echo "ERROR: dist/openwiki/index.html missing — openwiki export failed" >&2; exit 1; }
+[ -f dist/openwiki/graph.json ] || { echo "ERROR: dist/openwiki/graph.json missing — openwiki export failed" >&2; exit 1; }
+[ -f dist/openwiki/client.js ] || { echo "ERROR: dist/openwiki/client.js missing — openwiki export shape changed?" >&2; exit 1; }
+[ -f dist/openwiki/client-lib.js ] || { echo "ERROR: dist/openwiki/client-lib.js missing — openwiki export shape changed?" >&2; exit 1; }
+[ -f dist/openwiki/styles.css ] || { echo "ERROR: dist/openwiki/styles.css missing — openwiki export shape changed?" >&2; exit 1; }
+
+# The exporter's own <meta> CSP allows only 'self' fonts, which would silently
+# downgrade the wiki to fallback fonts under the /openwiki/* header. Widen just
+# the two font directives (portable sed via temp file + mv; exact-match, fail
+# closed if the generator's output shape ever changes).
+META_TMP="$(mktemp)"
+sed -e "s|style-src 'self' 'unsafe-inline'|style-src 'self' 'unsafe-inline' https://fonts.googleapis.com|" \
+    -e "s|font-src 'self'|font-src 'self' https://fonts.gstatic.com|" \
+    dist/openwiki/index.html > "$META_TMP"
+grep -q "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com" "$META_TMP" \
+  || { echo "ERROR: openwiki meta-CSP style-src patch did not apply — generator output changed?" >&2; exit 1; }
+grep -q "font-src 'self' https://fonts.gstatic.com" "$META_TMP" \
+  || { echo "ERROR: openwiki meta-CSP font-src patch did not apply — generator output changed?" >&2; exit 1; }
+mv "$META_TMP" dist/openwiki/index.html
+
 
 # Cloudflare Pages Functions live at the PROJECT ROOT (this script's CWD = repo root),
 # NOT inside the static output dir. Mirror from frontend/digithings-web/functions/
@@ -106,7 +134,7 @@ if [ ! -f functions/api/chat.ts ]; then
   echo "ERROR: functions/api/chat.ts missing after mirror" >&2
   exit 1
 fi
-if find functions -type f -name "*.test.ts" 2>/dev/null | grep -q .; then
+if find functions -type f \( -name "*.test.ts" -o -name "*.test.tsx" \) 2>/dev/null | grep -q .; then
   echo "ERROR: test files still present under functions/ after exclusion (#2348)" >&2
   exit 1
 fi

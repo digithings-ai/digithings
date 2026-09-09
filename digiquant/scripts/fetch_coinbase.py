@@ -4,7 +4,7 @@
 Usage:
     python scripts/fetch_coinbase.py
     python scripts/fetch_coinbase.py --symbols BTC/USD,ETH/USD,SOL/USD
-    python scripts/fetch_coinbase.py --start 2017-01-01
+    python scripts/fetch_coinbase.py --start 2015-07-20
 """
 
 from __future__ import annotations
@@ -65,7 +65,11 @@ def bars_to_polars(bars: list[list], ticker: str) -> pl.DataFrame:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch Coinbase daily OHLCV via CCXT")
     parser.add_argument("--symbols", default=",".join(SYMBOLS.keys()), help="Comma-separated CCXT symbols")
-    parser.add_argument("--start", default="2017-01-01", help="Start date (YYYY-MM-DD)")
+    parser.add_argument(
+        "--start",
+        default="2015-07-20",
+        help="Start date (YYYY-MM-DD); Coinbase BTC listing. ETH returns from first available bar.",
+    )
     parser.add_argument(
         "--through-yesterday",
         action="store_true",

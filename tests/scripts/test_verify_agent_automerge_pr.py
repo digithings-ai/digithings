@@ -40,7 +40,7 @@ vap = _load()
         "digigraph/src/digigraph/server.py",
         "tests/dg/test_api.py",
         "frontend/digichat/src/app/page.tsx",
-        "digiquant/src/digiquant/olympus/atlas/graph.py",
+        "digiquant/src/digiquant/research/graph.py",
         "docs/agents/AGENT_WORKFLOW.md",
     ],
 )

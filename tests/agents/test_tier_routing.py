@@ -197,8 +197,8 @@ class TestDuplicateTitleTokenizer:
 
     def test_partial_overlap(self):
         score = _similarity(
-            "[feat] add atlas research workflow integration",
-            "[feat] add hermes analysis workflow integration",
+            "[feat] add research workflow integration",
+            "[feat] add portfolio analysis workflow integration",
         )
         # "add", "workflow", "integration" overlap (3 of ~7 unique) — expect moderate
         assert 0.3 < score < 0.7

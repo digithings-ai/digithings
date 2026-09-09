@@ -18,6 +18,7 @@ DENY_PATH_SUBSTRINGS: tuple[str, ...] = (
     "docs/scoring/",
     "SECURITY.md",
     "digikey/",
+    "digiquant/brokers/",
     "digiquant/live/",
     "config/live",
 )

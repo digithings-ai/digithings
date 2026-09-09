@@ -107,12 +107,23 @@ export const authConfig = {
         token.sub = user.id ?? token.sub;
         if (user.email) token.email = user.email;
         if (user.name) token.name = user.name;
+        // User|AdapterUser: prefer typed User.app_metadata; AdapterUser needs a narrow.
+        const appMeta = (user as { app_metadata?: { plan_tier?: string } }).app_metadata;
+        if (typeof appMeta?.plan_tier === "string" && appMeta.plan_tier) {
+          token.plan_tier = appMeta.plan_tier;
+        }
       }
       return token;
     },
     session({ session, token }) {
       if (session.user) {
         session.user.id = (token.sub as string) ?? "";
+        if (typeof token.plan_tier === "string" && token.plan_tier) {
+          session.user.app_metadata = {
+            ...(session.user.app_metadata ?? {}),
+            plan_tier: token.plan_tier,
+          };
+        }
       }
       return session;
     },

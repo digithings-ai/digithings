@@ -7,17 +7,25 @@
 
 | File | Role |
 |------|------|
-| `config/litellm.yaml` | LiteLLM router: all models (OpenAI, Ollama Cloud, local Ollama). Add new entries here. |
+| `config/litellm.yaml` | LiteLLM router: house digiquant OpenRouter slugs, OpenAI, Ollama Cloud, local Ollama. Add new entries here. |
+| `config/litellm.omniroute.yaml` | Optional OmniRoute overlay — **not** loaded by default (#3413). |
+| `config/litellm.cheaperinference.yaml` | Hosted Cheaper Inference overlay — merged over `litellm.yaml` when `CHEAPERINFERENCE_API_KEY` is set (merge via `scripts/merge_litellm_cheaperinference.py` / stack boot), otherwise not loaded. |
 | `config/model_modes.yaml` | Mode → default model and full lists for test / medium / best. Update when adding models. |
 
 ## Caching (two layers)
 
-1. **LiteLLM proxy** — `config/litellm.yaml` sets **`litellm_settings.cache`** (default: **local** TTL cache). Optional **`litellm-cache`** Docker profile + **`REDIS_URL`** and **`cache_params.type: redis`** for Redis-backed cache across restarts/replicas. See the repo root `README.md` and `Makefile` for Docker Compose usage.
-2. **digigraph in-process** — Non-tool, non-streaming `chat_completion` calls may hit **`DIGI_LLM_CACHE_*`** in `digigraph/llm.py`. This is **additional** to proxy caching, not a substitute.
+1. **LiteLLM proxy** — `config/litellm.yaml` sets **`litellm_settings.cache`** (default: **local** TTL cache). Optional **`litellm-cache`** Docker profile + **`REDIS_URL`** and **`cache_params.type: redis`** for Redis-backed cache across restarts/replicas. See the repo root `README.md` and `Makefile` for Docker Compose usage. **BYOK requests must not share this cache:** digillm sends `extra_body.cache = {no-cache: true, no-store: true}` on the proxy path (#3605).
+2. **digigraph in-process** — Non-tool, non-streaming, non-BYOK `chat_completion` calls may hit **`DIGI_LLM_CACHE_*`** in digillm. This is **additional** to proxy caching, not a substitute. BYOK skips this layer too.
 
 ## Router fallbacks
 
-`config/litellm.yaml` defines **`litellm_settings.fallbacks`** (and **`default_fallbacks`**) so Ollama Cloud routes can fail over to **local** `ollama/qwen3:8b` after retries. Ensure that model is pulled when relying on fallbacks. Tuning **`num_retries`** / **`request_timeout`** is in the same block.
+`config/litellm.yaml` is strict routing: no `litellm_settings.fallbacks` and no
+`default_fallbacks` — provider errors surface to the caller (house policy #3078:
+fail fast, no fallback chains). The opt-in dev config `config/litellm.dev.yaml`
+defines local-Ollama fallbacks (`ollama/deepseek-r1:14b`) for Docker Compose use.
+Tuning **`num_retries`** / **`request_timeout`** lives in the same settings block.
+`ollama/qwen3:8b` is banned house-wide and refused by digillm (`_BANNED_MODELS`); it
+must not appear in any routing, fallback, or default.
 
 ## Modes (DIGI_LLM_MODE)
 

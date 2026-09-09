@@ -9,11 +9,10 @@
  *   plus "icon" (the nav-shell borderless glyph button). `loading` renders
  *   the .btn-spinner grammar before the children (callers set `disabled`
  *   themselves, as the specimen does).
- * - dress="chat": digichat's current shadcn-derived dress, matching
- *   digichat ui/button.tsx variant/size enums exactly so that wrapper can
- *   pin dress="chat" and re-export without any rendered-look change
- *   (E3 ruling: API compatibility beats aesthetic purity — the
- *   reference-vs-chat delta awaits a product ruling).
+ * - dress="chat": same utilitarian grammar (radius 0, ink/paper loud
+ *   fill) with digichat ui/button.tsx variant/size enums so the wrapper
+ *   can pin dress="chat" and re-export. API names stay; shape/fill follow
+ *   BLEND v0.1.
  *
  * All dress lives in styles/controls-core.css (import once app-wide).
  */

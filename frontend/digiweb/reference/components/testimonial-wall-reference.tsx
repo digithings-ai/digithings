@@ -20,7 +20,7 @@ const QUOTES: TestimonialQuote[] = [
     org: "Meridian Desk",
   },
   {
-    quote: "atlas proposes, digiquant proves, hermes ships. The loop is the product.",
+    quote: "research proposes, digiquant proves, portfolio ships. The loop is the product.",
     name: "S. Vance",
     role: "Quant Lead",
     org: "Cedar Street",
@@ -39,7 +39,7 @@ export function TestimonialWallReference() {
         numbers and real orgs only, phrased as <code>{"{Org}"} × digiquant</code>, never invented.
         Everything here is illustrative, badged as such.
       </p>
-      <p className="mt-[0.9rem] inline-block rounded-full border border-hair px-[0.6rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+      <p className="mt-[0.9rem] inline-block rounded-none border border-hair px-[0.6rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
         Example data · not live
       </p>
 

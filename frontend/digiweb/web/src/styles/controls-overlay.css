@@ -179,7 +179,7 @@
        re-exports do not change its rendered look (E3 ruling). */
   .ctl-menu-pane--ref {
     border: 1px solid var(--hair);
-    border-radius: 12px;
+    border-radius: 0;
     background: color-mix(in srgb, var(--surface) 94%, var(--bg));
     box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.5);
     font-family: var(--font-mono);
@@ -252,7 +252,7 @@
 @layer components {
   /* close button — digichat's Button variant=ghost size=icon-sm dress */
   .ctl-sheet-close {
-    border-radius: min(var(--radius-md, 0.5rem), 12px);
+    border-radius: 0;
   }
 
   .ctl-sheet-close:hover {
@@ -336,7 +336,7 @@
     position: relative;
     isolation: isolate;
     z-index: 50;
-    border-radius: var(--radius-sm, 0.25rem);
+    border-radius: 0;
   }
 
   .ctl-tip-arrow {
@@ -344,7 +344,7 @@
     height: 0.625rem;
     translate: 0 calc(-50% - 2px);
     rotate: 45deg;
-    border-radius: 2px;
+    border-radius: 0;
     background: var(--ink);
     fill: var(--ink);
   }
@@ -355,7 +355,7 @@
     background: color-mix(in srgb, var(--surface) 96%, var(--bg));
     color: var(--ink);
     border: 1px solid var(--hair);
-    border-radius: 8px;
+    border-radius: 0;
     box-shadow: 0 12px 30px -14px rgba(0, 0, 0, 0.6);
     font-family: var(--font-mono);
     font-size: 0.7rem;
@@ -414,6 +414,241 @@
   translate: 0 -50%;
 }
 
+/* ── DatePager calendar (nb-cal) — glass / term-bg month grid ─────────── */
+
+@layer components {
+  .nb-cal {
+    width: 17.5rem;
+    padding: 0.75rem;
+    border: 1px solid var(--hair);
+    border-radius: 0;
+    background: color-mix(in oklab, var(--term-bg) 92%, var(--surface));
+    box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.55);
+    font-family: var(--font-mono);
+    color: var(--ink);
+  }
+
+  .nb-cal-head {
+    display: grid;
+    grid-template-columns: 1.75rem 1fr 1.75rem;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .nb-cal-title {
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--ink);
+    letter-spacing: 0.01em;
+  }
+
+  .nb-cal-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink-mute);
+    cursor: pointer;
+    transition:
+      color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .nb-cal-nav:hover:not(:disabled) {
+    color: var(--ink);
+    background: color-mix(in oklab, var(--ink) 6%, transparent);
+  }
+
+  .nb-cal-nav:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  .nb-cal-weekdays,
+  .nb-cal-row {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.15rem;
+  }
+
+  .nb-cal-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .nb-cal-weekday {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.35rem;
+    font-size: 0.62rem;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .nb-cal-day {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 1;
+    margin: 0;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition:
+      color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .nb-cal-day:hover:not(:disabled):not(.nb-cal-day--selected) {
+    color: var(--ink);
+    background: color-mix(in oklab, var(--ink) 6%, transparent);
+  }
+
+  .nb-cal-day--selected {
+    color: var(--accent);
+    background: color-mix(in oklab, var(--accent) 20%, transparent);
+    border-color: color-mix(in oklab, var(--accent) 35%, transparent);
+  }
+
+  .nb-cal-day--muted,
+  .nb-cal-day:disabled {
+    color: var(--ink-mute);
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .nb-cal-day--empty {
+    pointer-events: none;
+    visibility: hidden;
+  }
+}
+
+/* ── dialog — the centered modal (components/controls/Dialog.tsx) ─────────
+   Canon dress directly (no digichat look to reproduce): radius 0, hairline,
+   --surface panel, canon black dim scrim. The card reuses the shared .ctl-pop
+   enter/exit above; the X is the sheet's borderless glyph grammar. */
+@layer components {
+  .ctl-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgb(0 0 0 / 0.5);
+    transition: opacity 0.15s ease;
+  }
+
+  .ctl-dialog-popup {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    pointer-events: none;
+  }
+
+  .ctl-dialog-card {
+    position: relative;
+    pointer-events: auto;
+    width: 100%;
+    max-width: 28rem;
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 0;
+    padding: 1.4rem 1.5rem;
+  }
+
+  .ctl-dialog-title {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--ink);
+    margin: 0;
+    padding-right: 2rem;
+  }
+
+  .ctl-dialog-description {
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    margin: 0.4rem 0 0;
+  }
+
+  .ctl-dialog-header {
+    margin-bottom: 0.2rem;
+  }
+
+  .ctl-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 1.4rem;
+  }
+
+  .ctl-dialog-x {
+    position: absolute;
+    top: 0.7rem;
+    right: 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 1px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink-soft);
+    font: inherit;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .ctl-dialog-x svg {
+    width: 1rem;
+    height: 1rem;
+  }
+}
+
+
+/* ── states (unlayered: must beat call-site utilities) ── */
+
+  .ctl-dialog-overlay[data-starting-style],
+  .ctl-dialog-overlay[data-ending-style] {
+    opacity: 0;
+  }
+
+  .ctl-dialog-card[data-tone="danger"] .ctl-dialog-title {
+    color: var(--danger);
+  }
+
+  .ctl-dialog-x:hover {
+    color: var(--ink);
+  }
+
+.ctl-dialog-x:focus-visible {
+  outline: none;
+  color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
 /* ── reduced motion: no travel, instant states ───────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .ctl-pop[data-open],
@@ -423,6 +658,10 @@
 
   .ctl-sheet,
   .ctl-sheet-overlay {
+    transition: none;
+  }
+
+  .ctl-dialog-overlay {
     transition: none;
   }
 }

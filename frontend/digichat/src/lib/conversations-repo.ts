@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import type { UIMessage } from "ai";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
@@ -10,6 +10,9 @@ import {
 import type * as schema from "@/db/schema";
 
 type Db = PostgresJsDatabase<typeof schema>;
+
+/** Outcome of a full-replace message write. */
+export type ReplaceConversationResult = "ok" | "not_found" | "would_truncate";
 
 export async function tenantIdBySlug(db: Db, slug: string): Promise<string | null> {
   const row = await db
@@ -104,8 +107,14 @@ export async function replaceConversationMessages(
     ownerUserSub: string;
     title?: string;
     messages: UIMessage[];
+    /**
+     * PUT is a full replace. Without this flag, refuse a body that would drop
+     * existing rows (stale localStorage / unhydrated client) — intentional
+     * clear must set `allowTruncate: true`.
+     */
+    allowTruncate?: boolean;
   }
-): Promise<boolean> {
+): Promise<ReplaceConversationResult> {
   const ok = await db
     .select({ id: conversations.id })
     .from(conversations)
@@ -118,9 +127,20 @@ export async function replaceConversationMessages(
     )
     .limit(1);
 
-  if (!ok.length) return false;
+  if (!ok.length) return "not_found";
 
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
+    if (!params.allowTruncate) {
+      const [row] = await tx
+        .select({ value: count() })
+        .from(conversationMessages)
+        .where(eq(conversationMessages.conversationId, params.conversationId));
+      const existing = Number(row?.value ?? 0);
+      if (existing > params.messages.length) {
+        return "would_truncate";
+      }
+    }
+
     await tx
       .delete(conversationMessages)
       .where(eq(conversationMessages.conversationId, params.conversationId));
@@ -142,9 +162,9 @@ export async function replaceConversationMessages(
         ...(params.title !== undefined ? { title: params.title } : {}),
       })
       .where(eq(conversations.id, params.conversationId));
-  });
 
-  return true;
+    return "ok";
+  });
 }
 
 export async function updateConversationTitle(

@@ -65,7 +65,7 @@ export function ChatMessage({
     .join(" ");
   return (
     <div className={cls}>
-      <span className="chat-msg-marker text-accent" aria-hidden="true">
+      <span className="chat-msg-marker aui-msg-marker text-ink" aria-hidden="true">
         {marker ?? MARKERS[role]}
       </span>
       <div className={bodyCls}>

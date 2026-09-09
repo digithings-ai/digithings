@@ -10,7 +10,12 @@ export type ChatThreadState = {
   messages: UIMessage[];
   /** Row exists on server (Postgres). */
   remote: boolean;
-  /** Server-backed thread: messages fetched at least once. */
+  /**
+   * Authoritative message list is safe to PUT to the server.
+   * Remote threads start false until a successful GET, or until localStorage is
+   * at least as fresh as the server summary `updatedAt`.
+   * PUT is a full replace — flushing while false would wipe Postgres history.
+   */
   hydrated: boolean;
   /** Bump to remount `useChat` after async load of server messages. */
   hydrateVersion: number;
@@ -65,6 +70,46 @@ export function saveLocalThreads(
   }
 }
 
+/**
+ * Local cache may only stand in for a server GET when it is at least as fresh
+ * as the remote summary. A stale non-empty local blob used to set
+ * `hydrated:true` and skip GET — then PUT full-replaced Postgres and deleted
+ * server-only turns.
+ */
+export function localCacheIsAuthoritative(
+  remoteUpdatedAt: string,
+  local: Pick<LocalPersistedThread, "updatedAt" | "messages"> | undefined
+): boolean {
+  if (!local?.messages?.length) return false;
+  const remoteTs = Date.parse(remoteUpdatedAt);
+  const localTs = Date.parse(local.updatedAt);
+  if (Number.isNaN(remoteTs) || Number.isNaN(localTs)) return false;
+  return localTs >= remoteTs;
+}
+
+/**
+ * `PUT /api/conversations/[id]` deletes then re-inserts every message.
+ * Never flush a remote thread whose body has not been loaded yet — an empty
+ * (or newly typed) client array would permanently erase the server history.
+ */
+export function canFlushServerMessages(t: Pick<ChatThreadState, "remote" | "hydrated">): boolean {
+  return !t.remote || t.hydrated;
+}
+
+/** Apply a successful GET /api/conversations/[id] payload onto thread state. */
+export function withHydratedConversation(
+  t: ChatThreadState,
+  payload: { title: string; messages: UIMessage[] }
+): ChatThreadState {
+  return {
+    ...t,
+    title: payload.title,
+    messages: payload.messages,
+    hydrated: true,
+    hydrateVersion: t.hydrateVersion + 1,
+  };
+}
+
 export function mergeRemoteAndLocal(
   remote: Array<{ id: string; title: string; updatedAt: string }>,
   local: LocalPersistedThread[]
@@ -76,15 +121,15 @@ export function mergeRemoteAndLocal(
   for (const r of remote) {
     seen.add(r.id);
     const loc = localById.get(r.id);
-    const hasLocalMessages = !!loc?.messages?.length;
+    const trustLocal = localCacheIsAuthoritative(r.updatedAt, loc);
     out.push({
       id: r.id,
       title: r.title,
       updatedAt: r.updatedAt,
-      messages: loc?.messages ?? [],
+      messages: trustLocal ? (loc?.messages ?? []) : [],
       remote: true,
-      hydrated: hasLocalMessages,
-      hydrateVersion: hasLocalMessages ? 1 : 0,
+      hydrated: trustLocal,
+      hydrateVersion: trustLocal ? 1 : 0,
     });
   }
 

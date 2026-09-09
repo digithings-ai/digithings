@@ -8,7 +8,7 @@
 
 digithings maintains two distinct categories of project directories:
 
-1. **`projects/`** — confidential client pilots and engagements (e.g. `projects/sitaas/`). These contain connection strings, client secrets, and proprietary config. They are excluded from version control via the root-anchored `.gitignore` pattern `/projects/` so they are never committed or pushed to public remotes.
+1. **`projects/`** — confidential client pilots and engagements (e.g. `projects/client-pilot/`). These contain connection strings, client secrets, and proprietary config. They are excluded from version control via the root-anchored `.gitignore` pattern `/projects/` so they are never committed or pushed to public remotes.
 
 2. **`docs/projects/`** — committed public dogfooding projects used to demonstrate or validate the digithings stack. For example, `docs/projects/digithings-guide/` is the ecosystem RAG project indexed at `chat.digithings.ai`.
 

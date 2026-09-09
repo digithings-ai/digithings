@@ -48,6 +48,9 @@ class _RecordingWriter:
         )
         return {"ok": True}
 
+    def prune_children(self, parent_doc: str, keep_names: set[str], subdir: str = "") -> list[str]:
+        return []
+
 
 def test_slug_for_url_stable() -> None:
     assert slug_for_url("https://docs.example.com/guides/Start/") == slug_for_url(
@@ -352,3 +355,53 @@ def test_single_segment_document_writes_one_note(tmp_path: Path) -> None:
     assert count == 1
     assert "__" not in writer.calls[0]["name"]
     assert "segment_label" not in writer.calls[0]["frontmatter"]
+
+
+def test_reingest_prunes_stale_children_after_section_is_inserted(tmp_path: Path) -> None:
+    """A changed segment layout must replace, not accumulate, child notes."""
+    manifest = OnboardManifest(
+        client="acme", seed_url="https://example.com/", vault_subdir="clients/acme"
+    )
+    ws = Workspace.create(tmp_path / "work")
+    url = "repo://acme/guide.md"
+    local = ws.root / "files" / "guide.md"
+    local.parent.mkdir(parents=True)
+    local.write_text(
+        "# Guide\n## Notes\nAlpha\n## Notes\nBravo\n## Tail\nCharlie\n",
+        encoding="utf-8",
+    )
+    ws.append_classified(
+        ClassifiedPage(
+            page=DiscoveredPage(
+                url=url,
+                final_url=url,
+                content_type="text/markdown",
+                title="Guide",
+                depth=0,
+                local_path="files/guide.md",
+                discovered_from="repo_source",
+            ),
+            page_class=PageClass.repo_doc,
+            score=90.0,
+            reasons=("repo",),
+        )
+    )
+    vault_root = tmp_path / "vault"
+    vault_root.mkdir()
+    vault = Vault(vault_root)
+    write_vault_notes(manifest, ws, vault)
+
+    local.write_text(
+        "# Guide\n## Intro\nNew\n## Notes\nAlpha\n## Notes\nBravo\n## Tail\nCharlie\n",
+        encoding="utf-8",
+    )
+    write_vault_notes(manifest, ws, vault)
+
+    slug = slug_for_url(url)
+    assert {note.name for note in vault.list_notes()} == {
+        slug,
+        f"{slug}__guide-intro",
+        f"{slug}__guide-notes-i001",
+        f"{slug}__guide-notes-i002",
+        f"{slug}__guide-tail",
+    }
