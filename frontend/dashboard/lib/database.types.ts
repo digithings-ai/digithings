@@ -467,6 +467,8 @@ export interface Database {
           source: string;
           /** finalized_accounting | legacy_estimate */
           contract: string;
+          /** Migration 123 (#3767): true on the first row after a source flip. */
+          series_seam: boolean;
         };
       };
       public_finalized_nav: {

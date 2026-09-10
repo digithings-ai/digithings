@@ -139,14 +139,34 @@ export function resolveInvestedPct(args: {
   };
 }
 
-function derivedDayReturnPct(
-  tip: { date: string; nav: number; day_return_pct?: number | null },
-  prior: { date: string; nav: number } | null
-): number | null {
+type NavPoint = {
+  date: string;
+  nav: number;
+  day_return_pct?: number | null;
+  source?: string | null;
+  series_seam?: boolean | null;
+};
+
+/**
+ * True when the tip row starts a new source run (#3767). A seam means the
+ * adjacent NAV values come from two different series (legacy estimate vs
+ * finalized accounting) — deriving a return across them draws a phantom jump.
+ */
+export function crossesNavSeam(tip: NavPoint, prior: NavPoint | null): boolean {
+  if (!prior) return false;
+  if (tip.series_seam === true) return true;
+  const tipSource = tip.source ?? null;
+  const priorSource = prior.source ?? null;
+  return tipSource != null && priorSource != null && tipSource !== priorSource;
+}
+
+function derivedDayReturnPct(tip: NavPoint, prior: NavPoint | null): number | null {
   if (tip.day_return_pct != null && Number.isFinite(tip.day_return_pct)) {
     return tip.day_return_pct;
   }
   if (!prior || !(prior.nav > 0)) return null;
+  // #3767: never derive a day return across a legacy↔finalized seam.
+  if (crossesNavSeam(tip, prior)) return null;
   const gap = calendarDaysBetween(prior.date, tip.date);
   if (gap == null || gap < 1 || gap > MAX_DAY_RETURN_GAP_DAYS) return null;
   return (tip.nav / prior.nav - 1) * 100;
@@ -159,6 +179,8 @@ export function persistedHeadlinesFromNav(
     nav: number;
     invested_pct?: number | null;
     day_return_pct?: number | null;
+    source?: string | null;
+    series_seam?: boolean | null;
   }>,
   opts: {
     bookWeightInvestedPct?: number | null;
@@ -224,7 +246,10 @@ export function persistedInsightMetrics(
 
 export function buildPerformanceSsotMeta(args: {
   navRows: ReadonlyArray<
-    Pick<AccountingNavRow, 'date' | 'source' | 'contract' | 'invested_pct' | 'day_return_pct'> & {
+    Pick<
+      AccountingNavRow,
+      'date' | 'source' | 'contract' | 'invested_pct' | 'day_return_pct' | 'series_seam'
+    > & {
       nav?: number;
       cash_pct?: number | null;
     }
@@ -252,8 +277,22 @@ export function buildPerformanceSsotMeta(args: {
   const tipDay =
     tip && finiteNav(tip.nav)
       ? derivedDayReturnPct(
-          { date: tip.date, nav: tip.nav, day_return_pct: tip.day_return_pct },
-          prior && finiteNav(prior.nav) ? { date: prior.date, nav: prior.nav } : null
+          {
+            date: tip.date,
+            nav: tip.nav,
+            day_return_pct: tip.day_return_pct,
+            source: tip.source,
+            series_seam: tip.series_seam,
+          },
+          prior && finiteNav(prior.nav)
+            ? {
+                date: prior.date,
+                nav: prior.nav,
+                day_return_pct: prior.day_return_pct,
+                source: prior.source,
+                series_seam: prior.series_seam,
+              }
+            : null
         )
       : tip?.day_return_pct != null && Number.isFinite(tip.day_return_pct)
         ? tip.day_return_pct
