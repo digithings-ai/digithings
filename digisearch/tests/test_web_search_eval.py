@@ -1,13 +1,14 @@
 """20-query web-search eval harness (#3853, task 9).
 
-offline-first: search providers, the digifetch fetcher, and the extractor are
-mocked at the ``digisearch.web_search.service`` seam, so the full
-search -> fetch -> enrich path runs with no network and no searxng sidecar.
+offline-first: search providers and the digifetch fetcher are mocked at the
+``digisearch.web_search.service`` seam, so the full search -> fetch -> enrich
+path runs with no network and no searxng sidecar. enrichment itself runs the
+real ``digisearch.web_search.extractor.extract_markdown`` (trafilatura primary,
+readability fallback), so table/list assertions exercise production code.
 live sampling is opt-in behind ``DIGISEARCH_WEB_SEARCH_LIVE=1``.
 """
 
 import os
-import re
 import statistics
 import sys
 import time
@@ -85,19 +86,8 @@ class _NoWaitLimiter:
         return None
 
 
-def _simulated_markdown(html: str) -> str:
-    """Deterministic html -> markdown stand-in preserving tables and lists."""
-    text = re.sub(r"</(tr|p|h1|ul)>", "\n", html)
-    text = re.sub(r"<li[^>]*>", "- ", text)
-    text = re.sub(r"</li>", "\n", text)
-    text = re.sub(r"<t[dh][^>]*>", "| ", text)
-    text = re.sub(r"</t[dh]>", " ", text)
-    text = re.sub(r"<[^>]+>", "", text)
-    lines = [ln.strip() for ln in text.splitlines()]
-    return "\n".join(ln for ln in lines if ln)
-
-
 def _patch_offline(monkeypatch, world: _OfflineWorld, *, searxng_down: bool = False) -> None:
+    """Mock providers + fetcher only; the real extractor stays on the seam."""
     from digisearch.web_search import service as svc
 
     if searxng_down:
@@ -118,11 +108,15 @@ def _patch_offline(monkeypatch, world: _OfflineWorld, *, searxng_down: bool = Fa
         svc, "DdgsWebSearchProvider", lambda *a, **k: _FakeSearchProvider(world, "ddgs")
     )
     monkeypatch.setattr(svc, "HttpFetcher", lambda *a, **k: _FakeFetcher(world))
-    monkeypatch.setattr(svc, "extract_markdown", lambda html, url="": _simulated_markdown(html))
     monkeypatch.setattr(svc, "_limiter", _NoWaitLimiter())
 
 
 def test_offline_enriched_markdown_quality(monkeypatch):
+    # real-extractor leg: trafilatura is an optional extra, so skip (never
+    # fail) when it is absent — same importorskip pattern as the single-case
+    # test below. providers + fetcher stay mocked, so this is fully offline.
+    trafilatura = pytest.importorskip("trafilatura", reason="needs [web-search] extra")
+    assert trafilatura is not None
     from digisearch.web_search import service as svc
     from digisearch.web_search.models import WebSearchRequest
 
