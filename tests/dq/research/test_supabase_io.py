@@ -1092,3 +1092,109 @@ class TestResolvePendingSkipsRowsOnPersistentOutage:
             reflector=lambda _payload: _Reflection(),
         )
         assert resolved == 1
+
+
+class _FakeArchiveStore:
+    """In-memory StorageBackend double for archive read-through tests (#3792)."""
+
+    def __init__(self) -> None:
+        self.objects: dict[str, bytes] = {}
+
+    def put(self, key: str, data: bytes) -> None:
+        self.objects[key] = data
+
+    def get(self, key: str) -> bytes:
+        return self.objects[key]
+
+    def delete(self, key: str) -> None:
+        del self.objects[key]
+
+    def list_keys(self, prefix: str) -> list[str]:
+        return sorted(k for k in self.objects if k.startswith(prefix))
+
+
+def _seed_document_pointer(
+    client: FakeSupabaseClient,
+    store: _FakeArchiveStore,
+    *,
+    workspace: str,
+    key: str,
+    date_str: str,
+    payload: dict[str, object],
+) -> None:
+    """Archive *payload* into *store* and register the pointer row (#3792)."""
+    import hashlib
+
+    from digiquant.ops.checkpoint_archive import compress_payload
+    from digiquant.ops.checkpoint_archive import document_key as archive_document_key
+
+    raw = json.dumps(payload, sort_keys=True).encode("utf-8")
+    stored = compress_payload(raw)
+    r2_key = archive_document_key(workspace, date_str, key)
+    store.put(r2_key, stored)
+    client.canned_reads.setdefault("archive_objects", []).append(
+        {
+            "source_table": "documents",
+            "source_key": {
+                "workspace_id": workspace,
+                "document_key": key,
+                "date": date_str,
+            },
+            "r2_key": r2_key,
+            "sha256": hashlib.sha256(stored).hexdigest(),
+            "size": len(stored),
+            "owner": "house",
+        }
+    )
+
+
+@pytest.mark.unit
+class TestLoadPriorContextArchiveReadthrough:
+    """Archived older versions read through R2 instead of degrading as missing (#3792)."""
+
+    def test_archived_segment_hydrates_from_r2(self) -> None:
+        house = str(house_workspace_id())
+        payload = {"regime": "archived"}
+        client = FakeSupabaseClient(
+            canned_reads={
+                "daily_snapshots": [],
+                "documents": [
+                    {
+                        "date": "2026-04-19",
+                        "document_key": "macro",
+                        "doc_type": "macro",
+                        "payload": None,
+                    },
+                ],
+            }
+        )
+        store = _FakeArchiveStore()
+        _seed_document_pointer(
+            client,
+            store,
+            workspace=house,
+            key="macro",
+            date_str="2026-04-19",
+            payload=payload,
+        )
+        ctx = load_prior_context(client=client, run_date=date(2026, 4, 20), store=store)
+        assert ctx.latest_segments["macro"]["payload"] == payload
+
+    def test_archived_segment_without_pointer_keeps_null_payload(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "daily_snapshots": [],
+                "documents": [
+                    {
+                        "date": "2026-04-19",
+                        "document_key": "macro",
+                        "doc_type": "macro",
+                        "payload": None,
+                    },
+                ],
+            }
+        )
+        ctx = load_prior_context(
+            client=client, run_date=date(2026, 4, 20), store=_FakeArchiveStore()
+        )
+        assert ctx.latest_segments["macro"]["payload"] is None
