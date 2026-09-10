@@ -36,6 +36,8 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
+_MAX_PAGES = 10_000  # runaway-fetch guard: ~10M rows, far beyond any book table.
+
 FAIL_TOL_BP = 25.0  # breach: engine vs recorded daily return differs by >25bp.
 # Rationale: the restatement replay matched to <1e-6, but this guard compares
 # against *stored* rows that may carry integer-lot quantization noise at $100M
@@ -103,17 +105,24 @@ def _fetch_table(
     and silently drop/duplicate rows into the weight schedule that ``--write``
     persists as truth.
 
-    Fail-closed: a page arriving out of order, or a page full of already-seen
-    rows (a same-date group larger than ``page_size`` that the cursor cannot
-    advance past), raises ``RuntimeError`` instead of returning a truncated
-    series. Callers must not write NAV from a partial fetch.
+    Fail-closed: a page arriving out of order, a page with duplicate keys, a
+    stalled cursor (full page, zero new keys — e.g. a server ignoring the
+    limit), or more than ``_MAX_PAGES`` pages raises ``RuntimeError`` instead
+    of returning a truncated series. Same-date groups larger than
+    ``page_size`` are handled by widening each request window by the
+    already-seen boundary count, so the stall branch only fires on a server
+    that misbehaves. Callers must not write NAV from a partial fetch.
     """
     selected = {c.strip() for c in cols.split(",")}
     has_ticker = "ticker" in selected
     rows: list[dict] = []
     seen: set[tuple[str, ...]] = set()
     last_date: str | None = None
+    pages = 0
     while True:
+        pages += 1
+        if pages > _MAX_PAGES:
+            raise RuntimeError(f"{table}: exceeded {_MAX_PAGES} pages — refusing a runaway fetch")
         # Rows already emitted for the cursor date ride along on the next
         # page (``gte`` re-anchors on the date, not the full key) and are
         # skipped client-side — so the request window covers them.

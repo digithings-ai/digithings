@@ -209,27 +209,32 @@ class TestProvisionalNavSuppression:
     """
 
     def test_existing_engine_nav_row_is_preserved(self) -> None:
+        """Engine NAV wins; H9-owned cash/invested still track the new book."""
+        existing = {
+            "date": RUN_DATE.isoformat(),
+            "nav": 99.5,
+            "cash_pct": 0.0,
+            "invested_pct": 100.0,
+            "workspace_id": str(house_workspace_id()),
+        }
         client = FakeSupabaseClient(
-            canned_reads={
-                "nav_history": [
-                    {
-                        "date": RUN_DATE.isoformat(),
-                        "nav": 99.5,
-                        "cash_pct": 0.0,
-                        "invested_pct": 100.0,
-                        "workspace_id": str(house_workspace_id()),
-                    }
-                ]
-            }
+            canned_reads={"nav_history": [dict(existing)]},
+            store={"nav_history": [dict(existing)]},
         )
-        out = _run(client, _state())
+        out = _run(client, _state(sized_book=_sized_book(80.0)))
 
         assert not out.get("errors"), out.get("errors")
         # Book still commits: positions land, manifest is recorded.
         positions = {r["ticker"]: r for r in client.store.get("positions", [])}
-        assert positions["SPY"]["weight_pct"] == 100.0
-        # ... but the provisional NAV upsert is suppressed — engine row wins.
-        assert client.store.get("nav_history", []) == []
+        assert positions["SPY"]["weight_pct"] == 80.0
+        # No second row appended (update in place, not upsert)...
+        nav_rows = client.store.get("nav_history", [])
+        assert len(nav_rows) == 1
+        # ... the engine NAV is preserved (not the provisional recompute)...
+        assert nav_rows[0]["nav"] == 99.5
+        # ... while cash/invested refresh to the just-booked weights.
+        assert nav_rows[0]["cash_pct"] == 20.0
+        assert nav_rows[0]["invested_pct"] == 80.0
 
     def test_overlay_nav_row_does_not_suppress_house_provisional(self) -> None:
         """Workspace pin per HOUSE_BOOK_SCOPE: a private row is not a house engine row."""

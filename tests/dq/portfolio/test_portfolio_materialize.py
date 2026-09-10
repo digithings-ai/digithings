@@ -124,23 +124,31 @@ class TestProvisionalNavSuppression:
     """Booking must not clobber an engine NAV row with a provisional recompute (#3804)."""
 
     def test_existing_engine_nav_row_is_preserved(self) -> None:
+        """Engine NAV wins; H9-owned cash/invested still track the new book."""
+        existing = {
+            "date": RUN_DATE.isoformat(),
+            "nav": 99.5,
+            "cash_pct": 0.0,
+            "invested_pct": 100.0,
+            "workspace_id": str(house_workspace_id()),
+        }
         client = FakeSupabaseClient(
-            canned_reads={
-                "nav_history": [
-                    {
-                        "date": RUN_DATE.isoformat(),
-                        "nav": 99.5,
-                        "workspace_id": str(house_workspace_id()),
-                    }
-                ]
-            }
+            canned_reads={"nav_history": [dict(existing)]},
+            store={"nav_history": [dict(existing)]},
         )
-        _run(client, [{"ticker": "SPY", "target_pct": 100}])
+        _run(client, [{"ticker": "SPY", "target_pct": 70}])
 
-        # Book still lands; the provisional NAV upsert is suppressed.
+        # Book still lands (SPY 70 + CASH 30).
         positions = {r["ticker"]: r for r in client.store.get("positions", [])}
-        assert positions["SPY"]["weight_pct"] == 100.0
-        assert client.store.get("nav_history", []) == []
+        assert positions["SPY"]["weight_pct"] == 70.0
+        # No second row appended (update in place, not upsert)...
+        nav_rows = client.store.get("nav_history", [])
+        assert len(nav_rows) == 1
+        # ... the engine NAV is preserved (not the provisional recompute)...
+        assert nav_rows[0]["nav"] == 99.5
+        # ... while cash/invested refresh to the just-booked weights.
+        assert nav_rows[0]["cash_pct"] == 30.0
+        assert nav_rows[0]["invested_pct"] == 70.0
 
     def test_prior_date_nav_row_does_not_suppress(self) -> None:
         """Only the same-date row guards — a prior engine row still chains."""

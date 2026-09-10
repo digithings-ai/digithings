@@ -566,17 +566,23 @@ def book_portfolio(
     # Provisional NAV suppression (#3804): the Nautilus schedule replay
     # (verify_nav_replay.py --write) owns ``nav_history.nav`` once it has
     # written the date. A re-dispatch after the engine step must not clobber
-    # that row with a provisional recompute, so an existing row for this
+    # that value with a provisional recompute, so an existing row for this
     # (workspace, date) keeps its stored NAV — fail-closed toward the engine.
-    # ``positions`` below still book normally; only the NAV point is guarded.
+    # H9-owned ``cash_pct`` / ``invested_pct`` are still refreshed (they track
+    # the just-booked weights, which the engine write preserves untouched), so
+    # a conflicting same-day re-book cannot leave them stale behind new
+    # ``positions``. ``positions`` below book normally in either case.
     existing_nav = load_nav_history_row(client, run_date, workspace_id=overlay_ws)
     if existing_nav is not None and existing_nav.get("nav") is not None:
         logger.warning(
             "commit_io: nav_history row exists for %s (nav=%s); "
-            "suppressing provisional overwrite (engine row wins)",
+            "preserving NAV, refreshing cash/invested only (engine row wins)",
             date_str,
             existing_nav.get("nav"),
         )
+        client.table("nav_history").update(
+            {"cash_pct": cash_pct, "invested_pct": round(invested, 4)}
+        ).eq("workspace_id", workspace_id).eq("date", date_str).execute()
     else:
         client.table("nav_history").upsert(
             {

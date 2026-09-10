@@ -1702,9 +1702,9 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
    (inception-100 normalization; `pipeline-research-metrics.yml` runs it before
    metrics). The booking path (`portfolio_materialize.py`, H9
    `commit_io.book_portfolio`) still writes provisional house rows at book time,
-   but an existing row for the same `(workspace_id, date)` now suppresses the
-   provisional NAV upsert — a book re-dispatch after the engine step keeps the
-   engine NAV instead of clobbering it (#3804). Fetches page by last-seen-key
+   but an existing row for the same `(workspace_id, date)` now keeps the stored
+   NAV (refreshing only H9-owned `cash_pct`/`invested_pct`) — a book re-dispatch
+   after the engine step keeps the engine NAV instead of clobbering it (#3804). Fetches page by last-seen-key
    cursor over a deterministic `(date, ticker)` order (never offsets) and refuse
    to verify or write from a truncated/unstable page (#3803). A read-only
    `verify_nav_replay` (no `--write`) step runs after metrics so drift fails

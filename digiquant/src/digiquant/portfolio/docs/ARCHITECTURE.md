@@ -526,11 +526,13 @@ anchor is the book, not the NAV row.
 legacy `portfolio_materialize`) read the existing `nav_history` row for
 `(workspace, run_date)` first (`research.supabase_io.load_nav_history_row`,
 workspace-pinned per house book scope). When a row with a non-null NAV already
-exists — i.e. the engine step already wrote this date — the provisional NAV
-upsert is skipped with a warning and the stored NAV is kept. `positions`
-pruning/booking still runs; only the NAV point is guarded. A same-date
-re-commit *before* the engine step still writes the provisional row (no row
-exists yet), so the normal book-then-engine order is unchanged.
+exists — i.e. the engine step already wrote this date — the stored NAV is kept
+and only the H9-owned `cash_pct` / `invested_pct` are refreshed (with a
+warning), so a conflicting same-day re-book cannot leave them stale behind
+new `positions`. `positions` pruning/booking still runs; only the NAV value
+is guarded. A same-date re-commit *before* the engine step still writes the
+provisional row (no row exists yet), so the normal book-then-engine order is
+unchanged.
 
 `research.supabase_io.query_price_deltas` is deliberately left alone: it is a one-trading-day
 triage signal shared with the rule evaluators, and every rule threshold is calibrated

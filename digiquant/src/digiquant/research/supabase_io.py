@@ -466,9 +466,10 @@ def load_nav_history_row(
     write a provisional NAV at book time; the Nautilus schedule replay
     (``verify_nav_replay.py --write``) later overwrites ``nav`` with the
     authoritative engine value. A re-dispatch of the book pipeline *after* the
-    engine step must not clobber that engine row with a provisional recompute,
-    so both booking paths consult this read first and skip the ``nav_history``
-    upsert when a row already exists for the date.
+    engine step must not clobber that engine value with a provisional
+    recompute, so both booking paths consult this read first: when a row
+    already exists for the date they preserve the stored NAV and refresh only
+    the H9-owned ``cash_pct`` / ``invested_pct``.
 
     ``workspace_id`` omitted / ``None`` means the house workspace — never an
     unfiltered date scan. Overlay passes its id so a private book cannot see

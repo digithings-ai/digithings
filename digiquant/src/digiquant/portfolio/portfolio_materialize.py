@@ -637,17 +637,22 @@ def build_materialize_node(deps: MaterializeDeps):
         # Provisional NAV suppression (#3804): the Nautilus schedule replay
         # (verify_nav_replay.py --write) owns ``nav_history.nav`` once it has
         # written the date. A re-dispatch after the engine step must not
-        # clobber that row with a provisional recompute, so an existing house
-        # row for this date keeps its stored NAV — fail-closed toward the
-        # engine. ``positions`` below still book normally.
+        # clobber that value with a provisional recompute, so an existing
+        # house row for this date keeps its stored NAV — fail-closed toward
+        # the engine. H9-owned ``cash_pct`` / ``invested_pct`` are still
+        # refreshed so they track the just-booked weights. ``positions`` below
+        # still book normally.
         existing_nav = load_nav_history_row(client, run_date)
         if existing_nav is not None and existing_nav.get("nav") is not None:
             logger.warning(
                 "phase9d: nav_history row exists for %s (nav=%s); "
-                "suppressing provisional overwrite (engine row wins)",
+                "preserving NAV, refreshing cash/invested only (engine row wins)",
                 date_str,
                 existing_nav.get("nav"),
             )
+            client.table("nav_history").update(
+                {"cash_pct": cash_pct, "invested_pct": round(invested, 4)}
+            ).eq("workspace_id", str(house_workspace_id())).eq("date", date_str).execute()
         else:
             client.table("nav_history").upsert(
                 {
