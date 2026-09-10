@@ -75,11 +75,8 @@ function rememberInput(
   return merged;
 }
 
-function displayTitle(name: string, span: ActivitySpan): string {
-  if (name === "digisearch" || name.startsWith("digisearch_")) {
-    return toolRowTitle(name, toolInputOf(span));
-  }
-  return span.label?.trim() || toolRowTitle(name);
+function displayTitle(name: string): string {
+  return toolRowTitle(name);
 }
 
 /** Close the current reasoning part so the next burst mints a new id. */
@@ -262,12 +259,12 @@ export function writeStandardActivity(
   if (span.operation === "execute_tool") {
     const name = toolNameOf(span);
     if (span.status === "started") {
-      const id = beginToolCall(writer, ctx, name, displayTitle(name, span));
+      const id = beginToolCall(writer, ctx, name, displayTitle(name));
       writeJsonInputDelta(writer, ctx, id, span);
       rememberInput(ctx, id, span);
       return;
     }
-    const id = completeToolCall(writer, ctx, name, displayTitle(name, span));
+    const id = completeToolCall(writer, ctx, name, displayTitle(name));
     ensureToolInput(writer, ctx, id, name, span);
     writeToolOutput(writer, ctx, id, span);
     return;
@@ -275,7 +272,7 @@ export function writeStandardActivity(
 
   if (span.operation === "retrieve") {
     const name = toolNameOf(span);
-    const id = completeToolCall(writer, ctx, name, displayTitle(name, span));
+    const id = completeToolCall(writer, ctx, name, displayTitle(name));
     ensureToolInput(writer, ctx, id, name, span);
     const docs = span.documents ?? [];
     const withheld = span.documentsWithheld === true;

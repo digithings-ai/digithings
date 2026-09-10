@@ -33,23 +33,23 @@ describe("formatToolDurationMs", () => {
 });
 
 describe("humanizeToolName", () => {
-  it("names digisearch by retrieval method", () => {
-    expect(humanizeToolName("digisearch")).toBe("digisearch semantic");
-    expect(humanizeToolName("digisearch", '{"mode":"keyword"}')).toBe("digisearch keyword");
-    expect(humanizeToolName("digisearch", '{"search_mode":"hybrid"}')).toBe("digisearch hybrid");
-    expect(humanizeToolName("digisearch", '{"search_type":"keyword"}')).toBe("digisearch keyword");
+  it("keeps the exact backend tool id, including underscores", () => {
+    expect(humanizeToolName("digisearch")).toBe("digisearch");
+    expect(humanizeToolName("digisearch", '{"mode":"keyword"}')).toBe("digisearch");
+    expect(humanizeToolName("digisearch", '{"search_mode":"hybrid"}')).toBe("digisearch");
+    expect(humanizeToolName("digisearch", '{"search_type":"keyword"}')).toBe("digisearch");
   });
 
-  it("suffixes fetch_all and research with the retrieval method", () => {
-    expect(humanizeToolName("digisearch_fetch_all")).toBe("digisearch fetch all (semantic)");
+  it("keeps fetch_all and research ids verbatim regardless of method args", () => {
+    expect(humanizeToolName("digisearch_fetch_all")).toBe("digisearch_fetch_all");
     expect(humanizeToolName("digisearch_research", '{"mode":"hybrid"}')).toBe(
-      "digisearch research (hybrid)",
+      "digisearch_research",
     );
   });
 
-  it("humanizes vault and web tools", () => {
-    expect(humanizeToolName("digivault_search_notes")).toBe("digivault search notes");
-    expect(humanizeToolName("digivault_get_note")).toBe("digivault get note");
-    expect(humanizeToolName("web_search")).toBe("web search");
+  it("keeps vault and web tool ids verbatim", () => {
+    expect(humanizeToolName("digivault_search_notes")).toBe("digivault_search_notes");
+    expect(humanizeToolName("digivault_get_note")).toBe("digivault_get_note");
+    expect(humanizeToolName("web_search")).toBe("web_search");
   });
 });

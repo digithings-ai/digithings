@@ -383,8 +383,10 @@ describe("createFoundryStreamResponse", () => {
     expect(out).toContain('"type":"data-conversation"');
     expect(out).not.toContain('"type":"data-externalConversation"');
     expect(out).toContain('"conversationId":"conv_9"');
-    // exactly one searching trace, not two (dedup fix)
-    expect(out.split("Searching knowledge base…").length - 1).toBe(1);
+    // exactly one file_search start, not two (dedup fix). The provider
+    // progress label is not serialized — rows render the raw backend id.
+    expect(out.split('"title":"file_search"').length - 1).toBe(1);
+    expect(out).not.toContain("Searching knowledge base…");
     expect(out).toContain('"delta":"Hel"');
     expect(out).toContain('"delta":"lo"');
     // the .done full-text re-emit must not appear as a delta (dup-answer fix)

@@ -319,14 +319,14 @@ describe("writeStandardActivity", () => {
     expect(types.lastIndexOf("reasoning-start")).toBeGreaterThan(types.indexOf("tool-output-available"));
     expect(chunks.find((c) => c.type === "tool-input-start")).toMatchObject({
       toolName: "digisearch",
-      title: "digisearch keyword",
+      title: "digisearch",
     });
     expect(
       chunks.filter((c) => c.type === "tool-input-start").map((c) => c.title),
-    ).toEqual(["digisearch keyword", "digivault_get_note"]);
+    ).toEqual(["digisearch", "digivault_get_note"]);
   });
 
-  it("titles digisearch_fetch_all with the method from tool input", () => {
+  it("titles digisearch_fetch_all with the exact backend id", () => {
     const chunks = collect({
       operation: "execute_tool",
       status: "started",
@@ -336,7 +336,7 @@ describe("writeStandardActivity", () => {
     });
     expect(chunks.find((c) => c.type === "tool-input-start")).toMatchObject({
       toolName: "digisearch_fetch_all",
-      title: "digisearch fetch all (keyword)",
+      title: "digisearch_fetch_all",
     });
   });
 

@@ -4,7 +4,7 @@ import { render, screen } from "@testing-library/react";
 import { ToolFallback } from "./tool-fallback.aui";
 
 describe("stock ToolFallback", () => {
-  it("names the digisearch row by retrieval method", () => {
+  it("renders the digisearch row with the raw backend id", () => {
     render(
       <ToolFallback
         type="tool-call"
@@ -18,10 +18,11 @@ describe("stock ToolFallback", () => {
         respondToApproval={async () => undefined}
       />,
     );
-    expect(screen.getByText("digisearch keyword")).toBeTruthy();
+    expect(screen.getByText("digisearch")).toBeTruthy();
+    expect(screen.queryByText("digisearch keyword")).toBeNull();
   });
 
-  it("humanizes vault tool ids in the row title", () => {
+  it("renders vault tool ids verbatim in the row title", () => {
     render(
       <ToolFallback
         type="tool-call"
@@ -35,6 +36,7 @@ describe("stock ToolFallback", () => {
         respondToApproval={async () => undefined}
       />,
     );
-    expect(screen.getByText("digivault get note")).toBeTruthy();
+    expect(screen.getByText("digivault_get_note")).toBeTruthy();
+    expect(screen.queryByText("digivault get note")).toBeNull();
   });
 });
