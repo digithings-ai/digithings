@@ -108,8 +108,7 @@ def test_litellm_proxy_keeps_house_slug_when_ci_keyed(monkeypatch: pytest.Monkey
     monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-litellm")
     assert (
-        client_mod._effective_model_id("deepseek/deepseek-v4-flash")
-        == "deepseek/deepseek-v4-flash"
+        client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek/deepseek-v4-flash"
     )
 
 

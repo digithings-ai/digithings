@@ -466,9 +466,8 @@ def cheaperinference_bare_id_for_house_slug(model: str) -> str | None:
 
 def _cheaperinference_api_base() -> str:
     return (
-        (os.environ.get("CHEAPERINFERENCE_API_BASE") or "").strip()
-        or _DEFAULT_CHEAPERINFERENCE_API_BASE
-    )
+        os.environ.get("CHEAPERINFERENCE_API_BASE") or ""
+    ).strip() or _DEFAULT_CHEAPERINFERENCE_API_BASE
 
 
 def _cheaperinference_direct_house() -> bool:
