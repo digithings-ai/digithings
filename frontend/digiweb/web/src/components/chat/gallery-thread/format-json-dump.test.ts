@@ -26,9 +26,10 @@ describe("formatToolDurationMs", () => {
     expect(formatToolDurationMs(999)).toBe("999ms");
   });
 
-  it("shows seconds at 1s and above", () => {
-    expect(formatToolDurationMs(1000)).toBe("1.0s");
-    expect(formatToolDurationMs(2300)).toBe("2.3s");
+  it("shows dual-unit seconds and milliseconds at 1s and above", () => {
+    expect(formatToolDurationMs(1000)).toBe("1.0s (1000ms)");
+    expect(formatToolDurationMs(2300)).toBe("2.3s (2300ms)");
+    expect(formatToolDurationMs(65000)).toBe("1m 5s (65000ms)");
   });
 });
 
