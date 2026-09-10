@@ -33,14 +33,14 @@ describe("ToolFallback", () => {
       />,
     );
     expect(screen.getByText(/Used tool:/)).toBeTruthy();
-    expect(screen.getByText("digisearch")).toBeTruthy();
+    expect(screen.getByText("digisearch semantic")).toBeTruthy();
     expect(screen.queryByText(/"query":"jwt"/)).toBeNull();
     await user.click(screen.getByRole("button"));
     expect(screen.getByText(/"query":"jwt"/)).toBeTruthy();
     expect(screen.getByText("Result")).toBeTruthy();
   });
 
-  it("renders the exact backend tool id with underscores", () => {
+  it("renders the humanized tool title, not the raw backend id", () => {
     render(
       <ToolFallback
         type="tool-call"
@@ -56,7 +56,26 @@ describe("ToolFallback", () => {
         respondToApproval={async () => undefined}
       />,
     );
-    expect(screen.getByText("digivault_get_note")).toBeTruthy();
-    expect(screen.queryByText("digivault get note")).toBeNull();
+    expect(screen.getByText("digivault get note")).toBeTruthy();
+    expect(screen.queryByText("digivault_get_note")).toBeNull();
+  });
+
+  it("names the digisearch row by retrieval method", () => {
+    render(
+      <ToolFallback
+        type="tool-call"
+        toolCallId="t3"
+        toolName="digisearch"
+        args={{ query: "jwt", mode: "keyword" }}
+        argsText='{"query":"jwt","mode":"keyword"}'
+        result={{ hitCount: 0 }}
+        isError={false}
+        status={{ type: "complete" }}
+        addResult={() => undefined}
+        resume={() => undefined}
+        respondToApproval={async () => undefined}
+      />,
+    );
+    expect(screen.getByText("digisearch keyword")).toBeTruthy();
   });
 });

@@ -24,6 +24,7 @@ import {
   CollapsibleTrigger,
 } from "./ui/collapsible";
 import { cn } from "@/lib/utils";
+import { toolRowTitle } from "@/lib/adapters/digithings/activity/tool-display";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 
@@ -148,11 +149,13 @@ function ToolFallbackDuration({
 
 function ToolFallbackTrigger({
   toolName,
+  title,
   status,
   className,
   ...props
 }: React.ComponentProps<typeof CollapsibleTrigger> & {
   toolName: string;
+  title?: string;
   status?: ToolCallMessagePartStatus;
 }) {
   const statusType = status?.type ?? "complete";
@@ -188,7 +191,7 @@ function ToolFallbackTrigger({
           isRunning && "shimmer motion-reduce:animate-none",
         )}
       >
-        {label}: <b>{toolName}</b>
+        {label}: <b>{title ?? toolName}</b>
       </span>
       <ToolFallbackDuration />
       <ChevronDownIcon
@@ -678,6 +681,7 @@ function ToolFallbackApproval({
 
 const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   toolName,
+  args,
   argsText,
   result,
   status,
@@ -703,7 +707,11 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
 
   return (
     <ToolFallbackRoot open={open} onOpenChange={setOpen}>
-      <ToolFallbackTrigger toolName={toolName} status={status} />
+      <ToolFallbackTrigger
+        toolName={toolName}
+        title={toolRowTitle(toolName, args)}
+        status={status}
+      />
       <ToolFallbackContent>
         <ToolFallbackError status={status} />
         <ToolFallbackArgs

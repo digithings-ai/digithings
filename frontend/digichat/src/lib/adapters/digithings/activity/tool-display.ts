@@ -1,4 +1,4 @@
-/** Exact MCP / backend tool ids for tool-row titles. Do not humanize. */
+/** Display labels for tool rows. Tool ids stay exact in toolName. */
 
 export function searchMethodFromArgs(
   input?: Record<string, unknown>,
@@ -14,11 +14,28 @@ export function searchMethodFromArgs(
   return "semantic";
 }
 
+function humanize(toolName: string): string {
+  return toolName
+    .replace(/^digivault_/, "digivault ")
+    .replace(/^digisearch_/, "digisearch ")
+    .replace(/_/g, " ")
+    .trim();
+}
+
 export function toolRowTitle(
   toolName: string,
-  _input?: Record<string, unknown>,
+  input?: Record<string, unknown>,
 ): string {
-  void _input;
   const name = toolName.trim();
-  return name || "tool";
+  if (!name) return "tool";
+  if (name === "digisearch" || name.startsWith("digisearch_")) {
+    if (name === "digisearch_fetch_all" || name === "digisearch_research") {
+      return humanize(name);
+    }
+    return `digisearch ${searchMethodFromArgs(input)}`;
+  }
+  if (name === "digivault_search_notes") return "digivault search notes";
+  if (name === "digivault_get_note") return "digivault get note";
+  if (name === "web_search") return "web search";
+  return humanize(name) || "tool";
 }

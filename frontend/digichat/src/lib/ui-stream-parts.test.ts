@@ -284,6 +284,7 @@ describe("writeStandardActivity", () => {
         label: "digisearch",
         toolName: "digisearch",
         query: "jwt",
+        toolInput: { query: "jwt", mode: "keyword" },
       },
       {
         operation: "retrieve",
@@ -318,11 +319,11 @@ describe("writeStandardActivity", () => {
     expect(types.lastIndexOf("reasoning-start")).toBeGreaterThan(types.indexOf("tool-output-available"));
     expect(chunks.find((c) => c.type === "tool-input-start")).toMatchObject({
       toolName: "digisearch",
-      title: "digisearch",
+      title: "digisearch keyword",
     });
     expect(
       chunks.filter((c) => c.type === "tool-input-start").map((c) => c.title),
-    ).toEqual(["digisearch", "digivault_get_note"]);
+    ).toEqual(["digisearch keyword", "digivault_get_note"]);
   });
 
   it("keeps consecutive reasoning deltas on one id until a tool round", () => {

@@ -15,11 +15,14 @@ describe("searchMethodFromArgs", () => {
 });
 
 describe("toolRowTitle", () => {
-  it("keeps the exact backend tool id, including underscores", () => {
-    expect(toolRowTitle("digisearch")).toBe("digisearch");
-    expect(toolRowTitle("digisearch", { mode: "keyword" })).toBe("digisearch");
-    expect(toolRowTitle("digivault_get_note")).toBe("digivault_get_note");
-    expect(toolRowTitle("digivault_search_notes")).toBe("digivault_search_notes");
-    expect(toolRowTitle("web_search")).toBe("web_search");
+  it("names digisearch by retrieval method", () => {
+    expect(toolRowTitle("digisearch")).toBe("digisearch semantic");
+    expect(toolRowTitle("digisearch", { mode: "keyword" })).toBe("digisearch keyword");
+    expect(toolRowTitle("digisearch", { mode: "hybrid" })).toBe("digisearch hybrid");
+  });
+
+  it("humanizes vault tools like get-note vs search", () => {
+    expect(toolRowTitle("digivault_get_note")).toBe("digivault get note");
+    expect(toolRowTitle("digivault_search_notes")).toBe("digivault search notes");
   });
 });

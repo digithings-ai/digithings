@@ -8,9 +8,11 @@ import { useState, type FC } from "react";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toolRowTitle } from "@/lib/adapters/digithings/activity/tool-display";
 
 export const ToolFallback: FC<ToolCallMessagePartProps> = ({
   toolName,
+  args,
   argsText,
   result,
   status,
@@ -18,6 +20,7 @@ export const ToolFallback: FC<ToolCallMessagePartProps> = ({
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const running = status?.type === "running";
+  const title = toolRowTitle(toolName, args);
   const resultText =
     result === undefined
       ? null
@@ -31,7 +34,7 @@ export const ToolFallback: FC<ToolCallMessagePartProps> = ({
         <CheckIcon className="size-3.5 shrink-0 opacity-70" aria-hidden />
         <p className="text-xs">
           {running ? "Running tool: " : isError ? "Tool failed: " : "Used tool: "}
-          <b>{toolName}</b>
+          <b>{title}</b>
         </p>
         <div className="flex-grow" />
         <Button
