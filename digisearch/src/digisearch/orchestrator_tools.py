@@ -33,12 +33,14 @@ class OpenAIToolDict(TypedDict):
 TOOL_DIGISEARCH = "digisearch"
 TOOL_DIGISEARCH_FETCH_ALL = "digisearch_fetch_all"
 TOOL_DIGISEARCH_RESEARCH_DELEGATE = "digisearch_research_delegate"
+TOOL_WEB_SEARCH = "web_search"
 
 ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
     {
         TOOL_DIGISEARCH,
         TOOL_DIGISEARCH_FETCH_ALL,
         TOOL_DIGISEARCH_RESEARCH_DELEGATE,
+        TOOL_WEB_SEARCH,
     }
 )
 
@@ -313,6 +315,42 @@ def build_digisearch_research_delegate_tool() -> OpenAIToolDict:
     }
 
 
+def build_web_search_tool() -> OpenAIToolDict:
+    """Hub connector: public web search (maps to ``POST /v1/web_search``)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": TOOL_WEB_SEARCH,
+            "description": (
+                "Search the public web (first-party tool). "
+                "Returns current web results with fetched content snippets "
+                "for grounding answers in fresh information."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Web search query"},
+                    "include_domains": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Only return hits under these domains.",
+                    },
+                    "exclude_domains": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Drop hits under these domains.",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Hits to return (default 4, max 10).",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+
 def build_orchestrator_tool_manifest(
     index_config: dict[str, Any] | None = None,
     *,
@@ -320,7 +358,11 @@ def build_orchestrator_tool_manifest(
 ) -> list[OpenAIToolDict]:
     """Return OpenAI tool dicts for the orchestrator surface."""
     ic = index_config or {}
-    tools: list[OpenAIToolDict] = [build_search_tool(ic), build_fetch_all_tool(ic)]
+    tools: list[OpenAIToolDict] = [
+        build_search_tool(ic),
+        build_fetch_all_tool(ic),
+        build_web_search_tool(),
+    ]
     if include_research_delegate:
         tools.append(build_digisearch_research_delegate_tool())
     return tools

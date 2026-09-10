@@ -56,6 +56,19 @@ digigraph reads `DIGI_LLM_MODE` and picks the default model from `config/model_m
    - Restart the stack (`docker compose up -d`) so LiteLLM and digigraph reload config.  
    - No code change is required for new models; only config and (if needed) this doc.
 
+## Grounding models (web search synthesis fallback)
+
+`config/digiquant_models.yaml` pins cheap-only `web_search_models` per tier
+(primary `google/gemini-3.1-flash-lite`, alt `deepseek/deepseek-v4-flash`).
+digigraph `get_grounding_model()` selects the synthesis model. These pins serve
+only the read-only synthesis fallback: the first-party digisearch `web_search`
+tool (searxng sidecar with ddgs fallback, digifetch fetch + extract enrichment)
+runs first in both the digigraph `web_search` handler and the digiquant research
+grounding pre-pass, so synthesis traffic — and its cost — drops as tool coverage
+lands. No sonar / `:online` pins: those are not on the house catalog and fail
+closed. Monitor the fallback rate alongside per-engine 403/CAPTCHA rates to see
+the cost win.
+
 ## Future: router (Claw-style)
 
 Goal: route by task (e.g. simple extraction → test, coding → medium, deep reasoning → best) to reduce token usage. The lists in `model_modes.yaml` under `test` / `medium` / `best` are intended for that router; the current implementation uses only the default model per mode.

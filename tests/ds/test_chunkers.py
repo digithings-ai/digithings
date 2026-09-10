@@ -208,13 +208,15 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 48 for #402 (RetrievalBackend protocol + pgvector /
     LightRAG docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
     unchanged.
+    Re-recorded at count 53 for #3853 (web_search section + searxng sidecar
+    docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 48
+    assert len(chunks) == 53
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -227,19 +229,22 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5c44b3a1c81aaae0",
         "4fe2b5f10b829673",
         "e446cea04444b3a8",
-        "214d58d9d1d9d220",
-        "90a5a2d345e53200",
-        "24d4f4910f267916",
-        "8b3750ac2215c89e",
+        "d48e16a1b753dc3a",
+        "b5bf4787c10afc02",
+        "c2841a0bdfdb0744",
+        "e928c58a0587fecd",
+        "16584e006bbec980",
         "5c929ad2654944ce",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
         "bb49fa9bd8d8d792",
         "674f45e22421aa20",
-        "f4a0993928428a57",
+        "84432c3b73ee9cb1",
+        "825ccc24e9d8ad0d",
         "819ebadc3320ecc2",
-        "9febcd11d9848e18",
-        "8c403dc89d35fe82",
+        "10832c167583db90",
+        "3442051d624d3623",
+        "7178441828bcff9d",
         "d60ae7116f9e57ec",
         "ec4e79e9d9714f36",
         "e04f2c804b4baa0c",
@@ -254,10 +259,12 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "3e4e414a6f3c0c5e",
         "79e1479908a647a2",
         "5881d77c9811fa5d",
-        "217c7d169b90a8be",
-        "e98012ae08e70074",
+        "a063d09664500f97",
+        "50b42145065d7d4e",
+        "d7f9e4835c9ff55e",
         "9496728548f7cd2a",
-        "11a2313f67dd5137",
+        "3132efab1e5ed61e",
+        "aef71ba4fa072289",
         "a0c3eeac2a656b2f",
         "44050a77e280c022",
         "79ae674b8661ea64",

@@ -61,6 +61,7 @@ __all__ = [
     "run_tools",
     "web_search",
     "openrouter_web_search",
+    "digifetch_web_search",
     "x_search",
 ]
 
@@ -324,6 +325,36 @@ def openrouter_web_search(
     del allowed_domains, max_results, engine
     with _logical_call_scope(CallPurpose.WEB_GROUNDING, NoArtifactReason.CONSUMED_INLINE):
         return _ground_via_completion(model, query, usage_kind="web_search")
+
+
+def digifetch_web_search(
+    model: str,
+    query: str,
+    *,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+    max_results: int = 8,
+) -> tuple[str, list[str]] | None:
+    """digifetch-backed web grounding honoring domain params (#3853).
+
+    Synthesis grounding has no vendor search params, so domain hints are folded
+    into the query text (see ``web_grounding.fetch_web_grounding``). Runs under
+    ``CallPurpose.WEB_SEARCH`` (tool path); the ``web_search`` /
+    ``openrouter_web_search`` rewrite path stays on ``CallPurpose.WEB_GROUNDING``.
+    Both report ``usage_kind="web_search"``.
+    """
+    hints: list[str] = []
+    inc = [str(d).strip() for d in (include_domains or []) if str(d).strip()]
+    if inc:
+        hints.append("prefer sources under these domains: " + ", ".join(inc))
+    exc = [str(d).strip() for d in (exclude_domains or []) if str(d).strip()]
+    if exc:
+        hints.append("exclude sources under these domains: " + ", ".join(exc))
+    effective = query
+    if hints:
+        effective = f"{query} ({'; '.join(hints)}; up to {max_results} sources)"
+    with _logical_call_scope(CallPurpose.WEB_SEARCH, NoArtifactReason.CONSUMED_INLINE):
+        return _ground_via_completion(model, effective, usage_kind="web_search")
 
 
 def x_search(
