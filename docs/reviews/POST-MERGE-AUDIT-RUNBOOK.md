@@ -37,8 +37,8 @@ make test-unit && make test-baseline
 make doc-check && python3 scripts/agents_init.py --check
 ruff check . && ruff format --check .
 make score
-cd frontend/digichat && npm run lint && npm run test && npm run build
-cd frontend/olympus && npm run lint && npm run test && npm run build
+cd cloudflare/digichat && npm run lint && npm run test && npm run build
+cd cloudflare/olympus && npm run lint && npm run test && npm run build
 ```
 
 Optional stack: `make up && make test-e2e` or green `e2e.yml` on `develop`.

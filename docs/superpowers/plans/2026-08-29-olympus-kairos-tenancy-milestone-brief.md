@@ -55,8 +55,8 @@ Vision docs historically used **Kairos** for two related ideas:
 | Profile schemas | `digiquant/profiles/` | `InvestmentProfile` + `AssetPreferences` (Pydantic v2) |
 | ProfileConfig DB | `olympus_profile_config` (mig 075), `profile_config.py` | **Landed** (#2609 Track B) — house + overlay pins; not yet multi-user auth |
 | Research corpus | `olympus/research_corpus.py` + related migs | Shared-corpus plumbing in progress on Track B |
-| Olympus dashboard | `frontend/olympus` | Brief, Pipeline, Portfolio (Holdings/Theses/Tearsheet/Ledger/Attribution), House (Corpus\|Book\|Profile read-only), Settings (ops chrome), Library, Why, twelve-x |
-| Access gate today | `frontend/olympus/AUTH.md` | **Cloudflare Access** email allow-list on `/olympus/*` — **not** per-user Supabase Auth + RLS |
+| Olympus dashboard | `cloudflare/olympus` | Brief, Pipeline, Portfolio (Holdings/Theses/Tearsheet/Ledger/Attribution), House (Corpus\|Book\|Profile read-only), Settings (ops chrome), Library, Why, twelve-x |
+| Access gate today | `cloudflare/olympus/AUTH.md` | **Cloudflare Access** email allow-list on `/olympus/*` — **not** per-user Supabase Auth + RLS |
 | Data exposure | Static export + anon RLS `USING (true)` on product tables | Anyone who passes Access (or has the URL before Access) can read the full house corpus + book |
 | Settings scope | `docs/superpowers/plans/2026-06-24-olympus-settings.md` | Explicitly **out of scope:** login, multi-user, notification prefs, API keys |
 | Wave 3 tenancy spec | `MIGRATION-ROADMAP-DIGITHINGS.md` P2–P8 | Full design: workspaces, RLS, OAuth, Stripe, BYOK, jobs — **not started as product** |
@@ -295,7 +295,7 @@ Each issue should cite this brief + the vision brief + `MIGRATION-ROADMAP-DIGITH
 - [Olympus pipeline metaplan](2026-08-06-olympus-pipeline-metaplan.md) — Progress / Kairos groundwork strip
 - [Wave 3 migration roadmap](../../../digiquant/src/digiquant/research/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md)
 - [docs/vision/dashboard.md](../../vision/dashboard.md), [docs/vision/digiquant.md](../../vision/digiquant.md)
-- [frontend/dashboard/AUTH.md](../../../frontend/dashboard/AUTH.md), [frontend/dashboard/README.md](../../../frontend/dashboard/README.md)
+- [cloudflare/dashboard/AUTH.md](../../../cloudflare/dashboard/AUTH.md), [cloudflare/dashboard/README.md](../../../cloudflare/dashboard/README.md)
 - [digiquant/docs/profiles/README.md](../../../digiquant/docs/profiles/README.md)
 - Broker stubs: `digiquant/src/digiquant/brokers/`
 

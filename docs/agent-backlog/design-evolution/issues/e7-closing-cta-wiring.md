@@ -1,10 +1,10 @@
 ## Goal
 
-Wire **`ClosingCtaBand`** (E2) on both **digithings.ai** and **digiquant.io** — final conversion section before footer with literal CTAs ([COPY_GUIDE.md §6–10](../../../../frontend/digiweb/design/COPY_GUIDE.md)).
+Wire **`ClosingCtaBand`** (E2) on both **digithings.ai** and **digiquant.io** — final conversion section before footer with literal CTAs ([COPY_GUIDE.md §6–10](../../../../cloudflare/digiweb/design/COPY_GUIDE.md)).
 
 ## Component
 
-- [x] `frontend/digithings-web/`, `frontend/digiquant-web/`
+- [x] `cloudflare/digithings-web/`, `cloudflare/digiquant-web/`
 
 ## Acceptance Criteria
 
@@ -18,15 +18,15 @@ Wire **`ClosingCtaBand`** (E2) on both **digithings.ai** and **digiquant.io** �
 ## Test Requirements
 
 ```bash
-cd frontend/digithings-web && npm run build
-cd frontend/digiquant-web && npm run build
+cd cloudflare/digithings-web && npm run build
+cd cloudflare/digiquant-web && npm run build
 ```
 
 Manual: scroll to footer — closing CTA visible on both sites.
 
 ## Documentation to Update
 
-- [ ] `frontend/digiweb/design/EVOLUTION.md` — note Phase E wiring
+- [ ] `cloudflare/digiweb/design/EVOLUTION.md` — note Phase E wiring
 
 ## Out of Scope
 

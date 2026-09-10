@@ -25,7 +25,7 @@ treating its half as done.)
 ``DIGI_TENANT_CORPUS_MAP`` is the same env var digigraph's own
 ``corpus_routing.py`` already reads (mapping ``tenant_slug`` to
 ``vaultPathPrefix``/``digisearchIndex``), already deployed today for the
-digithings/occ split (see ``frontend/digithings-stack-cloudflare/wrangler.toml``).
+digithings/occ split (see ``cloudflare/digithings-stack-cloudflare/wrangler.toml``).
 It is parsed independently here rather than imported from the digigraph
 package, so digivault stays installable and runnable on its own — no service
 in this repo imports another service's package as a runtime dependency.

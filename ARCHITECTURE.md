@@ -406,7 +406,7 @@ make up-heartbeat
 make stack-local          # runs scripts/run_stack_local.sh
 
 # Start digichat UI with hot reload (separate terminal)
-make digichat-dev         # cd frontend/digichat && npm run dev → http://127.0.0.1:3000
+make digichat-dev         # cd cloudflare/digichat && npm run dev → http://127.0.0.1:3000
 ```
 
 Requires Python 3.12+ virtual environment with all packages installed editable:
@@ -545,7 +545,7 @@ Each service maintains its own detailed architecture document. The root `ARCHITE
 | digibase | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
 | digiclaw | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
 | digikey | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
-| digichat | [frontend/digichat/ARCHITECTURE.md](frontend/digichat/ARCHITECTURE.md) |
+| digichat | [cloudflare/digichat/ARCHITECTURE.md](cloudflare/digichat/ARCHITECTURE.md) |
 | Frontend umbrella (ADR-0009) | [docs/adr/0009-frontend-umbrella.md](docs/adr/0009-frontend-umbrella.md) |
 | Local full stack setup | [docs/LOCAL_STACK.md](docs/LOCAL_STACK.md) |
 | LLM model configuration | [config/MODELS.md](config/MODELS.md) |

@@ -6,7 +6,7 @@
 
 **Date:** 2026-09-01
 **Source:** Operator walk of the olympus dashboard pipeline for **2026-08-31**, plus
-code investigation of Atlas A0–A4, Hermes H1–H9, and `frontend/dashboard` pipeline
+code investigation of Atlas A0–A4, Hermes H1–H9, and `cloudflare/dashboard` pipeline
 chrome.
 **Status:** Shipped on `develop` (WP-A–I, 2026-09-01). WP-J parked until the
 operator specifies roster width. Historical plan — not an open backlog.
@@ -26,7 +26,7 @@ scorecard) or collapsed (Decision/Commit). Digest subsection agents reuse the
 existing sector-swarm fan-out pattern — not a new orchestration framework.
 
 **Tech stack:** LangGraph phases in `digiquant/src/digiquant/olympus/`, Pydantic v2
-payloads, Supabase `documents`, Next.js dashboard in `frontend/dashboard/`.
+payloads, Supabase `documents`, Next.js dashboard in `cloudflare/dashboard/`.
 
 ## Global constraints
 
@@ -35,9 +35,9 @@ payloads, Supabase `documents`, Next.js dashboard in `frontend/dashboard/`.
 - H7 still emits **no weights**. H8 remains the only sizer. H9 remains the only booker.
 - No live-trading / `digiquant/brokers/` changes.
 - No `digikey/` changes.
-- Task PRs into `develop` for `frontend/dashboard` and `docs/`; into `module/digiquant`
+- Task PRs into `develop` for `cloudflare/dashboard` and `docs/`; into `module/digiquant`
   (after a current-base check) for Olympus Python.
-- ruff line length 100; dashboard tests via `cd frontend/dashboard && npm run test`.
+- ruff line length 100; dashboard tests via `cd cloudflare/dashboard && npm run test`.
 - Human-readable artifacts are **markdown reports or dedicated views**, not JSON
   pretty-prints of structured-output slots.
 
@@ -57,7 +57,7 @@ If a step has no inspectable input or output, it is not a node.
 
 ### Pipeline chrome is a flowchart of labels
 
-`frontend/dashboard/lib/pipeline-topology.ts` defines six stages. Several
+`cloudflare/dashboard/lib/pipeline-topology.ts` defines six stages. Several
 sub-steps are `stateOnly: true` (preflight, consolidate, thesis, screener): the
 backend runs them and **never publishes a `documents` row**. Clicking the stage
 card or those leaves opens `PipelineNodeDetail` with `pipelineNodeExplanation`
@@ -79,7 +79,7 @@ Atlas segments emit `SegmentReport` (`digiquant/src/digiquant/olympus/atlas/segm
 templates **and** “populate the structured fields”; strict structured output wins.
 
 The dashboard reconstructs markdown in `renderSegmentReportMarkdown`
-(`frontend/dashboard/lib/render-pipeline-payloads.ts`):
+(`cloudflare/dashboard/lib/render-pipeline-payloads.ts`):
 
 1. Bias + headline
 2. Material findings as bullets
@@ -225,8 +225,8 @@ that note.** Default: leave H5 width as-is.
 
 | Area | Paths |
 |---|---|
-| Pipeline graph / expand / sidebar | `frontend/dashboard/lib/pipeline-topology.ts`, `pipeline-layout.ts`, `pipeline-links.ts`, `pipeline-topology-status.ts`, `components/pipeline/PipelineCanvas.tsx`, `PipelineNodeDetail.tsx`, `PipelineNode.tsx` |
-| Research/digest markdown dump | `frontend/dashboard/lib/render-pipeline-payloads.ts`, `components/library/LibraryDocumentBody.tsx` |
+| Pipeline graph / expand / sidebar | `cloudflare/dashboard/lib/pipeline-topology.ts`, `pipeline-layout.ts`, `pipeline-links.ts`, `pipeline-topology-status.ts`, `components/pipeline/PipelineCanvas.tsx`, `PipelineNodeDetail.tsx`, `PipelineNode.tsx` |
+| Research/digest markdown dump | `cloudflare/dashboard/lib/render-pipeline-payloads.ts`, `components/library/LibraryDocumentBody.tsx` |
 | Segment schema + skills | `digiquant/src/digiquant/olympus/atlas/segments.py`, `atlas/skills/**`, `atlas/phases/phase7_synthesis.py` |
 | Scorecard | `atlas/phases/phase5_equities.py`, topology `scorecard` leaf, digest/PM consumers of `sector-scorecard` |
 | Inputs / bias row persist | `atlas/phases/preflight.py`, `phase6_consolidate.py`, `publish_phase.py` |
@@ -235,7 +235,7 @@ that note.** Default: leave H5 width as-is.
 | H7 view + confidence | `hermes/models/pm_direction.py`, `hermes/skills/pm-direction/*`, **new** `components/library/PmDirectionDocumentView.tsx` |
 | H8 confidence | `hermes/phases/phase7e_risk_sizing.py`, `hermes/sizing.py` |
 | Beliefs cadence | `olympus/learning/beliefs_distillation.py` |
-| Tests | `frontend/dashboard/lib/*.test.ts`, `components/**/*.test.tsx`, `tests/dq/olympus/`, `tests/dq/atlas/`, `tests/dq/hermes/` |
+| Tests | `cloudflare/dashboard/lib/*.test.ts`, `components/**/*.test.tsx`, `tests/dq/olympus/`, `tests/dq/atlas/`, `tests/dq/hermes/` |
 
 ---
 
@@ -264,17 +264,17 @@ Original sequence and specs below. Shipped as independent PRs into `develop`
 **Issue title:** Pipeline nodes expand in place; sidebar only for documents
 
 **Files:**
-- Modify: `frontend/dashboard/lib/pipeline-layout.ts` (stack expanded sub-steps
+- Modify: `cloudflare/dashboard/lib/pipeline-layout.ts` (stack expanded sub-steps
   under the stage at `x = stage.x`, `y` increasing; fan-out branches under the
   parent sub-step, not `cursorX += NODE_W`)
-- Modify: `frontend/dashboard/components/pipeline/PipelineCanvas.tsx` (stage click
+- Modify: `cloudflare/dashboard/components/pipeline/PipelineCanvas.tsx` (stage click
   toggles `expandedStages`; do not call `onNodeActivate` for `kind === 'stage'`
   unless that stage has exactly one document child — see WP-D Decision collapse)
-- Modify: `frontend/dashboard/components/pipeline/PipelineNodeDetail.tsx` (if
+- Modify: `cloudflare/dashboard/components/pipeline/PipelineNodeDetail.tsx` (if
   `!documentKey`, render nothing / close; delete the “Pipeline guide” empty state)
-- Modify: `frontend/dashboard/lib/pipeline-topology.ts` (drop `behavior: 'Stage
+- Modify: `cloudflare/dashboard/lib/pipeline-topology.ts` (drop `behavior: 'Stage
   overview'` as a user-facing path)
-- Test: `frontend/dashboard/lib/pipeline-layout.test.ts`,
+- Test: `cloudflare/dashboard/lib/pipeline-layout.test.ts`,
   `components/pipeline/PipelineCanvas.test.tsx`,
   `components/pipeline/PipelineNodeDetail.test.tsx`
 
@@ -558,7 +558,7 @@ Do not start WP-C and WP-E in the same PR. Do not start WP-H before WP-G.
 ## Execution record
 
 First slice was WP-A (#3397): layout tests for expanded research sub-steps
-sharing stage `x` and stacking in `y`; `npm run test` in `frontend/dashboard`.
+sharing stage `x` and stacking in `y`; `npm run test` in `cloudflare/dashboard`.
 WP-B followed as #3398. Remaining WPs C–I shipped as listed above. WP-J parked.
 
 ---

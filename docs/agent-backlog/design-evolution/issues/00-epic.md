@@ -1,6 +1,6 @@
 ## Goal
 
-Implement the frontend design evolution plan in [`frontend/digiweb/design/EVOLUTION.md`](https://github.com/digithings-ai/digithings/blob/develop/frontend/digiweb/design/EVOLUTION.md): borrow advanced UI/UX patterns from Graphite (scroll/motion), Cursor (bento, literal CTAs), and x.ai (mono infrastructure, flat dashboards) across **digithings.ai**, **digiquant.io**, **digichat**, and **Olympus/twelve-x** — without copying any reference site literally.
+Implement the frontend design evolution plan in [`cloudflare/digiweb/design/EVOLUTION.md`](https://github.com/digithings-ai/digithings/blob/develop/cloudflare/digiweb/design/EVOLUTION.md): borrow advanced UI/UX patterns from Graphite (scroll/motion), Cursor (bento, literal CTAs), and x.ai (mono infrastructure, flat dashboards) across **digithings.ai**, **digiquant.io**, **digichat**, and **Olympus/twelve-x** — without copying any reference site literally.
 
 **Blend:** Cursor page map · Graphite scroll craft · xAI mono on dashboards · our mesh/grain/module accents.
 
@@ -12,7 +12,7 @@ Full index: [`docs/agent-backlog/design-evolution/INDEX.md`](https://github.com/
 - [ ] #1201 — Motion & layout tokens
 - [ ] #1219 — Typography README (Geist, not Inter)
 
-### Phase B — Shared primitives (`frontend/digiweb/design/`)
+### Phase B — Shared primitives (`cloudflare/digiweb/design/`)
 - [ ] #1202 — ProductFrame
 - [ ] #1203 — BentoGrid
 - [ ] #1204 — TrustStrip + reveal-up
@@ -54,15 +54,15 @@ Full index: [`docs/agent-backlog/design-evolution/INDEX.md`](https://github.com/
 ## Acceptance Criteria
 
 - [x] All child issues filed and linked above
-- [ ] `frontend/digiweb/design/EVOLUTION.md` phase checkboxes updated as children complete
+- [ ] `cloudflare/digiweb/design/EVOLUTION.md` phase checkboxes updated as children complete
 - [x] `docs/agent-backlog/INDEX.md` includes a "Design evolution" theme row
 
 ## Related
 
 - Parent: #235 (shared design language epic)
 - Also: #1195 (hoist landing primitives), #240 (digichat tokens)
-- Strategy: [`frontend/digiweb/design/EVOLUTION.md`](https://github.com/digithings-ai/digithings/blob/develop/frontend/digiweb/design/EVOLUTION.md)
-- Scans: [`frontend/digiweb/design/references/scans/`](https://github.com/digithings-ai/digithings/blob/develop/frontend/digiweb/design/references/scans/INDEX.md)
+- Strategy: [`cloudflare/digiweb/design/EVOLUTION.md`](https://github.com/digithings-ai/digithings/blob/develop/cloudflare/digiweb/design/EVOLUTION.md)
+- Scans: [`cloudflare/digiweb/design/references/scans/`](https://github.com/digithings-ai/digithings/blob/develop/cloudflare/digiweb/design/references/scans/INDEX.md)
 
 ## Out of Scope
 

@@ -194,8 +194,8 @@ assert_allowed "cat > /tmp/scratch.txt" \
   "cat > /tmp/scratch.txt"
 
 # live/ outside digiquant is not a trading surface (design screenshots — #1399)
-assert_allowed "cat > frontend/design/references/mine/live/shot.jpg" \
-  "cat > frontend/design/references/mine/live/shot.jpg"
+assert_allowed "cat > cloudflare/design/references/mine/live/shot.jpg" \
+  "cat > cloudflare/design/references/mine/live/shot.jpg"
 
 # Read from protected path (no write)
 assert_allowed "cat .github/workflows/ci.yml | grep name" \

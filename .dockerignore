@@ -18,8 +18,8 @@ openspec
 tests
 scripts
 agents
-frontend/digithings
-frontend/digiquant
+cloudflare/digithings
+cloudflare/digiquant
 **/*.log
 .env
 .env.*

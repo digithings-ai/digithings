@@ -100,7 +100,7 @@ cutover (§6).
 Use only when the workflow cannot run (emergency) or for a staging clone.
 
 ```bash
-# Link CLI to core (project ref from frontend/dashboard/lib/database.types.ts)
+# Link CLI to core (project ref from cloudflare/dashboard/lib/database.types.ts)
 supabase link --project-ref rwagjbkvxkdwqmouagad
 
 # Option A — Supabase CLI (applies pending files the CLI tracks; still prefer
@@ -238,12 +238,12 @@ Behavior: classic anon client; Cloudflare Access may still gate `/dashboard/*`.
 | (same URL + anon key) | |
 
 Then **Retry deployment** / push to `main` so `scripts/build-digiquant.sh`
-rebuilds `frontend/dashboard` with the flag inlined (static export).
+rebuilds `cloudflare/dashboard` with the flag inlined (static export).
 
 Local verify:
 
 ```bash
-cd frontend/dashboard
+cd cloudflare/dashboard
 NEXT_PUBLIC_DASHBOARD_AUTH=1 npm run build
 # out/ must still be static-export clean
 ```
@@ -325,7 +325,7 @@ cutover PR merged/deployed → **then** remove Access.
 
 Cutover SQL revokes base `daily_snapshots` SELECT from anon/authenticated and
 exposes research via `public_daily_research`. Inventory of reads that break
-until the dashboard switches (file: `frontend/dashboard/lib/`):
+until the dashboard switches (file: `cloudflare/dashboard/lib/`):
 
 | Call site | Current read | Cutover change |
 |-----------|--------------|----------------|
@@ -428,5 +428,5 @@ verify anon **and** free JWT see zero weights/NAV → ship frontend
 
 - Staged SQL:
   [`digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql`](../../../digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql)
-- T1 cutover notes: [`frontend/dashboard/AUTH.md`](../../../frontend/dashboard/AUTH.md)
+- T1 cutover notes: [`cloudflare/dashboard/AUTH.md`](../../../cloudflare/dashboard/AUTH.md)
 - db-migrate mechanics: [`digiquant/supabase/README.md`](../../../digiquant/supabase/README.md)

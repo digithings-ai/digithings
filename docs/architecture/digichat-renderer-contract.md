@@ -3,7 +3,7 @@
 **Status:** Living architecture note (2026-09-05)
 **Related:** [ADR-0028](../adr/0028-digichat-web-foundation-and-opencode-distribution.md),
 [digichat modular frontend](digichat-modular-frontend.md),
-[`frontend/digichat/ARCHITECTURE.md`](../../frontend/digichat/ARCHITECTURE.md),
+[`cloudflare/digichat/ARCHITECTURE.md`](../../cloudflare/digichat/ARCHITECTURE.md),
 implementation [#3626](https://github.com/digithings-ai/digithings/issues/3626)
 (**digichat 2.0** — do not merge to `develop` until the 2.0 cut)
 

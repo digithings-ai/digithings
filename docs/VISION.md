@@ -27,7 +27,7 @@ Two public domains, plus a developer-tooling product line.
 
 ### `digiquant.io` — financial AI hub
 - **digiquant product** — algorithmic strategy generation, backtesting, optimization, broker connections, deployment.
-- **dashboard** — the human-facing dashboard (`frontend/dashboard`) for digiquant's finance sub-graph trio. research now lives inside `digiquant` as `digiquant.dashboard` (see ADR-0014, ADR-0015); the three sub-graphs are:
+- **dashboard** — the human-facing dashboard (`cloudflare/dashboard`) for digiquant's finance sub-graph trio. research now lives inside `digiquant` as `digiquant.dashboard` (see ADR-0014, ADR-0015); the three sub-graphs are:
   - **research** — high-level fundamental/research engine; runs daily batch research, structured outputs, DB-persisted.
   - **portfolio** — portfolio deliberation (bull/bear theses, risk debate) with a **human approval gate** before any execution.
   - **execution** — chat-based strategy development; a quant researcher's interactive strategy workbench inside digichat.
@@ -86,7 +86,7 @@ See **ADR-0001: digithings Project Spec** for the formal definition and **ADR-00
                                   └─────────────────────┘
 
     digiquant.io ────▶  digiquant product UI
-       dashboard    ────▶  research + portfolio + execution dashboard (frontend/dashboard)
+       dashboard    ────▶  research + portfolio + execution dashboard (cloudflare/dashboard)
                           └─▶ digigraph ──▶ digisearch / digiquant (execution, human-gated)
 
     projects/client-pilot ──▶  digigraph + digisearch (no digiquant)

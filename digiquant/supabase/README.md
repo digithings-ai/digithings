@@ -351,7 +351,7 @@ event per upserted row**, not one message per run.
 
 **Live quotes** — subscribe to Realtime `postgres_changes` on `public.prices_live` with the
 anon client. This is the live shape from
-[`frontend/digiquant-web/lib/live/useLivePrices.ts`](../../frontend/digiquant-web/lib/live/useLivePrices.ts),
+[`cloudflare/digiquant-web/lib/live/useLivePrices.ts`](../../cloudflare/digiquant-web/lib/live/useLivePrices.ts),
 which is the reference implementation; read the two warnings under it before adapting.
 
 ```ts

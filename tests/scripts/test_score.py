@@ -161,7 +161,7 @@ def test_scan_exempts_hardcoded_secret_in_test_fixtures() -> None:
 def test_scan_skips_score_py_and_design_fragments() -> None:
     for path in (
         "scripts/score.py",
-        "frontend/digiweb/design/terminal/highlight-dom.js",
+        "cloudflare/digiweb/design/terminal/highlight-dom.js",
         "package-lock.json",
     ):
         # Concatenate so this source line does not contain a call-shaped token.

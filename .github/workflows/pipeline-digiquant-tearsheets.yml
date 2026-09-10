@@ -1,4 +1,4 @@
-# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
+# Production clock: Cloudflare Worker digithings-cron (cloudflare/digithings-cron). Schedule removed #3579.
 name: "Pipeline: digiquant tearsheets"
 
 # Daily Slapper + BTC-SDCA tearsheet regeneration for digiquant.io

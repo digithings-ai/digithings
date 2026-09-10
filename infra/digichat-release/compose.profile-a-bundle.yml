@@ -15,7 +15,7 @@
 #   # edit secrets + provider keys
 #   make digichat-profile-a-bundle-up
 #
-# Stack-only (no digichat UI) — see frontend/digithings-stack-cloudflare/README.md
+# Stack-only (no digichat UI) — see cloudflare/digithings-stack-cloudflare/README.md
 # (`docker build` / `docker run`).
 
 name: digichat-profile-a-bundle

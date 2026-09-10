@@ -4,7 +4,7 @@ The hosted market-data MCP server is a dedicated container built from
 ``digiquant/Dockerfile.mcp`` (FastMCP ``streamable-http`` on :8767 with the
 ``[research]``/``[mcp]`` extras — never the backtest engine), fronted by a
 second Cloudflare Container (``DigiQuantMcpContainer``) beside the Profile A
-stack in ``frontend/digithings-stack-cloudflare/``.
+stack in ``cloudflare/digithings-stack-cloudflare/``.
 
 RED premise (review finding 3): at creation these tests failed with
 ``FileNotFoundError`` (brief Step 2) because ``Dockerfile.mcp`` did not exist
@@ -25,9 +25,9 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCKERFILE = REPO_ROOT / "digiquant" / "Dockerfile.mcp"
-WRANGLER = REPO_ROOT / "frontend" / "digithings-stack-cloudflare" / "wrangler.toml"
-WORKER_INDEX = REPO_ROOT / "frontend" / "digithings-stack-cloudflare" / "src" / "index.ts"
-WORKER_PORTS = REPO_ROOT / "frontend" / "digithings-stack-cloudflare" / "src" / "ports.ts"
+WRANGLER = REPO_ROOT / "cloudflare" / "digithings-stack-cloudflare" / "wrangler.toml"
+WORKER_INDEX = REPO_ROOT / "cloudflare" / "digithings-stack-cloudflare" / "src" / "index.ts"
+WORKER_PORTS = REPO_ROOT / "cloudflare" / "digithings-stack-cloudflare" / "src" / "ports.ts"
 ARCHITECTURE = REPO_ROOT / "digiquant" / "ARCHITECTURE.md"
 
 #: Vars forwarded by DigiQuantMcpContainer.envVars only — never duplicated into
