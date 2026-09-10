@@ -288,3 +288,559 @@ def test_r2_per_ticker_error_entry_serves_history_only_and_marks_stale(monkeypat
     assert [str(r["date"]) for r in live["rows"]] == dates
     assert [r["close"] for r in live["rows"]] == pytest.approx(closes)
     assert live["stale"] is True
+
+
+# ─── Task 7b: remaining bespoke readers → R2 seams ────────────────────────
+#
+# Each test drives one reader twice on as_of="2025-08-29": once against a
+# seeded FakeSupabaseClient (supabase backend) and once against fake R2
+# generations holding the SAME closes (r2 backend, exploding client proves no
+# Supabase market-table read happens). Dates must match; recomputed indicator
+# values within ±1e-9 (parquet float round-trip); stored closes/macro exact.
+# FAILS while the reader is Supabase-only (exploding client raises).
+
+from datetime import date as _dt_date  # noqa: E402
+from datetime import timedelta as _tdelta_mod  # noqa: E402
+
+from tests.fixtures.fake_supabase import FakeSupabaseClient  # noqa: E402
+
+_T7B_AS_OF = "2025-08-29"
+_T7B_RUN_DATE = _dt_date(2025, 8, 29)
+_T7B_TICKERS = ("SPY", "QQQ")
+_T7B_MACRO = ("DGS10", "VIXCLS")
+
+
+class _ExplodingMarketClient:
+    """Proves the R2 path never touches Supabase market tables."""
+
+    def table(self, name: str):  # score:allow untyped def — test fake mirrors client surface
+        raise AssertionError(f"Supabase market-table read after cutover: {name!r}")
+
+
+def _t7b_dates(n: int = 80) -> list[str]:
+    end = _dt_date.fromisoformat(_T7B_AS_OF)
+    return [(end - _tdelta_mod(days=n - 1 - i)).isoformat() for i in range(n)]
+
+
+def _t7b_closes(n: int = 80, base: float = 100.0) -> list[float]:
+    return [round(base + i * 0.37 + (i % 7) * 0.11, 2) for i in range(n)]
+
+
+def _t7b_price_payload(ticker: str, dates: list[str], closes: list[float]) -> tuple[bytes, str]:
+    frame = pl.DataFrame(
+        {
+            "date": dates,
+            "ticker": [ticker] * len(dates),
+            "open": closes,
+            "high": [c + 0.2 for c in closes],
+            "low": [c - 0.2 for c in closes],
+            "close": closes,
+            "volume": [1_000_000 + i * 1000 for i in range(len(dates))],
+        }
+    )
+    buf = io.BytesIO()
+    frame.write_parquet(buf)
+    payload = buf.getvalue()
+    return payload, hashlib.sha256(payload).hexdigest()
+
+
+def _t7b_indicator_rows(ticker: str, dates: list[str], closes: list[float]) -> list[dict]:
+    """Supabase-shaped stored technicals with compute_indicators values."""
+    from digiquant.data.prices.technicals import compute_indicators
+    from digiquant.research.data.queries import TECHNICAL_COLUMNS
+
+    payload, _ = _t7b_price_payload(ticker, dates, closes)
+    hist = pl.read_parquet(io.BytesIO(payload)).with_columns(pl.col("date").cast(pl.Date))
+    computed = compute_indicators(hist.rename({"date": "timestamp"})).to_dicts()
+    rows = []
+    for d, ind in zip(dates, computed):
+        row: dict = {"ticker": ticker, "date": d}
+        for col in (*TECHNICAL_COLUMNS, "hist_vol_21"):
+            if col == "date":
+                continue
+            val = ind.get(col)
+            row[col] = None if val is None else float(val)
+        rows.append(row)
+    return rows
+
+
+def _t7b_hist_rows(ticker: str, dates: list[str], closes: list[float]) -> list[dict]:
+    return [
+        {
+            "date": d,
+            "ticker": ticker,
+            "open": c,
+            "high": c + 0.2,
+            "low": c - 0.2,
+            "close": c,
+            "volume": 1_000_000 + i * 1000,
+        }
+        for i, (d, c) in enumerate(zip(dates, closes))
+    ]
+
+
+def _t7b_macro_rows() -> list[dict]:
+    dates = _t7b_dates(8)
+    rows = []
+    for sid, base in (("DGS10", 4.2), ("VIXCLS", 18.5)):
+        for i, d in enumerate(dates):
+            rows.append(
+                {
+                    "source": "fred",
+                    "series_id": sid,
+                    "obs_date": d,
+                    "value": round(base + i * 0.05, 3),
+                    "unit": "percent" if sid == "DGS10" else "index",
+                }
+            )
+    return rows
+
+
+def _t7b_supabase_client(
+    dates: list[str], closes_by_ticker: dict[str, list[float]]
+) -> FakeSupabaseClient:
+    hist: list[dict] = []
+    tech: list[dict] = []
+    for ticker, closes in closes_by_ticker.items():
+        hist.extend(_t7b_hist_rows(ticker, dates, closes))
+        tech.extend(_t7b_indicator_rows(ticker, dates, closes))
+    return FakeSupabaseClient(
+        canned_reads={
+            "price_history": hist,
+            "price_technicals": tech,
+            "macro_series_observations": _t7b_macro_rows(),
+        }
+    )
+
+
+def _t7b_r2_env(
+    monkeypatch: pytest.MonkeyPatch,
+    dates: list[str],
+    closes_by_ticker: dict[str, list[float]],
+) -> None:
+    from digiquant.data.prices.r2_history import macro_latest_pointer_key
+
+    pointer_map: dict[str, tuple[bytes, str]] = {}
+    datasets: dict[str, dict] = {}
+    for ticker, closes in closes_by_ticker.items():
+        payload, sha = _t7b_price_payload(ticker, dates, closes)
+        gen_key = f"market-data/price/{ticker}/{_T7B_AS_OF}.parquet"
+        pointer_map[gen_key] = (payload, sha)
+        datasets[ticker] = {
+            "object": gen_key,
+            "sha256": sha,
+            "rows": len(dates),
+            "as_of": _T7B_AS_OF,
+        }
+    for sid in _T7B_MACRO:
+        rows = sorted(
+            (r for r in _t7b_macro_rows() if r["series_id"] == sid),
+            key=lambda r: r["obs_date"],
+        )
+        payload, sha = _macro_payload(rows)
+        pointer = macro_latest_pointer_key("fred", sid)
+        pointer_map[pointer] = (payload, sha)
+        datasets[f"fred__{sid}"] = {"object": pointer, "sha256": sha, "rows": len(rows)}
+    manifest = {"version": 1, "as_of": _T7B_AS_OF, "datasets": datasets}
+    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
+    _r2_env(monkeypatch, _FakeR2Store(pointer_map), manifest)
+
+
+def _t7b_both(monkeypatch: pytest.MonkeyPatch):
+    """(supabase_client, ) with R2 fakes armed; caller sets the backend per drive."""
+    dates = _t7b_dates()
+    closes = {t: _t7b_closes(base=100.0 if t == "SPY" else 200.0) for t in _T7B_TICKERS}
+    sup = _t7b_supabase_client(dates, closes)
+    _t7b_r2_env(monkeypatch, dates, closes)
+    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "supabase")
+    return dates, closes, sup
+
+
+def _assert_close(got, want, path: str = "root") -> None:
+    if isinstance(want, dict):
+        assert isinstance(got, dict), path
+        assert set(got) == set(want), (path, set(got) ^ set(want))
+        for key in want:
+            _assert_close(got[key], want[key], f"{path}.{key}")
+    elif isinstance(want, (list, tuple)):
+        assert len(got) == len(want), (path, len(got), len(want))
+        for i, (g, w) in enumerate(zip(got, want)):
+            _assert_close(g, w, f"{path}[{i}]")
+    elif isinstance(want, float):
+        assert got == pytest.approx(want, nan_ok=True), (path, got, want)
+    else:
+        assert got == want, (path, got, want)
+
+
+def _use_supabase(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "supabase")
+
+
+def _use_r2(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
+
+
+def test_get_price_technicals_helper_r2_matches_supabase(monkeypatch):
+    from digiquant.research.data import queries as q
+
+    _, _, sup = _t7b_both(monkeypatch)
+    _use_supabase(monkeypatch)
+    want = q.get_price_technicals(client=sup, ticker="SPY", lookback=20, as_of=_T7B_RUN_DATE)
+    _use_r2(monkeypatch)
+    got = q.get_price_technicals(
+        client=_ExplodingMarketClient(), ticker="SPY", lookback=20, as_of=_T7B_RUN_DATE
+    )
+    assert [r["date"] for r in got["window"]] == [r["date"] for r in want["window"]]
+    # The shared fake ignores select() projections, so project the Supabase
+    # side through the helper's real TECHNICAL_COLUMNS select (production
+    # PostgREST returns exactly these keys).
+    want_window = [{k: r.get(k) for k in q.TECHNICAL_COLUMNS} for r in want["window"]]
+    _assert_close(got["window"], want_window)
+    _assert_close(got["latest"], {k: want["latest"].get(k) for k in q.TECHNICAL_COLUMNS})
+
+
+def test_get_macro_series_helper_r2_matches_supabase(monkeypatch):
+    from digiquant.research.data import queries as q
+
+    _, _, sup = _t7b_both(monkeypatch)
+    _use_supabase(monkeypatch)
+    want = q.get_macro_series(
+        client=sup, series_ids=list(_T7B_MACRO), lookback=6, as_of=_T7B_RUN_DATE
+    )
+    _use_r2(monkeypatch)
+    got = q.get_macro_series(
+        client=_ExplodingMarketClient(),
+        series_ids=list(_T7B_MACRO),
+        lookback=6,
+        as_of=_T7B_RUN_DATE,
+    )
+    # Same select-projection note as the technicals test: the helper's real
+    # select is series_id,obs_date,value,unit (the fake returns whole rows).
+    cols = ("series_id", "obs_date", "value", "unit")
+    want_proj = {
+        sid: {
+            "latest": {k: payload["latest"].get(k) for k in cols} if payload["latest"] else {},
+            "window": [{k: r.get(k) for k in cols} for r in payload["window"]],
+        }
+        for sid, payload in want.items()
+    }
+    _assert_close(got, want_proj)
+
+
+def test_get_market_context_r2_matches_supabase(monkeypatch):
+    # Pattern from the thin-wrapper parity tests, applied to the bulk reader:
+    # same as_of on both backends, identical dates, values within ±1e-9.
+    # FAILS while the reader is Supabase-only (no R2 path to drive).
+    from digiquant.research.data import queries as q
+
+    _, _, sup = _t7b_both(monkeypatch)
+    kwargs: dict = {
+        "tickers": list(_T7B_TICKERS),
+        "series_ids": list(_T7B_MACRO),
+        "run_date": _T7B_RUN_DATE,
+    }
+    _use_supabase(monkeypatch)
+    want = q.get_market_context(client=sup, **kwargs)
+    _use_r2(monkeypatch)
+    got = q.get_market_context(client=_ExplodingMarketClient(), **kwargs)
+    assert got["as_of"] == want["as_of"] == _T7B_AS_OF
+    assert sorted(got["price_technicals"]) == sorted(want["price_technicals"])
+    _assert_close(got["price_technicals"], want["price_technicals"])
+    _assert_close(got["macro_series"], want["macro_series"])
+
+
+def test_get_market_breadth_r2_matches_supabase(monkeypatch):
+    from digiquant.research.data import queries as q
+
+    _, _, sup = _t7b_both(monkeypatch)
+    _use_supabase(monkeypatch)
+    want = q.get_market_breadth(client=sup, run_date=_T7B_RUN_DATE)
+    _use_r2(monkeypatch)
+    got = q.get_market_breadth(client=_ExplodingMarketClient(), run_date=_T7B_RUN_DATE)
+    _assert_close(got, want)
+
+
+def test_sector_relative_strength_r2_matches_supabase(monkeypatch):
+    from digiquant.research.data import queries as q
+
+    _, _, sup = _t7b_both(monkeypatch)
+    kwargs: dict = {"etfs": ["QQQ"], "benchmark": "SPY", "lookback_days": 70}
+    _use_supabase(monkeypatch)
+    want = q.get_sector_relative_strength(client=sup, run_date=_T7B_RUN_DATE, **kwargs)
+    _use_r2(monkeypatch)
+    got = q.get_sector_relative_strength(
+        client=_ExplodingMarketClient(), run_date=_T7B_RUN_DATE, **kwargs
+    )
+    _assert_close(got, want)
+
+
+def test_etf_flows_proxy_r2_matches_supabase(monkeypatch):
+    from digiquant.research.data import queries as q
+
+    _, _, sup = _t7b_both(monkeypatch)
+    kwargs: dict = {"etfs": list(_T7B_TICKERS)}
+    _use_supabase(monkeypatch)
+    want = q.get_etf_flows_proxy(client=sup, run_date=_T7B_RUN_DATE, **kwargs)
+    _use_r2(monkeypatch)
+    got = q.get_etf_flows_proxy(client=_ExplodingMarketClient(), run_date=_T7B_RUN_DATE, **kwargs)
+    _assert_close(got, want)
+
+
+def test_return_correlations_r2_matches_supabase(monkeypatch):
+    from digiquant.research.data import queries as q
+
+    _, _, sup = _t7b_both(monkeypatch)
+    kwargs: dict = {"tickers": list(_T7B_TICKERS), "lookback_days": 70}
+    _use_supabase(monkeypatch)
+    want = q.get_return_correlations(client=sup, run_date=_T7B_RUN_DATE, **kwargs)
+    _use_r2(monkeypatch)
+    got = q.get_return_correlations(
+        client=_ExplodingMarketClient(), run_date=_T7B_RUN_DATE, **kwargs
+    )
+    assert want is not None and got is not None
+    assert got.sort(["a", "b"]).to_dicts() == pytest.approx(
+        want.sort(["a", "b"]).to_dicts(), nan_ok=True
+    )
+
+
+def test_query_price_deltas_r2_matches_supabase(monkeypatch):
+    from digiquant.research.supabase_io import query_price_deltas
+
+    _, _, sup = _t7b_both(monkeypatch)
+    _use_supabase(monkeypatch)
+    want = query_price_deltas(client=sup, tickers=tuple(_T7B_TICKERS), run_date=_T7B_RUN_DATE)
+    _use_r2(monkeypatch)
+    got = query_price_deltas(
+        client=_ExplodingMarketClient(), tickers=tuple(_T7B_TICKERS), run_date=_T7B_RUN_DATE
+    )
+    assert got == pytest.approx(want)
+
+
+def test_query_returns_window_r2_matches_supabase(monkeypatch):
+    from datetime import timedelta as _tdelta
+
+    from digiquant.research.supabase_io import query_returns_window
+
+    _, _, sup = _t7b_both(monkeypatch)
+    start = _T7B_RUN_DATE - _tdelta(days=30)
+    _use_supabase(monkeypatch)
+    want = query_returns_window(client=sup, ticker="SPY", start_date=start, holding_days=5)
+    _use_r2(monkeypatch)
+    got = query_returns_window(
+        client=_ExplodingMarketClient(), ticker="SPY", start_date=start, holding_days=5
+    )
+    assert want is not None and got is not None
+    assert got[0] == pytest.approx(want[0])
+    assert (got[1], got[2]) == (want[1], want[2])
+
+
+def test_interval_price_returns_r2_matches_supabase(monkeypatch):
+    from datetime import timedelta as _tdelta
+
+    from digiquant.portfolio.writers.commit_io import _interval_price_returns
+
+    _, _, sup = _t7b_both(monkeypatch)
+    kwargs: dict = {
+        "tickers": tuple(_T7B_TICKERS),
+        "start_date": _T7B_RUN_DATE - _tdelta(days=30),
+        "run_date": _T7B_RUN_DATE,
+    }
+    _use_supabase(monkeypatch)
+    want = _interval_price_returns(client=sup, **kwargs)
+    _use_r2(monkeypatch)
+    got = _interval_price_returns(client=_ExplodingMarketClient(), **kwargs)
+    assert got == pytest.approx(want)
+
+
+def test_last_closes_r2_matches_supabase(monkeypatch):
+    from digiquant.portfolio.writers.ledger_io import _last_closes
+
+    _, _, sup = _t7b_both(monkeypatch)
+    _use_supabase(monkeypatch)
+    want = _last_closes(client=sup, tickers=set(_T7B_TICKERS), run_date=_T7B_RUN_DATE)
+    _use_r2(monkeypatch)
+    got = _last_closes(
+        client=_ExplodingMarketClient(), tickers=set(_T7B_TICKERS), run_date=_T7B_RUN_DATE
+    )
+    assert got == want
+
+
+def test_fetch_session_close_r2_matches_supabase(monkeypatch):
+    from digiquant.research.forecast_outcomes import _fetch_session_close
+
+    _, _, sup = _t7b_both(monkeypatch)
+    _use_supabase(monkeypatch)
+    want = _fetch_session_close(client=sup, ticker="SPY", session=_T7B_RUN_DATE)
+    _use_r2(monkeypatch)
+    got = _fetch_session_close(client=_ExplodingMarketClient(), ticker="SPY", session=_T7B_RUN_DATE)
+    assert want is not None and got == want
+
+
+def test_price_for_symbol_r2_matches_supabase(monkeypatch):
+    from digiquant.portfolio.writers.opening_snapshot import _price_for_symbol
+
+    _, _, sup = _t7b_both(monkeypatch)
+    kwargs: dict = {"symbol": "SPY", "book_date": _T7B_RUN_DATE, "entry_price": None}
+    _use_supabase(monkeypatch)
+    want = _price_for_symbol(client=sup, **kwargs)
+    _use_r2(monkeypatch)
+    got = _price_for_symbol(client=_ExplodingMarketClient(), **kwargs)
+    assert want is not None and got == want
+
+
+def test_select_focus_tickers_r2_matches_supabase(monkeypatch):
+    from digiquant.portfolio.candidates import select_focus_tickers
+
+    dates, _, sup = _t7b_both(monkeypatch)
+    watchlist = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"]
+    _use_supabase(monkeypatch)
+    want = select_focus_tickers(
+        client=sup, watchlist=watchlist, run_date=_T7B_RUN_DATE, holdings=["SPY"]
+    )
+    _use_r2(monkeypatch)
+    got = select_focus_tickers(
+        client=_ExplodingMarketClient(),
+        watchlist=watchlist,
+        run_date=_T7B_RUN_DATE,
+        holdings=["SPY"],
+    )
+    assert got == want
+
+
+def test_load_ticker_risk_r2_matches_supabase(monkeypatch):
+    from digiquant.portfolio.phases.phase7e_risk_sizing import _load_ticker_risk
+
+    _, _, sup = _t7b_both(monkeypatch)
+    tickers = list(_T7B_TICKERS)
+    _use_supabase(monkeypatch)
+    want = _load_ticker_risk(sup, tickers, _T7B_RUN_DATE)
+    _use_r2(monkeypatch)
+    got = _load_ticker_risk(_ExplodingMarketClient(), tickers, _T7B_RUN_DATE)  # type: ignore[arg-type]
+    assert sorted(got) == sorted(want)
+    for ticker in tickers:
+        assert got[ticker].hist_vol_21 == pytest.approx(want[ticker].hist_vol_21, nan_ok=True)
+        assert got[ticker].atr_pct == pytest.approx(want[ticker].atr_pct, nan_ok=True)
+
+
+def test_freshness_probes_read_manifest_seal(monkeypatch):
+    from digiquant.research.supabase_io import (
+        query_macro_series_freshness,
+        query_price_technicals_freshness,
+    )
+
+    _, _, _ = _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    latest, count = query_price_technicals_freshness(client=_ExplodingMarketClient())  # type: ignore[arg-type]
+    assert latest == _T7B_RUN_DATE
+    assert count == len(_T7B_TICKERS)
+    assert (
+        query_macro_series_freshness(client=_ExplodingMarketClient())  # type: ignore[arg-type]
+        == _T7B_RUN_DATE
+    )
+
+
+def test_portfolio_materialize_benchmark_r2_matches_supabase(monkeypatch):
+    """Alpha tracks the R2 SPY closes under r2, the Supabase closes otherwise."""
+    from digiquant.dashboard.performance_returns import calculate_performance_returns
+    from digiquant.dashboard.tenancy import house_workspace_id
+    from digiquant.portfolio.portfolio_materialize import _upsert_portfolio_metrics
+
+    dates = _t7b_dates(25)
+    nav_rows = [
+        {
+            "workspace_id": str(house_workspace_id()),
+            "date": d,
+            "nav": round(100.0 + i * 0.4, 2),
+        }
+        for i, d in enumerate(dates)
+    ]
+    # Supabase SPY: flat (benchmark return 0). R2 SPY: trending (return > 0).
+    flat = [100.0] * len(dates)
+    trend = [round(100.0 + i * 0.5, 2) for i in range(len(dates))]
+    r2_dates, r2_closes = dates, {"SPY": trend}
+    _t7b_r2_env(monkeypatch, r2_dates, r2_closes)
+    sup_flat = _t7b_supabase_client(dates, {"SPY": flat})
+    sup_flat.canned_reads["nav_history"] = nav_rows
+
+    _use_supabase(monkeypatch)
+    _upsert_portfolio_metrics(client=sup_flat, run_date=_T7B_RUN_DATE)
+    sup_row = sup_flat.store["portfolio_metrics"][-1]
+
+    r2_client = FakeSupabaseClient(canned_reads={"nav_history": nav_rows})
+    _use_r2(monkeypatch)
+    _upsert_portfolio_metrics(client=r2_client, run_date=_T7B_RUN_DATE)
+    r2_row = r2_client.store["portfolio_metrics"][-1]
+
+    navs = [r["nav"] for r in nav_rows]
+    expect_sup = calculate_performance_returns(
+        nav_values=navs, benchmark_closes=flat, benchmark_ticker="SPY"
+    )
+    expect_r2 = calculate_performance_returns(
+        nav_values=navs, benchmark_closes=trend, benchmark_ticker="SPY"
+    )
+    assert sup_row["benchmark_return_pct"] == pytest.approx(expect_sup.benchmark_return_pct)
+    assert r2_row["benchmark_return_pct"] == pytest.approx(expect_r2.benchmark_return_pct)
+    assert r2_row["benchmark_return_pct"] != pytest.approx(sup_row["benchmark_return_pct"])
+
+
+def test_h9_symbol_history_r2_matches_supabase(monkeypatch):
+    from digiquant.portfolio.h9_cost_evidence import _load_symbol_history
+
+    _, _, sup = _t7b_both(monkeypatch)
+    kwargs: dict = {"symbol": "SPY", "as_of_session": _T7B_AS_OF, "lookback_days": 20}
+    _use_supabase(monkeypatch)
+    want = _load_symbol_history(client=sup, **kwargs)
+    _use_r2(monkeypatch)
+    got = _load_symbol_history(client=_ExplodingMarketClient(), **kwargs)  # type: ignore[arg-type]
+    assert got.height == want.height
+    assert got.sort("date").to_dicts() == pytest.approx(want.sort("date").to_dicts(), nan_ok=True)
+
+
+def test_h9_price_row_r2_matches_supabase(monkeypatch):
+    from digiquant.portfolio.h9_cost_evidence import _fetch_price_row
+
+    _, _, sup = _t7b_both(monkeypatch)
+    kwargs: dict = {"symbol": "SPY", "session_date": _T7B_AS_OF}
+    _use_supabase(monkeypatch)
+    want = _fetch_price_row(client=sup, **kwargs)
+    _use_r2(monkeypatch)
+    got = _fetch_price_row(client=_ExplodingMarketClient(), **kwargs)  # type: ignore[arg-type]
+    assert want is not None and got is not None
+    _assert_close(got, want)
+
+
+def test_dispatcher_matrix_rides_r2_backend(monkeypatch):
+    """Dispatcher re-verify (second cutover): every data tool serves R2 data.
+
+    Drives two representative tools through ``build_data_tool_dispatcher``
+    under r2 (exploding client proves no Supabase read) and diffs against the
+    direct-helper R2 output. All six tools share the same run_date-as-as_of
+    threading, so these two pin the matrix.
+    """
+    import json as _json
+
+    from digiquant.research.data import queries as q
+    from digiquant.research.data.tools import build_data_tool_dispatcher
+
+    _, _, _ = _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    dispatch = build_data_tool_dispatcher(
+        _ExplodingMarketClient(),
+        run_date=_T7B_RUN_DATE,  # type: ignore[arg-type]
+    )
+    macro_out = _json.loads(
+        dispatch("get_macro_series", {"series_ids": list(_T7B_MACRO), "lookback": 6})
+    )
+    macro_direct = q.get_macro_series(
+        client=_ExplodingMarketClient(),  # type: ignore[arg-type]
+        series_ids=list(_T7B_MACRO),
+        lookback=6,
+        as_of=_T7B_RUN_DATE,
+    )
+    _assert_close(macro_out, macro_direct)
+    breadth_out = _json.loads(dispatch("get_market_breadth", {}))
+    breadth_direct = q.get_market_breadth(
+        client=_ExplodingMarketClient(),
+        run_date=_T7B_RUN_DATE,  # type: ignore[arg-type]
+    )
+    _assert_close(breadth_out, breadth_direct)

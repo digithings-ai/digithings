@@ -41,6 +41,7 @@ from digiquant.dashboard.postgrest_timeout import (
     WRITE_TIMEOUT_SECONDS,
 )
 from digiquant.dashboard.tenancy import resolved_workspace_id
+from digiquant.research.data.queries import r2_backend_enabled
 from digiquant.research.state import Phase7DigestPayload, PriorContext, PublishedArtifact
 from digiquant.supabase_retry import run_with_supabase_retry
 
@@ -817,7 +818,14 @@ def query_price_technicals_freshness(
     2. Rows from the last ``recent_days`` days for the distinct-ticker count.
        A 7-day window matches the orchestrator skill's "within 3 calendar
        days" staleness rule with headroom for weekend / holiday gaps.
+
+    Under ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` both answers come from the R2
+    manifest seal (:func:`r2_manifest_seal` — no Supabase read at all).
     """
+    from digiquant.research.data.queries import r2_manifest_seal
+
+    if r2_backend_enabled():
+        return r2_manifest_seal()
     from datetime import timedelta
 
     latest_resp = (
@@ -873,6 +881,10 @@ def query_price_deltas(
     - ``lookback_days`` floors the date range to a small window; requests are
       batched by ticker so a full window for every ticker fits under PostgREST's
       row cap.
+
+    Under ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` the window comes from the
+    sealed R2 generations (:func:`r2_close_rows`); the grouping math below is
+    backend-independent.
     """
     from datetime import timedelta
 
@@ -880,19 +892,32 @@ def query_price_deltas(
         return {}
 
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
-    ordered = sorted(tickers)
-    batch = _price_delta_ticker_batch(lookback_days)
-    rows: list[PriceHistoryRow] = []
-    for start in range(0, len(ordered), batch):
-        resp = (
-            client.table("price_history")
-            .select("date, ticker, close")
-            .in_("ticker", ordered[start : start + batch])
-            .gte("date", floor)
-            .lt("date", run_date.isoformat())
-            .execute()
+    if r2_backend_enabled():
+        from digiquant.research.data.queries import r2_close_rows
+
+        # Strictly-before-run_date mirrors the Supabase ``.lt("date", run_date)``
+        # (the seam's ``until`` is inclusive).
+        rows: list[PriceHistoryRow] = list(
+            r2_close_rows(
+                tickers=list(tickers),
+                since=floor,
+                until=run_date - timedelta(days=1),
+            )
         )
-        rows.extend(list(getattr(resp, "data", None) or []))
+    else:
+        ordered = sorted(tickers)
+        batch = _price_delta_ticker_batch(lookback_days)
+        rows = []
+        for start in range(0, len(ordered), batch):
+            resp = (
+                client.table("price_history")
+                .select("date, ticker, close")
+                .in_("ticker", ordered[start : start + batch])
+                .gte("date", floor)
+                .lt("date", run_date.isoformat())
+                .execute()
+            )
+            rows.extend(list(getattr(resp, "data", None) or []))
 
     # Group by ticker, sort each group by date desc, take the top two
     # distinct dates, compute pct_change. Avoids any dataframe import — this
@@ -1011,6 +1036,10 @@ def query_returns_window(
 
     Missing data → ``None`` (caller skips the row gracefully — see
     AC #7 of the issue: "missing returns data skips resolution").
+
+    Under ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` the window comes from the
+    sealed R2 generations (:func:`r2_close_rows`); the trading-day math below
+    is backend-independent.
     """
     from datetime import timedelta
 
@@ -1024,22 +1053,36 @@ def query_returns_window(
     # and failed the 2026-08-29 daily run (#3078).
     end_floor = (start_date + timedelta(days=holding_days + lookback_days)).isoformat()
 
-    def _fetch_window() -> list[dict[str, Any]]:
-        window_resp = (
-            client.table("price_history")
-            .select("date, close")
-            .eq("ticker", ticker)
-            .gte("date", start_date.isoformat())
-            .lt("date", end_floor)
-            .order("date", desc=False)
-            .execute()
-        )
-        return list(getattr(window_resp, "data", None) or [])
+    if r2_backend_enabled():
+        from digiquant.research.data.queries import r2_close_rows
 
-    rows = run_with_supabase_retry(
-        _fetch_window,
-        operation=f"query_returns_window {ticker}",
-    )
+        # Exclusive ``end_floor`` mirrors the Supabase ``.lt("date", end_floor)``.
+        rows = run_with_supabase_retry(
+            lambda: r2_close_rows(
+                tickers=[ticker],
+                since=start_date,
+                until=_parse_date(end_floor) - timedelta(days=1),
+            ),
+            operation=f"query_returns_window {ticker}",
+        )
+    else:
+
+        def _fetch_window() -> list[dict[str, Any]]:
+            window_resp = (
+                client.table("price_history")
+                .select("date, close")
+                .eq("ticker", ticker)
+                .gte("date", start_date.isoformat())
+                .lt("date", end_floor)
+                .order("date", desc=False)
+                .execute()
+            )
+            return list(getattr(window_resp, "data", None) or [])
+
+        rows = run_with_supabase_retry(
+            _fetch_window,
+            operation=f"query_returns_window {ticker}",
+        )
     if not rows:
         return None
 
@@ -1308,7 +1351,16 @@ def query_macro_series_freshness(
     *,
     client: SupabaseClient,
 ) -> date | None:
-    """Return the latest obs_date observed in ``macro_series_observations``."""
+    """Return the latest obs_date observed in ``macro_series_observations``.
+
+    Under ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` this is the manifest seal
+    (``macro_series_observations`` FRED/Yahoo writes stop at cutover; the R2
+    refresh cron owns freshness — same seal the price probe reads).
+    """
+    if r2_backend_enabled():
+        from digiquant.research.data.queries import r2_manifest_seal
+
+        return r2_manifest_seal()[0]
     resp = (
         client.table("macro_series_observations")
         .select("obs_date")

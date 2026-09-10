@@ -36,14 +36,36 @@ def prices() -> None:
 
 
 def _supabase_writes_disabled() -> bool:
-    """Flag plumbing for the R2 market-data cache cutover (#3780), currently dormant.
+    """True when the R2 market-data cache is authoritative (#3780, Task 7b cutover).
 
-    Returns True under ``DIGIQUANT_MARKET_DATA_BACKEND=r2``. The writers-stop is
-    REVERTED (fix round): Supabase tables keep being written (dual-write window)
-    until the bespoke bulk readers migrate off the Supabase tables (Task 8), so
-    no call site refuses on this flag today. Re-enable the stop then.
+    ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` stops the Supabase writers: the daily
+    refresh lands in R2 generations via ``scripts/refresh_market_data_r2.py``
+    instead. Rollback = unset the flag (writers resume; readers fall back to
+    Supabase bodies). ``fetch-macro --sources fedprob`` is exempt (see
+    :func:`_macro_write_covered_by_r2`) — prediction-market odds have no R2
+    generation.
     """
     return os.environ.get("DIGIQUANT_MARKET_DATA_BACKEND", "supabase").strip().lower() == "r2"
+
+
+def _refuse_supabase_write(command: str) -> None:
+    """Fail LOUD when a writer runs under the R2 backend (never skip silently)."""
+    raise click.ClickException(
+        f"{command}: Supabase market-data writes are stopped "
+        "(DIGIQUANT_MARKET_DATA_BACKEND=r2); the R2 refresh owns this table now. "
+        "Unset the flag to roll back to Supabase writers."
+    )
+
+
+# Sources whose rows land in R2 generations (FRED backfill + Yahoo FX refresh).
+# ``fedprob`` (Kalshi/Polymarket snapshots read by get_fed_rate_probabilities)
+# has no R2 home, so fedprob-only runs keep writing Supabase under r2.
+_R2_COVERED_MACRO_SOURCES = frozenset({"fred", "yahoo"})
+
+
+def _macro_write_covered_by_r2(sources_set: set[str]) -> bool:
+    """True when a fetch-macro run writes any R2-owned source (gate scope)."""
+    return bool(_R2_COVERED_MACRO_SOURCES & {s.strip() for s in sources_set})
 
 
 def _parse_iso_option(value: str | None, flag: str) -> date | None:
@@ -129,6 +151,8 @@ def fetch_quotes_cmd(
 
     universe = _resolve_universe(tickers, watchlist, include_sectors)
 
+    if supabase and not dry_run and _supabase_writes_disabled():
+        _refuse_supabase_write("fetch-quotes")
     click.echo(f"fetch-quotes: {len(universe)} tickers | dry_run={dry_run}")
     frames = incremental_update(universe, cache_dir=cache_dir, bulk_period=period, dry_run=dry_run)
     click.echo(f"  fetched: {len(frames)}")
@@ -220,6 +244,8 @@ def compute_technicals_cmd(
 
     client = None
     if supabase and not dry_run:
+        if _supabase_writes_disabled():
+            _refuse_supabase_write("compute-technicals")
         client = build_supabase_client(
             os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL")),
             os.environ.get(
@@ -385,6 +411,8 @@ def recompute_technicals_cmd(
     since_d = _parse_iso_option(since, "--since")
     if since_d is not None and since_d > as_of_d:
         raise click.UsageError(f"--since ({since_d}) must be on or before --as-of ({as_of_d})")
+    if not dry_run and _supabase_writes_disabled():
+        _refuse_supabase_write("recompute-technicals")
 
     client = build_supabase_client(
         os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL")),
@@ -469,6 +497,11 @@ def fetch_macro_cmd(
     sources_set = {s.strip() for s in sources.split(",") if s.strip()}
     if backfill and latest_only:
         raise click.UsageError("--backfill and --latest-only are mutually exclusive")
+    if supabase and not dry_run and _supabase_writes_disabled():
+        if _macro_write_covered_by_r2(sources_set):
+            _refuse_supabase_write("fetch-macro")
+        # fedprob-only runs fall through: prediction-market odds have no R2
+        # generation (get_fed_rate_probabilities stays Supabase-backed).
     mani = MacroManifest.from_yaml(manifest)
 
     # Validate FRED creds up-front so --dry-run'd FRED fails fast before the

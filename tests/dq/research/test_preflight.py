@@ -128,28 +128,27 @@ class TestPreflight:
         # Refresh failed → keep the stale data + the scripts signal (never crashes preflight).
         assert out["data_layer"].fallback_used == "scripts"
 
-    def test_on_demand_refresh_runs_under_r2_backend_dual_write(
+    def test_on_demand_refresh_skipped_under_r2_backend(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # #3780 Task 7 fix round (dual-write): the writers-stop is reverted, so
-        # under the R2 backend the on-demand recompute still runs when opted in
-        # (bulk readers serve the Supabase tables until Task 8 migrates them).
+        # #3780 Task 7b (second cutover): the Supabase writers are stopped
+        # under the R2 backend, so the on-demand recompute (a
+        # price_technicals writer) must not run even when opted in — the R2
+        # refresh cron owns freshness now. The stale seal keeps the scripts
+        # signal; only the write path is gated.
         monkeypatch.setenv("DIGIQUANT_REFRESH_ON_DEMAND", "1")
         monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
-        client, deps = self._stale_deps()
-        run_date = date(2026, 4, 26)
-
-        def _fake_recompute(*, client, tickers, as_of):
-            # Simulate the upsert: the table is now fresh on the re-probe.
-            client.canned_reads["price_technicals"] = [{"date": as_of.isoformat(), "ticker": "SPY"}]
-            return SimpleNamespace(tickers_processed=1, rows_upserted=12)
-
-        with patch.object(
-            refresh_mod, "recompute_technicals_from_history", side_effect=_fake_recompute
-        ) as recompute:
-            out = build_preflight_node(deps)(ResearchState(run_type="baseline", run_date=run_date))
-        recompute.assert_called_once()
-        assert out["data_layer"].fallback_used == "supabase"
+        monkeypatch.setattr(
+            "digiquant.mcp_server._read_manifest",
+            lambda: {"version": 1, "as_of": "2026-04-01", "datasets": {}},
+        )
+        _client, deps = self._stale_deps()
+        with patch.object(refresh_mod, "recompute_technicals_from_history") as recompute:
+            out = build_preflight_node(deps)(
+                ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+            )
+        recompute.assert_not_called()
+        assert out["data_layer"].fallback_used == "scripts"
 
     def test_missing_price_technicals_signals_no_source(self) -> None:
         run_date = date(2026, 4, 26)

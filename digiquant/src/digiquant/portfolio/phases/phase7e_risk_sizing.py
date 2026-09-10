@@ -330,25 +330,50 @@ def _load_ticker_risk(
 ) -> dict[str, TickerRisk]:
     """Assemble ``{ticker: TickerRisk}`` — latest ``price_technicals`` row ≤ run_date for
     vol, :func:`sector_bucket` for concentration. Fail-soft: a read error (or a missing
-    ticker) leaves vol unset so the sizer falls back to its default annualized vol."""
+    ticker) leaves vol unset so the sizer falls back to its default annualized vol.
+
+    Reads ``hist_vol_21`` + ``atr_pct`` directly (``hist_vol_21`` is outside the
+    shared helper's ``TECHNICAL_COLUMNS`` projection). Under
+    ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` the newest sealed indicator row per
+    ticker comes from ``_read_r2_window`` (#3780 Task 7b).
+    """
+    from digiquant.research.data.queries import r2_backend_enabled
+
     latest: dict[str, dict[str, Any]] = {}
     if tickers:
         try:
-            since = (run_date - timedelta(days=_VOL_LOOKBACK_DAYS)).isoformat()
-            resp = (
-                client.table("price_technicals")
-                .select("ticker,date,hist_vol_21,atr_pct")
-                .in_("ticker", list(tickers))
-                .lte("date", run_date.isoformat())  # look-ahead guard (no future rows)
-                .gte("date", since)
-                .order("date", desc=True)
-                .limit(len(tickers) * _VOL_LOOKBACK_DAYS)
-                .execute()
-            )
-            for row in getattr(resp, "data", None) or []:
-                ticker = row.get("ticker")
-                if ticker and ticker not in latest:  # desc order → first seen is freshest
-                    latest[ticker] = row
+            if r2_backend_enabled():
+                from digiquant.mcp_server import _read_r2_window
+
+                for ticker in tickers:
+                    try:
+                        window = _read_r2_window(ticker, run_date.isoformat())
+                    except LookupError:
+                        continue
+                    if window and ticker not in latest:
+                        row = window[-1]
+                        latest[ticker] = {
+                            "ticker": ticker,
+                            "date": str(row.get("date")),
+                            "hist_vol_21": row.get("hist_vol_21"),
+                            "atr_pct": row.get("atr_pct"),
+                        }
+            else:
+                since = (run_date - timedelta(days=_VOL_LOOKBACK_DAYS)).isoformat()
+                resp = (
+                    client.table("price_technicals")
+                    .select("ticker,date,hist_vol_21,atr_pct")
+                    .in_("ticker", list(tickers))
+                    .lte("date", run_date.isoformat())  # look-ahead guard (no future rows)
+                    .gte("date", since)
+                    .order("date", desc=True)
+                    .limit(len(tickers) * _VOL_LOOKBACK_DAYS)
+                    .execute()
+                )
+                for row in getattr(resp, "data", None) or []:
+                    ticker = row.get("ticker")
+                    if ticker and ticker not in latest:  # desc order → first seen is freshest
+                        latest[ticker] = row
         except Exception as exc:  # vol read is best-effort; default vol used
             logger.warning("phase7e: price_technicals read failed (%s); using default vol", exc)
     return {

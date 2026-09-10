@@ -46,6 +46,7 @@ from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries, sized_book
 from digiquant.portfolio.risk_envelope import risk_horizon_days
 from digiquant.portfolio.sector_map import sector_bucket
+from digiquant.research.data.queries import r2_backend_enabled
 from digiquant.research.state import ResearchState
 from digiquant.research.supabase_io import SupabaseClient, load_prior_book, query_price_deltas
 
@@ -315,20 +316,34 @@ def _upsert_portfolio_metrics(
     benchmark_closes: list[float] = []
     if len(nav_observations) >= 2:
         try:
-            benchmark_resp = (
-                client.table("price_history")
-                .select("date,close")
-                .eq("ticker", _ALPHA_BENCHMARK)
-                .gte("date", str(nav_observations[0]["date"]))
-                .lte("date", str(nav_observations[-1]["date"]))
-                .order("date")
-                .execute()
-            )
-            benchmark_closes = [
-                _coerce_float(row.get("close"))
-                for row in (getattr(benchmark_resp, "data", None) or [])
-                if row.get("close") is not None
-            ]
+            if r2_backend_enabled():
+                # Sealed R2 SPY generation over the NAV window (#3780 Task 7b).
+                from digiquant.research.data.queries import r2_close_rows
+
+                benchmark_closes = [
+                    _coerce_float(row.get("close"))
+                    for row in r2_close_rows(
+                        tickers=[_ALPHA_BENCHMARK],
+                        since=str(nav_observations[0]["date"]),
+                        until=str(nav_observations[-1]["date"]),
+                    )
+                    if row.get("close") is not None
+                ]
+            else:
+                benchmark_resp = (
+                    client.table("price_history")
+                    .select("date,close")
+                    .eq("ticker", _ALPHA_BENCHMARK)
+                    .gte("date", str(nav_observations[0]["date"]))
+                    .lte("date", str(nav_observations[-1]["date"]))
+                    .order("date")
+                    .execute()
+                )
+                benchmark_closes = [
+                    _coerce_float(row.get("close"))
+                    for row in (getattr(benchmark_resp, "data", None) or [])
+                    if row.get("close") is not None
+                ]
         except Exception as exc:
             logger.warning(
                 "phase9d: benchmark return computation failed (%s); benchmark return will be NULL",
