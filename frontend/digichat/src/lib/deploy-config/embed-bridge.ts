@@ -20,7 +20,9 @@ export function clientConfigFromEmbedTenant(
   const webSearch = embed.webSearch === true;
   const catalog = (embed.tools?.catalog ?? []).map((e) => ({
     id: e.id,
-    default: e.default !== false,
+    // Omitted `default` means session-OFF (#3805 fail-closed for promote).
+    // Only explicit `default: true` starts the tool on.
+    default: e.default === true,
     ...(e.label ? { label: e.label } : {}),
   }));
   if (webSearch && !catalog.some((t) => t.id === "web_search")) {
