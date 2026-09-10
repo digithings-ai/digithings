@@ -18,7 +18,7 @@ import {
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { useCopyToClipboard } from "./hooks/use-copy-to-clipboard";
 import { cn } from "./cn";
-import { ChatMermaidBlock } from "../ChatMermaidBlock";
+import { MermaidDiagram } from "../../assistant-ui/elements/mermaid-diagram.aui";
 
 type MarkdownTextProps = Partial<TextMessagePartProps> & {
   components?: Parameters<typeof memoizeMarkdownComponents>[0];
@@ -55,6 +55,9 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
       remarkPlugins={[remarkGfm]}
       className="aui-md"
       components={markdownComponents}
+      componentsByLanguage={{
+        mermaid: { SyntaxHighlighter: MermaidDiagram },
+      }}
       defer
     />
   );
@@ -264,6 +267,4 @@ const defaultComponents = memoizeMarkdownComponents({
     );
   },
   CodeHeader,
-  SyntaxHighlighter: ({ code, language }: { code: string; language?: string }) =>
-    language === "mermaid" ? <ChatMermaidBlock code={code} /> : null,
 });
