@@ -163,7 +163,19 @@ export async function createDigigraphTraceStreamResponse(opts: {
     execute: async ({ writer }) => {
       let textSeq = 0;
       let textId = "assistant-main";
-      writer.write({ type: "text-start", id: textId });
+      let textOpen = false;
+      const openText = () => {
+        if (textOpen) return;
+        textId = textSeq === 0 ? "assistant-main" : `assistant-main-${textSeq}`;
+        writer.write({ type: "text-start", id: textId });
+        textOpen = true;
+      };
+      const closeText = () => {
+        if (!textOpen) return;
+        writer.write({ type: "text-end", id: textId });
+        textOpen = false;
+        textSeq += 1;
+      };
       const activityCtx = createActivityWriteContext();
       const bodyPayload: Record<string, unknown> = {
         model,
@@ -209,33 +221,35 @@ export async function createDigigraphTraceStreamResponse(opts: {
           // it can say what to do instead of a dead end. Same mechanism as the
           // `digigraph_error` SSE branch below; both now drop upstream `message`
           // for BYOK remediable codes (embed-chat-error owns that copy).
-          writer.write({ type: "text-end", id: textId });
+          closeText();
           throw new DigigraphStreamContractError(
             digigraphErrorToEmbedPayload({ code: relayable })
           );
         }
+        openText();
         writer.write({
           type: "text-delta",
           id: textId,
           delta: "The assistant is unavailable right now. Please try again shortly.",
         });
-        writer.write({ type: "text-end", id: textId });
+        closeText();
         return;
       }
       if (!res.body) {
         console.error(`[digigraph] upstream ${res.status} returned an empty body`);
+        openText();
         writer.write({
           type: "text-delta",
           id: textId,
           delta: "The assistant is unavailable right now. Please try again shortly.",
         });
-        writer.write({ type: "text-end", id: textId });
+        closeText();
         return;
       }
       for await (const delta of iterateOpenAiSse(res.body)) {
         const dgErr = delta.digigraph_error;
         if (dgErr && typeof dgErr === "object") {
-          writer.write({ type: "text-end", id: textId });
+          closeText();
           throw new DigigraphStreamContractError(
             digigraphErrorToEmbedPayload(dgErr as DigigraphErrorPayload),
           );
@@ -244,6 +258,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
         if (typeof c === "string" && c.length) {
           const cleaned = stripToolDumpFromAnswerDelta(c);
           if (cleaned.length) {
+            openText();
             writer.write({ type: "text-delta", id: textId, delta: cleaned });
           }
         }
@@ -263,19 +278,21 @@ export async function createDigigraphTraceStreamResponse(opts: {
           // This is NOT an activity span — it renders no visible chip; it only
           // resets which text part subsequent "content" deltas land in.
           if (payload.type === "round_boundary") {
-            writer.write({ type: "text-end", id: textId });
-            textId = `assistant-main-${++textSeq}`;
-            writer.write({ type: "text-start", id: textId });
+            closeText();
             continue;
           }
 
-          for (const span of mapDigigraphTraceToSpans(payload, opts.activityDetail)) {
+          const spans = mapDigigraphTraceToSpans(payload, opts.activityDetail);
+          if (spans.some((s) => s.operation === "execute_tool" || s.operation === "retrieve")) {
+            closeText();
+          }
+          for (const span of spans) {
             writeStandardActivity(writer, span, activityCtx);
           }
         }
       }
       finishStandardActivity(writer, activityCtx);
-      writer.write({ type: "text-end", id: textId });
+      closeText();
     },
   });
 

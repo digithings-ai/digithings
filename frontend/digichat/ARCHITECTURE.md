@@ -1233,10 +1233,17 @@ coerces AI SDK `ModelMessage` content to plain strings to avoid digigraph's stri
 `422` validation). In the legacy path, the AI SDK OpenAI provider constructs the body.
 
 digigraph SSE frames carry an optional `digigraph_trace` field on each
-`choices[0].delta`. The trace path maps typed payloads (`rag_sources`,
-`graph_update`, and opaque labels) through `mapdigigraphTraceToSpans` and emits
+`choices[0].delta`. The trace path maps typed payloads (`tool_call`,
+`rag_sources`, `graph_update`, and opaque labels) through `mapDigigraphTraceToSpans` and emits
 only standard tool / `source-*` / reasoning / `data-status` parts (`writeStandardActivity`).
-1.4 `data-digichatActivity` is not written. Auth `chat-panel` and embed both
+Each tool invocation gets its own `toolCallId` (FIFO per tool name). Input is JSON
+(`query` / vault path from MCP arguments); retrieve output is `{ query, documents, hitCount }`
+with document snippets/bodies at `activityDetail: full`. The website-like dogfood host
+(`config/examples/digithings-ai-embed.yaml`) sets `gate.activityDetail: full` so chunks are
+not replaced by `{ documentsWithheld: true }`. Leftover started rows are auto-completed at
+stream end so ordinary retrieve / get_note / search_notes never sit on Allow/Deny.
+`tool-input-available` is emitted only with `tool-output-available` during the call. 1.4 `data-digichatActivity` is not
+written. Auth `chat-panel` and embed both
 render those parts through assistant-ui `MessagePrimitive.Parts`
 (`cli-message-parts.tsx`). Old branded parts hydrate via `LegacyActivityHydrate`
 only when no standard activity parts exist.

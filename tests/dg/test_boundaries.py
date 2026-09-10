@@ -241,3 +241,113 @@ def test_tool_call_reaches_browser_as_a_started_trace() -> None:
     assert payload["tool"] == "digisearch"
     assert payload["query"] == "RS256 token exchange"
     assert payload["status"] == "started"
+    assert payload["arguments"] == {"query": "RS256 token exchange"}
+
+
+@pytest.mark.unit
+def test_tool_result_trace_forwards_mcp_args_and_sources() -> None:
+    queue: Queue = Queue()
+
+    def fake_stream(
+        initial, config=None, stream_mode=None, version=None, durability=None, subgraphs=None
+    ):
+        yield {
+            "type": "custom",
+            "ns": (),
+            "data": (
+                "tool_call",
+                {
+                    "name": "digivault_get_note",
+                    "arguments": {"vault_paths": ["clients/digithings/architecture.md"]},
+                },
+            ),
+        }
+        yield {
+            "type": "custom",
+            "ns": (),
+            "data": (
+                "tool_result",
+                {
+                    "name": "digivault_get_note",
+                    "content": '{"notes":[{"vault_path":"clients/digithings/architecture.md"}]}',
+                    "rag_sources": [
+                        {
+                            "doc_id": "clients/digithings/architecture.md",
+                            "snippet": "# digigraph",
+                            "body": "# digigraph\nhub",
+                        }
+                    ],
+                    "hit_count": 1,
+                    "query": "1 note",
+                },
+            ),
+        }
+
+    mock_graph = MagicMock()
+    mock_graph.stream.side_effect = fake_stream
+    mock_graph.get_state.return_value = MagicMock(values={})
+
+    with patch("digigraph.workflow.build_workflow_graph", return_value=mock_graph):
+        run_digigraph_workflow_streaming(WorkflowRequest(prompt="What is digigraph?"), queue)
+
+    events = []
+    while not queue.empty():
+        events.append(queue.get())
+
+    rag = [
+        data
+        for (kind, data) in events
+        if kind == "trace" and isinstance(data, dict) and data.get("type") == "rag_sources"
+    ]
+    assert len(rag) == 1
+    payload = rag[0]["payload"]
+    assert payload["tool"] == "digivault_get_note"
+    assert payload["arguments"] == {"vault_paths": ["clients/digithings/architecture.md"]}
+    assert payload["sources"][0]["body"] == "# digigraph\nhub"
+
+
+@pytest.mark.unit
+def test_retrieval_tool_result_without_rag_sources_still_completes() -> None:
+    queue: Queue = Queue()
+
+    def fake_stream(
+        initial, config=None, stream_mode=None, version=None, durability=None, subgraphs=None
+    ):
+        yield {
+            "type": "custom",
+            "ns": (),
+            "data": (
+                "tool_call",
+                {"name": "digivault_search_notes", "arguments": {"query": "LangGraph hub"}},
+            ),
+        }
+        yield {
+            "type": "custom",
+            "ns": (),
+            "data": (
+                "tool_result",
+                {"name": "digivault_search_notes", "content": "vault_path is required."},
+            ),
+        }
+
+    mock_graph = MagicMock()
+    mock_graph.stream.side_effect = fake_stream
+    mock_graph.get_state.return_value = MagicMock(values={})
+
+    with patch("digigraph.workflow.build_workflow_graph", return_value=mock_graph):
+        run_digigraph_workflow_streaming(WorkflowRequest(prompt="What is digigraph?"), queue)
+
+    events = []
+    while not queue.empty():
+        events.append(queue.get())
+
+    rag = [
+        data
+        for (kind, data) in events
+        if kind == "trace" and isinstance(data, dict) and data.get("type") == "rag_sources"
+    ]
+    assert len(rag) == 1
+    payload = rag[0]["payload"]
+    assert payload["tool"] == "digivault_search_notes"
+    assert payload["arguments"] == {"query": "LangGraph hub"}
+    assert payload["sources"] == []

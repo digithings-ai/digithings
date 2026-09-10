@@ -65,6 +65,130 @@ describe("writeStandardActivity", () => {
     const start = chunks.find((c) => c.type === "tool-input-start");
     const out = chunks.find((c) => c.type === "tool-output-available");
     expect(out?.toolCallId).toBe(start?.toolCallId);
+    const delta = chunks.find((c) => c.type === "tool-input-delta");
+    expect(delta?.inputTextDelta).toBe(JSON.stringify({ query: "auth" }));
+    const input = chunks.find((c) => c.type === "tool-input-available");
+    expect(input?.input).toEqual({ query: "auth" });
+    expect(out?.output).toEqual({ query: "auth" });
+  });
+
+  it("mints a new toolCallId per invocation of the same tool name", () => {
+    const chunks = collect([
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "digisearch",
+        toolName: "digisearch",
+        query: "first",
+      },
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "Sources",
+        toolName: "digisearch",
+        query: "first",
+        documents: [{ title: "A", path: "a.md", snippet: "alpha" }],
+      },
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "digisearch",
+        toolName: "digisearch",
+        query: "second",
+      },
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "Sources",
+        toolName: "digisearch",
+        query: "second",
+        documents: [{ title: "B", path: "b.md", snippet: "beta" }],
+      },
+    ]);
+    const starts = chunks.filter((c) => c.type === "tool-input-start");
+    expect(starts).toHaveLength(2);
+    expect(starts[0]?.toolCallId).not.toBe(starts[1]?.toolCallId);
+    const outputs = chunks.filter((c) => c.type === "tool-output-available");
+    expect(outputs).toHaveLength(2);
+    expect(outputs[0]?.toolCallId).toBe(starts[0]?.toolCallId);
+    expect(outputs[1]?.toolCallId).toBe(starts[1]?.toolCallId);
+    expect(outputs[0]?.output).toMatchObject({
+      query: "first",
+      hitCount: 1,
+      documents: [{ title: "A", path: "a.md", snippet: "alpha" }],
+    });
+    expect(outputs[0]?.output).not.toHaveProperty("status");
+    expect(outputs[0]?.output).not.toHaveProperty("label");
+  });
+
+  it("does not emit tool-input-available on a started call until finish (avoids Approve)", () => {
+    const chunks = collect(
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "digivault_search_notes",
+        toolName: "digivault_search_notes",
+        query: "digigraph",
+      },
+      false,
+    );
+    expect(chunks.some((c) => c.type === "tool-input-start")).toBe(true);
+    expect(chunks.some((c) => c.type === "tool-input-available")).toBe(false);
+    expect(chunks.some((c) => c.type === "tool-output-available")).toBe(false);
+  });
+
+  it("auto-completes leftover read tools on finish so Allow/Deny never sticks", () => {
+    const chunks = collect({
+      operation: "execute_tool",
+      status: "started",
+      label: "digivault_get_note",
+      toolName: "digivault_get_note",
+      toolInput: { vault_paths: ["clients/digithings/architecture.md"] },
+    });
+    expect(chunks.some((c) => c.type === "tool-input-available")).toBe(true);
+    const out = chunks.find((c) => c.type === "tool-output-available");
+    expect(out?.output).toMatchObject({
+      vault_paths: ["clients/digithings/architecture.md"],
+    });
+    const start = chunks.find((c) => c.type === "tool-input-start");
+    expect(out?.toolCallId).toBe(start?.toolCallId);
+  });
+
+  it("keeps started MCP args on the retrieve result row", () => {
+    const chunks = collect([
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "digivault_get_note",
+        toolName: "digivault_get_note",
+        toolInput: { vault_paths: ["clients/digithings/architecture.md"] },
+      },
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "Loaded full note",
+        toolName: "digivault_get_note",
+        documents: [
+          {
+            title: "architecture",
+            path: "clients/digithings/architecture.md",
+            body: "# digigraph\norchestration hub",
+          },
+        ],
+      },
+    ]);
+    const out = chunks.find((c) => c.type === "tool-output-available");
+    expect(out?.output).toMatchObject({
+      vault_paths: ["clients/digithings/architecture.md"],
+      hitCount: 1,
+      documents: [
+        expect.objectContaining({
+          path: "clients/digithings/architecture.md",
+          body: "# digigraph\norchestration hub",
+        }),
+      ],
+    });
+    expect(chunks.filter((c) => c.type === "tool-output-available")).toHaveLength(1);
   });
 
   it("maps retrieve documents to source-url or source-document plus tool output", () => {
@@ -108,7 +232,26 @@ describe("writeStandardActivity", () => {
     });
     expect(chunks.some((c) => String(c.type).startsWith("source-"))).toBe(false);
     const out = chunks.find((c) => c.type === "tool-output-available");
-    expect(out?.output).toMatchObject({ documentsWithheld: true });
+    expect(out?.output).toMatchObject({ documentsWithheld: true, query: "auth", hitCount: 0 });
+    expect(out?.output).not.toHaveProperty("documents");
+  });
+
+  it("keeps hitCount when labels withheld documents", () => {
+    const chunks = collect({
+      operation: "retrieve",
+      status: "completed",
+      label: "Sources",
+      toolName: "digisearch",
+      query: "digigraph",
+      documentsWithheld: true,
+      hitCount: 7,
+    });
+    const out = chunks.find((c) => c.type === "tool-output-available");
+    expect(out?.output).toMatchObject({
+      query: "digigraph",
+      hitCount: 7,
+      documentsWithheld: true,
+    });
   });
 
   it("maps reasoningDelta onto reasoning chunks and closes on finish", () => {

@@ -62,7 +62,9 @@ hosts:
       allowAddForm: false
     gate:
       mode: ungated
-      activityDetail: labels
+      # Local website-like dogfood (`?host=digithings.ai`) must show retrieve
+      # chunks / note bodies. Production can still set labels via env overlay.
+      activityDetail: full
       llmAccess: free_then_byok
       showByok: true
       showLanguageSelector: true
