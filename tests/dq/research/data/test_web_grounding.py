@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -10,6 +11,10 @@ import pytest
 pytest.importorskip("openai")
 
 from digiquant.research.data import web_grounding
+
+# Saved before the autouse fixture below replaces the module attr, so the
+# bearer-threading tests below exercise the real tool call (#3859 Task 2).
+_real_call_web_search_tool = web_grounding.call_web_search_tool
 
 
 @pytest.fixture(autouse=True)
@@ -156,3 +161,82 @@ def test_build_grounding_live_search_without_data_tools(monkeypatch: pytest.Monk
     assert tools is None
     assert execute_tool is None
     assert web_grounding == grounding
+
+
+def _fake_hub_results(seen: dict[str, Any]):
+    """Fake `_call_digisearch_web_search` capturing kwargs, returning one row."""
+
+    def fake_call(query: str, **kw: Any) -> dict[str, Any]:
+        seen.update(kw)
+        return {
+            "content": "- [t](https://a.com/1): s",
+            "results": [
+                {
+                    "doc_id": "https://a.com/1",
+                    "content": "s",
+                    "metadata": {"title": "t"},
+                }
+            ],
+        }
+
+    return fake_call
+
+
+@pytest.mark.unit
+def test_pipeline_bearer_threaded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pipeline hub calls carry the Task 1 service JWT (#3859 Task 2).
+
+    Adapted from the brief: the real `_call_digisearch_web_search` takes
+    `context` (bearer via `context.state["digi_bearer"]`), not `bearer_token`,
+    and both seams are lazily imported at call time, so patch the sources.
+    """
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", _fake_hub_results(seen))
+    out = _real_call_web_search_tool(query="etf flows", include_domains=[], max_results=4)
+    assert out["sources"] == ["https://a.com/1"]
+    context = seen.get("context")
+    assert context is not None
+    assert context.state.get("digi_bearer") == "svc-jwt"
+
+
+@pytest.mark.unit
+def test_explicit_bearer_token_wins_over_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An explicit `bearer_token` threads through and skips the JWT exchange."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    def _boom(**k: Any) -> str:
+        raise AssertionError("get_service_jwt must not run with explicit bearer")
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", _boom)
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", _fake_hub_results(seen))
+    out = _real_call_web_search_tool(
+        query="etf flows", include_domains=[], max_results=4, bearer_token="explicit"
+    )
+    assert out["sources"] == ["https://a.com/1"]
+    context = seen.get("context")
+    assert context is not None
+    assert context.state.get("digi_bearer") == "explicit"
+
+
+@pytest.mark.unit
+def test_pipeline_bearer_auth_error_propagates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`ServiceAuthError` from the JWT exchange propagates (never swallowed)."""
+    import digibase.service_auth as sa_mod
+    from digibase.service_auth import ServiceAuthError
+
+    def _raise(**k: Any) -> str:
+        raise ServiceAuthError("DIGIQUANT_DIGIKEY_API_KEY is not set")
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", _raise)
+    with pytest.raises(ServiceAuthError):
+        _real_call_web_search_tool(query="etf flows", include_domains=[], max_results=4)

@@ -88,10 +88,32 @@ def _openrouter_web_search(model: str, query: str) -> tuple[str, list[str]] | No
     return openrouter_web_search(model, query)
 
 
+def _pipeline_bearer() -> str | None:
+    """Service JWT for pipeline hub calls (Task 1 ``digibase.service_auth``).
+
+    Lazy import so this module imports cleanly when digibase is minimal.
+    ``ServiceAuthError`` propagates — callers map it to fail-hard.
+    """
+    try:
+        from digibase.service_auth import get_service_jwt
+    except ImportError:
+        return None
+    return get_service_jwt()
+
+
 def call_web_search_tool(
-    *, query: str, include_domains: list[str], max_results: int
+    *,
+    query: str,
+    include_domains: list[str],
+    max_results: int,
+    bearer_token: str | None = None,
 ) -> dict[str, Any]:
     """First-party web_search tool via digigraph's orchestrator hub (#3853).
+
+    Carries the Task 1 service JWT (#3859): an explicit ``bearer_token`` wins,
+    else :func:`_pipeline_bearer` mints one via digikey. The token threads
+    into ``_call_digisearch_web_search`` via ``ToolContext.state``
+    (``digi_bearer``) — the only bearer seam on its signature.
 
     Returns ``{"summary", "sources"}`` in the digigraph-compatible shape.
     Raises ``RuntimeError`` when the service errors or yields no rows so the
@@ -99,12 +121,22 @@ def call_web_search_tool(
     call goes over HTTP (``POST /v1/orchestrator_invoke``), mirroring how
     :func:`_openrouter_web_search` lazily imports ``digigraph.llm_client``.
     """
+    from digigraph.orchestration.registry import ToolContext
     from digigraph.orchestration.web_search_tools import _call_digisearch_web_search
 
+    token = bearer_token if bearer_token is not None else _pipeline_bearer()
+    context = ToolContext(
+        session_id=None,
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={"digi_bearer": token} if token else {},
+    )
     tool_out = _call_digisearch_web_search(
         query,
         include_domains=list(include_domains or []),
         max_results=max_results,
+        context=context,
     )
     rows = (tool_out or {}).get("results") or []
     lines: list[str] = []
