@@ -270,6 +270,88 @@ describe("writeStandardActivity", () => {
     expect(chunks[1]).toMatchObject({ delta: "step 1" });
   });
 
+  it("mints a new reasoning id after tools so later thinking is its own part", () => {
+    const chunks = collect([
+      {
+        operation: "chat",
+        status: "started",
+        label: "Thinking",
+        reasoningDelta: "first burst",
+      },
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "digisearch",
+        toolName: "digisearch",
+        query: "jwt",
+      },
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "Sources",
+        toolName: "digisearch",
+        query: "jwt",
+        documents: [{ title: "A", path: "a.md", snippet: "alpha" }],
+      },
+      {
+        operation: "chat",
+        status: "started",
+        label: "Thinking",
+        reasoningDelta: "second burst",
+      },
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "digivault_get_note",
+        toolName: "digivault_get_note",
+        toolInput: { vault_paths: ["clients/digithings/a.md"] },
+      },
+    ]);
+    const starts = chunks.filter((c) => c.type === "reasoning-start");
+    const deltas = chunks.filter((c) => c.type === "reasoning-delta");
+    expect(starts).toHaveLength(2);
+    expect(starts[0]?.id).not.toBe(starts[1]?.id);
+    expect(deltas[0]).toMatchObject({ id: starts[0]?.id, delta: "first burst" });
+    expect(deltas[1]).toMatchObject({ id: starts[1]?.id, delta: "second burst" });
+    const types = chunks.map((c) => c.type);
+    expect(types.indexOf("reasoning-end")).toBeLessThan(types.indexOf("tool-input-start"));
+    expect(types.lastIndexOf("reasoning-start")).toBeGreaterThan(types.indexOf("tool-output-available"));
+    expect(chunks.find((c) => c.type === "tool-input-start")).toMatchObject({
+      toolName: "digisearch",
+      title: "digisearch",
+    });
+    expect(
+      chunks.filter((c) => c.type === "tool-input-start").map((c) => c.title),
+    ).toEqual(["digisearch", "digivault_get_note"]);
+  });
+
+  it("keeps consecutive reasoning deltas on one id until a tool round", () => {
+    const chunks = collect(
+      [
+        {
+          operation: "chat",
+          status: "started",
+          label: "Thinking",
+          reasoningDelta: "one ",
+        },
+        {
+          operation: "chat",
+          status: "started",
+          label: "Thinking",
+          reasoningDelta: "two",
+        },
+      ],
+      false,
+    );
+    const starts = chunks.filter((c) => c.type === "reasoning-start");
+    expect(starts).toHaveLength(1);
+    expect(chunks.filter((c) => c.type === "reasoning-delta")).toEqual([
+      expect.objectContaining({ id: starts[0]?.id, delta: "one " }),
+      expect.objectContaining({ id: starts[0]?.id, delta: "two" }),
+    ]);
+    expect(chunks.some((c) => c.type === "reasoning-end")).toBe(false);
+  });
+
   it("maps opaque chat progress to unbranded data-status", () => {
     const chunks = collect({
       operation: "chat",

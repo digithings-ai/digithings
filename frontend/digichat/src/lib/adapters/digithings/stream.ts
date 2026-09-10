@@ -13,6 +13,7 @@ import { coreMessagesToDigigraphOpenAi } from "@/lib/digigraph-messages";
 import { type ActivityDetail } from "@/lib/chat-activity";
 import { mapDigigraphTraceToSpans } from "@/lib/adapters/digithings/activity";
 import {
+  closeOpenReasoning,
   createActivityWriteContext,
   finishStandardActivity,
   uiMessagesForUpstream,
@@ -164,8 +165,10 @@ export async function createDigigraphTraceStreamResponse(opts: {
       let textSeq = 0;
       let textId = "assistant-main";
       let textOpen = false;
+      const activityCtx = createActivityWriteContext();
       const openText = () => {
         if (textOpen) return;
+        closeOpenReasoning(writer, activityCtx);
         textId = textSeq === 0 ? "assistant-main" : `assistant-main-${textSeq}`;
         writer.write({ type: "text-start", id: textId });
         textOpen = true;
@@ -176,7 +179,6 @@ export async function createDigigraphTraceStreamResponse(opts: {
         textOpen = false;
         textSeq += 1;
       };
-      const activityCtx = createActivityWriteContext();
       const bodyPayload: Record<string, unknown> = {
         model,
         messages: coreMessagesToDigigraphOpenAi(coreMessages),

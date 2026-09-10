@@ -113,6 +113,87 @@ it("maps reasoning_content deltas onto reasoning UI chunks", async () => {
   expect(body).toContain("Final answer.");
 });
 
+it("mints a new reasoning id after a tool round on the dogfood stream", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [{ delta: { reasoning_content: "look in vault" } }],
+        })}\n\n`,
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_trace: {
+                  v: 1,
+                  type: "tool_call",
+                  payload: { tool: "digivault_get_note", status: "started" },
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_trace: {
+                  v: 1,
+                  type: "digivault_get_note",
+                  payload: {
+                    toolName: "digivault_get_note",
+                    vault_paths: ["clients/digithings/a.md"],
+                    hits: [
+                      {
+                        body: "# note",
+                        metadata: { vault_path: "clients/digithings/a.md" },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        `data: ${JSON.stringify({
+          choices: [{ delta: { reasoning_content: "now I can answer" } }],
+        })}\n\n`,
+        `data: ${JSON.stringify({
+          choices: [{ delta: { content: "Here is the note." } }],
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("load the note")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+  const events = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("data: ") && l !== "data: [DONE]")
+    .map((l) => JSON.parse(l.slice(6)) as Record<string, unknown>);
+  const starts = events.filter((e) => e.type === "reasoning-start");
+  expect(starts).toHaveLength(2);
+  expect(starts[0]?.id).not.toBe(starts[1]?.id);
+  const types = events.map((e) => e.type);
+  expect(types.indexOf("reasoning-end")).toBeLessThan(types.indexOf("tool-input-start"));
+  expect(types.lastIndexOf("reasoning-start")).toBeGreaterThan(types.indexOf("tool-input-start"));
+  const toolStart = events.find((e) => e.type === "tool-input-start");
+  expect(toolStart).toMatchObject({
+    toolName: "digivault_get_note",
+    title: "digivault_get_note",
+  });
+  expect(body).not.toContain("digivault get note");
+});
+
 it("posts the full multi-turn history to digigraph chat completions", async () => {
   const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response("data: [DONE]\n\n", {

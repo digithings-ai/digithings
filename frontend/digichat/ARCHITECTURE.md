@@ -820,9 +820,12 @@ Picking a row (click or Enter on a highlight) autofills
 `label` / `url` / `auth` (token kept unless the id changes). Custom ids still type freely;
 operator rows keep id/url locked and hide the catalog. Snapshot only — no live Smithery / PulseMCP / registry
 fetch, and `@assistant-ui/react-mcp` is not installed. `/tools` lists every
-connected tool as On/Off. `/models`, `/effort`,
+connected tool as On/Off. Exclusive lists (`/models`, `/effort`, `/language`,
+and the `/provider` roster) mark the current choice with the same filled disc as
+dropdown radio items (`CircleIcon`) — never the word “on”. Enter or click commits
+the choice and closes the menu. `/models`, `/effort`,
 and `/language` start on their nested lists. Keyboard: Up/Down, Enter
-to toggle or enter a nested list, Left/Right on `/language` to cycle the full ISO map, Escape
+to toggle, enter a nested list, or commit an exclusive pick, Left/Right on `/language` to cycle the full ISO map, Escape
 (the `escape` control) to go back or close.
 `/language` (alias `/lang`) plus featured English / Dutch / Italian / Spanish / French resolve
 through the mirrored ISO map (codes, English labels, and autonyms). `/provider` (aliases
@@ -1239,7 +1242,7 @@ only standard tool / `source-*` / reasoning / `data-status` parts (`writeStandar
 Each tool invocation gets its own `toolCallId` (FIFO per tool name). Input JSON is pretty-printed on the wire (`tool-input-delta`); retrieve output is `{ query, documents, hitCount, durationMs }`
 with document snippets/bodies at `activityDetail: full`. Vault search `rag_sources` traces map through `mapDigivaultSearchNotes` (not the digisearch retrieve-with-no-docs path). A failed vault invoke is `execute_tool`/`failed`, never `{ hitCount: 0 }`. The website-like dogfood host
 (`config/examples/digithings-ai-embed.yaml`) sets `gate.activityDetail: full` and `backend.vaultPathPrefix: clients/digithings` so D1 FTS is scoped and chunks are
-not replaced by `{ documentsWithheld: true }`. Tool row titles humanize ids (`digisearch semantic` when the locate method is known). `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are auto-completed at
+not replaced by `{ documentsWithheld: true }`. Tool row titles are the exact MCP / backend tool ids with underscores (`digisearch`, `digivault_get_note`) — not humanized labels. Each reasoning burst between tool rounds gets its own `reasoning-start` id so later thinking is not appended into the first block. `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are auto-completed at
 stream end so ordinary retrieve / get_note / search_notes never sit on Allow/Deny.
 `tool-input-available` is emitted only with `tool-output-available` during the call. 1.4 `data-digichatActivity` is not
 written. Auth `chat-panel` and embed both

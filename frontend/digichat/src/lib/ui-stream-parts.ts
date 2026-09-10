@@ -75,19 +75,18 @@ function rememberInput(
   return merged;
 }
 
-function displayTitle(name: string, span?: ActivitySpan): string {
-  // Method-aware titles for locate tools; keep Foundry/custom labels otherwise
-  // so "Searching knowledge base…" is not rewritten to "file search".
-  if (
-    name === "digithings_docs" ||
-    name === "digisearch" ||
-    name.startsWith("digisearch")
-  ) {
-    return toolRowTitle(name, span?.toolInput);
-  }
-  const label = span?.label?.trim();
-  if (label) return label;
-  return toolRowTitle(name, span?.toolInput);
+function displayTitle(name: string): string {
+  return toolRowTitle(name);
+}
+
+/** Close the current reasoning part so the next burst mints a new id. */
+export function closeOpenReasoning(
+  writer: UiStreamWriter,
+  ctx: StandardActivityContext,
+): void {
+  if (!ctx.reasoningId) return;
+  writer.write({ type: "reasoning-end", id: ctx.reasoningId });
+  ctx.reasoningId = null;
 }
 
 function writeToolStart(
@@ -239,6 +238,11 @@ export function writeStandardActivity(
     return;
   }
 
+  // Tools / status / answer-adjacent spans end this reasoning phase. The next
+  // reasoningDelta mints a new id so assistant-ui cannot append round 2 into
+  // the first thinking block (same class of bug as reusing one toolCallId).
+  closeOpenReasoning(writer, ctx);
+
   if (span.brief) {
     writer.write({
       type: "data-status",
@@ -255,12 +259,12 @@ export function writeStandardActivity(
   if (span.operation === "execute_tool") {
     const name = toolNameOf(span);
     if (span.status === "started") {
-      const id = beginToolCall(writer, ctx, name, displayTitle(name, span));
+      const id = beginToolCall(writer, ctx, name, displayTitle(name));
       writeJsonInputDelta(writer, ctx, id, span);
       rememberInput(ctx, id, span);
       return;
     }
-    const id = completeToolCall(writer, ctx, name, displayTitle(name, span));
+    const id = completeToolCall(writer, ctx, name, displayTitle(name));
     ensureToolInput(writer, ctx, id, name, span);
     writeToolOutput(writer, ctx, id, span);
     return;
@@ -268,7 +272,7 @@ export function writeStandardActivity(
 
   if (span.operation === "retrieve") {
     const name = toolNameOf(span);
-    const id = completeToolCall(writer, ctx, name, displayTitle(name, span));
+    const id = completeToolCall(writer, ctx, name, displayTitle(name));
     ensureToolInput(writer, ctx, id, name, span);
     const docs = span.documents ?? [];
     const withheld = span.documentsWithheld === true;
@@ -296,10 +300,7 @@ export function finishStandardActivity(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
 ): void {
-  if (ctx.reasoningId) {
-    writer.write({ type: "reasoning-end", id: ctx.reasoningId });
-    ctx.reasoningId = null;
-  }
+  closeOpenReasoning(writer, ctx);
   for (const [name, queue] of ctx.pendingByName) {
     while (queue.length) {
       const id = queue.shift() as string;

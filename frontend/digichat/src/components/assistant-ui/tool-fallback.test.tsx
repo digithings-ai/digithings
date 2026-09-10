@@ -39,4 +39,24 @@ describe("ToolFallback", () => {
     expect(screen.getByText(/"query":"jwt"/)).toBeTruthy();
     expect(screen.getByText("Result")).toBeTruthy();
   });
+
+  it("renders the exact backend tool id with underscores", () => {
+    render(
+      <ToolFallback
+        type="tool-call"
+        toolCallId="t2"
+        toolName="digivault_get_note"
+        args={{ vault_paths: ["a.md"] }}
+        argsText='{"vault_paths":["a.md"]}'
+        result={{ hitCount: 1 }}
+        isError={false}
+        status={{ type: "complete" }}
+        addResult={() => undefined}
+        resume={() => undefined}
+        respondToApproval={async () => undefined}
+      />,
+    );
+    expect(screen.getByText("digivault_get_note")).toBeTruthy();
+    expect(screen.queryByText("digivault get note")).toBeNull();
+  });
 });
