@@ -17,7 +17,7 @@ pooled in ``config/digiquant_models.yaml`` (plus ``openrouter/`` pins in
    the body must be non-empty and parse as JSON with the requested key.
 
 Requires ``OPENROUTER_API_KEY``. Without it the script prints a notice and exits 0 so
-non-secret CI contexts skip gracefully. Live calls use ``max_tokens=2000``: a
+non-secret CI contexts skip gracefully (pass ``--strict`` / ``--fail-on-skip`` to exit 1). Live calls use ``max_tokens=2000``: a
 reasoning-capable slug bills hidden ``reasoning_content`` out of the same budget as
 the visible answer, and a tight cap (previously 64) can let reasoning consume the
 whole thing, cutting the response off one character into the visible answer — which
@@ -234,12 +234,19 @@ def main() -> int:
         action="store_true",
         help="skip live completions; check endpoint metadata only",
     )
+    parser.add_argument(
+        "--strict",
+        "--fail-on-skip",
+        action="store_true",
+        dest="strict",
+        help="exit 1 when OPENROUTER_API_KEY is missing (nothing checked) (#3787)",
+    )
     args = parser.parse_args()
 
     api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     if not api_key:
         print("OPENROUTER_API_KEY not set — skipping pool validation (nothing checked).")
-        return 0
+        return 1 if args.strict else 0
 
     slugs = collect_pool_slugs(args.config_dir)
     if not slugs:

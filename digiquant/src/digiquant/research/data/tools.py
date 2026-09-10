@@ -179,20 +179,6 @@ def _coerce_bool(value: Any, *, default: bool = True) -> bool:
     return str(value).strip().lower() not in ("false", "0", "no", "")
 
 
-def _references_technicals_close(args: dict[str, Any]) -> bool:
-    """True when query args reference a 'close' column on price_technicals."""
-    columns = str(args.get("columns", "*"))
-    if any(part.strip().lower() == "close" for part in columns.split(",")):
-        return True
-    if str(args.get("order", "")).strip().lower() == "close":
-        return True
-    for filter_arg in ("eq", "gte", "lte", "in_"):
-        filt = args.get(filter_arg)
-        if isinstance(filt, dict) and any(str(key).strip().lower() == "close" for key in filt):
-            return True
-    return False
-
-
 def build_data_tool_dispatcher(
     client: Any,
     run_date: date | None = None,
@@ -233,21 +219,26 @@ def build_data_tool_dispatcher(
                     "Allowed tables: positions, nav_history, theses, "
                     "thesis_vehicles, position_events, portfolio_metrics, trading_calendar."
                 )
-            # Server-side guard: price_technicals never had a 'close' column (#3078).
-            # Fail fast with a redirect instead of burning a tool round on a 42703
-            # and inviting the model to retry the same doomed query. (Market
-            # tables left query_data for the R2 cache in #3780; the guard stays
-            # so the redirect names the R2 tool, not a retired table.)
-            if table == "price_technicals" and _references_technicals_close(args):
-                return (
-                    "Error: price_technicals has no 'close' column. "
-                    "Use the R2-backed digiquant_get_price_technicals MCP tool "
-                    "for OHLCV/indicators."
-                )
-            # NOTE (#3780): the old 'date'→'obs_date' rewrite for
-            # macro_series_observations lived here; the table left query_data
-            # for the R2 cache, so get_macro_series (series_ids, no columns) is
-            # the only macro path and needs no rewrite.
+            # NOTE (#3780 + #814): macro_series_observations is still served
+            # by query_data on both backends, so the 'date' to 'obs_date'
+            # rewrite below stays: without it the model burns tool rounds
+            # on Postgres 42703 errors. (The R2 cutover routes dedicated
+            # macro reads via get_macro_series; this generic path keeps
+            # working for direct table queries.)
+            # Column allowlists for price_history / price_technicals live in
+            # ``query_data`` (#3771) so MCP digiquant_query_data shares the same choke.
+            # Server-side rewrite: the LLM sometimes sorts/filters macro_series_observations
+            # by 'date' (the generic name) instead of 'obs_date' (the real column). Silently
+            # correct it so the model gets useful data rather than a Postgres 42703 error (#814).
+            if table == "macro_series_observations":
+                for filter_arg in ("eq", "gte", "lte"):
+                    filt = args.get(filter_arg)
+                    if isinstance(filt, dict) and "date" in filt:
+                        filt = dict(filt)
+                        filt["obs_date"] = filt.pop("date")
+                        args = {**args, filter_arg: filt}
+                if args.get("order") == "date":
+                    args = {**args, "order": "obs_date"}
             return query_data(
                 client=client,
                 table=table,

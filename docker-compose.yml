@@ -1,7 +1,7 @@
 # Digi Ecosystem – Docker Compose (Phase 0+)
 # See ARCHITECTURE.md, SECURITY.md. For hardened deploy: docker compose --profile hardened up
 # Usage: docker compose up --build
-# For testing without OpenAI: set OLLAMA_MODEL=ollama/qwen3:8b in .env; Ollama runs in Docker below.
+# For testing without OpenAI: set OLLAMA_MODEL=ollama/deepseek-r1:14b in .env; Ollama runs in Docker below.
 
 services:
   # ─── Redis for digikey JWT revocation blocklist (ADR-0007) ───

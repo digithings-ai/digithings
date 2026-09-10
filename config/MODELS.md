@@ -35,7 +35,7 @@ Set in `.env`:
 - **`medium`** – Balanced quality/speed.
 - **`best`** – Largest/best for hard tasks.
 
-digigraph reads `DIGI_LLM_MODE` and picks the default model from `config/model_modes.yaml`. If the file is missing or the mode is unset, it falls back to `test` and then to the env `OLLAMA_MODEL` or a built-in default.
+digigraph reads `DIGI_LLM_MODE` and picks the default model from `config/model_modes.yaml`. If the file is missing or the mode is unset, mode selection uses `test`, then env `OLLAMA_MODEL`, then a built-in default — that is **mode defaults only**, not a provider fallback chain. Provider errors still surface (see Router fallbacks / digillm ARCHITECTURE fail-fast).
 
 ## How agents should update the model list
 

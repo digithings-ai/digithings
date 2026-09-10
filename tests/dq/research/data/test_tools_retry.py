@@ -97,8 +97,10 @@ def test_schema_error_fails_fast_without_retry(
             inner.execute = _execute  # type: ignore[method-assign]
             return inner
 
+    # Use a table without a per-column allowlist so the 42703 still reaches
+    # Supabase (price_technicals/price_history now fail-fast in query_data #3771).
     dispatch = build_data_tool_dispatcher(_BadColumnClient({}))
-    err = dispatch("query_data", {"table": "theses", "columns": "nope"})
+    err = dispatch("query_data", {"table": "positions", "columns": "nope"})
     # A real bug (42703) is not transient: one attempt, Error string, no sleep.
     assert "42703" in err
     assert _BadColumnClient.attempts == 1

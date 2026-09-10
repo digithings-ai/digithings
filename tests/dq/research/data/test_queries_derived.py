@@ -15,6 +15,8 @@ from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.research.data.queries import (
     ALLOWED_READ_TABLES,
     HOUSE_BOOK_READ_TABLES,
+    PRICE_HISTORY_COLUMNS,
+    PRICE_TECHNICALS_COLUMNS,
     get_market_breadth,
     get_sector_relative_strength,
     get_vix_term_structure,
@@ -321,6 +323,110 @@ class TestQueryData:
         out = query_data(client=client, table="theses", eq={"date": "2026-06-15"})
         assert out["row_count"] == 1
         assert out["rows"][0]["ticker"] == "THEME"
+
+    def test_price_technicals_rejects_ohlcv_columns(self) -> None:
+        """OHLCV on price_technicals fails fast at the table whitelist post-cutover (#3780)."""
+
+        class _ExplodingClient:
+            def table(self, *_a: object, **_k: object) -> object:
+                raise AssertionError("must not reach Supabase")
+
+        out = query_data(
+            client=_ExplodingClient(),  # type: ignore[arg-type]
+            table="price_technicals",
+            columns="date,close,rsi_14",
+            eq={"ticker": "SPY"},
+        )
+        assert "error" in out
+        assert "not readable" in out["error"]
+        assert "rows" not in out
+
+    def test_price_technicals_rejects_ohlcv_filter_key(self) -> None:
+        class _ExplodingClient:
+            def table(self, *_a: object, **_k: object) -> object:
+                raise AssertionError("must not reach Supabase")
+
+        out = query_data(
+            client=_ExplodingClient(),  # type: ignore[arg-type]
+            table="price_technicals",
+            columns="*",
+            gte={"close": 100},
+        )
+        assert "error" in out
+        assert "not readable" in out["error"]
+        assert "rows" not in out
+
+    def test_price_history_rejects_sma_columns(self) -> None:
+        """sma_*/technicals on price_history fail fast at the table whitelist post-cutover (#3780)."""
+
+        class _ExplodingClient:
+            def table(self, *_a: object, **_k: object) -> object:
+                raise AssertionError("must not reach Supabase")
+
+        out = query_data(
+            client=_ExplodingClient(),  # type: ignore[arg-type]
+            table="price_history",
+            columns="date,sma_50,close",
+            eq={"ticker": "SPY"},
+        )
+        assert "error" in out
+        assert "not readable" in out["error"]
+        assert "rows" not in out
+
+    def test_price_history_rejects_technical_order_key(self) -> None:
+        class _ExplodingClient:
+            def table(self, *_a: object, **_k: object) -> object:
+                raise AssertionError("must not reach Supabase")
+
+        out = query_data(
+            client=_ExplodingClient(),  # type: ignore[arg-type]
+            table="price_history",
+            columns="*",
+            order="rsi_14",
+        )
+        assert "error" in out
+        assert "not readable" in out["error"]
+        assert "rows" not in out
+
+    def test_star_select_refused_on_removed_tables(self) -> None:
+        # Post-cutover (#3780): market tables left generic query_data, so even
+        # ``*`` is refused at the table level (column allowlists no longer apply).
+        class _ExplodingClient:
+            def table(self, *_a: object, **_k: object) -> object:
+                raise AssertionError("must not reach Supabase")
+
+        for table in ("price_history", "price_technicals"):
+            out = query_data(
+                client=_ExplodingClient(),  # type: ignore[arg-type]
+                table=table,
+                columns="*",
+                eq={"ticker": "SPY"},
+            )
+            assert "error" in out
+            assert "not readable" in out["error"]
+            assert "rows" not in out
+
+    def test_explicit_allowed_columns_refused_post_cutover(self) -> None:
+        # Post-cutover (#3780): even allowlisted columns are refused at the
+        # table level — dedicated flag-aware tools own market reads now.
+        class _ExplodingClient:
+            def table(self, *_a: object, **_k: object) -> object:
+                raise AssertionError("must not reach Supabase")
+
+        out = query_data(
+            client=_ExplodingClient(),  # type: ignore[arg-type]
+            table="price_technicals",
+            columns="date,rsi_14,sma_50",
+            eq={"ticker": "SPY"},
+            order="date",
+        )
+        assert "error" in out
+        assert "not readable" in out["error"]
+        assert "rows" not in out
+        assert "sma_50" in PRICE_TECHNICALS_COLUMNS
+        assert "close" not in PRICE_TECHNICALS_COLUMNS
+        assert "sma_50" not in PRICE_HISTORY_COLUMNS
+        assert "close" in PRICE_HISTORY_COLUMNS
 
 
 @pytest.mark.unit

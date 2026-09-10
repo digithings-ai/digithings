@@ -14,6 +14,16 @@ does not drop until those tuples are vacuumed. The "588MB → ~488MB" math
 in the archive design spec is therefore **unverified until measured
 pre/post with the queries below**.
 
+
+## MCP token retention (#3794)
+
+digigraph strips `mcp_servers.token` before checkpointer persistence. The R2
+bucket **`digithings-archive`** is private (lifecycle + access via service
+credentials only — never publish account ids or keys). Any checkpoint blobs
+archived **before** the #3794 redaction may still hold OAuth/session tokens;
+retain/expire them under the existing archive lifecycle and do not exfiltrate
+payload contents into tickets or chat.
+
 ## VACUUM strategy
 
 No new VACUUM job is needed. Two existing mechanisms cover the archive

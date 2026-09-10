@@ -2352,8 +2352,10 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
    REJECTED/base-preserved outcome (#3078) — a structurally invalid amendment is
    a model-output error that must surface, not be absorbed; the H6 node catches it
    and degrades that ticker to carried + PhaseError, never killing the chain (#3738). `query_data`
-   rejects `close` on `price_technicals` before Supabase with a redirect to
-   `price_history` (#3078). H9 cost evidence reads `hist_vol_21`/`atr_pct` from `price_technicals`
+   enforces per-table column allowlists for `price_history` / `price_technicals` (#3771;
+   covers MCP `digiquant_query_data` too): OHLCV/`close` on technicals redirects to
+   `price_history`; `sma_*`/technicals on history redirect to `price_technicals`. H9 cost
+   evidence reads `hist_vol_21`/`atr_pct` from `price_technicals`
   (second read joined onto the history row), never from `price_history`.
   `conviction_delta` clamps to ±2 before validation; `DocumentPatch` drops ops
   missing `op`/`path` before validation; bias synonyms map hawkish→bearish,

@@ -125,11 +125,15 @@ _MAX_TOOL_MESSAGE_CHARS = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "120
 # id reaching digillm means routing above it failed — raise immediately with a
 # clear error instead of billing a call the house policy forbids.
 _BANNED_MODELS = frozenset({"ollama/qwen3:8b"})
+_BANNED_MODELS_LOWER = frozenset(m.lower() for m in _BANNED_MODELS)
 
 
 def _reject_banned_model(model: str) -> None:
-    """Raise :class:`ValueError` when *model* is a banned id (see :data:`_BANNED_MODELS`)."""
-    if (model or "").strip() in _BANNED_MODELS:
+    """Raise :class:`ValueError` when *model* is a banned id (see :data:`_BANNED_MODELS`).
+
+    Comparison is case-insensitive so ``OLLAMA/QWEN3:8B`` cannot bypass the ban.
+    """
+    if (model or "").strip().lower() in _BANNED_MODELS_LOWER:
         raise ValueError(
             f"model {model!r} is banned by house policy (#3078); "
             "resolve a cheap-inference route through digillm instead"
@@ -325,7 +329,11 @@ def _default_client_api_key() -> str:
     Priority (highest first):
     1. Per-request proxy-key override (:func:`set_proxy_key`).
     2. ``LITELLM_PROXY_API_KEY`` env var.
-    3. ``OPENAI_API_KEY`` env var (``"not-set"`` if unset).
+    3. ``OPENAI_API_KEY`` env var.
+
+    Raises:
+        RuntimeError: when no key is configured (fail-fast misconfig; never the
+            sentinel ``"not-set"`` that used to produce a late provider 401).
     """
     override = _proxy_key_override.get()
     if override:
@@ -333,7 +341,13 @@ def _default_client_api_key() -> str:
     proxy = (os.environ.get("LITELLM_PROXY_API_KEY") or "").strip()
     if proxy:
         return proxy
-    return os.environ.get("OPENAI_API_KEY", "not-set")
+    openai_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+    if openai_key:
+        return openai_key
+    raise RuntimeError(
+        "No LLM API key configured: set LITELLM_PROXY_API_KEY or OPENAI_API_KEY "
+        "(or call set_proxy_key) before creating a house client."
+    )
 
 
 # ── Request timeout ───────────────────────────────────────────────────────────
@@ -697,6 +711,12 @@ def get_client_for_model(model: str) -> OpenAI:
         cfg = _EXTERNAL_PROVIDERS.get(provider)
         if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
             return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
+        expected = cfg["base_url"] if cfg else "a registered provider base_url"
+        raise RuntimeError(
+            f"BYOK api_base {base_url!r} does not match registered base for "
+            f"provider {provider!r} (expected {expected!r}); refusing silent "
+            "house/vendor fallthrough."
+        )
     # Cheaper Inference default base: mapped house slugs use get_client(); a catalog
     # miss (sonar / :online / maverick / grok-4.3|4.6 / anthropic) always raises —
     # there is no OpenRouter fallback.
@@ -1170,8 +1190,10 @@ def _record_usage(**fields: Any) -> None:
 def _normalize_tool_arguments(args_str: str | None) -> str:
     """Return a valid JSON string for tool-call arguments.
 
-    Some models stream invalid JSON (incomplete, trailing comma). Falls back to
-    ``"{}"`` when the value cannot be repaired.
+    Some models stream invalid JSON (incomplete, trailing comma). Best-effort
+    repairs (missing closing ``}``, trailing commas) are applied when they yield
+    valid JSON. Empty / whitespace-only becomes ``"{}"``. Irreparable garbage
+    raises ``ValueError`` (fail-fast) rather than silently substituting ``"{}"``.
     """
     s = (args_str or "").strip()
     if not s:
@@ -1194,8 +1216,10 @@ def _normalize_tool_arguments(args_str: str | None) -> str:
     try:
         json.loads(fixed)
         return fixed
-    except json.JSONDecodeError:
-        return "{}"
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"tool call arguments are not valid JSON and could not be repaired: {s!r}"
+        ) from exc
 
 
 def _compact_tool_message_content(msg_content: str) -> str:
@@ -1373,14 +1397,21 @@ def completion(
       never cached (they may have side effects).
     - ``response_format``: OpenAI-compatible json_schema structured-output
       descriptor, e.g. ``{"type": "json_schema", "json_schema": {"name": ...,
-      "schema": {...}}}``. Mutually exclusive with ``tools`` (ignored when
-      ``tools`` is non-empty). Providers without json_schema support silently
+      "schema": {...}}}``. Mutually exclusive with ``tools`` — passing both
+      raises ``ValueError`` (fail-fast). Providers without json_schema support silently
       ignore it, so an in-prompt schema remains the primary contract there.
 
     Raises:
-        RuntimeError: when a registered provider's API key env var is unset.
-        ValueError: when ``model`` is a banned id (house policy, #3078).
+        RuntimeError: when a registered provider's API key env var is unset, or
+            when no house API key is configured for the default client.
+        ValueError: when ``model`` is a banned id (house policy, #3078), or when
+            both ``tools`` and ``response_format`` are provided.
     """
+    if tools and response_format is not None:
+        raise ValueError(
+            "completion: tools and response_format are mutually exclusive; "
+            "pass one or the other, not both."
+        )
     _reject_banned_model(model)
     provider, _ = _parse_provider_prefix(model)
     client = get_client_for_model(model)
@@ -1433,7 +1464,6 @@ def completion(
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
     elif response_format is not None:
-        # tools and response_format are mutually exclusive in the OpenAI API.
         kwargs["response_format"] = response_format
 
     try:
@@ -1696,8 +1726,9 @@ def _stream_completion_one_turn(
                 response=evidence,
             )
             raise
-        except Exception:
-            scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+        except Exception as error:
+            scope.terminal_outcome = ProviderCallOutcome.FAILED
+            scope.logical_error_type = type(error).__name__
             _emit_attempt(
                 scope=scope,
                 attempt_number=attempt_number,
@@ -1705,8 +1736,9 @@ def _stream_completion_one_turn(
                 provider=_provider_name(provider),
                 requested_model=model,
                 started_at=started_at,
-                outcome=ProviderAttemptOutcome.CANCELLED,
+                outcome=ProviderAttemptOutcome.FAILED,
                 response=evidence,
+                error=error,
             )
             raise
     _emit_attempt(

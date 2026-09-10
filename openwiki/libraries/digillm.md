@@ -19,9 +19,12 @@ verified:
 # digillm Library
 
 digillm is the single home for LLM client code: a standalone,
-provider-agnostic library speaking to any OpenAI-compatible endpoint,
-with no vendor preference (LiteLLM is the house upstream swap layer via
-`OPENAI_API_BASE`), no FastAPI, and no hard dependency on digismith.
+provider-agnostic library speaking to any OpenAI-compatible endpoint.
+**House default** when `CHEAPERINFERENCE_API_KEY` is set is
+[Cheaper Inference](../../docs/providers/cheaperinference.md) (LiteLLM overlay /
+CLI rewrite); otherwise OpenRouter. Force OpenRouter with
+`DIGI_HOUSE_UPSTREAM=openrouter`. LiteLLM remains the local swap layer via
+`OPENAI_API_BASE`. No FastAPI; no hard dependency on digismith.
 Hard deps are `openai>=1.0` + `pydantic>=2`; mode resolution, tracing,
 and dev tools ride extras. Consumers: twelve-x now; digigraph and
 digisearch migrate later.
@@ -30,10 +33,11 @@ digisearch migrate later.
 
 `register_provider(prefix, base_url, api_key_env)` maps `provider/`
 model prefixes to vendor endpoints; `get_client_for_model()` resolves
-per request across the default base, LiteLLM proxy, OpenRouter, and BYOK
-pass-throughs, with proxy-key and BYOK contextvars (`proxy_key()`,
-`byok()`) scoping credentials per request. Cost-control guards keep house
-traffic off hosted marketplaces.
+per request across the default base, Cheaper Inference (when keyed),
+LiteLLM proxy, OpenRouter, and BYOK pass-throughs, with proxy-key and BYOK
+contextvars (`proxy_key()`, `byok()`) scoping credentials per request.
+Cost-control guards keep house traffic off unintended hosted marketplaces;
+see `docs/LLM_PROVIDERS.md`.
 
 ## Completion and tool loop
 
