@@ -323,6 +323,16 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
           },
           persistence: "none",
           auth: "anonymous",
+          models: {
+            default: "deepseek/deepseek-v4-flash",
+            available: [
+              "deepseek/deepseek-v4-flash",
+              "deepseek/deepseek-v4-flash-0731",
+              "openai/gpt-oss-120b",
+              "z-ai/glm-5.3-flash",
+            ],
+            allowPicker: true,
+          },
           backend: { type: "digigraph" },
           gate: { mode: "ungated", activityDetail: "labels" },
         },

@@ -129,7 +129,16 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     modelPicker: false,
     branchPicker: true,
   },
-  models: { available: [], allowPicker: false },
+  models: {
+    default: "deepseek/deepseek-v4-flash",
+    available: [
+      "deepseek/deepseek-v4-flash",
+      "deepseek/deepseek-v4-flash-0731",
+      "openai/gpt-oss-120b",
+      "z-ai/glm-5.3-flash",
+    ],
+    allowPicker: true,
+  },
   cli: { enabled: false },
   tools: { allowUserToggle: true, catalog: [] },
   mcp: { servers: [], allowUserServers: false, allowAddForm: false },
