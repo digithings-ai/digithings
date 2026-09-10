@@ -1,10 +1,26 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToolCatalogBar } from "./tool-catalog-bar";
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
 import { takePendingForceTool } from "@/lib/pending-chat-headers";
+
+function stubMapStorage() {
+  // happy-dom ships a non-functional localStorage — stub a real Map so the
+  // effect sync reads the missing-key default, not the catch branch.
+  const store = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      store.set(k, v);
+    },
+    removeItem: (k: string) => {
+      store.delete(k);
+    },
+    clear: () => store.clear(),
+  });
+}
 
 const catalogConfig = {
   ...DEFAULT_CLIENT_CONFIG,
@@ -20,13 +36,21 @@ const catalogConfig = {
 };
 
 describe("ToolCatalogBar", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
   it("arms X-Digi-Force-Tool on Search / Vault and isolates web search prefs", async () => {
+    // Matched-tenant slug: the toggle starts off (#3420 opt-in) so this test
+    // exercises the interaction, not the baseline default-on path (covered
+    // below). Stubbed storage keeps the initial read deterministic in every
+    // environment regardless of happy-dom localStorage behavior.
+    stubMapStorage();
     takePendingForceTool("host-a");
     const user = userEvent.setup();
     const onWebSearchChange = vi.fn();
     render(
       <ToolCatalogBar
-        clientConfig={catalogConfig}
+        clientConfig={{ ...catalogConfig, slug: "occ" }}
         sessionKey="host-a"
         webSearchScope="web-scope"
         onWebSearchChange={onWebSearchChange}
@@ -64,5 +88,34 @@ describe("ToolCatalogBar", () => {
       />,
     );
     expect(document.querySelector("[data-tool-catalog]")).toBeNull();
+  });
+
+  it("defaults the web toggle on for the baseline embed slug, off for matched tenants", () => {
+    // Baseline (slug "embed", no stored pref): default-on.
+    stubMapStorage();
+    const { unmount } = render(
+      <ToolCatalogBar
+        clientConfig={catalogConfig}
+        sessionKey="baseline-scope"
+        webSearchScope="baseline-web-default"
+      />,
+    );
+    expect(catalogConfig.slug).toBe("embed");
+    expect(screen.getByRole("button", { name: "Web search" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    unmount();
+    // Matched tenant slug with no stored pref: stays off (#3420 opt-in).
+    stubMapStorage();
+    render(
+      <ToolCatalogBar
+        clientConfig={{ ...catalogConfig, slug: "occ" }}
+        sessionKey="tenant-scope"
+        webSearchScope="tenant-web-default"
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Web search" }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
   });
 });
