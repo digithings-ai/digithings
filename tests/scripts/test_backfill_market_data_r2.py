@@ -179,6 +179,58 @@ def make_macro_fetch(rows: list[dict[str, Any]]) -> Any:
     return fetch_page
 
 
+def test_backfill_macro_lowercases_uppercase_source() -> None:
+    """Upper-case spec sources must still write lowercase keys/pointers (#3780).
+
+    The refresh (``refresh_macro_series``) and the reader
+    (``_read_r2_macro_window`` hardcodes ``"fred"``) both lowercase, so an
+    upper-case ``backfill_macro`` source would write unreachable
+    keys/pointers. Regression net: mixed-case in, lowercase out.
+    """
+    calls: list[str] = []
+    store = FakeStore()
+    n = backfill.backfill_macro(
+        "FRED",
+        "DGS10",
+        make_macro_fetch(macro_rows_730()),
+        store,
+        page_size=100,
+        progress=calls.append,
+    )
+    assert n == 1
+    assert [p["key"] for p in store.puts] == ["market-data/macro/fred__DGS10/2026-09-08.parquet"]
+    assert store.pointers == {
+        "market-data/macro/fred__DGS10/latest": "market-data/macro/fred__DGS10/2026-09-08.parquet"
+    }
+
+
+def test_r2_store_adapter_macro_dataset_id_lowercases_source() -> None:
+    """Adapter manifest ids normalize the source the same way (``fred__DGS10``)."""
+    from types import SimpleNamespace
+
+    class Inner:
+        def put_generation(
+            self,
+            key: str,
+            payload: bytes,
+            source_table: str,
+            source_key: dict[str, Any] | None = None,
+            rows: int = -1,
+        ) -> Any:
+            return SimpleNamespace(key=key, sha256="abc123")
+
+    manifest: dict[str, Any] = {}
+    adapter = backfill.R2StoreAdapter(Inner(), manifest)
+    adapter.put_generation(
+        "market-data/macro/fred__DGS10/2026-09-08.parquet",
+        b"macro-bytes",
+        backfill.SOURCE_TABLE_MACRO,
+        {"source": "FRED", "series": "DGS10", "as_of": "2026-09-08"},
+        rows=730,
+    )
+    assert list(manifest["datasets"]) == ["fred__DGS10"]
+
+
 def test_backfill_macro_resumes_from_manifest() -> None:
     calls: list[str] = []
     store = FakeStore(existing={"market-data/macro/fred__DGS10/2026-09-07.parquet"})

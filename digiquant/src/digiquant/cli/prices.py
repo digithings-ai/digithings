@@ -44,8 +44,14 @@ def _supabase_writes_disabled() -> bool:
     Supabase bodies). ``fetch-macro --sources fedprob`` is exempt (see
     :func:`_macro_write_covered_by_r2`) — prediction-market odds have no R2
     generation.
+
+    Thin alias over :func:`digiquant.research.data.queries.r2_backend_enabled`
+    (the single canonical flag read); kept under this name for the writer
+    call sites and their tests.
     """
-    return os.environ.get("DIGIQUANT_MARKET_DATA_BACKEND", "supabase").strip().lower() == "r2"
+    from digiquant.research.data.queries import r2_backend_enabled
+
+    return r2_backend_enabled()
 
 
 def _refuse_supabase_write(command: str) -> None:

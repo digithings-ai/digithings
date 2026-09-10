@@ -32,11 +32,6 @@ _ttl: dict[tuple, tuple[float, str]] = {}
 _R2_LIVE_OVERLAP_DAYS = 30
 
 
-def _market_data_backend() -> str:
-    """Live read of the ``DIGIQUANT_MARKET_DATA_BACKEND`` flag (default ``supabase``)."""
-    return os.environ.get("DIGIQUANT_MARKET_DATA_BACKEND", "supabase").strip().lower()
-
-
 def _ttl_get(key: tuple) -> str | None:
     hit = _ttl.get(key)
     if hit and time.time() - hit[0] < _TTL_SECONDS:
@@ -320,7 +315,9 @@ def digiquant_get_price_technicals(
     """
     try:
         lookback = min(int(lookback), 500)
-        if _market_data_backend() != "r2":
+        from digiquant.research.data.queries import r2_backend_enabled
+
+        if not r2_backend_enabled():
             return _supabase_technicals(ticker, lookback)
         manifest = _read_manifest()
         if manifest["version"] != 1:
@@ -368,7 +365,9 @@ def digiquant_get_macro_series(
     """
     try:
         lookback = min(int(lookback), 500)
-        if _market_data_backend() != "r2":
+        from digiquant.research.data.queries import r2_backend_enabled
+
+        if not r2_backend_enabled():
             return _supabase_macro(series_ids, lookback)
         manifest = _read_manifest()
         if manifest["version"] != 1:

@@ -28,7 +28,6 @@ MANIFEST_KEY = "market-data/manifest.json"
 
 SOURCE_TABLE_PRICE = "market-data/price"
 SOURCE_TABLE_MACRO = "market-data/macro"
-SOURCE_TABLE_SNAPSHOT = "market-data/snapshot"
 
 RegistryInsert = Callable[[str, dict[str, Any], str, str, int], None]
 
@@ -58,11 +57,6 @@ def macro_latest_pointer_key(source: str, series: str) -> str:
     return f"market-data/macro/{source}__{series}/latest"
 
 
-def snapshot_key(yyyymm: str, ticker: str) -> str:
-    """R2 key layout: ``market-data/snapshots/{yyyymm}/{TICKER}.parquet``."""
-    return f"market-data/snapshots/{yyyymm}/{normalize_ticker(ticker)}.parquet"
-
-
 def build_manifest(
     as_of: str,
     datasets: dict[str, dict[str, Any]],
@@ -89,7 +83,15 @@ class Generation:
 
 
 class R2HistoryStore:
-    """Versioned market-data history over a :class:`StorageBackend` + registry insert."""
+    """Versioned market-data history over a :class:`StorageBackend` + registry insert.
+
+    This store deliberately has NO ``existing_generations`` listing: resume
+    decisions belong to the scripts-side ``R2StoreAdapter``
+    (``scripts/backfill_market_data_r2.py``, inherited by the refresh
+    ``RefreshStore``), which answers from the manifest's dataset ``object``
+    values without listing R2. Backfill/refresh call sites use the adapter,
+    never this class, for generation enumeration.
+    """
 
     def __init__(self, backend: StorageBackend, registry_insert: RegistryInsert) -> None:
         self._backend = backend
@@ -166,7 +168,6 @@ __all__ = [
     "MANIFEST_VERSION",
     "SOURCE_TABLE_MACRO",
     "SOURCE_TABLE_PRICE",
-    "SOURCE_TABLE_SNAPSHOT",
     "ArchiveVerifyError",
     "Generation",
     "R2HistoryStore",
@@ -177,5 +178,4 @@ __all__ = [
     "macro_key",
     "macro_latest_pointer_key",
     "normalize_ticker",
-    "snapshot_key",
 ]

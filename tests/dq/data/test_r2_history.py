@@ -150,7 +150,6 @@ def test_key_grammar() -> None:
         generation_key,
         latest_pointer_key,
         macro_key,
-        snapshot_key,
     )
 
     assert generation_key("SPY", "2026-09-08") == "market-data/price/SPY/2026-09-08.parquet"
@@ -160,7 +159,6 @@ def test_key_grammar() -> None:
         macro_key("FRED", "DGS10", "2026-09-08")
         == "market-data/macro/FRED__DGS10/2026-09-08.parquet"
     )
-    assert snapshot_key("202608", "SPY") == "market-data/snapshots/202608/SPY.parquet"
 
 
 def test_manifest_round_trip(fakes: Any) -> None:

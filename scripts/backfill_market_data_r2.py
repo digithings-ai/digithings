@@ -137,7 +137,14 @@ def backfill_macro(
     page_size: int = PAGE_SIZE,
     progress: Callable[[str], None] = print,
 ) -> int:
-    """Copy one macro series' observations into a new sealed generation."""
+    """Copy one macro series' observations into a new sealed generation.
+
+    ``source`` is lowercased on entry: the refresh (``refresh_macro_series``)
+    and the reader (``_read_r2_macro_window`` hardcodes ``"fred"``) both use
+    lowercase sources, so an upper-case spec would otherwise write unreachable
+    keys/pointers.
+    """
+    source = source.lower()
     rows: list[dict[str, Any]] = []
     offset = 0
     while True:
@@ -204,7 +211,7 @@ class R2StoreAdapter:
         datasets = self._manifest.setdefault("datasets", {})
         info = dict(source_key or {})
         if source_table == SOURCE_TABLE_MACRO:
-            dataset_id = f"{info.get('source')}__{info.get('series')}"
+            dataset_id = f"{str(info.get('source', '')).lower()}__{info.get('series')}"
         else:
             dataset_id = normalize_ticker(str(info.get("ticker", key)))
         datasets[dataset_id] = {

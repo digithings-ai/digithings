@@ -33,10 +33,13 @@ env:
   # sealed at as_of, and stops the Supabase writers (`digiquant prices`
   # refuses covered writes under this flag). Rollback = flip back to
   # "supabase" (readers fall back to the Supabase bodies, writers resume).
+  # Merge default is "supabase": the live backfill has NOT run yet (R2 is
+  # empty), so "r2" would break the daily pipeline on merge. Flip to "r2"
+  # only post-merge, supervised, once the backfill has landed.
   # Standing exception: `fetch-macro --sources fedprob` keeps writing
   # macro_series_observations under "r2" (prediction-market odds have no R2
   # generation; get_fed_rate_probabilities stays Supabase-backed).
-  DIGIQUANT_MARKET_DATA_BACKEND: "r2"
+  DIGIQUANT_MARKET_DATA_BACKEND: "supabase"
 
   DIGI_CHECKPOINTER: postgres          # Resume on retry (#665); degrades if URI absent
   LANGSMITH_TRACING: "true"            # Required for traces; key alone is insufficient (#687)
