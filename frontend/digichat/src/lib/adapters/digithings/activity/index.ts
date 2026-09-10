@@ -45,6 +45,20 @@ function mapGraphUpdate(payload: Record<string, unknown>): ActivitySpan | null {
   };
 }
 
+/** Narrow an unknown trace result to the sanitizer's accepted shapes. */
+function toolResultValue(value: unknown): ActivitySpan["toolResult"] | undefined {
+  if (
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value)) ||
+    Array.isArray(value) ||
+    (typeof value === "object" && value !== null)
+  ) {
+    return value as Exclude<ActivitySpan["toolResult"], undefined>;
+  }
+  return undefined;
+}
+
 function mapOpaque(trace: DigigraphTraceLike): ActivitySpan {
   const label =
     (typeof trace.payload?.label === "string" && trace.payload.label) || trace.type || "activity";
@@ -102,6 +116,7 @@ export function mapDigigraphTraceToSpans(
         ? payload.query.trim()
         : undefined) || (args ? queryFromToolArgs(args) : undefined);
     const toolInput = toolInputFromPayload(payload);
+    const toolResult = "result" in payload ? toolResultValue(payload.result) : undefined;
     raw = {
       operation: "execute_tool",
       status: payload.status === "failed" ? "failed" : "completed",
@@ -109,7 +124,7 @@ export function mapDigigraphTraceToSpans(
       toolName: tool,
       ...(query ? { query } : {}),
       ...(toolInput ? { toolInput } : {}),
-      ...("result" in payload ? { toolResult: payload.result } : {}),
+      ...(toolResult !== undefined ? { toolResult } : {}),
     };
   } else if (trace.type === "rag_sources") {
     raw = mapDigisearchRagSources(trace.payload ?? {});

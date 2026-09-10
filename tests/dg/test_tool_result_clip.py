@@ -1,7 +1,6 @@
 """Unit tests for generic (non-retrieval) tool-result trace clipping."""
 
 import pytest
-
 from digigraph.workflow import _clip_tool_result
 
 
