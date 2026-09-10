@@ -7,11 +7,16 @@ https://api.bgeometrics.com/scalar.html). Investigated as the free
 alternative to BlockHorizon's undocumented endpoint (issue #3694): it covers
 nearly the same metric catalog with a documented, no-signup API.
 
-Free-tier constraints (confirmed live, 2026-09-10):
-- **No API key required.** An anonymous request is served the documented
-  "free plan" tier directly (``X-RateLimit-Limit-Hour: 10`` on an unauth'd
-  call) — there is no separate, more-restricted anonymous tier to register
-  out of.
+Free-tier constraints:
+- **Treat an API key as required, not optional.** This module originally
+  documented anonymous access as working, but bitcoin-data.com now markets
+  registration as required for even the free tier, and an unauthenticated
+  call observed in a later session returned HTTP 200 with an empty body
+  instead of data — anonymous access may be gone or degraded. Pass ``token``
+  (or set ``BGEOMETRICS_API_TOKEN``); the exact header name bitcoin-data.com
+  expects wasn't independently confirmed, so ``_get_json`` sends the token
+  under both ``Authorization: Bearer`` and ``X-Bgapi-Token`` (the latter is
+  what bitcoin-data.com's own MCP server docs describe) as a hedge.
 - **10 requests/hour, 15 requests/day**, shared across every metric from one
   IP/token. Fetch **one metric per call**; do not loop over a catalog.
 - **History capped at roughly the last 4 years.** Range queries further back
@@ -20,10 +25,6 @@ Free-tier constraints (confirmed live, 2026-09-10):
   backtesting (2014/2018 cycles) needs a different source — see
   ``coinmetrics.py``, whose free MVRV series covers full history back to
   2010.
-
-Auth is optional: pass ``token`` (or set ``BGEOMETRICS_API_TOKEN``) for a
-paid-tier token. Anonymous calls work today and hit the free-tier limits
-above.
 
 HTTP is split from parsing, mirroring ``data/onchain/bitview.py``:
 ``bgeometrics_rows_to_frame`` is HTTP-free; ``BgeometricsClient.fetch`` adds
@@ -239,7 +240,12 @@ def _get_json(
 ) -> object:
     headers = {"User-Agent": _USER_AGENT, "Accept": "application/json"}
     if token:
+        # bitcoin-data.com's own MCP docs (mcp.bitcoin-data.com) document
+        # ``x-bgapi-token`` as the header name, while this client historically
+        # sent ``Authorization: Bearer``. Send both — harmless if only one is
+        # actually read, and avoids silently breaking whichever scheme is real.
         headers["Authorization"] = f"Bearer {token}"
+        headers["X-Bgapi-Token"] = token
     caller = session if session is not None else httpx
     resp = caller.get(url, headers=headers, timeout=timeout, params=params)
     try:
