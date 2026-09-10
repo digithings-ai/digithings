@@ -59,6 +59,24 @@ def test_completion_rejects_banned_model_without_calling_provider() -> None:
     assert fake_client.chat.completions.create.call_count == 0
 
 
+@pytest.mark.parametrize(
+    "banned",
+    [
+        "OLLAMA/QWEN3:8B",
+        "Ollama/Qwen3:8b",
+        " ollama/qwen3:8b ",
+    ],
+)
+def test_completion_rejects_banned_model_case_insensitive(banned: str) -> None:
+    fake_client = MagicMock()
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        pytest.raises(ValueError, match="banned"),
+    ):
+        digillm.completion(banned, [{"role": "user", "content": "hi"}])
+    assert fake_client.chat.completions.create.call_count == 0
+
+
 def test_run_tools_rejects_banned_model() -> None:
     with pytest.raises(ValueError, match="ollama/qwen3:8b"):
         digillm.run_tools(

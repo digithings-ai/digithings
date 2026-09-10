@@ -125,11 +125,15 @@ _MAX_TOOL_MESSAGE_CHARS = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "120
 # id reaching digillm means routing above it failed — raise immediately with a
 # clear error instead of billing a call the house policy forbids.
 _BANNED_MODELS = frozenset({"ollama/qwen3:8b"})
+_BANNED_MODELS_LOWER = frozenset(m.lower() for m in _BANNED_MODELS)
 
 
 def _reject_banned_model(model: str) -> None:
-    """Raise :class:`ValueError` when *model* is a banned id (see :data:`_BANNED_MODELS`)."""
-    if (model or "").strip() in _BANNED_MODELS:
+    """Raise :class:`ValueError` when *model* is a banned id (see :data:`_BANNED_MODELS`).
+
+    Comparison is case-insensitive so ``OLLAMA/QWEN3:8B`` cannot bypass the ban.
+    """
+    if (model or "").strip().lower() in _BANNED_MODELS_LOWER:
         raise ValueError(
             f"model {model!r} is banned by house policy (#3078); "
             "resolve a cheap-inference route through digillm instead"
