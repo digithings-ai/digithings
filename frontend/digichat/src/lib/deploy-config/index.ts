@@ -45,7 +45,6 @@ export {
   catalogAllowsForceTool,
   catalogAllowsDisableId,
   allowedForceTools,
-  expandDisabledCatalogIds,
   omitForcedCatalogIds,
   FORCE_TOOL_BY_CATALOG_ID,
   DISABLEABLE_CATALOG_IDS,

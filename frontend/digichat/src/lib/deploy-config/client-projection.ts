@@ -147,9 +147,9 @@ function projectCatalog(entries: ToolCatalogEntry[] | undefined): DigichatClient
   if (!entries?.length) return [];
   return entries.map((e) => ({
     id: e.id,
-    // Omitted YAML `default` means session-on (#3733 / #3736). Only explicit
-    // `default: false` starts the tool off.
-    default: e.default !== false,
+    // Omitted YAML `default` means session-OFF (#3805 fail-closed for promote).
+    // Only explicit `default: true` starts the tool on.
+    default: e.default === true,
     ...(e.label ? { label: e.label } : {}),
   }));
 }

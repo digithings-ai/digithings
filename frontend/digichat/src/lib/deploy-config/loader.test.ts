@@ -316,7 +316,7 @@ describe("force-tool allowlist", () => {
     expect(filterForceToolHeader(dep, "not-a-tool")).toBeUndefined();
   });
 
-  it("does not allow digisearch when the catalog is empty", () => {
+  it("denies digisearch/digivault when catalog empty (fail-closed, #3806)", () => {
     const dep = embedTenantToDeployment({
       slug: "x",
       token: "t",
@@ -328,6 +328,7 @@ describe("force-tool allowlist", () => {
     });
     expect(dep.tools?.catalog ?? []).toEqual([]);
     expect(filterForceToolHeader(dep, "digisearch")).toBeUndefined();
+    expect(filterForceToolHeader(dep, "digivault")).toBeUndefined();
     expect(filterForceToolHeader(dep, "not-a-tool")).toBeUndefined();
   });
 });
