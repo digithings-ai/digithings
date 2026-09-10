@@ -92,6 +92,9 @@ LIVE_WINDOW_DAYS = 45
 FULL_HISTORY_START = "1990-01-01"
 PRICE_VALUE_COLS = ("open", "high", "low", "close", "volume")
 MACRO_VALUE_COLS = ("obs_date", "value")
+# Backfill macro generations carry exactly these columns (Task 5 writes the
+# direct-PG SELECT of source,series_id,obs_date,value,unit — no meta).
+MACRO_COLUMNS = ("source", "series_id", "obs_date", "value", "unit")
 POSTGRES_URI_ENV = "MARKET_DATA_POSTGRES_URI"
 FRED_API_KEY_ENV = "FRED_API_KEY"
 
@@ -486,7 +489,13 @@ def refresh_universe(
 
 
 def _normalize_macro_rows(rows: list[dict[str, Any]]) -> pl.DataFrame:
-    """Macro observation dicts -> ``obs_date``-sorted frame (dedupe last-wins)."""
+    """Macro observation dicts -> ``obs_date``-sorted frame (dedupe last-wins).
+
+    Projects onto the backfill macro schema (:data:`MACRO_COLUMNS`): vendor
+    rows carry ``meta`` dicts (FRED titles, Yahoo quote conventions) that the
+    backfill never wrote, so keeping them would widen refresh generations and
+    break the incremental ``pl.concat`` against backfill-shaped history.
+    """
     if not rows:
         return pl.DataFrame(
             schema={
@@ -508,7 +517,8 @@ def _normalize_macro_rows(rows: list[dict[str, Any]]) -> pl.DataFrame:
         .sort("obs_date")
     )
     key = [c for c in ("obs_date",) if c in frame.columns]
-    return frame.unique(subset=key, keep="last").sort("obs_date")
+    frame = frame.unique(subset=key, keep="last").sort("obs_date")
+    return frame.select([c for c in MACRO_COLUMNS if c in frame.columns])
 
 
 def _put_macro(store: Any, source: str, series: str, frame: pl.DataFrame, as_of: str) -> str:
@@ -622,14 +632,38 @@ def refresh_macro_series(
         top = _max_date(full, "obs_date")
         try:
             _put_macro(store, source, series, full, top)
-        except ArchiveVerifyError as exc:
-            return _outcome(
-                name,
-                MODE_ERROR,
-                as_of=seal,
-                rows=hist.height,
-                note=f"registry conflict, kept existing: {exc}",
-            )
+        except ArchiveVerifyError:
+            try:
+                fresh = _fetch_full()
+            except Exception as exc:
+                return _outcome(
+                    name,
+                    MODE_ERROR,
+                    as_of=seal,
+                    rows=hist.height,
+                    note=f"registry conflict, re-pull failed: {exc}",
+                )
+            top2 = _max_date(fresh, "obs_date")
+            if not top2 or top2 == top:
+                return _outcome(
+                    name,
+                    MODE_ERROR,
+                    as_of=seal,
+                    rows=hist.height,
+                    note=f"registry conflict for {macro_key(source, series, top)};"
+                    " kept existing generation",
+                )
+            try:
+                _put_macro(store, source, series, fresh, top2)
+            except ArchiveVerifyError as exc:
+                return _outcome(
+                    name,
+                    MODE_ERROR,
+                    as_of=seal,
+                    rows=hist.height,
+                    note=f"registry conflict persists: {exc}",
+                )
+            top, full = top2, fresh
         return _outcome(
             name, MODE_FULL_REPULL, as_of=top, rows=full.height, note="sealed overlap restated"
         )

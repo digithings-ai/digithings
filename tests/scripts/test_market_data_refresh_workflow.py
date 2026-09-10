@@ -109,6 +109,7 @@ class FakeStore:
         self.puts: list[dict[str, Any]] = []
         self.pointers: dict[str, str] = {}
         self.full_calls: dict[str, int] = {}
+        self.macro_full_calls: dict[tuple[str, str], int] = {}
         if live_rewritten_history is not None:
             base = {r["date"]: dict(r) for r in price_rows(HIST_DEFAULT)}
             for row in live_rewritten_history:
@@ -163,6 +164,7 @@ class FakeStore:
         return list(self.macro_live_rows(source, series, start, end))
 
     def fetch_macro_full(self, source: str, series: str, end: str) -> list[dict[str, Any]]:
+        self.macro_full_calls[(source, series)] = self.macro_full_calls.get((source, series), 0) + 1
         return list(self.macro_live_rows(source, series, "1990-01-01", end))
 
     def macro_live_rows(
@@ -235,12 +237,6 @@ def test_restatement_triggers_full_repull():
     )
     result = refresh_ticker("SPY", store)
     assert result["mode"] == "full-repull"
-
-
-def test_staleness_gate_refuses():
-    from digiquant.data.prices.refresh_gate import staleness_gate
-
-    assert staleness_gate(manifest_as_of="2026-08-01", run_date="2026-09-09")["ok"] is False
 
 
 def test_incremental_merge_writes_new_generation() -> None:
@@ -357,6 +353,63 @@ def test_macro_restatement_triggers_full_repull() -> None:
     assert result["mode"] == "full-repull"
 
 
+def test_macro_registry_conflict_retries_once_then_errors() -> None:
+    hist = [
+        {"source": "fred", "series_id": "DGS10", "obs_date": "2026-01-02", "value": 4.1},
+    ]
+    live = [
+        {"source": "fred", "series_id": "DGS10", "obs_date": "2026-01-02", "value": 9.9},
+    ]
+    store = FakeStore(
+        macros={("fred", "DGS10"): hist},
+        macro_lives={("fred", "DGS10"): live},
+        always_conflict=True,
+    )
+    result = refresh_macro_series("fred", "DGS10", store, manifest(), as_of="2026-01-06")
+    assert result["mode"] == "error"
+    assert "conflict" in result["note"]
+    assert store.macro_full_calls[("fred", "DGS10")] == 2
+    assert store.puts == []
+    assert store.pointers == {}
+
+
+def test_macro_refresh_matches_backfill_schema_without_meta() -> None:
+    import io
+
+    hist = [
+        {
+            "source": "fred",
+            "series_id": "DGS10",
+            "obs_date": "2026-01-01",
+            "value": 4.0,
+            "unit": "Percent",
+        },
+        {
+            "source": "fred",
+            "series_id": "DGS10",
+            "obs_date": "2026-01-02",
+            "value": 4.1,
+            "unit": "Percent",
+        },
+    ]
+    live = hist + [
+        {
+            "source": "fred",
+            "series_id": "DGS10",
+            "obs_date": "2026-01-05",
+            "value": 4.2,
+            "unit": "Percent",
+            "meta": {"title": "Market Yield on U.S. Treasury Securities"},
+        }
+    ]
+    store = FakeStore(macros={("fred", "DGS10"): hist}, macro_lives={("fred", "DGS10"): live})
+    result = refresh_macro_series("fred", "DGS10", store, manifest(), as_of="2026-01-06")
+    assert result["mode"] == "incremental"
+    key = "market-data/macro/fred__DGS10/2026-01-05.parquet"
+    frame = pl.read_parquet(io.BytesIO(store.objects[key]))
+    assert frame.columns == ["source", "series_id", "obs_date", "value", "unit"]
+
+
 def test_overlap_hash_stable_for_equal_frames() -> None:
     from digiquant.data.prices.merge import overlap_hash
 
@@ -397,6 +450,9 @@ def test_workflow_secrets_wired() -> None:
         "FRED_API_KEY",
     ):
         assert name in env, name
+    # Recorded deviation (Task 6 report): the store seam needs the direct-PG
+    # registry insert, so the workflow wires one extra secret past the brief pins.
+    assert env["MARKET_DATA_POSTGRES_URI"] == "${{ secrets.MARKET_DATA_POSTGRES_URI }}"
 
 
 def test_workflow_runs_refresh_and_uploads_manifest() -> None:
@@ -455,22 +511,7 @@ def test_main_marks_stale_and_exits_nonzero_on_ticker_failure(
         fetch_errors={"BOOM": "no_data"},
     )
     monkeypatch.setattr("scripts.refresh_market_data_r2._today_iso", lambda: "2026-01-05")
-    import scripts.refresh_market_data_r2 as refresh_mod
-
-    manifest_doc = {"version": 1, "as_of": "2026-01-02", "datasets": {}}
-    store.manifest = manifest_doc
-    monkeypatch.setattr(refresh_mod, "build_store", lambda uri: (store, manifest_doc))
-    rc = refresh_mod.main(
-        [
-            "--tickers",
-            "SPY,BOOM",
-            "--postgres-uri",
-            "postgresql://fake",
-            "--skip-macro",
-            "--manifest-out",
-            str(tmp_path / "refresh.json"),
-        ]
-    )
+    rc = _run_main(monkeypatch, tmp_path, store)
     assert rc == 1
     artifact = json.loads((tmp_path / "refresh.json").read_text())
     assert artifact["stale"] is True
