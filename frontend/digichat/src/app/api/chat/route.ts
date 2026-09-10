@@ -465,6 +465,9 @@ export async function POST(req: Request) {
       filterDisabledToolsHeader(dep, disabledToolsRaw),
       allowed,
     );
+    // Forward catalog ids as-is (#3807): digigraph `expand_disabled_tool_tokens`
+    // expands digisearch/digivault aliases upstream. Do not expand to tool
+    // names here — that would break the upstream contract.
     if (disabled.length) {
       upstreamHeaders["X-Digi-Disabled-Tools"] = disabled.join(",");
     }

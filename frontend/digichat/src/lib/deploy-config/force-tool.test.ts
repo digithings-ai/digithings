@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CLIENT_CONFIG } from "./client-projection";
 import {
+  allowedForceTools,
   filterDisabledToolsHeader,
   filterForceToolHeader,
   omitForcedCatalogIds,
@@ -30,8 +31,28 @@ describe("filterDisabledToolsHeader", () => {
   it("maps aliases and ignores empty input", () => {
     expect(filterDisabledToolsHeader(dep, "search, vault")).toEqual(["digisearch", "digivault"]);
     expect(filterDisabledToolsHeader(dep, "")).toEqual([]);
+    // Fail-closed (#3806): empty catalog denies builtins.
     expect(filterDisabledToolsHeader(null, "digisearch")).toEqual([]);
     expect(filterDisabledToolsHeader(null, "rm -rf")).toEqual([]);
+  });
+
+  it("forwards catalog ids unexpanded — digigraph expands them upstream (#3807)", () => {
+    expect(filterDisabledToolsHeader(dep, "digisearch")).toEqual(["digisearch"]);
+    expect(filterDisabledToolsHeader(dep, "digivault")).toEqual(["digivault"]);
+  });
+
+  it("denies force-tools on an empty catalog but still allows MCP ids (#3806)", () => {
+    expect(filterForceToolHeader(null, "digisearch")).toBeUndefined();
+    expect(filterForceToolHeader(null, "digivault")).toBeUndefined();
+    expect(allowedForceTools(null)).toEqual([]);
+    const mcpOnly = {
+      slug: "mcp-only",
+      mcp: { servers: [{ id: "datatap", url: "https://mcp.datatap.example/mcp" }] },
+    } as DigichatDeployment;
+    expect(filterForceToolHeader(mcpOnly, "digisearch")).toBeUndefined();
+    expect(filterForceToolHeader(mcpOnly, "datatap")).toBe("datatap");
+    expect(allowedForceTools(mcpOnly)).toEqual(["datatap"]);
+    expect(filterDisabledToolsHeader(mcpOnly, "digisearch,datatap")).toEqual(["datatap"]);
   });
 });
 

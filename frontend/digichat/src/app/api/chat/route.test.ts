@@ -524,6 +524,42 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-Digi-Force-Tool"]).toBeUndefined();
   });
 
+  it("drops X-Digi-Force-Tool / X-Digi-Disabled-Tools when catalog is empty (#3806)", async () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "test",
+        backend: { type: "digigraph" },
+        tools: { catalog: [] },
+      },
+    });
+    setDigichatConfigForTests(cfg);
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-force-tool": "digisearch",
+            "x-digi-disabled-tools": "digisearch,digivault",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        })
+      );
+      expect(res.status).toBe(200);
+      await res.text();
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-Force-Tool"]).toBeUndefined();
+      expect(call?.headers?.["X-Digi-Disabled-Tools"]).toBeUndefined();
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
   it("forwards allowlisted X-Digi-Disabled-Tools and drops unknown tokens (#3733)", async () => {
     setDigichatConfigForTests(catalogWithSearchVault());
     try {
@@ -545,6 +581,8 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       };
       const forwarded = call?.headers?.["X-Digi-Disabled-Tools"];
       expect(forwarded).toBe("digisearch");
+      // Catalog ids forward as-is (#3807) — digigraph expands them upstream.
+      expect(forwarded).not.toContain("digisearch_fetch_all");
     } finally {
       resetDigichatConfigForTests();
     }
