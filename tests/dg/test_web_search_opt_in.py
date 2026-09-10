@@ -96,6 +96,34 @@ def test_web_search_skill_hidden_unless_enabled(monkeypatch: pytest.MonkeyPatch)
     assert WEB_SEARCH_TOOL_NAME in names_on
 
 
+def test_handle_web_search_prefers_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    from digigraph.orchestration import web_search_tools as mod
+
+    ctx = type("C", (), {"state": {"enable_web_search": True}})()
+    monkeypatch.setattr(
+        mod,
+        "_call_digisearch_web_search",
+        lambda q, **k: {
+            "content": "md bullets",
+            "results": [
+                {
+                    "doc_id": "https://a.com/1",
+                    "content": "md",
+                    "rank": 0,
+                    "metadata": {
+                        "title": "A",
+                        "source_url": "https://a.com/1",
+                        "evidence_tier": "External",
+                        "source_kind": "external",
+                    },
+                }
+            ],
+        },
+    )
+    out = mod._handle_web_search({"query": "etf flows"}, ctx)
+    assert out["results"][0]["doc_id"] == "https://a.com/1"
+
+
 def test_web_search_handler_labels_external(monkeypatch: pytest.MonkeyPatch) -> None:
     ctx = ToolContext(
         session_id="s",
