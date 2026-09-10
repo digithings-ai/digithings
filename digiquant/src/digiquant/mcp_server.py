@@ -829,6 +829,71 @@ def create_mcp_server() -> Any:
         )
 
     @mcp.tool()
+    def digiquant_fetch_bgeometrics_series(
+        metric: str = "mvrv",
+        startday: str | None = None,
+        endday: str | None = None,
+        last: bool = False,
+        cache_dir: str | None = None,
+        timeout: float = 30.0,
+        token: str | None = None,
+    ) -> str:
+        """Fetch one Bitcoin valuation/on-chain metric from bitcoin-data.com (BGeometrics).
+
+        700+ metric catalog (MVRV, NUPL, SOPR, realized cap/price, HODL
+        waves, Mayer multiple, NVT, Pi-cycle, rainbow chart, power-law model,
+        and more — see ``KNOWN_METRICS`` for a curated subset; any other
+        bitcoin-data.com slug also works). No API key needed.
+
+        Free-tier limits (enforced by the API, not just documented): 10
+        requests/hour, 15/day, shared across every metric — fetch **one
+        metric per call**. History is capped at roughly the last 4 years;
+        for deeper multi-cycle history use
+        ``digiquant_fetch_coinmetrics_series`` instead (MVRV back to 2010,
+        no rate-limit concern). Fail-soft + timeout.
+        """
+        from digiquant.sdca_mcp import run_fetch_bgeometrics_series
+
+        return run_fetch_bgeometrics_series(
+            metric=metric,
+            startday=startday,
+            endday=endday,
+            last=last,
+            cache_dir=cache_dir,
+            timeout=timeout,
+            token=token,
+        )
+
+    @mcp.tool()
+    def digiquant_fetch_coinmetrics_series(
+        metric: str = "CapMVRVCur",
+        asset: str = "btc",
+        start_time: str | None = None,
+        end_time: str | None = None,
+        cache_dir: str | None = None,
+        timeout: float = 30.0,
+    ) -> str:
+        """Fetch one on-chain metric from the CoinMetrics Community API.
+
+        Free community tier for BTC exposes 31 metrics (supply/flow/fee/
+        price primitives plus ``CapMVRVCur``, the MVRV valuation ratio — see
+        ``KNOWN_COMMUNITY_METRICS``). MVRV has full history back to
+        2010-07-18, unlike bgeometrics' ~4-year cap. No API key needed;
+        rate limit is generous (thousands/window). CC BY-NC — research-only,
+        do not republish derived series commercially. Fail-soft + timeout.
+        """
+        from digiquant.sdca_mcp import run_fetch_coinmetrics_series
+
+        return run_fetch_coinmetrics_series(
+            metric=metric,
+            asset=asset,
+            start_time=start_time,
+            end_time=end_time,
+            cache_dir=cache_dir,
+            timeout=timeout,
+        )
+
+    @mcp.tool()
     def digiquant_fit_sdca_weights(
         profile: str = "btc_v1",
         profile_json: str | None = None,

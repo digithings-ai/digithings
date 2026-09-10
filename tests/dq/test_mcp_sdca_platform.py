@@ -13,7 +13,12 @@ import pytest
 from digiquant.data.prices import OHLCV_COLUMNS
 from digiquant.data.prices.history_cache import save_cached
 from digiquant.orchestrator_tools import build_orchestrator_tool_manifest
-from digiquant.sdca_mcp import run_fetch_bitview_series, run_fit_sdca_weights
+from digiquant.sdca_mcp import (
+    run_fetch_bgeometrics_series,
+    run_fetch_bitview_series,
+    run_fetch_coinmetrics_series,
+    run_fit_sdca_weights,
+)
 from digiquant.strategies.sdca.asset_profile import SdcaAssetProfile
 from digiquant.strategies.sdca.cycle_windows import CycleKind, CycleWindow, SdcaCycleWindows
 from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
@@ -26,6 +31,8 @@ pytestmark = pytest.mark.unit
 
 _PLATFORM = {
     "digiquant_fetch_bitview_series",
+    "digiquant_fetch_bgeometrics_series",
+    "digiquant_fetch_coinmetrics_series",
     "digiquant_fit_sdca_weights",
     "digiquant_build_sdca_risk_index",
     "digiquant_run_optimize",
@@ -169,6 +176,62 @@ class TestFetchBitviewMcp:
 
     def test_mcp_tool_registered_fail_soft(self) -> None:
         raw = _mcp("digiquant_fetch_bitview_series")(series_ids_json="not-json")
+        payload = json.loads(raw)
+        assert "error" in payload
+
+
+class TestFetchBgeometricsMcp:
+    def test_mocked_http_writes_parquet(self, tmp_path: Path) -> None:
+        session = _FakeSession(
+            [{"d": "2025-01-01", "unixTs": 1735689600, "mvrv": 2.3579}]
+        )
+        payload = json.loads(
+            run_fetch_bgeometrics_series(
+                metric="mvrv",
+                startday="2025-01-01",
+                endday="2025-01-01",
+                cache_dir=str(tmp_path),
+                session=session,
+            )
+        )
+        assert payload["error"] is None
+        assert payload["row_count"] == 1
+        assert Path(payload["path"]).exists()
+
+    def test_mcp_tool_registered_fail_soft(self) -> None:
+        raw = _mcp("digiquant_fetch_bgeometrics_series")(metric="")
+        payload = json.loads(raw)
+        assert "error" in payload
+
+
+class TestFetchCoinmetricsMcp:
+    def test_mocked_http_writes_parquet(self, tmp_path: Path) -> None:
+        session = _FakeSession(
+            {
+                "data": [
+                    {
+                        "asset": "btc",
+                        "time": "2018-01-01T00:00:00.000000000Z",
+                        "CapMVRVCur": "2.69423548",
+                    }
+                ]
+            }
+        )
+        payload = json.loads(
+            run_fetch_coinmetrics_series(
+                metric="CapMVRVCur",
+                start_time="2018-01-01",
+                end_time="2018-01-01",
+                cache_dir=str(tmp_path),
+                session=session,
+            )
+        )
+        assert payload["error"] is None
+        assert payload["row_count"] == 1
+        assert Path(payload["path"]).exists()
+
+    def test_mcp_tool_registered_fail_soft(self) -> None:
+        raw = _mcp("digiquant_fetch_coinmetrics_series")(metric="")
         payload = json.loads(raw)
         assert "error" in payload
 

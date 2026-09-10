@@ -254,6 +254,79 @@ def build_digiquant_fetch_bitview_series_tool() -> dict[str, Any]:
     }
 
 
+def build_digiquant_fetch_bgeometrics_series_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digiquant_fetch_bgeometrics_series",
+            "description": (
+                "Fetch one Bitcoin valuation/on-chain metric from "
+                "bitcoin-data.com (BGeometrics): 700+ metrics (mvrv, "
+                "mvrv-zscore, nupl, sopr, realized-price, thermocap-multiple, "
+                "mayer-multiple, pi-cycle, rainbow-chart, power-law-model-price, "
+                "and more). No API key needed. Free tier: 10 req/hour, 15/day "
+                "shared across all metrics — fetch one metric per call. "
+                "History capped at ~4 years; for deeper multi-cycle history "
+                "use digiquant_fetch_coinmetrics_series instead. Fail-soft."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "metric": {
+                        "type": "string",
+                        "description": "bitcoin-data.com metric slug, e.g. 'mvrv'",
+                        "default": "mvrv",
+                    },
+                    "startday": {"type": "string", "description": "YYYY-MM-DD"},
+                    "endday": {"type": "string", "description": "YYYY-MM-DD"},
+                    "last": {
+                        "type": "boolean",
+                        "description": "fetch only the most recent value",
+                        "default": False,
+                    },
+                    "cache_dir": {"type": "string"},
+                    "timeout": {"type": "number", "default": 30},
+                    "token": {"type": "string", "description": "optional paid-tier API token"},
+                },
+                "required": ["metric"],
+            },
+        },
+    }
+
+
+def build_digiquant_fetch_coinmetrics_series_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digiquant_fetch_coinmetrics_series",
+            "description": (
+                "Fetch one on-chain metric from the CoinMetrics Community "
+                "API (free, no API key). BTC free tier exposes 31 metrics "
+                "(supply/flow/fee/price primitives plus CapMVRVCur, the "
+                "MVRV valuation ratio, with full history back to "
+                "2010-07-18). CC BY-NC — research-only, do not republish "
+                "derived series commercially. Fail-soft."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "metric": {
+                        "type": "string",
+                        "description": "CoinMetrics metric id, e.g. 'CapMVRVCur'",
+                        "default": "CapMVRVCur",
+                    },
+                    "asset": {"type": "string", "default": "btc"},
+                    "start_time": {"type": "string", "description": "ISO 8601 or YYYY-MM-DD"},
+                    "end_time": {"type": "string", "description": "ISO 8601 or YYYY-MM-DD"},
+                    "cache_dir": {"type": "string"},
+                    "timeout": {"type": "number", "default": 30},
+                },
+                "required": ["metric"],
+            },
+        },
+    }
+
+
 def build_digiquant_fit_sdca_weights_tool() -> dict[str, Any]:
     return {
         "type": "function",
@@ -435,6 +508,8 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digiquant_fit_btc_power_law_tool(),
         build_digiquant_build_sdca_risk_index_tool(),
         build_digiquant_fetch_bitview_series_tool(),
+        build_digiquant_fetch_bgeometrics_series_tool(),
+        build_digiquant_fetch_coinmetrics_series_tool(),
         build_digiquant_fit_sdca_weights_tool(),
         build_digiquant_compile_research_portfolio_tool(),
         build_dashboard_run_policy_replay_tool(),
