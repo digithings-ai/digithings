@@ -64,13 +64,18 @@ def _price_payload(dates: list[str], closes: list[float]) -> tuple[bytes, str]:
 
 
 class _FakeR2Store:
-    """Minimal R2HistoryStore double serving fixed parquet bytes."""
+    """Minimal R2HistoryStore double serving fixed parquet bytes.
 
-    def __init__(self, payload: bytes) -> None:
-        self._payload = payload
+    Keyed on ``(key, sha256)`` like the production lookup
+    (``store.get_generation(entry["object"], entry["sha256"])``): a wrong
+    key or sha raises ``KeyError`` instead of serving the bytes.
+    """
+
+    def __init__(self, generations: dict[tuple[str, str], bytes]) -> None:
+        self._generations = generations
 
     def get_generation(self, key: str, sha256: str) -> bytes:
-        return self._payload
+        return self._generations[(key, sha256)]
 
     def read_latest(self, pointer_key: str) -> str:
         raise KeyError(pointer_key)
@@ -81,14 +86,15 @@ def _r2_seal(monkeypatch: pytest.MonkeyPatch) -> None:
     dates = _history_dates()
     closes = [round(100.0 + i * 0.13, 2) for i in range(len(dates))]
     payload, sha = _price_payload(dates, closes)
+    key = f"market-data/price/SPY/{_SEAL}.parquet"
     manifest = {
         "version": 1,
         "as_of": _SEAL,
-        "datasets": {"SPY": {"object": f"market-data/price/SPY/{_SEAL}.parquet", "sha256": sha}},
+        "datasets": {"SPY": {"object": key, "sha256": sha}},
     }
     monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
     monkeypatch.setattr(mcp, "_read_manifest", lambda: manifest)
-    monkeypatch.setattr(mcp, "_get_r2_store", lambda: _FakeR2Store(payload))
+    monkeypatch.setattr(mcp, "_get_r2_store", lambda: _FakeR2Store({(key, sha): payload}))
 
 
 def test_no_row_newer_than_asof(_r2_seal: None) -> None:

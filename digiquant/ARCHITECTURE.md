@@ -353,7 +353,13 @@ to the sealed tail. Live-fire checklist asserts seal coverage at H9 time
 Dispatcher matrix: all six data tools ride `build_data_tool_dispatcher`
 with shared run-date-as-`as_of` threading; `get_fed_rate_probabilities`
 is the documented Supabase exception (prediction-market odds have no R2
-generation — exploding-client serves `Error:`).
+generation — exploding-client serves `Error:`). Executable re-verify is
+the Task 7b dispatcher test
+`tests/dq/test_market_data_parity.py:801`
+(`test_dispatcher_matrix_rides_r2_backend`), which drives all six tools
+through `build_data_tool_dispatcher`
+(`tests/dq/test_market_data_parity.py:824`) and diffs each against the
+direct-helper output.
 
 Load comparison (`scripts/bench_market_data.py`, fake R2 store, TTL
 cleared per sample, no network): Task 1 Supabase technicals p50 1413.2ms

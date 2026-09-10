@@ -24,6 +24,7 @@ import argparse
 import hashlib
 import io
 import json
+import math
 import os
 import sys
 import time
@@ -45,9 +46,10 @@ _ALL_TOOLS = (_TECHNICALS, _MACRO)
 
 
 def _percentile_ms(samples_ms: list[float], pct: float) -> float:
+    """Nearest-rank percentile over the sample timings."""
     ordered = sorted(samples_ms)
-    idx = min(len(ordered) - 1, max(0, -(-int(pct * len(ordered)) // 1) - 1))
-    return ordered[idx]
+    rank = math.ceil(pct * len(ordered))
+    return ordered[min(len(ordered) - 1, max(0, rank - 1))]
 
 
 def _price_payload(dates: list[str], closes: list[float]) -> tuple[bytes, str]:
@@ -79,21 +81,19 @@ def _macro_payload(rows: list[dict]) -> tuple[bytes, str]:
 
 
 class _FakeR2Store:
-    """Pointer -> (generation bytes, sha), matched on sha like prod lookup."""
+    """Generation bytes keyed on ``(key, sha256)`` like the production lookup."""
 
-    def __init__(self, pointer_map: dict[str, tuple[bytes, str]]) -> None:
-        self._pointer_map = pointer_map
+    def __init__(self, generations: dict[tuple[str, str], bytes]) -> None:
+        self._generations = generations
 
     def get_generation(self, key: str, sha256: str) -> bytes:
-        for _pointer, (payload, sha) in self._pointer_map.items():
-            if sha == sha256:
-                return payload
-        raise KeyError(key)
+        return self._generations[(key, sha256)]
 
     def read_latest(self, pointer_key: str) -> str:
-        if pointer_key not in self._pointer_map:
-            raise KeyError(pointer_key)
-        return pointer_key
+        for gen_key, _sha in self._generations:
+            if gen_key == pointer_key:
+                return gen_key
+        raise KeyError(pointer_key)
 
 
 def _arm_fake_backend(as_of: str) -> None:
@@ -107,7 +107,7 @@ def _arm_fake_backend(as_of: str) -> None:
     price_payload, price_sha = _price_payload(dates, closes)
     price_key = f"market-data/price/SPY/{as_of}.parquet"
 
-    pointer_map = {price_key: (price_payload, price_sha)}
+    generations = {(price_key, price_sha): price_payload}
     datasets: dict[str, dict] = {
         "SPY": {"object": price_key, "sha256": price_sha, "rows": len(dates)}
     }
@@ -118,13 +118,13 @@ def _arm_fake_backend(as_of: str) -> None:
         ]
         payload, sha = _macro_payload(rows)
         pointer = macro_latest_pointer_key("fred", sid)
-        pointer_map[pointer] = (payload, sha)
+        generations[(pointer, sha)] = payload
         datasets[f"fred__{sid}"] = {"object": pointer, "sha256": sha, "rows": len(rows)}
     manifest = {"version": 1, "as_of": as_of, "datasets": datasets}
 
     os.environ["DIGIQUANT_MARKET_DATA_BACKEND"] = "r2"
     mcp._read_manifest = lambda: manifest  # type: ignore[method-assign]
-    mcp._get_r2_store = lambda: _FakeR2Store(pointer_map)  # type: ignore[method-assign]
+    mcp._get_r2_store = lambda: _FakeR2Store(generations)  # type: ignore[method-assign]
     mcp._ttl.clear()
 
     def _no_network(tickers: list[str], **kwargs):  # type: ignore[no-untyped-def]

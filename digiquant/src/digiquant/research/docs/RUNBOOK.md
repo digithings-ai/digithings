@@ -58,7 +58,7 @@ fetch paused; intraday fetch-quotes, calendar sync, at-open, fedprob/bitview
 kept) — do not resume them without a new issue.
 
 Dry-run (exit 0, no writes — the Task 10 live-fire check):
-`python scripts/refresh_market_data_r2.py --dry-run --as-of YYYY-MM-DD`.
+`python scripts/refresh_market_data_r2.py --dry-run --as-of 2025-08-29`.
 
 Staleness gate runbook entry: the manifest seal may be at most 5 trading
 days behind the run date (`data/prices/refresh_gate.py`, shared by cron and
@@ -74,14 +74,17 @@ Promotion runbook (supervised with the operator — write the commands, do
 NOT run them from an agent env; no cloud creds there):
 
 ```bash
-# 1. Live size gate on the core project (PASS <= 320MB per data/cutover_gate.py;
+# 1. Live size gate on the core project, evaluated through the gate script
+#    (PASS <= 320MB per data/cutover_gate.py;
 #    ~172MB of price tables drop toward a ≈292MB target; macro_series_observations
 #    stays per the carve-out — migration 122 drops price_history + price_technicals ONLY).
 psql "$CORE_PG_URI" -c "SELECT pg_size_pretty(pg_database_size(current_database()));"
+SIZE_BYTES=$(psql "$CORE_PG_URI" -tAX -c "SELECT pg_database_size(current_database());")
+python -c "import sys; from digiquant.data.cutover_gate import cutover_size_gate_passes; sys.exit(0 if cutover_size_gate_passes(int(sys.argv[1])) else 1)" "$SIZE_BYTES"  # pre-migration: expect exit 1 (>320MB); record the bytes
 # 2. Reclaim, then apply migration 122 via db-migrate.yml (file + ledger in one
 #    transaction; see digiquant/supabase/migrations/122_drop_market_data_tables.sql).
 psql "$CORE_PG_URI" -c "VACUUM (ANALYZE);"
-# 3. Re-run the size gate from step 1 post-migration.
+# 3. Re-run the gate-script invocation from step 1 post-migration — PASS = exit 0 (<= 320MB).
 ```
 
 Owner actions before unsupervised operation: add `FRED_API_KEY` +
