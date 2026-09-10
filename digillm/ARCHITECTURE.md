@@ -57,6 +57,17 @@ surface (fail-fast, no fallback chain). `python -m digillm.mcp_server`
 (`[mcp]` extra) exposes the serializable slice (`complete`); `run_tools` /
 `structured_completion` stay library-only (callable / model class).
 
+### MCP hosting (loopback only — no stack slot)
+
+digillm rides inside digigraph via library calls (digigraph imports
+`digillm.completion` / `run_tools` in-process) — it is not a separately deployed
+service. `python -m digillm.mcp_server` (default `127.0.0.1:8768`, `DIGILLM_MCP_PORT`
+override) exists for trusted local clients and stdio (`--stdio` for Claude Desktop);
+a wider bind needs gateway auth since callers spend the operator key. There is
+intentionally no supervisord program, no stack slot, and no Worker route for digillm.
+A future stack program would need its own edge-auth design first — explicitly out
+of scope.
+
 ### Provider telemetry contracts
 
 `NodeRunRecord`, `ProviderCallRecord`, and `ProviderAttemptRecord` separate graph work, one
