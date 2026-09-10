@@ -213,12 +213,18 @@ class _LedgerTable:
         self._filters: list[tuple[str, Any]] = []
         self._delete = False
         self._order: str | None = None
+        self._range: tuple[int, int] | None = None
 
     def select(self, _cols: str) -> "_LedgerTable":
         return self
 
     def order(self, col: str) -> "_LedgerTable":
         self._order = col
+        return self
+
+    def range(self, start: int, end: int) -> "_LedgerTable":
+        """Inclusive window mirroring postgrest-py's ``.range()`` (used by _scan_all)."""
+        self._range = (start, end)
         return self
 
     def eq(self, col: str, val: Any) -> "_LedgerTable":
@@ -237,6 +243,9 @@ class _LedgerTable:
         matched = [r for r in self._rows if all(r.get(c) == v for c, v in self._filters)]
         if self._order is not None:
             matched.sort(key=lambda r: r.get(self._order))
+        if self._range is not None:
+            start, end = self._range
+            matched = matched[start : end + 1]
         if self._delete:
             for row in matched:
                 self._rows.remove(row)
