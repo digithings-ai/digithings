@@ -1206,14 +1206,15 @@ def create_mcp_server(
 
 def run_mcp(
     transport: str = "streamable-http",
-    host: str = "127.0.0.1",
+    host: str | None = None,
     port: int = 8767,
     scope: str = "full",
 ) -> None:
-    mcp = create_mcp_server(scope=scope, host=host, port=port)
+    bind = host or os.environ.get("DIGIQUANT_MCP_HOST", "127.0.0.1")
+    mcp = create_mcp_server(scope=scope, host=bind, port=port)
     logger.info(
         "Starting digiquant MCP server on %s:%d (transport=%s scope=%s)",
-        host,
+        bind,
         port,
         transport,
         scope,
@@ -1233,6 +1234,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--scope",
+        choices=_MCP_SCOPES,
         default=os.environ.get("DIGIQUANT_MCP_SCOPE", "full"),
         help="Tool scope: 'full' (default) or 'read' (dashboard-chat surface).",
     )

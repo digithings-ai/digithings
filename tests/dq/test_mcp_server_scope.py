@@ -86,6 +86,24 @@ def test_run_mcp_passes_bind_via_constructor_not_run():
 
 
 @pytest.mark.unit
+def test_run_mcp_honours_digiquant_mcp_host_env(monkeypatch):
+    """Direct run_mcp() must honor DIGIQUANT_MCP_HOST (sibling bind-fallback)."""
+    monkeypatch.setenv("DIGIQUANT_MCP_HOST", "0.0.0.0")
+    with patch.object(mcp_server, "create_mcp_server") as factory:
+        mcp_server.run_mcp(host=None)
+    factory.assert_called_once_with(scope="full", host="0.0.0.0", port=8767)
+    factory.return_value.run.assert_called_once_with(transport="streamable-http")
+
+
+@pytest.mark.unit
+def test_run_mcp_explicit_host_wins_over_env(monkeypatch):
+    monkeypatch.setenv("DIGIQUANT_MCP_HOST", "0.0.0.0")
+    with patch.object(mcp_server, "create_mcp_server") as factory:
+        mcp_server.run_mcp(host="127.0.0.1", port=8123)
+    factory.assert_called_once_with(scope="full", host="127.0.0.1", port=8123)
+
+
+@pytest.mark.unit
 def test_read_scope_includes_coinmetrics_catalog():
     assert READ_TOOLS_EXTRA <= set(READ_SCOPE_TOOLS)
 
