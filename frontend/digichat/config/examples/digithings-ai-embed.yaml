@@ -33,42 +33,15 @@ hosts:
       branchPicker: true
       modelPicker: true
     models:
-      # Cheap/free public picker (#3777). Default is CI DeepSeek V4 Flash
-      # (~$0.056/$0.113 per 1M). Allowlist is V4 Flash-or-cheaper OSS plus every
-      # current OpenRouter `:free` chat model that supports tools. Not
-      # gemini-3.1-flash-lite (~$0.20/$1.21) or gpt-5.6-luna (~$0.08/$0.48).
+      # Default product picker is Cheaper Inference cheap slugs only (#3829).
+      # OpenRouter never appears here — even if OPENROUTER_API_KEY is set.
+      # BYOK (`gate.showByok`) is the only way the list expands.
       default: deepseek/deepseek-v4-flash
       available:
         - deepseek/deepseek-v4-flash
         - deepseek/deepseek-v4-flash-0731
         - openai/gpt-oss-120b
-        - openai/gpt-oss-20b
         - z-ai/glm-5.3-flash
-        - google/gemma-3-12b-it
-        - inclusionai/ling-3.0-flash
-        - meta-llama/llama-3.1-8b-instruct
-        - mistralai/mistral-nemo
-        - mistralai/mistral-small-3.2-24b-instruct
-        - nvidia/nemotron-3-nano-30b-a3b
-        - qwen/qwen3-30b-a3b-instruct-2507
-        - qwen/qwen3.7-flash
-        - cohere/north-mini-code:free
-        - dots-studio/dots-3-note-preview:free
-        - google/gemma-4-26b-a4b-it:free
-        - google/gemma-4-31b-it:free
-        - inclusionai/ling-3.0-flash-fin:free
-        - inclusionai/ling-3.0-flash-sante:free
-        - liquid/lfm-2.5-2.6b:free
-        - nex-agi/nex-n2.5-mini:free
-        - nex-agi/nex-n2.5-pro:free
-        - nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
-        - nvidia/nemotron-3-super-120b-a12b:free
-        - nvidia/nemotron-3-ultra-550b-a55b:free
-        - nvidia/nemotron-3.5-lightning:free
-        - poolside/laguna-s-2.1:free
-        - poolside/laguna-xs-2.1:free
-        - thinkingmachines/inkling-small:free
-        - thinkingmachines/inkling:free
       allowPicker: true
     backend:
       type: digigraph

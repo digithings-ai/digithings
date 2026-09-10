@@ -214,6 +214,16 @@ describe("DigichatConfigSchema", () => {
     expect(cfg.deployment?.gate.requiredPlanTier).toBe("desk");
     expect(cfg.deployment?.gate.showByok).toBe(true);
     expect(cfg.deployment?.gate.llmAccess).toBe("operator");
+    expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4-flash");
+    expect(cfg.deployment?.models.available).toEqual([
+      "deepseek/deepseek-v4-flash",
+      "deepseek/deepseek-v4-flash-0731",
+      "openai/gpt-oss-120b",
+      "z-ai/glm-5.3-flash",
+    ]);
+    expect(cfg.deployment?.models.available.some((id) => id.endsWith(":free"))).toBe(
+      false,
+    );
   });
 
   it("pins product embed YAML to digichat skin + digigraph tool catalog", () => {
@@ -236,14 +246,15 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.tools?.catalog.find((t) => t.id === "digivault")?.default).toBe(true);
     expect(dt?.models.allowPicker).toBe(true);
     expect(dt?.models.default).toBe("deepseek/deepseek-v4-flash");
-    expect(dt?.models.available).toContain("deepseek/deepseek-v4-flash");
-    expect(dt?.models.available).toContain("openai/gpt-oss-20b");
-    expect(dt?.models.available).toContain("mistralai/mistral-nemo");
-    expect(dt?.models.available).toContain("google/gemma-4-31b-it:free");
-    expect(dt?.models.available).not.toContain("openai/gpt-oss-20b:free");
+    expect(dt?.models.available).toEqual([
+      "deepseek/deepseek-v4-flash",
+      "deepseek/deepseek-v4-flash-0731",
+      "openai/gpt-oss-120b",
+      "z-ai/glm-5.3-flash",
+    ]);
+    expect(dt?.models.available.some((id) => id.endsWith(":free"))).toBe(false);
     expect(dt?.models.available).not.toContain("google/gemini-3.1-flash-lite");
     expect(dt?.models.available).not.toContain("openai/gpt-5.6-luna");
-    expect(dt?.models.available.length).toBeGreaterThan(10);
     expect(allowedForceTools(dt)).toEqual(["digisearch", "digivault"]);
 
     const occ = parseDigichatConfig(

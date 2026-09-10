@@ -36,9 +36,13 @@ deployment:
     branchPicker: true
     modelPicker: true
   models:
-    default: openai/gpt-oss-20b:free
+    # Same CI-cheap default as digithings.ai (#3829). Not OpenRouter `:free`.
+    default: deepseek/deepseek-v4-flash
     available:
-      - openai/gpt-oss-20b:free
+      - deepseek/deepseek-v4-flash
+      - deepseek/deepseek-v4-flash-0731
+      - openai/gpt-oss-120b
+      - z-ai/glm-5.3-flash
     allowPicker: true
   backend:
     type: digigraph
