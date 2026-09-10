@@ -28,5 +28,18 @@ env:
   DIGIQUANT_ONCHAIN_POSITIONING: "1"   # Hyperdash cohort GraphQL (#801)
   OLYMPUS_POSITION_RISK_FIELDS: "1"    # Pillar 2E advisory fields (migration 039)
 
+  # Market-data serving layer (#3780, Task 7b second cutover): "r2" routes
+  # the MCP price/macro tools + pipeline reads through the versioned R2 cache
+  # sealed at as_of, and stops the Supabase writers (`digiquant prices`
+  # refuses covered writes under this flag). Rollback = flip back to
+  # "supabase" (readers fall back to the Supabase bodies, writers resume).
+  # Merge default is "supabase": the live backfill has NOT run yet (R2 is
+  # empty), so "r2" would break the daily pipeline on merge. Flip to "r2"
+  # only post-merge, supervised, once the backfill has landed.
+  # Standing exception: `fetch-macro --sources fedprob` keeps writing
+  # macro_series_observations under "r2" (prediction-market odds have no R2
+  # generation; get_fed_rate_probabilities stays Supabase-backed).
+  DIGIQUANT_MARKET_DATA_BACKEND: "supabase"
+
   DIGI_CHECKPOINTER: postgres          # Resume on retry (#665); degrades if URI absent
   LANGSMITH_TRACING: "true"            # Required for traces; key alone is insufficient (#687)

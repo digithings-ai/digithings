@@ -226,6 +226,27 @@ export const McpServerSchema = z
     url: z.string().url(),
     label: z.string().optional(),
     default: z.boolean().optional(),
+    /**
+     * Operator-static secret for this server (e.g. a per-tenant MCP API
+     * key). Never client-projected (#3841). Prefer `tokenEnv` over inlining
+     * this directly in checked-in YAML.
+     */
+    token: z.string().optional(),
+    /**
+     * Name of the env var to resolve `token` from at load time (mirrors the
+     * deployment-level `DIGICHAT_EMBED_TOKEN` pattern). Loader fills `token`
+     * from this when `token` is unset (#3841).
+     */
+    tokenEnv: z.string().optional(),
+    /**
+     * Custom outbound header name for the resolved token, e.g. "X-API-Key".
+     * Defaults to `Authorization: Bearer <token>` when unset. Operator-only —
+     * the session overlay (user-supplied auth) cannot set this (#3841).
+     */
+    authHeader: z
+      .string()
+      .regex(/^[A-Za-z][A-Za-z0-9-]{0,40}$/, "authHeader must be a valid HTTP header name")
+      .optional(),
   })
   .strict();
 

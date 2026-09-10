@@ -461,3 +461,30 @@ describe("conversationIdFromParts", () => {
     ).toBe("legacy");
   });
 });
+
+describe("writeStandardActivity toolResult", () => {
+  it("emits output.result so the row completes with a JSON Result pane", () => {
+    const chunks = collect([
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "datatap__list_connections",
+        toolName: "datatap__list_connections",
+      },
+      {
+        operation: "execute_tool",
+        status: "completed",
+        label: "datatap__list_connections",
+        toolName: "datatap__list_connections",
+        toolResult: { connections: [{ name: "a", id: "1" }] },
+      },
+    ]);
+    const outputs = chunks.filter((c) => c.type === "tool-output-available");
+    // Completion arrives with the result mid-stream — exactly one output,
+    // carrying the result (the finish backstop must not emit a second).
+    expect(outputs).toHaveLength(1);
+    expect(outputs[0]?.output).toMatchObject({
+      result: { connections: [{ name: "a", id: "1" }] },
+    });
+  });
+});

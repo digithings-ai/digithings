@@ -127,6 +127,13 @@ jobs:
     env:
       REFRESH_SCOPE: ${{ needs.resolve.outputs.refresh_scope }}
       RUN_DATE: ${{ needs.resolve.outputs.run_date }}
+      # R2 market-data creds (#3780): wired now so the supervised post-merge
+      # flip of DIGIQUANT_MARKET_DATA_BACKEND to `r2` is safe. Mirrors
+      # pipeline-checkpoint-archive.yml (same four names, same secrets).
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     steps:
       - name: Check out digiquant source
         uses: actions/checkout@v4

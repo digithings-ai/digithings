@@ -4,10 +4,15 @@
  * Hostnames:
  *   graph.digithings.ai → digigraph :8000
  *   key.digithings.ai   → digikey   :8005
+ *   mcp.digithings.ai   → digiquant-mcp :8767 (reserved; see HUMAN GATE in
+ *                         wrangler.toml — route enabled only with edge auth)
  *
  * workers.dev fallbacks:
  *   /healthz            → digigraph
  *   /_stack/key/*       → digikey (strip prefix)
+ *
+ * (No /_stack/mcp/* forwarder — unauthenticated MCP forwarding must not ship.
+ * mcp.digithings.ai answers only once its route is enabled behind the JWT gate.)
  *
  * digisearch / digivault / LiteLLM are loopback-only inside the Container.
  * digichat Container calls these public URLs via DIGIGRAPH_INTERNAL_URL / DIGIKEY_URL.
@@ -17,6 +22,9 @@ import { env as workerEnvBinding } from "cloudflare:workers";
 import {
   DIGIGRAPH_PORT,
   DIGIKEY_PORT,
+  DIGIQUANT_MCP_HOSTNAME,
+  DIGIQUANT_MCP_PORT,
+  MCP_CONTAINER_ID,
   SHARED_STACK_CONTAINER_ID,
   portForHostname,
 } from "./ports";
@@ -115,6 +123,59 @@ export class DigiStackContainer extends Container {
   }
 }
 
+/**
+ * Dedicated digiquant-mcp market-data container (#3780 Task 8).
+ *
+ * Separate image (digiquant/Dockerfile.mcp: [research]+[mcp] extras,
+ * streamable-http :8767) — NOT part of the Profile A stack container above
+ * (Option B rejected: it would bloat the chat-only profile and couple deploys).
+ * Single pinned instance (MCP_CONTAINER_ID, max_instances = 1 in
+ * wrangler.toml): the MCP read path assumes a single replica (in-memory 900s
+ * TTL keyed by as_of + manifest version).
+ */
+export class DigiQuantMcpContainer extends Container {
+  defaultPort = DIGIQUANT_MCP_PORT;
+  requiredPorts = [DIGIQUANT_MCP_PORT];
+  /**
+   * Warm policy (min-instances-1 equivalent): daily reads plus the
+   * market-data-refresh cron backup ping keep this alive. A cold start only
+   * pays the FastMCP import, never a data load (R2 is the cache).
+   */
+  sleepAfter = "24h";
+
+  /**
+   * Runtime env for the MCP process. Secrets from `wrangler secret put`.
+   * Pass-through, no silent default flip: unset/empty keeps the library
+   * default (`supabase`); operators set this to "r2" explicitly via env.
+   */
+  envVars = {
+    DIGIQUANT_MARKET_DATA_BACKEND: env.DIGIQUANT_MARKET_DATA_BACKEND ?? "",
+    FRED_API_KEY: env.FRED_API_KEY ?? "",
+    R2_ACCOUNT_ID: env.R2_ACCOUNT_ID ?? "",
+    R2_BUCKET: env.R2_BUCKET ?? "",
+    R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID ?? "",
+    R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY ?? "",
+  };
+
+  override async fetch(request: Request): Promise<Response> {
+    try {
+      await this.startAndWaitForPorts({
+        ports: [DIGIQUANT_MCP_PORT],
+        cancellationOptions: {
+          portReadyTimeoutMS: 180_000,
+          instanceGetTimeoutMS: 60_000,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return new Response(`mcp container not ready: ${message}`, {
+        status: 503,
+      });
+    }
+    return this.containerFetch(request, DIGIQUANT_MCP_PORT);
+  }
+}
+
 function targetPortFromRequest(request: Request): number {
   const header = request.headers.get("cf-container-target-port");
   if (header) {
@@ -128,6 +189,7 @@ function targetPortFromRequest(request: Request): number {
 
 export interface Env {
   STACK: DurableObjectNamespace<DigiStackContainer>;
+  MCP_STACK: DurableObjectNamespace<DigiQuantMcpContainer>;
   DIGIKEY_ISSUER?: string;
   DIGIKEY_AUDIENCE?: string;
   DIGIKEY_ALLOW_EPHEMERAL_KEY?: string;
@@ -161,6 +223,12 @@ export interface Env {
   DIGI_HOUSE_UPSTREAM?: string;
   LITELLM_PROXY_API_KEY?: string;
   LITELLM_MASTER_KEY?: string;
+  DIGIQUANT_MARKET_DATA_BACKEND?: string;
+  FRED_API_KEY?: string;
+  R2_ACCOUNT_ID?: string;
+  R2_BUCKET?: string;
+  R2_ACCESS_KEY_ID?: string;
+  R2_SECRET_ACCESS_KEY?: string;
 }
 
 function rewriteKeyStackPath(request: Request): Request {
@@ -168,6 +236,10 @@ function rewriteKeyStackPath(request: Request): Request {
   const stripped = url.pathname.replace(/^\/_stack\/key/, "") || "/";
   url.pathname = stripped;
   return new Request(url.toString(), request);
+}
+
+function isMcpHostname(hostname: string): boolean {
+  return hostname.trim().toLowerCase() === DIGIQUANT_MCP_HOSTNAME;
 }
 
 export default {
@@ -188,10 +260,22 @@ export default {
       return container.fetch(switchPort(rewriteKeyStackPath(request), DIGIKEY_PORT));
     }
 
+    // Dedicated digiquant-mcp container (#3780 Task 8): reachable only via the
+    // reserved mcp.digithings.ai hostname once its route is enabled (HUMAN GATE
+    // in wrangler.toml — needs Worker-edge digikey JWT enforcement first; the
+    // MCP tools are unauthenticated localhost today). No workers.dev forwarding
+    // route ships: an unauthenticated /_stack/mcp/* forwarder must not go live.
+    if (isMcpHostname(url.hostname)) {
+      const container = getContainer(workerEnv.MCP_STACK, MCP_CONTAINER_ID);
+      return container.fetch(request);
+    }
+
     const port = portForHostname(url.hostname);
     if (port === null) {
       return new Response(
-        "digithings-stack: unknown host. Use graph.digithings.ai, key.digithings.ai, or /_stack/key/* on workers.dev.",
+        "digithings-stack: unknown host. Use graph.digithings.ai, " +
+          "key.digithings.ai, or /_stack/key/* on workers.dev. " +
+          "(mcp.digithings.ai is reserved; its route is not yet enabled.)",
         { status: 404 },
       );
     }

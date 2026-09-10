@@ -60,6 +60,7 @@ from digiquant.portfolio.models.portfolio_ledger import (
 from digiquant.portfolio.sizing import SizingCaps
 from digiquant.portfolio.sizing_events import SizingAdjustment
 from digiquant.portfolio.turnover import no_trade_band_pp
+from digiquant.research.data.queries import r2_backend_enabled
 from digiquant.research.state import ResearchState
 from digiquant.research.supabase_io import SupabaseClient
 
@@ -200,6 +201,25 @@ def _last_closes(*, client: SupabaseClient, tickers: set[str], run_date: date) -
     floor = (run_date - timedelta(days=_CLOSE_LOOKBACK_DAYS)).isoformat()
     ordered = sorted(tickers)
     latest: dict[str, tuple[str, float]] = {}
+    if r2_backend_enabled():
+        # Sealed R2 generations; ``until`` is run_date − 1d to mirror the
+        # Supabase ``.lt("date", run_date)`` bound (#3780 Task 7b).
+        from digiquant.research.data.queries import r2_close_rows
+
+        rows = r2_close_rows(tickers=ordered, since=floor, until=run_date - timedelta(days=1))
+        for row in rows:
+            ticker = _symbol(row.get("ticker"))
+            day = str(row.get("date") or "")
+            try:
+                close = float(row.get("close"))  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                continue
+            if not ticker or not day or close <= 0:
+                continue
+            current = latest.get(ticker)
+            if current is None or day > current[0]:
+                latest[ticker] = (day, close)
+        return {ticker: close for ticker, (_, close) in latest.items()}
     for start in range(0, len(ordered), _CLOSE_TICKER_BATCH):
         resp = _execute(
             client.table(_PRICE_HISTORY)

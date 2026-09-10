@@ -45,6 +45,20 @@ function mapGraphUpdate(payload: Record<string, unknown>): ActivitySpan | null {
   };
 }
 
+/** Narrow an unknown trace result to the sanitizer's accepted shapes. */
+function toolResultValue(value: unknown): ActivitySpan["toolResult"] | undefined {
+  if (
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value)) ||
+    Array.isArray(value) ||
+    (typeof value === "object" && value !== null)
+  ) {
+    return value as Exclude<ActivitySpan["toolResult"], undefined>;
+  }
+  return undefined;
+}
+
 function mapOpaque(trace: DigigraphTraceLike): ActivitySpan {
   const label =
     (typeof trace.payload?.label === "string" && trace.payload.label) || trace.type || "activity";
@@ -84,6 +98,33 @@ export function mapDigigraphTraceToSpans(
       toolName: tool,
       ...(query ? { query } : {}),
       ...(toolInput ? { toolInput } : {}),
+    };
+  } else if (trace.type === "tool_result") {
+    // Generic (non-retrieval) tool completion, e.g. MCP tools. digigraph
+    // emits this the moment the tool returns, so the row completes
+    // mid-stream instead of lingering "running" until end-of-stream.
+    const payload = trace.payload ?? {};
+    const tool =
+      (typeof payload.tool === "string" && payload.tool.trim()) ||
+      (typeof payload.toolName === "string" && payload.toolName.trim()) ||
+      (typeof payload.name === "string" && payload.name.trim()) ||
+      "";
+    if (!tool) return [];
+    const args = argsRecord(payload);
+    const query =
+      (typeof payload.query === "string" && payload.query.trim()
+        ? payload.query.trim()
+        : undefined) || (args ? queryFromToolArgs(args) : undefined);
+    const toolInput = toolInputFromPayload(payload);
+    const toolResult = "result" in payload ? toolResultValue(payload.result) : undefined;
+    raw = {
+      operation: "execute_tool",
+      status: payload.status === "failed" ? "failed" : "completed",
+      label: tool,
+      toolName: tool,
+      ...(query ? { query } : {}),
+      ...(toolInput ? { toolInput } : {}),
+      ...(toolResult !== undefined ? { toolResult } : {}),
     };
   } else if (trace.type === "rag_sources") {
     raw = mapDigisearchRagSources(trace.payload ?? {});

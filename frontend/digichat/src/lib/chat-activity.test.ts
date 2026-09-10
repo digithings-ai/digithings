@@ -835,3 +835,53 @@ it("messageActivities projects 2.0 standard tool/source/data-status parts", () =
   expect(rows.some((r) => r.kind === "tool_result" && r.hits[0]?.title === "Auth")).toBe(true);
   expect(rows.some((r) => r.kind === "brief")).toBe(true);
 });
+
+describe("sanitizeActivitySpan toolResult", () => {
+  it("keeps a generic MCP result record", () => {
+    const out = sanitizeActivitySpan(
+      span({
+        status: "completed",
+        toolName: "datatap__list_connections",
+        toolResult: { connections: [{ name: "a", id: "1" }] },
+      }),
+    );
+    expect(out?.toolResult).toEqual({ connections: [{ name: "a", id: "1" }] });
+  });
+
+  it("truncates oversize results to a preview instead of dropping them", () => {
+    const out = sanitizeActivitySpan(
+      span({
+        status: "completed",
+        toolName: "datatap__search",
+        toolResult: { hits: Array.from({ length: 50 }, (_, i) => `hit-${i}-` + "x".repeat(280)) },
+      }),
+    );
+    expect(out?.toolResult).toMatchObject({ truncated: true });
+    expect(JSON.stringify(out?.toolResult).length).toBeLessThan(13_000);
+  });
+
+  it("drops undeclared-shaped results (null, nested blobs)", () => {
+    expect(
+      sanitizeActivitySpan(span({ status: "completed", toolResult: null }))?.toolResult,
+    ).toBeUndefined();
+    expect(
+      sanitizeActivitySpan(span({ status: "completed", toolResult: { a: { b: { c: { d: 1 } } } } }))?.toolResult,
+    ).toBeUndefined();
+  });
+
+  it("labels gate keeps toolResult while withholding documents", () => {
+    const out = applyActivityDetail(
+      {
+        operation: "execute_tool",
+        status: "completed",
+        label: "datatap__list_connections",
+        toolName: "datatap__list_connections",
+        documents: [{ title: "T", path: "P" }],
+        toolResult: { count: 2 },
+      },
+      "labels",
+    );
+    expect(out?.documentsWithheld).toBe(true);
+    expect(out).toMatchObject({ toolResult: { count: 2 } });
+  });
+});

@@ -222,7 +222,35 @@ function applyEnvOverlay(
     }
   }
 
+  // Resolve `mcp.servers[].tokenEnv` → `.token` (operator-static MCP auth, #3841).
+  if (next.deployment) {
+    next.deployment = resolveMcpServerTokens(next.deployment, env);
+  }
+  if (next.hosts) {
+    for (const [hostKey, dep] of Object.entries(next.hosts)) {
+      next.hosts[hostKey] = resolveMcpServerTokens(dep, env);
+    }
+  }
+
   return next;
+}
+
+/** Fills each `mcp.servers[].token` from its `tokenEnv` when `token` is unset (#3841). */
+function resolveMcpServerTokens(
+  dep: DigichatDeployment,
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): DigichatDeployment {
+  const servers = dep.mcp?.servers;
+  if (!servers?.length) return dep;
+  let changed = false;
+  const next = servers.map((s) => {
+    if (s.token || !s.tokenEnv) return s;
+    const resolved = env[s.tokenEnv]?.trim();
+    if (!resolved) return s;
+    changed = true;
+    return { ...s, token: resolved };
+  });
+  return changed ? { ...dep, mcp: { ...dep.mcp!, servers: next } } : dep;
 }
 
 function mergeEmbedTenantsOverlay(

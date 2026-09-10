@@ -38,18 +38,18 @@ DATA_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "query_data",
             "description": (
-                "Generic read of any market-data table to ground a claim in real numbers "
+                "Generic read of any book/calendar table to ground a claim in real numbers "
                 "(backed by digibase, scoped read-only to the data tables). Allowed tables: "
-                "price_history (daily OHLCV — columns: ticker, date, open, high, low, close, volume; "
-                "NOTE: no sma_*/rsi_*/macd/… — use price_technicals for indicators), "
-                "price_technicals (indicators per ticker — columns: ticker, date, sma_20, sma_50, "
-                "sma_200, rsi_14, macd, macd_signal, macd_hist, adx_14, atr_14, atr_pct, "
-                "bb_upper, bb_lower, bb_pct_b, zscore_200; "
-                "NOTE: no OHLCV/close — use price_history for open/high/low/close/volume), "
-                "macro_series_observations (FRED macro — columns: series_id, obs_date, value; "
-                "NOTE: the date column is 'obs_date' NOT 'date'; filter/sort by obs_date), "
                 "positions, nav_history, theses, thesis_vehicles, position_events, "
                 "portfolio_metrics, trading_calendar. "
+                "Market history (price_history, price_technicals, "
+                "macro_series_observations) moved to the versioned R2 cache (#3780) — "
+                "ground price/macro claims with get_macro_series and the injected "
+                "market context instead "
+                "(NOTE: price_technicals had NO 'close' column — use the R2-backed "
+                "digiquant_get_price_technicals MCP tool for OHLCV/indicators). "
+                "Macro date column was 'obs_date' on the retired table; the "
+                "get_macro_series tool takes series_ids directly. "
                 "positions/nav_history/position_events/portfolio_metrics default to the "
                 "house workspace_id (overlay same-date rows are excluded); pass "
                 "eq.workspace_id to read another book. "
@@ -216,10 +216,15 @@ def build_data_tool_dispatcher(
             if not table:
                 return (
                     "Error: query_data requires a 'table' argument. "
-                    "Allowed tables: price_history, price_technicals, "
-                    "macro_series_observations, positions, nav_history, theses, "
+                    "Allowed tables: positions, nav_history, theses, "
                     "thesis_vehicles, position_events, portfolio_metrics, trading_calendar."
                 )
+            # NOTE (#3780 + #814): macro_series_observations is still served
+            # by query_data on both backends, so the 'date' to 'obs_date'
+            # rewrite below stays: without it the model burns tool rounds
+            # on Postgres 42703 errors. (The R2 cutover routes dedicated
+            # macro reads via get_macro_series; this generic path keeps
+            # working for direct table queries.)
             # Column allowlists for price_history / price_technicals live in
             # ``query_data`` (#3771) so MCP digiquant_query_data shares the same choke.
             # Server-side rewrite: the LLM sometimes sorts/filters macro_series_observations
@@ -252,6 +257,7 @@ def build_data_tool_dispatcher(
                 client=client,
                 series_ids=list(args.get("series_ids", [])),
                 lookback=int(args.get("lookback", 6)),
+                as_of=as_of,
             )
         if name == "get_market_breadth":
             # Readers filter <= as_of and take the newest row → "as of the run date".
