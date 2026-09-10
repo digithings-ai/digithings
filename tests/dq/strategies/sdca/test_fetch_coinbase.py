@@ -18,6 +18,8 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
+pytest.importorskip("ccxt")
+
 _SCRIPT_PATH = Path(__file__).resolve().parents[4] / "digiquant" / "scripts" / "fetch_coinbase.py"
 
 
