@@ -29,8 +29,9 @@ custom_domain = true
 # market-data tools to the public internet, and those tools are unauthenticated
 # localhost today. Enable this route ONLY together with Worker-edge digikey JWT
 # enforcement (scope `digiquant:backtest`, see digiquant/ARCHITECTURE.md § MCP
-# hosting). Until then the MCP container is reachable via /_stack/mcp/* on
-# workers.dev (same JWT gate applies before any production use).
+# hosting). Until then the MCP container answers only on the custom-domain route
+# once enabled with that gate — there is deliberately no workers.dev forwarding
+# route (an unauthenticated /_stack/mcp/* forwarder must not ship).
 # [[routes]]
 # pattern = "mcp.digithings.ai"
 # zone_name = "digithings.ai"
@@ -51,8 +52,9 @@ instance_type = "standard-2"
 # MCP_CONTAINER_ID in src/ports.ts): the MCP read path assumes a single replica
 # (in-memory 900s TTL keyed by as_of + manifest version).
 # Warm policy (min-instances-1 equivalent): sleepAfter = "24h" on the class in
-# src/index.ts, with the daily market-data-refresh cron as backup warm ping:
-#   curl -sS https://<stack-host>/_stack/mcp/mcp -H 'Accept: application/json'
+# src/index.ts, with the daily market-data-refresh cron as backup warm ping
+# (against the enabled custom-domain route, once live):
+#   curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'
 # Egress verified 2026-09-10: query1.finance.yahoo.com reachable (HTTP 429 =
 # Yahoo rate-limit, i.e. egress works; same retry/backoff as the cron applies),
 # api.stlouisfed.org reachable (HTTP 301 to the API docs).

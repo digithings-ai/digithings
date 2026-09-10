@@ -259,8 +259,9 @@ The `digiquant_pipeline_delegate` tool is a second name in the orchestrator mani
 #### MCP hosting — dedicated container (#3780 Task 8)
 
 The market-data MCP server ships as its own image, `digiquant/Dockerfile.mcp`
-(build context: monorepo root): `python:3.12-slim` +
-`uv sync --frozen --package digiquant --extra research --extra mcp`, entrypoint
+(build context: monorepo root): `python:3.12-slim` + per-package COPYs
+(workspace deps `digibase`/`digikey` first, mirroring `digiquant/Dockerfile`)
+and `uv pip install --system -e "./digiquant[research,mcp]"`, entrypoint
 `python -m digiquant.mcp_server` (FastMCP `streamable-http` on `:8767`). It
 carries the `[research]`/`[mcp]` extras — never the backtest engine. The hosted
 bind is non-loopback via `DIGIQUANT_MCP_HOST=0.0.0.0` /
@@ -268,9 +269,8 @@ bind is non-loopback via `DIGIQUANT_MCP_HOST=0.0.0.0` /
 
 Cloudflare wiring (`frontend/digithings-stack-cloudflare/`): `DigiQuantMcpContainer`
 beside `DigiStackContainer` (own `[[containers]]` image entry, `MCP_STACK`
-binding, `v2` migration), routed by hostname (`mcp.digithings.ai`, reserved) and
-by workers.dev path prefix (`/_stack/mcp/*`, prefix stripped like
-`/_stack/key/*`). Single replica by design (`max_instances = 1`, one pinned
+binding, `v2` migration), routed by exact hostname (`mcp.digithings.ai`,
+reserved) only — no workers.dev forwarding route ships. Single replica by design (`max_instances = 1`, one pinned
 `MCP_CONTAINER_ID`): the read path assumes one replica (in-memory 900s TTL
 keyed by `as_of` + manifest version; correctness never depends on the cache —
 R2 is source of truth).
@@ -291,8 +291,9 @@ API docs. Re-run both before first deploy; a 429 storm behind shared egress
 means backing off the overlap window, not widening it.
 
 Warm policy (min-instances-1 equivalent): `sleepAfter = "24h"` on the container
-class, backed by the daily `market-data-refresh` cron health ping:
-`curl -sS https://<stack-host>/_stack/mcp/mcp -H 'Accept: application/json'`.
+class, backed by the daily `market-data-refresh` cron health ping against the
+enabled custom-domain route (once live):
+`curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'`.
 A cold start only pays the FastMCP import, never a data load.
 
 Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`
@@ -300,6 +301,9 @@ plus the four R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
 `R2_SECRET_ACCESS_KEY` (same `digithings-archive` bucket as the checkpoint
 archive). The read path is registry-read-only (registry inserts raise) so the
 cron's `MARKET_DATA_POSTGRES_URI` is deliberately NOT forwarded here.
+`DIGIQUANT_MARKET_DATA_BACKEND` is passed through with no Worker-side default:
+unset/empty keeps the library default (`supabase`); set it to `"r2"`
+explicitly via env for the hosted path.
 
 ### CLI (`python -m digiquant` / `digiquant`)
 
