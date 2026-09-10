@@ -199,6 +199,9 @@ def run_mcp(
     port: int = 8765,
 ) -> None:
     """Run the MCP server. Default: streamable HTTP on 127.0.0.1:8765."""
+    from digisearch.backend_require import require_real_search_backend
+
+    require_real_search_backend()
     bind = host or os.environ.get("DIGISEARCH_MCP_HOST", "127.0.0.1")
     mcp.settings.host = bind
     mcp.settings.port = port
