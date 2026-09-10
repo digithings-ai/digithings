@@ -104,3 +104,30 @@ def test_run_uses_configured_min_interval(monkeypatch):
         config=WebSearchConfig(backend="searxng", fetch_max_pages=1, min_interval_s=0.0),
     )
     assert resp.results and acquired == [1.0]
+
+
+def test_from_env_bad_backend_raises_config_error(monkeypatch):
+    import pytest
+
+    from digisearch.web_search.models import WebSearchConfigError
+
+    monkeypatch.setenv("DIGISEARCH_WEB_SEARCH_BACKEND", "bogus")
+    with pytest.raises(WebSearchConfigError, match="bogus"):
+        WebSearchConfig.from_env()
+
+
+def test_from_env_good_backend_unchanged(monkeypatch):
+    monkeypatch.delenv("DIGISEARCH_WEB_SEARCH_BACKEND", raising=False)
+    assert WebSearchConfig.from_env().backend == "auto"
+    monkeypatch.setenv("DIGISEARCH_WEB_SEARCH_BACKEND", "ddgs")
+    assert WebSearchConfig.from_env().backend == "ddgs"
+
+
+def test_run_web_search_lets_config_error_propagate(monkeypatch):
+    import pytest
+
+    from digisearch.web_search.models import WebSearchConfigError
+
+    monkeypatch.setenv("DIGISEARCH_WEB_SEARCH_BACKEND", "bogus")
+    with pytest.raises(WebSearchConfigError):
+        run_web_search(WebSearchRequest(query="etf"))

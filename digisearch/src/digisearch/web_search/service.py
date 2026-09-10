@@ -7,11 +7,16 @@ import threading
 from typing import Literal
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy, with_retry
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from digisearch.web_search.ddgs_provider import DdgsWebSearchProvider
 from digisearch.web_search.extractor import extract_markdown
-from digisearch.web_search.models import WebSearchRequest, WebSearchResponse, WebSearchResult
+from digisearch.web_search.models import (
+    WebSearchConfigError,
+    WebSearchRequest,
+    WebSearchResponse,
+    WebSearchResult,
+)
 from digisearch.web_search.searxng_provider import SearXNGWebSearchProvider
 
 
@@ -24,10 +29,17 @@ class WebSearchConfig(BaseModel):
 
     @classmethod
     def from_env(cls) -> WebSearchConfig:
-        return cls(
-            backend=os.environ.get("DIGISEARCH_WEB_SEARCH_BACKEND", "auto"),
-            searxng_url=os.environ.get("DIGISEARCH_SEARXNG_URL", "http://127.0.0.1:8080"),
-        )
+        backend = os.environ.get("DIGISEARCH_WEB_SEARCH_BACKEND", "auto")
+        try:
+            return cls(
+                backend=backend,
+                searxng_url=os.environ.get("DIGISEARCH_SEARXNG_URL", "http://127.0.0.1:8080"),
+            )
+        except ValidationError as e:
+            raise WebSearchConfigError(
+                f"invalid DIGISEARCH_WEB_SEARCH_BACKEND={backend!r}: "
+                "must be one of auto, searxng, ddgs"
+            ) from e
 
 
 _DEFAULT_MIN_INTERVAL_S = 1.0

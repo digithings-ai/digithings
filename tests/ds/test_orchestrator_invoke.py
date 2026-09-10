@@ -192,3 +192,30 @@ def test_orchestrator_invoke_web_search_invalid_query_is_ok_false(
     assert body.get("ok") is False
     assert "query" in (body.get("error") or "")
     assert seen == []
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_web_search_bad_backend_is_ok_false(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bad DIGISEARCH_WEB_SEARCH_BACKEND must fail closed (ok:False), never 500."""
+    monkeypatch.setenv("DIGISEARCH_WEB_SEARCH_BACKEND", "bogus")
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "web_search", "arguments": {"query": "etf flows"}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("ok") is False
+    assert "bogus" in (body.get("error") or "")
+
+
+@pytest.mark.unit
+def test_v1_web_search_bad_backend_is_503(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bad DIGISEARCH_WEB_SEARCH_BACKEND must fail closed-loud (503), never 500."""
+    monkeypatch.setenv("DIGISEARCH_WEB_SEARCH_BACKEND", "bogus")
+    r = client.post("/v1/web_search", json={"query": "etf flows"})
+    assert r.status_code == 503
+    assert "bogus" in r.text

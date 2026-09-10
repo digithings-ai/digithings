@@ -30,7 +30,7 @@ from digisearch.orchestrator_tools import (
 )
 from digisearch.pipeline.ingest import IngestError, ingest_source
 from digisearch.search._stub import _first_env, query_index
-from digisearch.web_search.models import WebSearchRequest, WebSearchResponse
+from digisearch.web_search.models import WebSearchConfigError, WebSearchRequest, WebSearchResponse
 
 configure_logging()
 
@@ -786,7 +786,10 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             return OrchestratorInvokeResponse(
                 ok=False, error=f"invalid web_search input: {summarize_validation_error(e)}"
             )
-        resp = run_web_search(web_req)
+        try:
+            resp = run_web_search(web_req)
+        except WebSearchConfigError as e:
+            return OrchestratorInvokeResponse(ok=False, error=f"invalid web_search config: {e}")
         return OrchestratorInvokeResponse(
             ok=True,
             service="digisearch",
@@ -820,7 +823,13 @@ def v1_web_search(req: WebSearchRequest) -> WebSearchResponse:
             status_code=503,
             detail=f"Install digisearch[web-search] for /v1/web_search: {e}",
         ) from e
-    return run_web_search(req)
+    try:
+        return run_web_search(req)
+    except WebSearchConfigError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"invalid web_search config: {e}",
+        ) from e
 
 
 @app.post("/ingest", response_model=IngestResponse)

@@ -29,6 +29,15 @@ class WebSearchRequest(BaseModel):
     recency_days: int | None = Field(default=7, ge=1, le=365)
 
 
+class WebSearchConfigError(ValueError):
+    """Invalid web-search env config (e.g. bad DIGISEARCH_WEB_SEARCH_BACKEND).
+
+    Raised by WebSearchConfig.from_env() instead of pydantic ValidationError
+    so each entry can fail closed-loud in its own envelope (HTTP 503,
+    orchestrator ok:False, MCP message) instead of 500ing.
+    """
+
+
 def recency_days_to_ddgs_timelimit(recency_days: int | None) -> str | None:
     """Map recency_days to a ddgs ``text()`` timelimit (d/w/m/y); None omits it."""
     if recency_days is None:

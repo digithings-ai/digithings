@@ -108,7 +108,11 @@ def web_search(
 ) -> str:
     """Search the public web (first-party tool). Returns JSON WebSearchResponse."""
     try:
-        from digisearch.web_search.models import WebSearchRequest, summarize_validation_error
+        from digisearch.web_search.models import (
+            WebSearchConfigError,
+            WebSearchRequest,
+            summarize_validation_error,
+        )
         from digisearch.web_search.service import run_web_search
     except ImportError as e:
         return f"[web_search unavailable: install digisearch[web-search] for web_search: {e}]"
@@ -121,7 +125,10 @@ def web_search(
         )
     except ValidationError as e:
         return f"[web_search invalid input: {summarize_validation_error(e)}]"
-    return run_web_search(req).model_dump_json()
+    try:
+        return run_web_search(req).model_dump_json()
+    except WebSearchConfigError as e:
+        return f"[web_search unavailable: {e}]"
 
 
 @mcp.tool()
