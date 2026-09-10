@@ -106,6 +106,7 @@
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"] {
   overflow-anchor: none;
   scrollbar-gutter: stable;
+  overflow-x: hidden;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input {
@@ -472,6 +473,9 @@
   font-family: var(--font-mono);
   font-size: 0.88rem;
   color: var(--ink-soft);
+  /* Outside markers / fence frames paint in padding. A y-scroll viewport
+     computes overflow-x to auto and would clip hanging ink. */
+  overflow: visible;
 }
 
 /* Markdown stream cursor: block bar, same as the composer caret. */
@@ -1012,6 +1016,25 @@
   margin-bottom: 0.55rem;
 }
 
+/* Tailwind preflight zeroes ul/ol padding. `ms-*` leaves outside markers in
+   the margin, which a scrollport + content-visibility paint containment clip
+   (ol digits gone, ul discs nicked). Keep markers in padding. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-ul,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-ol {
+  margin-inline-start: 0;
+  padding-inline-start: 1.75rem;
+  list-style-position: outside;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-ul {
+  list-style-type: disc;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-ol {
+  padding-inline-start: 2rem;
+  list-style-type: decimal;
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-a {
   color: var(--ink-soft);
   text-decoration-color: var(--hair-2);
@@ -1075,6 +1098,8 @@
   font-size: 0.78rem;
   line-height: 1.45;
   color: var(--ink-soft);
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-inline-code {
@@ -1088,6 +1113,8 @@
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-table-wrapper {
   margin: 0.7rem 0;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-th {
