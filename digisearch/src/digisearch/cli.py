@@ -127,7 +127,7 @@ def mcp(
 
     resolved = port if port is not None else int(os.environ.get("DIGISEARCH_MCP_PORT", "8765"))
     cfg = DigiSearchConfig.from_config(config) if config else DigiSearchConfig.from_env()
-    client: DigiSearch = DigiSearch(cfg) if config else DigiSearch()
+    client: DigiSearch = DigiSearch(cfg)
     create_mcp_with_indexes(client)
     run_mcp(port=resolved)
 

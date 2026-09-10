@@ -23,6 +23,8 @@ _RUNNER = CliRunner()
 _BACKEND_ENV = (
     "AZURE_SEARCH_ENDPOINT",
     "AZURE_SEARCH_API_KEY",
+    "AZURE_SEARCH_INDEX_NAME",
+    "DIGISEARCH_INDEX_CONFIG",
     "CHROMA_PATH",
     "CHROMA_HOST",
     "DIGISEARCH_ALLOW_STUB",
@@ -34,6 +36,11 @@ def _no_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     """Strip non-Cloudflare backend env (Cloudflare creds are cleared by conftest)."""
     for name in _BACKEND_ENV:
         monkeypatch.delenv(name, raising=False)
+    # azure_search freezes AZURE_SEARCH_ENDPOINT/_API_KEY as module-level
+    # constants at import, so delenv alone is ineffective when the module was
+    # already imported (e.g. by an earlier test module) — neutralize those too.
+    monkeypatch.setattr("digisearch.indexes.backends.azure_search.AZURE_SEARCH_ENDPOINT", "")
+    monkeypatch.setattr("digisearch.indexes.backends.azure_search.AZURE_SEARCH_API_KEY", "")
 
 
 @pytest.mark.unit

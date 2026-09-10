@@ -16,7 +16,7 @@ digithings (digithings.ai) is an open-core modular agentic stack for building co
 |---------|------------|------|--------------|----------------|-----------|--------|
 | **digigraph** | 8000 | LangGraph orchestration hub; OpenAI-compatible API; delegates to verticals | JWT (digikey) — 503 if not configured | core (always on) | Yes — `python -m digigraph.mcp_server` | Shipped |
 | **digiquant** | 8001 | NautilusTrader backtest/optimize; ordered quant pipeline; orchestrator endpoints | JWT (`digiquant:backtest`, `digiquant:optimize`) | core | Yes — `python -m digiquant.mcp_server` | Shipped |
-| **digisearch** | 8002 | RAG pipeline; document ingestion; vector search (Chroma/Azure) | JWT (`digisearch:query`, `digisearch:ingest`) | core | Yes — `docker compose --profile digisearch-mcp up` | Shipped |
+| **digisearch** | 8002 | RAG pipeline; document ingestion; vector search (Chroma/Azure) | JWT (`digisearch:query`, `digisearch:ingest`) | core | Yes — `docker compose --profile digisearch-mcp up`; stack loopback :8765 via supervisord | Shipped |
 | **digismith** | 8003 | LangSmith-aligned tracing helpers (library); health + `/v1/status` endpoint | None (public metadata) | core | No | Shipped |
 | **digivault** | 8004 | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags) | JWT (`digivault:read`, `digivault:write`) | digivault | Yes — `python -m digivault.mcp_server` | New |
 | **LiteLLM** | 4000 | LLM routing proxy (100+ providers); response cache; rate limiting | `LITELLM_MASTER_KEY` Bearer | core | No | Shipped |
