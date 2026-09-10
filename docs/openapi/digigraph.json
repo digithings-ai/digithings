@@ -73,6 +73,7 @@
           "research_system_prompt": {
             "anyOf": [
               {
+                "maxLength": 4000,
                 "type": "string"
               },
               {

@@ -1376,11 +1376,35 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         expect(lastResearchPrompt()).toBeUndefined();
       });
 
-      it("sends the baseline prompt when x-embed-host matches no deployment", async () => {
-        await POST(chatReq({ "x-embed-host": "https://unknown.example" }));
+      it("sends the baseline prompt on the real unauthenticated baseline embed path", async () => {
+        // True baseline: no session (auth rejects) + unknown host + legacy
+        // generic embed open. resolveEmbedChatTenant is real here and must
+        // yield { tenantSlug: "embed", embedConfig: null }.
+        process.env.DIGICHAT_LEGACY_EMBED_ENABLED = "1";
+        vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+        const res = await POST(chatReq({ "x-embed-host": "https://unknown.example" }));
+        expect(res.status).toBe(200);
         const prompt = lastResearchPrompt();
         expect(typeof prompt).toBe("string");
         expect(prompt as string).toMatch(/digi(chat|graph|search|vault)/);
+      });
+
+      it("omits researchSystemPrompt when an authenticated tenant spoofs an unknown host", async () => {
+        // The header is client-controlled: a logged-in tenant (mockAuthCtx,
+        // slug "acme") must not receive the baseline prompt by sending an
+        // unregistered host.
+        await POST(chatReq({ "x-embed-host": "https://unknown.example" }));
+        expect(lastResearchPrompt()).toBeUndefined();
+      });
+
+      it("omits researchSystemPrompt when x-embed-host is empty", async () => {
+        await POST(chatReq({ "x-embed-host": "" }));
+        expect(lastResearchPrompt()).toBeUndefined();
+      });
+
+      it("omits researchSystemPrompt when x-embed-host is whitespace-only", async () => {
+        await POST(chatReq({ "x-embed-host": "   " }));
+        expect(lastResearchPrompt()).toBeUndefined();
       });
 
       it("omits researchSystemPrompt when x-embed-host matches a deployment", async () => {

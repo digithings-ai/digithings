@@ -1,10 +1,14 @@
 /**
- * Web search preference (default ON; tenant-gated).
+ * Web search preference (default OFF; tenant-gated; baseline opts into default-ON).
  *
- * Default on. Tenant must still allow (`webSearch: true` in config) — that gate
+ * Default off. Tenant must still allow (`webSearch: true` in config) — that gate
  * is unchanged (#3420): the BFF only sends X-Digi-Enable-Web-Search when the
- * tenant allows AND this user pref is on. The user opts out via this
- * localStorage flag, persisted as "0".
+ * tenant allows AND this user pref is on. Callers pass `defaultOn: true` only
+ * for the baseline embed surface (slug "embed"), which has no legacy stored
+ * values. Everywhere else the default stays off so prior opt-outs — which are
+ * indistinguishable from never-set (opt-out used to remove the key) — are
+ * never silently re-enabled. The user opts out via this localStorage flag,
+ * persisted as "0".
  */
 
 const STORAGE_PREFIX = "digichat-web-search:";
@@ -14,11 +18,16 @@ export function webSearchStorageKey(scope: string): string {
   return `${STORAGE_PREFIX}${s}`;
 }
 
-/** Read user preference; missing → true (default on). Explicit "0" opts out. */
-export function readWebSearchPref(scope: string): boolean {
+/**
+ * Read user preference. Missing key → `defaultOn` (false unless the caller
+ * opts a surface into default-on). Explicit "0" always opts out.
+ */
+export function readWebSearchPref(scope: string, defaultOn = false): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return window.localStorage.getItem(webSearchStorageKey(scope)) !== "0";
+    const stored = window.localStorage.getItem(webSearchStorageKey(scope));
+    if (stored === null) return defaultOn;
+    return stored !== "0";
   } catch {
     return false;
   }

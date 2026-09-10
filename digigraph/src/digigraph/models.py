@@ -96,6 +96,7 @@ class ChatCompletionRequest(BaseModel):
     )
     research_system_prompt: str | None = Field(
         None,
+        max_length=4000,
         description=(
             "Opt-in default research system prompt for sessions with no "
             "server-configured prompt (single-tenant / baseline embed). Ignored "

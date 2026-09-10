@@ -449,13 +449,20 @@ export async function POST(req: Request) {
       getDigichatConfig,
       embedTenantToDeployment,
     } = await import("@/lib/deploy-config/loader");
-    const embedHost = req.headers.get("x-embed-host");
-    // Baseline-only research prompt: the header is present but matches no host
-    // deployment, so the request serves the unconfigured baseline embed. MUST
+    const rawEmbedHost = req.headers.get("x-embed-host");
+    const embedHost = rawEmbedHost?.trim() ? rawEmbedHost.trim() : null;
+    // Baseline-only research prompt: a trimmed, non-empty header that matches
+    // no host deployment, on the unconfigured baseline embed tenant (slug
+    // "embed", no verified tenant). The header is client-controlled, so the
+    // tenant check closes the spoof: an authenticated tenant sending an
+    // unregistered host keeps its own slug and gets no baseline prompt. MUST
     // use matchHostDeployment (no fallback) — resolveDeploymentForHost below
     // falls back to the default deployment for unknown hosts.
     isBaselineEmbed =
-      embedHost !== null && matchHostDeployment(embedHost, getDigichatConfig()) === null;
+      embedHost !== null &&
+      tenantSlug === "embed" &&
+      embedConfig === null &&
+      matchHostDeployment(embedHost, getDigichatConfig()) === null;
     let dep = resolveDeploymentForHost(embedHost, getDigichatConfig());
     if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
     const operator = operatorMcpServersForUpstream(dep);

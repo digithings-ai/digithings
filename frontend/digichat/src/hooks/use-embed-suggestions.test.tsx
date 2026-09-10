@@ -65,13 +65,23 @@ describe("useEmbedSuggestions hydration", () => {
   });
 
   it("reshuffles after mount", () => {
-    const seen = new Set<string>();
-    for (let i = 0; i < 10; i += 1) {
-      const hook = renderHookLocally(() => useEmbedSuggestions(undefined, BASELINE_CFG));
-      seen.add(hook.result.current.join("|"));
-      hook.unmount();
+    // Deterministic draw sequence: blocks of three 0s then three 0.99s give
+    // alternating Fisher-Yates orders, so variety holds without Math.random flakiness.
+    const draws = Array.from({ length: 30 }, (_, i) => (Math.floor(i / 3) % 2 === 0 ? 0 : 0.99));
+    let at = 0;
+    const realRandom = Math.random;
+    Math.random = () => draws[at++ % draws.length];
+    try {
+      const seen = new Set<string>();
+      for (let i = 0; i < 10; i += 1) {
+        const hook = renderHookLocally(() => useEmbedSuggestions(undefined, BASELINE_CFG));
+        seen.add(hook.result.current.join("|"));
+        hook.unmount();
+      }
+      expect(seen.size).toBeGreaterThan(1);
+    } finally {
+      Math.random = realRandom;
     }
-    expect(seen.size).toBeGreaterThan(1);
   });
 
   it("keeps url override winning over the tenant pool", () => {

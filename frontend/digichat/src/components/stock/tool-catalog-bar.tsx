@@ -40,8 +40,14 @@ export function ToolCatalogBar({
   const tenantAllowsWeb =
     gate.webSearch === true || catalog.some((t) => t.id === "web_search");
 
-  // First render is always off (SSR-agreeing); stored/default-ON syncs after mount.
-  const [webPref, setWebPref] = useSyncedWebSearchPref(prefScope);
+  // First render is always off (SSR-agreeing); the stored value syncs after
+  // mount. Default-on applies to the baseline embed surface only (slug
+  // "embed", which has no legacy stored values); every other surface keeps
+  // the #3420 opt-in default so prior opt-outs are never re-enabled.
+  const [webPref, setWebPref] = useSyncedWebSearchPref(
+    prefScope,
+    clientConfig.slug === "embed",
+  );
   const [armedForce, setArmedForce] = useState<string | null>(null);
 
   const webOn = isWebSearchEnabled({

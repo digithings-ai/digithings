@@ -1,6 +1,7 @@
 /**
- * RED: websearch toggle pref must render SSR-identical first (off) on both
- * server and client, then sync the stored/default-ON value after mount.
+ * Websearch toggle pref must render SSR-identical first (off) on both
+ * server and client, then sync the stored value after mount — falling back
+ * to defaultOn (baseline-only default-on) when nothing is stored.
  * (tool-catalog-bar initialized from localStorage during render, which
  * hydrates_websearch_on tenants like ?host=digithings.ai.)
  */
@@ -25,13 +26,13 @@ function stubStorage(initial: Record<string, string> = {}) {
   });
 }
 
-function renderHook(scope: string) {
+function renderHook(scope: string, defaultOn?: boolean) {
   const result: { current: [boolean, (next: boolean) => void]; renders: boolean[] } = {
     current: [false, () => {}],
     renders: [],
   };
   function Probe() {
-    result.current = useSyncedWebSearchPref(scope);
+    result.current = useSyncedWebSearchPref(scope, defaultOn);
     result.renders.push(result.current[0]);
     return null;
   }
@@ -68,8 +69,8 @@ describe("useSyncedWebSearchPref", () => {
     }
   });
 
-  it("missing key first-renders off, then syncs to default-on", () => {
-    const { result, unmount } = renderHook("fresh-scope");
+  it("missing key first-renders off, then syncs to default-on when opted in (baseline)", () => {
+    const { result, unmount } = renderHook("fresh-scope", true);
     try {
       expect(result.renders[0]).toBe(false);
       expect(result.current[0]).toBe(true);
@@ -81,6 +82,16 @@ describe("useSyncedWebSearchPref", () => {
   it("stored opt-out stays off after mount", () => {
     stubStorage({ [webSearchStorageKey("out-scope")]: "0" });
     const { result, unmount } = renderHook("out-scope");
+    try {
+      expect(result.renders[0]).toBe(false);
+      expect(result.current[0]).toBe(false);
+    } finally {
+      unmount();
+    }
+  });
+
+  it("missing key with defaultOn=false stays off after mount (non-baseline opt-in preserved)", () => {
+    const { result, unmount } = renderHook("optin-scope", false);
     try {
       expect(result.renders[0]).toBe(false);
       expect(result.current[0]).toBe(false);

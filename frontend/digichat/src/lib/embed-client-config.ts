@@ -88,6 +88,10 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   layout: "embed",
   showLanguageSelector: false,
   webSearch: true,
+  // Baseline operator surface: no pinned servers, but the user-server form is
+  // open (same as the deploy-path default). The bridge projects this with
+  // strict ===true passthroughs, so the keys must be present here.
+  mcp: { servers: [], allowUserServers: true, allowAddForm: true },
 };
 
 /** Registry entry → client-safe config. Copies declared fields only; `token`

@@ -343,6 +343,7 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 | `allowed_tools` | `list[str] \| None` | Tool allowlist for this request |
 | `require_tool_calls` | `bool \| None` | Also accepted via `X-Require-Tool-Calls` header; floor semantics, see 4.1/4.2 |
 | `force_tool` | `str \| None` | Also accepted via `X-Digi-Force-Tool`; aliases `search`/`digisearch`, `docs`/`digivault`. Injected locate then synthesize — the model is not asked to write the query |
+| `research_system_prompt` | `str \| None` | Opt-in default research system prompt for sessions with no server-configured prompt (single-tenant / baseline embed). `max_length=4000`; rejected with 422 when longer. Ignored when `DIGI_TENANT_CORPUS_MAP` resolves a prompt for the tenant |
 
 ---
 

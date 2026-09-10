@@ -1364,14 +1364,19 @@ wrong/absent customer token) is the unconfigured container default: skin
 rotated-square arrow), generic “Ask a question” copy, compact attach+send
 composer, plus the baseline template defaults: 4 starter suggestion chips
 (`BASELINE_EMBED_SUGGESTIONS`, owner-replaceable copy), `gate.webSearch: true`
-with the websearch session pref defaulting ON (explicit opt-out persists;
-tenant AND still gates the BFF forward per #3420), and
+with the websearch session pref defaulting ON for the baseline slug only
+(`defaultOn` when `clientConfig.slug === "embed"`; matched surfaces keep the
+#3420 opt-in default off so prior opt-outs are never silently re-enabled;
+tenant AND still gates the BFF forward), and
 `mcp.allowUserServers / allowAddForm: true` (session MCP URLs stay
 `https`-only + SSRF-allowlisted, operator YAML wins). The `/tools` slash row
 stays visible on empty catalogs via the websearch row. The BFF sends
 `research_system_prompt` (`DEFAULT_BASELINE_RESEARCH_SYSTEM_PROMPT`) only for
-this baseline case — `x-embed-host` present but matching no host deployment —
-never for matched hosts or first paint without the header. YAML that omits
+this baseline case — trimmed non-empty `x-embed-host` matching no host
+deployment, on the unauthenticated baseline tenant (`tenantSlug "embed"`,
+`embedConfig` null) — never for matched hosts, spoofed-unknown-host
+authenticated traffic, empty/whitespace headers, or first paint without the
+header. YAML that omits
 `skin` still parses as catalog `base`. Product hosts (`digithings-ai-embed.yaml`,
 `occ-embed.yaml`) keep `chrome.skin: digichat` with the digisearch / digivault
 catalog (web_search tenant-allowed on digithings.ai; embed/popup session
