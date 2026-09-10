@@ -16,8 +16,18 @@ vi.mock("@/app/(baseline)/stock/thread.aui", () => ({
 }));
 
 vi.mock("@/components/assistant-ui/skins", () => ({
-  ThreadSkinView: ({ skin }: { skin: string }) => (
-    <div data-testid="stock-thread" data-skin={skin}>
+  ThreadSkinView: ({
+    skin,
+    composerLayout,
+  }: {
+    skin: string;
+    composerLayout?: string;
+  }) => (
+    <div
+      data-testid="stock-thread"
+      data-skin={skin}
+      data-composer-layout={composerLayout ?? ""}
+    >
       stock thread
     </div>
   ),
@@ -242,5 +252,19 @@ describe("ProductStockShell", () => {
       />,
     );
     expect(document.querySelector("[data-tool-catalog]")).toBeNull();
+  });
+
+  it("forwards composerLayout to the skin view", () => {
+    const runtime = {} as AssistantRuntime;
+    render(
+      <ProductStockShell
+        runtime={runtime}
+        composerLayout="compact"
+        clientConfig={DEFAULT_CLIENT_CONFIG}
+      />,
+    );
+    expect(
+      screen.getByTestId("stock-thread").getAttribute("data-composer-layout"),
+    ).toBe("compact");
   });
 });

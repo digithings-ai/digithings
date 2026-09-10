@@ -64,6 +64,8 @@ describe("product CSS isolation", () => {
 
   it("first-party digichat skin uses the compact composer off app chrome", () => {
     const skin = read("../../components/assistant-ui/skins/digichat.tsx");
-    expect(skin).toMatch(/composerLayout=\{mode === "app" \? "expanded" : "compact"\}/);
+    expect(skin).toMatch(
+      /composerLayout=\{composerLayout \?\? \(mode === "app" \? "expanded" : "compact"\)\}/
+    );
   });
 });
