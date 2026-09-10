@@ -139,6 +139,17 @@ public tip.
 `net_pnl_total / E0` alone. Migration 074's formula is superseded by
 `084_olympus_accounting_day_return_pct.sql`; 085 retains that equity-delta formula.
 
+**Credible tip + `series_seam` (123 / #3767 / #3824):** CREATE OR REPLACE on
+`public_accounting_period_status`, `public_finalized_nav`, and
+`public_accounting_nav_history` only (no new grants on base accounting tables).
+A superseder voids a prior tip only when it is itself credible — incomplete/failed
+zero-equity tombstones and `superseded_by_restatement_*` quality reasons do **not**
+void restated clean finals. `public_accounting_nav_history` adds an additive boolean
+`series_seam` (true on the first row after a legacy↔finalized source flip). Dashboard
+performance SSOT must break the line / refuse cross-seam day return rather than draw
+one continuous series. Opening-equity chaining of restated days remains
+**#3803 / #3804** (finalize-writer path) — 123 is display/view-only.
+
 **Cutover gate:** point public readers only after an approved shadow interval (including one
 rebalance session) has zero unexplained reconciliation failures. Do **not** enable
 `OLYMPUS_ACCOUNTING_FINALIZER=on` until ops/shadow evidence is approved.
@@ -147,7 +158,7 @@ rebalance session) has zero unexplained reconciliation failures. Do **not** enab
 `public_accounting_nav_history`. If that view is missing (`PGRST205`), Performance and
 the homepage live book fail closed with a typed contract error — they must **not** silently
 re-point to `public_nav_history` in the browser. Apply migrations **072–074** (and later
-084/085 replacements) on the core project before expecting NAV/statistics to render.
+084/085 replacements, plus **123** credible-tip / `series_seam`) on the core project before expecting NAV/statistics to render.
 
 ### ProfileConfig — migration 075 (#2609 / Track B)
 
