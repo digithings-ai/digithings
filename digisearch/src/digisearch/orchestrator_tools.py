@@ -323,8 +323,8 @@ def build_web_search_tool() -> OpenAIToolDict:
             "name": TOOL_WEB_SEARCH,
             "description": (
                 "Search the public web (first-party tool). "
-                "Runs searxng with ddgs fallback, then fetches top hits "
-                "and enriches snippets with extracted markdown."
+                "Returns current web results with fetched content snippets "
+                "for grounding answers in fresh information."
             ),
             "parameters": {
                 "type": "object",

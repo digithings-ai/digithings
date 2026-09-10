@@ -29,6 +29,51 @@ class WebSearchRequest(BaseModel):
     recency_days: int | None = Field(default=7, ge=1, le=365)
 
 
+def recency_days_to_ddgs_timelimit(recency_days: int | None) -> str | None:
+    """Map recency_days to a ddgs ``text()`` timelimit (d/w/m/y); None omits it."""
+    if recency_days is None:
+        return None
+    if recency_days <= 1:
+        return "d"
+    if recency_days <= 7:
+        return "w"
+    if recency_days <= 31:
+        return "m"
+    return "y"
+
+
+def recency_days_to_searxng_time_range(recency_days: int | None) -> str | None:
+    """Map recency_days to a searxng ``time_range`` (day/month/year); None omits it.
+
+    searxng documents only day/month/year (no week bucket), so sub-month
+    windows above a day map to the next-coarser month superset.
+    """
+    if recency_days is None:
+        return None
+    if recency_days <= 1:
+        return "day"
+    if recency_days <= 31:
+        return "month"
+    return "year"
+
+
+def summarize_validation_error(exc: Exception) -> str:
+    """Render a pydantic ValidationError as a single clean line (never a traceback)."""
+    from pydantic import ValidationError
+
+    assert isinstance(exc, ValidationError)
+    parts = []
+    for err in exc.errors():
+        loc = ".".join(str(p) for p in err.get("loc", ())) or "value"
+        parts.append(f"{loc}: {err.get('msg', 'invalid')}")
+    return "; ".join(parts) or "invalid input"
+
+
+def _normalize_domains(domains: list[str]) -> set[str]:
+    """Strip/lower/drop-empty domain entries once, so padded/empty lists behave."""
+    return {d.strip().lower() for d in domains if d.strip()}
+
+
 def _host(url: str) -> str:
     try:
         return urlparse(url).hostname or ""
@@ -42,8 +87,8 @@ def apply_domain_filter(
     include_domains: list[str],
     exclude_domains: list[str],
 ) -> list[dict]:
-    inc = {d.lower() for d in include_domains}
-    exc = {d.lower() for d in exclude_domains}
+    inc = _normalize_domains(include_domains)
+    exc = _normalize_domains(exclude_domains)
     kept: list[dict] = []
     for r in results:
         h = _host(str(r.get("url", ""))).lower()

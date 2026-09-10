@@ -9,6 +9,7 @@ from digisearch.web_search.models import (
     WebSearchResponse,
     WebSearchResult,
     apply_domain_filter,
+    recency_days_to_searxng_time_range,
 )
 
 
@@ -26,13 +27,16 @@ class SearXNGWebSearchProvider:
         self._timeout = timeout
 
     def search(self, req: WebSearchRequest) -> WebSearchResponse:
-        params = {
+        params: dict[str, object] = {
             "q": req.query,
             "format": "json",
             "pageno": 1,
             "language": "en",
             "safesearch": 1,
         }
+        time_range = recency_days_to_searxng_time_range(req.recency_days)
+        if time_range is not None:
+            params["time_range"] = time_range
         close = False
         client = self._client
         if client is None:

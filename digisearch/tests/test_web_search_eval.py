@@ -75,6 +75,12 @@ class _FakeFetcher:
     def __init__(self, world: _OfflineWorld) -> None:
         self._world = world
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
     def fetch(self, url: str):
         query = self._world.last_query or "markets"
         keywords = self._world.keywords_by_query.get(query, [])

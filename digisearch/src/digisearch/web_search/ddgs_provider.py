@@ -7,6 +7,7 @@ from digisearch.web_search.models import (
     WebSearchResponse,
     WebSearchResult,
     apply_domain_filter,
+    recency_days_to_ddgs_timelimit,
 )
 
 try:
@@ -28,8 +29,12 @@ class DdgsWebSearchProvider:
         if DDGS is None:
             raise DdgsUnavailableError("ddgs package not installed")
         rows: list[dict] = []
+        timelimit = recency_days_to_ddgs_timelimit(req.recency_days)
         with DDGS() as ddgs:
-            for row in ddgs.text(req.query, max_results=req.max_results) or []:
+            # Over-fetch like the searxng provider so post-filtering still
+            # leaves up to max_results rows; capped again below.
+            found = ddgs.text(req.query, max_results=req.max_results * 2, timelimit=timelimit) or []
+            for row in found:
                 rows.append(
                     {
                         "url": str(row.get("href", "")),

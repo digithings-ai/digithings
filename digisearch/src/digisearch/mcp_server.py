@@ -7,6 +7,7 @@ import os
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import ValidationError
 
 from digisearch.core.models import Query
 from digisearch.logging import configure_logging
@@ -106,17 +107,21 @@ def web_search(
     max_results: int = 4,
 ) -> str:
     """Search the public web (first-party tool). Returns JSON WebSearchResponse."""
-    from digisearch.web_search.models import WebSearchRequest
-    from digisearch.web_search.service import run_web_search
-
-    return run_web_search(
-        WebSearchRequest(
+    try:
+        from digisearch.web_search.models import WebSearchRequest, summarize_validation_error
+        from digisearch.web_search.service import run_web_search
+    except ImportError as e:
+        return f"[web_search unavailable: install digisearch[web-search] for web_search: {e}]"
+    try:
+        req = WebSearchRequest(
             query=query,
             include_domains=include_domains or [],
             exclude_domains=exclude_domains or [],
             max_results=max_results,
         )
-    ).model_dump_json()
+    except ValidationError as e:
+        return f"[web_search invalid input: {summarize_validation_error(e)}]"
+    return run_web_search(req).model_dump_json()
 
 
 @mcp.tool()

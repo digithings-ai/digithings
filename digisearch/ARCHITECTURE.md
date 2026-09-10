@@ -286,7 +286,7 @@ Directly invokes the internal LangGraph pipeline (`plan → retrieve → aggrega
 
 Auth required (`digisearch:query` scope via the default `digisearch_path_scopes` fallthrough). Rate limited: 30 req/min (default bucket).
 
-Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. `run_web_search` tries the searxng sidecar first, fails over to embedded ddgs (`DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs`, sidecar URL from `DIGISEARCH_SEARXNG_URL`), then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). Fetch/extract failures keep the original search snippet — enrichment never fails the response. No new port: served by the existing digisearch HTTP app.
+Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4), recency_days (1–365, default 7; mapped onto provider recency filters, omitted when null)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. `run_web_search` tries the searxng sidecar first, fails over to embedded ddgs (`DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs`, sidecar URL from `DIGISEARCH_SEARXNG_URL`), then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). Fetch/extract failures keep the original search snippet — enrichment never fails the response. No new port: served by the existing digisearch HTTP app.
 
 ### MCP Tools
 
@@ -614,13 +614,21 @@ core needs. The HTTP/MCP/CLI service stack and the parser deps are extras:
 | `[embedding]` | `openai` | OpenAI embedder |
 | `[rerank]` | `sentence-transformers` | BGE cross-encoder (`Reranker` provider=`bge`); kept separate from `[embedding]` so OpenAI-only installs stay light (#2441) |
 | `[agent]` | `langgraph` | research-turn graph (§11) |
-| `[web-search]` | `ddgs`, `trafilatura`, `readability-lxml`, `markdownify` | proprietary web search: ddgs fallback + fetch→extract enrichment (§3 `POST /v1/web_search`; #3853) |
+| `[web-search]` | `digifetch`, `ddgs`, `trafilatura`, `readability-lxml`, `markdownify` | proprietary web search: searxng sidecar (httpx, base only) + ddgs fallback + digifetch fetch → trafilatura/readability extract enrichment (§3 `POST /v1/web_search`; #3853) |
 | `[dev]` | `[server]` + `[ingestion]` + pytest/ruff/langgraph | CI + local dev (so every dev install exercises and pip-audits the full shipped surface) |
 
-The **running service** installs `digisearch[server,ingestion,azure,chroma]`
+The **running service** installs `digisearch[server,ingestion,azure,chroma,web-search]`
 (see [Docker](#10-docker-and-mcp-composition)) so it retains every dependency it
 relied on before the split (the service additionally now ships pdfplumber for
-PDF ingest, which the old `[azure,chroma]`-only image lacked). A consumer that
+PDF ingest, which the old `[azure,chroma]`-only image lacked, plus the
+`[web-search]` stack for `POST /v1/web_search`). The image COPY/installs the
+`digifetch` workspace sibling exactly like `digibase`/`digikey` (its
+`pyproject.toml` + `ARCHITECTURE.md` readme + `src`, then `uv pip install -e`),
+which is what satisfies the `[web-search]` extra's `digifetch>=0.1.0` pin at
+build time. `[web-search]` rides `all` like every other feature extra, but stays
+out of `[dev]`: `dev` is `[server]` + `[ingestion]` only (same as
+`[azure]`/`[chroma]`/`[agent]`), so local installs stay light and CI exercises
+the extra explicitly. A consumer that
 only wants a parser can `pip install digisearch[ingestion]` without dragging in
 the server stack.
 
@@ -1009,7 +1017,7 @@ docker compose --profile digisearch-mcp up
 
 The `searxng` service (`searxng/searxng`) is loopback-only on the host (`127.0.0.1:8080`) with config at `config/searxng/settings.yml` (`search.formats: [html, json]`, engine allowlist). `valkey` backs its limiter. digisearch reaches it in-container via `DIGISEARCH_SEARXNG_URL=http://searxng:8080`. No new digisearch port: `POST /v1/web_search`, MCP `web_search`, and orchestrator `web_search` all ride the existing apps.
 
-Rollout ops: single flag `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (default `auto`); a down sidecar or a ddgs 403/CAPTCHA fails over to the next backend, and the digigraph `web` skill stays corpus-only unless the session opts in (#3420) — fail-closed to corpus-only at every layer. Engine allowlist is `wikipedia, duckduckgo, bing, mojeek`; `search.formats` must keep `json` (the provider calls `/search?format=json`). `server.secret_key` ships as a dev-only placeholder — rotate before exposing beyond loopback. Upstream scrapers break without notice: `compose pull searxng` weekly, and watch per-engine 403/CAPTCHA rates plus the digillm synthesis fallback rate as the early signal; the cost win shows up as a drop in grounding-model (gemini flash-lite) traffic on web-grounded segments. Eval: `digisearch/tests/test_web_search_eval.py` (20 queries across news/macro/docs/earnings, mocked offline; live sampling behind `DIGISEARCH_WEB_SEARCH_LIVE=1` with p50 fetch+extract < 5s).
+Rollout ops: single flag `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (default `auto`); a down sidecar or a ddgs 403/CAPTCHA fails over to the next backend, and the digigraph `web` skill stays corpus-only unless the session opts in (#3420) — fail-closed to corpus-only at every layer. Engine allowlist is `wikipedia, duckduckgo, bing, mojeek`; `search.formats` must keep `json` (the provider calls `/search?format=json`). `server.secret_key` ships as a dev-only placeholder — rotate before exposing beyond loopback. Upstream scrapers break without notice: `compose pull searxng` weekly, and watch per-engine 403/CAPTCHA rates plus the digillm synthesis fallback rate as the early signal; the cost win shows up as a drop in grounding-model (gemini flash-lite) traffic on web-grounded segments. Eval: `digisearch/tests/test_web_search_eval.py` (20 queries across news/macro/docs/earnings, mocked offline; live sampling behind `DIGISEARCH_WEB_SEARCH_LIVE=1` with p50 fetch+extract < 5s). Known limitation: digiquant→hub calls carry no service token today (bearer None path), so in authed prod the tool leg 401s and the synthesis fallback engages (fail-closed); service-token auth for that leg is a follow-up, not wired here.
 
 ### Environment variables reference
 

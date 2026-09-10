@@ -36,7 +36,7 @@ configure_logging()
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -568,6 +568,36 @@ def _query_request_from_digisearch_args(
     )
 
 
+def _coerce_web_search_max_results(raw: object) -> int | None:
+    """Defensively coerce an orchestrator max_results arg; None when invalid.
+
+    Accepts ints (never bools — the bool-is-int quirk silently mapped True to
+    1), integral floats, and int-looking strings; clamps the result to 1–10.
+    A missing arg (None) maps to the default 4; anything else is invalid.
+    """
+    if raw is None:
+        return 4
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        num = raw
+    elif isinstance(raw, float):
+        if not raw.is_integer():
+            return None
+        num = int(raw)
+    elif isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return None
+        try:
+            num = int(text)
+        except ValueError:
+            return None
+    else:
+        return None
+    return min(max(num, 1), 10)
+
+
 @app.post("/v1/orchestrator_invoke")
 def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvokeResponse:
     """Execute one digisearch orchestrator tool by name (hub dispatch)."""
@@ -740,16 +770,23 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         exclude = (
             args.get("exclude_domains") if isinstance(args.get("exclude_domains"), list) else []
         )
-        max_raw = args.get("max_results", 4)
-        max_results = int(max_raw) if isinstance(max_raw, int) else 4
-        resp = run_web_search(
-            WebSearchRequest(
+        max_results = _coerce_web_search_max_results(args.get("max_results", 4))
+        if max_results is None:
+            return OrchestratorInvokeResponse(ok=False, error="max_results must be an integer 1-10")
+        try:
+            web_req = WebSearchRequest(
                 query=qtext,
                 include_domains=[str(d) for d in include],
                 exclude_domains=[str(d) for d in exclude],
                 max_results=max_results,
             )
-        )
+        except ValidationError as e:
+            from digisearch.web_search.models import summarize_validation_error
+
+            return OrchestratorInvokeResponse(
+                ok=False, error=f"invalid web_search input: {summarize_validation_error(e)}"
+            )
+        resp = run_web_search(web_req)
         return OrchestratorInvokeResponse(
             ok=True,
             service="digisearch",
