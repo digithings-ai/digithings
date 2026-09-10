@@ -28,7 +28,7 @@ The dashboard (`frontend/dashboard`, npm package `dashboard`) is the
 digiquant operator surface: research, portfolio, and execution in one
 investment-intelligence UI. It is a Next.js 16 + React 19 app that builds to
 a **static export** (`output: 'export'`) served under the **`/dashboard/`
-base path** — the only public path (ADR-0026); the old `/dashboard/` path is
+base path** — the only public path (ADR-0026); the old `/olympus/` path is
 retired with no redirect alias.
 
 ## Hosting and routing
@@ -70,3 +70,17 @@ route `page.test.ts` files, and `lib/` unit tests including
 `book-reconciliation`, `accounting-views`, and `accounting-nav-fail-closed`
 — the fail-closed P&L contract (missing basis or mark renders `—`, never an
 invented number).
+
+## Plan tiers + Desk+ digichat (#3664 / #3670)
+
+Effective ladder: **Observer** (free) → **Brief** → **Desk** → **Studio** /
+Enterprise. Do not document Baseline/Custom as Stripe products.
+
+- **Billing** (dashboard Settings): Brief / Desk / Studio checkout; annual is the
+  default interval. Display catalog and tab visibility by effective tier live in
+  `frontend/dashboard/README.md` and `docs/agent-backlog/kairos-tenancy/PRICING.md`.
+- **Desk+ digichat popup:** Desk / Studio / enterprise get full chat; Brief /
+  Observer see the upgrade CTA. The embed mints HMAC `X-Embed-Plan-Proof` via
+  `POST /api/plan-proof` from JWT `app_metadata.plan_tier` — never a raw
+  `X-Embed-Plan-Tier` header. Shared secret: `DIGICHAT_PLAN_PROOF_SECRET`.
+
