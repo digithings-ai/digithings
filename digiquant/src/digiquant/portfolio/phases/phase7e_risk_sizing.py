@@ -26,9 +26,13 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
+from typing import (
+    TYPE_CHECKING,
+    Any,  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
+)
 
-from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
+if TYPE_CHECKING:
+    from digigraph.graph.pipeline_builder import PipelinePhase
 
 from digiquant.portfolio.allocation_contracts import (
     AllocationInputBundle,
@@ -1395,6 +1399,9 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
 
 def build_risk_sizing_phase(deps: RiskSizingDeps) -> PipelinePhase:
     """Wrap the enforcement node into a single-node ``PipelinePhase`` (H8)."""
+    # Lazy: digigraph.graph pulls the LLM stack (openai); lean envs lack it.
+    from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
+
     return PipelinePhase(
         name="portfolio_h8_risk_sizing",
         nodes=[NodeSpec(name="portfolio/risk-sizing", run=build_risk_sizing_node(deps))],

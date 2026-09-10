@@ -34,10 +34,12 @@ import math
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import (
+    TYPE_CHECKING,
     Any,  # score:allow untyped any — scored-lint suppression: duck-typed Supabase client + rows
 )
 
-from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
+if TYPE_CHECKING:
+    from digigraph.graph.pipeline_builder import PipelinePhase
 
 from digiquant.dashboard.envcompat import POSITION_RISK_FIELDS, env_lookup
 from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
@@ -753,6 +755,9 @@ def build_materialize_node(deps: MaterializeDeps):
 
 def build_materialize_phase(deps: MaterializeDeps) -> PipelinePhase:
     """Wrap the materialization node into a single-node ``PipelinePhase``."""
+    # Lazy: digigraph.graph pulls the LLM stack (openai); lean envs lack it.
+    from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
+
     return PipelinePhase(
         name="materialize",
         nodes=[NodeSpec(name="materialize-portfolio", run=build_materialize_node(deps))],
