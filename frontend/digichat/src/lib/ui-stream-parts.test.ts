@@ -326,6 +326,20 @@ describe("writeStandardActivity", () => {
     ).toEqual(["digisearch keyword", "digivault_get_note"]);
   });
 
+  it("titles digisearch_fetch_all with the method from tool input", () => {
+    const chunks = collect({
+      operation: "execute_tool",
+      status: "started",
+      label: "digisearch_fetch_all",
+      toolName: "digisearch_fetch_all",
+      toolInput: { mode: "keyword" },
+    });
+    expect(chunks.find((c) => c.type === "tool-input-start")).toMatchObject({
+      toolName: "digisearch_fetch_all",
+      title: "digisearch fetch all (keyword)",
+    });
+  });
+
   it("keeps consecutive reasoning deltas on one id until a tool round", () => {
     const chunks = collect(
       [

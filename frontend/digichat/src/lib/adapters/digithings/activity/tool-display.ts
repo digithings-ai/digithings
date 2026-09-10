@@ -30,7 +30,8 @@ export function toolRowTitle(
   if (!name) return "tool";
   if (name === "digisearch" || name.startsWith("digisearch_")) {
     if (name === "digisearch_fetch_all" || name === "digisearch_research") {
-      return humanize(name);
+      const base = name === "digisearch_fetch_all" ? "fetch all" : "research";
+      return `digisearch ${base} (${searchMethodFromArgs(input)})`;
     }
     return `digisearch ${searchMethodFromArgs(input)}`;
   }

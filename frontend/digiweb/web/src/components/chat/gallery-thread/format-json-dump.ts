@@ -47,6 +47,7 @@ export function humanizeToolName(toolName: string, argsText?: string): string {
     const raw =
       (typeof input?.mode === "string" && input.mode) ||
       (typeof input?.search_mode === "string" && input.search_mode) ||
+      (typeof input?.search_type === "string" && input.search_type) ||
       "";
     const mode = raw.trim().toLowerCase();
     const method =
@@ -56,6 +57,7 @@ export function humanizeToolName(toolName: string, argsText?: string): string {
           ? "hybrid"
           : "semantic";
     if (name === "digisearch_fetch_all") return `digisearch fetch all (${method})`;
+    if (name === "digisearch_research") return `digisearch research (${method})`;
     return `digisearch ${method}`;
   }
   return name.replaceAll("_", " ");

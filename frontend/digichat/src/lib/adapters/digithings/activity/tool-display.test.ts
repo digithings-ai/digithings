@@ -25,4 +25,14 @@ describe("toolRowTitle", () => {
     expect(toolRowTitle("digivault_get_note")).toBe("digivault get note");
     expect(toolRowTitle("digivault_search_notes")).toBe("digivault search notes");
   });
+
+  it("suffixes fetch_all and research with the retrieval method", () => {
+    expect(toolRowTitle("digisearch_fetch_all")).toBe("digisearch fetch all (semantic)");
+    expect(toolRowTitle("digisearch_fetch_all", { search_type: "keyword" })).toBe(
+      "digisearch fetch all (keyword)",
+    );
+    expect(toolRowTitle("digisearch_research", { mode: "hybrid" })).toBe(
+      "digisearch research (hybrid)",
+    );
+  });
 });

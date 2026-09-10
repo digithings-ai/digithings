@@ -76,7 +76,7 @@ function rememberInput(
 }
 
 function displayTitle(name: string, span: ActivitySpan): string {
-  if (name === "digisearch") {
+  if (name === "digisearch" || name.startsWith("digisearch_")) {
     return toolRowTitle(name, toolInputOf(span));
   }
   return span.label?.trim() || toolRowTitle(name);
