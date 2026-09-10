@@ -12,6 +12,16 @@ pytest.importorskip("openai")
 from digiquant.research.data import web_grounding
 
 
+@pytest.fixture(autouse=True)
+def _tool_unavailable(monkeypatch: pytest.MonkeyPatch):
+    """Legacy-path tests: force the tool-first call to fail so the synthesis fallback runs."""
+
+    def _raise(**kwargs):
+        raise RuntimeError("web-search tool unavailable")
+
+    monkeypatch.setattr(web_grounding, "call_web_search_tool", _raise)
+
+
 def _query_for(segment: str) -> str:
     captured: dict[str, str] = {}
 
@@ -26,6 +36,22 @@ def _query_for(segment: str) -> str:
             run_date=date(2026, 6, 9),
         )
     return captured["query"]
+
+
+@pytest.mark.unit
+def test_fetch_web_grounding_uses_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    from digiquant.research.data import web_grounding as mod
+
+    monkeypatch.setattr(
+        mod,
+        "call_web_search_tool",
+        lambda **k: {"summary": "s", "sources": ["https://a.com/1"]},
+    )
+    out = mod.fetch_web_grounding(
+        model="cheap", segment="macro", run_date="2026-09-10", scope="test"
+    )
+    assert out is not None
+    assert out["sources"] == ["https://a.com/1"]
 
 
 @pytest.mark.unit
