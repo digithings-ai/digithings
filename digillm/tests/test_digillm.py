@@ -1605,7 +1605,8 @@ def test_normalize_tool_arguments_repairs_bad_json() -> None:
     assert json.loads(client_mod._normalize_tool_arguments('{"a": 1')) == {"a": 1}
     assert client_mod._normalize_tool_arguments("") == "{}"
     assert json.loads(client_mod._normalize_tool_arguments('{"a": 1,}')) == {"a": 1}
-    assert client_mod._normalize_tool_arguments("not json at all") == "{}"
+    with pytest.raises(ValueError, match="could not be repaired"):
+        client_mod._normalize_tool_arguments("not json at all")
 
 
 # ── Retry ────────────────────────────────────────────────────────────────────
@@ -1664,7 +1665,9 @@ def test_optional_nonnegative_int_rejects_bool_as_unavailable() -> None:
     assert client_mod._optional_nonnegative_int(3) == 3
 
 
-def test_sdk_hidden_retries_remain_enabled_and_opaque() -> None:
+def test_sdk_hidden_retries_remain_enabled_and_opaque(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Attempt telemetry observes SDK create calls, not the SDK's internal HTTP retries.
 
     We deliberately omit ``max_retries`` so the SDK default applies. Pin that default to the
@@ -1674,6 +1677,7 @@ def test_sdk_hidden_retries_remain_enabled_and_opaque() -> None:
     """
     from openai._constants import DEFAULT_MAX_RETRIES
 
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     made = _capture_client_kwargs(digillm.get_client)
     assert len(made) == 1
     assert "max_retries" not in made[0]

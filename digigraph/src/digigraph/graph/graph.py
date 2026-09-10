@@ -7,6 +7,7 @@ import threading
 
 from langgraph.graph import END, START, StateGraph
 
+from digigraph.graph.mcp_checkpoint_redact import McpTokenRedactingCheckpointer
 from digigraph.graph.nodes import (
     backtest_node,
     optimize_node,
@@ -183,6 +184,11 @@ def get_checkpointer():
                     _checkpointer_instance.setup()
             except ImportError:
                 pass
+        if _checkpointer_instance is not None and not isinstance(
+            _checkpointer_instance, McpTokenRedactingCheckpointer
+        ):
+            # Strip mcp_servers.token on durable writes; in-request state keeps tokens (#3794).
+            _checkpointer_instance = McpTokenRedactingCheckpointer(_checkpointer_instance)
         return _checkpointer_instance
 
 

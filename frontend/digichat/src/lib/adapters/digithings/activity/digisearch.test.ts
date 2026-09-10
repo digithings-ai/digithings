@@ -93,4 +93,50 @@ describe("mapDigisearchRagSources", () => {
       toolInput: { query: "SHOWCASE" },
     });
   });
+
+  it("routes vault search rag_sources onto search_notes with real hit rows", () => {
+    const span = mapDigisearchRagSources({
+      tool: "digivault_search_notes",
+      query: "run digigraph docker command",
+      arguments: { query: "run digigraph docker command" },
+      sources: [
+        {
+          doc_id: "clients/digithings/digigraph/ARCHITECTURE.md",
+          snippet: "docker compose up digigraph",
+          metadata: { title: "digigraph architecture" },
+        },
+      ],
+      hit_count: 1,
+    });
+    expect(span).toMatchObject({
+      operation: "retrieve",
+      status: "completed",
+      toolName: "digivault_search_notes",
+      documents: [
+        {
+          title: "digigraph architecture",
+          path: "clients/digithings/digigraph/ARCHITECTURE.md",
+          snippet: "docker compose up digigraph",
+        },
+      ],
+    });
+  });
+
+  it("does not render a vault invoke error as hitCount 0", () => {
+    const span = mapDigisearchRagSources({
+      tool: "digivault_search_notes",
+      query: "run digigraph docker command",
+      sources: [],
+      hit_count: 0,
+      status: "failed",
+      error: "path_prefix is required when the D1 backend is configured",
+    });
+    expect(span).toMatchObject({
+      operation: "execute_tool",
+      status: "failed",
+      toolName: "digivault_search_notes",
+    });
+    expect(span).not.toHaveProperty("hitCount");
+    expect(span?.label).toMatch(/path_prefix|failed/i);
+  });
 });

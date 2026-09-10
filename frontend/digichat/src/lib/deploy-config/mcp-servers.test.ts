@@ -195,6 +195,23 @@ describe("mergeMcpSessionOverlay", () => {
     });
     expect(merged).toEqual([{ id: "evil", url: "https://mcp.evil.example/mcp" }]);
   });
+
+  it("rejects http session URLs even when host would otherwise pass SSRF (#3795)", () => {
+    expect(
+      mergeMcpSessionOverlay({
+        operator: [],
+        overlay: [{ id: "insecure", url: "http://mcp.datatap.example/mcp" }],
+        allowSessionUrls: true,
+      }),
+    ).toEqual([]);
+    expect(
+      mergeMcpSessionOverlay({
+        operator: [],
+        overlay: [{ id: "secure", url: "https://mcp.datatap.example/mcp" }],
+        allowSessionUrls: true,
+      }),
+    ).toEqual([{ id: "secure", url: "https://mcp.datatap.example/mcp" }]);
+  });
 });
 
 describe("resolveMcpOAuthResourceUrl", () => {

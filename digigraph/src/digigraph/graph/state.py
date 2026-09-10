@@ -65,6 +65,7 @@ class WorkflowState(TypedDict, total=False):
     force_tool: str | None
     # Operator MCP servers for this turn (BFF header). Must be declared so a
     # prior tenant's URLs cannot stick on the checkpoint (#3736 / CWE-639).
+    # ``token`` is in-request only — stripped before checkpointer write (#3794).
     mcp_servers: list[dict[str, str]]
     # Raw catalog disable tokens (including extra MCP ids). Same sticky-key rule.
     disabled_tools: list[str] | None

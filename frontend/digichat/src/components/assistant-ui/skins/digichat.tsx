@@ -18,7 +18,7 @@ import {
   serializeThreadMarkdown,
   type TranscriptTurn,
 } from "@digithings/digichat-ui";
-import { DigichatThread, type ThreadSlashTrigger } from "@digithings/web/chat/thread";
+import { DigichatThread, type ComposerLayout, type ThreadSlashTrigger } from "@digithings/web/chat/thread";
 import {
   BASELINE_EMBED_PLACEHOLDER,
   BASELINE_EMBED_WELCOME,
@@ -45,7 +45,12 @@ import {
  * First-party digichat Thread. Explicit ThreadSkinView branch — never fall
  * through to product-page-assistant. Always left-aligned regardless of YAML.
  */
-export function DigichatSkin() {
+export function DigichatSkin({
+  composerLayout,
+}: {
+  /** Explicit override — embed forces compact regardless of chrome mode. */
+  composerLayout?: ComposerLayout;
+}) {
   const { welcome, welcomeBody, placeholder } = useComposerCopy(
     BASELINE_EMBED_WELCOME,
     BASELINE_EMBED_PLACEHOLDER,
@@ -278,7 +283,7 @@ export function DigichatSkin() {
       welcomeBody={welcomeBody}
       placeholder={placeholder}
       onComposerSubmit={onComposerSubmit}
-      composerLayout={mode === "app" ? "expanded" : "compact"}
+      composerLayout={composerLayout ?? (mode === "app" ? "expanded" : "compact")}
       slash={enableSlash ? slashTrigger : undefined}
       mention={enableSlash ? mentionTrigger : undefined}
     />

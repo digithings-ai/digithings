@@ -661,6 +661,18 @@ rate-limited on both the embed-IP path and the authenticated/session path
 the provider using digichat's own egress, so the authenticated path needs a
 ceiling too, not just the anonymous-embed one.
 
+**Redirect posture (#2572):** `isAllowedServiceUrl` gates only the *first* hop.
+Node/undici's default `redirect: "follow"` forwards custom headers (including
+`X-BYOK-Key` and `X-LiteLLM-Proxy-Key`) across origins while stripping only
+`Authorization`. Credentialed outbound fetches therefore go through
+`src/lib/fetch-guarded.ts` (`fetchGuarded`): `redirect: "manual"`, same-origin
+Location hops only, refuse cross-origin redirects while credentials are present.
+Wired into the digigraph trace stream (`adapters/digithings/stream.ts`), the
+AI SDK / `streamText` client (`lib/digigraph.ts` custom `fetch`), and
+`fetchWithTimeout` (covers `POST /api/byok/test` provider probes). Vitest
+`fetch-guarded.test.ts` stands up two local origins and asserts the X-* headers
+never reach the redirect target.
+
 `config/byok-providers.json`'s `keyPrefix` field is read by no runtime code, and
 `fallbackModels` is read only by `digigraph/src/digigraph/llm_auth.py` (whose loader
 takes `id`/`baseUrl`/`requiresModel` plus the first `fallbackModels` entry, used as
@@ -820,9 +832,12 @@ Picking a row (click or Enter on a highlight) autofills
 `label` / `url` / `auth` (token kept unless the id changes). Custom ids still type freely;
 operator rows keep id/url locked and hide the catalog. Snapshot only — no live Smithery / PulseMCP / registry
 fetch, and `@assistant-ui/react-mcp` is not installed. `/tools` lists every
-connected tool as On/Off. `/models`, `/effort`,
+connected tool as On/Off. Exclusive lists (`/models`, `/effort`, `/language`,
+and the `/provider` roster) mark the current choice with the same filled disc as
+dropdown radio items (`CircleIcon`) — never the word “on”. Enter or click commits
+the choice and closes the menu. `/models`, `/effort`,
 and `/language` start on their nested lists. Keyboard: Up/Down, Enter
-to toggle or enter a nested list, Left/Right on `/language` to cycle the full ISO map, Escape
+to toggle, enter a nested list, or commit an exclusive pick, Left/Right on `/language` to cycle the full ISO map, Escape
 (the `escape` control) to go back or close.
 `/language` (alias `/lang`) plus featured English / Dutch / Italian / Spanish / French resolve
 through the mirrored ISO map (codes, English labels, and autonyms). `/provider` (aliases
@@ -851,7 +866,8 @@ the operator YAML URL when the id matches; a client `url` is accepted only when
 adds a session MCP (id, url, auth, extra fields) for this tab. Client-supplied
 `X-Digi-Mcp-Servers` is ignored. Session overlay travels on `X-Digi-Mcp-Session`
 (`{id,url?,auth,token?}[]`): operator id+token attach to the YAML URL; session URLs are merged
-only when `mcp.allowUserServers` is true (SSRF + count/size caps). Session URLs never echo
+only when `mcp.allowUserServers` is true (`https://` + SSRF + count/size caps; operator YAML
+may still use `http` for docker DNS). Session URLs never echo
 back in the client config projection. `@assistant-ui/react-mcp` is not installed — visitor MCP
 is BFF-proxied, not browser MCP. The model can call `session_*` tools (same trust as slash) to
 mutate language/model/effort/tools/MCP; `session_upsert_mcp` cannot plant a new session URL
@@ -1110,14 +1126,21 @@ names, and private RFC1918 ranges. This is a reasonable SSRF guard for the ecosy
 endpoint cookie. The allowlist can be further tightened via
 `DIGICHAT_ENDPOINT_HOST_ALLOWLIST`.
 
+That allowlist is **first-hop only**. Cross-origin redirect protection for
+credentialed fetches is `fetchGuarded` (#2572), not a second `isAllowedServiceUrl`
+pass. Making the allowlist's `.suffix` host match (`host.endsWith("." + h)`) opt-in
+remains a separate hardening follow-up; this release does not change that match.
+
 Operator MCP URLs use the inverse check (`isAllowedMcpServerUrl` in
 `src/lib/deploy-config/mcp-servers.ts`, mirrored by digigraph
 `is_allowed_mcp_url`): loopback (including WHATWG shorthand such as `127.1`),
 RFC1918, metadata (`169.254.169.254`, `100.100.100.200`), loopback DNS
 (`localtest.me`, `lvh.me`, `vcap.me`), and DNS-rebinding hosts (`.nip.io` / `.sslip.io` / `.xip.io`)
 are refused without live DNS; docker hostnames such as `datatap-mcp` stay allowed. The same
-check gates OAuth discovery and session overlay URLs (`X-Digi-Mcp-Session`).
+check gates OAuth discovery and session overlay URLs (`X-Digi-Mcp-Session`); session overlay
+and OAuth client URLs additionally require `https://` (operator YAML URLs may remain `http`).
 `POST /api/mcp/oauth/start` additionally ignores client URLs unless `mcp.allowUserServers`.
+DNS rebinding / resolve-before-connect in digigraph remains a residual (#3795 follow-up).
 Do not use `isAllowedServiceUrl` for MCP (opposite polarity: that helper *allows*
 loopback for ecosystem cookies).
 
@@ -1245,14 +1268,15 @@ digigraph SSE frames carry an optional `digigraph_trace` field on each
 `choices[0].delta`. The trace path maps typed payloads (`tool_call`,
 `tool_result`, `rag_sources`, `graph_update`, and opaque labels) through `mapDigigraphTraceToSpans` and emits
 only standard tool / `source-*` / reasoning / `data-status` parts (`writeStandardActivity`).
-Each tool invocation gets its own `toolCallId` (FIFO per tool name). Input is JSON
-(`query` / vault path from MCP arguments); retrieve output is `{ query, documents, hitCount }`
+Each tool invocation gets its own `toolCallId` (FIFO per tool name). Input JSON is pretty-printed on the wire (`tool-input-delta`); retrieve output is `{ query, documents, hitCount, durationMs }`
 with document snippets/bodies at `activityDetail: full`. Generic (non-retrieval)
-tool output is `{ input…, result }` where `result` is the clipped MCP payload —
-the `tool_result` trace arrives the moment the tool returns, so the row completes
-mid-stream with its args + JSON Result pane (no per-tool UI; `ToolFallback`
-renders both). `toolResult` passes the `labels` detail gate untouched (tenant's
-own tool output for the tenant's own user). Leftover started rows are auto-completed at
+tool output is `{ input…, result, durationMs }` where `result` is the clipped MCP
+payload — the `tool_result` trace arrives the moment the tool returns, so the row
+completes mid-stream with its args + JSON Result pane (no per-tool UI;
+`ToolFallback` renders both). `toolResult` passes the `labels` detail gate
+untouched (tenant's own tool output for the tenant's own user). Vault search `rag_sources` traces map through `mapDigivaultSearchNotes` (not the digisearch retrieve-with-no-docs path). A failed vault invoke is `execute_tool`/`failed`, never `{ hitCount: 0 }`. The website-like dogfood host
+(`config/examples/digithings-ai-embed.yaml`) sets `gate.activityDetail: full` and `backend.vaultPathPrefix: clients/digithings` so D1 FTS is scoped and chunks are
+not replaced by `{ documentsWithheld: true }`. Stable `toolName` values remain the exact MCP / backend tool ids. Tool rows render display titles derived client-side via `toolRowTitle(toolName, args)` — method-aware for `digisearch` / `digisearch_*` (`digisearch semantic`, `digisearch keyword`, or `digisearch hybrid` from the `mode` / `search_mode` / `search_type` args; `digisearch fetch all (<method>)` and `digisearch research (<method>)` for those variants), humanized for vault and web-search tools. The gallery-thread fallback (`humanizeToolName` in `@digithings/web`) implements the same contract from `(toolName, argsText)`. (The streamed `tool-input-start` title is dropped by the assistant-stream / assistant-ui converters before render, so fallbacks must derive the label themselves; provider span labels such as the Foundry `Searching knowledge base…` progress row still reach the wire but neither fallback surface displays them.) Each reasoning burst between tool rounds gets its own `reasoning-start` id so later thinking is not appended into the first block. `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are auto-completed at
 stream end so ordinary retrieve / get_note / search_notes never sit on Allow/Deny.
 `tool-input-available` is emitted only with `tool-output-available` during the call. 1.4 `data-digichatActivity` is not
 written. Auth `chat-panel` and embed both

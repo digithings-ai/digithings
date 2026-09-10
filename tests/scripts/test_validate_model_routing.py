@@ -92,9 +92,10 @@ def test_get_model_for_mode_respects_digi_llm_mode(
     assert routing.get_model_for_mode() == "ollama/medium-model"
 
 
-def test_get_model_for_mode_unknown_mode_falls_to_test_then_hardcoded(
+def test_get_model_for_mode_unknown_mode_raises_without_silent_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """#3787 — no silent gpt-4o-mini when defaults are empty."""
     mod = _load()
     (tmp_path / "model_modes.yaml").write_text(
         yaml.safe_dump({"defaults": {}, "phase_models": {}}),
@@ -102,7 +103,37 @@ def test_get_model_for_mode_unknown_mode_falls_to_test_then_hardcoded(
     )
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
     monkeypatch.setenv("DIGI_LLM_MODE", "free")
-    assert mod.get_model_for_mode() == "gpt-4o-mini"
+    with pytest.raises(ValueError, match="refusing silent gpt-4o-mini"):
+        mod.get_model_for_mode()
+
+
+def test_inventory_slugs_includes_digiquant_capabilities(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mod = _load()
+    (tmp_path / "model_modes.yaml").write_text(
+        yaml.safe_dump({"defaults": {"test": "ollama/x"}, "phase_models": {}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "digiquant_models.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "phase_capabilities": {
+                    "portfolio/pm-direction": {},
+                    "beliefs-distillation": {},
+                },
+                "phase_capability_prefixes": {
+                    "h6_analyst_response-": {},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+    slugs = {s for s, _ in mod.inventory_slugs()}
+    assert "portfolio/pm-direction" in slugs
+    assert "beliefs-distillation" in slugs
+    assert any(s.startswith("h6_analyst_response-") for s in slugs)
 
 
 def test_default_model_overrides_mode_table(

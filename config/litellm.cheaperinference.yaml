@@ -10,10 +10,10 @@
 # House pins keep OpenRouter-style model_name keys (digiquant_models.yaml).
 # CI catalog uses bare ids — map only models that exist there.
 # BYOK passthrough is regex-pinned to the CI host (never a bare api_base, #3605).
-# Stay on OpenRouter (default litellm.yaml): meta-llama/*, perplexity/sonar,
-# all :online variants, x-ai/grok-4.3|4.6 (CI has grok-4.5 only), anthropic/*
-# (quality bake-off required before cutting). The cheap tier is CI-only (#3660)
-# and pins none of those; balanced/quality still do.
+# Dead OpenRouter house routes (maverick, grok-4.3/4.6, claude-sonnet-5,
+# perplexity/sonar, and their :online aliases) were retired from litellm.yaml
+# in #3788 — they were billable but unused by digiquant pools. Remaining
+# :online / unmapped pins fail closed under CI-only house (#3660).
 
 model_list:
   - model_name: deepseek/deepseek-v4-flash

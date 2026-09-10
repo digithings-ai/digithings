@@ -33,6 +33,7 @@ from digiquant.portfolio.models.portfolio_ledger import (
     PortfolioCommit,
 )
 from digiquant.portfolio.models.risk_policy import RiskPolicy
+from digiquant.research.data.queries import r2_backend_enabled
 from digiquant.research.state import ResearchState
 from digiquant.research.supabase_io import SupabaseClient
 from digiquant.supabase_retry import is_retryable_supabase_error, run_with_supabase_retry
@@ -64,6 +65,34 @@ def _load_symbol_history(
     as_of_session: str,
     lookback_days: int,
 ) -> pl.DataFrame:
+    """Trailing OHLCV window ≤ session for ADV estimation (newest-first head).
+
+    Under ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` the window comes from the
+    sealed R2 generation (:func:`r2_ohlcv_rows`), floored at
+    ``lookback_days + 45`` before the session (45d mirrors the refresh live
+    window — the consumer only reads the newest ``lookback_days + 5`` rows,
+    so the floor never affects output on gap-free data). A session past the
+    seal serves the sealed tail (same fail-soft shape as a fetch gap today).
+    """
+    if r2_backend_enabled():
+        from datetime import date as _date
+        from datetime import timedelta as _timedelta
+
+        from digiquant.research.data.queries import r2_ohlcv_rows
+
+        session = _date.fromisoformat(as_of_session)
+        rows = r2_ohlcv_rows(
+            tickers=[symbol.strip().upper()],
+            since=session - _timedelta(days=lookback_days + 45),
+            until=session,
+        )
+        if not rows:
+            return pl.DataFrame()
+        frame = pl.DataFrame(rows)
+        if "date" in frame.columns:
+            frame = frame.sort("date", descending=True).head(lookback_days + 5)
+        return frame
+
     def _fetch_history() -> list[dict[str, Any]]:
         history_resp = (
             client.table(_PRICE_HISTORY)
@@ -97,7 +126,34 @@ def _fetch_technicals_row(
     ``price_history`` has no ``hist_vol_21`` / ``atr_pct`` columns — selecting
     them there raised Postgres 42703 (#3299). Fail-soft: a missing row leaves
     vol unset and the cost model falls back to its default sigma.
+
+    Under ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` the row is the newest sealed
+    indicator row ≤ session (``_read_r2_window`` carries the full
+    ``compute_indicators`` output, including ``hist_vol_21`` which the
+    ``get_price_technicals`` helper projection omits).
     """
+    if r2_backend_enabled():
+        from digiquant.mcp_server import _read_r2_window
+
+        try:
+            window = _read_r2_window(symbol.strip().upper(), session_date)
+        except LookupError:
+            return None
+        except Exception as exc:
+            if is_retryable_supabase_error(exc):
+                logger.warning("h9 cost evidence: price_technicals read failed (%s)", exc)
+            else:
+                logger.error("h9 cost evidence: price_technicals read failed (%s)", exc)
+            return None
+        if not window:
+            return None
+        row = window[-1]
+        return {
+            "ticker": symbol.strip().upper(),
+            "date": str(row.get("date")),
+            "hist_vol_21": row.get("hist_vol_21"),
+            "atr_pct": row.get("atr_pct"),
+        }
     try:
         resp = (
             client.table(_PRICE_TECHNICALS)
@@ -126,6 +182,24 @@ def _fetch_price_row(
     symbol: str,
     session_date: str,
 ) -> dict[str, Any] | None:
+    if r2_backend_enabled():
+        # Sealed single-session OHLCV row + vol join (same shape as below).
+        from digiquant.research.data.queries import r2_ohlcv_rows
+
+        rows = r2_ohlcv_rows(
+            tickers=[symbol.strip().upper()], since=session_date, until=session_date
+        )
+        if not rows:
+            return None
+        row = dict(rows[0])
+        technicals = _fetch_technicals_row(client=client, symbol=symbol, session_date=session_date)
+        if technicals:
+            # Join (not a second price read): vol evidence onto the OHLCV row.
+            for key in ("hist_vol_21", "atr_pct"):
+                if row.get(key) is None and technicals.get(key) is not None:
+                    row[key] = technicals[key]
+        return row
+
     def _fetch_history_row() -> list[dict[str, Any]]:
         history_resp = (
             client.table(_PRICE_HISTORY)

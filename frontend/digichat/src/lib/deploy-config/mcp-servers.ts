@@ -250,7 +250,9 @@ export function parseMcpSessionOverlay(raw: string | null | undefined): McpSessi
 
 /**
  * Operator URL always wins. Overlay may attach a token to an operator id.
- * Session URLs are added only when allowSessionUrls (mcp.allowUserServers).
+ * Session URLs are added only when allowSessionUrls (mcp.allowUserServers)
+ * and must be https (same rule as resolveMcpOAuthResourceUrl). Operator YAML
+ * URLs remain server-side and may still be http (e.g. docker DNS).
  */
 export function mergeMcpSessionOverlay(opts: {
   operator: readonly McpServerForward[];
@@ -274,7 +276,7 @@ export function mergeMcpSessionOverlay(opts: {
     }
     if (!opts.allowSessionUrls) continue;
     const url = (item.url ?? "").trim();
-    if (!url || !isAllowedMcpServerUrl(url)) continue;
+    if (!url.startsWith("https://") || !isAllowedMcpServerUrl(url)) continue;
     if (sessionCount >= MAX_SESSION_SERVERS) continue;
     sessionCount += 1;
     const row: McpUpstreamServer = { id: item.id, url };

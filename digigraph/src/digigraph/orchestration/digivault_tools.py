@@ -119,6 +119,18 @@ _DIGIVAULT_SEARCH_NO_PREFIX_ERROR = "path_prefix is required when the D1 backend
 _DIGIVAULT_GET_NOTE_NO_PREFIX_ERROR = "path_prefix is required for digivault_get_note"
 
 
+def _failed_invoke_result(error: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Keep model-facing JSON in `content` while exposing ok/error to activity traces."""
+    payload = {"ok": False, "error": error, **(extra or {})}
+    return {
+        "content": json.dumps(payload),
+        "ok": False,
+        "error": error,
+        "results": [],
+        "rag_sources": [],
+    }
+
+
 def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
     q = args.get("query", "")
     if not q or not str(q).strip():
@@ -159,20 +171,20 @@ def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str 
             # also catch a digivault outage, an expired D1 token, or a malformed
             # D1_DATABASE_MAP that happens to fire while vault_path_prefix is
             # None, mislabeling a real infra failure as a session config gap.
-            return json.dumps(
-                {
-                    "ok": False,
-                    "error": (
-                        "No tenant corpus is configured for this chat session, so "
-                        "digivault_search_notes cannot search the vault here — "
-                        "this is a session configuration gap, not something you "
-                        "can fix by resupplying path_prefix. Do not retry this "
-                        "tool; answer from what digisearch already returned, or "
-                        "tell the user vault search is unavailable."
-                    ),
-                }
+            return _failed_invoke_result(
+                "No tenant corpus is configured for this chat session, so "
+                "digivault_search_notes cannot search the vault here — "
+                "this is a session configuration gap, not something you "
+                "can fix by resupplying path_prefix. Do not retry this "
+                "tool; answer from what digisearch already returned, or "
+                "tell the user vault search is unavailable."
             )
-        return json.dumps(inv)
+        err = inv.get("error")
+        if isinstance(err, str) and err.strip():
+            return _failed_invoke_result(
+                err.strip(), extra={k: v for k, v in inv.items() if k != "error"}
+            )
+        return _failed_invoke_result("digivault_search_notes failed")
     data = inv.get("data")
     if not isinstance(data, dict):
         # A completed (ok=True) search with no usable payload is a zero-hit search,
@@ -324,20 +336,20 @@ def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> st
             # also catch a digivault outage, an expired D1 token, or a malformed
             # D1_DATABASE_MAP that happens to fire while vault_path_prefix is
             # None, mislabeling a real infra failure as a session config gap.
-            return json.dumps(
-                {
-                    "ok": False,
-                    "error": (
-                        "No tenant corpus is configured for this chat session, so "
-                        "digivault_get_note cannot look up a vault note here — this "
-                        "is a session configuration gap, not something you can fix "
-                        "by resupplying path_prefix. Do not retry this tool; answer "
-                        "from what digisearch or digivault_search_notes already "
-                        "returned, or tell the user vault lookup is unavailable."
-                    ),
-                }
+            return _failed_invoke_result(
+                "No tenant corpus is configured for this chat session, so "
+                "digivault_get_note cannot look up a vault note here — this "
+                "is a session configuration gap, not something you can fix "
+                "by resupplying path_prefix. Do not retry this tool; answer "
+                "from what digisearch or digivault_search_notes already "
+                "returned, or tell the user vault lookup is unavailable."
             )
-        return json.dumps(inv)
+        err = inv.get("error")
+        if isinstance(err, str) and err.strip():
+            return _failed_invoke_result(
+                err.strip(), extra={k: v for k, v in inv.items() if k != "error"}
+            )
+        return _failed_invoke_result("digivault_get_note failed")
     data = inv.get("data")
     if not isinstance(data, dict):
         return "Note not found."

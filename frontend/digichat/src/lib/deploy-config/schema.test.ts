@@ -234,7 +234,10 @@ describe("DigichatConfigSchema", () => {
     const dt = digithings.hosts?.["digithings.ai"];
     expect(dt?.chrome.skin).toBe("digichat");
     expect(welcomeTitle(dt?.chrome.welcome)).toBe("Ask about digithings.");
-    expect(dt?.backend).toEqual({ type: "digigraph" });
+    expect(dt?.backend).toEqual({
+      type: "digigraph",
+      vaultPathPrefix: "clients/digithings",
+    });
     expect(dt?.tools?.allowUserToggle).toBe(true);
     expect(dt?.tools?.catalog.map((t) => t.id)).toEqual([
       "digisearch",
@@ -255,6 +258,7 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.models.available.some((id) => id.endsWith(":free"))).toBe(false);
     expect(dt?.models.available).not.toContain("google/gemini-3.1-flash-lite");
     expect(dt?.models.available).not.toContain("openai/gpt-5.6-luna");
+    expect(dt?.mcp?.allowUserServers).toBe(false);
     expect(allowedForceTools(dt)).toEqual(["digisearch", "digivault"]);
 
     const occ = parseDigichatConfig(

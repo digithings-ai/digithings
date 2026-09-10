@@ -23,6 +23,7 @@ import {
   type SpeechSynthesisAdapter,
 } from "@assistant-ui/react";
 import { ThreadSkinView } from "@/components/assistant-ui/skins";
+import type { ComposerLayout } from "@digithings/web/chat/thread";
 import type { DigichatClientConfig, DigichatClientFeatures } from "@/lib/deploy-config";
 import {
   DEFAULT_CLIENT_CONFIG,
@@ -74,6 +75,8 @@ export type ProductShellProps = {
   /** localStorage scope for web search; defaults to sessionKey. */
   webSearchScope?: string;
   onWebSearchChange?: (enabled: boolean) => void;
+  /** Explicit composer layout for the digichat skin (else mode-derived). */
+  composerLayout?: ComposerLayout;
 };
 
 /** Adapters accepted by useAISDKRuntime / RuntimeAdapterProvider (attachments). */
@@ -173,6 +176,7 @@ export function ProductStockShell({
   sessionKey,
   webSearchScope,
   onWebSearchChange,
+  composerLayout,
 }: ProductShellProps) {
   const cfg = clientConfig ?? DEFAULT_CLIENT_CONFIG;
   const features = cfg.features;
@@ -292,7 +296,11 @@ export function ProductStockShell({
                   />
                 ) : null}
                 <div className="min-h-0 flex-1">
-                  <ThreadSkinView skin={cfg.chrome.skin} welcome={headline} />
+                  <ThreadSkinView
+                    skin={cfg.chrome.skin}
+                    welcome={headline}
+                    composerLayout={composerLayout}
+                  />
                 </div>
                 {footerSlot}
                 {/* Placeholder attribute for stock composer — AuiConfig composer key varies by version */}

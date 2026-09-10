@@ -45,6 +45,10 @@ hosts:
       allowPicker: true
     backend:
       type: digigraph
+      # Tenant corpus for D1 FTS. Without this, digigraph overwrites path_prefix
+      # with None and vault search fails closed — the BFF used to render that as
+      # hitCount: 0 with no error (#3838).
+      vaultPathPrefix: clients/digithings
     tools:
       allowUserToggle: true
       catalog:
@@ -58,7 +62,9 @@ hosts:
           default: true
           label: Web search
     mcp:
-      allowUserServers: true
+      # Fail-closed for public digithings.ai marketing embed (#3795).
+      # Example ≠ live env; prod DIGICHAT_EMBED_TENANTS omits this (schema default false).
+      allowUserServers: false
       allowAddForm: false
     gate:
       mode: ungated

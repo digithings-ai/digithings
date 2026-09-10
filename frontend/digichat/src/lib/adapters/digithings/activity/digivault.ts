@@ -40,6 +40,14 @@ function mapVaultRowsToDocuments(rows: unknown[]): ActivitySpan["documents"] {
   for (const raw of rows) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
     const h = raw as Record<string, unknown>;
+    const meta =
+      typeof h.metadata === "object" && h.metadata && !Array.isArray(h.metadata)
+        ? (h.metadata as Record<string, unknown>)
+        : {};
+    const title =
+      (typeof h.title === "string" && h.title.trim()) ||
+      (typeof meta.title === "string" && meta.title.trim()) ||
+      undefined;
     const doc = mapRawSourceToDocument({
       ...h,
       vault_path: h.vault_path ?? h.path ?? h.doc_id,
@@ -47,10 +55,8 @@ function mapVaultRowsToDocuments(rows: unknown[]): ActivitySpan["documents"] {
         h.snippet ??
         (typeof h.body_markdown === "string" ? h.body_markdown.trim().slice(0, 280) : undefined),
       metadata: {
-        ...(typeof h.metadata === "object" && h.metadata && !Array.isArray(h.metadata)
-          ? (h.metadata as Record<string, unknown>)
-          : {}),
-        title: h.title,
+        ...meta,
+        ...(title ? { title } : {}),
         vault_path: h.vault_path ?? h.path ?? h.doc_id,
       },
     });
@@ -174,11 +180,25 @@ export function mapDigivaultSearchNotes(
     return mapDigivaultGetNote(payload);
   }
 
-  const hits = payload.hits ?? payload.results;
+  const hits = payload.hits ?? payload.results ?? payload.sources;
   const query =
     typeof payload.query === "string" && payload.query.trim()
       ? payload.query.trim()
       : undefined;
+  const errorText =
+    typeof payload.error === "string" && payload.error.trim() ? payload.error.trim() : "";
+  if (payload.status === "failed" || errorText) {
+    return attachToolArgs(
+      {
+        operation: "execute_tool",
+        status: "failed",
+        label: (errorText || "digivault_search_notes failed").slice(0, 200),
+        toolName: DIGIVAULT_SEARCH_TOOL,
+        ...(query ? { query } : {}),
+      },
+      payload,
+    );
+  }
 
   if (!Array.isArray(hits)) {
     const errors = payload.errors;
@@ -230,6 +250,12 @@ export function mapDigivaultSearchNotes(
       payload,
     );
   }
+  const upstreamHits =
+    typeof payload.hit_count === "number" &&
+    Number.isFinite(payload.hit_count) &&
+    payload.hit_count > 0
+      ? Math.trunc(payload.hit_count)
+      : undefined;
   return attachToolArgs(
     {
       operation: "retrieve",
@@ -237,6 +263,7 @@ export function mapDigivaultSearchNotes(
       label: errorCount > 0 ? `Sources (${errorCount} errors)` : "Sources",
       toolName: DIGIVAULT_SEARCH_TOOL,
       ...(documents.length ? { documents } : {}),
+      ...(!documents.length && upstreamHits ? { hitCount: upstreamHits } : {}),
       ...(query ? { query } : {}),
     },
     payload,

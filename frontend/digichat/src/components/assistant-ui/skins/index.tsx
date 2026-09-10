@@ -1,6 +1,7 @@
 "use client";
 
 import type { FC } from "react";
+import type { ComposerLayout } from "@digithings/web/chat/thread";
 import { Base } from "@/components/assistant-ui/skins/base/thread";
 import {
   isCloneSkin,
@@ -31,6 +32,8 @@ export type ThreadSkinViewProps = {
   skin: ThreadSkin;
   /** Welcome headline — unused on official clones / layouts (they keep demo copy). */
   welcome?: string;
+  /** Explicit composer layout for the digichat skin (else mode-derived). */
+  composerLayout?: ComposerLayout;
 };
 
 /**
@@ -41,7 +44,7 @@ export type ThreadSkinViewProps = {
  * `react-ink` and `expo-react-native` are web facsimiles; TTY / Expo sources
  * stay under `reference/assistant-ui-templates/` and are not imported here.
  */
-export function ThreadSkinView({ skin }: ThreadSkinViewProps) {
+export function ThreadSkinView({ skin, composerLayout }: ThreadSkinViewProps) {
   if (isCloneSkin(skin)) {
     const Clone = CLONE_THREADS[skin];
     return <Clone />;
@@ -68,7 +71,7 @@ export function ThreadSkinView({ skin }: ThreadSkinViewProps) {
   }
 
   if (skin === "digichat") {
-    return <DigichatSkin />;
+    return <DigichatSkin composerLayout={composerLayout} />;
   }
 
   return <ProductPageAssistant />;

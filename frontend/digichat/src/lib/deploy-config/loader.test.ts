@@ -513,6 +513,7 @@ describe("matchHostDeployment", () => {
     expect(client.features.attachments).toBe(false);
     expect(cfg.hosts!["digithings.ai"]!.gate.activityDetail).toBe("full");
     expect(tenant.activityDetail).toBe("full");
+    expect(cfg.hosts!["digithings.ai"]!.backend.vaultPathPrefix).toBe("clients/digithings");
   });
 
   it("does not inject Search/Vault onto an empty catalog", () => {

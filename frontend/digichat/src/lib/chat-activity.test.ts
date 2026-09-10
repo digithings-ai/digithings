@@ -323,7 +323,7 @@ describe("toDigiChatActivity", () => {
     ).toEqual([{ kind: "trace", label: "Planning", done: true }]);
   });
 
-  it("accumulates reasoning deltas into one trailing block", () => {
+  it("accumulates consecutive reasoning deltas into one block", () => {
     const reason = (text: string): ActivitySpan => ({
       operation: "chat",
       status: "started",
@@ -332,6 +332,47 @@ describe("toDigiChatActivity", () => {
     });
     expect(toDigiChatActivity([reason("one "), reason("two")])).toEqual([
       { kind: "reasoning", text: "one two" },
+    ]);
+  });
+
+  it("keeps reasoning phases in order around tool rounds", () => {
+    const reason = (text: string): ActivitySpan => ({
+      operation: "chat",
+      status: "started",
+      label: "reasoning",
+      reasoningDelta: text,
+    });
+    expect(
+      toDigiChatActivity([
+        reason("first "),
+        reason("burst"),
+        {
+          operation: "execute_tool",
+          status: "started",
+          label: "digisearch",
+          toolName: "digisearch",
+          query: "jwt",
+        },
+        {
+          operation: "retrieve",
+          status: "completed",
+          label: "Sources",
+          toolName: "digisearch",
+          query: "jwt",
+          documents: [{ title: "A", path: "a.md" }],
+        },
+        reason("second burst"),
+      ]),
+    ).toEqual([
+      { kind: "reasoning", text: "first burst" },
+      {
+        kind: "tool_result",
+        name: "digisearch",
+        query: "jwt",
+        hits: [{ title: "A", path: "a.md" }],
+        count: 1,
+      },
+      { kind: "reasoning", text: "second burst" },
     ]);
   });
 

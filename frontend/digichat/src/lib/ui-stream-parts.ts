@@ -9,6 +9,7 @@
 import type { UIMessage, UIMessageChunk } from "ai";
 import type { ActivityDocument, ActivitySpan } from "@/lib/chat-activity";
 import { expandPageContextFileParts } from "@/lib/embed-page-context-messages";
+import { toolRowTitle } from "@/lib/adapters/digithings/activity/tool-display";
 
 /** Unbranded conversation-id part (Foundry continuity). Was data-externalConversation. */
 export const CONVERSATION_PART_TYPE = "data-conversation" as const;
@@ -27,6 +28,8 @@ export type StandardActivityContext = {
   inputAvailable: Set<string>;
   jsonInputWritten: Set<string>;
   reasoningId: string | null;
+  /** BFF wall clock when each tool-input-start was written. */
+  startedAt: Map<string, number>;
 };
 
 export function createActivityWriteContext(): StandardActivityContext {
@@ -38,6 +41,7 @@ export function createActivityWriteContext(): StandardActivityContext {
     inputAvailable: new Set(),
     jsonInputWritten: new Set(),
     reasoningId: null,
+    startedAt: new Map(),
   };
 }
 
@@ -71,6 +75,23 @@ function rememberInput(
   return merged;
 }
 
+function displayTitle(name: string, span: ActivitySpan): string {
+  if (name === "digisearch" || name.startsWith("digisearch_")) {
+    return toolRowTitle(name, toolInputOf(span));
+  }
+  return span.label?.trim() || toolRowTitle(name);
+}
+
+/** Close the current reasoning part so the next burst mints a new id. */
+export function closeOpenReasoning(
+  writer: UiStreamWriter,
+  ctx: StandardActivityContext,
+): void {
+  if (!ctx.reasoningId) return;
+  writer.write({ type: "reasoning-end", id: ctx.reasoningId });
+  ctx.reasoningId = null;
+}
+
 function writeToolStart(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
@@ -85,6 +106,7 @@ function writeToolStart(
     ...(title ? { title } : {}),
   });
   ctx.started.add(id);
+  ctx.startedAt.set(id, Date.now());
   return id;
 }
 
@@ -127,7 +149,7 @@ function writeJsonInputDelta(
   writer.write({
     type: "tool-input-delta",
     toolCallId: id,
-    inputTextDelta: JSON.stringify(input),
+    inputTextDelta: JSON.stringify(input, null, 2),
   });
   ctx.jsonInputWritten.add(id);
 }
@@ -164,6 +186,10 @@ function writeToolOutput(
   // Generic tool result (e.g. MCP payload): the row's Result pane renders
   // this as JSON, and its arrival is what flips the row to completed.
   if (span.toolResult !== undefined) output.result = span.toolResult;
+  const started = ctx.startedAt.get(id);
+  if (started !== undefined) {
+    output.durationMs = Math.max(0, Date.now() - started);
+  }
   if (span.status === "failed") output.status = "failed";
   writer.write({
     type: "tool-output-available",
@@ -218,6 +244,11 @@ export function writeStandardActivity(
     return;
   }
 
+  // Tools / status / answer-adjacent spans end this reasoning phase. The next
+  // reasoningDelta mints a new id so assistant-ui cannot append round 2 into
+  // the first thinking block (same class of bug as reusing one toolCallId).
+  closeOpenReasoning(writer, ctx);
+
   if (span.brief) {
     writer.write({
       type: "data-status",
@@ -234,12 +265,12 @@ export function writeStandardActivity(
   if (span.operation === "execute_tool") {
     const name = toolNameOf(span);
     if (span.status === "started") {
-      const id = beginToolCall(writer, ctx, name, span.label);
+      const id = beginToolCall(writer, ctx, name, displayTitle(name, span));
       writeJsonInputDelta(writer, ctx, id, span);
       rememberInput(ctx, id, span);
       return;
     }
-    const id = completeToolCall(writer, ctx, name, span.label);
+    const id = completeToolCall(writer, ctx, name, displayTitle(name, span));
     ensureToolInput(writer, ctx, id, name, span);
     writeToolOutput(writer, ctx, id, span);
     return;
@@ -247,7 +278,7 @@ export function writeStandardActivity(
 
   if (span.operation === "retrieve") {
     const name = toolNameOf(span);
-    const id = completeToolCall(writer, ctx, name, span.label);
+    const id = completeToolCall(writer, ctx, name, displayTitle(name, span));
     ensureToolInput(writer, ctx, id, name, span);
     const docs = span.documents ?? [];
     const withheld = span.documentsWithheld === true;
@@ -275,10 +306,7 @@ export function finishStandardActivity(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
 ): void {
-  if (ctx.reasoningId) {
-    writer.write({ type: "reasoning-end", id: ctx.reasoningId });
-    ctx.reasoningId = null;
-  }
+  closeOpenReasoning(writer, ctx);
   for (const [name, queue] of ctx.pendingByName) {
     while (queue.length) {
       const id = queue.shift() as string;

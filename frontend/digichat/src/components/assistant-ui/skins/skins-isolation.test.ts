@@ -37,4 +37,33 @@ describe("assistant-ui skin isolation", () => {
     expect(skin).not.toMatch(/from ["']@digithings\/web["']/);
     expect(skin).not.toMatch(/ChatMarkdown/);
   });
+
+  it("threads an explicit composerLayout override to the digichat skin", () => {
+    const index = readFileSync(join(here, "index.tsx"), "utf8");
+    expect(index).toMatch(/composerLayout/);
+    const skin = readFileSync(join(here, "digichat.tsx"), "utf8");
+    expect(skin).toMatch(/composerLayout \?\? \(mode === ["']app["']/);
+  });
+
+  it("embed passes compact composerLayout through the product shell", () => {
+    const shell = readFileSync(
+      join(here, "..", "..", "stock", "product-shell.tsx"),
+      "utf8",
+    );
+    expect(shell).toMatch(/composerLayout/);
+    const embed = readFileSync(
+      join(
+        here,
+        "..",
+        "..",
+        "..",
+        "app",
+        "(digichat)",
+        "embed",
+        "embed-client.tsx",
+      ),
+      "utf8",
+    );
+    expect(embed).toMatch(/composerLayout="compact"/);
+  });
 });

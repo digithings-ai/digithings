@@ -112,7 +112,7 @@ When `stream: true` in `POST /v1/chat/completions`:
 3. Event types produced by the workflow thread:
    - `tool_call` / `tool_result` — formatted with the stream formatter (neutral or Open WebUI `<details>` style)
    - `content` — LLM token deltas, HTML-escaped
-   - `reasoning` — accumulated into a `<thinking>` block before the first `content` chunk (skipped when `X-Suppress-Tool-Stream` is set)
+   - `reasoning` — Open WebUI `<thinking>` chrome before the first `content` chunk when that formatter is on. With `X-Suppress-Tool-Stream` (digichat), reasoning is still forwarded as `delta.reasoning_content` so the BFF can render a Thinking block; `<thinking>` / `<details>` chrome is omitted.
    - `trace` — `TraceEventV1` dicts embedded in `delta.digigraph_trace` for digichat
      (     `tool_call` / `tool_result` / `rag_sources` / `round_boundary`, …). The
      `tool_call` payload includes `tool`, `status`, optional `query`, and a size-capped
@@ -120,12 +120,14 @@ When `stream: true` in `POST /v1/chat/completions`:
      for retrieve tools (`digisearch`, `digivault_*`, …) becomes a `rag_sources` trace
      that forwards those arguments plus `sources` (including get_note `body`) so the
      BFF can close the row without a client Allow/Deny. String error results still
-     emit `sources: []` so the started row completes. Every other (generic/MCP)
-     tool's `tool_result` becomes a `tool_result` trace carrying `tool`, `status`
-     (`failed` when the result has `error`), the queued clipped `arguments`, and a
-     size-capped `result` (`_clip_tool_result`, 12_000-char JSON cap with truncated
-     preview) — so the BFF row shows args + JSON result and completes the moment
-     the tool returns instead of lingering until end-of-stream. The
+     emit `sources: []` so the started row completes. Failed vault/search invokes
+     set `status: failed` and `error` on that payload so the BFF does not render a
+     fake `hitCount: 0`. Every other (generic/MCP) tool's `tool_result` becomes a
+     `tool_result` trace carrying `tool`, `status` (`failed` when the result has
+     `error`), the queued clipped `arguments`, and a size-capped `result`
+     (`_clip_tool_result`, 12_000-char JSON cap with truncated preview) — so the
+     BFF row shows args + JSON result and completes the moment the tool returns
+     instead of lingering until end-of-stream. The
      `round_boundary` event marks the end of a digillm tool round: `round_idx` is the
      zero-based round number, and `narration` is the assistant text produced that round
      (with `stream_deltas`, content deltas were already emitted; without streaming,
@@ -270,7 +272,7 @@ real node executions rather than compiled graph nodes.
 | `research_system_prompt_override` | `str \| None` | Optional research system prompt from tenant corpus map; same unconditional-None write as `digisearch_index`. |
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`). **Must** be declared — LangGraph drops undeclared keys. `research_node` prepends a mapped directive to **this turn's user query** (not the tenant system prompt). See `digigraph.languages`. |
 | `force_tool` | `str \| None` | Per-request locate tool to inject with the user string as its query (`X-Digi-Force-Tool`; aliases `search`/`digisearch`, `docs`/`digivault`). Extra operator MCP **server ids** are accepted too: those hint the model with `tool_choice="required"` rather than injecting a locate. **Must** be declared. |
-| `mcp_servers` | `list[dict]` | Streamable HTTP MCP `{id, url, auth?, token?, authHeader?}` pairs (`X-Digi-Mcp-Servers` after BFF merge). **Must** be declared. Always overwritten from the BFF header (empty list clears a prior tenant). URLs never come from an untrusted JSON body. Tokens are never logged. `authHeader` is operator-only (#3841), never session-overlay-settable. |
+| `mcp_servers` | `list[dict]` | Streamable HTTP MCP `{id, url, auth?, token?, authHeader?}` pairs (`X-Digi-Mcp-Servers` after BFF merge). **Must** be declared. Always overwritten from the BFF header (empty list clears a prior tenant). URLs never come from an untrusted JSON body. Tokens are never logged. `authHeader` is operator-only (#3841), never session-overlay-settable. **In-request only for persistence (#3794):** `token` is stripped by `McpTokenRedactingCheckpointer` before checkpointer write so durable/R2-archived blobs do not retain OAuth/session bearer values; the same-turn graph state still carries tokens for MCP calls. |
 | `disabled_tools` | `list[str] \| None` | Catalog ids to hide this turn (`X-Digi-Disabled-Tools`), including extra MCP server ids. **Must** be declared. |
 | `effort` | `str \| None` | Per-request reasoning effort (`X-Digi-Effort`: low/medium/high). **Must** be declared. |
 | `supervisor_depth_remaining` | `int` | Depth budget for supervisor loop |
@@ -809,7 +811,7 @@ The operator default is tested **un-normalized**, which is why `byok_operator_mo
 
 digichat forwards `X-BYOK-Model` from all four of its send paths (`chat-panel.tsx`, `use-embed-digi-chat.ts`, the `/api/chat` BFF, and `byok-ping.ts`) whenever the user chose a model — including for providers whose catalog entry sets `requiresModel: false`. That flag decides whether a model is *mandatory*, never whether a chosen one is forwarded; three of the four used to gate the header on it and so dropped an OpenAI user's chosen model on the floor.
 
-**`OLLAMA_MODEL` must not clobber a BYOK bare slug.** After `_apply_byok_model_override` returns the spendable model, `llm_client` still runs it through `resolve_request_model`. For registered providers that path already keeps the slug when a matching BYOK override is bound. OpenAI BYOK models are bare (`gpt-4o-mini`) because `openai` is absent from digillm's registry, so they used to fall into `resolve_effective_model`, which prefers `OLLAMA_MODEL` over the request string. With `OLLAMA_MODEL=ollama/qwen3:8b` set (common on local/free deployments), an OpenAI BYOK chat therefore called `api.openai.com` with model `ollama/qwen3:8b` on the user's key — `model_not_found` while digichat still showed BYOK active. `resolve_request_model` now returns a bare slug unchanged whenever a BYOK override is bound **for a routable provider** (`byok_provider_supported`, not mere presence — see the function's docstring for why presence alone isn't the right gate); without BYOK, `OLLAMA_MODEL` still wins (operator local routing).
+**`OLLAMA_MODEL` must not clobber a BYOK bare slug.** After `_apply_byok_model_override` returns the spendable model, `llm_client` still runs it through `resolve_request_model`. For registered providers that path already keeps the slug when a matching BYOK override is bound. OpenAI BYOK models are bare (`gpt-4o-mini`) because `openai` is absent from digillm's registry, so they used to fall into `resolve_effective_model`, which prefers `OLLAMA_MODEL` over the request string. With `OLLAMA_MODEL=ollama/deepseek-r1:14b` set (common on local/free deployments), an OpenAI BYOK chat therefore called `api.openai.com` with model `ollama/deepseek-r1:14b` on the user's key — `model_not_found` while digichat still showed BYOK active. `resolve_request_model` now returns a bare slug unchanged whenever a BYOK override is bound **for a routable provider** (`byok_provider_supported`, not mere presence — see the function's docstring for why presence alone isn't the right gate); without BYOK, `OLLAMA_MODEL` still wins (operator local routing).
 
 This closes only the `OLLAMA_MODEL`-clobber case. A deployment whose *mode default* (`model_modes.yaml`) is itself an Ollama slug — this repo's shipped default — hits the same `model_not_found` by a different path: with no `X-BYOK-Model` header, `_apply_byok_model_override` passes the operator default through unchanged (`byok_operator_model_routes_elsewhere` only refuses *registered*-provider defaults), so `resolve_request_model` now returns that Ollama slug unchanged too, and digillm still sends it to the BYOK provider's endpoint. Not this fix's scope; tracked as a follow-up rather than silently assumed closed.
 
@@ -937,7 +939,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 
 - digillm's `get_client()` (used by digigraph via `llm_client`) creates an `OpenAI` instance pointed at `OPENAI_API_BASE` (default: `http://litellm:4000/v1` in Docker).
 - All LLM calls (research, brief builder, synthesis) go through LiteLLM, which routes to Ollama, OpenAI, or other configured providers.
-- Model selection: `get_model_for_mode()` returns the model ID from `config/model_modes.yaml` for the current mode. LiteLLM translates provider-prefixed IDs (e.g. `ollama/qwen3:8b`) to the target provider's expected format.
+- Model selection: `get_model_for_mode()` returns the model ID from `config/model_modes.yaml` for the current mode. LiteLLM translates provider-prefixed IDs (e.g. `ollama/deepseek-r1:14b`) to the target provider's expected format.
 - **Model routing:** callers must pass a concrete model string. digiquant
   phase pins in `config/digiquant_models.yaml` are **unprefixed** OpenRouter
   slugs listed as `model_name` entries in `config/litellm.yaml` so traffic is
