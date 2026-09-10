@@ -165,6 +165,14 @@ class _FakeQuery:
     def _matches(self, row: dict[str, Any]) -> bool:
         house = str(house_workspace_id())
         for op, col, val in self._filters:
+            if op == "eq" and "->>" in col:
+                # PostgREST JSON extraction (``source_key->>workspace_id``):
+                # compare against the nested object's text value (#3792).
+                parent, _, sub = col.partition("->>")
+                container = row.get(parent)
+                if not isinstance(container, dict) or container.get(sub) != val:
+                    return False
+                continue
             row_val = row.get(col)
             if op == "eq" and col == "workspace_id" and row_val is None and val == house:
                 # TEST-FAKE courtesy only: legacy house fixtures omit the column.

@@ -2976,7 +2976,15 @@ Documents phase (migration 120): pointer-per-row for non-latest
 `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`, endpoint
 built as `https://<account>.r2.cloudflarestorage.com`.
 `.github/workflows/pipeline-checkpoint-archive.yml` runs it daily. The live
-checkpointer path is untouched.
+checkpointer path is untouched. Read-through consumers (#3792):
+`read_archived_document` wraps `resolve_payload` + JSON decode (``None`` on
+pointer-miss / corrupt bytes, never raises on a read path); document readers
+take an optional `store` (tests inject a fake, production resolves the R2
+backend from `R2_*` env, absent creds disable read-through). Wired into the
+dashboard fallback (`research_retrieval/queries.py::_query_documents_row` via
+`query_research`) and the research priors (`research/supabase_io.py`:
+`load_prior_context`, analyst/deliberation summaries, `load_latest_beliefs_document`).
+Only the `payload` cell is archived — `content` is untouched.
 
 **RLS.** Every strategy-store table RLS-enabled. Public reference + tearsheet tables grant
 `anon SELECT USING (true)`; writers use the service role (RLS bypass). `strategy_calibrations`
