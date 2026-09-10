@@ -184,3 +184,33 @@ class TestBitviewClient:
         _url, kwargs = session.calls[0]
         assert "digiquant" in kwargs["headers"]["User-Agent"]
         assert BITVIEW_BASE_URL.startswith("https://")
+
+    def test_allow_derived_bypasses_nupl_refusal(self) -> None:
+        session = _FakeSession(body=[_mvrv_slice()])
+        result = BitviewClient(session=session).fetch(["nupl"], allow_derived=True)
+        nupl = result.series["nupl"]
+        assert nupl.has_data
+        assert session.calls != []
+
+    def test_allow_derived_false_still_refuses_nupl(self) -> None:
+        session = _FakeSession(exc=AssertionError("must not fetch nupl"))
+        result = BitviewClient(session=session).fetch(["nupl"], allow_derived=False)
+        assert result.series["nupl"].error is not None
+        assert session.calls == []
+
+    def test_fetch_bitview_series_allow_derived_bypasses_nupl_refusal(self) -> None:
+        session = _FakeSession(body=[_mvrv_slice()])
+        result = fetch_bitview_series(["nupl"], session=session, allow_derived=True)
+        assert result.series["nupl"].has_data
+
+    def test_custom_base_url_used_for_bulk_request(self) -> None:
+        session = _FakeSession(body=[_mvrv_slice()])
+        BitviewClient(session=session, base_url="https://custom.example.com").fetch(["mvrv"])
+        url, _kwargs = session.calls[0]
+        assert url.startswith("https://custom.example.com")
+
+    def test_fetch_bitview_series_base_url_forwarded(self) -> None:
+        session = _FakeSession(body=[_mvrv_slice()])
+        fetch_bitview_series(["mvrv"], session=session, base_url="https://custom.example.com")
+        url, _kwargs = session.calls[0]
+        assert url.startswith("https://custom.example.com")

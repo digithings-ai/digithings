@@ -153,8 +153,9 @@ def build_digiquant_fetch_coinbase_ohlcv_tool() -> dict[str, Any]:
         "function": {
             "name": "digiquant_fetch_coinbase_ohlcv",
             "description": (
-                "Fetch daily OHLCV from Coinbase (CCXT) into the price-history "
-                "cache. Fail-soft per symbol."
+                "Fetch OHLCV from Coinbase (CCXT) into the price-history "
+                "cache. Any Coinbase spot pair, any supported timeframe. "
+                "Fail-soft per symbol."
             ),
             "parameters": {
                 "type": "object",
@@ -164,6 +165,15 @@ def build_digiquant_fetch_coinbase_ohlcv_tool() -> dict[str, Any]:
                         "description": "JSON array of CCXT symbols, e.g. [\"BTC/USD\"]",
                     },
                     "start": {"type": "string"},
+                    "end": {"type": "string", "description": "End date (YYYY-MM-DD); defaults to now"},
+                    "timeframe": {
+                        "type": "string",
+                        "description": "CCXT timeframe: 1m,5m,15m,30m,1h,2h,6h,1d (default 1d)",
+                    },
+                    "through_yesterday": {
+                        "type": "boolean",
+                        "description": "Drop today's incomplete UTC bar (only meaningful for timeframe=1d)",
+                    },
                     "cache_dir": {"type": "string"},
                 },
             },
@@ -235,8 +245,9 @@ def build_digiquant_fetch_bitview_series_tool() -> dict[str, Any]:
             "description": (
                 "Fetch Bitview/BRK on-chain day1 series (mvrv, asopr_24h, "
                 "puell_multiple, rhodl_ratio) into data/onchain/bitview. "
-                "JSON API only; nupl refused (dual-count). Fail-soft. "
-                "CM community CC BY-NC is not fetched. Refs #1086."
+                "JSON API only; nupl refused by default (dual-count of mvrv) "
+                "unless allow_derived=true. Fail-soft. CM community CC BY-NC "
+                "is not fetched. Refs #1086."
             ),
             "parameters": {
                 "type": "object",
@@ -249,6 +260,12 @@ def build_digiquant_fetch_bitview_series_tool() -> dict[str, Any]:
                     "timeout": {"type": "number", "default": 30},
                     "start": {"type": "integer"},
                     "end": {"type": "integer"},
+                    "base_url": {"type": "string", "description": "Override API base URL"},
+                    "allow_derived": {
+                        "type": "boolean",
+                        "description": "Fetch series normally refused as derived/dual-count (e.g. nupl)",
+                        "default": False,
+                    },
                 },
             },
         },
@@ -265,10 +282,13 @@ def build_digiquant_fetch_bgeometrics_series_tool() -> dict[str, Any]:
                 "bitcoin-data.com (BGeometrics): 700+ metrics (mvrv, "
                 "mvrv-zscore, nupl, sopr, realized-price, thermocap-multiple, "
                 "mayer-multiple, pi-cycle, rainbow-chart, power-law-model-price, "
-                "and more). No API key needed. Free tier: 10 req/hour, 15/day "
-                "shared across all metrics — fetch one metric per call. "
-                "History capped at ~4 years; for deeper multi-cycle history "
-                "use digiquant_fetch_coinmetrics_series instead. Fail-soft."
+                "and more). API key now effectively required (bitcoin-data.com "
+                "markets registration as mandatory even for the free tier); "
+                "pass token or set BGEOMETRICS_API_TOKEN. Free tier: 10 "
+                "req/hour, 15/day shared across all metrics — fetch one "
+                "metric per call. History capped at ~4 years; for deeper "
+                "multi-cycle history use digiquant_fetch_coinmetrics_series "
+                "instead. Fail-soft."
             ),
             "parameters": {
                 "type": "object",
@@ -287,7 +307,8 @@ def build_digiquant_fetch_bgeometrics_series_tool() -> dict[str, Any]:
                     },
                     "cache_dir": {"type": "string"},
                     "timeout": {"type": "number", "default": 30},
-                    "token": {"type": "string", "description": "optional paid-tier API token"},
+                    "token": {"type": "string", "description": "bitcoin-data.com API token"},
+                    "base_url": {"type": "string", "description": "Override API base URL"},
                 },
                 "required": ["metric"],
             },
@@ -301,12 +322,13 @@ def build_digiquant_fetch_coinmetrics_series_tool() -> dict[str, Any]:
         "function": {
             "name": "digiquant_fetch_coinmetrics_series",
             "description": (
-                "Fetch one on-chain metric from the CoinMetrics Community "
-                "API (free, no API key). BTC free tier exposes 31 metrics "
-                "(supply/flow/fee/price primitives plus CapMVRVCur, the "
-                "MVRV valuation ratio, with full history back to "
-                "2010-07-18). CC BY-NC — research-only, do not republish "
-                "derived series commercially. Fail-soft."
+                "Fetch one on-chain metric for one asset from the CoinMetrics "
+                "Community API (free, no API key required). One metric/asset "
+                "per call — use digiquant_list_coinmetrics_catalog to discover "
+                "what's available per-asset. BTC's CapMVRVCur (MVRV valuation "
+                "ratio) has full history back to 2010-07-18. CC BY-NC — "
+                "research-only, do not republish derived series commercially. "
+                "Fail-soft."
             ),
             "parameters": {
                 "type": "object",
@@ -319,10 +341,37 @@ def build_digiquant_fetch_coinmetrics_series_tool() -> dict[str, Any]:
                     "asset": {"type": "string", "default": "btc"},
                     "start_time": {"type": "string", "description": "ISO 8601 or YYYY-MM-DD"},
                     "end_time": {"type": "string", "description": "ISO 8601 or YYYY-MM-DD"},
+                    "page_size": {"type": "integer", "default": 10000},
                     "cache_dir": {"type": "string"},
                     "timeout": {"type": "number", "default": 30},
+                    "base_url": {"type": "string", "description": "Override API base URL"},
+                    "api_key": {"type": "string", "description": "Registered CoinMetrics API key (optional)"},
                 },
                 "required": ["metric"],
+            },
+        },
+    }
+
+
+def build_digiquant_list_coinmetrics_catalog_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digiquant_list_coinmetrics_catalog",
+            "description": (
+                "List which CoinMetrics community metrics exist for an asset "
+                "(or all assets). Discovery tool — call before "
+                "digiquant_fetch_coinmetrics_series to find real metric names "
+                "instead of guessing. Fail-soft."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "asset": {"type": "string", "description": "Restrict to one asset, e.g. 'btc'"},
+                    "timeout": {"type": "number", "default": 30},
+                    "base_url": {"type": "string", "description": "Override API base URL"},
+                    "api_key": {"type": "string", "description": "Registered CoinMetrics API key (optional)"},
+                },
             },
         },
     }
@@ -475,6 +524,7 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digiquant_fetch_bitview_series_tool(),
         build_digiquant_fetch_bgeometrics_series_tool(),
         build_digiquant_fetch_coinmetrics_series_tool(),
+        build_digiquant_list_coinmetrics_catalog_tool(),
         build_digiquant_fit_sdca_weights_tool(),
         build_olympus_run_policy_replay_tool(),
         build_olympus_get_policy_replay_tool(),

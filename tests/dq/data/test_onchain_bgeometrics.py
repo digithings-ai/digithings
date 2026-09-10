@@ -169,5 +169,18 @@ class TestBgeometricsClient:
         _url, kwargs = session.calls[0]
         assert kwargs["headers"]["Authorization"] == "Bearer secret-token"
 
+    def test_token_also_sent_as_x_bgapi_token_header(self) -> None:
+        session = _FakeSession(body=_mvrv_last())
+        BgeometricsClient(session=session, token="secret-token").fetch("mvrv", last=True)
+        _url, kwargs = session.calls[0]
+        assert kwargs["headers"]["X-Bgapi-Token"] == "secret-token"
+
+    def test_no_token_sends_neither_auth_header(self) -> None:
+        session = _FakeSession(body=_mvrv_last())
+        BgeometricsClient(session=session).fetch("mvrv", last=True)
+        _url, kwargs = session.calls[0]
+        assert "Authorization" not in kwargs["headers"]
+        assert "X-Bgapi-Token" not in kwargs["headers"]
+
     def test_base_url_is_https(self) -> None:
         assert BGEOMETRICS_BASE_URL.startswith("https://")

@@ -19,6 +19,7 @@ from digiquant.data.onchain.coinmetrics import (
     LICENSE_NOTE,
     CoinMetricsClient,
     asset_metrics_rows_to_frame,
+    fetch_coinmetrics_catalog,
     fetch_coinmetrics_series,
 )
 
@@ -135,3 +136,74 @@ class TestCoinMetricsClient:
 
     def test_base_url_is_https(self) -> None:
         assert COINMETRICS_BASE_URL.startswith("https://")
+
+    def test_comma_separated_metric_is_rejected(self) -> None:
+        result = CoinMetricsClient(session=_FakeSession()).fetch("CapMVRVCur,PriceUSD", asset="btc")
+        assert result.error is not None
+        assert "comma-separated" in result.error
+
+    def test_comma_separated_asset_is_rejected(self) -> None:
+        result = CoinMetricsClient(session=_FakeSession()).fetch("CapMVRVCur", asset="btc,eth")
+        assert result.error is not None
+        assert "comma-separated" in result.error
+
+    def test_page_size_forwarded_as_param(self) -> None:
+        session = _FakeSession(body=_mvrv_payload())
+        CoinMetricsClient(session=session).fetch("CapMVRVCur", asset="btc", page_size=500)
+        _url, kwargs = session.calls[0]
+        assert kwargs["params"]["page_size"] == 500
+
+    def test_api_key_forwarded_as_query_param(self) -> None:
+        session = _FakeSession(body=_mvrv_payload())
+        CoinMetricsClient(session=session).fetch("CapMVRVCur", asset="btc", api_key="secret-key")
+        _url, kwargs = session.calls[0]
+        assert kwargs["params"]["api_key"] == "secret-key"
+
+    def test_no_api_key_omits_param(self) -> None:
+        session = _FakeSession(body=_mvrv_payload())
+        CoinMetricsClient(session=session).fetch("CapMVRVCur", asset="btc")
+        _url, kwargs = session.calls[0]
+        assert "api_key" not in kwargs["params"]
+
+    def test_custom_base_url_used_for_request(self) -> None:
+        session = _FakeSession(body=_mvrv_payload())
+        CoinMetricsClient(
+            session=session, base_url="https://custom.example.com/v4"
+        ).fetch("CapMVRVCur", asset="btc")
+        url, _kwargs = session.calls[0]
+        assert url.startswith("https://custom.example.com/v4")
+
+
+class TestCoinMetricsCatalog:
+    def test_fetch_catalog_returns_raw_payload(self) -> None:
+        payload = {"data": [{"asset": "btc", "metrics": [{"metric": "CapMVRVCur"}]}]}
+        session = _FakeSession(body=payload)
+        result = fetch_coinmetrics_catalog("btc", session=session)
+        assert result.error is None
+        assert result.has_data
+        assert result.data == payload
+
+    def test_fetch_catalog_hits_catalog_v2_endpoint(self) -> None:
+        session = _FakeSession(body={"data": []})
+        fetch_coinmetrics_catalog("btc", session=session)
+        url, kwargs = session.calls[0]
+        assert url.endswith("/catalog-v2/asset-metrics")
+        assert kwargs["params"]["assets"] == "btc"
+
+    def test_fetch_catalog_without_asset_omits_assets_param(self) -> None:
+        session = _FakeSession(body={"data": []})
+        fetch_coinmetrics_catalog(session=session)
+        _url, kwargs = session.calls[0]
+        assert "assets" not in kwargs["params"]
+
+    def test_fetch_catalog_fail_soft_on_network_error(self) -> None:
+        session = _FakeSession(exc=ConnectionError("boom"))
+        result = fetch_coinmetrics_catalog("btc", session=session)
+        assert result.error is not None
+        assert result.has_data is False
+
+    def test_fetch_catalog_env_kill_switch_skips_network(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DIGIQUANT_COINMETRICS_FETCH", "0")
+        result = fetch_coinmetrics_catalog("btc")
+        assert result.error is not None
+        assert "disabled" in (result.error or "")

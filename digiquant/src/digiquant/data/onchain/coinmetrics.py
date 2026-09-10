@@ -14,10 +14,14 @@ already documents for its own CM-sourced data).
 Confirmed live (2026-09-10):
 - No auth required; rate limit is generous (``x-ratelimit-limit: 6000,
   6000;w=20`` — a sliding 20s window), so unlike bgeometrics this client can
-  be called freely.
+  be called freely. An optional ``api_key`` param is still accepted (raises
+  the rate limit for registered keys) and forwarded as a query param.
 - A single request with a large ``page_size`` returns full history in one
   shot (5890 daily rows for BTC MVRV, no ``next_page_url`` needed) — no
   pagination handling required for a single asset/metric pull.
+- The 31-metric count below is BTC's catalog specifically and varies per
+  asset; use ``fetch_coinmetrics_catalog`` for the live per-asset list
+  instead of assuming ``KNOWN_COMMUNITY_METRICS`` applies elsewhere.
 
 HTTP is split from parsing, mirroring ``data/onchain/bitview.py``:
 ``asset_metrics_rows_to_frame`` is HTTP-free; ``CoinMetricsClient.fetch``
@@ -232,12 +236,23 @@ class CoinMetricsClient:
         start_time: str | None = None,
         end_time: str | None = None,
         page_size: int = DEFAULT_PAGE_SIZE,
+        api_key: str | None = None,
     ) -> CoinMetricsSeriesResult:
         metric = metric.strip()
         asset = asset.strip().lower()
         if not metric or not asset:
             return CoinMetricsSeriesResult(
                 asset=asset or "?", metric=metric or "?", error="asset and metric are required"
+            )
+        if "," in metric or "," in asset:
+            return CoinMetricsSeriesResult(
+                asset=asset,
+                metric=metric,
+                error=(
+                    "comma-separated asset/metric lists are not supported by "
+                    "this client (one series per call, so each row's `asset`/"
+                    "`metric` is unambiguous) — call once per asset/metric pair"
+                ),
             )
         url = f"{self.base_url}/timeseries/asset-metrics"
         params: dict[str, str | int] = {
@@ -250,6 +265,8 @@ class CoinMetricsClient:
             params["start_time"] = start_time
         if end_time:
             params["end_time"] = end_time
+        if api_key:
+            params["api_key"] = api_key
         try:
             payload = _get_json(url, timeout=self.timeout, session=self.session, params=params)
         except Exception as exc:  # transport/HTTP — never crash the caller
@@ -284,6 +301,7 @@ def fetch_coinmetrics_series(
     timeout: float = DEFAULT_TIMEOUT,
     session: _HttpGet | None = None,
     base_url: str = COINMETRICS_BASE_URL,
+    api_key: str | None = None,
 ) -> CoinMetricsSeriesResult:
     """Fetch one CoinMetrics community metric. Always fail-soft. Inject ``session`` in tests (no network)."""
     if session is None and not _fetch_enabled():
@@ -291,7 +309,53 @@ def fetch_coinmetrics_series(
             asset=asset, metric=metric, error=f"{_ENV_FLAG} disabled (no network)"
         )
     client = CoinMetricsClient(base_url=base_url, timeout=timeout, session=session, cache_dir=cache_dir)
-    return client.fetch(metric, asset=asset, start_time=start_time, end_time=end_time, page_size=page_size)
+    return client.fetch(
+        metric, asset=asset, start_time=start_time, end_time=end_time, page_size=page_size, api_key=api_key
+    )
+
+
+class CoinMetricsCatalogResult(BaseModel):
+    """Raw ``catalog-v2/asset-metrics`` payload, or a fail-soft error."""
+
+    model_config = ConfigDict(frozen=True, strict=True, arbitrary_types_allowed=True)
+
+    error: str | None = None
+    data: Any = None
+
+    @property
+    def has_data(self) -> bool:
+        return self.error is None and self.data is not None
+
+
+def fetch_coinmetrics_catalog(
+    asset: str | None = None,
+    *,
+    timeout: float = DEFAULT_TIMEOUT,
+    session: _HttpGet | None = None,
+    base_url: str = COINMETRICS_BASE_URL,
+    api_key: str | None = None,
+) -> CoinMetricsCatalogResult:
+    """Fetch the live per-asset metric catalog (discovery, not a timeseries).
+
+    Lets a caller find out which metrics actually exist for an asset before
+    calling ``fetch_coinmetrics_series`` — the frozen ``KNOWN_COMMUNITY_METRICS``
+    tuple above is a BTC-only snapshot from 2026-09-10, not a general answer.
+    Pass ``asset=None`` for the full catalog across all assets.
+    """
+    if session is None and not _fetch_enabled():
+        return CoinMetricsCatalogResult(error=f"{_ENV_FLAG} disabled (no network)")
+    url = f"{base_url.rstrip('/')}/catalog-v2/asset-metrics"
+    params: dict[str, str | int] = {}
+    if asset:
+        params["assets"] = asset.strip().lower()
+    if api_key:
+        params["api_key"] = api_key
+    try:
+        payload = _get_json(url, timeout=timeout, session=session, params=params)
+    except Exception as exc:  # transport/HTTP — never crash the caller
+        logger.warning("coinmetrics catalog fetch failed: %s", exc)
+        return CoinMetricsCatalogResult(error=f"{type(exc).__name__}: {exc}")
+    return CoinMetricsCatalogResult(data=payload)
 
 
 __all__ = [
@@ -300,9 +364,11 @@ __all__ = [
     "DEFAULT_PAGE_SIZE",
     "KNOWN_COMMUNITY_METRICS",
     "LICENSE_NOTE",
+    "CoinMetricsCatalogResult",
     "CoinMetricsClient",
     "CoinMetricsSeriesResult",
     "asset_metrics_rows_to_frame",
+    "fetch_coinmetrics_catalog",
     "fetch_coinmetrics_series",
     "write_series_parquet",
 ]
