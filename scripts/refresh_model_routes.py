@@ -267,12 +267,19 @@ def main(argv: list[str] | None = None, client: Any | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default=None, help="Snapshot output path")
     parser.add_argument("--min-context", type=int, default=64000)
+    parser.add_argument(
+        "--strict",
+        "--fail-on-skip",
+        action="store_true",
+        dest="strict",
+        help="exit 1 when no providers are configured (nothing refreshed) (#3787)",
+    )
     args = parser.parse_args(argv)
 
     providers = configured_providers()
     if not providers:
         print("no providers configured; skipping model-route refresh")
-        return 0
+        return 1 if args.strict else 0
 
     payloads: dict[str, Mapping[str, Any]] = {}
     live: dict[str, list[str]] = {}

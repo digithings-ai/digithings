@@ -56,7 +56,14 @@ def get_model_for_mode() -> str:
         return str(model)
     mode = os.environ.get("DIGI_LLM_MODE", "test").lower().strip()
     defaults = data.get("defaults") or {}
-    return defaults.get(mode) or defaults.get("test") or "gpt-4o-mini"
+    resolved = defaults.get(mode) or defaults.get("test")
+    if not resolved:
+        raise ValueError(
+            "no model for mode "
+            f"{mode!r} in config/model_modes.yaml defaults "
+            "(and no default_model) — refusing silent gpt-4o-mini fallback (#3787)"
+        )
+    return str(resolved)
 
 
 # ── Phase slug inventory ─────────────────────────────────────────────────────
@@ -119,6 +126,49 @@ ALL_SLUGS: list[tuple[str, str]] = [
 ]
 
 
+def _example_slug(capability: str) -> str:
+    """Turn a phase capability / prefix into a concrete inventory slug."""
+    if capability.endswith("-"):
+        if capability.startswith("portfolio/"):
+            return f"{capability}example"
+        if capability.startswith("h6_"):
+            return f"{capability}example"
+        return f"{capability}AAPL"
+    return capability
+
+
+def inventory_slugs() -> list[tuple[str, str]]:
+    """Hand list plus any digiquant_models.yaml capabilities missing from it.
+
+    Prefers deriving coverage from ``config/digiquant_models.yaml`` so new
+    portfolio/H6 phases cannot silently drop out of --routing (#3787).
+    """
+    import yaml
+
+    known = {slug for slug, _ in ALL_SLUGS}
+    out = list(ALL_SLUGS)
+    path = Path(os.environ.get("DIGI_CONFIG_PATH", str(ROOT / "config"))) / "digiquant_models.yaml"
+    if not path.is_file():
+        return out
+    data = yaml.safe_load(path.read_text()) or {}
+    caps = set(data.get("phase_capabilities") or {})
+    caps |= set(data.get("phase_capability_prefixes") or {})
+    for cap in sorted(caps):
+        example = _example_slug(str(cap))
+        # prefix capabilities: match if any known slug starts with the prefix
+        if str(cap).endswith("-"):
+            if any(s.startswith(str(cap)) for s in known):
+                continue
+            out.append((example, f"from digiquant_models.yaml ({cap}*)"))
+            known.add(example)
+            continue
+        if example in known:
+            continue
+        out.append((example, f"from digiquant_models.yaml"))
+        known.add(example)
+    return out
+
+
 def _resolve(slug: str) -> str:
     return get_model_for_phase(slug) or get_model_for_mode()
 
@@ -171,7 +221,7 @@ _PING_MESSAGE = [
 ]
 
 
-def ping_providers(by_model: dict[str, list[str]]) -> bool:
+def ping_providers(by_model: dict[str, list[str]]) -> tuple[bool, int]:
     sys.path.insert(0, str(ROOT / "digigraph" / "src"))
     sys.path.insert(0, str(ROOT / "digillm" / "src"))
     from digigraph.llm_client import completion_text
@@ -183,6 +233,7 @@ def ping_providers(by_model: dict[str, list[str]]) -> bool:
     all_ok = True
     tested: set[str] = set()
     failures: list[tuple[str, str]] = []
+    skipped = 0
 
     for model in by_model:
         prov = _provider(model)
@@ -202,6 +253,7 @@ def ping_providers(by_model: dict[str, list[str]]) -> bool:
         if not key_val:
             print(f"  SKIP  {model}")
             print(f"        {key_var} not set — cannot test\n")
+            skipped += 1
             continue
 
         print(f"  PING  {model}  [{prov}]  … ", end="", flush=True)
@@ -223,7 +275,7 @@ def ping_providers(by_model: dict[str, list[str]]) -> bool:
             print(f"    • {model}: {textwrap.shorten(msg, width=72)}")
         print()
 
-    return all_ok
+    return all_ok, skipped
 
 
 # ── Entry point ──────────────────────────────────────────────────────────────
@@ -235,24 +287,55 @@ def main() -> None:
     )
     ap.add_argument("--routing", action="store_true", help="Only print routing table")
     ap.add_argument("--ping", action="store_true", help="Only run provider pings")
+    ap.add_argument(
+        "--strict",
+        "--fail-on-skip",
+        action="store_true",
+        dest="strict",
+        help="exit 1 when every provider ping was skipped (nothing checked) (#3787)",
+    )
     args = ap.parse_args()
 
     do_routing = not args.ping or args.routing
     do_ping = not args.routing or args.ping
 
+    slugs = inventory_slugs()
     by_model: dict[str, list[str]] = {}
     if do_routing:
-        by_model = print_routing_table()
+        mode = os.environ.get("DIGI_LLM_MODE", "test")
+        print(f"\n{'=' * 70}")
+        print(f"  research/portfolio model routing table  (DIGI_LLM_MODE={mode})")
+        print(f"{'=' * 70}")
+        prev_model = None
+        for slug, label in slugs:
+            model = _resolve(slug)
+            source = "phase_models" if get_model_for_phase(slug) else f"defaults[{mode}]"
+            if model != prev_model:
+                print(f"\n  ── {model}  [{source}]")
+                prev_model = model
+            print(f"     {slug:<36}  {label}")
+            by_model.setdefault(model, []).append(slug)
+        print(f"\n{'─' * 70}")
+        print(f"  Distinct models: {len(by_model)}")
+        for m in by_model:
+            print(f"    • {m}  ({len(by_model[m])} phases)")
+        print()
     else:
-        # Build by_model without printing
-        for slug, _ in ALL_SLUGS:
+        for slug, _ in slugs:
             m = _resolve(slug)
             by_model.setdefault(m, []).append(slug)
 
     if do_ping:
-        ok = ping_providers(by_model)
+        ok, skipped = ping_providers(by_model)
         if not ok:
             print("Provider ping failed — check API keys, routing, and network.", file=sys.stderr)
+            sys.exit(1)
+        distinct_providers = len({_provider(m) for m in by_model})
+        if args.strict and distinct_providers and skipped >= distinct_providers:
+            print(
+                f"STRICT: all {skipped} provider ping(s) skipped — nothing checked (#3787)",
+                file=sys.stderr,
+            )
             sys.exit(1)
 
 
