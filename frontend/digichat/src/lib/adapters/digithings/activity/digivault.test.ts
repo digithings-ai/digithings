@@ -11,6 +11,7 @@ describe("mapDigivaultSearchNotes", () => {
       label: "Sources",
       toolName: "digivault_search_notes",
       query: "nonexistent topic",
+      toolInput: { query: "nonexistent topic" },
     });
     expect(span).not.toHaveProperty("documents");
   });
@@ -31,6 +32,7 @@ describe("mapDigivaultSearchNotes", () => {
       label: "Searching digivault…",
       toolName: "digivault_search_notes",
       query: "showcase",
+      toolInput: { query: "showcase" },
     });
   });
 
@@ -51,6 +53,7 @@ describe("mapDigivaultSearchNotes", () => {
       label: "digivault_get_note errors (1)",
       toolName: "digivault_get_note",
       query: "batch",
+      toolInput: { query: "batch" },
     });
   });
 
@@ -79,6 +82,7 @@ describe("mapDigivaultSearchNotes", () => {
         },
       ],
       query: "showcase",
+      toolInput: { query: "showcase" },
     });
   });
 });
@@ -99,6 +103,7 @@ describe("mapDigivaultGetNote", () => {
       label: "digivault_get_note errors (2)",
       toolName: "digivault_get_note",
       query: "batch",
+      toolInput: { query: "batch" },
     });
   });
 
