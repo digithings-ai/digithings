@@ -85,6 +85,32 @@ export function mapDigigraphTraceToSpans(
       ...(query ? { query } : {}),
       ...(toolInput ? { toolInput } : {}),
     };
+  } else if (trace.type === "tool_result") {
+    // Generic (non-retrieval) tool completion, e.g. MCP tools. digigraph
+    // emits this the moment the tool returns, so the row completes
+    // mid-stream instead of lingering "running" until end-of-stream.
+    const payload = trace.payload ?? {};
+    const tool =
+      (typeof payload.tool === "string" && payload.tool.trim()) ||
+      (typeof payload.toolName === "string" && payload.toolName.trim()) ||
+      (typeof payload.name === "string" && payload.name.trim()) ||
+      "";
+    if (!tool) return [];
+    const args = argsRecord(payload);
+    const query =
+      (typeof payload.query === "string" && payload.query.trim()
+        ? payload.query.trim()
+        : undefined) || (args ? queryFromToolArgs(args) : undefined);
+    const toolInput = toolInputFromPayload(payload);
+    raw = {
+      operation: "execute_tool",
+      status: payload.status === "failed" ? "failed" : "completed",
+      label: tool,
+      toolName: tool,
+      ...(query ? { query } : {}),
+      ...(toolInput ? { toolInput } : {}),
+      ...("result" in payload ? { toolResult: payload.result } : {}),
+    };
   } else if (trace.type === "rag_sources") {
     raw = mapDigisearchRagSources(trace.payload ?? {});
   } else if (

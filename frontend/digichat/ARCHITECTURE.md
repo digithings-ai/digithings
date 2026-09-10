@@ -858,7 +858,11 @@ mutate language/model/effort/tools/MCP; `session_upsert_mcp` cannot plant a new 
 when `allowUserMcp` is false (operator token attach still works). The client applies them to `EmbedChatPrefsApi`.
 `X-Digi-Effort` (low/medium/high) is forwarded to digigraph. digisearch / digivault / web_search
 stay orchestrator tools (HTTP to the verticals), not browser MCP. DataTap-style installs add
-extra servers in YAML (see `config/examples/datatap-mcp.yaml`).
+extra servers in YAML (see `config/examples/datatap-mcp.yaml`). The trial-tenant
+variant (per-tenant container + dev MCP server + `X-API-Key` static auth) is
+`config/examples/datatap-trial-test.yaml`, deployed per
+`config/examples/datatap-trial-deploy.md` — that doc, not this section, is the
+tenant-rollout reference.
 
 In-iframe “ask digichat” chrome is omitted on the first-party skin; outer launcher title /
 new chat / close and marketing footer attribution stay. Signed-in ChatShell keeps `/clear`
@@ -1239,13 +1243,16 @@ coerces AI SDK `ModelMessage` content to plain strings to avoid digigraph's stri
 
 digigraph SSE frames carry an optional `digigraph_trace` field on each
 `choices[0].delta`. The trace path maps typed payloads (`tool_call`,
-`rag_sources`, `graph_update`, and opaque labels) through `mapDigigraphTraceToSpans` and emits
+`tool_result`, `rag_sources`, `graph_update`, and opaque labels) through `mapDigigraphTraceToSpans` and emits
 only standard tool / `source-*` / reasoning / `data-status` parts (`writeStandardActivity`).
 Each tool invocation gets its own `toolCallId` (FIFO per tool name). Input is JSON
 (`query` / vault path from MCP arguments); retrieve output is `{ query, documents, hitCount }`
-with document snippets/bodies at `activityDetail: full`. The website-like dogfood host
-(`config/examples/digithings-ai-embed.yaml`) sets `gate.activityDetail: full` so chunks are
-not replaced by `{ documentsWithheld: true }`. Leftover started rows are auto-completed at
+with document snippets/bodies at `activityDetail: full`. Generic (non-retrieval)
+tool output is `{ input…, result }` where `result` is the clipped MCP payload —
+the `tool_result` trace arrives the moment the tool returns, so the row completes
+mid-stream with its args + JSON Result pane (no per-tool UI; `ToolFallback`
+renders both). `toolResult` passes the `labels` detail gate untouched (tenant's
+own tool output for the tenant's own user). Leftover started rows are auto-completed at
 stream end so ordinary retrieve / get_note / search_notes never sit on Allow/Deny.
 `tool-input-available` is emitted only with `tool-output-available` during the call. 1.4 `data-digichatActivity` is not
 written. Auth `chat-panel` and embed both

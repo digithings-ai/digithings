@@ -36,6 +36,10 @@ export const MAX_BRIEF_QUESTIONS = 12;
 export const MAX_BRIEF_THEME_LABEL = 120;
 export const MAX_BRIEF_THEME_SUMMARY = 220;
 export const MAX_BRIEF_QUESTION_CHARS = 200;
+/** Generic MCP tool result payload cap (JSON chars) before preview truncation. */
+export const MAX_TOOL_RESULT_CHARS = 12_000;
+export const MAX_TOOL_RESULT_KEYS = 32;
+export const MAX_TOOL_RESULT_ITEMS = 50;
 
 export type ActivityDetail = "off" | "labels" | "full";
 
@@ -65,6 +69,14 @@ export type ActivitySpan = {
    * scalars only — never a raw prompt or upstream endpoint.
    */
   toolInput?: Record<string, unknown>;
+  /**
+   * Generic tool result payload (e.g. MCP tool output), shown as JSON in the
+   * tool row. Size-capped by the sanitizer; oversize payloads arrive as a
+   * `{ truncated: true, preview }` record. Passes the detail gate untouched
+   * (unlike documents): it is the tenant's own tool output for the tenant's
+   * own user, and `labels`-mode tenants must still see MCP results.
+   */
+  toolResult?: Record<string, unknown> | unknown[] | string | number | boolean;
   status: "started" | "completed" | "failed";
   /** Presentation-safe; never raw upstream text. */
   label: string;
@@ -151,8 +163,73 @@ function toolInput(value: unknown): Record<string, unknown> | undefined {
   return Object.keys(out).length ? out : undefined;
 }
 
-function documents(value: unknown): ActivityDocument[] | undefined {
-  if (!Array.isArray(value)) return undefined;
+/**
+ * Presentation-safe generic tool result. Scalars pass (strings capped);
+ * arrays and records recurse one level with item/key caps so an MCP result
+ * stays JSON-safe and bounded. Oversize payloads become a truncated preview
+ * record instead of being dropped, so the row always shows something.
+ */
+function toolResult(
+  value: unknown,
+  depth = 0,
+): Record<string, unknown> | unknown[] | string | number | boolean | undefined {
+  if (typeof value === "string") {
+    const s = value.trim();
+    if (!s) return undefined;
+    return s.length > MAX_TOOL_RESULT_CHARS ? s.slice(0, MAX_TOOL_RESULT_CHARS - 100) + "… [truncated]" : s;
+  }
+  if (typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))) {
+    return value;
+  }
+  if (value === null || value === undefined) return undefined;
+  if (typeof value !== "object") return undefined;
+  if (Array.isArray(value)) {
+    if (depth > 2) return undefined;
+    const out: unknown[] = [];
+    for (const item of value) {
+      if (out.length >= MAX_TOOL_RESULT_ITEMS) break;
+      const clipped =
+        typeof item === "string"
+          ? item.trim().slice(0, MAX_DOC_FIELD_CHARS) || undefined
+          : typeof item === "boolean" || (typeof item === "number" && Number.isFinite(item))
+            ? item
+            : typeof item === "object" && item !== null && !Array.isArray(item)
+              ? toolResult(item, depth + 1)
+              : undefined;
+      if (clipped === undefined) continue;
+      if (typeof clipped === "string" && !clipped) continue;
+      out.push(clipped);
+    }
+    return out.length ? out : undefined;
+  }
+  if (depth > 2) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [rawKey, rawVal] of Object.entries(value as Record<string, unknown>)) {
+    if (Object.keys(out).length >= MAX_TOOL_RESULT_KEYS) break;
+    const key = str(rawKey, MAX_TOOL_INPUT_KEY_CHARS);
+    if (!key) continue;
+    const clipped =
+      typeof rawVal === "string"
+        ? str(rawVal, MAX_DOC_FIELD_CHARS)
+        : typeof rawVal === "boolean" || (typeof rawVal === "number" && Number.isFinite(rawVal))
+          ? rawVal
+          : Array.isArray(rawVal) || (typeof rawVal === "object" && rawVal !== null)
+            ? toolResult(rawVal, depth + 1)
+            : undefined;
+    if (clipped === undefined) continue;
+    out[key] = clipped;
+  }
+  if (!Object.keys(out).length) return undefined;
+  if (JSON.stringify(out).length > MAX_TOOL_RESULT_CHARS) {
+    return {
+      truncated: true,
+      preview: JSON.stringify(out).slice(0, MAX_TOOL_RESULT_CHARS - 100) + "… [truncated]",
+    };
+  }
+  return out;
+}
+
+function documents(value: unknown): ActivityDocument[] | undefined {  if (!Array.isArray(value)) return undefined;
   const out: ActivityDocument[] = [];
   for (const entry of value) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
@@ -229,6 +306,11 @@ export function sanitizeActivitySpan(input: unknown): ActivitySpan | null {
 
   const parsedInput = toolInput(record.toolInput);
   if (parsedInput) span.toolInput = parsedInput;
+
+  if ("toolResult" in record) {
+    const parsedResult = toolResult(record.toolResult);
+    if (parsedResult !== undefined) span.toolResult = parsedResult;
+  }
 
   const docs = documents(record.documents);
   if (docs) span.documents = docs;
