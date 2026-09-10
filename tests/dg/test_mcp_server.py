@@ -61,6 +61,16 @@ def test_run_mcp_applies_bind_to_settings_not_run(
 
 
 @pytest.mark.unit
+def test_default_port_stays_8766() -> None:
+    import inspect
+
+    from digigraph import mcp_server
+
+    default_port = inspect.signature(mcp_server.run_mcp).parameters["port"].default
+    assert default_port == 8766  # digivault moved to 8769, digigraph keeps 8766
+
+
+@pytest.mark.unit
 def test_get_mcp_server_singleton() -> None:
     pytest.importorskip("mcp")
     from digigraph.mcp_server import get_mcp_server
