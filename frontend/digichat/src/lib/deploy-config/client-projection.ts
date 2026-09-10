@@ -16,6 +16,7 @@ import { welcomeBodyLines, welcomeTitle } from "./schema";
 import {
   BASELINE_EMBED_PLACEHOLDER,
   BASELINE_EMBED_SKIN,
+  BASELINE_EMBED_SUGGESTIONS,
   BASELINE_EMBED_WELCOME,
   BASELINE_EMBED_WELCOME_BODY,
 } from "@/lib/baseline-embed";
@@ -111,7 +112,7 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     welcome: BASELINE_EMBED_WELCOME,
     welcomeBody: [...BASELINE_EMBED_WELCOME_BODY],
     placeholder: BASELINE_EMBED_PLACEHOLDER,
-    suggestions: [],
+    suggestions: [...BASELINE_EMBED_SUGGESTIONS],
     accent: null,
     attribution: false,
     defaultLanguage: DEFAULT_LANGUAGE_CODE,
@@ -129,16 +130,25 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     modelPicker: false,
     branchPicker: true,
   },
-  models: { available: [], allowPicker: false },
+  models: {
+    default: "deepseek/deepseek-v4-flash",
+    available: [
+      "deepseek/deepseek-v4-flash",
+      "deepseek/deepseek-v4-flash-0731",
+      "openai/gpt-oss-120b",
+      "z-ai/glm-5.3-flash",
+    ],
+    allowPicker: true,
+  },
   cli: { enabled: false },
   tools: { allowUserToggle: true, catalog: [] },
-  mcp: { servers: [], allowUserServers: false, allowAddForm: false },
+  mcp: { servers: [], allowUserServers: true, allowAddForm: true },
   gate: {
     mode: "turn_limited",
     activityDetail: "labels",
-    showByok: false,
+    showByok: true,
     showLanguageSelector: false,
-    webSearch: false,
+    webSearch: true,
   },
   backendType: "digigraph",
 };

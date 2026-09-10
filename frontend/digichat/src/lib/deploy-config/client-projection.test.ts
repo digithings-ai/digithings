@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { toDigichatClientConfig } from "./client-projection";
+import { BASELINE_EMBED_SUGGESTIONS } from "@/lib/baseline-embed";
+import { DEFAULT_CLIENT_CONFIG, toDigichatClientConfig } from "./client-projection";
 import { clientConfigFromEmbedTenant } from "./embed-bridge";
 import type { EmbedTenantClientConfig } from "@/lib/embed-client-config";
 import type { DigichatDeployment } from "./schema";
@@ -95,5 +96,31 @@ describe("clientConfigFromEmbedTenant omitted-default fail-closed (#3805)", () =
     expect(byId.get("implicit-off")).toBe(false);
     expect(byId.get("explicit-on")).toBe(true);
     expect(byId.get("explicit-off")).toBe(false);
+  });
+});
+
+describe("baseline embed models catalog (Cheaper Inference default)", () => {
+  it("ships the 4-slug catalog with deepseek default and an enabled picker", () => {
+    expect(DEFAULT_CLIENT_CONFIG.models).toEqual({
+      default: "deepseek/deepseek-v4-flash",
+      available: [
+        "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v4-flash-0731",
+        "openai/gpt-oss-120b",
+        "z-ai/glm-5.3-flash",
+      ],
+      allowPicker: true,
+    });
+  });
+});
+
+describe("baseline embed defaults (unconfigured container)", () => {
+  it("ships template suggestions, user MCP, web search, and BYOK", () => {
+    expect(BASELINE_EMBED_SUGGESTIONS).toHaveLength(4);
+    expect(DEFAULT_CLIENT_CONFIG.chrome.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
+    expect(DEFAULT_CLIENT_CONFIG.mcp.allowUserServers).toBe(true);
+    expect(DEFAULT_CLIENT_CONFIG.mcp.allowAddForm).toBe(true);
+    expect(DEFAULT_CLIENT_CONFIG.gate.webSearch).toBe(true);
+    expect(DEFAULT_CLIENT_CONFIG.gate.showByok).toBe(true);
   });
 });

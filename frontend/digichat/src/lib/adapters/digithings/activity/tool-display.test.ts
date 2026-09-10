@@ -15,24 +15,23 @@ describe("searchMethodFromArgs", () => {
 });
 
 describe("toolRowTitle", () => {
-  it("names digisearch by retrieval method", () => {
-    expect(toolRowTitle("digisearch")).toBe("digisearch semantic");
-    expect(toolRowTitle("digisearch", { mode: "keyword" })).toBe("digisearch keyword");
-    expect(toolRowTitle("digisearch", { mode: "hybrid" })).toBe("digisearch hybrid");
+  it("keeps the exact backend tool id, including underscores", () => {
+    expect(toolRowTitle("digisearch")).toBe("digisearch");
+    expect(toolRowTitle("digisearch", { mode: "keyword" })).toBe("digisearch");
+    expect(toolRowTitle("digisearch", { mode: "hybrid" })).toBe("digisearch");
   });
 
-  it("humanizes vault tools like get-note vs search", () => {
-    expect(toolRowTitle("digivault_get_note")).toBe("digivault get note");
-    expect(toolRowTitle("digivault_search_notes")).toBe("digivault search notes");
+  it("keeps vault and web tool ids verbatim", () => {
+    expect(toolRowTitle("digivault_get_note")).toBe("digivault_get_note");
+    expect(toolRowTitle("digivault_search_notes")).toBe("digivault_search_notes");
+    expect(toolRowTitle("web_search")).toBe("web_search");
   });
 
-  it("suffixes fetch_all and research with the retrieval method", () => {
-    expect(toolRowTitle("digisearch_fetch_all")).toBe("digisearch fetch all (semantic)");
+  it("keeps fetch_all and research ids verbatim regardless of method args", () => {
+    expect(toolRowTitle("digisearch_fetch_all")).toBe("digisearch_fetch_all");
     expect(toolRowTitle("digisearch_fetch_all", { search_type: "keyword" })).toBe(
-      "digisearch fetch all (keyword)",
+      "digisearch_fetch_all",
     );
-    expect(toolRowTitle("digisearch_research", { mode: "hybrid" })).toBe(
-      "digisearch research (hybrid)",
-    );
+    expect(toolRowTitle("digisearch_research", { mode: "hybrid" })).toBe("digisearch_research");
   });
 });

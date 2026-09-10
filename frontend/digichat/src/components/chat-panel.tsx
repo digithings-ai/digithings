@@ -16,9 +16,8 @@ import { p } from "@/lib/base-path";
 import { useBYOKKey } from "@/hooks/use-byok-key";
 import {
   isWebSearchEnabled,
-  readWebSearchPref,
-  writeWebSearchPref,
 } from "@/lib/web-search-pref";
+import { useSyncedWebSearchPref } from "@/hooks/use-synced-web-search-pref";
 import {
   takePendingForceTool,
   takePendingTurnMode,
@@ -78,9 +77,9 @@ export function ChatPanel({
     clientConfig.tools.catalog.some((t) => t.id === "web_search") ||
     (typeof process.env.NEXT_PUBLIC_DIGICHAT_WEB_SEARCH === "string" &&
       process.env.NEXT_PUBLIC_DIGICHAT_WEB_SEARCH === "1");
-  const [webSearchPref, setWebSearchPref] = useState(() =>
-    webSearchAllowed && typeof window !== "undefined" ? readWebSearchPref("auth") : false,
-  );
+  // First render is always off (SSR-agreeing); stored/default-ON syncs after mount.
+  // Send path stays gated by webSearchAllowed below.
+  const [webSearchPref, setWebSearchPref] = useSyncedWebSearchPref("auth");
 
   const transport = useMemo(
     () =>
@@ -159,7 +158,6 @@ export function ChatPanel({
         sessionKey={threadId}
         webSearchScope="auth"
         onWebSearchChange={(on) => {
-          writeWebSearchPref("auth", on);
           setWebSearchPref(on);
         }}
         headerSlot={

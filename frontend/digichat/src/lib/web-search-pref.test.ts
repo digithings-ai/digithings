@@ -17,11 +17,26 @@ describe("web-search-pref (#3420)", () => {
     }
   });
 
-  it("defaults off and requires tenant + user", () => {
+  it("missing key defaults off; baseline surfaces opt into default-on explicitly", () => {
     expect(isWebSearchEnabled({ tenantAllows: false, userPref: false })).toBe(false);
     expect(isWebSearchEnabled({ tenantAllows: true, userPref: false })).toBe(false);
     expect(isWebSearchEnabled({ tenantAllows: false, userPref: true })).toBe(false);
     expect(isWebSearchEnabled({ tenantAllows: true, userPref: true })).toBe(true);
+    // happy-dom ships a non-functional localStorage — stub a real Map so the
+    // missing-key default is exercised, not the catch branch.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+      clear: () => store.clear(),
+    });
+    expect(readWebSearchPref("fresh-scope")).toBe(false);
+    expect(readWebSearchPref("fresh-scope", true)).toBe(true);
   });
 
   it("persists user preference under a scoped key", () => {

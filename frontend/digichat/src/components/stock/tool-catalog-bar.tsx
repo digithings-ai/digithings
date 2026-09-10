@@ -11,9 +11,8 @@ import { FORCE_TOOL_BY_CATALOG_ID } from "@/lib/deploy-config";
 import { setPendingForceTool } from "@/lib/pending-chat-headers";
 import {
   isWebSearchEnabled,
-  readWebSearchPref,
-  writeWebSearchPref,
 } from "@/lib/web-search-pref";
+import { useSyncedWebSearchPref } from "@/hooks/use-synced-web-search-pref";
 import { cn } from "@/lib/utils";
 
 export type ToolCatalogBarProps = {
@@ -41,8 +40,13 @@ export function ToolCatalogBar({
   const tenantAllowsWeb =
     gate.webSearch === true || catalog.some((t) => t.id === "web_search");
 
-  const [webPref, setWebPref] = useState(() =>
-    typeof window !== "undefined" ? readWebSearchPref(prefScope) : false,
+  // First render is always off (SSR-agreeing); the stored value syncs after
+  // mount. Default-on applies to the baseline embed surface only (slug
+  // "embed", which has no legacy stored values); every other surface keeps
+  // the #3420 opt-in default so prior opt-outs are never re-enabled.
+  const [webPref, setWebPref] = useSyncedWebSearchPref(
+    prefScope,
+    clientConfig.slug === "embed",
   );
   const [armedForce, setArmedForce] = useState<string | null>(null);
 
@@ -54,10 +58,9 @@ export function ToolCatalogBar({
   const toggleWeb = useCallback(() => {
     if (!allowToggle || !tenantAllowsWeb) return;
     const next = !webPref;
-    writeWebSearchPref(prefScope, next);
     setWebPref(next);
     onWebSearchChange?.(next);
-  }, [allowToggle, tenantAllowsWeb, webPref, prefScope, onWebSearchChange, setWebPref]);
+  }, [allowToggle, tenantAllowsWeb, webPref, onWebSearchChange, setWebPref]);
 
   const toggleForce = useCallback(
     (catalogId: string) => {

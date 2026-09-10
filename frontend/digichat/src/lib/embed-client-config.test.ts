@@ -6,6 +6,8 @@ import {
   toEmbedClientConfig,
 } from "./embed-client-config";
 import { parseEmbedTenants, resetEmbedTenantRegistryForTests } from "./embed-tenants";
+import { BASELINE_EMBED_SUGGESTIONS } from "./baseline-embed";
+import { clientConfigFromEmbedTenant } from "./deploy-config/embed-bridge";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -218,7 +220,22 @@ describe("DEFAULT_EMBED_TENANT_CONFIG", () => {
       "Ask about anything you need help with.",
     ]);
     expect(DEFAULT_EMBED_TENANT_CONFIG.attachments).toBe(true);
-    expect(DEFAULT_EMBED_TENANT_CONFIG.showByok).toBe(false);
-    expect(DEFAULT_EMBED_TENANT_CONFIG.webSearch).toBe(false);
+    expect(DEFAULT_EMBED_TENANT_CONFIG.showByok).toBe(true);
+    expect(DEFAULT_EMBED_TENANT_CONFIG.webSearch).toBe(true);
+    expect(DEFAULT_EMBED_TENANT_CONFIG.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
+    expect(DEFAULT_EMBED_TENANT_CONFIG.mcp).toEqual({
+      servers: [],
+      allowUserServers: true,
+      allowAddForm: true,
+    });
+  });
+
+  it("projects baseline mcp user-server flags through the deploy-config bridge", () => {
+    // The bridge replaces base.mcp wholesale (no spread), so a missing mcp on
+    // the legacy default would diverge from the deploy path (allowUserServers
+    // true). Both baselines must agree.
+    const projected = clientConfigFromEmbedTenant(DEFAULT_EMBED_TENANT_CONFIG);
+    expect(projected.mcp.allowUserServers).toBe(true);
+    expect(projected.mcp.allowAddForm).toBe(true);
   });
 });

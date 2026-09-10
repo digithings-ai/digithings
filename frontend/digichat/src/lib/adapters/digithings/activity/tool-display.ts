@@ -1,4 +1,4 @@
-/** Display labels for tool rows. Tool ids stay exact in toolName. */
+/** Raw backend tool ids for tool-row titles (one-to-one with the backend). */
 
 export function searchMethodFromArgs(
   input?: Record<string, unknown>,
@@ -14,29 +14,11 @@ export function searchMethodFromArgs(
   return "semantic";
 }
 
-function humanize(toolName: string): string {
-  return toolName
-    .replace(/^digivault_/, "digivault ")
-    .replace(/^digisearch_/, "digisearch ")
-    .replace(/_/g, " ")
-    .trim();
-}
-
 export function toolRowTitle(
   toolName: string,
-  input?: Record<string, unknown>,
+  _input?: Record<string, unknown>,
 ): string {
+  void _input;
   const name = toolName.trim();
-  if (!name) return "tool";
-  if (name === "digisearch" || name.startsWith("digisearch_")) {
-    if (name === "digisearch_fetch_all" || name === "digisearch_research") {
-      const base = name === "digisearch_fetch_all" ? "fetch all" : "research";
-      return `digisearch ${base} (${searchMethodFromArgs(input)})`;
-    }
-    return `digisearch ${searchMethodFromArgs(input)}`;
-  }
-  if (name === "digivault_search_notes") return "digivault search notes";
-  if (name === "digivault_get_note") return "digivault get note";
-  if (name === "web_search") return "web search";
-  return humanize(name) || "tool";
+  return name || "tool";
 }

@@ -1,9 +1,14 @@
 /**
- * Opt-in web search preference (#3420).
+ * Web search preference (default OFF; tenant-gated; baseline opts into default-ON).
  *
- * Default off. Tenant must allow (`webSearch: true` in DIGICHAT_EMBED_TENANTS);
- * the user must also opt in via this localStorage flag. Both are required before
- * the BFF sends X-Digi-Enable-Web-Search — never silently mix web into RAG.
+ * Default off. Tenant must still allow (`webSearch: true` in config) — that gate
+ * is unchanged (#3420): the BFF only sends X-Digi-Enable-Web-Search when the
+ * tenant allows AND this user pref is on. Callers pass `defaultOn: true` only
+ * for the baseline embed surface (slug "embed"), which has no legacy stored
+ * values. Everywhere else the default stays off so prior opt-outs — which are
+ * indistinguishable from never-set (opt-out used to remove the key) — are
+ * never silently re-enabled. The user opts out via this localStorage flag,
+ * persisted as "0".
  */
 
 const STORAGE_PREFIX = "digichat-web-search:";
@@ -13,11 +18,16 @@ export function webSearchStorageKey(scope: string): string {
   return `${STORAGE_PREFIX}${s}`;
 }
 
-/** Read user preference; missing/invalid → false (default off). */
-export function readWebSearchPref(scope: string): boolean {
+/**
+ * Read user preference. Missing key → `defaultOn` (false unless the caller
+ * opts a surface into default-on). Explicit "0" always opts out.
+ */
+export function readWebSearchPref(scope: string, defaultOn = false): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return window.localStorage.getItem(webSearchStorageKey(scope)) === "1";
+    const stored = window.localStorage.getItem(webSearchStorageKey(scope));
+    if (stored === null) return defaultOn;
+    return stored !== "0";
   } catch {
     return false;
   }
@@ -28,14 +38,14 @@ export function writeWebSearchPref(scope: string, enabled: boolean): void {
   try {
     const key = webSearchStorageKey(scope);
     if (enabled) window.localStorage.setItem(key, "1");
-    else window.localStorage.removeItem(key);
+    else window.localStorage.setItem(key, "0");
   } catch {
     /* private mode / quota */
   }
 }
 
 /**
- * Effective enable for a request: tenant must allow AND user must opt in.
+ * Effective enable for a request: tenant must allow AND user must not opt out.
  * Either false → do not send the digigraph header.
  */
 export function isWebSearchEnabled(args: {

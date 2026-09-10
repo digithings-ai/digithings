@@ -1276,7 +1276,7 @@ completes mid-stream with its args + JSON Result pane (no per-tool UI;
 `ToolFallback` renders both). `toolResult` passes the `labels` detail gate
 untouched (tenant's own tool output for the tenant's own user). Vault search `rag_sources` traces map through `mapDigivaultSearchNotes` (not the digisearch retrieve-with-no-docs path). A failed vault invoke is `execute_tool`/`failed`, never `{ hitCount: 0 }`. The website-like dogfood host
 (`config/examples/digithings-ai-embed.yaml`) sets `gate.activityDetail: full` and `backend.vaultPathPrefix: clients/digithings` so D1 FTS is scoped and chunks are
-not replaced by `{ documentsWithheld: true }`. Stable `toolName` values remain the exact MCP / backend tool ids. Tool rows render display titles derived client-side via `toolRowTitle(toolName, args)` — method-aware for `digisearch` / `digisearch_*` (`digisearch semantic`, `digisearch keyword`, or `digisearch hybrid` from the `mode` / `search_mode` / `search_type` args; `digisearch fetch all (<method>)` and `digisearch research (<method>)` for those variants), humanized for vault and web-search tools. The gallery-thread fallback (`humanizeToolName` in `@digithings/web`) implements the same contract from `(toolName, argsText)`. (The streamed `tool-input-start` title is dropped by the assistant-stream / assistant-ui converters before render, so fallbacks must derive the label themselves; provider span labels such as the Foundry `Searching knowledge base…` progress row still reach the wire but neither fallback surface displays them.) Each reasoning burst between tool rounds gets its own `reasoning-start` id so later thinking is not appended into the first block. `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are auto-completed at
+not replaced by `{ documentsWithheld: true }`. Stable `toolName` values remain the exact MCP / backend tool ids, and tool rows render those ids verbatim — `toolRowTitle(toolName)` in digichat and `humanizeToolName(toolName)` in the gallery thread are identity functions by owner decision (raw backend names with underscores, one-to-one with the backend). The streamed `tool-input-start` title is dropped by the assistant-stream / assistant-ui converters before render, so both fallback surfaces derive the row label client-side from the exact id; provider span labels such as the Foundry `Searching knowledge base…` progress row still reach the wire but are not displayed. Each reasoning burst between tool rounds gets its own `reasoning-start` id so later thinking is not appended into the first block. `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are auto-completed at
 stream end so ordinary retrieve / get_note / search_notes never sit on Allow/Deny.
 `tool-input-available` is emitted only with `tool-output-available` during the call. 1.4 `data-digichatActivity` is not
 written. Auth `chat-panel` and embed both
@@ -1376,7 +1376,21 @@ same subpath with a fixture runtime. Contract:
 wrong/absent customer token) is the unconfigured container default: skin
 `digichat` (gallery Thread UI, including hairline hover hints with no
 rotated-square arrow), generic “Ask a question” copy, compact attach+send
-composer, empty tool catalog (no Search / Vault / MCP / provider). YAML that omits
+composer, plus the baseline template defaults: 4 starter suggestion chips
+(`BASELINE_EMBED_SUGGESTIONS`, owner-replaceable copy), `gate.webSearch: true`
+with the websearch session pref defaulting ON for the baseline slug only
+(`defaultOn` when `clientConfig.slug === "embed"`; matched surfaces keep the
+#3420 opt-in default off so prior opt-outs are never silently re-enabled;
+tenant AND still gates the BFF forward), and
+`mcp.allowUserServers / allowAddForm: true` (session MCP URLs stay
+`https`-only + SSRF-allowlisted, operator YAML wins). The `/tools` slash row
+stays visible on empty catalogs via the websearch row. The BFF sends
+`research_system_prompt` (`DEFAULT_BASELINE_RESEARCH_SYSTEM_PROMPT`) only for
+this baseline case — trimmed non-empty `x-embed-host` matching no host
+deployment, on the unauthenticated baseline tenant (`tenantSlug "embed"`,
+`embedConfig` null) — never for matched hosts, spoofed-unknown-host
+authenticated traffic, empty/whitespace headers, or first paint without the
+header. YAML that omits
 `skin` still parses as catalog `base`. Product hosts (`digithings-ai-embed.yaml`,
 `occ-embed.yaml`) keep `chrome.skin: digichat` with the digisearch / digivault
 catalog (web_search tenant-allowed on digithings.ai; embed/popup session
@@ -1416,7 +1430,8 @@ default to `chrome.mode: embed` so `/` redirects to `/embed` and chat is
 do not wrap the catalog page; anonymous layout chat uses the same YAML
 install. `welcome` (headline string, or `{ title, body }`) / `placeholder` /
 `title` / `accent` from YAML are applied to the selected template at runtime.
-`suggestions` is opt-in; omit it for no starter chips. A bare `welcome: "…"`
+`suggestions` is opt-in per deployment YAML; omit it for no starter chips
+(the unconfigured baseline default still ships the template chips above). A bare `welcome: "…"`
 string still means title-only.
 
 ### digichat CLI (Ink) — separate Node package
