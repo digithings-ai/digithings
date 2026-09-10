@@ -59,8 +59,6 @@ def test_completion_rejects_banned_model_without_calling_provider() -> None:
     assert fake_client.chat.completions.create.call_count == 0
 
 
-
-
 @pytest.mark.parametrize(
     "banned",
     [
