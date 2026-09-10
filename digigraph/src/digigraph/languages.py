@@ -4,7 +4,7 @@ Only the mapped display name below ever reaches a prompt — the raw
 X-Digi-Language header/request value is never interpolated directly, so an
 unrecognized or crafted value can at most be ignored, never inject text.
 
-Keep in exact sync with ``frontend/digichat/src/lib/languages.ts`` ``LANGUAGES``.
+Keep in exact sync with ``cloudflare/digichat/src/lib/languages.ts`` ``LANGUAGES``.
 """
 
 from __future__ import annotations

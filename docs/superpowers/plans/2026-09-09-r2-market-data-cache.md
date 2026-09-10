@@ -524,7 +524,7 @@ git commit -m "feat(market-data): daily R2 refresh cron with staleness gate"
 ### Task 7: Cutover reads, dual-write window, stop writers, shrink whitelist
 
 **Files:**
-- Modify: every `run_date`-holding caller of `get_price_technicals` / `get_macro_series` (implementer enumerates via `grep -rn "get_price_technicals\|get_macro_series" digiquant/src frontend/digichat/src`; known modules: `research/data/queries.py` wrappers, portfolio H4/H5/H7/H9 phases, `materialize_*`, commit/snapshot, `backtest.py`, dashboard retrieval, preflight freshness)
+- Modify: every `run_date`-holding caller of `get_price_technicals` / `get_macro_series` (implementer enumerates via `grep -rn "get_price_technicals\|get_macro_series" digiquant/src cloudflare/digichat/src`; known modules: `research/data/queries.py` wrappers, portfolio H4/H5/H7/H9 phases, `materialize_*`, commit/snapshot, `backtest.py`, dashboard retrieval, preflight freshness)
 - Modify: `digiquant/src/digiquant/mcp_server.py` (whitelist), `digiquant/src/digiquant/cli/prices.py` (disable refresh command path), `research/phases/preflight.py:156-158` (disable recompute call)
 - Test: `tests/dq/test_market_data_parity.py` (uses Task 1 goldens)
 
@@ -639,7 +639,7 @@ git commit -m "feat(market-data): migrate remaining readers, stop writers (secon
 
 **Files:**
 - Create: `digiquant/Dockerfile.mcp`
-- Modify: Cloudflare container wiring following the existing stack file under `frontend/digithings-stack-cloudflare/` (implementer locates the exact wrangler/container config via glob; adds the new service beside the existing ones)
+- Modify: Cloudflare container wiring following the existing stack file under `cloudflare/digithings-stack-cloudflare/` (implementer locates the exact wrangler/container config via glob; adds the new service beside the existing ones)
 - Test: `tests/scripts/test_mcp_container.py` (asserts Dockerfile pins + entrypoint + port; asserts wiring file references the new service)
 
 **Interfaces:**

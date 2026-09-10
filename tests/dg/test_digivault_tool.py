@@ -359,7 +359,7 @@ def test_handle_digivault_search_not_ok_response() -> None:
 def test_handle_digivault_search_no_context_prefix_error_is_actionable() -> None:
     """Important 2 (#2240 final-branch review): when there is no context prefix
     (unmapped tenant slug — e.g. `tenantSlug: "embed"` in
-    frontend/digichat/src/lib/embed-chat-tenant.ts, absent from
+    cloudflare/digichat/src/lib/embed-chat-tenant.ts, absent from
     DIGI_TENANT_CORPUS_MAP), relaying digivault's raw "path_prefix is required"
     sentence is unactionable: the model already supplied path_prefix (the schema
     marks it required) and this handler is the one that discarded it. Driving the

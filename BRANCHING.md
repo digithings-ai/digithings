@@ -39,7 +39,7 @@ git rev-list --count origin/module/<component>..origin/develop   # 0 = current; 
 ## Long-lived branches
 
 
-**Org production clocks** live in the Cloudflare Worker `digithings-cron` (`frontend/digithings-cron`); the default branch stays `develop`.
+**Org production clocks** live in the Cloudflare Worker `digithings-cron` (`cloudflare/digithings-cron`); the default branch stays `develop`.
 
 | Branch | Purpose | Protection |
 |--------|---------|------------|

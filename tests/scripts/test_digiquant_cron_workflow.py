@@ -25,7 +25,7 @@ WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 SPEC = REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "kairos-cron-check.workflow.yml"
 INSTALLED = WORKFLOW_DIR / "execution-cron-check.yml"
 HOUSE = WORKFLOW_DIR / "pipeline-digiquant.yml"
-JOBS_SOURCE = REPO_ROOT / "frontend" / "digithings-cron" / "src" / "jobs.ts"
+JOBS_SOURCE = REPO_ROOT / "cloudflare" / "digithings-cron" / "src" / "jobs.ts"
 MAILGUN_FRAGMENT = (
     REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "pipeline-olympus-mailgun.env.yml"
 )

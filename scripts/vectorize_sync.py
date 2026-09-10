@@ -18,7 +18,7 @@ the number of vectors that *would* be upserted.
 
 ``--index`` is NOT a free choice: it must equal the ``DIGISEARCH_INDEX`` /
 ``DIGI_TENANT_CORPUS_MAP`` entry the digisearch server for that tenant is
-configured with (see ``frontend/digithings-stack-cloudflare/wrangler.toml``),
+configured with (see ``cloudflare/digithings-stack-cloudflare/wrangler.toml``),
 because ``_vectorize_backend`` passes ``index_name`` straight into the Vectorize
 URL with no translation -- a mismatched name means every chat query 404s against
 an index that was never populated. Today those values are underscore-form
@@ -325,7 +325,7 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help=(
             "Vectorize index name -- MUST equal the target tenant's DIGISEARCH_INDEX / "
-            "DIGI_TENANT_CORPUS_MAP value (see frontend/digithings-stack-cloudflare/"
+            "DIGI_TENANT_CORPUS_MAP value (see cloudflare/digithings-stack-cloudflare/"
             "wrangler.toml), e.g. digithings_docs or occ_help. A name that doesn't "
             "match means digisearch queries a different index than this synced."
         ),

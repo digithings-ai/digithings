@@ -52,8 +52,8 @@ Phase A (Tasks 1–4) is parallelizable — four mostly-independent pure modules
 ### Task 1: Pipeline topology model
 
 **Files:**
-- Create: `frontend/olympus/lib/pipeline-topology.ts`
-- Test: `frontend/olympus/lib/pipeline-topology.test.ts`
+- Create: `cloudflare/olympus/lib/pipeline-topology.ts`
+- Test: `cloudflare/olympus/lib/pipeline-topology.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -141,15 +141,15 @@ export function stageById(id: PipelineStageId): StageDef | undefined {
 
 - [ ] **Step 4: Run test to verify it passes** — `npx vitest run lib/pipeline-topology.test.ts` → PASS.
 
-- [ ] **Step 5: Commit** — `git add frontend/olympus/lib/pipeline-topology.* && git commit -m "feat(olympus): pipeline topology model (Surface 1, Task 1)\n\nRefs #1048"`
+- [ ] **Step 5: Commit** — `git add cloudflare/olympus/lib/pipeline-topology.* && git commit -m "feat(olympus): pipeline topology model (Surface 1, Task 1)\n\nRefs #1048"`
 
 ---
 
 ### Task 2: Runtime fan-out widths + node presence from documents
 
 **Files:**
-- Create: `frontend/olympus/lib/pipeline-graph-data.ts`
-- Test: `frontend/olympus/lib/pipeline-graph-data.test.ts`
+- Create: `cloudflare/olympus/lib/pipeline-graph-data.ts`
+- Test: `cloudflare/olympus/lib/pipeline-graph-data.test.ts`
 
 **Interfaces:**
 - Consumes: `documents` rows for a day — `{ document_key: string }[]` (the existing shape from `lib/queries.ts`; verify field name with `grep "document_key" lib/queries.ts`).
@@ -223,8 +223,8 @@ export function buildPipelineDayData(docs: { document_key: string }[]): Pipeline
 ### Task 3: Pure layout engine
 
 **Files:**
-- Create: `frontend/olympus/lib/pipeline-layout.ts`
-- Test: `frontend/olympus/lib/pipeline-layout.test.ts`
+- Create: `cloudflare/olympus/lib/pipeline-layout.ts`
+- Test: `cloudflare/olympus/lib/pipeline-layout.test.ts`
 
 **Interfaces:**
 - Consumes: `PIPELINE_TOPOLOGY`, `StageDef` (Task 1); `PipelineDayData` (Task 2).
@@ -288,8 +288,8 @@ describe('layoutPipeline', () => {
 ### Task 4: node→document_key resolver + param parse
 
 **Files:**
-- Modify: `frontend/olympus/lib/pipeline-links.ts`
-- Test: `frontend/olympus/lib/pipeline-links.test.ts`
+- Modify: `cloudflare/olympus/lib/pipeline-links.ts`
+- Test: `cloudflare/olympus/lib/pipeline-links.test.ts`
 
 **Interfaces:**
 - Consumes: existing `buildPipelineHref`, `PipelineStage` (already in file — read it first).
@@ -338,8 +338,8 @@ describe('pipeline link resolvers', () => {
 ### Task 5: PipelineNode + SVG connectors
 
 **Files:**
-- Create: `frontend/olympus/components/pipeline/PipelineNode.tsx`, `components/pipeline/PipelineConnectors.tsx`
-- Test: `frontend/olympus/components/pipeline/PipelineNode.test.tsx`
+- Create: `cloudflare/olympus/components/pipeline/PipelineNode.tsx`, `components/pipeline/PipelineConnectors.tsx`
+- Test: `cloudflare/olympus/components/pipeline/PipelineNode.test.tsx`
 
 **Interfaces:**
 - Consumes: `LaidOutNode`, `Connector` (Task 3).
@@ -354,8 +354,8 @@ describe('pipeline link resolvers', () => {
 ### Task 6: Camera controller (pan/zoom/fit/auto-center)
 
 **Files:**
-- Create: `frontend/olympus/components/pipeline/useCanvasCamera.ts`
-- Test: `frontend/olympus/components/pipeline/useCanvasCamera.test.ts` (pure math only)
+- Create: `cloudflare/olympus/components/pipeline/useCanvasCamera.ts`
+- Test: `cloudflare/olympus/components/pipeline/useCanvasCamera.test.ts` (pure math only)
 
 **Interfaces:**
 - Produces: `useCanvasCamera()` → `{ transform, zoomIn, zoomOut, fit(bbox, viewport), centerOn(rect, viewport), bind }`. Extract the pure math into exported helpers `computeFit(bbox, viewport)` and `computeCenter(rect, viewport, scale)` returning `{ x, y, scale }` — test THESE (the hook itself needs DOM, untested here).
@@ -369,8 +369,8 @@ describe('pipeline link resolvers', () => {
 ### Task 7: PipelineCanvas (composition + expansion state)
 
 **Files:**
-- Create: `frontend/olympus/components/pipeline/PipelineCanvas.tsx`
-- Test: `frontend/olympus/components/pipeline/PipelineCanvas.test.tsx`
+- Create: `cloudflare/olympus/components/pipeline/PipelineCanvas.tsx`
+- Test: `cloudflare/olympus/components/pipeline/PipelineCanvas.test.tsx`
 
 **Interfaces:**
 - Consumes: Tasks 1–6.
@@ -383,8 +383,8 @@ describe('pipeline link resolvers', () => {
 ### Task 8: PipelineNodeDetail (reuse document views)
 
 **Files:**
-- Create: `frontend/olympus/components/pipeline/PipelineNodeDetail.tsx`
-- Test: `frontend/olympus/components/pipeline/PipelineNodeDetail.test.tsx`
+- Create: `cloudflare/olympus/components/pipeline/PipelineNodeDetail.tsx`
+- Test: `cloudflare/olympus/components/pipeline/PipelineNodeDetail.test.tsx`
 
 **Interfaces:**
 - Consumes: `lib/hooks/use-library-document.ts` + the `library/*` views. **Do not re-implement rendering** — dispatch on `document_key` to the same view chosen by `LibraryDocumentBody`/`DocumentExpandInline` (read those first to mirror the dispatch).

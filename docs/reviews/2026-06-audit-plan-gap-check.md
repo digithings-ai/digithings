@@ -235,7 +235,7 @@ Add to implementation plan as **`REM-138` … `REM-145`** (or fold into wave-0 b
 | **REM-141** | DOC-02 | Update **`ROADMAP.md`** revocation / Redis opt-in (with REM-016) | 4 | S |
 | **REM-142** | DOC-04 | Fix **`digiquant/ARCHITECTURE.md`** ADDM / drift sections | 4 | S |
 | **REM-143** | DOC-05 | Fix **`digiclaw/ARCHITECTURE.md`** ADDM + auth-blocked vs logic-blocked | 4 | S |
-| **REM-144** | G-05 | Wire **`frontend/digichat`** into `make test-unit` or documented aggregate target | 2 | S |
+| **REM-144** | G-05 | Wire **`cloudflare/digichat`** into `make test-unit` or documented aggregate target | 2 | S |
 | **REM-145** | G-06 | Document or dedupe **double workflow** triggers (`ci.yml` vs path filters) | 2 | S |
 
 **Optional (defer ok):** REM for G-02 explicit supervisor/optimize_node tests; G-11 deploy gate doc in `DEPLOYMENT.md`.

@@ -106,7 +106,7 @@ make digichat-profile-a-bundle-up
 ```
 
 Stack-only `docker run` (no digichat UI): see
-[`frontend/digithings-stack-cloudflare/README.md`](../../frontend/digithings-stack-cloudflare/README.md).
+[`cloudflare/digithings-stack-cloudflare/README.md`](../../cloudflare/digithings-stack-cloudflare/README.md).
 
 | Goal | Prefer |
 |---|---|

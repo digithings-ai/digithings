@@ -1,7 +1,7 @@
 # Product rebrand scope — drop Olympus / Atlas / Hermes / Kairos
 
 > **Date:** 2026-08-30
-> **Status:** Accepted — product name is **digiquant** (ADR-0026). On-site CTA is **`open dashboard`**. Wave 1 copy and wave 3 identifiers shipped (#3261). [#3325](https://github.com/digithings-ai/digithings/pull/3325) on `develop` (`a8bd41741`): public path is `/dashboard/` only — `/olympus/` 308s and the `dist/olympus` twin are retired; workspace is `frontend/dashboard` (package `dashboard`). Live Pages still serve `/olympus/` (200) and `/dashboard/` (404) until a coordinated Pages+EF cutover. Site `/build-info.json` is `9f898ec1d` after the Python-only `main` hotfix [#3331](https://github.com/digithings-ai/digithings/pull/3331); that rebuild does not ship `/dashboard/`.
+> **Status:** Accepted — product name is **digiquant** (ADR-0026). On-site CTA is **`open dashboard`**. Wave 1 copy and wave 3 identifiers shipped (#3261). [#3325](https://github.com/digithings-ai/digithings/pull/3325) on `develop` (`a8bd41741`): public path is `/dashboard/` only — `/olympus/` 308s and the `dist/olympus` twin are retired; workspace is `cloudflare/dashboard` (package `dashboard`). Live Pages still serve `/olympus/` (200) and `/dashboard/` (404) until a coordinated Pages+EF cutover. Site `/build-info.json` is `9f898ec1d` after the Python-only `main` hotfix [#3331](https://github.com/digithings-ai/digithings/pull/3331); that rebuild does not ship `/dashboard/`.
 > **Does not:** rewrite Python packages, SQL tables, or live-trading paths
 > **Human gate:** yes — kairos **package** rename later touches execution
 
@@ -20,21 +20,21 @@ Four Greek names currently do four different jobs:
 
 | Name | Job today | User-visible? |
 |------|-----------|----------------|
-| **olympus** | Product brand for the operator dashboard (`frontend/dashboard`, `digiquant.io/olympus/`) and the Python umbrella (`digiquant.olympus`) | Yes — nav CTA, page title, OAuth app, Access path |
+| **olympus** | Product brand for the operator dashboard (`cloudflare/dashboard`, `digiquant.io/olympus/`) and the Python umbrella (`digiquant.olympus`) | Yes — nav CTA, page title, OAuth app, Access path |
 | **atlas** | Research sub-graph (`digiquant.olympus.atlas`, A0–A4) | Yes on the landing pipeline scene; **no** in dashboard nav |
 | **hermes** | Portfolio / deliberation sub-graph (`digiquant.olympus.hermes`, H1–H9) | Yes on landing; **no** in dashboard nav |
 | **kairos** | Execution router + broker mirror (`digiquant.olympus.kairos`) | Yes on landing (“in development”); live-trading adjacent |
 
-The dashboard **already** uses functional nav: Brief, Portfolio, Pipeline, FX Hub (`frontend/dashboard/lib/nav.ts`). Atlas / Hermes / Kairos are marketing and code names, not chrome labels. Stripping subsystem brands from the UI is mostly a landing-page + copy job.
+The dashboard **already** uses functional nav: Brief, Portfolio, Pipeline, FX Hub (`cloudflare/dashboard/lib/nav.ts`). Atlas / Hermes / Kairos are marketing and code names, not chrome labels. Stripping subsystem brands from the UI is mostly a landing-page + copy job.
 
 The mark itself (nested arcs + a small circle, used as favicon and as `OlympusMark` / `AtlasMark`) is what prompted the “letter A → alphabox / autobox / ai box” instinct:
 
 ```
-frontend/dashboard/public/icons/dashboard-app-dark.svg
-frontend/digiquant-web/components/landing/OlympusMark.tsx
+cloudflare/dashboard/public/icons/dashboard-app-dark.svg
+cloudflare/digiquant-web/components/landing/OlympusMark.tsx
 ```
 
-Existing marketing already uses the *box* metaphor. From `frontend/digiweb/design/COPY_GUIDE.md`:
+Existing marketing already uses the *box* metaphor. From `cloudflare/digiweb/design/COPY_GUIDE.md`:
 
 > digiquant: “A quant hedge fund. *In a box you own.*”
 > Primary CTA on digiquant.io: `open olympus`
@@ -63,12 +63,12 @@ Treat “rename everything” as **thousands of edits across two branch hops**, 
 | Surface | Current | Notes |
 |---------|---------|-------|
 | Public URL | `https://digiquant.io/olympus/` | Next `basePath: '/olympus'`; static export to `dist/olympus/` |
-| Page title / PWA name | `Olympus — digiquant` | `frontend/dashboard/app/layout.tsx` |
+| Page title / PWA name | `Olympus — digiquant` | `cloudflare/dashboard/app/layout.tsx` |
 | Landing CTA | `open olympus` / “Open Olympus” | SiteNav, hero, closing CTA, copy guide |
 | Landing pipeline scene | Atlas → Hermes → Kairos | `PipelineScene.tsx` — the only place users still see subsystem brands as names |
 | Auth | GitHub OAuth app `digiquant olympus`; callback `/olympus/auth/callback/` | Cloudflare Access still on `/olympus/*` until cutover |
 | Broker OAuth | Alpaca redirect `/olympus/settings/brokers/callback/` | Must stay in lockstep with the public path |
-| CSP / `_headers` | scoped to `/olympus*` | `frontend/dashboard/lib/security-headers.mjs` |
+| CSP / `_headers` | scoped to `/olympus*` | `cloudflare/dashboard/lib/security-headers.mjs` |
 | Vision / copy | `docs/vision/olympus.md`, COPY_GUIDE proper-noun list | Product names in prose are currently Olympus, Atlas, Hermes |
 
 ### 2.2 Runtime identifiers (change later, or never)
@@ -79,7 +79,7 @@ Treat “rename everything” as **thousands of edits across two branch hops**, 
 | CLI entry | `python -m digiquant.olympus.hermes.chain` | Cron + `pipeline-olympus.yml`. Alias the old module if renamed. |
 | Env vars | Canonical `DIGIQUANT_*` with retired `OLYMPUS_*` / `KAIROS_*` / `ATLAS_*` aliases (`envcompat.py`). Public dashboard keys are `NEXT_PUBLIC_DASHBOARD_*`. |
 | CSS | `.oly-*` (~20 classes), `.accent-atlas`, `.olympus-mark` | Keep `.oly-` as an internal prefix. Users never see it. |
-| npm | workspace folder `frontend/dashboard`, package name `dashboard` | Shipped with wave 3. |
+| npm | workspace folder `cloudflare/dashboard`, package name `dashboard` | Shipped with wave 3. |
 | CI | `test-dashboard.yml` (was `test-olympus.yml`), `pipeline-olympus.yml`, `test-atlas-graph.yml`, `validate-olympus-pools.yml`, `pipeline-atlas-metrics.yml` | Frontend workflow renamed with the folder. Pipeline names stay until wave 4. |
 | Config | `config/olympus_models.yaml` | Internal; rename with the Python package. |
 | Phase IDs | A0–A4, H1–H9 | **Keep.** These are graph coordinates, not brands. |
@@ -115,7 +115,7 @@ Replace four brands with **one product name + three job words**.
 
 | Today | User-facing after | Code (eventual) |
 |-------|-------------------|-----------------|
-| olympus | **\<product\>** (see §4) | `frontend/<product>/`, later `digiquant.<product>` |
+| olympus | **\<product\>** (see §4) | `cloudflare/<product>/`, later `digiquant.<product>` |
 | atlas | **research** | `…/research/` (today `atlas/`) |
 | hermes | **portfolio** (or deliberation, if you want the PM loop distinguished from the book) | `…/portfolio/` (today `hermes/`) |
 | kairos | **execution** | `…/execution/` (today `kairos/`) — human gate |
@@ -199,7 +199,7 @@ Ship **copy before paths, paths before packages, packages before tables**. Front
 | **0** | Lock the name. File the ADR. Open the issue pack. | — | Human |
 | **1** | User-facing copy only: titles, CTAs, landing pipeline labels (research / portfolio / execution), vision docs, COPY_GUIDE. **URL stays `/olympus/`.** | Low | Copy review |
 | **2** | Public path + redirects + OAuth + Access + Alpaca callback + CSP. `basePath` + `dist/<name>/`. | Med — every redirect and vendor console | Human (auth redirects) |
-| **3** | `frontend/dashboard` folder + npm workspace name. Keep `.oly-*` CSS. | Med | one-hop `develop` |
+| **3** | `cloudflare/dashboard` folder + npm workspace name. Keep `.oly-*` CSS. | Med | one-hop `develop` |
 | **4** | Python package / CLI / CI workflow names. Compat import shims for one release. | High | two-hop `module/digiquant` |
 | **5** | Operator secrets/flags: canonical `DIGIQUANT_*` with retired `OLYMPUS_*` / `KAIROS_*` / `ATLAS_*` aliases. CLI paths `scripts/digiquant_*.py`. Prefer the new names in new env and docs. | Med | ops |
 | **never** | Rewrite old SQL migrations, ADR bodies, issue titles, or `olympus_*` / `atlas_run_diagnostics` table names. | — | — |
@@ -217,7 +217,7 @@ Keep the old path as a permanent alias until vendor consoles (GitHub OAuth, Supa
 
 ### Tests per wave
 
-- Wave 1–3: `cd frontend/dashboard && npm run test && npm run build`; landing copy grep; `make doc-check`
+- Wave 1–3: `cd cloudflare/dashboard && npm run test && npm run build`; landing copy grep; `make doc-check`
 - Wave 4: `pytest -m unit tests/dq/olympus tests/dq/atlas tests/dq/hermes tests/dq/olympus/kairos`
 - Do not run Nautilus-heavy `make test-unit` on Linux as the rename signal (SIGABRT #42)
 

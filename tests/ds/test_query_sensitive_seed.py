@@ -72,7 +72,7 @@ def test_stub_ingest_is_query_sensitive_with_diverse_corpus(
 @pytest.mark.unit
 def test_profile_a_seed_dir_has_diverse_paths() -> None:
     """Structure check for the CF stack seed (counts + unique filenames)."""
-    seed = Path("frontend/digithings-stack-cloudflare/container/seed/digithings_docs")
+    seed = Path("cloudflare/digithings-stack-cloudflare/container/seed/digithings_docs")
     if not seed.is_dir():
         pytest.skip("seed dir not present in this checkout")
     files = sorted(p.name for p in seed.glob("*.md"))

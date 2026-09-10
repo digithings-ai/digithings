@@ -10,7 +10,7 @@ day: the assistant-ui + AI SDK v7 + standard data-parts implementation is
 Supersedes [ADR-0027](0027-opencode-digichat-cli-foundation.md).
 
 **Release line (owner, 2026-09-05):** the published package is
-`frontend/digichat` **1.4.0**. Non-UI BFF/auth/embed-policy work may still
+`cloudflare/digichat` **1.4.0**. Non-UI BFF/auth/embed-policy work may still
 ship as **1.5** on `develop`. Do not merge the 2.0 UI/stream migration into
 `develop` until a 2.0 release is intended — release-please on `develop` would
 otherwise fold it into 1.5 or force a major too early. Do not add 1.x UI
@@ -50,7 +50,7 @@ the repository moved from `sst/opencode` to `anomalyco/opencode`. Carrying a
 branded fork across that velocity is not defensible.
 
 The existing delivery and code split also argues against replacing the web
-foundation. `frontend/digichat` plus `frontend/digichat-ui` contain 18,622
+foundation. `cloudflare/digichat` plus `cloudflare/digichat-ui` contain 18,622
 production/config lines; in the Next.js app approximately 47% is browser
 presentation and 53% is API routes, adapters, auth, persistence, and embed
 policy. The genuinely visual part of `digichat-ui` is approximately 2,300–2,600
