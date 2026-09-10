@@ -49,6 +49,7 @@ _CALL_TIMEOUT_S = 30.0
 _MAX_MCP_JSON = 16384
 _MAX_TOKEN = 4096
 _AUTH_KINDS = frozenset({"bearer", "oauth"})
+_AUTH_HEADER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,40}$")
 
 _cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="digi-mcp")
@@ -185,14 +186,26 @@ def _auth_fields(item: dict[str, Any]) -> dict[str, str]:
     token = str(item.get("token") or "").strip()
     if token and len(token) <= _MAX_TOKEN:
         extra["token"] = token
+    # Operator-only (#3841) — the BFF never lets a session overlay set this.
+    auth_header = str(item.get("authHeader") or "").strip()
+    if auth_header and _AUTH_HEADER_RE.match(auth_header):
+        extra["authHeader"] = auth_header
     return extra
 
 
 def mcp_http_headers(server: dict[str, str]) -> dict[str, str] | None:
-    """Authorization header for Streamable HTTP. Never log the token."""
+    """Auth header for Streamable HTTP. Never log the token.
+
+    Defaults to ``Authorization: Bearer <token>``. An operator-declared
+    ``authHeader`` (#3841) sends the raw token under that header name
+    instead — e.g. DataTap's MCP server expects ``X-API-Key``.
+    """
     token = (server.get("token") or "").strip()
     if not token:
         return None
+    auth_header = (server.get("authHeader") or "").strip()
+    if auth_header and _AUTH_HEADER_RE.match(auth_header):
+        return {auth_header: token}
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -200,7 +213,8 @@ def mcp_list_cache_key(server: dict[str, str]) -> str:
     """Cache identity includes a token fingerprint so auth changes miss."""
     token = (server.get("token") or "").strip()
     ident = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16] if token else "-"
-    return f"{server.get('id', '')}|{server.get('url', '')}|{ident}"
+    auth_header = (server.get("authHeader") or "").strip()
+    return f"{server.get('id', '')}|{server.get('url', '')}|{ident}|{auth_header}"
 
 
 def parse_mcp_servers_json(raw: str | None) -> list[dict[str, str]]:

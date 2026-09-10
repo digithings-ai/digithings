@@ -60,6 +60,58 @@ def _clip_tool_arguments(args: dict[str, Any]) -> dict[str, Any]:
     return clipped
 
 
+_MAX_TOOL_RESULT_CHARS = 12_000
+
+
+def _clip_scalar(val: Any) -> Any | None:
+    if isinstance(val, str):
+        stripped = val.strip()
+        return stripped[:2000] or None
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, int | float):
+        return val if abs(val) != float("inf") and val == val else None
+    return None
+
+
+def _clip_tool_result(result: Any, _depth: int = 0) -> Any | None:
+    """Size-capped tool result for the generic BFF tool-row UI.
+
+    Generic MCP tools (unlike retrieval tools) had no completion trace, so the
+    BFF left their rows "running" until end-of-stream with no result to show.
+    Scalars pass (capped); lists/dicts recurse two levels with item/key caps —
+    enough for typical MCP payloads (list of flat records). Anything deeper
+    (nested blobs, None) is dropped so output stays JSON-safe.
+    """
+    if _depth > 2:
+        return _clip_scalar(result)
+    if isinstance(result, dict):
+        out: dict[str, Any] = {}
+        for i, (key, val) in enumerate(result.items()):
+            if i >= 32 or not isinstance(key, str) or not key.strip():
+                continue
+            if key == "rag_sources":
+                continue
+            clipped = _clip_tool_result(val, _depth + 1)
+            if clipped is None:
+                continue
+            if isinstance(clipped, str) and not clipped.strip():
+                continue
+            out[key.strip()] = clipped
+        return out or None
+    if isinstance(result, list):
+        out_list: list[Any] = []
+        for item in result[:50]:
+            clipped = _clip_tool_result(item, _depth + 1)
+            if clipped is None:
+                continue
+            if isinstance(clipped, str) and not clipped.strip():
+                continue
+            out_list.append(clipped)
+        return out_list or None
+    return _clip_scalar(result)
+
+
 def _audit_digi_kwargs(req: WorkflowRequest) -> dict[str, str]:
     out: dict[str, str] = {}
     if req.digi_trace_key_prefix:
@@ -121,7 +173,7 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     initial["enable_web_search"] = bool(req.enable_web_search)
     # Unconditional — empty list must clear a prior tenant's MCP URLs.
     initial["mcp_servers"] = [
-        s.model_dump(exclude_none=True)
+        s.model_dump(exclude_none=True, by_alias=True)
         if hasattr(s, "model_dump")
         else {"id": s["id"], "url": s["url"]}
         for s in (req.mcp_servers or [])
@@ -566,6 +618,50 @@ def run_digigraph_workflow_streaming(
                             request_id=trace_ctx["request_id"],
                             session_id=trace_ctx["session_id"],
                             payload=rag_payload,
+                        ).model_dump(),
+                    )
+                )
+            elif name:
+                # Generic (non-retrieval) tool completion — e.g. MCP tools.
+                # Previously only retrieval tools emitted a completion trace,
+                # so the BFF left every other tool row "running" until
+                # end-of-stream with an empty output. Emit a clipped result
+                # so the row completes the moment the tool returns.
+                failed = bool(data.get("error")) or data.get("status") == "failed"
+                generic_payload: dict[str, Any] = {
+                    "tool": name,
+                    "status": "failed" if failed else "completed",
+                }
+                queued = pending_tool_args.get(name)
+                if queued:
+                    generic_payload["arguments"] = queued.pop(0)
+                if "query" in data and isinstance(data["query"], str) and data["query"].strip():
+                    generic_payload["query"] = data["query"].strip()
+                result_data = {k: v for k, v in data.items() if k != "name"}
+                clipped_result = _clip_tool_result(result_data)
+                if clipped_result is not None:
+                    rendered = clipped_result
+                    try:
+                        if len(json.dumps(clipped_result)) > _MAX_TOOL_RESULT_CHARS:
+                            rendered = {
+                                "truncated": True,
+                                "preview": json.dumps(clipped_result)[
+                                    : _MAX_TOOL_RESULT_CHARS - 100
+                                ]
+                                + "… [truncated]",
+                            }
+                    except (TypeError, ValueError):
+                        rendered = {"preview": str(clipped_result)[:2000]}
+                    generic_payload["result"] = rendered
+                emit(
+                    (
+                        "trace",
+                        TraceEventV1(
+                            type="tool_result",
+                            workflow_id=trace_ctx["workflow_id"],
+                            request_id=trace_ctx["request_id"],
+                            session_id=trace_ctx["session_id"],
+                            payload=generic_payload,
                         ).model_dump(),
                     )
                 )

@@ -183,6 +183,9 @@ function writeToolOutput(
     ...rememberInput(ctx, id, span),
     ...extra,
   };
+  // Generic tool result (e.g. MCP payload): the row's Result pane renders
+  // this as JSON, and its arrival is what flips the row to completed.
+  if (span.toolResult !== undefined) output.result = span.toolResult;
   const started = ctx.startedAt.get(id);
   if (started !== undefined) {
     output.durationMs = Math.max(0, Date.now() - started);

@@ -115,6 +115,7 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
             url=s["url"],
             auth=s.get("auth") or None,
             token=s.get("token") or None,
+            auth_header=s.get("authHeader") or None,
         )
         for s in mcp_servers
     ]

@@ -848,8 +848,13 @@ list when the provider requires one. PaywallCard / ChatShell still use `ByokCliF
 (not localStorage). No sign-in is required for these session prefs.
 
 **Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default? }` is
-forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?}`). **Operator URLs never reach the
-browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip them). `/tools` lists every
+forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?}`). **Operator URLs never reach the
+browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip `url`/`token`/`tokenEnv`/`authHeader`, keeping only
+`id`/`label`/`default`). An operator server may set a static `token` (inline) or `tokenEnv` (resolved from the
+deploy environment by `loader.ts`, inline `token` wins if both are set) plus an optional `authHeader` — the outbound
+header name for that token, e.g. `X-API-Key` for MCP servers that don't speak `Authorization: Bearer` (DataTap's,
+`#3841`). `authHeader` is operator-only: it has no counterpart on the session-overlay schema, so a client can never
+set or override it — only the operator/token pairing on the same YAML row can. `/tools` lists every
 connected catalog + MCP tool as On/Off (each is also a slash command). `/mcp` lists MCP
 tools with status Active / Disabled / Needs auth; Enter opens the session JSON and field
 editors (including bearer paste). When `auth` is `oauth` and the token is empty, **Authenticate**
@@ -869,7 +874,11 @@ mutate language/model/effort/tools/MCP; `session_upsert_mcp` cannot plant a new 
 when `allowUserMcp` is false (operator token attach still works). The client applies them to `EmbedChatPrefsApi`.
 `X-Digi-Effort` (low/medium/high) is forwarded to digigraph. digisearch / digivault / web_search
 stay orchestrator tools (HTTP to the verticals), not browser MCP. DataTap-style installs add
-extra servers in YAML (see `config/examples/datatap-mcp.yaml`).
+extra servers in YAML (see `config/examples/datatap-mcp.yaml`). The trial-tenant
+variant (per-tenant container + dev MCP server + `X-API-Key` static auth) is
+`config/examples/datatap-trial-test.yaml`, deployed per
+`config/examples/datatap-trial-deploy.md` — that doc, not this section, is the
+tenant-rollout reference.
 
 In-iframe “ask digichat” chrome is omitted on the first-party skin; outer launcher title /
 new chat / close and marketing footer attribution stay. Signed-in ChatShell keeps `/clear`
@@ -1257,10 +1266,15 @@ coerces AI SDK `ModelMessage` content to plain strings to avoid digigraph's stri
 
 digigraph SSE frames carry an optional `digigraph_trace` field on each
 `choices[0].delta`. The trace path maps typed payloads (`tool_call`,
-`rag_sources`, `graph_update`, and opaque labels) through `mapDigigraphTraceToSpans` and emits
+`tool_result`, `rag_sources`, `graph_update`, and opaque labels) through `mapDigigraphTraceToSpans` and emits
 only standard tool / `source-*` / reasoning / `data-status` parts (`writeStandardActivity`).
 Each tool invocation gets its own `toolCallId` (FIFO per tool name). Input JSON is pretty-printed on the wire (`tool-input-delta`); retrieve output is `{ query, documents, hitCount, durationMs }`
-with document snippets/bodies at `activityDetail: full`. Vault search `rag_sources` traces map through `mapDigivaultSearchNotes` (not the digisearch retrieve-with-no-docs path). A failed vault invoke is `execute_tool`/`failed`, never `{ hitCount: 0 }`. The website-like dogfood host
+with document snippets/bodies at `activityDetail: full`. Generic (non-retrieval)
+tool output is `{ input…, result, durationMs }` where `result` is the clipped MCP
+payload — the `tool_result` trace arrives the moment the tool returns, so the row
+completes mid-stream with its args + JSON Result pane (no per-tool UI;
+`ToolFallback` renders both). `toolResult` passes the `labels` detail gate
+untouched (tenant's own tool output for the tenant's own user). Vault search `rag_sources` traces map through `mapDigivaultSearchNotes` (not the digisearch retrieve-with-no-docs path). A failed vault invoke is `execute_tool`/`failed`, never `{ hitCount: 0 }`. The website-like dogfood host
 (`config/examples/digithings-ai-embed.yaml`) sets `gate.activityDetail: full` and `backend.vaultPathPrefix: clients/digithings` so D1 FTS is scoped and chunks are
 not replaced by `{ documentsWithheld: true }`. Stable `toolName` values remain the exact MCP / backend tool ids. Tool rows render display titles derived client-side via `toolRowTitle(toolName, args)` — method-aware for `digisearch` / `digisearch_*` (`digisearch semantic`, `digisearch keyword`, or `digisearch hybrid` from the `mode` / `search_mode` / `search_type` args; `digisearch fetch all (<method>)` and `digisearch research (<method>)` for those variants), humanized for vault and web-search tools. The gallery-thread fallback (`humanizeToolName` in `@digithings/web`) implements the same contract from `(toolName, argsText)`. (The streamed `tool-input-start` title is dropped by the assistant-stream / assistant-ui converters before render, so fallbacks must derive the label themselves; provider span labels such as the Foundry `Searching knowledge base…` progress row still reach the wire but neither fallback surface displays them.) Each reasoning burst between tool rounds gets its own `reasoning-start` id so later thinking is not appended into the first block. `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are auto-completed at
 stream end so ordinary retrieve / get_note / search_notes never sit on Allow/Deny.
