@@ -94,3 +94,12 @@ export function providerModelChoices(
   }
   return [...rows, custom];
 }
+
+/** House CI picker until BYOK is connected; then that provider's catalog presets. */
+export function sessionPickerModels(
+  house: readonly string[],
+  provider?: BYOKProvider | null,
+): readonly string[] {
+  if (provider) return byokModelPresets(provider);
+  return house;
+}

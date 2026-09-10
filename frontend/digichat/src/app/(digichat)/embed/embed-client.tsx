@@ -363,9 +363,13 @@ function EmbedChat({
   chatPrefsRef.current = chatPrefs;
   const getResponseLanguage = useCallback(() => chatPrefsRef.current.language, []);
   const getSelectedModel = useCallback(() => {
+    if (byokIsSet) {
+      const bound = byokModel.trim();
+      if (bound) return bound;
+    }
     const id = chatPrefsRef.current.model.trim();
     return id || undefined;
-  }, []);
+  }, [byokIsSet, byokModel]);
   const planProofRef = useRef(planProof);
   // eslint-disable-next-line react-hooks/refs -- send-time HMAC proof (#1339)
   planProofRef.current = planProof ?? null;
@@ -1213,6 +1217,14 @@ function EmbedChat({
           }}
           onActivateProvider={showByok ? onByokSaved : undefined}
           onClearProvider={showByok ? clearByokKey : undefined}
+          onPickSessionModel={
+            byokIsSet
+              ? (id) => {
+                  setByokKey(byokKey, byokProvider, id);
+                  setChatPrefs((p) => ({ ...p, model: id }));
+                }
+              : undefined
+          }
           providerActive={byokIsSet ? { provider: byokProvider, model: byokModel } : null}
           initialProvider={byokIsSet ? byokProvider : undefined}
           providerSeed={providerSeed}
