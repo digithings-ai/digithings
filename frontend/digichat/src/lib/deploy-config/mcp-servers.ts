@@ -142,7 +142,14 @@ export function isAllowedMcpServerUrl(raw: string): boolean {
   return !hostnameIsBlocked(u.hostname);
 }
 
-export type McpServerForward = { id: string; url: string };
+export type McpServerForward = {
+  id: string;
+  url: string;
+  /** Operator-static secret, already resolved by the loader (#3841). */
+  token?: string;
+  /** Custom outbound header name for `token`, e.g. "X-API-Key" (#3841). */
+  authHeader?: string;
+};
 
 export type McpSessionOverlayItem = {
   id: string;
@@ -156,6 +163,8 @@ export type McpUpstreamServer = {
   url: string;
   auth?: string;
   token?: string;
+  /** Operator-only — session overlay can never set this (#3841). */
+  authHeader?: string;
 };
 
 const MCP_AUTH = new Set(["none", "bearer", "oauth"]);
@@ -189,7 +198,13 @@ export function operatorMcpServersForUpstream(
     if (!MCP_ID.test(id) || seen.has(id)) continue;
     if (!isAllowedMcpServerUrl(s.url)) continue;
     seen.add(id);
-    out.push({ id, url: s.url.trim() });
+    const row: McpServerForward = { id, url: s.url.trim() };
+    const token = s.token?.trim();
+    if (token && token.length <= MAX_TOKEN) {
+      row.token = token;
+      if (s.authHeader?.trim()) row.authHeader = s.authHeader.trim();
+    }
+    out.push(row);
   }
   return out;
 }
@@ -242,7 +257,12 @@ export function mergeMcpSessionOverlay(opts: {
   overlay: readonly McpSessionOverlayItem[];
   allowSessionUrls: boolean;
 }): McpUpstreamServer[] {
-  const out: McpUpstreamServer[] = opts.operator.map((s) => ({ id: s.id, url: s.url }));
+  const out: McpUpstreamServer[] = opts.operator.map((s) => {
+    const row: McpUpstreamServer = { id: s.id, url: s.url };
+    if (s.token) row.token = s.token;
+    if (s.authHeader) row.authHeader = s.authHeader;
+    return row;
+  });
   const byId = new Map(out.map((s) => [s.id, s]));
   let sessionCount = 0;
   for (const item of opts.overlay) {
@@ -275,6 +295,7 @@ export function mcpUpstreamHeaderValue(
       const row: Record<string, string> = { id: s.id, url: s.url };
       if (s.auth) row.auth = s.auth;
       if (s.token) row.token = s.token;
+      if (s.authHeader) row.authHeader = s.authHeader;
       return row;
     }),
   );

@@ -265,7 +265,7 @@ real node executions rather than compiled graph nodes.
 | `research_system_prompt_override` | `str \| None` | Optional research system prompt from tenant corpus map; same unconditional-None write as `digisearch_index`. |
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`). **Must** be declared — LangGraph drops undeclared keys. `research_node` prepends a mapped directive to **this turn's user query** (not the tenant system prompt). See `digigraph.languages`. |
 | `force_tool` | `str \| None` | Per-request locate tool to inject with the user string as its query (`X-Digi-Force-Tool`; aliases `search`/`digisearch`, `docs`/`digivault`). Extra operator MCP **server ids** are accepted too: those hint the model with `tool_choice="required"` rather than injecting a locate. **Must** be declared. |
-| `mcp_servers` | `list[dict]` | Streamable HTTP MCP `{id, url, auth?, token?}` pairs (`X-Digi-Mcp-Servers` after BFF merge). **Must** be declared. Always overwritten from the BFF header (empty list clears a prior tenant). URLs never come from an untrusted JSON body. Tokens are never logged. |
+| `mcp_servers` | `list[dict]` | Streamable HTTP MCP `{id, url, auth?, token?, authHeader?}` pairs (`X-Digi-Mcp-Servers` after BFF merge). **Must** be declared. Always overwritten from the BFF header (empty list clears a prior tenant). URLs never come from an untrusted JSON body. Tokens are never logged. `authHeader` is operator-only (#3841), never session-overlay-settable. |
 | `disabled_tools` | `list[str] \| None` | Catalog ids to hide this turn (`X-Digi-Disabled-Tools`), including extra MCP server ids. **Must** be declared. |
 | `effort` | `str \| None` | Per-request reasoning effort (`X-Digi-Effort`: low/medium/high). **Must** be declared. |
 | `supervisor_depth_remaining` | `int` | Depth budget for supervisor loop |
@@ -293,7 +293,7 @@ Pydantic v2 model for `POST /workflow` and internal use:
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`); see 4.1 |
 | `force_tool` | `str \| None` | Optional locate tool (`X-Digi-Force-Tool`); aliases `search`/`digisearch`, `docs`/`digivault`. Catalog locate is injected (the model is not hinted). Extra operator MCP server ids hint + `tool_choice="required"` instead. |
 | `disabled_tools` | `list[str] \| None` | Catalog ids to hide this turn (`X-Digi-Disabled-Tools`). Built-in aliases (digisearch, digivault) plus extra operator MCP server ids. Unknown tokens ignored. Always overwritten from the header on HTTP. Applied after the allowlist; `force_tool` is unioned back so a one-shot `/digisearch <query>` still locates when the toggle is off. |
-| `mcp_servers` | `list[McpServerRef] \| None` | Streamable HTTP MCP servers (`X-Digi-Mcp-Servers` after BFF overlay merge). Client-writable on the model but **never trusted as-is**: HTTP handlers overwrite from the BFF header (and `DIGI_MCP_SERVERS` env). Optional `auth`/`token`. Empty list clears a prior tenant. |
+| `mcp_servers` | `list[McpServerRef] \| None` | Streamable HTTP MCP servers (`X-Digi-Mcp-Servers` after BFF overlay merge). Client-writable on the model but **never trusted as-is**: HTTP handlers overwrite from the BFF header (and `DIGI_MCP_SERVERS` env). Optional `auth`/`token`. `auth_header` (wire alias `authHeader`) is operator-only — never settable via the session overlay (#3841). Empty list clears a prior tenant. |
 | `effort` | `str \| None` | Per-request reasoning effort (`X-Digi-Effort`: low/medium/high). Always overwritten from the header on HTTP. |
 | `enable_web_search` | `bool` | Opt-in `web_search` (`X-Digi-Enable-Web-Search`); default off at this API. Embed sessions send it when the tenant allows and the session pref is on. |
 | `digi_subject` | `str \| None` | Client-writable, but never trusted as-is: `server.py`'s `_digi_fields_from_request` unconditionally overwrites it with the verified `auth.subject` (or clears it to `None` when auth is absent or its subject claim is empty) before it reaches graph state — see §6.10 |
@@ -637,9 +637,20 @@ toggle is off.
 
 Operator MCP tools are listed from Streamable HTTP servers declared by the
 trusted BFF (`X-Digi-Mcp-Servers`, optionally merged with `DIGI_MCP_SERVERS`).
-Names are prefixed `{server_id}__{tool}`. Optional `Authorization: Bearer` is
-passed into `streamablehttp_client` when the BFF overlay includes a token. The
-list-tools cache key fingerprints the token (never the raw value). `is_allowed_mcp_url` refuses
+Names are prefixed `{server_id}__{tool}`. `Authorization: Bearer` is
+passed into `streamablehttp_client` by default when the BFF overlay includes a
+token. An operator-only `authHeader` (deploy YAML `mcp.servers[].authHeader`,
+#3841) sends the token under that header name instead — e.g. `X-API-Key` for
+MCP servers (such as DataTap's) that don't speak Bearer auth. `authHeader` is
+never settable via the session overlay: digichat's `MCP_ID`-validated,
+SSRF-guarded overlay type has no such field, and the client projection
+(`toDigichatClientConfig`) strips it along with `url`/`token`/`tokenEnv`
+before anything reaches the browser. Server-side, `mcp_http_headers()`
+(`orchestration/mcp_client.py`) picks the header name; `McpServerRef.auth_header`
+(alias `authHeader`) carries it through `WorkflowRequest.mcp_servers` in the
+typed HTTP path. The list-tools cache key fingerprints the token (never the
+raw value) and folds in the header name so switching auth schemes busts the
+cache. `is_allowed_mcp_url` refuses
 loopback, link-local, RFC1918/ULA, metadata, IPv4-mapped, decimal/hex IPv4
 literals, and DNS-rebinding suffixes (`nip.io` / `sslip.io` / `xip.io`)
 without live DNS (TOCTOU). Docker hostnames such as `datatap-mcp` stay allowed.

@@ -315,6 +315,53 @@ describe("disclosure helpers", () => {
   });
 });
 
+describe("McpServerSchema operator-static auth (#3841)", () => {
+  it("accepts token/tokenEnv/authHeader on an operator MCP server", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        mcp: {
+          servers: [
+            {
+              id: "datatap",
+              url: "https://mcp.datatap.example/mcp",
+              tokenEnv: "DATATAP_MCP_TOKEN",
+              authHeader: "X-API-Key",
+            },
+          ],
+        },
+      },
+    });
+    const server = cfg.deployment?.mcp?.servers?.[0];
+    expect(server?.tokenEnv).toBe("DATATAP_MCP_TOKEN");
+    expect(server?.authHeader).toBe("X-API-Key");
+    expect(server?.token).toBeUndefined();
+  });
+
+  it("rejects a malformed authHeader value", () => {
+    expect(() =>
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "acme",
+          backend: { type: "digigraph" },
+          mcp: {
+            servers: [
+              {
+                id: "datatap",
+                url: "https://mcp.datatap.example/mcp",
+                authHeader: "bad header!",
+              },
+            ],
+          },
+        },
+      }),
+    ).toThrow();
+  });
+});
+
 describe("allowlistModelId", () => {
   it("passes through when available is empty", () => {
     expect(allowlistModelId(undefined, "any-model")).toBe("any-model");

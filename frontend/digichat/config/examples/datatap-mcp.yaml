@@ -41,6 +41,13 @@ deployment:
         url: https://mcp.datatap.example/mcp
         label: DataTap
         default: true
+        # DataTap's MCP server authenticates via a custom header, not
+        # `Authorization: Bearer` — set authHeader alongside a token or
+        # tokenEnv (#3841). tokenEnv is resolved from the deploy environment
+        # at load time and never committed; an inline `token` wins if both
+        # are set. Neither is ever projected to the browser.
+        tokenEnv: DATATAP_MCP_TOKEN
+        authHeader: X-API-Key
   gate:
     mode: ungated
     activityDetail: labels

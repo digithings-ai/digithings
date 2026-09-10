@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isAllowedMcpServerUrl,
   mcpServersHeaderValue,
+  mcpUpstreamHeaderValue,
   mergeMcpSessionOverlay,
   operatorMcpServersForUpstream,
   resolveMcpOAuthResourceUrl,
@@ -52,6 +53,53 @@ describe("operatorMcpServersForUpstream", () => {
       { id: "datatap", url: "https://mcp.datatap.example/mcp" },
     ]);
     expect(mcpServersHeaderValue(dep)).toContain("datatap");
+  });
+
+  it("carries operator token/authHeader (#3841) into the upstream header", () => {
+    const dep = {
+      slug: "datatap",
+      mcp: {
+        servers: [
+          {
+            id: "datatap",
+            url: "https://mcp.datatap.example/mcp",
+            token: "tenant-static-key",
+            authHeader: "X-API-Key",
+          },
+        ],
+      },
+    } as DigichatDeployment;
+    const forwarded = operatorMcpServersForUpstream(dep);
+    expect(forwarded).toEqual([
+      {
+        id: "datatap",
+        url: "https://mcp.datatap.example/mcp",
+        token: "tenant-static-key",
+        authHeader: "X-API-Key",
+      },
+    ]);
+    const header = mcpUpstreamHeaderValue(forwarded);
+    expect(header).toBeDefined();
+    expect(JSON.parse(header ?? "[]")).toEqual([
+      {
+        id: "datatap",
+        url: "https://mcp.datatap.example/mcp",
+        token: "tenant-static-key",
+        authHeader: "X-API-Key",
+      },
+    ]);
+  });
+
+  it("omits authHeader when no operator token is set", () => {
+    const dep = {
+      slug: "datatap",
+      mcp: {
+        servers: [{ id: "datatap", url: "https://mcp.datatap.example/mcp", authHeader: "X-API-Key" }],
+      },
+    } as DigichatDeployment;
+    expect(operatorMcpServersForUpstream(dep)).toEqual([
+      { id: "datatap", url: "https://mcp.datatap.example/mcp" },
+    ]);
   });
 });
 
@@ -105,6 +153,47 @@ describe("mergeMcpSessionOverlay", () => {
         allowSessionUrls: true,
       }),
     ).toEqual([]);
+  });
+
+  it("keeps operator authHeader even when a session overlay overrides the token (#3841)", () => {
+    const merged = mergeMcpSessionOverlay({
+      operator: [
+        {
+          id: "datatap",
+          url: "https://mcp.datatap.example/mcp",
+          token: "operator-static-key",
+          authHeader: "X-API-Key",
+        },
+      ],
+      overlay: [{ id: "datatap", auth: "bearer", token: "visitor-oauth-token" }],
+      allowSessionUrls: false,
+    });
+    expect(merged).toEqual([
+      {
+        id: "datatap",
+        url: "https://mcp.datatap.example/mcp",
+        token: "visitor-oauth-token",
+        authHeader: "X-API-Key",
+        auth: "bearer",
+      },
+    ]);
+  });
+
+  it("session overlay items can never carry an authHeader field through to upstream", () => {
+    // McpSessionOverlayItem has no authHeader field at the type level; this
+    // asserts the runtime behavior matches — an overlay-only id (no operator
+    // entry) never gets an authHeader even if injected via a loose object.
+    const merged = mergeMcpSessionOverlay({
+      operator: [],
+      overlay: [
+        { id: "evil", url: "https://mcp.evil.example/mcp", authHeader: "X-Injected" } as {
+          id: string;
+          url?: string;
+        },
+      ],
+      allowSessionUrls: true,
+    });
+    expect(merged).toEqual([{ id: "evil", url: "https://mcp.evil.example/mcp" }]);
   });
 });
 

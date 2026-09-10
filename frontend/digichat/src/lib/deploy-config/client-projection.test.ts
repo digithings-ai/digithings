@@ -20,6 +20,44 @@ function depWithCatalog(
   } as unknown as DigichatDeployment;
 }
 
+describe("mcp.servers client projection never leaks operator secrets (#3841)", () => {
+  it("drops url/token/tokenEnv/authHeader, keeps only id/label/default", () => {
+    const dep = {
+      slug: "test",
+      chrome: { mode: "embed", theme: "dark" },
+      persistence: "none",
+      auth: "anonymous",
+      features: {},
+      models: { available: [] },
+      gate: { mode: "turn_limited", activityDetail: "labels" },
+      backend: { type: "digigraph" },
+      tools: { allowUserToggle: true, catalog: [] },
+      mcp: {
+        servers: [
+          {
+            id: "datatap",
+            url: "https://mcp.datatap.example/mcp",
+            label: "DataTap",
+            default: true,
+            token: "tenant-static-key",
+            tokenEnv: "DATATAP_MCP_TOKEN",
+            authHeader: "X-API-Key",
+          },
+        ],
+        allowUserServers: false,
+        allowAddForm: false,
+      },
+    } as unknown as DigichatDeployment;
+    const client = toDigichatClientConfig(dep);
+    expect(client.mcp.servers).toEqual([{ id: "datatap", label: "DataTap", default: true }]);
+    const serialized = JSON.stringify(client.mcp.servers);
+    expect(serialized).not.toContain("tenant-static-key");
+    expect(serialized).not.toContain("DATATAP_MCP_TOKEN");
+    expect(serialized).not.toContain("X-API-Key");
+    expect(serialized).not.toContain("mcp.datatap.example");
+  });
+});
+
 describe("projectCatalog omitted-default fail-closed (#3805)", () => {
   it("omitted/undefined default → false; explicit true → true; explicit false → false", () => {
     const client = toDigichatClientConfig(

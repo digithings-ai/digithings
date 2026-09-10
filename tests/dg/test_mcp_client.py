@@ -145,6 +145,76 @@ def test_mcp_cache_key_changes_with_token_and_omits_raw_secret() -> None:
 
 
 @pytest.mark.unit
+def test_parse_mcp_servers_json_keeps_valid_auth_header() -> None:
+    raw = (
+        '[{"id":"datatap","url":"https://mcp.datatap.example/mcp",'
+        '"token":"tok","authHeader":"X-API-Key"}]'
+    )
+    assert parse_mcp_servers_json(raw) == [
+        {
+            "id": "datatap",
+            "url": "https://mcp.datatap.example/mcp",
+            "token": "tok",
+            "authHeader": "X-API-Key",
+        }
+    ]
+
+
+@pytest.mark.unit
+def test_parse_mcp_servers_json_drops_malformed_auth_header() -> None:
+    raw = (
+        '[{"id":"datatap","url":"https://mcp.datatap.example/mcp",'
+        '"token":"tok","authHeader":"bad header!"}]'
+    )
+    parsed = parse_mcp_servers_json(raw)
+    assert parsed == [
+        {"id": "datatap", "url": "https://mcp.datatap.example/mcp", "token": "tok"}
+    ]
+    assert "authHeader" not in parsed[0]
+
+
+@pytest.mark.unit
+def test_mcp_http_headers_uses_custom_auth_header_when_present() -> None:
+    from digigraph.orchestration.mcp_client import mcp_http_headers
+
+    default = {"id": "s", "url": "https://mcp.example/mcp", "token": "tok"}
+    assert mcp_http_headers(default) == {"Authorization": "Bearer tok"}
+
+    custom = {
+        "id": "datatap",
+        "url": "https://mcp.datatap.example/mcp",
+        "token": "tenant-static-key",
+        "authHeader": "X-API-Key",
+    }
+    assert mcp_http_headers(custom) == {"X-API-Key": "tenant-static-key"}
+
+    no_token = {"id": "s", "url": "https://mcp.example/mcp", "authHeader": "X-API-Key"}
+    assert mcp_http_headers(no_token) is None
+
+    malformed_header = {
+        "id": "s",
+        "url": "https://mcp.example/mcp",
+        "token": "tok",
+        "authHeader": "bad header!",
+    }
+    assert mcp_http_headers(malformed_header) == {"Authorization": "Bearer tok"}
+
+
+@pytest.mark.unit
+def test_mcp_cache_key_changes_with_auth_header() -> None:
+    from digigraph.orchestration.mcp_client import mcp_list_cache_key
+
+    bearer = {"id": "s", "url": "https://mcp.example/mcp", "token": "tok"}
+    custom = {
+        "id": "s",
+        "url": "https://mcp.example/mcp",
+        "token": "tok",
+        "authHeader": "X-API-Key",
+    }
+    assert mcp_list_cache_key(bearer) != mcp_list_cache_key(custom)
+
+
+@pytest.mark.unit
 def test_call_prefixed_tool_passes_server_with_token() -> None:
     from digigraph.orchestration.mcp_client import call_prefixed_tool
 
@@ -176,6 +246,27 @@ def test_http_mcp_servers_keep_token(monkeypatch: pytest.MonkeyPatch) -> None:
     assert copied.mcp_servers is not None
     assert copied.mcp_servers[0].token == "tok"
     assert copied.mcp_servers[0].auth == "oauth"
+
+
+@pytest.mark.unit
+def test_http_mcp_servers_keep_auth_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGI_MCP_SERVERS", raising=False)
+    from digigraph.http_api.context import _with_digi_request_context
+
+    req = WorkflowRequest(prompt="hi")
+    request = SimpleNamespace(
+        state=SimpleNamespace(digi_bearer=None, digi_auth=None),
+        headers={
+            "X-Digi-Mcp-Servers": (
+                '[{"id":"datatap","url":"https://mcp.datatap.example/mcp",'
+                '"token":"tenant-static-key","authHeader":"X-API-Key"}]'
+            ),
+        },
+    )
+    copied = _with_digi_request_context(request, req)
+    assert copied.mcp_servers is not None
+    assert copied.mcp_servers[0].token == "tenant-static-key"
+    assert copied.mcp_servers[0].auth_header == "X-API-Key"
 
 
 @pytest.mark.unit

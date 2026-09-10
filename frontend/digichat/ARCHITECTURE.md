@@ -833,8 +833,13 @@ list when the provider requires one. PaywallCard / ChatShell still use `ByokCliF
 (not localStorage). No sign-in is required for these session prefs.
 
 **Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default? }` is
-forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?}`). **Operator URLs never reach the
-browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip them). `/tools` lists every
+forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?}`). **Operator URLs never reach the
+browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip `url`/`token`/`tokenEnv`/`authHeader`, keeping only
+`id`/`label`/`default`). An operator server may set a static `token` (inline) or `tokenEnv` (resolved from the
+deploy environment by `loader.ts`, inline `token` wins if both are set) plus an optional `authHeader` — the outbound
+header name for that token, e.g. `X-API-Key` for MCP servers that don't speak `Authorization: Bearer` (DataTap's,
+`#3841`). `authHeader` is operator-only: it has no counterpart on the session-overlay schema, so a client can never
+set or override it — only the operator/token pairing on the same YAML row can. `/tools` lists every
 connected catalog + MCP tool as On/Off (each is also a slash command). `/mcp` lists MCP
 tools with status Active / Disabled / Needs auth; Enter opens the session JSON and field
 editors (including bearer paste). When `auth` is `oauth` and the token is empty, **Authenticate**

@@ -176,6 +176,87 @@ deployment:
     expect(cfg.deployment?.token).toBe("from_env");
   });
 
+  it("resolves mcp.servers[].tokenEnv into .token on deployment (#3841)", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: acme
+  backend:
+    type: digigraph
+  mcp:
+    servers:
+      - id: datatap
+        url: https://mcp.datatap.example/mcp
+        tokenEnv: DATATAP_MCP_TOKEN
+        authHeader: X-API-Key
+`,
+      env: { DATATAP_MCP_TOKEN: "resolved-secret" },
+    });
+    const server = cfg.deployment?.mcp?.servers?.[0];
+    expect(server?.token).toBe("resolved-secret");
+    expect(server?.authHeader).toBe("X-API-Key");
+  });
+
+  it("leaves mcp.servers[].token unset when tokenEnv is missing from env (#3841)", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: acme
+  backend:
+    type: digigraph
+  mcp:
+    servers:
+      - id: datatap
+        url: https://mcp.datatap.example/mcp
+        tokenEnv: DATATAP_MCP_TOKEN
+`,
+      env: {},
+    });
+    expect(cfg.deployment?.mcp?.servers?.[0]?.token).toBeUndefined();
+  });
+
+  it("does not let tokenEnv override an inline token (#3841)", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: acme
+  backend:
+    type: digigraph
+  mcp:
+    servers:
+      - id: datatap
+        url: https://mcp.datatap.example/mcp
+        token: inline-secret
+        tokenEnv: DATATAP_MCP_TOKEN
+`,
+      env: { DATATAP_MCP_TOKEN: "should-not-win" },
+    });
+    expect(cfg.deployment?.mcp?.servers?.[0]?.token).toBe("inline-secret");
+  });
+
+  it("resolves mcp.servers[].tokenEnv on hosts as well as deployment (#3841)", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+hosts:
+  customer.example:
+    slug: customer
+    backend:
+      type: digigraph
+    mcp:
+      servers:
+        - id: datatap
+          url: https://mcp.datatap.example/mcp
+          tokenEnv: DATATAP_MCP_TOKEN
+`,
+      env: { DATATAP_MCP_TOKEN: "resolved-secret" },
+    });
+    expect(cfg.hosts?.["customer.example"]?.mcp?.servers?.[0]?.token).toBe("resolved-secret");
+  });
+
   it("overlays DIGICHAT_CHROME_SKIN onto deployment", () => {
     const cfg = loadDigichatConfig({
       fileContents: `

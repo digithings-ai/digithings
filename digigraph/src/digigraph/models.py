@@ -227,7 +227,8 @@ class WorkflowRequest(BaseModel):
             "Client-writable on this model but never trusted as-is: HTTP handlers "
             "overwrite from the BFF header (operator YAML plus SSRF-guarded session "
             "overlay, and DIGI_MCP_SERVERS env). URLs never come from an untrusted "
-            "JSON body. Optional auth/token are session overlay only."
+            "JSON body. Optional auth/token are session overlay only; auth_header "
+            "is operator-only, never settable via the session overlay (#3841)."
         ),
     )
     effort: str | None = Field(
@@ -242,12 +243,19 @@ class WorkflowRequest(BaseModel):
 class McpServerRef(BaseModel):
     """Trusted Streamable HTTP MCP server forwarded by the BFF (#3736)."""
 
-    model_config = ConfigDict(extra="forbid")
+    # populate_by_name: auth_header is constructed by its Python field name
+    # (context.py) but dumped by its wire alias `authHeader` (workflow.py).
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
     url: str = Field(..., min_length=1, max_length=2048)
     auth: str | None = Field(None, max_length=16)
     token: str | None = Field(None, max_length=4096)
+    # Operator-only (#3841): custom outbound header name for `token`, e.g.
+    # "X-API-Key". Never settable via the user-facing session overlay.
+    auth_header: str | None = Field(
+        None, max_length=41, pattern=r"^[A-Za-z][A-Za-z0-9-]{0,40}$", alias="authHeader"
+    )
 
 
 class WorkflowResult(BaseModel):
