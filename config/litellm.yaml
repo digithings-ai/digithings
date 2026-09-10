@@ -560,12 +560,6 @@ model_list:
         - api_key
 
   # Ollama local (Docker: ollama:11434)
-  - model_name: ollama/qwen3:8b
-    litellm_params:
-      model: ollama/qwen3:8b
-      api_base: http://ollama:11434
-      configurable_clientside_auth_params:
-        - api_key
   - model_name: ollama/deepseek-r1:14b
     litellm_params:
       model: ollama/deepseek-r1:14b
