@@ -249,12 +249,20 @@ class BitviewClient:
         *,
         start: int | None = None,
         end: int | None = None,
+        allow_derived: bool = False,
     ) -> BitviewFetchResult:
+        """Fetch ``day1`` series. ``FORBIDDEN_SERIES`` (e.g. NUPL) are refused
+
+        by default — a strategy-methodology guard against dual-counting a
+        metric derived from another one already in the composite. Pass
+        ``allow_derived=True`` to fetch them anyway for callers outside the
+        SDCA valuation composite (research, a chatbot agent, ad-hoc lookup).
+        """
         ids = _normalize_ids(series_ids)
         results: dict[str, BitviewSeriesResult] = {}
         allowed: list[str] = []
         for series_id in ids:
-            if series_id.lower() in FORBIDDEN_SERIES:
+            if series_id.lower() in FORBIDDEN_SERIES and not allow_derived:
                 results[series_id] = _forbidden_result(series_id)
             else:
                 allowed.append(series_id)
@@ -339,6 +347,7 @@ def fetch_bitview_series(
     start: int | None = None,
     end: int | None = None,
     base_url: str = BITVIEW_BASE_URL,
+    allow_derived: bool = False,
 ) -> BitviewFetchResult:
     """Fetch v1 series. Always fail-soft. Inject ``session`` in tests (no network)."""
     if session is None and not _fetch_enabled():
@@ -351,7 +360,7 @@ def fetch_bitview_series(
             error=f"{_ENV_FLAG} disabled",
         )
     client = BitviewClient(base_url=base_url, timeout=timeout, session=session, cache_dir=cache_dir)
-    return client.fetch(series_ids, start=start, end=end)
+    return client.fetch(series_ids, start=start, end=end, allow_derived=allow_derived)
 
 
 __all__ = [

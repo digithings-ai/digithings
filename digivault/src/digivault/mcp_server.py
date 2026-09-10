@@ -1,6 +1,6 @@
 """digivault MCP server — exposes vault management as MCP tools for digigraph.
 
-Run: ``python -m digivault.mcp_server`` (streamable HTTP, default 127.0.0.1:8766).
+Run: ``python -m digivault.mcp_server`` (streamable HTTP, default 127.0.0.1:8769).
 Operates on the vault directory named by ``DIGIVAULT_ROOT``.
 
 Tool registration is owned by :mod:`digivault.tool_dispatch` — this module only
@@ -36,11 +36,13 @@ register_mcp_tools(mcp, _open_vault)
 def run_mcp(
     transport: str = "streamable-http",
     host: str | None = None,
-    port: int = 8766,
+    port: int = 8769,
 ) -> None:
-    """Run the MCP server. Default: streamable HTTP on 127.0.0.1:8766."""
+    """Run the MCP server. Default: streamable HTTP on 127.0.0.1:8769."""
     bind = host or os.environ.get("DIGIVAULT_MCP_HOST", "127.0.0.1")
-    mcp.run(transport=transport, host=bind, port=port)
+    mcp.settings.host = bind
+    mcp.settings.port = port
+    mcp.run(transport=transport)
 
 
 if __name__ == "__main__":  # pragma: no cover
