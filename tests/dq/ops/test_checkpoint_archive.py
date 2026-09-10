@@ -718,22 +718,27 @@ def _seed_ledger(client: FakeClient, keys_sizes: list[tuple[str, int]]) -> None:
 def test_evict_oldest_first_to_low_watermark():
     client = FakeClient()
     _seed_ledger(
-        client, [("r2/a", 4_000_000_000), ("r2/b", 3_000_000_000), ("r2/c", 2_000_000_000)]
+        client,
+        [
+            ("checkpoints/a", 4_000_000_000),
+            ("checkpoints/b", 3_000_000_000),
+            ("checkpoints/c", 2_000_000_000),
+        ],
     )
     store = FakeStore()
-    for key in ("r2/a", "r2/b", "r2/c"):
+    for key in ("checkpoints/a", "checkpoints/b", "checkpoints/c"):
         store.objects[key] = b"x"
     evicted = evict_to_watermark(client, store)
-    assert evicted == ["r2/a"]
+    assert evicted == ["checkpoints/a"]
     assert bucket_usage(client) <= LOW_WATERMARK_BYTES
 
 
 def test_evict_never_touches_latest_run():
     client = FakeClient()
-    _seed_ledger(client, [("r2/latest-x", 9_000_000_000)])
+    _seed_ledger(client, [("checkpoints/latest-x", 9_000_000_000)])
     store = FakeStore()
-    store.objects["r2/latest-x"] = b"x"
-    assert evict_to_watermark(client, store, {"r2/latest-x"}) == []
+    store.objects["checkpoints/latest-x"] = b"x"
+    assert evict_to_watermark(client, store, {"checkpoints/latest-x"}) == []
 
 
 def test_reconcile_removes_dead_ledger_rows():
@@ -750,6 +755,15 @@ def test_reconcile_reports_orphans_without_deleting():
     store.objects["checkpoints/orphan/x.bin"] = b"y"
     assert reconcile_ledger(client, store) == ["checkpoints/orphan/x.bin"]
     assert "checkpoints/orphan/x.bin" in store.objects
+
+
+def test_reconcile_reports_dead_market_data_without_deleting():
+    client = FakeClient()
+    _seed_ledger(client, [("market-data/price/SPY/2026-09-08.parquet", 10)])
+    store = FakeStore()  # no backing object: dead market-data pointer
+    assert reconcile_ledger(client, store) == ["market-data/price/SPY/2026-09-08.parquet"]
+    rows = client.table("archive_objects").select("*").execute().data
+    assert [r["r2_key"] for r in rows] == ["market-data/price/SPY/2026-09-08.parquet"]
 
 
 def test_fetch_thread_rows_two_phase_single_row_statements():
@@ -962,7 +976,7 @@ def test_evict_to_watermark_paginates_and_uses_local_total():
             {
                 "source_table": "checkpoint_blobs",
                 "source_key": {"thread_id": f"t{i:04d}"},
-                "r2_key": f"r2/k{i:04d}",
+                "r2_key": f"checkpoints/k{i:04d}",
                 "sha256": "0" * 64,
                 "size": 10_000_000,
                 "owner": "house",
@@ -971,10 +985,10 @@ def test_evict_to_watermark_paginates_and_uses_local_total():
         ).execute()
     store = FakeStore()
     for i in range(1500):
-        store.objects[f"r2/k{i:04d}"] = b"x"
+        store.objects[f"checkpoints/k{i:04d}"] = b"x"
     evicted = evict_to_watermark(client, store)
     # 15GB total; evict oldest-first until <= 7GB low watermark → 800 rows (8GB).
-    assert evicted == [f"r2/k{i:04d}" for i in range(800)]
+    assert evicted == [f"checkpoints/k{i:04d}" for i in range(800)]
     # The ordered scan paged twice (1000 + 500); no per-row ledger re-selects.
     full_scans = [e for e in client.log if e[0] == "*"]
     assert len(full_scans) == 2

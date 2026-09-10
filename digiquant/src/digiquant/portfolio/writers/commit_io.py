@@ -24,6 +24,7 @@ from digiquant.portfolio.candidates import holdings_from_prior_book
 from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries
 from digiquant.portfolio.risk_envelope import risk_horizon_days
 from digiquant.portfolio.sector_map import sector_bucket
+from digiquant.research.data.queries import r2_backend_enabled, r2_close_rows
 from digiquant.research.decision_log import persist_pending
 from digiquant.research.pretrade_risk_registry import (
     PreTradeRiskRegistryConflict,
@@ -192,27 +193,38 @@ def _interval_price_returns(
     # Per ticker keep the latest close at-or-before the anchor (interval start) and
     # the latest close strictly before run_date (interval end). Small categorical
     # data — batched so a full window for every ticker fits under PostgREST's cap.
+    # Under the R2 backend the same window comes from the sealed generations
+    # (#3780 Task 7b); ``until`` is run_date − 1d to mirror ``.lt(run_date)``.
+    raw_rows: list[dict[str, Any]] = []
+    if r2_backend_enabled():
+        raw_rows = r2_close_rows(
+            tickers=ordered,
+            since=floor,
+            until=run_date - timedelta(days=1),
+        )
+    else:
+        for start in range(0, len(ordered), _NAV_INTERVAL_TICKER_BATCH):
+            resp = (
+                client.table("price_history")
+                .select("date, ticker, close")
+                .in_("ticker", ordered[start : start + _NAV_INTERVAL_TICKER_BATCH])
+                .gte("date", floor)
+                .lt("date", run_date.isoformat())
+                .execute()
+            )
+            raw_rows.extend(list(getattr(resp, "data", None) or []))
     begin: dict[str, tuple[str, float]] = {}
     end: dict[str, tuple[str, float]] = {}
-    for start in range(0, len(ordered), _NAV_INTERVAL_TICKER_BATCH):
-        resp = (
-            client.table("price_history")
-            .select("date, ticker, close")
-            .in_("ticker", ordered[start : start + _NAV_INTERVAL_TICKER_BATCH])
-            .gte("date", floor)
-            .lt("date", run_date.isoformat())
-            .execute()
-        )
-        for row in getattr(resp, "data", None) or []:
-            ticker = row.get("ticker")
-            row_date = row.get("date")
-            close = _opt_float(row.get("close"))
-            if not isinstance(ticker, str) or not isinstance(row_date, str) or close is None:
-                continue
-            if row_date <= anchor_str and row_date > begin.get(ticker, ("", 0.0))[0]:
-                begin[ticker] = (row_date, close)
-            if row_date > end.get(ticker, ("", 0.0))[0]:
-                end[ticker] = (row_date, close)
+    for row in raw_rows:
+        ticker = row.get("ticker")
+        row_date = row.get("date")
+        close = _opt_float(row.get("close"))
+        if not isinstance(ticker, str) or not isinstance(row_date, str) or close is None:
+            continue
+        if row_date <= anchor_str and row_date > begin.get(ticker, ("", 0.0))[0]:
+            begin[ticker] = (row_date, close)
+        if row_date > end.get(ticker, ("", 0.0))[0]:
+            end[ticker] = (row_date, close)
 
     returns: dict[str, float] = {}
     for ticker, (begin_date, begin_close) in begin.items():

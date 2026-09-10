@@ -43,19 +43,42 @@ const indexSource = readFileSync(
   "utf-8",
 );
 
+// MCP-scoped vars (#3780 Task 8): forwarded by DigiQuantMcpContainer.envVars
+// ONLY — never duplicated into DigiStackContainer.envVars (the stack container
+// ignores them; duplication was removed in review finding 6). The first
+// envVars block below is the stack container's, the second the MCP one's.
+const MCP_SCOPED_VARS = new Set([
+  "DIGIQUANT_MARKET_DATA_BACKEND",
+  "FRED_API_KEY",
+  "R2_ACCOUNT_ID",
+  "R2_BUCKET",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
+]);
+
 // Deliberately throws rather than returning an empty match -- a re-indented
 // `envVars = { ... };` (or `Env { ... }`) block must fail loudly, not silently
 // pass every assertion below with zero entries extracted.
-function extractEnvVarsBlock(source) {
-  const block = source.match(/envVars = \{([\s\S]*?)\n {2}\};/);
-  if (!block) {
+function extractAllEnvVarsBlocks(source) {
+  const blocks = [...source.matchAll(/envVars = \{([\s\S]*?)\n {2}\};/g)].map(
+    (m) => m[1],
+  );
+  if (blocks.length === 0) {
     throw new Error("could not locate the `envVars = { ... };` block in index.ts");
   }
-  return block[1];
+  return blocks;
+}
+
+function extractEnvVarsBlock(source) {
+  return extractAllEnvVarsBlocks(source)[0];
+}
+
+function extractEnvVarsRefsFromBody(body) {
+  return [...body.matchAll(/env\.([A-Za-z0-9_]+)/g)].map((m) => m[1]);
 }
 
 function extractEnvVarsRefs(source) {
-  return [...extractEnvVarsBlock(source).matchAll(/env\.([A-Za-z0-9_]+)/g)].map((m) => m[1]);
+  return extractAllEnvVarsBlocks(source).flatMap(extractEnvVarsRefsFromBody);
 }
 
 /**
@@ -72,8 +95,7 @@ function extractEnvVarsRefs(source) {
  * continuation line -- or a key-looking substring inside a quoted JSON
  * default -- for a new top-level key.
  */
-function extractEnvVarsKeyToRef(source) {
-  const body = extractEnvVarsBlock(source);
+function extractEnvVarsKeyToRefFromBody(body) {
   const keyMatches = [...body.matchAll(/^ {4}([A-Za-z_][A-Za-z0-9_]*):/gm)];
   return keyMatches
     .map((match, i) => {
@@ -86,9 +108,16 @@ function extractEnvVarsKeyToRef(source) {
     .filter((pair) => pair !== null);
 }
 
-function extractEnvVarsKeys(source) {
-  const body = extractEnvVarsBlock(source);
+function extractEnvVarsKeyToRef(source) {
+  return extractAllEnvVarsBlocks(source).flatMap(extractEnvVarsKeyToRefFromBody);
+}
+
+function extractEnvVarsKeysFromBody(body) {
   return [...body.matchAll(/^ {4}([A-Za-z_][A-Za-z0-9_]*):/gm)].map((m) => m[1]);
+}
+
+function extractEnvVarsKeys(source) {
+  return extractAllEnvVarsBlocks(source).flatMap(extractEnvVarsKeysFromBody);
 }
 
 function extractEnvInterfaceStringMembers(source) {
@@ -106,12 +135,31 @@ describe("Env / envVars parity", () => {
     // Compare Env members to top-level envVars *keys* (not arbitrary env.*
     // references elsewhere in the block). A typo'd key that still reads
     // env.FOO would pass a refs-only check while never forwarding FOO.
+    // Union of both containers' blocks: MCP-scoped vars live on the MCP
+    // block only (see the duplication check below).
     const envMembers = extractEnvInterfaceStringMembers(indexSource);
     const forwarded = new Set(extractEnvVarsKeys(indexSource));
     const missing = envMembers.filter((name) => !forwarded.has(name));
     expect(missing, `Env member(s) declared but never keyed in envVars: ${missing}`).toEqual(
       [],
     );
+  });
+
+  it("keeps MCP-scoped vars on the MCP container block only", () => {
+    const blocks = extractAllEnvVarsBlocks(indexSource);
+    expect(blocks.length).toBe(2);
+    const stackKeys = new Set(extractEnvVarsKeysFromBody(blocks[0]));
+    const mcpKeys = new Set(extractEnvVarsKeysFromBody(blocks[1]));
+    const duplicated = [...MCP_SCOPED_VARS].filter((name) => stackKeys.has(name));
+    expect(
+      duplicated,
+      `MCP-scoped var(s) duplicated into DigiStackContainer.envVars: ${duplicated}`,
+    ).toEqual([]);
+    const mcpMissing = [...MCP_SCOPED_VARS].filter((name) => !mcpKeys.has(name));
+    expect(
+      mcpMissing,
+      `MCP-scoped var(s) missing from DigiQuantMcpContainer.envVars: ${mcpMissing}`,
+    ).toEqual([]);
   });
 
   it("declares Env for every env.* var envVars reads", () => {

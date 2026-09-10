@@ -28,6 +28,12 @@ logger = logging.getLogger(__name__)
 
 BLOB_TABLES = ("checkpoint_blobs", "checkpoint_writes")
 
+# R2 key prefixes owned by this archiver. Market-data generations
+# (``market-data/...``) share the bucket but are indexed by the
+# R2HistoryStore manifest — eviction and reconciliation must never touch
+# them (#3780).
+MANAGED_PREFIXES = ("checkpoints/", "documents/")
+
 # Key columns identifying one payload row per table (tables carry no PK).
 BLOB_KEY_COLUMNS: dict[str, tuple[str, ...]] = {
     "checkpoint_blobs": ("thread_id", "checkpoint_ns", "channel", "version"),
@@ -230,6 +236,8 @@ def evict_to_watermark(
             break
         if row["r2_key"] in protected:
             continue
+        if not row["r2_key"].startswith(MANAGED_PREFIXES):
+            continue  # market-data generations are namespaced apart; never evict
         store.delete(row["r2_key"])
         client.table("archive_objects").delete().eq("r2_key", row["r2_key"]).execute()
         evicted.append(row["r2_key"])
@@ -239,18 +247,35 @@ def evict_to_watermark(
 
 
 def reconcile_ledger(client: Any, store: StorageBackend) -> list[str]:
-    """Drop ledger rows with no backing object; return orphan R2 keys.
+    """Drop dead managed ledger rows; report orphans + dead market-data pointers.
 
     Orphan R2 objects (present in the bucket, absent from the ledger) are
     reported for operator review — never auto-deleted. Both archive prefixes
-    are listed (#3791): ``checkpoints/`` and ``documents/``.
+    are listed (#3791): ``checkpoints/`` and ``documents/``; only the
+    archiver's own prefixes are in scope for deletes — market-data
+    generations are indexed by the R2HistoryStore manifest instead (#3780).
+
+    Dead market-data ledger rows (no backing object) are never auto-deleted
+    either — their lifecycle belongs to the market-data tasks — but they are
+    reported as orphans (same ``list[str]`` shape) so they stay visible.
+
+    The ledger scan is paginated past the PostgREST 1000-row cap (#3789).
     """
-    ledger_keys = {r["r2_key"] for r in _scan_all(client, "archive_objects", "r2_key")}
+    ledger_keys = {
+        r["r2_key"] for r in _scan_all(client, "archive_objects", "r2_key") if r.get("r2_key")
+    }
+    managed_keys = {k for k in ledger_keys if k.startswith(MANAGED_PREFIXES)}
     stored_keys = set(store.list_keys("checkpoints/")) | set(store.list_keys("documents/"))
-    for dead in sorted(ledger_keys - stored_keys):
+    for dead in sorted(managed_keys - stored_keys):
         client.table("archive_objects").delete().eq("r2_key", dead).execute()
         logger.info("reconciled dead ledger row %s", dead)
-    return sorted(stored_keys - ledger_keys)
+    orphans = sorted(stored_keys - managed_keys)
+    market_rows = sorted(k for k in ledger_keys - managed_keys if k.startswith("market-data/"))
+    dead_market: list[str] = []
+    if market_rows:
+        stored_market = set(store.list_keys("market-data/"))
+        dead_market = sorted(k for k in market_rows if k not in stored_market)
+    return sorted(orphans + dead_market)
 
 
 def parse_postgrest_bytea(value: Any) -> bytes | None:
@@ -754,6 +779,7 @@ __all__ = [
     "HIGH_WATERMARK_BYTES",
     "KEY_COLUMNS_BY_TABLE",
     "LOW_WATERMARK_BYTES",
+    "MANAGED_PREFIXES",
     "PG_URI_ENV",
     "R2Backend",
     "StorageBackend",
