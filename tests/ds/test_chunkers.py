@@ -210,6 +210,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     unchanged.
     Re-recorded at count 53 for #3853 (web_search section + searxng sidecar
     docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 53) re-recorded for the cloudflare/ directory rename (#3854) plus web_search docs (#3856) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -245,9 +246,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "10832c167583db90",
         "3442051d624d3623",
         "7178441828bcff9d",
-        "d60ae7116f9e57ec",
+        "3dd21c10200ab888",
         "ec4e79e9d9714f36",
-        "e04f2c804b4baa0c",
+        "dd4f473ceff325c2",
         "2ec8256cb4695f07",
         "16bea1bbfea529fc",
         "00bffb9020b848f5",
