@@ -310,6 +310,13 @@ def digiquant_get_price_technicals(
     The R2 envelope is ``{"as_of", "rows", "stale"}``: ``stale`` is true when
     the manifest seal is >5 trading days behind ``as_of`` (Task 6 gate) or the
     live overlap carried a per-ticker fetch error entry (history-only serve).
+
+    Two independent ``stale`` signals share the name (#3780 Task 7 fix round
+    M2): the manifest's writer-side ``stale`` (Task 6 refresh cron — the seal's
+    age at generation time) vs this envelope's reader-side ``stale`` (evaluated
+    per request from the seal and the live overlap). They can disagree (a fresh
+    manifest served through a flaked live fetch reads stale here). Task 10 docs
+    must carry the glossary entry.
     """
     try:
         lookback = min(int(lookback), 500)
@@ -336,7 +343,11 @@ def digiquant_get_price_technicals(
         payload = json.dumps(
             {"as_of": resolved, "rows": rows[-lookback:], "stale": stale}, default=str
         )
-        _ttl[cache_key] = (time.time(), payload)
+        # Task 7 fix round (M1): never cache a stale-flagged payload — a stale
+        # serve pinned for the full 900s TTL would keep reporting stale after
+        # the vendor flake clears. Fresh payloads cache normally.
+        if not stale:
+            _ttl[cache_key] = (time.time(), payload)
         return payload
     except Exception as exc:
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
@@ -350,6 +361,10 @@ def digiquant_get_macro_series(
     The R2 envelope is ``{"as_of", "series", "stale"}`` (per-series
     ``{latest, window}``). Unknown series fail loud (``{"error"}``); a stale
     manifest seal only flags ``stale`` — macro has no live overlap to repair it.
+
+    Same two-``stale`` note as technicals (#3780 Task 7 fix round M2): the
+    manifest's writer-side ``stale`` (Task 6 cron) vs this envelope's
+    reader-side ``stale``. Task 10 docs must carry the glossary entry.
     """
     try:
         lookback = min(int(lookback), 500)
@@ -377,7 +392,9 @@ def digiquant_get_macro_series(
             for sid, payload in per_series.items()
         }
         payload = json.dumps({"as_of": resolved, "series": series, "stale": stale}, default=str)
-        _ttl[cache_key] = (time.time(), payload)
+        # Task 7 fix round (M1): same no-cache-on-stale rule as technicals.
+        if not stale:
+            _ttl[cache_key] = (time.time(), payload)
         return payload
     except Exception as exc:
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})

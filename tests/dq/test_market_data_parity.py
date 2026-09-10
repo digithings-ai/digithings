@@ -15,6 +15,11 @@ Adaptations vs the brief sketch, verified against the real fixtures:
   ``compute_indicators`` on the same history.
 - Macro IS exact value parity: the R2 macro path does no recomputation, so
   golden DGS10/VIXCLS values embedded in synthetic parquet come back as-is.
+- Close coverage is SYNTHETIC wiring-only (#3780 Task 7 fix round I2): the
+  Task 1 goldens carry no ``close`` column anywhere (indicator-only windows),
+  so ``100.0+i*0.5`` closes embedded in the fake parquet only prove the serving
+  path round-trips values — NOT that R2 values equal Supabase values. True
+  value parity is owned by the Task 10 contract tests (see premise guard below).
 - Manifest dataset ids are Task 5's real backfill keys (normalized ticker via
   ``normalize_ticker``; macro ``fred__{SERIES}`` lowercase) — verified against
   ``scripts/backfill_market_data_r2.py::R2StoreAdapter.put_generation``.
@@ -105,6 +110,20 @@ def _spy_history_for_golden(golden: dict) -> tuple[list[str], list[float]]:
     dates = sorted(r["date"] for r in golden["technicals"]["SPY"]["window"])
     closes = [100.0 + i * 0.5 for i in range(len(dates))]
     return dates, closes
+
+
+def test_golden_fixtures_carry_no_close_column_so_close_parity_is_wiring_only():
+    """I2 premise guard: closes here are synthetic BY NECESSITY, not by choice.
+
+    If a future golden gains a ``close`` column, this test fails — upgrade the
+    close round-trip to real golden-value parity then (Task 10 contract tests
+    own value parity until that happens).
+    """
+    for date in _DATES:
+        golden = _load_golden(date)
+        for ticker, tech in golden["technicals"].items():
+            assert all("close" not in row for row in tech["window"]), (date, ticker)
+            assert "close" not in tech["latest"], (date, ticker)
 
 
 def test_r2_backend_matches_supabase_goldens(monkeypatch):

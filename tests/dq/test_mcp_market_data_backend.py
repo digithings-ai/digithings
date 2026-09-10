@@ -94,6 +94,46 @@ def test_technicals_r2_ttl_caches_window(monkeypatch):
     assert len(calls) == 1
 
 
+# ── Task 7 fix round M1 (#3780): stale-flagged payloads must not sit in the
+# 900s TTL cache (a stale serve would pin the stale flag for the full window
+# even after the vendor flake clears). Fresh payloads cache normally (above).
+
+
+def test_technicals_r2_stale_payload_skips_ttl_store(monkeypatch):
+    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
+    monkeypatch.setattr(mcp, "_read_manifest", lambda: {"version": 1, "as_of": "2024-12-31"})
+    calls: list[tuple] = []
+
+    def _stale_window(ticker, as_of, manifest=None, return_stale=False):
+        calls.append((ticker, as_of))
+        rows = [{"date": "2024-12-31", "close": 1.0}]
+        return (rows, True) if return_stale else rows
+
+    monkeypatch.setattr(mcp, "_read_r2_window", _stale_window)
+    first = mcp.digiquant_get_price_technicals("SPY", lookback=20, as_of="2024-12-31")
+    assert json.loads(first)["stale"] is True
+    second = mcp.digiquant_get_price_technicals("SPY", lookback=20, as_of="2024-12-31")
+    assert json.loads(second)["stale"] is True
+    assert len(calls) == 2
+
+
+def test_macro_r2_stale_payload_skips_ttl_store(monkeypatch):
+    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
+    monkeypatch.setattr(mcp, "_read_manifest", lambda: {"version": 1, "as_of": "2024-12-01"})
+    series = {"CPI": {"latest": {"obs_date": "2024-12-01", "value": 1.0}, "window": []}}
+    calls: list[tuple] = []
+
+    def _counting(series_ids, as_of, manifest=None):
+        calls.append((tuple(series_ids), as_of))
+        return series
+
+    monkeypatch.setattr(mcp, "_read_r2_macro_window", _counting)
+    first = mcp.digiquant_get_macro_series(["CPI"], lookback=6, as_of="2024-12-31")
+    assert json.loads(first)["stale"] is True
+    mcp.digiquant_get_macro_series(["CPI"], lookback=6, as_of="2024-12-31")
+    assert len(calls) == 2
+
+
 def test_technicals_r2_lookback_slices_tail(monkeypatch):
     monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
     monkeypatch.setattr(mcp, "_read_manifest", lambda: {"version": 1, "as_of": "2024-12-31"})
@@ -117,6 +157,17 @@ def test_macro_r2_backend_returns_asof_envelope(monkeypatch):
     out = json.loads(mcp.digiquant_get_macro_series(["CPI"], lookback=6, as_of="2024-12-31"))
     assert out["as_of"] == "2024-12-31"
     assert out["series"]["CPI"]["latest"]["obs_date"] == "2024-12-31"
+
+
+# ── Task 7 fix round M2 (#3780): the manifest `stale` (Task 6 writer-side)
+# vs envelope `stale` (reader-side) naming collision must stay documented at
+# the envelope construction site until Task 10 docs carry the glossary entry.
+
+
+def test_envelope_docstrings_distinguish_both_stale_signals():
+    for fn in (mcp.digiquant_get_price_technicals, mcp.digiquant_get_macro_series):
+        assert "writer-side" in fn.__doc__ and "reader-side" in fn.__doc__
+        assert "Task 10" in fn.__doc__
 
 
 # ── Task 4 review findings (Refs #3780): helpers ──

@@ -146,16 +146,7 @@ def _refresh_stale_technicals(
 
     Opt-in via ``DIGIQUANT_REFRESH_ON_DEMAND``; fail-soft → ``False`` (keep the stale data and
     the ``"scripts"`` fallback signal). Returns True only when rows were actually upserted.
-
-    Disabled under the R2 backend (#3780, Task 7 cutover): Supabase writers are
-    stopped, so recomputing into ``price_technicals`` would write rows no reader
-    serves. Rollback = unset ``DIGIQUANT_MARKET_DATA_BACKEND``.
     """
-    import os
-
-    if os.environ.get("DIGIQUANT_MARKET_DATA_BACKEND", "supabase").strip().lower() == "r2":
-        logger.info("preflight: on-demand technicals refresh skipped (R2 backend owns writes)")
-        return False
     if not _refresh_on_demand_enabled():
         return False
     tickers = list(config.watchlist)

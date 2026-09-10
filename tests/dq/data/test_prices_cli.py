@@ -292,31 +292,62 @@ def test_recompute_technicals_needs_a_universe() -> None:
     assert "Provide --watchlist or --tickers" in result.output
 
 
-# ─── R2 cutover writer gate (#3780, Task 7) ─────────────────────────────
+# ─── R2 cutover dual-write window (#3780, Task 7 fix round) ─────────────
+# Writers-stop reverted: Supabase tables keep being written (dual-write)
+# until the bespoke bulk readers migrate (Task 8). The flag plumbing stays
+# dormant for supervised parity sampling + the later re-stop.
 
 
-def test_supabase_writers_refuse_under_r2_backend(
+def test_supabase_writers_stay_active_under_r2_backend_dual_write(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    """Under DIGIQUANT_MARKET_DATA_BACKEND=r2 the writers fail LOUD (never silent)."""
+    """Dual-write: even with DIGIQUANT_MARKET_DATA_BACKEND=r2 writers proceed."""
+    from digiquant.cli.prices import _supabase_writes_disabled
+
     monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
+    assert _supabase_writes_disabled() is True  # plumbing dormant-but-present
+    monkeypatch.setenv("FRED_API_KEY", "dummy")  # empty-series manifest: no HTTP
     runner = CliRunner()
     manifest = tmp_path / "macro_series.yaml"
     manifest.write_text("fred:\n  series: []\n")
-    cases = [
-        (fetch_quotes_cmd, ["--tickers", "SPY", "--supabase"]),
-        (compute_technicals_cmd, ["--tickers", "SPY", "--supabase"]),
-        (recompute_technicals_cmd, ["--tickers", "SPY"]),
-        (fetch_macro_cmd, ["--manifest", str(manifest), "--supabase"]),
-    ]
-    for cmd, args in cases:
-        result = runner.invoke(cmd, args)
-        assert result.exit_code != 0, (cmd.name, result.output)
-        assert "writes are stopped" in result.output, (cmd.name, result.output)
+    n = 30
+    with (
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(f"{_WRITER}.upsert_price_history"),
+        patch(f"{_WRITER}.upsert_price_technicals", return_value=Mock(rows=n)),
+        patch(f"{_WRITER}.upsert_macro_observations", return_value=Mock(rows=0)),
+        patch(f"{_CACHE}.incremental_update", return_value={"SPY": _fake_ohlcv(3)}),
+        patch(f"{_CACHE}.load_cached", return_value=_fake_ohlcv(n)),
+        patch(f"{_TECH}.compute_indicators", return_value=_fake_ind(n)),
+        patch(f"{_VENUES}.venue_for", return_value=None),
+        patch(
+            f"{_REFRESH}.recompute_technicals_from_history",
+            return_value=RefreshResult(1, 0, rows_computed=4, history_rows_read=40),
+        ),
+    ):
+        cases = [
+            (fetch_quotes_cmd, ["--tickers", "SPY", "--supabase"]),
+            (
+                compute_technicals_cmd,
+                ["--tickers", "SPY", "--supabase", "--cache-dir", str(tmp_path)],
+            ),
+            (recompute_technicals_cmd, ["--tickers", "SPY"]),
+            (
+                fetch_macro_cmd,
+                ["--manifest", str(manifest), "--supabase", "--sources", "fred"],
+            ),
+        ]
+        for cmd, args in cases:
+            result = runner.invoke(cmd, args)
+            assert result.exit_code == 0, (cmd.name, result.output)
 
 
-def test_supabase_writers_stay_active_by_default(tmp_path) -> None:
+def test_supabase_writers_stay_active_by_default(tmp_path, monkeypatch) -> None:
     """Without the flag the gates are inert (dry-run paths exit zero, no network)."""
+    from digiquant.cli.prices import _supabase_writes_disabled
+
+    monkeypatch.delenv("DIGIQUANT_MARKET_DATA_BACKEND", raising=False)
+    assert _supabase_writes_disabled() is False  # flag default is supabase
     runner = CliRunner()
     result = runner.invoke(
         fetch_quotes_cmd, ["--tickers", "SPY", "--dry-run", "--cache-dir", str(tmp_path)]

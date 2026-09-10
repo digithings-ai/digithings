@@ -128,21 +128,28 @@ class TestPreflight:
         # Refresh failed → keep the stale data + the scripts signal (never crashes preflight).
         assert out["data_layer"].fallback_used == "scripts"
 
-    def test_on_demand_refresh_skipped_under_r2_backend(
+    def test_on_demand_refresh_runs_under_r2_backend_dual_write(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # #3780 Task 7: under the R2 backend the Supabase recompute is disabled
-        # (the R2 refresh owns writes) — even with the opt-in flag set. Rollback
-        # = unset DIGIQUANT_MARKET_DATA_BACKEND.
+        # #3780 Task 7 fix round (dual-write): the writers-stop is reverted, so
+        # under the R2 backend the on-demand recompute still runs when opted in
+        # (bulk readers serve the Supabase tables until Task 8 migrates them).
         monkeypatch.setenv("DIGIQUANT_REFRESH_ON_DEMAND", "1")
         monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
-        _client, deps = self._stale_deps()
-        with patch.object(refresh_mod, "recompute_technicals_from_history") as recompute:
-            out = build_preflight_node(deps)(
-                ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
-            )
-        recompute.assert_not_called()
-        assert out["data_layer"].fallback_used == "scripts"
+        client, deps = self._stale_deps()
+        run_date = date(2026, 4, 26)
+
+        def _fake_recompute(*, client, tickers, as_of):
+            # Simulate the upsert: the table is now fresh on the re-probe.
+            client.canned_reads["price_technicals"] = [{"date": as_of.isoformat(), "ticker": "SPY"}]
+            return SimpleNamespace(tickers_processed=1, rows_upserted=12)
+
+        with patch.object(
+            refresh_mod, "recompute_technicals_from_history", side_effect=_fake_recompute
+        ) as recompute:
+            out = build_preflight_node(deps)(ResearchState(run_type="baseline", run_date=run_date))
+        recompute.assert_called_once()
+        assert out["data_layer"].fallback_used == "supabase"
 
     def test_missing_price_technicals_signals_no_source(self) -> None:
         run_date = date(2026, 4, 26)
