@@ -68,17 +68,23 @@ Record the three outputs; the gate below automates the first two.
 
 ## Workflow size gate (advisory)
 
-`pipeline-checkpoint-archive.yml` ends with a **size-gate step**
-(`scripts/digiquant_checkpoint_size_gate.py`). It is deliberately
-**advisory, not blocking**: `continue-on-error: true`, and the script
-itself exits 0 on DB errors unless `--strict` is passed. A red gate
-never fails the archive — it pages the operator via the failed-step
-annotation.
+`scripts/digiquant_checkpoint_size_gate.py` is the read-only gate check:
+per-table plus whole-DB sizes against `--threshold-mb` (default 500,
+the free-tier quota). It is deliberately **fail-open**: exits 0 on DB
+errors unless `--strict` is passed, so it can never fail the archive.
+`--strict` exists for one-shot operator verification runs, not for the
+scheduled path.
 
-- Default threshold: `--threshold-mb 500` (free-tier quota).
-- Override per-run via the `threshold-mb` dispatch input if the quota changes.
-- `--strict` exists for one-shot operator verification runs, not for
-  the scheduled path.
+Pending follow-up: wire it as a trailing step in
+`pipeline-checkpoint-archive.yml` with `continue-on-error: true` (plus an
+optional `threshold-mb` dispatch input) — that edit needs a token with
+`workflow` scope and could not land from the authoring session. Until
+then, run it by hand after the archive:
+
+```bash
+DIGI_CHECKPOINTER_POSTGRES_URI=<read-only-uri> \
+  python scripts/digiquant_checkpoint_size_gate.py --threshold-mb 500
+```
 
 ## What "relief verified" looks like
 
