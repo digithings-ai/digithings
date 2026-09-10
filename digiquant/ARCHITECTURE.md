@@ -235,6 +235,13 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `dashboard_evaluate_policy_gate` | Evaluate immutable gate criteria (eligibility only) |
 | `dashboard_get_policy_gate_evaluation` | Fetch a gate-evaluation summary by `evaluation_id` |
 
+`create_mcp_server(scope=...)` gates registration: `scope="full"` (default)
+registers all 23 tools; `scope="read"` registers only the 9 dashboard-chat
+reads (strategy list, price/macro reads, `query_data`, policy
+replay/comparison reads, gate reads + evaluations, coinmetrics catalog).
+`--scope` / `DIGIQUANT_MCP_SCOPE` select the scope; `host`/`port` live on the
+`FastMCP(...)` constructor — `run()` takes transport only.
+
 Human decision write (`record_policy_governance_decision`) is **not** an MCP tool —
 only the DigiAuth HTTP boundary may record decisions. There is no
 promote/activate/set-live/rollback-live tool on any surface.

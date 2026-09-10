@@ -414,18 +414,63 @@ def _require_mcp() -> type:
     return FastMCP  # type: ignore[return-value]
 
 
-def create_mcp_server() -> Any:
-    _require_mcp()
-    mcp = FastMCP("digiquant")
+#: Tools safe for the dashboard-chat surface: latest/historical runs, published
+#: research reads, prices/technicals, macro, the house book, read-only gate
+#: evaluations, and the coinmetrics catalog discovery tool. Everything else
+#: (backtest / optimize / pipeline / export / fetches / fits / tearsheets /
+#: policy-replay runs) is compute or mutate and stays on ``scope="full"`` only.
+READ_SCOPE_TOOLS: frozenset[str] = frozenset(
+    {
+        "digiquant_list_strategies",
+        "digiquant_get_price_technicals",
+        "digiquant_get_macro_series",
+        "digiquant_query_data",
+        "dashboard_get_policy_replay",
+        "dashboard_get_policy_comparison",
+        "dashboard_evaluate_policy_gate",
+        "dashboard_get_policy_gate_evaluation",
+        "digiquant_list_coinmetrics_catalog",
+    }
+)
 
-    @mcp.tool()
+_MCP_SCOPES = ("full", "read")
+
+
+def create_mcp_server(
+    scope: str = "full",
+    host: str = "127.0.0.1",
+    port: int = 8767,
+) -> Any:
+    """Build the digiquant FastMCP server.
+
+    ``scope="read"`` registers only :data:`READ_SCOPE_TOOLS` (dashboard chat);
+    ``scope="full"`` (default) registers every tool. ``host``/``port`` go on
+    the server — installed mcp's ``run()`` takes transport only.
+    """
+    if scope not in _MCP_SCOPES:
+        raise ValueError(f"unknown MCP scope {scope!r}; expected one of {', '.join(_MCP_SCOPES)}")
+    _require_mcp()
+    mcp = FastMCP("digiquant", host=host, port=port)
+    enabled = READ_SCOPE_TOOLS if scope == "read" else None
+
+    def _maybe_tool(name: str):
+        """Register the tool unless a read scope excludes it."""
+
+        def _register(fn):
+            if enabled is None or name in enabled:
+                return mcp.tool(name=name)(fn)
+            return fn
+
+        return _register
+
+    @_maybe_tool("digiquant_list_strategies")
     def digiquant_list_strategies() -> str:
         """List registered strategies (name, aliases, description, default_params)."""
         from digiquant.service import service_list_strategies
 
         return json.dumps(service_list_strategies(), indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_run_backtest")
     def digiquant_run_backtest(
         strategy_name: str,
         symbols_json: str,
@@ -447,7 +492,7 @@ def create_mcp_server() -> Any:
         )
         return result.model_dump_json(indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_run_optimize")
     def digiquant_run_optimize(
         strategy_name: str,
         symbols_json: str,
@@ -482,7 +527,7 @@ def create_mcp_server() -> Any:
         )
         return result.model_dump_json(indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_export")
     def digiquant_export(
         strategy_name: str,
         target: str,
@@ -499,7 +544,7 @@ def create_mcp_server() -> Any:
         )
         return result.model_dump_json(indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_run_pipeline")
     def digiquant_run_pipeline(
         strategy_name: str,
         symbols_json: str,
@@ -539,7 +584,7 @@ def create_mcp_server() -> Any:
         )
         return json.dumps(raw, indent=2)
 
-    @mcp.tool(name="digiquant_get_price_technicals")
+    @_maybe_tool("digiquant_get_price_technicals")
     def digiquant_get_price_technicals_tool(
         ticker: str, lookback: int = 20, as_of: str | None = None
     ) -> str:
@@ -552,7 +597,7 @@ def create_mcp_server() -> Any:
         """
         return digiquant_get_price_technicals(ticker, lookback=lookback, as_of=as_of)
 
-    @mcp.tool(name="digiquant_get_macro_series")
+    @_maybe_tool("digiquant_get_macro_series")
     def digiquant_get_macro_series_tool(
         series_ids: list[str], lookback: int = 6, as_of: str | None = None
     ) -> str:
@@ -565,7 +610,7 @@ def create_mcp_server() -> Any:
         """
         return digiquant_get_macro_series(series_ids, lookback=lookback, as_of=as_of)
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_query_data")
     def digiquant_query_data(
         table: str,
         columns: str = "*",
@@ -626,7 +671,7 @@ def create_mcp_server() -> Any:
 
         return str(Path(__file__).resolve().parents[3] / "scripts" / "validation")
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_fetch_coinbase_ohlcv")
     def digiquant_fetch_coinbase_ohlcv(
         symbols_json: str = '["BTC/USD", "ETH/USD", "SOL/USD"]',
         start: str = "2015-07-20",
@@ -691,7 +736,7 @@ def create_mcp_server() -> Any:
                 out[ticker] = {"error": f"{type(exc).__name__}: {exc}"}
         return json.dumps(out, indent=2, default=str)
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_fit_btc_power_law")
     def digiquant_fit_btc_power_law(
         ticker: str = "BTC-USD",
         cache_dir: str | None = None,
@@ -770,7 +815,7 @@ def create_mcp_server() -> Any:
             indent=2,
         )
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_build_sdca_risk_index")
     def digiquant_build_sdca_risk_index(
         ticker: str = "BTC-USD",
         cache_dir: str | None = None,
@@ -815,7 +860,7 @@ def create_mcp_server() -> Any:
             rolling_window=rolling_window,
         )
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_fetch_bitview_series")
     def digiquant_fetch_bitview_series(
         series_ids_json: str = '["mvrv", "asopr_24h", "puell_multiple", "rhodl_ratio"]',
         cache_dir: str | None = None,
@@ -847,7 +892,7 @@ def create_mcp_server() -> Any:
             allow_derived=allow_derived,
         )
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_fetch_bgeometrics_series")
     def digiquant_fetch_bgeometrics_series(
         metric: str = "mvrv",
         startday: str | None = None,
@@ -888,7 +933,7 @@ def create_mcp_server() -> Any:
             base_url=base_url or BGEOMETRICS_BASE_URL,
         )
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_fetch_coinmetrics_series")
     def digiquant_fetch_coinmetrics_series(
         metric: str = "CapMVRVCur",
         asset: str = "btc",
@@ -927,7 +972,7 @@ def create_mcp_server() -> Any:
             api_key=api_key,
         )
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_list_coinmetrics_catalog")
     def digiquant_list_coinmetrics_catalog(
         asset: str | None = None,
         timeout: float = 30.0,
@@ -948,7 +993,7 @@ def create_mcp_server() -> Any:
             asset=asset, timeout=timeout, base_url=base_url or COINMETRICS_BASE_URL, api_key=api_key
         )
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_fit_sdca_weights")
     def digiquant_fit_sdca_weights(
         profile: str = "btc_v1",
         profile_json: str | None = None,
@@ -982,7 +1027,7 @@ def create_mcp_server() -> Any:
             rolling_window=rolling_window,
         )
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_generate_slapper_tearsheet")
     def digiquant_generate_slapper_tearsheet(
         strategy: str | None = None,
         cache_dir: str | None = None,
@@ -1054,7 +1099,7 @@ def create_mcp_server() -> Any:
                 failures[strat] = error or "unknown error"
         return json.dumps({"entries": entries, "failures": failures}, indent=2, default=str)
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_validate_slapper_vs_tradingview")
     def digiquant_validate_slapper_vs_tradingview(
         strategy: str,
         ohlcv_csv: str,
@@ -1081,7 +1126,7 @@ def create_mcp_server() -> Any:
         except Exception as exc:  # surface as JSON to the caller
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
-    @mcp.tool()
+    @_maybe_tool("dashboard_run_policy_replay")
     def dashboard_run_policy_replay(
         pair_content_hash: str,
         run_id: str | None = None,
@@ -1102,7 +1147,7 @@ def create_mcp_server() -> Any:
             return json.dumps({"ok": False, "error": str(exc)})
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("dashboard_get_policy_replay")
     def dashboard_get_policy_replay(run_id: str) -> str:
         """Fetch a policy replay run summary by id (fail closed if unknown)."""
         from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
@@ -1114,7 +1159,7 @@ def create_mcp_server() -> Any:
             return json.dumps({"ok": False, "error": str(exc)})
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("dashboard_get_policy_comparison")
     def dashboard_get_policy_comparison(comparison_id: str) -> str:
         """Fetch a policy comparison summary (artifact IDs / status only)."""
         from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
@@ -1126,7 +1171,7 @@ def create_mcp_server() -> Any:
             return json.dumps({"ok": False, "error": str(exc)})
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("dashboard_evaluate_policy_gate")
     def dashboard_evaluate_policy_gate(
         comparison_id: str,
         criteria_version_id: str,
@@ -1144,7 +1189,7 @@ def create_mcp_server() -> Any:
             return json.dumps({"ok": False, "error": str(exc)})
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("dashboard_get_policy_gate_evaluation")
     def dashboard_get_policy_gate_evaluation(evaluation_id: str) -> str:
         """Fetch a gate-evaluation summary by id (fail closed if unknown)."""
         from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
@@ -1163,10 +1208,17 @@ def run_mcp(
     transport: str = "streamable-http",
     host: str = "127.0.0.1",
     port: int = 8767,
+    scope: str = "full",
 ) -> None:
-    mcp = create_mcp_server()
-    logger.info("Starting digiquant MCP server on %s:%d (transport=%s)", host, port, transport)
-    mcp.run(transport=transport, host=host, port=port)
+    mcp = create_mcp_server(scope=scope, host=host, port=port)
+    logger.info(
+        "Starting digiquant MCP server on %s:%d (transport=%s scope=%s)",
+        host,
+        port,
+        transport,
+        scope,
+    )
+    mcp.run(transport=transport)
 
 
 if __name__ == "__main__":
@@ -1179,6 +1231,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--port", type=int, default=int(os.environ.get("DIGIQUANT_MCP_PORT", "8767"))
     )
+    parser.add_argument(
+        "--scope",
+        default=os.environ.get("DIGIQUANT_MCP_SCOPE", "full"),
+        help="Tool scope: 'full' (default) or 'read' (dashboard-chat surface).",
+    )
     args = parser.parse_args()
     transport = "stdio" if args.stdio else "streamable-http"
-    run_mcp(transport=transport, host=args.host, port=args.port)
+    run_mcp(transport=transport, host=args.host, port=args.port, scope=args.scope)
