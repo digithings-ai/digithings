@@ -2958,7 +2958,11 @@ newest run per owner live in Supabase (resume only ever touches the current run 
 `--retain-days` / `--keep` intersect that set. `evict_to_watermark` deletes
 oldest-first down from the 8.5GB high watermark to the 7GB low watermark (ledger
 `size` sum), never touching the latest run's keys; `reconcile_ledger` drops dead
-ledger rows and reports orphan R2 keys without auto-deleting them. `resolve_payload`
+ledger rows and reports orphan R2 keys without auto-deleting them. Every key and
+ledger scan pages explicitly past the PostgREST 1000-row cap (`_scan_all` over
+`DOC_SCAN_PAGE_SIZE`); `evict_to_watermark` keeps a local running total instead of
+re-querying per row, and `reconcile_ledger` lists both `checkpoints/` and
+`documents/` prefixes. `resolve_payload`
 is the read-through contract: pointer lookup → R2 GET → sha256 verify
 (`ArchiveVerifyError`) → decompress (`ArchiveNotFoundError` when no pointer row).
 Documents phase (migration 120): pointer-per-row for non-latest

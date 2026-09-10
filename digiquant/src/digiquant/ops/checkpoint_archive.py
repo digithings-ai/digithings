@@ -102,30 +102,70 @@ HIGH_WATERMARK_BYTES = 8_500_000_000
 LOW_WATERMARK_BYTES = 7_000_000_000
 
 
+def _scan_all(
+    client: Any,
+    table: str,
+    cols: str,
+    *,
+    filters: tuple[tuple[str, Any], ...] = (),
+    order: tuple[str, ...] = (),
+) -> list[dict[str, Any]]:
+    """Paginated select past the PostgREST 1000-row response cap (#3789).
+
+    Every unbounded select silently truncates at 1000 rows, so key scans and
+    ledger scans page explicitly with ``.range()`` — the same pattern as
+    :func:`archive_documents` (``DOC_SCAN_PAGE_SIZE``).
+    """
+    rows: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        query = client.table(table).select(cols)
+        for col, val in filters:
+            query = query.eq(col, val)
+        for col in order:
+            query = query.order(col)
+        page = query.range(offset, offset + DOC_SCAN_PAGE_SIZE - 1).execute().data or []
+        rows.extend(page)
+        if len(page) < DOC_SCAN_PAGE_SIZE:
+            break
+        offset += DOC_SCAN_PAGE_SIZE
+    return rows
+
+
 def bucket_usage(client: Any) -> int:
-    """Sum of archived bytes per the ``archive_objects`` ledger."""
-    rows = client.table("archive_objects").select("size").execute().data or []
+    """Sum of archived bytes per the ``archive_objects`` ledger (#3790).
+
+    Paginated: an unbounded ``select("size")`` silently stops at 1000 rows and
+    undercounts the bucket once the ledger grows past the PostgREST cap.
+    """
+    rows = _scan_all(client, "archive_objects", "size")
     return sum(int(r.get("size") or 0) for r in rows)
 
 
 def evict_to_watermark(
     client: Any, store: StorageBackend, latest_keys: set[str] | None = None
 ) -> list[str]:
-    """Delete oldest-first until usage <= low watermark; never evict *latest_keys*."""
+    """Delete oldest-first until usage <= low watermark; never evict *latest_keys*.
+
+    One paginated oldest-first scan feeds a local running total (#3790) — no
+    per-row ``bucket_usage`` re-query of the full ledger.
+    """
     protected = latest_keys or set()
-    if bucket_usage(client) <= HIGH_WATERMARK_BYTES:
+    rows = _scan_all(client, "archive_objects", "*", order=("archived_at",))
+    total = sum(int(r.get("size") or 0) for r in rows)
+    if total <= HIGH_WATERMARK_BYTES:
         return []
-    rows = client.table("archive_objects").select("*").order("archived_at").execute().data or []
     evicted: list[str] = []
     for row in rows:
-        if bucket_usage(client) <= LOW_WATERMARK_BYTES:
+        if total <= LOW_WATERMARK_BYTES:
             break
         if row["r2_key"] in protected:
             continue
         store.delete(row["r2_key"])
         client.table("archive_objects").delete().eq("r2_key", row["r2_key"]).execute()
         evicted.append(row["r2_key"])
-        logger.info("evicted %s (%s bytes)", row["r2_key"], row["size"])
+        total -= int(row.get("size") or 0)
+        logger.info("evicted %s (%s bytes)", row["r2_key"], row.get("size"))
     return evicted
 
 
@@ -133,12 +173,11 @@ def reconcile_ledger(client: Any, store: StorageBackend) -> list[str]:
     """Drop ledger rows with no backing object; return orphan R2 keys.
 
     Orphan R2 objects (present in the bucket, absent from the ledger) are
-    reported for operator review — never auto-deleted.
+    reported for operator review — never auto-deleted. Both archive prefixes
+    are listed (#3791): ``checkpoints/`` and ``documents/``.
     """
-    ledger_keys = {
-        r["r2_key"] for r in (client.table("archive_objects").select("r2_key").execute().data or [])
-    }
-    stored_keys = set(store.list_keys("checkpoints/"))
+    ledger_keys = {r["r2_key"] for r in _scan_all(client, "archive_objects", "r2_key")}
+    stored_keys = set(store.list_keys("checkpoints/")) | set(store.list_keys("documents/"))
     for dead in sorted(ledger_keys - stored_keys):
         client.table("archive_objects").delete().eq("r2_key", dead).execute()
         logger.info("reconciled dead ledger row %s", dead)
@@ -229,7 +268,7 @@ def _thread_max_ts(checkpoint: Any) -> datetime | None:
 def threads_older_than(client: Any, retain_days: int) -> list[str]:
     """Threads whose newest checkpoint is older than *retain_days* (archive candidates)."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=retain_days)
-    rows = client.table("checkpoints").select("thread_id,checkpoint").execute().data or []
+    rows = _scan_all(client, "checkpoints", "thread_id,checkpoint")
     newest: dict[str, datetime] = {}
     for row in rows:
         thread_id = row.get("thread_id")
@@ -243,14 +282,14 @@ def threads_older_than(client: Any, retain_days: int) -> list[str]:
 
 def list_threads(client: Any) -> list[str]:
     """Distinct checkpoint thread ids (one per graph run)."""
-    rows = client.table("checkpoints").select("thread_id").execute().data or []
+    rows = _scan_all(client, "checkpoints", "thread_id")
     return sorted({str(row["thread_id"]) for row in rows if row.get("thread_id")})
 
 
 def previous_threads(client: Any, owner: str = "house") -> list[str]:
     """All threads except the newest — Supabase keeps the latest run per owner."""
     _ = owner  # owner scoping lands with multi-user threads; single house owner today
-    rows = client.table("checkpoints").select("thread_id,checkpoint").execute().data or []
+    rows = _scan_all(client, "checkpoints", "thread_id,checkpoint")
     newest: dict[str, datetime] = {}
     for row in rows:
         thread_id = row.get("thread_id")
@@ -417,10 +456,8 @@ def _fetch_thread_rows(
     Postgres); otherwise each payload row is a PostgREST single-row fetch.
     """
     key_cols = BLOB_KEY_COLUMNS[table]
-    keys = (
-        client.table(table).select(",".join(key_cols)).eq("thread_id", thread_id).execute().data
-        or []
-    )
+    # Page explicitly: a hot thread's key scan can exceed the PostgREST 1000-row cap.
+    keys = _scan_all(client, table, ",".join(key_cols), filters=(("thread_id", thread_id),))
     rows: list[dict[str, Any]] = []
     for key in keys:
         if payload_reader is not None:
@@ -513,22 +550,9 @@ def archive_documents(
     """
     key_cols = DOCUMENT_KEY_COLUMNS
     # Page explicitly: PostgREST silently caps one response at 1000 rows.
-    key_rows: list[dict[str, Any]] = []
-    offset = 0
-    while True:
-        page = (
-            client.table("documents")
-            .select(",".join(key_cols))
-            .eq("workspace_id", workspace)
-            .range(offset, offset + DOC_SCAN_PAGE_SIZE - 1)
-            .execute()
-            .data
-            or []
-        )
-        key_rows.extend(page)
-        if len(page) < DOC_SCAN_PAGE_SIZE:
-            break
-        offset += DOC_SCAN_PAGE_SIZE
+    key_rows = _scan_all(
+        client, "documents", ",".join(key_cols), filters=(("workspace_id", workspace),)
+    )
     groups: dict[str, list[dict[str, Any]]] = {}
     for key_row in key_rows:
         groups.setdefault(key_row.get("document_key"), []).append(key_row)
