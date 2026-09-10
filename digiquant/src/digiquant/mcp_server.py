@@ -630,16 +630,24 @@ def create_mcp_server() -> Any:
     def digiquant_fetch_coinbase_ohlcv(
         symbols_json: str = '["BTC/USD", "ETH/USD", "SOL/USD"]',
         start: str = "2015-07-20",
+        end: str | None = None,
+        timeframe: str = "1d",
+        through_yesterday: bool = False,
         cache_dir: str | None = None,
     ) -> str:
-        """Fetch daily OHLCV from Coinbase (CCXT) into the price-history cache.
+        """Fetch OHLCV bars from Coinbase (CCXT) into the price-history cache.
 
-        ``symbols_json`` is a JSON array of CCXT symbols. ``start`` defaults
-        to Coinbase BTC listing ``2015-07-20``; ETH/SOL begin at the first
-        available Coinbase daily bar. Returns JSON mapping each ticker to
+        ``symbols_json`` is a JSON array of CCXT symbols (any Coinbase spot
+        pair, not just BTC/ETH/SOL — e.g. ``["DOGE/USD"]``). ``timeframe`` is
+        any CCXT-supported Coinbase timeframe: ``1m,5m,15m,30m,1h,2h,6h,1d``.
+        ``start`` defaults to Coinbase BTC listing ``2015-07-20``; ``end``
+        defaults to now. ``through_yesterday`` drops the current UTC day's
+        bar (only meaningful for ``timeframe="1d"``, where today's daily bar
+        is still incomplete). Returns JSON mapping each ticker to
         ``{bars, first, last, path}`` (or ``{error}``).
         """
         import sys
+        from datetime import UTC, datetime
         from pathlib import Path
 
         sd = _scripts_dir()
@@ -647,6 +655,7 @@ def create_mcp_server() -> Any:
             sys.path.insert(0, sd)
         try:
             import ccxt
+            import polars as pl
             from fetch_coinbase import DEFAULT_CACHE, SYMBOLS, bars_to_polars, fetch_all_daily
         except ImportError as exc:
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
@@ -658,15 +667,18 @@ def create_mcp_server() -> Any:
         for sym in json.loads(symbols_json):
             ticker = SYMBOLS.get(sym, sym.replace("/", "-"))
             try:
-                bars = fetch_all_daily(exchange, sym, start)
+                bars = fetch_all_daily(exchange, sym, start, timeframe=timeframe, end=end)
                 if not bars:
                     out[ticker] = {"error": "no data"}
                     continue
                 df = (
-                    bars_to_polars(bars, ticker)
+                    bars_to_polars(bars, ticker, timeframe=timeframe)
                     .unique(subset=["timestamp"], keep="last")
                     .sort("timestamp")
                 )
+                if through_yesterday:
+                    today = datetime.now(UTC).date().isoformat()
+                    df = df.filter(pl.col("timestamp") < today)
                 path = cache / f"{ticker}.csv"
                 df.write_csv(path)
                 out[ticker] = {
@@ -810,14 +822,19 @@ def create_mcp_server() -> Any:
         timeout: float = 30.0,
         start: int | None = None,
         end: int | None = None,
+        base_url: str | None = None,
+        allow_derived: bool = False,
     ) -> str:
         """Fetch Bitview/BRK on-chain ``day1`` series into ``data/onchain/bitview/``.
 
         JSON API only (no HTML scrape). Default catalog is the #1086 v1 subset.
-        ``nupl`` is refused (monotone of MVRV). Fail-soft + timeout. Coin Metrics
-        community CC BY-NC series are not fetched. Network is the operator opt-in
-        of invoking this tool.
+        ``nupl`` is refused by default (monotone of MVRV — the SDCA composite
+        avoids dual-counting it alongside MVRV); pass ``allow_derived=True``
+        to fetch it anyway for uses outside that composite. Fail-soft +
+        timeout. Coin Metrics community CC BY-NC series are not fetched.
+        Network is the operator opt-in of invoking this tool.
         """
+        from digiquant.data.onchain.bitview import BITVIEW_BASE_URL
         from digiquant.sdca_mcp import run_fetch_bitview_series
 
         return run_fetch_bitview_series(
@@ -826,6 +843,109 @@ def create_mcp_server() -> Any:
             timeout=timeout,
             start=start,
             end=end,
+            base_url=base_url or BITVIEW_BASE_URL,
+            allow_derived=allow_derived,
+        )
+
+    @mcp.tool()
+    def digiquant_fetch_bgeometrics_series(
+        metric: str = "mvrv",
+        startday: str | None = None,
+        endday: str | None = None,
+        last: bool = False,
+        cache_dir: str | None = None,
+        timeout: float = 30.0,
+        token: str | None = None,
+        base_url: str | None = None,
+    ) -> str:
+        """Fetch one Bitcoin valuation/on-chain metric from bitcoin-data.com (BGeometrics).
+
+        700+ metric catalog (MVRV, NUPL, SOPR, realized cap/price, HODL
+        waves, Mayer multiple, NVT, Pi-cycle, rainbow chart, power-law model,
+        and more — see ``KNOWN_METRICS`` for a curated subset; any other
+        bitcoin-data.com slug also works). Treat ``token`` as required —
+        bitcoin-data.com now markets registration as mandatory even for the
+        free tier (pass it, or set ``BGEOMETRICS_API_TOKEN``).
+
+        Free-tier limits (enforced by the API, not just documented): 10
+        requests/hour, 15/day, shared across every metric — fetch **one
+        metric per call**. History is capped at roughly the last 4 years;
+        for deeper multi-cycle history use
+        ``digiquant_fetch_coinmetrics_series`` instead (MVRV back to 2010,
+        no rate-limit concern). Fail-soft + timeout.
+        """
+        from digiquant.data.onchain.bgeometrics import BGEOMETRICS_BASE_URL
+        from digiquant.sdca_mcp import run_fetch_bgeometrics_series
+
+        return run_fetch_bgeometrics_series(
+            metric=metric,
+            startday=startday,
+            endday=endday,
+            last=last,
+            cache_dir=cache_dir,
+            timeout=timeout,
+            token=token,
+            base_url=base_url or BGEOMETRICS_BASE_URL,
+        )
+
+    @mcp.tool()
+    def digiquant_fetch_coinmetrics_series(
+        metric: str = "CapMVRVCur",
+        asset: str = "btc",
+        start_time: str | None = None,
+        end_time: str | None = None,
+        page_size: int = 10_000,
+        cache_dir: str | None = None,
+        timeout: float = 30.0,
+        base_url: str | None = None,
+        api_key: str | None = None,
+    ) -> str:
+        """Fetch one on-chain metric for one asset from the CoinMetrics Community API.
+
+        One metric/asset per call — comma-separated lists are rejected (use
+        ``digiquant_list_coinmetrics_catalog`` to discover what's available
+        per-asset first, rather than assuming BTC's metric set applies
+        elsewhere). MVRV (``CapMVRVCur``) has full BTC history back to
+        2010-07-18, unlike bgeometrics' ~4-year cap. No API key required for
+        the free tier (generous rate limit); pass ``api_key`` if you have a
+        registered CoinMetrics key for a higher limit. CC BY-NC —
+        research-only, do not republish derived series commercially.
+        Fail-soft + timeout.
+        """
+        from digiquant.data.onchain.coinmetrics import COINMETRICS_BASE_URL
+        from digiquant.sdca_mcp import run_fetch_coinmetrics_series
+
+        return run_fetch_coinmetrics_series(
+            metric=metric,
+            asset=asset,
+            start_time=start_time,
+            end_time=end_time,
+            page_size=page_size,
+            cache_dir=cache_dir,
+            timeout=timeout,
+            base_url=base_url or COINMETRICS_BASE_URL,
+            api_key=api_key,
+        )
+
+    @mcp.tool()
+    def digiquant_list_coinmetrics_catalog(
+        asset: str | None = None,
+        timeout: float = 30.0,
+        base_url: str | None = None,
+        api_key: str | None = None,
+    ) -> str:
+        """List which CoinMetrics community metrics exist for ``asset`` (or all assets).
+
+        Discovery tool — call before ``digiquant_fetch_coinmetrics_series``
+        to find real metric names instead of guessing from the BTC-only
+        ``KNOWN_COMMUNITY_METRICS`` snapshot. Returns the raw
+        ``catalog-v2/asset-metrics`` JSON. Fail-soft + timeout.
+        """
+        from digiquant.data.onchain.coinmetrics import COINMETRICS_BASE_URL
+        from digiquant.sdca_mcp import run_list_coinmetrics_catalog
+
+        return run_list_coinmetrics_catalog(
+            asset=asset, timeout=timeout, base_url=base_url or COINMETRICS_BASE_URL, api_key=api_key
         )
 
     @mcp.tool()
