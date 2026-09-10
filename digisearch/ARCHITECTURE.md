@@ -264,9 +264,10 @@ Auth required (`digisearch:query` scope). Rate limited: 30 req/min.
 
 Returns OpenAI-style tool definitions for digigraph orchestration. Accepts optional `index_config` body to specialize tool schemas (filterable_fields, facetable_fields, result_metadata_fields).
 
-Returns 2 or 3 tools:
+Returns 3 or 4 tools:
 - `digisearch` — standard search with pagination
 - `digisearch_fetch_all` — auto-paginating fetch of full result sets
+- `web_search` — public web search (searxng→ddgs, fetch + extract enriched; #3853)
 - `digisearch_research_delegate` — composite research turn (only when `digisearch[agent]` is installed)
 
 #### `POST /v1/orchestrator_invoke`
@@ -281,6 +282,12 @@ Auth required. Rate limited: 10 req/min.
 
 Directly invokes the internal LangGraph pipeline (`plan → retrieve → aggregate`). Requires `digisearch[agent]` install. Returns `{service, error, trace, query, index_name, total, backend, results, rag_sources, formatted_context}`.
 
+#### `POST /v1/web_search`
+
+Auth required (`digisearch:query` scope via the default `digisearch_path_scopes` fallthrough). Rate limited: 30 req/min (default bucket).
+
+Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. `run_web_search` tries the searxng sidecar first, fails over to embedded ddgs (`DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs`, sidecar URL from `DIGISEARCH_SEARXNG_URL`), then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). Fetch/extract failures keep the original search snippet — enrichment never fails the response. No new port: served by the existing digisearch HTTP app.
+
 ### MCP Tools
 
 MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streamable HTTP.
@@ -288,6 +295,7 @@ MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streama
 | Tool | Description | Optional |
 |------|-------------|----------|
 | `digisearch_query` | Search documents; returns formatted string of hits with score and content preview | No |
+| `web_search` | Search the public web; returns JSON `WebSearchResponse` (#3853) | Yes (`digisearch[web-search]`) |
 | `digisearch_research_turn` | Composite research turn (plan → retrieve → aggregate) with citations | Yes (`digisearch[agent]`) |
 
 Tool parameters for `digisearch_query`: `text`, `index_name`, `top_k`, `mode`.
@@ -547,6 +555,13 @@ digisearch/src/digisearch/
 ├── discovery/
 │   └── crossref.py            # DOI → EvidenceMetadata via Crossref REST API
 │
+├── web_search/                # Proprietary web search (#3853, [web-search] extra)
+│   ├── models.py              # WebSearchRequest / WebSearchResponse / WebSearchResult
+│   ├── searxng_provider.py    # Primary: loopback searxng sidecar (/search?format=json)
+│   ├── ddgs_provider.py       # Fallback: embedded ddgs scrape (zero infra)
+│   ├── extractor.py           # fetch HTML → markdown (trafilatura, readability fallback)
+│   └── service.py             # run_web_search: searxng→ddgs failover + digifetch enrich
+│
 └── dev/
     └── edgar_sample_export.py # EDGAR-CORPUS slice exporter (dev/test only)
 ```
@@ -599,6 +614,7 @@ core needs. The HTTP/MCP/CLI service stack and the parser deps are extras:
 | `[embedding]` | `openai` | OpenAI embedder |
 | `[rerank]` | `sentence-transformers` | BGE cross-encoder (`Reranker` provider=`bge`); kept separate from `[embedding]` so OpenAI-only installs stay light (#2441) |
 | `[agent]` | `langgraph` | research-turn graph (§11) |
+| `[web-search]` | `ddgs`, `trafilatura`, `readability-lxml`, `markdownify` | proprietary web search: ddgs fallback + fetch→extract enrichment (§3 `POST /v1/web_search`; #3853) |
 | `[dev]` | `[server]` + `[ingestion]` + pytest/ruff/langgraph | CI + local dev (so every dev install exercises and pip-audits the full shipped surface) |
 
 The **running service** installs `digisearch[server,ingestion,azure,chroma]`
@@ -930,7 +946,7 @@ The contract is versioned by `{"tools": [...], "version": 1}` in the tools respo
 
 ### digiclaw MCP attachment
 
-digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback, `digisearch-mcp` Docker profile). Tools available: `digisearch_query`, `digisearch_research_turn` (when `[agent]` is installed).
+digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback, `digisearch-mcp` Docker profile). Tools available: `digisearch_query`, `web_search` (when `[web-search]` is installed), `digisearch_research_turn` (when `[agent]` is installed).
 
 MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is purely at network level (loopback binding).
 
@@ -989,6 +1005,10 @@ The `digisearch-mcp` Docker Compose profile starts the MCP server sidecar. To en
 docker compose --profile digisearch-mcp up
 ```
 
+### searxng + valkey sidecar (#3853)
+
+The `searxng` service (`searxng/searxng`) is loopback-only on the host (`127.0.0.1:8080`) with config at `config/searxng/settings.yml` (`search.formats: [html, json]`, engine allowlist). `valkey` backs its limiter. digisearch reaches it in-container via `DIGISEARCH_SEARXNG_URL=http://searxng:8080`. No new digisearch port: `POST /v1/web_search`, MCP `web_search`, and orchestrator `web_search` all ride the existing apps.
+
 ### Environment variables reference
 
 | Variable | Default | Purpose |
@@ -1014,6 +1034,8 @@ docker compose --profile digisearch-mcp up
 | `DIGISEARCH_LIGHTRAG_WORKING_DIR` | `.lightrag` | LightRAG working directory |
 | `DIGISEARCH_RERANK_ENABLED` | `0` | When truthy, `query_index()` runs `Reranker` over results (`top_n=query.top_k`); off by default (#2441) |
 | `DIGISEARCH_RERANK_PROVIDER` | `bge` | `bge` (`BAAI/bge-reranker-v2-m3`) or `cohere` (`rerank-multilingual-v3.0`) when rerank is enabled |
+| `DIGISEARCH_WEB_SEARCH_BACKEND` | `auto` | `auto` (searxng→ddgs failover) \| `searxng` \| `ddgs` (#3853) |
+| `DIGISEARCH_SEARXNG_URL` | `http://127.0.0.1:8080` | searxng sidecar base URL (compose sets `http://searxng:8080` in-container; #3853) |
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
 | `DIGISEARCH_EMBED` | `1` (on when unset) | Set `0` to skip pipeline-level embed on ingest |
 | `DIGISEARCH_EMBEDDING_PROVIDER` | _(unset)_ | `minilm` \| `openai` — explicit provider (fails loud if unloadable) |

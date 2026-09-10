@@ -99,6 +99,27 @@ def digisearch_query(
 
 
 @mcp.tool()
+def web_search(
+    query: str,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+    max_results: int = 4,
+) -> str:
+    """Search the public web (first-party tool). Returns JSON WebSearchResponse."""
+    from digisearch.web_search.models import WebSearchRequest
+    from digisearch.web_search.service import run_web_search
+
+    return run_web_search(
+        WebSearchRequest(
+            query=query,
+            include_domains=include_domains or [],
+            exclude_domains=exclude_domains or [],
+            max_results=max_results,
+        )
+    ).model_dump_json()
+
+
+@mcp.tool()
 def search_strategies(
     query: str,
     top_k: int = 10,

@@ -25,10 +25,12 @@ from digisearch.orchestrator_tools import (
     TOOL_DIGISEARCH,
     TOOL_DIGISEARCH_FETCH_ALL,
     TOOL_DIGISEARCH_RESEARCH_DELEGATE,
+    TOOL_WEB_SEARCH,
     OpenAIToolDict,
 )
 from digisearch.pipeline.ingest import IngestError, ingest_source
 from digisearch.search._stub import _first_env, query_index
+from digisearch.web_search.models import WebSearchRequest, WebSearchResponse
 
 configure_logging()
 
@@ -457,7 +459,8 @@ class OrchestratorInvokeRequest(BaseModel):
     """Request for POST /v1/orchestrator_invoke."""
 
     tool: str = Field(
-        ..., description="digisearch | digisearch_fetch_all | digisearch_research_delegate"
+        ...,
+        description="digisearch | digisearch_fetch_all | digisearch_research_delegate | web_search",
     )
     arguments: dict[str, Any] = Field(default_factory=dict)
     default_index_name: str | None = Field(
@@ -497,7 +500,9 @@ class OrchestratorInvokeResponse(BaseModel):
     ok: bool
     service: str | None = None
     tool: str | None = None
-    data: QueryResponse | OrchestratorFetchAllData | ResearchTurnOutput | None = None
+    data: (
+        QueryResponse | OrchestratorFetchAllData | ResearchTurnOutput | WebSearchResponse | None
+    ) = None
     error: str | None = None
 
 
@@ -718,6 +723,40 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             data=ResearchTurnOutput.model_validate(body),
         )
 
+    if tool == TOOL_WEB_SEARCH:
+        try:
+            from digisearch.web_search.service import run_web_search
+        except ImportError as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Install digisearch[web-search] for web_search: {e}",
+            ) from e
+        qtext = str(args.get("query") or "").strip()
+        if not qtext:
+            return OrchestratorInvokeResponse(ok=False, error="query is required")
+        include = (
+            args.get("include_domains") if isinstance(args.get("include_domains"), list) else []
+        )
+        exclude = (
+            args.get("exclude_domains") if isinstance(args.get("exclude_domains"), list) else []
+        )
+        max_raw = args.get("max_results", 4)
+        max_results = int(max_raw) if isinstance(max_raw, int) else 4
+        resp = run_web_search(
+            WebSearchRequest(
+                query=qtext,
+                include_domains=[str(d) for d in include],
+                exclude_domains=[str(d) for d in exclude],
+                max_results=max_results,
+            )
+        )
+        return OrchestratorInvokeResponse(
+            ok=True,
+            service="digisearch",
+            tool=tool,
+            data=resp,
+        )
+
     raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
 
 
@@ -732,6 +771,19 @@ def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
             detail=f"Install digisearch[agent] for /v1/research_turn: {e}",
         ) from e
     return ResearchTurnOutput.model_validate(run_research_turn(req.model_dump(mode="json")))
+
+
+@app.post("/v1/web_search", response_model=WebSearchResponse)
+def v1_web_search(req: WebSearchRequest) -> WebSearchResponse:
+    """Search the public web (searxng with ddgs fallback, fetch + extract enrichment)."""
+    try:
+        from digisearch.web_search.service import run_web_search
+    except ImportError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Install digisearch[web-search] for /v1/web_search: {e}",
+        ) from e
+    return run_web_search(req)
 
 
 @app.post("/ingest", response_model=IngestResponse)
