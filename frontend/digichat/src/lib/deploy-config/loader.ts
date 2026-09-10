@@ -23,6 +23,7 @@ import {
 import {
   BASELINE_EMBED_PLACEHOLDER,
   BASELINE_EMBED_SKIN,
+  BASELINE_EMBED_SUGGESTIONS,
   BASELINE_EMBED_WELCOME,
   BASELINE_EMBED_WELCOME_BODY,
 } from "@/lib/baseline-embed";
@@ -320,6 +321,7 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
               body: BASELINE_EMBED_WELCOME_BODY,
             },
             placeholder: BASELINE_EMBED_PLACEHOLDER,
+            suggestions: [...BASELINE_EMBED_SUGGESTIONS],
           },
           persistence: "none",
           auth: "anonymous",
@@ -334,7 +336,13 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
             allowPicker: true,
           },
           backend: { type: "digigraph" },
-          gate: { mode: "ungated", activityDetail: "labels" },
+          mcp: { servers: [], allowUserServers: true, allowAddForm: true },
+          gate: {
+            mode: "ungated",
+            activityDetail: "labels",
+            showByok: true,
+            webSearch: true,
+          },
         },
       },
       "digichat config (dev default)",

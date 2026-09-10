@@ -23,9 +23,18 @@ vi.mock("@/lib/adapters/foundry/stream", () => ({
   createFoundryStreamResponse: vi.fn(async () => new Response("foundry", { status: 200 })),
 }));
 
-vi.mock("@/lib/adapters/digithings/stream", () => ({
-  createDigigraphTraceStreamResponse: vi.fn(async () => new Response("trace", { status: 200 })),
-}));
+vi.mock("@/lib/adapters/digithings/stream", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/adapters/digithings/stream")>(
+      "@/lib/adapters/digithings/stream",
+    );
+  return {
+    ...actual,
+    createDigigraphTraceStreamResponse: vi.fn(
+      async () => new Response("trace", { status: 200 }),
+    ),
+  };
+});
 
 vi.mock("@/lib/digigraph-upstream", () => ({
   resolveDigigraphUpstreamAuth: vi.fn(),
@@ -1354,6 +1363,46 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       expect(res.status).toBe(200);
       expect(createDigigraphTraceStreamResponse).not.toHaveBeenCalled();
       expect(streamText).toHaveBeenCalledTimes(1);
+    });
+
+    describe("baseline researchSystemPrompt", () => {
+      function lastResearchPrompt(): unknown {
+        return vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0]
+          ?.researchSystemPrompt;
+      }
+
+      it("omits researchSystemPrompt when no x-embed-host header is present", async () => {
+        await POST(chatReq());
+        expect(lastResearchPrompt()).toBeUndefined();
+      });
+
+      it("sends the baseline prompt when x-embed-host matches no deployment", async () => {
+        await POST(chatReq({ "x-embed-host": "https://unknown.example" }));
+        const prompt = lastResearchPrompt();
+        expect(typeof prompt).toBe("string");
+        expect(prompt as string).toMatch(/digi(chat|graph|search|vault)/);
+      });
+
+      it("omits researchSystemPrompt when x-embed-host matches a deployment", async () => {
+        setDigichatConfigForTests(
+          parseDigichatConfig({
+            version: 1,
+            deployment: { slug: "local", backend: { type: "digigraph" } },
+            hosts: {
+              "matched.example": {
+                slug: "matched",
+                backend: { type: "digigraph" },
+              },
+            },
+          })
+        );
+        try {
+          await POST(chatReq({ "x-embed-host": "https://matched.example" }));
+          expect(lastResearchPrompt()).toBeUndefined();
+        } finally {
+          resetDigichatConfigForTests();
+        }
+      });
     });
   });
 });

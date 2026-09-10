@@ -21,6 +21,7 @@ import {
 import {
   BASELINE_EMBED_PLACEHOLDER,
   BASELINE_EMBED_SKIN,
+  BASELINE_EMBED_SUGGESTIONS,
   BASELINE_EMBED_WELCOME,
   BASELINE_EMBED_WELCOME_BODY,
 } from "@/lib/baseline-embed";
@@ -81,12 +82,12 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   welcome: BASELINE_EMBED_WELCOME,
   welcomeBody: [...BASELINE_EMBED_WELCOME_BODY],
   placeholder: BASELINE_EMBED_PLACEHOLDER,
-  suggestions: [],
+  suggestions: [...BASELINE_EMBED_SUGGESTIONS],
   attachments: true,
-  showByok: false,
+  showByok: true,
   layout: "embed",
   showLanguageSelector: false,
-  webSearch: false,
+  webSearch: true,
 };
 
 /** Registry entry → client-safe config. Copies declared fields only; `token`

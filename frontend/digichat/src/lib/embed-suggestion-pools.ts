@@ -23,6 +23,11 @@ export function getTenantSuggestionPool(slug: string): string[] | undefined {
   return pool ? [...pool] : undefined;
 }
 
+/** First `count` items of `pool`, capped at 4 — deterministic pick for SSR/hydration. */
+export function pickStableEmbedSuggestions(pool: readonly string[]): string[] {
+  return [...pool].slice(0, Math.min(pool.length, 4));
+}
+
 /** Pick `min`–`max` unique items from `pool` (defaults 3–4). */
 export function pickRandomEmbedSuggestions(
   pool: readonly string[],

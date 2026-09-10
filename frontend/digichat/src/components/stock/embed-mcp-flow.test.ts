@@ -129,6 +129,18 @@ describe("connectedTools", () => {
     ]);
     expect(rows.find((r) => r.id === "datatap")?.kind).toBe("mcp");
   });
+
+  it("keeps the websearch row with empty catalog and MCP sets (baseline embed)", () => {
+    const rows = connectedTools({
+      hasDigisearch: false,
+      hasVault: false,
+      tenantAllowsWeb: true,
+      catalogTools: [],
+      mcpServers: [],
+      mcpCustom: [],
+    });
+    expect(rows.map((r) => r.slash)).toEqual(["websearch"]);
+  });
 });
 
 describe("summaries", () => {

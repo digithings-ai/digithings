@@ -15,7 +15,10 @@ import {
   DigigraphUpstreamAuthError,
   resolveDigigraphUpstreamAuth,
 } from "@/lib/digigraph-upstream";
-import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
+import {
+  createDigigraphTraceStreamResponse,
+  DEFAULT_BASELINE_RESEARCH_SYSTEM_PROMPT,
+} from "@/lib/adapters/digithings/stream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { resolveLanguageCode } from "@/lib/languages";
 import { requireDigiChatAuth } from "@/lib/request-auth";
@@ -351,6 +354,9 @@ export async function POST(req: Request) {
   // provider models — the CI picker must not reject those ids (#3829).
   let modelId = digigraphModelName();
   const requestedModel = req.headers.get("x-digi-model")?.trim() || undefined;
+  // Set inside the MCP/deploy-config block below: true when x-embed-host is
+  // present but matches no host deployment (unconfigured baseline embed).
+  let isBaselineEmbed = false;
   try {
     const { allowlistModelId } = await import("@/lib/deploy-config");
     const {
@@ -438,11 +444,18 @@ export async function POST(req: Request) {
       mcpUpstreamHeaderValue,
     } = await import("@/lib/deploy-config");
     const {
+      matchHostDeployment,
       resolveDeploymentForHost,
       getDigichatConfig,
       embedTenantToDeployment,
     } = await import("@/lib/deploy-config/loader");
     const embedHost = req.headers.get("x-embed-host");
+    // Baseline-only research prompt: the header is present but matches no host
+    // deployment, so the request serves the unconfigured baseline embed. MUST
+    // use matchHostDeployment (no fallback) — resolveDeploymentForHost below
+    // falls back to the default deployment for unknown hosts.
+    isBaselineEmbed =
+      embedHost !== null && matchHostDeployment(embedHost, getDigichatConfig()) === null;
     let dep = resolveDeploymentForHost(embedHost, getDigichatConfig());
     if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
     const operator = operatorMcpServersForUpstream(dep);
@@ -516,6 +529,9 @@ export async function POST(req: Request) {
           responseHeaders,
           activityDetail: embedConfig?.activityDetail ?? "full",
           signal: req.signal,
+          researchSystemPrompt: isBaselineEmbed
+            ? DEFAULT_BASELINE_RESEARCH_SYSTEM_PROMPT
+            : undefined,
         }),
       );
     } catch (err) {

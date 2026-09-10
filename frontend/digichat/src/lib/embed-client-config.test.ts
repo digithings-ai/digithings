@@ -6,6 +6,7 @@ import {
   toEmbedClientConfig,
 } from "./embed-client-config";
 import { parseEmbedTenants, resetEmbedTenantRegistryForTests } from "./embed-tenants";
+import { BASELINE_EMBED_SUGGESTIONS } from "./baseline-embed";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -218,7 +219,8 @@ describe("DEFAULT_EMBED_TENANT_CONFIG", () => {
       "Ask about anything you need help with.",
     ]);
     expect(DEFAULT_EMBED_TENANT_CONFIG.attachments).toBe(true);
-    expect(DEFAULT_EMBED_TENANT_CONFIG.showByok).toBe(false);
-    expect(DEFAULT_EMBED_TENANT_CONFIG.webSearch).toBe(false);
+    expect(DEFAULT_EMBED_TENANT_CONFIG.showByok).toBe(true);
+    expect(DEFAULT_EMBED_TENANT_CONFIG.webSearch).toBe(true);
+    expect(DEFAULT_EMBED_TENANT_CONFIG.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
   });
 });

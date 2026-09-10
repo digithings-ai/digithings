@@ -8,6 +8,10 @@ import {
 } from "./embed-chat-prefs";
 
 describe("disabledCatalogIds", () => {
+  it("defaults web search on; the tenant gate still decides whether it sends", () => {
+    expect(DEFAULT_EMBED_CHAT_PREFS.webSearch).toBe(true);
+  });
+
   it("is empty when search and vault are on", () => {
     expect(disabledCatalogIds(DEFAULT_EMBED_CHAT_PREFS)).toEqual([]);
   });

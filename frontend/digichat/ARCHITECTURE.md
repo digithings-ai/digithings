@@ -1362,7 +1362,16 @@ same subpath with a fixture runtime. Contract:
 wrong/absent customer token) is the unconfigured container default: skin
 `digichat` (gallery Thread UI, including hairline hover hints with no
 rotated-square arrow), generic “Ask a question” copy, compact attach+send
-composer, empty tool catalog (no Search / Vault / MCP / provider). YAML that omits
+composer, plus the baseline template defaults: 4 starter suggestion chips
+(`BASELINE_EMBED_SUGGESTIONS`, owner-replaceable copy), `gate.webSearch: true`
+with the websearch session pref defaulting ON (explicit opt-out persists;
+tenant AND still gates the BFF forward per #3420), and
+`mcp.allowUserServers / allowAddForm: true` (session MCP URLs stay
+`https`-only + SSRF-allowlisted, operator YAML wins). The `/tools` slash row
+stays visible on empty catalogs via the websearch row. The BFF sends
+`research_system_prompt` (`DEFAULT_BASELINE_RESEARCH_SYSTEM_PROMPT`) only for
+this baseline case — `x-embed-host` present but matching no host deployment —
+never for matched hosts or first paint without the header. YAML that omits
 `skin` still parses as catalog `base`. Product hosts (`digithings-ai-embed.yaml`,
 `occ-embed.yaml`) keep `chrome.skin: digichat` with the digisearch / digivault
 catalog (web_search tenant-allowed on digithings.ai; embed/popup session
@@ -1402,7 +1411,8 @@ default to `chrome.mode: embed` so `/` redirects to `/embed` and chat is
 do not wrap the catalog page; anonymous layout chat uses the same YAML
 install. `welcome` (headline string, or `{ title, body }`) / `placeholder` /
 `title` / `accent` from YAML are applied to the selected template at runtime.
-`suggestions` is opt-in; omit it for no starter chips. A bare `welcome: "…"`
+`suggestions` is opt-in per deployment YAML; omit it for no starter chips
+(the unconfigured baseline default still ships the template chips above). A bare `welcome: "…"`
 string still means title-only.
 
 ### digichat CLI (Ink) — separate Node package

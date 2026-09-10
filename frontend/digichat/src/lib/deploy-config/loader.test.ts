@@ -12,6 +12,7 @@ import { toDigichatClientConfig, toChromeClientConfig } from "./client-projectio
 import { filterForceToolHeader } from "./force-tool";
 import { clientConfigFromEmbedTenant } from "./embed-bridge";
 import { toEmbedClientConfig } from "@/lib/embed-client-config";
+import { BASELINE_EMBED_SUGGESTIONS } from "@/lib/baseline-embed";
 import type { EmbedTenantConfig } from "@/lib/embed-tenants";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -238,6 +239,11 @@ deployment:
       ],
       allowPicker: true,
     });
+    expect(cfg.deployment?.chrome.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
+    expect(cfg.deployment?.mcp?.allowUserServers).toBe(true);
+    expect(cfg.deployment?.mcp?.allowAddForm).toBe(true);
+    expect(cfg.deployment?.gate.webSearch).toBe(true);
+    expect(cfg.deployment?.gate.showByok).toBe(true);
   });
 });
 

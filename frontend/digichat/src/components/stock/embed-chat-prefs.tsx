@@ -2,7 +2,7 @@
 
 /**
  * Session-only embed/popup prefs (#3733 / #3736). Reload and `/new` reset:
- * /digisearch and /digivault on, /websearch off, language English, thinking on.
+ * /digisearch and /digivault on, /websearch on, language English, thinking on.
  * Not localStorage.
  */
 
@@ -25,7 +25,7 @@ export type EmbedChatPrefs = {
 };
 
 export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
-  webSearch: false,
+  webSearch: true,
   digisearch: true,
   vault: true,
   extra: {},
