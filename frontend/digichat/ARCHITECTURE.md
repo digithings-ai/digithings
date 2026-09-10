@@ -1236,11 +1236,10 @@ digigraph SSE frames carry an optional `digigraph_trace` field on each
 `choices[0].delta`. The trace path maps typed payloads (`tool_call`,
 `rag_sources`, `graph_update`, and opaque labels) through `mapDigigraphTraceToSpans` and emits
 only standard tool / `source-*` / reasoning / `data-status` parts (`writeStandardActivity`).
-Each tool invocation gets its own `toolCallId` (FIFO per tool name). Input is JSON
-(`query` / vault path from MCP arguments); retrieve output is `{ query, documents, hitCount }`
-with document snippets/bodies at `activityDetail: full`. The website-like dogfood host
-(`config/examples/digithings-ai-embed.yaml`) sets `gate.activityDetail: full` so chunks are
-not replaced by `{ documentsWithheld: true }`. Leftover started rows are auto-completed at
+Each tool invocation gets its own `toolCallId` (FIFO per tool name). Input JSON is pretty-printed on the wire (`tool-input-delta`); retrieve output is `{ query, documents, hitCount, durationMs }`
+with document snippets/bodies at `activityDetail: full`. Vault search `rag_sources` traces map through `mapDigivaultSearchNotes` (not the digisearch retrieve-with-no-docs path). A failed vault invoke is `execute_tool`/`failed`, never `{ hitCount: 0 }`. The website-like dogfood host
+(`config/examples/digithings-ai-embed.yaml`) sets `gate.activityDetail: full` and `backend.vaultPathPrefix: clients/digithings` so D1 FTS is scoped and chunks are
+not replaced by `{ documentsWithheld: true }`. Tool row titles humanize ids (`digisearch semantic` when the locate method is known). `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are auto-completed at
 stream end so ordinary retrieve / get_note / search_notes never sit on Allow/Deny.
 `tool-input-available` is emitted only with `tool-output-available` during the call. 1.4 `data-digichatActivity` is not
 written. Auth `chat-panel` and embed both

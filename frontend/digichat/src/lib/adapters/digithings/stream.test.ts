@@ -83,6 +83,36 @@ it("never emits data-digigraphTrace on the authenticated path", async () => {
   expect(body).not.toContain('"workflow_id"');
 });
 
+it("maps reasoning_content deltas onto reasoning UI chunks", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [{ delta: { reasoning_content: "internal chain of thought" } }],
+        })}\n\n`,
+        `data: ${JSON.stringify({
+          choices: [{ delta: { content: "Final answer." } }],
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+  expect(body).toContain('"type":"reasoning-start"');
+  expect(body).toContain('"type":"reasoning-delta"');
+  expect(body).toContain("internal chain of thought");
+  expect(body).toContain("Final answer.");
+});
+
 it("posts the full multi-turn history to digigraph chat completions", async () => {
   const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response("data: [DONE]\n\n", {

@@ -31,6 +31,34 @@ const ANIMATION_DURATION = 200;
 
 const pressable = "active:scale-[0.98]";
 
+function formatJsonDump(value: unknown): string {
+  if (value === undefined) return "";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return value;
+    try {
+      return JSON.stringify(JSON.parse(trimmed), null, 2);
+    } catch {
+      return value;
+    }
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+const formatToolDuration = (ms: number) => {
+  if (!Number.isFinite(ms) || ms < 0) return "0ms";
+  const rounded = Math.round(ms);
+  if (rounded < 1000) return `${rounded}ms`;
+  const seconds = rounded / 1000;
+  if (seconds < 10) return `${(Math.floor(seconds * 10) / 10).toFixed(1)}s`;
+  if (seconds < 60) return `${Math.floor(seconds)}s`;
+  return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
+};
+
 export type ToolFallbackRootProps = Omit<
   React.ComponentProps<typeof Collapsible>,
   "open" | "onOpenChange"
@@ -95,14 +123,6 @@ const statusIconMap: Record<ToolStatus, React.ElementType> = {
   complete: CheckIcon,
   incomplete: XCircleIcon,
   "requires-action": AlertCircleIcon,
-};
-
-const formatToolDuration = (ms: number) => {
-  if (ms < 1000) return "<1s";
-  const seconds = ms / 1000;
-  if (seconds < 10) return `${(Math.floor(seconds * 10) / 10).toFixed(1)}s`;
-  if (seconds < 60) return `${Math.floor(seconds)}s`;
-  return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
 };
 
 function ToolFallbackDuration({
@@ -235,7 +255,7 @@ function ToolFallbackArgs({
       {...props}
     >
       <pre className="aui-tool-fallback-args-value bg-muted/50 text-foreground/90 rounded-md p-2.5 text-xs whitespace-pre-wrap">
-        {argsText}
+        {formatJsonDump(argsText)}
       </pre>
     </div>
   );
@@ -260,7 +280,7 @@ function ToolFallbackResult({
         Result:
       </p>
       <pre className="aui-tool-fallback-result-content bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs whitespace-pre-wrap">
-        {typeof result === "string" ? result : JSON.stringify(result, null, 2)}
+        {formatJsonDump(result)}
       </pre>
     </div>
   );

@@ -254,6 +254,24 @@ export async function createDigigraphTraceStreamResponse(opts: {
             digigraphErrorToEmbedPayload(dgErr as DigigraphErrorPayload),
           );
         }
+        const reasoning =
+          (typeof delta.reasoning_content === "string" && delta.reasoning_content) ||
+          (typeof (delta as { reasoning?: unknown }).reasoning === "string"
+            ? (delta as { reasoning: string }).reasoning
+            : "");
+        if (reasoning) {
+          closeText();
+          writeStandardActivity(
+            writer,
+            {
+              operation: "chat",
+              status: "started",
+              label: "Thinking",
+              reasoningDelta: reasoning,
+            },
+            activityCtx,
+          );
+        }
         const c = delta.content;
         if (typeof c === "string" && c.length) {
           const cleaned = stripToolDumpFromAnswerDelta(c);

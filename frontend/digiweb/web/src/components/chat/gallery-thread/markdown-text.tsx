@@ -18,6 +18,7 @@ import {
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { useCopyToClipboard } from "./hooks/use-copy-to-clipboard";
 import { cn } from "./cn";
+import { ChatMermaidBlock } from "../ChatMermaidBlock";
 
 type MarkdownTextProps = Partial<TextMessagePartProps> & {
   components?: Parameters<typeof memoizeMarkdownComponents>[0];
@@ -263,4 +264,6 @@ const defaultComponents = memoizeMarkdownComponents({
     );
   },
   CodeHeader,
+  SyntaxHighlighter: ({ code, language }: { code: string; language?: string }) =>
+    language === "mermaid" ? <ChatMermaidBlock code={code} /> : null,
 });

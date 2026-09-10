@@ -58,7 +58,7 @@ describe("writeStandardActivity", () => {
     expect(chunks[0]).toMatchObject({
       type: "tool-input-start",
       toolName: "file_search",
-      title: "file_search",
+      title: "file search",
     });
     expect(chunks.some((c) => c.type === "tool-input-available")).toBe(true);
     expect(chunks.some((c) => c.type === "tool-output-available")).toBe(true);
@@ -66,10 +66,11 @@ describe("writeStandardActivity", () => {
     const out = chunks.find((c) => c.type === "tool-output-available");
     expect(out?.toolCallId).toBe(start?.toolCallId);
     const delta = chunks.find((c) => c.type === "tool-input-delta");
-    expect(delta?.inputTextDelta).toBe(JSON.stringify({ query: "auth" }));
+    expect(delta?.inputTextDelta).toBe(JSON.stringify({ query: "auth" }, null, 2));
     const input = chunks.find((c) => c.type === "tool-input-available");
     expect(input?.input).toEqual({ query: "auth" });
-    expect(out?.output).toEqual({ query: "auth" });
+    expect(out?.output).toMatchObject({ query: "auth" });
+    expect(out?.output).toHaveProperty("durationMs");
   });
 
   it("mints a new toolCallId per invocation of the same tool name", () => {

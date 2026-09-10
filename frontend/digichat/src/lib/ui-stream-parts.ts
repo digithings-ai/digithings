@@ -9,6 +9,7 @@
 import type { UIMessage, UIMessageChunk } from "ai";
 import type { ActivityDocument, ActivitySpan } from "@/lib/chat-activity";
 import { expandPageContextFileParts } from "@/lib/embed-page-context-messages";
+import { toolRowTitle } from "@/lib/adapters/digithings/activity/tool-display";
 
 /** Unbranded conversation-id part (Foundry continuity). Was data-externalConversation. */
 export const CONVERSATION_PART_TYPE = "data-conversation" as const;
@@ -27,6 +28,8 @@ export type StandardActivityContext = {
   inputAvailable: Set<string>;
   jsonInputWritten: Set<string>;
   reasoningId: string | null;
+  /** BFF wall clock when each tool-input-start was written. */
+  startedAt: Map<string, number>;
 };
 
 export function createActivityWriteContext(): StandardActivityContext {
@@ -38,6 +41,7 @@ export function createActivityWriteContext(): StandardActivityContext {
     inputAvailable: new Set(),
     jsonInputWritten: new Set(),
     reasoningId: null,
+    startedAt: new Map(),
   };
 }
 
@@ -71,6 +75,10 @@ function rememberInput(
   return merged;
 }
 
+function displayTitle(name: string, span?: ActivitySpan): string {
+  return toolRowTitle(name, span?.toolInput);
+}
+
 function writeToolStart(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
@@ -85,6 +93,7 @@ function writeToolStart(
     ...(title ? { title } : {}),
   });
   ctx.started.add(id);
+  ctx.startedAt.set(id, Date.now());
   return id;
 }
 
@@ -127,7 +136,7 @@ function writeJsonInputDelta(
   writer.write({
     type: "tool-input-delta",
     toolCallId: id,
-    inputTextDelta: JSON.stringify(input),
+    inputTextDelta: JSON.stringify(input, null, 2),
   });
   ctx.jsonInputWritten.add(id);
 }
@@ -161,6 +170,10 @@ function writeToolOutput(
     ...rememberInput(ctx, id, span),
     ...extra,
   };
+  const started = ctx.startedAt.get(id);
+  if (started !== undefined) {
+    output.durationMs = Math.max(0, Date.now() - started);
+  }
   if (span.status === "failed") output.status = "failed";
   writer.write({
     type: "tool-output-available",
@@ -231,12 +244,12 @@ export function writeStandardActivity(
   if (span.operation === "execute_tool") {
     const name = toolNameOf(span);
     if (span.status === "started") {
-      const id = beginToolCall(writer, ctx, name, span.label);
+      const id = beginToolCall(writer, ctx, name, displayTitle(name, span));
       writeJsonInputDelta(writer, ctx, id, span);
       rememberInput(ctx, id, span);
       return;
     }
-    const id = completeToolCall(writer, ctx, name, span.label);
+    const id = completeToolCall(writer, ctx, name, displayTitle(name, span));
     ensureToolInput(writer, ctx, id, name, span);
     writeToolOutput(writer, ctx, id, span);
     return;
@@ -244,7 +257,7 @@ export function writeStandardActivity(
 
   if (span.operation === "retrieve") {
     const name = toolNameOf(span);
-    const id = completeToolCall(writer, ctx, name, span.label);
+    const id = completeToolCall(writer, ctx, name, displayTitle(name, span));
     ensureToolInput(writer, ctx, id, name, span);
     const docs = span.documents ?? [];
     const withheld = span.documentsWithheld === true;
