@@ -280,6 +280,79 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-BYOK-Model"]).toBe("openai/gpt-4o-mini");
   });
 
+  it("rejects a house X-Digi-Model that is not on the CI picker allowlist", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "local",
+          backend: { type: "digigraph" },
+          models: {
+            default: "deepseek/deepseek-v4-flash",
+            available: ["deepseek/deepseek-v4-flash", "z-ai/glm-5.3-flash"],
+            allowPicker: true,
+          },
+        },
+      }),
+    );
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-model": "openai/gpt-4o-mini",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe("model_not_allowed");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("does not apply the house picker allowlist when BYOK is bound", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "local",
+          backend: { type: "digigraph" },
+          models: {
+            default: "deepseek/deepseek-v4-flash",
+            available: ["deepseek/deepseek-v4-flash"],
+            allowPicker: true,
+          },
+        },
+      }),
+    );
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-model": "gpt-4o-mini",
+            "x-byok-key": "sk-test",
+            "x-byok-provider": "openai",
+            "x-byok-model": "gpt-4o-mini",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
   it("forwards OCC corpus headers from digigraph embed backend config", async () => {
     vi.mocked(resolveChatTenantContext).mockResolvedValue({
       tenantSlug: "occ",
