@@ -256,6 +256,51 @@ pipeline.
 
 The `digiquant_pipeline_delegate` tool is a second name in the orchestrator manifest (same function), used by digigraph's hub dispatch to alias the pipeline call.
 
+#### MCP hosting — dedicated container (#3780 Task 8)
+
+The market-data MCP server ships as its own image, `digiquant/Dockerfile.mcp`
+(build context: monorepo root): `python:3.12-slim` +
+`uv sync --frozen --package digiquant --extra research --extra mcp`, entrypoint
+`python -m digiquant.mcp_server` (FastMCP `streamable-http` on `:8767`). It
+carries the `[research]`/`[mcp]` extras — never the backtest engine. The hosted
+bind is non-loopback via `DIGIQUANT_MCP_HOST=0.0.0.0` /
+`DIGIQUANT_MCP_PORT=8767` (code defaults stay `127.0.0.1:8767` for local runs).
+
+Cloudflare wiring (`frontend/digithings-stack-cloudflare/`): `DigiQuantMcpContainer`
+beside `DigiStackContainer` (own `[[containers]]` image entry, `MCP_STACK`
+binding, `v2` migration), routed by hostname (`mcp.digithings.ai`, reserved) and
+by workers.dev path prefix (`/_stack/mcp/*`, prefix stripped like
+`/_stack/key/*`). Single replica by design (`max_instances = 1`, one pinned
+`MCP_CONTAINER_ID`): the read path assumes one replica (in-memory 900s TTL
+keyed by `as_of` + manifest version; correctness never depends on the cache —
+R2 is source of truth).
+
+Networking/auth: public hostname `mcp.digithings.ai` is reserved, not enabled —
+the `[[routes]]` entry stays commented until Worker-edge digikey JWT enforcement
+lands. Caller auth is via digikey, scope `digiquant:backtest` (the default/read
+scope in `digiquant_path_scopes()`; no new scope was minted — current MCP tools
+are unauthenticated localhost). Enabling the route without that gate is a human
+decision (new external network exposure).
+
+Egress: the container needs `https://query1.finance.yahoo.com` (30d live overlap)
+and `https://api.stlouisfed.org` (FRED macro overlap). Verified 2026-09-10 from
+the operator host: `curl -sI https://query1.finance.yahoo.com` → HTTP 429
+(Yahoo rate-limit, i.e. egress works — same retry/backoff 1s/2s/4s as the
+refresh cron applies); `curl -sI https://api.stlouisfed.org` → HTTP 301 to the
+API docs. Re-run both before first deploy; a 429 storm behind shared egress
+means backing off the overlap window, not widening it.
+
+Warm policy (min-instances-1 equivalent): `sleepAfter = "24h"` on the container
+class, backed by the daily `market-data-refresh` cron health ping:
+`curl -sS https://<stack-host>/_stack/mcp/mcp -H 'Accept: application/json'`.
+A cold start only pays the FastMCP import, never a data load.
+
+Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`
+plus the four R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
+`R2_SECRET_ACCESS_KEY` (same `digithings-archive` bucket as the checkpoint
+archive). The read path is registry-read-only (registry inserts raise) so the
+cron's `MARKET_DATA_POSTGRES_URI` is deliberately NOT forwarded here.
+
 ### CLI (`python -m digiquant` / `digiquant`)
 
 Top-level click group in `cli/__init__.py`. Subgroups live under `cli/` (or dashboard for policy-replay). Pipeline commands call the same functions as HTTP/MCP via `service.py` where applicable.
