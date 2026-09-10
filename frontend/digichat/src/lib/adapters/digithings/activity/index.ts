@@ -15,6 +15,40 @@ export type DigigraphTraceLike = {
 /** LangGraph housekeeping trace types — never shown in the activity chain. */
 const SUPPRESSED_TRACE_TYPES = new Set(["graph_step", "span"]);
 
+function queryFromToolArgs(args: Record<string, unknown>): string | undefined {
+  const query = typeof args.query === "string" && args.query.trim() ? args.query.trim() : undefined;
+  if (query) return query;
+  const vaultPath =
+    (typeof args.vault_path === "string" && args.vault_path.trim()) ||
+    (typeof args.path === "string" && args.path.trim()) ||
+    "";
+  if (vaultPath) return vaultPath;
+  const paths = args.vault_paths;
+  if (Array.isArray(paths)) {
+    const n = paths.filter((p) => typeof p === "string" && p.trim()).length;
+    if (n === 1) return "1 note";
+    if (n > 1) return `${n} notes`;
+  }
+  return undefined;
+}
+
+function argsRecord(payload: Record<string, unknown>): Record<string, unknown> | undefined {
+  const raw = payload.arguments ?? payload.args;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  return undefined;
+}
+
+function toolInputFromPayload(payload: Record<string, unknown>): Record<string, unknown> | undefined {
+  const args = argsRecord(payload);
+  if (args && Object.keys(args).length) return args;
+  if (typeof payload.query === "string" && payload.query.trim()) {
+    return { query: payload.query.trim() };
+  }
+  return undefined;
+}
+
 function mapGraphUpdate(payload: Record<string, unknown>): ActivitySpan | null {
   const briefRaw = payload.research_brief;
   if (!briefRaw || typeof briefRaw !== "object" || Array.isArray(briefRaw)) return null;
@@ -70,16 +104,19 @@ export function mapDigigraphTraceToSpans(
       (typeof payload.name === "string" && payload.name.trim()) ||
       "";
     if (!tool) return [];
+    const args = argsRecord(payload);
     const query =
-      typeof payload.query === "string" && payload.query.trim()
+      (typeof payload.query === "string" && payload.query.trim()
         ? payload.query.trim()
-        : undefined;
+        : undefined) || (args ? queryFromToolArgs(args) : undefined);
+    const toolInput = toolInputFromPayload(payload);
     raw = {
       operation: "execute_tool",
       status: payload.status === "completed" ? "completed" : "started",
       label: tool,
       toolName: tool,
       ...(query ? { query } : {}),
+      ...(toolInput ? { toolInput } : {}),
     };
   } else if (trace.type === "rag_sources") {
     raw = mapDigisearchRagSources(trace.payload ?? {});

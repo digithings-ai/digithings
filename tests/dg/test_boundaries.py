@@ -241,3 +241,4 @@ def test_tool_call_reaches_browser_as_a_started_trace() -> None:
     assert payload["tool"] == "digisearch"
     assert payload["query"] == "RS256 token exchange"
     assert payload["status"] == "started"
+    assert payload["arguments"] == {"query": "RS256 token exchange"}

@@ -19,19 +19,21 @@ export type UiStreamWriter = {
 
 export type StandardActivityContext = {
   seq: number;
-  /** toolName → in-flight toolCallId */
-  toolIds: Map<string, string>;
+  /** In-flight toolCallIds queued per tool name (FIFO — one row per call). */
+  pendingByName: Map<string, string[]>;
   started: Set<string>;
   inputAvailable: Set<string>;
+  jsonInputWritten: Set<string>;
   reasoningId: string | null;
 };
 
 export function createActivityWriteContext(): StandardActivityContext {
   return {
     seq: 0,
-    toolIds: new Map(),
+    pendingByName: new Map(),
     started: new Set(),
     inputAvailable: new Set(),
+    jsonInputWritten: new Set(),
     reasoningId: null,
   };
 }
@@ -50,27 +52,71 @@ function toolNameOf(span: ActivitySpan): string {
   return name || "tool";
 }
 
-function ensureToolStart(
+function toolInputOf(span: ActivitySpan): Record<string, unknown> {
+  const input: Record<string, unknown> = { ...(span.toolInput ?? {}) };
+  if (span.query && input.query === undefined) input.query = span.query;
+  return input;
+}
+
+function writeToolStart(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
   name: string,
   title?: string,
 ): string {
-  let id = ctx.toolIds.get(name);
-  if (!id) {
-    id = nextId(ctx, "tool");
-    ctx.toolIds.set(name, id);
-  }
-  if (!ctx.started.has(id)) {
-    writer.write({
-      type: "tool-input-start",
-      toolCallId: id,
-      toolName: name,
-      ...(title ? { title } : {}),
-    });
-    ctx.started.add(id);
-  }
+  const id = nextId(ctx, "tool");
+  writer.write({
+    type: "tool-input-start",
+    toolCallId: id,
+    toolName: name,
+    ...(title ? { title } : {}),
+  });
+  ctx.started.add(id);
   return id;
+}
+
+function beginToolCall(
+  writer: UiStreamWriter,
+  ctx: StandardActivityContext,
+  name: string,
+  title?: string,
+): string {
+  const id = writeToolStart(writer, ctx, name, title);
+  let q = ctx.pendingByName.get(name);
+  if (!q) {
+    q = [];
+    ctx.pendingByName.set(name, q);
+  }
+  q.push(id);
+  return id;
+}
+
+function completeToolCall(
+  writer: UiStreamWriter,
+  ctx: StandardActivityContext,
+  name: string,
+  title?: string,
+): string {
+  const q = ctx.pendingByName.get(name);
+  if (q && q.length) return q.shift() as string;
+  return writeToolStart(writer, ctx, name, title);
+}
+
+function writeJsonInputDelta(
+  writer: UiStreamWriter,
+  ctx: StandardActivityContext,
+  id: string,
+  span: ActivitySpan,
+): void {
+  if (ctx.jsonInputWritten.has(id)) return;
+  const input = toolInputOf(span);
+  if (!Object.keys(input).length) return;
+  writer.write({
+    type: "tool-input-delta",
+    toolCallId: id,
+    inputTextDelta: JSON.stringify(input),
+  });
+  ctx.jsonInputWritten.add(id);
 }
 
 function ensureToolInput(
@@ -81,11 +127,12 @@ function ensureToolInput(
   span: ActivitySpan,
 ): void {
   if (ctx.inputAvailable.has(id)) return;
+  writeJsonInputDelta(writer, ctx, id, span);
   writer.write({
     type: "tool-input-available",
     toolCallId: id,
     toolName: name,
-    input: { query: span.query ?? "", label: span.label },
+    input: toolInputOf(span),
   });
   ctx.inputAvailable.add(id);
 }
@@ -151,47 +198,40 @@ export function writeStandardActivity(
 
   if (span.operation === "execute_tool") {
     const name = toolNameOf(span);
-    const id = ensureToolStart(writer, ctx, name, span.label);
     if (span.status === "started") {
-      if (span.query) {
-        writer.write({
-          type: "tool-input-delta",
-          toolCallId: id,
-          inputTextDelta: span.query,
-        });
-      }
+      const id = beginToolCall(writer, ctx, name, span.label);
+      writeJsonInputDelta(writer, ctx, id, span);
       return;
     }
+    const id = completeToolCall(writer, ctx, name, span.label);
     ensureToolInput(writer, ctx, id, name, span);
+    const output: Record<string, unknown> = toolInputOf(span);
+    if (span.status === "failed") output.status = "failed";
     writer.write({
       type: "tool-output-available",
       toolCallId: id,
-      output: {
-        status: span.status,
-        label: span.label,
-        query: span.query ?? "",
-      },
+      output,
     });
     return;
   }
 
   if (span.operation === "retrieve") {
     const name = toolNameOf(span);
-    const id = ensureToolStart(writer, ctx, name, span.label);
+    const id = completeToolCall(writer, ctx, name, span.label);
     ensureToolInput(writer, ctx, id, name, span);
     const docs = span.documents ?? [];
     const withheld = span.documentsWithheld === true;
+    const hitCount = typeof span.hitCount === "number" ? span.hitCount : docs.length;
+    const output: Record<string, unknown> = {
+      ...toolInputOf(span),
+      hitCount,
+    };
+    if (withheld) output.documentsWithheld = true;
+    else if (docs.length) output.documents = docs;
     writer.write({
       type: "tool-output-available",
       toolCallId: id,
-      output: {
-        status: span.status,
-        label: span.label,
-        query: span.query ?? "",
-        hitCount: typeof span.hitCount === "number" ? span.hitCount : docs.length,
-        documentsWithheld: withheld,
-        documents: withheld ? undefined : docs,
-      },
+      output,
     });
     if (!withheld) {
       for (const doc of docs) writeSource(writer, ctx, doc);

@@ -65,8 +65,28 @@ describe("mapDigigraphTraceToSpans", () => {
         label: "digisearch",
         toolName: "digisearch",
         query: "RS256 token exchange",
+        toolInput: { query: "RS256 token exchange" },
       },
     ]);
+  });
+
+  it("reads query and toolInput from MCP arguments when query is not top-level", () => {
+    const spans = mapDigigraphTraceToSpans(
+      {
+        type: "tool_call",
+        payload: {
+          tool: "digivault_get_note",
+          status: "started",
+          arguments: { vault_paths: ["digigraph/ARCHITECTURE.md"] },
+        },
+      },
+      "full",
+    );
+    expect(spans[0]).toMatchObject({
+      toolName: "digivault_get_note",
+      query: "1 note",
+      toolInput: { vault_paths: ["digigraph/ARCHITECTURE.md"] },
+    });
   });
 
   it("maps graph_update research_brief to brief span", () => {
@@ -107,6 +127,7 @@ describe("mapDigigraphTraceToSpans", () => {
     );
     expect(rag[0].documents).toBeUndefined();
     expect(rag[0].documentsWithheld).toBe(true);
+    expect(rag[0].hitCount).toBe(1);
 
     const brief = mapDigigraphTraceToSpans(
       {
@@ -251,6 +272,7 @@ describe("mapDigigraphTraceToSpans", () => {
         label: "Sources",
         toolName: "digisearch",
         query: "jwt",
+        toolInput: { query: "jwt" },
       },
     ]);
   });

@@ -402,6 +402,25 @@ def run_digigraph_workflow_streaming(
                 }
                 if tool_query:
                     tool_payload["query"] = tool_query
+                if args:
+                    clipped: dict[str, Any] = {}
+                    for i, (key, val) in enumerate(args.items()):
+                        if i >= 16 or not isinstance(key, str) or not key.strip():
+                            continue
+                        if isinstance(val, str):
+                            clipped[key] = val[:300]
+                        elif isinstance(val, bool):
+                            clipped[key] = val
+                        elif isinstance(val, int | float):
+                            clipped[key] = val
+                        elif isinstance(val, list):
+                            items = [
+                                item[:300] for item in val if isinstance(item, str) and item.strip()
+                            ][:20]
+                            if items:
+                                clipped[key] = items
+                    if clipped:
+                        tool_payload["arguments"] = clipped
                 emit(
                     (
                         "trace",

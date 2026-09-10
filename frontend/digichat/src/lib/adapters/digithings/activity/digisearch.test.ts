@@ -24,6 +24,7 @@ describe("mapDigisearchRagSources", () => {
       label: "Sources",
       toolName: "digisearch",
       query: "jwt",
+      toolInput: { query: "jwt" },
     });
     expect(span).not.toHaveProperty("documents");
   });
@@ -69,6 +70,7 @@ describe("mapDigisearchRagSources", () => {
         },
       ],
       query: "SHOWCASE",
+      toolInput: { query: "SHOWCASE" },
     });
   });
 });

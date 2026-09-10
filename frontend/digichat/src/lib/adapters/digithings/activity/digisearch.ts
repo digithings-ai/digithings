@@ -63,6 +63,6 @@ export function mapDigisearchRagSources(
     toolName,
     ...(documents.length ? { documents } : {}),
     ...(!documents.length && upstreamHits ? { hitCount: upstreamHits } : {}),
-    ...(query ? { query } : {}),
+    ...(query ? { query, toolInput: { query } } : {}),
   };
 }
