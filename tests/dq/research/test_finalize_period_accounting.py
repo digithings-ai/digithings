@@ -114,9 +114,8 @@ class _MergingQuery(_FakeQuery):
             seen.add(key)
             if self._matches(row):
                 rows.append(row)
-        if self._order is not None:
-            col, desc = self._order
-            rows.sort(key=lambda r: r.get(col, ""), reverse=desc)
+        for col, desc in reversed(self._orders):
+            rows.sort(key=lambda r, _c=col: r.get(_c, ""), reverse=desc)
         if self._range is not None:
             start, end = self._range
             rows = rows[start : end + 1]

@@ -16,6 +16,7 @@ from digiquant.research.supabase_io import (
     _json_safe,
     _price_delta_ticker_batch,
     load_active_theses_rows,
+    load_nav_history_row,
     load_portfolio_performance_snapshot,
     load_prior_analyst_summaries,
     load_prior_book,
@@ -894,6 +895,47 @@ class TestLoadPriorBook:
             ]
         )
         assert weights == {"SPY": 20.0, "CASH": 80.0}
+
+
+@pytest.mark.unit
+class TestLoadNavHistoryRow:
+    """Same-date engine-row lookup guarding provisional NAV writes (#3804)."""
+
+    def test_returns_row_for_workspace_and_date(self) -> None:
+        house = str(house_workspace_id())
+        client = FakeSupabaseClient(
+            canned_reads={
+                "nav_history": [
+                    {"date": "2026-06-12", "nav": 99.5, "workspace_id": house},
+                    {"date": "2026-06-11", "nav": 100.0, "workspace_id": house},
+                ]
+            }
+        )
+        row = load_nav_history_row(client, date(2026, 6, 12))
+        assert row is not None and row["nav"] == 99.5
+
+    def test_returns_none_when_no_row_for_date(self) -> None:
+        house = str(house_workspace_id())
+        client = FakeSupabaseClient(
+            canned_reads={
+                "nav_history": [{"date": "2026-06-11", "nav": 100.0, "workspace_id": house}]
+            }
+        )
+        assert load_nav_history_row(client, date(2026, 6, 12)) is None
+
+    def test_overlay_row_does_not_satisfy_house_lookup(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "nav_history": [
+                    {
+                        "date": "2026-06-12",
+                        "nav": 77.0,
+                        "workspace_id": str(uuid4()),
+                    }
+                ]
+            }
+        )
+        assert load_nav_history_row(client, date(2026, 6, 12)) is None
 
 
 @pytest.mark.unit

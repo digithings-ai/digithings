@@ -22,7 +22,9 @@ Requires ``nautilus_trader`` (``digiquant[nautilus]``) and Supabase env —
 (see ``digiquant/src/digiquant/research/config/supabase.env``).
 
 Read-only unless ``--write``: SELECTs Group A tables pinned to the house
-workspace. ``--write`` upserts ``nav_history`` (house-pinned) only.
+workspace. ``--write`` upserts ``nav_history`` (house-pinned) only. All
+fetches use cursor pagination over a deterministic ``(date, ticker)`` order
+(#3803) and refuse to verify or write from a truncated/unstable page.
 """
 
 from __future__ import annotations
@@ -76,24 +78,84 @@ def _get_client():
     return create_client(url, key)
 
 
+def _fetch_key(row: dict, has_ticker: bool) -> tuple[str, ...]:
+    """Sort/fetch cursor for one row: ``(date, ticker)`` or ``(date,)``."""
+    if has_ticker:
+        return (str(row.get("date") or ""), str(row.get("ticker") or ""))
+    return (str(row.get("date") or ""),)
+
+
 def _fetch_table(
-    sb, table: str, house_id: str, cols: str, or_null_workspace: bool = False
+    sb,
+    table: str,
+    house_id: str,
+    cols: str,
+    or_null_workspace: bool = False,
+    page_size: int = 1000,
 ) -> list[dict]:
+    """Fetch every row of ``table`` with cursor (keyset) pagination (#3803).
+
+    Ordering is deterministic — ``(date, ticker)`` when the projection
+    carries ``ticker``, else ``(date,)`` — so same-date rows have a stable
+    tiebreak instead of an arbitrary server order. Pages are anchored on the
+    last-seen key (``date >= cursor`` + client-side skip of seen keys), never
+    on an offset: a concurrent book upsert between pages cannot shift offsets
+    and silently drop/duplicate rows into the weight schedule that ``--write``
+    persists as truth.
+
+    Fail-closed: a page arriving out of order, or a page full of already-seen
+    rows (a same-date group larger than ``page_size`` that the cursor cannot
+    advance past), raises ``RuntimeError`` instead of returning a truncated
+    series. Callers must not write NAV from a partial fetch.
+    """
+    selected = {c.strip() for c in cols.split(",")}
+    has_ticker = "ticker" in selected
     rows: list[dict] = []
-    page_size = 1000
-    offset = 0
+    seen: set[tuple[str, ...]] = set()
+    last_date: str | None = None
     while True:
+        # Rows already emitted for the cursor date ride along on the next
+        # page (``gte`` re-anchors on the date, not the full key) and are
+        # skipped client-side — so the request window covers them.
+        boundary_seen = sum(1 for key in seen if key[0] == last_date) if last_date else 0
         query = sb.table(table).select(cols).order("date")
+        if has_ticker:
+            query = query.order("ticker")
         if or_null_workspace:
             # Omitted workspace_id = house (HOUSE_BOOK_SCOPE.md): match both.
             query = query.or_(f"workspace_id.eq.{house_id},workspace_id.is.null")
         else:
             query = query.eq("workspace_id", house_id)
-        page = query.range(offset, offset + page_size - 1).execute().data or []
-        rows.extend(page)
-        if len(page) < page_size:
+        if last_date is not None:
+            query = query.gte("date", last_date)
+        page = query.limit(page_size + boundary_seen).execute().data or []
+
+        keys = [_fetch_key(r, has_ticker) for r in page]
+        if any(a > b for a, b in zip(keys, keys[1:])):
+            raise RuntimeError(
+                f"{table}: page arrived out of (date,ticker) order — "
+                "pagination is unstable, refusing the fetch"
+            )
+        if len(page) and len(set(keys)) < len(keys):
+            raise RuntimeError(
+                f"{table}: duplicate (date,ticker) keys within one page — "
+                "pagination is unstable, refusing the fetch"
+            )
+        fresh = [(r, k) for r, k in zip(page, keys) if k not in seen]
+        for r, k in fresh:
+            seen.add(k)
+            rows.append(r)
+        if len(page) < page_size + boundary_seen:
             break
-        offset += page_size
+        if not fresh:
+            # Full page, zero new keys: the cursor cannot advance past a
+            # same-date group larger than page_size. Truncating here would
+            # silently drop rows, so fail instead.
+            raise RuntimeError(
+                f"{table}: pagination stalled at date {last_date} "
+                f"(page_size={page_size}) — refusing a truncated fetch"
+            )
+        last_date = fresh[-1][1][0]
     return rows
 
 
@@ -293,15 +355,21 @@ def main() -> int:
     sb = _get_client()
     house_id = str(house_workspace_id())
 
-    price_rows = _fetch_table(
-        sb,
-        "price_history",
-        house_id,
-        "date,ticker,open,high,low,close,volume",
-        or_null_workspace=True,
-    )
-    position_rows = _fetch_table(sb, "positions", house_id, "date,ticker,weight_pct")
-    nav_rows = _fetch_table(sb, "nav_history", house_id, "date,nav")
+    try:
+        price_rows = _fetch_table(
+            sb,
+            "price_history",
+            house_id,
+            "date,ticker,open,high,low,close,volume",
+            or_null_workspace=True,
+        )
+        position_rows = _fetch_table(sb, "positions", house_id, "date,ticker,weight_pct")
+        nav_rows = _fetch_table(sb, "nav_history", house_id, "date,nav")
+    except RuntimeError as exc:
+        # Unstable/truncated pagination (#3803): never verify — and never
+        # `--write` — against a partial series.
+        print(f"FAIL: {exc}")
+        return 2
     if not position_rows or not nav_rows:
         print("SKIP: no house positions/nav_history rows readable")
         return 1

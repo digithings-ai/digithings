@@ -89,7 +89,9 @@ BacktestEngine with zero-fee, same-bar fills:
   $100M scale).
 - **Verify script:** `digiquant/scripts/research/verify_nav_replay.py`
   rebuilds the causal schedule + bars from Supabase and compares engine NAV
-  vs `nav_history` (non-zero exit on breach).
+  vs `nav_history` (non-zero exit on breach). Reads page by last-seen-key
+  cursor over a deterministic `(date, ticker)` order (#3803) — never offsets —
+  and refuses to verify or `--write` from a truncated/unstable page.
 
 ## 8. External Links
 

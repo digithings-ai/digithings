@@ -199,6 +199,56 @@ class TestCommitRunBooking:
         assert analyst_doc["payload"]["risks"].strip()  # risks persisted, non-empty
 
 
+class TestProvisionalNavSuppression:
+    """Booking must not clobber an engine NAV row with a provisional recompute (#3804).
+
+    The Nautilus schedule replay (``verify_nav_replay.py --write``) owns
+    ``nav_history.nav`` once it has written the date; a book-pipeline
+    re-dispatch after the engine step keeps the stored NAV. ``positions``
+    still book normally — only the NAV point is guarded.
+    """
+
+    def test_existing_engine_nav_row_is_preserved(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "nav_history": [
+                    {
+                        "date": RUN_DATE.isoformat(),
+                        "nav": 99.5,
+                        "cash_pct": 0.0,
+                        "invested_pct": 100.0,
+                        "workspace_id": str(house_workspace_id()),
+                    }
+                ]
+            }
+        )
+        out = _run(client, _state())
+
+        assert not out.get("errors"), out.get("errors")
+        # Book still commits: positions land, manifest is recorded.
+        positions = {r["ticker"]: r for r in client.store.get("positions", [])}
+        assert positions["SPY"]["weight_pct"] == 100.0
+        # ... but the provisional NAV upsert is suppressed — engine row wins.
+        assert client.store.get("nav_history", []) == []
+
+    def test_overlay_nav_row_does_not_suppress_house_provisional(self) -> None:
+        """Workspace pin per HOUSE_BOOK_SCOPE: a private row is not a house engine row."""
+        client = FakeSupabaseClient(
+            canned_reads={
+                "nav_history": [
+                    {
+                        "date": RUN_DATE.isoformat(),
+                        "nav": 77.0,
+                        "workspace_id": "00000000-0000-4000-8000-000000000001",
+                    }
+                ]
+            }
+        )
+        _run(client, _state())
+
+        assert len(client.store.get("nav_history", [])) == 1
+
+
 class TestCommitRunCoherence:
     def test_held_ticker_flat_in_h7_is_allowed(self) -> None:
         client = FakeSupabaseClient()

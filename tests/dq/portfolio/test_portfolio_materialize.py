@@ -120,6 +120,45 @@ class TestFreshSeed:
         assert positions["CASH"]["category"] in _POSITIONS_CATEGORY_ALLOWED
 
 
+class TestProvisionalNavSuppression:
+    """Booking must not clobber an engine NAV row with a provisional recompute (#3804)."""
+
+    def test_existing_engine_nav_row_is_preserved(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "nav_history": [
+                    {
+                        "date": RUN_DATE.isoformat(),
+                        "nav": 99.5,
+                        "workspace_id": str(house_workspace_id()),
+                    }
+                ]
+            }
+        )
+        _run(client, [{"ticker": "SPY", "target_pct": 100}])
+
+        # Book still lands; the provisional NAV upsert is suppressed.
+        positions = {r["ticker"]: r for r in client.store.get("positions", [])}
+        assert positions["SPY"]["weight_pct"] == 100.0
+        assert client.store.get("nav_history", []) == []
+
+    def test_prior_date_nav_row_does_not_suppress(self) -> None:
+        """Only the same-date row guards — a prior engine row still chains."""
+        client = FakeSupabaseClient(
+            canned_reads={
+                "nav_history": [
+                    {
+                        "date": "2026-06-11",
+                        "nav": 142.0,
+                        "workspace_id": str(house_workspace_id()),
+                    }
+                ]
+            }
+        )
+        _run(client, [{"ticker": "SPY", "target_pct": 100}])
+        assert client.store["nav_history"][0]["nav"] == pytest.approx(142.0, abs=1e-6)
+
+
 class TestNavChaining:
     def test_second_day_chains_return_from_prior_book(self) -> None:
         # Prior book held SPY 60 / TLT 40 at nav 100; SPY +2%, TLT -1% over the
