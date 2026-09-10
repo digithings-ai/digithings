@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from digigraph.orchestration.registry import ToolContext
@@ -11,8 +10,6 @@ from digigraph.orchestration.tool_common import (
     _digisearch_service_base,
 )
 from digigraph.trace_events import rag_sources_from_results
-
-logger = logging.getLogger(__name__)
 
 EXTERNAL_EVIDENCE_TIER = "External"
 WEB_SEARCH_TOOL_NAME = "web_search"
@@ -69,7 +66,8 @@ def _call_digisearch_web_search(
     (``POST /v1/orchestrator_invoke``). Normalizes the hub envelope
     (``{"ok", "data": {"results": [{url, title, snippet}]}}``) into the digigraph
     tool shape (``{"content", "results": [{doc_id, ...}]}``). Returns ``{}`` when
-    the service errors or yields no rows so the caller falls back to synthesis.
+    the service errors or yields no rows — callers fail hard (no synthesis
+    fallback, #3859).
     """
     from digigraph.vertical_orchestrator.digisearch_hub import invoke_digisearch_tool
 
@@ -127,7 +125,7 @@ def _call_digisearch_web_search(
 
 
 def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
-    """digisearch web_search tool first, digillm synthesis fallback (#3853, #3420)."""
+    """digisearch web_search tool only — fail hard, never synthesize (#3859)."""
     if not _web_search_available(context):
         return {
             "error": "tool_not_allowed",
@@ -141,43 +139,17 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
     if not q or not str(q).strip():
         return "No search query provided."
     query = str(q).strip()
-    try:
-        tool_out = _call_digisearch_web_search(
-            query,
-            include_domains=args.get("include_domains"),
-            exclude_domains=args.get("exclude_domains"),
-            max_results=int(args.get("max_results", 4)),
-            context=context,
-        )
-        if tool_out and tool_out.get("results"):
-            results = list(tool_out["results"][:8])
-            return {
-                "content": tool_out.get("content", ""),
-                "results": results,
-                "rag_sources": rag_sources_from_results(results),
-                "name": WEB_SEARCH_TOOL_NAME,
-            }
-    except Exception:
-        # Broad by design: raw ImportError when the [web-search] extra is missing,
-        # 503-until-image-rebuild, transport errors — all fall back to synthesis.
-        logger.debug("digisearch web_search failed; falling back to synthesis", exc_info=True)
+    from digigraph.llm_client import digifetch_web_search
 
-    from digigraph.llm_client import openrouter_web_search
-    from digigraph.llm_client import web_search as xai_web_search
-    from digigraph.model_config import get_grounding_model, get_model_for_mode
-
-    model = get_grounding_model() or get_model_for_mode()
-    grounded = openrouter_web_search(model, query)
-    if grounded is None:
-        grounded = xai_web_search(model, query)
-    if grounded is None:
-        return {
-            "content": "Web search returned no results.",
-            "results": [],
-            "rag_sources": [],
-            "name": WEB_SEARCH_TOOL_NAME,
-        }
-    summary, urls = grounded
+    # Tool path needs no model — "" keeps the (model, query) shape for callers.
+    summary, urls = digifetch_web_search(
+        "",
+        query,
+        include_domains=args.get("include_domains"),
+        exclude_domains=args.get("exclude_domains"),
+        max_results=int(args.get("max_results", 4)),
+        context=context,
+    )
     results: list[dict[str, Any]] = []
     for i, url in enumerate(urls[:8]):
         if not isinstance(url, str) or not url.strip():
