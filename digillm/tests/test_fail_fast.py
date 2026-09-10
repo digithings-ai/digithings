@@ -166,3 +166,85 @@ def test_concurrent_provider_calls_bounded_by_env(
     assert not any(thread.is_alive() for thread in threads)
     assert fake_client.chat.completions.create.call_count == 6
     assert max(observed) <= 2
+
+
+def test_default_client_api_key_fail_fast_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Missing house key must raise — never the late-401 sentinel ``not-set`` (#3788)."""
+    monkeypatch.delenv("LITELLM_PROXY_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    digillm.clear_caches()
+    with pytest.raises(RuntimeError, match="No LLM API key configured"):
+        client_mod._default_client_api_key()
+    with (
+        patch.object(client_mod, "OpenAI") as openai_ctor,
+        pytest.raises(RuntimeError, match="No LLM API key configured"),
+    ):
+        digillm.get_client()
+    openai_ctor.assert_not_called()
+
+
+def test_byok_non_proxy_base_mismatch_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """BYOK override base_url must match the registered provider — no house fallthrough."""
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-house")
+    digillm.clear_caches()
+    with digillm.byok("sk-ant-user", "https://evil.example/v1"):
+        with pytest.raises(RuntimeError, match="refusing silent house/vendor fallthrough"):
+            digillm.get_client_for_model("anthropic/claude-sonnet-5")
+
+
+def test_completion_rejects_tools_with_response_format() -> None:
+    tools = [
+        {
+            "type": "function",
+            "function": {"name": "ping", "parameters": {"type": "object", "properties": {}}},
+        }
+    ]
+    response_format = {
+        "type": "json_schema",
+        "json_schema": {"name": "Out", "schema": {"type": "object"}, "strict": True},
+    }
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        digillm.completion(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "hi"}],
+            tools=tools,  # type: ignore[arg-type]
+            response_format=response_format,  # type: ignore[arg-type]
+        )
+
+
+def test_stream_chunk_decode_error_emits_failed_not_cancelled() -> None:
+    """Malformed chunk handling must report FAILED, not CANCELLED (#3788)."""
+    from digillm.telemetry import ProviderAttemptOutcome, ProviderAttemptRecord, TelemetryRecord
+
+    class _BrokenChoice:
+        @property
+        def delta(self) -> object:
+            raise AttributeError("broken delta")
+
+    class _BrokenChunk:
+        choices = [_BrokenChoice()]
+
+    class _Attempts(list[ProviderAttemptRecord]):
+        def observe(self, record: TelemetryRecord) -> None:
+            if isinstance(record, ProviderAttemptRecord):
+                self.append(record)
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = iter([_BrokenChunk()])
+    attempts = _Attempts()
+    digillm.set_telemetry_observer(attempts)
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        pytest.raises(AttributeError, match="broken delta"),
+    ):
+        digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "hello"}],
+            [],
+            execute_tool=lambda *_args: "",
+            stream_deltas=True,
+        )
+    assert len(attempts) == 1
+    assert attempts[0].outcome is ProviderAttemptOutcome.FAILED
+    assert attempts[0].error_type == "AttributeError"
