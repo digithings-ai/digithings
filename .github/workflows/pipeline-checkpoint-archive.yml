@@ -5,7 +5,7 @@
 # no consolidation headroom). This job offloads finished threads' payloads to
 # Cloudflare R2 (verified by SHA-256 read-back), then NULLs the bytea cells.
 # Metadata rows stay; restore path is `restore_thread` in
-# digiquant/ops/checkpoint_archive.py.
+# digiquant/src/digiquant/ops/checkpoint_archive.py.
 #
 # Schedule 13:30 UTC runs after the morning daily-pipeline window (crons at
 # :17 past 09–12 UTC) plus buffer, so the just-finished run's thread is left
@@ -18,6 +18,13 @@
 # CORE_SUPABASE_* (or SUPABASE_*) service-role creds follow the standard
 # execution-cron-check fallback chain.
 #
+# Post-archive size relief (#3811) needs no new VACUUM job: NULL-ing bytea
+# leaves dead tuples reclaimed by autovacuum plus the existing pg_cron
+# `langgraph-checkpoint-vacuum` (plain VACUUM ANALYZE, 05:50 UTC daily —
+# see migration 061). The trailing size-gate step is advisory
+# (continue-on-error): it reports per-table sizes, never fails the archive.
+# Strategy + manual pre/post queries: docs/ops/checkpoint-archive-vacuum.md.
+#
 # Installed at .github/workflows/pipeline-checkpoint-archive.yml — must match
 # this spec byte-for-byte (tests/scripts/test_checkpoint_archive_workflow.py).
 name: "Pipeline: checkpoint archive"
@@ -26,6 +33,11 @@ on:
   schedule:
     - cron: "30 13 * * *"
   workflow_dispatch:
+    inputs:
+      threshold-mb:
+        description: "Size-gate DB threshold in MB (advisory only)"
+        required: false
+        default: "500"
 
 permissions:
   contents: read
@@ -73,3 +85,10 @@ jobs:
           name: checkpoint-archive-manifests
           path: /tmp/checkpoint-archive-manifests.json
           retention-days: 90
+
+      - name: Post-archive size gate (advisory, #3811)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          uv run --frozen --no-sync python scripts/digiquant_checkpoint_size_gate.py \
+            --threshold-mb "${{ inputs.threshold-mb || 500 }}"
