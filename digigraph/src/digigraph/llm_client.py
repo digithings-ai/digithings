@@ -354,7 +354,7 @@ def digifetch_web_search(
     if hints:
         effective = f"{query} ({'; '.join(hints)}; up to {max_results} sources)"
     with _logical_call_scope(CallPurpose.WEB_SEARCH, NoArtifactReason.CONSUMED_INLINE):
-        return _ground_via_completion(effective, usage_kind="web_search")
+        return _ground_via_completion(model, effective, usage_kind="web_search")
 
 
 def x_search(

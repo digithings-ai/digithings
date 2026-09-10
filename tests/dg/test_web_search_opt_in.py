@@ -124,6 +124,77 @@ def test_handle_web_search_prefers_tool(monkeypatch: pytest.MonkeyPatch) -> None
     assert out["results"][0]["doc_id"] == "https://a.com/1"
 
 
+def test_digifetch_web_search_passes_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    from digigraph import llm_client as client
+
+    calls: dict[str, str] = {}
+
+    def fake_ground(model: str, query: str, *, usage_kind: str = "") -> object:
+        calls["model"] = model
+        calls["query"] = query
+        calls["usage_kind"] = usage_kind
+        return ("summary", ["https://ex.com/a"])
+
+    monkeypatch.setattr(client, "_ground_via_completion", fake_ground)
+    out = client.digifetch_web_search("test-model", "etf flows", include_domains=["a.com"])
+    assert out == ("summary", ["https://ex.com/a"])
+    assert calls["model"] == "test-model"
+    assert "etf flows" in calls["query"]
+    assert "a.com" in calls["query"]
+    assert calls["usage_kind"] == "web_search"
+
+
+def test_handle_web_search_import_error_falls_back_to_synthesis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from digigraph.orchestration import web_search_tools as mod
+
+    ctx = type("C", (), {"state": {"enable_web_search": True}})()
+
+    def raise_import(*args: object, **kwargs: object) -> object:
+        raise ImportError("no web-search extra")
+
+    monkeypatch.setattr(mod, "_call_digisearch_web_search", raise_import)
+    with (
+        patch("digigraph.model_config.get_grounding_model", return_value="m"),
+        patch(
+            "digigraph.llm_client.openrouter_web_search",
+            return_value=("synth summary", ["https://ex.com/a"]),
+        ),
+        patch("digigraph.llm_client.web_search", return_value=None),
+    ):
+        out = mod._handle_web_search({"query": "etf flows"}, ctx)
+    assert isinstance(out, dict)
+    assert out["content"] == "synth summary"
+    assert out["results"][0]["doc_id"] == "https://ex.com/a"
+    assert out["name"] == WEB_SEARCH_TOOL_NAME
+
+
+def test_handle_web_search_tool_error_falls_back_to_no_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from digigraph.orchestration import web_search_tools as mod
+    from digigraph.vertical_orchestrator import digisearch_hub as hub
+
+    ctx = type("C", (), {"state": {"enable_web_search": True}})()
+    monkeypatch.setattr(
+        hub,
+        "invoke_digisearch_tool",
+        lambda *args, **kwargs: {"ok": False, "error": "unavailable", "status": 503},
+    )
+    with (
+        patch("digigraph.model_config.get_grounding_model", return_value="m"),
+        patch("digigraph.llm_client.openrouter_web_search", return_value=None),
+        patch("digigraph.llm_client.web_search", return_value=None),
+    ):
+        out = mod._handle_web_search({"query": "etf flows"}, ctx)
+    assert isinstance(out, dict)
+    assert out["content"] == "Web search returned no results."
+    assert out["results"] == []
+    assert out["rag_sources"] == []
+    assert out["name"] == WEB_SEARCH_TOOL_NAME
+
+
 def test_web_search_handler_labels_external(monkeypatch: pytest.MonkeyPatch) -> None:
     ctx = ToolContext(
         session_id="s",
