@@ -1,0 +1,32 @@
+# digivault-mcp — dedicated vault MCP container (#3854, Track B).
+# Build context: monorepo root (`docker build -f digivault/Dockerfile.mcp .`).
+# Same per-package COPY convention as digivault/Dockerfile: workspace deps
+# (digibase, digikey) are installed editable first so pip resolves them from
+# the local tree, then digivault itself with the [service] extra —
+# never the [supabase] read path. (`uv sync --frozen` is deliberately
+# NOT used: it needs the workspace root + uv.lock in context, which a
+# service-image build must not drag in.)
+# Serves FastMCP streamable-http via digivault.mcp_server:run_mcp on :8769
+# with the [service] extra. Filesystem vault only (DIGIVAULT_ROOT);
+# search_notes/get_note stay orchestrator-only and are never registered
+# here (tool_dispatch.py). Non-loopback bind via the existing
+# DIGIVAULT_MCP_HOST override (default 127.0.0.1 in code; the ENV below
+# binds 0.0.0.0 for the hosted path).
+FROM python:3.12-slim
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+RUN pip install --upgrade pip && pip install uv
+COPY digibase/pyproject.toml digibase/README.md ./digibase/
+COPY digibase/src ./digibase/src
+RUN uv pip install --system -e "./digibase"
+COPY digikey/pyproject.toml digikey/README.md ./digikey/
+COPY digikey/src ./digikey/src
+RUN uv pip install --system -e "./digikey"
+COPY digivault/pyproject.toml digivault/ARCHITECTURE.md ./digivault/
+COPY digivault/src ./digivault/src
+RUN uv pip install --system -e "./digivault[service]"
+ENV DIGIVAULT_MCP_HOST=0.0.0.0
+EXPOSE 8769
+CMD ["python", "-m", "digivault.mcp_server"]

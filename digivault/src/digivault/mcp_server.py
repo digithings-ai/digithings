@@ -9,6 +9,7 @@ opens the vault and starts the transport. Do not add ``@mcp.tool`` handlers here
 
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 
@@ -45,5 +46,18 @@ def run_mcp(
     mcp.run(transport=transport)
 
 
+def main(argv: list[str] | None = None) -> None:
+    """CLI entry point: ``python -m digivault.mcp_server [--stdio]``."""
+    parser = argparse.ArgumentParser(description="digivault MCP server (vault tools)")
+    parser.add_argument("--stdio", action="store_true", help="Use stdio transport")
+    parser.add_argument("--host", default=None, help="Bind host (default 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=8769, help="Bind port (default 8769)")
+    args = parser.parse_args(argv)
+    if args.stdio:
+        run_mcp(transport="stdio")
+    else:
+        run_mcp(transport="streamable-http", host=args.host, port=args.port)
+
+
 if __name__ == "__main__":  # pragma: no cover
-    run_mcp()
+    main()
