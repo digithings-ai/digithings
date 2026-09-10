@@ -112,7 +112,7 @@ When `stream: true` in `POST /v1/chat/completions`:
 3. Event types produced by the workflow thread:
    - `tool_call` / `tool_result` — formatted with the stream formatter (neutral or Open WebUI `<details>` style)
    - `content` — LLM token deltas, HTML-escaped
-   - `reasoning` — accumulated into a `<thinking>` block before the first `content` chunk (skipped when `X-Suppress-Tool-Stream` is set)
+   - `reasoning` — Open WebUI `<thinking>` chrome before the first `content` chunk when that formatter is on. With `X-Suppress-Tool-Stream` (digichat), reasoning is still forwarded as `delta.reasoning_content` so the BFF can render a Thinking block; `<thinking>` / `<details>` chrome is omitted.
    - `trace` — `TraceEventV1` dicts embedded in `delta.digigraph_trace` for digichat
      (`tool_call` / `tool_result` / `rag_sources` / `round_boundary`, …). The
      `tool_call` payload includes `tool`, `status`, optional `query`, and a size-capped
@@ -120,7 +120,9 @@ When `stream: true` in `POST /v1/chat/completions`:
      for retrieve tools (`digisearch`, `digivault_*`, …) becomes a `rag_sources` trace
      that forwards those arguments plus `sources` (including get_note `body`) so the
      BFF can close the row without a client Allow/Deny. String error results still
-     emit `sources: []` so the started row completes. The
+     emit `sources: []` so the started row completes. Failed vault/search invokes
+     set `status: failed` and `error` on that payload so the BFF does not render a
+     fake `hitCount: 0`. The
      `round_boundary` event marks the end of a digillm tool round: `round_idx` is the
      zero-based round number, and `narration` is the assistant text produced that round
      (with `stream_deltas`, content deltas were already emitted; without streaming,
