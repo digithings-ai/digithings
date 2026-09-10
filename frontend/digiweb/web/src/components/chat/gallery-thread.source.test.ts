@@ -91,6 +91,23 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(reference).not.toMatch(/TooltipPrimitive\.Arrow/);
   });
 
+  it("markdown lists keep markers inside padding so a scrollport cannot clip them", () => {
+    const chatbot = read(
+      "../../../../reference/app/(chatbot)/chatbot/chatbot.css",
+    );
+    const aui = read("../../styles/chat-aui.css");
+    const thread = read("gallery-thread/thread.aui.tsx");
+    const markdown = read("gallery-thread/markdown-text.tsx");
+    expect(chatbot).toMatch(/\.aui-md-ol \{[\s\S]*padding-inline-start: 2rem/);
+    expect(chatbot).toContain("list-style-position: outside");
+    expect(aui).toContain(".digichat-thread .aui-md-ol");
+    expect(aui).toContain("padding-inline-start: 2rem");
+    expect(thread).toMatch(/overflow-x-hidden/);
+    expect(thread).not.toMatch(/overflow-x-auto overflow-y-scroll/);
+    expect(markdown).toMatch(/aui-md-ol[\s\S]*ps-8 list-outside list-decimal/);
+    expect(markdown).toMatch(/aui-md-ul[\s\S]*ps-7 list-outside list-disc/);
+  });
+
   it("portaled tooltip CSS hides descendant svg, not only a direct child", () => {
     const chatbot = read(
       "../../../../reference/app/(chatbot)/chatbot/chatbot.css",

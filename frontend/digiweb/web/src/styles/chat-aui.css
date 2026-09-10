@@ -160,6 +160,38 @@
   align-items: flex-start;
 }
 
+.digichat-thread [data-slot="aui_thread-viewport"],
+.digichat-thread.aui-thread-root [data-slot="aui_thread-viewport"] {
+  overflow-x: hidden;
+}
+
+.digichat-thread .aui-assistant-message-content,
+.digichat-thread .aui-assistant-message-content .aui-md {
+  overflow: visible;
+}
+
+.digichat-thread .aui-md-ul,
+.digichat-thread .aui-md-ol {
+  margin-inline-start: 0;
+  padding-inline-start: 1.75rem;
+  list-style-position: outside;
+}
+
+.digichat-thread .aui-md-ul {
+  list-style-type: disc;
+}
+
+.digichat-thread .aui-md-ol {
+  padding-inline-start: 2rem;
+  list-style-type: decimal;
+}
+
+.digichat-thread .aui-md-pre,
+.digichat-thread .aui-md-table-wrapper {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .digichat-thread .chat-msg-marker {
   margin-top: 0.2rem;
 }
