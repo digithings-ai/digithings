@@ -1057,13 +1057,12 @@ def query_returns_window(
         from digiquant.research.data.queries import r2_close_rows
 
         # Exclusive ``end_floor`` mirrors the Supabase ``.lt("date", end_floor)``.
-        rows = run_with_supabase_retry(
-            lambda: r2_close_rows(
-                tickers=[ticker],
-                since=start_date,
-                until=_parse_date(end_floor) - timedelta(days=1),
-            ),
-            operation=f"query_returns_window {ticker}",
+        # Transient R2 faults retry centrally inside ``r2_close_rows`` (shared
+        # seam), so no per-site wrapper — same policy as every other R2 reader.
+        rows = r2_close_rows(
+            tickers=[ticker],
+            since=start_date,
+            until=_parse_date(end_floor) - timedelta(days=1),
         )
     else:
 

@@ -74,6 +74,85 @@ def _resolve_r2_as_of(as_of: date | None) -> str:
     return str(_r2_manifest()["as_of"])
 
 
+def _r2_generation_window(
+    *,
+    tickers: list[str] | tuple[str, ...],
+    since: date | str,
+    until: date | str,
+    columns: tuple[str, ...],
+    strict: bool = True,
+) -> list[dict[str, Any]]:
+    """Fetch + window + project sealed R2 generations (shared seam, #3780 fix round).
+
+    ``since``/``until`` are inclusive ISO bounds. ``columns`` selects the
+    projection: ``strict`` selects exactly (missing column raises, as before
+    for closes); non-strict intersects with the generation's columns so
+    readers needing volume omit absent columns per row. ``date`` values come
+    back as ISO strings; all other columns pass through untouched (null
+    closes included — callers coerce, mirroring the Supabase path).
+
+    Transient R2 transport faults retry centrally here
+    (:func:`run_with_supabase_retry` only retries marker-matched faults such
+    as disconnects/timeouts — ``LookupError``/``ValueError`` fail loud on
+    first attempt), so every ``r2_*_rows`` consumer shares one retry policy
+    instead of each call site wrapping its own. Single-ticker live-overlap
+    reads (:func:`_read_r2_window` and friends, MCP-owned) stay unwrapped at
+    these call sites: on tool paths the dispatcher (``execute_tool``) already
+    retries the whole dispatch, and direct-call readers are fail-soft by
+    design (empty payload / skip / fallback on ``LookupError``).
+    """
+    import io
+
+    import polars as pl
+
+    from digiquant.data.prices.r2_history import latest_pointer_key, normalize_ticker
+    from digiquant.mcp_server import _get_r2_store
+
+    manifest = _r2_manifest()
+    if manifest.get("version") != 1:
+        raise ValueError(f"unsupported manifest version {manifest.get('version')}")
+    since_s = since.isoformat() if isinstance(since, date) else str(since)
+    until_s = until.isoformat() if isinstance(until, date) else str(until)
+    store = _get_r2_store()
+    datasets = manifest.get("datasets") or {}
+
+    def _fetch() -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for ticker in tickers:
+            entry = datasets.get(ticker) or datasets.get(normalize_ticker(ticker))
+            if entry is not None:
+                payload = store.get_generation(str(entry["object"]), str(entry["sha256"]))
+            else:
+                try:
+                    gen_key = store.read_latest(latest_pointer_key(ticker))
+                except KeyError:
+                    raise LookupError(f"unknown ticker {ticker!r}") from None
+                sha: str | None = None
+                for cand in datasets.values():
+                    if isinstance(cand, dict) and cand.get("object") == gen_key:
+                        sha = cand.get("sha256")
+                        break
+                if sha is None:
+                    raise LookupError(f"unknown ticker {ticker!r}")
+                payload = store.get_generation(gen_key, str(sha))
+            frame = pl.read_parquet(io.BytesIO(payload))
+            frame = frame.with_columns(pl.col("date").cast(pl.Date)).sort("date")
+            if "ticker" not in frame.columns:
+                frame = frame.with_columns(pl.lit(normalize_ticker(ticker)).alias("ticker"))
+            window = frame.filter(
+                (pl.col("date") >= pl.lit(since_s).cast(pl.Date))
+                & (pl.col("date") <= pl.lit(until_s).cast(pl.Date))
+            )
+            keep = list(columns) if strict else [c for c in columns if c in window.columns]
+            for row in window.select(keep).to_dicts():
+                shaped = dict(row)
+                shaped["date"] = str(shaped["date"])
+                out.append(shaped)
+        return out
+
+    return run_with_supabase_retry(_fetch, operation="r2 generation window")
+
+
 def r2_close_rows(
     *, tickers: list[str] | tuple[str, ...], since: date | str, until: date | str
 ) -> list[dict[str, Any]]:
@@ -87,49 +166,9 @@ def r2_close_rows(
     manifest — both fail loud, never an empty window. Null closes are passed
     through (callers coerce, mirroring the Supabase ``numeric``-as-string path).
     """
-    import io
-
-    import polars as pl
-
-    from digiquant.data.prices.r2_history import latest_pointer_key, normalize_ticker
-    from digiquant.mcp_server import _get_r2_store
-
-    manifest = _r2_manifest()
-    if manifest.get("version") != 1:
-        raise ValueError(f"unsupported manifest version {manifest.get('version')}")
-    since_s = since.isoformat() if isinstance(since, date) else str(since)
-    until_s = until.isoformat() if isinstance(until, date) else str(until)
-    store = _get_r2_store()
-    datasets = manifest.get("datasets") or {}
-    out: list[dict[str, Any]] = []
-    for ticker in tickers:
-        entry = datasets.get(ticker) or datasets.get(normalize_ticker(ticker))
-        if entry is not None:
-            payload = store.get_generation(str(entry["object"]), str(entry["sha256"]))
-        else:
-            try:
-                gen_key = store.read_latest(latest_pointer_key(ticker))
-            except KeyError:
-                raise LookupError(f"unknown ticker {ticker!r}") from None
-            sha: str | None = None
-            for cand in datasets.values():
-                if isinstance(cand, dict) and cand.get("object") == gen_key:
-                    sha = cand.get("sha256")
-                    break
-            if sha is None:
-                raise LookupError(f"unknown ticker {ticker!r}")
-            payload = store.get_generation(gen_key, str(sha))
-        frame = pl.read_parquet(io.BytesIO(payload))
-        frame = frame.with_columns(pl.col("date").cast(pl.Date)).sort("date")
-        if "ticker" not in frame.columns:
-            frame = frame.with_columns(pl.lit(normalize_ticker(ticker)).alias("ticker"))
-        window = frame.filter(
-            (pl.col("date") >= pl.lit(since_s).cast(pl.Date))
-            & (pl.col("date") <= pl.lit(until_s).cast(pl.Date))
-        )
-        for row in window.select("date", "ticker", "close").to_dicts():
-            out.append({"date": str(row["date"]), "ticker": row["ticker"], "close": row["close"]})
-    return out
+    return _r2_generation_window(
+        tickers=tickers, since=since, until=until, columns=("date", "ticker", "close")
+    )
 
 
 def r2_ohlcv_rows(
@@ -140,53 +179,13 @@ def r2_ohlcv_rows(
     Same fetch as :func:`r2_close_rows` for readers needing volume (ETF-flow
     proxy). Columns absent from a generation are omitted per row.
     """
-    import io
-
-    import polars as pl
-
-    from digiquant.data.prices.r2_history import latest_pointer_key, normalize_ticker
-    from digiquant.mcp_server import _get_r2_store
-
-    manifest = _r2_manifest()
-    if manifest.get("version") != 1:
-        raise ValueError(f"unsupported manifest version {manifest.get('version')}")
-    since_s = since.isoformat() if isinstance(since, date) else str(since)
-    until_s = until.isoformat() if isinstance(until, date) else str(until)
-    store = _get_r2_store()
-    datasets = manifest.get("datasets") or {}
-    cols = ("date", "ticker", "open", "high", "low", "close", "volume")
-    out: list[dict[str, Any]] = []
-    for ticker in tickers:
-        entry = datasets.get(ticker) or datasets.get(normalize_ticker(ticker))
-        if entry is not None:
-            payload = store.get_generation(str(entry["object"]), str(entry["sha256"]))
-        else:
-            try:
-                gen_key = store.read_latest(latest_pointer_key(ticker))
-            except KeyError:
-                raise LookupError(f"unknown ticker {ticker!r}") from None
-            sha: str | None = None
-            for cand in datasets.values():
-                if isinstance(cand, dict) and cand.get("object") == gen_key:
-                    sha = cand.get("sha256")
-                    break
-            if sha is None:
-                raise LookupError(f"unknown ticker {ticker!r}")
-            payload = store.get_generation(gen_key, str(sha))
-        frame = pl.read_parquet(io.BytesIO(payload))
-        frame = frame.with_columns(pl.col("date").cast(pl.Date)).sort("date")
-        if "ticker" not in frame.columns:
-            frame = frame.with_columns(pl.lit(normalize_ticker(ticker)).alias("ticker"))
-        window = frame.filter(
-            (pl.col("date") >= pl.lit(since_s).cast(pl.Date))
-            & (pl.col("date") <= pl.lit(until_s).cast(pl.Date))
-        )
-        keep = [c for c in cols if c in window.columns]
-        for row in window.select(keep).to_dicts():
-            shaped = dict(row)
-            shaped["date"] = str(shaped["date"])
-            out.append(shaped)
-    return out
+    return _r2_generation_window(
+        tickers=tickers,
+        since=since,
+        until=until,
+        columns=("date", "ticker", "open", "high", "low", "close", "volume"),
+        strict=False,
+    )
 
 
 def r2_manifest_seal() -> tuple[date, int]:
