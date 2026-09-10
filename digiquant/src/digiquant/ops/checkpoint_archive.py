@@ -89,6 +89,75 @@ def resolve_payload(
     return decompress_payload(blob)
 
 
+def maybe_archive_store(store: StorageBackend | None) -> StorageBackend | None:
+    """Explicit store wins; else the env-built R2 backend; else None (no read-through).
+
+    Document readers take an optional ``store`` so unit tests can inject a
+    fake; production callers omit it and read through the real bucket when
+    ``R2_*`` creds are present. Missing creds disable read-through silently —
+    callers keep their pre-archive missing-row behavior.
+    """
+    if store is not None:
+        return store
+    try:
+        return _r2_backend_from_env()
+    except Exception:  # pragma: no cover — env misconfig, never raise on a read path
+        logger.warning("archive read-through disabled: R2 backend unavailable")
+        return None
+
+
+def read_archived_document(
+    client: Any,
+    store: StorageBackend | None,
+    *,
+    workspace_id: str,
+    document_key: str,
+    date_str: str,
+) -> Any:
+    """Archived-document read-through for NULL-payload ``documents`` rows (#3792).
+
+    Returns the decoded JSON payload, or ``None`` on pointer-miss (row still
+    live in Supabase or never archived), checksum failure, or undecodable
+    bytes. Corruption degrades to a warning + ``None`` — the daily graph must
+    never hard-fail on an archived prior; the un-degraded signal is the
+    failed-archive alarm on the write path, not the read path.
+    """
+    backend = maybe_archive_store(store)
+    if backend is None:
+        return None
+    try:
+        raw = resolve_payload(
+            client,
+            backend,
+            "documents",
+            {
+                "workspace_id": str(workspace_id),
+                "document_key": document_key,
+                "date": str(date_str),
+            },
+        )
+    except ArchiveNotFoundError:
+        return None
+    except ArchiveVerifyError:
+        logger.warning(
+            "archived document %s/%s/%s failed verification; treating as missing",
+            workspace_id,
+            date_str,
+            document_key,
+        )
+        return None
+    try:
+        return json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        logger.warning(
+            "archived document %s/%s/%s is not valid JSON; treating as missing",
+            workspace_id,
+            date_str,
+            document_key,
+        )
+        return None
+
+
 class StorageBackend(Protocol):
     """Object-store surface the archiver needs (R2, or a fake in tests)."""
 
@@ -698,8 +767,10 @@ __all__ = [
     "evict_to_watermark",
     "list_threads",
     "main",
+    "maybe_archive_store",
     "parse_postgrest_bytea",
     "previous_threads",
+    "read_archived_document",
     "reconcile_ledger",
     "record_pointer",
     "resolve_payload",
