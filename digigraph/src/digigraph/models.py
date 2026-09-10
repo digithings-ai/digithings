@@ -94,6 +94,14 @@ class ChatCompletionRequest(BaseModel):
             "vault/search hits and never replace them (#3420)."
         ),
     )
+    research_system_prompt: str | None = Field(
+        None,
+        description=(
+            "Opt-in default research system prompt for sessions with no "
+            "server-configured prompt (single-tenant / baseline embed). Ignored "
+            "when DIGI_TENANT_CORPUS_MAP resolves a prompt for the tenant."
+        ),
+    )
 
 
 class WorkflowRequest(BaseModel):

@@ -75,6 +75,10 @@ class TestChatCompletionRequest:
         req = ChatCompletionRequest(messages=[], force_tool="docs")
         assert req.force_tool == "docs"
 
+    def test_chat_completion_request_accepts_research_system_prompt(self) -> None:
+        req = ChatCompletionRequest(messages=[], research_system_prompt="baseline default")
+        assert req.research_system_prompt == "baseline default"
+
 
 @pytest.mark.unit
 class TestWorkflowResult:

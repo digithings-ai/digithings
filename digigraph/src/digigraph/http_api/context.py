@@ -73,13 +73,18 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
         corpus_map=corpus_map,
     )
     # Same CWE-639 class as digi_subject: when DIGI_TENANT_CORPUS_MAP is configured,
-    # digisearch_index / vault_path_prefix / research_system_prompt_override must be
-    # written unconditionally so a client body value cannot survive into graph state
-    # (digisearch has no server-side tenant→index bind; digivault does for prefixes).
+    # digisearch_index / vault_path_prefix must be written unconditionally so a client
+    # body value cannot survive into graph state (digisearch has no server-side
+    # tenant→index bind; digivault does for prefixes).
+    # research_system_prompt_override is the deliberate exception: a mapped tenant
+    # prompt still wins, but when the map has no prompt for this tenant the client
+    # value (e.g. the baseline embed default) stands — workflow.py rewrites the
+    # initial override from the request every turn, so nothing sticks across turns.
     if corpus_map:
         updates["digisearch_index"] = corpus.digisearch_index
         updates["vault_path_prefix"] = corpus.vault_path_prefix
-        updates["research_system_prompt_override"] = corpus.research_system_prompt
+        if corpus.research_system_prompt:
+            updates["research_system_prompt_override"] = corpus.research_system_prompt
     else:
         if corpus.digisearch_index:
             updates["digisearch_index"] = corpus.digisearch_index

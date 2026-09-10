@@ -672,6 +672,8 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
         disabled_raw = (request.headers.get("X-Digi-Disabled-Tools") or "").strip()
         if disabled_raw:
             wf_extras["disabled_tools"] = [p.strip() for p in disabled_raw.split(",") if p.strip()]
+        if "research_system_prompt_override" not in wf_extras and req.research_system_prompt:
+            wf_extras["research_system_prompt_override"] = req.research_system_prompt
         return StreamingResponse(
             _stream_completions_progressive(
                 req,
@@ -709,6 +711,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
             force_tool=_resolve_force_tool_chat(req, request),
             enable_web_search=enable_web_search,
             disabled_tools=disabled_tokens or None,
+            research_system_prompt_override=req.research_system_prompt,
         )
         result = run_digigraph_workflow(_with_digi_request_context(request, wf))
         if not result.success and result.error_code in ("free_quota_exceeded", "rate_limit"):
