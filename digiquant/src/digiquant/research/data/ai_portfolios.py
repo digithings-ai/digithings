@@ -1,12 +1,12 @@
-"""Grounding pre-pass for the `alt-ai-portfolios` segment (#658 / #2567).
+"""Grounding pre-pass for the `alt-ai-portfolios` segment (#658 / #2567 / #3853).
 
 Reads the latest public posts of tracked AI-run portfolio accounts on X via
-OpenRouter **native** web search (web-search-capable grounding model), returning
-a cited summary to inject into phase_inputs. Does not assemble Exa
-``engine`` / ``max_results`` params — those belong to the digillm toolkit
-fallback, not dashboard.
+the cheap synthesis grounding model (tier ``web_search_models`` pin — any
+house-routed slug, no vendor prefix gate), returning a cited summary to
+inject into phase_inputs. Does not assemble Exa ``engine`` / ``max_results``
+params — those belong to the digillm toolkit fallback, not dashboard.
 
-Requires ``OPENROUTER_API_KEY``; fails soft to ``None`` otherwise.
+Fails soft to ``None`` on error or empty synthesis.
 """
 
 from __future__ import annotations
@@ -56,8 +56,8 @@ def fetch_ai_portfolio_grounding(
     run_date: date,
 ) -> dict[str, Any] | None:
     """Return ``{"summary", "sources", "accounts", "as_of"}`` or ``None`` (ungrounded)."""
-    if not model.startswith("openrouter/"):
-        return None
+    # No vendor prefix gate (#3853): the tier's cheap synthesis-only pins are
+    # bare house slugs, and ``model`` already selects the synthesis route below.
     cfg = _config()
     accounts = list(cfg.get("accounts", []))
     if not accounts:

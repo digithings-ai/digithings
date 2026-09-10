@@ -40,11 +40,18 @@ def test_fetch_ai_portfolio_grounding_returns_summary_sources_handles():
 
 
 @pytest.mark.unit
-def test_fetch_ai_portfolio_grounding_none_for_non_openrouter():
-    assert (
-        ai_portfolios.fetch_ai_portfolio_grounding(model="ollama/local", run_date=date(2026, 6, 9))
-        is None
-    )
+def test_fetch_ai_portfolio_grounding_accepts_bare_cheap_pin():
+    """No vendor prefix gate (#3853): bare house synthesis pins ground like openrouter/ ones."""
+
+    def _or_ws(model, query, **kwargs):
+        return ("@grkportfolio bought $GFI[[1]](https://x.com/s/1)", ["https://x.com/s/1"])
+
+    with patch("digigraph.llm_client.openrouter_web_search", side_effect=_or_ws):
+        out = ai_portfolios.fetch_ai_portfolio_grounding(
+            model="google/gemini-3.1-flash-lite", run_date=date(2026, 6, 9)
+        )
+    assert out is not None
+    assert out["sources"] == ["https://x.com/s/1"]
 
 
 @pytest.mark.unit

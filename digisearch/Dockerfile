@@ -22,13 +22,18 @@ COPY digikey/pyproject.toml digikey/README.md ./digikey/
 COPY digikey/src ./digikey/src
 RUN uv pip install --system -e "./digikey"
 
+COPY digifetch/pyproject.toml digifetch/ARCHITECTURE.md ./digifetch/
+COPY digifetch/src ./digifetch/src
+RUN uv pip install --system -e "./digifetch"
+
 COPY digisearch/pyproject.toml digisearch/ARCHITECTURE.md ./digisearch/
 COPY digisearch/src ./digisearch/src
 COPY digisearch/seeds ./digisearch/seeds
 WORKDIR /app/digisearch
 # [server] = FastAPI/uvicorn/mcp/typer/digikey + json logging (base is now light);
-# [ingestion] = parser deps incl. pdfplumber for PDF ingest; [azure]+[chroma] backends.
-RUN uv pip install --system -e ".[server,ingestion,azure,chroma]"
+# [ingestion] = parser deps incl. pdfplumber for PDF ingest; [azure]+[chroma] backends;
+# [web-search] = ddgs fallback + digifetch fetch + trafilatura/readability extract.
+RUN uv pip install --system -e ".[server,ingestion,azure,chroma,web-search]"
 
 EXPOSE 8002
 CMD ["uvicorn", "digisearch.server:app", "--host", "0.0.0.0", "--port", "8002"]

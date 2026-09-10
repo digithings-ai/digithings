@@ -202,6 +202,7 @@ services:
       - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - DIGISEARCH_INDEX=${DIGISEARCH_INDEX:-default}
+      - DIGISEARCH_SEARXNG_URL=${DIGISEARCH_SEARXNG_URL:-http://searxng:8080}
       - CHROMA_PATH=/data/chroma
       - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
@@ -219,6 +220,35 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  # ─── searxng + valkey: proprietary web-search sidecar for digisearch (#3853) ───
+  # Loopback-only on the host; digisearch reaches searxng as http://searxng:8080
+  # via DIGISEARCH_SEARXNG_URL. ddgs remains the zero-infra fallback.
+  searxng:
+    image: searxng/searxng:2026.9.5
+    container_name: digi-searxng
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./config/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    depends_on:
+      - valkey
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  valkey:
+    image: valkey/valkey:9-alpine
+    container_name: digi-searxng-valkey
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping || redis-cli ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   # ─── digivault: Obsidian-style markdown vault management (profile: digivault) ───
   digivault:

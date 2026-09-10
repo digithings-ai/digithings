@@ -1,20 +1,24 @@
-"""Web-grounding pre-pass for research phases (#650 / #2567).
+"""Web-grounding pre-pass for research phases (#650 / #2567 / #3853).
 
-For ``live_search`` segments, runs a read-only synthesis pass and returns a cited
-summary injected into ``phase_inputs`` before the normal structured-output
-research call.
+For ``live_search`` segments, tries the first-party digisearch ``web_search``
+tool first (enforced ``include_domains`` from ``search_domains.yaml``) and
+falls back to a read-only synthesis pass, returning a cited summary injected
+into ``phase_inputs`` before the normal structured-output research call.
 
-dashboard grounding synthesizes via a plain digillm completion over in-house
-retrieval context (:func:`digigraph.model_config.get_grounding_model` selects
-the synthesis model from the tier's ``web_search_models``). No vendor search
-tooling — digillm is a generic router. Citations are model-recalled only; the
-prompt forbids inventing sources.
+The tool call goes through digigraph's orchestrator hub (``POST
+/v1/orchestrator_invoke``) — never ``import digisearch`` — mirroring how the
+legacy fallback lazily imports ``digigraph.llm_client`` below. The fallback
+synthesizes via a plain digillm completion over in-house retrieval context
+(:func:`digigraph.model_config.get_grounding_model` selects the synthesis
+model from the tier's ``web_search_models`` cheap-only pins). Citations are
+model-recalled only; the prompt forbids inventing sources.
 
-Fails soft on error or missing key unless ``OLYMPUS_WEB_SEARCH=required``.
+Fails soft on error or missing key unless ``DIGIQUANT_WEB_SEARCH=required``.
 """
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
@@ -26,9 +30,11 @@ import yaml
 
 from digiquant.dashboard.envcompat import WEB_SEARCH, env_lookup
 
+logger = logging.getLogger(__name__)
+
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "search_domains.yaml"
 
-# Soft focus hint for the grounding query (native search ignores Exa allowlists).
+# Enforced include_domains cap on the first-party web_search tool call.
 _MAX_ALLOWED_DOMAINS = 5
 
 
@@ -52,10 +58,11 @@ def _config() -> dict[str, Any]:
         return yaml.safe_load(f) or {}
 
 
-def _build_query(segment: str, run_date: date, scope: str) -> str:
+def _build_query(segment: str, run_date: date | str, scope: str = "") -> str:
+    run_label = run_date.isoformat() if isinstance(run_date, date) else str(run_date)
     q = (
         f"For the '{segment}' segment of a daily market-research brief dated "
-        f"{run_date.isoformat()}, search the web for the latest material developments — "
+        f"{run_label}, search the web for the latest material developments — "
         "news, sentiment, positioning, fund/ETF flows, options/derivatives signals, and "
         "official (Fed/Treasury/regulatory) statements as relevant to this segment. "
     )
@@ -81,18 +88,80 @@ def _openrouter_web_search(model: str, query: str) -> tuple[str, list[str]] | No
     return openrouter_web_search(model, query)
 
 
+def call_web_search_tool(
+    *, query: str, include_domains: list[str], max_results: int
+) -> dict[str, Any]:
+    """First-party web_search tool via digigraph's orchestrator hub (#3853).
+
+    Returns ``{"summary", "sources"}`` in the digigraph-compatible shape.
+    Raises ``RuntimeError`` when the service errors or yields no rows so the
+    caller falls back to synthesis. Never imports digisearch directly — the
+    call goes over HTTP (``POST /v1/orchestrator_invoke``), mirroring how
+    :func:`_openrouter_web_search` lazily imports ``digigraph.llm_client``.
+    """
+    from digigraph.orchestration.web_search_tools import _call_digisearch_web_search
+
+    tool_out = _call_digisearch_web_search(
+        query,
+        include_domains=list(include_domains or []),
+        max_results=max_results,
+    )
+    rows = (tool_out or {}).get("results") or []
+    lines: list[str] = []
+    sources: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        url = str(row.get("doc_id") or "").strip()
+        if not url:
+            continue
+        meta = row.get("metadata") or {}
+        title = str(meta.get("title") or url).strip() or url
+        snippet = str(row.get("content") or "").strip()
+        line = f"- [{title}]({url})"
+        if snippet:
+            line += f": {snippet}"
+        lines.append(line)
+        sources.append(url)
+    if not lines:
+        raise RuntimeError("digisearch web_search returned no rows")
+    return {"summary": "\n".join(lines), "sources": sources}
+
+
 def fetch_web_grounding(
     *,
     model: str,
     segment: str,
-    run_date: date,
+    run_date: date | str,
     scope: str = "",
 ) -> dict[str, Any] | None:
     """Return ``{"summary", "sources", "as_of"}`` web grounding for a segment, or None."""
     cfg = _config()
-    # Domain list is folded into the natural-language query focus only; native
-    # provider search does not accept Exa allowlist tool params.
-    allowed = _domains_for(segment, cfg)
+    # Tool-first (#3853): search_domains.yaml is the enforced include_domains
+    # contract on the first-party web_search tool (capped at 5). The legacy
+    # synthesis fallback still gets the domains as a soft query preference.
+    domains = _domains_for(segment, cfg) or []
+    try:
+        max_results = int(cfg.get("max_search_results", 4) or 4)
+    except (TypeError, ValueError):
+        max_results = 4
+    max_results = max(1, min(max_results, 10))
+    as_of = run_date.isoformat() if isinstance(run_date, date) else str(run_date)
+    try:
+        tool_out = call_web_search_tool(
+            query=_build_query(segment, run_date, scope),
+            include_domains=domains,
+            max_results=max_results,
+        )
+        summary = str(tool_out.get("summary") or "").strip()
+        sources = list(tool_out.get("sources") or [])
+        if summary:
+            return {"summary": summary, "sources": sources, "as_of": as_of}
+    except Exception:
+        # Broad by design (Task 6 pattern): missing extra, 503, transport
+        # errors, empty rows — all fall back to synthesis below.
+        logger.debug("digisearch web_search tool failed; falling back to synthesis", exc_info=True)
+    allowed = domains or None
     focus = scope
     if allowed:
         focus = (f"{scope} Prefer sources among: {', '.join(allowed)}.").strip()
@@ -110,4 +179,4 @@ def fetch_web_grounding(
                 f"OLYMPUS_WEB_SEARCH=required but web search returned empty text for {segment!r}"
             )
         return None
-    return {"summary": summary, "sources": sources, "as_of": run_date.isoformat()}
+    return {"summary": summary, "sources": sources, "as_of": as_of}

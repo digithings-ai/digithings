@@ -13,17 +13,19 @@
 #                      endpoints 404 on function tools, so it is banned from phase pools.
 #                      Web grounding is NOT done here; it is a separate pre-pass (below).
 #
-#   web_search_models — grounding pre-passes only (research/portfolio live_search). Carries the
-#                      ``:online``/native-search models (perplexity/sonar). The pre-pass
-#                      injects a ``web_grounding`` block into the prompt before the phase
-#                      runs, so phase models never need ``:online`` themselves. These models
-#                      may lack function tools — NEVER routed to run_tools phases.
+#   web_search_models — grounding pre-passes only (research/portfolio live_search).
+#                      Cheap synthesis-only pins: the pre-pass tries the first-party
+#                      digisearch web_search tool first and synthesizes on these models
+#                      only as fallback. The pre-pass injects a ``web_grounding`` block
+#                      into the prompt before the phase runs, so phase models never need
+#                      ``:online`` themselves. These models may lack function tools —
+#                      NEVER routed to run_tools phases.
 #
 # Phase routing: stable hash(phase_slug) → capability pool (extraction / research /
 # reasoning). Grounding: hash(segment) → web_search_models pool.
 #
 # Tier philosophy:
-#   cheap     — open-weight OSS models (bare) for phases; ``:online``/perplexity grounding
+#   cheap     — open-weight OSS models (bare) for phases; first-party tool + cheap synthesis grounding
 #   balanced  — cheap pool + mid-tier (Gemini Flash, GPT-5.6 Luna, Grok), all bare
 #   quality   — unbounded frontier models; no auto-router sanitization
 #
@@ -78,10 +80,11 @@ tiers:
       reasoning:
         - "deepseek/deepseek-v4-flash"
     web_search_models:
-      # House CI-only (#3660): CI synthesis models, NOT sonar. perplexity/sonar
-      # and ``:online`` pins are not on CI and fail closed there — retrieval stays
-      # in-house (digisearch / live_search / data tools) and this pre-pass
-      # synthesizes on CI (primary gemini-3.1-flash-lite, alt deepseek-v4-flash).
+      # House CI-only (#3660): cheap synthesis fallback pins, NOT sonar. The
+      # first-party web_search tool runs first; perplexity/sonar and ``:online``
+      # pins are not on CI and fail closed there — retrieval stays in-house
+      # (digisearch / live_search / data tools) and this pre-pass synthesizes
+      # on CI (primary gemini-3.1-flash-lite, alt deepseek-v4-flash).
       - "google/gemini-3.1-flash-lite"
       - "deepseek/deepseek-v4-flash"
 
@@ -108,7 +111,7 @@ tiers:
         - "google/gemini-3.7-flash"
         - "openai/gpt-5.6-luna"
     web_search_models:
-      # Same CI synthesis pattern as cheap (no sonar / :online).
+      # Same cheap synthesis-fallback pattern as cheap (no sonar / :online).
       - "google/gemini-3.1-flash-lite"
       - "deepseek/deepseek-v4-flash"
 

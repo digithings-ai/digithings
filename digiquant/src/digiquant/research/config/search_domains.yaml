@@ -1,6 +1,7 @@
-# Curated allowlists for the OpenRouter `openrouter:web_search` grounding pre-pass
-# (web_grounding.py) — maps to Exa `allowed_domains`. Keeps the day-to-day search
-# flow consistent and high-signal. Edit to tune sources.
+# Curated include_domains for the first-party `web_search` grounding pre-pass
+# (web_grounding.py) — enforced include_domains on the digisearch web_search
+# tool, folded as a soft preference into the legacy synthesis fallback query.
+# Keeps the day-to-day search flow consistent and high-signal. Edit to tune sources.
 #
 # NOTE: allowlists are capped at 5 domains per request. Each list below is truncated
 # to its first 5 entries before being sent.
