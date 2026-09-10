@@ -167,4 +167,6 @@ def run_mcp(
 ) -> None:
     """Run the MCP server. Default: streamable HTTP on 127.0.0.1:8765."""
     bind = host or os.environ.get("DIGISEARCH_MCP_HOST", "127.0.0.1")
-    mcp.run(transport=transport, host=bind, port=port)
+    mcp.settings.host = bind
+    mcp.settings.port = port
+    mcp.run(transport=transport)

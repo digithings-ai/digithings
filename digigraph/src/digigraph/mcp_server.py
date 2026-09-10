@@ -270,7 +270,9 @@ def run_mcp(
     bind = host or os.environ.get("DIGIGRAPH_MCP_HOST", "127.0.0.1")
     mcp = get_mcp_server()
     logger.info("Starting digigraph MCP server on %s:%d (transport=%s)", bind, port, transport)
-    mcp.run(transport=transport, host=bind, port=port)
+    mcp.settings.host = bind
+    mcp.settings.port = port
+    mcp.run(transport=transport)
 
 
 if __name__ == "__main__":
