@@ -11,15 +11,17 @@ import json
 from pathlib import Path
 from typing import Any  # score:allow untyped any — MCP JSON argument bags
 
-from digiquant.data.onchain.bgeometrics import BGEOMETRICS_BASE_URL
+from digiquant.data.onchain.bgeometrics import BGEOMETRICS_BASE_URL, fetch_bgeometrics_series
 from digiquant.data.onchain.bgeometrics import DEFAULT_CACHE_DIR as BGEOMETRICS_CACHE
-from digiquant.data.onchain.bgeometrics import fetch_bgeometrics_series
-from digiquant.data.onchain.bitview import BITVIEW_BASE_URL
+from digiquant.data.onchain.bitview import BITVIEW_BASE_URL, DEFAULT_SERIES, fetch_bitview_series
 from digiquant.data.onchain.bitview import DEFAULT_CACHE_DIR as BITVIEW_CACHE
-from digiquant.data.onchain.bitview import DEFAULT_SERIES, fetch_bitview_series
-from digiquant.data.onchain.coinmetrics import COINMETRICS_BASE_URL, DEFAULT_PAGE_SIZE
+from digiquant.data.onchain.coinmetrics import (
+    COINMETRICS_BASE_URL,
+    DEFAULT_PAGE_SIZE,
+    fetch_coinmetrics_catalog,
+    fetch_coinmetrics_series,
+)
 from digiquant.data.onchain.coinmetrics import DEFAULT_CACHE_DIR as COINMETRICS_CACHE
-from digiquant.data.onchain.coinmetrics import fetch_coinmetrics_catalog, fetch_coinmetrics_series
 from digiquant.data.prices.history_cache import DEFAULT_CACHE_DIR, incremental_update, load_cached
 from digiquant.strategies.sdca.asset_profile import daily_closes_from_ohlcv
 from digiquant.strategies.sdca.fit_weights import (

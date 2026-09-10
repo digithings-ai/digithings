@@ -308,9 +308,16 @@ def fetch_coinmetrics_series(
         return CoinMetricsSeriesResult(
             asset=asset, metric=metric, error=f"{_ENV_FLAG} disabled (no network)"
         )
-    client = CoinMetricsClient(base_url=base_url, timeout=timeout, session=session, cache_dir=cache_dir)
+    client = CoinMetricsClient(
+        base_url=base_url, timeout=timeout, session=session, cache_dir=cache_dir
+    )
     return client.fetch(
-        metric, asset=asset, start_time=start_time, end_time=end_time, page_size=page_size, api_key=api_key
+        metric,
+        asset=asset,
+        start_time=start_time,
+        end_time=end_time,
+        page_size=page_size,
+        api_key=api_key,
     )
 
 

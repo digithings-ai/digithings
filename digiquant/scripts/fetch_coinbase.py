@@ -66,20 +66,26 @@ def bars_to_polars(bars: list[list], ticker: str, *, timeframe: str = "1d") -> p
     one row.
     """
     fmt = "%Y-%m-%d" if timeframe == "1d" else "%Y-%m-%dT%H:%M:%SZ"
-    return pl.DataFrame({
-        "timestamp": [datetime.fromtimestamp(b[0] / 1000, tz=timezone.utc).strftime(fmt) for b in bars],
-        "open": [b[1] for b in bars],
-        "high": [b[2] for b in bars],
-        "low": [b[3] for b in bars],
-        "close": [b[4] for b in bars],
-        "volume": [b[5] for b in bars],
-        "symbol": [ticker] * len(bars),
-    })
+    return pl.DataFrame(
+        {
+            "timestamp": [
+                datetime.fromtimestamp(b[0] / 1000, tz=timezone.utc).strftime(fmt) for b in bars
+            ],
+            "open": [b[1] for b in bars],
+            "high": [b[2] for b in bars],
+            "low": [b[3] for b in bars],
+            "close": [b[4] for b in bars],
+            "volume": [b[5] for b in bars],
+            "symbol": [ticker] * len(bars),
+        }
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch Coinbase daily OHLCV via CCXT")
-    parser.add_argument("--symbols", default=",".join(SYMBOLS.keys()), help="Comma-separated CCXT symbols")
+    parser.add_argument(
+        "--symbols", default=",".join(SYMBOLS.keys()), help="Comma-separated CCXT symbols"
+    )
     parser.add_argument(
         "--start",
         default="2015-07-20",
@@ -107,7 +113,9 @@ def main() -> None:
         ticker = SYMBOLS.get(ccxt_sym, ccxt_sym.replace("/", "-"))
 
         logger.info("Fetching %s (%s) from %s", ccxt_sym, ticker, args.start)
-        bars = fetch_all_daily(exchange, ccxt_sym, args.start, timeframe=args.timeframe, end=args.end)
+        bars = fetch_all_daily(
+            exchange, ccxt_sym, args.start, timeframe=args.timeframe, end=args.end
+        )
         if not bars:
             logger.error("No data for %s", ccxt_sym)
             continue
@@ -123,8 +131,14 @@ def main() -> None:
 
         out = args.cache_dir / f"{ticker}.csv"
         df.write_csv(out)
-        logger.info("  %s: %d bars (%s → %s) → %s", ticker, len(df),
-                     df["timestamp"][0], df["timestamp"][-1], out)
+        logger.info(
+            "  %s: %d bars (%s → %s) → %s",
+            ticker,
+            len(df),
+            df["timestamp"][0],
+            df["timestamp"][-1],
+            out,
+        )
 
 
 if __name__ == "__main__":

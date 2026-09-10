@@ -164,7 +164,10 @@ def build_digiquant_fetch_coinbase_ohlcv_tool() -> dict[str, Any]:
                         "description": 'JSON array of CCXT symbols, e.g. ["BTC/USD"]',
                     },
                     "start": {"type": "string"},
-                    "end": {"type": "string", "description": "End date (YYYY-MM-DD); defaults to now"},
+                    "end": {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD); defaults to now",
+                    },
                     "timeframe": {
                         "type": "string",
                         "description": "CCXT timeframe: 1m,5m,15m,30m,1h,2h,6h,1d (default 1d)",
@@ -344,7 +347,10 @@ def build_digiquant_fetch_coinmetrics_series_tool() -> dict[str, Any]:
                     "cache_dir": {"type": "string"},
                     "timeout": {"type": "number", "default": 30},
                     "base_url": {"type": "string", "description": "Override API base URL"},
-                    "api_key": {"type": "string", "description": "Registered CoinMetrics API key (optional)"},
+                    "api_key": {
+                        "type": "string",
+                        "description": "Registered CoinMetrics API key (optional)",
+                    },
                 },
                 "required": ["metric"],
             },
@@ -369,7 +375,10 @@ def build_digiquant_list_coinmetrics_catalog_tool() -> dict[str, Any]:
                     "asset": {"type": "string", "description": "Restrict to one asset, e.g. 'btc'"},
                     "timeout": {"type": "number", "default": 30},
                     "base_url": {"type": "string", "description": "Override API base URL"},
-                    "api_key": {"type": "string", "description": "Registered CoinMetrics API key (optional)"},
+                    "api_key": {
+                        "type": "string",
+                        "description": "Registered CoinMetrics API key (optional)",
+                    },
                 },
             },
         },
