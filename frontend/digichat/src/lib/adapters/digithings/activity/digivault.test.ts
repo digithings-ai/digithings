@@ -85,6 +85,39 @@ describe("mapDigivaultSearchNotes", () => {
       toolInput: { query: "showcase" },
     });
   });
+
+  it("maps rag_sources-shaped rows (doc_id + snippet) the same as native hits", () => {
+    const span = mapDigivaultSearchNotes({
+      query: "run digigraph docker command",
+      hits: [
+        {
+          doc_id: "clients/digithings/digigraph/ARCHITECTURE.md",
+          snippet: "docker compose up digigraph",
+          metadata: { title: "digigraph architecture" },
+        },
+      ],
+    });
+    expect(span?.documents?.[0]).toMatchObject({
+      title: "digigraph architecture",
+      path: "clients/digithings/digigraph/ARCHITECTURE.md",
+      snippet: "docker compose up digigraph",
+    });
+  });
+
+  it("surfaces failed vault search instead of a zero-hit retrieve", () => {
+    expect(
+      mapDigivaultSearchNotes({
+        query: "run digigraph docker command",
+        hits: [],
+        status: "failed",
+        error: "No tenant corpus is configured for this chat session",
+      }),
+    ).toMatchObject({
+      operation: "execute_tool",
+      status: "failed",
+      toolName: "digivault_search_notes",
+    });
+  });
 });
 
 describe("mapDigivaultGetNote", () => {

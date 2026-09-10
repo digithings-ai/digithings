@@ -20,6 +20,7 @@ import {
 import { cn } from "./cn";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
+import { formatJsonDump, formatToolDurationMs, humanizeToolName } from "./format-json-dump";
 
 const ANIMATION_DURATION = 200;
 
@@ -98,13 +99,7 @@ const statusLabels: Record<ToolStatus, string> = {
   "requires-action": "Needs action",
 };
 
-const formatToolDuration = (ms: number) => {
-  if (ms < 1000) return "<1s";
-  const seconds = ms / 1000;
-  if (seconds < 10) return `${(Math.floor(seconds * 10) / 10).toFixed(1)}s`;
-  if (seconds < 60) return `${Math.floor(seconds)}s`;
-  return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
-};
+const formatToolDuration = formatToolDurationMs;
 
 function ToolFallbackDuration({
   elapsedMs,
@@ -150,12 +145,16 @@ function useRowElapsed(isRunning: boolean) {
 
 function ToolFallbackTrigger({
   toolName,
+  argsText,
   status,
+  completedMs,
   className,
   ...props
 }: React.ComponentProps<typeof CollapsibleTrigger> & {
   toolName: string;
+  argsText?: string;
   status?: ToolCallMessagePartStatus;
+  completedMs?: number;
 }) {
   const statusType = status?.type ?? "complete";
   const isCancelled =
@@ -165,7 +164,9 @@ function ToolFallbackTrigger({
     ? "idle"
     : statusMatrix[statusType];
   const statusLabel = isCancelled ? "Cancelled" : statusLabels[statusType];
-  const elapsedMs = useRowElapsed(statusType === "running");
+  const liveMs = useRowElapsed(statusType === "running");
+  const elapsedMs =
+    statusType === "complete" && completedMs !== undefined ? completedMs : liveMs;
 
   return (
     <CollapsibleTrigger
@@ -188,7 +189,7 @@ function ToolFallbackTrigger({
           isCancelled && "text-muted-foreground line-through",
         )}
       >
-        {toolName}
+        {humanizeToolName(toolName, argsText)}
       </span>
       <ToolFallbackDuration elapsedMs={elapsedMs} />
       <span
@@ -257,7 +258,7 @@ function ToolFallbackArgs({
         data-slot="tool-fallback-dump"
         className="aui-tool-fallback-args-value bg-muted/50 text-foreground/90 rounded-md p-2.5 text-xs whitespace-pre-wrap"
       >
-        {argsText}
+        {formatJsonDump(argsText)}
       </pre>
     </div>
   );
@@ -285,7 +286,7 @@ function ToolFallbackResult({
         data-slot="tool-fallback-dump"
         className="aui-tool-fallback-result-content bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs whitespace-pre-wrap"
       >
-        {typeof result === "string" ? result : JSON.stringify(result, null, 2)}
+        {typeof result === "string" ? formatJsonDump(result) : formatJsonDump(result)}
       </pre>
     </div>
   );
@@ -681,6 +682,13 @@ function ToolFallbackApproval({
   );
 }
 
+function durationFromResult(result: unknown): number | undefined {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return undefined;
+  const ms = (result as { durationMs?: unknown }).durationMs;
+  if (typeof ms === "number" && Number.isFinite(ms) && ms >= 0) return Math.round(ms);
+  return undefined;
+}
+
 const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   toolName,
   argsText,
@@ -707,7 +715,12 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
 
   return (
     <ToolFallbackRoot open={open} onOpenChange={setOpen}>
-      <ToolFallbackTrigger toolName={toolName} status={status} />
+      <ToolFallbackTrigger
+        toolName={toolName}
+        argsText={argsText}
+        status={status}
+        completedMs={durationFromResult(result)}
+      />
       <ToolFallbackContent>
         <ToolFallbackError status={status} />
         <ToolFallbackArgs

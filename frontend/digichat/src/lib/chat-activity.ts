@@ -488,6 +488,11 @@ export function toDigiChatActivity(
   let pendingTool = "search";
   let pendingQuery = "";
   let reasoning = "";
+  const flushReasoning = () => {
+    if (!reasoning) return;
+    rows.push({ kind: "reasoning", text: reasoning });
+    reasoning = "";
+  };
 
   for (const span of spans) {
     if (span.reasoningDelta) {
@@ -501,6 +506,8 @@ export function toDigiChatActivity(
       // to fall through.
       continue;
     }
+
+    flushReasoning();
 
     if (span.operation === "execute_tool") {
       const name = span.toolName ?? "tool";
@@ -689,7 +696,7 @@ export function toDigiChatActivity(
     }
   }
 
-  if (reasoning) rows.push({ kind: "reasoning", text: reasoning });
+  flushReasoning();
   return orphanedRows.size ? rows.filter((_, idx) => !orphanedRows.has(idx)) : rows;
 }
 

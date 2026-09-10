@@ -3,8 +3,10 @@
 /**
  * Session menu docked above the composer (#3736 UI pass). Same chrome as the
  * slash palette: opaque, composer-width, command/label left, value right.
- * Arrow keys move; Enter toggles or opens a nested list; Escape closes.
- * Left/Right on `/language` cycles the full ISO list.
+ * Arrow keys move; Enter toggles, opens a nested list, or commits an exclusive
+ * pick (then the menu closes). Escape closes. Left/Right on `/language` cycles
+ * the full ISO list. Exclusive rows reuse the dropdown radio disc (`CircleIcon`),
+ * not the word “on”.
  */
 
 import {
@@ -17,6 +19,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { CircleIcon } from "lucide-react";
 import { nextPaletteIndex } from "@digithings/digichat-ui";
 import { useEmbedChatPrefs } from "@/components/stock/embed-chat-prefs";
 import {
@@ -90,6 +93,8 @@ type MenuRow = {
   value: string;
   activate: () => void;
   checked?: boolean;
+  /** Single-choice list: radio disc, not On/Off. */
+  exclusive?: boolean;
 };
 
 const EFFORTS = ["low", "medium", "high"] as const;
@@ -349,14 +354,16 @@ export function EmbedComposerMenu({
         return {
           id: o.value,
           label: `${o.value}  ${o.label}`,
-          value: [native, selected ? "On" : ""].filter(Boolean).join(" · "),
+          value: native,
           checked: selected,
+          exclusive: true,
           activate: () => {
             api.setLanguage(o.value);
+            onClose();
           },
         };
       }),
-    [languages, api],
+    [languages, api, onClose],
   );
 
   const modelRows = useMemo((): MenuRow[] => {
@@ -376,27 +383,31 @@ export function EmbedComposerMenu({
     return available.map((id) => ({
       id,
       label: id,
-      value: (providerActive?.model || api.prefs.model) === id ? "On" : "",
+      value: "",
       checked: (providerActive?.model || api.prefs.model) === id,
+      exclusive: true,
       activate: () => {
         api.setModel(id);
         onPickSessionModel?.(id);
+        onClose();
       },
     }));
-  }, [available, api, onPickSessionModel, providerActive]);
+  }, [available, api, onClose, onPickSessionModel, providerActive]);
 
   const effortRows = useMemo(
     (): MenuRow[] =>
       EFFORTS.map((id) => ({
         id,
         label: slashName(`effort ${id}`),
-        value: api.prefs.effort === id ? "On" : "",
+        value: "",
         checked: api.prefs.effort === id,
+        exclusive: true,
         activate: () => {
           api.setEffort(id);
+          onClose();
         },
       })),
-    [api],
+    [api, onClose],
   );
 
   const toggleTool = useCallback(
@@ -612,6 +623,7 @@ export function EmbedComposerMenu({
       label: slashName(id),
       value: providerDisplayName(id),
       checked: providerActive?.provider === id,
+      exclusive: true,
       activate: () => {
         setProviderPick(id);
         setKeyDraft("");
@@ -1262,12 +1274,13 @@ export function EmbedComposerMenu({
         view !== "mcp-edit"
           ? rows.map((row, index) => {
               const toggle = typeof row.checked === "boolean" && (view === "main" || view === "tools");
+              const exclusive = Boolean(row.exclusive);
               return (
                 <button
                   key={row.id}
                   id={`dc-menu-${row.id}`}
                   type="button"
-                  role={toggle ? "menuitemcheckbox" : "menuitem"}
+                  role={toggle ? "menuitemcheckbox" : exclusive ? "menuitemradio" : "menuitem"}
                   aria-checked={typeof row.checked === "boolean" ? row.checked : undefined}
                   data-cursor={index === cursor ? "true" : undefined}
                   className="flex w-full cursor-pointer items-baseline justify-between gap-4 px-3 py-1.5 text-start text-sm outline-none outline-offset-[-1px]"
@@ -1279,9 +1292,14 @@ export function EmbedComposerMenu({
                   onKeyDown={(e) => onRowKey(e, index)}
                 >
                   <span className="min-w-0 shrink-0 font-medium">{row.label}</span>
-                  {row.value ? (
-                    <span className="text-muted-foreground min-w-0 truncate text-right text-xs">
-                      {row.value}
+                  {row.value || (exclusive && row.checked) ? (
+                    <span className="text-muted-foreground flex min-w-0 items-center justify-end gap-2 truncate text-right text-xs">
+                      {row.value ? <span className="truncate">{row.value}</span> : null}
+                      {exclusive && row.checked ? (
+                        <span data-slot="dropdown-menu-radio-item-indicator" className="inline-flex shrink-0">
+                          <CircleIcon className="size-2 fill-current" aria-hidden />
+                        </span>
+                      ) : null}
                     </span>
                   ) : null}
                 </button>

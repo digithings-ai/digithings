@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from queue import Full, Queue
@@ -378,6 +379,34 @@ def _emit_event(
             continue
 
 
+def _tool_result_error(data: dict[str, Any]) -> str | None:
+    """Surface a failed vault/search invoke instead of a fake zero-hit retrieve."""
+    if data.get("ok") is False:
+        err = data.get("error")
+        if isinstance(err, str) and err.strip():
+            return err.strip()
+        content = data.get("content")
+        if isinstance(content, str) and content.strip():
+            return content.strip()[:500]
+        return "tool failed"
+    content = data.get("content")
+    if not isinstance(content, str):
+        return None
+    text = content.strip()
+    if not text.startswith("{"):
+        return None
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(parsed, dict) and parsed.get("ok") is False:
+        err = parsed.get("error")
+        if isinstance(err, str) and err.strip():
+            return err.strip()
+        return "tool failed"
+    return None
+
+
 def run_digigraph_workflow_streaming(
     req: WorkflowRequest,
     event_queue: Queue,
@@ -524,6 +553,10 @@ def run_digigraph_workflow_streaming(
                     rag_payload["query"] = data["query"]
                 if "hit_count" in data:
                     rag_payload["hit_count"] = data["hit_count"]
+                err = _tool_result_error(data)
+                if err:
+                    rag_payload["error"] = err[:500]
+                    rag_payload["status"] = "failed"
                 emit(
                     (
                         "trace",

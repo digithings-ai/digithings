@@ -1,5 +1,10 @@
 import type { ActivitySpan } from "@/lib/chat-activity";
-import { mapDigivaultGetNote, DIGIVAULT_GET_NOTE_TOOL } from "./digivault";
+import {
+  DIGIVAULT_GET_NOTE_TOOL,
+  DIGIVAULT_SEARCH_TOOL,
+  mapDigivaultGetNote,
+  mapDigivaultSearchNotes,
+} from "./digivault";
 import {
   mapRawSourceToDocument,
   ragToolDisplayName,
@@ -16,6 +21,38 @@ export function mapDigisearchRagSources(
   const toolRaw = typeof payload.tool === "string" ? payload.tool.trim() : "";
   if (toolRaw === DIGIVAULT_GET_NOTE_TOOL) {
     return mapDigivaultGetNote(payload);
+  }
+  if (toolRaw === DIGIVAULT_SEARCH_TOOL || toolRaw === "digivault") {
+    return mapDigivaultSearchNotes({
+      ...payload,
+      hits: Array.isArray(payload.hits)
+        ? payload.hits
+        : Array.isArray(payload.results)
+          ? payload.results
+          : payload.sources,
+    });
+  }
+  const failed =
+    payload.status === "failed" ||
+    (typeof payload.error === "string" && payload.error.trim().length > 0);
+  if (failed) {
+    const err =
+      typeof payload.error === "string" && payload.error.trim()
+        ? payload.error.trim()
+        : "search failed";
+    const toolInput = toolInputFromPayload(payload);
+    const query =
+      (typeof payload.query === "string" && payload.query.trim()
+        ? payload.query.trim()
+        : undefined) || (toolInput ? queryFromToolArgs(toolInput) : undefined);
+    return {
+      operation: "execute_tool",
+      status: "failed",
+      label: err.slice(0, 200),
+      toolName: ragToolDisplayName(payload.tool),
+      ...(query ? { query } : {}),
+      ...(toolInput ? { toolInput } : query ? { toolInput: { query } } : {}),
+    };
   }
   const sources = payload.sources;
   if (!Array.isArray(sources)) return null;
