@@ -1,4 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
+import { fetchGuarded } from "@/lib/fetch-guarded";
 
 /**
  * OpenAI-compatible client pointed at digigraph (/v1).
@@ -33,16 +34,16 @@ export function createDigiGraphClient(
       : { "X-Response-Format": "plain" },
     fetch: async (url, init) => {
       if (!init?.body || typeof init.body !== "string") {
-        return fetch(url, init);
+        return fetchGuarded(url, init);
       }
       try {
         const parsed = JSON.parse(init.body) as Record<string, unknown>;
         // Explicit body field, belt-and-suspenders alongside the X-Response-Format
         // header above: Open WebUI chrome is opt-in only, never implied by model id.
         parsed.openwebui_format = openwebui;
-        return fetch(url, { ...init, body: JSON.stringify(parsed) });
+        return fetchGuarded(url, { ...init, body: JSON.stringify(parsed) });
       } catch {
-        return fetch(url, init);
+        return fetchGuarded(url, init);
       }
     },
   });

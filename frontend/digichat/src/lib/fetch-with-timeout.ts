@@ -1,7 +1,12 @@
 /** Shared AbortController-based fetch timeout. Extracted from
  * app/api/byok/test/route.ts so app/api/byok/models/route.ts doesn't
  * duplicate it — see docs/superpowers/specs/2026-08-13-digichat-byok-model-catalog-design.md.
+ *
+ * Credentialed calls go through `fetchGuarded` (#2572) so cross-origin redirects
+ * never forward BYOK / provider secret headers.
  */
+
+import { fetchGuarded } from "@/lib/fetch-guarded";
 
 export const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
 
@@ -13,7 +18,7 @@ export async function fetchWithTimeout(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await fetchGuarded(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }
