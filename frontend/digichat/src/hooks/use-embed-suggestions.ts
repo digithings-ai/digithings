@@ -29,6 +29,7 @@ export function useEmbedSuggestions(
   useEffect(() => {
     const pool = tenantCfg.suggestions ?? getTenantSuggestionPool(tenantCfg.slug) ?? [];
     if (!pool.length) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional one-shot mount sync: first render must match SSR (stable pick) to avoid a hydration mismatch; the reshuffled variety pick applies after mount.
     setMountedSuggestions(pickRandomEmbedSuggestions(pool));
   }, [tenantCfg.suggestions, tenantCfg.slug]);
 
