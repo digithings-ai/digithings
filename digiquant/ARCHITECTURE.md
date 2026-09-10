@@ -315,6 +315,18 @@ cron's `MARKET_DATA_POSTGRES_URI` is deliberately NOT forwarded here.
 unset/empty keeps the library default (`supabase`); set it to `"r2"`
 explicitly via env for the hosted path.
 
+Owner applies the five secrets from `cloudflare/digithings-stack-cloudflare/`
+(`$VALUE` filled only in the operator's shell history — never in the repo;
+`env -u` per the `CLOUDFLARE_API_TOKEN` trap noted in `wrangler.toml`):
+
+```bash
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put FRED_API_KEY
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCOUNT_ID
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_BUCKET
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCESS_KEY_ID
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_SECRET_ACCESS_KEY
+```
+
 #### Market-data R2 read path (#3780 Task 10)
 
 `DIGIQUANT_MARKET_DATA_BACKEND=r2` routes the price/macro tools through

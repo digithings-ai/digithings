@@ -26,5 +26,8 @@ COPY digiquant/pyproject.toml ./digiquant/
 COPY digiquant/src ./digiquant/src
 RUN uv pip install --system -e "./digiquant[research,mcp]"
 ENV DIGIQUANT_MCP_HOST=0.0.0.0 DIGIQUANT_MCP_PORT=8767
+# Hosted default is read-only: `full` never leaves localhost. Local
+# `python -m digiquant.mcp_server` still defaults to `full` (see mcp_server.py).
+ENV DIGIQUANT_MCP_SCOPE=read
 EXPOSE 8767
 CMD ["python", "-m", "digiquant.mcp_server"]
