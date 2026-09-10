@@ -47,15 +47,15 @@ def test_coerce_bool_handles_string_args():
 def test_dispatcher_routes_and_returns_json_string():
     client = _FakeClient(
         {
-            "price_technicals": [{"ticker": "SPY", "date": "2026-06-08", "rsi_14": 55.0}],
+            "theses": [{"ticker": "SPY", "date": "2026-06-08", "thesis_id": "t1"}],
             "macro_series_observations": [
                 {"series_id": "DFF", "obs_date": "2026-06-07", "value": 4.5}
             ],
         }
     )
     dispatch = build_data_tool_dispatcher(client)
-    pt = json.loads(dispatch("query_data", {"table": "price_technicals", "eq": {"ticker": "SPY"}}))
-    assert pt["rows"][0]["rsi_14"] == 55.0
+    pt = json.loads(dispatch("query_data", {"table": "theses", "eq": {"ticker": "SPY"}}))
+    assert pt["rows"][0]["thesis_id"] == "t1"
     mc = json.loads(dispatch("get_macro_series", {"series_ids": ["DFF"], "lookback": 3}))
     assert mc["DFF"]["latest"]["value"] == 4.5
     err = dispatch("nonexistent_tool", {})
@@ -85,12 +85,31 @@ def test_query_data_table_none_returns_actionable_error():
 
 
 @pytest.mark.unit
-def test_macro_obs_date_rewritten_from_date(monkeypatch):
-    """Server-side rewrite: 'date' → 'obs_date' for macro_series_observations (#814).
+def test_dispatcher_macro_series_anchored_to_run_date():
+    """The dispatcher threads its run_date as as_of (look-ahead-safe backfills)."""
+    from datetime import date
 
-    The LLM commonly sorts/filters by 'date' on this table (generic name) instead of
-    'obs_date' (the real Postgres column). The dispatcher must silently correct it so
-    the query returns data rather than a column-not-found error.
+    client = _FakeClient(
+        {
+            "macro_series_observations": [
+                {"series_id": "DFF", "obs_date": "2026-06-01", "value": 4.4},
+                {"series_id": "DFF", "obs_date": "2026-06-10", "value": 4.5},
+            ],
+        }
+    )
+    dispatch = build_data_tool_dispatcher(client, run_date=date(2026, 6, 5))
+    mc = json.loads(dispatch("get_macro_series", {"series_ids": ["DFF"], "lookback": 5}))
+    assert mc["DFF"]["latest"]["obs_date"] == "2026-06-01"
+    assert len(mc["DFF"]["window"]) == 1
+
+
+@pytest.mark.unit
+def test_macro_query_data_refused_post_cutover(monkeypatch):
+    """query_data no longer serves macro_series_observations (#3780, Task 7).
+
+    The per-series-latest read the old 'date'→'obs_date' rewrite supported now
+    lives exclusively behind the get_macro_series tool (which takes series_ids
+    directly and needs no column rewrite).
     """
     client = _FakeClient(
         {
@@ -101,14 +120,13 @@ def test_macro_obs_date_rewritten_from_date(monkeypatch):
         }
     )
     dispatch = build_data_tool_dispatcher(client)
-    # LLM sends 'order':'date' — should be silently rewritten to 'obs_date'.
     result = json.loads(
         dispatch(
             "query_data",
             {"table": "macro_series_observations", "eq": {"series_id": "DGS10"}, "order": "date"},
         )
     )
-    assert len(result["rows"]) == 2
+    assert "error" in result and "not readable" in result["error"]
 
 
 @pytest.mark.unit
@@ -160,5 +178,5 @@ def test_price_technicals_close_rejected_before_supabase():
         {"table": "price_technicals", "columns": "date,close,rsi_14", "eq": {"ticker": "SPY"}},
     )
     assert "Error" in err
-    assert "price_history" in err
+    assert "digiquant_get_price_technicals" in err
     assert "close" in err

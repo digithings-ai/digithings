@@ -80,6 +80,29 @@ class TestGetMarketContext:
         assert ctx["price_technicals"] == {}
         assert ctx["macro_series"] == {}
 
+    def test_rows_newer_than_run_date_excluded(self) -> None:
+        """Cutover look-ahead guard: backfill run_dates must not see future rows."""
+        ctx = get_market_context(
+            client=_client(
+                price_rows=[
+                    {"date": "2026-06-15", "ticker": "SPY", "rsi_14": 99.0},
+                    {"date": "2026-06-11", "ticker": "SPY", "rsi_14": 61.2},
+                ],
+                macro_rows=[
+                    {"series_id": "DGS10", "obs_date": "2026-06-15", "value": 9.99, "unit": "pct"},
+                    {"series_id": "DGS10", "obs_date": "2026-06-11", "value": 4.21, "unit": "pct"},
+                    {"series_id": "DGS10", "obs_date": "2026-06-10", "value": 4.18, "unit": "pct"},
+                ],
+            ),
+            tickers=["SPY"],
+            series_ids=["DGS10"],
+            run_date=RUN_DATE,
+        )
+        assert ctx["price_technicals"]["SPY"]["date"] == "2026-06-11"
+        assert ctx["price_technicals"]["SPY"]["rsi_14"] == 61.2
+        assert ctx["macro_series"]["DGS10"]["date"] == "2026-06-11"
+        assert ctx["macro_series"]["DGS10"]["value"] == 4.21
+
 
 class TestMarketContextTickers:
     def test_includes_core_set_and_sector_etfs(self) -> None:

@@ -35,6 +35,26 @@ def prices() -> None:
 # ─── Shared helpers ───────────────────────────────────────────────────────
 
 
+def _supabase_writes_disabled() -> bool:
+    """True when the R2 market-data cache is authoritative (#3780, Task 7 cutover).
+
+    ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` stops the Supabase writers: the daily
+    refresh lands in R2 generations via ``scripts/refresh_market_data_r2.py``
+    instead. Rollback = unset the flag (writers resume; readers fall back to
+    Supabase bodies in ``mcp_server``).
+    """
+    return os.environ.get("DIGIQUANT_MARKET_DATA_BACKEND", "supabase").strip().lower() == "r2"
+
+
+def _refuse_supabase_write(command: str) -> None:
+    """Fail LOUD when a writer runs under the R2 backend (never skip silently)."""
+    raise click.ClickException(
+        f"{command}: Supabase market-data writes are stopped "
+        "(DIGIQUANT_MARKET_DATA_BACKEND=r2); the R2 refresh owns this table now. "
+        "Unset the flag to roll back to Supabase writers."
+    )
+
+
 def _parse_iso_option(value: str | None, flag: str) -> date | None:
     """Parse an optional ISO-date CLI option, surfacing a UsageError (not a traceback)."""
     if value is None or not value.strip():
@@ -118,6 +138,8 @@ def fetch_quotes_cmd(
 
     universe = _resolve_universe(tickers, watchlist, include_sectors)
 
+    if supabase and not dry_run and _supabase_writes_disabled():
+        _refuse_supabase_write("fetch-quotes")
     click.echo(f"fetch-quotes: {len(universe)} tickers | dry_run={dry_run}")
     frames = incremental_update(universe, cache_dir=cache_dir, bulk_period=period, dry_run=dry_run)
     click.echo(f"  fetched: {len(frames)}")
@@ -209,6 +231,8 @@ def compute_technicals_cmd(
 
     client = None
     if supabase and not dry_run:
+        if _supabase_writes_disabled():
+            _refuse_supabase_write("compute-technicals")
         client = build_supabase_client(
             os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL")),
             os.environ.get(
@@ -374,6 +398,8 @@ def recompute_technicals_cmd(
     since_d = _parse_iso_option(since, "--since")
     if since_d is not None and since_d > as_of_d:
         raise click.UsageError(f"--since ({since_d}) must be on or before --as-of ({as_of_d})")
+    if not dry_run and _supabase_writes_disabled():
+        _refuse_supabase_write("recompute-technicals")
 
     client = build_supabase_client(
         os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL")),
@@ -458,6 +484,8 @@ def fetch_macro_cmd(
     sources_set = {s.strip() for s in sources.split(",") if s.strip()}
     if backfill and latest_only:
         raise click.UsageError("--backfill and --latest-only are mutually exclusive")
+    if supabase and not dry_run and _supabase_writes_disabled():
+        _refuse_supabase_write("fetch-macro")
     mani = MacroManifest.from_yaml(manifest)
 
     # Validate FRED creds up-front so --dry-run'd FRED fails fast before the

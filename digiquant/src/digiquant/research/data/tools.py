@@ -38,17 +38,18 @@ DATA_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "query_data",
             "description": (
-                "Generic read of any market-data table to ground a claim in real numbers "
+                "Generic read of any book/calendar table to ground a claim in real numbers "
                 "(backed by digibase, scoped read-only to the data tables). Allowed tables: "
-                "price_history (daily OHLCV — columns: ticker, date, open, high, low, close, volume), "
-                "price_technicals (indicators per ticker — columns: ticker, date, sma_20, sma_50, "
-                "sma_200, rsi_14, macd, macd_signal, macd_hist, adx_14, atr_14, atr_pct, "
-                "bb_upper, bb_lower, bb_pct_b, zscore_200; "
-                "NOTE: price_technicals has NO 'close' column — use price_history for OHLCV), "
-                "macro_series_observations (FRED macro — columns: series_id, obs_date, value; "
-                "NOTE: the date column is 'obs_date' NOT 'date'; filter/sort by obs_date), "
                 "positions, nav_history, theses, thesis_vehicles, position_events, "
                 "portfolio_metrics, trading_calendar. "
+                "Market history (price_history, price_technicals, "
+                "macro_series_observations) moved to the versioned R2 cache (#3780) — "
+                "ground price/macro claims with get_macro_series and the injected "
+                "market context instead "
+                "(NOTE: price_technicals had NO 'close' column — use the R2-backed "
+                "digiquant_get_price_technicals MCP tool for OHLCV/indicators). "
+                "Macro date column was 'obs_date' on the retired table; the "
+                "get_macro_series tool takes series_ids directly. "
                 "positions/nav_history/position_events/portfolio_metrics default to the "
                 "house workspace_id (overlay same-date rows are excluded); pass "
                 "eq.workspace_id to read another book. "
@@ -229,30 +230,24 @@ def build_data_tool_dispatcher(
             if not table:
                 return (
                     "Error: query_data requires a 'table' argument. "
-                    "Allowed tables: price_history, price_technicals, "
-                    "macro_series_observations, positions, nav_history, theses, "
+                    "Allowed tables: positions, nav_history, theses, "
                     "thesis_vehicles, position_events, portfolio_metrics, trading_calendar."
                 )
             # Server-side guard: price_technicals never had a 'close' column (#3078).
             # Fail fast with a redirect instead of burning a tool round on a 42703
-            # and inviting the model to retry the same doomed query.
+            # and inviting the model to retry the same doomed query. (Market
+            # tables left query_data for the R2 cache in #3780; the guard stays
+            # so the redirect names the R2 tool, not a retired table.)
             if table == "price_technicals" and _references_technicals_close(args):
                 return (
                     "Error: price_technicals has no 'close' column. "
-                    "Query price_history for OHLCV (open/high/low/close/volume)."
+                    "Use the R2-backed digiquant_get_price_technicals MCP tool "
+                    "for OHLCV/indicators."
                 )
-            # Server-side rewrite: the LLM sometimes sorts/filters macro_series_observations
-            # by 'date' (the generic name) instead of 'obs_date' (the real column). Silently
-            # correct it so the model gets useful data rather than a Postgres 42703 error (#814).
-            if table == "macro_series_observations":
-                for filter_arg in ("eq", "gte", "lte"):
-                    filt = args.get(filter_arg)
-                    if isinstance(filt, dict) and "date" in filt:
-                        filt = dict(filt)
-                        filt["obs_date"] = filt.pop("date")
-                        args = {**args, filter_arg: filt}
-                if args.get("order") == "date":
-                    args = {**args, "order": "obs_date"}
+            # NOTE (#3780): the old 'date'→'obs_date' rewrite for
+            # macro_series_observations lived here; the table left query_data
+            # for the R2 cache, so get_macro_series (series_ids, no columns) is
+            # the only macro path and needs no rewrite.
             return query_data(
                 client=client,
                 table=table,
@@ -271,6 +266,7 @@ def build_data_tool_dispatcher(
                 client=client,
                 series_ids=list(args.get("series_ids", [])),
                 lookback=int(args.get("lookback", 6)),
+                as_of=as_of,
             )
         if name == "get_market_breadth":
             # Readers filter <= as_of and take the newest row → "as of the run date".

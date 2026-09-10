@@ -14,7 +14,7 @@ import json
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, Literal, overload
 
 logger = logging.getLogger(__name__)
 
@@ -110,17 +110,43 @@ def _read_manifest() -> dict:
     return _get_r2_store().read_manifest()  # type: ignore[no-any-return]
 
 
-def _read_r2_window(ticker: str, as_of: str, manifest: dict | None = None) -> list[dict]:
+def _r2_is_stale(manifest_as_of: str, resolved_as_of: str) -> bool:
+    """Task 6 staleness gate on the read path: seal >5 trading days behind as_of."""
+    from digiquant.data.prices.refresh_gate import staleness_gate
+
+    return not bool(staleness_gate(manifest_as_of, resolved_as_of)["ok"])
+
+
+@overload
+def _read_r2_window(ticker: str, as_of: str, manifest: dict | None = ...) -> list[dict]: ...
+
+
+@overload
+def _read_r2_window(
+    ticker: str, as_of: str, manifest: dict | None = ..., *, return_stale: Literal[True]
+) -> tuple[list[dict], bool]: ...
+
+
+def _read_r2_window(
+    ticker: str, as_of: str, manifest: dict | None = None, *, return_stale: bool = False
+) -> list[dict] | tuple[list[dict], bool]:
     """Date-ascending indicator dicts for *ticker* sealed at *as_of*.
 
     R2 history (SHA-verified via the manifest) + live overlap fetched from
     ``(manifest_as_of, as_of]`` → :func:`merge_history_live` with
     ``sealed=False`` (settled close: the live ``as_of`` bar is excluded) →
     :func:`compute_indicators`. An ``as_of`` at or before the manifest seal
-    skips the live fetch entirely. A missing ``latest`` pointer (KeyError)
+    skips the live fetch entirely, and the merged frame is additionally bounded
+    to ``date <= as_of`` so historical reads (``as_of`` behind the seal — the
+    cutover's backfill use case) cannot leak newer history (#3780 Task 7).
+    A missing ``latest`` pointer (KeyError)
     maps to an unknown-ticker ``LookupError`` for the MCP error envelope.
     A live-fetch failure raises (surfaced as the ``{"error"}`` envelope by
     the caller) — it is never swallowed into a valid-looking window.
+    A per-ticker fetch *error entry* (``FetchResult.errors`` with no raised
+    exception, e.g. vendor ``no_data``) serves history-only rows but marks the
+    read stale (fail-soft serving + loud flag — Task 7 decision, mirroring the
+    Task 6 cron): pass ``return_stale=True`` to get ``(rows, live_stale)``.
     Indicator columns are attached to the merged frame via a date-ordered
     left join, with a row-count guard so a reordering/filtering change in
     :func:`compute_indicators` fails loud instead of misaligning.
@@ -166,7 +192,9 @@ def _read_r2_window(ticker: str, as_of: str, manifest: dict | None = None) -> li
 
     if as_of_d <= manifest_d:
         live = hist.clear()
+        live_stale = False
     else:
+        live_stale = False
         try:
             from digiquant.data.prices.fetchers import fetch_batch
 
@@ -176,6 +204,17 @@ def _read_r2_window(ticker: str, as_of: str, manifest: dict | None = None) -> li
                 start=live_start.isoformat(),
                 end=(as_of_d + _td(days=1)).isoformat(),
             )
+            if ticker in fetched.errors:
+                # Vendor error entry, no exception: serve history-only but flag
+                # stale (Task 7 fail-soft decision) — never a fresh-looking seal.
+                live_stale = True
+                logger.warning(
+                    "R2 read %s as_of=%s: live fetch error entry (%s); "
+                    "serving history-only (stale)",
+                    ticker,
+                    resolved_as_of,
+                    fetched.errors[ticker],
+                )
             frame = fetched.frames.get(ticker)
             if frame is None or frame.is_empty():
                 live = hist.clear()
@@ -195,8 +234,12 @@ def _read_r2_window(ticker: str, as_of: str, manifest: dict | None = None) -> li
             raise RuntimeError(f"live fetch failed for {ticker!r}: {exc}") from exc
 
     merged = merge_history_live(hist, live, manifest_seal, resolved_as_of, sealed=False)
+    # Historical-read bound: the merge only caps history at the seal, so an
+    # as_of behind the seal would leak newer history (look-ahead). No-op when
+    # as_of >= seal (merge output is already <= as_of there).
+    merged = merged.filter(pl.col("date") <= pl.lit(resolved_as_of).cast(pl.Date))
     if merged.is_empty():
-        return []
+        return ([], live_stale) if return_stale else []
     ohlcv = merged.rename({"date": "timestamp"}) if "timestamp" not in merged.columns else merged
     indicators = compute_indicators(ohlcv)
     if indicators.height != merged.height:
@@ -204,7 +247,7 @@ def _read_r2_window(ticker: str, as_of: str, manifest: dict | None = None) -> li
             f"indicator/price row mismatch for {ticker!r}: "
             f"{indicators.height} indicator rows vs {merged.height} merged rows"
         )
-    return (
+    rows = (
         merged.select(pl.col("date"), pl.col("close"))
         .with_row_index("_mcp_pos")
         .join(indicators.with_row_index("_mcp_pos"), on="_mcp_pos", how="left")
@@ -212,6 +255,7 @@ def _read_r2_window(ticker: str, as_of: str, manifest: dict | None = None) -> li
         .sort("date")
         .to_dicts()
     )
+    return (rows, live_stale) if return_stale else rows
 
 
 def _read_r2_macro_window(
@@ -261,7 +305,12 @@ def _read_r2_macro_window(
 def digiquant_get_price_technicals(
     ticker: str, lookback: int = 20, as_of: str | None = None
 ) -> str:
-    """Technicals for *ticker*, Supabase-backed by default or R2-backed with the flag."""
+    """Technicals for *ticker*, Supabase-backed by default or R2-backed with the flag.
+
+    The R2 envelope is ``{"as_of", "rows", "stale"}``: ``stale`` is true when
+    the manifest seal is >5 trading days behind ``as_of`` (Task 6 gate) or the
+    live overlap carried a per-ticker fetch error entry (history-only serve).
+    """
     try:
         lookback = min(int(lookback), 500)
         if _market_data_backend() != "r2":
@@ -274,8 +323,19 @@ def digiquant_get_price_technicals(
         cached = _ttl_get(cache_key)
         if cached is not None:
             return cached
-        rows = _read_r2_window(ticker, resolved, manifest)
-        payload = json.dumps({"as_of": resolved, "rows": rows[-lookback:]}, default=str)
+        rows, live_stale = _read_r2_window(ticker, resolved, manifest, return_stale=True)
+        stale = live_stale or _r2_is_stale(str(manifest["as_of"]), resolved)
+        if stale:
+            logger.warning(
+                "R2 technicals %s as_of=%s seal=%s live_stale=%s: serving stale window",
+                ticker,
+                resolved,
+                manifest["as_of"],
+                live_stale,
+            )
+        payload = json.dumps(
+            {"as_of": resolved, "rows": rows[-lookback:], "stale": stale}, default=str
+        )
         _ttl[cache_key] = (time.time(), payload)
         return payload
     except Exception as exc:
@@ -285,7 +345,12 @@ def digiquant_get_price_technicals(
 def digiquant_get_macro_series(
     series_ids: list[str], lookback: int = 6, as_of: str | None = None
 ) -> str:
-    """Macro observations for *series_ids*, Supabase-backed by default or R2-backed."""
+    """Macro observations for *series_ids*, Supabase-backed by default or R2-backed.
+
+    The R2 envelope is ``{"as_of", "series", "stale"}`` (per-series
+    ``{latest, window}``). Unknown series fail loud (``{"error"}``); a stale
+    manifest seal only flags ``stale`` — macro has no live overlap to repair it.
+    """
     try:
         lookback = min(int(lookback), 500)
         if _market_data_backend() != "r2":
@@ -299,11 +364,19 @@ def digiquant_get_macro_series(
         if cached is not None:
             return cached
         per_series = _read_r2_macro_window(series_ids, resolved, manifest)
+        stale = _r2_is_stale(str(manifest["as_of"]), resolved)
+        if stale:
+            logger.warning(
+                "R2 macro %s as_of=%s seal=%s: serving stale window",
+                series_ids,
+                resolved,
+                manifest["as_of"],
+            )
         series = {
             sid: {"latest": payload["latest"], "window": payload["window"][-lookback:]}
             for sid, payload in per_series.items()
         }
-        payload = json.dumps({"as_of": resolved, "series": series}, default=str)
+        payload = json.dumps({"as_of": resolved, "series": series, "stale": stale}, default=str)
         _ttl[cache_key] = (time.time(), payload)
         return payload
     except Exception as exc:
@@ -493,9 +566,12 @@ def create_mcp_server() -> Any:
         agents use, so external agents (digichat / execution) can fetch the paper
         book and market data by key (#925). Allowed tables: ``positions``,
         ``nav_history``, ``theses``, ``thesis_vehicles``, ``position_events``,
-        ``portfolio_metrics``, ``price_history``, ``price_technicals``,
-        ``macro_series_observations``, ``trading_calendar``. Operator-internal
-        telemetry (decision_log, diagnostics) is deliberately NOT readable.
+        ``portfolio_metrics``, ``trading_calendar``. Market history
+        (``price_history``, ``price_technicals``, ``macro_series_observations``)
+        moved to the versioned R2 cache (#3780) and is no longer readable here —
+        use ``digiquant_get_price_technicals`` / ``digiquant_get_macro_series``.
+        Operator-internal telemetry (decision_log, diagnostics) is deliberately
+        NOT readable.
         Group A books (``positions``, ``nav_history``, ``position_events``,
         ``portfolio_metrics``) default to the house ``workspace_id`` when
         ``eq`` omits it; pass ``eq.workspace_id`` to read another book.

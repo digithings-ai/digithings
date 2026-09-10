@@ -26,11 +26,12 @@ def _clear_ttl():
 def test_technicals_r2_backend_returns_asof_envelope(monkeypatch):
     monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
     monkeypatch.setattr(mcp, "_read_manifest", lambda: {"version": 1, "as_of": "2024-12-31"})
-    monkeypatch.setattr(
-        mcp,
-        "_read_r2_window",
-        lambda ticker, as_of, manifest=None: [{"date": "2024-12-31", "close": 1.0}],
-    )
+
+    def _window(ticker, as_of, manifest=None, return_stale=False):
+        rows = [{"date": "2024-12-31", "close": 1.0}]
+        return (rows, False) if return_stale else rows
+
+    monkeypatch.setattr(mcp, "_read_r2_window", _window)
     out = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=20, as_of="2024-12-31"))
     assert out["as_of"] == "2024-12-31"
     assert out["rows"][0]["date"] == "2024-12-31"
@@ -55,7 +56,7 @@ def test_technicals_r2_unknown_ticker_envelope(monkeypatch):
     monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
     monkeypatch.setattr(mcp, "_read_manifest", lambda: {"version": 1, "as_of": "2024-12-31"})
 
-    def _boom(ticker, as_of, manifest=None):
+    def _boom(ticker, as_of, manifest=None, return_stale=False):
         raise LookupError(f"unknown ticker {ticker!r}")
 
     monkeypatch.setattr(mcp, "_read_r2_window", _boom)
@@ -81,9 +82,10 @@ def test_technicals_r2_ttl_caches_window(monkeypatch):
     monkeypatch.setattr(mcp, "_read_manifest", lambda: {"version": 1, "as_of": "2024-12-31"})
     calls: list[tuple] = []
 
-    def _counting(ticker, as_of, manifest=None):
+    def _counting(ticker, as_of, manifest=None, return_stale=False):
         calls.append((ticker, as_of))
-        return [{"date": "2024-12-31", "close": 1.0}]
+        rows = [{"date": "2024-12-31", "close": 1.0}]
+        return (rows, False) if return_stale else rows
 
     monkeypatch.setattr(mcp, "_read_r2_window", _counting)
     first = mcp.digiquant_get_price_technicals("SPY", lookback=20, as_of="2024-12-31")
@@ -96,7 +98,11 @@ def test_technicals_r2_lookback_slices_tail(monkeypatch):
     monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
     monkeypatch.setattr(mcp, "_read_manifest", lambda: {"version": 1, "as_of": "2024-12-31"})
     rows = [{"date": f"2024-12-{day:02d}", "close": float(day)} for day in (29, 30, 31)]
-    monkeypatch.setattr(mcp, "_read_r2_window", lambda ticker, as_of, manifest=None: rows)
+
+    def _window(ticker, as_of, manifest=None, return_stale=False):
+        return (rows, False) if return_stale else rows
+
+    monkeypatch.setattr(mcp, "_read_r2_window", _window)
     out = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=2, as_of="2024-12-31"))
     assert [r["date"] for r in out["rows"]] == ["2024-12-30", "2024-12-31"]
 

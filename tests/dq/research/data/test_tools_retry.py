@@ -44,11 +44,11 @@ class _FlakyClient(_FakeClient):
         return inner
 
 
-def _technicals_client(**over):  # type: ignore[no-untyped-def]
+def _theses_client(**over):  # type: ignore[no-untyped-def]
     return _FlakyClient(
         {
-            "price_technicals": [
-                {"ticker": "SPY", "date": "2026-06-08", "rsi_14": 55.0},
+            "theses": [
+                {"ticker": "SPY", "date": "2026-06-08", "thesis_id": "t1"},
             ]
         },
         **over,
@@ -59,10 +59,10 @@ def test_transient_disconnect_retries_then_returns_data(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(time, "sleep", lambda _s: None)
-    client = _technicals_client(failures=2)
+    client = _theses_client(failures=2)
     dispatch = build_data_tool_dispatcher(client)
-    out = json.loads(dispatch("query_data", {"table": "price_technicals"}))
-    assert out["rows"][0]["rsi_14"] == 55.0
+    out = json.loads(dispatch("query_data", {"table": "theses"}))
+    assert out["rows"][0]["thesis_id"] == "t1"
     assert client.attempts == 3
 
 
@@ -70,9 +70,9 @@ def test_persistent_outage_returns_error_string_after_three_attempts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(time, "sleep", lambda _s: None)
-    client = _technicals_client(failures=10)
+    client = _theses_client(failures=10)
     dispatch = build_data_tool_dispatcher(client)
-    out = json.loads(dispatch("query_data", {"table": "price_technicals"}))
+    out = json.loads(dispatch("query_data", {"table": "theses"}))
     # Retries exhausted: the pre-existing error shape, not a raise.
     assert "timed out" in out["error"]
     assert client.attempts == 3
@@ -98,7 +98,7 @@ def test_schema_error_fails_fast_without_retry(
             return inner
 
     dispatch = build_data_tool_dispatcher(_BadColumnClient({}))
-    err = dispatch("query_data", {"table": "price_technicals", "columns": "nope"})
+    err = dispatch("query_data", {"table": "theses", "columns": "nope"})
     # A real bug (42703) is not transient: one attempt, Error string, no sleep.
     assert "42703" in err
     assert _BadColumnClient.attempts == 1

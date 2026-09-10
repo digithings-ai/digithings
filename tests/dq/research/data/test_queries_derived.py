@@ -181,14 +181,14 @@ class TestQueryData:
     def test_reads_whitelisted_table_with_eq_filter(self) -> None:
         client = _FakeClient(
             {
-                "price_technicals": [
-                    {"ticker": "XLK", "date": "2026-06-15", "rsi_14": 60.0},
-                    {"ticker": "XLF", "date": "2026-06-15", "rsi_14": 50.0},
+                "theses": [
+                    {"ticker": "XLK", "date": "2026-06-15", "thesis_id": "t1"},
+                    {"ticker": "XLF", "date": "2026-06-15", "thesis_id": "t2"},
                 ]
             }
         )
-        out = query_data(client=client, table="price_technicals", eq={"ticker": "XLK"})
-        assert out["table"] == "price_technicals"
+        out = query_data(client=client, table="theses", eq={"ticker": "XLK"})
+        assert out["table"] == "theses"
         assert out["row_count"] == 1
         assert out["rows"][0]["ticker"] == "XLK"
 
@@ -202,17 +202,30 @@ class TestQueryData:
 
     def test_limit_passthrough(self) -> None:
         rows = [
-            {"ticker": "A", "date": f"2026-06-{d:02d}", "close": float(d)} for d in range(1, 11)
+            {"ticker": "A", "date": f"2026-06-{d:02d}", "thesis_id": f"t{d}"} for d in range(1, 11)
         ]
-        out = query_data(
-            client=_FakeClient({"price_history": rows}), table="price_history", limit=3
-        )
+        out = query_data(client=_FakeClient({"theses": rows}), table="theses", limit=3)
         assert out["row_count"] == 3
 
     def test_whitelist_excludes_operator_tables(self) -> None:
         assert "decision_log" not in ALLOWED_READ_TABLES
         assert "atlas_run_diagnostics" not in ALLOWED_READ_TABLES
-        assert {"price_history", "price_technicals", "positions"} <= ALLOWED_READ_TABLES
+        assert {"positions", "theses", "trading_calendar"} <= ALLOWED_READ_TABLES
+
+    def test_whitelist_excludes_r2_cutover_market_tables(self) -> None:
+        # #3780 Task 7: market history is served from the R2 cache, never via
+        # the generic reader — the MCP price/macro tools own those reads now.
+        from digiquant.research.data.queries import MARKET_TABLES_REMOVED
+
+        assert set(MARKET_TABLES_REMOVED) == {
+            "price_history",
+            "price_technicals",
+            "macro_series_observations",
+        }
+        for table in MARKET_TABLES_REMOVED:
+            assert table not in ALLOWED_READ_TABLES
+            out = query_data(client=_FakeClient({table: [{"a": 1}]}), table=table)
+            assert "error" in out and "not readable" in out["error"]
 
     def test_allowed_tables_scope_blinds_callers_from_the_book(self) -> None:
         from digiquant.research.data.queries import MARKET_DATA_TABLES
@@ -225,13 +238,15 @@ class TestQueryData:
             allowed_tables=MARKET_DATA_TABLES,
         )
         assert "error" in out and "not readable" in out["error"]
-        # Market data is still allowed under the scope.
+        # Post-cutover (#3780) the blinded query_data scope is the calendar only
+        # (market values arrive via the injected market_context + dedicated
+        # readers, not the generic reader).
         ok = query_data(
-            client=_FakeClient({"price_technicals": [{"ticker": "XLK"}]}),
-            table="price_technicals",
+            client=_FakeClient({"trading_calendar": [{"date": "2026-06-15"}]}),
+            table="trading_calendar",
             allowed_tables=MARKET_DATA_TABLES,
         )
-        assert ok.get("table") == "price_technicals"
+        assert ok.get("table") == "trading_calendar"
         assert "positions" not in MARKET_DATA_TABLES
 
     def test_rejects_relationship_columns(self) -> None:
@@ -244,10 +259,8 @@ class TestQueryData:
         assert "rows" not in out
 
     def test_allows_plain_column_list(self) -> None:
-        client = _FakeClient(
-            {"price_history": [{"date": "2026-06-15", "close": 1.0, "ticker": "A"}]}
-        )
-        out = query_data(client=client, table="price_history", columns="date, close")
+        client = _FakeClient({"theses": [{"date": "2026-06-15", "thesis_id": "t1", "ticker": "A"}]})
+        out = query_data(client=client, table="theses", columns="date, thesis_id")
         assert out["row_count"] == 1
 
     def test_group_a_tables_are_positions_nav_events_metrics(self) -> None:
@@ -294,14 +307,12 @@ class TestQueryData:
         assert out["row_count"] == 1
         assert out["rows"][0]["ticker"] == "OVERLAY"
 
-    def test_price_history_does_not_inject_workspace_id(self) -> None:
+    def test_calendar_does_not_inject_workspace_id(self) -> None:
         # Rows without workspace_id would vanish if the house stamp leaked here.
-        client = _FakeClient(
-            {"price_history": [{"ticker": "SPY", "date": "2026-06-15", "close": 1.0}]}
-        )
-        out = query_data(client=client, table="price_history", eq={"date": "2026-06-15"})
+        client = _FakeClient({"trading_calendar": [{"date": "2026-06-15", "venue": "NYSE"}]})
+        out = query_data(client=client, table="trading_calendar", eq={"date": "2026-06-15"})
         assert out["row_count"] == 1
-        assert out["rows"][0]["ticker"] == "SPY"
+        assert out["rows"][0]["venue"] == "NYSE"
 
     def test_theses_does_not_inject_workspace_id(self) -> None:
         client = _FakeClient(
@@ -326,12 +337,10 @@ class TestToolDispatcher:
 
     def test_dispatch_query_data(self) -> None:
         client = _FakeClient(
-            {"price_technicals": [{"ticker": "XLK", "date": "2026-06-15", "rsi_14": 60.0}]}
+            {"theses": [{"ticker": "XLK", "date": "2026-06-15", "thesis_id": "t1"}]}
         )
         execute = build_data_tool_dispatcher(client)
-        result = json.loads(
-            execute("query_data", {"table": "price_technicals", "eq": {"ticker": "XLK"}})
-        )
+        result = json.loads(execute("query_data", {"table": "theses", "eq": {"ticker": "XLK"}}))
         assert result["rows"][0]["ticker"] == "XLK"
 
     def test_dispatch_breadth_returns_json(self) -> None:
@@ -351,16 +360,14 @@ class TestToolDispatcher:
         result = json.loads(execute("get_market_breadth", {}))
         assert result["universe_size"] == 0
 
-    def test_dispatch_query_data_price_history(self) -> None:
-        # Raw OHLCV now flows through the generic query_data reader (get_price_history retired).
-        client = _FakeClient(
-            {"price_history": [{"date": "2026-06-15", "ticker": "QQQ", "close": 1.0, "volume": 1}]}
-        )
+    def test_dispatch_query_data_market_tables_refused(self) -> None:
+        # Post-cutover (#3780): market history left the generic reader for the
+        # R2-backed tools — the dispatcher surfaces the refusal, never Supabase.
+        client = _FakeClient({"price_history": [{"ticker": "QQQ"}]})
         execute = build_data_tool_dispatcher(client)
-        result = json.loads(
-            execute("query_data", {"table": "price_history", "eq": {"ticker": "QQQ"}})
-        )
-        assert result["rows"][0]["ticker"] == "QQQ"
+        for table in ("price_history", "price_technicals", "macro_series_observations"):
+            result = json.loads(execute("query_data", {"table": table, "eq": {"ticker": "QQQ"}}))
+            assert "error" in result and "not readable" in result["error"]
 
     def test_dispatch_unknown_tool(self) -> None:
         execute = build_data_tool_dispatcher(_FakeClient({}))

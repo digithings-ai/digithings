@@ -51,19 +51,21 @@ TECHNICAL_COLUMNS: tuple[str, ...] = (
 )
 
 
-def get_price_technicals(*, client: Any, ticker: str, lookback: int = 20) -> dict[str, Any]:
+def get_price_technicals(
+    *, client: Any, ticker: str, lookback: int = 20, as_of: date | None = None
+) -> dict[str, Any]:
     """Return {ticker, latest, window[]} of selected technicals for one ticker.
 
     ``window`` is newest-first, length <= lookback. ``latest`` is window[0] or {}.
+    ``as_of`` bounds rows to ``date <= as_of`` (look-ahead-safe for historical
+    reads); omit it for "latest available".
     """
-    resp = (
-        client.table("price_technicals")
-        .select(",".join(TECHNICAL_COLUMNS))
-        .eq("ticker", ticker)
-        .order("date", desc=True)
-        .limit(lookback)
-        .execute()
+    query = (
+        client.table("price_technicals").select(",".join(TECHNICAL_COLUMNS)).eq("ticker", ticker)
     )
+    if as_of is not None:
+        query = query.lte("date", as_of.isoformat())
+    resp = query.order("date", desc=True).limit(lookback).execute()
     rows = getattr(resp, "data", None) or []
     return {"ticker": ticker, "latest": rows[0] if rows else {}, "window": rows}
 
@@ -123,6 +125,7 @@ def get_market_context(
             .select(",".join(("ticker", *TECHNICAL_COLUMNS)))
             .in_("ticker", list(tickers))
             .gte("date", since)
+            .lte("date", run_date.isoformat())
             .order("date", desc=True)
             .limit(len(tickers) * price_window_days)
             .execute()
@@ -132,7 +135,9 @@ def get_market_context(
             if ticker and ticker not in out["price_technicals"]:
                 out["price_technicals"][ticker] = {k: row.get(k) for k in TECHNICAL_COLUMNS}
     if series_ids:
-        macro = get_macro_series(client=client, series_ids=list(series_ids), lookback=2)
+        macro = get_macro_series(
+            client=client, series_ids=list(series_ids), lookback=2, as_of=run_date
+        )
         for sid, payload in macro.items():
             window = payload.get("window") or []
             if not window:
@@ -452,14 +457,21 @@ def get_return_correlations(
 #
 # One read-only, table-whitelisted reader the agents + PM call via the ``query_data``
 # tool — backed by the shared ``digibase`` Supabase connector, so we don't hand-roll
-# a bespoke tool per table or hand the model raw SQL. Scoped to the market-data +
-# paper-book tables; operator-internal telemetry (decision_log, atlas_run_diagnostics)
-# is deliberately NOT readable.
+# a bespoke tool per table or hand the model raw SQL. Scoped to the paper-book
+# tables + the trading calendar; operator-internal telemetry (decision_log,
+# atlas_run_diagnostics) is deliberately NOT readable.
+#
+# Market history (price_history, price_technicals, macro_series_observations)
+# moved to the versioned R2 cache (#3780, Task 7 cutover): it is served via
+# ``digiquant_get_price_technicals`` / ``digiquant_get_macro_series`` (MCP) and
+# the ``get_*`` readers below (in-process), never via this generic reader.
+MARKET_TABLES_REMOVED: tuple[str, ...] = (
+    "price_history",
+    "price_technicals",
+    "macro_series_observations",
+)
 ALLOWED_READ_TABLES: frozenset[str] = frozenset(
     {
-        "price_history",
-        "price_technicals",
-        "macro_series_observations",
         "positions",
         "nav_history",
         "theses",
@@ -470,12 +482,10 @@ ALLOWED_READ_TABLES: frozenset[str] = frozenset(
     }
 )
 
-# Market-data-only subset for BLINDED callers: the phase7c analysts must not read the
-# book (positions/nav_history/theses/...) — that would break the "blinded to portfolio
-# weights" rule — so they get query_data scoped to market data + the calendar only.
-MARKET_DATA_TABLES: frozenset[str] = frozenset(
-    {"price_history", "price_technicals", "macro_series_observations", "trading_calendar"}
-)
+# Blinded-analyst scope for ``query_data``: with market tables removed from the
+# generic reader, only the calendar remains here. (Blinded nodes still get
+# market *values* via the injected ``market_context`` + dedicated readers.)
+MARKET_DATA_TABLES: frozenset[str] = frozenset({"trading_calendar"})
 
 # Group A private books: omitted workspace_id is the house, never an unfiltered
 # date scan. Overlay same-date rows must not seed house research via query_data.
@@ -513,7 +523,7 @@ def query_data(
     limit: int = 50,
     allowed_tables: frozenset[str] | None = None,
 ) -> dict[str, Any]:
-    """Read rows from a whitelisted market-data table via the digibase connector.
+    """Read rows from a whitelisted table via the digibase connector.
 
     Read-only and table-scoped: a table outside the active whitelist is refused
     (the error is returned to the model, not raised). Callers may pass a narrower

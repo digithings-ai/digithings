@@ -128,6 +128,22 @@ class TestPreflight:
         # Refresh failed → keep the stale data + the scripts signal (never crashes preflight).
         assert out["data_layer"].fallback_used == "scripts"
 
+    def test_on_demand_refresh_skipped_under_r2_backend(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # #3780 Task 7: under the R2 backend the Supabase recompute is disabled
+        # (the R2 refresh owns writes) — even with the opt-in flag set. Rollback
+        # = unset DIGIQUANT_MARKET_DATA_BACKEND.
+        monkeypatch.setenv("DIGIQUANT_REFRESH_ON_DEMAND", "1")
+        monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
+        _client, deps = self._stale_deps()
+        with patch.object(refresh_mod, "recompute_technicals_from_history") as recompute:
+            out = build_preflight_node(deps)(
+                ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+            )
+        recompute.assert_not_called()
+        assert out["data_layer"].fallback_used == "scripts"
+
     def test_missing_price_technicals_signals_no_source(self) -> None:
         run_date = date(2026, 4, 26)
         client = FakeSupabaseClient(

@@ -28,5 +28,13 @@ env:
   DIGIQUANT_ONCHAIN_POSITIONING: "1"   # Hyperdash cohort GraphQL (#801)
   OLYMPUS_POSITION_RISK_FIELDS: "1"    # Pillar 2E advisory fields (migration 039)
 
+  # Market-data serving layer (#3780, Task 7 cutover): "r2" routes the MCP
+  # price/macro tools + pipeline reads through the versioned R2 cache sealed
+  # at as_of; "supabase" (default) keeps the legacy table reads. Rollback =
+  # flip back to "supabase" (and unset to re-enable the Supabase writers in
+  # `digiquant prices`). Dual-write window: writer crons do NOT set this flag,
+  # so they keep filling Supabase until the stop is verified over N=3 cycles.
+  DIGIQUANT_MARKET_DATA_BACKEND: "r2"
+
   DIGI_CHECKPOINTER: postgres          # Resume on retry (#665); degrades if URI absent
   LANGSMITH_TRACING: "true"            # Required for traces; key alone is insufficient (#687)
