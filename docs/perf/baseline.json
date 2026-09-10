@@ -1,21 +1,39 @@
 {
-  "backend": "supabase",
-  "recorded_at": "2026-09-09T22:51:52.074292+00:00",
-  "dates": [
-    "2024-12-31",
-    "2025-03-15",
-    "2025-08-29"
-  ],
-  "tools": {
-    "get_price_technicals": {
-      "n": 3,
-      "p50_ms": 1413.2,
-      "p99_ms": 2078.8
-    },
-    "get_macro_series": {
-      "n": 3,
-      "p50_ms": 483.9,
-      "p99_ms": 863.7
+  "supabase": {
+    "backend": "supabase",
+    "recorded_at": "2026-09-09T22:51:52.074292+00:00",
+    "dates": [
+      "2024-12-31",
+      "2025-03-15",
+      "2025-08-29"
+    ],
+    "tools": {
+      "get_price_technicals": {
+        "n": 3,
+        "p50_ms": 1413.2,
+        "p99_ms": 2078.8
+      },
+      "get_macro_series": {
+        "n": 3,
+        "p50_ms": 483.9,
+        "p99_ms": 863.7
+      }
+    }
+  },
+  "r2": {
+    "recorded_at": "2026-09-10T02:49:42.795696+00:00",
+    "as_of": "2025-08-29",
+    "tools": {
+      "get_price_technicals": {
+        "n": 100,
+        "p50_ms": 9.6,
+        "p99_ms": 11.8
+      },
+      "get_macro_series": {
+        "n": 100,
+        "p50_ms": 0.5,
+        "p99_ms": 0.9
+      }
     }
   }
 }
