@@ -15,6 +15,8 @@ from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.research.data.queries import (
     ALLOWED_READ_TABLES,
     HOUSE_BOOK_READ_TABLES,
+    PRICE_HISTORY_COLUMNS,
+    PRICE_TECHNICALS_COLUMNS,
     get_market_breadth,
     get_sector_relative_strength,
     get_vix_term_structure,
@@ -310,6 +312,115 @@ class TestQueryData:
         out = query_data(client=client, table="theses", eq={"date": "2026-06-15"})
         assert out["row_count"] == 1
         assert out["rows"][0]["ticker"] == "THEME"
+
+    def test_price_technicals_rejects_ohlcv_columns(self) -> None:
+        """OHLCV on price_technicals must fail fast with redirect to price_history (#3771)."""
+
+        class _ExplodingClient:
+            def table(self, *_a: object, **_k: object) -> object:
+                raise AssertionError("must not reach Supabase")
+
+        out = query_data(
+            client=_ExplodingClient(),  # type: ignore[arg-type]
+            table="price_technicals",
+            columns="date,close,rsi_14",
+            eq={"ticker": "SPY"},
+        )
+        assert "error" in out
+        assert "price_history" in out["error"]
+        assert "close" in out["error"]
+        assert "rows" not in out
+
+    def test_price_technicals_rejects_ohlcv_filter_key(self) -> None:
+        class _ExplodingClient:
+            def table(self, *_a: object, **_k: object) -> object:
+                raise AssertionError("must not reach Supabase")
+
+        out = query_data(
+            client=_ExplodingClient(),  # type: ignore[arg-type]
+            table="price_technicals",
+            columns="*",
+            gte={"close": 100},
+        )
+        assert "error" in out
+        assert "price_history" in out["error"]
+        assert "close" in out["error"]
+
+    def test_price_history_rejects_sma_columns(self) -> None:
+        """sma_*/technicals on price_history must redirect to price_technicals (#3771)."""
+
+        class _ExplodingClient:
+            def table(self, *_a: object, **_k: object) -> object:
+                raise AssertionError("must not reach Supabase")
+
+        out = query_data(
+            client=_ExplodingClient(),  # type: ignore[arg-type]
+            table="price_history",
+            columns="date,sma_50,close",
+            eq={"ticker": "SPY"},
+        )
+        assert "error" in out
+        assert "price_technicals" in out["error"]
+        assert "sma_50" in out["error"]
+        assert "rows" not in out
+
+    def test_price_history_rejects_technical_order_key(self) -> None:
+        class _ExplodingClient:
+            def table(self, *_a: object, **_k: object) -> object:
+                raise AssertionError("must not reach Supabase")
+
+        out = query_data(
+            client=_ExplodingClient(),  # type: ignore[arg-type]
+            table="price_history",
+            columns="*",
+            order="rsi_14",
+        )
+        assert "error" in out
+        assert "price_technicals" in out["error"]
+        assert "rsi_14" in out["error"]
+
+    def test_star_select_still_allowed_on_both_tables(self) -> None:
+        # ``*`` skips column enumeration; only explicit names are allowlisted.
+        hist = query_data(
+            client=_FakeClient(
+                {"price_history": [{"ticker": "SPY", "date": "2026-06-15", "close": 1.0}]}
+            ),
+            table="price_history",
+            columns="*",
+            eq={"ticker": "SPY"},
+        )
+        assert hist["row_count"] == 1
+        tech = query_data(
+            client=_FakeClient(
+                {"price_technicals": [{"ticker": "SPY", "date": "2026-06-15", "rsi_14": 55.0}]}
+            ),
+            table="price_technicals",
+            columns="*",
+            eq={"ticker": "SPY"},
+            order="date",
+        )
+        assert tech["row_count"] == 1
+
+    def test_explicit_allowed_columns_happy_path(self) -> None:
+        out = query_data(
+            client=_FakeClient(
+                {
+                    "price_technicals": [
+                        {"ticker": "SPY", "date": "2026-06-15", "rsi_14": 55.0, "sma_50": 100.0}
+                    ]
+                }
+            ),
+            table="price_technicals",
+            columns="date,rsi_14,sma_50",
+            eq={"ticker": "SPY"},
+            order="date",
+        )
+        assert out["row_count"] == 1
+        assert out["rows"][0]["rsi_14"] == 55.0
+        assert "sma_50" in PRICE_TECHNICALS_COLUMNS
+        assert "close" not in PRICE_TECHNICALS_COLUMNS
+        assert "sma_50" not in PRICE_HISTORY_COLUMNS
+        assert "close" in PRICE_HISTORY_COLUMNS
 
 
 @pytest.mark.unit

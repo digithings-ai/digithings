@@ -20,6 +20,7 @@ import {
   writeStandardActivity,
 } from "@/lib/ui-stream-parts";
 import { BYOK_MODEL_REMEDIABLE_CODES } from "@/lib/embed-chat-error";
+import { CredentialRedirectError, fetchGuarded } from "@/lib/fetch-guarded";
 
 export type DigigraphTracePayload = {
   v?: number;
@@ -184,30 +185,48 @@ export async function createDigigraphTraceStreamResponse(opts: {
         messages: coreMessagesToDigigraphOpenAi(coreMessages),
         stream: true,
       };
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          // Authorization comes from upstreamHeaders and nowhere else, because
-          // route.ts sets it unconditionally (`route.ts:244`, one const literal;
-          // later lines only add X-* keys). NOT because the spread would override
-          // it — a spread overrides only keys it actually contains, so an
-          // `Authorization` set here WOULD survive a caller that omitted one. That
-          // is why route.ts's unconditional set is pinned by a test rather than
-          // left to inspection: if it ever becomes conditional, this adapter must
-          // regain a fallback or digigraph gets an unauthenticated request (#2537).
-          ...opts.upstreamHeaders,
-          // After upstreamHeaders so dogfood never inherits Open WebUI format.
-          // Belt-and-suspenders: digigraph's Open WebUI chrome is opt-in only
-          // (X-Response-Format: openwebui or openwebui_format=true), never implied
-          // by model id, but dogfood forces plain explicitly rather than relying
-          // on that default.
-          "X-Suppress-Tool-Stream": "1",
-          "X-Response-Format": "plain",
-        },
-        body: JSON.stringify(bodyPayload),
-        signal: opts.signal,
-      });
+      // #2572: never follow cross-origin redirects while carrying BYOK /
+      // LiteLLM / digikey credentials (Node forwards X-* across origins).
+      let res: Response;
+      try {
+        res = await fetchGuarded(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            // Authorization comes from upstreamHeaders and nowhere else, because
+            // route.ts sets it unconditionally (`route.ts:244`, one const literal;
+            // later lines only add X-* keys). NOT because the spread would override
+            // it — a spread overrides only keys it actually contains, so an
+            // `Authorization` set here WOULD survive a caller that omitted one. That
+            // is why route.ts's unconditional set is pinned by a test rather than
+            // left to inspection: if it ever becomes conditional, this adapter must
+            // regain a fallback or digigraph gets an unauthenticated request (#2537).
+            ...opts.upstreamHeaders,
+            // After upstreamHeaders so dogfood never inherits Open WebUI format.
+            // Belt-and-suspenders: digigraph's Open WebUI chrome is opt-in only
+            // (X-Response-Format: openwebui or openwebui_format=true), never implied
+            // by model id, but dogfood forces plain explicitly rather than relying
+            // on that default.
+            "X-Suppress-Tool-Stream": "1",
+            "X-Response-Format": "plain",
+          },
+          body: JSON.stringify(bodyPayload),
+          signal: opts.signal,
+        });
+      } catch (err) {
+        if (err instanceof CredentialRedirectError) {
+          console.error(`[digigraph] ${err.message}`);
+          openText();
+          writer.write({
+            type: "text-delta",
+            id: textId,
+            delta: "The assistant is unavailable right now. Please try again shortly.",
+          });
+          closeText();
+          return;
+        }
+        throw err;
+      }
       if (!res.ok) {
         // Log the upstream detail server-side; never stream it. A 500 body can
         // carry stack traces, internal hostnames, and prompt echoes, and this

@@ -661,6 +661,18 @@ rate-limited on both the embed-IP path and the authenticated/session path
 the provider using digichat's own egress, so the authenticated path needs a
 ceiling too, not just the anonymous-embed one.
 
+**Redirect posture (#2572):** `isAllowedServiceUrl` gates only the *first* hop.
+Node/undici's default `redirect: "follow"` forwards custom headers (including
+`X-BYOK-Key` and `X-LiteLLM-Proxy-Key`) across origins while stripping only
+`Authorization`. Credentialed outbound fetches therefore go through
+`src/lib/fetch-guarded.ts` (`fetchGuarded`): `redirect: "manual"`, same-origin
+Location hops only, refuse cross-origin redirects while credentials are present.
+Wired into the digigraph trace stream (`adapters/digithings/stream.ts`), the
+AI SDK / `streamText` client (`lib/digigraph.ts` custom `fetch`), and
+`fetchWithTimeout` (covers `POST /api/byok/test` provider probes). Vitest
+`fetch-guarded.test.ts` stands up two local origins and asserts the X-* headers
+never reach the redirect target.
+
 `config/byok-providers.json`'s `keyPrefix` field is read by no runtime code, and
 `fallbackModels` is read only by `digigraph/src/digigraph/llm_auth.py` (whose loader
 takes `id`/`baseUrl`/`requiresModel` plus the first `fallbackModels` entry, used as
@@ -1103,6 +1115,11 @@ without credentials, and allows only loopback, `*.local`, single-label Docker se
 names, and private RFC1918 ranges. This is a reasonable SSRF guard for the ecosystem
 endpoint cookie. The allowlist can be further tightened via
 `DIGICHAT_ENDPOINT_HOST_ALLOWLIST`.
+
+That allowlist is **first-hop only**. Cross-origin redirect protection for
+credentialed fetches is `fetchGuarded` (#2572), not a second `isAllowedServiceUrl`
+pass. Making the allowlist's `.suffix` host match (`host.endsWith("." + h)`) opt-in
+remains a separate hardening follow-up; this release does not change that match.
 
 Operator MCP URLs use the inverse check (`isAllowedMcpServerUrl` in
 `src/lib/deploy-config/mcp-servers.ts`, mirrored by digigraph
