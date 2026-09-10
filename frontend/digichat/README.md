@@ -10,6 +10,16 @@ Next.js **App Router** app: React chat UI + BFF for **digigraph** (`POST /v1/cha
 4. Open **`http://127.0.0.1:3000`**, confirm **`GET /api/health`** is `ok` for all enabled services.
 5. Sign in (dev password) or rely on local-bootstrap when **`DIGICHAT_LOCAL_AUTH_KEY`** is set; chat uses digikey **`bff_session`** JWTs so digigraph can call digisearch/digiquant tools with the same auth chain.
 
+## Tool catalog (fail-closed — #3805 / #3806 / #3807)
+
+Deploy YAML tool catalog is the allowlist. Promote defaults are **fail-closed**:
+
+- Omitted catalog `default` projects to **off** (`false`) in client projection / embed bridge — only explicit `default: true` starts a tool on.
+- An **empty** catalog does **not** imply digisearch/digivault for force-tool or disable-id checks. MCP server ids from `dep.mcp.servers` are still honored.
+- BFF forwards catalog ids as-is in `X-Digi-Disabled-Tools`; digigraph expands tokens upstream. Unknown / disallowed `X-Digi-Force-Tool` values are dropped.
+
+See `src/lib/deploy-config/force-tool.ts` and `client-projection.ts`.
+
 ## Scripts
 
 | Command | Description |
