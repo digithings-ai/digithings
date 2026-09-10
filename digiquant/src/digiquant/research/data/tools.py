@@ -40,11 +40,12 @@ DATA_TOOLS: list[dict[str, Any]] = [
             "description": (
                 "Generic read of any market-data table to ground a claim in real numbers "
                 "(backed by digibase, scoped read-only to the data tables). Allowed tables: "
-                "price_history (daily OHLCV — columns: ticker, date, open, high, low, close, volume), "
+                "price_history (daily OHLCV — columns: ticker, date, open, high, low, close, volume; "
+                "NOTE: no sma_*/rsi_*/macd/… — use price_technicals for indicators), "
                 "price_technicals (indicators per ticker — columns: ticker, date, sma_20, sma_50, "
                 "sma_200, rsi_14, macd, macd_signal, macd_hist, adx_14, atr_14, atr_pct, "
                 "bb_upper, bb_lower, bb_pct_b, zscore_200; "
-                "NOTE: price_technicals has NO 'close' column — use price_history for OHLCV), "
+                "NOTE: no OHLCV/close — use price_history for open/high/low/close/volume), "
                 "macro_series_observations (FRED macro — columns: series_id, obs_date, value; "
                 "NOTE: the date column is 'obs_date' NOT 'date'; filter/sort by obs_date), "
                 "positions, nav_history, theses, thesis_vehicles, position_events, "
@@ -178,20 +179,6 @@ def _coerce_bool(value: Any, *, default: bool = True) -> bool:
     return str(value).strip().lower() not in ("false", "0", "no", "")
 
 
-def _references_technicals_close(args: dict[str, Any]) -> bool:
-    """True when query args reference a 'close' column on price_technicals."""
-    columns = str(args.get("columns", "*"))
-    if any(part.strip().lower() == "close" for part in columns.split(",")):
-        return True
-    if str(args.get("order", "")).strip().lower() == "close":
-        return True
-    for filter_arg in ("eq", "gte", "lte", "in_"):
-        filt = args.get(filter_arg)
-        if isinstance(filt, dict) and any(str(key).strip().lower() == "close" for key in filt):
-            return True
-    return False
-
-
 def build_data_tool_dispatcher(
     client: Any,
     run_date: date | None = None,
@@ -233,14 +220,8 @@ def build_data_tool_dispatcher(
                     "macro_series_observations, positions, nav_history, theses, "
                     "thesis_vehicles, position_events, portfolio_metrics, trading_calendar."
                 )
-            # Server-side guard: price_technicals never had a 'close' column (#3078).
-            # Fail fast with a redirect instead of burning a tool round on a 42703
-            # and inviting the model to retry the same doomed query.
-            if table == "price_technicals" and _references_technicals_close(args):
-                return (
-                    "Error: price_technicals has no 'close' column. "
-                    "Query price_history for OHLCV (open/high/low/close/volume)."
-                )
+            # Column allowlists for price_history / price_technicals live in
+            # ``query_data`` (#3771) so MCP digiquant_query_data shares the same choke.
             # Server-side rewrite: the LLM sometimes sorts/filters macro_series_observations
             # by 'date' (the generic name) instead of 'obs_date' (the real column). Silently
             # correct it so the model gets useful data rather than a Postgres 42703 error (#814).
