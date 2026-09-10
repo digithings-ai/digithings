@@ -4,6 +4,7 @@ import {
   mapRawSourceToDocument,
   ragToolDisplayName,
 } from "./source-document";
+import { queryFromToolArgs, toolInputFromPayload } from "./tool-args";
 
 /**
  * Map digisearch-style digigraph traces (`rag_sources`) onto ActivitySpan.
@@ -28,10 +29,11 @@ export function mapDigisearchRagSources(
     documents.push(doc);
   }
   const toolName = ragToolDisplayName(payload.tool);
+  const toolInput = toolInputFromPayload(payload);
   const query =
-    typeof payload.query === "string" && payload.query.trim()
+    (typeof payload.query === "string" && payload.query.trim()
       ? payload.query.trim()
-      : undefined;
+      : undefined) || (toolInput ? queryFromToolArgs(toolInput) : undefined);
   // A zero-hit search (`sources: []`) reaches here too — digigraph now emits
   // this trace on every completed retrieval, hit or miss (workflow.py's
   // `"rag_sources" in data` gate, not `data.get("rag_sources")`), so it must
@@ -63,6 +65,7 @@ export function mapDigisearchRagSources(
     toolName,
     ...(documents.length ? { documents } : {}),
     ...(!documents.length && upstreamHits ? { hitCount: upstreamHits } : {}),
-    ...(query ? { query, toolInput: { query } } : {}),
+    ...(query ? { query } : {}),
+    ...(toolInput ? { toolInput } : query ? { toolInput: { query } } : {}),
   };
 }

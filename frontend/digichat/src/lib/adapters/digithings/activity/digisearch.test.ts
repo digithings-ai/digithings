@@ -43,6 +43,26 @@ describe("mapDigisearchRagSources", () => {
     expect(mapDigisearchRagSources({ tool: "digisearch" })).toBeNull();
   });
 
+  it("prefers MCP arguments over the query-only toolInput", () => {
+    const span = mapDigisearchRagSources({
+      tool: "digisearch",
+      query: "what is digigraph",
+      arguments: { query: "what is digigraph", top_k: 6 },
+      sources: [
+        {
+          snippet: "# digigraph",
+          metadata: { source_url: "repo://digithings/digigraph/ARCHITECTURE.md" },
+        },
+      ],
+      hit_count: 1,
+    });
+    expect(span?.toolInput).toEqual({ query: "what is digigraph", top_k: 6 });
+    expect(span?.documents?.[0]).toMatchObject({
+      path: "digigraph/ARCHITECTURE.md",
+      snippet: "# digigraph",
+    });
+  });
+
   it("leaves the successful (non-empty) path byte-identical", () => {
     const payload = {
       tool: "digithings_docs",

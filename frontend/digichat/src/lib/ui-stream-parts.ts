@@ -21,6 +21,8 @@ export type StandardActivityContext = {
   seq: number;
   /** In-flight toolCallIds queued per tool name (FIFO — one row per call). */
   pendingByName: Map<string, string[]>;
+  /** Last known MCP args keyed by toolCallId (used when retrieve omits them). */
+  inputById: Map<string, Record<string, unknown>>;
   started: Set<string>;
   inputAvailable: Set<string>;
   jsonInputWritten: Set<string>;
@@ -31,6 +33,7 @@ export function createActivityWriteContext(): StandardActivityContext {
   return {
     seq: 0,
     pendingByName: new Map(),
+    inputById: new Map(),
     started: new Set(),
     inputAvailable: new Set(),
     jsonInputWritten: new Set(),
@@ -56,6 +59,16 @@ function toolInputOf(span: ActivitySpan): Record<string, unknown> {
   const input: Record<string, unknown> = { ...(span.toolInput ?? {}) };
   if (span.query && input.query === undefined) input.query = span.query;
   return input;
+}
+
+function rememberInput(
+  ctx: StandardActivityContext,
+  id: string,
+  span: ActivitySpan,
+): Record<string, unknown> {
+  const merged = { ...(ctx.inputById.get(id) ?? {}), ...toolInputOf(span) };
+  if (Object.keys(merged).length) ctx.inputById.set(id, merged);
+  return merged;
 }
 
 function writeToolStart(
@@ -109,7 +122,7 @@ function writeJsonInputDelta(
   span: ActivitySpan,
 ): void {
   if (ctx.jsonInputWritten.has(id)) return;
-  const input = toolInputOf(span);
+  const input = rememberInput(ctx, id, span);
   if (!Object.keys(input).length) return;
   writer.write({
     type: "tool-input-delta",
@@ -132,9 +145,28 @@ function ensureToolInput(
     type: "tool-input-available",
     toolCallId: id,
     toolName: name,
-    input: toolInputOf(span),
+    input: rememberInput(ctx, id, span),
   });
   ctx.inputAvailable.add(id);
+}
+
+function writeToolOutput(
+  writer: UiStreamWriter,
+  ctx: StandardActivityContext,
+  id: string,
+  span: ActivitySpan,
+  extra: Record<string, unknown> = {},
+): void {
+  const output: Record<string, unknown> = {
+    ...rememberInput(ctx, id, span),
+    ...extra,
+  };
+  if (span.status === "failed") output.status = "failed";
+  writer.write({
+    type: "tool-output-available",
+    toolCallId: id,
+    output,
+  });
 }
 
 function writeSource(
@@ -201,17 +233,12 @@ export function writeStandardActivity(
     if (span.status === "started") {
       const id = beginToolCall(writer, ctx, name, span.label);
       writeJsonInputDelta(writer, ctx, id, span);
+      rememberInput(ctx, id, span);
       return;
     }
     const id = completeToolCall(writer, ctx, name, span.label);
     ensureToolInput(writer, ctx, id, name, span);
-    const output: Record<string, unknown> = toolInputOf(span);
-    if (span.status === "failed") output.status = "failed";
-    writer.write({
-      type: "tool-output-available",
-      toolCallId: id,
-      output,
-    });
+    writeToolOutput(writer, ctx, id, span);
     return;
   }
 
@@ -222,17 +249,10 @@ export function writeStandardActivity(
     const docs = span.documents ?? [];
     const withheld = span.documentsWithheld === true;
     const hitCount = typeof span.hitCount === "number" ? span.hitCount : docs.length;
-    const output: Record<string, unknown> = {
-      ...toolInputOf(span),
-      hitCount,
-    };
-    if (withheld) output.documentsWithheld = true;
-    else if (docs.length) output.documents = docs;
-    writer.write({
-      type: "tool-output-available",
-      toolCallId: id,
-      output,
-    });
+    const extra: Record<string, unknown> = { hitCount };
+    if (withheld) extra.documentsWithheld = true;
+    else if (docs.length) extra.documents = docs;
+    writeToolOutput(writer, ctx, id, span, extra);
     if (!withheld) {
       for (const doc of docs) writeSource(writer, ctx, doc);
     }
@@ -247,14 +267,30 @@ export function writeStandardActivity(
   });
 }
 
-/** Close an open reasoning block at end of stream. */
+/** Close an open reasoning block and auto-complete leftover read-tool rows. */
 export function finishStandardActivity(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
 ): void {
-  if (!ctx.reasoningId) return;
-  writer.write({ type: "reasoning-end", id: ctx.reasoningId });
-  ctx.reasoningId = null;
+  if (ctx.reasoningId) {
+    writer.write({ type: "reasoning-end", id: ctx.reasoningId });
+    ctx.reasoningId = null;
+  }
+  for (const [name, queue] of ctx.pendingByName) {
+    while (queue.length) {
+      const id = queue.shift() as string;
+      const stored = ctx.inputById.get(id) ?? {};
+      const span: ActivitySpan = {
+        operation: "execute_tool",
+        status: "completed",
+        label: name,
+        toolName: name,
+        ...(Object.keys(stored).length ? { toolInput: stored } : {}),
+      };
+      ensureToolInput(writer, ctx, id, name, span);
+      writeToolOutput(writer, ctx, id, span);
+    }
+  }
 }
 
 /**

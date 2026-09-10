@@ -121,17 +121,74 @@ describe("writeStandardActivity", () => {
     expect(outputs[0]?.output).not.toHaveProperty("label");
   });
 
-  it("does not emit tool-input-available on a started call (avoids Approve)", () => {
-    const chunks = collect({
-      operation: "execute_tool",
-      status: "started",
-      label: "digivault_search_notes",
-      toolName: "digivault_search_notes",
-      query: "digigraph",
-    });
+  it("does not emit tool-input-available on a started call until finish (avoids Approve)", () => {
+    const chunks = collect(
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "digivault_search_notes",
+        toolName: "digivault_search_notes",
+        query: "digigraph",
+      },
+      false,
+    );
     expect(chunks.some((c) => c.type === "tool-input-start")).toBe(true);
     expect(chunks.some((c) => c.type === "tool-input-available")).toBe(false);
     expect(chunks.some((c) => c.type === "tool-output-available")).toBe(false);
+  });
+
+  it("auto-completes leftover read tools on finish so Allow/Deny never sticks", () => {
+    const chunks = collect({
+      operation: "execute_tool",
+      status: "started",
+      label: "digivault_get_note",
+      toolName: "digivault_get_note",
+      toolInput: { vault_paths: ["clients/digithings/architecture.md"] },
+    });
+    expect(chunks.some((c) => c.type === "tool-input-available")).toBe(true);
+    const out = chunks.find((c) => c.type === "tool-output-available");
+    expect(out?.output).toMatchObject({
+      vault_paths: ["clients/digithings/architecture.md"],
+    });
+    const start = chunks.find((c) => c.type === "tool-input-start");
+    expect(out?.toolCallId).toBe(start?.toolCallId);
+  });
+
+  it("keeps started MCP args on the retrieve result row", () => {
+    const chunks = collect([
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "digivault_get_note",
+        toolName: "digivault_get_note",
+        toolInput: { vault_paths: ["clients/digithings/architecture.md"] },
+      },
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "Loaded full note",
+        toolName: "digivault_get_note",
+        documents: [
+          {
+            title: "architecture",
+            path: "clients/digithings/architecture.md",
+            body: "# digigraph\norchestration hub",
+          },
+        ],
+      },
+    ]);
+    const out = chunks.find((c) => c.type === "tool-output-available");
+    expect(out?.output).toMatchObject({
+      vault_paths: ["clients/digithings/architecture.md"],
+      hitCount: 1,
+      documents: [
+        expect.objectContaining({
+          path: "clients/digithings/architecture.md",
+          body: "# digigraph\norchestration hub",
+        }),
+      ],
+    });
+    expect(chunks.filter((c) => c.type === "tool-output-available")).toHaveLength(1);
   });
 
   it("maps retrieve documents to source-url or source-document plus tool output", () => {

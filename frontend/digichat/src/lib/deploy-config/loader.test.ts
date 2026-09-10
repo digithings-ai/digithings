@@ -430,6 +430,8 @@ describe("matchHostDeployment", () => {
       expect.arrayContaining(["digisearch", "digivault", "web_search"]),
     );
     expect(client.features.attachments).toBe(false);
+    expect(cfg.hosts!["digithings.ai"]!.gate.activityDetail).toBe("full");
+    expect(tenant.activityDetail).toBe("full");
   });
 
   it("does not inject Search/Vault onto an empty catalog", () => {

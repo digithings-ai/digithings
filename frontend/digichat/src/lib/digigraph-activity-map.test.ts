@@ -70,6 +70,60 @@ describe("mapDigigraphTraceToSpans", () => {
     ]);
   });
 
+  it("copies MCP arguments onto rag_sources retrieve spans", () => {
+    const spans = mapDigigraphTraceToSpans(
+      {
+        type: "rag_sources",
+        payload: {
+          tool: "digivault_get_note",
+          query: "6 notes",
+          arguments: { vault_paths: ["clients/digithings/architecture.md"] },
+          sources: [
+            {
+              doc_id: "clients/digithings/architecture.md",
+              snippet: "# digigraph",
+              body: "# digigraph\nLangGraph hub",
+              metadata: { title: "architecture", vault_path: "clients/digithings/architecture.md" },
+            },
+          ],
+          hit_count: 1,
+        },
+      },
+      "full",
+    );
+    expect(spans[0]).toMatchObject({
+      toolName: "digivault_get_note",
+      toolInput: { vault_paths: ["clients/digithings/architecture.md"] },
+      documents: [
+        expect.objectContaining({
+          path: "clients/digithings/architecture.md",
+          body: "# digigraph\nLangGraph hub",
+        }),
+      ],
+    });
+  });
+
+  it("completes a retrieval tool_result with empty rag_sources instead of dropping it", () => {
+    const spans = mapDigigraphTraceToSpans(
+      {
+        type: "rag_sources",
+        payload: {
+          tool: "digivault_search_notes",
+          arguments: { query: "digigraph orchestration hub LangGraph" },
+          sources: [],
+          hit_count: 0,
+        },
+      },
+      "full",
+    );
+    expect(spans[0]).toMatchObject({
+      operation: "retrieve",
+      status: "completed",
+      toolName: "digivault_search_notes",
+      toolInput: { query: "digigraph orchestration hub LangGraph" },
+    });
+  });
+
   it("reads query and toolInput from MCP arguments when query is not top-level", () => {
     const spans = mapDigigraphTraceToSpans(
       {
@@ -317,6 +371,7 @@ describe("mapDigigraphTraceToSpans", () => {
         label: "Sources",
         toolName: "digivault_search_notes",
         query: "nonexistent topic",
+        toolInput: { query: "nonexistent topic" },
       },
     ]);
   });
