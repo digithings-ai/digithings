@@ -45,6 +45,7 @@ import {
 import {
   createContext,
   useContext,
+  useRef,
   type ComponentPropsWithoutRef,
   type ComponentType,
   type FC,
@@ -53,6 +54,7 @@ import {
 } from "react";
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
 import { MessageError } from "./message-error.aui";
+import { ComposerBlockCaret } from "./block-caret";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -379,6 +381,7 @@ const Composer: FC<{
 }> = ({ autoFocus, placeholder = "Send a message...", layout }) => {
   const compact = layout === "compact";
   const { onComposerSubmit, slash, mention } = useContext(ThreadChromeContext);
+  const inputWrapRef = useRef<HTMLDivElement | null>(null);
   const bar = (
     <ComposerPrimitive.Root
       className="aui-composer-root relative flex w-full flex-col"
@@ -398,20 +401,26 @@ const Composer: FC<{
             )}
           >
             {compact ? <ComposerAddAttachment /> : null}
-            <ComposerPrimitive.Input
-              placeholder={placeholder}
-              className={cn(
-                "aui-composer-input placeholder:text-muted-foreground/60 max-h-48 w-full resize-none overflow-hidden bg-transparent outline-none",
-                compact
-                  ? "min-h-7 flex-1 px-1.5 py-0 text-sm leading-7"
-                  : "min-h-[1.375rem] px-2.5 py-0.5 text-base leading-6",
-              )}
-              rows={1}
-              autoFocus={autoFocus}
-              submitMode="enter"
-              enterKeyHint="send"
-              aria-label="Message"
-            />
+            <div
+              ref={inputWrapRef}
+              className={cn("aui-composer-input-wrap relative min-w-0", compact && "flex-1")}
+            >
+              <ComposerPrimitive.Input
+                placeholder={placeholder}
+                className={cn(
+                  "aui-composer-input placeholder:text-muted-foreground/60 max-h-48 w-full resize-none overflow-hidden bg-transparent outline-none",
+                  compact
+                    ? "min-h-7 px-1.5 py-0 text-sm leading-7"
+                    : "min-h-[1.375rem] px-2.5 py-0.5 text-base leading-6",
+                )}
+                rows={1}
+                autoFocus={autoFocus}
+                submitMode="enter"
+                enterKeyHint="send"
+                aria-label="Message"
+              />
+              <ComposerBlockCaret containerRef={inputWrapRef} />
+            </div>
             {compact ? <ComposerSendControls /> : null}
           </div>
           {compact ? null : <ComposerAction />}
