@@ -45,6 +45,51 @@ metrics and lookback cannot alter daily `pnl_pct` semantics.
 
 **dashboard daily chain:** `python -m digiquant.portfolio.chain --cadence daily` (`.github/workflows/pipeline-digiquant.yml`). House clocks run every day with `refresh_scope=none` and edit-mode continuity (`skip`/`edit`/`full` per artifact). Operator full refresh is manual (`workflow_dispatch` / `--refresh-scope all`). Beliefs distillation: daily short fold on every house run; `--refresh-scope beliefs` (or unfolded `decision_log` backlog above `OLYMPUS_BELIEFS_BACKLOG`, default 20) selects the full rewrite.
 
+### Market-data R2 refresh (cutover #3780)
+
+The versioned R2 cache owns price/macro serving under
+`DIGIQUANT_MARKET_DATA_BACKEND=r2`. Daily refresh is
+`.github/workflows/pipeline-market-data-refresh.yml`, cron **`0 13 * * *`**
+(distinct from the checkpoint-archiver `30 13 * * *`), running
+`scripts/refresh_market_data_r2.py` (yfinance/FRED/Yahoo-FX → new immutable
+generations + manifest). Supabase market-table writers are paused per the
+`pipeline-digiquant-prices.yml` header (compute-technicals + fred/yahoo
+fetch paused; intraday fetch-quotes, calendar sync, at-open, fedprob/bitview
+kept) — do not resume them without a new issue.
+
+Dry-run (exit 0, no writes — the Task 10 live-fire check):
+`python scripts/refresh_market_data_r2.py --dry-run --as-of YYYY-MM-DD`.
+
+Staleness gate runbook entry: the manifest seal may be at most 5 trading
+days behind the run date (`data/prices/refresh_gate.py`, shared by cron and
+readers). On breach the cron writes the manifest with `stale=true`, keeps
+the previous objects serving (fail-soft), and exits non-zero so the failure
+alerts. Operator response: read the `failed` list in the
+`market-data-refresh-manifest` artifact (`/tmp/market-data-refresh.json`,
+90d retention), fix the vendor/secret cause, re-run supervised. Do NOT flip
+the backend flag — readers already fail-soft (history-only rows + loud
+`stale:true` envelope).
+
+Promotion runbook (supervised with the operator — write the commands, do
+NOT run them from an agent env; no cloud creds there):
+
+```bash
+# 1. Live size gate on the core project (PASS <= 320MB per data/cutover_gate.py;
+#    ~172MB of price tables drop toward a ≈292MB target; macro_series_observations
+#    stays per the carve-out — migration 122 drops price_history + price_technicals ONLY).
+psql "$CORE_PG_URI" -c "SELECT pg_size_pretty(pg_database_size(current_database()));"
+# 2. Reclaim, then apply migration 122 via db-migrate.yml (file + ledger in one
+#    transaction; see digiquant/supabase/migrations/122_drop_market_data_tables.sql).
+psql "$CORE_PG_URI" -c "VACUUM (ANALYZE);"
+# 3. Re-run the size gate from step 1 post-migration.
+```
+
+Owner actions before unsupervised operation: add `FRED_API_KEY` +
+`MARKET_DATA_POSTGRES_URI` to GitHub secrets (both MISSING — refresh/backfill
+need them). Prod gate: Worker-edge digikey JWT enforcement (scope
+`digiquant:backtest`) must land before production MCP use (human decision,
+new external network exposure).
+
 ## Two tracks (research vs portfolio)
 
 - **Track A — Generic research** (positioning-blind): macro, sectors, crypto, sentiment, etc. **Do not** load `config/preferences.md` or `config/investment-profile.md`. Each research run **ends** with the **`digest`** — `documents.digest` + materialized `daily_snapshots` for the date — as the **single overview** of all sub-segments (`python -m digiquant.portfolio.chain --cadence daily` through research A0–A4). Run [`run_db_first.py --skip-execute --validate-mode research`](scripts/run_db_first.py) after publish.

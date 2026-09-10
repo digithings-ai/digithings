@@ -305,6 +305,68 @@ cron's `MARKET_DATA_POSTGRES_URI` is deliberately NOT forwarded here.
 unset/empty keeps the library default (`supabase`); set it to `"r2"`
 explicitly via env for the hosted path.
 
+#### Market-data R2 read path (#3780 Task 10)
+
+`DIGIQUANT_MARKET_DATA_BACKEND=r2` routes the price/macro tools through
+versioned R2 generations sealed at the manifest `as_of`, merged with a 30d
+live overlap under settled-close semantics (`merge_history_live` +
+`apply_settled_close(frame, as_of, sealed)` — full-path imports
+`digiquant.data.prices.merge`, `digiquant.data.prices.r2_history`; the live
+`as_of` bar is excluded unless sealed). Envelopes:
+`{"as_of", "rows", "stale"}` for technicals,
+`{"as_of", "series": {sid: {"latest", "window"}}, "stale"}` for macro.
+Date-ascending rows; `as_of` before the first sealed bar serves `[]`.
+Per-ticker vendor error entries fail soft (history-only rows) and loud
+(`stale: true`). Contract tests: `tests/dq/test_market_data_asof.py`.
+
+Stale glossary (two independent signals share the name):
+`manifest.stale` (writer-side, Task 6 refresh cron — the seal's age at
+generation time) vs the envelope `stale` (reader-side, evaluated per
+request: seal >5 trading days behind `as_of`, or the live overlap carried
+a per-ticker fetch error entry). They can disagree — a fresh manifest
+served through a flaked live fetch reads stale here. Stale payloads are
+never TTL-cached. Legacy token `fallback_used="supabase"` (preflight /
+triage) keeps its vocabulary and now means "primary store fresh" — the
+Supabase tables by default, the R2 seal under the cutover flag.
+
+Value-parity contract (Task 7 premise guard → Task 10 definition): Task 1
+goldens carry no `close` anywhere, so OHLC close parity is wiring-only
+(synthetic closes round-trip the serving path). Macro is exact value
+parity (no recomputation). Technicals parity is the golden-column subset
+plus an exact round-trip vs `compute_indicators` on the same history
+(±1e-9 parquet float tolerance). Future backfills own exact-OHLC parity:
+record goldens WITH a `close` column, then promote the premise guard to a
+real golden-value comparison.
+
+Macro carve-out: migration `122_drop_market_data_tables.sql` drops
+`price_history` + `price_technicals` ONLY — `macro_series_observations`
+stays (fedprob/bitview have no R2 homes; future work). Post-cutover size
+gate (`data/cutover_gate.py`, `POST_CUTOVER_SIZE_GATE_MB=320`) reads the
+`pg_database_size` total only: ~172MB of price tables dropped, revised
+saving ≈292MB target.
+
+H9 seal coverage: H9 (`h9_cost_evidence.py`) reads the run-date session
+bar but R2 seals through the manifest `as_of`; seal < run_date fail-softs
+to the sealed tail. Live-fire checklist asserts seal coverage at H9 time
+(manifest `as_of` vs run_date) before sign-off.
+
+Dispatcher matrix: all six data tools ride `build_data_tool_dispatcher`
+with shared run-date-as-`as_of` threading; `get_fed_rate_probabilities`
+is the documented Supabase exception (prediction-market odds have no R2
+generation — exploding-client serves `Error:`).
+
+Load comparison (`scripts/bench_market_data.py`, fake R2 store, TTL
+cleared per sample, no network): Task 1 Supabase technicals p50 1413.2ms
+/ p99 2078.8ms, macro p50 483.9ms / p99 863.7ms (n=3) vs R2 technicals p50
+9.6ms / p99 11.8ms, macro p50 0.5ms / p99 0.9ms (n=100, as_of 2025-08-29)
+— PASS on p99 <= 2x baseline AND p99 <= 800ms (see `docs/perf/baseline.json`).
+
+Prod gate (human): Worker-edge digikey JWT enforcement (scope
+`digiquant:backtest`) must land before production MCP use — not
+implemented here. Owner actions: `FRED_API_KEY` + `MARKET_DATA_POSTGRES_URI`
+are MISSING from GitHub secrets (refresh cron + backfill need them); live
+refresh runs stay supervised with the operator.
+
 ### CLI (`python -m digiquant` / `digiquant`)
 
 Top-level click group in `cli/__init__.py`. Subgroups live under `cli/` (or dashboard for policy-replay). Pipeline commands call the same functions as HTTP/MCP via `service.py` where applicable.
