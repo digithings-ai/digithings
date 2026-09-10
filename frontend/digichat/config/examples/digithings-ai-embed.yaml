@@ -62,7 +62,9 @@ hosts:
           default: true
           label: Web search
     mcp:
-      allowUserServers: true
+      # Fail-closed for public digithings.ai marketing embed (#3795).
+      # Example ≠ live env; prod DIGICHAT_EMBED_TENANTS omits this (schema default false).
+      allowUserServers: false
       allowAddForm: false
     gate:
       mode: ungated

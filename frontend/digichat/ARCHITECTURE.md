@@ -861,7 +861,8 @@ the operator YAML URL when the id matches; a client `url` is accepted only when
 adds a session MCP (id, url, auth, extra fields) for this tab. Client-supplied
 `X-Digi-Mcp-Servers` is ignored. Session overlay travels on `X-Digi-Mcp-Session`
 (`{id,url?,auth,token?}[]`): operator id+token attach to the YAML URL; session URLs are merged
-only when `mcp.allowUserServers` is true (SSRF + count/size caps). Session URLs never echo
+only when `mcp.allowUserServers` is true (`https://` + SSRF + count/size caps; operator YAML
+may still use `http` for docker DNS). Session URLs never echo
 back in the client config projection. `@assistant-ui/react-mcp` is not installed — visitor MCP
 is BFF-proxied, not browser MCP. The model can call `session_*` tools (same trust as slash) to
 mutate language/model/effort/tools/MCP; `session_upsert_mcp` cannot plant a new session URL
@@ -1127,8 +1128,10 @@ Operator MCP URLs use the inverse check (`isAllowedMcpServerUrl` in
 RFC1918, metadata (`169.254.169.254`, `100.100.100.200`), loopback DNS
 (`localtest.me`, `lvh.me`, `vcap.me`), and DNS-rebinding hosts (`.nip.io` / `.sslip.io` / `.xip.io`)
 are refused without live DNS; docker hostnames such as `datatap-mcp` stay allowed. The same
-check gates OAuth discovery and session overlay URLs (`X-Digi-Mcp-Session`).
+check gates OAuth discovery and session overlay URLs (`X-Digi-Mcp-Session`); session overlay
+and OAuth client URLs additionally require `https://` (operator YAML URLs may remain `http`).
 `POST /api/mcp/oauth/start` additionally ignores client URLs unless `mcp.allowUserServers`.
+DNS rebinding / resolve-before-connect in digigraph remains a residual (#3795 follow-up).
 Do not use `isAllowedServiceUrl` for MCP (opposite polarity: that helper *allows*
 loopback for ecosystem cookies).
 
