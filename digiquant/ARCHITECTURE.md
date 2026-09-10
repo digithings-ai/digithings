@@ -2304,6 +2304,17 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
 - Standalone CLI: `python -m digiquant.research.graph` — research-only consumers.
 - Terminal `publish_phase` is wired only when `deps.publish` is provided;
   the chain orchestrator passes `None` so publish runs once at the end (research artifacts).
+- Web grounding pre-pass for `live_search` segments (#3853): `fetch_web_grounding`
+  (`research/data/web_grounding.py`) tries the first-party digisearch `web_search`
+  tool first (`call_web_search_tool` via digigraph's orchestrator hub over HTTP —
+  never `import digisearch`), with enforced `include_domains` from
+  `research/config/search_domains.yaml` (per-segment allowlists, capped at 5),
+  and falls back to a read-only digillm synthesis pass over the tier's
+  `web_search_models` pins. The cited summary is injected into `phase_inputs`
+  before the normal structured-output research call. `live_search_is_fallback`
+  segments (e.g. macro) skip the paid tool call on the fresh-data hot path.
+  Fail-soft (`grounding_absent=True`) unless `DIGIQUANT_WEB_SEARCH=required`
+  (legacy alias `OLYMPUS_WEB_SEARCH`), which raises `DashboardWebSearchError`.
 
 ### portfolio (thesis-aware portfolio loop)
 

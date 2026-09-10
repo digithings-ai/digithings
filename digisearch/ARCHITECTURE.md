@@ -274,7 +274,7 @@ Returns 3 or 4 tools:
 
 Auth required (`digisearch:query` scope). Rate limited: 10 req/min.
 
-Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, or `digisearch_research_delegate`. The hub calls this to execute search without importing digisearch Python code directly.
+Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, `digisearch_research_delegate`, or `web_search`. The hub calls this to execute search without importing digisearch Python code directly.
 
 #### `POST /v1/research_turn`
 
@@ -1009,6 +1009,8 @@ docker compose --profile digisearch-mcp up
 
 The `searxng` service (`searxng/searxng`) is loopback-only on the host (`127.0.0.1:8080`) with config at `config/searxng/settings.yml` (`search.formats: [html, json]`, engine allowlist). `valkey` backs its limiter. digisearch reaches it in-container via `DIGISEARCH_SEARXNG_URL=http://searxng:8080`. No new digisearch port: `POST /v1/web_search`, MCP `web_search`, and orchestrator `web_search` all ride the existing apps.
 
+Rollout ops: single flag `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (default `auto`); a down sidecar or a ddgs 403/CAPTCHA fails over to the next backend, and the digigraph `web` skill stays corpus-only unless the session opts in (#3420) — fail-closed to corpus-only at every layer. Engine allowlist is `wikipedia, duckduckgo, bing, mojeek`; `search.formats` must keep `json` (the provider calls `/search?format=json`). `server.secret_key` ships as a dev-only placeholder — rotate before exposing beyond loopback. Upstream scrapers break without notice: `compose pull searxng` weekly, and watch per-engine 403/CAPTCHA rates plus the digillm synthesis fallback rate as the early signal; the cost win shows up as a drop in grounding-model (gemini flash-lite) traffic on web-grounded segments. Eval: `digisearch/tests/test_web_search_eval.py` (20 queries across news/macro/docs/earnings, mocked offline; live sampling behind `DIGISEARCH_WEB_SEARCH_LIVE=1` with p50 fetch+extract < 5s).
+
 ### Environment variables reference
 
 | Variable | Default | Purpose |
@@ -1036,6 +1038,7 @@ The `searxng` service (`searxng/searxng`) is loopback-only on the host (`127.0.0
 | `DIGISEARCH_RERANK_PROVIDER` | `bge` | `bge` (`BAAI/bge-reranker-v2-m3`) or `cohere` (`rerank-multilingual-v3.0`) when rerank is enabled |
 | `DIGISEARCH_WEB_SEARCH_BACKEND` | `auto` | `auto` (searxng→ddgs failover) \| `searxng` \| `ddgs` (#3853) |
 | `DIGISEARCH_SEARXNG_URL` | `http://127.0.0.1:8080` | searxng sidecar base URL (compose sets `http://searxng:8080` in-container; #3853) |
+| `DIGISEARCH_WEB_SEARCH_LIVE` | _(unset)_ | Set `1` to run the live-sampled leg of `digisearch/tests/test_web_search_eval.py` (real backends, p50 fetch+extract < 5s); default runs fully mocked offline (#3853) |
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
 | `DIGISEARCH_EMBED` | `1` (on when unset) | Set `0` to skip pipeline-level embed on ingest |
 | `DIGISEARCH_EMBEDDING_PROVIDER` | _(unset)_ | `minilm` \| `openai` — explicit provider (fails loud if unloadable) |

@@ -26,12 +26,17 @@ import { CredentialRedirectError, fetchGuarded } from "@/lib/fetch-guarded";
  * Feature-focused research prompt for the unconfigured baseline embed only.
  * Guides digigraph document RAG mode toward digichat / digigraph / digisearch /
  * digivault capabilities. Owner-replaceable copy. Never sent for a matched host
- * deployment — see the route gate.
+ * deployment — see the route gate. When web search is on, its digifetch-backed
+ * results arrive as External cites: cite their real URLs inline and never
+ * present them as corpus knowledge.
  */
 export const DEFAULT_BASELINE_RESEARCH_SYSTEM_PROMPT =
   "Answer questions about what digichat, digigraph, digisearch, and digivault can do. " +
   "Help the visitor explore the available tools and capabilities. " +
-  "Use the tools you are given when they help answer. Keep answers short.";
+  "Use the tools you are given when they help answer. " +
+  "When web search is on, its digifetch-backed results are External cites: " +
+  "cite their real URLs inline and never present them as corpus knowledge. " +
+  "Keep answers short.";
 
 export type DigigraphTracePayload = {
   v?: number;
