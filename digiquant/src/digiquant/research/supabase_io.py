@@ -454,6 +454,40 @@ def load_prior_book(
     return [r for r in rows if str(r.get("date") or "") == top_date]
 
 
+def load_nav_history_row(
+    client: SupabaseClient,
+    run_date: date,
+    *,
+    workspace_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Existing ``nav_history`` row for ``(workspace, run_date)``, or ``None`` (#3804).
+
+    Booking paths (H9 ``commit_io.book_portfolio``, legacy ``portfolio_materialize``)
+    write a provisional NAV at book time; the Nautilus schedule replay
+    (``verify_nav_replay.py --write``) later overwrites ``nav`` with the
+    authoritative engine value. A re-dispatch of the book pipeline *after* the
+    engine step must not clobber that engine value with a provisional
+    recompute, so both booking paths consult this read first: when a row
+    already exists for the date they preserve the stored NAV and refresh only
+    the H9-owned ``cash_pct`` / ``invested_pct``.
+
+    ``workspace_id`` omitted / ``None`` means the house workspace — never an
+    unfiltered date scan. Overlay passes its id so a private book cannot see
+    (or suppress itself on) a house engine row, and vice versa.
+    """
+    scoped = str(resolved_workspace_id(workspace_id))
+    resp = (
+        client.table("nav_history")
+        .select("date, nav, cash_pct, invested_pct")
+        .eq("workspace_id", scoped)
+        .eq("date", run_date.isoformat())
+        .limit(1)
+        .execute()
+    )
+    rows = list(getattr(resp, "data", None) or [])
+    return dict(rows[0]) if rows else None
+
+
 # Per-ticker analyst / deliberation docs are loaded separately (slim summaries) so
 # ``load_prior_context`` does not stuff full decision artifacts into every node.
 _CONTINUITY_EXCLUDED_DOC_PREFIXES = ("analyst/", "deliberation/")

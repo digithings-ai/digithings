@@ -1697,13 +1697,18 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   (submission now uses the sells-first ordering for both paths).
   Forward verify: `digiquant/scripts/research/verify_nav_replay.py` rebuilds
   the causal schedule + bars from Supabase and fails non-zero on NAV breach.
-  **Single source of truth (#3695):** the engine is the last writer of
-  `nav_history` under normal ordering via `verify_nav_replay.py --write`
-  (inception-100 normalization; `pipeline-research-metrics.yml` runs it before
-  metrics). The booking path (`portfolio_materialize.py`) still writes
-  provisional house rows at book time, so "sole writer" means last-writer
-  under the documented step order — a read-only `verify_nav_replay` (no
-  `--write`) step runs after metrics so drift fails loudly.
+   **Single source of truth (#3695, hardened #3803/#3804):** the engine is the last writer of
+   `nav_history` under normal ordering via `verify_nav_replay.py --write`
+   (inception-100 normalization; `pipeline-research-metrics.yml` runs it before
+   metrics). The booking path (`portfolio_materialize.py`, H9
+   `commit_io.book_portfolio`) still writes provisional house rows at book time,
+   but an existing row for the same `(workspace_id, date)` now keeps the stored
+   NAV (refreshing only H9-owned `cash_pct`/`invested_pct`) — a book re-dispatch
+   after the engine step keeps the engine NAV instead of clobbering it (#3804). Fetches page by last-seen-key
+   cursor over a deterministic `(date, ticker)` order (never offsets) and refuse
+   to verify or write from a truncated/unstable page (#3803). A read-only
+   `verify_nav_replay` (no `--write`) step runs after metrics so drift fails
+   loudly.
   `refresh_performance_metrics.refresh_nav_point` only guards the engine row;
   `pnl_pct` reads the stored engine series (finalized-accounting precedence
   retired — it caused the Sept 2026 scale break); `update_tearsheet.py` no
