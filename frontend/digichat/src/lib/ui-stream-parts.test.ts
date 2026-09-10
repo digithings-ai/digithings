@@ -58,7 +58,7 @@ describe("writeStandardActivity", () => {
     expect(chunks[0]).toMatchObject({
       type: "tool-input-start",
       toolName: "file_search",
-      title: "file search",
+      title: "file_search",
     });
     expect(chunks.some((c) => c.type === "tool-input-available")).toBe(true);
     expect(chunks.some((c) => c.type === "tool-output-available")).toBe(true);

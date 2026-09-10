@@ -76,6 +76,17 @@ function rememberInput(
 }
 
 function displayTitle(name: string, span?: ActivitySpan): string {
+  // Method-aware titles for locate tools; keep Foundry/custom labels otherwise
+  // so "Searching knowledge base…" is not rewritten to "file search".
+  if (
+    name === "digithings_docs" ||
+    name === "digisearch" ||
+    name.startsWith("digisearch")
+  ) {
+    return toolRowTitle(name, span?.toolInput);
+  }
+  const label = span?.label?.trim();
+  if (label) return label;
   return toolRowTitle(name, span?.toolInput);
 }
 

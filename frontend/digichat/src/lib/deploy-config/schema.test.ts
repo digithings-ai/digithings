@@ -234,7 +234,10 @@ describe("DigichatConfigSchema", () => {
     const dt = digithings.hosts?.["digithings.ai"];
     expect(dt?.chrome.skin).toBe("digichat");
     expect(welcomeTitle(dt?.chrome.welcome)).toBe("Ask about digithings.");
-    expect(dt?.backend).toEqual({ type: "digigraph" });
+    expect(dt?.backend).toEqual({
+      type: "digigraph",
+      vaultPathPrefix: "clients/digithings",
+    });
     expect(dt?.tools?.allowUserToggle).toBe(true);
     expect(dt?.tools?.catalog.map((t) => t.id)).toEqual([
       "digisearch",
