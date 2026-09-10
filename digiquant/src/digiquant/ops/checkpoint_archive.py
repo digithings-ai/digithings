@@ -165,7 +165,7 @@ def evict_to_watermark(
         client.table("archive_objects").delete().eq("r2_key", row["r2_key"]).execute()
         evicted.append(row["r2_key"])
         total -= int(row.get("size") or 0)
-        logger.info("evicted %s (%s bytes)", row["r2_key"], row["size"])
+        logger.info("evicted %s (%s bytes)", row["r2_key"], row.get("size"))
     return evicted
 
 
@@ -550,22 +550,9 @@ def archive_documents(
     """
     key_cols = DOCUMENT_KEY_COLUMNS
     # Page explicitly: PostgREST silently caps one response at 1000 rows.
-    key_rows: list[dict[str, Any]] = []
-    offset = 0
-    while True:
-        page = (
-            client.table("documents")
-            .select(",".join(key_cols))
-            .eq("workspace_id", workspace)
-            .range(offset, offset + DOC_SCAN_PAGE_SIZE - 1)
-            .execute()
-            .data
-            or []
-        )
-        key_rows.extend(page)
-        if len(page) < DOC_SCAN_PAGE_SIZE:
-            break
-        offset += DOC_SCAN_PAGE_SIZE
+    key_rows = _scan_all(
+        client, "documents", ",".join(key_cols), filters=(("workspace_id", workspace),)
+    )
     groups: dict[str, list[dict[str, Any]]] = {}
     for key_row in key_rows:
         groups.setdefault(key_row.get("document_key"), []).append(key_row)
