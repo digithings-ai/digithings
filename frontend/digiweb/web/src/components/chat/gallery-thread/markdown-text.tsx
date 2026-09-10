@@ -166,7 +166,7 @@ const defaultComponents = memoizeMarkdownComponents({
   ul: ({ className, ...props }) => (
     <ul
       className={cn(
-        "aui-md-ul marker:text-muted-foreground my-3 ms-5 list-disc [&>li]:mt-1",
+        "aui-md-ul marker:text-muted-foreground my-3 ms-0 ps-7 list-outside list-disc [&>li]:mt-1",
         className,
       )}
       {...props}
@@ -175,7 +175,7 @@ const defaultComponents = memoizeMarkdownComponents({
   ol: ({ className, ...props }) => (
     <ol
       className={cn(
-        "aui-md-ol marker:text-muted-foreground my-3 ms-5 list-decimal [&>li]:mt-1",
+        "aui-md-ol marker:text-muted-foreground my-3 ms-0 ps-8 list-outside list-decimal [&>li]:mt-1",
         className,
       )}
       {...props}
@@ -243,7 +243,7 @@ const defaultComponents = memoizeMarkdownComponents({
   pre: ({ className, ...props }) => (
     <pre
       className={cn(
-        "aui-md-pre border-border/50 bg-muted/30 overflow-x-auto rounded-t-none rounded-b-xl border border-t-0 p-3.5 text-[13px] leading-relaxed",
+        "aui-md-pre border-border/50 bg-muted/30 max-w-full overflow-x-auto rounded-t-none rounded-b-xl border border-t-0 p-3.5 text-[13px] leading-relaxed",
         className,
       )}
       {...props}

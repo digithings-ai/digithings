@@ -347,7 +347,8 @@ export async function POST(req: Request) {
   const provider = createDigiGraphClient(eco.digigraphUrl, upstreamBearer);
 
   // Deploy `models.available` allowlist (fail closed when non-empty).
-  // Prefer X-Digi-Model; BYOK model is separate and still forwarded below.
+  // Prefer X-Digi-Model on the house path. Bound BYOK spends the visitor's
+  // provider models — the CI picker must not reject those ids (#3829).
   let modelId = digigraphModelName();
   const requestedModel = req.headers.get("x-digi-model")?.trim() || undefined;
   try {
@@ -360,7 +361,9 @@ export async function POST(req: Request) {
     const embedHost = req.headers.get("x-embed-host");
     let dep = resolveDeploymentForHost(embedHost, getDigichatConfig());
     if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
-    if (dep?.models && (dep.models.available?.length ?? 0) > 0) {
+    if (byokKey) {
+      if (requestedModel) modelId = requestedModel;
+    } else if (dep?.models && (dep.models.available?.length ?? 0) > 0) {
       const allowed = allowlistModelId(dep.models, requestedModel);
       if (requestedModel && allowed === undefined) {
         runLock.release();
@@ -462,6 +465,9 @@ export async function POST(req: Request) {
       filterDisabledToolsHeader(dep, disabledToolsRaw),
       allowed,
     );
+    // Forward catalog ids as-is (#3807): digigraph `expand_disabled_tool_tokens`
+    // expands digisearch/digivault aliases upstream. Do not expand to tool
+    // names here — that would break the upstream contract.
     if (disabled.length) {
       upstreamHeaders["X-Digi-Disabled-Tools"] = disabled.join(",");
     }

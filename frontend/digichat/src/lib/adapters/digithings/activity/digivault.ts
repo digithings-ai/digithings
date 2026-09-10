@@ -1,5 +1,6 @@
 import type { ActivitySpan } from "@/lib/chat-activity";
 import { mapRawSourceToDocument } from "./source-document";
+import { queryFromToolArgs, toolInputFromPayload } from "./tool-args";
 
 export const DIGIVAULT_SEARCH_TOOL = "digivault_search_notes";
 export const DIGIVAULT_GET_NOTE_TOOL = "digivault_get_note";
@@ -13,6 +14,24 @@ function vaultPathFromPayload(payload: Record<string, unknown>, documents: { pat
 
 function loadedNoteLabel(path?: string): string {
   return path ? `Loaded full note: ${path}` : "Loaded full note";
+}
+
+function attachToolArgs(
+  span: ActivitySpan,
+  payload: Record<string, unknown>,
+): ActivitySpan {
+  const toolInput = toolInputFromPayload(payload);
+  const query =
+    span.query ||
+    (typeof payload.query === "string" && payload.query.trim()
+      ? payload.query.trim()
+      : undefined) ||
+    (toolInput ? queryFromToolArgs(toolInput) : undefined);
+  return {
+    ...span,
+    ...(query ? { query } : {}),
+    ...(toolInput ? { toolInput } : query ? { toolInput: { query } } : {}),
+  };
 }
 
 function mapVaultRowsToDocuments(rows: unknown[]): ActivitySpan["documents"] {
@@ -70,23 +89,29 @@ export function mapDigivaultGetNote(payload: Record<string, unknown>): ActivityS
     if (errors && typeof errors === "object" && !Array.isArray(errors)) {
       const paths = Object.keys(errors as Record<string, unknown>);
       if (paths.length > 0) {
-        return {
-          operation: "execute_tool",
-          status: "failed",
-          label: `digivault_get_note errors (${paths.length})`,
-          toolName: DIGIVAULT_GET_NOTE_TOOL,
-          ...(query ? { query } : {}),
-        };
+        return attachToolArgs(
+          {
+            operation: "execute_tool",
+            status: "failed",
+            label: `digivault_get_note errors (${paths.length})`,
+            toolName: DIGIVAULT_GET_NOTE_TOOL,
+            ...(query ? { query } : {}),
+          },
+          payload,
+        );
       }
     }
     if (payload.status === "started" || payload.status === "in_progress") {
-      return {
-        operation: "execute_tool",
-        status: "started",
-        label: query ? `Loading note: ${query}` : "Loading vault note…",
-        toolName: DIGIVAULT_GET_NOTE_TOOL,
-        ...(query ? { query } : {}),
-      };
+      return attachToolArgs(
+        {
+          operation: "execute_tool",
+          status: "started",
+          label: query ? `Loading note: ${query}` : "Loading vault note…",
+          toolName: DIGIVAULT_GET_NOTE_TOOL,
+          ...(query ? { query } : {}),
+        },
+        payload,
+      );
     }
     return null;
   }
@@ -100,13 +125,16 @@ export function mapDigivaultGetNote(payload: Record<string, unknown>): ActivityS
   const path = vaultPathFromPayload(payload, documents);
 
   if (errorCount > 0 && documents.length === 0) {
-    return {
-      operation: "execute_tool",
-      status: "failed",
-      label: `digivault_get_note errors (${errorCount})`,
-      toolName: DIGIVAULT_GET_NOTE_TOOL,
-      ...(query ? { query } : {}),
-    };
+    return attachToolArgs(
+      {
+        operation: "execute_tool",
+        status: "failed",
+        label: `digivault_get_note errors (${errorCount})`,
+        toolName: DIGIVAULT_GET_NOTE_TOOL,
+        ...(query ? { query } : {}),
+      },
+      payload,
+    );
   }
 
   const upstreamHits =
@@ -116,20 +144,23 @@ export function mapDigivaultGetNote(payload: Record<string, unknown>): ActivityS
       ? Math.trunc(payload.hit_count)
       : undefined;
 
-  return {
-    operation: "retrieve",
-    status: "completed",
-    label:
-      errorCount > 0
-        ? `${loadedNoteLabel(path)} (${errorCount} errors)`
-        : documents.length > 1
-          ? `Loaded ${documents.length} full notes`
-          : loadedNoteLabel(path),
-    toolName: DIGIVAULT_GET_NOTE_TOOL,
-    ...(documents.length ? { documents } : {}),
-    ...(!documents.length && upstreamHits ? { hitCount: upstreamHits } : {}),
-    ...(query ? { query } : {}),
-  };
+  return attachToolArgs(
+    {
+      operation: "retrieve",
+      status: "completed",
+      label:
+        errorCount > 0
+          ? `${loadedNoteLabel(path)} (${errorCount} errors)`
+          : documents.length > 1
+            ? `Loaded ${documents.length} full notes`
+            : loadedNoteLabel(path),
+      toolName: DIGIVAULT_GET_NOTE_TOOL,
+      ...(documents.length ? { documents } : {}),
+      ...(!documents.length && upstreamHits ? { hitCount: upstreamHits } : {}),
+      ...(query ? { query } : {}),
+    },
+    payload,
+  );
 }
 
 /**
@@ -154,23 +185,29 @@ export function mapDigivaultSearchNotes(
     if (errors && typeof errors === "object" && !Array.isArray(errors)) {
       const paths = Object.keys(errors as Record<string, unknown>);
       if (paths.length > 0) {
-        return {
-          operation: "execute_tool",
-          status: "failed",
-          label: `digivault_search_notes errors (${paths.length})`,
-          toolName: DIGIVAULT_SEARCH_TOOL,
-          ...(query ? { query } : {}),
-        };
+        return attachToolArgs(
+          {
+            operation: "execute_tool",
+            status: "failed",
+            label: `digivault_search_notes errors (${paths.length})`,
+            toolName: DIGIVAULT_SEARCH_TOOL,
+            ...(query ? { query } : {}),
+          },
+          payload,
+        );
       }
     }
     if (payload.status === "started" || payload.status === "in_progress") {
-      return {
-        operation: "execute_tool",
-        status: "started",
-        label: "Searching digivault…",
-        toolName: DIGIVAULT_SEARCH_TOOL,
-        ...(query ? { query } : {}),
-      };
+      return attachToolArgs(
+        {
+          operation: "execute_tool",
+          status: "started",
+          label: "Searching digivault…",
+          toolName: DIGIVAULT_SEARCH_TOOL,
+          ...(query ? { query } : {}),
+        },
+        payload,
+      );
     }
     return null;
   }
@@ -182,20 +219,26 @@ export function mapDigivaultSearchNotes(
       : undefined;
   const errorCount = errors ? Object.keys(errors).length : 0;
   if (errorCount > 0 && documents.length === 0) {
-    return {
-      operation: "execute_tool",
-      status: "failed",
-      label: `digivault_search_notes errors (${errorCount})`,
-      toolName: DIGIVAULT_SEARCH_TOOL,
-      ...(query ? { query } : {}),
-    };
+    return attachToolArgs(
+      {
+        operation: "execute_tool",
+        status: "failed",
+        label: `digivault_search_notes errors (${errorCount})`,
+        toolName: DIGIVAULT_SEARCH_TOOL,
+        ...(query ? { query } : {}),
+      },
+      payload,
+    );
   }
-  return {
-    operation: "retrieve",
-    status: "completed",
-    label: errorCount > 0 ? `Sources (${errorCount} errors)` : "Sources",
-    toolName: DIGIVAULT_SEARCH_TOOL,
-    ...(documents.length ? { documents } : {}),
-    ...(query ? { query } : {}),
-  };
+  return attachToolArgs(
+    {
+      operation: "retrieve",
+      status: "completed",
+      label: errorCount > 0 ? `Sources (${errorCount} errors)` : "Sources",
+      toolName: DIGIVAULT_SEARCH_TOOL,
+      ...(documents.length ? { documents } : {}),
+      ...(query ? { query } : {}),
+    },
+    payload,
+  );
 }

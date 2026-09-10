@@ -5,6 +5,7 @@ import {
   providerDisplayName,
   providerKeyPlaceholder,
   providerModelChoices,
+  sessionPickerModels,
   tryResolveProviderInput,
   wantsProviderKeyPing,
 } from "./embed-provider-flow";
@@ -24,6 +25,29 @@ describe("providerModelChoices", () => {
     expect(openai[0]).toEqual({ id: "", label: "(default)" });
     expect(openai.at(-1)?.id).toBe("__custom__");
     expect(providerModelChoices("anthropic")[0]?.id).not.toBe("");
+  });
+});
+
+describe("sessionPickerModels", () => {
+  const house = [
+    "deepseek/deepseek-v4-flash",
+    "z-ai/glm-5.3-flash",
+  ] as const;
+
+  it("stays on the house CI list when no BYOK provider is connected", () => {
+    expect(sessionPickerModels(house)).toEqual([...house]);
+    expect(sessionPickerModels(house, null)).toEqual([...house]);
+  });
+
+  it("switches to that provider's presets when BYOK is connected", () => {
+    expect(sessionPickerModels(house, "openai")).toEqual([
+      "gpt-4o-mini",
+      "gpt-4o",
+      "o4-mini",
+    ]);
+    expect(sessionPickerModels(house, "openai")).not.toContain(
+      "deepseek/deepseek-v4-flash",
+    );
   });
 });
 

@@ -6,6 +6,7 @@ import {
 } from "@/lib/chat-activity";
 import { mapDigisearchRagSources } from "./digisearch";
 import { mapDigivaultGetNote, mapDigivaultSearchNotes } from "./digivault";
+import { argsRecord, queryFromToolArgs, toolInputFromPayload } from "./tool-args";
 
 export type DigigraphTraceLike = {
   type: string;
@@ -70,16 +71,19 @@ export function mapDigigraphTraceToSpans(
       (typeof payload.name === "string" && payload.name.trim()) ||
       "";
     if (!tool) return [];
+    const args = argsRecord(payload);
     const query =
-      typeof payload.query === "string" && payload.query.trim()
+      (typeof payload.query === "string" && payload.query.trim()
         ? payload.query.trim()
-        : undefined;
+        : undefined) || (args ? queryFromToolArgs(args) : undefined);
+    const toolInput = toolInputFromPayload(payload);
     raw = {
       operation: "execute_tool",
       status: payload.status === "completed" ? "completed" : "started",
       label: tool,
       toolName: tool,
       ...(query ? { query } : {}),
+      ...(toolInput ? { toolInput } : {}),
     };
   } else if (trace.type === "rag_sources") {
     raw = mapDigisearchRagSources(trace.payload ?? {});

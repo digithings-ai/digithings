@@ -77,12 +77,12 @@ NOT run them from an agent env; no cloud creds there):
 # 1. Live size gate on the core project, evaluated through the gate script
 #    (PASS <= 320MB per data/cutover_gate.py;
 #    ~172MB of price tables drop toward a ≈292MB target; macro_series_observations
-#    stays per the carve-out — migration 122 drops price_history + price_technicals ONLY).
+#    stays per the carve-out — migration 124 drops price_history + price_technicals ONLY).
 psql "$CORE_PG_URI" -c "SELECT pg_size_pretty(pg_database_size(current_database()));"
 SIZE_BYTES=$(psql "$CORE_PG_URI" -tAX -c "SELECT pg_database_size(current_database());")
 python -c "import sys; from digiquant.data.cutover_gate import cutover_size_gate_passes; sys.exit(0 if cutover_size_gate_passes(int(sys.argv[1])) else 1)" "$SIZE_BYTES"  # pre-migration: expect exit 1 (>320MB); record the bytes
-# 2. Reclaim, then apply migration 122 via db-migrate.yml (file + ledger in one
-#    transaction; see digiquant/supabase/migrations/122_drop_market_data_tables.sql).
+# 2. Reclaim, then apply migration 124 via db-migrate.yml (file + ledger in one
+#    transaction; see digiquant/supabase/migrations/124_drop_market_data_tables.sql).
 psql "$CORE_PG_URI" -c "VACUUM (ANALYZE);"
 # 3. Re-run the gate-script invocation from step 1 post-migration — PASS = exit 0 (<= 320MB).
 ```

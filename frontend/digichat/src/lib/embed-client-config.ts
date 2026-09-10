@@ -19,10 +19,12 @@ import {
   type EmbedTenantConfig,
 } from "@/lib/embed-tenants";
 import {
-  DEFAULT_THREAD_SKIN,
-  defaultThreadSkinForTenant,
-  type ThreadSkin,
-} from "@/lib/thread-skins";
+  BASELINE_EMBED_PLACEHOLDER,
+  BASELINE_EMBED_SKIN,
+  BASELINE_EMBED_WELCOME,
+  BASELINE_EMBED_WELCOME_BODY,
+} from "@/lib/baseline-embed";
+import { defaultThreadSkinForTenant, type ThreadSkin } from "@/lib/thread-skins";
 
 export type EmbedTenantClientConfig = {
   slug: string;
@@ -34,8 +36,11 @@ export type EmbedTenantClientConfig = {
   attribution: boolean;
   title?: string;
   welcome?: string;
+  welcomeBody?: string[];
   suggestions?: string[];
   placeholder?: string;
+  /** User file picker. JSON omit / unresolved-tenant omit stays off except DEFAULT. */
+  attachments?: boolean;
   lockedContact?: string;
   showByok?: boolean;
   layout?: "page" | "embed";
@@ -60,15 +65,24 @@ export type EmbedTenantClientConfig = {
   backendType?: "digigraph" | "foundry";
 };
 
-/** Legacy defaults — deliberately the *gated* configuration, so a slow or
- * failed config fetch can only be more restrictive than intended, never less. */
+/**
+ * Unresolved host / wrong token / no-host `/embed`. Looks like an unconfigured
+ * digichat container (first-party skin, generic copy, attach+send) — never a
+ * tenant brand. Gate stays turn-limited so a slow fetch cannot open a
+ * trial_form / ungated tenant by accident.
+ */
 export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   slug: "embed",
   gateMode: "turn_limited",
   theme: "dark",
-  skin: DEFAULT_THREAD_SKIN,
+  skin: BASELINE_EMBED_SKIN,
   accent: null,
   attribution: false,
+  welcome: BASELINE_EMBED_WELCOME,
+  welcomeBody: [...BASELINE_EMBED_WELCOME_BODY],
+  placeholder: BASELINE_EMBED_PLACEHOLDER,
+  suggestions: [],
+  attachments: true,
   showByok: false,
   layout: "embed",
   showLanguageSelector: false,
@@ -89,9 +103,11 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     attribution: cfg.attribution,
     title: cfg.title,
     welcome: cfg.welcome,
+    welcomeBody: cfg.welcomeBody?.length ? cfg.welcomeBody : undefined,
     suggestions: cfg.suggestions ?? getTenantSuggestionPool(cfg.slug),
     placeholder: cfg.placeholder,
     lockedContact: cfg.lockedContact,
+    attachments: cfg.attachments === true,
     showByok: cfg.showByok ?? false,
     layout: cfg.layout ?? "embed",
     llmAccess: cfg.llmAccess,
@@ -127,7 +143,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
  * to it — a registered host alone is never enough for a customer tenant, only
  * the matching per-tenant token unlocks the real config (#1339) — because this
  * path discloses the same fields to the same anonymous visitor. An unknown host
- * or a wrong/absent token yields the gated defaults, never a partial tenant.
+ * or a wrong/absent token yields the baseline defaults, never a partial tenant.
  */
 export function resolveEmbedClientConfigFromParams(
   token: string | undefined,

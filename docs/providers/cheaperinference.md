@@ -8,8 +8,11 @@ here means this product, **not** self-hosted OmniRoute Docker / `OMNIROUTE_*`.
 
 When `CHEAPERINFERENCE_API_KEY` is set, digillm prefers CI and maps house slugs
 in `_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE` to bare CI model ids (#3648 / #3660).
+That holds even if `OPENROUTER_API_KEY` is also set and `OPENAI_API_BASE` still
+points at OpenRouter — mapped house slugs do **not** stay on OpenRouter.
 On the Cloudflare stack container, entrypoint merges the CI LiteLLM overlay and
-exports `ENV_LITELLM_CONFIG` for the LiteLLM supervisor (#3674).
+exports `ENV_LITELLM_CONFIG` for the LiteLLM supervisor (#3674). LiteLLM proxy
+keeps house `model_name` keys (overlay routes them).
 
 Force OpenRouter: `DIGI_HOUSE_UPSTREAM=openrouter` (or `or`), or
 `CHEAPERINFERENCE_HOUSE=0|false|no|off`.
@@ -62,3 +65,28 @@ land — not automated in this PR.
 It is an operator error to share a single `CHEAPERINFERENCE_API_KEY` between
 different tenants expecting isolated model routing; each tenant should have its
 own key and upstream configuration.
+
+## digichat public picker (#3829)
+
+Default product path (digithings.ai `/chat` embed **and** dashboard
+`dashboard-modal.yaml`) allowlists **Cheaper Inference cheap house slugs
+only**:
+
+- `deepseek/deepseek-v4-flash` (default)
+- `deepseek/deepseek-v4-flash-0731`
+- `openai/gpt-oss-120b`
+- `z-ai/glm-5.3-flash`
+
+Every id is on `config/litellm.cheaperinference.yaml` and
+`_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE`. OpenRouter (`:free` or paid) is **not**
+on that list, even if `OPENROUTER_API_KEY` / Groq credentials exist. The BFF
+rejects any other house `X-Digi-Model`.
+
+**BYOK** (`gate.showByok`): connecting a visitor provider replaces `/models`
+with that provider’s presets (existing BYOK catalog). The house allowlist does
+not apply while a BYOK key is bound.
+
+House LiteLLM overlay routes those slugs to `api.cheaperinference.com` when
+`CHEAPERINFERENCE_API_KEY` is set. Direct digillm clients do the same even when
+`OPENAI_API_BASE` still points at OpenRouter. Force OpenRouter:
+`DIGI_HOUSE_UPSTREAM=openrouter`.

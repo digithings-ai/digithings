@@ -24,6 +24,8 @@ export const ACTIVITY_PART_TYPE = "data-digichatActivity" as const;
 
 export const MAX_LABEL_CHARS = 200;
 export const MAX_QUERY_CHARS = 200;
+export const MAX_TOOL_INPUT_KEYS = 16;
+export const MAX_TOOL_INPUT_KEY_CHARS = 64;
 export const MAX_DOCUMENTS = 20;
 export const MAX_DOC_FIELD_CHARS = 300;
 export const MAX_REASONING_CHARS = 4000;
@@ -58,6 +60,11 @@ export type ActivitySpan = {
   /** gen_ai.tool.name */
   toolName?: string;
   query?: string;
+  /**
+   * Presentation-safe MCP / tool arguments (query, vault path, …). Allowlisted
+   * scalars only — never a raw prompt or upstream endpoint.
+   */
+  toolInput?: Record<string, unknown>;
   status: "started" | "completed" | "failed";
   /** Presentation-safe; never raw upstream text. */
   label: string;
@@ -114,6 +121,34 @@ function snippetStr(value: unknown, max: number): string | undefined {
 
 function bool(value: unknown): true | undefined {
   return value === true ? true : undefined;
+}
+
+function toolInput(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [rawKey, rawVal] of Object.entries(value as Record<string, unknown>)) {
+    if (Object.keys(out).length >= MAX_TOOL_INPUT_KEYS) break;
+    const key = str(rawKey, MAX_TOOL_INPUT_KEY_CHARS);
+    if (!key) continue;
+    if (typeof rawVal === "string") {
+      const s = str(rawVal, MAX_DOC_FIELD_CHARS);
+      if (s) out[key] = s;
+    } else if (typeof rawVal === "boolean") {
+      out[key] = rawVal;
+    } else if (typeof rawVal === "number" && Number.isFinite(rawVal)) {
+      out[key] = rawVal;
+    } else if (Array.isArray(rawVal)) {
+      const items: string[] = [];
+      for (const item of rawVal) {
+        const s = str(item, MAX_DOC_FIELD_CHARS);
+        if (!s) continue;
+        items.push(s);
+        if (items.length >= MAX_DOCUMENTS) break;
+      }
+      if (items.length) out[key] = items;
+    }
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 function documents(value: unknown): ActivityDocument[] | undefined {
@@ -192,6 +227,9 @@ export function sanitizeActivitySpan(input: unknown): ActivitySpan | null {
   const query = str(record.query, MAX_QUERY_CHARS);
   if (query) span.query = query;
 
+  const parsedInput = toolInput(record.toolInput);
+  if (parsedInput) span.toolInput = parsedInput;
+
   const docs = documents(record.documents);
   if (docs) span.documents = docs;
 
@@ -232,7 +270,14 @@ export function applyActivityDetail(
   // found something (see the providers). Flag that this rest object had real
   // hits stripped, so the projector can render an honest "search happened"
   // row instead of a fabricated zero count (see toDigiChatActivity).
-  return documents && documents.length > 0 ? { ...rest, documentsWithheld: true } : rest;
+  if (documents && documents.length > 0) {
+    return {
+      ...rest,
+      documentsWithheld: true,
+      hitCount: rest.hitCount ?? documents.length,
+    };
+  }
+  return rest;
 }
 
 /**

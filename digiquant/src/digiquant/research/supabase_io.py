@@ -41,6 +41,7 @@ from digiquant.dashboard.postgrest_timeout import (
     WRITE_TIMEOUT_SECONDS,
 )
 from digiquant.dashboard.tenancy import resolved_workspace_id
+from digiquant.ops.checkpoint_archive import read_archived_document
 from digiquant.research.data.queries import r2_backend_enabled
 from digiquant.research.state import Phase7DigestPayload, PriorContext, PublishedArtifact
 from digiquant.supabase_retry import run_with_supabase_retry
@@ -455,6 +456,40 @@ def load_prior_book(
     return [r for r in rows if str(r.get("date") or "") == top_date]
 
 
+def load_nav_history_row(
+    client: SupabaseClient,
+    run_date: date,
+    *,
+    workspace_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Existing ``nav_history`` row for ``(workspace, run_date)``, or ``None`` (#3804).
+
+    Booking paths (H9 ``commit_io.book_portfolio``, legacy ``portfolio_materialize``)
+    write a provisional NAV at book time; the Nautilus schedule replay
+    (``verify_nav_replay.py --write``) later overwrites ``nav`` with the
+    authoritative engine value. A re-dispatch of the book pipeline *after* the
+    engine step must not clobber that engine value with a provisional
+    recompute, so both booking paths consult this read first: when a row
+    already exists for the date they preserve the stored NAV and refresh only
+    the H9-owned ``cash_pct`` / ``invested_pct``.
+
+    ``workspace_id`` omitted / ``None`` means the house workspace — never an
+    unfiltered date scan. Overlay passes its id so a private book cannot see
+    (or suppress itself on) a house engine row, and vice versa.
+    """
+    scoped = str(resolved_workspace_id(workspace_id))
+    resp = (
+        client.table("nav_history")
+        .select("date, nav, cash_pct, invested_pct")
+        .eq("workspace_id", scoped)
+        .eq("date", run_date.isoformat())
+        .limit(1)
+        .execute()
+    )
+    rows = list(getattr(resp, "data", None) or [])
+    return dict(rows[0]) if rows else None
+
+
 # Per-ticker analyst / deliberation docs are loaded separately (slim summaries) so
 # ``load_prior_context`` does not stuff full decision artifacts into every node.
 _CONTINUITY_EXCLUDED_DOC_PREFIXES = ("analyst/", "deliberation/")
@@ -503,6 +538,33 @@ def _slim_deliberation_summary(payload: dict[str, Any]) -> dict[str, Any]:
     return slim
 
 
+def _hydrate_document_row(
+    client: SupabaseClient,
+    row: dict[str, Any],
+    *,
+    store: Any | None,
+    workspace_id: str,
+) -> dict[str, Any]:
+    """Read one NULL-payload ``documents`` row through the archive pointer (#3792).
+
+    ``archive_documents`` NULLs the payload cell of non-latest versions; the
+    row still resolves the version, so hydrate it from R2 instead of carrying
+    a null into the graph. Pointer-miss keeps the row as-is.
+    """
+    if row.get("payload") is not None or not row.get("document_key") or not row.get("date"):
+        return row
+    payload = read_archived_document(
+        client,
+        store,
+        workspace_id=workspace_id,
+        document_key=str(row["document_key"]),
+        date_str=str(row["date"]),
+    )
+    if payload is None:
+        return row
+    return {**row, "payload": payload}
+
+
 def load_prior_analyst_summaries(
     client: SupabaseClient,
     run_date: date,
@@ -510,6 +572,7 @@ def load_prior_analyst_summaries(
     *,
     lookback_days: int = 30,
     workspace_id: str | None = None,
+    store: Any | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Latest prior ``analyst/{ticker}`` slim summary per held ticker.
 
@@ -544,6 +607,7 @@ def load_prior_analyst_summaries(
         ticker = key.split("/", 1)[1]
         if ticker in out:
             continue
+        row = _hydrate_document_row(client, row, store=store, workspace_id=scoped)
         slim = _slim_analyst_summary(row.get("payload") or {})
         out[ticker] = {
             "date": row.get("date"),
@@ -560,6 +624,7 @@ def load_prior_deliberation_summaries(
     *,
     lookback_days: int = 30,
     workspace_id: str | None = None,
+    store: Any | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Latest prior ``deliberation/{ticker}`` slim summary per held ticker.
 
@@ -595,6 +660,7 @@ def load_prior_deliberation_summaries(
         ticker = key.split("/", 1)[1]
         if ticker in out:
             continue
+        row = _hydrate_document_row(client, row, store=store, workspace_id=scoped)
         slim = _slim_deliberation_summary(row.get("payload") or {})
         out[ticker] = {
             "date": row.get("date"),
@@ -734,6 +800,7 @@ def load_prior_context(
     documents_lookback_days: int = 30,
     documents_row_cap: int = 500,
     workspace_id: str | None = None,
+    store: Any | None = None,
 ) -> PriorContext:
     """Query recent ``daily_snapshots`` + latest-per-segment ``documents``.
 
@@ -758,6 +825,10 @@ def load_prior_context(
     ``load_prior_deliberation_summaries``, ``load_latest_beliefs_document``, and
     ``query_institutional_absence_streak`` all pin house. ``daily_snapshots``
     stays date-only (house-only ``UNIQUE(date)``; overlay publish skips it).
+
+    Rows whose payload was NULLed by ``archive_documents`` read through R2 via
+    the ``archive_objects`` pointer (``store`` injects the backend for tests;
+    production resolves it from ``R2_*`` env). Pointer-miss keeps the row as-is.
     """
     from datetime import timedelta
 
@@ -794,7 +865,7 @@ def load_prior_context(
             continue
         if any(str(key).startswith(prefix) for prefix in _CONTINUITY_EXCLUDED_DOC_PREFIXES):
             continue
-        latest_by_key[key] = row
+        latest_by_key[key] = _hydrate_document_row(client, row, store=store, workspace_id=scoped)
 
     return PriorContext(
         last_snapshots=last_snapshots,
@@ -1258,6 +1329,7 @@ def load_latest_beliefs_document(
     client: SupabaseClient,
     run_date: date,
     workspace_id: str | None = None,
+    store: Any | None = None,
 ) -> dict[str, Any] | None:
     """Latest house ``beliefs`` document strictly before ``run_date`` for PM context."""
     scoped = str(resolved_workspace_id(workspace_id))
@@ -1272,7 +1344,9 @@ def load_latest_beliefs_document(
         .execute()
     )
     rows = list(getattr(resp, "data", None) or [])
-    return rows[0] if rows else None
+    if not rows:
+        return None
+    return _hydrate_document_row(client, rows[0], store=store, workspace_id=scoped)
 
 
 def query_institutional_absence_streak(

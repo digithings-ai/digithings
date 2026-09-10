@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -80,6 +80,64 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(aui).toContain(popoverGate);
     expect(chatbot).not.toMatch(/^\.aui-action-bar-more-content \{/m);
     expect(aui).not.toMatch(/^\.aui-action-bar-more-content \{/m);
+  });
+
+  it("product tooltip matches /chatbot: no rotated-square arrow", () => {
+    const product = read("gallery-thread/ui/tooltip.tsx");
+    const reference = read("../../../../reference/components/ui/tooltip.tsx");
+    expect(product).toContain('data-tooltip-arrow="none"');
+    expect(product).not.toMatch(/TooltipPrimitive\.Arrow/);
+    expect(reference).toContain('data-tooltip-arrow="none"');
+    expect(reference).not.toMatch(/TooltipPrimitive\.Arrow/);
+  });
+
+  it("markdown lists keep markers inside padding so a scrollport cannot clip them", () => {
+    const chatbot = read(
+      "../../../../reference/app/(chatbot)/chatbot/chatbot.css",
+    );
+    const aui = read("../../styles/chat-aui.css");
+    const thread = read("gallery-thread/thread.aui.tsx");
+    const markdown = read("gallery-thread/markdown-text.tsx");
+    expect(chatbot).toMatch(/\.aui-md-ol \{[\s\S]*padding-inline-start: 2rem/);
+    expect(chatbot).toContain("list-style-position: outside");
+    expect(aui).toContain(".digichat-thread .aui-md-ol");
+    expect(aui).toContain("padding-inline-start: 2rem");
+    expect(thread).toMatch(/overflow-x-hidden/);
+    expect(thread).not.toMatch(/overflow-x-auto overflow-y-scroll/);
+    expect(markdown).toMatch(/aui-md-ol[\s\S]*ps-8 list-outside list-decimal/);
+    expect(markdown).toMatch(/aui-md-ul[\s\S]*ps-7 list-outside list-disc/);
+  });
+
+  it("portaled tooltip CSS hides descendant svg, not only a direct child", () => {
+    const chatbot = read(
+      "../../../../reference/app/(chatbot)/chatbot/chatbot.css",
+    );
+    const aui = read("../../styles/chat-aui.css");
+    const hide =
+      ':is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-slot="tooltip-content"] svg';
+    expect(chatbot).toContain(hide);
+    expect(aui).toContain(hide);
+  });
+
+  it("gallery /chatbot specimens import the product Thread subpath", () => {
+    const specimen = read(
+      "../../../../reference/components/chatbot/chatbot-thread-specimen.tsx",
+    );
+    const chrome = read(
+      "../../../../reference/components/chatbot/chatbot-chrome-specimen.tsx",
+    );
+    expect(specimen).toMatch(/from ["']@digithings\/web\/chat\/thread["']/);
+    expect(chrome).toMatch(/from ["']@digithings\/web\/chat\/thread["']/);
+    expect(specimen).not.toMatch(/assistant-ui\/elements\/thread/);
+    expect(chrome).not.toMatch(/assistant-ui\/elements\/thread/);
+  });
+
+  it("does not keep a second registry Thread under the reference app", () => {
+    const fork = join(
+      here,
+      "../../../../reference/components/assistant-ui/elements/thread.aui.tsx",
+    );
+    expect(existsSync(fork)).toBe(false);
   });
 
   it("gallery DotMatrix re-exports the chat subpath, not the main barrel", () => {

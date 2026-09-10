@@ -1233,10 +1233,17 @@ coerces AI SDK `ModelMessage` content to plain strings to avoid digigraph's stri
 `422` validation). In the legacy path, the AI SDK OpenAI provider constructs the body.
 
 digigraph SSE frames carry an optional `digigraph_trace` field on each
-`choices[0].delta`. The trace path maps typed payloads (`rag_sources`,
-`graph_update`, and opaque labels) through `mapdigigraphTraceToSpans` and emits
+`choices[0].delta`. The trace path maps typed payloads (`tool_call`,
+`rag_sources`, `graph_update`, and opaque labels) through `mapDigigraphTraceToSpans` and emits
 only standard tool / `source-*` / reasoning / `data-status` parts (`writeStandardActivity`).
-1.4 `data-digichatActivity` is not written. Auth `chat-panel` and embed both
+Each tool invocation gets its own `toolCallId` (FIFO per tool name). Input is JSON
+(`query` / vault path from MCP arguments); retrieve output is `{ query, documents, hitCount }`
+with document snippets/bodies at `activityDetail: full`. The website-like dogfood host
+(`config/examples/digithings-ai-embed.yaml`) sets `gate.activityDetail: full` so chunks are
+not replaced by `{ documentsWithheld: true }`. Leftover started rows are auto-completed at
+stream end so ordinary retrieve / get_note / search_notes never sit on Allow/Deny.
+`tool-input-available` is emitted only with `tool-output-available` during the call. 1.4 `data-digichatActivity` is not
+written. Auth `chat-panel` and embed both
 render those parts through assistant-ui `MessagePrimitive.Parts`
 (`cli-message-parts.tsx`). Old branded parts hydrate via `LegacyActivityHydrate`
 only when no standard activity parts exist.
@@ -1316,29 +1323,35 @@ part-driven vs chrome-driven is indexed in digiweb
 | `chrome.defaultLanguage` | curated codes (`languages.ts`) | Seeds the stock language picker |
 | `chrome.transcript.userAlign` | `right \| left` | Stock web default `right` |
 | `chrome.skin` | `base \| chatgpt \| claude \| grok \| gemini \| perplexity \| react-ink \| expo-react-native \| base-assistant-ui \| webpage-assistant \| product-page-assistant \| digichat` | The 11 assistant-ui catalog template ids plus first-party `digichat`. Overlay: `DIGICHAT_CHROME_SKIN`. Baked YAML: `/app/config/examples/skins/<id>.yaml`. Catalog / third-party default remains `base`. Unset `skin` on digithings.ai / OCC hosts (and slugs `digithings`, `digithings-ai`, `occ`) defaults to `digichat` so production `DIGICHAT_EMBED_TENANTS` without `skin` still mounts DigichatThread. |
-| `models.default` / `models.available` / `models.allowPicker` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`); empty `available` = no restriction |
-| `features.modelPicker` | bool | Also enables picker when `models.allowPicker` unset |
+| `models.default` / `models.available` / `models.allowPicker` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`); empty `available` = no restriction. Bound BYOK skips that house allowlist. Product embed + dashboard YAML publish CI cheap slugs only (`deepseek/deepseek-v4-flash` default, plus `deepseek-v4-flash-0731`, `openai/gpt-oss-120b`, `z-ai/glm-5.3-flash`). Never OpenRouter `:free`. Connecting BYOK replaces `/models` with that provider’s presets (#3829). |
+| `features.attachments` | bool | Default **true** (composer attach). Product / DataTap / dashboard YAML set false. |
 | `gate.showLanguageSelector` | bool | Reserved; language chrome is not mounted on the stock baseline |
 | `cli.enabled` | bool (default `false`) | Documents / gates the Ink CLI (see below) |
 
-Web UI mounts `ThreadSkinView` (`ProductStockShell` on `/embed` and `/`).
 `chrome.skin` selects one of the 11 official assistant-ui catalog templates
 vendored under `src/components/assistant-ui/skins/`, or first-party `digichat`
-(`DigichatThread` from `@digithings/web/chat/thread` **is** the gallery
-`/chatbot` Thread module — `thread.aui.tsx` + slots + cube glyphs — plus
-`@digithings/web/styles/chatbot.css`. Contract:
-[`frontend/digiweb/CHAT_THEME.md`](../digiweb/CHAT_THEME.md)). Product embed
-examples `config/examples/digithings-ai-embed.yaml` and `occ-embed.yaml` set
-`chrome.skin: digichat` and keep `backend.type: digigraph` with the
-digisearch / digivault catalog (web_search tenant-allowed on digithings.ai;
-embed/popup session defaults all three tools ON). YAML `hosts` resolve for
-`/embed` first paint (first-party / token rules unchanged). `ProductStockShell`
-mounts `ToolCatalogBar` only for `chrome.mode: app`. Embed / modal / sidebar
-use assistant-ui `ComposerTriggerPopover` (`unstable_useSlashCommandAdapter`)
-instead; `/search` and `/vault` still arm `X-Digi-Force-Tool`, and session
-toggles send `X-Digi-Disabled-Tools` (catalog-allowlisted on the BFF).
-Disclosure modes still drive reasoning / tool UI when those parts appear
-in the stream.
+(`DigichatThread` from `@digithings/web/chat/thread` **is** the first-party
+Thread — `gallery-thread/thread.aui.tsx` + slots + cube glyphs — plus
+`@digithings/web/styles/chatbot.css`. Design-reference `/chatbot` mounts that
+same subpath with a fixture runtime. Contract:
+[`frontend/digiweb/CHAT_THEME.md`](../digiweb/CHAT_THEME.md)).
+
+**No-host / unresolved `/embed`** (missing `?host=`, unknown parent, or
+wrong/absent customer token) is the unconfigured container default: skin
+`digichat` (gallery Thread UI, including hairline hover hints with no
+rotated-square arrow), generic “Ask a question” copy, compact attach+send
+composer, empty tool catalog (no Search / Vault / MCP / provider). YAML that omits
+`skin` still parses as catalog `base`. Product hosts (`digithings-ai-embed.yaml`,
+`occ-embed.yaml`) keep `chrome.skin: digichat` with the digisearch / digivault
+catalog (web_search tenant-allowed on digithings.ai; embed/popup session
+defaults those tools ON). YAML `hosts` resolve for `/embed` first paint
+(first-party / token rules unchanged). `ProductStockShell` mounts
+`ToolCatalogBar` only for `chrome.mode: app`. Embed / modal / sidebar use
+assistant-ui `ComposerTriggerPopover` (`unstable_useSlashCommandAdapter`)
+instead; `/search` and `/vault` still arm `X-Digi-Force-Tool` when those ids
+are in the catalog, and session toggles send `X-Digi-Disabled-Tools`
+(catalog-allowlisted on the BFF). Disclosure modes still drive reasoning /
+tool UI when those parts appear in the stream.
 
 **Client container — pick a template (not docs-only):**
 

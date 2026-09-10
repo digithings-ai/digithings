@@ -48,7 +48,12 @@ from digiquant.portfolio.risk_envelope import risk_horizon_days
 from digiquant.portfolio.sector_map import sector_bucket
 from digiquant.research.data.queries import r2_backend_enabled
 from digiquant.research.state import ResearchState
-from digiquant.research.supabase_io import SupabaseClient, load_prior_book, query_price_deltas
+from digiquant.research.supabase_io import (
+    SupabaseClient,
+    load_nav_history_row,
+    load_prior_book,
+    query_price_deltas,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -644,16 +649,36 @@ def build_materialize_node(deps: MaterializeDeps):
                     for r in pos_rows
                 ]
 
-        client.table("nav_history").upsert(
-            {
-                "workspace_id": str(house_workspace_id()),
-                "date": date_str,
-                "nav": nav,
-                "cash_pct": cash_pct,
-                "invested_pct": round(invested, 4),
-            },
-            on_conflict="workspace_id,date",
-        ).execute()
+        # Provisional NAV suppression (#3804): the Nautilus schedule replay
+        # (verify_nav_replay.py --write) owns ``nav_history.nav`` once it has
+        # written the date. A re-dispatch after the engine step must not
+        # clobber that value with a provisional recompute, so an existing
+        # house row for this date keeps its stored NAV — fail-closed toward
+        # the engine. H9-owned ``cash_pct`` / ``invested_pct`` are still
+        # refreshed so they track the just-booked weights. ``positions`` below
+        # still book normally.
+        existing_nav = load_nav_history_row(client, run_date)
+        if existing_nav is not None and existing_nav.get("nav") is not None:
+            logger.warning(
+                "phase9d: nav_history row exists for %s (nav=%s); "
+                "preserving NAV, refreshing cash/invested only (engine row wins)",
+                date_str,
+                existing_nav.get("nav"),
+            )
+            client.table("nav_history").update(
+                {"cash_pct": cash_pct, "invested_pct": round(invested, 4)}
+            ).eq("workspace_id", str(house_workspace_id())).eq("date", date_str).execute()
+        else:
+            client.table("nav_history").upsert(
+                {
+                    "workspace_id": str(house_workspace_id()),
+                    "date": date_str,
+                    "nav": nav,
+                    "cash_pct": cash_pct,
+                    "invested_pct": round(invested, 4),
+                },
+                on_conflict="workspace_id,date",
+            ).execute()
 
         # Portfolio-level risk metrics (#953): compute sharpe/vol/drawdown/alpha
         # from the nav_history series and upsert into portfolio_metrics. Advisory —

@@ -115,6 +115,12 @@ When `stream: true` in `POST /v1/chat/completions`:
    - `reasoning` — accumulated into a `<thinking>` block before the first `content` chunk (skipped when `X-Suppress-Tool-Stream` is set)
    - `trace` — `TraceEventV1` dicts embedded in `delta.digigraph_trace` for digichat
      (`tool_call` / `tool_result` / `rag_sources` / `round_boundary`, …). The
+     `tool_call` payload includes `tool`, `status`, optional `query`, and a size-capped
+     `arguments` dict (MCP input) for the BFF tool-row UI. Each matching `tool_result`
+     for retrieve tools (`digisearch`, `digivault_*`, …) becomes a `rag_sources` trace
+     that forwards those arguments plus `sources` (including get_note `body`) so the
+     BFF can close the row without a client Allow/Deny. String error results still
+     emit `sources: []` so the started row completes. The
      `round_boundary` event marks the end of a digillm tool round: `round_idx` is the
      zero-based round number, and `narration` is the assistant text produced that round
      (with `stream_deltas`, content deltas were already emitted; without streaming,
@@ -793,7 +799,7 @@ This closes only the `OLLAMA_MODEL`-clobber case. A deployment whose *mode defau
 
 **Free-quota errors:** provider 429 / RPD under `llm_mode: free` maps to stable code `free_quota_exceeded` (HTTP 429 + SSE `delta.digigraph_error`) for digichat BYOK handoff. Generic rate limits outside free mode use `rate_limit`.
 
-**`delta.digigraph_error` contract (streaming):** `run_digigraph_workflow_streaming` emits an `("error", {"code", "message"})` queue event only when `final["error_code"]` is set (`workflow.py` — without a code, the error is surfaced as plain `content` only). Today that code is written only for `free_quota_exceeded` and `rate_limit` via `_user_facing_llm_error` in `graph/research.py`; both messages are static product copy, never exception text. digichat's stream adapter relays the SSE `message` for those codes; for `BYOK_MODEL_REMEDIABLE_CODES` it relays the code only and lets `embed-chat-error` supply trusted copy (#2536).
+**`delta.digigraph_error` contract (streaming):** `run_digigraph_workflow_streaming` always emits `("error", {"code", "message", optional "detail"})` when `GRAPH_RUNTIME_ERRORS` fire or `final["error"]` is set — never assistant `content` prefixed with `Error:`. Unclassified failures use code `llm_error`. Messages are sanitized (no Compose DNS, no secrets); `detail` is the longer provider dump for the embed disclosure. digichat's stream adapter relays `message`/`detail` except for `BYOK_MODEL_REMEDIABLE_CODES` (code only; `embed-chat-error` supplies trusted copy — #2536). Quota/rate-limit still use `free_quota_exceeded` / `rate_limit`.
 
 CLI: `digi llm-settings` / `python -m digigraph.cli llm-settings` prints effective provider/model/key-env present (never secrets).
 

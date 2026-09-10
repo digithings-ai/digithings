@@ -27,10 +27,8 @@ export function catalogAllowsForceTool(
 ): boolean {
   const raw = forceTool?.trim();
   if (!raw) return false;
-  // Legacy compat: empty catalog → allow digisearch/digivault only (pre-config installs).
-  if (!catalog?.length && !mcpIds?.length) {
-    return raw === "digisearch" || raw === "digivault";
-  }
+  // Fail-closed (#3806): empty catalog allows nothing by itself. Only MCP
+  // server ids from the deployment may still allow their own force values.
   const catalogId = CATALOG_ID_BY_FORCE_TOOL[raw] ?? raw;
   if (catalog?.some((e) => e.id === catalogId || FORCE_TOOL_BY_CATALOG_ID[e.id] === raw)) {
     return true;
@@ -41,14 +39,11 @@ export function catalogAllowsForceTool(
 export function allowedForceTools(dep: DigichatDeployment | null | undefined): string[] {
   const catalog = dep?.tools?.catalog;
   const out = new Set<string>();
-  if (!catalog?.length) {
-    out.add("digisearch");
-    out.add("digivault");
-  } else {
-    for (const e of catalog) {
-      const mapped = FORCE_TOOL_BY_CATALOG_ID[e.id] ?? (e.id !== "web_search" ? e.id : undefined);
-      if (mapped) out.add(mapped);
-    }
+  // Fail-closed (#3806): empty catalog contributes no builtins. MCP server
+  // ids from the deployment may still be added below.
+  for (const e of catalog ?? []) {
+    const mapped = FORCE_TOOL_BY_CATALOG_ID[e.id] ?? (e.id !== "web_search" ? e.id : undefined);
+    if (mapped) out.add(mapped);
   }
   for (const s of dep?.mcp?.servers ?? []) {
     if (s.id.trim()) out.add(s.id.trim());
@@ -70,14 +65,6 @@ export function filterForceToolHeader(
 export const DISABLEABLE_CATALOG_IDS = ["digisearch", "digivault"] as const;
 
 export type DisableableCatalogId = (typeof DISABLEABLE_CATALOG_IDS)[number];
-
-/** Upstream tool names dropped when a catalog id is disabled. */
-export const DISABLED_TOOLS_BY_CATALOG_ID: Readonly<
-  Record<DisableableCatalogId, readonly string[]>
-> = {
-  digisearch: ["digisearch", "digisearch_fetch_all"],
-  digivault: ["digivault", "digivault_search_notes", "digivault_get_note"],
-};
 
 const DISABLE_ALIASES: Readonly<Record<string, string>> = {
   digisearch: "digisearch",
@@ -108,10 +95,8 @@ export function catalogAllowsDisableId(
   const mapped = DISABLE_ALIASES[catalogId.trim().toLowerCase()] ?? catalogId.trim().toLowerCase();
   if (!mapped || mapped === "web_search") return false;
   if (DISABLEABLE_CATALOG_IDS.includes(mapped as DisableableCatalogId)) {
-    if (!catalog?.length) {
-      return mapped === "digisearch" || mapped === "digivault";
-    }
-    return catalog.some((e) => e.id === mapped || FORCE_TOOL_BY_CATALOG_ID[e.id] === mapped);
+    // Fail-closed (#3806): empty catalog denies builtins unless listed.
+    return catalog?.some((e) => e.id === mapped || FORCE_TOOL_BY_CATALOG_ID[e.id] === mapped) === true;
   }
   if (extraIds?.has(mapped)) return true;
   if (catalog?.some((e) => e.id === mapped)) return true;
@@ -120,7 +105,8 @@ export function catalogAllowsDisableId(
 
 /**
  * Fail-closed parse of X-Digi-Disabled-Tools. Unknown tokens dropped.
- * Empty catalog → allow digisearch/digivault only (same as force-tool).
+ * Empty catalog → nothing disableable unless listed on the deployment (#3806).
+ * Returns catalog ids as-is — digigraph expands digisearch/digivault upstream (#3807).
  */
 export function filterDisabledToolsHeader(
   dep: DigichatDeployment | null | undefined,
@@ -140,17 +126,6 @@ export function filterDisabledToolsHeader(
     out.push(mapped);
   }
   return out;
-}
-
-export function expandDisabledCatalogIds(ids: readonly string[]): string[] {
-  const names = new Set<string>();
-  for (const id of ids) {
-    const mapped = DISABLED_TOOLS_BY_CATALOG_ID[id as DisableableCatalogId];
-    if (mapped) {
-      for (const n of mapped) names.add(n);
-    }
-  }
-  return [...names];
 }
 
 /** Force-with-query wins: do not disable the catalog id being forced this send. */

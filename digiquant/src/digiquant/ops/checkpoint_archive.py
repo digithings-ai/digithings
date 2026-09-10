@@ -95,6 +95,75 @@ def resolve_payload(
     return decompress_payload(blob)
 
 
+def maybe_archive_store(store: StorageBackend | None) -> StorageBackend | None:
+    """Explicit store wins; else the env-built R2 backend; else None (no read-through).
+
+    Document readers take an optional ``store`` so unit tests can inject a
+    fake; production callers omit it and read through the real bucket when
+    ``R2_*`` creds are present. Missing creds disable read-through silently —
+    callers keep their pre-archive missing-row behavior.
+    """
+    if store is not None:
+        return store
+    try:
+        return _r2_backend_from_env()
+    except Exception:  # pragma: no cover — env misconfig, never raise on a read path
+        logger.warning("archive read-through disabled: R2 backend unavailable")
+        return None
+
+
+def read_archived_document(
+    client: Any,
+    store: StorageBackend | None,
+    *,
+    workspace_id: str,
+    document_key: str,
+    date_str: str,
+) -> Any:
+    """Archived-document read-through for NULL-payload ``documents`` rows (#3792).
+
+    Returns the decoded JSON payload, or ``None`` on pointer-miss (row still
+    live in Supabase or never archived), checksum failure, or undecodable
+    bytes. Corruption degrades to a warning + ``None`` — the daily graph must
+    never hard-fail on an archived prior; the un-degraded signal is the
+    failed-archive alarm on the write path, not the read path.
+    """
+    backend = maybe_archive_store(store)
+    if backend is None:
+        return None
+    try:
+        raw = resolve_payload(
+            client,
+            backend,
+            "documents",
+            {
+                "workspace_id": str(workspace_id),
+                "document_key": document_key,
+                "date": str(date_str),
+            },
+        )
+    except ArchiveNotFoundError:
+        return None
+    except ArchiveVerifyError:
+        logger.warning(
+            "archived document %s/%s/%s failed verification; treating as missing",
+            workspace_id,
+            date_str,
+            document_key,
+        )
+        return None
+    try:
+        return json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        logger.warning(
+            "archived document %s/%s/%s is not valid JSON; treating as missing",
+            workspace_id,
+            date_str,
+            document_key,
+        )
+        return None
+
+
 class StorageBackend(Protocol):
     """Object-store surface the archiver needs (R2, or a fake in tests)."""
 
@@ -108,23 +177,62 @@ HIGH_WATERMARK_BYTES = 8_500_000_000
 LOW_WATERMARK_BYTES = 7_000_000_000
 
 
+def _scan_all(
+    client: Any,
+    table: str,
+    cols: str,
+    *,
+    filters: tuple[tuple[str, Any], ...] = (),
+    order: tuple[str, ...] = (),
+) -> list[dict[str, Any]]:
+    """Paginated select past the PostgREST 1000-row response cap (#3789).
+
+    Every unbounded select silently truncates at 1000 rows, so key scans and
+    ledger scans page explicitly with ``.range()`` — the same pattern as
+    :func:`archive_documents` (``DOC_SCAN_PAGE_SIZE``).
+    """
+    rows: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        query = client.table(table).select(cols)
+        for col, val in filters:
+            query = query.eq(col, val)
+        for col in order:
+            query = query.order(col)
+        page = query.range(offset, offset + DOC_SCAN_PAGE_SIZE - 1).execute().data or []
+        rows.extend(page)
+        if len(page) < DOC_SCAN_PAGE_SIZE:
+            break
+        offset += DOC_SCAN_PAGE_SIZE
+    return rows
+
+
 def bucket_usage(client: Any) -> int:
-    """Sum of archived bytes per the ``archive_objects`` ledger."""
-    rows = client.table("archive_objects").select("size").execute().data or []
+    """Sum of archived bytes per the ``archive_objects`` ledger (#3790).
+
+    Paginated: an unbounded ``select("size")`` silently stops at 1000 rows and
+    undercounts the bucket once the ledger grows past the PostgREST cap.
+    """
+    rows = _scan_all(client, "archive_objects", "size")
     return sum(int(r.get("size") or 0) for r in rows)
 
 
 def evict_to_watermark(
     client: Any, store: StorageBackend, latest_keys: set[str] | None = None
 ) -> list[str]:
-    """Delete oldest-first until usage <= low watermark; never evict *latest_keys*."""
+    """Delete oldest-first until usage <= low watermark; never evict *latest_keys*.
+
+    One paginated oldest-first scan feeds a local running total (#3790) — no
+    per-row ``bucket_usage`` re-query of the full ledger.
+    """
     protected = latest_keys or set()
-    if bucket_usage(client) <= HIGH_WATERMARK_BYTES:
+    rows = _scan_all(client, "archive_objects", "*", order=("archived_at",))
+    total = sum(int(r.get("size") or 0) for r in rows)
+    if total <= HIGH_WATERMARK_BYTES:
         return []
-    rows = client.table("archive_objects").select("*").order("archived_at").execute().data or []
     evicted: list[str] = []
     for row in rows:
-        if bucket_usage(client) <= LOW_WATERMARK_BYTES:
+        if total <= LOW_WATERMARK_BYTES:
             break
         if row["r2_key"] in protected:
             continue
@@ -133,7 +241,8 @@ def evict_to_watermark(
         store.delete(row["r2_key"])
         client.table("archive_objects").delete().eq("r2_key", row["r2_key"]).execute()
         evicted.append(row["r2_key"])
-        logger.info("evicted %s (%s bytes)", row["r2_key"], row["size"])
+        total -= int(row.get("size") or 0)
+        logger.info("evicted %s (%s bytes)", row["r2_key"], row.get("size"))
     return evicted
 
 
@@ -141,18 +250,19 @@ def reconcile_ledger(client: Any, store: StorageBackend) -> list[str]:
     """Drop dead managed ledger rows; report orphans + dead market-data pointers.
 
     Orphan R2 objects (present in the bucket, absent from the ledger) are
-    reported for operator review — never auto-deleted. Only the archiver's
-    own ``checkpoints/`` + ``documents/`` prefixes are in scope; market-data
+    reported for operator review — never auto-deleted. Both archive prefixes
+    are listed (#3791): ``checkpoints/`` and ``documents/``; only the
+    archiver's own prefixes are in scope for deletes — market-data
     generations are indexed by the R2HistoryStore manifest instead (#3780).
 
     Dead market-data ledger rows (no backing object) are never auto-deleted
     either — their lifecycle belongs to the market-data tasks — but they are
     reported as orphans (same ``list[str]`` shape) so they stay visible.
+
+    The ledger scan is paginated past the PostgREST 1000-row cap (#3789).
     """
     ledger_keys = {
-        r["r2_key"]
-        for r in (client.table("archive_objects").select("r2_key").execute().data or [])
-        if r.get("r2_key")
+        r["r2_key"] for r in _scan_all(client, "archive_objects", "r2_key") if r.get("r2_key")
     }
     managed_keys = {k for k in ledger_keys if k.startswith(MANAGED_PREFIXES)}
     stored_keys = set(store.list_keys("checkpoints/")) | set(store.list_keys("documents/"))
@@ -252,7 +362,7 @@ def _thread_max_ts(checkpoint: Any) -> datetime | None:
 def threads_older_than(client: Any, retain_days: int) -> list[str]:
     """Threads whose newest checkpoint is older than *retain_days* (archive candidates)."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=retain_days)
-    rows = client.table("checkpoints").select("thread_id,checkpoint").execute().data or []
+    rows = _scan_all(client, "checkpoints", "thread_id,checkpoint")
     newest: dict[str, datetime] = {}
     for row in rows:
         thread_id = row.get("thread_id")
@@ -266,14 +376,14 @@ def threads_older_than(client: Any, retain_days: int) -> list[str]:
 
 def list_threads(client: Any) -> list[str]:
     """Distinct checkpoint thread ids (one per graph run)."""
-    rows = client.table("checkpoints").select("thread_id").execute().data or []
+    rows = _scan_all(client, "checkpoints", "thread_id")
     return sorted({str(row["thread_id"]) for row in rows if row.get("thread_id")})
 
 
 def previous_threads(client: Any, owner: str = "house") -> list[str]:
     """All threads except the newest — Supabase keeps the latest run per owner."""
     _ = owner  # owner scoping lands with multi-user threads; single house owner today
-    rows = client.table("checkpoints").select("thread_id,checkpoint").execute().data or []
+    rows = _scan_all(client, "checkpoints", "thread_id,checkpoint")
     newest: dict[str, datetime] = {}
     for row in rows:
         thread_id = row.get("thread_id")
@@ -440,10 +550,8 @@ def _fetch_thread_rows(
     Postgres); otherwise each payload row is a PostgREST single-row fetch.
     """
     key_cols = BLOB_KEY_COLUMNS[table]
-    keys = (
-        client.table(table).select(",".join(key_cols)).eq("thread_id", thread_id).execute().data
-        or []
-    )
+    # Page explicitly: a hot thread's key scan can exceed the PostgREST 1000-row cap.
+    keys = _scan_all(client, table, ",".join(key_cols), filters=(("thread_id", thread_id),))
     rows: list[dict[str, Any]] = []
     for key in keys:
         if payload_reader is not None:
@@ -536,22 +644,9 @@ def archive_documents(
     """
     key_cols = DOCUMENT_KEY_COLUMNS
     # Page explicitly: PostgREST silently caps one response at 1000 rows.
-    key_rows: list[dict[str, Any]] = []
-    offset = 0
-    while True:
-        page = (
-            client.table("documents")
-            .select(",".join(key_cols))
-            .eq("workspace_id", workspace)
-            .range(offset, offset + DOC_SCAN_PAGE_SIZE - 1)
-            .execute()
-            .data
-            or []
-        )
-        key_rows.extend(page)
-        if len(page) < DOC_SCAN_PAGE_SIZE:
-            break
-        offset += DOC_SCAN_PAGE_SIZE
+    key_rows = _scan_all(
+        client, "documents", ",".join(key_cols), filters=(("workspace_id", workspace),)
+    )
     groups: dict[str, list[dict[str, Any]]] = {}
     for key_row in key_rows:
         groups.setdefault(key_row.get("document_key"), []).append(key_row)
@@ -698,8 +793,10 @@ __all__ = [
     "evict_to_watermark",
     "list_threads",
     "main",
+    "maybe_archive_store",
     "parse_postgrest_bytea",
     "previous_threads",
+    "read_archived_document",
     "reconcile_ledger",
     "record_pointer",
     "resolve_payload",

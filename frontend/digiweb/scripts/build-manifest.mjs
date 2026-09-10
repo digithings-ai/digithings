@@ -26,8 +26,7 @@ function walk(dir, ext, out = []) {
     const st = statSync(full);
     if (st.isDirectory()) {
       if (entry === "node_modules" || entry === ".next") continue;
-      // Registry copies (assistant-ui Thread + shadcn primitives). Not kit patterns.
-      if (entry === "assistant-ui") continue;
+      // Vendor copies (shadcn primitives under components/ui). Not kit patterns.
       if (entry === "ui" && dir.endsWith("components")) continue;
       walk(full, ext, out);
     } else if (full.endsWith(ext)) {

@@ -57,6 +57,7 @@ import {
   providerDisplayName,
   providerKeyPlaceholder,
   providerModelChoices,
+  sessionPickerModels,
   tryResolveProviderInput,
   wantsProviderKeyPing,
 } from "@/components/stock/embed-provider-flow";
@@ -125,6 +126,7 @@ export function EmbedComposerMenu({
   onClose,
   onActivateProvider,
   onClearProvider,
+  onPickSessionModel,
   providerActive,
   initialProvider,
   providerSeed,
@@ -135,13 +137,17 @@ export function EmbedComposerMenu({
   onClose: () => void;
   onActivateProvider?: (key: string, provider: BYOKProvider, model: string) => void;
   onClearProvider?: () => void;
+  onPickSessionModel?: (id: string) => void;
   providerActive?: { provider: BYOKProvider; model: string } | null;
   initialProvider?: BYOKProvider;
   providerSeed?: string;
   mcpSeed?: string;
 }) {
   const api = useEmbedChatPrefs();
-  const available = models ?? [];
+  const available = sessionPickerModels(
+    models ?? [],
+    providerActive?.provider ?? null,
+  );
   const languages = useMemo(() => languageSelectOptions(), []);
   const toolOnInput = useMemo(
     () => ({
@@ -257,24 +263,28 @@ export function EmbedComposerMenu({
 
   const mainRows = useMemo((): MenuRow[] => {
     const rows: MenuRow[] = [];
-    rows.push({
-      id: "tools",
-      label: slashName("tools"),
-      value: toolsMenuSummary(toolRows, (id) => connectedToolIsOn(id, toolOnInput)),
-      activate: () => {
-        setCursor(0);
-        setView("tools");
-      },
-    });
-    rows.push({
-      id: "mcp",
-      label: slashName("mcp"),
-      value: mcpMenuSummaryFromConfigs(mcpConfigs, api.extraToolOn),
-      activate: () => {
-        setCursor(0);
-        setView("mcp");
-      },
-    });
+    if (toolRows.length > 0) {
+      rows.push({
+        id: "tools",
+        label: slashName("tools"),
+        value: toolsMenuSummary(toolRows, (id) => connectedToolIsOn(id, toolOnInput)),
+        activate: () => {
+          setCursor(0);
+          setView("tools");
+        },
+      });
+    }
+    if (mcpConfigs.length > 0 || api.allowUserMcp) {
+      rows.push({
+        id: "mcp",
+        label: slashName("mcp"),
+        value: mcpMenuSummaryFromConfigs(mcpConfigs, api.extraToolOn),
+        activate: () => {
+          setCursor(0);
+          setView("mcp");
+        },
+      });
+    }
     rows.push({
       id: "thinking",
       label: slashName("thinking"),
@@ -366,13 +376,14 @@ export function EmbedComposerMenu({
     return available.map((id) => ({
       id,
       label: id,
-      value: api.prefs.model === id ? "On" : "",
-      checked: api.prefs.model === id,
+      value: (providerActive?.model || api.prefs.model) === id ? "On" : "",
+      checked: (providerActive?.model || api.prefs.model) === id,
       activate: () => {
         api.setModel(id);
+        onPickSessionModel?.(id);
       },
     }));
-  }, [available, api]);
+  }, [available, api, onPickSessionModel, providerActive]);
 
   const effortRows = useMemo(
     (): MenuRow[] =>
@@ -498,18 +509,20 @@ export function EmbedComposerMenu({
         },
       };
     });
-    rows.push({
-      id: "mcp-new",
-      label: slashName("mcp new"),
-      value: "Add",
-      activate: () => {
-        setMcpDraft(emptyMcpConfig());
-        setMcpError(null);
-        setMcpSuggestIndex(-1);
-        setMcpIdDropdownOpen(false);
-        setView("mcp-edit");
-      },
-    });
+    if (api.allowAddMcp) {
+      rows.push({
+        id: "mcp-new",
+        label: slashName("mcp new"),
+        value: "Add",
+        activate: () => {
+          setMcpDraft(emptyMcpConfig());
+          setMcpError(null);
+          setMcpSuggestIndex(-1);
+          setMcpIdDropdownOpen(false);
+          setView("mcp-edit");
+        },
+      });
+    }
     return rows;
   }, [api, mcpConfigs]);
 

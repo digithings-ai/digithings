@@ -1,4 +1,4 @@
--- 122_drop_market_data_tables.sql
+-- 124_drop_market_data_tables.sql
 --
 -- Run with:  supabase db push   (or apply via MCP against the core project).
 -- Unwrapped on purpose: db-migrate.yml applies the file + ledger in one

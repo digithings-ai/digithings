@@ -56,7 +56,8 @@ export function useStockChatPrefs({
   const tenantAllowsWeb = clientConfig.gate.webSearch === true;
   const showByok = clientConfig.gate.showByok === true;
   const showModels =
-    clientConfig.models.allowPicker === true || clientConfig.features.modelPicker === true;
+    (clientConfig.models.allowPicker === true || clientConfig.features.modelPicker === true) &&
+    clientConfig.models.available.length > 0;
 
   const getLanguage = useCallback(() => chatPrefsRef.current.language, []);
   const getModel = useCallback(() => {
@@ -121,8 +122,8 @@ export function useStockChatPrefs({
       tenantAllowsWeb,
       showByok,
       showModels,
-      hasDigisearch: catalog.length === 0 || catalog.some((e) => e.id === "digisearch"),
-      hasVault: catalog.length === 0 || catalog.some((e) => e.id === "digivault"),
+      hasDigisearch: catalog.some((e) => e.id === "digisearch"),
+      hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions,
       allowUserMcp: clientConfig.mcp.allowUserServers === true,
       allowAddMcp: clientConfig.mcp.allowAddForm === true,

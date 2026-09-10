@@ -29,6 +29,7 @@ from digiquant.ops.checkpoint_archive import (  # noqa: E402
     reconcile_ledger,
     resolve_payload,
     restore_thread,
+    threads_older_than,
 )
 
 
@@ -39,6 +40,10 @@ class _Resp:
 
 @dataclass
 class _Query:
+    # Mirror PostgREST's default page cap: an unbounded select returns at most
+    # 1000 rows. Production code must paginate explicitly (see DOC_SCAN_PAGE_SIZE).
+    _DEFAULT_PAGE = 1000
+
     table_name: str
     store: dict[str, list[dict[str, Any]]]
     _filters: list[tuple[str, Any]] = field(default_factory=list)
@@ -106,6 +111,8 @@ class _Query:
         if self._range is not None:
             start, end = self._range
             rows = rows[start : end + 1]
+        else:
+            rows = rows[: self._DEFAULT_PAGE]
         if self._pending_delete:
             for row in rows:
                 table.remove(row)
@@ -894,3 +901,121 @@ class TestDirectPostgresReader:
         monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "s")
         monkeypatch.delenv("DIGI_CHECKPOINTER_POSTGRES_URI", raising=False)
         assert main([]) == 2
+
+
+def test_list_threads_scans_all_pages():
+    """list_threads must paginate: 1100 threads span two PostgREST pages (#3789)."""
+    client = FakeClient(store={"checkpoints": [{"thread_id": f"t{i:04d}"} for i in range(1100)]})
+    assert list_threads(client) == [f"t{i:04d}" for i in range(1100)]
+
+
+def test_threads_older_than_scans_all_pages():
+    """threads_older_than must see past the 1000-row cap (#3789)."""
+    client = FakeClient(
+        store={
+            "checkpoints": [
+                {"thread_id": f"t{i:04d}", "checkpoint": {"ts": "2026-01-01T00:00:00+00:00"}}
+                for i in range(1050)
+            ]
+        }
+    )
+    assert threads_older_than(client, retain_days=30) == [f"t{i:04d}" for i in range(1050)]
+
+
+def test_previous_threads_scans_all_pages():
+    """previous_threads must see past the 1000-row cap, still excluding newest (#3789)."""
+    rows = [
+        {
+            "thread_id": f"t{i:04d}",
+            "checkpoint": {"ts": "2026-01-01T00:00:00+00:00"},
+        }
+        for i in range(1050)
+    ]
+    rows[-1]["checkpoint"] = {"ts": "2026-09-08T00:00:00+00:00"}
+    client = FakeClient(store={"checkpoints": rows})
+    got = previous_threads(client)
+    assert len(got) == 1049
+    assert "t1049" not in got
+    assert got == sorted(got)
+
+
+def test_fetch_thread_rows_key_scan_paginates():
+    """A hot thread's key-only scan must page past the 1000-row cap (#3789)."""
+    from digiquant.ops.checkpoint_archive import _fetch_thread_rows
+
+    client = FakeClient()
+    for i in range(1050):
+        client.store.setdefault("checkpoint_blobs", []).append(
+            {
+                "thread_id": "t1",
+                "checkpoint_ns": f"ns{i:04d}",
+                "channel": "c",
+                "version": "v",
+                "blob": b"x",
+            }
+        )
+    rows = _fetch_thread_rows(client, "checkpoint_blobs", "t1")
+    assert [r["checkpoint_ns"] for r in rows] == [f"ns{i:04d}" for i in range(1050)]
+    # Key-only scan paged twice (1000 + 50); payload fetches stay single-row.
+    assert len([e for e in client.log if e[0] != "*"]) == 2
+    assert all(count <= 1 for cols, _, count in client.log if cols == "*")
+
+
+def test_bucket_usage_sums_all_pages():
+    """bucket_usage must sum past the 1000-row cap, not silently undercount (#3790)."""
+    client = FakeClient()
+    _seed_ledger(client, [(f"r2/k{i:04d}", 10) for i in range(1100)])
+    assert bucket_usage(client) == 11_000
+
+
+def test_evict_to_watermark_paginates_and_uses_local_total():
+    """Ledger past the cap: one paginated oldest-first scan, local total, no re-selects."""
+    client = FakeClient()
+    for i in range(1500):
+        client.table("archive_objects").insert(
+            {
+                "source_table": "checkpoint_blobs",
+                "source_key": {"thread_id": f"t{i:04d}"},
+                "r2_key": f"checkpoints/k{i:04d}",
+                "sha256": "0" * 64,
+                "size": 10_000_000,
+                "owner": "house",
+                "archived_at": f"2026-09-01T{i:04d}",
+            }
+        ).execute()
+    store = FakeStore()
+    for i in range(1500):
+        store.objects[f"checkpoints/k{i:04d}"] = b"x"
+    evicted = evict_to_watermark(client, store)
+    # 15GB total; evict oldest-first until <= 7GB low watermark → 800 rows (8GB).
+    assert evicted == [f"checkpoints/k{i:04d}" for i in range(800)]
+    # The ordered scan paged twice (1000 + 500); no per-row ledger re-selects.
+    full_scans = [e for e in client.log if e[0] == "*"]
+    assert len(full_scans) == 2
+    assert [e for e in client.log if e[0] == "size"] == []
+    assert bucket_usage(client) == 700 * 10_000_000
+
+
+def test_reconcile_ledger_scans_all_pages():
+    """Dead-ledger cleanup must see past the 1000-row cap (#3789)."""
+    client = FakeClient()
+    _seed_ledger(client, [(f"checkpoints/gone{i:04d}", 10) for i in range(1050)])
+    assert reconcile_ledger(client, FakeStore()) == []
+    remaining = client.table("archive_objects").select("r2_key").range(0, 9999).execute().data
+    assert remaining == []
+
+
+def test_reconcile_reports_documents_prefix_orphans():
+    """reconcile_ledger must list documents/ orphans too, never auto-delete (#3791)."""
+    client = FakeClient()
+    store = FakeStore()
+    store.objects["checkpoints/orphan/x.bin"] = b"y"
+    store.objects["documents/house/2026-09-07/thesis.zst"] = b"z"
+    assert reconcile_ledger(client, store) == [
+        "checkpoints/orphan/x.bin",
+        "documents/house/2026-09-07/thesis.zst",
+    ]
+    assert set(store.objects) == {
+        "checkpoints/orphan/x.bin",
+        "documents/house/2026-09-07/thesis.zst",
+    }

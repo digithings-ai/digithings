@@ -72,6 +72,13 @@ export function slashSubmitAction(raw: string, extra?: readonly SlashDef[]): Sla
 }
 
 export function visibilityFromPrefs(api: EmbedChatPrefsApi): SlashVisibility {
+  const hasMcp = api.allowUserMcp || api.mcpServers.length > 0;
+  const hasTools =
+    api.hasDigisearch ||
+    api.hasVault ||
+    api.tenantAllowsWeb ||
+    api.catalogTools.length > 0 ||
+    hasMcp;
   return {
     webSearch: api.tenantAllowsWeb,
     byok: api.showByok,
@@ -79,7 +86,8 @@ export function visibilityFromPrefs(api: EmbedChatPrefsApi): SlashVisibility {
     digivault: api.hasVault,
     sessions: api.hasSessions,
     models: api.showModels,
-    mcp: true,
+    mcp: hasMcp,
+    tools: hasTools,
   };
 }
 
@@ -123,6 +131,8 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
     if (def.id === "digivault" && vis.digivault === false) continue;
     if (def.id === "sessions" && vis.sessions !== true) continue;
     if ((def.id === "models" || def.id === "effort") && vis.models === false) continue;
+    if (def.id === "mcp" && vis.mcp === false) continue;
+    if (def.id === "tools" && vis.tools === false) continue;
 
     let description = def.hint;
     if (def.id === "websearch") {

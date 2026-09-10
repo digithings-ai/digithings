@@ -28,6 +28,36 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
+_RETRIEVAL_TOOL_NAMES = frozenset(
+    {
+        "digisearch",
+        "digisearch_fetch_all",
+        "digisearch_research_delegate",
+        "digivault_search_notes",
+        "digivault_get_note",
+        "web_search",
+    }
+)
+
+
+def _clip_tool_arguments(args: dict[str, Any]) -> dict[str, Any]:
+    """Size-capped MCP args for the BFF tool-row UI (never a raw prompt dump)."""
+    clipped: dict[str, Any] = {}
+    for i, (key, val) in enumerate(args.items()):
+        if i >= 16 or not isinstance(key, str) or not key.strip():
+            continue
+        if isinstance(val, str):
+            clipped[key] = val[:300]
+        elif isinstance(val, bool):
+            clipped[key] = val
+        elif isinstance(val, int | float):
+            clipped[key] = val
+        elif isinstance(val, list):
+            items = [item[:300] for item in val if isinstance(item, str) and item.strip()][:20]
+            if items:
+                clipped[key] = items
+    return clipped
+
 
 def _audit_digi_kwargs(req: WorkflowRequest) -> dict[str, str]:
     out: dict[str, str] = {}
@@ -366,6 +396,7 @@ def run_digigraph_workflow_streaming(
 
     workflow_id = str(uuid.uuid4())
     content_streamed = False
+    pending_tool_args: dict[str, list[dict[str, Any]]] = {}
     trace_ctx = {
         "workflow_id": workflow_id,
         "request_id": req.request_id,
@@ -402,6 +433,11 @@ def run_digigraph_workflow_streaming(
                 }
                 if tool_query:
                     tool_payload["query"] = tool_query
+                if args:
+                    clipped = _clip_tool_arguments(args)
+                    if clipped:
+                        tool_payload["arguments"] = clipped
+                        pending_tool_args.setdefault(name.strip(), []).append(clipped)
                 emit(
                     (
                         "trace",
@@ -463,38 +499,43 @@ def run_digigraph_workflow_streaming(
                     ).model_dump(),
                 )
             )
-        if event_type == "tool_result" and isinstance(data, dict) and "rag_sources" in data:
+        if event_type == "tool_result" and isinstance(data, dict):
             # Fire on any retrieval tool's result, hit or miss. "rag_sources" is a key
             # only retrieval handlers set on their return dict (digisearch,
             # digisearch_fetch_all, digivault_search_notes, digivault_get_note,
             # digisearch_research_delegate) — present even when empty on a zero-hit
-            # search. Non-retrieval tools (visualization_agent, digistore_list, todo,
-            # ...) never set this key, so they still never produce a trace here.
-            # Gating on truthiness (as before) meant a zero-hit search never got a
-            # trace event at all: "searched, found nothing" and "never searched"
-            # looked identical downstream. hit_count/query (set by research.py's
-            # execute_search wrapper) are forwarded when present so the browser can
-            # tell the two apart.
-            rag_payload: dict[str, Any] = {
-                "sources": data["rag_sources"],
-                "tool": data.get("name", "digisearch"),
-            }
-            if "query" in data:
-                rag_payload["query"] = data["query"]
-            if "hit_count" in data:
-                rag_payload["hit_count"] = data["hit_count"]
-            emit(
-                (
-                    "trace",
-                    TraceEventV1(
-                        type="rag_sources",
-                        workflow_id=trace_ctx["workflow_id"],
-                        request_id=trace_ctx["request_id"],
-                        session_id=trace_ctx["session_id"],
-                        payload=rag_payload,
-                    ).model_dump(),
+            # search. String error returns omit the key; still emit a completion
+            # trace so the BFF does not leave Allow/Deny on the started row.
+            tool_name = data.get("name")
+            name = tool_name.strip() if isinstance(tool_name, str) and tool_name.strip() else ""
+            has_sources = "rag_sources" in data
+            if has_sources or name in _RETRIEVAL_TOOL_NAMES:
+                sources = data.get("rag_sources") if has_sources else []
+                if not isinstance(sources, list):
+                    sources = []
+                rag_payload: dict[str, Any] = {
+                    "sources": sources,
+                    "tool": name or data.get("name", "digisearch"),
+                }
+                queued = pending_tool_args.get(name) if name else None
+                if queued:
+                    rag_payload["arguments"] = queued.pop(0)
+                if "query" in data:
+                    rag_payload["query"] = data["query"]
+                if "hit_count" in data:
+                    rag_payload["hit_count"] = data["hit_count"]
+                emit(
+                    (
+                        "trace",
+                        TraceEventV1(
+                            type="rag_sources",
+                            workflow_id=trace_ctx["workflow_id"],
+                            request_id=trace_ctx["request_id"],
+                            session_id=trace_ctx["session_id"],
+                            payload=rag_payload,
+                        ).model_dump(),
+                    )
                 )
-            )
         emit((event_type, data))
 
     dg_audit_log(
@@ -572,7 +613,14 @@ def run_digigraph_workflow_streaming(
             },
             **_audit_digi_kwargs(req),
         )
-        emit(("content", f"Error: {e!s}"))
+        from digigraph.llm_errors import LLM_ERROR, sanitize_user_facing_error
+
+        message = sanitize_user_facing_error(str(e), limit=280) or "The workflow failed."
+        detail = sanitize_user_facing_error(str(e))
+        payload: dict[str, str] = {"code": LLM_ERROR, "message": message}
+        if detail and detail != message:
+            payload["detail"] = detail
+        emit(("error", payload))
         emit(("done", None))
         return
 
@@ -584,15 +632,20 @@ def run_digigraph_workflow_streaming(
     )
     error = final.get("error")
     if error:
-        err_code = final.get("error_code")
-        if err_code:
-            emit(
-                (
-                    "error",
-                    {"code": str(err_code), "message": str(error)},
-                )
-            )
-        emit(("content", f"Error: {error}"))
+        from digigraph.llm_errors import LLM_ERROR, sanitize_user_facing_error
+
+        err_code = str(final.get("error_code") or LLM_ERROR)
+        message = sanitize_user_facing_error(str(error), limit=280) or "The request failed."
+        payload: dict[str, str] = {"code": err_code, "message": message}
+        detail_raw = final.get("error_detail")
+        detail = sanitize_user_facing_error(str(detail_raw)) if detail_raw else None
+        if not detail:
+            extra = sanitize_user_facing_error(str(error))
+            if extra and extra != message:
+                detail = extra
+        if detail and detail != message:
+            payload["detail"] = detail
+        emit(("error", payload))
         emit(("done", None))
         return
 

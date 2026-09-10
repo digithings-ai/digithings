@@ -57,6 +57,7 @@ export const BYOK_MODEL_REMEDIABLE_MESSAGE =
 export type ParsedEmbedChatError = {
   code?: EmbedChatErrorCode;
   message?: string;
+  detail?: string;
   raw: string;
 };
 
@@ -65,11 +66,17 @@ export function parseEmbedChatError(error: Error | undefined): ParsedEmbedChatEr
   if (!error?.message) return null;
   const raw = error.message.trim();
   try {
-    const parsed = JSON.parse(raw) as { error?: string; message?: string; code?: string };
+    const parsed = JSON.parse(raw) as {
+      error?: string;
+      message?: string;
+      code?: string;
+      detail?: string;
+    };
     const code = parsed.error ?? parsed.code;
     return {
       code: typeof code === "string" ? code : undefined,
       message: typeof parsed.message === "string" ? parsed.message : undefined,
+      detail: typeof parsed.detail === "string" ? parsed.detail : undefined,
       raw,
     };
   } catch {
@@ -155,17 +162,7 @@ export function formatEmbedChatError(error: Error | undefined): string | null {
   if (!parsed) return null;
 
   const { code, message, raw } = parsed;
-  if (
-    message &&
-    (code === "embed_disabled" ||
-      code === "unauthorized" ||
-      code === "trial_gate" ||
-      code === "free_quota_exceeded" ||
-      code === "rate_limit" ||
-      code === "rate_limit_exceeded" ||
-      (code != null && UPSTREAM_ERROR_CODES.has(code)) ||
-      (code != null && BYOK_MODEL_REMEDIABLE_CODES.has(code)))
-  ) {
+  if (message) {
     return message;
   }
   if (code === "free_quota_exceeded" || raw.includes("free_quota_exceeded")) {

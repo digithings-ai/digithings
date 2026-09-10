@@ -314,6 +314,19 @@ it("maps digigraph_error code to embed-chat-error payload", () => {
   });
 });
 
+it("relays llm_error detail for the embed disclosure", () => {
+  const payload = digigraphErrorToEmbedPayload({
+    code: "llm_error",
+    message: "No endpoints found for this model.",
+    detail: "Error code: 404",
+  });
+  expect(JSON.parse(payload)).toEqual({
+    error: "llm_error",
+    message: "No endpoints found for this model.",
+    detail: "Error code: 404",
+  });
+});
+
 it("drops upstream message for BYOK remediable digigraph_error codes", () => {
   const sensitive = "Provider openai is not supported for your X-BYOK-Provider header.";
   const payload = digigraphErrorToEmbedPayload({
@@ -539,6 +552,83 @@ it("keeps a single unbroken text part when no round_boundary ever fires", async 
   expect(events.filter((e) => e.type === "text-start")).toHaveLength(1);
   expect(events.filter((e) => e.type === "text-end")).toHaveLength(1);
   expect(events.filter((e) => e.type === "text-start")[0]?.id).toBe("assistant-main");
+});
+
+it("emits tool parts before the answer text when tools complete first", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_trace: {
+                  v: 1,
+                  type: "tool_call",
+                  payload: { tool: "digisearch", query: "what is digigraph", status: "started" },
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_trace: {
+                  v: 1,
+                  type: "rag_sources",
+                  payload: {
+                    tool: "digisearch",
+                    query: "what is digigraph",
+                    sources: [
+                      {
+                        snippet: "# digigraph",
+                        metadata: { source_url: "repo://digithings/digigraph/ARCHITECTURE.md" },
+                      },
+                    ],
+                    hit_count: 1,
+                  },
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "digigraph is the hub." } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("What is digigraph?")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+  const events = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("data: ") && l !== "data: [DONE]")
+    .map((l) => JSON.parse(l.slice(6)) as Record<string, unknown>);
+
+  const types = events.map((e) => e.type);
+  const toolStartAt = types.indexOf("tool-input-start");
+  const textStartAt = types.indexOf("text-start");
+  expect(toolStartAt).toBeGreaterThanOrEqual(0);
+  expect(textStartAt).toBeGreaterThan(toolStartAt);
+
+  const input = events.find((e) => e.type === "tool-input-available");
+  expect(input?.input).toEqual({ query: "what is digigraph" });
+  const output = events.find((e) => e.type === "tool-output-available");
+  expect(output?.output).toMatchObject({
+    query: "what is digigraph",
+    hitCount: 1,
+  });
+  expect(Array.isArray((output?.output as { documents?: unknown[] })?.documents)).toBe(true);
 });
 
 it("opts digigraph out of Open WebUI format on the dogfood stream path", async () => {

@@ -135,6 +135,7 @@ describe("applyActivityDetail", () => {
     expect(out.reasoningDelta).toBeUndefined();
     expect(out.label).toBe("Sources");
     expect(out.query).toBe("auth");
+    expect(out.hitCount).toBe(1);
   });
 
   // The signal the projector needs to tell "results withheld" apart from

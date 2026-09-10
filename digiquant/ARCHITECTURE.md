@@ -338,7 +338,7 @@ plus an exact round-trip vs `compute_indicators` on the same history
 record goldens WITH a `close` column, then promote the premise guard to a
 real golden-value comparison.
 
-Macro carve-out: migration `122_drop_market_data_tables.sql` drops
+Macro carve-out: migration `124_drop_market_data_tables.sql` drops
 `price_history` + `price_technicals` ONLY — `macro_series_observations`
 stays (fedprob/bitview have no R2 homes; future work). Post-cutover size
 gate (`data/cutover_gate.py`, `POST_CUTOVER_SIZE_GATE_MB=320`) reads the
@@ -1814,13 +1814,18 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   (submission now uses the sells-first ordering for both paths).
   Forward verify: `digiquant/scripts/research/verify_nav_replay.py` rebuilds
   the causal schedule + bars from Supabase and fails non-zero on NAV breach.
-  **Single source of truth (#3695):** the engine is the last writer of
-  `nav_history` under normal ordering via `verify_nav_replay.py --write`
-  (inception-100 normalization; `pipeline-research-metrics.yml` runs it before
-  metrics). The booking path (`portfolio_materialize.py`) still writes
-  provisional house rows at book time, so "sole writer" means last-writer
-  under the documented step order — a read-only `verify_nav_replay` (no
-  `--write`) step runs after metrics so drift fails loudly.
+   **Single source of truth (#3695, hardened #3803/#3804):** the engine is the last writer of
+   `nav_history` under normal ordering via `verify_nav_replay.py --write`
+   (inception-100 normalization; `pipeline-research-metrics.yml` runs it before
+   metrics). The booking path (`portfolio_materialize.py`, H9
+   `commit_io.book_portfolio`) still writes provisional house rows at book time,
+   but an existing row for the same `(workspace_id, date)` now keeps the stored
+   NAV (refreshing only H9-owned `cash_pct`/`invested_pct`) — a book re-dispatch
+   after the engine step keeps the engine NAV instead of clobbering it (#3804). Fetches page by last-seen-key
+   cursor over a deterministic `(date, ticker)` order (never offsets) and refuse
+   to verify or write from a truncated/unstable page (#3803). A read-only
+   `verify_nav_replay` (no `--write`) step runs after metrics so drift fails
+   loudly.
   `refresh_performance_metrics.refresh_nav_point` only guards the engine row;
   `pnl_pct` reads the stored engine series (finalized-accounting precedence
   retired — it caused the Sept 2026 scale break); `update_tearsheet.py` no
@@ -3075,7 +3080,11 @@ newest run per owner live in Supabase (resume only ever touches the current run 
 `--retain-days` / `--keep` intersect that set. `evict_to_watermark` deletes
 oldest-first down from the 8.5GB high watermark to the 7GB low watermark (ledger
 `size` sum), never touching the latest run's keys; `reconcile_ledger` drops dead
-ledger rows and reports orphan R2 keys without auto-deleting them. `resolve_payload`
+ledger rows and reports orphan R2 keys without auto-deleting them. Every key and
+ledger scan pages explicitly past the PostgREST 1000-row cap (`_scan_all` over
+`DOC_SCAN_PAGE_SIZE`); `evict_to_watermark` keeps a local running total instead of
+re-querying per row, and `reconcile_ledger` lists both `checkpoints/` and
+`documents/` prefixes. `resolve_payload`
 is the read-through contract: pointer lookup → R2 GET → sha256 verify
 (`ArchiveVerifyError`) → decompress (`ArchiveNotFoundError` when no pointer row).
 Documents phase (migration 120): pointer-per-row for non-latest
@@ -3084,7 +3093,15 @@ Documents phase (migration 120): pointer-per-row for non-latest
 `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`, endpoint
 built as `https://<account>.r2.cloudflarestorage.com`.
 `.github/workflows/pipeline-checkpoint-archive.yml` runs it daily. The live
-checkpointer path is untouched.
+checkpointer path is untouched. Read-through consumers (#3792):
+`read_archived_document` wraps `resolve_payload` + JSON decode (``None`` on
+pointer-miss / corrupt bytes, never raises on a read path); document readers
+take an optional `store` (tests inject a fake, production resolves the R2
+backend from `R2_*` env, absent creds disable read-through). Wired into the
+dashboard fallback (`research_retrieval/queries.py::_query_documents_row` via
+`query_research`) and the research priors (`research/supabase_io.py`:
+`load_prior_context`, analyst/deliberation summaries, `load_latest_beliefs_document`).
+Only the `payload` cell is archived — `content` is untouched.
 
 **RLS.** Every strategy-store table RLS-enabled. Public reference + tearsheet tables grant
 `anon SELECT USING (true)`; writers use the service role (RLS bypass). `strategy_calibrations`

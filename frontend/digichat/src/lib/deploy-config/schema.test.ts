@@ -36,6 +36,7 @@ describe("DigichatConfigSchema", () => {
     expect(cfg.deployment?.cli.enabled).toBe(false);
     expect(cfg.deployment?.models.available).toEqual([]);
     expect(cfg.deployment?.gate.activityDetail).toBe("labels");
+    expect(cfg.deployment?.features.attachments).toBe(true);
   });
 
   it("coerces reasoning/toolCalls booleans", () => {
@@ -213,6 +214,16 @@ describe("DigichatConfigSchema", () => {
     expect(cfg.deployment?.gate.requiredPlanTier).toBe("desk");
     expect(cfg.deployment?.gate.showByok).toBe(true);
     expect(cfg.deployment?.gate.llmAccess).toBe("operator");
+    expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4-flash");
+    expect(cfg.deployment?.models.available).toEqual([
+      "deepseek/deepseek-v4-flash",
+      "deepseek/deepseek-v4-flash-0731",
+      "openai/gpt-oss-120b",
+      "z-ai/glm-5.3-flash",
+    ]);
+    expect(cfg.deployment?.models.available.some((id) => id.endsWith(":free"))).toBe(
+      false,
+    );
   });
 
   it("pins product embed YAML to digichat skin + digigraph tool catalog", () => {
@@ -233,6 +244,17 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.tools?.catalog.find((t) => t.id === "web_search")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digisearch")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digivault")?.default).toBe(true);
+    expect(dt?.models.allowPicker).toBe(true);
+    expect(dt?.models.default).toBe("deepseek/deepseek-v4-flash");
+    expect(dt?.models.available).toEqual([
+      "deepseek/deepseek-v4-flash",
+      "deepseek/deepseek-v4-flash-0731",
+      "openai/gpt-oss-120b",
+      "z-ai/glm-5.3-flash",
+    ]);
+    expect(dt?.models.available.some((id) => id.endsWith(":free"))).toBe(false);
+    expect(dt?.models.available).not.toContain("google/gemini-3.1-flash-lite");
+    expect(dt?.models.available).not.toContain("openai/gpt-5.6-luna");
     expect(allowedForceTools(dt)).toEqual(["digisearch", "digivault"]);
 
     const occ = parseDigichatConfig(
@@ -273,6 +295,9 @@ describe("DigichatConfigSchema", () => {
       if (id === "digichat") {
         expect(cfg.deployment?.chrome.transcript.userAlign).toBe("left");
         expect(cfg.deployment?.chrome.theme).toBe("dark");
+        expect(welcomeTitle(cfg.deployment?.chrome.welcome)).toBe("Ask a question");
+        expect(cfg.deployment?.tools?.catalog ?? []).toEqual([]);
+        expect(cfg.deployment?.features.attachments).toBe(true);
       }
     }
   });

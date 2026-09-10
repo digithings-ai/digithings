@@ -1,4 +1,4 @@
-"""Unit tests for migration 122 — drop Supabase price tables post-cutover (#3780).
+"""Unit tests for migration 124 — drop Supabase price tables post-cutover (#3780).
 
 Point of no return for the R2 market-data cutover (spec §7.4): with reads
 routed via R2 (Task 7b dispatcher matrix) and parity green (Task 7), the
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-M122 = MIGRATIONS_DIR / "122_drop_market_data_tables.sql"
+M124 = MIGRATIONS_DIR / "124_drop_market_data_tables.sql"
 M121 = MIGRATIONS_DIR / "121_checkpoint_blobs_nullable.sql"
 
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
@@ -37,19 +37,19 @@ DROPPED_TABLES = ("price_history", "price_technicals")
 
 @pytest.fixture(scope="module")
 def raw() -> str:
-    assert M122.is_file(), f"migration missing: {M122}"
-    return M122.read_text(encoding="utf-8")
+    assert M124.is_file(), f"migration missing: {M124}"
+    return M124.read_text(encoding="utf-8")
 
 
-def test_migration_122_is_only_122_file() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("122_*.sql")) == [M122]
+def test_migration_124_is_only_124_file() -> None:
+    assert sorted(MIGRATIONS_DIR.glob("124_*.sql")) == [M124]
 
 
 def test_header_convention_matches_119_to_121(raw: str) -> None:
     """First-six-line shape must match 121 exactly, modulo the filename."""
     prior = M121.read_text(encoding="utf-8").splitlines()
     lines = raw.splitlines()
-    assert lines[0] == f"-- {M122.name}"
+    assert lines[0] == f"-- {M124.name}"
     assert lines[1:6] == prior[1:6]
 
 

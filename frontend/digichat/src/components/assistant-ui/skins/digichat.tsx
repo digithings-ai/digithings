@@ -19,6 +19,10 @@ import {
   type TranscriptTurn,
 } from "@digithings/digichat-ui";
 import { DigichatThread, type ThreadSlashTrigger } from "@digithings/web/chat/thread";
+import {
+  BASELINE_EMBED_PLACEHOLDER,
+  BASELINE_EMBED_WELCOME,
+} from "@/lib/baseline-embed";
 import { useComposerCopy, useSkinChrome } from "@/components/stock/skin-chrome";
 import { useStockComposerGateSubmit, useStockSendGate } from "@/components/stock/stock-send-gate";
 import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
@@ -43,8 +47,8 @@ import {
  */
 export function DigichatSkin() {
   const { welcome, welcomeBody, placeholder } = useComposerCopy(
-    "What should we inspect?",
-    "Ask digichat…",
+    BASELINE_EMBED_WELCOME,
+    BASELINE_EMBED_PLACEHOLDER,
   );
   const { mode } = useSkinChrome();
   const gateSubmit = useStockComposerGateSubmit();

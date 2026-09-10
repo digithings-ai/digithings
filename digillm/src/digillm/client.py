@@ -420,6 +420,9 @@ _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "google/gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
     "openai/gpt-5.6-luna": "gpt-5.6-luna",
     "openai/gpt-5.6-sol": "gpt-5.6-sol",
+    "deepseek/deepseek-v4-flash-0731": "deepseek-v4-flash-0731",
+    "openai/gpt-oss-120b": "gpt-oss-120b",
+    "z-ai/glm-5.3-flash": "glm-5.3-flash",
 }
 
 
@@ -461,15 +464,46 @@ def cheaperinference_bare_id_for_house_slug(model: str) -> str | None:
     return _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE.get(model)
 
 
+def _cheaperinference_api_base() -> str:
+    return (
+        os.environ.get("CHEAPERINFERENCE_API_BASE") or ""
+    ).strip() or _DEFAULT_CHEAPERINFERENCE_API_BASE
+
+
+def _cheaperinference_direct_house() -> bool:
+    """True when mapped house slugs should hit hosted CI, not OpenRouter.
+
+    LiteLLM proxy stays on the overlay (merged ``model_name`` keys). Direct
+    clients (CLI / leftover ``OPENAI_API_BASE``) prefer CI whenever the key
+    is set — including when ``OPENROUTER_API_KEY`` is also present.
+    """
+    if _litellm_proxy_configured():
+        return False
+    return cheaperinference_house_preferred() or _api_base_is_cheaperinference()
+
+
+def _cheaperinference_direct_client() -> OpenAI:
+    """Uncached-on-key-change client pointed at hosted Cheaper Inference."""
+    key = (os.environ.get("CHEAPERINFERENCE_API_KEY") or "").strip() or _default_client_api_key()
+    base = _cheaperinference_api_base().rstrip("/")
+    cache_key: tuple[str, str | None] = (key, base)
+    client = _client_cache.get(cache_key)
+    if client is None:
+        client = OpenAI(api_key=key, base_url=base, timeout=_REQUEST_TIMEOUT)
+        _client_cache[cache_key] = client
+    return client
+
+
 def _is_ci_catalog_miss(model: str) -> bool:
-    """CI is the default base but this house slug is not on the CI catalog.
+    """Selected house upstream is CI but this house slug is not on the catalog.
 
     Fail-fast: callers raise via :func:`_raise_for_ci_catalog_miss` — there is
     no quiet OpenRouter fallback. A misconfigured pin must surface, not spend
-    silently on another upstream.
+    silently on another upstream. LiteLLM proxy is excluded: the merged overlay
+    still carries OpenRouter-only pins (sonar, :online, …).
     """
     return (
-        _api_base_is_cheaperinference()
+        _cheaperinference_direct_house()
         and _is_openrouter_backed_house_slug(model)
         and cheaperinference_bare_id_for_house_slug(model) is None
     )
@@ -625,7 +659,7 @@ def _with_byok_litellm_pass_through(kwargs: dict[str, Any]) -> dict[str, Any]:
 def _effective_model_id(model: str) -> str:
     """Model id on the wire: full caller string for LiteLLM; vendor slug otherwise."""
     bare = cheaperinference_bare_id_for_house_slug(model)
-    if bare is not None and _api_base_is_cheaperinference():
+    if bare is not None and _cheaperinference_direct_house():
         return bare
     if _is_ci_catalog_miss(model):
         _raise_for_ci_catalog_miss(model)
@@ -668,11 +702,12 @@ def get_client_for_model(model: str) -> OpenAI:
     # there is no OpenRouter fallback.
     if _is_ci_catalog_miss(model):
         _raise_for_ci_catalog_miss(model)
-    elif (
-        cheaperinference_bare_id_for_house_slug(model) is not None
-        and _api_base_is_cheaperinference()
+    elif cheaperinference_bare_id_for_house_slug(model) is not None and (
+        _cheaperinference_direct_house()
     ):
-        return get_client()
+        if _api_base_is_cheaperinference():
+            return get_client()
+        return _cheaperinference_direct_client()
     if provider is None or _use_default_base_client(model):
         return get_client()
     cfg = _EXTERNAL_PROVIDERS[provider]

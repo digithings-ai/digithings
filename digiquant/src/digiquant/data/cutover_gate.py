@@ -1,7 +1,7 @@
 """Post-cutover database size gate for the R2 market-data cutover (#3780).
 
 PASS = ``pg_database_size`` total <= ``POST_CUTOVER_SIZE_GATE_MB`` after
-migration 122 drops ``price_history`` + ``price_technicals``.
+migration 124 drops ``price_history`` + ``price_technicals``.
 
 Derivation (spec §7.4, ruling 2026-09-09): 512MB measured 2026-09-09 minus
 ~48MB deferred documents-vacuum minus ~172MB price tables = ~292MB
