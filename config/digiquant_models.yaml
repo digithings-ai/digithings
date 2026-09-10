@@ -27,12 +27,11 @@
 #   balanced  — cheap pool + mid-tier (Gemini Flash, GPT-5.6 Luna, Grok), all bare
 #   quality   — unbounded frontier models; no auto-router sanitization
 #
-# Pools prefer the latest generation release per vendor as of #2368 (2026-08-14,
-# grok-4.6 added 2026-08-15) where cost allows — balanced keeps grok-4.3 rather
-# than the current grok-4.6 flagship, which is quality-only. See
-# docs/providers/snapshots/*.yaml for the vendor model IDs this was checked
-# against as of that file's own last_checked date; a slug added after a
-# snapshot was last refreshed won't appear there yet.
+# Pools are CI-mapped only (#3660 / #3788): maverick, grok-4.3/4.6, sonar, and
+# anthropic frontier pins are NOT in phase or web_search pools (and the matching
+# OpenRouter litellm.yaml routes were retired). See
+# docs/providers/snapshots/*.yaml for vendor model IDs checked historically;
+# a slug added after a snapshot was last refreshed won't appear there yet.
 # Endpoint capability (tools + strict json_schema + context floor) is live-verified
 # by scripts/validate_digiquant_pools.py (.github/workflows/validate-digiquant-pools.yml).
 #
