@@ -298,10 +298,17 @@ export function writeStandardActivity(
   });
 }
 
-/** Close an open reasoning block and auto-complete leftover read-tool rows. */
+/**
+ * Close an open reasoning block and settle leftover tool rows. Rows still
+ * open at stream end normally completed without a final trace — complete
+ * them. When the stream itself errored (`failed`), mark them failed instead:
+ * auto-completing orphans as success renders a lie (a "success" row whose
+ * tool never returned).
+ */
 export function finishStandardActivity(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
+  failed = false,
 ): void {
   closeOpenReasoning(writer, ctx);
   for (const [name, queue] of ctx.pendingByName) {
@@ -310,7 +317,7 @@ export function finishStandardActivity(
       const stored = ctx.inputById.get(id) ?? {};
       const span: ActivitySpan = {
         operation: "execute_tool",
-        status: "completed",
+        status: failed ? "failed" : "completed",
         label: name,
         toolName: name,
         ...(Object.keys(stored).length ? { toolInput: stored } : {}),

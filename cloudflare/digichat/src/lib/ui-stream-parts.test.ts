@@ -488,3 +488,31 @@ describe("writeStandardActivity toolResult", () => {
     });
   });
 });
+
+describe("finishStandardActivity on stream error", () => {
+  it("settles orphaned started rows as failed, not completed", () => {
+    const chunks: Record<string, unknown>[] = [];
+    const writer = {
+      write: (c: Record<string, unknown>) => chunks.push(c),
+    };
+    const ctx = createActivityWriteContext();
+    writeStandardActivity(
+      writer as Parameters<typeof writeStandardActivity>[0],
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "azure_ai_search",
+        toolName: "azure_ai_search",
+        query: "Bob",
+      },
+      ctx,
+    );
+    finishStandardActivity(
+      writer as Parameters<typeof finishStandardActivity>[0],
+      ctx,
+      true,
+    );
+    const out = chunks.find((c) => c.type === "tool-output-available");
+    expect(out?.output).toMatchObject({ status: "failed", query: "Bob" });
+  });
+});

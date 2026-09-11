@@ -757,6 +757,7 @@ export async function createFoundryStreamResponse(opts: {
     execute: async ({ writer }) => {
       const textId = "assistant-main";
       let textOpen = false;
+      let streamFailed = false;
       const activityCtx = createActivityWriteContext();
       const openText = () => {
         if (!textOpen) {
@@ -853,6 +854,7 @@ export async function createFoundryStreamResponse(opts: {
         }
       } catch (err) {
         if (opts.signal?.aborted) return;
+        streamFailed = true;
         openText();
         if (err instanceof FoundryProtocolError) {
           writer.write({
@@ -876,7 +878,9 @@ export async function createFoundryStreamResponse(opts: {
           });
         }
       } finally {
-        finishStandardActivity(writer, activityCtx);
+        // Orphaned started rows settle as failed when the stream errored —
+        // auto-completing them as success would render a lie.
+        finishStandardActivity(writer, activityCtx, streamFailed);
         closeText();
       }
     },
