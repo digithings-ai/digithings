@@ -510,6 +510,56 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
   });
 
+  it("forwards web search for first-party (null embedConfig) when DIGICHAT_WEB_SEARCH=1", async () => {
+    process.env.DIGICHAT_WEB_SEARCH = "1";
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      ...mockAuthCtx,
+      embedConfig: null,
+    } as EmbedChatTenantContext);
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-enable-web-search": "1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBe("1");
+  });
+
+  it("does not forward web search for first-party (null embedConfig) when env is unset", async () => {
+    delete process.env.DIGICHAT_WEB_SEARCH;
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      ...mockAuthCtx,
+      embedConfig: null,
+    } as EmbedChatTenantContext);
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-enable-web-search": "1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
+  });
+
   it("ignores X-Digi-Force-Tool on regenerate (send-only)", async () => {
     const res = await POST(
       new Request("http://localhost/api/chat", {
