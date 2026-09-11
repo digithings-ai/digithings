@@ -16,9 +16,9 @@ digithings (digithings.ai) is an open-core modular agentic stack for building co
 |---------|------------|------|--------------|----------------|-----------|--------|
 | **digigraph** | 8000 | LangGraph orchestration hub; OpenAI-compatible API; delegates to verticals | JWT (digikey) — 503 if not configured | core (always on) | Yes — `python -m digigraph.mcp_server` | Shipped |
 | **digiquant** | 8001 | NautilusTrader backtest/optimize; ordered quant pipeline; orchestrator endpoints | JWT (`digiquant:backtest`, `digiquant:optimize`) | core | Yes — `python -m digiquant.mcp_server` | Shipped |
-| **digisearch** | 8002 | RAG pipeline; document ingestion; vector search (Chroma/Azure) | JWT (`digisearch:query`, `digisearch:ingest`) | core | Yes — `docker compose --profile digisearch-mcp up` | Shipped |
+| **digisearch** | 8002 | RAG pipeline; document ingestion; vector search (Chroma/Azure) | JWT (`digisearch:query`, `digisearch:ingest`) | core | Yes — `docker compose --profile digisearch-mcp up`; stack loopback :8765 via supervisord | Shipped |
 | **digismith** | 8003 | LangSmith-aligned tracing helpers (library); health + `/v1/status` endpoint | None (public metadata) | core | No | Shipped |
-| **digivault** | 8004 | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags) | JWT (`digivault:read`, `digivault:write`) | digivault | Yes — `python -m digivault.mcp_server` | New |
+| **digivault** | 8004 | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags) | JWT (`digivault:read`, `digivault:write`) | digivault | Yes — `docker compose --profile digivault-mcp up`; stack loopback :8769 via supervisord | New |
 | **LiteLLM** | 4000 | LLM routing proxy (100+ providers); response cache; rate limiting | `LITELLM_MASTER_KEY` Bearer | core | No | Shipped |
 | **digikey** | 8005 | API key issuance; JWT exchange (RS256); JWKS endpoint | Admin token for key issuance | core | No | Shipped |
 | **Ollama** | 11435 (host) | Local LLM inference (maps to container port 11434) | None | core | No | Shipped |
@@ -106,13 +106,14 @@ sequenceDiagram
 
 ## 4. MCP Server Topology
 
-MCP (Model Context Protocol) is the standard for tool discovery and invocation at the edge of the digithings ecosystem. digigraph, digiquant, and digisearch each expose MCP servers. digikey, digismith, and digiclaw do not (digiclaw MCP integration is Phase 2).
+MCP (Model Context Protocol) is the standard for tool discovery and invocation at the edge of the digithings ecosystem. digigraph, digiquant, digisearch, and digivault each expose MCP servers. digikey, digismith, and digiclaw do not (digiclaw MCP integration is Phase 2).
 
 | Component | MCP Server Command | Host Port | Exposed Tools (examples) | Typical Clients |
 |-----------|-------------------|-----------|--------------------------|-----------------|
-| **digigraph** | `python -m digigraph.mcp_server` (install: `pip install -e "digigraph[mcp]"`) | stdio or SSE | `workflow`, `chat`, `thread_state`, `list_orchestrator_tools`, `list_orchestrator_tools_detailed` | digiclaw (Phase 2), IDE plugins, Claude Desktop |
+| **digigraph** | `python -m digigraph.mcp_server` (install: `pip install -e "digigraph[mcp]"`); in the cloudflare stack, loopback `:8766` inside `DigiStackContainer` via the `digigraph-mcp` supervisord program (no public route yet) | 8766 or stdio | `workflow`, `chat`, `thread_state`, `list_orchestrator_tools`, `list_orchestrator_tools_detailed` | digiclaw (Phase 2), IDE plugins, Claude Desktop |
 | **digiquant** | `python -m digiquant.mcp_server` | stdio or SSE | `digiquant_run_pipeline`, `digiquant_list_strategies`, `run_backtest`, `run_optimize`, `run_validation` | digigraph (invokes via HTTP orchestrator), power-user IDE |
-| **digisearch** | `docker compose --profile digisearch-mcp up` → container port 8765 | 8765 | `digisearch_query`, `digisearch_fetch_all`, `digisearch_research_turn` (with `digisearch[agent]`), `digisearch_research_delegate` | digigraph (invokes via HTTP orchestrator), Langflow, IDE |
+| **digisearch** | `docker compose --profile digisearch-mcp up` → container port 8765; in the cloudflare stack, loopback `:8765` inside `DigiStackContainer` via the `digisearch-mcp` supervisord program (no public route yet) | 8765 | `digisearch_query`, `digisearch_fetch_all`, `digisearch_research_turn` (with `digisearch[agent]`), `digisearch_research_delegate` | digigraph (invokes via HTTP orchestrator), Langflow, IDE |
+| **digivault** | `docker compose --profile digivault-mcp up` → container port 8769; in the cloudflare stack, loopback `:8769` inside `DigiStackContainer` via the `digivault-mcp` supervisord program (no public route yet) | 8769 | `digivault_search_tag`, `digivault_backlinks`, `digivault_lint`, `digivault_create_note` (`digivault_search_notes` / `digivault_get_note` stay orchestrator-only) | digigraph (invokes via HTTP orchestrator), IDE |
 
 **Design notes:**
 

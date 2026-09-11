@@ -80,6 +80,48 @@ def test_complete_tool_rejects_empty_messages(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.unit
+def test_complete_tool_names_missing_provider_key_without_keys_or_base(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No provider key + no OPENAI_API_BASE must name the key, not refuse the connection.
+
+    House routing prefers Cheaper Inference when CHEAPERINFERENCE_API_KEY is set and
+    otherwise falls back to the default client (LITELLM_PROXY_API_KEY / OPENAI_API_KEY).
+    With all of those plus OPENAI_API_BASE cleared, complete must fail fast through
+    _completion's key resolution — never a bare connection refusal.
+    """
+    for var in (
+        "CHEAPERINFERENCE_API_KEY",
+        "CHEAPERINFERENCE_API_BASE",
+        "CHEAPERINFERENCE_HOUSE",
+        "DIGI_HOUSE_UPSTREAM",
+        "LITELLM_PROXY_API_KEY",
+        "OPENAI_API_KEY",
+        "OPENAI_API_BASE",
+        "DIGILLM_TRUSTED_LITELLM_BASES",
+        "OPENROUTER_API_KEY",
+        "XAI_API_KEY",
+        "GEMINI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GROQ_API_KEY",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    digillm.clear_caches()
+
+    async def _run() -> Any:
+        return await digillm_mcp.call_tool(
+            "complete",
+            {
+                "model": "deepseek/deepseek-v4-flash",
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+        )
+
+    with pytest.raises(Exception, match="CHEAPERINFERENCE_API_KEY|OPENAI_API_KEY"):
+        asyncio.run(_run())
+
+
+@pytest.mark.unit
 def test_run_mcp_applies_bind_to_settings_not_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

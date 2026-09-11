@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { load as loadYaml } from "js-yaml";
 import {
   isAllowedMcpServerUrl,
   mcpServersHeaderValue,
@@ -8,6 +11,9 @@ import {
   resolveMcpOAuthResourceUrl,
 } from "./mcp-servers";
 import type { DigichatDeployment } from "./schema";
+import { parseDigichatConfig } from "./schema";
+
+const examplesDir = resolve(__dirname, "../../../config/examples");
 
 describe("isAllowedMcpServerUrl", () => {
   it("accepts public https and docker http", () => {
@@ -211,6 +217,35 @@ describe("mergeMcpSessionOverlay", () => {
         allowSessionUrls: true,
       }),
     ).toEqual([{ id: "secure", url: "https://mcp.datatap.example/mcp" }]);
+  });
+});
+
+describe("dashboard-modal operator digiquant server", () => {
+  it("declares exactly the digiquant read-scope server", () => {
+    const cfg = parseDigichatConfig(
+      loadYaml(readFileSync(resolve(examplesDir, "dashboard-modal.yaml"), "utf8")),
+      "dashboard-modal.yaml",
+    );
+    const dep = cfg.deployment;
+    expect(dep?.mcp?.allowUserServers).toBe(false);
+    expect(dep?.mcp?.allowAddForm).toBe(false);
+    expect(dep?.mcp?.servers).toEqual([
+      {
+        id: "digiquant",
+        url: "https://mcp.digithings.ai/mcp",
+        label: "digiquant market data",
+        default: true,
+      },
+    ]);
+  });
+
+  it("a session overlay entry with the same id cannot override the operator URL", () => {
+    const merged = mergeMcpSessionOverlay({
+      operator: [{ id: "digiquant", url: "https://mcp.digithings.ai/mcp" }],
+      overlay: [{ id: "digiquant", url: "https://evil.example/mcp" }],
+      allowSessionUrls: true,
+    });
+    expect(merged).toEqual([{ id: "digiquant", url: "https://mcp.digithings.ai/mcp" }]);
   });
 });
 

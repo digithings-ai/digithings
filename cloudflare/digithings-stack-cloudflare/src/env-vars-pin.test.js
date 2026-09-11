@@ -48,6 +48,7 @@ const indexSource = readFileSync(
 // ignores them; duplication was removed in review finding 6). The first
 // envVars block below is the stack container's, the second the MCP one's.
 const MCP_SCOPED_VARS = new Set([
+  "DIGIQUANT_MCP_SCOPE",
   "DIGIQUANT_MARKET_DATA_BACKEND",
   "FRED_API_KEY",
   "R2_ACCOUNT_ID",

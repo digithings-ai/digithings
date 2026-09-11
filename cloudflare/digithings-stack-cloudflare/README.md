@@ -16,6 +16,9 @@ One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 | _(loopback only)_ | digivault `:8004` | Vault notes |
 | _(loopback only)_ | LiteLLM `:4000` | LLM router |
 | _(loopback only)_ | Redis `:6379` | digikey blocklist |
+| _(loopback only)_ | digisearch-mcp `:8765` | RAG MCP (fail-loud backend gate) |
+| _(loopback only)_ | digivault-mcp `:8769` | vault-notes MCP (4 vault-local tools) |
+| _(loopback only)_ | digigraph-mcp `:8766` | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
 
 ```text
 Pages digithings.ai/chat[/occ]
@@ -61,6 +64,26 @@ npx wrangler secret put GROQ_API_KEY
 
 npx wrangler deploy
 ```
+
+Manual deploys also run through
+[`deploy-digithings-stack-cloudflare.yml`](../../.github/workflows/deploy-digithings-stack-cloudflare.yml)
+(`workflow_dispatch` only, behind the `production` environment gate — stays
+human-approved; PRs touching the stack run the `check` job only). The digiquant-mcp
+container reads its market-data secrets from the Worker environment — set each value via
+stdin (`$VALUE`-only, never commit values):
+
+```bash
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put FRED_API_KEY
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCOUNT_ID
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_BUCKET
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCESS_KEY_ID
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_SECRET_ACCESS_KEY
+```
+
+The `env -u CLOUDFLARE_API_TOKEN` prefix is load-bearing: that variable doubles as
+wrangler's own auth token, so leaving it exported makes wrangler authenticate as the
+Vectorize/D1-scoped secret instead of your login session (auth error 10000) — see the
+trap documented in `wrangler.toml:116-129`.
 
 Custom domains `graph.digithings.ai` / `key.digithings.ai` are declared in
 `wrangler.toml`. First deploy may take several minutes (image build + provision).
@@ -176,6 +199,12 @@ Ollama in this path unless you need them.
 | digivault `:8004` | loopback | Notes |
 | LiteLLM `:4000` | loopback | LLM router |
 | Redis `:6379` | loopback | digikey blocklist |
+| digisearch-mcp `:8765` | loopback | RAG MCP (fail-loud backend gate) |
+| digivault-mcp `:8769` | loopback | vault-notes MCP (4 vault-local tools) |
+| digigraph-mcp `:8766` | loopback | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
+
+hosted `:8765` `web_search` uses the embedded ddgs fallback (no searxng sidecar in-stack);
+compose-local searxng via `DIGISEARCH_SEARXNG_URL` remains for dev.
 
 **Omitted on purpose:** digiquant, digismith HTTP, Ollama, heartbeat.
 

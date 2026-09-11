@@ -147,8 +147,12 @@ export class DigiQuantMcpContainer extends Container {
    * Runtime env for the MCP process. Secrets from `wrangler secret put`.
    * Pass-through, no silent default flip: unset/empty keeps the library
    * default (`supabase`); operators set this to "r2" explicitly via env.
+   * Scope is the one deliberate hosted default: the container runs `read`
+   * ONLY (`full` never leaves localhost); local runs keep defaulting to
+   * `full` in `digiquant/mcp_server.py`.
    */
   envVars = {
+    DIGIQUANT_MCP_SCOPE: env.DIGIQUANT_MCP_SCOPE ?? "read",
     DIGIQUANT_MARKET_DATA_BACKEND: env.DIGIQUANT_MARKET_DATA_BACKEND ?? "",
     FRED_API_KEY: env.FRED_API_KEY ?? "",
     R2_ACCOUNT_ID: env.R2_ACCOUNT_ID ?? "",
@@ -223,6 +227,7 @@ export interface Env {
   DIGI_HOUSE_UPSTREAM?: string;
   LITELLM_PROXY_API_KEY?: string;
   LITELLM_MASTER_KEY?: string;
+  DIGIQUANT_MCP_SCOPE?: string;
   DIGIQUANT_MARKET_DATA_BACKEND?: string;
   FRED_API_KEY?: string;
   R2_ACCOUNT_ID?: string;

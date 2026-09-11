@@ -18,6 +18,7 @@ from digikey.integrations.service_middleware import DigiAuthMiddleware, digisear
 
 from digisearch import __version__
 from digisearch.agent.pipeline_models import ResearchTurnOutput
+from digisearch.backend_require import require_real_search_backend
 from digisearch.core.models import Query
 from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TOP_K
 from digisearch.logging import configure_logging
@@ -29,7 +30,7 @@ from digisearch.orchestrator_tools import (
     OpenAIToolDict,
 )
 from digisearch.pipeline.ingest import IngestError, ingest_source
-from digisearch.search._stub import _first_env, query_index
+from digisearch.search._stub import query_index
 from digisearch.web_search.models import WebSearchConfigError, WebSearchRequest, WebSearchResponse
 
 configure_logging()
@@ -66,36 +67,7 @@ app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=digisea
 @app.on_event("startup")
 def _require_real_search_backend() -> None:
     """Fail startup unless Vectorize, Azure, Chroma, or DIGISEARCH_ALLOW_STUB=1 (unit tests) is set."""
-    allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-    )
-    if allow_stub:
-        logger.warning("digisearch: DIGISEARCH_ALLOW_STUB=1 — in-memory stub allowed (tests only).")
-        return
-    # Canonical-first, legacy-fallback (#2239 credential rename) -- same precedence
-    # `_vectorize_backend` uses, so this startup gate can never disagree with the
-    # backend it's gating.
-    if _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID") and _first_env(
-        "CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN"
-    ):
-        return
-    from digisearch.indexes.backends import azure_search as _az
-
-    azure_ok = False
-    try:
-        azure_ok = _az.is_azure_configured()
-    except (OSError, ImportError, AttributeError, RuntimeError, TypeError) as exc:
-        logger.warning("Azure backend probe failed at startup: %s", exc)
-        azure_ok = False
-    chroma_ok = bool(os.environ.get("CHROMA_PATH") or os.environ.get("CHROMA_HOST"))
-    if not azure_ok and not chroma_ok:
-        raise RuntimeError(
-            "digisearch requires a real backend: set CLOUDFLARE_ACCOUNT_ID+CLOUDFLARE_API_TOKEN "
-            "(or legacy VECTORIZE_*/D1_* names), AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST, "
-            "or DIGISEARCH_ALLOW_STUB=1 for tests only."
-        )
+    require_real_search_backend()
 
 
 _rl_windows: dict[str, _deque] = {}

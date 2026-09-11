@@ -101,6 +101,8 @@ The MCP server (`mcp_server.py`, FastMCP) exposes:
 
 Default transport: **streamable-http** on port 8766. `--stdio` mode available for Claude Desktop integration.
 
+The server binds loopback by default (`127.0.0.1:8766`; `DIGIGRAPH_MCP_HOST` overrides the host). With `DIGI_MCP_REQUIRE_AUTH=1`, the `workflow` tool refuses unauthenticated calls unless a digikey verifier is configured (`DIGIKEY_JWKS_URL` or `DIGIKEY_PUBLIC_KEY_PEM`) — fail-closed. All LLM calls on the `workflow`/`chat` path go through `digigraph.llm_client` (LiteLLM proxy at `OPENAI_API_BASE`, default `http://127.0.0.1:4000/v1`; `DIGI_LLM_MODE=test` in the stack). In the cloudflare stack the server runs as the `digigraph-mcp` supervisord program (loopback `:8766`, no Worker route).
+
 The MCP server uses FastAPI's `TestClient` internally for `chat` and `thread_state` calls — it instantiates the full FastAPI app in-process rather than making real HTTP calls. This means MCP requests bypass the rate limiter and auth middleware (TestClient is exempted by the `ip == "testclient"` check in `rate_limit.py:62`).
 
 ### 3.3 Streaming Behavior
@@ -722,7 +724,7 @@ What is still missing is preemption — no exception is injected into a node alr
 
 ### 6.8 MCP Server Auth Gap
 
-The MCP server (`mcp_server.py`) has no built-in authentication layer. The `streamable-http` transport binds to `0.0.0.0:8766` by default, making it network-accessible. The `workflow` and `chat` MCP tools invoke the workflow directly (bypassing HTTP middleware including `DigiAuthMiddleware`). Operators must use network policy or a gateway in front of the MCP server.
+The MCP server (`mcp_server.py`) binds loopback (`127.0.0.1:8766`) by default (`DIGIGRAPH_MCP_HOST` overrides the host). The `workflow` tool honors the `DIGI_MCP_REQUIRE_AUTH=1` fail-closed gate (refuses without `DIGIKEY_JWKS_URL` / `DIGIKEY_PUBLIC_KEY_PEM`); a wider bind still needs network policy or a gateway in front of the MCP server.
 
 ### 6.9 Manifest Cache Never Invalidates
 

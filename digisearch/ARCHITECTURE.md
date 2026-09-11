@@ -300,7 +300,23 @@ MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streama
 
 Tool parameters for `digisearch_query`: `text`, `index_name`, `top_k`, `mode`.
 
-The MCP server has a module-level client hook (`_digisearch_client`) for wiring a real backend at startup. Without it, falls back to the stub. In production this should always be wired.
+The `digisearch mcp` CLI builds a real `DigiSearch` client first
+(`DigiSearchConfig.from_config` when `--config` is passed, else
+`DigiSearchConfig.from_env()`), wires it via `create_mcp_with_indexes(client)`,
+then calls `run_mcp`. `run_mcp` fails loud through the shared
+`backend_require.require_real_search_backend()` gate — the same precedence the
+HTTP startup gate enforces (Cloudflare `CLOUDFLARE_ACCOUNT_ID` +
+`CLOUDFLARE_API_TOKEN` with legacy `VECTORIZE_*` / `D1_*` fallback → Azure →
+Chroma → `RuntimeError`), so without a backend and without
+`DIGISEARCH_ALLOW_STUB=1` the command exits non-zero instead of serving stub
+results. The stub fallback stays unit-tests-only: never set
+`DIGISEARCH_ALLOW_STUB` in production code paths, images, compose files,
+supervisord programs, or wrangler vars. Port resolves from `--port`, else
+`DIGISEARCH_MCP_PORT`, else `8765`; host from `DIGISEARCH_MCP_HOST`, else
+`127.0.0.1` (loopback-only). In the cloudflare stack the server runs as the
+`digisearch-mcp` supervisord program (priority 45, after digisearch HTTP seed
+wait, before litellm) with no public route — reachable only from inside the
+container.
 
 ### CLI Commands
 
@@ -313,7 +329,7 @@ Entry point: `digisearch` (Typer). All defined in `cli.py`.
 | `digisearch discover-crossref <doi>` | Fetch Crossref metadata and print YAML sidecar snippet |
 | `digisearch query --index <name> --text <q>` | Run search query and print ranked results |
 | `digisearch serve [--config <path>] [--port 8002]` | Start HTTP API server (uvicorn) |
-| `digisearch mcp [--port 8765]` | Start MCP server |
+| `digisearch mcp [--port 8765]` | Start MCP server (real backend only; fails loud without one; port also via `DIGISEARCH_MCP_PORT`) |
 | `digisearch index build --config <path>` | Build/re-index (stub — prints guidance) |
 | `digisearch index inspect --index <name>` | Inspect stub index chunk counts |
 
@@ -476,6 +492,7 @@ or section.
 digisearch/src/digisearch/
 │
 ├── server.py                  # FastAPI app: HTTP endpoints, rate limiting, correlation IDs
+├── backend_require.py         # Shared real-backend gate (HTTP startup + MCP run_mcp)
 ├── mcp_server.py              # FastMCP: MCP tool server (port 8765)
 ├── orchestrator_tools.py      # OpenAI-style tool manifest for digigraph orchestration
 ├── cli.py                     # Typer CLI (digisearch) — thin wrapper over pipeline.ingest
