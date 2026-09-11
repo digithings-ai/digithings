@@ -12,6 +12,7 @@ import {
   SHARED_DIGICHAT_CONTAINER_ID,
   shouldProxyToDigiChat,
 } from "./paths";
+import { legacyEmbedEnabledValue } from "./embed-flag";
 
 export class DigiChatContainer extends Container {
   defaultPort = 3000;
@@ -23,7 +24,8 @@ export class DigiChatContainer extends Container {
    * @see https://developers.cloudflare.com/containers/examples/env-vars-and-secrets/
    */
   envVars = {
-    DIGICHAT_EMBED_ENABLED: env.DIGICHAT_EMBED_ENABLED ?? "1",
+    // Legacy generic anonymous embed is OFF unless explicitly opted in.
+    DIGICHAT_EMBED_ENABLED: legacyEmbedEnabledValue(env.DIGICHAT_EMBED_ENABLED),
     DIGICHAT_REQUIRE_ROOT_AUTH: env.DIGICHAT_REQUIRE_ROOT_AUTH ?? "0",
     DIGICHAT_EMBED_HOSTS:
       env.DIGICHAT_EMBED_HOSTS ??

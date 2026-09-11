@@ -91,12 +91,15 @@ describe("GET /api/embed/tenant-config", () => {
     },
   });
 
-  it("returns digithings config for first-party host without token", async () => {
+  it("returns digithings config for first-party host without token when origin is first-party", async () => {
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
     resetEmbedTenantRegistryForTests();
     const res = await GET(
       new Request("https://chat.example.com/api/embed/tenant-config", {
-        headers: { "X-Embed-Host": "https://digithings.ai" },
+        headers: {
+          "X-Embed-Host": "https://digithings.ai",
+          Origin: "https://digithings.ai",
+        },
       }),
     );
     expect(res.status).toBe(200);
@@ -104,6 +107,17 @@ describe("GET /api/embed/tenant-config", () => {
     expect(body.slug).toBe("digithings");
     expect(body.gateMode).toBe("ungated");
     expect(body.skin).toBe("digichat");
+  });
+
+  it("withholds a first-party tenant when only the spoofable X-Embed-Host is sent", async () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const res = await GET(
+      new Request("https://chat.example.com/api/embed/tenant-config", {
+        headers: { "X-Embed-Host": "https://digithings.ai" },
+      }),
+    );
+    expect(await res.json()).toEqual(DEFAULT_EMBED_TENANT_CONFIG);
   });
 
   it("projects showByok, layout to the client body", async () => {
@@ -125,7 +139,10 @@ describe("GET /api/embed/tenant-config", () => {
     resetEmbedTenantRegistryForTests();
     const res = await GET(
       new Request("https://chat.example.com/api/embed/tenant-config", {
-        headers: { "X-Embed-Host": "https://digithings.ai" },
+        headers: {
+          "X-Embed-Host": "https://digithings.ai",
+          Origin: "https://digithings.ai",
+        },
       }),
     );
     const body = await res.json();

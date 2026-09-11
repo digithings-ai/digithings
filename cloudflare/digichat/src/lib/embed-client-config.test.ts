@@ -92,10 +92,21 @@ describe("resolveEmbedClientConfigFromParams", () => {
     );
   });
 
-  it("allows the first-party host without a token, matching the header path", () => {
+  it("allows the first-party host without a token when the request origin is first-party", () => {
     withRegistry();
-    const cfg = resolveEmbedClientConfigFromParams(undefined, "https://digithings.ai");
+    const cfg = resolveEmbedClientConfigFromParams(
+      undefined,
+      "https://digithings.ai",
+      "https://www.digithings.ai",
+    );
     expect(cfg.slug).toBe("digithings");
+  });
+
+  it("withholds a first-party tenant when only the spoofable host is presented", () => {
+    withRegistry();
+    expect(resolveEmbedClientConfigFromParams(undefined, "https://digithings.ai")).toEqual(
+      DEFAULT_EMBED_TENANT_CONFIG,
+    );
   });
 
   it("trims whitespace from the token param before comparison (#2006)", () => {

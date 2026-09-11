@@ -20,8 +20,14 @@ export function isDigichatDevelopment(): boolean {
 }
 
 /**
- * True when the embed host may skip X-Embed-Token: prod digithings.ai hosts, or
- * (development only) loopback hosts registered in DIGICHAT_EMBED_TENANTS.
+ * True when the embed host is on the first-party allowlist: prod digithings.ai
+ * hosts, or (development only) loopback hosts registered in
+ * DIGICHAT_EMBED_TENANTS.
+ *
+ * This predicate is only half of a first-party tokenless decision. Callers must
+ * also check a browser-attested origin (`embedOriginHostOf`) so the spoofable
+ * `X-Embed-Host` header can never unlock a tenant by itself (see
+ * `hostTenantAuthorized` in embed-chat-tenant.ts).
  */
 export function isFirstPartyEmbedHost(host: string | null | undefined): boolean {
   const normalized = normalizeEmbedHost(host);

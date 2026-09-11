@@ -117,7 +117,7 @@ The deleted `cloudflare/website/` landing (`#try` iframe) is **not** the marketi
 - **Analytics:** `src/lib/embed-gate.ts` exports `emit(event, props)` — no-op today.
 - **Non-goals:** #260 tokens, #202 SSO, #201 model selector.
 
-**Production embed gate:** `POST /api/chat` returns **503** for embed requests (`X-Embed-Host`) on **unregistered** hosts unless `DIGICHAT_LEGACY_EMBED_ENABLED=1` (or deprecated `DIGICHAT_EMBED_ENABLED=1`) or `X-Embed-Token` matches `DIGICHAT_EMBED_TOKEN`. Registered tenants in `DIGICHAT_EMBED_TENANTS` use their own token, or first-party bypass for `digithings.ai` / `www.digithings.ai` (and `localhost` / `127.0.0.1` in development when registered). Legacy generic embed does **not** default on when tenants are configured.
+**Production embed gate:** the legacy generic anonymous embed is **OFF by default everywhere** (worker `?? "0"`, `wrangler.toml` var unset, compose `${DIGICHAT_EMBED_ENABLED:-0}`, `.env.example` commented) and only opens via an explicit `DIGICHAT_LEGACY_EMBED_ENABLED=1` (deprecated alias `DIGICHAT_EMBED_ENABLED=1`) on a deployment with **no** `DIGICHAT_EMBED_TENANTS`. When tenants are configured, an **unregistered host is refused (503)** — the legacy flag is ignored, never an anonymous fallback. Registered tenants authorize with their own `X-Embed-Token`; a **first-party tokenless** embed additionally requires a browser-attested first-party origin (`Origin`/`Referer`: `digithings.ai` / `www.digithings.ai`, virtual `occ`, and `localhost` / `127.0.0.1` in development when registered). `X-Embed-Host` is **display/selection-only** and never authorizes by itself. `X-Embed-Token` matching `DIGICHAT_EMBED_TOKEN` still gates the single-install YAML deployment.
 
 ### Local dogfood against digithings-web
 
