@@ -339,14 +339,19 @@ def _extract_perf_stats(engine: Any, USD: Any) -> dict[str, Any]:
         stats_returns = analyzer.get_performance_stats_returns()
         result["stats_returns"] = stats_returns
         if stats_returns:
-            raw = stats_returns.get("Sharpe Ratio (252 days)", 0) or 0
-            v = float(raw)
-            result["sharpe"] = v if not math.isnan(v) else None
+            raw = stats_returns.get("Sharpe Ratio (252 days)")
+            if raw is not None:
+                v = float(raw)
+                result["sharpe"] = v if not math.isnan(v) else None
 
         stats_pnls = analyzer.get_performance_stats_pnls()
         result["stats_pnls"] = stats_pnls
         if stats_pnls:
-            dd = stats_pnls.get("Max Drawdown %") or stats_pnls.get("Max Drawdown")
+            dd = None
+            for key in ("Max Drawdown %", "Max Drawdown"):
+                if stats_pnls.get(key) is not None:
+                    dd = stats_pnls[key]
+                    break
             if dd is not None:
                 v = float(dd)
                 normalized = normalize_drawdown_pct(v if not math.isnan(v) else None)
@@ -402,12 +407,14 @@ def _build_result(
     *,
     errors: list[str] | None = None,
     missing: list[str] | None = None,
+    warnings: list[str] | None = None,
 ) -> BacktestResult:
     """Assemble BacktestResult from extracted metrics.
 
     ``errors`` are fatal extraction failures (``status="error"``); ``missing``
-    names absent metrics (``status="partial"``). A result is only ``ok`` when
-    every metric was extracted.
+    names absent metrics and ``warnings`` records non-fatal analyzer errors
+    (``status="partial"``). A result is only ``ok`` when every metric was
+    extracted cleanly.
     """
 
     def _ns_to_iso(ns: int) -> str:
@@ -418,15 +425,21 @@ def _build_result(
 
     errors = list(errors or [])
     missing = list(missing if missing is not None else perf.get("missing") or [])
+    warnings = list(warnings if warnings is not None else perf.get("errors") or [])
     if errors:
         status = "error"
-        message = (
-            f"Backtest on user OHLCV data ({symbol}) — metric extraction failed: "
-            f"{'; '.join(errors)}."
-        )
-    elif missing:
+        detail = "; ".join(errors)
+        if warnings:
+            detail += f"; analyzer warnings: {'; '.join(warnings)}"
+        message = f"Backtest on user OHLCV data ({symbol}) — metric extraction failed: {detail}."
+    elif missing or warnings:
         status = "partial"
-        message = f"Backtest on user OHLCV data ({symbol}) — missing metrics: {', '.join(missing)}."
+        parts = []
+        if warnings:
+            parts.append(f"analyzer warnings: {'; '.join(warnings)}")
+        if missing:
+            parts.append(f"missing metrics: {', '.join(missing)}")
+        message = f"Backtest on user OHLCV data ({symbol}) — {'; '.join(parts)}."
     else:
         status = "ok"
         message = f"Backtest on user OHLCV data ({symbol})."
@@ -525,6 +538,7 @@ def _run_backtest_ohlcv(
         perf=perf,
         errors=pnl_errors,
         missing=perf["missing"],
+        warnings=perf["errors"],
     )
 
     if tearsheet_path is not None:
@@ -598,14 +612,14 @@ def _run_multi_symbol_backtest(
             logger.warning("Multi-symbol: backtest returned None for symbol %s — skipping", sym)
             skipped_symbols.append(sym)
             continue
-        if result.status == "error":
+        if result.status != "ok":
             logger.warning(
-                "Multi-symbol: backtest errored for symbol %s — excluding from averages", sym
+                "Multi-symbol: backtest status=%s for symbol %s — excluding from aggregates",
+                result.status,
+                sym,
             )
             degraded_symbols.append(f"{sym} ({result.status})")
             continue
-        if result.status != "ok":
-            degraded_symbols.append(f"{sym} ({result.status})")
         per_symbol_pnl[sym] = result.total_pnl
         per_symbol_return[sym] = result.total_return_pct
         if result.sharpe_ratio is not None:
