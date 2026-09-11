@@ -101,7 +101,7 @@ The MCP server (`mcp_server.py`, FastMCP) exposes:
 
 Default transport: **streamable-http** on port 8766. `--stdio` mode available for Claude Desktop integration.
 
-The server binds loopback by default (`127.0.0.1:8766`; `DIGIGRAPH_MCP_HOST` overrides the host). With `DIGI_MCP_REQUIRE_AUTH=1`, the `workflow` tool refuses unauthenticated calls unless a digikey verifier is configured (`DIGIKEY_JWKS_URL` or `DIGIKEY_PUBLIC_KEY_PEM`) — fail-closed. All LLM calls on the `workflow`/`chat` path go through `digigraph.llm_client` (LiteLLM proxy at `OPENAI_API_BASE`, default `http://127.0.0.1:4000/v1`; `DIGI_LLM_MODE=test` in the stack). In the cloudflare stack the server runs as the `digigraph-mcp` supervisord program (loopback `:8766`, no Worker route).
+The server binds loopback by default (`127.0.0.1:8766`; `DIGIGRAPH_MCP_HOST` overrides the host). With `DIGI_MCP_REQUIRE_AUTH=1`, **every** MCP tool verifies a digikey-issued RS256 bearer token (`mcp_server.py:_authorize_mcp_headers`, reusing `digikey.jwt_verify.decode_token` and `digikey.scopes.scope_grants_required`): signature via `DIGIKEY_JWKS_URL` or `DIGIKEY_PUBLIC_KEY_PEM`, plus issuer/audience/exp, and the tool's scope (`digigraph:workflow` for `workflow`, `digigraph:chat` for `chat`, `digigraph:mcp` for `thread_state` and the tool-discovery tools). Missing, invalid, expired, wrong-audience and wrong-scope tokens are refused, and when auth is required but no verifier is configured the server fails closed. Without the flag the server is unauthenticated and loopback-only by default. All LLM calls on the `workflow`/`chat` path go through `digigraph.llm_client` (LiteLLM proxy at `OPENAI_API_BASE`, default `http://127.0.0.1:4000/v1`; `DIGI_LLM_MODE=test` in the stack). In the cloudflare stack the server runs as the `digigraph-mcp` supervisord program (loopback `:8766`, no Worker route).
 
 The MCP server uses FastAPI's `TestClient` internally for `chat` and `thread_state` calls — it instantiates the full FastAPI app in-process rather than making real HTTP calls. This means MCP requests bypass the rate limiter and auth middleware (TestClient is exempted by the `ip == "testclient"` check in `rate_limit.py:62`).
 
@@ -744,9 +744,11 @@ What is still missing is preemption — no exception is injected into a node alr
 
 `RateLimiter._get_ip()` (see §12.8) only consults `X-Forwarded-For` when the direct peer is in `DIGI_TRUSTED_PROXIES`; with that unset (the default), a client's `X-Forwarded-For` is ignored entirely and `request.client.host` is used, so `X-Forwarded-For: 1.2.3.4` cannot impersonate another IP. Setting `DIGI_TRUSTED_PROXIES` moves the trust boundary to whichever proxy hops are listed there — see §12.8 for the operational requirement to list every hop in the chain, not just the innermost one. Currently there is no proxy in the default Compose stack — digigraph is directly exposed on `127.0.0.1:8000` — so `DIGI_TRUSTED_PROXIES` should stay unset there.
 
-### 6.8 MCP Server Auth Gap
+### 6.8 MCP Server Auth
 
-The MCP server (`mcp_server.py`) binds loopback (`127.0.0.1:8766`) by default (`DIGIGRAPH_MCP_HOST` overrides the host). The `workflow` tool honors the `DIGI_MCP_REQUIRE_AUTH=1` fail-closed gate (refuses without `DIGIKEY_JWKS_URL` / `DIGIKEY_PUBLIC_KEY_PEM`); a wider bind still needs network policy or a gateway in front of the MCP server.
+The MCP server (`mcp_server.py`) binds loopback (`127.0.0.1:8766`) by default (`DIGIGRAPH_MCP_HOST` overrides the host). When `DIGI_MCP_REQUIRE_AUTH=1`, every exposed tool — `workflow`, `chat`, `thread_state`, `list_orchestrator_tools`, `list_orchestrator_tools_detailed` — calls `_authorize_mcp_ctx` before doing any work. It reads the `Authorization: Bearer` header from the FastMCP request context and verifies the token with `digikey.jwt_verify.decode_token` (RS256 signature via `DIGIKEY_JWKS_URL` / `DIGIKEY_PUBLIC_KEY_PEM`, plus issuer/audience/exp), applies the same fail-closed revocation policy as `DigiAuthMiddleware` (`digikey.blocklist.assert_blocklist_ready()` when `DIGIKEY_REQUIRE_BLOCKLIST=1`, and `is_blocked(jti)` when Redis is configured), then enforces the tool's scope with `digikey.scopes.scope_grants_required` (`digigraph:workflow`, `digigraph:chat`, or `digigraph:mcp`). Missing, malformed, tampered, expired, wrong-audience, revoked and wrong-scope tokens are refused (`McpAuthDenied`) and no workflow/chat/thread work runs. When auth is required but no verifier is configured — or the transport carries no HTTP headers (stdio) — the gate fails closed and refuses every call.
+
+`chat` and `thread_state` call the digraph FastAPI app in-process via TestClient, so they forward the caller's verified bearer into that internal request (`_internal_auth_headers`) — without it `DigiAuthMiddleware` 401s even a valid caller. The token is re-verified by that middleware, so this is a pass-through, not a bypass. Without the flag the server is unauthenticated; a wider bind still needs network policy or a gateway in front of the MCP server.
 
 ### 6.9 Manifest Cache Never Invalidates
 
@@ -1099,7 +1101,7 @@ python -m digigraph.mcp_server --host 127.0.0.1 --port 8766
 
 Installation prerequisite: `pip install -e "digigraph[mcp]"` (installs `mcp` package with `FastMCP`).
 
-The MCP server is a separate process from the FastAPI HTTP server. It does not share the same HTTP middleware stack — auth, rate limiting, and CORS apply only to HTTP clients.
+The MCP server is a separate process from the FastAPI HTTP server, so the HTTP middleware stack (rate limiting and CORS) does not apply to it. Auth is not inherited either: with `DIGI_MCP_REQUIRE_AUTH=1` each MCP tool performs its own digikey JWT verification (see §6.8); without the flag the server is unauthenticated.
 
 ---
 
