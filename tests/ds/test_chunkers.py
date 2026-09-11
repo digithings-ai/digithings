@@ -214,13 +214,14 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 54 for #3854 Phase 2 Track A (digisearch MCP backend-gate + supervisord docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 57 for #3859 (Task 9 web_search docs: recency buckets, rollout-ops rewrite) plus merged develop prose — fixture prose only; RecursiveChunker unchanged.
     Hashes only (count still 57) re-recorded for #3871 (tool-only cost-win rewrite + searxng floats-on-latest owner decision in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 58 for #3909 (backend fail-loud + research workspace scoping + raw filter gate docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 57
+    assert len(chunks) == 58
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -231,11 +232,11 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "6f61da3b9ed54d44",
         "5c87a98eae4b4c24",
         "5c44b3a1c81aaae0",
-        "4fe2b5f10b829673",
+        "5fc146dcd98ed469",
         "e446cea04444b3a8",
         "d48e16a1b753dc3a",
-        "50427e0515200055",
-        "a901093c569d8ad4",
+        "4e256fae99ddc3e2",
+        "dace1a11e10bae3d",
         "f5694c994b90e40c",
         "2f102978f3f92316",
         "16584e006bbec980",
@@ -249,23 +250,24 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "819ebadc3320ecc2",
         "10832c167583db90",
         "3442051d624d3623",
-        "7178441828bcff9d",
-        "3dd21c10200ab888",
+        "06ba55aa13191afa",
+        "0b92159ce012cda6",
         "ec4e79e9d9714f36",
-        "dd4f473ceff325c2",
+        "06466d8456cb4a74",
         "2ec8256cb4695f07",
         "16bea1bbfea529fc",
         "00bffb9020b848f5",
         "078cbca3f2c3b3e1",
-        "8e8ba68329d0d6db",
-        "6b71a6ae799786a7",
-        "e5be9f0e5832575d",
-        "5276cf81c056f97a",
-        "3e4e414a6f3c0c5e",
-        "79e1479908a647a2",
-        "5881d77c9811fa5d",
-        "a063d09664500f97",
-        "50b42145065d7d4e",
+        "148ff3553b0c7caa",
+        "222dabb58df09011",
+        "f2687d4521d1e069",
+        "112fe01c18768a54",
+        "cdf4f0c7a56c56e7",
+        "8200c214c753f6dd",
+        "2c221fc487c50f69",
+        "a261a5a8ca75360c",
+        "c237b6e35263d7db",
+        "9b73f4d75e4908dc",
         "5dbc6c5291de10ab",
         "e8874754e8823dbd",
         "472ca1370eb9ef1a",
@@ -274,7 +276,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "3132efab1e5ed61e",
         "aef71ba4fa072289",
         "a0c3eeac2a656b2f",
-        "44050a77e280c022",
+        "482754fb154988ce",
         "79ae674b8661ea64",
         "fc586dc7c2348d1e",
         "ac8dbe83a57bf4f4",
