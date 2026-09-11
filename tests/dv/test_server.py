@@ -107,14 +107,16 @@ def test_protected_route_requires_auth(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_list_and_create_handlers(vault_dir: Path) -> None:
-    listing = server.list_notes()
+    listing = server.list_notes(_fake_request())
     assert {n.name for n in listing.notes} == {"a", "b"}
 
-    created = server.create_note(server.CreateNoteRequest(name="c", title="C", body="see [[a]]\n"))
+    created = server.create_note(
+        server.CreateNoteRequest(name="c", title="C", body="see [[a]]\n"), _fake_request()
+    )
     assert created.name == "c"
     assert (vault_dir / "c.md").is_file()
 
-    backlinks = server.get_backlinks("a")
+    backlinks = server.get_backlinks("a", _fake_request())
     assert "c" in backlinks.backlinks
 
 
@@ -125,7 +127,8 @@ def test_create_note_overwrite_upsert(vault_dir: Path) -> None:
             title="C1",
             body="v1\n",
             frontmatter={"source_url": "repo://t/a.md"},
-        )
+        ),
+        _fake_request(),
     )
     again = server.create_note(
         server.CreateNoteRequest(
@@ -134,7 +137,8 @@ def test_create_note_overwrite_upsert(vault_dir: Path) -> None:
             body="v2\n",
             overwrite=True,
             frontmatter={"source_url": "repo://t/a.md", "page_class": "repo_doc"},
-        )
+        ),
+        _fake_request(),
     )
     assert again.name == "c"
     raw = (vault_dir / "c.md").read_text(encoding="utf-8")
@@ -155,14 +159,15 @@ def test_batch_note_upsert_keeps_links_consistent(vault_dir: Path) -> None:
                 server.CreateNoteRequest(name="c", body="see [[d]]\n"),
                 server.CreateNoteRequest(name="d", body="see [[c]]\n"),
             ]
-        )
+        ),
+        _fake_request(),
     )
 
     assert [note.name for note in result.notes] == ["c", "d"]
     assert result.notes[0].backlinks == ("d",)
     assert result.notes[1].backlinks == ("c",)
-    assert server.get_backlinks("c").backlinks == ["d"]
-    assert server.get_backlinks("d").backlinks == ["c"]
+    assert server.get_backlinks("c", _fake_request()).backlinks == ["d"]
+    assert server.get_backlinks("d", _fake_request()).backlinks == ["c"]
 
 
 def test_batch_note_upsert_omits_notes_pruned_in_same_batch(vault_dir: Path) -> None:
@@ -176,7 +181,8 @@ def test_batch_note_upsert_omits_notes_pruned_in_same_batch(vault_dir: Path) -> 
                 )
             ],
             prunes=[server.PruneChildrenRequest(parent_doc="guide", keep_names=[])],
-        )
+        ),
+        _fake_request(),
     )
 
     assert result.notes == []
@@ -209,7 +215,8 @@ def test_prune_children_handler_deletes_only_stale_children(vault_dir: Path) -> 
             parent_doc="guide",
             keep_names=["guide__current"],
             subdir="clients/acme",
-        )
+        ),
+        _fake_request(),
     )
 
     assert result.deleted == ["guide__stale"]
@@ -219,7 +226,7 @@ def test_prune_children_handler_deletes_only_stale_children(vault_dir: Path) -> 
 
 
 def test_lint_handler(vault_dir: Path) -> None:
-    report = server.lint()
+    report = server.lint(_fake_request())
     assert report.ok is True
     assert report.note_count == 2
 
@@ -1483,6 +1490,179 @@ def test_by_path_route_end_to_end_refuses_cross_tenant_prefix_via_real_jwt(
         headers=auth_headers(scopes=[SCOPE_READ], tenant_slug="digithings"),
     )
     assert ok.status_code == 200
+
+
+# ── filesystem note routes scoped to the authenticated tenant (#3915) ───────────
+# The DIGIVAULT_ROOT-backed note routes (list/get/create/batch/rename/prune/
+# frontmatter/backlinks/tags/lint) predate the D1 by-path/search tenant binding and
+# opened the shared root with only `digivault:read`/`:write` — no tenant or
+# path_prefix enforcement at all, so a multi-tenant deployment could read and write
+# across corpora. These tests drive the real HTTP surface with signed JWTs (the same
+# DigiAuthMiddleware -> request.state.digi_auth wiring the end-to-end by-path test
+# above pins for D1), so a regression that reopens the shared root fails here rather
+# than only at the unit level. On the pre-fix code every cross-tenant test below
+# observes the other corpus (red); the fix narrows each request to the caller's own
+# prefix subdirectory, the filesystem analogue of D1's one-database-per-corpus.
+
+
+def _tenant_vault_root(tmp_path: Path) -> Path:
+    """One ``DIGIVAULT_ROOT`` holding two client corpora as prefix subdirectories —
+    the layout ``DIGI_TENANT_CORPUS_MAP`` describes (and ``local_search`` already
+    filters by for the D1-less search path)."""
+    root = tmp_path / "vault"
+    digi = root / "clients" / "digithings"
+    occ = root / "clients" / "online-compliance-center"
+    digi.mkdir(parents=True)
+    occ.mkdir(parents=True)
+    (digi / "arch.md").write_text(
+        "---\ntitle: Arch\ntags: [arch]\n---\nDigi arch\n", encoding="utf-8"
+    )
+    (occ / "faq.md").write_text(
+        "---\ntitle: OCC FAQ\ntags: [occ]\n---\nOCC help\n", encoding="utf-8"
+    )
+    (occ / "guide__stale.md").write_text(
+        "---\ntitle: stale\nparent_doc: guide\n---\nstale\n", encoding="utf-8"
+    )
+    return root
+
+
+def _tenant_client_env(monkeypatch: pytest.MonkeyPatch, root: Path) -> None:
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(root))
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+
+
+def test_filesystem_list_notes_is_scoped_to_the_authenticated_tenant(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _tenant_client_env(monkeypatch, _tenant_vault_root(tmp_path))
+    resp = TestClient(server.app).get(
+        "/v1/notes", headers=auth_headers(scopes=[SCOPE_READ], tenant_slug="digithings")
+    )
+    assert resp.status_code == 200
+    assert {n["name"] for n in resp.json()["notes"]} == {"arch"}
+
+
+def test_filesystem_get_note_cannot_read_another_tenants_note(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _tenant_client_env(monkeypatch, _tenant_vault_root(tmp_path))
+    resp = TestClient(server.app).get(
+        "/v1/notes/faq", headers=auth_headers(scopes=[SCOPE_READ], tenant_slug="digithings")
+    )
+    assert resp.status_code == 404
+
+
+def test_filesystem_tags_are_scoped_to_the_authenticated_tenant(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _tenant_client_env(monkeypatch, _tenant_vault_root(tmp_path))
+    resp = TestClient(server.app).get(
+        "/v1/tags/occ", headers=auth_headers(scopes=[SCOPE_READ], tenant_slug="digithings")
+    )
+    assert resp.status_code == 200
+    assert resp.json()["notes"] == []
+
+
+def test_filesystem_lint_only_counts_the_authenticated_tenants_notes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _tenant_client_env(monkeypatch, _tenant_vault_root(tmp_path))
+    resp = TestClient(server.app).get(
+        "/v1/lint", headers=auth_headers(scopes=[SCOPE_READ], tenant_slug="digithings")
+    )
+    assert resp.status_code == 200
+    assert resp.json()["note_count"] == 1
+
+
+def test_filesystem_create_overwrite_cannot_clobber_another_tenants_note(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = _tenant_vault_root(tmp_path)
+    _tenant_client_env(monkeypatch, root)
+    resp = TestClient(server.app).post(
+        "/v1/notes",
+        json={"name": "faq", "body": "PWNED\n", "overwrite": True},
+        headers=auth_headers(scopes=[SCOPE_WRITE], tenant_slug="digithings"),
+    )
+    assert resp.status_code == 201
+    occ = root / "clients" / "online-compliance-center" / "faq.md"
+    assert "OCC help" in occ.read_text(encoding="utf-8")
+    assert (root / "clients" / "digithings" / "faq.md").is_file()
+
+
+def test_filesystem_rename_cannot_move_another_tenants_note(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = _tenant_vault_root(tmp_path)
+    _tenant_client_env(monkeypatch, root)
+    resp = TestClient(server.app).post(
+        "/v1/notes/faq/rename",
+        json={"new_name": "pwned"},
+        headers=auth_headers(scopes=[SCOPE_WRITE], tenant_slug="digithings"),
+    )
+    assert resp.status_code == 400
+    assert (root / "clients" / "online-compliance-center" / "faq.md").is_file()
+
+
+def test_filesystem_prune_cannot_delete_another_tenants_child(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = _tenant_vault_root(tmp_path)
+    _tenant_client_env(monkeypatch, root)
+    resp = TestClient(server.app).post(
+        "/v1/notes/prune-children",
+        json={"parent_doc": "guide", "keep_names": [], "subdir": ""},
+        headers=auth_headers(scopes=[SCOPE_WRITE], tenant_slug="digithings"),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] == []
+    assert (root / "clients" / "online-compliance-center" / "guide__stale.md").is_file()
+
+
+def test_filesystem_routes_refuse_an_unmapped_tenant(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Once DIGI_TENANT_CORPUS_MAP is configured, a tenant absent from it has no
+    authorized corpus — a filesystem route must fail closed (403), not fall through
+    to the shared root."""
+    _tenant_client_env(monkeypatch, _tenant_vault_root(tmp_path))
+    resp = TestClient(server.app).get(
+        "/v1/notes", headers=auth_headers(scopes=[SCOPE_READ], tenant_slug="rogue-tenant")
+    )
+    assert resp.status_code == 403
+
+
+def test_filesystem_routes_unaffected_when_tenant_map_is_unset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Backward-compatibility guarantee: with no DIGI_TENANT_CORPUS_MAP (single-tenant
+    deployments), every existing note route keeps its unscoped behavior even for a
+    caller whose JWT carries a tenant slug there is nothing to check it against."""
+    (tmp_path / "a.md").write_text("---\ntitle: A\n---\nA\n", encoding="utf-8")
+    (tmp_path / "b.md").write_text("---\ntitle: B\n---\nB\n", encoding="utf-8")
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(tmp_path))
+    monkeypatch.delenv("DIGI_TENANT_CORPUS_MAP", raising=False)
+    resp = TestClient(server.app).get(
+        "/v1/notes", headers=auth_headers(scopes=[SCOPE_READ], tenant_slug="unrelated")
+    )
+    assert resp.status_code == 200
+    assert {n["name"] for n in resp.json()["notes"]} == {"a", "b"}
+
+
+def test_orchestrator_invoke_vault_local_tools_are_scoped_to_the_tenant(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The vault-local orchestrator tools (lint/tag/backlinks/create_note) route
+    through the same `_open_vault`; they must be scoped too, not just the raw note
+    routes."""
+    _tenant_client_env(monkeypatch, _tenant_vault_root(tmp_path))
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(tool="digivault_lint", arguments={}),
+        _fake_request(scopes=[SCOPE_READ], tenant_slug="digithings"),
+    )
+    assert resp.ok is True
+    assert resp.data is not None
+    assert resp.data["note_count"] == 1
 
 
 # ── digivault_get_note orchestrator tool (#2239 Task 3 gap) ─────────────────────
