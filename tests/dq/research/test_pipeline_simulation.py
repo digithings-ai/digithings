@@ -70,6 +70,26 @@ class TestSimulatorContract:
     def test_parse_schema_name_returns_none_when_missing(self) -> None:
         assert parse_schema_name([{"content": [{"text": "no schema"}]}]) is None
 
+    def test_simulator_stubs_grounding(self) -> None:
+        """simulated_pipeline must stub the tool-only grounding boundary (#3859).
+
+        Task 4 made pipeline grounding tool-only with an unconditional
+        DashboardWebSearchError raise; simulated runs must never reach the
+        live web_search tool, so the simulator patches the grounding tool
+        boundary (fetch_web_grounding / call_web_search_tool /
+        build_grounding) alongside completion_text + load_skill_edit.
+        """
+        import inspect
+
+        from digiquant.research.testing import simulator
+
+        src = inspect.getsource(simulator.simulated_pipeline)
+        assert (
+            "fetch_web_grounding" in src
+            or "call_web_search_tool" in src
+            or "build_grounding" in src
+        )
+
     def test_coverage_directive_default_refreshes_rostered_tickers(self) -> None:
         """The simulator keeps the full H4 roster flowing to H5 (#3739).
 

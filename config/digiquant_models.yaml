@@ -37,7 +37,8 @@
 # Endpoint capability (tools + strict json_schema + context floor) is live-verified
 # by scripts/validate_digiquant_pools.py (.github/workflows/validate-digiquant-pools.yml).
 #
-# Fail-hard when grounding unavailable: OLYMPUS_WEB_SEARCH=required.
+# Tool-only grounding (#3859): a requested web_search must succeed or raise;
+# no synthesis fallback, no env gate.
 #
 # Env contract: house calls go service → digillm → LiteLLM (OPENAI_API_BASE).
 # apply_digiquant_house_env() points the default client at the house upstream

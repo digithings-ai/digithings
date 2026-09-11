@@ -132,15 +132,15 @@ def _ingested_macro_stale(run_date: Any) -> bool:
         return True
     try:
         client = _research_data_client()
-    except Exception as exc:  # any client failure → paid fallback, never crash
-        logger.warning("macro freshness probe: client unavailable (%s); paid fallback", exc)
+    except Exception as exc:  # any client failure → stale (tool search, never a skip)
+        logger.warning("macro freshness probe: client unavailable (%s); tool search", exc)
         return True
     try:
         from digiquant.research.supabase_io import query_macro_series_freshness
 
         latest = query_macro_series_freshness(client=client)
-    except Exception as exc:  # any probe failure → paid fallback
-        logger.warning("macro freshness probe failed (%s); paid fallback", exc)
+    except Exception as exc:  # any probe failure → stale (tool search, never a skip)
+        logger.warning("macro freshness probe failed (%s); tool search", exc)
         return True
     if latest is None:
         return True
