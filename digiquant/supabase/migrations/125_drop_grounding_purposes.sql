@@ -11,6 +11,11 @@
 -- the olympus_provider_calls purpose CHECK. Migration 067 stays immutable;
 -- this file rewrites the inline CHECK it created (Postgres auto-name
 -- olympus_provider_calls_purpose_check) with the two values removed.
+--
+-- NOT VALID on purpose: #3660-era house runs already persisted rows with the
+-- retired purposes (see digiquant/research/provider_telemetry.py), and a
+-- validating ADD CONSTRAINT would fail on those history rows. NOT VALID keeps
+-- that history truthful while enforcing the reduced set on all new writes.
 ALTER TABLE public.olympus_provider_calls
     DROP CONSTRAINT olympus_provider_calls_purpose_check;
 ALTER TABLE public.olympus_provider_calls
@@ -27,4 +32,4 @@ ALTER TABLE public.olympus_provider_calls
             'x_search',
             'embedding'
         )
-    );
+    ) NOT VALID;
