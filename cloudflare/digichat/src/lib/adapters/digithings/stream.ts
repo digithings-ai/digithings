@@ -116,6 +116,18 @@ function relayableUpstreamCode(body: string): string | null {
   return code;
 }
 
+/**
+ * User-facing copy for a digigraph failure the visitor can only retry: a
+ * non-OK status with no actionable code, an empty body, or a refused
+ * credential redirect.
+ *
+ * Delivered as a stream `error` part (never an assistant `text-delta`) so the
+ * runtime marks the assistant message as errored and the error UI + retry
+ * shows, instead of a success-looking bubble (#3910).
+ */
+export const DIGIGRAPH_UNAVAILABLE_MESSAGE =
+  "The assistant is unavailable right now. Please try again shortly.";
+
 class DigigraphStreamContractError extends Error {
   constructor(payload: string) {
     super(payload);
@@ -241,14 +253,8 @@ export async function createDigigraphTraceStreamResponse(opts: {
       } catch (err) {
         if (err instanceof CredentialRedirectError) {
           console.error(`[digigraph] ${err.message}`);
-          openText();
-          writer.write({
-            type: "text-delta",
-            id: textId,
-            delta: "The assistant is unavailable right now. Please try again shortly.",
-          });
           closeText();
-          return;
+          throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
         }
         throw err;
       }
@@ -272,25 +278,15 @@ export async function createDigigraphTraceStreamResponse(opts: {
             digigraphErrorToEmbedPayload({ code: relayable })
           );
         }
-        openText();
-        writer.write({
-          type: "text-delta",
-          id: textId,
-          delta: "The assistant is unavailable right now. Please try again shortly.",
-        });
+        // #3910: no actionable code — fail the turn with a real error part so
+        // the runtime renders the error UI and a retry, not a fake reply.
         closeText();
-        return;
+        throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
       if (!res.body) {
         console.error(`[digigraph] upstream ${res.status} returned an empty body`);
-        openText();
-        writer.write({
-          type: "text-delta",
-          id: textId,
-          delta: "The assistant is unavailable right now. Please try again shortly.",
-        });
         closeText();
-        return;
+        throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
       for await (const delta of iterateOpenAiSse(res.body)) {
         const dgErr = delta.digigraph_error;

@@ -1,6 +1,7 @@
 import { it, expect, vi, afterEach } from "vitest";
 import type { UIMessage } from "ai";
 import {
+  DIGIGRAPH_UNAVAILABLE_MESSAGE,
   createDigigraphTraceStreamResponse,
   digigraphErrorToEmbedPayload,
 } from "./stream";
@@ -38,7 +39,60 @@ it("does not stream the upstream error body to the browser", async () => {
   expect(res.headers.get("x-vercel-ai-ui-message-stream")).toBe("v1");
   expect(body).not.toContain(secret);
   expect(body).not.toContain("db.internal");
-  expect(body).toMatch(/unavailable|try again/i);
+  // #3910: a failed turn must be a real stream error the runtime can render,
+  // never a success-looking assistant text bubble.
+  expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  expect(body).not.toContain('"type":"text-delta"');
+  expect(body).not.toContain('"type":"text-start"');
+  expect(errorLog).toHaveBeenCalled();
+});
+
+// #3910: a 2xx with no body is just as much an outage as a 5xx. It used to be
+// streamed as assistant text, so the visitor saw a "reply" with no retry.
+it("surfaces an empty upstream body as a stream error", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(null, { status: 200, statusText: "OK" })
+  );
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  expect(body).not.toContain('"type":"text-delta"');
+  expect(errorLog).toHaveBeenCalled();
+});
+
+// #3910: fetchGuarded refuses to carry the BYOK/Authorization headers across a
+// cross-origin redirect (#2572). That refusal is an infrastructure failure and
+// must surface as an error the visitor can retry, not as a fake reply.
+it("surfaces a cross-origin credential redirect as a stream error", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(null, {
+      status: 302,
+      headers: { location: "https://evil.example.com/steal" },
+    })
+  );
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: { Authorization: "Bearer from-upstream-headers" },
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  expect(body).not.toContain('"type":"text-delta"');
+  expect(body).not.toContain("evil.example.com");
   expect(errorLog).toHaveBeenCalled();
 });
 
@@ -905,8 +959,9 @@ it("accepts a flat error envelope", async () => {
 });
 
 // The allowlist is the point: a code with no frontend copy would render as raw
-// JSON, which is worse than the generic message.
-it("still swallows an error code that is not on the allowlist", async () => {
+// JSON, which is worse than the generic message. The body is still swallowed,
+// but the turn must fail loudly (#3910).
+it("surfaces a non-allowlisted upstream code as a stream error without leaking the body", async () => {
   const { body, errorLog } = await streamFor400(
     JSON.stringify({
       error: { code: "thread_error", message: "Traceback: connect to db.internal:5432" },
@@ -915,12 +970,14 @@ it("still swallows an error code that is not on the allowlist", async () => {
 
   expect(body).not.toContain("thread_error");
   expect(body).not.toContain("db.internal");
-  expect(body).toMatch(/unavailable|try again/i);
+  expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  expect(body).not.toContain('"type":"text-delta"');
   expect(errorLog).toHaveBeenCalled();
 });
 
-it("still swallows a body that is not JSON", async () => {
+it("surfaces a non-JSON upstream body as a stream error without leaking the body", async () => {
   const { body } = await streamFor400("<html>502 Bad Gateway from nginx/1.25</html>");
   expect(body).not.toContain("nginx");
-  expect(body).toMatch(/unavailable|try again/i);
+  expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  expect(body).not.toContain('"type":"text-delta"');
 });
