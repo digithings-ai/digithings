@@ -499,7 +499,7 @@ silent orphan in a published performance series, which is the defect this closes
 | Writer | When | Owns |
 |---|---|---|
 | H9 `commit_io.book_portfolio` | commit time, ~12:00–14:00 UTC | the **provisional** row: NAV as of the latest close available *before* `run_date`, plus `cash_pct` / `invested_pct`, which H9 alone owns |
-| `digiquant/scripts/research/refresh_performance_metrics.py` | evening cron, ~22:00–23:00 UTC | the **authoritative** NAV: restated against that date's settled close |
+| `digiquant/scripts/research/verify_nav_replay.py --write` | evening cron, ~22:00–23:00 UTC | the **authoritative** NAV: engine replay restated against that date's settled close. `refresh_performance_metrics.py` only *guards* this row — it never computes NAV |
 
 **The evening restatement is a correction, not corruption.** Reading a manifest NAV and a
 `nav_history` NAV that differ for the same date is expected: the manifest is a commit-time
