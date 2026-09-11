@@ -186,7 +186,7 @@ def test_postgres_checkpointer_conninfo_carries_connection_bounds(
     pytest.importorskip("psycopg")
     monkeypatch.setenv("DIGI_CHECKPOINTER", "postgres")
     monkeypatch.setenv(
-        "DIGI_CHECKPOINTER_POSTGRES_URI", "postgresql://u:p@db.example.test:5432/postgres"
+        "CORE_POSTGRES_URI", "postgresql://u:p@db.example.test:5432/postgres"
     )
 
     ckpt = _graph_module.get_checkpointer()
@@ -215,7 +215,7 @@ def test_bounded_conn_string_accepts_keyword_value_form():
 
 @pytest.mark.unit
 def test_bounded_conn_string_preserves_operator_overrides():
-    """A value already in DIGI_CHECKPOINTER_POSTGRES_URI wins — that env var is the
+    """A value already in CORE_POSTGRES_URI wins — that env var is the
     documented escape hatch, so the defaults must never overwrite it."""
     pytest.importorskip("psycopg")
     out = _graph_module._bounded_conn_string(

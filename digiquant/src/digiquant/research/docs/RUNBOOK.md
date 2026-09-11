@@ -87,9 +87,9 @@ psql "$CORE_PG_URI" -c "VACUUM (ANALYZE);"
 # 3. Re-run the gate-script invocation from step 1 post-migration — PASS = exit 0 (<= 320MB).
 ```
 
-Owner actions before unsupervised operation: add `FRED_API_KEY` +
-`MARKET_DATA_POSTGRES_URI` to GitHub secrets (both MISSING — refresh/backfill
-need them). Prod gate: Worker-edge digikey JWT enforcement (scope
+Owner actions before unsupervised operation: add `CORE_POSTGRES_URI`
+to GitHub secrets (`FRED_API_KEY` provisioned 2026-09-10; refresh/backfill
+need the URI). Prod gate: Worker-edge digikey JWT enforcement (scope
 `digiquant:backtest`) must land before production MCP use (human decision,
 new external network exposure).
 

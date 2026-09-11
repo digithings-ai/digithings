@@ -78,7 +78,7 @@ def _bounded_conn_string(conn_string: str) -> str:
     Accepts either libpq spelling — a ``postgresql://`` URI or ``host=... dbname=...``
     keyword/value — because ``psycopg.conninfo.make_conninfo`` normalizes both and
     round-trips percent-escaped credentials that manual URL surgery mangles. Any parameter
-    the operator already set in ``DIGI_CHECKPOINTER_POSTGRES_URI`` wins, so the env var
+    the operator already set in ``CORE_POSTGRES_URI`` wins, so the env var
     remains the override path.
 
     Best-effort by design: if psycopg is absent or the string does not parse, it is
@@ -100,7 +100,7 @@ def _bounded_conn_string(conn_string: str) -> str:
         import logging as _logging
 
         _logging.getLogger(__name__).warning(
-            "DIGI_CHECKPOINTER_POSTGRES_URI is not parseable (%s); connecting without "
+            "CORE_POSTGRES_URI is not parseable (%s); connecting without "
             "explicit connect-timeout/keepalive bounds",
             exc,
         )
@@ -123,7 +123,7 @@ def get_checkpointer():
     Use ``none`` to compile without one (not recommended; breaks multi-turn / thread APIs).
 
     For sqlite: DIGI_CHECKPOINTER_SQLITE_URI (default ~/.digigraph/checkpoints.sqlite).
-    For postgres: DIGI_CHECKPOINTER_POSTGRES_URI (required for HA / multi-replica; see
+    For postgres: CORE_POSTGRES_URI (required for HA / multi-replica; see
     digigraph/ARCHITECTURE.md §5.5.1 — REM-099). Its conninfo is passed through
     :func:`_bounded_conn_string`, which fills in connect-timeout and TCP-keepalive
     parameters so a vanished peer cannot stall the process indefinitely (#1734).
@@ -176,7 +176,7 @@ def get_checkpointer():
             try:
                 from langgraph.checkpoint.postgres import PostgresSaver
 
-                conn_string = os.environ.get("DIGI_CHECKPOINTER_POSTGRES_URI", "").strip()
+                conn_string = os.environ.get("CORE_POSTGRES_URI", "").strip()
                 if conn_string:
                     cm = PostgresSaver.from_conn_string(_bounded_conn_string(conn_string))
                     _cm_holders.append(cm)
@@ -212,7 +212,7 @@ def get_store():
         if _store_instance is not None:
             return _store_instance
         if raw == "postgres":
-            conn_string = os.environ.get("DIGI_CHECKPOINTER_POSTGRES_URI", "").strip()
+            conn_string = os.environ.get("CORE_POSTGRES_URI", "").strip()
             if conn_string:
                 try:
                     from langgraph.store.postgres import PostgresStore
@@ -233,7 +233,7 @@ def get_store():
                 import logging as _logging
 
                 _logging.getLogger(__name__).warning(
-                    "DIGI_CHECKPOINTER=postgres but DIGI_CHECKPOINTER_POSTGRES_URI is "
+                    "DIGI_CHECKPOINTER=postgres but CORE_POSTGRES_URI is "
                     "unset; falling back to InMemoryStore for cross-thread memory (not "
                     "persistent, not shared across replicas)."
                 )

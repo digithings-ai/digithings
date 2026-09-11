@@ -515,7 +515,7 @@ graph TD
 
 | Concern | Compose Today | K8s Target | Action Required |
 |---------|--------------|------------|-----------------|
-| LangGraph checkpointer | `MemorySaver` (in-process) | Postgres (`DIGI_CHECKPOINTER=postgres`) | Set `DIGI_CHECKPOINTER_POSTGRES_URI`; install `langgraph-checkpoint-postgres` |
+| LangGraph checkpointer | `MemorySaver` (in-process) | Postgres (`DIGI_CHECKPOINTER=postgres`) | Set `CORE_POSTGRES_URI`; install `langgraph-checkpoint-postgres` |
 | digigraph rate limiting | Per-process dict | Redis-backed (`digibase` rate limiter) | Wire `REDIS_URL` to digigraph; implement distributed rate limiter (Phase 2) |
 | digisearch vector store | Chroma local volume | Azure AI Search or Qdrant Cloud | Set `AZURE_SEARCH_*` env vars; Chroma is dev/test only |
 | digikey storage | SQLite default | Postgres (required for multi-replica) | Set `DIGIKEY_DATABASE_URL=postgresql://...` |

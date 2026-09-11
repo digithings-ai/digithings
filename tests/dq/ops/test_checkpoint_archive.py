@@ -537,7 +537,7 @@ class TestMain:
         monkeypatch.setenv("R2_BUCKET", "bkt")
         monkeypatch.setenv("R2_ACCESS_KEY_ID", "k")
         monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "s")
-        monkeypatch.setenv("DIGI_CHECKPOINTER_POSTGRES_URI", "postgresql://fake/db")
+        monkeypatch.setenv("CORE_POSTGRES_URI", "postgresql://fake/db")
         monkeypatch.setattr("digiquant.ops.checkpoint_archive.R2Backend", lambda **kw: FakeStore())
         monkeypatch.setattr(
             "digiquant.ops.checkpoint_archive.DirectPostgresReader",
@@ -585,7 +585,7 @@ class TestMain:
         monkeypatch.setenv("R2_BUCKET", "bkt")
         monkeypatch.setenv("R2_ACCESS_KEY_ID", "k")
         monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "s")
-        monkeypatch.setenv("DIGI_CHECKPOINTER_POSTGRES_URI", "postgresql://fake/db")
+        monkeypatch.setenv("CORE_POSTGRES_URI", "postgresql://fake/db")
         monkeypatch.setattr("digiquant.ops.checkpoint_archive.R2Backend", lambda **kw: FakeStore())
         monkeypatch.setattr(
             "digiquant.ops.checkpoint_archive.DirectPostgresReader",
@@ -637,7 +637,7 @@ class TestMain:
         monkeypatch.setenv("R2_BUCKET", "bkt")
         monkeypatch.setenv("R2_ACCESS_KEY_ID", "k")
         monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "s")
-        monkeypatch.setenv("DIGI_CHECKPOINTER_POSTGRES_URI", "postgresql://fake/db")
+        monkeypatch.setenv("CORE_POSTGRES_URI", "postgresql://fake/db")
         monkeypatch.setattr("digiquant.ops.checkpoint_archive.R2Backend", lambda **kw: FakeStore())
         monkeypatch.setattr(
             "digiquant.ops.checkpoint_archive.DirectPostgresReader",
@@ -899,7 +899,7 @@ class TestDirectPostgresReader:
         monkeypatch.setenv("R2_BUCKET", "bkt")
         monkeypatch.setenv("R2_ACCESS_KEY_ID", "k")
         monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "s")
-        monkeypatch.delenv("DIGI_CHECKPOINTER_POSTGRES_URI", raising=False)
+        monkeypatch.delenv("CORE_POSTGRES_URI", raising=False)
         assert main([]) == 2
 
 
