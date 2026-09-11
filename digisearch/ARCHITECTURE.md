@@ -194,7 +194,7 @@ Key request fields:
 | `index_name` | `str` | Default: `"default"` |
 | `top_k` | `int` | 1–100; default 10 |
 | `mode` | `str` | `keyword` \| `vector` \| `hybrid` (validated). Backend capability hint — see [query.mode semantics](#querymode-semantics) |
-| `filter` | `str?` | Raw OData (only when `allow_raw_filter` is on) |
+| `filter` | `str?` | Raw OData — rejected (HTTP 400) unless the index config sets `allow_raw_filter: true` |
 | `filters` | `list[dict]?` | Structured: `[{field, op, value}]` |
 | `columns` | `list[str]?` | Metadata fields to return |
 | `facets` | `list[str]?` | Azure facet expressions |
@@ -281,6 +281,8 @@ Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, `digisearch_res
 Auth required. Rate limited: 10 req/min.
 
 Directly invokes the internal LangGraph pipeline (`plan → retrieve → aggregate`). Requires `digisearch[agent]` install. Returns `{service, error, trace, query, index_name, total, backend, results, rag_sources, formatted_context}`.
+
+Request: `ResearchTurnRequest {user_message, index_name, top_k, mode, filter?, filters?, session_id?, workspace_id?}`. Raw `filter` is rejected (HTTP 400) unless the index config sets `allow_raw_filter: true`. When `workspace_id` is set it is injected as a mandatory `workspace_id eq …` structured filter into the retrieve step, identical to `POST /query` (#3909).
 
 #### `POST /v1/web_search`
 
@@ -670,7 +672,7 @@ When `DIGISEARCH_RERANK_ENABLED` is truthy and `Query.skip_rerank` is false, `_m
 
 Azure is registered first (preferred), then Vectorize, then Chroma, stub last. Adding a new backend requires only calling `register_backend()` at import time. There is no configuration-driven selection — the first configured backend wins.
 
-**Weakness:** if Azure is misconfigured (credentials present but wrong), the Azure backend raises, logs a warning, returns `None`, and silently falls through to Chroma. Operators may not notice that a production query is served by the wrong backend. Vectorize is deliberately exempt from this fall-through — see below.
+**Fail-loud backends:** Azure (first) and Chroma (last) are optional local backends, but once one is *configured* a serving failure must not be silently answered from a different corpus. A failing `query_azure()` / `ChromaBackend.query()` now raises `SearchBackendError` (`indexes/backends/backend_errors.py`); `_stub.py`'s `_azure_backend` / `_chroma_backend` wrappers re-raise instead of returning `None`, and `SearchBackendError` is deliberately absent from `_BACKEND_ERRORS`, so `query_index` cannot swallow it and fall through (#3909). Only the "not configured" and optional-dependency-`ImportError` paths still return `None` so the router continues. Vectorize has the same contract via its own `VectorizeBackendError` — see below. A healthy backend with no matches still returns an empty result (not an error).
 
 #### Vectorize (remote index)
 
@@ -706,8 +708,9 @@ refuses to upsert under a different model) both live in `vectorize_sync.py`,
 not in `VectorizeBackend` itself — a chunk added through the generic
 `POST /ingest` → `route_add_chunks` path is not stamped or checked this way.
 
-Second, unlike `ChromaBackend.query`, which catches its errors and returns
-`[]`, a Vectorize failure propagates. `VectorizeBackend.query()` raises a plain
+Second, a Vectorize failure propagates rather than collapsing into an empty
+result — the same fail-loud contract Chroma/Azure now follow via
+`SearchBackendError` (#3909). `VectorizeBackend.query()` raises a plain
 `RuntimeError` on an HTTP error status or an HTTP-200-with-`success: false`
 body; `_vectorize_backend` then wraps *any* exception from that call —
 including an `ImportError` while importing `VectorizeBackend` itself — as
@@ -825,9 +828,11 @@ When `workspace_id` is set on `POST /query`, the server injects a mandatory stru
 
 Callers omitting `workspace_id` receive unscoped results (single-tenant default). Multi-tenant deployments should require `workspace_id` at the BFF layer.
 
+The research path is scoped the same way (#3909): `POST /v1/research_turn`, the `digisearch_research_delegate` orchestrator tool, and the `digisearch_research_turn` MCP tool all accept `workspace_id`, carry it on `ResearchTurnState`, and inject the mandatory `workspace_id eq …` clause in the retrieve step.
+
 ### Filter injection risks
 
-**Raw OData path:** `POST /query` accepts a `filter` string when `allow_raw_filter=True` is set in the index config. The `filter_validator.py` applies:
+**Raw OData path:** `POST /query`, `POST /v1/research_turn`, and the orchestrator invoke paths that feed them reject a raw `filter` (HTTP 400) when the configured index does not set `allow_raw_filter: true` (#3909); previously only the Azure backend re-gated it. When enabled, `filter_validator.py` applies:
 
 1. Blocked pattern regex: rejects `exec(`, `eval(`, `<script`, `javascript:`, `data:`
 2. Character allowlist: rejects non-OData characters including newlines
@@ -1162,6 +1167,8 @@ The current graph is minimal: `node_plan` validates input, `node_retrieve` calls
 - **Azure:** inject an OData filter clause `(workspace_id eq '{workspace_id}')` for all queries
 - **Vectorize:** `VectorizeBackend.query()` raises `VectorizeBackendError` when filters / `workspace_id` are present (#2219 fail-loud). Full fix: translate `Query.filters` into Vectorize metadata `filter`, register filterable fields as metadata indexes at index creation, or keep routing to a per-workspace index and omit filters
 - **Stub:** filter post-retrieval by `chunk.metadata.get("workspace_id")`
+
+The research path (`POST /v1/research_turn`, orchestrator `digisearch_research_delegate`, MCP `digisearch_research_turn`) applies the same server-side `workspace_id` injection as `POST /query` (#3909).
 
 Without this, `workspace_id` is decorative on backends that neither filter nor fail closed.
 
