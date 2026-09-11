@@ -15,7 +15,7 @@
 #   # edit secrets + provider keys
 #   make digichat-profile-a-bundle-up
 #
-# Stack-only (no digichat UI) — see frontend/digithings-stack-cloudflare/README.md
+# Stack-only (no digichat UI) — see cloudflare/digithings-stack-cloudflare/README.md
 # (`docker build` / `docker run`).
 
 name: digichat-profile-a-bundle
@@ -110,7 +110,7 @@ services:
       DIGICHAT_AUTO_MIGRATE: ${DIGICHAT_AUTO_MIGRATE:-1}
       DIGICHAT_CONFIG_PATH: ${DIGICHAT_CONFIG_PATH:-}
       DIGICHAT_CHROME_SKIN: ${DIGICHAT_CHROME_SKIN:-}
-      DIGICHAT_EMBED_ENABLED: ${DIGICHAT_EMBED_ENABLED:-1}
+      DIGICHAT_EMBED_ENABLED: ${DIGICHAT_EMBED_ENABLED:-0}
       DIGICHAT_REQUIRE_ROOT_AUTH: ${DIGICHAT_REQUIRE_ROOT_AUTH:-0}
       DIGICHAT_EMBED_TENANTS: ${DIGICHAT_EMBED_TENANTS:-}
       DIGICHAT_EMBED_HOSTS: ${DIGICHAT_EMBED_HOSTS:-}

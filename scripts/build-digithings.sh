@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build script for digithings.ai — run by Cloudflare Pages on every push.
-# digithings.ai is now a Next.js static-export app (frontend/digithings-web);
+# digithings.ai is now a Next.js static-export app (cloudflare/digithings-web);
 # this builds it and assembles dist/. (Was copy-only for the legacy static site.)
 #
 # NOTE: the Cloudflare Pages project for digithings.ai must run this script with
@@ -44,19 +44,19 @@ echo "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}"
 # hydration error (#2244) that never reproduces under webpack -- a known,
 # unresolved class of upstream Next.js/React bug (vercel/next.js#43159), not
 # an app bug. `next dev` is untouched; it never reproduced this.
-npm --workspace frontend/digithings-web run build
+npm --workspace cloudflare/digithings-web run build
 
 # Assemble dist/ from the static export (includes /og.png for the stable OG
 # URL, and self-hosted fonts under /_next/static/media).
 rm -rf dist
 mkdir -p dist
-cp -r frontend/digithings-web/out/. dist/
+cp -r cloudflare/digithings-web/out/. dist/
 echo "digithings.ai" > dist/CNAME
 
 # CSP frame-src must match the /chat iframe origin (Bugbot / embed cutover).
 [ -f dist/_headers ] || { echo "ERROR: dist/_headers missing — CSP would not apply" >&2; exit 1; }
 FRAME_SRC="$(node --input-type=module -e '
-  import { frameSrcForCsp } from "./frontend/digithings-web/lib/security-headers.mjs";
+  import { frameSrcForCsp } from "./cloudflare/digithings-web/lib/security-headers.mjs";
   process.stdout.write(frameSrcForCsp());
 ')"
 grep -F "frame-src ${FRAME_SRC}" dist/_headers >/dev/null \
@@ -113,12 +113,12 @@ mv "$META_TMP" dist/openwiki/index.html
 
 
 # Cloudflare Pages Functions live at the PROJECT ROOT (this script's CWD = repo root),
-# NOT inside the static output dir. Mirror from frontend/digithings-web/functions/
+# NOT inside the static output dir. Mirror from cloudflare/digithings-web/functions/
 # (Phase 3: digivault /api/chat + /api/byok on free Pages — no Containers).
 echo "--- mirroring Pages Functions to repo root ---"
 rm -rf functions
-if [ -d frontend/digithings-web/functions ] && [ -n "$(find frontend/digithings-web/functions -type f 2>/dev/null | head -1)" ]; then
-  cp -r frontend/digithings-web/functions functions
+if [ -d cloudflare/digithings-web/functions ] && [ -n "$(find cloudflare/digithings-web/functions -type f 2>/dev/null | head -1)" ]; then
+  cp -r cloudflare/digithings-web/functions functions
   # Wrangler's functions bundler treats every file under functions/ as a route
   # candidate. Test files (e.g. test.test.ts, colocated next to test.ts per
   # this repo's convention) export no onRequest* handler today, so they don't
@@ -127,7 +127,7 @@ if [ -d frontend/digithings-web/functions ] && [ -n "$(find frontend/digithings-
   # it stays true by construction (#2348).
   find functions -type f \( -name "*.test.ts" -o -name "*.test.tsx" \) -delete
 else
-  echo "ERROR: expected frontend/digithings-web/functions (digivault /api/chat)" >&2
+  echo "ERROR: expected cloudflare/digithings-web/functions (digivault /api/chat)" >&2
   exit 1
 fi
 if [ ! -f functions/api/chat.ts ]; then

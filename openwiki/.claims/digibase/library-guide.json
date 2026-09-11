@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:db9d428950415c63754b589c906d71c558b815e98dde8e07d319291506530b2b",
+  "pageVersion": "sha256:fb5d8af30ba11845a99f0552a3c6b23d8ea0b3088c38ea4fdfeaf40c9fe4fd9b",
   "claims": [
     {
       "id": "claim_77aba88ac88f44a98131a6ae36681463",
@@ -17,8 +17,12 @@
       "statement": "install_request_id_middleware assigns or honors X-Request-ID on request.state (registered after rate limiting for LIFO wrap) while outbound_service_headers merges correlation ID with an optional bearer without logging it.",
       "evidence": [
         {
-          "resource": "repo://digibase/src/digibase/http.py#L46-L120",
-          "version": "repo-lines-v1:sha256:e383170c3b07c11950545a89009a135d3dea223ca8a4be084648decb32ba865e:eyJzZWxlY3RlZExpbmVDb3VudCI6NzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFlNjk5MWFlYjBmYjA3YTM3OWMxZmEwYWFiMjc4M2MxMTgxYTM2NGI4YzYyMDQzOWMxYTVkOGVlMjczZTIyNWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3ZGNjOGE0Njc5ZDRkMDEyMDVmNWFkNTM0MjIyNWQ1YWU4NDRlM2UyNjE2OGExNThlMjY3ZDVjYTg5YzJhNzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3MDE0OWUwNjlhZDY3ZWNjZjQ3MzY0NmZmMWM3NTAwNTBkMzI5ZDExMDAxOGRjNTc2Njg3OGVhZmExZDYwN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk3MTNiODMzY2I5YjA0OTQ1MmUxNTA5ZmE3MzVjODFkNzQ2NTIyYTZkYTVkNjIwMTk2MTkyMWUzYWUxM2M3MzMifQ"
+          "resource": "repo://digibase/src/digibase/http.py#L46-L68",
+          "version": "repo-lines-v1:sha256:177d282dd0b764cb0c933e6b5d009d1fb8507c4fa10a88fec0dff34f56518782:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFlNjk5MWFlYjBmYjA3YTM3OWMxZmEwYWFiMjc4M2MxMTgxYTM2NGI4YzYyMDQzOWMxYTVkOGVlMjczZTIyNWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM1ZTJkYWNmYjUwNGQ4MWEzMDFhZTM1MzgwZDgzMjM1ZjhlNjUwYjQzYjg4ODdlMDIxMjE0ODQ4ZTJmZDM4YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3MDE0OWUwNjlhZDY3ZWNjZjQ3MzY0NmZmMWM3NTAwNTBkMzI5ZDExMDAxOGRjNTc2Njg3OGVhZmExZDYwN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQzMGMyMDc2YzZhMjI4ODE5NWZkZjBmNTc4NmMwZWUwZGUyYzkwYjVkNmI5NzI4ZGYyMmZlMDRkOTRiOTIxNmIifQ"
+        },
+        {
+          "resource": "repo://digibase/src/digibase/http.py#L79-L95",
+          "version": "repo-lines-v1:sha256:7aaa63dfe49967fc65e50d231672bfdcdfab1b84dffdc8123f8101749e79d2da:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNiNTI5ZmJjZWRjZTZiZTFlMzkwODVjOWE1ODY5OWMyMmFlNDJkMTY1YTdkNDA2MDdjZjZiM2QxYzY2YTYwMWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2YTcxNTI1NzJlZTg0ZjEwOTA2Yzc0YjlmMmE5MjQzNGRkYWIwZTNjNDI4MTNiMDRlNTk3ZWZjZWM5NTFiMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZmMTg5OWE4MTgxMzI5MzUzZmM4ZWE3ZmM3ZjhiMjFjMWQ4MDFhYzVjYmVlMzNhOWZjNjY1NTc2NjBiNzc0ZTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEyOThjZDRhMzUwYjlhYWYxN2NlMTUzYmYzNmJjMzk2ZGQ3MTdjMDllMjFiODE1NDlkMTRiZmQ0MTg0MTBkNzAifQ"
         }
       ]
     },
@@ -34,11 +38,15 @@
     },
     {
       "id": "claim_a8f9c931ebbd4de09dd5c72856efdcbf",
-      "statement": "setup_otel_fastapi is a strict no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set and requires the digibase[otel] extra, warning and continuing without tracing otherwise.",
+      "statement": "setup_otel_fastapi is a strict no-op unless DIGI_OTEL_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT is set and requires the digibase[otel] extra, warning and continuing without tracing otherwise.",
       "evidence": [
         {
-          "resource": "repo://digibase/src/digibase/otel.py#L12-L30",
-          "version": "repo-lines-v1:sha256:cd42f1d94b8f5d31f1c144ba056b858210a3d7e97e75b33d11211c9969a89858:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE1NWFjNGYyMWE5YzdhNWYwN2IwNjhlYzMxMGY1OWYyOWNkODQyMTg0MzVhYjAyNTdhYWI3N2NhNjc1NTU3NjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxOWQzZGVmNDFkNDk1NDY1NWI5YzRlNjJiOTNhMDJjZTAxZTY0MDEzZWEzZGQyZTVhMDE3NTgwYjJhMzI4ZGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ4ZDFhYzczMTI1NTE0ZjM5MzNlMjU5Njc1ZTdjZmViZjM0NmViMjMzYTM5NmIzYzg4NGNlYzAzNzI1ODJkMjAifQ"
+          "resource": "repo://digibase/src/digibase/otel.py#L12-L21",
+          "version": "repo-lines-v1:sha256:cacc13823a61cadf7d4fbe3de35e7eac540d1f5290e61753d58830068afd248b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBkNjA3YjIyMTRmOWY5MWMxMDYxZjRhZTdjM2JhNDNkYmQ3NmNiNzk4NDhiZTFkYTdjNzFlY2JkZDFhMWZhY2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE1MTIyZDNlYjdmZTA0NDM5YjJmYmJkZDU2MGZmZTc1OWM1OTFiZmNkYzhhYmY2YzNmOWFmMWViYWUyOTMwZmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjExYjI0NWFkYzVjYTQ4MTY1OTdmYzM3ZThlODJlYzM1NTg3NDc2ZTE4ZjZkNmY0OGZhMWFhNjkzMjY0ZmNjODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY5NTc3M2FhMGUzYjVkMTFjMTQ3NWY1YTFhOWQyNzVlZGZmMGJhN2E0NDkzZGE0YTA1YTZmYzYyYWE0YmY0MjAifQ"
+        },
+        {
+          "resource": "repo://digibase/src/digibase/otel.py#L39-L71",
+          "version": "repo-lines-v1:sha256:587a7c4151a98290452438c4c04d89c438c46f17aa53dab7e0d90ad9e8c3066d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJmN2U3Y2IwMTM4MzVjMzA3MmIxMTJlY2Y0YTQ2ODZjMzU2ZDhhOGE4ZGViMDkzZWJjZGJmN2JlNmI1MGM3NzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFiNWM4MjYzMmZjODJkNGIyYzM0MGY0MjU1OGJhM2RmYTMxYzc2NTVkZjZmY2MxNjhiNGZkY2U1N2ZhYzYwNDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAxYjBiZWRlNzQxYzY5ZWJhZjhiZjQxYTE1MjQyZjViNjY5ZDQ4Njg0YmExZjBkZjlhYzRkMzAxZTRlNjRlOTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc4ZmRlNDBjYzUwZTg5NjcyMTRkMjBiYjVmMDA3YzY2YjkyODNjOTNmMzUxMzZmMjk0YjMyMTRiZTU2OTZkZGMifQ"
         }
       ]
     },
@@ -55,6 +63,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-07T22:38:58.074Z"
+    "at": "2026-09-09T14:37:17.158Z"
   }
 }

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Build script for digiquant.io — run by Cloudflare Pages on every push.
 # Assembles into dist/:
-#   1. frontend/digiquant-web/out/ — the digiquant.io landing (Next.js static
+#   1. cloudflare/digiquant-web/out/ — the digiquant.io landing (Next.js static
 #      export, root domain, no basePath) → dist/ root
-#   2. frontend/dashboard/out/     — the dashboard (basePath /dashboard)
+#   2. cloudflare/dashboard/out/     — the dashboard (basePath /dashboard)
 #      → dist/dashboard/ only. The landing export keeps a temporary 308 from
 #      /olympus/* to /dashboard/* so existing bookmarks do not fail closed.
 # The digiquant-web export ships public/_headers (root /* security headers +
@@ -36,8 +36,8 @@ if [ "$(uname -s)" = "Linux" ]; then
 fi
 
 # REM-037: committed static portfolio JSON must not ship (Supabase is primary).
-if [ -f frontend/dashboard/public/dashboard-data.json ]; then
-  echo "ERROR: frontend/dashboard/public/dashboard-data.json must not be committed (REM-037)."
+if [ -f cloudflare/dashboard/public/dashboard-data.json ]; then
+  echo "ERROR: cloudflare/dashboard/public/dashboard-data.json must not be committed (REM-037)."
   echo "       Remove the file; portfolio data comes from Supabase at runtime."
   exit 1
 fi
@@ -64,8 +64,8 @@ echo "--- building digiquant-web (Next.js static export) ---"
 # digithings-web's build-digithings.sh (#2244): Turbopack production-builds
 # this home page into an intermittent React hydration error; webpack does
 # not. `next dev` is untouched; it never reproduced this.
-npm --workspace frontend/digiquant-web run build
-cp -r frontend/digiquant-web/out/. dist/
+npm --workspace cloudflare/digiquant-web run build
+cp -r cloudflare/digiquant-web/out/. dist/
 
 # 2. Dashboard (basePath /dashboard) → dist/dashboard/.
 echo "--- building dashboard ---"
@@ -90,9 +90,9 @@ fi
 echo "NEXT_PUBLIC_DIGICHAT_POPUP=${NEXT_PUBLIC_DIGICHAT_POPUP}"
 echo "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}"
 echo "NEXT_PUBLIC_DIGICHAT_EMBED_HOST=${NEXT_PUBLIC_DIGICHAT_EMBED_HOST}"
-npm --workspace frontend/dashboard run build
+npm --workspace cloudflare/dashboard run build
 mkdir -p dist/dashboard
-cp -r frontend/dashboard/out/. dist/dashboard/
+cp -r cloudflare/dashboard/out/. dist/dashboard/
 
 # 3. Custom domain marker.
 echo "digiquant.io" > dist/CNAME

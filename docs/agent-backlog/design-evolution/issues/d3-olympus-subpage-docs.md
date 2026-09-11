@@ -1,6 +1,6 @@
 ## Goal
 
-Document **Olympus subpage chrome** (sticky tab bar, breadcrumbs, section headers) in design references so twelve-x and future subpages stay aligned with Cursor literal-nav pattern ([`EVOLUTION.md` §3](../../../../frontend/digiweb/design/EVOLUTION.md)).
+Document **Olympus subpage chrome** (sticky tab bar, breadcrumbs, section headers) in design references so twelve-x and future subpages stay aligned with Cursor literal-nav pattern ([`EVOLUTION.md` §3](../../../../cloudflare/digiweb/design/EVOLUTION.md)).
 
 ## Component
 
@@ -8,14 +8,14 @@ Document **Olympus subpage chrome** (sticky tab bar, breadcrumbs, section header
 
 ## Acceptance Criteria
 
-- [ ] New doc `frontend/digiweb/design/references/olympus-subpage-chrome.md` covering:
+- [ ] New doc `cloudflare/digiweb/design/references/olympus-subpage-chrome.md` covering:
   - Tab bar anatomy (`SubpageStickyTabBar`)
   - When to use tabs vs sidebar
   - Typography roles on dashboard (Instrument Serif display, mono labels)
   - Surface/border rules post-D1
   - Screenshot or ASCII wireframe of standard subpage layout
-- [ ] Linked from `frontend/digiweb/design/references/README.md` and `EVOLUTION.md` §11
-- [ ] `frontend/olympus/ARCHITECTURE.md` cross-links to new doc
+- [ ] Linked from `cloudflare/digiweb/design/references/README.md` and `EVOLUTION.md` §11
+- [ ] `cloudflare/olympus/ARCHITECTURE.md` cross-links to new doc
 - [ ] Docs-only PR; `make doc-check` passes
 
 ## Test Requirements
@@ -24,9 +24,9 @@ Document **Olympus subpage chrome** (sticky tab bar, breadcrumbs, section header
 
 ## Documentation to Update
 
-- [ ] `frontend/digiweb/design/references/olympus-subpage-chrome.md` (new)
-- [ ] `frontend/digiweb/design/references/README.md`
-- [ ] `frontend/digiweb/design/EVOLUTION.md` — twelve-x alignment gap closed
+- [ ] `cloudflare/digiweb/design/references/olympus-subpage-chrome.md` (new)
+- [ ] `cloudflare/digiweb/design/references/README.md`
+- [ ] `cloudflare/digiweb/design/EVOLUTION.md` — twelve-x alignment gap closed
 
 ## Out of Scope
 

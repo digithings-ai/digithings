@@ -4,7 +4,7 @@ Build shared **`CaseStudyCard`** primitive — Graphite `{Co} × Product` horizo
 
 ## Component
 
-- [x] cross-cutting (`frontend/digiweb/design/`)
+- [x] cross-cutting (`cloudflare/digiweb/design/`)
 
 ## Acceptance Criteria
 
@@ -21,8 +21,8 @@ Build shared **`CaseStudyCard`** primitive — Graphite `{Co} × Product` horizo
 
 ## Documentation to Update
 
-- [ ] `frontend/digiweb/design/site/README.md`
-- [ ] `frontend/digiweb/design/COPY_GUIDE.md` §12 anti-patterns
+- [ ] `cloudflare/digiweb/design/site/README.md`
+- [ ] `cloudflare/digiweb/design/COPY_GUIDE.md` §12 anti-patterns
 
 ## Out of Scope
 

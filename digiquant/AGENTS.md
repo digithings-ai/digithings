@@ -96,9 +96,9 @@ ruff check digiquant/ && ruff format --check digiquant/
 
 ## Dashboard (research + portfolio)
 
-Public path is **`/dashboard/`** only (`frontend/dashboard`; ADR-0026). `/dashboard/` is retired — no redirect alias.
+Public path is **`/dashboard/`** only (`cloudflare/dashboard`; ADR-0026). `/dashboard/` is retired — no redirect alias.
 
-When touching `digiquant/src/digiquant/dashboard/` **or** `frontend/dashboard/` Group A queries:
+When touching `digiquant/src/digiquant/dashboard/` **or** `cloudflare/dashboard/` Group A queries:
 
 1. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) § research + portfolio and
    [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md).

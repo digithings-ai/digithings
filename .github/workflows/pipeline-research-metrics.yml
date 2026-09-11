@@ -1,4 +1,4 @@
-# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
+# Production clock: Cloudflare Worker digithings-cron (cloudflare/digithings-cron). Schedule removed #3579.
 name: "Pipeline: research metrics refresh"
 
 # Daily refresh of the derived performance + lookback surfaces the dashboard
@@ -108,6 +108,7 @@ jobs:
         continue-on-error: true
 
       - name: Write NAV from Nautilus engine (engine NAV writer)
+        timeout-minutes: 10
         env:
           CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
           CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -143,6 +144,7 @@ jobs:
       # and the full-path compare covers the target date anyway. Guards the
       # last-writer invariant without writing.
       - name: Verify NAV against engine replay (read-only)
+        timeout-minutes: 10
         env:
           CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
           CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}

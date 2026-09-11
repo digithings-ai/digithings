@@ -13,9 +13,391 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any
+import time
+from typing import Any, Literal, overload  # score:allow untyped any — MCP payloads
 
 logger = logging.getLogger(__name__)
+
+# ── Market-data backend: Supabase vs versioned R2 history (#3780, Task 4) ──
+#
+# ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` routes the price/macro tools through the
+# R2HistoryStore generations + manifest sealed at ``manifest["as_of"]``, merged
+# with a live overlap and settled-close semantics. Default ``supabase`` keeps
+# the current bodies byte-for-byte (extracted as ``_supabase_*`` below).
+
+_TTL_SECONDS = 900
+_ttl: dict[tuple, tuple[float, str]] = {}
+
+# Calendar days of live overlap fetched ahead of the R2 manifest seal.
+_R2_LIVE_OVERLAP_DAYS = 30
+
+
+def _ttl_get(key: tuple) -> str | None:
+    hit = _ttl.get(key)
+    if hit and time.time() - hit[0] < _TTL_SECONDS:
+        return hit[1]
+    return None
+
+
+def _supabase_technicals(ticker: str, lookback: int) -> str:
+    """Current Supabase body, extracted unchanged (non-R2 path)."""
+    from digiquant.research.data.queries import get_price_technicals
+    from digiquant.research.supabase_io import SupabaseConfig, build_client
+
+    try:
+        client = build_client(SupabaseConfig.from_env())
+        result = get_price_technicals(client=client, ticker=ticker, lookback=lookback)
+    except Exception as exc:  # surface as JSON to the caller, never crash
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+    return json.dumps(result, default=str)
+
+
+def _supabase_macro(series_ids: list[str], lookback: int) -> str:
+    """Current Supabase body, extracted unchanged (non-R2 path)."""
+    from digiquant.research.data.queries import get_macro_series
+    from digiquant.research.supabase_io import SupabaseConfig, build_client
+
+    try:
+        client = build_client(SupabaseConfig.from_env())
+        result = get_macro_series(client=client, series_ids=series_ids, lookback=lookback)
+    except Exception as exc:  # surface as JSON to the caller, never crash
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+    return json.dumps(result, default=str)
+
+
+def _get_r2_store() -> Any:
+    """Build the read-path ``R2HistoryStore`` from env (patchable seam for tests)."""
+    from digiquant.data.prices.r2_history import R2HistoryStore
+    from digiquant.ops.checkpoint_archive import (
+        R2_ACCESS_KEY_ENV,
+        R2_ACCOUNT_ENV,
+        R2_BUCKET_ENV,
+        R2_SECRET_KEY_ENV,
+        R2Backend,
+    )
+
+    account = (os.environ.get(R2_ACCOUNT_ENV) or "").strip()
+    bucket = (os.environ.get(R2_BUCKET_ENV) or "").strip()
+    access = (os.environ.get(R2_ACCESS_KEY_ENV) or "").strip()
+    secret = (os.environ.get(R2_SECRET_KEY_ENV) or "").strip()
+    if not (account and bucket and access and secret):
+        raise RuntimeError(
+            "missing R2 credentials; set R2_ACCOUNT_ID/R2_BUCKET/R2_ACCESS_KEY_ID/"
+            "R2_SECRET_ACCESS_KEY"
+        )
+    backend = R2Backend(
+        endpoint_url=f"https://{account}.r2.cloudflarestorage.com",
+        bucket=bucket,
+        access_key=access,
+        secret_key=secret,
+    )
+
+    def _read_only_registry_insert(
+        source_table: str, source_key: dict, r2_key: str, sha256: str, size: int
+    ) -> None:
+        raise RuntimeError("market-data MCP read path must not write registry rows")
+
+    return R2HistoryStore(backend, _read_only_registry_insert)
+
+
+def _read_manifest() -> dict:
+    """Read the R2 market-data manifest (version-checked by the store)."""
+    return _get_r2_store().read_manifest()  # type: ignore[no-any-return]
+
+
+def _r2_is_stale(manifest_as_of: str, resolved_as_of: str) -> bool:
+    """Task 6 staleness gate on the read path: seal >5 trading days behind as_of."""
+    from digiquant.data.prices.refresh_gate import staleness_gate
+
+    return not bool(staleness_gate(manifest_as_of, resolved_as_of)["ok"])
+
+
+@overload
+def _read_r2_window(ticker: str, as_of: str, manifest: dict | None = ...) -> list[dict]: ...
+
+
+@overload
+def _read_r2_window(
+    ticker: str, as_of: str, manifest: dict | None = ..., *, return_stale: Literal[True]
+) -> tuple[list[dict], bool]: ...
+
+
+def _read_r2_window(
+    ticker: str, as_of: str, manifest: dict | None = None, *, return_stale: bool = False
+) -> list[dict] | tuple[list[dict], bool]:
+    """Date-ascending indicator dicts for *ticker* sealed at *as_of*.
+
+    R2 history (SHA-verified via the manifest) + live overlap fetched from
+    ``(manifest_as_of, as_of]`` → :func:`merge_history_live` with
+    ``sealed=False`` (settled close: the live ``as_of`` bar is excluded) →
+    :func:`compute_indicators`. An ``as_of`` at or before the manifest seal
+    skips the live fetch entirely, and the merged frame is additionally bounded
+    to ``date <= as_of`` so historical reads (``as_of`` behind the seal — the
+    cutover's backfill use case) cannot leak newer history (#3780 Task 7).
+    A missing ``latest`` pointer (KeyError)
+    maps to an unknown-ticker ``LookupError`` for the MCP error envelope.
+    A live-fetch failure raises (surfaced as the ``{"error"}`` envelope by
+    the caller) — it is never swallowed into a valid-looking window.
+    A per-ticker fetch *error entry* (``FetchResult.errors`` with no raised
+    exception, e.g. vendor ``no_data``) serves history-only rows but marks the
+    read stale (fail-soft serving + loud flag — Task 7 decision, mirroring the
+    Task 6 cron): pass ``return_stale=True`` to get ``(rows, live_stale)``.
+    Indicator columns are attached to the merged frame via a date-ordered
+    left join, with a row-count guard so a reordering/filtering change in
+    :func:`compute_indicators` fails loud instead of misaligning.
+    """
+    import io
+    from datetime import date as _date
+    from datetime import timedelta as _td
+
+    import polars as pl
+
+    from digiquant.data.prices.merge import merge_history_live
+    from digiquant.data.prices.r2_history import latest_pointer_key, normalize_ticker
+    from digiquant.data.prices.technicals import compute_indicators
+
+    manifest = manifest if manifest is not None else _read_manifest()
+    as_of_d = _date.fromisoformat(as_of)
+    manifest_d = _date.fromisoformat(str(manifest["as_of"]))
+    manifest_seal = manifest_d.isoformat()
+    resolved_as_of = as_of_d.isoformat()
+    store = _get_r2_store()
+    datasets = manifest.get("datasets") or {}
+    entry = datasets.get(ticker) or datasets.get(normalize_ticker(ticker))
+    if entry is not None:
+        payload = store.get_generation(str(entry["object"]), str(entry["sha256"]))
+    else:
+        try:
+            gen_key = store.read_latest(latest_pointer_key(ticker))
+        except KeyError:
+            raise LookupError(f"unknown ticker {ticker!r}") from None
+        sha: str | None = None
+        for cand in datasets.values():
+            if isinstance(cand, dict) and cand.get("object") == gen_key:
+                sha = cand.get("sha256")
+                break
+        if sha is None:
+            raise LookupError(f"unknown ticker {ticker!r}")
+        payload = store.get_generation(gen_key, str(sha))
+
+    hist = pl.read_parquet(io.BytesIO(payload))
+    if "date" not in hist.columns and "timestamp" in hist.columns:
+        hist = hist.rename({"timestamp": "date"})
+    hist = hist.with_columns(pl.col("date").cast(pl.Date)).sort("date")
+
+    if as_of_d <= manifest_d:
+        live = hist.clear()
+        live_stale = False
+    else:
+        live_stale = False
+        try:
+            from digiquant.data.prices.fetchers import fetch_batch
+
+            live_start = max(manifest_d + _td(days=1), as_of_d - _td(days=_R2_LIVE_OVERLAP_DAYS))
+            fetched = fetch_batch(
+                [ticker],
+                start=live_start.isoformat(),
+                end=(as_of_d + _td(days=1)).isoformat(),
+            )
+            if ticker in fetched.errors:
+                # Vendor error entry, no exception: serve history-only but flag
+                # stale (Task 7 fail-soft decision) — never a fresh-looking seal.
+                live_stale = True
+                logger.warning(
+                    "R2 read %s as_of=%s: live fetch error entry (%s); "
+                    "serving history-only (stale)",
+                    ticker,
+                    resolved_as_of,
+                    fetched.errors[ticker],
+                )
+            frame = fetched.frames.get(ticker)
+            if frame is None or frame.is_empty():
+                live = hist.clear()
+            else:
+                staged = frame.with_columns(pl.col("timestamp").cast(pl.Date).alias("date"))
+                live = staged.select(
+                    pl.col("date").cast(pl.Date),
+                    *(
+                        pl.col(c).cast(hist.schema[c])
+                        if c in staged.columns
+                        else pl.lit(None).cast(hist.schema[c]).alias(c)
+                        for c in hist.columns
+                        if c != "date"
+                    ),
+                )
+        except Exception as exc:
+            raise RuntimeError(f"live fetch failed for {ticker!r}: {exc}") from exc
+
+    merged = merge_history_live(hist, live, manifest_seal, resolved_as_of, sealed=False)
+    # Historical-read bound: the merge only caps history at the seal, so an
+    # as_of behind the seal would leak newer history (look-ahead). No-op when
+    # as_of >= seal (merge output is already <= as_of there).
+    merged = merged.filter(pl.col("date") <= pl.lit(resolved_as_of).cast(pl.Date))
+    if merged.is_empty():
+        return ([], live_stale) if return_stale else []
+    ohlcv = merged.rename({"date": "timestamp"}) if "timestamp" not in merged.columns else merged
+    indicators = compute_indicators(ohlcv)
+    if indicators.height != merged.height:
+        raise RuntimeError(
+            f"indicator/price row mismatch for {ticker!r}: "
+            f"{indicators.height} indicator rows vs {merged.height} merged rows"
+        )
+    rows = (
+        merged.select(pl.col("date"), pl.col("close"))
+        .with_row_index("_mcp_pos")
+        .join(indicators.with_row_index("_mcp_pos"), on="_mcp_pos", how="left")
+        .drop("_mcp_pos")
+        .sort("date")
+        .to_dicts()
+    )
+    return (rows, live_stale) if return_stale else rows
+
+
+def _read_r2_macro_window(
+    series_ids: list[str], as_of: str, manifest: dict | None = None
+) -> dict[str, dict]:
+    """Per-series ``{latest, window}`` macro observations sealed at *as_of*.
+
+    A series whose generation is missing from the manifest (unknown sha) or
+    whose ``latest`` pointer is absent raises ``LookupError`` — surfaced as
+    the ``{"error"}`` envelope by the caller — so backfill key mismatches
+    fail loud instead of serving empty windows.
+    """
+    import io
+
+    import polars as pl
+
+    from digiquant.data.prices.r2_history import macro_latest_pointer_key
+
+    manifest = manifest if manifest is not None else _read_manifest()
+    datasets = manifest.get("datasets") or {}
+    store = _get_r2_store()
+    out: dict[str, dict] = {}
+    for sid in series_ids:
+        try:
+            gen_key = store.read_latest(macro_latest_pointer_key("fred", sid))
+            sha = None
+            for cand in datasets.values():
+                if isinstance(cand, dict) and cand.get("object") == gen_key:
+                    sha = cand.get("sha256")
+                    break
+            if sha is None:
+                raise LookupError(f"unknown macro series {sid!r}")
+            frame = pl.read_parquet(io.BytesIO(store.get_generation(gen_key, str(sha))))
+            date_col = "obs_date" if "obs_date" in frame.columns else "date"
+            rows = (
+                frame.with_columns(pl.col(date_col).cast(pl.Date))
+                .filter(pl.col(date_col) <= pl.lit(as_of).cast(pl.Date))
+                .sort(date_col)
+                .to_dicts()
+            )
+            out[sid] = {"latest": rows[-1] if rows else {}, "window": rows}
+        except KeyError:
+            raise LookupError(f"unknown macro series {sid!r}") from None
+    return out
+
+
+def digiquant_get_price_technicals(
+    ticker: str, lookback: int = 20, as_of: str | None = None
+) -> str:
+    """Technicals for *ticker*, Supabase-backed by default or R2-backed with the flag.
+
+    The R2 envelope is ``{"as_of", "rows", "stale"}``: ``stale`` is true when
+    the manifest seal is >5 trading days behind ``as_of`` (Task 6 gate) or the
+    live overlap carried a per-ticker fetch error entry (history-only serve).
+
+    Two independent ``stale`` signals share the name (#3780 Task 7 fix round
+    M2): the manifest's writer-side ``stale`` (Task 6 refresh cron — the seal's
+    age at generation time) vs this envelope's reader-side ``stale`` (evaluated
+    per request from the seal and the live overlap). They can disagree (a fresh
+    manifest served through a flaked live fetch reads stale here). Task 10 docs
+    must carry the glossary entry.
+    """
+    try:
+        lookback = min(int(lookback), 500)
+        from digiquant.research.data.queries import r2_backend_enabled
+
+        if not r2_backend_enabled():
+            return _supabase_technicals(ticker, lookback)
+        manifest = _read_manifest()
+        if manifest["version"] != 1:
+            return json.dumps({"error": f"unsupported manifest version {manifest['version']}"})
+        resolved = as_of or manifest["as_of"]
+        cache_key = ("technicals", ticker, resolved, manifest["version"])
+        cached = _ttl_get(cache_key)
+        if cached is not None:
+            return cached
+        rows, live_stale = _read_r2_window(ticker, resolved, manifest, return_stale=True)
+        stale = live_stale or _r2_is_stale(str(manifest["as_of"]), resolved)
+        if stale:
+            logger.warning(
+                "R2 technicals %s as_of=%s seal=%s live_stale=%s: serving stale window",
+                ticker,
+                resolved,
+                manifest["as_of"],
+                live_stale,
+            )
+        payload = json.dumps(
+            {"as_of": resolved, "rows": rows[-lookback:], "stale": stale}, default=str
+        )
+        # Task 7 fix round (M1): never cache a stale-flagged payload — a stale
+        # serve pinned for the full 900s TTL would keep reporting stale after
+        # the vendor flake clears. Fresh payloads cache normally.
+        if not stale:
+            _ttl[cache_key] = (time.time(), payload)
+        return payload
+    except Exception as exc:
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+
+def digiquant_get_macro_series(
+    series_ids: list[str], lookback: int = 6, as_of: str | None = None
+) -> str:
+    """Macro observations for *series_ids*, Supabase-backed by default or R2-backed.
+
+    The R2 envelope is ``{"as_of", "series", "stale"}`` (per-series
+    ``{latest, window}``). Unknown series fail loud (``{"error"}``); a stale
+    manifest seal only flags ``stale`` — macro has no live overlap to repair it.
+
+    Same two-``stale`` note as technicals (#3780 Task 7 fix round M2): the
+    manifest's writer-side ``stale`` (Task 6 cron) vs this envelope's
+    reader-side ``stale``. Task 10 docs must carry the glossary entry.
+    """
+    try:
+        lookback = min(int(lookback), 500)
+        from digiquant.research.data.queries import r2_backend_enabled
+
+        if not r2_backend_enabled():
+            return _supabase_macro(series_ids, lookback)
+        manifest = _read_manifest()
+        if manifest["version"] != 1:
+            return json.dumps({"error": f"unsupported manifest version {manifest['version']}"})
+        resolved = as_of or manifest["as_of"]
+        cache_key = ("macro", tuple(series_ids), resolved, manifest["version"])
+        cached = _ttl_get(cache_key)
+        if cached is not None:
+            return cached
+        per_series = _read_r2_macro_window(series_ids, resolved, manifest)
+        stale = _r2_is_stale(str(manifest["as_of"]), resolved)
+        if stale:
+            logger.warning(
+                "R2 macro %s as_of=%s seal=%s: serving stale window",
+                series_ids,
+                resolved,
+                manifest["as_of"],
+            )
+        series = {
+            sid: {"latest": payload["latest"], "window": payload["window"][-lookback:]}
+            for sid, payload in per_series.items()
+        }
+        payload = json.dumps({"as_of": resolved, "series": series, "stale": stale}, default=str)
+        # Task 7 fix round (M1): same no-cache-on-stale rule as technicals.
+        if not stale:
+            _ttl[cache_key] = (time.time(), payload)
+        return payload
+    except Exception as exc:
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -32,18 +414,63 @@ def _require_mcp() -> type:
     return FastMCP  # type: ignore[return-value]
 
 
-def create_mcp_server() -> Any:
-    _require_mcp()
-    mcp = FastMCP("digiquant")
+#: Tools safe for the dashboard-chat surface: latest/historical runs, published
+#: research reads, prices/technicals, macro, the house book, read-only gate
+#: evaluations, and the coinmetrics catalog discovery tool. Everything else
+#: (backtest / optimize / pipeline / export / fetches / fits / tearsheets /
+#: policy-replay runs) is compute or mutate and stays on ``scope="full"`` only.
+READ_SCOPE_TOOLS: frozenset[str] = frozenset(
+    {
+        "digiquant_list_strategies",
+        "digiquant_get_price_technicals",
+        "digiquant_get_macro_series",
+        "digiquant_query_data",
+        "dashboard_get_policy_replay",
+        "dashboard_get_policy_comparison",
+        "dashboard_evaluate_policy_gate",
+        "dashboard_get_policy_gate_evaluation",
+        "digiquant_list_coinmetrics_catalog",
+    }
+)
 
-    @mcp.tool()
+_MCP_SCOPES = ("full", "read")
+
+
+def create_mcp_server(
+    scope: str = "full",
+    host: str = "127.0.0.1",
+    port: int = 8767,
+) -> Any:
+    """Build the digiquant FastMCP server.
+
+    ``scope="read"`` registers only :data:`READ_SCOPE_TOOLS` (dashboard chat);
+    ``scope="full"`` (default) registers every tool. ``host``/``port`` go on
+    the server — installed mcp's ``run()`` takes transport only.
+    """
+    if scope not in _MCP_SCOPES:
+        raise ValueError(f"unknown MCP scope {scope!r}; expected one of {', '.join(_MCP_SCOPES)}")
+    _require_mcp()
+    mcp = FastMCP("digiquant", host=host, port=port)
+    enabled = READ_SCOPE_TOOLS if scope == "read" else None
+
+    def _maybe_tool(name: str):
+        """Register the tool unless a read scope excludes it."""
+
+        def _register(fn):
+            if enabled is None or name in enabled:
+                return mcp.tool(name=name)(fn)
+            return fn
+
+        return _register
+
+    @_maybe_tool("digiquant_list_strategies")
     def digiquant_list_strategies() -> str:
         """List registered strategies (name, aliases, description, default_params)."""
         from digiquant.service import service_list_strategies
 
         return json.dumps(service_list_strategies(), indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_run_backtest")
     def digiquant_run_backtest(
         strategy_name: str,
         symbols_json: str,
@@ -65,7 +492,7 @@ def create_mcp_server() -> Any:
         )
         return result.model_dump_json(indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_run_optimize")
     def digiquant_run_optimize(
         strategy_name: str,
         symbols_json: str,
@@ -100,7 +527,7 @@ def create_mcp_server() -> Any:
         )
         return result.model_dump_json(indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_export")
     def digiquant_export(
         strategy_name: str,
         target: str,
@@ -117,7 +544,7 @@ def create_mcp_server() -> Any:
         )
         return result.model_dump_json(indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_run_pipeline")
     def digiquant_run_pipeline(
         strategy_name: str,
         symbols_json: str,
@@ -157,41 +584,33 @@ def create_mcp_server() -> Any:
         )
         return json.dumps(raw, indent=2)
 
-    @mcp.tool()
-    def digiquant_get_price_technicals(ticker: str, lookback: int = 20) -> str:
+    @_maybe_tool("digiquant_get_price_technicals")
+    def digiquant_get_price_technicals_tool(
+        ticker: str, lookback: int = 20, as_of: str | None = None
+    ) -> str:
         """Latest technical indicators + recent daily window for a ticker (JSON).
 
         Reads the maintained ``price_technicals`` table in Supabase. Returns
         ``{"error": ...}`` if the data layer is unavailable.
+        With ``DIGIQUANT_MARKET_DATA_BACKEND=r2``, reads the versioned R2
+        history sealed at ``as_of`` (default: manifest seal) instead.
         """
-        from digiquant.research.data.queries import get_price_technicals
-        from digiquant.research.supabase_io import SupabaseConfig, build_client
+        return digiquant_get_price_technicals(ticker, lookback=lookback, as_of=as_of)
 
-        try:
-            client = build_client(SupabaseConfig.from_env())
-            result = get_price_technicals(client=client, ticker=ticker, lookback=lookback)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-        return json.dumps(result, default=str)
-
-    @mcp.tool()
-    def digiquant_get_macro_series(series_ids: list[str], lookback: int = 6) -> str:
+    @_maybe_tool("digiquant_get_macro_series")
+    def digiquant_get_macro_series_tool(
+        series_ids: list[str], lookback: int = 6, as_of: str | None = None
+    ) -> str:
         """Latest values + recent window for FRED macro series ids (JSON).
 
         Reads the maintained ``macro_series_observations`` table in Supabase.
         Returns ``{"error": ...}`` if the data layer is unavailable.
+        With ``DIGIQUANT_MARKET_DATA_BACKEND=r2``, reads the versioned R2
+        history sealed at ``as_of`` (default: manifest seal) instead.
         """
-        from digiquant.research.data.queries import get_macro_series
-        from digiquant.research.supabase_io import SupabaseConfig, build_client
+        return digiquant_get_macro_series(series_ids, lookback=lookback, as_of=as_of)
 
-        try:
-            client = build_client(SupabaseConfig.from_env())
-            result = get_macro_series(client=client, series_ids=series_ids, lookback=lookback)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-        return json.dumps(result, default=str)
-
-    @mcp.tool()
+    @_maybe_tool("digiquant_query_data")
     def digiquant_query_data(
         table: str,
         columns: str = "*",
@@ -208,9 +627,12 @@ def create_mcp_server() -> Any:
         agents use, so external agents (digichat / execution) can fetch the paper
         book and market data by key (#925). Allowed tables: ``positions``,
         ``nav_history``, ``theses``, ``thesis_vehicles``, ``position_events``,
-        ``portfolio_metrics``, ``price_history``, ``price_technicals``,
-        ``macro_series_observations``, ``trading_calendar``. Operator-internal
-        telemetry (decision_log, diagnostics) is deliberately NOT readable.
+        ``portfolio_metrics``, ``trading_calendar``. Market history
+        (``price_history``, ``price_technicals``, ``macro_series_observations``)
+        moved to the versioned R2 cache (#3780) and is no longer readable here —
+        use ``digiquant_get_price_technicals`` / ``digiquant_get_macro_series``.
+        Operator-internal telemetry (decision_log, diagnostics) is deliberately
+        NOT readable.
         Group A books (``positions``, ``nav_history``, ``position_events``,
         ``portfolio_metrics``) default to the house ``workspace_id`` when
         ``eq`` omits it; pass ``eq.workspace_id`` to read another book.
@@ -249,20 +671,28 @@ def create_mcp_server() -> Any:
 
         return str(Path(__file__).resolve().parents[3] / "scripts" / "validation")
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_fetch_coinbase_ohlcv")
     def digiquant_fetch_coinbase_ohlcv(
         symbols_json: str = '["BTC/USD", "ETH/USD", "SOL/USD"]',
         start: str = "2015-07-20",
+        end: str | None = None,
+        timeframe: str = "1d",
+        through_yesterday: bool = False,
         cache_dir: str | None = None,
     ) -> str:
-        """Fetch daily OHLCV from Coinbase (CCXT) into the price-history cache.
+        """Fetch OHLCV bars from Coinbase (CCXT) into the price-history cache.
 
-        ``symbols_json`` is a JSON array of CCXT symbols. ``start`` defaults
-        to Coinbase BTC listing ``2015-07-20``; ETH/SOL begin at the first
-        available Coinbase daily bar. Returns JSON mapping each ticker to
+        ``symbols_json`` is a JSON array of CCXT symbols (any Coinbase spot
+        pair, not just BTC/ETH/SOL — e.g. ``["DOGE/USD"]``). ``timeframe`` is
+        any CCXT-supported Coinbase timeframe: ``1m,5m,15m,30m,1h,2h,6h,1d``.
+        ``start`` defaults to Coinbase BTC listing ``2015-07-20``; ``end``
+        defaults to now. ``through_yesterday`` drops the current UTC day's
+        bar (only meaningful for ``timeframe="1d"``, where today's daily bar
+        is still incomplete). Returns JSON mapping each ticker to
         ``{bars, first, last, path}`` (or ``{error}``).
         """
         import sys
+        from datetime import UTC, datetime
         from pathlib import Path
 
         sd = _scripts_dir()
@@ -270,6 +700,7 @@ def create_mcp_server() -> Any:
             sys.path.insert(0, sd)
         try:
             import ccxt
+            import polars as pl
             from fetch_coinbase import DEFAULT_CACHE, SYMBOLS, bars_to_polars, fetch_all_daily
         except ImportError as exc:
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
@@ -281,15 +712,18 @@ def create_mcp_server() -> Any:
         for sym in json.loads(symbols_json):
             ticker = SYMBOLS.get(sym, sym.replace("/", "-"))
             try:
-                bars = fetch_all_daily(exchange, sym, start)
+                bars = fetch_all_daily(exchange, sym, start, timeframe=timeframe, end=end)
                 if not bars:
                     out[ticker] = {"error": "no data"}
                     continue
                 df = (
-                    bars_to_polars(bars, ticker)
+                    bars_to_polars(bars, ticker, timeframe=timeframe)
                     .unique(subset=["timestamp"], keep="last")
                     .sort("timestamp")
                 )
+                if through_yesterday:
+                    today = datetime.now(UTC).date().isoformat()
+                    df = df.filter(pl.col("timestamp") < today)
                 path = cache / f"{ticker}.csv"
                 df.write_csv(path)
                 out[ticker] = {
@@ -302,7 +736,7 @@ def create_mcp_server() -> Any:
                 out[ticker] = {"error": f"{type(exc).__name__}: {exc}"}
         return json.dumps(out, indent=2, default=str)
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_fit_btc_power_law")
     def digiquant_fit_btc_power_law(
         ticker: str = "BTC-USD",
         cache_dir: str | None = None,
@@ -381,7 +815,7 @@ def create_mcp_server() -> Any:
             indent=2,
         )
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_build_sdca_risk_index")
     def digiquant_build_sdca_risk_index(
         ticker: str = "BTC-USD",
         cache_dir: str | None = None,
@@ -426,21 +860,26 @@ def create_mcp_server() -> Any:
             rolling_window=rolling_window,
         )
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_fetch_bitview_series")
     def digiquant_fetch_bitview_series(
         series_ids_json: str = '["mvrv", "asopr_24h", "puell_multiple", "rhodl_ratio"]',
         cache_dir: str | None = None,
         timeout: float = 30.0,
         start: int | None = None,
         end: int | None = None,
+        base_url: str | None = None,
+        allow_derived: bool = False,
     ) -> str:
         """Fetch Bitview/BRK on-chain ``day1`` series into ``data/onchain/bitview/``.
 
         JSON API only (no HTML scrape). Default catalog is the #1086 v1 subset.
-        ``nupl`` is refused (monotone of MVRV). Fail-soft + timeout. Coin Metrics
-        community CC BY-NC series are not fetched. Network is the operator opt-in
-        of invoking this tool.
+        ``nupl`` is refused by default (monotone of MVRV — the SDCA composite
+        avoids dual-counting it alongside MVRV); pass ``allow_derived=True``
+        to fetch it anyway for uses outside that composite. Fail-soft +
+        timeout. Coin Metrics community CC BY-NC series are not fetched.
+        Network is the operator opt-in of invoking this tool.
         """
+        from digiquant.data.onchain.bitview import BITVIEW_BASE_URL
         from digiquant.sdca_mcp import run_fetch_bitview_series
 
         return run_fetch_bitview_series(
@@ -449,9 +888,112 @@ def create_mcp_server() -> Any:
             timeout=timeout,
             start=start,
             end=end,
+            base_url=base_url or BITVIEW_BASE_URL,
+            allow_derived=allow_derived,
         )
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_fetch_bgeometrics_series")
+    def digiquant_fetch_bgeometrics_series(
+        metric: str = "mvrv",
+        startday: str | None = None,
+        endday: str | None = None,
+        last: bool = False,
+        cache_dir: str | None = None,
+        timeout: float = 30.0,
+        token: str | None = None,
+        base_url: str | None = None,
+    ) -> str:
+        """Fetch one Bitcoin valuation/on-chain metric from bitcoin-data.com (BGeometrics).
+
+        700+ metric catalog (MVRV, NUPL, SOPR, realized cap/price, HODL
+        waves, Mayer multiple, NVT, Pi-cycle, rainbow chart, power-law model,
+        and more — see ``KNOWN_METRICS`` for a curated subset; any other
+        bitcoin-data.com slug also works). Treat ``token`` as required —
+        bitcoin-data.com now markets registration as mandatory even for the
+        free tier (pass it, or set ``BGEOMETRICS_API_TOKEN``).
+
+        Free-tier limits (enforced by the API, not just documented): 10
+        requests/hour, 15/day, shared across every metric — fetch **one
+        metric per call**. History is capped at roughly the last 4 years;
+        for deeper multi-cycle history use
+        ``digiquant_fetch_coinmetrics_series`` instead (MVRV back to 2010,
+        no rate-limit concern). Fail-soft + timeout.
+        """
+        from digiquant.data.onchain.bgeometrics import BGEOMETRICS_BASE_URL
+        from digiquant.sdca_mcp import run_fetch_bgeometrics_series
+
+        return run_fetch_bgeometrics_series(
+            metric=metric,
+            startday=startday,
+            endday=endday,
+            last=last,
+            cache_dir=cache_dir,
+            timeout=timeout,
+            token=token,
+            base_url=base_url or BGEOMETRICS_BASE_URL,
+        )
+
+    @_maybe_tool("digiquant_fetch_coinmetrics_series")
+    def digiquant_fetch_coinmetrics_series(
+        metric: str = "CapMVRVCur",
+        asset: str = "btc",
+        start_time: str | None = None,
+        end_time: str | None = None,
+        page_size: int = 10_000,
+        cache_dir: str | None = None,
+        timeout: float = 30.0,
+        base_url: str | None = None,
+        api_key: str | None = None,
+    ) -> str:
+        """Fetch one on-chain metric for one asset from the CoinMetrics Community API.
+
+        One metric/asset per call — comma-separated lists are rejected (use
+        ``digiquant_list_coinmetrics_catalog`` to discover what's available
+        per-asset first, rather than assuming BTC's metric set applies
+        elsewhere). MVRV (``CapMVRVCur``) has full BTC history back to
+        2010-07-18, unlike bgeometrics' ~4-year cap. No API key required for
+        the free tier (generous rate limit); pass ``api_key`` if you have a
+        registered CoinMetrics key for a higher limit. CC BY-NC —
+        research-only, do not republish derived series commercially.
+        Fail-soft + timeout.
+        """
+        from digiquant.data.onchain.coinmetrics import COINMETRICS_BASE_URL
+        from digiquant.sdca_mcp import run_fetch_coinmetrics_series
+
+        return run_fetch_coinmetrics_series(
+            metric=metric,
+            asset=asset,
+            start_time=start_time,
+            end_time=end_time,
+            page_size=page_size,
+            cache_dir=cache_dir,
+            timeout=timeout,
+            base_url=base_url or COINMETRICS_BASE_URL,
+            api_key=api_key,
+        )
+
+    @_maybe_tool("digiquant_list_coinmetrics_catalog")
+    def digiquant_list_coinmetrics_catalog(
+        asset: str | None = None,
+        timeout: float = 30.0,
+        base_url: str | None = None,
+        api_key: str | None = None,
+    ) -> str:
+        """List which CoinMetrics community metrics exist for ``asset`` (or all assets).
+
+        Discovery tool — call before ``digiquant_fetch_coinmetrics_series``
+        to find real metric names instead of guessing from the BTC-only
+        ``KNOWN_COMMUNITY_METRICS`` snapshot. Returns the raw
+        ``catalog-v2/asset-metrics`` JSON. Fail-soft + timeout.
+        """
+        from digiquant.data.onchain.coinmetrics import COINMETRICS_BASE_URL
+        from digiquant.sdca_mcp import run_list_coinmetrics_catalog
+
+        return run_list_coinmetrics_catalog(
+            asset=asset, timeout=timeout, base_url=base_url or COINMETRICS_BASE_URL, api_key=api_key
+        )
+
+    @_maybe_tool("digiquant_fit_sdca_weights")
     def digiquant_fit_sdca_weights(
         profile: str = "btc_v1",
         profile_json: str | None = None,
@@ -485,7 +1027,7 @@ def create_mcp_server() -> Any:
             rolling_window=rolling_window,
         )
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_generate_slapper_tearsheet")
     def digiquant_generate_slapper_tearsheet(
         strategy: str | None = None,
         cache_dir: str | None = None,
@@ -557,7 +1099,7 @@ def create_mcp_server() -> Any:
                 failures[strat] = error or "unknown error"
         return json.dumps({"entries": entries, "failures": failures}, indent=2, default=str)
 
-    @mcp.tool()
+    @_maybe_tool("digiquant_validate_slapper_vs_tradingview")
     def digiquant_validate_slapper_vs_tradingview(
         strategy: str,
         ohlcv_csv: str,
@@ -584,7 +1126,7 @@ def create_mcp_server() -> Any:
         except Exception as exc:  # surface as JSON to the caller
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
-    @mcp.tool()
+    @_maybe_tool("dashboard_run_policy_replay")
     def dashboard_run_policy_replay(
         pair_content_hash: str,
         run_id: str | None = None,
@@ -605,7 +1147,7 @@ def create_mcp_server() -> Any:
             return json.dumps({"ok": False, "error": str(exc)})
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("dashboard_get_policy_replay")
     def dashboard_get_policy_replay(run_id: str) -> str:
         """Fetch a policy replay run summary by id (fail closed if unknown)."""
         from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
@@ -617,7 +1159,7 @@ def create_mcp_server() -> Any:
             return json.dumps({"ok": False, "error": str(exc)})
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("dashboard_get_policy_comparison")
     def dashboard_get_policy_comparison(comparison_id: str) -> str:
         """Fetch a policy comparison summary (artifact IDs / status only)."""
         from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
@@ -629,7 +1171,7 @@ def create_mcp_server() -> Any:
             return json.dumps({"ok": False, "error": str(exc)})
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("dashboard_evaluate_policy_gate")
     def dashboard_evaluate_policy_gate(
         comparison_id: str,
         criteria_version_id: str,
@@ -647,7 +1189,7 @@ def create_mcp_server() -> Any:
             return json.dumps({"ok": False, "error": str(exc)})
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
-    @mcp.tool()
+    @_maybe_tool("dashboard_get_policy_gate_evaluation")
     def dashboard_get_policy_gate_evaluation(evaluation_id: str) -> str:
         """Fetch a gate-evaluation summary by id (fail closed if unknown)."""
         from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
@@ -664,12 +1206,20 @@ def create_mcp_server() -> Any:
 
 def run_mcp(
     transport: str = "streamable-http",
-    host: str = "127.0.0.1",
+    host: str | None = None,
     port: int = 8767,
+    scope: str = "full",
 ) -> None:
-    mcp = create_mcp_server()
-    logger.info("Starting digiquant MCP server on %s:%d (transport=%s)", host, port, transport)
-    mcp.run(transport=transport, host=host, port=port)
+    bind = host or os.environ.get("DIGIQUANT_MCP_HOST", "127.0.0.1")
+    mcp = create_mcp_server(scope=scope, host=bind, port=port)
+    logger.info(
+        "Starting digiquant MCP server on %s:%d (transport=%s scope=%s)",
+        bind,
+        port,
+        transport,
+        scope,
+    )
+    mcp.run(transport=transport)
 
 
 if __name__ == "__main__":
@@ -682,6 +1232,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--port", type=int, default=int(os.environ.get("DIGIQUANT_MCP_PORT", "8767"))
     )
+    parser.add_argument(
+        "--scope",
+        choices=_MCP_SCOPES,
+        default=os.environ.get("DIGIQUANT_MCP_SCOPE", "full"),
+        help="Tool scope: 'full' (default) or 'read' (dashboard-chat surface).",
+    )
     args = parser.parse_args()
     transport = "stdio" if args.stdio else "streamable-http"
-    run_mcp(transport=transport, host=args.host, port=args.port)
+    run_mcp(transport=transport, host=args.host, port=args.port, scope=args.scope)

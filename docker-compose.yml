@@ -1,7 +1,7 @@
 # Digi Ecosystem – Docker Compose (Phase 0+)
 # See ARCHITECTURE.md, SECURITY.md. For hardened deploy: docker compose --profile hardened up
 # Usage: docker compose up --build
-# For testing without OpenAI: set OLLAMA_MODEL=ollama/qwen3:8b in .env; Ollama runs in Docker below.
+# For testing without OpenAI: set OLLAMA_MODEL=ollama/deepseek-r1:14b in .env; Ollama runs in Docker below.
 
 services:
   # ─── Redis for digikey JWT revocation blocklist (ADR-0007) ───
@@ -202,6 +202,7 @@ services:
       - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - DIGISEARCH_INDEX=${DIGISEARCH_INDEX:-default}
+      - DIGISEARCH_SEARXNG_URL=${DIGISEARCH_SEARXNG_URL:-http://searxng:8080}
       - CHROMA_PATH=/data/chroma
       - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
@@ -219,6 +220,37 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  # ─── searxng + valkey: proprietary web-search sidecar for digisearch (#3853) ───
+  # Loopback-only on the host; digisearch reaches searxng as http://searxng:8080
+  # via DIGISEARCH_SEARXNG_URL. ddgs remains the zero-infra fallback.
+  searxng:
+    image: searxng/searxng:latest
+    container_name: digi-searxng
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./config/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    depends_on:
+      - valkey
+    healthcheck:
+      # searxng image ships wget (no curl): probe with wget or the
+      # container never becomes healthy (#3859).
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  valkey:
+    image: valkey/valkey:9-alpine
+    container_name: digi-searxng-valkey
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping || redis-cli ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   # ─── digivault: Obsidian-style markdown vault management (profile: digivault) ───
   digivault:
@@ -348,8 +380,8 @@ services:
   # ─── digisearch MCP server (optional: run with docker compose --profile digisearch-mcp up) ───
   digisearch-mcp:
     build:
-      context: ./digisearch
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: digisearch/Dockerfile
     image: digi-digisearch:latest
     container_name: digi-digisearch-mcp
     profiles:
@@ -371,6 +403,26 @@ services:
       - digisearch_chroma:/data/chroma
       - ./digisearch/devdata/edgar_sample:/data/edgar_dev_corpus:ro
     command: ["python", "-m", "digisearch.cli", "mcp", "--port", "8765"]
+
+  # ─── digivault MCP server (optional: run with docker compose --profile digivault-mcp up) ───
+  digivault-mcp:
+    build:
+      context: .
+      dockerfile: digivault/Dockerfile.mcp
+    image: digi-digivault-mcp:latest
+    container_name: digi-digivault-mcp
+    profiles:
+      - digivault-mcp
+    ports:
+      - "127.0.0.1:8769:8769"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGIVAULT_ROOT=${DIGIVAULT_ROOT:-/data/vault}
+      # Loopback by default; set DIGIVAULT_MCP_HOST in .env for published-port access.
+    volumes:
+      - digivault_data:/data/vault
 
   # ─── Phase 3: Heartbeat (run with: docker compose --profile heartbeat up) ───
   heartbeat:
@@ -429,7 +481,7 @@ services:
       # Repo-root context: digichat is an npm workspace member; its lockfile and
       # the private @digithings/design package only exist at the root (#675).
       context: .
-      dockerfile: frontend/digichat/Dockerfile
+      dockerfile: cloudflare/digichat/Dockerfile
     image: digi-digichat:latest
     container_name: digi-digichat
     profiles:

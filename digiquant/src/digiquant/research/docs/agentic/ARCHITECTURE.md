@@ -346,13 +346,13 @@ H1/H2 consume `digest_briefing_for_portfolio` (`date` / `body` / `regime_label` 
 ### Phase 8 — Web dashboard / tearsheet
 
 ```bash
-python3 scripts/update_tearsheet.py   # NAV path + frontend/public/dashboard-data.json; Supabase when configured
+python3 scripts/update_tearsheet.py   # NAV path + cloudflare/public/dashboard-data.json; Supabase when configured
 ./scripts/git-commit.sh             # commit config / static JSON as needed
 ```
 
 **Behavior:** `update_tearsheet.py` uses `config/portfolio.json` and, when Supabase env is set, aligns dashboard history with `daily_snapshots` / documents. See script `--help` for optional disk scan behavior used in some operator workflows.
 
-The Next.js frontend reads from Supabase where wired, with `frontend/public/dashboard-data.json` as static fallback — no separate backend API for the digest loop.
+The Next.js frontend reads from Supabase where wired, with `cloudflare/public/dashboard-data.json` as static fallback — no separate backend API for the digest loop.
 
 ---
 
@@ -389,7 +389,7 @@ The Next.js frontend reads from Supabase where wired, with `frontend/public/dash
 
 ## Snapshot read path (frontend-consumable)
 
-**Goal:** the research frontend (Next.js dashboard at `frontend/dashboard/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
+**Goal:** the research frontend (Next.js dashboard at `cloudflare/dashboard/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
 
 ### Source of truth
 
@@ -469,7 +469,7 @@ Behavior:
 
 ## Run Checkpoint / Resume (#665)
 
-A failed or interrupted run (e.g. provider outage, credit exhaustion) can **resume from the last completed node** instead of re-running the whole pipeline. When `DIGI_CHECKPOINTER=postgres` + `DIGI_CHECKPOINTER_POSTGRES_URI` are set, the chain compiles research and portfolio with a LangGraph **PostgresSaver** and runs them under **distinct per-graph threads** — `{run_id}::research` and `{run_id}::portfolio` (never one shared thread; their state schemas differ). Each node (per-segment, per-(axis,ticker) analyst, per-(round,ticker) debater) is a checkpoint boundary, so resume re-runs only incomplete nodes. Publish is **not** checkpointed (cheap + idempotent upserts).
+A failed or interrupted run (e.g. provider outage, credit exhaustion) can **resume from the last completed node** instead of re-running the whole pipeline. When `DIGI_CHECKPOINTER=postgres` + `CORE_POSTGRES_URI` are set, the chain compiles research and portfolio with a LangGraph **PostgresSaver** and runs them under **distinct per-graph threads** — `{run_id}::research` and `{run_id}::portfolio` (never one shared thread; their state schemas differ). Each node (per-segment, per-(axis,ticker) analyst, per-(round,ticker) debater) is a checkpoint boundary, so resume re-runs only incomplete nodes. Publish is **not** checkpointed (cheap + idempotent upserts).
 
 - **Automatic within a run:** the workflow's 3× outer retry reuses the same `GITHUB_RUN_ID`, so attempt 2 finds attempt 1's checkpoint and continues from the failure point.
 - **Cross-dispatch:** re-dispatch with `--resume-run-id <prior GITHUB_RUN_ID>` (a `resume_run_id` workflow input) to continue a previously-dead run.
@@ -544,14 +544,13 @@ preflight (freshness probe; no pre-loaded values)
 
 - **Two data tools, one query layer** (`dashboard/research/data/queries.py`): exposed both in-process (`data/tools.py` → `DATA_TOOLS` + dispatcher, consumed by `build_grounding` in `phases/_node_factory.py`) and over MCP (`digiquant_get_price_technicals` / `digiquant_get_macro_series` in `mcp_server.py`).
 - **Per-phase flags** on `SegmentNodeSpec`: `use_data_tools` (macro, asset-classes, equity, sectors) and `live_search` (macro, all alt-/inst-, international). Equity/sector nodes are bespoke and call `build_grounding` directly.
-- **Web grounding** (`data/web_grounding.py` → `digigraph.llm_client.openrouter_web_search`):
-  a read-only **pre-pass** on a **web-search-capable** model from
-  `get_grounding_model()` (Perplexity / `:online` — provider built-in search).
-  Domain preferences from `config/search_domains.yaml` are folded into the
-  natural-language query (native search has no Exa allowlist tool params).
-  The digillm Exa `openrouter:web_search` server tool remains a **toolkit**
-  fallback for non-native models and is **not** used by dashboard (#2567).
-  Any search error degrades to ungrounded research (no crash).
+- **Web grounding** (`data/web_grounding.py` → first-party digisearch
+  `web_search` tool): a read-only **pre-pass** over the tool, with domain
+  scoping from `config/search_domains.yaml` passed straight through as the
+  tool's `include_domains` / `exclude_domains` / `max_results`. There is no
+  synthesis fallback: a requested search must succeed or raise
+  `DashboardWebSearchError` — the run aborts rather than reasoning
+  ungrounded (#3859).
 - **Env gate**: `DIGIQUANT_RESEARCH_DATA_TOOLS` (default on; set `0`/`false` to disable all tool grounding). If Supabase is unavailable, `build_grounding` degrades to tool-less rather than crashing the phase.
 
 Function-tools and `response_format=json_schema` are mutually exclusive in one OpenAI-API call, so the structured-output contract is preserved by prompt + Pydantic validate-retry rather than by `response_format` on the tool path.
@@ -575,9 +574,9 @@ When signals conflict across phases, apply in order:
 Supabase (documents, daily_snapshots, price_history, …)
      │
      ▼  @supabase/supabase-js in Next.js (App Router)
-  frontend/app/ …                    Library, portfolio, architecture pages, …
+  cloudflare/app/ …                    Library, portfolio, architecture pages, …
      │
-     ├─ scripts/update_tearsheet.py → frontend/public/dashboard-data.json (static JSON used when present)
+     ├─ scripts/update_tearsheet.py → cloudflare/public/dashboard-data.json (static JSON used when present)
      └─ CI: .github/workflows/deploy.yml → static export → GitHub Pages (when configured)
 ```
 
@@ -596,7 +595,7 @@ digiquant-research/
   scripts/                   Bash + Python — run_db_first.py, materialize_snapshot.py,
                              publish_document.py, preload-history.py, smoke-test.sh, …
   agents/                    Named role files (*.agent.md)
-  frontend/                  Next.js (App Router) + TypeScript
+  cloudflare/                  Next.js (App Router) + TypeScript
   supabase/                  SQL migrations, config.toml
   tests/                     pytest
   cowork/                    Cowork tasks and project prompts

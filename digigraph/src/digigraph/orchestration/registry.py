@@ -82,6 +82,8 @@ class ToolContext:
     workflow_id: str | None = None
     # Optional digivault path prefix for multi-tenant corpus isolation.
     vault_path_prefix: str | None = None
+    # Operator MCP servers for this turn (BFF). Not globally registered.
+    extra_mcp_servers: list[dict[str, str]] | None = None
 
     @property
     def has_run_data_dir(self) -> bool:
@@ -174,12 +176,33 @@ def get_tools(
             else:
                 out_detailed.append(td)
 
+    extra_servers = context.extra_mcp_servers or []
+    if extra_servers:
+        from digigraph.orchestration.mcp_client import openai_tools_for_servers
+
+        for td in openai_tools_for_servers(extra_servers):
+            tname = _tool_schema_name(td) if isinstance(td, dict) else None
+            if not tname or tname in seen:
+                continue
+            if context.allowed_tool_names is not None and tname not in context.allowed_tool_names:
+                continue
+            seen.add(tname)
+            if mode is ToolExposureMode.SUMMARY:
+                fn = td.get("function") or {}
+                description = fn.get("description") or ""
+                out_summary.append(f"{tname}: {description}" if description else tname)
+            else:
+                out_detailed.append(td)
+
     return out_summary if mode is ToolExposureMode.SUMMARY else out_detailed
 
 
 def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
     """Dispatch to the handler for the given tool name. Returns handler result (str or dict)."""
-    if not has_tool(name):
+    from digigraph.orchestration.mcp_client import call_prefixed_tool, split_prefixed_tool_name
+
+    is_extra = bool(split_prefixed_tool_name(name) and context.extra_mcp_servers)
+    if not has_tool(name) and not is_extra:
         return f"Unknown tool: {name}"
     if context.allowed_tool_names is not None and name not in context.allowed_tool_names:
         from digigraph.audit import audit_log
@@ -205,6 +228,8 @@ def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict
                 "Adjust agents.allowed_tools, DIGI_ALLOWED_TOOLS, or the request allowed_tools field."
             ),
         }
+    if is_extra and not has_tool(name):
+        return call_prefixed_tool(name, args, context.extra_mcp_servers or [])
     _, _, handler, _ = _tools[name]
     return handler(args, context)
 

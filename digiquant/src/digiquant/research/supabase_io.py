@@ -41,6 +41,8 @@ from digiquant.dashboard.postgrest_timeout import (
     WRITE_TIMEOUT_SECONDS,
 )
 from digiquant.dashboard.tenancy import resolved_workspace_id
+from digiquant.ops.checkpoint_archive import read_archived_document
+from digiquant.research.data.queries import r2_backend_enabled
 from digiquant.research.state import Phase7DigestPayload, PriorContext, PublishedArtifact
 from digiquant.supabase_retry import run_with_supabase_retry
 
@@ -454,6 +456,40 @@ def load_prior_book(
     return [r for r in rows if str(r.get("date") or "") == top_date]
 
 
+def load_nav_history_row(
+    client: SupabaseClient,
+    run_date: date,
+    *,
+    workspace_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Existing ``nav_history`` row for ``(workspace, run_date)``, or ``None`` (#3804).
+
+    Booking paths (H9 ``commit_io.book_portfolio``, legacy ``portfolio_materialize``)
+    write a provisional NAV at book time; the Nautilus schedule replay
+    (``verify_nav_replay.py --write``) later overwrites ``nav`` with the
+    authoritative engine value. A re-dispatch of the book pipeline *after* the
+    engine step must not clobber that engine value with a provisional
+    recompute, so both booking paths consult this read first: when a row
+    already exists for the date they preserve the stored NAV and refresh only
+    the H9-owned ``cash_pct`` / ``invested_pct``.
+
+    ``workspace_id`` omitted / ``None`` means the house workspace — never an
+    unfiltered date scan. Overlay passes its id so a private book cannot see
+    (or suppress itself on) a house engine row, and vice versa.
+    """
+    scoped = str(resolved_workspace_id(workspace_id))
+    resp = (
+        client.table("nav_history")
+        .select("date, nav, cash_pct, invested_pct")
+        .eq("workspace_id", scoped)
+        .eq("date", run_date.isoformat())
+        .limit(1)
+        .execute()
+    )
+    rows = list(getattr(resp, "data", None) or [])
+    return dict(rows[0]) if rows else None
+
+
 # Per-ticker analyst / deliberation docs are loaded separately (slim summaries) so
 # ``load_prior_context`` does not stuff full decision artifacts into every node.
 _CONTINUITY_EXCLUDED_DOC_PREFIXES = ("analyst/", "deliberation/")
@@ -502,6 +538,33 @@ def _slim_deliberation_summary(payload: dict[str, Any]) -> dict[str, Any]:
     return slim
 
 
+def _hydrate_document_row(
+    client: SupabaseClient,
+    row: dict[str, Any],
+    *,
+    store: Any | None,
+    workspace_id: str,
+) -> dict[str, Any]:
+    """Read one NULL-payload ``documents`` row through the archive pointer (#3792).
+
+    ``archive_documents`` NULLs the payload cell of non-latest versions; the
+    row still resolves the version, so hydrate it from R2 instead of carrying
+    a null into the graph. Pointer-miss keeps the row as-is.
+    """
+    if row.get("payload") is not None or not row.get("document_key") or not row.get("date"):
+        return row
+    payload = read_archived_document(
+        client,
+        store,
+        workspace_id=workspace_id,
+        document_key=str(row["document_key"]),
+        date_str=str(row["date"]),
+    )
+    if payload is None:
+        return row
+    return {**row, "payload": payload}
+
+
 def load_prior_analyst_summaries(
     client: SupabaseClient,
     run_date: date,
@@ -509,6 +572,7 @@ def load_prior_analyst_summaries(
     *,
     lookback_days: int = 30,
     workspace_id: str | None = None,
+    store: Any | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Latest prior ``analyst/{ticker}`` slim summary per held ticker.
 
@@ -543,6 +607,7 @@ def load_prior_analyst_summaries(
         ticker = key.split("/", 1)[1]
         if ticker in out:
             continue
+        row = _hydrate_document_row(client, row, store=store, workspace_id=scoped)
         slim = _slim_analyst_summary(row.get("payload") or {})
         out[ticker] = {
             "date": row.get("date"),
@@ -559,6 +624,7 @@ def load_prior_deliberation_summaries(
     *,
     lookback_days: int = 30,
     workspace_id: str | None = None,
+    store: Any | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Latest prior ``deliberation/{ticker}`` slim summary per held ticker.
 
@@ -594,6 +660,7 @@ def load_prior_deliberation_summaries(
         ticker = key.split("/", 1)[1]
         if ticker in out:
             continue
+        row = _hydrate_document_row(client, row, store=store, workspace_id=scoped)
         slim = _slim_deliberation_summary(row.get("payload") or {})
         out[ticker] = {
             "date": row.get("date"),
@@ -733,6 +800,7 @@ def load_prior_context(
     documents_lookback_days: int = 30,
     documents_row_cap: int = 500,
     workspace_id: str | None = None,
+    store: Any | None = None,
 ) -> PriorContext:
     """Query recent ``daily_snapshots`` + latest-per-segment ``documents``.
 
@@ -757,6 +825,10 @@ def load_prior_context(
     ``load_prior_deliberation_summaries``, ``load_latest_beliefs_document``, and
     ``query_institutional_absence_streak`` all pin house. ``daily_snapshots``
     stays date-only (house-only ``UNIQUE(date)``; overlay publish skips it).
+
+    Rows whose payload was NULLed by ``archive_documents`` read through R2 via
+    the ``archive_objects`` pointer (``store`` injects the backend for tests;
+    production resolves it from ``R2_*`` env). Pointer-miss keeps the row as-is.
     """
     from datetime import timedelta
 
@@ -793,7 +865,7 @@ def load_prior_context(
             continue
         if any(str(key).startswith(prefix) for prefix in _CONTINUITY_EXCLUDED_DOC_PREFIXES):
             continue
-        latest_by_key[key] = row
+        latest_by_key[key] = _hydrate_document_row(client, row, store=store, workspace_id=scoped)
 
     return PriorContext(
         last_snapshots=last_snapshots,
@@ -817,7 +889,14 @@ def query_price_technicals_freshness(
     2. Rows from the last ``recent_days`` days for the distinct-ticker count.
        A 7-day window matches the orchestrator skill's "within 3 calendar
        days" staleness rule with headroom for weekend / holiday gaps.
+
+    Under ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` both answers come from the R2
+    manifest seal (:func:`r2_manifest_seal` — no Supabase read at all).
     """
+    from digiquant.research.data.queries import r2_manifest_seal
+
+    if r2_backend_enabled():
+        return r2_manifest_seal()
     from datetime import timedelta
 
     latest_resp = (
@@ -873,6 +952,10 @@ def query_price_deltas(
     - ``lookback_days`` floors the date range to a small window; requests are
       batched by ticker so a full window for every ticker fits under PostgREST's
       row cap.
+
+    Under ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` the window comes from the
+    sealed R2 generations (:func:`r2_close_rows`); the grouping math below is
+    backend-independent.
     """
     from datetime import timedelta
 
@@ -880,19 +963,32 @@ def query_price_deltas(
         return {}
 
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
-    ordered = sorted(tickers)
-    batch = _price_delta_ticker_batch(lookback_days)
-    rows: list[PriceHistoryRow] = []
-    for start in range(0, len(ordered), batch):
-        resp = (
-            client.table("price_history")
-            .select("date, ticker, close")
-            .in_("ticker", ordered[start : start + batch])
-            .gte("date", floor)
-            .lt("date", run_date.isoformat())
-            .execute()
+    if r2_backend_enabled():
+        from digiquant.research.data.queries import r2_close_rows
+
+        # Strictly-before-run_date mirrors the Supabase ``.lt("date", run_date)``
+        # (the seam's ``until`` is inclusive).
+        rows: list[PriceHistoryRow] = list(
+            r2_close_rows(
+                tickers=list(tickers),
+                since=floor,
+                until=run_date - timedelta(days=1),
+            )
         )
-        rows.extend(list(getattr(resp, "data", None) or []))
+    else:
+        ordered = sorted(tickers)
+        batch = _price_delta_ticker_batch(lookback_days)
+        rows = []
+        for start in range(0, len(ordered), batch):
+            resp = (
+                client.table("price_history")
+                .select("date, ticker, close")
+                .in_("ticker", ordered[start : start + batch])
+                .gte("date", floor)
+                .lt("date", run_date.isoformat())
+                .execute()
+            )
+            rows.extend(list(getattr(resp, "data", None) or []))
 
     # Group by ticker, sort each group by date desc, take the top two
     # distinct dates, compute pct_change. Avoids any dataframe import — this
@@ -1011,6 +1107,10 @@ def query_returns_window(
 
     Missing data → ``None`` (caller skips the row gracefully — see
     AC #7 of the issue: "missing returns data skips resolution").
+
+    Under ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` the window comes from the
+    sealed R2 generations (:func:`r2_close_rows`); the trading-day math below
+    is backend-independent.
     """
     from datetime import timedelta
 
@@ -1024,22 +1124,35 @@ def query_returns_window(
     # and failed the 2026-08-29 daily run (#3078).
     end_floor = (start_date + timedelta(days=holding_days + lookback_days)).isoformat()
 
-    def _fetch_window() -> list[dict[str, Any]]:
-        window_resp = (
-            client.table("price_history")
-            .select("date, close")
-            .eq("ticker", ticker)
-            .gte("date", start_date.isoformat())
-            .lt("date", end_floor)
-            .order("date", desc=False)
-            .execute()
-        )
-        return list(getattr(window_resp, "data", None) or [])
+    if r2_backend_enabled():
+        from digiquant.research.data.queries import r2_close_rows
 
-    rows = run_with_supabase_retry(
-        _fetch_window,
-        operation=f"query_returns_window {ticker}",
-    )
+        # Exclusive ``end_floor`` mirrors the Supabase ``.lt("date", end_floor)``.
+        # Transient R2 faults retry centrally inside ``r2_close_rows`` (shared
+        # seam), so no per-site wrapper — same policy as every other R2 reader.
+        rows = r2_close_rows(
+            tickers=[ticker],
+            since=start_date,
+            until=_parse_date(end_floor) - timedelta(days=1),
+        )
+    else:
+
+        def _fetch_window() -> list[dict[str, Any]]:
+            window_resp = (
+                client.table("price_history")
+                .select("date, close")
+                .eq("ticker", ticker)
+                .gte("date", start_date.isoformat())
+                .lt("date", end_floor)
+                .order("date", desc=False)
+                .execute()
+            )
+            return list(getattr(window_resp, "data", None) or [])
+
+        rows = run_with_supabase_retry(
+            _fetch_window,
+            operation=f"query_returns_window {ticker}",
+        )
     if not rows:
         return None
 
@@ -1216,6 +1329,7 @@ def load_latest_beliefs_document(
     client: SupabaseClient,
     run_date: date,
     workspace_id: str | None = None,
+    store: Any | None = None,
 ) -> dict[str, Any] | None:
     """Latest house ``beliefs`` document strictly before ``run_date`` for PM context."""
     scoped = str(resolved_workspace_id(workspace_id))
@@ -1230,7 +1344,9 @@ def load_latest_beliefs_document(
         .execute()
     )
     rows = list(getattr(resp, "data", None) or [])
-    return rows[0] if rows else None
+    if not rows:
+        return None
+    return _hydrate_document_row(client, rows[0], store=store, workspace_id=scoped)
 
 
 def query_institutional_absence_streak(
@@ -1308,7 +1424,16 @@ def query_macro_series_freshness(
     *,
     client: SupabaseClient,
 ) -> date | None:
-    """Return the latest obs_date observed in ``macro_series_observations``."""
+    """Return the latest obs_date observed in ``macro_series_observations``.
+
+    Under ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` this is the manifest seal
+    (``macro_series_observations`` FRED/Yahoo writes stop at cutover; the R2
+    refresh cron owns freshness — same seal the price probe reads).
+    """
+    if r2_backend_enabled():
+        from digiquant.research.data.queries import r2_manifest_seal
+
+        return r2_manifest_seal()[0]
     resp = (
         client.table("macro_series_observations")
         .select("obs_date")

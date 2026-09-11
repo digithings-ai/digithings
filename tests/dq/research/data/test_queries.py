@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from digiquant.research.data.queries import get_macro_series, get_price_technicals
 
@@ -8,12 +10,17 @@ class _FakeTable:
     def __init__(self, rows):
         self._rows = rows
         self._f = {}
+        self._lte: dict = {}
 
     def select(self, *a, **k):
         return self
 
     def eq(self, col, val):
         self._f[col] = val
+        return self
+
+    def lte(self, col, val):
+        self._lte[col] = val
         return self
 
     def in_(self, col, vals):
@@ -34,6 +41,7 @@ class _FakeTable:
             if all(
                 r.get(c) == v or (isinstance(v, set) and r.get(c) in v) for c, v in self._f.items()
             )
+            and all(str(r.get(c)) <= str(v) for c, v in self._lte.items())
         ]
         return type("R", (), {"data": rows[: getattr(self, "_n", len(rows))]})
 
@@ -113,3 +121,34 @@ def test_get_macro_series_groups_by_series():
     assert set(out) == {"M2SL", "DFF"}
     assert out["M2SL"]["latest"]["value"] == 21000.0
     assert out["DFF"]["latest"]["value"] == 4.5
+
+
+@pytest.mark.unit
+def test_get_price_technicals_as_of_bounds_rows():
+    """as_of caps the window at date <= as_of (look-ahead-safe historical reads)."""
+    client = _FakeClient(
+        {
+            "price_technicals": [
+                {"ticker": "SPY", "date": "2026-06-08", "rsi_14": 55.0},
+                {"ticker": "SPY", "date": "2026-06-05", "rsi_14": 54.0},
+            ]
+        }
+    )
+    out = get_price_technicals(client=client, ticker="SPY", lookback=5, as_of=date(2026, 6, 6))
+    assert out["latest"]["date"] == "2026-06-05"
+    assert len(out["window"]) == 1
+
+
+@pytest.mark.unit
+def test_get_macro_series_as_of_bounds_observations():
+    client = _FakeClient(
+        {
+            "macro_series_observations": [
+                {"series_id": "DFF", "obs_date": "2026-06-07", "value": 4.5, "unit": "%"},
+                {"series_id": "DFF", "obs_date": "2026-06-06", "value": 4.4, "unit": "%"},
+            ]
+        }
+    )
+    out = get_macro_series(client=client, series_ids=["DFF"], lookback=5, as_of=date(2026, 6, 6))
+    assert out["DFF"]["latest"]["obs_date"] == "2026-06-06"
+    assert len(out["DFF"]["window"]) == 1

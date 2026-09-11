@@ -3,15 +3,15 @@ type: operations-guide
 title: digichat Operations
 description: Running digichat — dev servers, Postgres and migrations, machine keys, env vars, and the container profile.
 tags: [digichat, operations, postgres, docker]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-2d4214cece07b9121a74928c
     resource: repo://frontend/digichat/Dockerfile
   - id: openwiki-source-a5dd02cf7bd6166bce9a336e
     resource: repo://frontend/digichat/OPERATIONS.md
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digichat Operations

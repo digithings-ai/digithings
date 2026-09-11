@@ -18,7 +18,7 @@
 - `make score` must pass on staged changes: Security ≥ 8, Quality ≥ 8, Optimization ≥ 7, Accuracy ≥ 9.
 - **Credentials are passed into constructors, never read from `os.environ` inside a store class.** Env reading happens at the call site (the `_stub.py` / `from_env` pattern).
 - **The error type lives in its own module.** A failing `from mod import A, B` binds neither name, so an exception class used to wrap that module's own ImportError must not live inside it. Mirror `vectorize_errors.py` exactly.
-- **Two databases, never one shared table with a filter.** `digithings_docs` and `occ_help`, matching `DIGI_TENANT_CORPUS_MAP` in `frontend/digithings-stack-cloudflare/wrangler.toml:85` and the two existing Vectorize index names.
+- **Two databases, never one shared table with a filter.** `digithings_docs` and `occ_help`, matching `DIGI_TENANT_CORPUS_MAP` in `cloudflare/digithings-stack-cloudflare/wrangler.toml:85` and the two existing Vectorize index names.
 - **Canonical `vault_path` carries no `.md` suffix.** Normalise by stripping at most one trailing `.md` at every boundary.
 - D1 hard limits to respect: max SQL statement 100,000 bytes; **max 100 bound parameters per query**; max row 2,000,000 bytes.
 - `VECTORIZE_*` established the container-config pattern: a new env var must be added to **both** `envVars` (`src/index.ts:41-72`) and the `Env` interface (`src/index.ts:112-139`). They are hand-kept in sync.
@@ -48,8 +48,8 @@ A Cloudflare API token with **D1 edit** permission. Verified 2026-08-12: the cur
 | `digivault/src/digivault/models.py` | New `NoteDetail` response model (body + frontmatter together — no existing model carries both). |
 | `digivault/src/digivault/orchestrator_tools.py` | New `digivault_get_note` manifest entry. |
 | `scripts/vectorize_sync.py:309-353` | Read notes from D1 instead of Supabase. |
-| `frontend/digithings-stack-cloudflare/src/index.ts` | `D1_ACCOUNT_ID`, `D1_API_TOKEN`, `D1_DATABASE_MAP` in `envVars` **and** `Env`. |
-| `frontend/digithings-stack-cloudflare/container/entrypoint.sh` | Export the three D1 vars. `DIGIVAULT_ROOT` handling is deliberately untouched. |
+| `cloudflare/digithings-stack-cloudflare/src/index.ts` | `D1_ACCOUNT_ID`, `D1_API_TOKEN`, `D1_DATABASE_MAP` in `envVars` **and** `Env`. |
+| `cloudflare/digithings-stack-cloudflare/container/entrypoint.sh` | Export the three D1 vars. `DIGIVAULT_ROOT` handling is deliberately untouched. |
 | `.github/workflows/docs-onboard-digithings.yml:144-187` | Swap `CORE_SUPABASE_*` secrets and `sync_onboard_vault.py` for `D1_*` and `d1_sync.py`. |
 | `digigraph/src/digigraph/graph/research.py` | Delete prefetch (401-429), context injection (469-475), strip (477-479); pass `max_tool_rounds`. |
 | `tests/dg/test_research_prefetch.py` | Four of five tests invert or are deleted. |
@@ -983,7 +983,7 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help=(
             "D1 database id for this corpus. MUST be the id mapped to --prefix in "
-            "D1_DATABASE_MAP (see frontend/digithings-stack-cloudflare/wrangler.toml); "
+            "D1_DATABASE_MAP (see cloudflare/digithings-stack-cloudflare/wrangler.toml); "
             "a mismatch means digivault reads a different corpus than this wrote."
         ),
     )
@@ -1152,10 +1152,10 @@ git commit -m "refactor(scripts): vectorize_sync reads notes from D1, not Supaba
 ### Task 6: container and CI wiring
 
 **Files:**
-- Modify: `frontend/digithings-stack-cloudflare/src/index.ts:41-72` and `:112-139`
-- Modify: `frontend/digithings-stack-cloudflare/container/entrypoint.sh`
+- Modify: `cloudflare/digithings-stack-cloudflare/src/index.ts:41-72` and `:112-139`
+- Modify: `cloudflare/digithings-stack-cloudflare/container/entrypoint.sh`
 - Modify: `.github/workflows/docs-onboard-digithings.yml:144-187`
-- Test: `frontend/digithings-stack-cloudflare/src/ports.test.ts`
+- Test: `cloudflare/digithings-stack-cloudflare/src/ports.test.ts`
 
 **Interfaces:**
 - Consumes: the env contract from Task 2 (`D1_ACCOUNT_ID`, `D1_API_TOKEN`, `D1_DATABASE_MAP`).
@@ -1232,13 +1232,13 @@ public.architecture_notes" step:
 
 - [ ] **Step 5: Typecheck and test the Worker**
 
-Run: `cd frontend/digithings-stack-cloudflare && npm run typecheck && npm test`
+Run: `cd cloudflare/digithings-stack-cloudflare && npm run typecheck && npm test`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/digithings-stack-cloudflare/src/index.ts frontend/digithings-stack-cloudflare/container/entrypoint.sh .github/workflows/docs-onboard-digithings.yml
+git add cloudflare/digithings-stack-cloudflare/src/index.ts cloudflare/digithings-stack-cloudflare/container/entrypoint.sh .github/workflows/docs-onboard-digithings.yml
 git commit -m "feat(stack): forward D1 config to the container and publish onboarding to D1"
 ```
 
@@ -1306,7 +1306,7 @@ uv run python scripts/vectorize_sync.py --prefix clients/online-compliance-cente
 - [ ] **Step 5: Set container secrets and redeploy**
 
 ```bash
-cd frontend/digithings-stack-cloudflare
+cd cloudflare/digithings-stack-cloudflare
 val() { grep -E "^$1=" ../../.env | head -1 | cut -d= -f2- | tr -d '"'"'"'; }
 
 printf '%s' "$(val CLOUDFLARE_ACCOUNT_ID)" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put CLOUDFLARE_ACCOUNT_ID

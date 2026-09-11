@@ -1,0 +1,69 @@
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+function walk(dir: string, acc: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) walk(p, acc);
+    else if (/\.(ts|tsx)$/.test(name)) acc.push(p);
+  }
+  return acc;
+}
+
+describe("assistant-ui skin isolation", () => {
+  it("Next.js skin modules do not import Ink, Expo, or react-native", () => {
+    const files = walk(here);
+    const banned =
+      /from ["']ink["']|from ["']@assistant-ui\/react-ink|from ["']react-native["']|from ["']expo/;
+    for (const file of files) {
+      const src = readFileSync(file, "utf8");
+      expect(src, file).not.toMatch(banned);
+    }
+  });
+
+  it("mounts first-party digichat via an explicit branch", () => {
+    const index = readFileSync(join(here, "index.tsx"), "utf8");
+    expect(index).toMatch(/skin === ["']digichat["']/);
+    expect(index).toMatch(/DigichatSkin/);
+  });
+
+  it("first-party skin imports the gallery Thread subpath, not the web barrel", () => {
+    const skin = readFileSync(join(here, "digichat.tsx"), "utf8");
+    expect(skin).toMatch(/from ["']@digithings\/web\/chat\/thread["']/);
+    expect(skin).not.toMatch(/from ["']@digithings\/web["']/);
+    expect(skin).not.toMatch(/ChatMarkdown/);
+  });
+
+  it("threads an explicit composerLayout override to the digichat skin", () => {
+    const index = readFileSync(join(here, "index.tsx"), "utf8");
+    expect(index).toMatch(/composerLayout/);
+    const skin = readFileSync(join(here, "digichat.tsx"), "utf8");
+    expect(skin).toMatch(/composerLayout \?\? \(mode === ["']app["']/);
+  });
+
+  it("embed passes compact composerLayout through the product shell", () => {
+    const shell = readFileSync(
+      join(here, "..", "..", "stock", "product-shell.tsx"),
+      "utf8",
+    );
+    expect(shell).toMatch(/composerLayout/);
+    const embed = readFileSync(
+      join(
+        here,
+        "..",
+        "..",
+        "..",
+        "app",
+        "(digichat)",
+        "embed",
+        "embed-client.tsx",
+      ),
+      "utf8",
+    );
+    expect(embed).toMatch(/composerLayout="compact"/);
+  });
+});

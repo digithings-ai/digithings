@@ -4,7 +4,7 @@ Add optional **Olympus footer status dot** wired to digismith `GET /v1/status` â
 
 ## Component
 
-- [x] `frontend/olympus/`
+- [x] `cloudflare/olympus/`
 
 ## Acceptance Criteria
 
@@ -23,8 +23,8 @@ Add optional **Olympus footer status dot** wired to digismith `GET /v1/status` â
 
 ## Documentation to Update
 
-- [ ] `frontend/olympus/ARCHITECTURE.md`
-- [ ] `frontend/digiweb/design/EVOLUTION.md`
+- [ ] `cloudflare/olympus/ARCHITECTURE.md`
+- [ ] `cloudflare/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

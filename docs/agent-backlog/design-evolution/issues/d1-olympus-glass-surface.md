@@ -1,14 +1,14 @@
 ## Goal
 
-Migrate **Olympus** dashboard from glass morphism to x.ai-style flat surfaces — hairline borders, `--surface` steps, no decorative shadows ([`EVOLUTION.md` §3 Olympus](../../../../frontend/digiweb/design/EVOLUTION.md)).
+Migrate **Olympus** dashboard from glass morphism to x.ai-style flat surfaces — hairline borders, `--surface` steps, no decorative shadows ([`EVOLUTION.md` §3 Olympus](../../../../cloudflare/digiweb/design/EVOLUTION.md)).
 
 ## Component
 
-- [x] `frontend/olympus/`
+- [x] `cloudflare/olympus/`
 
 ## Acceptance Criteria
 
-- [ ] Audit all `glass-card`, `backdrop-blur`, heavy `box-shadow` usage in `frontend/olympus/`
+- [ ] Audit all `glass-card`, `backdrop-blur`, heavy `box-shadow` usage in `cloudflare/olympus/`
 - [ ] Replace with utility classes:
   - `.surface` / `bg-[var(--surface)]` + `border border-[var(--hair)]`
   - Remove blur on new/changed components (legacy may migrate incrementally — document remaining glass in PR)
@@ -21,14 +21,14 @@ Migrate **Olympus** dashboard from glass morphism to x.ai-style flat surfaces �
 ## Test Requirements
 
 ```bash
-cd frontend/olympus && npm run build
+cd cloudflare/olympus && npm run build
 ```
 
 ## Documentation to Update
 
-- [ ] `frontend/olympus/ARCHITECTURE.md` — surface system
-- [ ] `frontend/digiweb/design/EVOLUTION.md` Phase D
-- [ ] `frontend/digiweb/design/EVOLUTION.md` §10 — glass on new components rejected
+- [ ] `cloudflare/olympus/ARCHITECTURE.md` — surface system
+- [ ] `cloudflare/digiweb/design/EVOLUTION.md` Phase D
+- [ ] `cloudflare/digiweb/design/EVOLUTION.md` §10 — glass on new components rejected
 
 ## Out of Scope
 

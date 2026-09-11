@@ -123,7 +123,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
   # Scan changed paths for live-trading touch. The directory fragment is
   # anchored to digiquant — a bare '/live/' also matched design-reference
-  # screenshots under frontend/**/references/**/live/ (false positives).
+  # screenshots under cloudflare/**/references/**/live/ (false positives).
   # `|| true` here would turn a failed diff into an empty file list, and an empty
   # list can never match — silently disarming the guard. Fail closed instead.
   if ! changed="$(git diff --name-only "$base" "$local_sha" 2>/dev/null)"; then

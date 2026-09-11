@@ -34,10 +34,12 @@ import math
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import (
+    TYPE_CHECKING,
     Any,  # score:allow untyped any — scored-lint suppression: duck-typed Supabase client + rows
 )
 
-from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
+if TYPE_CHECKING:
+    from digigraph.graph.pipeline_builder import PipelinePhase
 
 from digiquant.dashboard.envcompat import POSITION_RISK_FIELDS, env_lookup
 from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
@@ -46,8 +48,14 @@ from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries, sized_book
 from digiquant.portfolio.risk_envelope import risk_horizon_days
 from digiquant.portfolio.sector_map import sector_bucket
+from digiquant.research.data.queries import r2_backend_enabled
 from digiquant.research.state import ResearchState
-from digiquant.research.supabase_io import SupabaseClient, load_prior_book, query_price_deltas
+from digiquant.research.supabase_io import (
+    SupabaseClient,
+    load_nav_history_row,
+    load_prior_book,
+    query_price_deltas,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -315,20 +323,34 @@ def _upsert_portfolio_metrics(
     benchmark_closes: list[float] = []
     if len(nav_observations) >= 2:
         try:
-            benchmark_resp = (
-                client.table("price_history")
-                .select("date,close")
-                .eq("ticker", _ALPHA_BENCHMARK)
-                .gte("date", str(nav_observations[0]["date"]))
-                .lte("date", str(nav_observations[-1]["date"]))
-                .order("date")
-                .execute()
-            )
-            benchmark_closes = [
-                _coerce_float(row.get("close"))
-                for row in (getattr(benchmark_resp, "data", None) or [])
-                if row.get("close") is not None
-            ]
+            if r2_backend_enabled():
+                # Sealed R2 SPY generation over the NAV window (#3780 Task 7b).
+                from digiquant.research.data.queries import r2_close_rows
+
+                benchmark_closes = [
+                    _coerce_float(row.get("close"))
+                    for row in r2_close_rows(
+                        tickers=[_ALPHA_BENCHMARK],
+                        since=str(nav_observations[0]["date"]),
+                        until=str(nav_observations[-1]["date"]),
+                    )
+                    if row.get("close") is not None
+                ]
+            else:
+                benchmark_resp = (
+                    client.table("price_history")
+                    .select("date,close")
+                    .eq("ticker", _ALPHA_BENCHMARK)
+                    .gte("date", str(nav_observations[0]["date"]))
+                    .lte("date", str(nav_observations[-1]["date"]))
+                    .order("date")
+                    .execute()
+                )
+                benchmark_closes = [
+                    _coerce_float(row.get("close"))
+                    for row in (getattr(benchmark_resp, "data", None) or [])
+                    if row.get("close") is not None
+                ]
         except Exception as exc:
             logger.warning(
                 "phase9d: benchmark return computation failed (%s); benchmark return will be NULL",
@@ -629,16 +651,36 @@ def build_materialize_node(deps: MaterializeDeps):
                     for r in pos_rows
                 ]
 
-        client.table("nav_history").upsert(
-            {
-                "workspace_id": str(house_workspace_id()),
-                "date": date_str,
-                "nav": nav,
-                "cash_pct": cash_pct,
-                "invested_pct": round(invested, 4),
-            },
-            on_conflict="workspace_id,date",
-        ).execute()
+        # Provisional NAV suppression (#3804): the Nautilus schedule replay
+        # (verify_nav_replay.py --write) owns ``nav_history.nav`` once it has
+        # written the date. A re-dispatch after the engine step must not
+        # clobber that value with a provisional recompute, so an existing
+        # house row for this date keeps its stored NAV — fail-closed toward
+        # the engine. H9-owned ``cash_pct`` / ``invested_pct`` are still
+        # refreshed so they track the just-booked weights. ``positions`` below
+        # still book normally.
+        existing_nav = load_nav_history_row(client, run_date)
+        if existing_nav is not None and existing_nav.get("nav") is not None:
+            logger.warning(
+                "phase9d: nav_history row exists for %s (nav=%s); "
+                "preserving NAV, refreshing cash/invested only (engine row wins)",
+                date_str,
+                existing_nav.get("nav"),
+            )
+            client.table("nav_history").update(
+                {"cash_pct": cash_pct, "invested_pct": round(invested, 4)}
+            ).eq("workspace_id", str(house_workspace_id())).eq("date", date_str).execute()
+        else:
+            client.table("nav_history").upsert(
+                {
+                    "workspace_id": str(house_workspace_id()),
+                    "date": date_str,
+                    "nav": nav,
+                    "cash_pct": cash_pct,
+                    "invested_pct": round(invested, 4),
+                },
+                on_conflict="workspace_id,date",
+            ).execute()
 
         # Portfolio-level risk metrics (#953): compute sharpe/vol/drawdown/alpha
         # from the nav_history series and upsert into portfolio_metrics. Advisory —
@@ -713,6 +755,9 @@ def build_materialize_node(deps: MaterializeDeps):
 
 def build_materialize_phase(deps: MaterializeDeps) -> PipelinePhase:
     """Wrap the materialization node into a single-node ``PipelinePhase``."""
+    # Lazy: digigraph.graph pulls the LLM stack (openai); lean envs lack it.
+    from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
+
     return PipelinePhase(
         name="materialize",
         nodes=[NodeSpec(name="materialize-portfolio", run=build_materialize_node(deps))],

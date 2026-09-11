@@ -7,7 +7,7 @@
 **Goal:** ship the second-pass Olympus redesign — fix the data-layer amputation + single-day
 grounding across all surfaces, with Pipeline as the hub every surface links into.
 
-**61 tasks across 8 plans**, all TDD-first, all under `frontend/olympus`, all code-grounded.
+**61 tasks across 8 plans**, all TDD-first, all under `cloudflare/olympus`, all code-grounded.
 
 | Plan | Phase | Tasks | Net effect |
 |---|---|---|---|

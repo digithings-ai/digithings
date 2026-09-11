@@ -90,16 +90,16 @@ Without Stage A, Profile A “pull not build” cannot smoke on the operator hos
 
 | Layer | Today | Reference |
 |---|---|---|
-| **Pages shell** | `frontend/digithings-web/app/chat/page.tsx` → iframe `/embed?host=digithings.ai` | `infra/digichat-digithings/README.md` |
+| **Pages shell** | `cloudflare/digithings-web/app/chat/page.tsx` → iframe `/embed?host=digithings.ai` | `infra/digichat-digithings/README.md` |
 | **digichat Node** | Operator Docker Compose (`--profile digichat --profile digivault`), often **monorepo build** | Same README |
 | **Backend** | digigraph → LiteLLM; `digivault_hub` → digivault :8004 | INSTALL Profile A |
 | **Vault read path** | Production digivault search: **Supabase FTS** when `DIGIVAULT_ROOT` unset | `digivault/ARCHITECTURE.md` |
 | **Vault write path (legacy)** | `scripts/sync_architecture_vault.py` — `docs/vision` vault → Supabase notes table | CI / operator |
 | **Repo docs index (parallel)** | `docs/projects/digithings-guide/` + `scripts/reindex_digithings_guide.py` → **digisearch** | Retire after onboard dual-sink cutover |
 | **OpenAPI** | `docs/openapi/*.json` (FastAPI export + authored `digichat.json`) | `docs/openapi/README.md` |
-| **Embed CSP** | Runtime `DIGICHAT_EMBED_HOSTS` / tenants (after #2031) | `frontend/digichat/src/proxy.ts` |
-| **Auth** | `/` → `auth()` → redirect `/login`; `/embed` uses tenant `gateMode: ungated` | `frontend/digichat/src/app/page.tsx` |
-| **digiquant.io** | Marketing/docs site; **no `/chat` page** — corpus crawl target only | `frontend/digiquant-web/` |
+| **Embed CSP** | Runtime `DIGICHAT_EMBED_HOSTS` / tenants (after #2031) | `cloudflare/digichat/src/proxy.ts` |
+| **Auth** | `/` → `auth()` → redirect `/login`; `/embed` uses tenant `gateMode: ungated` | `cloudflare/digichat/src/app/page.tsx` |
+| **digiquant.io** | Marketing/docs site; **no `/chat` page** — corpus crawl target only | `cloudflare/digiquant-web/` |
 
 Dogfood success = same user-visible chat quality (grounding, citations, terminal UX on embed) on **stock GHCR pins** (after Stage A) + **onboard-driven corpus** (web + repo docs + OpenAPI) into **both** digivault and digisearch, with a **single** chat entrypoint on **digithings.ai**.
 

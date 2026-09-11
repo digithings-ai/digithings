@@ -10,7 +10,7 @@
 - **Tailwind v4 tokens only.** Use the design tokens verbatim: `--accent` cyan `#3DD6C4` for links/chrome/the single conviction encoding/the live-fresh dot only; `text-fin-green`/`text-fin-red` strictly for signed financial values; `text-fin-amber` for caution/stale/carried/mixed; `bg-bg-primary`/`bg-bg-secondary`/`bg-bg-glass`; `border-border-subtle`; `text-text-primary`/`text-text-secondary`/`text-text-muted`; `glass-card`; `font-display` (Instrument Serif) for headline numerals only; `font-mono`/`tabular-nums` for figures.
 - **The F5 token rule (verbatim, applied to this surface):** purge Holdings' off-palette literals — the `rgba(59,130,246,…)` weight-bar background in `AllocationsPositionsTable.tsx` and the `#a78bfa` drilldown price line + `rgb(59,130,246)` weight area/gradient in `PositionDrilldown.tsx` (and the `text-fin-blue`/`#38bdf8` ADD-event accents). Replace with cyan `--accent` (interactive/structural) and semantic fin-green/red (signed values) only. No gradients beyond the existing faint wash. No new decorative color.
 - **Empty-state discipline.** Time-series elements gate on a data predicate (≥2 sleeve dates) and render a calm element-specific line — never an em-dash placeholder, a 1-row "table over time," or a single-dot chart. Per-day elements (the positions table, the book strip, the risk cells) are the marquee and must carry the surface on a single baseline day. The target-vs-current column stays hidden until a rebalance payload exists but shows a quiet "no target book yet" affordance, not silent absence. `SleeveHistorySection` collapses to an empty-state on single-day data.
-- **Keep tests green.** Run `cd frontend/olympus && pnpm test` (`vitest run`) — 150+ plumbing + page-level tests must stay green. Page-level tests are updated as part of the work where behavior changes. Follow existing eslint/prettier conventions (ruff is Python-only).
+- **Keep tests green.** Run `cd cloudflare/olympus && pnpm test` (`vitest run`) — 150+ plumbing + page-level tests must stay green. Page-level tests are updated as part of the work where behavior changes. Follow existing eslint/prettier conventions (ruff is Python-only).
 - **Slop guard.** The conviction pip meter and the signed decision badge each encode a *different real quantity* (unsigned per-position strength 1–3 vs signed stance −5..+5) and must each be the only accent on their cell. The Pipeline link is contextual per row (a position → ITS decision node), never a cloned generic "View in Pipeline" button.
 - **Issue linkage.** Each commit traces to a GitHub issue. Holdings ships correct on the F3/F4 query-layer interim today; it tightens when backend issues #1 (`weight_pct` seeding) and #3 (`thesis_id` canonicalization) land. Use a `task/<N>-slug` branch or `Fixes #<N>` — placeholders flagged inline.
 ---
@@ -33,8 +33,8 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
 ### Task 1: Book-reconciliation header strip on Holdings
 
 **Files:**
-- Create: `frontend/olympus/components/portfolio/BookReconciliationStrip.tsx`
-- Test: `frontend/olympus/components/portfolio/BookReconciliationStrip.test.tsx`
+- Create: `cloudflare/olympus/components/portfolio/BookReconciliationStrip.tsx`
+- Test: `cloudflare/olympus/components/portfolio/BookReconciliationStrip.test.tsx`
 
 **Interfaces:**
 - Consumes (Phase 0): `BookReconciliation { rows: ReconciledPosition[]; investedPct: number; cashPct: number; grossPct: number; netPct: number }`.
@@ -72,7 +72,7 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
     });
   });
   ```
-- [ ] Run `cd frontend/olympus && pnpm test BookReconciliationStrip` — expect FAIL (module not found).
+- [ ] Run `cd cloudflare/olympus && pnpm test BookReconciliationStrip` — expect FAIL (module not found).
 - [ ] Implement `BookReconciliationStrip.tsx`:
   ```tsx
   'use client';
@@ -131,7 +131,7 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
     );
   }
   ```
-- [ ] Run `cd frontend/olympus && pnpm test BookReconciliationStrip` — expect PASS.
+- [ ] Run `cd cloudflare/olympus && pnpm test BookReconciliationStrip` — expect PASS.
 - [ ] Commit: `git add -A && git commit -m "feat(olympus): book-reconciliation strip for Holdings (F3)"`
 
 ---
@@ -139,8 +139,8 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
 ### Task 2: Risk-envelope micro-cell (stop ↔ target + horizon)
 
 **Files:**
-- Create: `frontend/olympus/components/portfolio/RiskEnvelopeCell.tsx`
-- Test: `frontend/olympus/components/portfolio/RiskEnvelopeCell.test.tsx`
+- Create: `cloudflare/olympus/components/portfolio/RiskEnvelopeCell.tsx`
+- Test: `cloudflare/olympus/components/portfolio/RiskEnvelopeCell.test.tsx`
 
 **Interfaces:**
 - Consumes (Phase 0 widened `Position`): `stop_loss_pct?: number | null`, `target_pct_gain?: number | null`, `horizon_days?: number | null`. Semantics ported verbatim from `components/observability/PositionRiskTab.tsx` (stop = downside %, target = upside % gain, horizon = days; advisory display fields derived from ATR + conviction — NOT orders, never sent to any broker).
@@ -173,7 +173,7 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
     });
   });
   ```
-- [ ] Run `cd frontend/olympus && pnpm test RiskEnvelopeCell` — expect FAIL.
+- [ ] Run `cd cloudflare/olympus && pnpm test RiskEnvelopeCell` — expect FAIL.
 - [ ] Implement `RiskEnvelopeCell.tsx`:
   ```tsx
   'use client';
@@ -238,7 +238,7 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
     );
   }
   ```
-- [ ] Run `cd frontend/olympus && pnpm test RiskEnvelopeCell` — expect PASS.
+- [ ] Run `cd cloudflare/olympus && pnpm test RiskEnvelopeCell` — expect PASS.
 - [ ] Commit: `git add -A && git commit -m "feat(olympus): risk-envelope micro-cell, relocated from System"`
 
 ---
@@ -246,8 +246,8 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
 ### Task 3: Decision-aware holdings helpers (latest / proposed / node)
 
 **Files:**
-- Create: `frontend/olympus/lib/holdings-decisions.ts`
-- Test: `frontend/olympus/lib/holdings-decisions.test.ts`
+- Create: `cloudflare/olympus/lib/holdings-decisions.ts`
+- Test: `cloudflare/olympus/lib/holdings-decisions.test.ts`
 
 **Interfaces:**
 - Consumes: `TableRow<'decision_log'>` rows (`{ ticker; run_date; stance; conviction: number | null; status; thesis; … }`) from `fetchObservabilityData().decisions`. `decision_log.conviction` is the −5..+5 scale; `stance` is a lowercase string.
@@ -299,7 +299,7 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
     });
   });
   ```
-- [ ] Run `cd frontend/olympus && pnpm test holdings-decisions` — expect FAIL.
+- [ ] Run `cd cloudflare/olympus && pnpm test holdings-decisions` — expect FAIL.
 - [ ] Implement `holdings-decisions.ts`:
   ```ts
   import type { TableRow } from '@/lib/database.types';
@@ -356,7 +356,7 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
     );
   }
   ```
-- [ ] Run `cd frontend/olympus && pnpm test holdings-decisions` — expect PASS.
+- [ ] Run `cd cloudflare/olympus && pnpm test holdings-decisions` — expect PASS.
 - [ ] Commit: `git add -A && git commit -m "feat(olympus): decision-aware holdings helpers (latest/proposed/node)"`
 
 ---
@@ -364,8 +364,8 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
 ### Task 4: Rebuild AllocationsPositionsTable — conviction-first, decision-aware, grouped by sector, re-tokenized
 
 **Files:**
-- Modify: `frontend/olympus/components/portfolio/AllocationsPositionsTable.tsx` (full rework of the prop contract, header, body, row; lines 16–219. Keep the former-positions logic at 32–67 with the additive-field defaults below.)
-- Test: `frontend/olympus/components/portfolio/AllocationsPositionsTable.test.tsx` (new)
+- Modify: `cloudflare/olympus/components/portfolio/AllocationsPositionsTable.tsx` (full rework of the prop contract, header, body, row; lines 16–219. Keep the former-positions logic at 32–67 with the additive-field defaults below.)
+- Test: `cloudflare/olympus/components/portfolio/AllocationsPositionsTable.test.tsx` (new)
 
 **Interfaces:**
 - Consumes: `ReconciledPosition[]` (Phase 0), `ConvictionMeter` + `SignedConvictionBadge` (Phase 0), `RiskEnvelopeCell` (Task 2), `buildPipelineHref` (Phase 0), widened `Position.sector_bucket`/`conviction`/`stop_loss_pct`/`target_pct_gain`/`horizon_days`/`day_change_pct`/`unrealized_pnl_pct`.
@@ -454,7 +454,7 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
     });
   });
   ```
-- [ ] Run `cd frontend/olympus && pnpm test AllocationsPositionsTable` — expect FAIL (props mismatch / behavior).
+- [ ] Run `cd cloudflare/olympus && pnpm test AllocationsPositionsTable` — expect FAIL (props mismatch / behavior).
 - [ ] Rework `AllocationsPositionsTable.tsx`. Concretely:
   - Imports: add `import { ConvictionMeter } from '@/components/shared/conviction-meter';`, `import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';`, `import RiskEnvelopeCell from '@/components/portfolio/RiskEnvelopeCell';`, `import { buildPipelineHref } from '@/lib/pipeline-links';`, `import type { BookReconciliation, ReconciledPosition } from '@/lib/book-reconciliation';`, `import type { TableRow } from '@/lib/database.types';`, `import { ExternalLink } from 'lucide-react';`. Keep `pnlColor` from `@/components/ui`; drop the `Badge` import (ticker becomes a plain span) and the `formatAllocationCategory` import (Category column dropped).
   - Replace the prop block + sort (lines 16–30):
@@ -623,8 +623,8 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
     ```
   - Replace the empty-state guard `positions.length === 0` (line 207) with `reconciliation.rows.length === 0`.
   - Re-tokenize the header checkbox `accent-fin-blue` (line 89) to `accent-[var(--accent)]`.
-- [ ] Run `cd frontend/olympus && pnpm test AllocationsPositionsTable` — expect PASS.
-- [ ] Run `cd frontend/olympus && pnpm test` — only `AllocationsTab` consumes this component (updated in Task 6); the full suite is otherwise unaffected at this point — expect green except the not-yet-updated `AllocationsTab` call site (typecheck only fails at build, not vitest). Proceed.
+- [ ] Run `cd cloudflare/olympus && pnpm test AllocationsPositionsTable` — expect PASS.
+- [ ] Run `cd cloudflare/olympus && pnpm test` — only `AllocationsTab` consumes this component (updated in Task 6); the full suite is otherwise unaffected at this point — expect green except the not-yet-updated `AllocationsTab` call site (typecheck only fails at build, not vitest). Proceed.
 - [ ] Commit: `git add -A && git commit -m "refactor(olympus): conviction-first decision-aware holdings table (F3/F5/F6)"`
 
 ---
@@ -632,8 +632,8 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
 ### Task 5: "Proposed by the pipeline" shelf
 
 **Files:**
-- Create: `frontend/olympus/components/portfolio/ProposedByPipelineShelf.tsx`
-- Test: `frontend/olympus/components/portfolio/ProposedByPipelineShelf.test.tsx`
+- Create: `cloudflare/olympus/components/portfolio/ProposedByPipelineShelf.tsx`
+- Test: `cloudflare/olympus/components/portfolio/ProposedByPipelineShelf.test.tsx`
 
 **Interfaces:**
 - Consumes: `ProposedDecision[]` (Task 3), `SignedConvictionBadge` (Phase 0), `buildPipelineHref` (Phase 0).
@@ -669,7 +669,7 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
     });
   });
   ```
-- [ ] Run `cd frontend/olympus && pnpm test ProposedByPipelineShelf` — expect FAIL.
+- [ ] Run `cd cloudflare/olympus && pnpm test ProposedByPipelineShelf` — expect FAIL.
 - [ ] Implement `ProposedByPipelineShelf.tsx`:
   ```tsx
   'use client';
@@ -715,7 +715,7 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
     );
   }
   ```
-- [ ] Run `cd frontend/olympus && pnpm test ProposedByPipelineShelf` — expect PASS.
+- [ ] Run `cd cloudflare/olympus && pnpm test ProposedByPipelineShelf` — expect PASS.
 - [ ] Commit: `git add -A && git commit -m "feat(olympus): proposed-by-pipeline shelf for not-held decision tickers"`
 
 ---
@@ -723,9 +723,9 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
 ### Task 6: Wire reconciliation + decisions through AllocationsTab and the portfolio shell
 
 **Files:**
-- Modify: `frontend/olympus/components/portfolio/tabs/AllocationsTab.tsx`
-- Modify: `frontend/olympus/components/portfolio/PortfolioShellInner.tsx` (fetch decisions; source `investedPct`; thread the new props)
-- Test: `frontend/olympus/components/portfolio/tabs/AllocationsTab.test.tsx` (new)
+- Modify: `cloudflare/olympus/components/portfolio/tabs/AllocationsTab.tsx`
+- Modify: `cloudflare/olympus/components/portfolio/PortfolioShellInner.tsx` (fetch decisions; source `investedPct`; thread the new props)
+- Test: `cloudflare/olympus/components/portfolio/tabs/AllocationsTab.test.tsx` (new)
 
 **Interfaces:**
 - Consumes: `reconcileBook` (Phase 0), `fetchObservabilityData` (`lib/observability-queries.ts` → `{ decisions: TableRow<'decision_log'>[]; … }`), `latestDecisionByTicker` + `proposedNotHeld` (Task 3), `DashboardData.server_portfolio_metrics?.invested_pct` (`ServerPortfolioMetrics`) as `opts.investedPct`.
@@ -774,7 +774,7 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
     });
   });
   ```
-- [ ] Run `cd frontend/olympus && pnpm test tabs/AllocationsTab` — expect FAIL.
+- [ ] Run `cd cloudflare/olympus && pnpm test tabs/AllocationsTab` — expect FAIL.
 - [ ] Rewrite `AllocationsTab.tsx` (new prop contract + internal reconciliation):
   ```tsx
   'use client';
@@ -868,8 +868,8 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
     ```
     (`useState`/`useEffect` are already imported at line 3.)
   - In the `tab === 'holdings'` render block (lines 238–254) add two props to `<AllocationsTab … />`: `investedPct={investedPct}` and `decisions={decisions}`. Keep `positions={positions}` and all existing props.
-- [ ] Run `cd frontend/olympus && pnpm test tabs/AllocationsTab` — expect PASS.
-- [ ] Run `cd frontend/olympus && pnpm test` — full suite green (`PortfolioSectionNav`, `portfolio-aggregates`, `portfolio-url-state`, `DecisionQuality`, the new Holdings suites).
+- [ ] Run `cd cloudflare/olympus && pnpm test tabs/AllocationsTab` — expect PASS.
+- [ ] Run `cd cloudflare/olympus && pnpm test` — full suite green (`PortfolioSectionNav`, `portfolio-aggregates`, `portfolio-url-state`, `DecisionQuality`, the new Holdings suites).
 - [ ] Commit: `git add -A && git commit -m "feat(olympus): wire book reconciliation + decisions into Holdings tab"`
 
 ---
@@ -877,9 +877,9 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
 ### Task 7: Re-tokenize PositionDrilldown (F5) + collapse SleeveHistorySection on single-day data
 
 **Files:**
-- Modify: `frontend/olympus/components/portfolio/PositionDrilldown.tsx` (lines 42–56 marker colors; 194–196 window-button active class; 275–276 gradient stops; 327 area stroke; 337 line stroke)
-- Modify: `frontend/olympus/components/portfolio/SleeveHistorySection.tsx` (lines 41/48/55 mode buttons; line 62 banner; chart gate)
-- Test: `frontend/olympus/components/portfolio/SleeveHistorySection.test.tsx` (new)
+- Modify: `cloudflare/olympus/components/portfolio/PositionDrilldown.tsx` (lines 42–56 marker colors; 194–196 window-button active class; 275–276 gradient stops; 327 area stroke; 337 line stroke)
+- Modify: `cloudflare/olympus/components/portfolio/SleeveHistorySection.tsx` (lines 41/48/55 mode buttons; line 62 banner; chart gate)
+- Test: `cloudflare/olympus/components/portfolio/SleeveHistorySection.test.tsx` (new)
 
 **Interfaces:**
 - Consumes: `sleeveData` (`Array<Record<string, number | string>>`) already passed by `AllocationsTab`. Single-day predicate = `sleeveData.length < 2`.
@@ -923,7 +923,7 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
     });
   });
   ```
-- [ ] Run `cd frontend/olympus && pnpm test SleeveHistorySection` — expect FAIL.
+- [ ] Run `cd cloudflare/olympus && pnpm test SleeveHistorySection` — expect FAIL.
 - [ ] Update `SleeveHistorySection.tsx`: re-tokenize the three mode buttons (lines 41/48/55) `bg-fin-blue/20 text-fin-blue` → `bg-[var(--accent)]/15 text-[var(--accent)]`, and the date banner (line 62) `border-fin-blue/30 bg-fin-blue/10` → `border-[var(--accent)]/30 bg-[var(--accent)]/10`. Then gate the chart on `sleeveData.length >= 2`:
   ```tsx
   const enoughHistory = sleeveData.length >= 2;
@@ -944,8 +944,8 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
     </p>
   )}
   ```
-- [ ] Run `cd frontend/olympus && pnpm test SleeveHistorySection` — expect PASS.
-- [ ] Verify F5 purge: `cd frontend/olympus && grep -RnE "59,130,246|a78bfa|38bdf8|fin-blue" components/portfolio/` — expect NO matches in `AllocationsPositionsTable.tsx`, `PositionDrilldown.tsx`, `SleeveHistorySection.tsx`. (If `SleeveStackedChart` or other untouched files match, leave them — they are out of this surface's F5 target set.)
+- [ ] Run `cd cloudflare/olympus && pnpm test SleeveHistorySection` — expect PASS.
+- [ ] Verify F5 purge: `cd cloudflare/olympus && grep -RnE "59,130,246|a78bfa|38bdf8|fin-blue" components/portfolio/` — expect NO matches in `AllocationsPositionsTable.tsx`, `PositionDrilldown.tsx`, `SleeveHistorySection.tsx`. (If `SleeveStackedChart` or other untouched files match, leave them — they are out of this surface's F5 target set.)
 - [ ] Commit: `git add -A && git commit -m "refactor(olympus): re-tokenize Holdings charts to cyan + sleeve empty-state (F5)"`
 
 ---
@@ -954,17 +954,17 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
 
 **Files:**
 - Modify: the observability/System tab host that mounts `PositionRiskTab` (locate the mount; the System surface is `components/system/how-olympus-works.tsx` plus the observability route components in `components/observability/`).
-- Delete: `frontend/olympus/components/observability/PositionRiskTab.tsx` (and its test if one exists)
+- Delete: `cloudflare/olympus/components/observability/PositionRiskTab.tsx` (and its test if one exists)
 - Test: update whichever System/observability test references the Position-risk tab.
 
 **Interfaces:**
 - Consumes: nothing new. Removal only; the data it showed (`stop_loss_pct`/`target_pct_gain`/`horizon_days`/`conviction`) now renders inline in the Holdings table (Task 4 `RiskEnvelopeCell` + `ConvictionMeter`).
 
 **Steps:**
-- [ ] Locate the mount + tab registration: `cd frontend/olympus && grep -RnE "PositionRiskTab|Position risk|position-risk|'risk'|\"risk\"" components/ app/ --include='*.tsx' --include='*.ts'`.
+- [ ] Locate the mount + tab registration: `cd cloudflare/olympus && grep -RnE "PositionRiskTab|Position risk|position-risk|'risk'|\"risk\"" components/ app/ --include='*.tsx' --include='*.ts'`.
 - [ ] Remove the import, the tab-key/label entry, and the `<PositionRiskTab … />` render from the observability tab host. Leave `AttributionTab` untouched (it relocates to Performance in the Phase-3 plan, not here).
 - [ ] Delete `components/observability/PositionRiskTab.tsx`. If `PositionRiskTab.test.tsx` exists, delete it; otherwise update the host tab test to drop the Position-risk assertion (and any tab-enum exhaustiveness list).
-- [ ] Run `cd frontend/olympus && pnpm test` — expect green (no remaining import of the deleted module).
+- [ ] Run `cd cloudflare/olympus && pnpm test` — expect green (no remaining import of the deleted module).
 - [ ] Commit: `git add -A && git commit -m "refactor(olympus): retire System Position-risk tab (relocated to Holdings)"`
 
 ---
@@ -974,8 +974,8 @@ This plan assumes the Phase 0 plan (`2026-06-24-olympus-phase0-foundation.md`) h
 **Files:** none (verification only).
 
 **Steps:**
-- [ ] Run `cd frontend/olympus && pnpm test` — entire vitest suite green.
+- [ ] Run `cd cloudflare/olympus && pnpm test` — entire vitest suite green.
 - [ ] Run the project's TS lint/format (per `package.json`; e.g. `pnpm lint` if defined, else `npx eslint . && npx prettier --check .`). Fix any introduced violations.
-- [ ] Run `cd frontend/olympus && npx tsc --noEmit` (or the project typecheck script) — no type errors from the new props/imports (verify the `AllocationsTab` call site in `PortfolioShellInner` matches the new contract).
+- [ ] Run `cd cloudflare/olympus && npx tsc --noEmit` (or the project typecheck script) — no type errors from the new props/imports (verify the `AllocationsTab` call site in `PortfolioShellInner` matches the new contract).
 - [ ] Manual gate (per `/score` before PR): confirm the F5 grep is clean; the per-row normalized weights sum (within sectors) to the strip's invested %; the shelf is absent (not empty-narrating) when no not-held decisions exist; each Pipeline link targets `analyst/{TICKER}` for ITS row; the conviction pip meter and signed badge are the only accents on their cells.
 - [ ] No commit. Open the PR on a `task/<N>-slug` branch (file the Holdings tracking issue if none exists) or include `Fixes #<N>` in the body. Reference backend deps in the PR body: `weight_pct` seeding (issue #1) and `thesis_id` canonicalization (issue #3) from the Phase-0 backend issue list — Holdings ships correct on the F3/F4 query-layer interim today and tightens when those land.

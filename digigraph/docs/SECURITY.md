@@ -53,3 +53,19 @@ A second, independent gate — `agents.require_tool_calls` — forces `tool_choi
 ## Streaming implementation
 
 `POST /v1/chat/completions` with `stream: true` runs the LangGraph workflow in a **worker thread** and forwards events over SSE. There is no cancellation token or backpressure contract today; prefer short workflows or non-streaming calls for strict latency budgets. See `digigraph/ARCHITECTURE.md` (streaming) for details.
+
+## MCP session tokens & checkpoints (#3794)
+
+Operator MCP overlays may include short-lived OAuth/session `token` fields on
+`WorkflowState.mcp_servers` for the active request. Those tokens are **in-request
+only**: `digigraph.graph.mcp_checkpoint_redact.McpTokenRedactingCheckpointer`
+strips `token` before durable checkpointer `put` / `put_writes`. Resume does not
+need persisted tokens — each HTTP turn overwrites `mcp_servers` from the BFF
+header.
+
+Checkpoint blobs may be archived to Cloudflare R2 bucket **`digithings-archive`**
+(private; account/keys are secrets — names only here). Blobs archived **before**
+this redaction may still contain token-bearing checkpoint JSON; treat them as
+sensitive until lifecycle expiry or re-archive. Do not paste token values into
+issues, logs, or reviews.
+
