@@ -144,23 +144,3 @@ export function extraOffFromCatalog(tools: readonly CatalogToolRow[]): Record<st
   }
   return extra;
 }
-
-/** Settings `/mcp` value: None / Off / label / "N on". */
-export function mcpMenuSummary(
-  servers: readonly CatalogToolRow[],
-  extraToolOn: (id: string) => boolean,
-): string {
-  if (!servers.length) return "None";
-  const on = servers.filter((s) => extraToolOn(s.id));
-  if (!on.length) return "Off";
-  if (on.length === 1) return on[0]!.label?.trim() || on[0]!.id;
-  return `${on.length} on`;
-}
-
-/** Enabled operator MCP servers — these join the settings tool list. */
-export function registeredMcpTools(
-  servers: readonly CatalogToolRow[],
-  extraToolOn: (id: string) => boolean,
-): CatalogToolRow[] {
-  return servers.filter((s) => extraToolOn(s.id));
-}
