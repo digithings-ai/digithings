@@ -302,3 +302,17 @@ class TestHyperdashScraper:
         monkeypatch.setattr("digiquant.data.onchain.hyperdash.HyperdashScraper", _boom)
         pos = get_onchain_cohort_positioning()
         assert pos.has_data is False and pos.error is None
+
+    def test_empty_canonical_keeps_off_over_retired_alias(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A present-but-empty canonical must not fall through to the retired alias (#3778).
+        monkeypatch.setenv("DIGIQUANT_ONCHAIN_POSITIONING", "")
+        monkeypatch.setenv("ATLAS_ONCHAIN_POSITIONING", "1")
+
+        def _boom(*_a: Any, **_k: Any) -> Any:
+            raise AssertionError("empty canonical must keep the switch off")
+
+        monkeypatch.setattr("digiquant.data.onchain.hyperdash.HyperdashScraper", _boom)
+        pos = get_onchain_cohort_positioning()
+        assert pos.has_data is False and pos.error is None

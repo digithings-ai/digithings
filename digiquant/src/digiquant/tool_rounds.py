@@ -30,6 +30,8 @@ T = TypeVar("T", bound=BaseModel)
 def olympus_max_tool_rounds() -> int:
     """Return the digiquant tool-round cap (default 24, minimum 1)."""
     raw = env_lookup(TOOL_ROUNDS_MAX, default=str(_DEFAULT_MAX_TOOL_ROUNDS)).strip()
+    if not raw:
+        return _DEFAULT_MAX_TOOL_ROUNDS
     try:
         value = int(raw)
     except ValueError:
