@@ -153,12 +153,14 @@ def _cmd_schedule_tick(args: argparse.Namespace) -> int:
     if not outcomes:
         print("no due jobs")
         return 0
+    failed = False
     for outcome in outcomes:
         if outcome.ok:
             print(f"ran {outcome.name}: ok")
         else:
+            failed = True
             print(f"ran {outcome.name}: error ({outcome.error})")
-    return 0
+    return 1 if failed else 0
 
 
 def _fmt_dt(value: datetime | None) -> str:

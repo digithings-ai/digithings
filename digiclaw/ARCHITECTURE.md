@@ -2,7 +2,7 @@
 
 **Component:** digiclaw — Gateway, Heartbeat, and Audit Layer
 **Status:** Phase 3 (heartbeat + audit implemented); OpenClaw gateway deferred
-**Last updated:** 2026-08-27
+**Last updated:** 2026-09-11
 
 ---
 
@@ -12,7 +12,7 @@ digiclaw is the intended user-facing gateway and runtime layer for the digithing
 
 1. **Heartbeat runner** — a single-shot Python script that pings digigraph and digiquant health endpoints, checks strategy drift via digiquant `GET /check_drift` (requires a digikey bearer), and logs results to the JSONL audit file.
 2. **JSONL audit log** — an append-only structured log; digiclaw callers use `digiclaw.audit.audit_log`, which delegates to `digibase.audit.emit_event` (fleet-wide emitter, CHR-151 / #1193).
-3. **Agent scheduler** — cron and continuous scheduling with durable lifecycle state (`start` / `stop` / `pause` / `resume`), YAML schedule definitions under `digiclaw/agents/`, and `digiclaw schedule status` for next-run visibility. Event-mode is modeled in the schema but not triggered yet.
+3. **Agent scheduler** — cron and continuous scheduling with durable lifecycle state (`start` / `stop` / `pause` / `resume`), YAML schedule definitions under `digiclaw/agents/`, and `digiclaw schedule status` for next-run visibility. Execution is injected via an `AgentRunner`; there is no working default runner, so a tick without an explicit runner fails loudly rather than recording a no-op as `ok` (#3881). Event-mode is modeled in the schema but not triggered yet.
 
 Everything else in scope for digiclaw — a persistent gateway runtime with channel adapters, session manager, queue manager, WebSocket control plane, full agent registry (#217), and MCP skill integration — is deferred. The `digiclaw/skills/README.md` defines the `run_digigraph_workflow` skill contract as a Phase 0 placeholder; no runtime implements it yet.
 
@@ -86,7 +86,7 @@ unchanged — format migration is out of scope for #1193):
 | `digiclaw heartbeat` | Same single-shot heartbeat via the `digiclaw` console script |
 | `digiclaw schedule status` | Lists agents, lifecycle, and next run times |
 | `digiclaw schedule start\|stop\|pause\|resume <agent>` | Lifecycle controls |
-| `digiclaw schedule tick` | Process due jobs once (supervisor / test entry) |
+| `digiclaw schedule tick` | Process due jobs once (supervisor / test entry). Requires an injected `AgentRunner`; with no runner, due agents are recorded `error` and the command exits non-zero — a no-op is never reported `ok` (#3881) |
 | `AUDIT_LOG_PATH` (JSONL file) | Append-only event log written via `digibase.audit.emit_event` (component wrappers call it) |
 | `AUDIT_SINK_URL` (HTTP POST) | Optional remote audit mirror (NDJSON); best-effort, no auth, no retry |
 | `DIGICLAW_AGENTS_DIR` | Optional override for agent YAML directory (default `digiclaw/agents`) |

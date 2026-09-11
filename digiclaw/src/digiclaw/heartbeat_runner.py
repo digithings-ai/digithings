@@ -33,7 +33,9 @@ def _heartbeat_checklist_path() -> Path | None:
     return None
 
 
-def _request(url: str, *, method: str = "GET", data: bytes | None = None, auth: bool = False) -> tuple[bool, str]:
+def _request(
+    url: str, *, method: str = "GET", data: bytes | None = None, auth: bool = False
+) -> tuple[bool, str]:
     headers: dict[str, str] = {}
     if auth:
         token = digikey_bearer_token()
