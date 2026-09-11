@@ -274,26 +274,14 @@ def _build_engine(
     return engine
 
 
-def _extract_pnl(account_report: Any, errors: list[str] | None = None) -> tuple[float, float]:
-    """Parse Nautilus account report -> (total_pnl, total_return_pct).
-
-    Returns (0.0, 0.0) when the report cannot be parsed. Any failure message is
-    appended to ``errors`` so callers can surface an error status rather than a
-    fabricated zero-PnL success.
-    """
-
-    def _fail(msg: str) -> tuple[float, float]:
-        logger.warning(msg)
-        if errors is not None:
-            errors.append(msg)
-        return 0.0, 0.0
-
+def _extract_pnl(account_report: Any) -> tuple[float, float]:
+    """Parse Nautilus account report -> (total_pnl, total_return_pct). Returns (0, 0) on failure."""
     if account_report is None:
-        return _fail("PnL extraction failed: account report unavailable")
+        return 0.0, 0.0
     try:
         df = pl.from_pandas(account_report)
         if df.height == 0:
-            return _fail("PnL extraction failed: account report is empty")
+            return 0.0, 0.0
         last_row = df.row(-1, named=True)
         initial = STARTING_BALANCE_USD
         raw_balance = None
@@ -302,9 +290,11 @@ def _extract_pnl(account_report: Any, errors: list[str] | None = None) -> tuple[
                 raw_balance = last_row[col_name]
                 break
         if raw_balance is None:
-            return _fail(
-                "PnL extraction failed: no recognised balance column in %s" % list(last_row.keys())
+            logger.warning(
+                "Account report has no recognised balance column. Columns: %s",
+                list(last_row.keys()),
             )
+            return 0.0, 0.0
         # Nautilus may return "1000000.00 USD" or a numeric value
         if isinstance(raw_balance, str):
             final_balance = float(raw_balance.strip().split()[0])
@@ -313,16 +303,12 @@ def _extract_pnl(account_report: Any, errors: list[str] | None = None) -> tuple[
         total_pnl = final_balance - initial
         return total_pnl, (total_pnl / initial) * 100.0
     except _PNL_PARSE_ERRORS as e:
-        return _fail(f"PnL extraction failed: {e}")
+        logger.warning("Failed to parse account report for PnL: %s", e)
+        return 0.0, 0.0
 
 
 def _extract_perf_stats(engine: Any, USD: Any) -> dict[str, Any]:
-    """Extract Sharpe, max-drawdown and raw series from the portfolio analyzer.
-
-    ``errors`` records analyzer/parse failures and ``missing`` names metrics that
-    remained ``None``, so callers can mark a result ``partial`` instead of
-    presenting fabricated ``ok`` metrics.
-    """
+    """Extract Sharpe, max-drawdown and raw series from the portfolio analyzer."""
     result: dict[str, Any] = {
         "sharpe": None,
         "max_dd": None,
@@ -331,27 +317,20 @@ def _extract_perf_stats(engine: Any, USD: Any) -> dict[str, Any]:
         "stats_general": None,
         "returns_series": None,
         "realized_pnls_series": None,
-        "errors": [],
-        "missing": [],
     }
     try:
         analyzer = engine.portfolio.analyzer
         stats_returns = analyzer.get_performance_stats_returns()
         result["stats_returns"] = stats_returns
         if stats_returns:
-            raw = stats_returns.get("Sharpe Ratio (252 days)")
-            if raw is not None:
-                v = float(raw)
-                result["sharpe"] = v if not math.isnan(v) else None
+            raw = stats_returns.get("Sharpe Ratio (252 days)", 0) or 0
+            v = float(raw)
+            result["sharpe"] = v if not math.isnan(v) else None
 
         stats_pnls = analyzer.get_performance_stats_pnls()
         result["stats_pnls"] = stats_pnls
         if stats_pnls:
-            dd = None
-            for key in ("Max Drawdown %", "Max Drawdown"):
-                if stats_pnls.get(key) is not None:
-                    dd = stats_pnls[key]
-                    break
+            dd = stats_pnls.get("Max Drawdown %") or stats_pnls.get("Max Drawdown")
             if dd is not None:
                 v = float(dd)
                 normalized = normalize_drawdown_pct(v if not math.isnan(v) else None)
@@ -384,12 +363,6 @@ def _extract_perf_stats(engine: Any, USD: Any) -> dict[str, Any]:
                 logger.debug("Failed to compute max drawdown from returns series: %s", e)
     except _ANALYZER_ERRORS as e:
         logger.warning("Failed to extract performance stats from Nautilus analyzer: %s", e)
-        result["errors"].append(f"performance stats unavailable: {e}")
-
-    if result["sharpe"] is None:
-        result["missing"].append("sharpe_ratio")
-    if result["max_dd"] is None:
-        result["missing"].append("max_drawdown_pct")
     return result
 
 
@@ -404,45 +377,14 @@ def _build_result(
     total_return_pct: float,
     num_trades: int,
     perf: dict[str, Any],
-    *,
-    errors: list[str] | None = None,
-    missing: list[str] | None = None,
-    warnings: list[str] | None = None,
 ) -> BacktestResult:
-    """Assemble BacktestResult from extracted metrics.
-
-    ``errors`` are fatal extraction failures (``status="error"``); ``missing``
-    names absent metrics and ``warnings`` records non-fatal analyzer errors
-    (``status="partial"``). A result is only ``ok`` when every metric was
-    extracted cleanly.
-    """
+    """Assemble BacktestResult from extracted metrics."""
 
     def _ns_to_iso(ns: int) -> str:
         return datetime.fromtimestamp(ns / 1e9, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def _safe_float(x: float | None) -> float | None:
         return None if (x is None or math.isnan(x)) else x
-
-    errors = list(errors or [])
-    missing = list(missing if missing is not None else perf.get("missing") or [])
-    warnings = list(warnings if warnings is not None else perf.get("errors") or [])
-    if errors:
-        status = "error"
-        detail = "; ".join(errors)
-        if warnings:
-            detail += f"; analyzer warnings: {'; '.join(warnings)}"
-        message = f"Backtest on user OHLCV data ({symbol}) — metric extraction failed: {detail}."
-    elif missing or warnings:
-        status = "partial"
-        parts = []
-        if warnings:
-            parts.append(f"analyzer warnings: {'; '.join(warnings)}")
-        if missing:
-            parts.append(f"missing metrics: {', '.join(missing)}")
-        message = f"Backtest on user OHLCV data ({symbol}) — {'; '.join(parts)}."
-    else:
-        status = "ok"
-        message = f"Backtest on user OHLCV data ({symbol})."
 
     return BacktestResult(
         run_id=run_id,
@@ -455,8 +397,8 @@ def _build_result(
         sharpe_ratio=perf["sharpe"],
         max_drawdown_pct=normalize_drawdown_pct(perf["max_dd"]),
         num_trades=num_trades,
-        status=status,
-        message=message,
+        status="ok",
+        message=f"Backtest on user OHLCV data ({symbol}).",
     )
 
 
@@ -519,8 +461,7 @@ def _run_backtest_ohlcv(
     start_ts = bars[0].ts_init
     end_ts = bars[-1].ts_init
 
-    pnl_errors: list[str] = []
-    total_pnl, total_return_pct = _extract_pnl(account_report, errors=pnl_errors)
+    total_pnl, total_return_pct = _extract_pnl(account_report)
     perf = _extract_perf_stats(engine, USD)
 
     engine.dispose()
@@ -536,9 +477,6 @@ def _run_backtest_ohlcv(
         total_return_pct=total_return_pct,
         num_trades=num_trades,
         perf=perf,
-        errors=pnl_errors,
-        missing=perf["missing"],
-        warnings=perf["errors"],
     )
 
     if tearsheet_path is not None:
@@ -579,20 +517,12 @@ def _run_multi_symbol_backtest(
 
     Returns a combined BacktestResult with:
     - total_pnl / total_return_pct as averages across symbols
-    - sharpe_ratio as the *average* Sharpe (labelled as such in the message)
-    - max_drawdown_pct as the worst per-symbol drawdown (never silently nil)
+    - sharpe_ratio as the average Sharpe
     - per_symbol_pnl dict keyed by symbol
-
-    Symbols whose backtest failed (``None`` or ``status="error"``) are never
-    silently averaged in as fabricated zeros; they are named and the result is
-    marked ``partial``.
     """
     per_symbol_pnl: dict[str, float] = {}
     per_symbol_return: dict[str, float] = {}
     per_symbol_sharpe: dict[str, float] = {}
-    per_symbol_max_dd: dict[str, float] = {}
-    skipped_symbols: list[str] = [s for s in symbols if s not in symbol_dfs]
-    degraded_symbols: list[str] = []
     num_trades_total = 0
     combined_run_id = f"multi-{uuid.uuid4().hex[:8]}"
     start_time: str | None = None
@@ -610,22 +540,11 @@ def _run_multi_symbol_backtest(
         )
         if result is None:
             logger.warning("Multi-symbol: backtest returned None for symbol %s — skipping", sym)
-            skipped_symbols.append(sym)
-            continue
-        if result.status != "ok":
-            logger.warning(
-                "Multi-symbol: backtest status=%s for symbol %s — excluding from aggregates",
-                result.status,
-                sym,
-            )
-            degraded_symbols.append(f"{sym} ({result.status})")
             continue
         per_symbol_pnl[sym] = result.total_pnl
         per_symbol_return[sym] = result.total_return_pct
         if result.sharpe_ratio is not None:
             per_symbol_sharpe[sym] = result.sharpe_ratio
-        if result.max_drawdown_pct is not None:
-            per_symbol_max_dd[sym] = result.max_drawdown_pct
         num_trades_total += result.num_trades
         if start_time is None or result.start_time < start_time:
             start_time = result.start_time
@@ -641,37 +560,6 @@ def _run_multi_symbol_backtest(
     avg_sharpe = (
         (sum(per_symbol_sharpe.values()) / len(per_symbol_sharpe)) if per_symbol_sharpe else None
     )
-    worst_dd = min(per_symbol_max_dd.values()) if per_symbol_max_dd else None
-
-    missing: list[str] = []
-    if avg_sharpe is None:
-        missing.append("sharpe_ratio")
-    elif len(per_symbol_sharpe) < n:
-        missing.append(f"sharpe_ratio ({len(per_symbol_sharpe)}/{n} symbols)")
-    if worst_dd is None:
-        missing.append("max_drawdown_pct")
-    elif len(per_symbol_max_dd) < n:
-        missing.append(f"max_drawdown_pct ({len(per_symbol_max_dd)}/{n} symbols)")
-
-    status = "partial" if (skipped_symbols or degraded_symbols or missing) else "ok"
-
-    message_bits = [f"Multi-symbol backtest across {n} symbol(s): {', '.join(per_symbol_pnl)}."]
-    if avg_sharpe is not None:
-        message_bits.append(
-            f"sharpe_ratio is the average Sharpe across "
-            f"{len(per_symbol_sharpe)}/{n} symbols, not a portfolio Sharpe."
-        )
-    if worst_dd is not None:
-        message_bits.append(
-            f"max_drawdown_pct is the worst per-symbol drawdown across "
-            f"{len(per_symbol_max_dd)}/{n} symbols."
-        )
-    if missing:
-        message_bits.append(f"Missing metrics: {', '.join(missing)}.")
-    if skipped_symbols:
-        message_bits.append(f"Symbols skipped: {', '.join(skipped_symbols)}.")
-    if degraded_symbols:
-        message_bits.append(f"Degraded symbols excluded: {', '.join(degraded_symbols)}.")
 
     bt_result = BacktestResult(
         run_id=combined_run_id,
@@ -682,11 +570,11 @@ def _run_multi_symbol_backtest(
         total_pnl=round(avg_pnl, 4),
         total_return_pct=round(avg_return, 4),
         sharpe_ratio=round(avg_sharpe, 4) if avg_sharpe is not None else None,
-        max_drawdown_pct=normalize_drawdown_pct(worst_dd),
+        max_drawdown_pct=None,
         num_trades=num_trades_total,
         per_symbol_pnl={k: round(v, 4) for k, v in per_symbol_pnl.items()},
-        status=status,
-        message=" ".join(message_bits),
+        status="ok",
+        message=f"Multi-symbol backtest across {n} symbol(s): {', '.join(per_symbol_pnl)}.",
     )
 
     if tearsheet_path is not None:

@@ -3,7 +3,7 @@
 
 Replaces matching ``model_name`` entries so house OpenRouter-style slugs that
 exist on Cheaper Inference route there; everything else (sonar, :online,
-maverick, grok-4.3/4.6, anthropic, Ollama, …) stays on the default file.
+unmapped / retired OpenRouter orphans, Ollama, …) stay on the default file or were removed in #3788.
 
 Usage:
   python scripts/merge_litellm_cheaperinference.py > /tmp/litellm.merged.yaml

@@ -170,7 +170,7 @@ behind_develop() {
 # Return success when develop changed the subtree owned by a module base.
 #
 # Module names match their repository directory except digichat, whose source
-# lives below frontend/. Keep the exception here rather than widening the diff
+# lives below cloudflare/. Keep the exception here rather than widening the diff
 # to unrelated repository files: this guard is specifically about changes that
 # could make a task edit moved or deleted component code.
 module_subtree_changed_since_base() {
@@ -178,7 +178,7 @@ module_subtree_changed_since_base() {
   local base="${base_ref#refs/remotes/origin/}"
   local component_path="${base#module/}"
   if [[ "$base" == "module/digichat" ]]; then
-    component_path="frontend/digichat"
+    component_path="cloudflare/digichat"
   fi
 
   local changed_paths

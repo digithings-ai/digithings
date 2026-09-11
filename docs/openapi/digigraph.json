@@ -70,6 +70,19 @@
             "description": "Optional per-request signal that this completion needs tool_choice='required'. Also accepted via X-Require-Tool-Calls header. Combined with project agents.require_tool_calls and env DIGI_REQUIRE_TOOL_CALLS as a FLOOR (any true value wins) \u2014 unlike allowed_tools, this can only raise the requirement, never lower one the deployment already mandates.",
             "title": "Require Tool Calls"
           },
+          "research_system_prompt": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opt-in default research system prompt for sessions with no server-configured prompt (single-tenant / baseline embed). Ignored when DIGI_TENANT_CORPUS_MAP resolves a prompt for the tenant.",
+            "title": "Research System Prompt"
+          },
           "session_id": {
             "anyOf": [
               {
@@ -127,6 +140,68 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "McpServerRef": {
+        "additionalProperties": false,
+        "description": "Trusted Streamable HTTP MCP server forwarded by the BFF (#3736).",
+        "properties": {
+          "auth": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth"
+          },
+          "authHeader": {
+            "anyOf": [
+              {
+                "maxLength": 41,
+                "pattern": "^[A-Za-z][A-Za-z0-9-]{0,40}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authheader"
+          },
+          "id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url"
+        ],
+        "title": "McpServerRef",
         "type": "object"
       },
       "ProductGraphRunRequest": {
@@ -332,6 +407,33 @@
             "description": "Per-request digisearch index. Client-writable on this model but, when DIGI_TENANT_CORPUS_MAP is set, overwritten server-side from the authenticated tenant's map entry (headers/body cannot select another tenant's corpus). When the map is unset, X-Digi-Corpus-Index may set it.",
             "title": "digisearch index"
           },
+          "disabled_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Catalog ids to hide this turn (X-Digi-Disabled-Tools). Built-in aliases (digisearch, digivault) plus extra operator MCP server ids. Unknown tokens ignored. Always overwritten from the header on HTTP.",
+            "title": "Disabled Tools"
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-request reasoning effort (X-Digi-Effort). One of low, medium, high. Unrecognized values are ignored. Always overwritten from the header on HTTP.",
+            "title": "Effort"
+          },
           "enable_web_search": {
             "default": false,
             "description": "Opt-in digigraph ``web_search`` tool (digillm). Default off. Also via X-Digi-Enable-Web-Search (#3420).",
@@ -362,8 +464,23 @@
                 "type": "null"
               }
             ],
-            "description": "Optional per-request locate tool to run with the user string as its query (X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. The model is not hinted \u2014 the call is injected, then it synthesizes.",
+            "description": "Optional per-request locate tool to run with the user string as its query (X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. Extra operator MCP server ids (from X-Digi-Mcp-Servers) are also accepted: those hint the model with tool_choice=required rather than injecting a locate call.",
             "title": "Force Tool"
+          },
+          "mcp_servers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/McpServerRef"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Streamable HTTP MCP servers for this turn (X-Digi-Mcp-Servers). Client-writable on this model but never trusted as-is: HTTP handlers overwrite from the BFF header (operator YAML plus SSRF-guarded session overlay, and DIGI_MCP_SERVERS env). URLs never come from an untrusted JSON body. Optional auth/token are session overlay only; auth_header is operator-only, never settable via the session overlay (#3841).",
+            "title": "Mcp Servers"
           },
           "prompt": {
             "description": "User idea, e.g. 'Build me a mean-reversion stat-arb on tech'",

@@ -7,7 +7,7 @@ retain their own release and safety gates.
 
 Canonical package + deploy docs:
 
--> [`frontend/digithings-cron/README.md`](../../frontend/digithings-cron/README.md)
+-> [`cloudflare/digithings-cron/README.md`](../../cloudflare/digithings-cron/README.md)
 
 Issue #3579. Default branch stays `develop`; this Worker is the production clock, not a branch flip.
 

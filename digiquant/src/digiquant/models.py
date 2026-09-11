@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field
 
 
 class BacktestResult(BaseModel):
@@ -28,12 +28,6 @@ class BacktestResult(BaseModel):
     status: str = Field("ok", description="ok | partial | error")
     message: str = Field("", description="Optional message or error")
 
-    @computed_field
-    @property
-    def success(self) -> bool:
-        """A completed backtest. ``partial`` (valid PnL, missing optional metric) is still success."""
-        return self.status != "error"
-
 
 class OptimizationConstraints(BaseModel):
     """Hard limits for optimization; candidates violating these are rejected."""
@@ -55,12 +49,8 @@ class OptimizeResult(BaseModel):
     run_id: str = Field(..., description="Optimization run identifier")
     strategy_name: str = Field(..., description="Strategy label")
     symbols: list[str] = Field(default_factory=list, description="Instruments")
-    best_params: dict[str, float | int | str] = Field(
-        default_factory=dict, description="Best parameter set"
-    )
-    best_backtest: BacktestResult | None = Field(
-        None, description="Backtest result for best params"
-    )
+    best_params: dict[str, float | int | str] = Field(default_factory=dict, description="Best parameter set")
+    best_backtest: BacktestResult | None = Field(None, description="Backtest result for best params")
     num_evaluations: int = Field(0, description="Number of param sets evaluated")
     status: str = Field("ok", description="ok | partial | error")
     message: str = Field("", description="Optional message")

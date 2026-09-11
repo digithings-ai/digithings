@@ -1,0 +1,4 @@
+/* Product import of the /chatbot grammar sheet.
+   Source of truth stays that isolated sheet so webpack for `/chatbot`
+   never `@source`s the rest of the gallery. */
+@import "../../../reference/app/(chatbot)/chatbot/chatbot.css";

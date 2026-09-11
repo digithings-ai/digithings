@@ -16,13 +16,13 @@ A 2026-08-30 inventory ([docs/plans/2026-08-30-product-rebrand-scope.md](../plan
 2. **Subsystems are jobs, not brands.** User-facing words are **research**, **portfolio**, and **execution**. Do not introduce replacement proper nouns for atlas / hermes / kairos.
 3. **Internal phase IDs stay.** A0–A4 and H1–H9 remain graph coordinates.
 4. **Do not rewrite history.** SQL migrations, historical ADR bodies, and `olympus_*` / `atlas_run_diagnostics` table names stay. Amend, do not edit-in-place.
-5. **Rollout is layered.** The dashboard is served at `/dashboard/` only. `/olympus/` is retired — no Cloudflare 308, no twin export. Vendor consoles list dashboard callback URLs only. Python packages `digiquant.dashboard.{atlas,hermes,kairos}` and env `OLYMPUS_*` stay until a dedicated two-hop `module/digiquant` PR. The kairos **package** rename is human-gated (execution path). The workspace folder is `frontend/dashboard` (npm package `dashboard`).
+5. **Rollout is layered.** The dashboard is served at `/dashboard/` only. `/olympus/` is retired — no Cloudflare 308, no twin export. Vendor consoles list dashboard callback URLs only. Python packages `digiquant.dashboard.{atlas,hermes,kairos}` and env `OLYMPUS_*` stay until a dedicated two-hop `module/digiquant` PR. The kairos **package** rename is human-gated (execution path). The workspace folder is `cloudflare/dashboard` (npm package `dashboard`).
 
 ## Consequences
 
 **Positive:** One product name on digiquant.io; landing and dashboard say the same thing; agent docs stop teaching four Greek names as the architecture.
 
-**Negative / tradeoffs:** `/olympus/` is gone (no 308). Python packages `digiquant.research` and env `OLYMPUS_*` stay until a two-hop `module/digiquant` PR. CSS (`.oly-*`) stays as an internal prefix. The workspace folder is `frontend/dashboard` (npm package `dashboard`). Historical issues and ADRs still say the old names.
+**Negative / tradeoffs:** `/olympus/` is gone (no 308). Python packages `digiquant.research` and env `OLYMPUS_*` stay until a two-hop `module/digiquant` PR. CSS (`.oly-*`) stays as an internal prefix. The workspace folder is `cloudflare/dashboard` (npm package `dashboard`). Historical issues and ADRs still say the old names.
 
 ## Amendment (2026-09-02, #3434)
 
@@ -35,5 +35,5 @@ Wave 5 of the rebrand plan said "prefer keeping `OLYMPUS_*`". Operator secrets, 
 ## Links
 
 - Scope: [docs/plans/2026-08-30-product-rebrand-scope.md](../plans/2026-08-30-product-rebrand-scope.md)
-- Copy: [frontend/digiweb/design/COPY_GUIDE.md](../../frontend/digiweb/design/COPY_GUIDE.md)
+- Copy: [cloudflare/digiweb/design/COPY_GUIDE.md](../../cloudflare/digiweb/design/COPY_GUIDE.md)
 - Supersedes product-name claims in ADR-0014 / 0015 / 0019 without rewriting those files

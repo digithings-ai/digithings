@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Canon ratchet (#1404) — see frontend/digiweb/MIGRATION.md
+      # Canon ratchet (#1404) — see cloudflare/digiweb/MIGRATION.md
       - name: Frontend canon guard
         run: python3 scripts/check_frontend_canon.py
 

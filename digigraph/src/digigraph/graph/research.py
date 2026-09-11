@@ -18,6 +18,7 @@ from digigraph.compaction import (
     compact_messages,
     compaction_config_from_env,
 )
+from digigraph.effort import resolve_effort_directive
 from digigraph.filter_hints import extract_filter_hints
 from digigraph.graph.state import WorkflowState
 from digigraph.languages import resolve_language_directive
@@ -241,58 +242,50 @@ def _is_likely_network_failure(exc: Exception) -> bool:
     return False
 
 
-def _user_facing_llm_error(exc: Exception) -> tuple[str, str | None]:
-    """Return ``(message, error_code)`` for an LLM failure.
+def _research_fail(
+    message: str,
+    *,
+    code: str | None = None,
+    detail: str | None = None,
+    research_response: str | None = None,
+) -> dict:
+    """Research-node error payload that always carries a digichat error_code."""
+    from digigraph.llm_errors import LLM_ERROR
 
-    ``error_code`` is a stable digichat contract value (e.g. ``free_quota_exceeded``)
-    or ``None`` when the failure is unclassified.
-    """
-    from digigraph.llm_errors import (
-        FREE_QUOTA_EXCEEDED,
-        RATE_LIMIT,
-        classify_llm_error,
-        free_quota_message,
-        rate_limit_message,
-    )
+    out: dict = {
+        "strategy_name": None,
+        "symbols": None,
+        "research_note": "error",
+        "error": message,
+        "error_code": code or LLM_ERROR,
+    }
+    if research_response is not None:
+        out["research_response"] = research_response
+    if detail:
+        out["error_detail"] = detail
+    return out
 
-    code = classify_llm_error(exc)
-    if code == FREE_QUOTA_EXCEEDED:
-        return free_quota_message(), FREE_QUOTA_EXCEEDED
-    if code == RATE_LIMIT:
-        return rate_limit_message(), RATE_LIMIT
 
-    msg = str(exc).lower()
-    if "context window exceeds limit" in msg or "context_length_exceeded" in msg:
-        return (
-            "The conversation or context is too long for this model. "
-            "Try: start a new chat, use a model with a larger context (e.g. set DIGI_LLM_MODE=medium), or shorten your question.",
-            None,
-        )
-    if "invalid api key" in msg or "authentication" in msg or "401" in msg:
-        return (
-            "API authentication failed. Check your model provider settings (e.g. OLLAMA_API_KEY, OPENAI_API_KEY).",
-            None,
-        )
+def _user_facing_llm_error(exc: Exception) -> tuple[str, str, str | None]:
+    """Return ``(message, error_code, detail)`` for an LLM failure."""
+    from digigraph.llm_errors import user_facing_llm_failure
+
     if _is_likely_network_failure(exc):
-        base = (os.environ.get("OPENAI_API_BASE") or "").strip() or "(unset — OpenAI default URL)"
         vert = _vertical_url_host_hints()
         if vert:
-            # Operator diagnostics only — never stream Docker Compose hostnames to embed clients.
+            # Operator diagnostics only — never stream Docker Compose hostnames.
             logger.warning("research network failure host hints: %s", vert)
+        from digigraph.llm_errors import LLM_ERROR, sanitize_user_facing_error
+
         return (
-            "A network connection failed during research (LLM and/or tools calling digisearch). "
-            f"OPENAI_API_BASE is {base}. "
-            "Start LiteLLM (http://127.0.0.1:4000/v1) or Ollama (http://127.0.0.1:11434/v1) and ensure digigraph can reach it. "
-            "Document/RAG also needs digisearch orchestrator at DIGISEARCH_URL (host: http://127.0.0.1:8002). "
-            "If you use `make stack-local`, host.docker.internal in OPENAI_API_BASE is rewritten to 127.0.0.1. "
-            "See docs/LOCAL_STACK.md.",
-            None,
+            "Could not reach the model provider. Try again shortly.",
+            LLM_ERROR,
+            sanitize_user_facing_error(str(exc)) or None,
         )
     tail = _vertical_url_host_hints()
     if tail:
         logger.warning("research failure host hints: %s", tail)
-    # Never echo raw exception text (may include Compose service DNS names like digisearch:8002).
-    return "Research failed. Please try again shortly.", None
+    return user_facing_llm_failure(exc)
 
 
 def _plan_result_preview(result: str | dict) -> str:
@@ -330,6 +323,7 @@ def _run_document_rag_path(
     index_name: str,
     index_display_name: str,
     prompt: str,
+    language_directive: str | None = None,
 ) -> dict:
     run_data_dir = None
     try:
@@ -354,11 +348,19 @@ def _run_document_rag_path(
     # when this request enabled web search so corpus-only deploys stay corpus-only.
     if state.get("enable_web_search") and "web" not in skill_ids:
         skill_ids.append("web")
+    # Session prefs tools (same trust as slash) — always on so the model can
+    # change language/model/effort/tools/MCP; the client applies the result.
+    if "session" not in skill_ids:
+        skill_ids.append("session")
 
     # Distinguish None (unrestricted) from [] (deny-all). A falsy check coerces
     # empty allowlist → None and silently opens every tool — the documented
     # contract is the opposite (ARCHITECTURE § tool allowlist; tool_policy).
     _allowed_names = frozen_from_state_list(state.get("allowed_tool_names"))
+    if _allowed_names is not None:
+        from digigraph.orchestration.session_prefs_tools import SESSION_TOOL_NAMES
+
+        _allowed_names = _allowed_names | SESSION_TOOL_NAMES
     _ctx_rid = state.get("request_id")
     _ctx_wid = state.get("workflow_id")
     # Normalize before constructing ToolContext (#2295 review): an empty or
@@ -384,6 +386,26 @@ def _run_document_rag_path(
         )
         or None,
     )
+    mcp_servers = [s for s in (state.get("mcp_servers") or []) if isinstance(s, dict)]
+    context.extra_mcp_servers = mcp_servers
+    from digigraph.orchestration.mcp_client import (
+        expand_mcp_disabled_tokens,
+        extra_tool_names_for_servers,
+        resolve_mcp_force_id,
+    )
+    from digigraph.orchestration.registry import list_tool_names
+
+    mcp_force = None
+    if not resolve_force_tool(state.get("force_tool")):
+        mcp_force = resolve_mcp_force_id(state.get("force_tool"), mcp_servers)
+    if mcp_servers:
+        extra_names = extra_tool_names_for_servers(mcp_servers)
+        disabled_extra = expand_mcp_disabled_tokens(state.get("disabled_tools"), extra_names)
+        live_extra = frozenset(n for n in extra_names if n not in disabled_extra)
+        if disabled_extra and context.allowed_tool_names is None:
+            context.allowed_tool_names = frozenset(list_tool_names()) | live_extra
+        elif live_extra and context.allowed_tool_names is not None:
+            context.allowed_tool_names = context.allowed_tool_names | live_extra
     tools_for_llm = get_tools_for_skills(skill_ids, context)
     collected_stored: dict[str, dict] = {}
     collected_rag: list[dict] = []
@@ -440,6 +462,11 @@ def _run_document_rag_path(
         return result
 
     user_content = str(prompt)
+    if mcp_force:
+        user_content = (
+            f"The user invoked /{mcp_force} for this turn. "
+            f"You must use tools whose names start with {mcp_force}__.\n\n" + user_content
+        )
 
     # Project mode only: prepend NL filter hints so the LLM folds them into
     # digisearch tool args. Opt out via DIGI_FILTER_HINTS=0. extract_filter_hints is fail-open.
@@ -476,6 +503,9 @@ def _run_document_rag_path(
                 "data_prep_agent, data_manipulation_agent, or data_engineer_agent.]\n\n"
                 + user_content
             )
+
+    if language_directive:
+        user_content = f"{language_directive}\n\n{user_content}"
 
     # The model drives retrieval: it chooses whether to search, writes its own query,
     # and may follow a digisearch hit with digivault_get_note to read the whole note.
@@ -540,7 +570,7 @@ def _run_document_rag_path(
         on_tool_step=stream_callback,
         tool_choice="auto"
         if forced
-        else ("required" if state.get("require_tool_calls") else "auto"),
+        else ("required" if (state.get("require_tool_calls") or mcp_force) else "auto"),
     )
 
     planning_mode = bool(cfg.get_planning_mode()) if cfg else False
@@ -568,13 +598,10 @@ def _run_document_rag_path(
         state["plan"] = None
 
     if not content or not str(content).strip():
-        return {
-            "strategy_name": None,
-            "symbols": None,
-            "research_note": "error",
-            "research_response": None,
-            "error": "LLM returned empty response. The search may have run; try rephrasing your question.",
-        }
+        return _research_fail(
+            "LLM returned empty response. The search may have run; try rephrasing your question.",
+            research_response=None,
+        )
     out_state: dict = {
         "strategy_name": None,
         "symbols": None,
@@ -605,6 +632,7 @@ def _run_quant_or_augmented_path(
     is_document_mode: bool,
     request_id: str | None = None,
     authorization_bearer: str | None = None,
+    language_directive: str | None = None,
 ) -> dict:
     doc_context = digisearch(
         str(prompt),
@@ -614,9 +642,11 @@ def _run_quant_or_augmented_path(
         authorization_bearer=authorization_bearer,
     )
     user_content = str(prompt)
+    if language_directive:
+        user_content = f"{language_directive}\n\n{user_content}"
     if doc_context:
         user_content = (
-            f"[Document context from digisearch]\n{doc_context}\n\n[User prompt]\n{prompt}"
+            f"[Document context from digisearch]\n{doc_context}\n\n[User prompt]\n{user_content}"
         )
 
     try:
@@ -628,13 +658,7 @@ def _run_quant_or_augmented_path(
             ],
         )
         if not content or not str(content).strip():
-            return {
-                "strategy_name": None,
-                "symbols": None,
-                "research_note": "error",
-                "research_response": None,
-                "error": "LLM returned empty response.",
-            }
+            return _research_fail("LLM returned empty response.", research_response=None)
 
         if is_document_mode:
             return {
@@ -647,13 +671,10 @@ def _run_quant_or_augmented_path(
         try:
             data = _parse_llm_json_object(content)
         except json.JSONDecodeError as parse_err:
-            return {
-                "strategy_name": None,
-                "symbols": None,
-                "research_note": "error",
-                "research_response": (content or "").strip()[:12000],
-                "error": f"LLM returned invalid JSON: {parse_err!s}",
-            }
+            return _research_fail(
+                f"LLM returned invalid JSON: {parse_err!s}",
+                research_response=(content or "").strip()[:12000],
+            )
 
         data = _unwrap_quant_payload(data)
         strategy_name = _pick_strategy_name(data)
@@ -663,17 +684,14 @@ def _run_quant_or_augmented_path(
             if symbols:
                 break
         if not strategy_name or not symbols:
-            return {
-                "strategy_name": None,
-                "symbols": None,
-                "research_note": "error",
-                "research_response": (content or "").strip()[:12000],
-                "error": (
+            return _research_fail(
+                (
                     "LLM response missing strategy_name or symbols (non-empty list). "
                     "Name at least one ticker (e.g. AAPL) and a strategy style, or switch workflow to "
                     "research_rag / document mode if you only want Q&A without backtest."
                 ),
-            }
+                research_response=(content or "").strip()[:12000],
+            )
         out: dict = {
             "strategy_name": str(strategy_name),
             "symbols": symbols,
@@ -684,29 +702,15 @@ def _run_quant_or_augmented_path(
             out["strategy_params"] = sp
         return out
     except Exception as e:
-        err_msg, err_code = _user_facing_llm_error(e)
-        out: dict = {
-            "strategy_name": None,
-            "symbols": None,
-            "research_note": "error",
-            "research_response": None,
-            "error": err_msg,
-        }
-        if err_code:
-            out["error_code"] = err_code
-        return out
+        err_msg, err_code, err_detail = _user_facing_llm_error(e)
+        return _research_fail(err_msg, code=err_code, detail=err_detail)
 
 
 def research_node(state: WorkflowState) -> dict:
     """Data Science Family (Phase 1): LLM infers strategy/symbols or document-mode RAG with tools."""
     prompt = state.get("prompt")
     if not prompt or not str(prompt).strip():
-        return {
-            "strategy_name": None,
-            "symbols": None,
-            "research_note": "error",
-            "error": "prompt required (non-empty).",
-        }
+        return _research_fail("prompt required (non-empty).")
 
     cfg, index_name, index_display_name, system_prompt = _load_research_settings()
     override_index = state.get("digisearch_index")
@@ -718,9 +722,11 @@ def research_node(state: WorkflowState) -> dict:
         system_prompt = str(override_prompt).strip()
     is_document_mode = system_prompt != RESEARCH_SYSTEM
 
+    # Language / effort are per-turn user preferences on this query, not the
+    # tenant system prompt — retrieval / tool routing stay English (#3736).
     language_directive = resolve_language_directive(state.get("response_language"))
-    if language_directive:
-        system_prompt = f"{system_prompt}\n\n{language_directive}"
+    effort_directive = resolve_effort_directive(state.get("effort"))
+    prompt_directive = "\n\n".join(p for p in (language_directive, effort_directive) if p) or None
 
     if is_document_mode and _digisearch_available():
         try:
@@ -731,19 +737,11 @@ def research_node(state: WorkflowState) -> dict:
                 index_name=index_name,
                 index_display_name=index_display_name,
                 prompt=str(prompt),
+                language_directive=prompt_directive,
             )
         except Exception as e:
-            err_msg, err_code = _user_facing_llm_error(e)
-            out: dict = {
-                "strategy_name": None,
-                "symbols": None,
-                "research_note": "error",
-                "research_response": None,
-                "error": err_msg,
-            }
-            if err_code:
-                out["error_code"] = err_code
-            return out
+            err_msg, err_code, err_detail = _user_facing_llm_error(e)
+            return _research_fail(err_msg, code=err_code, detail=err_detail)
 
     # Scope warning, not a guard. `require_tool_calls` is wired into exactly one
     # tool loop -- the document RAG path above. This path, and the sub-agent runners
@@ -770,4 +768,5 @@ def research_node(state: WorkflowState) -> dict:
         is_document_mode=is_document_mode,
         request_id=_norm_rid,
         authorization_bearer=state.get("digi_bearer"),
+        language_directive=prompt_directive,
     )

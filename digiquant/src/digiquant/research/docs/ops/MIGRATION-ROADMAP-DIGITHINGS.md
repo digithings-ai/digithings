@@ -262,11 +262,11 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 
 | Area | Files / actions |
 |------|------------------|
-| Supabase client split | [`frontend/lib/supabase.ts`](../../frontend/lib/supabase.ts) — browser client with cookie/session; optional server client for RSC. |
-| Auth UI | `frontend/app/login/page.tsx`, callback route, `middleware.ts` (protect `/settings`, `/portfolio` if needed). |
-| Types | Regenerate [`frontend/lib/database.types.ts`](../../frontend/lib/database.types.ts) from Supabase CLI after migrations. |
-| Data layer | [`frontend/lib/queries.ts`](../../frontend/lib/queries.ts) — every query takes `workspaceId` or resolves `default_workspace_id` + system id for global tab. |
-| Layout | [`frontend/app/layout.tsx`](../../frontend/app/layout.tsx) — session provider, nav sign-in/out. |
+| Supabase client split | [`cloudflare/lib/supabase.ts`](../../cloudflare/lib/supabase.ts) — browser client with cookie/session; optional server client for RSC. |
+| Auth UI | `cloudflare/app/login/page.tsx`, callback route, `middleware.ts` (protect `/settings`, `/portfolio` if needed). |
+| Types | Regenerate [`cloudflare/lib/database.types.ts`](../../cloudflare/lib/database.types.ts) from Supabase CLI after migrations. |
+| Data layer | [`cloudflare/lib/queries.ts`](../../cloudflare/lib/queries.ts) — every query takes `workspaceId` or resolves `default_workspace_id` + system id for global tab. |
+| Layout | [`cloudflare/app/layout.tsx`](../../cloudflare/app/layout.tsx) — session provider, nav sign-in/out. |
 
 **Routes (minimum):**
 
@@ -312,7 +312,7 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 
 **Goal:** Users edit structured config safely.
 
-- **Pages:** `frontend/app/settings/profile`, `…/billing`, `…/api-keys`, `…/rebalancing` (or single page with tabs).
+- **Pages:** `cloudflare/app/settings/profile`, `…/billing`, `…/api-keys`, `…/rebalancing` (or single page with tabs).
 - **JSON schemas:** Add under `templates/schemas/` for `investment-profile`, `preferences`, `rebalancing-policy` (mirror [`config/schedule.json`](../../config/schedule.json) fields you expose).
 - **Client validation** + **server re-validation** on save (BFF PATCH `workspaces`).
 
@@ -383,11 +383,11 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 **New**
 
 - `supabase/migrations/015_workspaces_and_billing.sql` (or split 015–017)
-- `frontend/middleware.ts`
-- `frontend/app/login/page.tsx`, `frontend/app/auth/callback/route.ts`
-- `frontend/app/settings/**` (layout + tabs)
-- `frontend/lib/auth.ts` (session helpers)
-- `frontend/lib/workspace-context.tsx` (optional)
+- `cloudflare/middleware.ts`
+- `cloudflare/app/login/page.tsx`, `cloudflare/app/auth/callback/route.ts`
+- `cloudflare/app/settings/**` (layout + tabs)
+- `cloudflare/lib/auth.ts` (session helpers)
+- `cloudflare/lib/workspace-context.tsx` (optional)
 - `app/api/**/route.ts` (or under digithings `apps/.../api`) for Stripe + credentials
 - `templates/schemas/rebalancing-policy.schema.json` (and siblings)
 - `docs/ops/multi-tenant.md`
@@ -395,8 +395,8 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 
 **Modify**
 
-- [`frontend/lib/supabase.ts`](../../frontend/lib/supabase.ts), [`frontend/lib/queries.ts`](../../frontend/lib/queries.ts), [`frontend/lib/types.ts`](../../frontend/lib/types.ts)
-- [`frontend/app/layout.tsx`](../../frontend/app/layout.tsx), page components that assume single-tenant data
+- [`cloudflare/lib/supabase.ts`](../../cloudflare/lib/supabase.ts), [`cloudflare/lib/queries.ts`](../../cloudflare/lib/queries.ts), [`cloudflare/lib/types.ts`](../../cloudflare/lib/types.ts)
+- [`cloudflare/app/layout.tsx`](../../cloudflare/app/layout.tsx), page components that assume single-tenant data
 - All publisher scripts listed in P6
 - [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml) / digithings CI when merged
 - [`RUNBOOK.md`](../../RUNBOOK.md), [`cowork/PROJECT.md`](../../cowork/PROJECT.md), [`AGENTS.md`](../../AGENTS.md) (operator rules)
@@ -462,7 +462,7 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 - Single-tenant Supabase: global UNIQUEs, `anon` read-all ([`001_initial_schema.sql`](../../supabase/migrations/001_initial_schema.sql), [`006_fix_partitioned_rls.sql`](../../supabase/migrations/006_fix_partitioned_rls.sql)).
 - Cowork + Python publishers ([`RUNBOOK.md`](../../RUNBOOK.md)).
 - GitHub Actions: market data only ([`daily-price-update.yml`](../../.github/workflows/daily-price-update.yml)).
-- Frontend: no auth ([`frontend/lib/queries.ts`](../../frontend/lib/queries.ts)).
+- Frontend: no auth ([`cloudflare/lib/queries.ts`](../../cloudflare/lib/queries.ts)).
 
 ---
 

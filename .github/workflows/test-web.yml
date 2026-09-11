@@ -28,7 +28,7 @@ jobs:
 
       # Canon ratchet (#1404): frontends stay on token-backed utilities —
       # no raw palette classes, legacy vocabulary, or color literals outside
-      # the sanctioned allowlist. Playbook: frontend/digiweb/MIGRATION.md
+      # the sanctioned allowlist. Playbook: cloudflare/digiweb/MIGRATION.md
       - name: Frontend canon guard
         run: python3 scripts/check_frontend_canon.py
 
@@ -56,7 +56,7 @@ jobs:
       # chat-mermaid.client. They are separate vitest roots, so digithings-web's
       # run above does not glob them in — 3 files there, 5 in digichat-ui, 10 in
       # @digithings/web, all disjoint (49 was digichat's count, a different lane). This lane
-      # owns them because both packages live under frontend/digiweb and are
+      # owns them because both packages live under cloudflare/digiweb and are
       # consumed by more than one app.
       - name: Test @digithings/web
         run: npm run test --workspace @digithings/web
@@ -103,7 +103,7 @@ jobs:
       #
       # Run through the workspace's own `typecheck` script rather than a bare root `tsc`
       # so cwd and tsconfig selection are unambiguous. Today both resolve the same binary
-      # (root typescript 6.0.3; only frontend/digichat nests its own, 5.9.3, for its ^5
+      # (root typescript 6.0.3; only cloudflare/digichat nests its own, 5.9.3, for its ^5
       # pin) — the script is what keeps that true if the reference ever nests one.
       #
       # No `next build` here on purpose: neither Cloudflare site builds this workspace,
@@ -116,7 +116,7 @@ jobs:
       # is not a one-fix change). Do not "tighten" it without regenerating or excluding
       # next-env.d.ts, and note Next rewrites that line itself on upgrade
       # (`next dev` writes .next/dev/types, `next build` writes .next/types).
-      # Same pair frontend/digiweb/reference/README.md documents as the local gate.
+      # Same pair cloudflare/digiweb/reference/README.md documents as the local gate.
       - name: Typecheck design-reference
         run: npm run typecheck --workspace design-reference
 

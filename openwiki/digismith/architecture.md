@@ -3,9 +3,6 @@ type: service-architecture
 title: digismith Architecture
 description: Module map and design of digismith — conditional LangSmith tracing library plus a stateless status HTTP service.
 tags: [digismith, observability, langsmith, architecture]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:31:53.755Z
 sources:
   - id: openwiki-source-3b0f3d164015c293da5dd7f8
     resource: repo://digillm/src/digillm/client.py
@@ -22,6 +19,9 @@ sources:
   - id: openwiki-source-ecab72add51be212920aacbe
     resource: repo://tests/dsm/test_trace.py
 generated: { by: "opencode", at: "2026-09-07T22:31:53.755Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digismith Architecture

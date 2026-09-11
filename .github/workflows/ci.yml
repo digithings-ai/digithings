@@ -72,7 +72,7 @@ jobs:
               - 'digiquant/**'
               - 'tests/dq/**'
               - '.github/workflows/test-digiquant.yml'
-              - 'frontend/digiquant-web/lib/live/**'
+              - 'cloudflare/digiquant-web/lib/live/**'
             digisearch:
               - 'digisearch/**'
               - 'tests/ds/**'
@@ -91,31 +91,31 @@ jobs:
               - 'digifetch/**'
               - '.github/workflows/test-digifetch.yml'
             digichat:
-              - 'frontend/digichat/**'
-              - 'frontend/digichat-ui/**'
-              - 'frontend/digiweb/web/**'
-              - 'frontend/digiweb/design/**'
+              - 'cloudflare/digichat/**'
+              - 'cloudflare/digichat-ui/**'
+              - 'cloudflare/digiweb/web/**'
+              - 'cloudflare/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-digichat.yml'
             dashboard:
-              - 'frontend/dashboard/**'
-              - 'frontend/digiweb/web/**'
-              - 'frontend/digiweb/design/**'
+              - 'cloudflare/dashboard/**'
+              - 'cloudflare/digiweb/web/**'
+              - 'cloudflare/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-dashboard.yml'
             web:
-              - 'frontend/digithings-web/**'
-              - 'frontend/digiquant-web/**'
-              - 'frontend/digithings-cron/**'
-              - 'frontend/digichat-ui/**'
-              - 'frontend/digiweb/web/**'
-              - 'frontend/digiweb/design/**'
-              - 'frontend/digiweb/brand/**'
-              - 'frontend/digiweb/reference/**'
-              - 'frontend/digichat-cloudflare/**'
-              - 'frontend/digithings-stack-cloudflare/**'
+              - 'cloudflare/digithings-web/**'
+              - 'cloudflare/digiquant-web/**'
+              - 'cloudflare/digithings-cron/**'
+              - 'cloudflare/digichat-ui/**'
+              - 'cloudflare/digiweb/web/**'
+              - 'cloudflare/digiweb/design/**'
+              - 'cloudflare/digiweb/brand/**'
+              - 'cloudflare/digiweb/reference/**'
+              - 'cloudflare/digichat-cloudflare/**'
+              - 'cloudflare/digithings-stack-cloudflare/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
@@ -187,11 +187,11 @@ jobs:
               - 'agents/**'
               - '.github/workflows/ci.yml'
               - 'scripts/ci_paths.yaml'
-              - 'frontend/digithings-cron/**'
+              - 'cloudflare/digithings-cron/**'
               - 'config/**'
               - '.release-please-manifest.json'
               - 'release-please-config.json'
-              - 'frontend/digichat/package.json'
+              - 'cloudflare/digichat/package.json'
               - 'package-lock.json'
               - '.github/workflows/release-please-digichat.yml'
               - '.github/workflows/pipeline-digiquant-prices.yml'
@@ -216,12 +216,12 @@ jobs:
 
   # ── Frontend canon guard (#1404, #1434) — UNCONDITIONAL ─────────────────────
   # No `needs`/`if` gate on purpose: check_frontend_canon.py does
-  # `git ls-files frontend` and scans ALL frontend files regardless of the
+  # `git ls-files cloudflare` and scans ALL frontend files regardless of the
   # diff, so its verdict is a property of the whole tree while a path filter is a
   # property of the diff. Gate it on any filter (as the per-app test jobs still are)
   # and a PR whose diff falls outside that filter skips a check whose scope was never
   # the diff in the first place. The mismatch is structural, so closing glob gaps does
-  # not fix it: frontend/digichat-ui/** and frontend/digiweb/reference/** were both in
+  # not fix it: cloudflare/digichat-ui/** and cloudflare/digiweb/reference/** were both in
   # no lane when this job was written and both are covered now (digichat + web, and
   # web since #1981) — the argument is unchanged. Keep the census case in view when
   # judging that: digichat-ui IS a census app (CENSUS_APPS in check_frontend_canon.py),
@@ -386,7 +386,14 @@ jobs:
         run: uv run --frozen --no-sync bash tests/scripts/test_protected_path_bash_guard.sh
 
       - name: Install ripgrep (pandas boundary gate)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+        run: |
+          # Avoid apt-get: ubuntu runners' Chrome repo Hash Sum mismatches
+          # abort update, and Ubuntu-only sources.list has no ripgrep package.
+          tmp=$(mktemp -d)
+          curl -fsSL https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz -C "$tmp" --strip-components=1 --wildcards '*/rg'
+          sudo install -m 0755 "$tmp/rg" /usr/local/bin/rg
+          rg --version
 
       - name: Pandas boundary (REM-132)
         run: bash scripts/check_pandas_boundary.sh

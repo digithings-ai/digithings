@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:61fd124bdf3833311b98c1193765decddc0c09f96270d71fd3626cf2b2b063d6",
+  "pageVersion": "sha256:6de568d4d0edd70e72f8320febc5445264ee0fe024e41e0c99b6bb654943ac10",
   "claims": [
     {
       "id": "claim_306cc6ba86d54e2794ac647038af0059",
@@ -27,8 +27,12 @@
       "statement": "Vault builds note, link-graph, backlink, and tag indexes with from_sources reconstruction over remote rows, serving list, backlinks, tag search, and fetch reads.",
       "evidence": [
         {
-          "resource": "repo://digivault/src/digivault/vault.py#L123-L260",
-          "version": "repo-lines-v1:sha256:725689d4145dea3dc03fee6983f028a698f8f4af493d65569dd93eac3dfee3b3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTM4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzNWFiZjQ0ZDBlMTdlMjMzZTA5NDQ1MjU4ZmNmOGYzNzU0Y2I4NDU5MGIzZDBlYWQ3ZjE2ZDNkZjM2N2I3NTUyIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyMmExN2M5MWVlOGI1OGVlN2E0OTViYjE2YTFmZjQ4MzVjMjRkOGVlZWY2NzNhZGNhMjQ3YzliNTliZTI5ZDM3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhYTE3OTY4MDA1OTdmOWEwMmU1YWQ0NWNhZTdiYjgyZTZlNzhiNDZlMzA3N2M2MDQ2MzRjZGViOTA5YzM0M2Y3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJmNzViMzI3ZWU4MWUzOTdlOTMxYjU4M2ViZGIxYWJmMTE3NThhZjE3ZTI2ZTQzOGQ4MjI0MDhmZGJiNWRlMGFlIn0"
+          "resource": "repo://digivault/src/digivault/vault.py#L248-L262",
+          "version": "repo-lines-v1:sha256:901efc4141512cf6dfee6924f4c8cb31772e9b2eb44dc8d5b2f71b66bd1db146:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ0MjU1ODJmN2YxNTZjNTQ4ZWFhYTM3NGZjZGNhMWZlODRlOTNlOGM4Njk1ODVhZWFlYWU5ZDg5MzVkNjcwYjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBkOTIyZjMwMjcxMWE0Yjg0MmU2YzQ3YmQ0MWExZGNkMjVjMDRlY2M1Y2E3OGEwYzNkYzQ2NWQ3ZGY1YWNiZmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRiYTJiNjYyZGI4NTFlMjg4NzhiNjEwMmM4MzdjM2JmODQ2YjcyZmU0N2NjZmEwYjE1NTkxZjlmYmUwZjhhYjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MGUwNGZmYWRmNWU0OTJkZGY5MjM0NzAwNTg4NDIwY2JjNDkyZGY5YmY5NDcyY2M1NjQ3MTdlZDliMjUyYzMifQ"
+        },
+        {
+          "resource": "repo://digivault/src/digivault/vault.py#L76-L124",
+          "version": "repo-lines-v1:sha256:b629b3558fa8595086eb0f7cc2dc71889cf12b25f1c708a60261893606cbd4a6:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiZWEyNzc3NzI3ZjRkZGRiMmQxNzFjNDc5ZjVhODQ0ZDk3M2QwZWYwNTY4NmVmODBmZDYyNmQwNGQxNjhiNzciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ1NjQ0NmRjZTA3YTM2OTBmNDBmZTFkNDYzMGQ0YTZlNDE0ZDQyZjA5NjZhNDgyZWRiNjU2NWIzZDZlMWUwODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFlY2RkNTEyZjZkOTkwOWM4NTYxY2EzN2U4Yzk4NTEzM2ZmZWQxMGVjMDkxYTlkNmVkYjE4NjM0NzI3ZjQ1MGMifQ"
         }
       ]
     },
@@ -45,6 +49,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-07T22:38:58.074Z"
+    "at": "2026-09-09T14:37:17.158Z"
   }
 }

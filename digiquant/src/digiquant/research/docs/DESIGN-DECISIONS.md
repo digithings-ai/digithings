@@ -247,7 +247,7 @@ isSupabaseConfigured()
 ```
 
 `update_tearsheet.py` generates BOTH:
-- `frontend/public/dashboard-data.json` (generated, gitignored — used as static fallback)
+- `cloudflare/public/dashboard-data.json` (generated, gitignored — used as static fallback)
 - Supabase 8-table push (when credentials available)
 
 ### Rationale

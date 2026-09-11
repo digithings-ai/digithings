@@ -13,7 +13,13 @@ import pytest
 from digiquant.data.prices import OHLCV_COLUMNS
 from digiquant.data.prices.history_cache import save_cached
 from digiquant.orchestrator_tools import build_orchestrator_tool_manifest
-from digiquant.sdca_mcp import run_fetch_bitview_series, run_fit_sdca_weights
+from digiquant.sdca_mcp import (
+    run_fetch_bgeometrics_series,
+    run_fetch_bitview_series,
+    run_fetch_coinmetrics_series,
+    run_fit_sdca_weights,
+    run_list_coinmetrics_catalog,
+)
 from digiquant.strategies.sdca.asset_profile import SdcaAssetProfile
 from digiquant.strategies.sdca.cycle_windows import CycleKind, CycleWindow, SdcaCycleWindows
 from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
@@ -26,6 +32,9 @@ pytestmark = pytest.mark.unit
 
 _PLATFORM = {
     "digiquant_fetch_bitview_series",
+    "digiquant_fetch_bgeometrics_series",
+    "digiquant_fetch_coinmetrics_series",
+    "digiquant_list_coinmetrics_catalog",
     "digiquant_fit_sdca_weights",
     "digiquant_build_sdca_risk_index",
     "digiquant_run_optimize",
@@ -130,6 +139,12 @@ class TestPlatformToolRegistration:
         missing_orch = _PLATFORM - manifest
         assert not missing_orch, f"missing orchestrator tools: {sorted(missing_orch)}"
 
+    def test_fetch_coinbase_ohlcv_exposes_timeframe_end_through_yesterday(self) -> None:
+        sig = inspect.signature(_mcp("digiquant_fetch_coinbase_ohlcv"))
+        assert "timeframe" in sig.parameters
+        assert "end" in sig.parameters
+        assert "through_yesterday" in sig.parameters
+
     def test_run_optimize_exposes_stage_b_freeze_kwargs(self) -> None:
         sig = inspect.signature(_mcp("digiquant_run_optimize"))
         assert "param_grid_json" in sig.parameters
@@ -167,10 +182,109 @@ class TestFetchBitviewMcp:
         )
         assert "dual-count" in payload["series"]["nupl"]["error"]
 
+    def test_allow_derived_bypasses_nupl_refusal(self) -> None:
+        payload = json.loads(
+            run_fetch_bitview_series(
+                series_ids_json='["nupl"]',
+                session=_FakeSession([_mvrv_slice()]),
+                allow_derived=True,
+            )
+        )
+        assert payload["series"]["nupl"]["error"] is None
+        assert payload["series"]["nupl"]["row_count"] == 5
+
     def test_mcp_tool_registered_fail_soft(self) -> None:
         raw = _mcp("digiquant_fetch_bitview_series")(series_ids_json="not-json")
         payload = json.loads(raw)
         assert "error" in payload
+
+    def test_mcp_tool_exposes_base_url_and_allow_derived(self) -> None:
+        sig = inspect.signature(_mcp("digiquant_fetch_bitview_series"))
+        assert "base_url" in sig.parameters
+        assert "allow_derived" in sig.parameters
+
+
+class TestFetchBgeometricsMcp:
+    def test_mocked_http_writes_parquet(self, tmp_path: Path) -> None:
+        session = _FakeSession(
+            [{"d": "2025-01-01", "unixTs": 1735689600, "mvrv": 2.3579}]
+        )
+        payload = json.loads(
+            run_fetch_bgeometrics_series(
+                metric="mvrv",
+                startday="2025-01-01",
+                endday="2025-01-01",
+                cache_dir=str(tmp_path),
+                session=session,
+            )
+        )
+        assert payload["error"] is None
+        assert payload["row_count"] == 1
+        assert Path(payload["path"]).exists()
+
+    def test_mcp_tool_registered_fail_soft(self) -> None:
+        raw = _mcp("digiquant_fetch_bgeometrics_series")(metric="")
+        payload = json.loads(raw)
+        assert "error" in payload
+
+
+class TestFetchCoinmetricsMcp:
+    def test_mocked_http_writes_parquet(self, tmp_path: Path) -> None:
+        session = _FakeSession(
+            {
+                "data": [
+                    {
+                        "asset": "btc",
+                        "time": "2018-01-01T00:00:00.000000000Z",
+                        "CapMVRVCur": "2.69423548",
+                    }
+                ]
+            }
+        )
+        payload = json.loads(
+            run_fetch_coinmetrics_series(
+                metric="CapMVRVCur",
+                start_time="2018-01-01",
+                end_time="2018-01-01",
+                cache_dir=str(tmp_path),
+                session=session,
+            )
+        )
+        assert payload["error"] is None
+        assert payload["row_count"] == 1
+        assert Path(payload["path"]).exists()
+
+    def test_mcp_tool_registered_fail_soft(self) -> None:
+        raw = _mcp("digiquant_fetch_coinmetrics_series")(metric="")
+        payload = json.loads(raw)
+        assert "error" in payload
+
+    def test_mcp_tool_exposes_page_size_base_url_api_key(self) -> None:
+        sig = inspect.signature(_mcp("digiquant_fetch_coinmetrics_series"))
+        assert "page_size" in sig.parameters
+        assert "base_url" in sig.parameters
+        assert "api_key" in sig.parameters
+
+
+class TestListCoinmetricsCatalogMcp:
+    def test_run_list_coinmetrics_catalog_returns_raw_payload(self) -> None:
+        payload = {"data": [{"asset": "btc", "metrics": [{"metric": "CapMVRVCur"}]}]}
+        result = json.loads(run_list_coinmetrics_catalog(asset="btc", session=_FakeSession(payload)))
+        assert result["error"] is None
+        assert result["data"] == payload
+
+    def test_mcp_tool_registered_fail_soft(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DIGIQUANT_COINMETRICS_FETCH", "0")
+        raw = _mcp("digiquant_list_coinmetrics_catalog")(asset="btc")
+        payload = json.loads(raw)
+        assert "error" in payload
+        assert "disabled" in payload["error"]
+
+    def test_mcp_tool_exposes_asset_base_url_api_key(self) -> None:
+        sig = inspect.signature(_mcp("digiquant_list_coinmetrics_catalog"))
+        assert "asset" in sig.parameters
+        assert "base_url" in sig.parameters
+        assert "api_key" in sig.parameters
 
 
 class TestFitSdcaWeightsMcp:

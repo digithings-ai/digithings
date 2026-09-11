@@ -88,7 +88,7 @@ jobs:
             [digismith]="pytest -m unit -k digismith -v --tb=short"
             [digiclaw]="pytest -m unit -k digiclaw -v --tb=short"
             [digibase]="pytest -m unit -k digibase -v --tb=short"
-            [digichat]="npm run test --prefix frontend/digichat"
+            [digichat]="npm run test --prefix cloudflare/digichat"
             [root]="pytest -m unit -v --tb=short"
           )
 

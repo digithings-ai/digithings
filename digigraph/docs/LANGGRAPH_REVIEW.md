@@ -116,7 +116,7 @@ LangGraph’s **Store** (e.g. `InMemoryStore`, `PostgresStore`) is for data that
 
 ### 3.8 Production checkpointers (implemented)
 
-We support `DIGI_CHECKPOINTER=memory|sqlite|postgres`. A shared checkpointer is used so thread state persists across requests. **memory:** built-in `MemorySaver`. **sqlite:** `langgraph-checkpoint-sqlite` (optional dep); `DIGI_CHECKPOINTER_SQLITE_URI` defaults to `~/.digigraph/checkpoints.sqlite`. **postgres:** `langgraph-checkpoint-postgres` (optional dep); `DIGI_CHECKPOINTER_POSTGRES_URI` required. For production, use sqlite or postgres for durable, resumable state. Install with `pip install digigraph[checkpoint-sqlite]` or `[checkpoint-postgres]`.
+We support `DIGI_CHECKPOINTER=memory|sqlite|postgres`. A shared checkpointer is used so thread state persists across requests. **memory:** built-in `MemorySaver`. **sqlite:** `langgraph-checkpoint-sqlite` (optional dep); `DIGI_CHECKPOINTER_SQLITE_URI` defaults to `~/.digigraph/checkpoints.sqlite`. **postgres:** `langgraph-checkpoint-postgres` (optional dep); `CORE_POSTGRES_URI` required. For production, use sqlite or postgres for durable, resumable state. Install with `pip install digigraph[checkpoint-sqlite]` or `[checkpoint-postgres]`.
 
 ---
 

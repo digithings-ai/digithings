@@ -203,7 +203,7 @@ throughout, and digivault keeps serving seed stubs until step 6.
 
 Three edit sites, copying what `VECTORIZE_*` did in #2222:
 
-- `frontend/digithings-stack-cloudflare/src/index.ts` — add `D1_ACCOUNT_ID`,
+- `cloudflare/digithings-stack-cloudflare/src/index.ts` — add `D1_ACCOUNT_ID`,
   `D1_API_TOKEN`, `D1_DATABASE_MAP` to the `envVars` whitelist **and** the `Env`
   interface. The whitelist is explicit; a `wrangler secret put` alone never reaches
   the container.

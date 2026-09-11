@@ -213,7 +213,7 @@
             "title": "Default Index Name"
           },
           "tool": {
-            "description": "digisearch | digisearch_fetch_all | digisearch_research_delegate",
+            "description": "digisearch | digisearch_fetch_all | digisearch_research_delegate | web_search",
             "title": "Tool",
             "type": "string"
           }
@@ -237,6 +237,9 @@
               },
               {
                 "$ref": "#/components/schemas/ResearchTurnOutput"
+              },
+              {
+                "$ref": "#/components/schemas/WebSearchResponse"
               },
               {
                 "type": "null"
@@ -886,6 +889,116 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WebSearchRequest": {
+        "properties": {
+          "exclude_domains": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Exclude Domains",
+            "type": "array"
+          },
+          "include_domains": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Include Domains",
+            "type": "array"
+          },
+          "max_results": {
+            "default": 4,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "recency_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 7,
+            "title": "Recency Days"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "WebSearchRequest",
+        "type": "object"
+      },
+      "WebSearchResponse": {
+        "properties": {
+          "provider": {
+            "default": "",
+            "title": "Provider",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/WebSearchResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "WebSearchResponse",
+        "type": "object"
+      },
+      "WebSearchResult": {
+        "properties": {
+          "engine": {
+            "default": "",
+            "title": "Engine",
+            "type": "string"
+          },
+          "score": {
+            "default": 0.0,
+            "title": "Score",
+            "type": "number"
+          },
+          "snippet": {
+            "default": "",
+            "title": "Snippet",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "WebSearchResult",
+        "type": "object"
       }
     }
   },
@@ -1284,6 +1397,45 @@
           }
         },
         "summary": "Api Research Turn"
+      }
+    },
+    "/v1/web_search": {
+      "post": {
+        "description": "Search the public web (searxng with ddgs fallback, fetch + extract enrichment).",
+        "operationId": "v1_web_search_v1_web_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "V1 Web Search"
       }
     }
   }

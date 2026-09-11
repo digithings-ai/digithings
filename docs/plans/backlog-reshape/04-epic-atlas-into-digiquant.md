@@ -8,7 +8,7 @@
 
 Atlas is a digiquant product, not a sibling app. Today it lives at `apps/digiquant-atlas/` — parallel to the monorepo, with its own `.github/workflows/`, `.claude/`, `.cursor/`, supabase migrations, Python package (`src/digiquant_atlas/`), skills tree, and Next.js frontend. The split creates drift (duplicated tooling, parallel CI, separate agent instructions) and obscures that Atlas, Hermes, and Kairos are one product family built on the same quant core.
 
-This epic folds Atlas **into** `digiquant/` so the digiquant module owns its flagship product end-to-end. The frontend joins the `frontend/` umbrella alongside every other web surface (ADR-0009). This also reverses the precedent set by `apps/digiquant-atlas/` and therefore requires an ADR.
+This epic folds Atlas **into** `digiquant/` so the digiquant module owns its flagship product end-to-end. The frontend joins the `cloudflare/` umbrella alongside every other web surface (ADR-0009). This also reverses the precedent set by `apps/digiquant-atlas/` and therefore requires an ADR.
 
 ## Target layout (proposal — requires ADR approval)
 
@@ -25,8 +25,8 @@ digiquant/
 │   └── migrations/                 ← NEW (or top-level infra/supabase/). From apps/digiquant-atlas/supabase/
 └── ARCHITECTURE.md                 ← adds Atlas section
 
-frontend/
-└── digiquant-atlas/                ← MOVED from apps/digiquant-atlas/frontend/ (joins workspace cleanly)
+cloudflare/
+└── digiquant-atlas/                ← MOVED from apps/digiquant-atlas/cloudflare/ (joins workspace cleanly)
 
 digiquant/atlas-skills/             ← or promote to a shared home; decision point
 ```
@@ -47,7 +47,7 @@ Workflows in `apps/digiquant-atlas/.github/workflows/` fold into the monorepo's 
 - [ ] Update all callers (scripts, tests, agent skill manifests).
 
 **Phase 2 — frontend move**
-- [ ] Move `apps/digiquant-atlas/frontend/` → `frontend/digiquant-atlas/`.
+- [ ] Move `apps/digiquant-atlas/cloudflare/` → `cloudflare/digiquant-atlas/`.
 - [ ] Update `package.json` workspace paths; verify `@digithings/design` resolves.
 - [ ] Update any CI `paths:` filters.
 
@@ -96,7 +96,7 @@ Workflows in `apps/digiquant-atlas/.github/workflows/` fold into the monorepo's 
 
 - [ ] `apps/digiquant-atlas/` no longer exists (or contains only a README pointer).
 - [ ] `digiquant/src/digiquant/olympus/atlas/` imports work end-to-end; tests pass.
-- [ ] `frontend/digiquant-atlas/` builds via workspace; design imports resolve.
+- [ ] `cloudflare/digiquant-atlas/` builds via workspace; design imports resolve.
 - [ ] CI runs Atlas tests as part of digiquant suite.
 - [ ] All docs, CLAUDE.md, AGENTS.md, ARCHITECTURE.md, and memory pointers updated.
 - [ ] One full daily Atlas run succeeds in the new layout before closing the epic.

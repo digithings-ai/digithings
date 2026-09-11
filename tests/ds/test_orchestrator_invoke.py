@@ -117,3 +117,135 @@ def test_orchestrator_invoke_unknown_tool(client: TestClient) -> None:
     body = r.json()
     msg = body.get("detail") or body.get("error", {}).get("message", "")
     assert "Unknown orchestrator tool" in msg
+
+
+def _fake_web_search_run(monkeypatch: pytest.MonkeyPatch) -> list:
+    import digisearch.web_search.service as svc_module
+    from digisearch.web_search.models import WebSearchResponse
+
+    seen: list = []
+
+    def _fake_run(req):
+        seen.append(req)
+        return WebSearchResponse(query=req.query, results=[], provider="searxng")
+
+    monkeypatch.setattr(svc_module, "run_web_search", _fake_run)
+    return seen
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_web_search_clamps_max_results(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _fake_web_search_run(monkeypatch)
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "web_search", "arguments": {"query": "etf flows", "max_results": 100}},
+    )
+    assert r.status_code == 200
+    assert r.json().get("ok") is True
+    assert seen and seen[0].max_results == 10
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_web_search_coerces_int_like(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _fake_web_search_run(monkeypatch)
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "web_search", "arguments": {"query": "etf flows", "max_results": "6"}},
+    )
+    assert r.status_code == 200
+    assert r.json().get("ok") is True
+    assert seen and seen[0].max_results == 6
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_web_search_rejects_bad_max_results(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _fake_web_search_run(monkeypatch)
+    for bad in (True, "garbage", 2.5, [4]):
+        r = client.post(
+            "/v1/orchestrator_invoke",
+            json={"tool": "web_search", "arguments": {"query": "etf flows", "max_results": bad}},
+        )
+        assert r.status_code == 200, bad
+        body = r.json()
+        assert body.get("ok") is False, bad
+        assert "max_results" in (body.get("error") or ""), bad
+    assert seen == []
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_web_search_invalid_query_is_ok_false(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _fake_web_search_run(monkeypatch)
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "web_search", "arguments": {"query": "x" * 501}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("ok") is False
+    assert "query" in (body.get("error") or "")
+    assert seen == []
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_web_search_bad_backend_is_ok_false(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bad DIGISEARCH_WEB_SEARCH_BACKEND must fail closed (ok:False), never 500."""
+    monkeypatch.setenv("DIGISEARCH_WEB_SEARCH_BACKEND", "bogus")
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "web_search", "arguments": {"query": "etf flows"}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("ok") is False
+    assert "bogus" in (body.get("error") or "")
+
+
+@pytest.mark.unit
+def test_v1_web_search_bad_backend_is_503(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bad DIGISEARCH_WEB_SEARCH_BACKEND must fail closed-loud (503), never 500."""
+    monkeypatch.setenv("DIGISEARCH_WEB_SEARCH_BACKEND", "bogus")
+    r = client.post("/v1/web_search", json={"query": "etf flows"})
+    assert r.status_code == 503
+    assert "bogus" in r.text
+
+
+@pytest.mark.unit
+def test_orchestrator_failing_web_search_surfaced_fail_hard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Failing web_search surfaces fail-hard through execute()/registry (#3871).
+
+    Pins actual surfacing: the registry execute path does not catch tool
+    failures, so a downed web_search raises instead of returning an envelope.
+    Patches the public call_digisearch_web_search wrapper, never the private one.
+    """
+    from digigraph.orchestration import builtin  # noqa: F401 - registration
+    from digigraph.orchestration import web_search_tools as ws_mod
+    from digigraph.orchestration.registry import ToolContext, execute
+
+    def _down(*args: object, **kwargs: object) -> dict[str, object]:
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(ws_mod, "call_digisearch_web_search", _down)
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={"enable_web_search": True},
+        allowed_tool_names=frozenset({ws_mod.WEB_SEARCH_TOOL_NAME}),
+    )
+    with pytest.raises(RuntimeError, match="down"):
+        execute(ws_mod.WEB_SEARCH_TOOL_NAME, {"query": "x"}, ctx)

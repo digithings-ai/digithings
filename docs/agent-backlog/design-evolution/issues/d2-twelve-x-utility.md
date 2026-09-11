@@ -1,10 +1,10 @@
 ## Goal
 
-Polish **twelve-x** FX research UI toward x.ai + Cursor utility: mono uppercase stat headers, outline filter pills, key-metric counter strip ([`EVOLUTION.md` §3 twelve-x](../../../../frontend/digiweb/design/EVOLUTION.md)).
+Polish **twelve-x** FX research UI toward x.ai + Cursor utility: mono uppercase stat headers, outline filter pills, key-metric counter strip ([`EVOLUTION.md` §3 twelve-x](../../../../cloudflare/digiweb/design/EVOLUTION.md)).
 
 ## Component
 
-- [x] `frontend/olympus/components/twelve-x/`
+- [x] `cloudflare/olympus/components/twelve-x/`
 
 ## Acceptance Criteria
 
@@ -18,15 +18,15 @@ Polish **twelve-x** FX research UI toward x.ai + Cursor utility: mono uppercase 
 ## Test Requirements
 
 ```bash
-cd frontend/olympus && npm run build
+cd cloudflare/olympus && npm run build
 ```
 
 Manual: twelve-x tab navigation + filter interaction
 
 ## Documentation to Update
 
-- [ ] `frontend/olympus/ARCHITECTURE.md` — twelve-x UI conventions
-- [ ] `frontend/digiweb/design/EVOLUTION.md`
+- [ ] `cloudflare/olympus/ARCHITECTURE.md` — twelve-x UI conventions
+- [ ] `cloudflare/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

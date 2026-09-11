@@ -1,0 +1,78 @@
+version: 1
+# digithings.ai public embed (dogfood)
+hosts:
+  digithings.ai:
+    slug: digithings-ai
+    aliases:
+      - www.digithings.ai
+    chrome:
+      mode: embed
+      theme: dark
+      skin: digichat
+      title: ask digichat
+      welcome: Ask about digithings.
+      placeholder: Ask a question
+      suggestions:
+        - What is digigraph?
+        - How do embeds work?
+      attribution: true
+      launcher:
+        mode: bar
+        label: ask digichat
+        closeLabel: close
+        mobileFullscreen: true
+    persistence: none
+    auth: anonymous
+    features:
+      attachments: false
+      dictation: false
+      speech: false
+      reasoning: true
+      toolCalls: true
+      sources: true
+      branchPicker: true
+      modelPicker: true
+    models:
+      # Default product picker is Cheaper Inference cheap slugs only (#3829).
+      # OpenRouter never appears here — even if OPENROUTER_API_KEY is set.
+      # BYOK (`gate.showByok`) is the only way the list expands.
+      default: deepseek/deepseek-v4-flash
+      available:
+        - deepseek/deepseek-v4-flash
+        - deepseek/deepseek-v4-flash-0731
+        - openai/gpt-oss-120b
+        - z-ai/glm-5.3-flash
+      allowPicker: true
+    backend:
+      type: digigraph
+      # Tenant corpus for D1 FTS. Without this, digigraph overwrites path_prefix
+      # with None and vault search fails closed — the BFF used to render that as
+      # hitCount: 0 with no error (#3838).
+      vaultPathPrefix: clients/digithings
+    tools:
+      allowUserToggle: true
+      catalog:
+        - id: digisearch
+          default: true
+          label: Search
+        - id: digivault
+          default: true
+          label: Vault
+        - id: web_search
+          default: true
+          label: Web search
+    mcp:
+      # Fail-closed for public digithings.ai marketing embed (#3795).
+      # Example ≠ live env; prod DIGICHAT_EMBED_TENANTS omits this (schema default false).
+      allowUserServers: false
+      allowAddForm: false
+    gate:
+      mode: ungated
+      # Local website-like dogfood (`?host=digithings.ai`) must show retrieve
+      # chunks / note bodies. Production can still set labels via env overlay.
+      activityDetail: full
+      llmAccess: free_then_byok
+      showByok: true
+      showLanguageSelector: true
+      webSearch: true
+    # token: set via DIGICHAT_HOST_DIGITHINGS_AI_TOKEN or DIGICHAT_EMBED_TENANTS

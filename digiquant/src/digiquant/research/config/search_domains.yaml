@@ -1,6 +1,9 @@
-# Curated allowlists for the OpenRouter `openrouter:web_search` grounding pre-pass
-# (web_grounding.py) — maps to Exa `allowed_domains`. Keeps the day-to-day search
-# flow consistent and high-signal. Edit to tune sources.
+# Enforced include_domains for the first-party `web_search` grounding pre-pass
+# (web_grounding.py, #3859): a requested live search is tool-only and must
+# succeed or raise — there is no synthesis fallback. These lists pass straight
+# through as the tool's `include_domains` (capped at 5 per request);
+# `web_excluded_websites` passes through as `exclude_domains` and
+# `max_search_results` as the tool's result count. Edit to tune sources.
 #
 # NOTE: allowlists are capped at 5 domains per request. Each list below is truncated
 # to its first 5 entries before being sent.
@@ -61,6 +64,8 @@ per_segment:
     - ft.com
 
 recency_days: 7
+# Domains excluded from every grounding search (passes through as `exclude_domains`).
+web_excluded_websites: []
 # Live search is billed per source; 8 -> 4 roughly halves the per-search spend with minimal
 # grounding loss (top results dominate). Tune up if grounding quality regresses.
 max_search_results: 4

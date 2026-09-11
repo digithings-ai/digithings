@@ -359,7 +359,7 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help=(
             "D1 database id for this corpus. MUST be the id mapped to --prefix in "
-            "D1_DATABASE_MAP (see frontend/digithings-stack-cloudflare/wrangler.toml); "
+            "D1_DATABASE_MAP (see cloudflare/digithings-stack-cloudflare/wrangler.toml); "
             "a mismatch means digivault reads a different corpus than this wrote."
         ),
     )

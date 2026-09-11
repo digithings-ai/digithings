@@ -5,7 +5,7 @@ description: digifetch shared fetch engine — HTTP fetch/download, retry policy
 tags: [digifetch, fetch, scraping, library]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
+    at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-5dd6032865f6a0da99b5bf34
     resource: repo://digifetch/ARCHITECTURE.md

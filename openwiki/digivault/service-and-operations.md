@@ -5,7 +5,7 @@ description: digivault service surface and operations — routes, store preceden
 tags: [digivault, service, operations, mcp]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
+    at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-177aa6b06017b843d46bc98a
     resource: repo://digivault/ARCHITECTURE.md

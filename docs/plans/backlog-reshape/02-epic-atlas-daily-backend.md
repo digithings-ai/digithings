@@ -6,7 +6,7 @@
 
 ## Goal
 
-Atlas is a **usable, live product**: it ingests prices daily, recomputes its research outputs, and publishes a snapshot that the Atlas frontend (`apps/digiquant-atlas/frontend/`) can render without human intervention. This is the minimum viable "Atlas is running" deliverable and a stated P0 ship item.
+Atlas is a **usable, live product**: it ingests prices daily, recomputes its research outputs, and publishes a snapshot that the Atlas frontend (`apps/digiquant-atlas/cloudflare/`) can render without human intervention. This is the minimum viable "Atlas is running" deliverable and a stated P0 ship item.
 
 Scope is deliberately narrow: **refresh → recompute → publish**. Anything agentic, orchestrated, or multi-agent belongs to a later epic (digiclaw, ADDM, perf monitor).
 
@@ -15,7 +15,7 @@ Scope is deliberately narrow: **refresh → recompute → publish**. Anything ag
 1. **#149** — MIGRATION: Atlas price pipeline → digiquant (**in progress**, `task/149-price-pipeline`)
 2. **NEW** — Atlas daily pipeline via GitHub Actions cron (draft: `docs/plans/backlog-reshape/01-atlas-daily-cron.md`)
 3. **NEW** — Atlas publish step: daily snapshot JSON → frontend-consumable location
-4. **NEW** — Atlas frontend wires to daily snapshot (replaces any stubbed/mock data on `apps/digiquant-atlas/frontend/`)
+4. **NEW** — Atlas frontend wires to daily snapshot (replaces any stubbed/mock data on `apps/digiquant-atlas/cloudflare/`)
 5. **NEW** — Health check + failure alerting for the daily job (GitHub Actions failure → issue comment or Slack webhook)
 
 ## Non-goals (explicitly out of scope)
@@ -38,5 +38,5 @@ The priorities stated in the current planning conversation put "Atlas with daily
 
 ## Context
 
-- Tracks to: `frontend/` umbrella plan (ADR-0009), Atlas research-app positioning in `docs/VISION.md`.
+- Tracks to: `cloudflare/` umbrella plan (ADR-0009), Atlas research-app positioning in `docs/VISION.md`.
 - Replaces the "daily" portion of #173 and #218 for the initial ship.
