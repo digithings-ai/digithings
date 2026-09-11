@@ -9,6 +9,8 @@ from typing import Any
 
 from digisearch.core.models import Chunk, Query, Result, SearchResponse
 from digisearch.core.standard_hits import BACKEND_AZURE_AI_SEARCH
+from digisearch.core.workspace_filter import chunk_matches_workspace
+from digisearch.indexes.backends.azure_search_errors import AzureWorkspaceFilterError
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +128,28 @@ def _build_odata_filter(
     return " and ".join(parts)
 
 
+def _workspace_odata_clause(workspace_id: str | None, filterable_fields: list[str]) -> str | None:
+    """Return the mandatory OData clause for *workspace_id*, or ``None`` when unscoped.
+
+    Fail closed: a workspace-scoped query against an index that cannot filter on
+    ``workspace_id`` must never run unscoped (cross-tenant leak). ``filterable_fields``
+    is an allowlist, so an absent ``workspace_id`` would otherwise be silently dropped
+    by :func:`_build_odata_filter`. Raise a type that ``search/_stub.py``'s
+    ``_BACKEND_ERRORS`` cannot swallow, mirroring ``VectorizeBackendError`` (#2219).
+    """
+    wid = (workspace_id or "").strip()
+    if not wid:
+        return None
+    if "workspace_id" not in frozenset(filterable_fields):
+        raise AzureWorkspaceFilterError(
+            "workspace_id isolation requested but 'workspace_id' is not in the index "
+            "filterable_fields allowlist; refusing to run an unscoped query "
+            "(see digisearch ARCHITECTURE.md §6). Add workspace_id to filterable_fields."
+        )
+    escaped = wid.replace("'", "''")
+    return f"(workspace_id eq '{escaped}')"
+
+
 def _normalize_facets(raw: dict[str, Any] | None) -> dict[str, list[dict[str, Any]]] | None:
     """Ensure facets dict is field -> list of {value, count} for JSON response."""
     if not raw:
@@ -205,16 +229,26 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
             if f not in select:
                 select.append(f)
 
-    # Build OData filter from query.filters
-    odata_filter: str | None = None
+    # Build OData filter from query.filters. Workspace isolation is mandatory and is
+    # applied separately so neither the filterable_fields allowlist nor the raw-OData
+    # branch can silently drop it.
     filters_dict = query.filters or {}
+    ws_clause = _workspace_odata_clause(query.workspace_id, filterable_fields)
+    if ws_clause and "workspace_id" not in select:
+        select.append("workspace_id")
+    odata_filter: str | None = None
     if allow_raw_filter and filters_dict.get("odata"):
         raw = filters_dict.get("odata")
         odata_filter = str(raw).strip() if raw else None
     elif filters_dict.get("structured"):
         structured = filters_dict.get("structured")
         if isinstance(structured, list):
-            odata_filter = _build_odata_filter(structured, filterable_fields)
+            # workspace_id is applied via ws_clause below; drop it here so exactly one
+            # canonical clause is emitted.
+            non_workspace = [f for f in structured if f.get("field") != "workspace_id"]
+            odata_filter = _build_odata_filter(non_workspace, filterable_fields)
+    if ws_clause:
+        odata_filter = f"{odata_filter} and {ws_clause}" if odata_filter else ws_clause
 
     # Resolve facets for this request: only populated when caller opts in via include_facets.
     # Request-supplied facets take precedence; otherwise fall back to index-config facets.
@@ -258,8 +292,13 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
         if query.highlight_post_tag is not None:
             search_kw["highlight_post_tag"] = query.highlight_post_tag
         search_results = client.search(**search_kw)
-        for i, doc in enumerate(search_results):
+        rank = 0
+        for doc in search_results:
             raw: dict[str, Any] = dict(doc)
+            # Defense-in-depth: never surface a chunk from another workspace even if the
+            # server-side filter was ignored or the index field is misconfigured.
+            if not chunk_matches_workspace(raw, query.workspace_id):
+                continue
             content = (
                 raw.get(content_f)
                 or (raw.get(content_fb) if content_fb else None)
@@ -288,7 +327,8 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
                 embedding=None,
                 metadata=raw,
             )
-            results.append(Result(chunk=chunk, score=score, rank=i + 1))
+            rank += 1
+            results.append(Result(chunk=chunk, score=score, rank=rank))
         # Only fetch/return facets when caller opted in — keeps default response lean.
         facets: dict[str, list[dict[str, Any]]] | None = None
         if query.include_facets and hasattr(search_results, "get_facets"):
