@@ -10,7 +10,9 @@ import urllib.request
 
 def digikey_bearer_token() -> str | None:
     """Return ``Authorization`` bearer JWT, or ``None`` if no API key is configured."""
-    api_key = (os.environ.get("DIGICLAW_DIGIKEY_API_KEY") or os.environ.get("DIGIKEY_API_KEY") or "").strip()
+    api_key = (
+        os.environ.get("DIGICLAW_DIGIKEY_API_KEY") or os.environ.get("DIGIKEY_API_KEY") or ""
+    ).strip()
     if not api_key:
         return None
     base = os.environ.get("DIGIKEY_URL", "http://127.0.0.1:8005").rstrip("/")
