@@ -366,7 +366,7 @@ Query
 ├── order_by: list[str]?       # Azure sort clauses
 ├── skip: int                  # pagination offset; default 0
 ├── include_total_count: bool  # full match count; default False
-└── workspace_id: str?         # tenant isolation hint (not enforced at backend level)
+└── workspace_id: str?         # tenant isolation; enforced by backends, fail-closed when unsupported
 ```
 
 ### `Result`
@@ -780,7 +780,7 @@ digisearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middlewa
 
 ### Multi-tenant isolation
 
-When `workspace_id` is set on `POST /query`, the server injects a mandatory structured filter clause (`workspace_id eq …`) into `Query.filters`. Chroma and stub backends apply this at query time; Azure receives the clause via structured filter → OData translation. **Vectorize does not translate filters yet** — `VectorizeBackend.query()` still sends only `{vector, topK, returnMetadata, returnValues}`, but if `Query.filters` is non-empty or `workspace_id` is set it now raises `VectorizeBackendError` instead of silently returning unscoped matches (#2219). Production corpora that isolate by separate per-corpus indexes keep querying without filters.
+When `workspace_id` is set on `POST /query`, the server injects a mandatory structured filter clause (`workspace_id eq …`) into `Query.filters`. Chroma and stub backends apply this at query time. Azure translates it to OData, and additionally **fails closed**: if `workspace_id` is not in the index's `filterable_fields` allowlist, `AzureWorkspaceFilterError` is raised (a type deliberately absent from `search/_stub.py`'s `_BACKEND_ERRORS`, so it propagates rather than falling through to another backend). The raw-OData branch (`allow_raw_filter`) ANDs the mandatory workspace clause into the raw filter instead of bypassing structured scoping, and results are post-filtered with `chunk_matches_workspace` as defense-in-depth (#3883). **Vectorize does not translate filters yet** — `VectorizeBackend.query()` still sends only `{vector, topK, returnMetadata, returnValues}`, but if `Query.filters` is non-empty or `workspace_id` is set it now raises `VectorizeBackendError` instead of silently returning unscoped matches (#2219). Production corpora that isolate by separate per-corpus indexes keep querying without filters.
 
 Callers omitting `workspace_id` receive unscoped results (single-tenant default). Multi-tenant deployments should require `workspace_id` at the BFF layer.
 
