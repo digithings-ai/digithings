@@ -70,6 +70,13 @@ export type ActivitySpan = {
    */
   toolInput?: Record<string, unknown>;
   /**
+   * Provider call correlation id (Foundry `call_id`, shared by a call item
+   * and its output item). Lets the stream writer settle the output into the
+   * same row the call opened instead of minting a second arg-less row.
+   * Capped opaque string; never rendered.
+   */
+  callId?: string;
+  /**
    * Generic tool result payload (e.g. MCP tool output), shown as JSON in the
    * tool row. Size-capped by the sanitizer; oversize payloads arrive as a
    * `{ truncated: true, preview }` record. Passes the detail gate untouched
@@ -306,6 +313,9 @@ export function sanitizeActivitySpan(input: unknown): ActivitySpan | null {
 
   const parsedInput = toolInput(record.toolInput);
   if (parsedInput) span.toolInput = parsedInput;
+
+  const callId = str(record.callId, MAX_LABEL_CHARS);
+  if (callId) span.callId = callId;
 
   if ("toolResult" in record) {
     const parsedResult = toolResult(record.toolResult);

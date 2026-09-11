@@ -30,6 +30,13 @@ export type StandardActivityContext = {
   reasoningId: string | null;
   /** BFF wall clock when each tool-input-start was written. */
   startedAt: Map<string, number>;
+  /**
+   * Provider call correlation (Foundry `call_id`) to open toolCallId. A
+   * completion carrying the same call id settles that exact row instead of
+   * the name-FIFO head — e.g. a search `_call_output` lands on the row its
+   * `_call` opened rather than minting an arg-less second row.
+   */
+  rowByCallId: Map<string, string>;
 };
 
 export function createActivityWriteContext(): StandardActivityContext {
@@ -42,6 +49,7 @@ export function createActivityWriteContext(): StandardActivityContext {
     jsonInputWritten: new Set(),
     reasoningId: null,
     startedAt: new Map(),
+    rowByCallId: new Map(),
   };
 }
 
@@ -128,7 +136,20 @@ function completeToolCall(
   ctx: StandardActivityContext,
   name: string,
   title?: string,
+  callId?: string,
 ): string {
+  if (callId) {
+    const rowId = ctx.rowByCallId.get(callId);
+    if (rowId) {
+      ctx.rowByCallId.delete(callId);
+      const q = ctx.pendingByName.get(name);
+      if (q) {
+        const at = q.indexOf(rowId);
+        if (at !== -1) q.splice(at, 1);
+      }
+      return rowId;
+    }
+  }
   const q = ctx.pendingByName.get(name);
   if (q && q.length) return q.shift() as string;
   return writeToolStart(writer, ctx, name, title);
@@ -263,11 +284,12 @@ export function writeStandardActivity(
     const name = toolNameOf(span);
     if (span.status === "started") {
       const id = beginToolCall(writer, ctx, name, displayTitle(name));
+      if (span.callId) ctx.rowByCallId.set(span.callId, id);
       writeJsonInputDelta(writer, ctx, id, span);
       rememberInput(ctx, id, span);
       return;
     }
-    const id = completeToolCall(writer, ctx, name, displayTitle(name));
+    const id = completeToolCall(writer, ctx, name, displayTitle(name), span.callId);
     ensureToolInput(writer, ctx, id, name, span);
     writeToolOutput(writer, ctx, id, span);
     return;
@@ -275,7 +297,7 @@ export function writeStandardActivity(
 
   if (span.operation === "retrieve") {
     const name = toolNameOf(span);
-    const id = completeToolCall(writer, ctx, name, displayTitle(name));
+    const id = completeToolCall(writer, ctx, name, displayTitle(name), span.callId);
     ensureToolInput(writer, ctx, id, name, span);
     const docs = span.documents ?? [];
     const withheld = span.documentsWithheld === true;
@@ -298,10 +320,17 @@ export function writeStandardActivity(
   });
 }
 
-/** Close an open reasoning block and auto-complete leftover read-tool rows. */
+/**
+ * Close an open reasoning block and settle leftover tool rows. Rows still
+ * open at stream end normally completed without a final trace — complete
+ * them. When the stream itself errored (`failed`), mark them failed instead:
+ * auto-completing orphans as success renders a lie (a "success" row whose
+ * tool never returned).
+ */
 export function finishStandardActivity(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
+  failed = false,
 ): void {
   closeOpenReasoning(writer, ctx);
   for (const [name, queue] of ctx.pendingByName) {
@@ -310,7 +339,7 @@ export function finishStandardActivity(
       const stored = ctx.inputById.get(id) ?? {};
       const span: ActivitySpan = {
         operation: "execute_tool",
-        status: "completed",
+        status: failed ? "failed" : "completed",
         label: name,
         toolName: name,
         ...(Object.keys(stored).length ? { toolInput: stored } : {}),
