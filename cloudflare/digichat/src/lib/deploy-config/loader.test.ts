@@ -601,3 +601,45 @@ deployment:
     expect(getAnonymousClientInstall({ DIGICHAT_CHROME_SKIN: "base" })).toBeNull();
   });
 });
+
+describe("compat web_search default-on (#3871)", () => {
+  const compatTenant = (over: Partial<EmbedTenantConfig> = {}): EmbedTenantConfig => ({
+    slug: "compat",
+    token: "compat-secret",
+    backend: { type: "digigraph" },
+    gateMode: "ungated",
+    theme: "dark",
+    attribution: false,
+    activityDetail: "labels",
+    ...over,
+  });
+
+  it("injects a default-on web_search catalog entry for compat tenants", () => {
+    const dep = embedTenantToDeployment(compatTenant({ webSearch: true }));
+    expect(dep.tools?.catalog.find((t) => t.id === "web_search")?.default).toBe(true);
+    expect(toDigichatClientConfig(dep).gate.webSearch).toBe(true);
+  });
+
+  it("injects a default-on web_search entry through the embed bridge", () => {
+    const client = clientConfigFromEmbedTenant(
+      toEmbedClientConfig(compatTenant({ webSearch: true })),
+    );
+    expect(client.tools.catalog.find((t) => t.id === "web_search")?.default).toBe(true);
+  });
+
+  it("keeps a datatap-shape deny tenant off the compat path (no injected web_search)", () => {
+    const dep = embedTenantToDeployment(
+      compatTenant({
+        slug: "datatap",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://example.services.ai.azure.com",
+          agentName: "agent",
+        },
+      }),
+    );
+    expect(dep.tools?.catalog.some((t) => t.id === "web_search") ?? false).toBe(false);
+    expect(toDigichatClientConfig(dep).gate.webSearch).toBe(false);
+    expect(filterForceToolHeader(dep, "web_search")).toBeUndefined();
+  });
+});
