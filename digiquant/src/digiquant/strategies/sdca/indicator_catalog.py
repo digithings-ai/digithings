@@ -705,7 +705,8 @@ def load_date_value_frame(path: Path | str) -> tuple[pl.Series, pl.Series]:
     cleaned = (
         pl.DataFrame({"date": dates, "value": values})
         .drop_nulls()
-        .unique(subset=["date"], keep="last")
+        .unique(subset=["date"], keep="last", maintain_order=True)
+        .sort("date")
     )
     return cleaned["date"], cleaned["value"]
 
