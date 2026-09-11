@@ -311,14 +311,23 @@ Pydantic v2 model for `POST /workflow` and internal use:
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `success` | `bool` | |
-| `message` | `str` | Human-readable summary or full RAG response |
-| `backtest_result` | `dict \| None` | digiquant `BacktestResult` |
+| `success` | `bool` | Honest run outcome. `True` for real assistant text or a genuine backtest result — digiquant `status` `ok` **or** `partial`. `status="error"` and an empty run (no assistant text, no backtest result) are `False`. |
+| `message` | `str` | Human-readable summary or full RAG response. Never a fabricated completion: a partial backtest reads `Backtest completed (partial): … Warning: <missing metric>`, a failed one `Backtest failed: …`, and an empty run `Workflow produced no result: no assistant response and no backtest result.` |
+| `error_code` | `str \| None` | Stable machine code (`free_quota_exceeded`, `rate_limit`, `llm_error`, `empty_result`); `None` on success. |
+| `backtest_result` | `dict \| None` | digiquant `BacktestResult` (`status` = `ok \| partial \| error`) |
 | `optimize_result` | `dict \| None` | digiquant optimization result |
 | `optimize_error` | `str \| None` | Non-fatal optimize error |
 | `research_brief` | `dict \| None` | Serialized `ResearchBrief` |
 | `rag_sources` | `list[dict] \| None` | Aggregated citations |
 | `profiling_questions` | `list[str] \| None` | Open questions for user follow-up |
+
+**Backtest success mapping (#3877).** digiquant `BacktestResult.status` is `ok | partial | error`
+(#3874/#3876). `partial` is a *completed* backtest with valid PnL and an optional metric
+missing, so digigraph maps `ok` and `partial` to `success=True` (success-with-warnings) and
+surfaces the missing metric in `message`; only `error` is a failure. When digiquant supplies its
+derived `BacktestResult.success` boolean, digigraph prefers it (forced `False` for
+`status="error"`). An empty run is a non-success carrying `error_code="empty_result"` — digigraph
+never fabricates a completion.
 
 ### 4.4 ResearchBrief (`research_brief_models.py`)
 
@@ -844,7 +853,7 @@ This closes only the `OLLAMA_MODEL`-clobber case. A deployment whose *mode defau
 
 **Free-quota errors:** provider 429 / RPD under `llm_mode: free` maps to stable code `free_quota_exceeded` (HTTP 429 + SSE `delta.digigraph_error`) for digichat BYOK handoff. Generic rate limits outside free mode use `rate_limit`.
 
-**`delta.digigraph_error` contract (streaming):** `run_digigraph_workflow_streaming` always emits `("error", {"code", "message", optional "detail"})` when `GRAPH_RUNTIME_ERRORS` fire or `final["error"]` is set — never assistant `content` prefixed with `Error:`. Unclassified failures use code `llm_error`. Messages are sanitized (no Compose DNS, no secrets); `detail` is the longer provider dump for the embed disclosure. digichat's stream adapter relays `message`/`detail` except for `BYOK_MODEL_REMEDIABLE_CODES` (code only; `embed-chat-error` supplies trusted copy — #2536). Quota/rate-limit still use `free_quota_exceeded` / `rate_limit`.
+**`delta.digigraph_error` contract (streaming):** `run_digigraph_workflow_streaming` always emits `("error", {"code", "message", optional "detail"})` when `GRAPH_RUNTIME_ERRORS` fire or `final["error"]` is set — never assistant `content` prefixed with `Error:`. Unclassified failures use code `llm_error`. Messages are sanitized (no Compose DNS, no secrets); `detail` is the longer provider dump for the embed disclosure. digichat's stream adapter relays `message`/`detail` except for `BYOK_MODEL_REMEDIABLE_CODES` (code only; `embed-chat-error` supplies trusted copy — #2536). Quota/rate-limit still use `free_quota_exceeded` / `rate_limit`. An empty run (no assistant text and no backtest result) emits `("error", {"code": "empty_result", ...})` rather than a synthetic completion `content` chunk; a genuine backtest result is still summarised as `content` (partial/error labelled honestly — #3877).
 
 CLI: `digi llm-settings` / `python -m digigraph.cli llm-settings` prints effective provider/model/key-env present (never secrets).
 

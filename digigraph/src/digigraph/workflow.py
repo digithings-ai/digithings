@@ -12,6 +12,7 @@ from typing import Any
 from digigraph.audit import audit_log as dg_audit_log
 from digigraph.boundaries import GRAPH_RUNTIME_ERRORS, PROJECT_CONFIG_ERRORS
 from digigraph.graph import build_workflow_graph
+from digigraph.llm_errors import EMPTY_RESULT
 from digigraph.models import WorkflowRequest, WorkflowResult
 from digigraph.project_config import DigiProjectConfig
 from digigraph.thread_scope import workflow_thread_id
@@ -39,6 +40,57 @@ _RETRIEVAL_TOOL_NAMES = frozenset(
         "web_search",
     }
 )
+
+# digiquant's BacktestResult.status vocabulary: "ok" and "partial" are completed
+# backtests (partial = valid PnL, an optional metric missing), "error" is a failure.
+_SUCCESSFUL_BACKTEST_STATUSES = frozenset({"ok", "partial"})
+
+# Honest non-success for a run that produced neither assistant text nor a backtest
+# result. Never replace this with a synthetic "Research completed" message.
+_EMPTY_RUN_MESSAGE = "Workflow produced no result: no assistant response and no backtest result."
+
+
+def _backtest_success(backtest: dict[str, Any]) -> bool:
+    """Honest success for a digiquant ``BacktestResult`` (#3877).
+
+    ``partial`` is a *completed* backtest whose optional metrics are incomplete —
+    success-with-warnings, never a failure. ``error`` is always a failure. Prefer
+    digiquant's derived ``success`` boolean (``status != "error"``) when present;
+    fall back to the status vocabulary for older payloads.
+    """
+    status = str(backtest.get("status") or "unknown").strip().lower()
+    derived = backtest.get("success")
+    if isinstance(derived, bool):
+        return derived and status != "error"
+    return status in _SUCCESSFUL_BACKTEST_STATUSES
+
+
+def _backtest_message(backtest: dict[str, Any]) -> str:
+    """Summarise a backtest without claiming a degraded/failed run fully completed."""
+    status = str(backtest.get("status") or "unknown").strip().lower()
+    summary = (
+        f"{backtest.get('strategy_name', '')} on {backtest.get('symbols', [])}. "
+        f"Total return: {backtest.get('total_return_pct', 0):.2f}%, "
+        f"trades: {backtest.get('num_trades', 0)}."
+    )
+    detail = str(backtest.get("message") or "").strip()
+    if status == "partial":
+        msg = f"Backtest completed (partial): {summary}"
+        if detail:
+            msg += f" Warning: {detail}"
+    elif status == "error":
+        msg = f"Backtest failed: {summary}"
+        if detail:
+            msg += f" {detail}"
+    elif status == "ok":
+        msg = f"Backtest completed: {summary}"
+        if detail:
+            msg += f" {detail}"
+    else:
+        msg = f"Backtest status {status!r}: {summary}"
+        if detail:
+            msg += f" {detail}"
+    return msg
 
 
 def _clip_tool_arguments(args: dict[str, Any]) -> dict[str, Any]:
@@ -297,12 +349,9 @@ def _workflow_result_from_state(final: dict) -> WorkflowResult:
     cfg = DigiProjectConfig.load()
     has_backtest = "backtest" in cfg.get_enabled_agents()
     if has_backtest and backtest:
-        status = backtest.get("status", "unknown")
-        success = status == "ok"
-        msg = (
-            f"Backtest completed: {backtest.get('strategy_name', '')} on {backtest.get('symbols', [])}. "
-            f"Total return: {backtest.get('total_return_pct', 0):.2f}%, trades: {backtest.get('num_trades', 0)}."
-        )
+        # Honest mapping: partial is completed-with-warnings, error is a failure.
+        success = _backtest_success(backtest)
+        msg = _backtest_message(backtest)
         if opt_res:
             msg += (
                 f" Optimization: best_params={opt_res.get('best_params', {})}, "
@@ -328,14 +377,28 @@ def _workflow_result_from_state(final: dict) -> WorkflowResult:
         )
     research_response = final.get("research_response")
     if research_response:
-        msg = research_response
-    else:
-        strategy = final.get("strategy_name")
-        symbols = final.get("symbols", [])
-        msg = f"Research completed: strategy={strategy}, symbols={symbols}. No backtest (digiquant not in project)."
+        return WorkflowResult(
+            success=True,
+            message=research_response,
+            backtest_result=None,
+            optimize_result=opt_res if isinstance(opt_res, dict) else None,
+            optimize_error=str(opt_err) if opt_err else None,
+            research_brief=final.get("research_brief")
+            if isinstance(final.get("research_brief"), dict)
+            else None,
+            rag_sources=final.get("rag_sources")
+            if isinstance(final.get("rag_sources"), list)
+            else None,
+            profiling_questions=final.get("profiling_questions")
+            if isinstance(final.get("profiling_questions"), list)
+            else None,
+        )
+    # Neither assistant text nor a backtest result: an empty run. Report the
+    # honest non-success instead of fabricating "Research completed: …".
     return WorkflowResult(
-        success=True,
-        message=msg,
+        success=False,
+        message=_EMPTY_RUN_MESSAGE,
+        error_code=EMPTY_RESULT,
         backtest_result=None,
         optimize_result=opt_res if isinstance(opt_res, dict) else None,
         optimize_error=str(opt_err) if opt_err else None,
@@ -782,18 +845,13 @@ def run_digigraph_workflow_streaming(
     if research_response and not content_streamed:
         emit(("content", str(research_response)))
     elif not research_response and not content_streamed:
-        strategy = final.get("strategy_name")
-        symbols = final.get("symbols", [])
-        fallback = (
-            f"Research completed: strategy={strategy}, symbols={symbols}. "
-            "No assistant text was streamed; check backtest or tool results."
-        )
         backtest = final.get("backtest_result")
         if backtest:
-            fallback = (
-                f"Backtest completed: {backtest.get('strategy_name', '')} "
-                f"on {backtest.get('symbols', [])}. "
-                f"Return: {backtest.get('total_return_pct', 0):.2f}%."
-            )
-        emit(("content", fallback))
+            # A real backtest result is a genuine result: summarise it honestly
+            # (partial/error are surfaced as such, never as "completed" success).
+            emit(("content", _backtest_message(backtest)))
+        else:
+            # No assistant text and no backtest result: an empty run. Emit the
+            # honest error channel instead of fabricating a completion message.
+            emit(("error", {"code": EMPTY_RESULT, "message": _EMPTY_RUN_MESSAGE}))
     emit(("done", None))
