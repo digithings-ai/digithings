@@ -174,3 +174,49 @@ def test_workspace_filter_error_propagates_through_query_index(az, monkeypatch, 
                 ),
                 index_name="idx",
             )
+
+
+@pytest.mark.unit
+def test_structured_only_workspace_clause_is_not_dropped(az, monkeypatch, tmp_path) -> None:
+    """A structured workspace_id filter with no Query.workspace_id must still scope.
+
+    Reachable via POST /query and the MCP ``filters`` path, which never set
+    ``workspace_id``; the clause must not be stripped and silently lost.
+    """
+    _azure_env(monkeypatch, tmp_path, filterable=["workspace_id", "sourceType"])
+    client = _patched_client([_T1, _T2])
+    with patch.object(az, "_get_client", return_value=client):
+        resp = query_azure(
+            Query(
+                text="tenant",
+                top_k=10,
+                workspace_id=None,
+                filters={"structured": [{"field": "workspace_id", "op": "eq", "value": "t1"}]},
+            ),
+            index_name="idx",
+        )
+
+    filt = client.search.call_args.kwargs.get("filter")
+    assert filt == "(workspace_id eq 't1')"
+    assert [r.chunk.id for r in resp.results] == ["c1"]
+
+
+@pytest.mark.unit
+def test_structured_only_workspace_clause_fails_closed_when_not_filterable(
+    az, monkeypatch, tmp_path
+) -> None:
+    """Structured-only workspace scoping must not silently degrade to unscoped."""
+    _azure_env(monkeypatch, tmp_path, filterable=["sourceType"])
+    client = _patched_client([_T1, _T2])
+    with patch.object(az, "_get_client", return_value=client):
+        with pytest.raises(AzureWorkspaceFilterError):
+            query_azure(
+                Query(
+                    text="tenant",
+                    top_k=10,
+                    workspace_id=None,
+                    filters={"structured": [{"field": "workspace_id", "op": "eq", "value": "t1"}]},
+                ),
+                index_name="idx",
+            )
+    client.search.assert_not_called()

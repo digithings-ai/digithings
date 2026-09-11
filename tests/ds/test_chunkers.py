@@ -208,13 +208,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 48 for #402 (RetrievalBackend protocol + pgvector /
     LightRAG docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
     unchanged.
+    Re-recorded at count 49 for #3883 (Azure workspace-isolation §6 + Query
+    workspace_id note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
+    unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 48
+    assert len(chunks) == 49
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -230,7 +233,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "214d58d9d1d9d220",
         "90a5a2d345e53200",
         "24d4f4910f267916",
-        "8b3750ac2215c89e",
+        "70d20d87c65f8b8e",
         "5c929ad2654944ce",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
@@ -247,15 +250,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "16bea1bbfea529fc",
         "00bffb9020b848f5",
         "078cbca3f2c3b3e1",
-        "8e8ba68329d0d6db",
-        "6b71a6ae799786a7",
-        "e5be9f0e5832575d",
-        "5276cf81c056f97a",
-        "3e4e414a6f3c0c5e",
-        "79e1479908a647a2",
-        "5881d77c9811fa5d",
-        "217c7d169b90a8be",
-        "e98012ae08e70074",
+        "2298af8a3460f592",
+        "e15576236dd1ba07",
+        "f2687d4521d1e069",
+        "112fe01c18768a54",
+        "cdf4f0c7a56c56e7",
+        "8200c214c753f6dd",
+        "2c221fc487c50f69",
+        "a261a5a8ca75360c",
+        "2093dd287bc13660",
+        "05c34cda6e56fd63",
         "9496728548f7cd2a",
         "11a2313f67dd5137",
         "a0c3eeac2a656b2f",
