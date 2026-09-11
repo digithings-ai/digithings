@@ -22,7 +22,7 @@ env:
   # Tool-round budget for Olympus research-agent calls (#3299). High but finite:
   # cheap models need room for data-tool grounding; the cap stays to bound cost.
   # digigraph chat keeps its own max_tool_rounds=4 — do not reuse this there.
-  OLYMPUS_MAX_TOOL_ROUNDS: "24"
+  DIGIQUANT_MAX_TOOL_ROUNDS: "24"
 
   # Fail-soft feature flags — outages degrade signal, never block the run.
   DIGIQUANT_ONCHAIN_POSITIONING: "1"   # Hyperdash cohort GraphQL (#801)

@@ -1,7 +1,8 @@
 """Tool-round budget for digiquant research-agent calls (#3299).
 
 Cheap-model JSON needs room for data-tool grounding before Pydantic
-validation. Default 24; override via ``OLYMPUS_MAX_TOOL_ROUNDS`` (also set in
+validation. Default 24; override via ``DIGIQUANT_MAX_TOOL_ROUNDS`` (retired
+``OLYMPUS_MAX_TOOL_ROUNDS`` alias still reads; also set in
 ``.github/digiquant-pipeline.yml``). digigraph chat keeps its own
 ``max_tool_rounds=4`` — do not reuse this there.
 """
@@ -9,7 +10,6 @@ validation. Default 24; override via ``OLYMPUS_MAX_TOOL_ROUNDS`` (also set in
 from __future__ import annotations
 
 import logging
-import os
 from typing import (  # score:allow untyped any — heterogeneous LLM message/tool-arg dicts
     Any,
     Callable,
@@ -18,9 +18,10 @@ from typing import (  # score:allow untyped any — heterogeneous LLM message/to
 
 from pydantic import BaseModel
 
+from digiquant.dashboard.envcompat import TOOL_ROUNDS_MAX, env_lookup
+
 logger = logging.getLogger(__name__)
 
-OLYMPUS_MAX_TOOL_ROUNDS_ENV = "OLYMPUS_MAX_TOOL_ROUNDS"
 _DEFAULT_MAX_TOOL_ROUNDS = 24
 
 T = TypeVar("T", bound=BaseModel)
@@ -28,15 +29,13 @@ T = TypeVar("T", bound=BaseModel)
 
 def olympus_max_tool_rounds() -> int:
     """Return the digiquant tool-round cap (default 24, minimum 1)."""
-    raw = os.environ.get(OLYMPUS_MAX_TOOL_ROUNDS_ENV, "").strip()
-    if not raw:
-        return _DEFAULT_MAX_TOOL_ROUNDS
+    raw = env_lookup(TOOL_ROUNDS_MAX, default=str(_DEFAULT_MAX_TOOL_ROUNDS)).strip()
     try:
         value = int(raw)
     except ValueError:
         logger.warning(
             "invalid %s=%r; using default %d",
-            OLYMPUS_MAX_TOOL_ROUNDS_ENV,
+            TOOL_ROUNDS_MAX,
             raw,
             _DEFAULT_MAX_TOOL_ROUNDS,
         )
@@ -61,8 +60,9 @@ def run_olympus_research_agent(
 ) -> T:
     """Thin digiquant wrapper around digigraph's ``run_research_agent``.
 
-    Injects ``OLYMPUS_MAX_TOOL_ROUNDS`` (default 24) unless the caller passes
-    an explicit ``max_tool_rounds``. Digigraph chat stays at ``max_tool_rounds=4``.
+    Injects ``DIGIQUANT_MAX_TOOL_ROUNDS`` (default 24; the retired
+    ``OLYMPUS_MAX_TOOL_ROUNDS`` alias still reads) unless the caller passes an
+    explicit ``max_tool_rounds``. Digigraph chat stays at ``max_tool_rounds=4``.
     """
     from digigraph.graph.research_agent import run_research_agent
 
@@ -85,7 +85,6 @@ def run_olympus_research_agent(
 
 
 __all__ = [
-    "OLYMPUS_MAX_TOOL_ROUNDS_ENV",
     "olympus_max_tool_rounds",
     "run_olympus_research_agent",
 ]
