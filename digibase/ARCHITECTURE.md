@@ -157,7 +157,7 @@ Builds a `JSONResponse` with the standard `{"error": {...}}` body. Extracts `req
 ```python
 register_fastapi_error_handlers(app: Any, *, service: str) -> None
 ```
-Registers two exception handlers on the FastAPI application instance: one for `StarletteHTTPException` (maps to `http_<status_code>` code) and one for `RequestValidationError` (maps to `validation_error` code with first error message). Both produce `ApiErrorEnvelope` JSON bodies.
+Registers three exception handlers on the FastAPI application instance: one for `StarletteHTTPException` (maps to `http_<status_code>` code), one for `RequestValidationError` (maps to `validation_error` code with first error message), and one for `Exception` (maps to `internal_error`, HTTP 500). The HTTP and validation handlers produce `ApiErrorEnvelope` JSON bodies; the `Exception` handler additionally emits a concise ERROR record via the `digibase.errors` logger naming the request id plus the exception type and message, then returns the standard envelope with `X-Request-ID` echoed when present. Starlette's `ServerErrorMiddleware` re-raises the exception and uvicorn already logs the full traceback, so this record deliberately omits `exc_info` to avoid double-logging the traceback; its purpose is request-id correlation in the service's own logger.
 
 ### `digibase.audit`
 
