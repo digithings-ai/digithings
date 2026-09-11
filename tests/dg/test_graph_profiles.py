@@ -154,11 +154,11 @@ def test_get_store_warns_on_postgres_with_missing_uri(
     from digigraph.graph.graph import get_store
 
     monkeypatch.setenv("DIGI_CHECKPOINTER", "postgres")
-    monkeypatch.delenv("DIGI_CHECKPOINTER_POSTGRES_URI", raising=False)
+    monkeypatch.delenv("CORE_POSTGRES_URI", raising=False)
     with caplog.at_level("WARNING"):
         store = get_store()
     assert type(store).__name__ == "InMemoryStore"
-    assert "DIGI_CHECKPOINTER_POSTGRES_URI is unset" in caplog.text
+    assert "CORE_POSTGRES_URI is unset" in caplog.text
 
 
 @pytest.mark.unit

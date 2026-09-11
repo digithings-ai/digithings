@@ -2,13 +2,13 @@
 # Performance tear sheet Implementation Plan
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development or superpowers:executing-plans. Steps use checkbox (- [ ]) syntax.
 **Goal:** Ship a hybrid, exportable Performance tear sheet for the single strategy "Olympus" at `/portfolio/performance` — a live-NAV track + an Olympus-specific decision track-record track, each degrading independently, empty-state-first, on one `window.print()` page.
-**Architecture:** Port the dependency-free digiquant tear-sheet template (`frontend/digiquant-web/components/tearsheet/*` + its `.ts-*` print/chart CSS) into Olympus by copying the `charts.tsx` / `format.ts` SVG primitives and the `.ts-*` CSS block into Olympus's `app/globals.css` (every CSS var the template uses — `--up`, `--down`, `--ink`, `--hair`, `--accent`, `--surface`, `--r-md`, `--ease` — is already declared in the shared `@digithings/design/tokens.css` that Olympus imports, with the cyan `--accent #3DD6C4`, so the "token bridge" is an equivalence, not a remap: `--up`≡`--color-fin-green`, `--down`≡`--color-fin-red`, `--ink`≡`--color-text-primary`, `--hair`≡`--color-border-subtle`). A new `OlympusTearsheet` TS type wraps the existing `TearsheetData` (engine `'live'`) plus a new `DecisionTrackRecord` computed **client-side** in `lib/decision-track-record.ts` (a faithful port of `digiquant/.../atlas/backtest.py`'s pure functions, covered by a vitest parity test). Data comes from a new fail-soft `fetchOlympusTearsheet()` in `lib/observability-queries.ts` reading `nav_history` + `decision_log` + `portfolio_metrics` + `position_attribution`. The page absorbs the Attribution diagnostics relocated from System.
+**Architecture:** Port the dependency-free digiquant tear-sheet template (`cloudflare/digiquant-web/components/tearsheet/*` + its `.ts-*` print/chart CSS) into Olympus by copying the `charts.tsx` / `format.ts` SVG primitives and the `.ts-*` CSS block into Olympus's `app/globals.css` (every CSS var the template uses — `--up`, `--down`, `--ink`, `--hair`, `--accent`, `--surface`, `--r-md`, `--ease` — is already declared in the shared `@digithings/design/tokens.css` that Olympus imports, with the cyan `--accent #3DD6C4`, so the "token bridge" is an equivalence, not a remap: `--up`≡`--color-fin-green`, `--down`≡`--color-fin-red`, `--ink`≡`--color-text-primary`, `--hair`≡`--color-border-subtle`). A new `OlympusTearsheet` TS type wraps the existing `TearsheetData` (engine `'live'`) plus a new `DecisionTrackRecord` computed **client-side** in `lib/decision-track-record.ts` (a faithful port of `digiquant/.../atlas/backtest.py`'s pure functions, covered by a vitest parity test). Data comes from a new fail-soft `fetchOlympusTearsheet()` in `lib/observability-queries.ts` reading `nav_history` + `decision_log` + `portfolio_metrics` + `position_attribution`. The page absorbs the Attribution diagnostics relocated from System.
 **Tech Stack:** Next.js 16 static export (`output:export`, `basePath /olympus`), React 19, Tailwind v4 (`@theme` tokens, `[data-theme]`), pure-SVG charts (no recharts in the tear sheet), lucide-react, `@supabase/supabase-js`, vitest.
 
 ## Global Constraints
 - **Static export only.** No server components with runtime data, no route handlers, no SSR fetch. Data loads client-side in a `'use client'` page via `useEffect` + the Supabase anon client (mirror `app/system/page.tsx`). The page sits under `/portfolio/performance`; AppFrame chrome wraps it automatically.
 - **Tailwind v4 `@theme` tokens only.** Use the existing semantic utilities (`text-fin-green/red/amber`, `bg-bg-primary/secondary`, `border-border-subtle`, `text-text-primary/secondary/muted`, `font-display`) and the ported `.ts-*` classes. No new color literals.
-- **vitest, kept green.** `npm test` (which runs `vitest run`) from `frontend/olympus` must stay green. The 150+ plumbing tests and page-level tests must not regress; page-level tests are updated as part of this work. New logic ships with a failing-first test.
+- **vitest, kept green.** `npm test` (which runs `vitest run`) from `cloudflare/olympus` must stay green. The 150+ plumbing tests and page-level tests must not regress; page-level tests are updated as part of this work. New logic ships with a failing-first test.
 - **The F5 token rule (verbatim):** cyan `--accent #3DD6C4` for links/chrome/the single conviction encoding/the live-fresh dot only; `fin-green`/`fin-red` *strictly* for signed financial values; `fin-amber` for caution/stale/carried/mixed-regime; **no gradients** beyond the existing faint regime wash; **no decorative numbering** unless it encodes the system's own priority. The ported `.ts-*` CSS already obeys this (`--up`/`--down` for signed values, `--accent` for chrome/links only). The KPI rail is **one keystroke from the MetricCard wall it replaces** — single headline KPI, strict hierarchy, no equal-weight 2×4 grid.
 - **Empty-state discipline (verbatim):** time-series elements are gated on a data predicate (≥2 NAV points; ≥1 resolved decision) and render a calm, *element-specific* line — never an em-dash placeholder, a 1-row "table over time," or a single-dot chart. Live-NAV <2 rows → an "inception" card ("NAV 99.32 — live since 2026-06-23 — equity curve accrues daily"); decision track 0 resolved → "11 decisions in flight — track record resolves as holding windows close." **PDF export stays enabled in all states.** The D2 backtest-seed is what makes these populated for demos; until then the empty states are the honest default.
 - **Slop guard:** do not stamp the System Zone1/Zone2 or Today hero/band composition here. This surface's structure is driven by its data shape: one serif H1 → one primary KPI strip → two labeled `.ts-panel` tracks. The conviction-calibration chart must encode a *different real quantity* (mean alpha per conviction bucket) from the per-decision alpha chart.
@@ -21,8 +21,8 @@
 The differentiating metric layer. A faithful TS port of `digiquant/src/digiquant/olympus/atlas/backtest.py`'s pure functions, producing `DecisionTrackRecord`. This is the only place the decision metrics are computed; the page consumes it. The existing `lib/decision-scorecard.ts` stays as-is for the calibration *bucket* shape (Task 4 reuses its `convictionBucketCalibration`); this file adds the track-record aggregate (`information_ratio`, `sortino_ratio`, `max_drawdown_pct`, `mean/median_alpha_pct`, `hit_rate`, `n_trades`) that `decision-scorecard.ts` does not produce.
 
 **Files:**
-- Create `frontend/olympus/lib/decision-track-record.ts`
-- Test: `frontend/olympus/lib/decision-track-record.test.ts`
+- Create `cloudflare/olympus/lib/decision-track-record.ts`
+- Test: `cloudflare/olympus/lib/decision-track-record.test.ts`
 
 **Interfaces:**
 - Consumes: nothing from Phase 0 directly (pure). Input shape mirrors the resolved `decision_log` row fields (`alpha` fraction, `actual_return` fraction, `conviction`, `run_date`, `holding_days`, `status`).
@@ -51,7 +51,7 @@ The differentiating metric layer. A faithful TS port of `digiquant/src/digiquant
 
 **Steps:**
 - [ ] Read `digiquant/src/digiquant/olympus/atlas/backtest.py` again as the parity reference (helpers `_mean`/`_median`/`_std`/`_downside_std`/`_max_drawdown_pct`/`_compound`/`_bucket_stats`/`backtest_decisions`).
-- [ ] Write the failing test `frontend/olympus/lib/decision-track-record.test.ts`. Hard-code three small fixtures and the exact expected outputs computed by hand from the Python formulas:
+- [ ] Write the failing test `cloudflare/olympus/lib/decision-track-record.test.ts`. Hard-code three small fixtures and the exact expected outputs computed by hand from the Python formulas:
   ```ts
   import { describe, expect, it } from 'vitest';
   import { backtestDecisions, type DecisionInput } from './decision-track-record';
@@ -127,7 +127,7 @@ The differentiating metric layer. A faithful TS port of `digiquant/src/digiquant
   ```
 - [ ] Run it, expect FAIL (module missing):
   ```bash
-  cd frontend/olympus && npx vitest run lib/decision-track-record.test.ts
+  cd cloudflare/olympus && npx vitest run lib/decision-track-record.test.ts
   ```
 - [ ] Implement `lib/decision-track-record.ts`. Port the helpers verbatim from `backtest.py`. Key parity points: (a) `information_ratio` uses **population** std (divide by `len`, matching `_std`), per-decision, NOT annualized — do **not** reuse `portfolio-risk-metrics.ts`'s `√252` Sharpe; (b) `sortino` falls back to `information_ratio` when downside-std is 0; (c) `max_drawdown_pct` compounds `return_frac` (not alpha) and is rounded to 4dp; (d) bucket thresholds `|conv|≥4 high`, `|conv|≥2 medium`, else `low` (matches `decision-scorecard.ts` `bucketFor`); (e) emit one `ConvictionBucketStat` per present bucket, mapping `high→conviction:5, medium→3, low→1` so the calibration chart x-axis is monotone; (f) round mean/median alpha and hit_rate to 4dp like the Python.
   ```ts
@@ -250,11 +250,11 @@ The differentiating metric layer. A faithful TS port of `digiquant/src/digiquant
   ```
 - [ ] Run the test, expect PASS:
   ```bash
-  cd frontend/olympus && npx vitest run lib/decision-track-record.test.ts
+  cd cloudflare/olympus && npx vitest run lib/decision-track-record.test.ts
   ```
 - [ ] Commit:
   ```bash
-  git add frontend/olympus/lib/decision-track-record.ts frontend/olympus/lib/decision-track-record.test.ts
+  git add cloudflare/olympus/lib/decision-track-record.ts cloudflare/olympus/lib/decision-track-record.test.ts
   git commit -m "feat(olympus): port backtest.py decision track-record to TS with parity test"
   ```
 
@@ -265,19 +265,19 @@ The differentiating metric layer. A faithful TS port of `digiquant/src/digiquant
 Bring the dependency-free SVG charts (`TimeSeries`, `SignedBars`), the formatters, and the `.ts-*` print/chart CSS into Olympus. No remap is needed: every CSS var the template references (`--up`/`--down`/`--ink`/`--ink-soft`/`--ink-mute`/`--hair`/`--hair-2`/`--surface`/`--surface-2`/`--accent`/`--accent-weak`/`--r-md`/`--r-sm`/`--ease`/`--bg`/`--font-sans`/`--font-mono`) is already declared in `@digithings/design/tokens.css`, which Olympus already imports — and `--accent` there is the cyan `#3DD6C4`, `--up`/`--down` are the fin-green/red. The Olympus `@theme` aliases (`--color-fin-green: var(--up)`, etc.) document the equivalence.
 
 **Files:**
-- Create `frontend/olympus/components/tearsheet/charts.tsx` (copy of digiquant-web's, unchanged logic)
-- Create `frontend/olympus/components/tearsheet/format.ts` (copy of digiquant-web's, unchanged)
-- Create `frontend/olympus/components/tearsheet/types.ts` (see Task 3 — folded here as the file is created here)
-- Modify `frontend/olympus/app/globals.css` — append the `.ts-*` CSS block + the `@media print` rules (lines 105-203 of `frontend/digiquant-web/app/globals.css`)
+- Create `cloudflare/olympus/components/tearsheet/charts.tsx` (copy of digiquant-web's, unchanged logic)
+- Create `cloudflare/olympus/components/tearsheet/format.ts` (copy of digiquant-web's, unchanged)
+- Create `cloudflare/olympus/components/tearsheet/types.ts` (see Task 3 — folded here as the file is created here)
+- Modify `cloudflare/olympus/app/globals.css` — append the `.ts-*` CSS block + the `@media print` rules (lines 105-203 of `cloudflare/digiquant-web/app/globals.css`)
 
 **Interfaces:**
 - Consumes: the shared design tokens (already imported).
 - Produces: `TimeSeries`, `SignedBars`, `type Scale`, `type Tone` (from `charts.tsx`); `fmtCompact`, `fmtMoney`, `fmtNum`, `fmtPct`, `toneClass` (from `format.ts`).
 
 **Steps:**
-- [ ] Copy `frontend/digiquant-web/components/tearsheet/charts.tsx` → `frontend/olympus/components/tearsheet/charts.tsx` verbatim. It imports `./format` and `./types` (created in this + the next task) and is pure SVG (no recharts, no external deps) — safe under static export. Keep the `Empty` component (`msg="no data"`/`"no trades"`); the page passes element-specific messages by gating the chart entirely on the empty-state predicate, so `Empty` is only the inner fallback.
-- [ ] Copy `frontend/digiquant-web/components/tearsheet/format.ts` → `frontend/olympus/components/tearsheet/format.ts` verbatim.
-- [ ] Append the tear-sheet CSS to `frontend/olympus/app/globals.css`. Copy the `.ts-*` rules and the `@media print` block from `frontend/digiquant-web/app/globals.css` (the contiguous block beginning at the `.ts-status` rule through the closing `}` of `@media print`, i.e. lines ~105-203). Prepend a comment documenting the bridge:
+- [ ] Copy `cloudflare/digiquant-web/components/tearsheet/charts.tsx` → `cloudflare/olympus/components/tearsheet/charts.tsx` verbatim. It imports `./format` and `./types` (created in this + the next task) and is pure SVG (no recharts, no external deps) — safe under static export. Keep the `Empty` component (`msg="no data"`/`"no trades"`); the page passes element-specific messages by gating the chart entirely on the empty-state predicate, so `Empty` is only the inner fallback.
+- [ ] Copy `cloudflare/digiquant-web/components/tearsheet/format.ts` → `cloudflare/olympus/components/tearsheet/format.ts` verbatim.
+- [ ] Append the tear-sheet CSS to `cloudflare/olympus/app/globals.css`. Copy the `.ts-*` rules and the `@media print` block from `cloudflare/digiquant-web/app/globals.css` (the contiguous block beginning at the `.ts-status` rule through the closing `}` of `@media print`, i.e. lines ~105-203). Prepend a comment documenting the bridge:
   ```css
   /* ── Performance tear sheet (ported from digiquant-web) ─────────────
      Dependency-free SVG tear sheet. Every var below resolves from the
@@ -289,17 +289,17 @@ Bring the dependency-free SVG charts (`TimeSeries`, `SignedBars`), the formatter
   ```
   Note: the print block hides `.site-nav`, `.footer`, `.nav-toggle`, `.theme-toggle` — Olympus's chrome uses different class names (`AppFrame`/`Sidebar`). Add Olympus-specific selectors to the print `display:none` list so the sidebar/app-bar don't print. Grep the rendered shell first:
   ```bash
-  cd frontend/olympus && grep -nE "className=\"[^\"]*sidebar|aside|app-bar|md:hidden" components/app-frame.tsx components/sidebar.tsx | head
+  cd cloudflare/olympus && grep -nE "className=\"[^\"]*sidebar|aside|app-bar|md:hidden" components/app-frame.tsx components/sidebar.tsx | head
   ```
   Add a `data-print-hide` attribute to the shell wrappers if class names are dynamic, and target `[data-print-hide]` in the print rule — but prefer reusing whatever stable wrapper class the shell already has. Resolve this in the same edit so the printed PDF is just the tear sheet.
 - [ ] Run the full suite to confirm nothing broke (CSS + new pure modules don't touch existing tests, but verify):
   ```bash
-  cd frontend/olympus && npm test
+  cd cloudflare/olympus && npm test
   ```
   Expect PASS (unchanged count).
 - [ ] Commit:
   ```bash
-  git add frontend/olympus/components/tearsheet/charts.tsx frontend/olympus/components/tearsheet/format.ts frontend/olympus/app/globals.css
+  git add cloudflare/olympus/components/tearsheet/charts.tsx cloudflare/olympus/components/tearsheet/format.ts cloudflare/olympus/app/globals.css
   git commit -m "feat(olympus): port tear-sheet SVG primitives + .ts-* print CSS"
   ```
 
@@ -310,16 +310,16 @@ Bring the dependency-free SVG charts (`TimeSeries`, `SignedBars`), the formatter
 Define the wrapping type and the fail-soft query that assembles it from `nav_history` + `decision_log` + `portfolio_metrics` + `position_attribution`. The live-NAV track reuses the existing `TearsheetData` shape (`engine='live'`, `strategy='Olympus'`, `symbol='AI-INTELLIGENCE'`); the decision track uses Task 1's `DecisionTrackRecord`. NAV-derived risk ratios reuse `lib/portfolio-risk-metrics.ts` (`computeEffectivePortfolioRiskMetrics`); drawdown is derived in TS mirroring the template's `_drawdown_from_equity`.
 
 **Files:**
-- Modify `frontend/olympus/components/tearsheet/types.ts` (created in Task 2) — add `OlympusTearsheet`
-- Modify `frontend/olympus/lib/observability-queries.ts` — add `fetchOlympusTearsheet()`
-- Test: `frontend/olympus/lib/tearsheet-build.test.ts` (tests the pure assembly helper, mocking the Supabase rows)
+- Modify `cloudflare/olympus/components/tearsheet/types.ts` (created in Task 2) — add `OlympusTearsheet`
+- Modify `cloudflare/olympus/lib/observability-queries.ts` — add `fetchOlympusTearsheet()`
+- Test: `cloudflare/olympus/lib/tearsheet-build.test.ts` (tests the pure assembly helper, mocking the Supabase rows)
 
 **Interfaces:**
 - Consumes (Phase 0 + existing):
   - `computeEffectivePortfolioRiskMetrics(serverMetrics, snaps): { sharpe; annVolPct; maxDrawdownPct }` from `lib/portfolio-risk-metrics.ts`
   - `backtestDecisions(inputs: DecisionInput[]): DecisionTrackRecord` from Task 1
   - `TableRow<'nav_history'>` `{ date; nav; cash_pct; invested_pct }`, `TableRow<'decision_log'>` `{ run_date; ticker; stance; conviction; status; actual_return; alpha; holding_days; ... }`, `TableRow<'portfolio_metrics'>`, `TableRow<'position_attribution'>` from `lib/database.types.ts`
-  - `TearsheetData` (and `engine: string` — `'live'` is an additive string value, no enum change needed since the field is typed `string`) and `TearsheetPoint` from `frontend/olympus/components/tearsheet/types.ts`
+  - `TearsheetData` (and `engine: string` — `'live'` is an additive string value, no enum change needed since the field is typed `string`) and `TearsheetPoint` from `cloudflare/olympus/components/tearsheet/types.ts`
 - Produces:
   ```ts
   // components/tearsheet/types.ts
@@ -352,8 +352,8 @@ Define the wrapping type and the fail-soft query that assembles it from `nav_his
   ```
 
 **Steps:**
-- [ ] Add the `OlympusTearsheet` + `DecisionLogRow` types to `frontend/olympus/components/tearsheet/types.ts` (import `DecisionTrackRecord` from `@/lib/decision-track-record` and `TableRow` from `@/lib/database.types`). Keep the template's `TearsheetData`/`TearsheetPoint`/`TearsheetTrade`/`TearsheetBreakdown` interfaces from the copied file unchanged.
-- [ ] Write the failing test `frontend/olympus/lib/tearsheet-build.test.ts` for the pure `buildOlympusTearsheet`:
+- [ ] Add the `OlympusTearsheet` + `DecisionLogRow` types to `cloudflare/olympus/components/tearsheet/types.ts` (import `DecisionTrackRecord` from `@/lib/decision-track-record` and `TableRow` from `@/lib/database.types`). Keep the template's `TearsheetData`/`TearsheetPoint`/`TearsheetTrade`/`TearsheetBreakdown` interfaces from the copied file unchanged.
+- [ ] Write the failing test `cloudflare/olympus/lib/tearsheet-build.test.ts` for the pure `buildOlympusTearsheet`:
   ```ts
   import { describe, expect, it } from 'vitest';
   import { buildOlympusTearsheet } from './observability-queries';
@@ -416,7 +416,7 @@ Define the wrapping type and the fail-soft query that assembles it from `nav_his
   ```
 - [ ] Run it, expect FAIL (`buildOlympusTearsheet` missing):
   ```bash
-  cd frontend/olympus && npx vitest run lib/tearsheet-build.test.ts
+  cd cloudflare/olympus && npx vitest run lib/tearsheet-build.test.ts
   ```
 - [ ] Implement `buildOlympusTearsheet` + `fetchOlympusTearsheet` in `lib/observability-queries.ts`. Add imports at the top: `import { computeEffectivePortfolioRiskMetrics } from './portfolio-risk-metrics'; import { backtestDecisions, type DecisionInput } from './decision-track-record'; import type { OlympusTearsheet, DecisionLogRow } from '@/components/tearsheet/types'; import type { TearsheetData, TearsheetPoint } from '@/components/tearsheet/types';`. Implement the pure builder, then the fetch wrapper reusing the existing `safeSelect` + `latestDateRows` helpers:
   ```ts
@@ -542,11 +542,11 @@ Define the wrapping type and the fail-soft query that assembles it from `nav_his
   ```
 - [ ] Run the test, expect PASS:
   ```bash
-  cd frontend/olympus && npx vitest run lib/tearsheet-build.test.ts
+  cd cloudflare/olympus && npx vitest run lib/tearsheet-build.test.ts
   ```
 - [ ] Commit:
   ```bash
-  git add frontend/olympus/components/tearsheet/types.ts frontend/olympus/lib/observability-queries.ts frontend/olympus/lib/tearsheet-build.test.ts
+  git add cloudflare/olympus/components/tearsheet/types.ts cloudflare/olympus/lib/observability-queries.ts cloudflare/olympus/lib/tearsheet-build.test.ts
   git commit -m "feat(olympus): OlympusTearsheet type + fetchOlympusTearsheet builder"
   ```
 
@@ -557,15 +557,15 @@ Define the wrapping type and the fail-soft query that assembles it from `nav_his
 The presentational surface. One serif H1, one primary KPI strip (NOT a MetricCard wall), then the two `.ts-panel` tracks (live-NAV + decision track-record incl. the two `SignedBars` charts and the conviction-calibration chart), the small decision-log table reusing `.ts-trades`, the absorbed Attribution diagnostics, and a `window.print()` Export button enabled in all states. Each section is independently gated on its empty-state predicate.
 
 **Files:**
-- Create `frontend/olympus/components/tearsheet/OlympusTearsheetView.tsx`
-- Test: `frontend/olympus/components/tearsheet/OlympusTearsheetView.test.tsx`
+- Create `cloudflare/olympus/components/tearsheet/OlympusTearsheetView.tsx`
+- Test: `cloudflare/olympus/components/tearsheet/OlympusTearsheetView.test.tsx`
 
 **Interfaces:**
 - Consumes: `OlympusTearsheet`, `DecisionLogRow` (Task 3); `TimeSeries`, `SignedBars` (Task 2); `fmtCompact`, `fmtMoney`, `fmtNum`, `fmtPct`, `toneClass` (Task 2); `AttributionTab` default export from `@/components/observability/AttributionTab` (absorbed from System); `SignedConvictionBadge` from `@/components/shared/signed-conviction-badge` (F6, Phase 0) for the decision-log table stance.
 - Produces: `OlympusTearsheetView({ data }: { data: OlympusTearsheet }): JSX.Element`.
 
 **Steps:**
-- [ ] Write the failing test `frontend/olympus/components/tearsheet/OlympusTearsheetView.test.tsx`. Render with `renderToStaticMarkup` (matches `app/page.test.ts`'s SSR-string approach; the SVG charts are deterministic). Assert the empty-state-first behavior and the no-MetricCard-wall hierarchy:
+- [ ] Write the failing test `cloudflare/olympus/components/tearsheet/OlympusTearsheetView.test.tsx`. Render with `renderToStaticMarkup` (matches `app/page.test.ts`'s SSR-string approach; the SVG charts are deterministic). Assert the empty-state-first behavior and the no-MetricCard-wall hierarchy:
   ```tsx
   import { createElement } from 'react';
   import { renderToStaticMarkup } from 'react-dom/server';
@@ -626,7 +626,7 @@ The presentational surface. One serif H1, one primary KPI strip (NOT a MetricCar
   ```
 - [ ] Run it, expect FAIL (component missing):
   ```bash
-  cd frontend/olympus && npx vitest run components/tearsheet/OlympusTearsheetView.test.tsx
+  cd cloudflare/olympus && npx vitest run components/tearsheet/OlympusTearsheetView.test.tsx
   ```
 - [ ] Implement `OlympusTearsheetView.tsx`. Structure (slop-guarded — one H1, one KPI strip, two labeled `.ts-panel` tracks):
   - Header: `.ts-header` with a serif H1 `Olympus — AI-intelligence strategy` and an eyebrow/meta line `live since {inceptionDate}` + `{navPoints} NAV points · {nResolved} resolved / {nPending} pending`; a `.ts-header-actions` button `Download PDF` calling `window.print()` (always enabled).
@@ -638,11 +638,11 @@ The presentational surface. One serif H1, one primary KPI strip (NOT a MetricCar
   Use the F5 rule: signed alpha/NAV deltas via `toneClass`/`Toned` (fin-green/red); the only cyan is the equity line tone (`tone="accent"`) and the header link/button chrome.
 - [ ] Run the test, expect PASS:
   ```bash
-  cd frontend/olympus && npx vitest run components/tearsheet/OlympusTearsheetView.test.tsx
+  cd cloudflare/olympus && npx vitest run components/tearsheet/OlympusTearsheetView.test.tsx
   ```
 - [ ] Commit:
   ```bash
-  git add frontend/olympus/components/tearsheet/OlympusTearsheetView.tsx frontend/olympus/components/tearsheet/OlympusTearsheetView.test.tsx
+  git add cloudflare/olympus/components/tearsheet/OlympusTearsheetView.tsx cloudflare/olympus/components/tearsheet/OlympusTearsheetView.test.tsx
   git commit -m "feat(olympus): hybrid Performance tear-sheet view (KPI rail + two tracks + attribution)"
   ```
 
@@ -653,16 +653,16 @@ The presentational surface. One serif H1, one primary KPI strip (NOT a MetricCar
 Add the real page, wired to `fetchOlympusTearsheet()` client-side (static-export safe), and re-point the old `/performance` redirect at it. The legacy `/performance` page currently redirects to `/portfolio?tab=performance` (a SPA tab being removed); point it at the new route instead.
 
 **Files:**
-- Create `frontend/olympus/app/portfolio/performance/page.tsx`
-- Modify `frontend/olympus/components/legacy-spa-redirect.tsx` — `PerformanceToPortfolioRedirectPage` now `router.replace('/portfolio/performance')`
-- Test: `frontend/olympus/app/portfolio/performance/page.test.ts`
+- Create `cloudflare/olympus/app/portfolio/performance/page.tsx`
+- Modify `cloudflare/olympus/components/legacy-spa-redirect.tsx` — `PerformanceToPortfolioRedirectPage` now `router.replace('/portfolio/performance')`
+- Test: `cloudflare/olympus/app/portfolio/performance/page.test.ts`
 
 **Interfaces:**
 - Consumes: `fetchOlympusTearsheet(): Promise<OlympusTearsheet>` (Task 3), `OlympusTearsheetView` (Task 4), `AtlasLoader`, `SUBPAGE_MAX` (mirror `app/system/page.tsx`).
 - Produces: the default-exported `PerformancePage` route component.
 
 **Steps:**
-- [ ] Write the failing test `frontend/olympus/app/portfolio/performance/page.test.ts`. Mock `fetchOlympusTearsheet` and assert the loading→loaded transition renders the view, mirroring how `app/system/page.test.ts` exercises a client page (read `app/system/page.test.ts` first for the exact mocking pattern, then mirror it):
+- [ ] Write the failing test `cloudflare/olympus/app/portfolio/performance/page.test.ts`. Mock `fetchOlympusTearsheet` and assert the loading→loaded transition renders the view, mirroring how `app/system/page.test.ts` exercises a client page (read `app/system/page.test.ts` first for the exact mocking pattern, then mirror it):
   ```ts
   import { describe, it, expect, vi } from 'vitest';
   // mirror app/system/page.test.ts: mock fetchOlympusTearsheet + assert PerformancePage mounts the view
@@ -671,7 +671,7 @@ Add the real page, wired to `fetchOlympusTearsheet()` client-side (static-export
   (The concrete assertions match `system/page.test.ts`'s structure — load that file in this step and copy its render/await harness verbatim, swapping the mocked fetch + asserting the serif H1 "Olympus" appears after load.)
 - [ ] Run it, expect FAIL (route missing):
   ```bash
-  cd frontend/olympus && npx vitest run app/portfolio/performance/page.test.ts
+  cd cloudflare/olympus && npx vitest run app/portfolio/performance/page.test.ts
   ```
 - [ ] Implement `app/portfolio/performance/page.tsx` (client page, mirrors `app/system/page.tsx`):
   ```tsx
@@ -716,7 +716,7 @@ Add the real page, wired to `fetchOlympusTearsheet()` client-side (static-export
   }
   ```
   (`fetchOlympusTearsheet` is fail-soft and never throws on empty/RLS-deny — the empty-state tear sheet renders, so `error` is reserved for genuine misconfiguration if `fetchOlympusTearsheet` is later hardened to throw; today it returns a zeroed build.)
-- [ ] Re-point the legacy redirect. Edit `frontend/olympus/components/legacy-spa-redirect.tsx`:
+- [ ] Re-point the legacy redirect. Edit `cloudflare/olympus/components/legacy-spa-redirect.tsx`:
   ```tsx
   // PerformanceToPortfolioRedirectPage
       router.replace('/portfolio/performance');
@@ -724,16 +724,16 @@ Add the real page, wired to `fetchOlympusTearsheet()` client-side (static-export
   (The standalone `/performance` route — `app/performance/page.tsx` — already re-exports `PerformanceToPortfolioRedirectPage`, so the old URL now lands on the real tear sheet.)
 - [ ] Run both the new page test and the redirect's existing test, expect PASS:
   ```bash
-  cd frontend/olympus && npx vitest run app/portfolio/performance/page.test.ts components/legacy-spa-redirect.test.tsx 2>/dev/null; npx vitest run app/portfolio/performance/page.test.ts
+  cd cloudflare/olympus && npx vitest run app/portfolio/performance/page.test.ts components/legacy-spa-redirect.test.tsx 2>/dev/null; npx vitest run app/portfolio/performance/page.test.ts
   ```
   (If a `legacy-spa-redirect.test.tsx` exists and asserts the old `/portfolio?tab=performance` target, update that assertion to `/portfolio/performance` in this same step.)
 - [ ] Run the full suite, expect all green:
   ```bash
-  cd frontend/olympus && npm test
+  cd cloudflare/olympus && npm test
   ```
 - [ ] Commit:
   ```bash
-  git add frontend/olympus/app/portfolio/performance/page.tsx frontend/olympus/app/portfolio/performance/page.test.ts frontend/olympus/components/legacy-spa-redirect.tsx
+  git add cloudflare/olympus/app/portfolio/performance/page.tsx cloudflare/olympus/app/portfolio/performance/page.test.ts cloudflare/olympus/components/legacy-spa-redirect.tsx
   git commit -m "feat(olympus): mount /portfolio/performance tear-sheet route, re-point legacy /performance"
   ```
 
@@ -744,8 +744,8 @@ Add the real page, wired to `fetchOlympusTearsheet()` client-side (static-export
 Make the tear sheet discoverable (a "Performance" entry ramp from the Portfolio surface) and run the final verification per the F5/empty-state constraints. This task is small and folds in the documentation + lint check.
 
 **Files:**
-- Modify `frontend/olympus/components/portfolio/PortfolioShellInner.tsx` (or the Portfolio sub-nav source — confirm by grep) — add a "Performance" link to `/portfolio/performance`
-- Modify `frontend/olympus/components/portfolio/ARCHITECTURE.md` *(only if it exists — per CLAUDE.md, update ARCHITECTURE after an interface change; otherwise skip)*
+- Modify `cloudflare/olympus/components/portfolio/PortfolioShellInner.tsx` (or the Portfolio sub-nav source — confirm by grep) — add a "Performance" link to `/portfolio/performance`
+- Modify `cloudflare/olympus/components/portfolio/ARCHITECTURE.md` *(only if it exists — per CLAUDE.md, update ARCHITECTURE after an interface change; otherwise skip)*
 
 **Interfaces:**
 - Consumes: the locked deep-link grammar is NOT used here (Performance is a single strategy page, not a Pipeline node); the link is a plain `/portfolio/performance` route. Contextual-link slop guard: this is a real new destination, not a cloned "View in Pipeline" button.
@@ -754,22 +754,22 @@ Make the tear sheet discoverable (a "Performance" entry ramp from the Portfolio 
 **Steps:**
 - [ ] Find the Portfolio sub-navigation source:
   ```bash
-  cd frontend/olympus && grep -rn "tab=theses\|tab=performance\|Holdings\|Theses\|subpage-tab-bar\|portfolio/theses" components/portfolio/PortfolioShellInner.tsx components/subpage-tab-bar.tsx | head
+  cd cloudflare/olympus && grep -rn "tab=theses\|tab=performance\|Holdings\|Theses\|subpage-tab-bar\|portfolio/theses" components/portfolio/PortfolioShellInner.tsx components/subpage-tab-bar.tsx | head
   ```
 - [ ] Add a "Performance" entry pointing at `/portfolio/performance` alongside the existing Holdings/Theses tabs (match the existing tab-item JSX/styling exactly — read the file's tab list first, then add one item; if tabs are query-param driven within `/portfolio`, instead add a sibling link styled as the others that navigates to the dedicated route).
-- [ ] If `frontend/olympus/components/portfolio/ARCHITECTURE.md` exists, add one line under its route/surface map: `/portfolio/performance — hybrid tear sheet (live-NAV + decision track record), OlympusTearsheetView ← fetchOlympusTearsheet`.
+- [ ] If `cloudflare/olympus/components/portfolio/ARCHITECTURE.md` exists, add one line under its route/surface map: `/portfolio/performance — hybrid tear sheet (live-NAV + decision track record), OlympusTearsheetView ← fetchOlympusTearsheet`.
 - [ ] Lint the changed TS (follow repo eslint/prettier; ruff is Python-only and does not apply):
   ```bash
-  cd frontend/olympus && npx eslint components/tearsheet app/portfolio/performance lib/decision-track-record.ts --max-warnings=0 && npx prettier --check "components/tearsheet/**" "app/portfolio/performance/**" "lib/decision-track-record.ts" "lib/observability-queries.ts"
+  cd cloudflare/olympus && npx eslint components/tearsheet app/portfolio/performance lib/decision-track-record.ts --max-warnings=0 && npx prettier --check "components/tearsheet/**" "app/portfolio/performance/**" "lib/decision-track-record.ts" "lib/observability-queries.ts"
   ```
   Fix any reported issue (run `npx prettier --write` on the listed paths if formatting drifts).
 - [ ] Run the full suite one final time, expect all green (no regressions in the 150+ plumbing/page tests):
   ```bash
-  cd frontend/olympus && npm test
+  cd cloudflare/olympus && npm test
   ```
 - [ ] Commit:
   ```bash
-  git add frontend/olympus/components/portfolio
+  git add cloudflare/olympus/components/portfolio
   git commit -m "feat(olympus): link Performance tear sheet from Portfolio sub-nav"
   ```
 

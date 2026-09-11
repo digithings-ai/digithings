@@ -1,0 +1,550 @@
+"use client";
+
+import { useCallback, useEffect, useMemo } from "react";
+import { useChat } from "@ai-sdk/react";
+import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
+import { buildProductRuntimeAdapters } from "@/components/stock/product-shell";
+import type { DigichatClientFeatures } from "@/lib/deploy-config";
+import type { AssistantRuntime } from "@assistant-ui/react";
+import type { UIMessage } from "ai";
+import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@digithings/digichat-ui";
+import { formatEmbedChatError } from "@/lib/embed-chat-error";
+import { type BYOKProvider } from "@/hooks/use-byok-key";
+import { p } from "@/lib/base-path";
+import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/embed-gate";
+import { resolveLanguageCode } from "@/lib/languages";
+import { omitForcedCatalogIds } from "@/lib/deploy-config/force-tool";
+import {
+  ACTIVITY_PART_TYPE,
+  messageActivities,
+} from "@/lib/chat-activity";
+import { conversationIdFromParts } from "@/lib/ui-stream-parts";
+import {
+  setPendingForceTool,
+  setPendingTurnMode,
+  takePendingForceTool,
+  takePendingTurnMode,
+  takePendingWebSearchForce,
+} from "@/lib/pending-chat-headers";
+import {
+  shapeUserMessageParts,
+  type PageContextMessage,
+} from "@/lib/embed-page-context-messages";
+
+export {
+  setPendingForceTool,
+  setPendingTurnMode,
+  takePendingForceTool,
+  takePendingTurnMode,
+  takePendingWebSearchForce,
+};
+
+/** Read ?token= / ?host= at send time — useChat transport is frozen on first render (#1339). */
+function readEmbedUrlAuth(): { token?: string; host?: string } {
+  if (typeof window === "undefined") return {};
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token")?.trim();
+  const host = params.get("host")?.trim();
+  return {
+    token: token || undefined,
+    host: host || undefined,
+  };
+}
+
+/**
+ * Whether this embed host is trial-unlocked, read at send time.
+ * Same freeze reason as readEmbedUrlAuth (#1339): a `trialUnlocked` prop closed
+ * over by DefaultChatTransport stays false after datatap:unlocked arrives, so
+ * the client counter can show 100 while the server still returns trial_gate.
+ */
+export function isEmbedTrialUnlockedAtSend(
+  resolvedHost: string,
+  propFallback?: boolean,
+): boolean {
+  return !!propFallback || readTrialUnlocked(resolvedHost);
+}
+
+/**
+ * The chat-access token for this host, read at send time. Same freeze reason as
+ * isEmbedTrialUnlockedAtSend (#1339): a token closed over by DefaultChatTransport would be null
+ * forever, because it is written after the transport is created.
+ */
+export function chatAccessTokenAtSend(resolvedHost: string): string | null {
+  return readChatAccessToken(resolvedHost);
+}
+
+const CONVERSATION_STORAGE_PREFIX = "digichat_embed_conversation:";
+
+function conversationStorageKey(host: string): string {
+  return `${CONVERSATION_STORAGE_PREFIX}${host}`;
+}
+
+/** The upstream conversation id for this embed host, when one has been established. */
+export function readEmbedConversationId(embedHost: string): string | null {
+  try {
+    return window.sessionStorage.getItem(conversationStorageKey(embedHost));
+  } catch {
+    return null;
+  }
+}
+
+type TracePartData = {
+  type?: string;
+  payload?: { label?: unknown; status?: unknown };
+};
+
+/**
+ * Legacy path: providers emitted a single data-digigraphTrace{label,status} part
+ * before the activity protocol landed. A visitor's browser caching an OLD client
+ * bundle isn't what this covers — that old bundle doesn't contain this function
+ * at all, so no branch here could help it. What it actually covers is the
+ * reverse: during a rolling deploy, a visitor who has already loaded this NEW
+ * client bundle can still be routed to an OLD server revision that hasn't
+ * picked up the activity protocol yet and only emits data-digigraphTrace. This
+ * fallback keeps that visitor's steps rendering until the rollout finishes.
+ * TODO(next release): remove once no server revision can emit the legacy part.
+ */
+function legacyTraceActivities(message: UIMessage): DigiChatActivity[] {
+  const traces = message.parts.filter(
+    (part): part is { type: "data-digigraphTrace"; data: TracePartData } =>
+      part.type === "data-digigraphTrace",
+  );
+
+  // Collapse trace steps by label: the external relay can emit the same step
+  // more than once (e.g. repeated "in_progress" frames), and each trace part
+  // carries a unique id so nothing reconciles upstream. Keyed by resolved
+  // label, first-seen order preserved; `done` is true if any frame completed.
+  const byLabel = new Map<string, { label: string; done: boolean }>();
+  for (const t of traces) {
+    const label = String(t.data?.payload?.label ?? t.data?.type ?? "activity");
+    const done = t.data?.payload?.status === "completed";
+    const seen = byLabel.get(label);
+    if (seen) seen.done = seen.done || done;
+    else byLabel.set(label, { label, done });
+  }
+
+  return Array.from(byLabel.values(), (t) => ({
+    kind: "trace" as const,
+    label: t.label,
+    done: t.done,
+  }));
+}
+
+export function uiMessageToDigiChat(
+  message: UIMessage,
+  opts: { settle?: boolean } = {},
+): DigiChatMessage {
+  const text = message.parts
+    .filter((part): part is { type: "text"; text: string } => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+
+  const activities = messageActivities(message, opts);
+  const hasActivityParts = message.parts.some(
+    (part) =>
+      part.type === ACTIVITY_PART_TYPE ||
+      part.type === "data-status" ||
+      part.type === "reasoning" ||
+      part.type === "source-url" ||
+      part.type === "source-document" ||
+      (typeof part.type === "string" && part.type.startsWith("tool-")),
+  );
+  const resolved = hasActivityParts ? activities : legacyTraceActivities(message);
+
+  return {
+    role: message.role === "user" ? "user" : "assistant",
+    content: text,
+    activities: resolved.length ? resolved : undefined,
+  };
+}
+
+type UseEmbedDigiChatOptions = {
+  accent: string;
+  token?: string;
+  host?: string;
+  embedHost: string;
+  byokKey?: string;
+  byokProvider?: string;
+  byokModel?: string;
+  trialUnlocked?: boolean;
+  onGated?: () => void;
+  /**
+   * Read at send time inside prepareSendMessagesRequest — same freeze reason
+   * as isEmbedTrialUnlockedAtSend/chatAccessTokenAtSend (#1339): the transport
+   * is built once in useMemo and useChat never adopts a rebuilt one, so a
+   * `responseLanguage: string` prop closed over by value would stay frozen at
+   * whatever detectBrowserLanguageCode() returned at mount forever (#2103
+   * final review, Critical finding). Unlike those two precedents, the value
+   * here must NOT be storage-backed (sessionStorage/localStorage) — the
+   * language is session-only and must reset on reload — so the caller passes
+   * a stable accessor closing over a ref instead of a storage-read helper.
+   */
+  getResponseLanguage?: () => string;
+  /**
+   * Send-time accessor for opt-in web search (#3420). Must not be closed over
+   * at transport creation — user toggle changes after mount. Return true only
+   * when tenant allows AND user opted in.
+   */
+  getEnableWebSearch?: () => boolean;
+  /**
+   * Send-time accessor for session-disabled catalog tools (#3733).
+   * Comma-separated catalog ids; BFF allowlists before forwarding.
+   */
+  getDisabledTools?: () => string;
+  /**
+   * Optional deploy-allowlisted model id. Read at send time (same freeze
+   * reason as getResponseLanguage) so the picker can change after mount.
+   */
+  getSelectedModel?: () => string | undefined;
+  /**
+   * HMAC-signed plan proof token from /api/plan-proof. Sent as
+   * X-Embed-Plan-Proof on every chat request. The chat route verifies the
+   * signature — raw X-Embed-Plan-Tier headers are never trusted (#3662).
+   * Prefer `getPlanProof` — this value is frozen at transport creation (#1339).
+   */
+  planProof?: string | null;
+  /**
+   * Send-time accessor for the HMAC plan proof (same freeze reason as
+   * getSelectedModel / getResponseLanguage). Dashboard mint is async after mount.
+   */
+  getPlanProof?: () => string | null | undefined;
+  /** Send-time MCP session overlay (id+token, optional session url). */
+  getMcpSession?: () => string | undefined;
+  /** Send-time effort: low | medium | high. */
+  getEffort?: () => string | undefined;
+  /**
+   * When false, omit regenerate/editLastUser so assistant-ui hides the
+   * chrome. Digigraph and Foundry both support turn mutation once the BFF
+   * sends X-Digi-Turn-Mode (#3475). Default true for digigraph-first callers.
+   */
+  allowClientTurnMutation?: boolean;
+  /** Deploy feature flags → runtime adapters (attachments/dictation/speech). */
+  features?: DigichatClientFeatures;
+};
+export function useEmbedDigiChat({
+  accent,
+  token,
+  host,
+  embedHost,
+  byokKey,
+  byokProvider,
+  byokModel,
+  trialUnlocked,
+  onGated,
+  getResponseLanguage,
+  getEnableWebSearch,
+  getDisabledTools,
+  getSelectedModel,
+  getMcpSession,
+  getEffort,
+  planProof,
+  getPlanProof,
+  allowClientTurnMutation = true,
+  features,
+}: UseEmbedDigiChatOptions): Omit<DigiChatController, "send"> & {
+  send: (
+    question: string,
+    opts?: { forceTool?: string; pageContext?: PageContextMessage | null },
+  ) => void | Promise<void>;
+  seed: (msgs: readonly DigiChatMessage[]) => void;
+  /** Raw AI SDK error — for structured code detection (quota → BYOK). */
+  rawError: Error | undefined;
+  runtime: AssistantRuntime;
+  /** Arm X-Digi-Turn-Mode only; ActionBar Reload/Send run the runtime. */
+  armRegenerate?: () => void;
+  armEditLastUser?: () => void;
+} {
+  const transport = useMemo(
+    () =>
+      new AssistantChatTransport({
+        api: p("/api/chat"),
+        prepareSendMessagesRequest: ({ messages, body }) => {
+          const urlAuth = readEmbedUrlAuth();
+          const effectiveToken = urlAuth.token ?? token;
+          const effectiveHost = urlAuth.host ?? host;
+          const resolvedHost = resolveEmbedHost(effectiveHost) || embedHost;
+          const headers: Record<string, string> = {
+            "content-type": "application/json",
+            "X-Embed-Host": resolvedHost,
+            "X-Embed-Accent": accent,
+          };
+          if (effectiveToken) headers["X-Embed-Token"] = effectiveToken;
+          if (byokKey) {
+            headers["X-BYOK-Key"] = byokKey;
+            const provider = (byokProvider ?? "openrouter") as BYOKProvider;
+            headers["X-BYOK-Provider"] = provider;
+            // Same as chat-panel: a model the user chose is forwarded whatever the
+            // provider's requiresModel flag says (#2490).
+            if (byokModel?.trim()) {
+              headers["X-BYOK-Model"] = byokModel.trim();
+            }
+          }
+          // Send-time read — same freeze reason as isEmbedTrialUnlockedAtSend/
+          // chatAccessTokenAtSend below (#1339): a language value closed over
+          // by the transport at creation time would stay frozen at whatever
+          // detectBrowserLanguageCode() returned at mount, so `/lang` would
+          // never reach the header (#2103 / #3418). Normalize against the
+          // curated list before forwarding — defense-in-depth for a hypothetical
+          // future caller of this exported hook that doesn't already pass a
+          // curated-safe value (see #2103 final review, Fix 6).
+          const normalizedLanguage = resolveLanguageCode(getResponseLanguage?.());
+          if (normalizedLanguage !== "en") {
+            headers["X-Digi-Language"] = normalizedLanguage;
+          }
+          const selectedModel = getSelectedModel?.()?.trim();
+          if (selectedModel) {
+            headers["X-Digi-Model"] = selectedModel;
+          }
+          const forceTool = takePendingForceTool(embedHost);
+          if (forceTool) {
+            headers["X-Digi-Force-Tool"] = forceTool;
+          }
+          const forceWeb = takePendingWebSearchForce(embedHost);
+          if (getEnableWebSearch?.() || forceWeb) {
+            headers["X-Digi-Enable-Web-Search"] = "1";
+          }
+          const disabled = omitForcedCatalogIds(
+            (getDisabledTools?.() ?? "")
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+            forceTool,
+          );
+          if (disabled.length) {
+            headers["X-Digi-Disabled-Tools"] = disabled.join(",");
+          }
+          const mcpSession = getMcpSession?.()?.trim();
+          if (mcpSession) {
+            headers["X-Digi-Mcp-Session"] = mcpSession;
+          }
+          const effort = getEffort?.()?.trim().toLowerCase();
+          if (effort === "low" || effort === "medium" || effort === "high") {
+            headers["X-Digi-Effort"] = effort;
+          }
+          const turnMode = takePendingTurnMode(embedHost);
+          if (turnMode) {
+            headers["X-Digi-Turn-Mode"] = turnMode;
+          }
+          headers["X-Digi-Run-Id"] = crypto.randomUUID();
+          // Send-time unlock check — transport is frozen on first render (#1339),
+          // so a closed-over trialUnlocked prop stays false after datatap:unlocked.
+          if (isEmbedTrialUnlockedAtSend(resolvedHost, trialUnlocked)) {
+            headers["X-Embed-Trial-Unlock"] = "1";
+          }
+          const chatToken = chatAccessTokenAtSend(resolvedHost);
+          if (chatToken) {
+            headers["X-Embed-Chat-Token"] = chatToken;
+          }
+          // HMAC-signed plan proof (#3662): sent on every request when available.
+          // The chat route verifies the signature — raw X-Embed-Plan-Tier headers
+          // are never trusted. Read at send time (getPlanProof / ref) so a mint
+          // after mount still reaches the header (#1339).
+          const proof = (getPlanProof?.() ?? planProof)?.trim();
+          if (proof) {
+            headers["X-Embed-Plan-Proof"] = proof;
+          }
+          try {
+            const conversationId = window.sessionStorage.getItem(
+              conversationStorageKey(resolvedHost),
+            );
+            if (conversationId) headers["X-External-Conversation"] = conversationId;
+          } catch {
+            /* sessionStorage unavailable */
+          }
+          return {
+            body: {
+              ...(typeof body === "object" && body !== null ? body : {}),
+              messages,
+            },
+            headers,
+          };
+        },
+      }),
+    // trialUnlocked and getResponseLanguage both stay in the deps for the rare
+    // case useChat starts honoring transport identity; the send-time read
+    // (see the doc comment on getResponseLanguage above) is what actually
+    // keeps the outgoing language current today. Keeping getResponseLanguage
+    // here costs nothing — the caller builds it with useCallback(() => ...,
+    // []), so its identity never changes and the transport is never rebuilt
+    // on a language change — while satisfying react-hooks/exhaustive-deps.
+      [
+        accent,
+        token,
+        host,
+        embedHost,
+        byokKey,
+        byokProvider,
+        byokModel,
+        trialUnlocked,
+        getResponseLanguage,
+        getEnableWebSearch,
+        getDisabledTools,
+        getSelectedModel,
+        getMcpSession,
+        getEffort,
+        getPlanProof,
+      ],
+  );
+
+  const chat = useChat<UIMessage>({
+    transport,
+  });
+  const runtimeAdapters = useMemo(
+    () => (features ? buildProductRuntimeAdapters(features) : undefined),
+    [features],
+  );
+  const runtime = useAISDKRuntime(chat, runtimeAdapters ? { adapters: runtimeAdapters } : undefined);
+  const { messages, sendMessage, status, error, regenerate, setMessages, stop } = chat;
+
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return;
+    const id = conversationIdFromParts(last.parts);
+    if (!id) return;
+    try {
+      window.sessionStorage.setItem(conversationStorageKey(embedHost), id);
+    } catch {
+      /* ignore */
+    }
+  }, [messages, embedHost]);
+
+  const busy = status === "streaming" || status === "submitted";
+  const chatError = formatEmbedChatError(error);
+
+  useEffect(() => {
+    if (!error?.message || !onGated) return;
+    try {
+      const parsed = JSON.parse(error.message.trim()) as { error?: string };
+      if (parsed.error === "trial_gate") onGated();
+    } catch {
+      /* non-JSON error — not a gate signal */
+    }
+  }, [error, onGated]);
+
+  const send = useCallback(
+    (
+      question: string,
+      opts?: { forceTool?: string; pageContext?: PageContextMessage | null },
+    ) => {
+      const q = question.trim();
+      if (!q || busy) return;
+      setPendingForceTool(embedHost, opts?.forceTool);
+      sendMessage({
+        role: "user",
+        parts: shapeUserMessageParts(q, opts?.pageContext),
+      });
+    },
+    [busy, sendMessage, embedHost],
+  );
+
+  const reset = useCallback(() => {
+    setMessages([]);
+    // /new must also drop backend conversation continuity (Foundry's
+    // X-External-Conversation) and any unused slash force-tool, not just the
+    // client transcript — otherwise "Start a new conversation" is a lie on
+    // adapters that key off the stored id.
+    setPendingForceTool(embedHost);
+    try {
+      window.sessionStorage.removeItem(conversationStorageKey(embedHost));
+    } catch {
+      /* sessionStorage unavailable */
+    }
+  }, [setMessages, embedHost]);
+
+  const armRegenerate = useCallback(() => {
+    if (!allowClientTurnMutation) return;
+    setPendingForceTool(embedHost);
+    setPendingTurnMode(embedHost, "regenerate");
+  }, [allowClientTurnMutation, embedHost]);
+
+  const doRegenerate = useCallback(() => {
+    if (!allowClientTurnMutation || busy) return;
+    armRegenerate();
+    void regenerate();
+  }, [allowClientTurnMutation, armRegenerate, busy, regenerate]);
+
+  const armEditLastUser = useCallback(() => {
+    if (!allowClientTurnMutation || busy) return;
+    setPendingForceTool(embedHost);
+    setPendingTurnMode(embedHost, "edit_last_user");
+  }, [allowClientTurnMutation, busy, embedHost]);
+
+  const editLastUser = useCallback(
+    (text: string) => {
+      if (!allowClientTurnMutation || busy) return;
+      const next = text.trim();
+      if (!next) return;
+      let lastUserIdx = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i]?.role === "user") {
+          lastUserIdx = i;
+          break;
+        }
+      }
+      if (lastUserIdx < 0) return;
+      // Drop the last user turn and anything after it (the following assistant).
+      setMessages(messages.slice(0, lastUserIdx));
+      // Force-tool is send-only — do not re-fire a prior slash on edit.
+      setPendingForceTool(embedHost);
+      setPendingTurnMode(embedHost, "edit_last_user");
+      sendMessage({
+        role: "user",
+        parts: [{ type: "text", text: next }],
+      });
+    },
+    [allowClientTurnMutation, busy, embedHost, messages, sendMessage, setMessages],
+  );
+
+  // Mid-stream: keep completed searches as running tool_call rows until
+  // retrieve arrives (or the turn settles). Settling early flashes "no hits".
+  const digiMessages = useMemo(
+    () =>
+      messages.map((m, i) => {
+        const streamingTurn = busy && i === messages.length - 1 && m.role === "assistant";
+        return uiMessageToDigiChat(m, { settle: !streamingTurn });
+      }),
+    [messages, busy],
+  );
+
+  const seed = useCallback(
+    (msgs: readonly DigiChatMessage[]) => {
+      setMessages(
+        msgs.map((m) => ({
+          id: crypto.randomUUID(),
+          role: m.role,
+          parts: [{ type: "text" as const, text: m.content }],
+        })),
+      );
+    },
+    [setMessages],
+  );
+
+  return {
+    messages: digiMessages,
+    busy,
+    error: chatError,
+    /** Raw AI SDK error — for structured code detection (quota → BYOK). */
+    rawError: error,
+    send,
+    reset,
+    stop: () => {
+      void stop();
+    },
+    // Error-row Retry: digigraph may regenerate; Foundry must not (#3466).
+    onRetry: allowClientTurnMutation
+      ? () => {
+          doRegenerate();
+        }
+      : undefined,
+    ...(allowClientTurnMutation
+      ? {
+          regenerate: doRegenerate,
+          editLastUser,
+          armRegenerate,
+          armEditLastUser,
+        }
+      : {}),
+    seed,
+    runtime,
+  };
+}

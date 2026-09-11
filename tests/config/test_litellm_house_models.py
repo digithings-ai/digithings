@@ -49,7 +49,6 @@ def _digiquant_house_slugs() -> set[str]:
     for tier in (digiquant.get("tiers") or {}).values():
         for pool in (tier.get("allowed_models") or {}).values():
             slugs.update(str(m) for m in (pool or []))
-        slugs.update(str(m) for m in (tier.get("web_search_models") or []))
     modes = yaml.safe_load((CONFIG / "model_modes.yaml").read_text(encoding="utf-8"))
     slugs.update(str(m) for m in (modes.get("phase_models") or {}).values())
     dogfood = yaml.safe_load((CONFIG / "dogfood-digiproject.yaml").read_text(encoding="utf-8"))
@@ -229,11 +228,14 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
     names = _model_names(overlay)
     expected = {
         "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v4-flash-0731",
         "deepseek/deepseek-v4-pro",
         "google/gemini-3.7-flash",
         "google/gemini-3.1-flash-lite",
         "openai/gpt-5.6-luna",
         "openai/gpt-5.6-sol",
+        "openai/gpt-oss-120b",
+        "z-ai/glm-5.3-flash",
     }
     missing = sorted(expected - names)
     assert not missing, f"CI overlay missing house slugs: {missing}"
@@ -252,6 +254,48 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
         assert params.get("api_key") == "os.environ/CHEAPERINFERENCE_API_KEY", entry["model_name"]
         assert params.get("api_base") == "os.environ/CHEAPERINFERENCE_API_BASE", entry["model_name"]
         assert str(params.get("model", "")).startswith("openai/"), entry["model_name"]
+
+
+# Cheap CI house slugs for the default product picker. Must exist on both the
+# overlay and ``_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE``. Never OpenRouter ``:free``.
+_PRODUCT_CI_CHEAP_PICKER = (
+    "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash-0731",
+    "openai/gpt-oss-120b",
+    "z-ai/glm-5.3-flash",
+)
+
+
+def _assert_ci_only_product_picker(models: dict) -> None:
+    from digillm.client import cheaperinference_bare_id_for_house_slug
+
+    overlay_names = _model_names(CONFIG / "litellm.cheaperinference.yaml")
+    available = list(models["available"])
+    assert models["allowPicker"] is True
+    assert models["default"] == "deepseek/deepseek-v4-flash"
+    assert models["default"] in available
+    assert available == list(_PRODUCT_CI_CHEAP_PICKER)
+    assert not any(str(m).endswith(":free") for m in available)
+    missing_ci = sorted(set(available) - overlay_names)
+    assert not missing_ci, f"picker ids missing from CI overlay: {missing_ci}"
+    for slug in available:
+        assert cheaperinference_bare_id_for_house_slug(slug), slug
+
+
+def test_digichat_public_picker_is_ci_cheap_only() -> None:
+    """digithings.ai / dashboard pickers: CI cheap slugs only — never OpenRouter."""
+    embed = yaml.safe_load(
+        (
+            REPO_ROOT / "cloudflare/digichat/config/examples/digithings-ai-embed.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    _assert_ci_only_product_picker(embed["hosts"]["digithings.ai"]["models"])
+    dashboard = yaml.safe_load(
+        (
+            REPO_ROOT / "cloudflare/digichat/config/examples/dashboard-modal.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    _assert_ci_only_product_picker(dashboard["deployment"]["models"])
 
 
 def test_cheaperinference_overlay_has_no_bare_api_base() -> None:

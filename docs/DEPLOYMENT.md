@@ -136,7 +136,7 @@ For a week-long unattended run:
 
 One public domain serves marketing + chat shell:
 
-- **Marketing shell:** `digithings.ai` — Cloudflare Pages (`frontend/digithings-web/`).
+- **Marketing shell:** `digithings.ai` — Cloudflare Pages (`cloudflare/digithings-web/`).
 - **Visitor chat:** `digithings.ai/chat` — Pages iframe → digichat Node `/embed`
   (`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`, e.g. Tunnel hostname `digichat.digithings.ai`).
   Backend: digichat → digigraph → digillm → LiteLLM (+ digivault tools).
@@ -149,7 +149,7 @@ Do **not** use `chat.digithings.ai` as the marketing host. Customer digichat `/e
 (DataTap etc.) is separate from digithings’ own marketing chat. Path routing:
 [ADR-0018](adr/0018-digichat-path-routing.md).
 
-The digithings Containers scaffold (`frontend/digichat-cloudflare/` +
+The digithings Containers scaffold (`cloudflare/digichat-cloudflare/` +
 `Dockerfile.digichat-cloudflare`) was **removed on 2026-08-06** — it had no deploy path in
 the repo (Containers need Workers Paid, digithings is on Free; routes stayed commented out
 and no workflow built the image) and its `wrangler` devDependency was pulling five `workerd`
@@ -159,13 +159,13 @@ instead.
 
 ### digithings.ai — static landing page
 
-- **Source:** `frontend/digithings-web/` (Next.js static export; and shared `frontend/digiweb/design/`, `frontend/digiweb/web/`, `frontend/digichat-ui/` assets). Those four are the app's transitive workspace closure, and `tests/scripts/test_deploy_build_inputs.py` asserts the deploy build check watches all of them.
+- **Source:** `cloudflare/digithings-web/` (Next.js static export; and shared `cloudflare/digiweb/design/`, `cloudflare/digiweb/web/`, `cloudflare/digichat-ui/` assets). Those four are the app's transitive workspace closure, and `tests/scripts/test_deploy_build_inputs.py` asserts the deploy build check watches all of them.
 - **Deployment:** **Cloudflare Pages** via `scripts/build-digithings.sh` (CI: Cloudflare Pages project `digithings-ai`).
-- **Legacy:** the `static.yml` GitHub Pages workflow and the pre-migration `frontend/digithings/` static HTML tree were both **removed** — the former in the 2026-06 workflow cleanup, the latter in #1240 once `frontend/digithings-web` (Next.js) fully replaced it as the build source; do not use GitHub Pages for this domain.
+- **Legacy:** the `static.yml` GitHub Pages workflow and the pre-migration `cloudflare/digithings/` static HTML tree were both **removed** — the former in the 2026-06 workflow cleanup, the latter in #1240 once `cloudflare/digithings-web` (Next.js) fully replaced it as the build source; do not use GitHub Pages for this domain.
 - **Nav link:** the landing page links to `/chat` (Pages shell that iframes digichat `/embed`).
 - **Deploy freshness (#1759):** `scripts/build-digithings.sh` writes `dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) via `scripts/write-build-info.sh`, and hard-fails the build if it is absent. A Pages project that stops producing deployments keeps serving the last good build with a `200` and no `last-modified` header, so the asset probes below pass throughout a freeze; the `freshness-digithings` job in `smoke-site.yml` reads the live stamp through `scripts/check_deploy_freshness.py` and fails when it is missing or older than 7 days. This is **detection only** — *why* a Pages project stopped building is visible only in the Cloudflare dashboard (deployment list, build log, production branch, watch paths).
 
-To update the landing page: edit `frontend/digithings-web/`, run the build script locally, and let Cloudflare Pages deploy from the connected branch.
+To update the landing page: edit `cloudflare/digithings-web/`, run the build script locally, and let Cloudflare Pages deploy from the connected branch.
 
 ### digithings.ai/chat — digichat marketing pane
 
@@ -242,7 +242,7 @@ If any check fails, roll back per the deployment target's standard procedure (st
 
 digithings.ai is served by **Cloudflare Pages, which natively supports a `_redirects` file** for server-side 301/302 redirects — this is a first-class Pages feature, not a Netlify-only one. There is no `404.html` JavaScript shim and no Jekyll plugin: legacy paths are redirected at the edge, and `website/` no longer exists.
 
-**Source of truth:** `frontend/digithings-web/public/_redirects`. Next.js copies everything under `public/` into the static export (`out/`), and `scripts/build-digithings.sh` assembles `dist/` from `out/`, so the file lands at the deploy root where Cloudflare Pages reads it. Current contents:
+**Source of truth:** `cloudflare/digithings-web/public/_redirects`. Next.js copies everything under `public/` into the static export (`out/`), and `scripts/build-digithings.sh` assembles `dist/` from `out/`, so the file lands at the deploy root where Cloudflare Pages reads it. Current contents:
 
 ```
 # Back-compat for the legacy static digithings.ai URLs.
@@ -254,7 +254,7 @@ Format is `<from> <to> <status>`, one rule per line, first match wins (`#` start
 
 ### Adding a redirect
 
-1. Add a `<from> <to> <status>` line to `frontend/digithings-web/public/_redirects`.
+1. Add a `<from> <to> <status>` line to `cloudflare/digithings-web/public/_redirects`.
 2. Push to the connected deploy branch; Cloudflare Pages rebuilds via `scripts/build-digithings.sh` and picks up the new rule (no other code changes).
 3. Verify: `curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://digithings.ai/<from>` prints the `301`/`302` and the target `Location`.
 
@@ -264,7 +264,7 @@ See also [docs/adr/0002-domain-unification.md](adr/0002-domain-unification.md) f
 
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — full service topology and flows.
 - [LOCAL_STACK.md](LOCAL_STACK.md) — no-Docker dev loop details.
-- [frontend/digichat/ARCHITECTURE.md](../frontend/digichat/ARCHITECTURE.md) — digichat module architecture.
+- [cloudflare/digichat/ARCHITECTURE.md](../cloudflare/digichat/ARCHITECTURE.md) — digichat module architecture.
 - [docs/adr/0018-digichat-path-routing.md](adr/0018-digichat-path-routing.md) — digichat path-routing decision (supersedes the `chat.digithings.ai` subdomain plan).
 - [digiclaw/docs/HEARTBEAT.md](../digiclaw/docs/HEARTBEAT.md) — heartbeat checklist.
 - [docs/adr/0002-domain-unification.md](adr/0002-domain-unification.md) — two-domain strategy and migration plan.

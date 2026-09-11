@@ -6,9 +6,9 @@
 > `config/digiquant_models.yaml` pins a model per capability tier;
 > `OLYMPUS_MODEL_TIER` (`cheap` default / `balanced` / `quality`) selects the
 > pinned set, and `apply_digiquant_house_env()` (portfolio chain startup) points
-> the default client at the house upstream. Every LLM call and the web
-> grounding pre-pass (completion synthesis over the tier's `web_search_models`)
-> go through the house key. **Frontier models are rejected** (`openai/*`,
+> the default client at the house upstream. Every LLM call goes through the
+> house key; the web grounding pre-pass is tool-only (first-party digisearch
+> `web_search` tool, no synthesis-model pins, #3859). **Frontier models are rejected** (`openai/*`,
 > `anthropic/*`, GPT-5.x, Claude Opus/Sonnet, o-series — see
 > `digigraph.model_config.is_flagship_openrouter_model`); phases pass **pinned**
 > model slugs, not `openrouter/auto`.

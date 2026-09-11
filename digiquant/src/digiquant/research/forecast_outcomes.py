@@ -34,6 +34,7 @@ from digiquant.portfolio.models.forecast_calibration import (
     forecast_outcome_content_hash,
     forecast_outcome_id,
 )
+from digiquant.research.data.queries import r2_backend_enabled
 from digiquant.research.forecast_registry import AMENDMENTS, ASSESSMENTS
 from digiquant.research.supabase_io import SupabaseClient
 
@@ -167,18 +168,27 @@ def _fetch_session_close(
     ticker: str,
     session: date,
 ) -> Decimal | None:
-    resp = (
-        client.table("price_history")
-        .select("date, close")
-        .eq("ticker", ticker.strip().upper())
-        .eq("date", session.isoformat())
-        .limit(1)
-        .execute()
-    )
-    rows = list(getattr(resp, "data", None) or [])
-    if not rows:
-        return None
-    raw = rows[0].get("close")
+    sym = ticker.strip().upper()
+    if r2_backend_enabled():
+        # Sealed R2 generation; single-date window (#3780 Task 7b).
+        from digiquant.research.data.queries import r2_close_rows
+
+        rows = r2_close_rows(tickers=[sym], since=session, until=session)
+        raws = [r.get("close") for r in rows if r.get("ticker") == sym]
+        raw = raws[0] if raws else None
+    else:
+        resp = (
+            client.table("price_history")
+            .select("date, close")
+            .eq("ticker", sym)
+            .eq("date", session.isoformat())
+            .limit(1)
+            .execute()
+        )
+        rows = list(getattr(resp, "data", None) or [])
+        if not rows:
+            return None
+        raw = rows[0].get("close")
     if raw is None:
         return None
     try:

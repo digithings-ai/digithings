@@ -5,7 +5,7 @@ description: Issue a dev API key, exchange it for a JWT, verify the JWKS, and ru
 tags: [digikey, quickstart, auth]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
+    at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-5a73d428d9c326b6be1e4770
     resource: repo://digikey/AGENTS.md

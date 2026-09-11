@@ -525,15 +525,18 @@ def detailed_usage_projection() -> dict[str, int | float | None]:
         for call in aggregate_calls
         if call.call_id in attempts_by_call
     ]
-    search_purposes = {CallPurpose.WEB_GROUNDING, CallPurpose.X_GROUNDING}
-    llm_call_ids = {call.call_id for call in aggregate_calls if call.purpose not in search_purposes}
-    llm_attempts = [attempt for attempt in successful_attempts if attempt.call_id in llm_call_ids]
+    search_purposes = {CallPurpose.WEB_SEARCH, CallPurpose.X_SEARCH}
+    # Tool search counts toward llm tokens (#3859): the first-party web_search
+    # tool is the only grounding, so token totals fold search attempts in —
+    # matching snapshot(), which sums chat + search kinds together.
     prompt_tokens = (
-        _nullable_sum([attempt.prompt_tokens for attempt in llm_attempts]) if llm_call_ids else 0
+        _nullable_sum([attempt.prompt_tokens for attempt in successful_attempts])
+        if aggregate_calls
+        else 0
     )
     completion_tokens = (
-        _nullable_sum([attempt.completion_tokens for attempt in llm_attempts])
-        if llm_call_ids
+        _nullable_sum([attempt.completion_tokens for attempt in successful_attempts])
+        if aggregate_calls
         else 0
     )
     cost_usd = _nullable_sum(
@@ -677,9 +680,9 @@ def snapshot() -> dict[str, Any]:
         calls = list(_CALLS)
     chat = [c for c in calls if c["kind"] == "chat"]
     search = [c for c in calls if c["kind"] in _SEARCH_KINDS]
-    prompt = sum(c["prompt_tokens"] for c in chat)
-    completion = sum(c["completion_tokens"] for c in chat)
-    cached = sum(c.get("cached_tokens", 0) for c in chat)
+    prompt = sum(c["prompt_tokens"] for c in chat + search)
+    completion = sum(c["completion_tokens"] for c in chat + search)
+    cached = sum(c.get("cached_tokens", 0) for c in chat + search)
     cost = sum(c.get("cost", 0.0) for c in calls)
     by_kind: dict[str, dict[str, float]] = {}
     for c in calls:

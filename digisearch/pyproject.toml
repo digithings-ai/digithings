@@ -15,7 +15,8 @@ license = { text = "MIT" }
 # live in [ingestion]. This lets consumers `pip install digisearch[ingestion]`
 # (or just the base) and import e.g. digisearch.ingestion.parsers.pdf WITHOUT
 # pulling fastapi/uvicorn/mcp/typer/digikey. See ARCHITECTURE.md §"Lazy package
-# surface and install extras". The running service installs [server,ingestion].
+# surface and install extras". The running service installs
+# [server,ingestion,azure,chroma,web-search].
 dependencies = [
     "polars>=1.0",
     "pydantic>=2",
@@ -65,6 +66,18 @@ ingestion = [
 ]
 agent = ["langgraph>=0.2"]
 edgar-corpus = ["datasets>=3.0"]
+# Proprietary web-search stack (#3853). All optional: the searxng provider needs
+# only base httpx; ddgs is the embedded fallback; digifetch (workspace sibling,
+# installed alongside digibase/digikey in the service image) powers fetch with
+# retry + rate limiting; trafilatura (+readability-lxml and markdownify
+# fallback) powers fetch -> extract enrichment in web_search/service.
+web-search = [
+    "digifetch>=0.1.0",
+    "ddgs>=9.0",
+    "trafilatura>=2.0",
+    "readability-lxml>=0.8",
+    "markdownify>=1.0",
+]
 # dev folds in [server] + [ingestion] so every CI/dev install (and pip-audit's
 # [dev] row) exercises and audits the full shipped surface, not just the light
 # base. Keep this in sync when adding runtime/parser deps.
@@ -80,6 +93,7 @@ all = [
     "digisearch[agent]",
     "digisearch[pgvector]",
     "digisearch[lightrag]",
+    "digisearch[web-search]",
 ]
 
 [project.scripts]

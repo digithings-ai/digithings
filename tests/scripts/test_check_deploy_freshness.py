@@ -345,7 +345,7 @@ def test_build_check_watches_the_files_it_runs(workflow_path: Path, callee: str)
         # no path filter anywhere in the repo — so a bad range there failed both
         # production builds with no CI job running. Nothing derives it, because nothing
         # about it moves: it is not reached through any import edge.
-        "frontend/digiweb/reference/package.json",
+        "cloudflare/digiweb/reference/package.json",
     ],
 )
 def test_build_check_watches_the_root_manifests(workflow_path: Path, manifest: str) -> None:
@@ -370,7 +370,7 @@ def test_build_check_watches_the_root_manifests(workflow_path: Path, manifest: s
     """
     paths = _trigger_paths(workflow_path)
     # Accept a covering directory glob as well as the literal path. A later PR widening
-    # `frontend/digiweb/reference/package.json` to `frontend/digiweb/reference/**`
+    # `cloudflare/digiweb/reference/package.json` to `cloudflare/digiweb/reference/**`
     # strictly improves coverage; a literal-membership assertion would go red on it and
     # the obvious fix would be to keep both — which is exactly the dead entry the comment
     # at the top of that filter warns #1966 had to remove.

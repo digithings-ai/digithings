@@ -7,6 +7,7 @@ import os
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import ValidationError
 
 from digisearch.core.models import Query
 from digisearch.logging import configure_logging
@@ -99,6 +100,38 @@ def digisearch_query(
 
 
 @mcp.tool()
+def web_search(
+    query: str,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+    max_results: int = 4,
+) -> str:
+    """Search the public web (first-party tool). Returns JSON WebSearchResponse."""
+    try:
+        from digisearch.web_search.models import (
+            WebSearchConfigError,
+            WebSearchRequest,
+            summarize_validation_error,
+        )
+        from digisearch.web_search.service import run_web_search
+    except ImportError as e:
+        return f"[web_search unavailable: install digisearch[web-search] for web_search: {e}]"
+    try:
+        req = WebSearchRequest(
+            query=query,
+            include_domains=include_domains or [],
+            exclude_domains=exclude_domains or [],
+            max_results=max_results,
+        )
+    except ValidationError as e:
+        return f"[web_search invalid input: {summarize_validation_error(e)}]"
+    try:
+        return run_web_search(req).model_dump_json()
+    except WebSearchConfigError as e:
+        return f"[web_search unavailable: {e}]"
+
+
+@mcp.tool()
 def search_strategies(
     query: str,
     top_k: int = 10,
@@ -166,5 +199,10 @@ def run_mcp(
     port: int = 8765,
 ) -> None:
     """Run the MCP server. Default: streamable HTTP on 127.0.0.1:8765."""
+    from digisearch.backend_require import require_real_search_backend
+
+    require_real_search_backend()
     bind = host or os.environ.get("DIGISEARCH_MCP_HOST", "127.0.0.1")
-    mcp.run(transport=transport, host=bind, port=port)
+    mcp.settings.host = bind
+    mcp.settings.port = port
+    mcp.run(transport=transport)

@@ -94,6 +94,15 @@ class ChatCompletionRequest(BaseModel):
             "vault/search hits and never replace them (#3420)."
         ),
     )
+    research_system_prompt: str | None = Field(
+        None,
+        max_length=4000,
+        description=(
+            "Opt-in default research system prompt for sessions with no "
+            "server-configured prompt (single-tenant / baseline embed). Ignored "
+            "when DIGI_TENANT_CORPUS_MAP resolves a prompt for the tenant."
+        ),
+    )
 
 
 class WorkflowRequest(BaseModel):
@@ -200,8 +209,9 @@ class WorkflowRequest(BaseModel):
         None,
         description=(
             "Optional per-request locate tool to run with the user string as its query "
-            "(X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. The model "
-            "is not hinted — the call is injected, then it synthesizes."
+            "(X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. Extra "
+            "operator MCP server ids (from X-Digi-Mcp-Servers) are also accepted: those "
+            "hint the model with tool_choice=required rather than injecting a locate call."
         ),
     )
     enable_web_search: bool = Field(
@@ -210,6 +220,50 @@ class WorkflowRequest(BaseModel):
             "Opt-in digigraph ``web_search`` tool (digillm). Default off. "
             "Also via X-Digi-Enable-Web-Search (#3420)."
         ),
+    )
+    disabled_tools: list[str] | None = Field(
+        None,
+        description=(
+            "Catalog ids to hide this turn (X-Digi-Disabled-Tools). "
+            "Built-in aliases (digisearch, digivault) plus extra operator MCP server ids. "
+            "Unknown tokens ignored. Always overwritten from the header on HTTP."
+        ),
+    )
+    mcp_servers: list["McpServerRef"] | None = Field(
+        None,
+        description=(
+            "Streamable HTTP MCP servers for this turn (X-Digi-Mcp-Servers). "
+            "Client-writable on this model but never trusted as-is: HTTP handlers "
+            "overwrite from the BFF header (operator YAML plus SSRF-guarded session "
+            "overlay, and DIGI_MCP_SERVERS env). URLs never come from an untrusted "
+            "JSON body. Optional auth/token are session overlay only; auth_header "
+            "is operator-only, never settable via the session overlay (#3841)."
+        ),
+    )
+    effort: str | None = Field(
+        None,
+        description=(
+            "Per-request reasoning effort (X-Digi-Effort). One of low, medium, high. "
+            "Unrecognized values are ignored. Always overwritten from the header on HTTP."
+        ),
+    )
+
+
+class McpServerRef(BaseModel):
+    """Trusted Streamable HTTP MCP server forwarded by the BFF (#3736)."""
+
+    # populate_by_name: auth_header is constructed by its Python field name
+    # (context.py) but dumped by its wire alias `authHeader` (workflow.py).
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    url: str = Field(..., min_length=1, max_length=2048)
+    auth: str | None = Field(None, max_length=16)
+    token: str | None = Field(None, max_length=4096)
+    # Operator-only (#3841): custom outbound header name for `token`, e.g.
+    # "X-API-Key". Never settable via the user-facing session overlay.
+    auth_header: str | None = Field(
+        None, max_length=41, pattern=r"^[A-Za-z][A-Za-z0-9-]{0,40}$", alias="authHeader"
     )
 
 

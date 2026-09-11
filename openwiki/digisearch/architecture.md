@@ -3,15 +3,15 @@ type: service-architecture
 title: digisearch Architecture
 description: RAG design of digisearch — ingest-to-query pipeline, pluggable index backends, vertical role under digigraph, and module map.
 tags: [digisearch, rag, architecture]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-0739fb1c67fa358e627b1663
     resource: repo://digisearch/ARCHITECTURE.md
   - id: openwiki-source-e6328240b5125d6213ffa41c
     resource: repo://digisearch/src/digisearch/search/_stub.py
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digisearch Architecture

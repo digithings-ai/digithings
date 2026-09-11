@@ -389,7 +389,7 @@ def test_every_shipping_module_in_the_registry_has_a_directory() -> None:
     """The digivault-gap guard, run against the real registry."""
     paths = fra._module_paths()
     assert "digivault" in paths, "digivault ships a service on 8004 and must be counted"
-    assert paths["digichat"] == "frontend/digichat", "frontend modules live one level down"
+    assert paths["digichat"] == "cloudflare/digichat", "frontend modules live one level down"
     for mid, path in paths.items():
         assert (REPO_ROOT / path).is_dir(), f"{mid} -> {path}"
 

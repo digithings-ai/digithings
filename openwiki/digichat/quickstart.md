@@ -3,9 +3,6 @@ type: quickstart
 title: digichat Quickstart
 description: Run the digichat dev server against a local stack, verify chat, and run the frontend test gates.
 tags: [digichat, quickstart, nextjs]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-e37135cc593e9175f6e913fb
     resource: repo://frontend/digichat/AGENTS.md
@@ -14,6 +11,9 @@ sources:
   - id: openwiki-source-a5dd02cf7bd6166bce9a336e
     resource: repo://frontend/digichat/OPERATIONS.md
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digichat Quickstart

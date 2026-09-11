@@ -37,8 +37,8 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 | digismith | 0 | 1 | 6 | 4 | **11** |
 | digikey | 5 | 6 | 4 | 2 | **17** |
 | digiclaw | 1 | 3 | 4 | 2 | **10** |
-| frontend/digichat | 2 | 8 | 14 | 6 | **30** |
-| frontend/olympus + design + landings | 0 | 9 | 14 | 8 | **31** |
+| cloudflare/digichat | 2 | 8 | 14 | 6 | **30** |
+| cloudflare/olympus + design + landings | 0 | 9 | 14 | 8 | **31** |
 | scripts + config + tests + agents | 0 | 4 | 18 | 7 | **29** |
 | github/workflows | 0 | 6 | 8 | 6 | **20** |
 | **Cross-cutting / doc drift** | — | — | 12 | 8 | **20** |
@@ -129,7 +129,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 
 ---
 
-### frontend/digichat — `881710b2`
+### cloudflare/digichat — `881710b2`
 
 | Sev | Finding | Location |
 |-----|---------|----------|
@@ -145,16 +145,16 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 
 ---
 
-### frontend/olympus + design + static landings — `f34bb6cb`
+### cloudflare/olympus + design + static landings — `f34bb6cb`
 
 | Sev | Finding | Location |
 |-----|---------|----------|
 | **High** | Supabase anon RLS `USING (true)` on all core tables — full public read | `supabase/migrations/001_initial_schema.sql:169-176` |
 | **High** | No Olympus workflow in CI; Cloudflare deploys without monorepo gate | `.github/workflows/ci.yml` |
-| **High** | Committed `public/dashboard-data.json` (~284 KB) publicly downloadable | `frontend/olympus/public/` |
+| **High** | Committed `public/dashboard-data.json` (~284 KB) publicly downloadable | `cloudflare/olympus/public/` |
 | **Medium** | ReactMarkdown without `rehype-sanitize` across 7+ library views | `components/library/*` |
-| **Medium** | `innerHTML` with unescaped data in design package (ticker, typewriter) | `frontend/digiweb/design/*.js` |
-| **Medium** | Missing `og.png`; relative OG URLs break social previews | `frontend/digithings/index.html` |
+| **Medium** | `innerHTML` with unescaped data in design package (ticker, typewriter) | `cloudflare/digiweb/design/*.js` |
+| **Medium** | Missing `og.png`; relative OG URLs break social previews | `cloudflare/digithings/index.html` |
 | **Medium** | Docs reference missing `deploy-digiquant.yml`; `static.yml` retired | READMEs, ADR-0012 |
 
 ---
@@ -289,7 +289,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 | AUDIT-091 | P2 | agents | `agents/sources/subagents/security-reviewer.md` | Orphan — not in agents.yml | Declare or remove | S |
 | AUDIT-092 | P2 | agents | `agents/sources/skills/ci-triage/SKILL.md` | Orphan skill | Declare or remove | S |
 | AUDIT-093 | P2 | agents | `docs/scoring/README.md:9-14` | Thresholds disagree with agents.yml | Align Block Merge If text | S |
-| AUDIT-094 | P2 | agents | `agents.yml:155` | digichat test_cmd wrong path | Fix to `frontend/digichat` workspace | S |
+| AUDIT-094 | P2 | agents | `agents.yml:155` | digichat test_cmd wrong path | Fix to `cloudflare/digichat` workspace | S |
 | AUDIT-095 | P2 | config | `ci.yml:104-105` | Compose validate only — no litellm lint | Run `validate_model_routing.py` | S |
 | AUDIT-096 | P2 | workflows | `static.yml` | RETIRED but cited in CLAUDE.md | Update deploy docs to Cloudflare | S |
 | AUDIT-097 | P2 | workflows | local vs develop | Agent workflow renames unmerged | Merge renames; update EXECUTION_TIERS | M |
@@ -370,7 +370,7 @@ Consolidated doc-vs-code mismatches that mislead operators or agents.
 | DOC-15 | `docs/scoring/README.md` Block Merge thresholds | `agents.yml` ≥8/≥8/≥7/≥9 | Scoring gate misapplied |
 | DOC-16 | `docs/agents/CI_CONVENTIONS.md` enforce-project resolved | Still 10/10 failing | False confidence |
 | DOC-17 | `CLAUDE.md`, `DEPLOYMENT.md` `static.yml` deploy | RETIRED; Cloudflare production | Wrong deploy path |
-| DOC-18 | `frontend/digiquant/README.md` `deploy-digiquant.yml` | File absent; `build-digiquant.sh` | Deploy instructions broken |
+| DOC-18 | `cloudflare/digiquant/README.md` `deploy-digiquant.yml` | File absent; `build-digiquant.sh` | Deploy instructions broken |
 | DOC-19 | `digichat OPERATIONS.md` `dgk_live_` for BFF | Code uses `digi_live_` for machine auth | Credential confusion |
 | DOC-20 | `digichat README.md` unauthenticated embed | `/api/chat` requires session/key | Embed appears supported |
 | DOC-21 | `AGENTS.md` digichat `make test-unit` | Makefile pytest-only | Wrong test command |

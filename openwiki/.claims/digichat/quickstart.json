@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:f948dc524c2840755afe1135beb139636e2d9e2453334e6917955017f7ebc616",
+  "pageVersion": "sha256:ac0f49dd9cd4bc5b8fc745860cc583c6bab08e1b9cfed9c4ee1a11e5d00ae040",
   "claims": [
     {
       "id": "claim_023f86cf79c246d296855d1dab1eb298",
@@ -27,14 +27,18 @@
       "statement": "The browser never holds upstream credentials; all LLM calls, token exchanges, and probes run in server Route Handlers.",
       "evidence": [
         {
-          "resource": "repo://frontend/digichat/ARCHITECTURE.md#L10-L15",
-          "version": "repo-lines-v1:sha256:97cf4fbe0b08944b9a98245fcea27db5e88834f1b75d3c3aeabeb55103e50de5:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2Y4NDNkZjJlZGY1MDM4OGQyNDIyMzI5ODEzYzhjMzk4YWFmMDc0OTEyMjBkNThhZTRjMWUxMDQyOGVhMjQ5ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWJiM2UzZWJjMWZkZmY5YjhhZTBiYTkyZDQ1YmY2NjNjMzk3YTZhNmIzYmM4MTI0ZmRlMjllZmQzOTIyY2ZhZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2I4MGRmMjdkMjk0YWNiYWQ4ZTk5NWExNzU5ZTdjYjk2YjYyOGViOTYzMDMzNWY0YjNjYmNkNWE3ZDIwYTkxMCJ9"
+          "resource": "repo://frontend/digichat/AGENTS.md#L13-L15",
+          "version": "repo-lines-v1:sha256:96f9cdd182d6853f1bbdf4b9836516b0cb3f0ad626d7d79a3985b6e0d25a9b12:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjhjNWZhYmUxYWU5YzJlYTI4MGQyODI3YjEyODM2NjhkNTdlMGJhYTE4OTVkZmFiYjAzNTFkZTU4Y2RhOTNkZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODJlNjRkYjIxYThhNmJiNmU5ODU1ZDVhNThkZDRhYTE3OTZhMjRiZWEyMjQyMGI5YmJlNTEwY2M4MDE4MTUyYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzllNjY5ZDYzMzk0MGNkNTA0NDNiZDJkYWFkMzFjNDBkNmE2NDc3ZTcxZmEwMjhiODU1MWFiODk5ZDdhODAzNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzQyNzQwNzdmMWNlZDk3MmUyZTg3NDA3MWRjYzc5NmI2YzRjMGEwYmY3YjRhZjcyYjNlOTc2NzYyMWEyZTRlMyJ9"
+        },
+        {
+          "resource": "repo://frontend/digichat/ARCHITECTURE.md#L17-L22",
+          "version": "repo-lines-v1:sha256:d2c1f1888d508484984308b7feb267de264264a40a6cccdfa363b7646ed39d48:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzY3YWI4YzU1NmIwMDU1MTliYTQxZTBlZjA1YzliMjBiYjRmZTExNzY1NzNlOTQ0ZThmNmI5MTYyYjAyOTg2YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTRkZjQ1NTI0YzA2ZDEwYmVhY2I3NDlmN2Y4MWE2NTBmN2JhNzJlZmQ4YjE3OGQ1MDM4NTkyYTVlZWY2NWJkMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWJiM2UzZWJjMWZkZmY5YjhhZTBiYTkyZDQ1YmY2NjNjMzk3YTZhNmIzYmM4MTI0ZmRlMjllZmQzOTIyY2ZhZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWM5YjAzMTQ5MjUxYjUyMDFhNGU4OTZkM2NmYWRhMjM1ODQyMTE0MzAwNGZjYWQxYmU0NjM3N2E3ZjEyMDA0MiJ9"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-07T22:38:58.074Z"
+    "at": "2026-09-09T14:37:17.158Z"
   }
 }

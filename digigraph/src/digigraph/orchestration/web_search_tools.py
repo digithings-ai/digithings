@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from digigraph.orchestration.registry import ToolContext
+from digigraph.orchestration.tool_common import (
+    _digi_bearer_from_context,
+    _digisearch_service_base,
+)
 from digigraph.trace_events import rag_sources_from_results
 
 EXTERNAL_EVIDENCE_TIER = "External"
@@ -15,7 +19,8 @@ WEB_SEARCH_TOOL: dict[str, Any] = {
     "function": {
         "name": WEB_SEARCH_TOOL_NAME,
         "description": (
-            "Search the public web for current information via digillm. Results are "
+            "Search the public web for current information with the first-party "
+            "digisearch web_search tool. Results are "
             "External citations — they supplement digisearch/digivault corpus hits and "
             "must never replace them. Prefer digisearch/digivault first; use web_search "
             "only when the corpus cannot answer and live public facts are required."
@@ -26,6 +31,20 @@ WEB_SEARCH_TOOL: dict[str, Any] = {
                 "query": {
                     "type": "string",
                     "description": "Web search query (short, factual).",
+                },
+                "include_domains": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Restrict results to these domains.",
+                },
+                "exclude_domains": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Never return results from these domains.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max rows to return (default 4).",
                 },
             },
             "required": ["query"],
@@ -39,8 +58,110 @@ def _web_search_available(context: ToolContext) -> bool:
     return bool(context.state.get("enable_web_search"))
 
 
+def _as_str_list(value: Any) -> list[str]:
+    """Coerce an optional tool arg to a clean string list (a bare string becomes one entry)."""
+    if isinstance(value, str):
+        return [value.strip()] if value.strip() else []
+    if isinstance(value, list):
+        return [str(v).strip() for v in value if str(v).strip()]
+    return []
+
+
+def call_digisearch_web_search(
+    query: str,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+    max_results: int = 4,
+    context: ToolContext | None = None,
+) -> dict[str, Any]:
+    """Public entry point for the digisearch ``web_search`` tool call.
+
+    Thin delegation to :func:`_call_digisearch_web_search` — external callers
+    (digiquant pipeline grounding) import this, never the private name.
+    """
+    return _call_digisearch_web_search(
+        query,
+        include_domains=include_domains,
+        exclude_domains=exclude_domains,
+        max_results=max_results,
+        context=context,
+    )
+
+
+def _call_digisearch_web_search(
+    query: str,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+    max_results: int = 4,
+    context: ToolContext | None = None,
+) -> dict[str, Any]:
+    """Invoke digisearch ``web_search`` via the vertical-orchestrator hub.
+
+    Never ``import digisearch`` — the call goes through
+    :func:`digigraph.vertical_orchestrator.digisearch_hub.invoke_digisearch_tool`
+    (``POST /v1/orchestrator_invoke``). Normalizes the hub envelope
+    (``{"ok", "data": {"results": [{url, title, snippet}]}}``) into the digigraph
+    tool shape (``{"content", "results": [{doc_id, ...}]}``). Returns ``{}`` when
+    the service errors or yields no rows — callers fail hard (no synthesis
+    fallback, #3859).
+    """
+    from digigraph.vertical_orchestrator.digisearch_hub import invoke_digisearch_tool
+
+    index_name = getattr(context, "index_name", None) or "default"
+    inv = invoke_digisearch_tool(
+        _digisearch_service_base(),
+        "web_search",
+        {
+            "query": query,
+            "include_domains": _as_str_list(include_domains),
+            "exclude_domains": _as_str_list(exclude_domains),
+            "max_results": max_results,
+        },
+        default_index_name=index_name,
+        bearer_token=_digi_bearer_from_context(context) if context is not None else None,
+        request_id=getattr(context, "request_id", None),
+    )
+    if not isinstance(inv, dict) or not inv.get("ok"):
+        return {}
+    data = inv.get("data")
+    if not isinstance(data, dict):
+        return {}
+    hits = data.get("results") or []
+    rows: list[dict[str, Any]] = []
+    for hit in hits:
+        if not isinstance(hit, dict):
+            continue
+        url = str(hit.get("url") or "").strip()
+        if not url:
+            continue
+        title = str(hit.get("title") or url).strip() or url
+        snippet = str(hit.get("snippet") or "")
+        rows.append(
+            {
+                "doc_id": url,
+                "content": snippet,
+                "rank": len(rows),
+                "metadata": {
+                    "title": title,
+                    "source_url": url,
+                    "evidence_tier": EXTERNAL_EVIDENCE_TIER,
+                    "source_kind": "external",
+                },
+            }
+        )
+    if not rows:
+        return {}
+    lines = []
+    for row in rows:
+        line = f"- [{row['metadata']['title']}]({row['doc_id']})"
+        if row["content"]:
+            line += f" — {row['content']}"
+        lines.append(line)
+    return {"content": "\n".join(lines), "results": rows}
+
+
 def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
-    """digillm web search — External cites; never a silent corpus substitute (#3420)."""
+    """digisearch web_search tool only — fail hard, never synthesize (#3859)."""
     if not _web_search_available(context):
         return {
             "error": "tool_not_allowed",
@@ -54,23 +175,17 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
     if not q or not str(q).strip():
         return "No search query provided."
     query = str(q).strip()
+    from digigraph.llm_client import digifetch_web_search
 
-    from digigraph.llm_client import openrouter_web_search
-    from digigraph.llm_client import web_search as xai_web_search
-    from digigraph.model_config import get_grounding_model, get_model_for_mode
-
-    model = get_grounding_model() or get_model_for_mode()
-    grounded = openrouter_web_search(model, query)
-    if grounded is None:
-        grounded = xai_web_search(model, query)
-    if grounded is None:
-        return {
-            "content": "Web search returned no results.",
-            "results": [],
-            "rag_sources": [],
-            "name": WEB_SEARCH_TOOL_NAME,
-        }
-    summary, urls = grounded
+    # Tool path needs no model — "" keeps the (model, query) shape for callers.
+    summary, urls = digifetch_web_search(
+        "",
+        query,
+        include_domains=args.get("include_domains"),
+        exclude_domains=args.get("exclude_domains"),
+        max_results=int(args.get("max_results", 4)),
+        context=context,
+    )
     results: list[dict[str, Any]] = []
     for i, url in enumerate(urls[:8]):
         if not isinstance(url, str) or not url.strip():

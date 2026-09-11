@@ -707,8 +707,8 @@ and allowing immediate rollback.
 digiquant.io.
 
 **Files:** migration `<NNN>_olympus_accounting_views.sql`; modify
-`frontend/olympus/lib/observability-queries.ts`, `frontend/olympus/lib/queries.ts`, generated/local
-DB types, `frontend/digiquant-web/lib/live/useLivePortfolio.ts`, and focused frontend tests.
+`cloudflare/olympus/lib/observability-queries.ts`, `cloudflare/olympus/lib/queries.ts`, generated/local
+DB types, `cloudflare/digiquant-web/lib/live/useLivePortfolio.ts`, and focused frontend tests.
 
 **Output/contribution:** Minimal curated views and adapter changes expose correct portfolio state
 without leaking private lineage.
@@ -724,7 +724,7 @@ npm run test --workspace olympus -- --run \
   lib/portfolio-attribution-build.test.ts \
   app/portfolio/attribution/page.test.ts \
   app/portfolio/performance/page.test.ts
-cd frontend/olympus && npm run lint && npm run build
+cd cloudflare/olympus && npm run lint && npm run build
 ```
 
 **Acceptance metric:** at least the approved shadow interval, including one rebalance session, has

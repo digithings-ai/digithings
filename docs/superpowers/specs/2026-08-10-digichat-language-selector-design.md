@@ -2,7 +2,7 @@
 
 - **Date:** 2026-08-10
 - **Issue:** [#2103](https://github.com/digithings-ai/digithings/issues/2103)
-- **Components:** `frontend/digichat`, `digigraph`
+- **Components:** `cloudflare/digichat`, `digigraph`
 
 ## Goal
 
@@ -15,10 +15,10 @@ the UI chrome and the model's own tool-use/retrieval behavior are untouched.
 The feature must work identically on both backend adapters DigiChat ships
 today, which currently have **no shared prompt-assembly code**:
 
-- The **digigraph** adapter (`frontend/digichat/src/lib/adapters/digithings/stream.ts`)
+- The **digigraph** adapter (`cloudflare/digichat/src/lib/adapters/digithings/stream.ts`)
   — used by digithings.ai/chat and OCC (`digithings.ai/chat/occ`), both on the
   Profile A stack.
-- The **Foundry** adapter (`frontend/digichat/src/lib/adapters/foundry/stream.ts`)
+- The **Foundry** adapter (`cloudflare/digichat/src/lib/adapters/foundry/stream.ts`)
   — used by DataTap (Profile B), which calls Azure AI Foundry directly via
   `@azure/ai-projects` and holds conversation state in Foundry, not digigraph.
 
@@ -121,7 +121,7 @@ no directive, `input` unchanged from today's behavior.
 
 ## Components touched
 
-**Frontend (`frontend/digichat/src`):**
+**Frontend (`cloudflare/digichat/src`):**
 - `lib/embed-tenants.ts` — `EmbedTenantConfig.showLanguageSelector?: boolean`, validated like `showByok`; read as `tenant?.showLanguageSelector !== false` wherever consumed (default true unless explicitly disabled).
 - `components/language-select.tsx` — new dedicated dropdown component, rendered from `app/embed/embed-client.tsx`'s header (next to the embed's own `showByok`-gated BYOK button), gated by `uiFlags.showLanguageSelector`. New session-scoped React state on `embed-client.tsx`, seeded once from `navigator.language` matched against the curated list (else `"en"`).
 - A small shared `LANGUAGES: { code: string; label: string }[]` constant (English/German/Italian/Spanish/French) used by the dropdown, in `lib/languages.ts`.
@@ -160,7 +160,7 @@ no directive, `input` unchanged from today's behavior.
   adapter option (Foundry) matches the selected code, and that an
   unrecognized value never reaches either backend call.
 - `ARCHITECTURE.md` updated for `digigraph` (new state field) and
-  `frontend/digichat` (new tenant flag + dual-backend contract).
+  `cloudflare/digichat` (new tenant flag + dual-backend contract).
 
 ## Out of scope
 

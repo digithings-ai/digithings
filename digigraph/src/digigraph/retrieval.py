@@ -1,8 +1,10 @@
 """Retrieval helpers for document-mode RAG (#3417 / #3418).
 
-Force-tool: the embed slash commands ``/search`` and ``/docs`` pass the user's
-string as the tool argument. The model is not hinted — we inject the tool call
-ourselves, then let it synthesize.
+Force-tool: the embed slash commands ``/digisearch`` and ``/digivault`` pass the
+user's remainder as the tool argument when present. The model is not hinted —
+we inject the tool call ourselves, then let it synthesize. Extra operator MCP
+server ids (``X-Digi-Mcp-Servers``) use a required-tool hint instead of a
+schema-blind inject.
 
 Auto second-hop: after a locate (digisearch / digivault_search_notes) we load
 full notes via ``digivault_get_note`` (batch ≤20) so the model does not ask

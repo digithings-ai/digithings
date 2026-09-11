@@ -30,7 +30,7 @@ CORS_SERVICES = ("digigraph", "digiquant", "digisearch", "digismith", "digikey")
 # Optional Compose profiles — not parametrized here; see per-component suites.
 OPTIONAL_PROFILE_SKIP = (
     "digivault",  # profile digivault — tests/dv/
-    "digichat",  # Next.js BFF — Vitest under frontend/digichat/
+    "digichat",  # Next.js BFF — Vitest under cloudflare/digichat/
 )
 
 pytestmark = pytest.mark.unit

@@ -6,7 +6,7 @@ a second message tree.
 
 ## Gallery
 
-Contract: [`frontend/digiweb/CHAT_THEME.md`](../../frontend/digiweb/CHAT_THEME.md).
+Contract: [`cloudflare/digiweb/CHAT_THEME.md`](../../cloudflare/digiweb/CHAT_THEME.md).
 
 Live: design-reference `/chatbot` (port 4013). Source of look: copied
 `thread.aui.tsx` + shadcn token aliases onto `--bg` / `--ink` / `--accent`.
