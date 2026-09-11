@@ -963,4 +963,67 @@ describe("mapFoundryEvent MCP items (#3861)", () => {
       })
     ).toBeNull();
   });
+
+  it("keeps array MCP output structured and falls back to server_label", () => {
+    expect(
+      mapFoundryEvent({
+        type: "response.output_item.done",
+        item: {
+          type: "mcp_call",
+          server_label: "datatap",
+          arguments: "{}",
+          output: JSON.stringify([{ name: "a" }, { name: "b" }]),
+        },
+      })
+    ).toEqual({
+      type: "activity",
+      span: {
+        operation: "execute_tool",
+        toolName: "datatap",
+        status: "completed",
+        toolResult: [{ name: "a" }, { name: "b" }],
+        label: "datatap",
+      },
+    });
+  });
+
+  // Progressive MCP: `.added` → running row; `.done` settles args + result
+  // into that SAME row (one row total — no orphan, no duplicate). Note the
+  // legacy projector keeps execute_tool rows as kind tool_call; completion
+  // itself is carried by the tool-output-available part (see ui-stream-parts).
+  it("keeps mcp_call progressive across added → done on one row", () => {
+    const progressive: FoundryStreamEvent[] = [
+      {
+        type: "response.output_item.added",
+        item: { type: "mcp_call", name: "datatap__list_connections" },
+      },
+      {
+        type: "response.output_item.done",
+        item: {
+          type: "mcp_call",
+          name: "datatap__list_connections",
+          status: "completed",
+          arguments: "{}",
+          output: JSON.stringify({ connections: [{ name: "a" }] }),
+        },
+      },
+    ];
+
+    const spans = progressive
+      .map((event) => mapFoundryEvent(event))
+      .filter((mapped): mapped is { type: "activity"; span: ActivitySpan } => mapped?.type === "activity")
+      .map((mapped) => mapped.span);
+
+    expect(toDigiChatActivity(spans.slice(0, 1), { settle: false })).toEqual([
+      { kind: "tool_call", name: "datatap__list_connections", query: "" },
+    ]);
+
+    expect(toDigiChatActivity(spans, { settle: false })).toEqual([
+      {
+        kind: "tool_call",
+        name: "datatap__list_connections",
+        query: "",
+      },
+    ]);
+  });
 });

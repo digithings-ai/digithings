@@ -29,7 +29,28 @@ This is the **trial** chat, not the website docs chat. The website chat
     (`datatap-search-rg`, eastus), deployment `gpt-5-mini`.
 - A reachable digigraph + digikey pair (shared dev stack is fine for trials).
 
-## Container environment
+## Container environment (V1 — Foundry agent)
+
+| Variable | Value / source |
+|---|---|
+| `DIGICHAT_CONFIG_PATH` | per-trial baked yaml, e.g. `config/datatap-trial-foundry.yaml` (template in `config/`, cloned per trial with that tenant's `projectEndpoint` + `agentName`) |
+| `AUTH_SECRET`, `AUTH_URL` | per standard digichat deploy (`docs/DEPLOYMENT.md` § digichat) |
+| `DIGICHAT_DATABASE_URL` | Postgres (persistence is `none` in this config, but sessions still need it) |
+
+No MCP token, no digikey/digigraph URLs on V1: the container talks to the
+tenant's Foundry agent via its managed identity (`DefaultAzureCredential`),
+and the agent carries the search index + MCP tool server-side.
+
+## Backend wiring (V1 — tenant Foundry agent, #3862)
+
+- Foundry project + model deployment in the tenant RG (blocked on the
+  Trials-sub Azure OpenAI grant — see prerequisites above).
+- Agent carries the tenant `dg-search-index` (`azure_ai_search` tool) and the
+  dev MCP server (MCP tool, custom-keys connection, tenant key).
+- Reasoning summary **enabled** on the agent definition, otherwise thinking
+  rows stay dropped by design.
+
+## Container environment (V2 — DigiGraph harness, parked)
 
 | Variable | Value / source |
 |---|---|
@@ -41,7 +62,7 @@ This is the **trial** chat, not the website docs chat. The website chat
 | `AUTH_SECRET`, `AUTH_URL` | per standard digichat deploy (`docs/DEPLOYMENT.md` § digichat) |
 | `DIGICHAT_DATABASE_URL` | Postgres (persistence is `none` in this config, but sessions still need it) |
 
-## Backend wiring (shared digigraph)
+## Backend wiring (V2 — shared digigraph, parked)
 
 - `DIGI_TENANT_CORPUS_MAP` must map the deployment slug to a
   `researchSystemPrompt`, otherwise the workflow takes the quant-extraction
@@ -52,7 +73,27 @@ This is the **trial** chat, not the website docs chat. The website chat
   Foundry `gpt-5-mini` deployment (azure provider entry), or set it directly
   once the Trials-subscription Foundry account has a deployment.
 
-## Deploy sketch (Azure CLI)
+## Deploy sketch — V1 (Azure CLI)
+
+```bash
+TENANT_RG="<trial-tenant-rg>"
+CAE="<cae-name-in-tenant-rg>"
+az containerapp create \
+  --subscription "Datatap Trials" \
+  --resource-group "$TENANT_RG" \
+  --environment "$CAE" \
+  --name digichat-datatap-trial \
+  --image <registry>/digichat:<tag> \
+  --target-port 3000 --ingress external \
+  --user-assigned <identity-with-foundry-access> \
+  --env-vars DIGICHAT_CONFIG_PATH=config/datatap-trial-foundry.yaml \
+             AUTH_URL=https://<this-app-fqdn> \
+  --secrets auth-secret="<auth-secret>"
+# then set AUTH_SECRET=secretref:auth-secret via
+# `az containerapp update --set-env-vars` (secretref form).
+```
+
+## Deploy sketch — V2 (parked)
 
 ```bash
 TENANT_RG="<trial-tenant-rg>"

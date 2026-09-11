@@ -279,15 +279,33 @@ function parseJsonObject(value: unknown): Record<string, unknown> | null {
 }
 
 /**
- * MCP `output` is a JSON string of the tool result. Return the parsed record,
- * or the raw string when it is not a JSON object (the span sanitizer caps
- * both) — never throw, never return empty.
+ * MCP `output` is a JSON string of the tool result. Return the parsed value
+ * (record, array, or number) so structured results stay structured; fall back
+ * to the raw string when it is not JSON. Never throw, never return empty.
  */
-function parseMcpResult(value: unknown): Record<string, unknown> | string | undefined {
-  const record = parseJsonObject(value);
-  if (record && Object.keys(record).length) return record;
-  if (typeof value === "string" && value.trim()) return value.trim();
+function parseMcpResult(value: unknown): Record<string, unknown> | unknown[] | number | string | undefined {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (parsed && typeof parsed === "object") return parsed as Record<string, unknown> | unknown[];
+      if (typeof parsed === "number" && Number.isFinite(parsed)) return parsed;
+    } catch {
+      // Not JSON — fall through to the raw string below.
+    }
+    return trimmed;
+  }
   return undefined;
+}
+
+/** Tool identity for an MCP item: tool name, else server label, else "mcp". */
+function mcpToolName(item: { name?: string; server_label?: string }): string {
+  if (typeof item.name === "string" && item.name.trim()) return item.name.trim();
+  if (typeof item.server_label === "string" && item.server_label.trim()) {
+    return item.server_label.trim();
+  }
+  return "mcp";
 }
 
 /**
@@ -499,13 +517,13 @@ function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | nul
 
   // Generic MCP tool call (`mcp_call`, #3861). `arguments` is a JSON string of
   // the tool input; the result arrives on the same item's `output` at `.done`
-  // (a standalone `mcp_call_output` item is also accepted — same row via the
-  // FIFO pending queue in writeStandardActivity). Args + JSON result render
-  // through the standard tool parts, exactly like a directly-plugged tool.
+  // (Responses API has no separate MCP output item — output rides the
+  // completed `mcp_call`). Args + JSON result render through the standard
+  // tool parts, exactly like a directly-plugged tool.
   // `mcp_approval_request` is intentionally unmapped: trial agents
   // auto-approve server-side (first-party agent, tenant-owned data).
   if (item?.type === "mcp_call") {
-    const name = typeof item.name === "string" && item.name.trim() ? item.name.trim() : "mcp";
+    const name = mcpToolName(item);
     const args = parseJsonObject(item.arguments);
     const output = parseMcpResult(item.output);
     return {
@@ -517,22 +535,6 @@ function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | nul
         ...(args && Object.keys(args).length ? { toolInput: args } : {}),
         ...(output !== undefined ? { toolResult: output } : {}),
         label: name,
-      },
-    };
-  }
-
-  if (item?.type === "mcp_call_output") {
-    const output = parseMcpResult(
-      typeof item.output === "string" ? item.output : undefined,
-    );
-    return {
-      type: "activity",
-      span: {
-        operation: "execute_tool",
-        toolName: "mcp",
-        status: item.status === "failed" ? "failed" : "completed",
-        ...(output !== undefined ? { toolResult: output } : {}),
-        label: "mcp",
       },
     };
   }
@@ -664,8 +666,7 @@ export function mapFoundryEvent(event: FoundryStreamEvent): FoundryServerEvent |
       // executes; `.done` settles it into the same row via the FIFO
       // pending queue (same contract as the search branch above).
       if (item?.type === "mcp_call") {
-        const name =
-          typeof item.name === "string" && item.name.trim() ? item.name.trim() : "mcp";
+        const name = mcpToolName(item);
         return {
           type: "activity",
           span: {
