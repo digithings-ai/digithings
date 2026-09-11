@@ -432,6 +432,15 @@ def admin_revoke_bff_subject(body: RevokeSessionBody, request: Request) -> Revok
     ``JtiIssuedRow.revoked_at`` so ``rehydrate_blocklist_from_db`` can restore
     the entries after a Redis restart. Idempotent: already-revoked rows are
     skipped on the next call.
+
+    Scope: ``JtiIssuedRow`` has no tenant column, so this revokes the subject
+    across the whole deployment. Subjects are unique and the endpoint is gated
+    on ``DIGIKEY_ADMIN_TOKEN``, so this cannot be used cross-tenant by a
+    non-admin. (F2)
+
+    Limitation: this blocks tokens already issued. It does not stop a caller
+    holding ``DIGIKEY_BFF_TOKEN`` from minting a fresh JWT for the same subject;
+    rotate the BFF secret to fully cut off a compromised BFF credential. (F3)
     """
     _require_admin(request)
     subject = body.subject.strip()

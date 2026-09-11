@@ -212,6 +212,8 @@ Durable record of every `jti` issued via token exchange — the source of truth 
 
 Composite indexes: `(api_key_id, exp)` for key revoke, `(subject, exp)` for BFF revoke. Rows where `exp < now()` are dead and can be purged by a nightly job.
 
+**In-place upgrade:** digikey has no migration framework, and `create_all` does not alter existing tables. `init_db()` calls `digikey.db_migrate.upgrade_jti_issued_table()` (before `create_all`) to add `subject`/`revoked_at` and drop `NOT NULL` on `api_key_id` for a pre-#3917 database. SQLite uses a non-destructive table rebuild; other dialects use `ALTER TABLE`. It is idempotent and recovers interrupted rebuilds. Never delete `digikey.db` to resolve drift — it holds API keys and revocation state.
+
 ### User profile pointers (`digikey_user_profile_pointers` table)
 
 Minimal identity seam for JWT profile claims (#308). Not the full profile body store (#307).
@@ -346,6 +348,10 @@ When `DIGIKEY_BLOCKLIST_REDIS_URL` is set (wired in root `docker-compose.yml`), 
 4. Consumer `DigiAuthMiddleware` calls `blocklist.is_blocked(jti)` — **fail-closed** when Redis is configured but unreachable.
 
 When Redis is **unset**, blocklist checks are skipped (legacy dev mode). Production stacks must set `DIGIKEY_BLOCKLIST_REDIS_URL`.
+
+**Subject revocation scope and limits (#3917).** `POST /v1/admin/bff-sessions/revoke` operates on the bare subject. `JtiIssuedRow` has no tenant column, so a subject revoke is deployment-global — acceptable because subjects are unique and the route is admin-gated, but it is not tenant-scoped. Revocation blocks **already-issued** tokens; it does not prevent a holder of the shared `DIGIKEY_BFF_TOKEN` from minting a new JWT for the same subject, so a compromised BFF secret still requires rotation.
+
+**Schema upgrades (no migration framework).** digikey applies `Base.metadata.create_all()`, which never alters an existing table. `init_db()` therefore runs `digikey.db_migrate.upgrade_jti_issued_table()` **before** `create_all()` to bring a pre-#3917 `digikey_jti_issued` (`api_key_id NOT NULL`, no `subject`/`revoked_at`) forward without dropping rows: SQLite gets an in-place table rebuild (create new → copy → drop old → rename), other dialects get additive `ALTER TABLE`s. It is idempotent and recovers an interrupted rebuild on the next start. Deployments must not delete `digikey.db` to "fix" schema drift — that destroys API keys and revocation state.
 
 ### Historical gap (pre–Wave 1 remediation)
 

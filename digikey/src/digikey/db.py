@@ -7,6 +7,7 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from digikey.db_migrate import upgrade_jti_issued_table
 from digikey.db_schema import Base
 
 _engine = None
@@ -41,4 +42,11 @@ def session_factory() -> sessionmaker[Session]:
 
 
 def init_db() -> None:
-    Base.metadata.create_all(bind=get_engine())
+    engine = get_engine()
+    # Upgrade existing tables *before* ``create_all``. ``create_all`` never
+    # alters an existing table, and worse, it would recreate an empty
+    # ``digikey_jti_issued`` if an interrupted rebuild left the copied data in
+    # the working table. Persistent SQLite volumes from before #3917 still have
+    # the old shape, which rehydrate/revoke reference.
+    upgrade_jti_issued_table(engine)
+    Base.metadata.create_all(bind=engine)
