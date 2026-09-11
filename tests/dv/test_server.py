@@ -1665,6 +1665,51 @@ def test_orchestrator_invoke_vault_local_tools_are_scoped_to_the_tenant(
     assert resp.data["note_count"] == 1
 
 
+@pytest.mark.parametrize("empty_prefix", ["/", "///", "   ", ".md"])
+def test_filesystem_route_503_when_the_only_mapped_prefix_normalizes_to_empty(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, empty_prefix: str
+) -> None:
+    """A lone map entry whose vaultPathPrefix normalizes to empty ('/', '///',
+    '   ', '.md') is "set but unusable" (TenantCorpusMapError -> 503), never a
+    silent fallback to the shared DIGIVAULT_ROOT. Before the fix, a tenant mapped
+    to '/' got HTTP 200 listing every corpus."""
+    root = _tenant_vault_root(tmp_path)
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(root))
+    monkeypatch.setenv(
+        "DIGI_TENANT_CORPUS_MAP",
+        json.dumps({"digithings": {"vaultPathPrefix": empty_prefix}}),
+    )
+    resp = TestClient(server.app).get(
+        "/v1/notes", headers=auth_headers(scopes=[SCOPE_READ], tenant_slug="digithings")
+    )
+    assert resp.status_code == 503
+
+
+@pytest.mark.parametrize("empty_prefix", ["/", "///", "   ", ".md"])
+def test_filesystem_route_403_when_a_mapped_prefix_normalizes_to_empty_alongside_valid(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, empty_prefix: str
+) -> None:
+    """Alongside a valid entry, the empty-prefix tenant is absent from the map, so
+    the filesystem route refuses it (403) rather than serving the shared root and
+    leaking the sibling corpus."""
+    root = _tenant_vault_root(tmp_path)
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(root))
+    monkeypatch.setenv(
+        "DIGI_TENANT_CORPUS_MAP",
+        json.dumps(
+            {
+                "digithings": {"vaultPathPrefix": empty_prefix},
+                "occ": {"vaultPathPrefix": "clients/online-compliance-center"},
+            }
+        ),
+    )
+    resp = TestClient(server.app).get(
+        "/v1/notes", headers=auth_headers(scopes=[SCOPE_READ], tenant_slug="digithings")
+    )
+    assert resp.status_code == 403
+    assert "faq" not in resp.text
+
+
 # ── digivault_get_note orchestrator tool (#2239 Task 3 gap) ─────────────────────
 def test_orchestrator_invoke_get_note_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """Full round trip through the shared `_fetch_note_by_path` helper — the note
