@@ -113,7 +113,7 @@ The deleted `cloudflare/website/` landing (`#try` iframe) is **not** the marketi
 - **Gates:** per-tenant `gateMode` — `ungated` (marketing), `turn_limited` (client-side free-turn quota then BYOK), or `trial_form`.
 - **BYOK:** shared `useBYOKKey` hook. `llmAccess: free_then_byok` serves free replies until quota/errors open in-chat BYOK.
 - **CSP:** `next.config.ts` bakes fail-closed `frame-ancestors 'none'` on `/embed`; `src/proxy.ts` overwrites with the allowlist at request time. Never emit `*`.
-- **Errors:** a failed `/api/chat` turn emits a stream `error` part — never a success-looking assistant text bubble — which the message error UI renders with Retry (`formatEmbedChatError` + `MessageError`). BYOK-remediable refusals still relay their code to open the in-chat key flow.
+- **Errors:** on the digigraph path, a failed `/api/chat` turn emits a stream `error` part — never a success-looking assistant text bubble — which the message error UI renders with Retry (`formatEmbedChatError` + `MessageError`). BYOK-remediable refusals still relay their code to open the in-chat key flow. The Foundry adapter (`src/lib/adapters/foundry/stream.ts`) still writes a generic `text-delta` at HTTP 200 on upstream failures; it needs the same error-part treatment in a follow-up.
 - **Analytics:** `src/lib/embed-gate.ts` exports `emit(event, props)` — no-op today.
 - **Non-goals:** #260 tokens, #202 SSO, #201 model selector.
 

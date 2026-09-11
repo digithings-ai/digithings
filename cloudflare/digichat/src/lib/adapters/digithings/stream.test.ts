@@ -47,11 +47,13 @@ it("does not stream the upstream error body to the browser", async () => {
   expect(errorLog).toHaveBeenCalled();
 });
 
-// #3910: a 2xx with no body is just as much an outage as a 5xx. It used to be
-// streamed as assistant text, so the visitor saw a "reply" with no retry.
-it("surfaces an empty upstream body as a stream error", async () => {
+// #3910: a real 200 always carries a non-null body even when the upstream sends
+// zero bytes, so `!res.body` only catches 204/205/HEAD. An SSE stream that ends
+// with no events must still fail the turn — otherwise it completes as a silent
+// empty reply with no error state and no Retry.
+it("surfaces a 200 SSE stream with no events as a stream error", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response(null, { status: 200, statusText: "OK" })
+    new Response("", { status: 200, headers: { "content-type": "text/event-stream" } })
   );
   const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -67,6 +69,99 @@ it("surfaces an empty upstream body as a stream error", async () => {
   expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
   expect(body).not.toContain('"type":"text-delta"');
   expect(errorLog).toHaveBeenCalled();
+});
+
+it("surfaces a [DONE]-only 200 SSE stream as a stream error", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("data: [DONE]\n\n", {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    })
+  );
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  expect(body).not.toContain('"type":"text-delta"');
+  expect(errorLog).toHaveBeenCalled();
+});
+
+// The emptiness check must not fire on a real answer: a streamed text delta is
+// the normal success shape.
+it("still streams a genuinely non-empty 200 SSE reply", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Hello." } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(errorTextFrom(body)).toBeUndefined();
+  expect(body).toContain('"type":"text-delta"');
+  expect(body).toContain("Hello.");
+});
+
+// A reply that streams only a tool/activity part and no answer text is not
+// empty — it must not be rewritten as "the assistant is unavailable".
+it("does not misclassify an activity-only 200 stream as empty", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_trace: {
+                  v: 1,
+                  type: "tool_call",
+                  payload: {
+                    tool: "digisearch",
+                    query: "what is digigraph",
+                    status: "started",
+                  },
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(errorTextFrom(body)).toBeUndefined();
+  expect(body).not.toContain('"type":"text-delta"');
+  expect(body).toContain('"type":"tool-input-start"');
 });
 
 // #3910: fetchGuarded refuses to carry the BYOK/Authorization headers across a

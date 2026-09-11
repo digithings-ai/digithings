@@ -200,6 +200,8 @@ export async function createDigigraphTraceStreamResponse(opts: {
       let textSeq = 0;
       let textId = "assistant-main";
       let textOpen = false;
+      /** Any answer text was written — the normal success signal. */
+      let textEmitted = false;
       const activityCtx = createActivityWriteContext();
       const openText = () => {
         if (textOpen) return;
@@ -320,6 +322,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
           if (cleaned.length) {
             openText();
             writer.write({ type: "text-delta", id: textId, delta: cleaned });
+            textEmitted = true;
           }
         }
         const tr = delta.digigraph_trace;
@@ -350,6 +353,21 @@ export async function createDigigraphTraceStreamResponse(opts: {
             writeStandardActivity(writer, span, activityCtx);
           }
         }
+      }
+      // #3910: a real 200 always has a non-null body even when the upstream
+      // sends no bytes, so `!res.body` only catches 204/205/HEAD. Without this,
+      // an SSE stream that ends with zero events completes silently — no
+      // assistant text, no activity, no error, no Retry. Treat a stream that
+      // produced neither answer text nor any activity/tool part as an upstream
+      // failure. `activityCtx.seq` counts every non-text part written (reasoning,
+      // tool, source, data-status), so a tool-only or reasoning-only reply is
+      // not misclassified as empty.
+      if (!textEmitted && activityCtx.seq === 0) {
+        console.error(
+          `[digigraph] upstream ${res.status} streamed no text or activity`
+        );
+        closeText();
+        throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
       finishStandardActivity(writer, activityCtx);
       closeText();
