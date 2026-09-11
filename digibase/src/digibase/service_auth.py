@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import threading
 import time
@@ -43,7 +44,8 @@ def get_service_jwt(
         raise ServiceAuthError(f"{key_env} is not set")
     if not base:
         raise ServiceAuthError(f"{digikey_url_env} is not set")
-    cache_key = f"{key_env}:{raw[:16]}:{','.join(scopes)}"
+    key_hash = hashlib.sha256(raw.encode()).hexdigest()
+    cache_key = f"{key_env}:{key_hash}:{','.join(scopes)}"
     now = time.monotonic()
     with _lock:
         hit = _cache.get(cache_key)
