@@ -48,7 +48,7 @@ phases, not this module's job today.
 | `digiskills/synthesize.py` | `Synthesizer` protocol; `TemplateSynthesizer` (default, deterministic, no LLM) and `DigiLLMSynthesizer` (real prose via `digillm.completion`, lazily imported, requires `[llm]`). |
 | `digiskills/compiler.py` | `compile_skill(source, ...)` — orchestrates a `CorpusBuilder` + `Synthesizer` into a `CompileResult`. Picks sane defaults from `source.kind` when not given explicitly. |
 | `digiskills/package.py` | `write_skill_package` / `write_skill_zip` — writes a `SkillPackage` to disk as an installable directory or zip archive. |
-| `digiskills/cli.py` | `digiskills compile <path> --name ... [--llm] [--zip] [--max-files N] [--max-file-chars N] [--max-total-chars N]` — Typer CLI, requires the `[cli]` extra. The `--max-*` flags override `LocalPathCorpusBuilder`'s caps (needed for large OpenAPI specs — a 484KB `public.json` exceeds the 200k-char per-file default and would ship truncated). |
+| `digiskills/cli.py` | `digiskills compile <path> --name ... [--llm] [--zip] [--max-files N] [--max-file-chars N] [--max-total-chars N]` — Typer CLI, requires the `[cli]` extra. The `--max-*` flags override `LocalPathCorpusBuilder`'s caps (needed for large OpenAPI specs, whose `public.json` can exceed the 500k-char per-file default and would otherwise ship truncated). |
 
 ## Public API (core)
 
@@ -263,11 +263,14 @@ stripped).
 `ARCHITECTURE.md`/`AGENTS.md` (digigraph, digiquant, digisearch, digismith,
 digiclaw, digibase, digikey, digivault, digifetch, digillm, digiskills,
 digichat) through the full pipeline with `TemplateSynthesizer`, asserting a
-clean compile (no truncation warnings — real module docs stay well under the
-size caps) and a well-formed, round-trippable `SKILL.md`. This validates
-ingestion/packaging against real content on every CI run; it does not
-validate `DigiLLMSynthesizer` prose quality, which needs a live model and is
-a manual check.
+clean compile (no truncation warnings) and a well-formed, round-trippable
+`SKILL.md` whose references carry every source doc through verbatim. The
+per-file cap (`DEFAULT_MAX_FILE_CHARS`, 500k) sits above the largest real
+module doc (`digiquant/ARCHITECTURE.md`) so the corpus is never cut; a doc
+that outgrows it trips this test rather than silently shipping truncated.
+This validates ingestion/packaging against real content on every CI run; it
+does not validate `DigiLLMSynthesizer` prose quality, which needs a live model
+and is a manual check.
 
 ## Monorepo integration
 
