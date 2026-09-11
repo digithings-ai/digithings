@@ -58,6 +58,11 @@ deployment:
   mcp:
     allowUserServers: false
     allowAddForm: false
+    servers:
+      - id: digiquant
+        url: https://mcp.digithings.ai/mcp
+        label: digiquant market data
+        default: true
   gate:
     mode: ungated
     activityDetail: labels
