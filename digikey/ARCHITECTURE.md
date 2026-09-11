@@ -91,6 +91,12 @@ Response shape:
 **`POST /v1/admin/keys`**
 Requires `Authorization: Bearer <DIGIKEY_ADMIN_TOKEN>`. Body: `AdminIssueBody`. Returns `AdminIssueResponse` with the plaintext key (shown once). If `DIGIKEY_ADMIN_TOKEN` is unset, returns 503 — no anonymous key creation.
 
+**`POST /v1/admin/keys/{key_id}/revoke`**
+Requires `Authorization: Bearer <DIGIKEY_ADMIN_TOKEN>`. Revokes an API key and blocklists every live JWT issued from it (ADR-0007). Response: `{"revoked": true, "jtis_invalidated": N}`. Returns 503 `auth_backend_unavailable` if the blocklist write fails (fail-closed).
+
+**`POST /v1/admin/bff-sessions/revoke`**
+Requires `Authorization: Bearer <DIGIKEY_ADMIN_TOKEN>`. Body: `{"subject": "<bare BFF subject>"}`. Blocklists every live `bff_session` JWT for that subject (#3917) — BFF sessions have no API-key row, so this is the subject-scoped analogue of the key revoke endpoint. Idempotent, same response shape, same fail-closed 503 behaviour.
+
 ### DigiAuthMiddleware (shared across services)
 
 `digikey.integrations.service_middleware.DigiAuthMiddleware` is a Starlette `BaseHTTPMiddleware` shipped as part of the `digikey` package. All three consumer services register it at app startup:
@@ -190,6 +196,21 @@ Rules:
 | `revoked_at` | `TIMESTAMPTZ` nullable | Set to revoke; checked on every exchange |
 
 Column type note: `scopes` uses `JSONB` on Postgres and `JSON` on SQLite via SQLAlchemy dialect variants (`db_schema.py:_json_type()`).
+
+### Issued JTIs (`digikey_jti_issued` table)
+
+Durable record of every `jti` issued via token exchange — the source of truth for revocation and Redis blocklist rehydration (ADR-0007). Both `api_key` and `bff_session` grants write a row at exchange time; if the insert fails the exchange returns 503 rather than emitting an untracked token.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `jti` | `VARCHAR(36)` PK | UUID hex from `jwt_issue.py` |
+| `api_key_id` | `VARCHAR(36)` nullable FK → `digikey_api_keys.id` | Set for `api_key` grants; NULL for `bff_session` |
+| `subject` | `VARCHAR(256)` nullable INDEX | Bare BFF subject (no `bff:` prefix) for `bff_session` grants; NULL otherwise |
+| `exp` | `INT` NOT NULL | Unix timestamp; sets Redis TTL and filters stale rows |
+| `issued_at` | `TIMESTAMPTZ` | Audit trail |
+| `revoked_at` | `TIMESTAMPTZ` nullable | Set by subject-scoped BFF revoke; durable marker for rehydrate (key-scoped revoke uses `ApiKeyRow.revoked_at`) |
+
+Composite indexes: `(api_key_id, exp)` for key revoke, `(subject, exp)` for BFF revoke. Rows where `exp < now()` are dead and can be purged by a nightly job.
 
 ### User profile pointers (`digikey_user_profile_pointers` table)
 
@@ -319,9 +340,10 @@ Raw API keys are never stored. Only bcrypt hashes are persisted in the `key_hash
 
 When `DIGIKEY_BLOCKLIST_REDIS_URL` is set (wired in root `docker-compose.yml`), digikey:
 
-1. Persists issued `jti` values in Postgres (`jti_issued`) at token exchange time.
-2. On `POST /v1/revoke`, marks the API key revoked and adds live JTIs to the Redis blocklist.
-3. Consumer `DigiAuthMiddleware` calls `blocklist.is_blocked(jti)` — **fail-closed** when Redis is configured but unreachable.
+1. Persists issued `jti` values in Postgres (`jti_issued`) at token exchange time — for **both** `api_key` and `bff_session` grants. A failed insert fails the exchange (503), so no untracked token is ever emitted.
+2. On `POST /v1/admin/keys/{id}/revoke`, marks the API key revoked and adds its live JTIs to the Redis blocklist. On `POST /v1/admin/bff-sessions/revoke`, marks the subject's live JTI rows `revoked_at` and blocklists them (subject-scoped; BFF has no key row).
+3. `rehydrate_blocklist_from_db()` repopulates Redis on startup for revoked API keys **and** revoked BFF subjects.
+4. Consumer `DigiAuthMiddleware` calls `blocklist.is_blocked(jti)` — **fail-closed** when Redis is configured but unreachable.
 
 When Redis is **unset**, blocklist checks are skipped (legacy dev mode). Production stacks must set `DIGIKEY_BLOCKLIST_REDIS_URL`.
 
