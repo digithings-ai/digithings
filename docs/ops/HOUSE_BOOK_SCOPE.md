@@ -97,13 +97,15 @@ script is house-owned).
 
 `nav_history` is written twice on a daily run, in order:
 
-1. **H9 / `portfolio_materialize`** may upsert a **provisional** arithmetic-chain
-   NAV for the date.
+1. **H9 `commit_io.book_portfolio`** may upsert a **provisional** arithmetic-chain
+   NAV for the date. (Legacy `portfolio_materialize.py` has the same shape but is
+   not on the daily path — do not reintroduce it.)
 2. **`verify_nav_replay.py --write`** then overwrites it with the Nautilus engine
    NAV — the sole source of truth (SSOT) for NAV.
 
-Between those steps a dashboard reader that queries `nav_history` can briefly see
-the provisional value. Treat a date's `nav_history` row as provisional until the
+Between those steps a dashboard reader that queries `nav_history` can see the
+provisional value for hours (the book runs ~12:00–14:00 UTC; the engine writer
+~22:00–23:00 UTC). Treat a date's `nav_history` row as provisional until the
 engine writer for that date has completed; after the overwrite the engine NAV is
 authoritative. Do not publish or quote the arithmetic-chain value as a settled NAV.
 
