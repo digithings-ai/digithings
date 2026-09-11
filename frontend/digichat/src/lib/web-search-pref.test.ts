@@ -17,7 +17,7 @@ describe("web-search-pref (#3420)", () => {
     }
   });
 
-  it("missing key defaults off; baseline surfaces opt into default-on explicitly", () => {
+  it("missing key defaults on; explicit stored false stays off (#3859)", () => {
     expect(isWebSearchEnabled({ tenantAllows: false, userPref: false })).toBe(false);
     expect(isWebSearchEnabled({ tenantAllows: true, userPref: false })).toBe(false);
     expect(isWebSearchEnabled({ tenantAllows: false, userPref: true })).toBe(false);
@@ -35,8 +35,9 @@ describe("web-search-pref (#3420)", () => {
       },
       clear: () => store.clear(),
     });
-    expect(readWebSearchPref("fresh-scope")).toBe(false);
+    expect(readWebSearchPref("fresh-scope")).toBe(true);
     expect(readWebSearchPref("fresh-scope", true)).toBe(true);
+    expect(readWebSearchPref("fresh-scope", false)).toBe(false);
   });
 
   it("persists user preference under a scoped key", () => {
@@ -52,7 +53,7 @@ describe("web-search-pref (#3420)", () => {
       },
       clear: () => store.clear(),
     });
-    expect(readWebSearchPref("datatap")).toBe(false);
+    expect(readWebSearchPref("datatap")).toBe(true);
     writeWebSearchPref("datatap", true);
     expect(readWebSearchPref("datatap")).toBe(true);
     writeWebSearchPref("datatap", false);
