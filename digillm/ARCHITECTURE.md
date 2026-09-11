@@ -383,6 +383,23 @@ Orthogonal to the budget, `DIGILLM_MAX_CONCURRENT_CALLS` (default 8) caps how ma
 logical calls may be in flight at once — burst smoothing for fan-out stages, not
 a time bound (#3738).
 
+**The fail-fast budgets are workflow-owned, not library defaults.** The daily
+digiquant pipeline pins `DIGILLM_PROVIDER_MAX_ATTEMPTS=2`,
+`DIGILLM_EMPTY_RETRY_MAX=1`, and `DIGILLM_MAX_CONCURRENT_CALLS=8`
+(`.github/workflows/pipeline-digiquant.yml`). The library defaults (12 / 4 / 8)
+are deliberately generous for interactive callers, so a local
+`python -m digiquant.portfolio.chain` run without that env gets much longer retry
+budgets than the #3078/#3737 fail-fast intent. For local parity, export the pins:
+
+```bash
+export DIGILLM_PROVIDER_MAX_ATTEMPTS=2
+export DIGILLM_EMPTY_RETRY_MAX=1
+export DIGILLM_MAX_CONCURRENT_CALLS=8
+```
+
+`apply_digiquant_house_env()` (`digigraph/src/digigraph/model_config.py`) sets the
+house model-routing base, not these budgets — it does not cover this gap.
+
 ### Usage observer contract
 
 `set_usage_observer(callback)` installs one process-level, best-effort observer used by
@@ -481,7 +498,7 @@ digismith on the path) plus `LANGSMITH_API_KEY` to enable spans.
 | `DIGILLM_CONNECT_TIMEOUT_SECONDS` | all clients | Connect timeout (default 5, = the OpenAI SDK default). Separate from the above so a wider read timeout cannot silently widen connect. |
 | `DIGI_LLM_CACHE_TTL_SECONDS` | response cache | Response-cache TTL (default 3600). |
 | `DIGI_TOOL_MESSAGE_MAX_CHARS` | tool loop | Cap on tool-result text injected into the next turn (default 12000). |
-| `DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_DELAY` | `completion` | Empty-response self-heal: retry count (default 2) + backoff seconds (default 2.0). |
+| `DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_BACKOFF` | `completion` | Empty-response self-heal: retry count (default 4, raised in #814) + backoff seconds (default 5.0). `DIGILLM_EMPTY_RETRY_DELAY` is a back-compat alias for `..._BACKOFF`. |
 
 ## Tests and CI
 
