@@ -528,8 +528,15 @@ Anthropic, Gemini, x.ai (model required for all non-OpenAI providers).
 Provider list is defined by `config/byok-providers.json`.
 
 A non-2xx digigraph reply is **not** relayed to an embed visitor: the body is
-logged server-side and the stream carries a generic "unavailable right now",
-because a 500 body can hold stack traces, internal hostnames and prompt echoes.
+logged server-side and the stream fails the turn with a generic "unavailable
+right now" `error` part — not an assistant `text-delta` — so the runtime marks
+the message errored and the error UI + Retry renders (`MessageError`). The copy
+is generic because a 500 body can hold stack traces, internal hostnames and
+prompt echoes. A 2xx SSE stream that ends having produced no answer text and no
+activity/tool part (an effectively empty reply, including a bare or
+`[DONE]`-only body) and a refused cross-origin credential redirect
+(`CredentialRedirectError`) take the same error path. A tool-only or
+reasoning-only reply counts as produced and is not misclassified.
 The one exception is a refusal the visitor can act on — `relayableUpstreamCode`
 in `lib/adapters/digithings/stream.ts` passes through the *code* alone, and only
 for codes in `BYOK_MODEL_REMEDIABLE_CODES`, so the BYOK sequence opens instead
