@@ -92,7 +92,15 @@ def register_fastapi_error_handlers(app: Any, *, service: str) -> None:
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
         req_id = _request_id(request)
-        logger.exception("unhandled error request_id=%s", req_id)
+        # Deliberately no exc_info: Starlette's ServerErrorMiddleware re-raises and
+        # uvicorn already logs the full traceback. This record only adds request-id
+        # correlation in the service's own logger.
+        logger.error(
+            "unhandled error request_id=%s exception=%s: %s",
+            req_id,
+            type(exc).__name__,
+            exc,
+        )
         headers = {"X-Request-ID": req_id} if req_id else None
         return json_error_response(
             status_code=500,

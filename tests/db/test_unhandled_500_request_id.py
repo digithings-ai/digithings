@@ -34,7 +34,7 @@ def test_unhandled_exception_includes_request_id_header() -> None:
 
 
 @pytest.mark.unit
-def test_unhandled_exception_logs_traceback_with_request_id(
+def test_unhandled_exception_logs_correlated_record(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     client = TestClient(_boom_app(), raise_server_exceptions=False)
@@ -47,6 +47,12 @@ def test_unhandled_exception_logs_traceback_with_request_id(
     assert records, "expected digibase.errors to log the unhandled exception"
     record = records[-1]
     assert record.levelno == logging.ERROR
-    assert "rid-log-500" in record.getMessage()
-    assert record.exc_info is not None
-    assert record.exc_info[0] is RuntimeError
+    message = record.getMessage()
+    assert "rid-log-500" in message
+    assert "RuntimeError" in message
+    assert "kaboom" in message
+    # The handler intentionally omits exc_info: Starlette's ServerErrorMiddleware
+    # re-raises and uvicorn logs the full traceback on its own logger, which
+    # TestClient does not capture. Asserting no exc_info here pins that this
+    # record does not double-log the traceback.
+    assert record.exc_info is None
