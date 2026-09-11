@@ -1,15 +1,13 @@
 """digibase connectors — write clients for external services (Supabase, etc.).
 
 The Supabase connector requires the optional ``digibase[supabase]`` extra. It is
-imported lazily so that ``import digibase.connectors`` and the base connector
-types remain usable even when ``supabase`` is not installed.
+imported lazily so that ``import digibase.connectors`` stays usable even when
+``supabase`` is not installed.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
-
-from digibase.connectors.base import ConnectorPayload, ConnectorResult
 
 if TYPE_CHECKING:
     from digibase.connectors.supabase import (
@@ -18,13 +16,9 @@ if TYPE_CHECKING:
         SupabaseWriteResult,
     )
 
-# Only always-defined names are advertised as wildcard exports. The Supabase
-# names are optional (they require digibase[supabase]) and are accessible via
-# __getattr__ lazy lookup, not guaranteed to be present.
-__all__ = [
-    "ConnectorPayload",
-    "ConnectorResult",
-]
+# The Supabase names are optional (they require digibase[supabase]) and are
+# accessible via __getattr__ lazy lookup, not guaranteed to be present.
+__all__: list[str] = []
 
 
 def __getattr__(name: str) -> Any:
