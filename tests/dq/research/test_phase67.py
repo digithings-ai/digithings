@@ -44,6 +44,33 @@ from digiquant.research.state import (
 from digiquant.research.testing.simulator import parse_schema_name
 
 
+@pytest.fixture(autouse=True)
+def _stub_web_grounding_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub the tool-only grounding boundary with canned grounding (#3859).
+
+    These tests assert fan-out topology and payloads, never live search —
+    the requested-search-must-succeed contract is covered by the grounding
+    unit tests, so phases get canned {summary, sources, as_of} grounding.
+    """
+    from digiquant.research.testing.simulator import CANNED_TOOL_SEARCH
+
+    monkeypatch.setattr(
+        "digiquant.research.data.web_grounding.fetch_web_grounding",
+        lambda **_kwargs: dict(CANNED_TOOL_SEARCH),
+    )
+    monkeypatch.setattr(
+        "digiquant.research.data.web_grounding.call_web_search_tool",
+        lambda **_kwargs: {
+            "summary": str(CANNED_TOOL_SEARCH["summary"]),
+            "sources": list(CANNED_TOOL_SEARCH["sources"]),
+        },
+    )
+    monkeypatch.setattr(
+        "digiquant.research.data.ai_portfolios.fetch_ai_portfolio_grounding",
+        lambda **_kwargs: dict(CANNED_TOOL_SEARCH),
+    )
+
+
 def _seed_state_through_phase5() -> ResearchState:
     """Populate phases 1–5 with minimal fresh slots so Phase 6+ has input."""
     state = ResearchState(

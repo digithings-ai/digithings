@@ -12,17 +12,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILD = REPO_ROOT / "scripts" / "build-digiquant.sh"
 DEPLOY = REPO_ROOT / ".github" / "workflows" / "deploy-digiquant-cloudflare.yml"
 SMOKE = REPO_ROOT / ".github" / "workflows" / "smoke-site.yml"
-REDIRECTS = REPO_ROOT / "frontend" / "digiquant-web" / "public" / "_redirects"
-HEADERS = REPO_ROOT / "frontend" / "digiquant-web" / "public" / "_headers"
+REDIRECTS = REPO_ROOT / "cloudflare" / "digiquant-web" / "public" / "_redirects"
+HEADERS = REPO_ROOT / "cloudflare" / "digiquant-web" / "public" / "_headers"
 
 
 def test_build_copies_dashboard_export_only_to_dist_dashboard() -> None:
     text = BUILD.read_text(encoding="utf-8")
     assert "mkdir -p dist/dashboard" in text
-    assert "cp -r frontend/dashboard/out/. dist/dashboard/" in text
+    assert "cp -r cloudflare/dashboard/out/. dist/dashboard/" in text
     assert "[ -f dist/dashboard/index.html ]" in text
     assert "mkdir -p dist/olympus" not in text
-    assert "cp -r frontend/dashboard/out/. dist/olympus/" not in text
+    assert "cp -r cloudflare/dashboard/out/. dist/olympus/" not in text
     assert "dist/olympus/index.html" not in text
 
 
@@ -65,7 +65,7 @@ def test_pages_auth_flag_is_dashboard_only() -> None:
 
 
 def test_settings_kicker_is_dashboard_not_olympus() -> None:
-    page = (REPO_ROOT / "frontend" / "dashboard" / "app" / "settings" / "page.tsx").read_text(
+    page = (REPO_ROOT / "cloudflare" / "dashboard" / "app" / "settings" / "page.tsx").read_text(
         encoding="utf-8"
     )
     assert "dashboard" in page

@@ -5,7 +5,7 @@ Keeps every frontend on the digiweb design canon after the 2026-07 migration:
 token-backed Tailwind utilities only — no raw palette utilities, no legacy
 vocabulary, no color literals in component code.
 
-Checks (git-tracked files under frontend/ only):
+Checks (git-tracked files under cloudflare/ only):
   1. Raw Tailwind palette utilities (``bg-zinc-900``, ``text-emerald-400`` …)
      in .tsx/.jsx/.ts — the canon utilities are token-backed (``text-ink``,
      ``bg-surface``, ``text-up`` …) via the @theme inline bridge.
@@ -39,23 +39,23 @@ REPO = Path(__file__).resolve().parent.parent
 
 # Sanctioned homes for concrete color values.
 ALLOWLIST = {
-    "frontend/dashboard/lib/chart-colors.ts",  # categorical/benchmark chart hues
+    "cloudflare/dashboard/lib/chart-colors.ts",  # categorical/benchmark chart hues
     # tenant embed accent overrides — ACCENT_CSS moved here with the client
     # tree when /embed/page.tsx became the server shell (#2001).
-    "frontend/digichat/src/app/embed/embed-client.tsx",
-    "frontend/digichat/src/app/(digichat)/embed/embed-client.tsx",
-    "frontend/digiweb/web/src/components/ThemeProvider.tsx",  # SSR theme-color meta
+    "cloudflare/digichat/src/app/embed/embed-client.tsx",
+    "cloudflare/digichat/src/app/(digichat)/embed/embed-client.tsx",
+    "cloudflare/digiweb/web/src/components/ThemeProvider.tsx",  # SSR theme-color meta
     # Canvas scenes compose runtime colors from token-derived channels
     # (migrate-vs-leave: canvas art stays concrete).
-    "frontend/digiquant-web/components/landing/AmbientMesh.tsx",
-    "frontend/digiquant-web/components/landing/HeroMesh.tsx",
-    "frontend/digiquant-web/components/landing/HeroGraph.tsx",
-    "frontend/digithings-web/components/landing/HeroMesh.tsx",
-    "frontend/digithings-web/components/landing/HeroGraph.tsx",
+    "cloudflare/digiquant-web/components/landing/AmbientMesh.tsx",
+    "cloudflare/digiquant-web/components/landing/HeroMesh.tsx",
+    "cloudflare/digiquant-web/components/landing/HeroGraph.tsx",
+    "cloudflare/digithings-web/components/landing/HeroMesh.tsx",
+    "cloudflare/digithings-web/components/landing/HeroGraph.tsx",
     # Reference-app livery chooser: a deliberate concrete swatch table
     # mirroring tokens.css module accents.
-    "frontend/digiweb/reference/components/livery-store.ts",
-    "frontend/digiweb/reference/components/livery-switcher.tsx",
+    "cloudflare/digiweb/reference/components/livery-store.ts",
+    "cloudflare/digiweb/reference/components/livery-switcher.tsx",
 }
 
 TEST_FILE = re.compile(r"(\.test\.|\.spec\.|/__tests__/|/test/)")
@@ -64,14 +64,14 @@ TEST_FILE = re.compile(r"(\.test\.|\.spec\.|/__tests__/|/test/)")
 # assistant-ui-templates and the (baseline) Next stock app must not trip
 # the design-canon ratchet (same idea as eslint ignores).
 CANON_SKIP_PREFIXES = (
-    "frontend/digichat/reference/",
-    "frontend/digichat/src/app/(baseline)/",
+    "cloudflare/digichat/reference/",
+    "cloudflare/digichat/src/app/(baseline)/",
     # Catalog Thread skins — vendor livery, not product chrome. Do not restyle.
-    "frontend/digichat/src/components/assistant-ui/skins/",
+    "cloudflare/digichat/src/components/assistant-ui/skins/",
     # assistant-ui reference chatbot copies (Phase 1–2 stock gallery).
-    "frontend/digiweb/reference/components/assistant-ui/",
-    "frontend/digiweb/reference/components/chatbot/",
-    "frontend/digiweb/reference/app/(chatbot)/",
+    "cloudflare/digiweb/reference/components/assistant-ui/",
+    "cloudflare/digiweb/reference/components/chatbot/",
+    "cloudflare/digiweb/reference/app/(chatbot)/",
 )
 
 
@@ -154,7 +154,7 @@ def family_census_findings(files: list[str]) -> list[tuple[str, int, str, str]]:
     for app in CENSUS_APPS:
         allowed = set(baseline.get(app, []))
         for rel in files:
-            if not rel.startswith(f"frontend/{app}/") or not rel.endswith(".css"):
+            if not rel.startswith(f"cloudflare/{app}/") or not rel.endswith(".css"):
                 continue
             text = (REPO / rel).read_text(encoding="utf-8")
             for m in CLASS_DEF.finditer(text):
@@ -176,7 +176,7 @@ def family_census_findings(files: list[str]) -> list[tuple[str, int, str, str]]:
 
 def tracked_frontend_files() -> list[str]:
     out = subprocess.run(
-        ["git", "ls-files", "frontend"],
+        ["git", "ls-files", "cloudflare"],
         cwd=REPO,
         capture_output=True,
         text=True,
@@ -222,7 +222,7 @@ def main() -> int:
         print(
             "\nUse token-backed utilities (text-ink, bg-surface, text-up …) or add"
             "\na `canon-allow: <reason>` comment / ALLOWLIST entry for sanctioned"
-            "\nliterals. Playbook: frontend/digiweb/MIGRATION.md"
+            "\nliterals. Playbook: cloudflare/digiweb/MIGRATION.md"
         )
         return 0 if warn_only else 1
 

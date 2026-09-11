@@ -2,7 +2,7 @@
 
 - **Date:** 2026-06-23
 - **Status:** Approved design / spec (pre-implementation)
-- **Surface:** Olympus FX Research suite, Today tab (`frontend/olympus/{app,components,lib}/twelve-x`)
+- **Surface:** Olympus FX Research suite, Today tab (`cloudflare/olympus/{app,components,lib}/twelve-x`)
 - **Scope:** **Part A only** — the Today page content redesign (twelve-x frontend files only). Part B (shared subpage top-bar: full-width on wide screens + collapse-to-hamburger on mobile) is a **separate, coordinated** change and is explicitly out of scope here.
 
 ## 1. Goal

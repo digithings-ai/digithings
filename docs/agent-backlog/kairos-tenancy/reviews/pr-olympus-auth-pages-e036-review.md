@@ -7,7 +7,7 @@
 **Approve for merge to `main`** after human confirms Cloudflare Access still covers `/olympus/*` until intentional Access removal.
 
 ## Checked
-- [x] Diff limited to `frontend/olympus` Auth surfaces + `scripts/build-digiquant.sh` + AUTH.md — no broker live paths, no migrations/cutover.
+- [x] Diff limited to `cloudflare/olympus` Auth surfaces + `scripts/build-digiquant.sh` + AUTH.md — no broker live paths, no migrations/cutover.
 - [x] Cutover `900_*` not moved to top-level migrations.
 - [x] `NEXT_PUBLIC_OLYMPUS_AUTH` default only when `CF_PAGES=1` and unset; explicit `0` keeps classic shell.
 - [x] Build asserts `dist/olympus/login/index.html` and `auth/callback/index.html`.

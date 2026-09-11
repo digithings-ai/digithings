@@ -15,7 +15,7 @@
 - **Polars/pandas, Pydantic, ruff** rules do not apply here — this is the TypeScript frontend. Match existing code style; line length follows the repo's prettier/eslint config.
 - **Tokens only, via `[data-theme]`** — colors come from the custom utilities (`text-fin-blue|green|red|amber`, `bg-bg-primary|secondary|glass`, `border-border-subtle|glow`, `text-text-primary|secondary|muted`, `.glass-card`) defined in `app/globals.css`. Never hardcode hex outside `globals.css`. Display face is Instrument Serif (`--font-display`); numbers are tabular mono.
 - **Static export** — no server components with runtime data; everything is client-fetched via `useDashboard()`. No new server routes.
-- **Tests** — vitest. Run from `frontend/olympus`: `npm test` (= `vitest run`). Tests live alongside source as `*.test.ts(x)` and render via `renderToStaticMarkup(createElement(Comp, props))` then assert with `toContain`. All currently-passing plumbing tests MUST stay green.
+- **Tests** — vitest. Run from `cloudflare/olympus`: `npm test` (= `vitest run`). Tests live alongside source as `*.test.ts(x)` and render via `renderToStaticMarkup(createElement(Comp, props))` then assert with `toContain`. All currently-passing plumbing tests MUST stay green.
 - **Nav labels (verbatim):** `Today`, `Portfolio`, `Why`, `System`, `Settings`. ("Why" is final; not "Research".)
 - **Action verbs (verbatim, from `RebalanceAction.action`):** `OPEN`, `ADD`, `TRIM`, `EXIT`, `HOLD`. Direction coloring: OPEN/ADD → `--up`; TRIM/EXIT → `--down`; HOLD → muted.
 - **Twelve-X** is cut from the Olympus owner nav (it already renders standalone via `app-frame.tsx`; just ensure nothing links to it).
@@ -26,9 +26,9 @@
 The worktree has no `node_modules`. Symlink the main checkout's:
 
 ```bash
-ln -sfn /Users/chrisstefan/Code/digithings/frontend/olympus/node_modules \
-  /Users/chrisstefan/Code/digithings/.claude/worktrees/olympus-redesign/frontend/olympus/node_modules
-cd /Users/chrisstefan/Code/digithings/.claude/worktrees/olympus-redesign/frontend/olympus
+ln -sfn /Users/chrisstefan/Code/digithings/cloudflare/olympus/node_modules \
+  /Users/chrisstefan/Code/digithings/.claude/worktrees/olympus-redesign/cloudflare/olympus/node_modules
+cd /Users/chrisstefan/Code/digithings/.claude/worktrees/olympus-redesign/cloudflare/olympus
 npm test   # baseline — confirm the existing suite is green before changing anything
 ```
 Expected: all existing tests pass (the "plumbing" baseline).
@@ -36,22 +36,22 @@ Expected: all existing tests pass (the "plumbing" baseline).
 ## File Structure
 
 **New files:**
-- `frontend/olympus/lib/nav.ts` — canonical 4-destination nav array (single source for sidebar + mobile bar).
-- `frontend/olympus/lib/nav.test.ts` — asserts the owner spine.
-- `frontend/olympus/components/today/move-hero.tsx` — the move-led hero (regime ribbon + THE MOVE + NAV status). Recomposes `TodayActionsPanel` + `AsOfBadge`.
-- `frontend/olympus/components/today/move-hero.test.tsx`
-- `frontend/olympus/components/today/why-today.tsx` — inline level-2 disclosure (deliberation net-stance + PM memo summary + "full debate →").
-- `frontend/olympus/components/today/today-summaries.tsx` — the four quiet doorway cards (How I'm doing · The read · Holdings · Theses).
-- `frontend/olympus/app/why/page.tsx`, `frontend/olympus/app/system/page.tsx` — new destinations.
+- `cloudflare/olympus/lib/nav.ts` — canonical 4-destination nav array (single source for sidebar + mobile bar).
+- `cloudflare/olympus/lib/nav.test.ts` — asserts the owner spine.
+- `cloudflare/olympus/components/today/move-hero.tsx` — the move-led hero (regime ribbon + THE MOVE + NAV status). Recomposes `TodayActionsPanel` + `AsOfBadge`.
+- `cloudflare/olympus/components/today/move-hero.test.tsx`
+- `cloudflare/olympus/components/today/why-today.tsx` — inline level-2 disclosure (deliberation net-stance + PM memo summary + "full debate →").
+- `cloudflare/olympus/components/today/today-summaries.tsx` — the four quiet doorway cards (How I'm doing · The read · Holdings · Theses).
+- `cloudflare/olympus/app/why/page.tsx`, `cloudflare/olympus/app/system/page.tsx` — new destinations.
 
 **Modified files:**
-- `frontend/olympus/components/sidebar.tsx` — consume `lib/nav.ts`; visually demote System.
-- `frontend/olympus/components/mobile-app-bar.tsx` — consume `lib/nav.ts`.
-- `frontend/olympus/app/page.tsx` — rebuilt Today (hero + 4 summaries; remove page-ambient wash and the 11-panel stack).
-- `frontend/olympus/app/portfolio/*` — tabs → Holdings · Theses · Performance; conviction scorecard moves into Performance.
-- `frontend/olympus/app/research/page.tsx` → becomes redirect to `/why`; reasoning moves to `app/why/`.
-- `frontend/olympus/app/observability/page.tsx` → becomes redirect to `/system`; ops content moves to `app/system/` (Run health + How Olympus works), scorecard removed.
-- `frontend/olympus/app/architecture/page.tsx` — content folds into System's "How Olympus works" (keep the P0 rewrite).
+- `cloudflare/olympus/components/sidebar.tsx` — consume `lib/nav.ts`; visually demote System.
+- `cloudflare/olympus/components/mobile-app-bar.tsx` — consume `lib/nav.ts`.
+- `cloudflare/olympus/app/page.tsx` — rebuilt Today (hero + 4 summaries; remove page-ambient wash and the 11-panel stack).
+- `cloudflare/olympus/app/portfolio/*` — tabs → Holdings · Theses · Performance; conviction scorecard moves into Performance.
+- `cloudflare/olympus/app/research/page.tsx` → becomes redirect to `/why`; reasoning moves to `app/why/`.
+- `cloudflare/olympus/app/observability/page.tsx` → becomes redirect to `/system`; ops content moves to `app/system/` (Run health + How Olympus works), scorecard removed.
+- `cloudflare/olympus/app/architecture/page.tsx` — content folds into System's "How Olympus works" (keep the P0 rewrite).
 - Page-level tests for each touched route.
 
 **Untouched (tested plumbing — do not edit):** `lib/dashboard-context.tsx`, `lib/queries.ts`, `lib/supabase.ts`, `lib/snapshot-*.ts`, `lib/render-*.ts`, `lib/decision-scorecard.ts`, `lib/portfolio-risk-metrics.ts`, `lib/performance-series.ts`, `lib/position-*.ts`, `lib/portfolio-aggregates.ts`, `lib/thesis-*.ts`, `components/SafeMarkdown.tsx`, `components/ui.tsx`.
@@ -65,8 +65,8 @@ Expected: all existing tests pass (the "plumbing" baseline).
 ### Task 1.1: Canonical nav module
 
 **Files:**
-- Create: `frontend/olympus/lib/nav.ts`
-- Test: `frontend/olympus/lib/nav.test.ts`
+- Create: `cloudflare/olympus/lib/nav.ts`
+- Test: `cloudflare/olympus/lib/nav.test.ts`
 
 **Interfaces:**
 - Produces: `export interface NavItem { href: string; label: string; icon: ElementType<{ size?: number }>; demoted?: boolean }` and `export const NAV: NavItem[]`.
@@ -74,7 +74,7 @@ Expected: all existing tests pass (the "plumbing" baseline).
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// frontend/olympus/lib/nav.test.ts
+// cloudflare/olympus/lib/nav.test.ts
 import { describe, it, expect } from 'vitest';
 import { NAV } from './nav';
 
@@ -96,13 +96,13 @@ describe('NAV', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/olympus && npx vitest run lib/nav.test.ts`
+Run: `cd cloudflare/olympus && npx vitest run lib/nav.test.ts`
 Expected: FAIL — `Cannot find module './nav'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```ts
-// frontend/olympus/lib/nav.ts
+// cloudflare/olympus/lib/nav.ts
 import type { ElementType } from 'react';
 import { LayoutDashboard, PieChart, BookOpen, Activity } from 'lucide-react';
 
@@ -125,21 +125,21 @@ export const NAV: NavItem[] = [
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd frontend/olympus && npx vitest run lib/nav.test.ts`
+Run: `cd cloudflare/olympus && npx vitest run lib/nav.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/olympus/lib/nav.ts frontend/olympus/lib/nav.test.ts
+git add cloudflare/olympus/lib/nav.ts cloudflare/olympus/lib/nav.test.ts
 git commit -m "feat(olympus): canonical 4-destination nav module"
 ```
 
 ### Task 1.2: Sidebar consumes canonical nav + demotes System
 
 **Files:**
-- Modify: `frontend/olympus/components/sidebar.tsx` (replace the inline `NAV` at lines ~12–23 with an import from `lib/nav`)
-- Test: `frontend/olympus/components/sidebar.test.tsx`
+- Modify: `cloudflare/olympus/components/sidebar.tsx` (replace the inline `NAV` at lines ~12–23 with an import from `lib/nav`)
+- Test: `cloudflare/olympus/components/sidebar.test.tsx`
 
 **Interfaces:**
 - Consumes: `NAV` from `lib/nav.ts`.
@@ -147,7 +147,7 @@ git commit -m "feat(olympus): canonical 4-destination nav module"
 - [ ] **Step 1: Write the failing test** — assert the sidebar renders all four labels and that System carries a demotion marker (e.g. a `data-demoted="true"` attribute / muted class). Use `renderToStaticMarkup`. Mock `next/navigation`'s `usePathname` to return `'/'`.
 
 ```tsx
-// frontend/olympus/components/sidebar.test.tsx
+// cloudflare/olympus/components/sidebar.test.tsx
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, it, expect, vi } from 'vitest';
@@ -182,8 +182,8 @@ describe('Sidebar', () => {
 ### Task 1.3: Mobile app bar consumes canonical nav
 
 **Files:**
-- Modify: `frontend/olympus/components/mobile-app-bar.tsx`
-- Test: `frontend/olympus/components/mobile-app-bar.test.tsx`
+- Modify: `cloudflare/olympus/components/mobile-app-bar.tsx`
+- Test: `cloudflare/olympus/components/mobile-app-bar.test.tsx`
 
 - [ ] **Step 1:** Failing test — renders the four destinations (same pattern as 1.2, mocking `usePathname`).
 - [ ] **Step 2:** Verify fails.
@@ -194,10 +194,10 @@ describe('Sidebar', () => {
 ### Task 1.4: New `/why` and `/system` destinations + back-compat redirects
 
 **Files:**
-- Create: `frontend/olympus/app/why/page.tsx`, `frontend/olympus/app/system/page.tsx`
-- Modify: `frontend/olympus/app/research/page.tsx` → redirect to `/why`; `frontend/olympus/app/observability/page.tsx` → redirect to `/system`
-- Modify: `frontend/olympus/app/library/page.tsx` redirect target → `/why` (currently `/research`)
-- Test: `frontend/olympus/app/why/page.test.tsx`, `frontend/olympus/app/system/page.test.tsx`
+- Create: `cloudflare/olympus/app/why/page.tsx`, `cloudflare/olympus/app/system/page.tsx`
+- Modify: `cloudflare/olympus/app/research/page.tsx` → redirect to `/why`; `cloudflare/olympus/app/observability/page.tsx` → redirect to `/system`
+- Modify: `cloudflare/olympus/app/library/page.tsx` redirect target → `/why` (currently `/research`)
+- Test: `cloudflare/olympus/app/why/page.test.tsx`, `cloudflare/olympus/app/system/page.test.tsx`
 
 **Interfaces:**
 - For Phase 1, `/why` renders the existing research client and `/system` renders the existing observability content unchanged (their internal reorganization is Phases 4 & 5). This keeps the skeleton navigable end-to-end after Phase 1.
@@ -210,10 +210,10 @@ describe('Sidebar', () => {
 
 ### Task 1.5: Verify Twelve-X is unlinked + Phase-1 gate
 
-- [ ] **Step 1:** Grep for links to `/twelve-x` outside `app/twelve-x/**` and `app-frame.tsx`: `rg "twelve-x" frontend/olympus --glob '!**/twelve-x/**'`. Expected: only `app-frame.tsx`'s standalone-route check. If any nav link exists, remove it.
+- [ ] **Step 1:** Grep for links to `/twelve-x` outside `app/twelve-x/**` and `app-frame.tsx`: `rg "twelve-x" cloudflare/olympus --glob '!**/twelve-x/**'`. Expected: only `app-frame.tsx`'s standalone-route check. If any nav link exists, remove it.
 - [ ] **Step 2:** Full suite + production build:
   ```bash
-  cd frontend/olympus && npm test && npm run build
+  cd cloudflare/olympus && npm test && npm run build
   ```
   Expected: tests green; `next build` static-export succeeds; `/why` and `/system` in output, old routes emit redirects.
 - [ ] **Step 3:** Commit any cleanup — `chore(olympus): confirm twelve-x unlinked from owner nav`.
@@ -229,8 +229,8 @@ describe('Sidebar', () => {
 ### Task 2.1: `MoveHero` — regime ribbon + THE MOVE + NAV status
 
 **Files:**
-- Create: `frontend/olympus/components/today/move-hero.tsx`
-- Test: `frontend/olympus/components/today/move-hero.test.tsx`
+- Create: `cloudflare/olympus/components/today/move-hero.tsx`
+- Test: `cloudflare/olympus/components/today/move-hero.test.tsx`
 
 **Interfaces:**
 - Produces: `export function MoveHero(props: { regime: string; regimeLabel: string; asOf: string | null; runType: string | null; actions: RebalanceAction[]; rationaleByTicker?: Record<string,string>; nav: { index: number | null; dailyPct: number | null; benchTicker: string | null; excessPct: number | null; sinceDate: string | null } }): JSX.Element`
@@ -279,7 +279,7 @@ describe('MoveHero', () => {
 ### Task 2.2: `WhyToday` — inline level-2 disclosure
 
 **Files:**
-- Create: `frontend/olympus/components/today/why-today.tsx` + test.
+- Create: `cloudflare/olympus/components/today/why-today.tsx` + test.
 
 **Interfaces:**
 - Produces: `export function WhyToday(props: { deliberations: PipelineTickerDoc[]; pmMemoSummary: string | null }): JSX.Element | null` — renders a compact "Why today" card with net-stance summary + PM memo line + a `Link` to `/why` ("full debate →"). Returns `null` when there is neither a deliberation nor a memo.
@@ -293,7 +293,7 @@ describe('MoveHero', () => {
 ### Task 2.3: `TodaySummaries` — the four doorway cards
 
 **Files:**
-- Create: `frontend/olympus/components/today/today-summaries.tsx` + test.
+- Create: `cloudflare/olympus/components/today/today-summaries.tsx` + test.
 
 **Interfaces:**
 - Produces: `export function TodaySummaries(props: { navSpark: number[]; excessPct: number|null; sharpe: number|null; positions: Position[]; theses: ThesisRow[] }): JSX.Element` — a responsive grid of four quiet cards: **How I'm doing** (compact NAV sparkline + excess/Sharpe → links `/portfolio?tab=performance`), **The read** (`<MorningBriefPanel />` in summary mode → links `/why`), **Holdings** (top ~6 positions w/ weight+Δ → `/portfolio`), **Theses** (status dots → `/portfolio?tab=theses`).
@@ -307,8 +307,8 @@ describe('MoveHero', () => {
 ### Task 2.4: Assemble the new `Today` page
 
 **Files:**
-- Modify: `frontend/olympus/app/page.tsx` (replace the 11-panel body)
-- Modify/Create: `frontend/olympus/app/page.test.tsx`
+- Modify: `cloudflare/olympus/app/page.tsx` (replace the 11-panel body)
+- Modify/Create: `cloudflare/olympus/app/page.test.tsx`
 
 - [ ] **Step 1:** Write/extend the page test: on an action day the move appears above the NAV index in source order (`html.indexOf('TRIM') < html.indexOf('104') `-style ordering check using stable text), the four summary labels are present, and the old full-page ambient class (e.g. `REGIME_PAGE_AMBIENT` output) is absent. Add a HOLD-day assertion.
 - [ ] **Step 2:** Verify fails (page still renders old layout).

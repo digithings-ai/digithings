@@ -58,7 +58,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 from lib.scratch_paths import AGENT_CACHE_ROOT  # noqa: E402
 
-OUTPUT_JSON = ROOT / "frontend" / "public" / "dashboard-data.json"
+OUTPUT_JSON = ROOT / "cloudflare" / "public" / "dashboard-data.json"
 DAILY_DIR = AGENT_CACHE_ROOT / "daily"
 PORTFOLIO_JSON = ROOT / "config" / "portfolio.json"
 
@@ -911,12 +911,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="update_tearsheet.py — Parse data/agent-cache/daily/*/DIGEST.md (+ snapshot.json) and upsert Supabase (recovery tool).",
         epilog="Normal operations use run_db_first.py + materialize_snapshot. "
-        "Add --json to also write frontend/public/dashboard-data.json.",
+        "Add --json to also write cloudflare/public/dashboard-data.json.",
     )
     parser.add_argument(
         "--json",
         action="store_true",
-        help="Also write static frontend/public/dashboard-data.json (legacy debugging fallback)",
+        help="Also write static cloudflare/public/dashboard-data.json (legacy debugging fallback)",
     )
     cli_args = parser.parse_args()
 

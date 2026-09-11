@@ -212,16 +212,19 @@ def _stream_completions_progressive(
                 elif pending_tool_calls:
                     pending_tool_calls.pop(0)
             elif event_type == "reasoning":
-                # digichat (and other non–Open WebUI clients) get activity via
-                # digigraph_trace; never inject Open WebUI <thinking> chrome.
-                if suppress_tool_stream:
-                    continue
+                # Open WebUI: buffer and flush as <thinking> before content.
+                # digichat (X-Suppress-Tool-Stream): forward reasoning_content so
+                # the BFF can render reasoning parts — do not drop the stream.
                 if isinstance(data, str):
                     raw = data
                 elif isinstance(data, dict):
                     raw = str((data.get("content") or data.get("delta") or ""))
                 else:
                     raw = str(data) if data else ""
+                if suppress_tool_stream:
+                    if raw:
+                        yield f"data: {_sse_chunk(cid, created, model, '', reasoning_content=raw)}\n\n"
+                    continue
                 if raw:
                     reasoning_buffer.append(raw)
                 # Emit only as content later (<thinking> block); skip reasoning_content in delta to avoid breaking clients

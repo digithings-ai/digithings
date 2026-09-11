@@ -7,7 +7,7 @@
 **Approve for merge to `main`** so Pages can rebuild Settings with Profile | Pipeline | Keys | Brokers | Notifications | Billing | About.
 
 ## Checked
-- [x] Diff limited to `frontend/olympus` Settings surfaces + entitlements/locked UI + `settings-api` + SETTINGS-IA + build-script asserts — no migrations, no cutover 900, no live-trading, no EF bulk.
+- [x] Diff limited to `cloudflare/olympus` Settings surfaces + entitlements/locked UI + `settings-api` + SETTINGS-IA + build-script asserts — no migrations, no cutover 900, no live-trading, no EF bulk.
 - [x] D1 / T5 tier matrix unchanged: Profile/Pipeline/Keys/Brokers writes stay Custom+; baseline-broker product tension documented in SETTINGS-IA (not silently widened).
 - [x] `NEXT_PUBLIC_OLYMPUS_AUTH` CF_PAGES default from Auth Pages #3231 preserved; build still asserts login + auth/callback.
 - [x] Build asserts `dist/olympus/settings/index.html` plus Pipeline/Keys tab markers (guards against shipping the old Status/Appearance shell).

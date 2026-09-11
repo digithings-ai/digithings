@@ -1,5 +1,5 @@
 # digichat image for digithings Cloudflare Containers.
-# Build context: monorepo root (same as frontend/digichat/Dockerfile).
+# Build context: monorepo root (same as cloudflare/digichat/Dockerfile).
 # DIGICHAT_ASSET_PREFIX avoids clashing with Pages `/_next` on digithings.ai.
 # Embed CSP hosts come from runtime DIGICHAT_EMBED_HOSTS / DIGICHAT_EMBED_TENANTS
 # (never bake DIGICHAT_EMBED_TENANTS as a build-arg — tokens in layer history).
@@ -9,12 +9,12 @@ FROM node:22-alpine AS deps
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 COPY package.json package-lock.json ./
-COPY frontend/digichat/package.json frontend/digichat/
-COPY frontend/digichat-ui/package.json frontend/digichat-ui/
-COPY frontend/digiweb/design/package.json frontend/digiweb/design/
-COPY frontend/digiweb/web/package.json frontend/digiweb/web/
-COPY frontend/dashboard/package.json frontend/dashboard/
-RUN npm ci --workspace frontend/digichat --include-workspace-root
+COPY cloudflare/digichat/package.json cloudflare/digichat/
+COPY cloudflare/digichat-ui/package.json cloudflare/digichat-ui/
+COPY cloudflare/digiweb/design/package.json cloudflare/digiweb/design/
+COPY cloudflare/digiweb/web/package.json cloudflare/digiweb/web/
+COPY cloudflare/dashboard/package.json cloudflare/dashboard/
+RUN npm ci --workspace cloudflare/digichat --include-workspace-root
 
 FROM node:22-alpine AS builder
 WORKDIR /app
@@ -23,12 +23,12 @@ ARG DIGICHAT_ASSET_PREFIX
 ENV DIGICHAT_ASSET_PREFIX=$DIGICHAT_ASSET_PREFIX
 ENV NEXT_PUBLIC_DIGICHAT_ASSET_PREFIX=$DIGICHAT_ASSET_PREFIX
 COPY --from=deps /app ./
-COPY frontend/digiweb/design ./frontend/digiweb/design
-COPY frontend/digiweb/web ./frontend/digiweb/web
+COPY cloudflare/digiweb/design ./cloudflare/digiweb/design
+COPY cloudflare/digiweb/web ./cloudflare/digiweb/web
 # Product skin @imports gallery chatbot.css from outside web/ (#3717).
-COPY ["frontend/digiweb/reference/app/(chatbot)/chatbot/chatbot.css", "frontend/digiweb/reference/app/(chatbot)/chatbot/chatbot.css"]
-COPY frontend/digichat-ui ./frontend/digichat-ui
-COPY frontend/digichat ./frontend/digichat
+COPY ["cloudflare/digiweb/reference/app/(chatbot)/chatbot/chatbot.css", "cloudflare/digiweb/reference/app/(chatbot)/chatbot/chatbot.css"]
+COPY cloudflare/digichat-ui ./cloudflare/digichat-ui
+COPY cloudflare/digichat ./cloudflare/digichat
 # Alpine musl bindings for lockfile platforms that resolve to glibc on some hosts
 RUN npm install \
       @rolldown/binding-linux-x64-musl@1.0.0-rc.16 \
@@ -39,9 +39,9 @@ RUN npm install \
 # Optional override: docker --build-arg or wrangler [[containers]] image_vars.
 # Do not use a Cloudflare dashboard secret for this.
 ARG DIGICHAT_VERSION
-RUN VERSION="${DIGICHAT_VERSION:-$(node -p "require('./frontend/digichat/package.json').version")}" \
+RUN VERSION="${DIGICHAT_VERSION:-$(node -p "require('./cloudflare/digichat/package.json').version")}" \
  && printf '%s' "$VERSION" > /tmp/digichat-version \
- && DIGICHAT_VERSION="$VERSION" npm run build --workspace frontend/digichat
+ && DIGICHAT_VERSION="$VERSION" npm run build --workspace cloudflare/digichat
 
 FROM node:22-alpine AS runner
 WORKDIR /app
@@ -49,11 +49,11 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN apk add --no-cache curl
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
-COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/.next/static ./frontend/digichat/.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/public ./frontend/digichat/public
-COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/scripts/trusted-proxy-server.mjs ./frontend/digichat/scripts/trusted-proxy-server.mjs
-COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/drizzle ./frontend/digichat/drizzle
+COPY --from=builder --chown=nextjs:nodejs /app/cloudflare/digichat/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/cloudflare/digichat/.next/static ./cloudflare/digichat/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/cloudflare/digichat/public ./cloudflare/digichat/public
+COPY --from=builder --chown=nextjs:nodejs /app/cloudflare/digichat/scripts/trusted-proxy-server.mjs ./cloudflare/digichat/scripts/trusted-proxy-server.mjs
+COPY --from=builder --chown=nextjs:nodejs /app/cloudflare/digichat/drizzle ./cloudflare/digichat/drizzle
 COPY --from=builder /tmp/digichat-version /etc/digichat-version
 # Empty when image_vars/--build-arg is omitted; trusted-proxy then reads /etc/digichat-version.
 ARG DIGICHAT_VERSION
@@ -62,4 +62,4 @@ USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-CMD ["node", "frontend/digichat/scripts/trusted-proxy-server.mjs"]
+CMD ["node", "cloudflare/digichat/scripts/trusted-proxy-server.mjs"]

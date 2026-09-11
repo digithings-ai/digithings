@@ -4,7 +4,7 @@ Copy one of these to the container bind-mount (default
 `DIGICHAT_CONFIG_PATH=/app/config/digichat.yaml`). Overlay secrets via env
 (`DIGICHAT_EMBED_TOKEN`, `DIGICHAT_HOST_<SLUG>_TOKEN`).
 
-Canonical copies live in `frontend/digichat/config/examples/`:
+Canonical copies live in `cloudflare/digichat/config/examples/`:
 
 - `digithings-ai-embed.yaml` — digithings.ai public embed
 - `occ-embed.yaml` — OCC corpus embed

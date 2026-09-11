@@ -43,6 +43,7 @@ on:
           - digikey
           - digigraph
           - digiquant
+          - digiquant-mcp
           - digisearch
           - digismith
           - digivault
@@ -72,6 +73,7 @@ jobs:
               {"service": "digikey", "dockerfile": "digikey/Dockerfile", "build_args": ""},
               {"service": "digigraph", "dockerfile": "digigraph/Dockerfile", "build_args": ""},
               {"service": "digiquant", "dockerfile": "digiquant/Dockerfile", "build_args": "NAUTILUS=1"},
+              {"service": "digiquant-mcp", "dockerfile": "digiquant/Dockerfile.mcp", "build_args": "", "version_from": "digiquant"},
               {"service": "digisearch", "dockerfile": "digisearch/Dockerfile", "build_args": ""},
               {"service": "digismith", "dockerfile": "digismith/Dockerfile", "build_args": ""},
               {"service": "digivault", "dockerfile": "digivault/Dockerfile", "build_args": ""},
@@ -105,7 +107,7 @@ jobs:
       - name: Read package version
         id: version
         run: |
-          ver=$(python3 -c "import tomllib,pathlib; p=pathlib.Path('${{ matrix.service }}/pyproject.toml'); print(tomllib.loads(p.read_text())['project']['version'])")
+          ver=$(python3 -c "import tomllib,pathlib; p=pathlib.Path('${{ matrix.version_from || matrix.service }}/pyproject.toml'); print(tomllib.loads(p.read_text())['project']['version'])")
           echo "version=$ver" >> "$GITHUB_OUTPUT"
           echo "short_sha=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
 

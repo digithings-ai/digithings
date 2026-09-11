@@ -21,7 +21,7 @@ docker pull ghcr.io/digithings-ai/digichat:v0.9.3
 
 - Git tag: `digichat-vX.Y.Z`
 - GHCR image: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (currently published through `v0.9.3`)
-- Changelog: `frontend/digichat/CHANGELOG.md`
+- Changelog: `cloudflare/digichat/CHANGELOG.md`
 - Pin a published tag — do not assume a version exists on GHCR until the digichat release workflow has published it from `main`.
 
 ### Profiles

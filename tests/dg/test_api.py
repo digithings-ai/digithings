@@ -335,7 +335,10 @@ class TestOpenAICompatible:
         assert "<details>" not in body
         assert "<thinking>" not in body
         assert "Tool call" not in body
-        assert "internal chain of thought" not in body
+        # digichat always sets X-Suppress-Tool-Stream; reasoning still reaches
+        # the BFF as reasoning_content (not Open WebUI <thinking> chrome).
+        assert "internal chain of thought" in body
+        assert "reasoning_content" in body
         assert "Final" in body and "here" in body
 
     def test_chat_completions_stream_plain_format_opts_out_of_openwebui(

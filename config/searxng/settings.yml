@@ -1,0 +1,29 @@
+# searxng sidecar settings for digisearch proprietary web search (#3853).
+# Mounted read-only at /etc/searxng/settings.yml (see docker-compose.yml).
+# JSON output must stay enabled: the searxng provider calls /search?format=json.
+use_default_settings:
+  engines:
+    keep_only:
+      - wikipedia
+      - duckduckgo
+      - bing
+      - mojeek
+
+general:
+  instance_name: "digi searxng"
+
+server:
+  # Dev default only — operators: replace before exposing beyond loopback.
+  secret_key: "dev-only-change-me-before-production"
+  bind_address: "0.0.0.0"
+  port: 8080
+  limiter: true
+  image_proxy: true
+
+search:
+  formats:
+    - html
+    - json
+
+redis:
+  url: redis://valkey:6379/0

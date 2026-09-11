@@ -11,7 +11,7 @@
 
 ## Goal
 
-digiquant.io serves the content in `frontend/digiquant/` (post-rename; currently `frontend/digiquant/`). GitHub Pages only supports one custom domain per repo, and `digithings-ai/digithings` already owns the `digithings.ai` slot. Solution: a thin `digithings-ai/digiquant-web` publish repo that Pages serves as `digiquant.io`, fed by a deploy workflow in the monorepo.
+digiquant.io serves the content in `cloudflare/digiquant/` (post-rename; currently `cloudflare/digiquant/`). GitHub Pages only supports one custom domain per repo, and `digithings-ai/digithings` already owns the `digithings.ai` slot. Solution: a thin `digithings-ai/digiquant-web` publish repo that Pages serves as `digiquant.io`, fed by a deploy workflow in the monorepo.
 
 Blocker-removal for epic #174 (live website demos) and user-stated P0.
 
@@ -28,22 +28,22 @@ Blocker-removal for epic #174 (live website demos) and user-stated P0.
 - [ ] HTTPS enforced + cert issued by GH (wait for propagation; verify via `curl -I https://digiquant.io`).
 
 ### Sync workflow (in monorepo)
-- [ ] `.github/workflows/deploy-digiquant.yml` added. Triggers: `push` to `develop` touching `frontend/digiquant/**` or `frontend/digiweb/design/**`, plus `workflow_dispatch`.
-- [ ] Builds the same dist shape as `static.yml` but from `frontend/digiquant/`:
-  - `dist/` ← `frontend/digiquant/.`
-  - `dist/design/` ← `frontend/digiweb/design/`
+- [ ] `.github/workflows/deploy-digiquant.yml` added. Triggers: `push` to `develop` touching `cloudflare/digiquant/**` or `cloudflare/digiweb/design/**`, plus `workflow_dispatch`.
+- [ ] Builds the same dist shape as `static.yml` but from `cloudflare/digiquant/`:
+  - `dist/` ← `cloudflare/digiquant/.`
+  - `dist/design/` ← `cloudflare/digiweb/design/`
 - [ ] Pushes `dist/` to `digithings-ai/digiquant-web` `main` via a deploy key or PAT stored as monorepo secret `DIGIQUANT_WEB_DEPLOY_TOKEN`. Commit message references the source SHA.
 - [ ] Workflow runs cleanly on a `workflow_dispatch` before merge.
 
 ### Verification
-- [ ] `https://digiquant.io` serves the `frontend/digiquant/` content end-to-end with design assets loading.
+- [ ] `https://digiquant.io` serves the `cloudflare/digiquant/` content end-to-end with design assets loading.
 - [ ] `https://www.digiquant.io` redirects/serves correctly.
-- [ ] Pushing a trivial change to `frontend/digiquant/` on `develop` triggers a new deploy within ~5 minutes.
+- [ ] Pushing a trivial change to `cloudflare/digiquant/` on `develop` triggers a new deploy within ~5 minutes.
 
 ### Documentation
 - [ ] `CLAUDE.md` frontend-umbrella section notes the split-repo Pages setup for digiquant.io.
 - [ ] `docs/adr/0002-domain-unification.md` amended or a new ADR filed: "digiquant.io served from separate publish repo due to one-domain-per-repo Pages limit."
-- [ ] `frontend/digiquant/README.md` documents the deploy path so nobody wonders where the site comes from.
+- [ ] `cloudflare/digiquant/README.md` documents the deploy path so nobody wonders where the site comes from.
 
 ## Rejected alternatives
 

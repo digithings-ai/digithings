@@ -10,6 +10,7 @@ from unittest.mock import patch
 import digigraph.graph.graph as _graph_module
 import pytest
 from digigraph.graph import build_workflow_graph
+from digigraph.graph.mcp_checkpoint_redact import unwrap_checkpointer
 
 
 @pytest.fixture(autouse=False)
@@ -38,8 +39,9 @@ def test_checkpointer_defaults_to_sqlite_when_project_active(
     ckpt = _graph_module.get_checkpointer()
 
     assert ckpt is not None, "Expected a checkpointer, got None"
-    assert type(ckpt).__name__ == "SqliteSaver", (
-        f"Expected SqliteSaver when project active, got {type(ckpt).__name__!r}"
+    backend = unwrap_checkpointer(ckpt)
+    assert type(backend).__name__ == "SqliteSaver", (
+        f"Expected SqliteSaver when project active, got {type(backend).__name__!r}"
     )
 
 
@@ -53,9 +55,10 @@ def test_checkpointer_defaults_to_memory_without_project(monkeypatch, reset_chec
         ckpt = _graph_module.get_checkpointer()
 
     assert ckpt is not None, "Expected a checkpointer, got None"
-    # LangGraph >= 1.x aliases MemorySaver -> InMemorySaver
-    assert type(ckpt).__name__ in ("MemorySaver", "InMemorySaver"), (
-        f"Expected memory-based checkpointer without project, got {type(ckpt).__name__!r}"
+    # LangGraph >= 1.x aliases MemorySaver -> InMemorySaver; #3794 wraps for token redact
+    backend = unwrap_checkpointer(ckpt)
+    assert type(backend).__name__ in ("MemorySaver", "InMemorySaver"), (
+        f"Expected memory-based checkpointer without project, got {type(backend).__name__!r}"
     )
 
 
@@ -70,9 +73,10 @@ def test_checkpointer_env_overrides_project_default(tmp_path, monkeypatch, reset
     ckpt = _graph_module.get_checkpointer()
 
     assert ckpt is not None, "Expected a checkpointer, got None"
-    # LangGraph >= 1.x aliases MemorySaver -> InMemorySaver
-    assert type(ckpt).__name__ in ("MemorySaver", "InMemorySaver"), (
-        f"Expected memory-based checkpointer (env override), got {type(ckpt).__name__!r}"
+    # LangGraph >= 1.x aliases MemorySaver -> InMemorySaver; #3794 wraps for token redact
+    backend = unwrap_checkpointer(ckpt)
+    assert type(backend).__name__ in ("MemorySaver", "InMemorySaver"), (
+        f"Expected memory-based checkpointer (env override), got {type(backend).__name__!r}"
     )
 
 
@@ -108,9 +112,10 @@ def test_graph_research_returns_error_when_llm_raises() -> None:
         out = g.invoke({"prompt": "stat arb tech"}, config={"configurable": {"thread_id": "test"}})
     assert out.get("strategy_name") is None
     assert out.get("research_note") == "error"
-    # Raw exception text is not streamed to clients (may include Compose DNS names).
-    assert out.get("error") == "Research failed. Please try again shortly."
-    assert "unavailable" not in str(out.get("error", ""))
+    # Raw Compose DNS is not streamed; provider/API text is.
+    assert out.get("error_code") == "llm_error"
+    assert "Research failed" not in str(out.get("error", ""))
+    assert "unavailable" in str(out.get("error", ""))
 
 
 @pytest.mark.unit
@@ -181,7 +186,7 @@ def test_postgres_checkpointer_conninfo_carries_connection_bounds(
     pytest.importorskip("psycopg")
     monkeypatch.setenv("DIGI_CHECKPOINTER", "postgres")
     monkeypatch.setenv(
-        "DIGI_CHECKPOINTER_POSTGRES_URI", "postgresql://u:p@db.example.test:5432/postgres"
+        "CORE_POSTGRES_URI", "postgresql://u:p@db.example.test:5432/postgres"
     )
 
     ckpt = _graph_module.get_checkpointer()
@@ -210,7 +215,7 @@ def test_bounded_conn_string_accepts_keyword_value_form():
 
 @pytest.mark.unit
 def test_bounded_conn_string_preserves_operator_overrides():
-    """A value already in DIGI_CHECKPOINTER_POSTGRES_URI wins — that env var is the
+    """A value already in CORE_POSTGRES_URI wins — that env var is the
     documented escape hatch, so the defaults must never overwrite it."""
     pytest.importorskip("psycopg")
     out = _graph_module._bounded_conn_string(

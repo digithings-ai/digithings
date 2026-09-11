@@ -3,9 +3,6 @@ type: service-architecture
 title: digivault Architecture
 description: Vault design of digivault — pure core library versus thin service layer, module map, and safety invariants.
 tags: [digivault, vault, markdown, architecture]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-a18bc9b1229d0282f121b666
     resource: repo://digivault/AGENTS.md
@@ -16,6 +13,9 @@ sources:
   - id: openwiki-source-88d7df185e0425784adb4684
     resource: repo://digivault/src/digivault/models.py
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digivault Architecture

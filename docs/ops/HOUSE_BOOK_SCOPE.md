@@ -96,7 +96,7 @@ script is house-owned).
 ## Related
 
 - Contracts: `digiquant/src/digiquant/dashboard/tenancy.py`
-- Dashboard helper: `frontend/dashboard/lib/house-workspace.ts`
+- Dashboard helper: `cloudflare/dashboard/lib/house-workspace.ts`
 - Schema / RLS notes: `digiquant/supabase/SCHEMA.md` (migrations 096–113)
 - Settings / APP_URL paths: `digiquant/supabase/functions/_shared/app-url.ts`
   (`APP_URL` = site origin only; paths append `/dashboard/...`)

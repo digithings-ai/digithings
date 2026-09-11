@@ -4,7 +4,7 @@ WHAT WENT WRONG. `@tailwindcss/oxide` declares twelve platform `optionalDependen
 but the root lock carried `oxide-darwin-arm64` alone — every Linux entry was missing. So
 `npm ci` put no Linux oxide binary in the tree, and six build files papered over it by
 hand-installing `@tailwindcss/oxide-linux-x64-{gnu,musl}`: three CI lanes, both Cloudflare
-Pages build scripts, and `frontend/digichat/Dockerfile`. Their comments described the gap
+Pages build scripts, and `cloudflare/digichat/Dockerfile`. Their comments described the gap
 as intrinsic ("the one native tree the root lock cannot supply"). It was not — it was a
 truncated lock, repaired by grafting the missing entries at their locked versions.
 
@@ -137,7 +137,7 @@ def test_the_bindings_are_not_hand_installed_anywhere() -> None:
         REPO_ROOT / ".github" / "workflows" / "test-dashboard.yml",
         REPO_ROOT / "scripts" / "build-digithings.sh",
         REPO_ROOT / "scripts" / "build-digiquant.sh",
-        REPO_ROOT / "frontend" / "digichat" / "Dockerfile",
+        REPO_ROOT / "cloudflare" / "digichat" / "Dockerfile",
     ]
     for site in sites:
         assert site.exists(), f"{site} moved — update this guard"

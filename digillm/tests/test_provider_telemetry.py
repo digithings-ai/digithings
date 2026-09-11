@@ -844,9 +844,9 @@ def test_stream_callback_failure_is_not_misattributed_to_provider() -> None:
     calls = [record for record in records if isinstance(record, ProviderCallRecord)]
     assert caught.value is failure
     assert len(attempts) == 1
-    assert attempts[0].outcome is ProviderAttemptOutcome.CANCELLED
-    assert attempts[0].error_type is None
+    # Consumer/decode errors during chunk handling are FAILED, not CANCELLED (#3788).
+    assert attempts[0].outcome is ProviderAttemptOutcome.FAILED
+    assert attempts[0].error_type == "RuntimeError"
     assert len(calls) == 1
-    assert calls[0].outcome is ProviderCallOutcome.CANCELLED
-    assert calls[0].no_artifact_reason is NoArtifactReason.CALL_CANCELLED
-    assert calls[0].error_type is None
+    assert calls[0].outcome is ProviderCallOutcome.FAILED
+    assert calls[0].error_type == "RuntimeError"

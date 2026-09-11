@@ -9,7 +9,7 @@ on:
     branches:
       - main
     paths:
-      - "frontend/digichat/**"
+      - "cloudflare/digichat/**"
   workflow_dispatch:
 
 concurrency:
@@ -35,7 +35,7 @@ jobs:
 
       - name: Read digichat version
         id: version
-        run: echo "version=$(jq -r .version frontend/digichat/package.json)" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(jq -r .version cloudflare/digichat/package.json)" >> "$GITHUB_OUTPUT"
 
       - name: Check if this version is already published
         id: check
@@ -53,7 +53,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: frontend/digichat/Dockerfile
+          file: cloudflare/digichat/Dockerfile
           push: true
           tags: |
             ghcr.io/digithings-ai/digichat:v${{ steps.version.outputs.version }}

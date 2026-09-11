@@ -136,14 +136,14 @@ Plugins (.opencode/plugins or npm)
 
 | Layer | Location | Notes |
 |-------|----------|--------|
-| BFF | `frontend/digichat` | Next.js 16; browser never holds digigraph JWT |
-| Shared UI | `frontend/digichat-ui` | `DigiChatSession`, activity rows, slash parser |
+| BFF | `cloudflare/digichat` | Next.js 16; browser never holds digigraph JWT |
+| Shared UI | `cloudflare/digichat-ui` | `DigiChatSession`, activity rows, slash parser |
 | Slash | `slash-commands.ts` | `/search`→`digisearch`, `/docs`→`digivault_search_notes`, `/help`, `/new`, `/lang` |
 | Force tools | BFF `X-Digi-Force-Tool` | Send-only; embed + app shell |
 | Backends | digigraph \| Foundry | Adapters only; digivault/digisearch are **digigraph tools**, not digichat HTTP backends |
 | Auth | Auth.js + digichat session | Machine keys hashed; `requireDigiChatAuth()` |
 
-See: [`frontend/digichat/AGENTS.md`](../../frontend/digichat/AGENTS.md), [`docs/architecture/digichat-modular-frontend.md`](digichat-modular-frontend.md).
+See: [`cloudflare/digichat/AGENTS.md`](../../cloudflare/digichat/AGENTS.md), [`docs/architecture/digichat-modular-frontend.md`](digichat-modular-frontend.md).
 
 ### Duplicated effort vs OpenCode already solves
 
@@ -352,5 +352,5 @@ See §10. Outcome: spike report comment on #3568 + go/no-go for Phase 2.
 - OpenCode repo: https://github.com/anomalyco/opencode  
 - OpenCode docs: https://opencode.ai/docs/ (plugins, MCP, SDK)  
 - digichat modular frontend: [digichat-modular-frontend.md](digichat-modular-frontend.md)  
-- digichat-ui slash: `frontend/digichat-ui/src/slash-commands.ts`  
+- digichat-ui slash: `cloudflare/digichat-ui/src/slash-commands.ts`  
 - Issue: https://github.com/digithings-ai/digithings/issues/3568  
