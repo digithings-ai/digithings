@@ -35,7 +35,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-digithings-stack-cloudflare
+  # Per-run group: manual deploys may target different refs (inputs.ref), so the
+  # newest run is NOT a superset of what it displaces — cancel-in-progress would
+  # kill a running approved deploy. Unique-per-run groups never queue (#2541).
+  group: deploy-digithings-stack-cloudflare-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:

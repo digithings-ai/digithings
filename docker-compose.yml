@@ -418,7 +418,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - DIGIVAULT_ROOT=${DIGIVAULT_ROOT:-/data/vault}
-      - DIGIVAULT_MCP_HOST=0.0.0.0
+      # Loopback by default; set DIGIVAULT_MCP_HOST in .env for published-port access.
     volumes:
       - digivault_data:/data/vault
 
