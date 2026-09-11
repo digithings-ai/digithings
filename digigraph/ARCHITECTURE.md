@@ -661,21 +661,31 @@ before anything reaches the browser. Server-side, `mcp_http_headers()`
 typed HTTP path. The list-tools cache key fingerprints the token (never the
 raw value) and folds in the header name so switching auth schemes busts the
 cache. `is_allowed_mcp_url` refuses
-loopback, link-local, RFC1918/ULA, metadata, IPv4-mapped, decimal/hex IPv4
-literals, and DNS-rebinding suffixes (`nip.io` / `sslip.io` / `xip.io`) from the
-literal host string alone. That literal pre-filter is not sufficient on its own
-(#3879): an attacker-controlled hostname can pass it and then resolve to an
-internal address. Every Streamable HTTP connect therefore goes through an
-SSRF-safe httpcore backend (`_SsrfSafeNetworkBackend`, wired via
-`_mcp_http_client_factory`): the host is resolved to its A/AAAA records
-immediately before the socket connects, the connect is refused unless **every**
-resolved address passes the blocklist, and the socket is pinned to the validated
-IP so a later DNS answer cannot redirect it (no TOCTOU / rebinding). DNS failure
-fails closed. A bare label with no dot (`datatap-mcp`) is container-internal
-service discovery, not public DNS, so RFC1918/ULA is expected there and allowed
-— loopback, link-local and metadata addresses stay blocked either way. The
-refusal is raised as `McpAddressRejected` and logged as a warning, never
-swallowed. Visitor MCP is a BFF-proxied session overlay (`mcp.allowUserServers` in
+loopback, link-local, CGNAT (`100.64.0.0/10`), RFC1918/ULA, metadata,
+IPv4-mapped, decimal/hex IPv4 literals, and DNS-rebinding suffixes (`nip.io` /
+`sslip.io` / `xip.io`) from the literal host string alone. That literal
+pre-filter is not sufficient on its own (#3879): an attacker-controlled hostname
+can pass it and then resolve to an internal address. Every Streamable HTTP
+connect therefore goes through an SSRF-safe httpcore backend
+(`_SsrfSafeNetworkBackend`, wired via `_mcp_http_client_factory`): the host is
+resolved to its A/AAAA records immediately before the socket connects, the
+connect is refused unless **every** resolved address is globally routable, and
+the validated addresses are dialed in order without a second DNS lookup, so a
+later DNS answer cannot redirect it (no TOCTOU / rebinding) and a dual-stack
+answer still falls back across families. DNS failure and resolution timeout fail
+closed.
+
+**Dotless Docker names and the residual risk.** A bare label with no dot
+(`datatap-mcp`) cannot be a public DNS name, so the guard assumes it is
+container-internal service discovery and allows it to resolve into RFC1918/ULA.
+That is an assumption, not a proof: a public MCP server that 302-redirects to a
+dotless internal name, or a hostile search domain / `/etc/hosts` entry steering a
+dotless name, can still reach private space. Loopback, link-local, metadata and
+CGNAT are blocked for **every** name in every mode. To remove the assumption,
+set `DIGIGRAPH_MCP_PRIVATE_HOST_ALLOWLIST` (comma-separated hostnames): when set,
+**only** those names may resolve into private space (blank = none). The refusal
+is raised as `McpAddressRejected` and logged as a warning, never swallowed.
+Visitor MCP is a BFF-proxied session overlay (`mcp.allowUserServers` in
 digichat), not browser MCP / `@assistant-ui/react-mcp`. Session `session_*` tools
 are always appended so the model can change session prefs; the client applies
 them.
