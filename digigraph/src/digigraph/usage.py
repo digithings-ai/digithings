@@ -525,7 +525,7 @@ def detailed_usage_projection() -> dict[str, int | float | None]:
         for call in aggregate_calls
         if call.call_id in attempts_by_call
     ]
-    search_purposes = {CallPurpose.WEB_GROUNDING, CallPurpose.X_GROUNDING}
+    search_purposes = {CallPurpose.WEB_SEARCH, CallPurpose.X_SEARCH}
     llm_call_ids = {call.call_id for call in aggregate_calls if call.purpose not in search_purposes}
     llm_attempts = [attempt for attempt in successful_attempts if attempt.call_id in llm_call_ids]
     prompt_tokens = (
@@ -677,9 +677,9 @@ def snapshot() -> dict[str, Any]:
         calls = list(_CALLS)
     chat = [c for c in calls if c["kind"] == "chat"]
     search = [c for c in calls if c["kind"] in _SEARCH_KINDS]
-    prompt = sum(c["prompt_tokens"] for c in chat)
-    completion = sum(c["completion_tokens"] for c in chat)
-    cached = sum(c.get("cached_tokens", 0) for c in chat)
+    prompt = sum(c["prompt_tokens"] for c in chat + search)
+    completion = sum(c["completion_tokens"] for c in chat + search)
+    cached = sum(c.get("cached_tokens", 0) for c in chat + search)
     cost = sum(c.get("cost", 0.0) for c in calls)
     by_kind: dict[str, dict[str, float]] = {}
     for c in calls:

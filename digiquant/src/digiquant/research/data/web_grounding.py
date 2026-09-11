@@ -138,7 +138,7 @@ def call_web_search_tool(
 
 def fetch_web_grounding(
     *,
-    model: str,
+    model: str = "",
     segment: str,
     run_date: date | str,
     scope: str = "",

@@ -944,7 +944,8 @@ def seed_supabase_client(
 # patches the grounding tool boundary below to return this canned
 # {summary, sources, as_of} grounding (same shape as the phase7d pm-skill
 # fixture). Canned grounding lives only in tests/simulator — never in
-# production paths.
+# production paths. build_grounding needs no direct patch: it delegates to
+# the fetch functions above at call time.
 
 CANNED_WEB_GROUNDING: dict[str, Any] = {
     "summary": "- canned",

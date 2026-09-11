@@ -249,27 +249,20 @@ def build_grounding(
         except Exception as exc:  # degrade to tool-less rather than crash the phase
             logger.warning("research tools unavailable (%s); proceeding without them", exc)
     if ai_portfolios:
-        from digigraph.model_config import get_grounding_model
-
         from digiquant.research.data.ai_portfolios import fetch_ai_portfolio_grounding
 
-        grounding = get_grounding_model(segment=segment or "ai-portfolios")
-        if grounding:
-            web_grounding = fetch_ai_portfolio_grounding(model=grounding, run_date=run_date)
+        web_grounding = fetch_ai_portfolio_grounding(run_date=run_date)
     elif live_search:
-        from digigraph.model_config import get_grounding_model
-
-        grounding = get_grounding_model(segment=segment or "research")
         if live_search_is_fallback and not _ingested_macro_stale(run_date):
             logger.info(
                 "%s: ingested macro layer fresh — grounded-by-ingest skip, no paid web_search",
                 segment or "macro",
             )
-        elif grounding:
+        else:
             from digiquant.research.data.web_grounding import fetch_web_grounding
 
             web_grounding = fetch_web_grounding(
-                model=grounding, segment=segment or "research", run_date=run_date, scope=scope
+                segment=segment or "research", run_date=run_date, scope=scope
             )
     return tools, execute_tool, web_grounding
 

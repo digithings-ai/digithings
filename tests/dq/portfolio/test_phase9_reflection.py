@@ -51,6 +51,33 @@ from tests.dq.research.test_supabase_io import FakeSupabaseClient
 _RUN_ID = UUID("11111111-2222-3333-4444-555555555555")
 
 
+@pytest.fixture(autouse=True)
+def _stub_web_grounding_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub the tool-only grounding boundary with canned grounding (#3859).
+
+    These tests assert node contracts and artifacts, never live search —
+    the requested-search-must-succeed contract is covered by the grounding
+    unit tests, so nodes get canned {summary, sources, as_of} grounding.
+    """
+    from digiquant.research.testing.simulator import CANNED_WEB_GROUNDING
+
+    monkeypatch.setattr(
+        "digiquant.research.data.web_grounding.fetch_web_grounding",
+        lambda **_kwargs: dict(CANNED_WEB_GROUNDING),
+    )
+    monkeypatch.setattr(
+        "digiquant.research.data.web_grounding.call_web_search_tool",
+        lambda **_kwargs: {
+            "summary": str(CANNED_WEB_GROUNDING["summary"]),
+            "sources": list(CANNED_WEB_GROUNDING["sources"]),
+        },
+    )
+    monkeypatch.setattr(
+        "digiquant.research.data.ai_portfolios.fetch_ai_portfolio_grounding",
+        lambda **_kwargs: dict(CANNED_WEB_GROUNDING),
+    )
+
+
 def _seed_state_with_analysts(
     *,
     watchlist: tuple[str, ...] = ("AAPL", "MSFT"),

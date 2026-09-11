@@ -1,4 +1,8 @@
-"""Cost-split lock-in: web-search tool vs grounding telemetry stay distinct (#3853)."""
+"""Cost-split lock-in: web-search tool telemetry stays on the tool purpose (#3859).
+
+Grounding synthesis is retired — there is no ``WEB_GROUNDING`` rewrite purpose
+anymore. The tool path records ``WEB_SEARCH`` only.
+"""
 
 from __future__ import annotations
 
@@ -17,12 +21,18 @@ from digillm.telemetry import CallPurpose
 
 def test_purposes_exist() -> None:
     assert CallPurpose.WEB_SEARCH.value == "web_search"
-    assert CallPurpose.WEB_GROUNDING.value == "web_grounding"
+    assert CallPurpose.X_SEARCH.value == "x_search"
 
 
-def test_tool_and_rewrite_purposes_stay_distinct() -> None:
-    assert CallPurpose.WEB_SEARCH is not CallPurpose.WEB_GROUNDING
-    assert CallPurpose.WEB_SEARCH.value != CallPurpose.WEB_GROUNDING.value
+def test_tool_purposes_stay_distinct() -> None:
+    assert CallPurpose.WEB_SEARCH is not CallPurpose.X_SEARCH
+    assert CallPurpose.WEB_SEARCH.value != CallPurpose.X_SEARCH.value
+
+
+def test_no_grounding_rewrite_purpose() -> None:
+    """The retired synthesis purposes must not come back."""
+    assert not hasattr(CallPurpose, "WEB_GROUNDING")
+    assert not hasattr(CallPurpose, "X_GROUNDING")
 
 
 @pytest.fixture()

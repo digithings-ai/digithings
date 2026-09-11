@@ -20,17 +20,25 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import (
     Any,  # score:allow untyped any — heterogeneous LLM tool/step payloads
     Iterator,
 )
+from uuid import uuid4
 
 from digillm import (  # telemetry + message types for the wrappers below
+    CacheStatus,
     CallPurpose,
     ChatCompletionMessage,
     JsonSchemaResponseFormat,
     NoArtifactReason,
+    ProviderAttemptOutcome,
+    ProviderAttemptRecord,
     ProviderCallContextHandle,
+    ProviderCallOutcome,
+    ProviderCallRecord,
+    RetryReason,
     ToolArguments,
     ToolDefinition,
 )
@@ -260,4 +268,56 @@ def digifetch_web_search(
     if not rows:
         raise RuntimeError(f"web_search tool returned no rows for query={query!r}")
     summary = "\n".join(f"- {r.get('content', '')} ({r.get('doc_id', '')})" for r in rows)
-    return summary, [r.get("doc_id", "") for r in rows]
+    sources = [r.get("doc_id", "") for r in rows]
+    _usage.record(kind="web_search", model="digisearch:web_search", sources=len(sources))
+    _emit_web_search_telemetry(source_count=len(sources))
+    return summary, sources
+
+
+def _emit_web_search_telemetry(*, source_count: int) -> None:
+    """Emit the detailed provider-call records for one tool-only web_search call.
+
+    No-op unless a usage run is active. The tool path has no LLM attempt, so the
+    attempt carries zero tokens and no cost — the summary/counts still reconcile
+    with :func:`digigraph.usage.snapshot` while ``cost_usd`` stays unavailable
+    (never fabricated).
+    """
+    del source_count
+    node_run_id, _metadata = _usage.provider_call_metadata()
+    if node_run_id is None:
+        node_run_id = uuid4()
+    now = datetime.now(tz=timezone.utc)
+    call_id = uuid4()
+    _usage.observe_telemetry(
+        ProviderCallRecord(
+            call_id=call_id,
+            node_run_id=node_run_id,
+            parent_call_id=None,
+            purpose=CallPurpose.WEB_SEARCH,
+            requested_model="digisearch:web_search",
+            cache_status=CacheStatus.BYPASSED,
+            outcome=ProviderCallOutcome.SUCCEEDED,
+            attempt_count=1,
+            artifacts=(),
+            no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+            started_at=now,
+            finished_at=now,
+        )
+    )
+    _usage.observe_telemetry(
+        ProviderAttemptRecord(
+            attempt_id=uuid4(),
+            call_id=call_id,
+            attempt_number=1,
+            provider="digisearch",
+            requested_model="digisearch:web_search",
+            served_model=None,
+            outcome=ProviderAttemptOutcome.SUCCEEDED,
+            retry_reason=RetryReason.NOT_APPLICABLE,
+            prompt_tokens=0,
+            completion_tokens=0,
+            cost_usd=None,
+            started_at=now,
+            finished_at=now,
+        )
+    )

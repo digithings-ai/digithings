@@ -41,6 +41,33 @@ _BASE_ID = UUID("11111111-1111-5111-8111-111111111111")
 _EFF_ID = UUID("33333333-3333-5333-8333-333333333333")
 
 
+@pytest.fixture(autouse=True)
+def _stub_web_grounding_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub the tool-only grounding boundary with canned grounding (#3859).
+
+    These tests assert node contracts and artifacts, never live search —
+    the requested-search-must-succeed contract is covered by the grounding
+    unit tests, so nodes get canned {summary, sources, as_of} grounding.
+    """
+    from digiquant.research.testing.simulator import CANNED_WEB_GROUNDING
+
+    monkeypatch.setattr(
+        "digiquant.research.data.web_grounding.fetch_web_grounding",
+        lambda **_kwargs: dict(CANNED_WEB_GROUNDING),
+    )
+    monkeypatch.setattr(
+        "digiquant.research.data.web_grounding.call_web_search_tool",
+        lambda **_kwargs: {
+            "summary": str(CANNED_WEB_GROUNDING["summary"]),
+            "sources": list(CANNED_WEB_GROUNDING["sources"]),
+        },
+    )
+    monkeypatch.setattr(
+        "digiquant.research.data.ai_portfolios.fetch_ai_portfolio_grounding",
+        lambda **_kwargs: dict(CANNED_WEB_GROUNDING),
+    )
+
+
 def _terms(**over: object) -> ForecastTerms:
     base: dict[str, object] = dict(
         horizon_sessions=21,

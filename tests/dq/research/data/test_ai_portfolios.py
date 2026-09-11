@@ -12,6 +12,9 @@ from datetime import date
 from typing import Any
 
 import pytest
+
+pytest.importorskip("openai")
+
 from digiquant.research.data import ai_portfolios
 from digiquant.research.data.web_grounding import DashboardWebSearchError
 

@@ -544,14 +544,13 @@ preflight (freshness probe; no pre-loaded values)
 
 - **Two data tools, one query layer** (`dashboard/research/data/queries.py`): exposed both in-process (`data/tools.py` → `DATA_TOOLS` + dispatcher, consumed by `build_grounding` in `phases/_node_factory.py`) and over MCP (`digiquant_get_price_technicals` / `digiquant_get_macro_series` in `mcp_server.py`).
 - **Per-phase flags** on `SegmentNodeSpec`: `use_data_tools` (macro, asset-classes, equity, sectors) and `live_search` (macro, all alt-/inst-, international). Equity/sector nodes are bespoke and call `build_grounding` directly.
-- **Web grounding** (`data/web_grounding.py` → `digigraph.llm_client.openrouter_web_search`):
-  a read-only **pre-pass** on a **web-search-capable** model from
-  `get_grounding_model()` (Perplexity / `:online` — provider built-in search).
-  Domain preferences from `config/search_domains.yaml` are folded into the
-  natural-language query (native search has no Exa allowlist tool params).
-  The digillm Exa `openrouter:web_search` server tool remains a **toolkit**
-  fallback for non-native models and is **not** used by dashboard (#2567).
-  Any search error degrades to ungrounded research (no crash).
+- **Web grounding** (`data/web_grounding.py` → first-party digisearch
+  `web_search` tool): a read-only **pre-pass** over the tool, with domain
+  scoping from `config/search_domains.yaml` passed straight through as the
+  tool's `include_domains` / `exclude_domains` / `max_results`. There is no
+  synthesis fallback: a requested search must succeed or raise
+  `DashboardWebSearchError` — the run aborts rather than reasoning
+  ungrounded (#3859).
 - **Env gate**: `DIGIQUANT_RESEARCH_DATA_TOOLS` (default on; set `0`/`false` to disable all tool grounding). If Supabase is unavailable, `build_grounding` degrades to tool-less rather than crashing the phase.
 
 Function-tools and `response_format=json_schema` are mutually exclusive in one OpenAI-API call, so the structured-output contract is preserved by prompt + Pydantic validate-retry rather than by `response_format` on the tool path.

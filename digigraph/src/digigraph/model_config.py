@@ -54,7 +54,6 @@ _MODEL_MODES_LOAD_ERRORS = (OSError, yaml.YAMLError)
 
 # Open-weight-only policy for dashboard / OpenRouter. Blocks frontier providers and IDs.
 _FLAGSHIP_PROVIDER_PREFIXES = frozenset({"openai/", "anthropic/"})
-_FLAGSHIP_ALLOWED_POOL_PREFIXES = frozenset({"openai/", "anthropic/", "openai/*", "anthropic/*"})
 _FLAGSHIP_MODEL_ID_MARKERS = frozenset(
     {
         "gpt-5",
@@ -73,13 +72,6 @@ _FLAGSHIP_MODEL_ID_MARKERS = frozenset(
         "claude-4",
     }
 )
-_OPEN_WEIGHT_ALLOWED_MODELS = (
-    "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*,perplexity/*"
-)
-_BALANCED_ALLOWED_MODELS = (
-    "deepseek/*,meta-llama/*,mistralai/*,google/*,x-ai/*,openai/gpt-5.6-luna*,perplexity/*"
-)
-_DEFAULT_COST_QUALITY_TRADEOFF = 10
 # Mid-tier OpenAI/Anthropic slugs permitted on ``balanced`` (not ``cheap``). Google and
 # xAI models never reach this check — they're never classified flagship (see
 # _FLAGSHIP_PROVIDER_PREFIXES / _FLAGSHIP_MODEL_ID_MARKERS above), so they're already
@@ -221,13 +213,6 @@ class ModelModesConfig(BaseModel):
     phase_models: dict[str, str] = Field(default_factory=dict)
 
 
-class DigiquantOpenRouterTierConfig(BaseModel):
-    """OpenRouter env knobs for one dashboard model tier (or global defaults)."""
-
-    allowed_models: str = _OPEN_WEIGHT_ALLOWED_MODELS
-    cost_quality_tradeoff: int = _DEFAULT_COST_QUALITY_TRADEOFF
-
-
 class DigiquantTierConfig(BaseModel):
     """One dashboard cost/quality tier (cheap / balanced / quality)."""
 
@@ -235,11 +220,6 @@ class DigiquantTierConfig(BaseModel):
     models: dict[str, str] = Field(default_factory=dict)
     # Per-capability pools; selection is stable-hash by phase slug (no single-model pins).
     allowed_models: dict[str, list[str]] = Field(default_factory=dict)
-    # Web-search grounding pool; defaults to the union of ``allowed_models`` when empty.
-    web_search_models: list[str] = Field(default_factory=list)
-    # Legacy single grounding pin — ignored when ``web_search_models`` is set.
-    grounding_model: str = ""
-    openrouter: DigiquantOpenRouterTierConfig = Field(default_factory=DigiquantOpenRouterTierConfig)
 
     @model_validator(mode="after")
     def _migrate_legacy_models(self) -> DigiquantTierConfig:
@@ -256,9 +236,6 @@ class DigiquantModelsConfig(BaseModel):
     """Parsed ``digiquant_models.yaml`` — centralized research/portfolio model policy."""
 
     default_tier: str = "cheap"
-    openrouter_defaults: DigiquantOpenRouterTierConfig = Field(
-        default_factory=DigiquantOpenRouterTierConfig
-    )
     tiers: dict[str, DigiquantTierConfig] = Field(default_factory=dict)
     phase_capabilities: dict[str, str] = Field(default_factory=dict)
     phase_capability_prefixes: dict[str, str] = Field(default_factory=dict)
@@ -359,19 +336,6 @@ def is_flagship_openrouter_model(model: str) -> bool:
     return False
 
 
-def is_flagship_allowed_models_entry(entry: str) -> bool:
-    """True when an ``allowed_models`` pool entry would admit frontier models."""
-    normalized = entry.strip().lower()
-    if not normalized:
-        return False
-    if normalized in _FLAGSHIP_ALLOWED_POOL_PREFIXES:
-        return True
-    for prefix in _FLAGSHIP_PROVIDER_PREFIXES:
-        if normalized.startswith(prefix):
-            return True
-    return is_flagship_openrouter_model(normalized)
-
-
 def is_native_search_only_model(model: str) -> bool:
     """True for providers that ground via native search but lack function tools."""
     slug = _openrouter_slug(model).strip().lower()
@@ -399,24 +363,6 @@ def tier_allows_phase_model(model: str, tier: str) -> bool:
     return False
 
 
-def sanitize_allowed_models(allowed_models: str, *, tier: str = "cheap") -> str:
-    """Drop disallowed entries from a comma-separated OpenRouter allowed_models string."""
-    if tier == "quality":
-        stripped = allowed_models.strip()
-        return stripped if stripped else _OPEN_WEIGHT_ALLOWED_MODELS
-    entries = [part.strip() for part in allowed_models.split(",") if part.strip()]
-    if tier == "balanced":
-        kept = [
-            entry
-            for entry in entries
-            if not is_flagship_allowed_models_entry(entry)
-            or entry.lower().startswith(("openai/gpt-5.6-luna", "google/", "x-ai/"))
-        ]
-        return ",".join(kept) if kept else _BALANCED_ALLOWED_MODELS
-    kept = [entry for entry in entries if not is_flagship_allowed_models_entry(entry)]
-    return ",".join(kept) if kept else _OPEN_WEIGHT_ALLOWED_MODELS
-
-
 def _warn_flagship_models_in_digiquant_config(cfg: DigiquantModelsConfig) -> None:
     """Log when digiquant_models.yaml pools a frontier model on a restricted tier."""
     for tier_name, tier_cfg in cfg.tiers.items():
@@ -433,12 +379,6 @@ def _warn_flagship_models_in_digiquant_config(cfg: DigiquantModelsConfig) -> Non
                         capability,
                         model,
                     )
-    pool = sanitize_allowed_models(cfg.openrouter_defaults.allowed_models, tier="cheap")
-    if pool != cfg.openrouter_defaults.allowed_models.strip():
-        logger.debug(
-            "dashboard_models openrouter_defaults sanitized for cheap tier to %r",
-            pool,
-        )
 
 
 def _phase_models_override(phase_slug: str, phase_models: dict[str, str]) -> str | None:
@@ -479,9 +419,10 @@ def is_tool_use_capable_model(model: str) -> bool:
     OpenRouter's built-in web plugin — it does **not** imply function-tool support. For
     open-weight models the ``:online`` endpoints reject function tools outright (404
     "No endpoints found that support tool use"), which is why pinning ``:online`` slugs in
-    phase pools broke the pipeline. Grounding is supplied by a separate web-search pre-pass
-    (:func:`get_grounding_model` over ``web_search_models``) that injects a ``web_grounding``
-    block into the prompt, so phase models never need ``:online`` themselves.
+    phase pools broke the pipeline. Grounding is supplied by a separate tool-only
+    web-search pre-pass (first-party digisearch ``web_search`` tool) that injects a
+    ``web_grounding`` block into the prompt, so phase models never need ``:online``
+    themselves.
 
     Therefore a model is tool-capable iff it is a plain (bare) OpenRouter slug that is not a
     native-search-only provider (perplexity/*) and does not carry the ``:online`` suffix.
@@ -489,37 +430,15 @@ def is_tool_use_capable_model(model: str) -> bool:
     slug = _openrouter_slug(model).strip().lower()
     if not slug or is_native_search_only_model(model):
         return False
-    # ``:online`` is a web-search variant, not a function-tool signal — route it via
-    # ``web_search_models`` grounding only, never phase/tool calls.
+    # ``:online`` is a web-search variant, not a function-tool signal — never phase/tool calls.
     if ":online" in slug:
         return False
     return True
 
 
-# #3660 house grounding synthesizers (digisearch / live_search retrieval first;
-# these LLMs only rewrite the retrieved context — not OpenRouter :online/sonar).
-_HOUSE_CI_GROUNDING_SYNTHESIS_SLUGS = frozenset(
-    {
-        "google/gemini-3.1-flash-lite",
-        "deepseek/deepseek-v4-flash",
-    }
-)
-
-
-def is_web_search_capable_model(model: str) -> bool:
-    """True when *model* may run digiquant grounding pre-passes.
-
-    Includes OpenRouter ``:online`` / perplexity native search, plus house CI
-    synthesis slugs used after in-house digisearch retrieval (#3660).
-    """
-    slug = _openrouter_slug(model).strip().lower()
-    if not slug:
-        return False
-    if is_native_search_only_model(model):
-        return True
-    if ":online" in slug:
-        return True
-    return slug in _HOUSE_CI_GROUNDING_SYNTHESIS_SLUGS
+# Tool-only grounding (#3859): the first-party digisearch ``web_search`` tool runs
+# first and must succeed or raise; there is no synthesis-model fallback, so no
+# grounding-model pool exists in this module.
 
 
 def _pick_from_pool(pool: list[str], key: str) -> str:
@@ -540,29 +459,6 @@ def _tier_capability_pool(tier_cfg: DigiquantTierConfig, capability: str) -> lis
     return pool
 
 
-def _tier_web_search_pool(tier_cfg: DigiquantTierConfig) -> list[str]:
-    # Explicit ``web_search_models`` wins (#3660): house CI synthesis pins
-    # (``gemini-3.1-flash-lite`` / ``deepseek-v4-flash``) are not ``:online`` /
-    # perplexity, but they are the configured synthesizers after digisearch
-    # retrieval. Do not filter them with ``is_web_search_capable_model``.
-    if tier_cfg.web_search_models:
-        return list(tier_cfg.web_search_models)
-    seen: set[str] = set()
-    merged: list[str] = []
-    for capability in ("research", "extraction", "reasoning"):
-        for model in _tier_capability_pool(tier_cfg, capability):
-            if model not in seen:
-                seen.add(model)
-                merged.append(model)
-    if merged:
-        pool = merged
-    elif tier_cfg.grounding_model:
-        pool = [tier_cfg.grounding_model]
-    else:
-        pool = []
-    return [m for m in pool if is_web_search_capable_model(m)]
-
-
 def _model_for_digiquant_capability(capability: str, tier: str, phase_slug: str) -> str | None:
     if capability not in _VALID_CAPABILITIES:
         return None
@@ -575,23 +471,6 @@ def _model_for_digiquant_capability(capability: str, tier: str, phase_slug: str)
     if not pool:
         return None
     return _pick_from_pool(pool, phase_slug)
-
-
-def get_grounding_model(*, segment: str = "grounding") -> str | None:
-    """Return a model for digiquant grounding pre-passes.
-
-    When ``web_search_models`` is set (#3660), use that list as-is (house CI
-    synthesis after digisearch / live_search). Legacy fallbacks still filter to
-    ``perplexity/*`` / ``:online`` (#2567). Slugs are unprefixed OpenRouter-style
-    ids resolved through LiteLLM / Cheaper Inference (#3414).
-    """
-    tier_cfg = _load_digiquant_models().tiers.get(get_digiquant_tier())
-    if tier_cfg is None:
-        return None
-    pool = _tier_web_search_pool(tier_cfg)
-    if not pool:
-        return None
-    return _pick_from_pool(pool, segment)
 
 
 def _cheaperinference_house_preferred() -> bool:

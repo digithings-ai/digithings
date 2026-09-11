@@ -285,11 +285,9 @@ Per-document research deltas (`document_delta`, manifest) use the same **week an
 
 Target: **< $1/day** in xAI usage *without reducing capability* — trim
 redundancy and misallocated effort, never research breadth or freshness.
-Agentic searches dominate cost (built-in provider search on the tier's
-`web_search_models` pins — typically `perplexity/sonar` or `:online` variants,
-billed per that model's page; the `openrouter:web_search` Exa server tool is
-**$0.007**/request per [OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search)
-but unreachable from production pools), tokens are second.
+Agentic searches go through the first-party digisearch `web_search` tool
+(searxng sidecar with ddgs fallback); there are no provider-search pins and
+no synthesis fallback (#3859). Tokens are second.
 
 Capability-preserving reductions in place:
 
@@ -400,12 +398,12 @@ pools in `config/digiquant_models.yaml`, not by request knobs.
 Phases pass **pinned** model slugs (not `openrouter/auto`). Fail-fast:
 provider errors surface instead of substituting another model.
 
-**Web grounding (dashboard)** resolves via `get_grounding_model()` from the tier's
-`web_search_models` pool. House pools are CI synthesis models (`gemini-3.1-flash-lite`,
-`deepseek-v4-flash`) over in-house digisearch retrieval — not sonar / `:online`
-(#3660). Grounding synthesizes via plain completion over the tier pins; dashboard
-call sites do **not** pass Exa `engine` / `max_results`. Fail-fast: there is no
-preflight web-search ping — provider errors surface from the real run.
+**Web grounding (dashboard)** goes through the first-party digisearch
+`web_search` tool with domain scoping from `config/search_domains.yaml`
+passed straight through as tool params (#3859). There is no synthesis
+fallback: a requested search must succeed or raise `DashboardWebSearchError`.
+Fail-fast: there is no preflight web-search ping — provider errors surface
+from the real run.
 **Structured JSON** phases use pinned open-weight models with `strict:true` json_schema.
 
 Per-phase override: `config/model_modes.yaml` → `phase_models` — **frontier models are

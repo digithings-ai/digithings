@@ -12,6 +12,9 @@ from datetime import date
 from typing import Any
 
 import pytest
+
+pytest.importorskip("openai")
+
 from digiquant.research.data import web_grounding
 
 # Saved so the bearer-threading tests below exercise the real tool call (#3859 Task 2).

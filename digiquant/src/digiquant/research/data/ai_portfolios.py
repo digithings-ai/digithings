@@ -55,7 +55,7 @@ def _build_query(accounts: list[dict[str, Any]], run_date: date, recency_days: i
 
 def fetch_ai_portfolio_grounding(
     *,
-    model: str,
+    model: str = "",
     run_date: date,
 ) -> dict[str, Any]:
     """Return ``{"summary", "sources", "accounts", "as_of"}`` or raise.
