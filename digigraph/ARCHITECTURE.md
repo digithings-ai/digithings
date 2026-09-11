@@ -503,7 +503,7 @@ Process-wide singleton via `get_checkpointer()` in `graph/graph.py:108`:
 | unset + no project | `MemorySaver` (in-process dict) | Default standalone mode; lost on restart |
 | `memory` | `MemorySaver` (in-process dict) | Explicit; lost on restart |
 | `sqlite` | `SqliteSaver` | File path via `DIGI_CHECKPOINTER_SQLITE_URI` |
-| `postgres` | `PostgresSaver` | Connection string via `DIGI_CHECKPOINTER_POSTGRES_URI` |
+| `postgres` | `PostgresSaver` | Connection string via `CORE_POSTGRES_URI` |
 | `none` / `off` / `0` / `false` | None (no checkpointing) | Breaks multi-turn and thread APIs |
 
 **Project-mode default:** When `get_checkpointer()` is called and `DIGI_CHECKPOINTER` is unset, the function probes for an active project config via `_resolve_config_path()`. If a `digiproject.yaml` is found, it defaults to `sqlite` so multi-turn conversation state persists across HTTP requests. The env var always takes precedence over this auto-detection.
@@ -514,7 +514,7 @@ For **more than one digigraph replica** behind a load balancer, operators **must
 
 ```bash
 DIGI_CHECKPOINTER=postgres
-DIGI_CHECKPOINTER_POSTGRES_URI=postgresql://...
+CORE_POSTGRES_URI=postgresql://...
 ```
 
 `memory` and `sqlite` are single-process backends; checkpoints are not shared across pods. Postgres is the only supported shared store today. Per-thread advisory locking for concurrent writes on the same `thread_id` is still recommended (see §7.5). Install with `pip install digigraph[checkpoint-postgres]`.
@@ -547,7 +547,7 @@ Three properties that any other Postgres-checkpointer deployment should copy:
 | `connect_timeout` | `10` | establishing a connection |
 | `keepalives` / `keepalives_idle` / `keepalives_interval` / `keepalives_count` | `1` / `30` / `10` / `5` | an established-but-dead connection (~80s to detect) |
 
-It accepts either libpq spelling (`postgresql://` URI or `host=… dbname=…` keyword/value) via `psycopg.conninfo.make_conninfo`, and **any parameter already present in `DIGI_CHECKPOINTER_POSTGRES_URI` wins** — that env var is the override path. Missing psycopg or an unparseable conninfo returns the string unchanged with a warning: bounding a connection must never itself be why a process fails to start.
+It accepts either libpq spelling (`postgresql://` URI or `host=… dbname=…` keyword/value) via `psycopg.conninfo.make_conninfo`, and **any parameter already present in `CORE_POSTGRES_URI` wins** — that env var is the override path. Missing psycopg or an unparseable conninfo returns the string unchanged with a warning: bounding a connection must never itself be why a process fails to start.
 
 `statement_timeout` is deliberately **not** set. It is enforced server-side, so it cannot help when the network path is gone, and it risks aborting a legitimately slow write against a checkpoint table already at ~950 MB in production (#1758).
 
@@ -563,7 +563,7 @@ Timing is the only thing that changes: an unreachable Postgres already raised `p
 | `sqlite` | `SqliteSaver` (persistent, file-backed) | `InMemoryStore` (**not** persistent) |
 | `postgres` | `PostgresSaver` | `PostgresStore` (same conn string, reusing `_bounded_conn_string`'s connect-timeout/keepalive bounds) |
 
-LangGraph ships no first-class `Store` equivalent of `SqliteSaver`, so `sqlite` maps to `InMemoryStore` here — a documented, same-process choice, not a silent one: unlike `get_checkpointer()`'s sqlite path, **`DIGI_CHECKPOINTER=sqlite` gets no persistent cross-thread Store at all**. A response-language preference set under `sqlite` is lost on process restart and is never shared across replicas, even though the checkpointer itself (thread-scoped state) survives both. Only `DIGI_CHECKPOINTER=postgres` gets a Store that persists and is shared across replicas; every other setting (including sqlite) silently falls back to `InMemoryStore`, with a warning now logged for both failure paths that can produce that fallback under `postgres` (missing `langgraph-checkpoint-postgres` install, or `DIGI_CHECKPOINTER_POSTGRES_URI` unset).
+LangGraph ships no first-class `Store` equivalent of `SqliteSaver`, so `sqlite` maps to `InMemoryStore` here — a documented, same-process choice, not a silent one: unlike `get_checkpointer()`'s sqlite path, **`DIGI_CHECKPOINTER=sqlite` gets no persistent cross-thread Store at all**. A response-language preference set under `sqlite` is lost on process restart and is never shared across replicas, even though the checkpointer itself (thread-scoped state) survives both. Only `DIGI_CHECKPOINTER=postgres` gets a Store that persists and is shared across replicas; every other setting (including sqlite) silently falls back to `InMemoryStore`, with a warning now logged for both failure paths that can produce that fallback under `postgres` (missing `langgraph-checkpoint-postgres` install, or `CORE_POSTGRES_URI` unset).
 
 Today's realized impact is low: `DIGI_SUPERVISOR` defaults off, so the supervisor node (the only current Store reader/writer) does not run by default, and the Store holds nothing but a language preference even when it is on. See §6 for the Store's namespace-trust dependency on `digi_subject`.
 
@@ -1027,7 +1027,7 @@ digigraph:
 | `DIGI_PROJECT_CONFIG` | (empty) | Path to project YAML (optional) |
 | `DIGI_CHECKPOINTER` | `sqlite` when project active, else `memory` | Checkpointer backend: `memory` / `sqlite` / `postgres` / `none` |
 | `DIGI_CHECKPOINTER_SQLITE_URI` | `~/.digigraph/checkpoints.sqlite` | SQLite file path |
-| `DIGI_CHECKPOINTER_POSTGRES_URI` | (empty) | Postgres connection string |
+| `CORE_POSTGRES_URI` | (empty) | Postgres connection string |
 | `DIGIQUANT_URL` | `http://127.0.0.1:8001` when unset | digiquant base URL. Explicit empty string disables backtest routing (Profile A). |
 | `DIGIQUANT_DATA_DIR` | `/app/data` | Path to CSV files for backtests (required only when digiquant is enabled) |
 | `DIGISEARCH_INDEX` | `default` | Default vector index name |

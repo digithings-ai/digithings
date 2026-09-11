@@ -47,7 +47,7 @@ jobs:
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
+      CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4

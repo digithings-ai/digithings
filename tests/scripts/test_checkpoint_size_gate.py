@@ -44,6 +44,6 @@ def test_gate_boundary_is_ok() -> None:
 
 def test_main_fail_open_without_uri(monkeypatch: pytest.MonkeyPatch) -> None:
     gate = _load()
-    monkeypatch.delenv("DIGI_CHECKPOINTER_POSTGRES_URI", raising=False)
+    monkeypatch.delenv("CORE_POSTGRES_URI", raising=False)
     assert gate.main(["--threshold-mb", "500"]) == 0
     assert gate.main(["--threshold-mb", "500", "--strict"]) == 2

@@ -92,7 +92,7 @@ optional `threshold-mb` dispatch input) — that edit needs a token with
 then, run it by hand after the archive:
 
 ```bash
-DIGI_CHECKPOINTER_POSTGRES_URI=<read-only-uri> \
+CORE_POSTGRES_URI=<read-only-uri> \
   python scripts/digiquant_checkpoint_size_gate.py --threshold-mb 500
 ```
 

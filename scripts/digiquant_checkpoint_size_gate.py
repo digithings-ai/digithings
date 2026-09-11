@@ -16,7 +16,7 @@ import argparse
 import os
 import sys
 
-PG_URI_ENV = "DIGI_CHECKPOINTER_POSTGRES_URI"
+PG_URI_ENV = "CORE_POSTGRES_URI"
 
 # Tables whose footprint the archive is expected to shrink.
 GATED_TABLES = (

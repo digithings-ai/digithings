@@ -233,7 +233,7 @@ jobs:
           # the 1-retry budget across many segments in the same minute.
           DIGILLM_MAX_CONCURRENT_CALLS: 8
           DRY_RUN: ${{ inputs.dry_run }}
-          DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
+          CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           LANGSMITH_PROJECT: digiquant-baseline
