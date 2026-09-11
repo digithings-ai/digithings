@@ -533,7 +533,6 @@
   outline-offset: -1px;
 }
 
-[data-thread-skin="digichat"] .embed-settings-pane,
 [data-thread-skin="digichat"][data-embed-settings],
 [data-thread-skin="digichat"] .dc-composer-menu,
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu {
