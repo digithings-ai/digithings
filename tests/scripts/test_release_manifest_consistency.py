@@ -127,12 +127,12 @@ def test_digichat_release_bumps_the_root_workspace_lockfile() -> None:
 
     Under npm workspaces the lockfile lives at the repo root, so a digichat release
     PR that only touched package.json + CHANGELOG + the manifest left
-    ``packages['frontend/digichat'].version`` stale until a hand ``npm install``.
+    ``packages['cloudflare/digichat'].version`` stale until a hand ``npm install``.
     The GenericJson extra-file must keep that field in the same release commit.
     """
     packages = _config()["packages"]
     assert isinstance(packages, dict)
-    digichat = packages["frontend/digichat"]
+    digichat = packages["cloudflare/digichat"]
     assert isinstance(digichat, dict)
     extras = digichat.get("extra-files")
     assert isinstance(extras, list) and extras, "digichat must declare extra-files"
@@ -147,7 +147,7 @@ def test_digichat_release_bumps_the_root_workspace_lockfile() -> None:
         "digichat extra-files must bump the repo-root lockfile via "
         "'/package-lock.json' (leading slash — release-please rejects '../')"
     )
-    assert lock_bumps[0].get("jsonpath") == "$.packages['frontend/digichat'].version"
+    assert lock_bumps[0].get("jsonpath") == "$.packages['cloudflare/digichat'].version"
 
 
 @pytest.mark.unit
@@ -167,7 +167,7 @@ def test_release_manifest_consistency_lane_sees_release_prs() -> None:
     block = ci[start:end]
     for path in (
         ".release-please-manifest.json",
-        "frontend/digichat/package.json",
+        "cloudflare/digichat/package.json",
         "package-lock.json",
     ):
         assert f"'{path}'" in block or f'"{path}"' in block, (

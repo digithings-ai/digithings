@@ -39,7 +39,7 @@ vap = _load()
     [
         "digigraph/src/digigraph/server.py",
         "tests/dg/test_api.py",
-        "frontend/digichat/src/app/page.tsx",
+        "cloudflare/digichat/src/app/page.tsx",
         "digiquant/src/digiquant/research/graph.py",
         "docs/agents/AGENT_WORKFLOW.md",
     ],
@@ -59,7 +59,7 @@ def test_is_allowed_permits_ordinary_agent_paths(path: str) -> None:
         "digiquant/live/broker.py",
         "config/live.yaml",
         "config/live/trading.env",
-        "frontend/digichat/SECURITY.md",
+        "cloudflare/digichat/SECURITY.md",
         r"digikey\src\digikey\keys.py",  # Windows separators still deny
     ],
 )

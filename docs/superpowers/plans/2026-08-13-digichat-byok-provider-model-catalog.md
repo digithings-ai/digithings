@@ -14,7 +14,7 @@
 - Vitest for all new/modified frontend tests; co-locate `route.test.ts` beside `route.ts`, `*.test.ts` beside the module it tests — matches this repo's existing convention.
 - Ruff-compliant Python (line length 100) for the digigraph half; tests live at `tests/dg/` (repo-root-relative).
 - Never put a real-looking API key in a test — use obviously-fake strings that still pass format validation (`sk-test-…`, `sk-or-v1-test-…`), matching existing test fixtures.
-- This plan spans **two module branches**: the frontend/catalog-JSON tasks are `component:digichat` (two-hop: `task/201-slug` → `module/digichat` → `develop`); the digigraph catalog-loader task is `component:digigraph` (its own two-hop). Check staleness before branching either: `git fetch origin && git rev-list --count origin/module/digichat..origin/develop` (93 behind as of the design spec's writing — re-check, it moves fast) and the same for `module/digigraph` (3 behind). Sync via a `chore/sync-*` PR into the stale module branch first.
+- This plan spans **two module branches**: the cloudflare/catalog-JSON tasks are `component:digichat` (two-hop: `task/201-slug` → `module/digichat` → `develop`); the digigraph catalog-loader task is `component:digigraph` (its own two-hop). Check staleness before branching either: `git fetch origin && git rev-list --count origin/module/digichat..origin/develop` (93 behind as of the design spec's writing — re-check, it moves fast) and the same for `module/digigraph` (3 behind). Sync via a `chore/sync-*` PR into the stale module branch first.
 - `llm_auth.py` changes are auth-adjacent per CLAUDE.md's human-gate rule — plan for explicit review before merge regardless of `make score`.
 - Design reference: [`docs/superpowers/specs/2026-08-13-digichat-byok-model-catalog-design.md`](../specs/2026-08-13-digichat-byok-model-catalog-design.md).
 
@@ -253,8 +253,8 @@ degrading to an empty allowlist under live traffic."
 ### Task 3: Frontend — `ByokModelOption` type + `use-byok-key.catalog-parity.test.ts`
 
 **Files:**
-- Modify: `frontend/digichat/src/hooks/use-byok-key.ts` (add type only, no behavior change)
-- Create: `frontend/digichat/src/hooks/use-byok-key.catalog-parity.test.ts`
+- Modify: `cloudflare/digichat/src/hooks/use-byok-key.ts` (add type only, no behavior change)
+- Create: `cloudflare/digichat/src/hooks/use-byok-key.catalog-parity.test.ts`
 
 **Interfaces:**
 - Consumes: `config/byok-providers.json` (Task 1).
@@ -263,7 +263,7 @@ degrading to an empty allowlist under live traffic."
 - [ ] **Step 1: Write the failing cross-check test**
 
 ```ts
-// frontend/digichat/src/hooks/use-byok-key.catalog-parity.test.ts
+// cloudflare/digichat/src/hooks/use-byok-key.catalog-parity.test.ts
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -295,12 +295,12 @@ describe("use-byok-key <-> config/byok-providers.json parity", () => {
 
 - [ ] **Step 2: Run to verify it passes immediately (catalog and TS already agree — this test's job is to catch FUTURE drift)**
 
-Run: `cd frontend/digichat && npx vitest run src/hooks/use-byok-key.catalog-parity.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/hooks/use-byok-key.catalog-parity.test.ts`
 Expected: PASS (2 passed) — if this fails right now, stop: Task 1's JSON and today's `use-byok-key.ts` disagree, and that must be resolved before continuing (it would mean the "zero behavior change" premise of Task 1/2 was wrong).
 
 - [ ] **Step 3: Add the `ByokModelOption` type**
 
-In `frontend/digichat/src/hooks/use-byok-key.ts`, add right after the existing `BYOKKeyState` type (currently lines 75-80):
+In `cloudflare/digichat/src/hooks/use-byok-key.ts`, add right after the existing `BYOKKeyState` type (currently lines 75-80):
 
 ```ts
 /** A single model entry once live catalog data exists (Task 8+). Falls back to a
@@ -322,10 +322,10 @@ Expected: all pass
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/hooks/use-byok-key.ts frontend/digichat/src/hooks/use-byok-key.catalog-parity.test.ts
+git add cloudflare/digichat/src/hooks/use-byok-key.ts cloudflare/digichat/src/hooks/use-byok-key.catalog-parity.test.ts
 git commit -m "test(digichat): cross-check use-byok-key against config/byok-providers.json
 
-Same pattern languages.ts documents for its own frontend/backend list —
+Same pattern languages.ts documents for its own cloudflare/backend list —
 CI fails the moment one side is edited without the other."
 ```
 
@@ -335,12 +335,12 @@ CI fails the moment one side is edited without the other."
 
 **Files:**
 - Modify: `config/byok-providers.json` (append entry)
-- Modify: `frontend/digichat/src/hooks/use-byok-key.ts` (`BYOKProvider` union, `BYOK_PROVIDER_LIST`, every exhaustive switch)
-- Modify: `frontend/digichat/src/components/byok-cli-flow.tsx:380-388` (key placeholder ternary)
-- Modify: `frontend/digichat/src/app/api/byok/test/route.ts` (`BYOKProvider` type, `readProvider`, `testKey` switch, new `testXaiKey`)
-- Modify: `frontend/digichat/src/app/api/chat/route.ts` (`byokNeedsModel` OR-chain)
+- Modify: `cloudflare/digichat/src/hooks/use-byok-key.ts` (`BYOKProvider` union, `BYOK_PROVIDER_LIST`, every exhaustive switch)
+- Modify: `cloudflare/digichat/src/components/byok-cli-flow.tsx:380-388` (key placeholder ternary)
+- Modify: `cloudflare/digichat/src/app/api/byok/test/route.ts` (`BYOKProvider` type, `readProvider`, `testKey` switch, new `testXaiKey`)
+- Modify: `cloudflare/digichat/src/app/api/chat/route.ts` (`byokNeedsModel` OR-chain)
 - Modify: `tests/dg/test_llm_auth.py` (the 4 parametrize lists that currently treat `"xai"` as unrouted)
-- Test: `frontend/digichat/src/hooks/use-byok-key.test.ts`, `frontend/digichat/src/app/api/byok/test/route.test.ts`
+- Test: `cloudflare/digichat/src/hooks/use-byok-key.test.ts`, `cloudflare/digichat/src/app/api/byok/test/route.test.ts`
 
 **Interfaces:**
 - Consumes: nothing new.
@@ -365,12 +365,12 @@ In `config/byok-providers.json`, append after the `gemini` entry:
 
 - [ ] **Step 2: Run the parity test — it now fails on purpose, proving it catches drift**
 
-Run: `cd frontend/digichat && npx vitest run src/hooks/use-byok-key.catalog-parity.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/hooks/use-byok-key.catalog-parity.test.ts`
 Expected: FAIL — `BYOK_PROVIDER_LIST` (4 entries) no longer equals the catalog's ids (5 entries). This is the parity test doing its job; proceed to make the TS side agree.
 
 - [ ] **Step 3: Add `"xai"` to `use-byok-key.ts` — TypeScript's exhaustiveness checks will force every switch**
 
-In `frontend/digichat/src/hooks/use-byok-key.ts`:
+In `cloudflare/digichat/src/hooks/use-byok-key.ts`:
 
 ```ts
 export type BYOKProvider = "openai" | "anthropic" | "openrouter" | "gemini" | "xai";
@@ -471,7 +471,7 @@ export function validateBYOKKey(key: string, provider: BYOKProvider): string | n
 
 - [ ] **Step 4: Fix the key-input placeholder ternary in `byok-cli-flow.tsx`**
 
-In `frontend/digichat/src/components/byok-cli-flow.tsx`, change (currently lines 380-388):
+In `cloudflare/digichat/src/components/byok-cli-flow.tsx`, change (currently lines 380-388):
 
 ```tsx
                 placeholder={
@@ -497,7 +497,7 @@ Expected: builds cleanly
 
 - [ ] **Step 6: Add x.ai to the BYOK ping route**
 
-In `frontend/digichat/src/app/api/byok/test/route.ts`:
+In `cloudflare/digichat/src/app/api/byok/test/route.ts`:
 
 ```ts
 type BYOKProvider = "openai" | "anthropic" | "openrouter" | "gemini" | "xai";
@@ -577,7 +577,7 @@ async function testXaiKey(key: string): Promise<TestResult> {
 
 - [ ] **Step 7: Add a test for the new provider**
 
-Add to `frontend/digichat/src/app/api/byok/test/route.test.ts`, after the existing Gemini tests:
+Add to `cloudflare/digichat/src/app/api/byok/test/route.test.ts`, after the existing Gemini tests:
 
 ```ts
   it("returns 400 for invalid x.ai key prefix", async () => {
@@ -614,7 +614,7 @@ Add to `frontend/digichat/src/app/api/byok/test/route.test.ts`, after the existi
 
 - [ ] **Step 8: Add x.ai to `chat/route.ts`'s `byokNeedsModel`**
 
-In `frontend/digichat/src/app/api/chat/route.ts` (currently lines 203-206):
+In `cloudflare/digichat/src/app/api/chat/route.ts` (currently lines 203-206):
 
 ```ts
   const byokNeedsModel =
@@ -696,11 +696,11 @@ Run: `npm run lint && ruff check digigraph/src`
 
 ```bash
 git add config/byok-providers.json \
-  frontend/digichat/src/hooks/use-byok-key.ts \
-  frontend/digichat/src/components/byok-cli-flow.tsx \
-  frontend/digichat/src/app/api/byok/test/route.ts \
-  frontend/digichat/src/app/api/byok/test/route.test.ts \
-  frontend/digichat/src/app/api/chat/route.ts \
+  cloudflare/digichat/src/hooks/use-byok-key.ts \
+  cloudflare/digichat/src/components/byok-cli-flow.tsx \
+  cloudflare/digichat/src/app/api/byok/test/route.ts \
+  cloudflare/digichat/src/app/api/byok/test/route.test.ts \
+  cloudflare/digichat/src/app/api/chat/route.ts \
   tests/dg/test_llm_auth.py
 git commit -m "feat: add x.ai as a 5th BYOK provider end-to-end
 
@@ -716,9 +716,9 @@ that keeps Ollama/generic-custom-URL out of scope."
 ### Task 5: Extract `fetchWithTimeout`/`abortOrMessage` into a shared lib module
 
 **Files:**
-- Create: `frontend/digichat/src/lib/fetch-with-timeout.ts`
-- Create: `frontend/digichat/src/lib/fetch-with-timeout.test.ts`
-- Modify: `frontend/digichat/src/app/api/byok/test/route.ts` (import instead of local copies — behavior-preserving)
+- Create: `cloudflare/digichat/src/lib/fetch-with-timeout.ts`
+- Create: `cloudflare/digichat/src/lib/fetch-with-timeout.test.ts`
+- Modify: `cloudflare/digichat/src/app/api/byok/test/route.ts` (import instead of local copies — behavior-preserving)
 
 **Interfaces:**
 - Consumes: nothing.
@@ -727,7 +727,7 @@ that keeps Ollama/generic-custom-URL out of scope."
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// frontend/digichat/src/lib/fetch-with-timeout.test.ts
+// cloudflare/digichat/src/lib/fetch-with-timeout.test.ts
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { abortOrMessage, DEFAULT_FETCH_TIMEOUT_MS, fetchWithTimeout } from "./fetch-with-timeout";
 
@@ -777,13 +777,13 @@ describe("abortOrMessage", () => {
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/fetch-with-timeout.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/fetch-with-timeout.test.ts`
 Expected: FAIL — `Error: Cannot find module './fetch-with-timeout'`
 
 - [ ] **Step 3: Implement**
 
 ```ts
-// frontend/digichat/src/lib/fetch-with-timeout.ts
+// cloudflare/digichat/src/lib/fetch-with-timeout.ts
 
 /** Shared AbortController-based fetch timeout. Extracted from
  * app/api/byok/test/route.ts so app/api/byok/models/route.ts doesn't
@@ -821,7 +821,7 @@ Expected: PASS (5 passed)
 
 - [ ] **Step 5: Update `byok/test/route.ts` to use the shared module**
 
-In `frontend/digichat/src/app/api/byok/test/route.ts`, delete the local `TIMEOUT_MS` constant, `fetchWithTimeout` function, and `abortOrMessage` function (their current bodies), and add an import:
+In `cloudflare/digichat/src/app/api/byok/test/route.ts`, delete the local `TIMEOUT_MS` constant, `fetchWithTimeout` function, and `abortOrMessage` function (their current bodies), and add an import:
 
 ```ts
 import { fetchWithTimeout, abortOrMessage } from "@/lib/fetch-with-timeout";
@@ -842,9 +842,9 @@ Expected: all pass
 - [ ] **Step 8: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/fetch-with-timeout.ts \
-  frontend/digichat/src/lib/fetch-with-timeout.test.ts \
-  frontend/digichat/src/app/api/byok/test/route.ts
+git add cloudflare/digichat/src/lib/fetch-with-timeout.ts \
+  cloudflare/digichat/src/lib/fetch-with-timeout.test.ts \
+  cloudflare/digichat/src/app/api/byok/test/route.ts
 git commit -m "refactor(digichat): extract fetchWithTimeout/abortOrMessage to lib/
 
 Second consumer arrives in the next task (app/api/byok/models/route.ts) —
@@ -856,8 +856,8 @@ extracting now avoids a second hand-copy of the same 15 lines."
 ### Task 6: `byok/test/route.ts` — return the full model list for OpenAI/Anthropic/Gemini
 
 **Files:**
-- Modify: `frontend/digichat/src/app/api/byok/test/route.ts`
-- Test: `frontend/digichat/src/app/api/byok/test/route.test.ts`
+- Modify: `cloudflare/digichat/src/app/api/byok/test/route.ts`
+- Test: `cloudflare/digichat/src/app/api/byok/test/route.test.ts`
 
 **Interfaces:**
 - Consumes: nothing new (same upstream calls this route already makes).
@@ -865,7 +865,7 @@ extracting now avoids a second hand-copy of the same 15 lines."
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `frontend/digichat/src/app/api/byok/test/route.test.ts`:
+Add to `cloudflare/digichat/src/app/api/byok/test/route.test.ts`:
 
 ```ts
   it("returns the full model list for a valid OpenAI key, not just the first id", async () => {
@@ -931,7 +931,7 @@ Expected: FAIL — `body.models` is `undefined`
 
 - [ ] **Step 3: Implement — widen `TestResult` and each probe function**
 
-In `frontend/digichat/src/app/api/byok/test/route.ts`, change the shared type:
+In `cloudflare/digichat/src/app/api/byok/test/route.ts`, change the shared type:
 
 ```ts
 type TestResult = {
@@ -1027,7 +1027,7 @@ Expected: all pass, including the two new ones
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/app/api/byok/test/route.ts frontend/digichat/src/app/api/byok/test/route.test.ts
+git add cloudflare/digichat/src/app/api/byok/test/route.ts cloudflare/digichat/src/app/api/byok/test/route.test.ts
 git commit -m "feat(digichat): byok/test route returns full model list, not just first id
 
 Same upstream request each provider already makes — no new network call.
@@ -1040,8 +1040,8 @@ the models/ prefix stripped, a genuinely different shape."
 ### Task 7: `byok/test/route.ts` — switch OpenRouter validation to `GET /api/v1/key`
 
 **Files:**
-- Modify: `frontend/digichat/src/app/api/byok/test/route.ts`
-- Test: `frontend/digichat/src/app/api/byok/test/route.test.ts`
+- Modify: `cloudflare/digichat/src/app/api/byok/test/route.ts`
+- Test: `cloudflare/digichat/src/app/api/byok/test/route.test.ts`
 
 **Interfaces:**
 - Consumes: nothing new.
@@ -1051,7 +1051,7 @@ the models/ prefix stripped, a genuinely different shape."
 
 - [ ] **Step 1: Write the failing tests**
 
-Replace the existing OpenRouter-specific tests in `frontend/digichat/src/app/api/byok/test/route.test.ts` (currently `"returns 400 for invalid OpenRouter key prefix"` and `"returns 400 when OpenRouter model header missing"`) — the second one no longer applies once validation doesn't need a model, so **delete** `"returns 400 when OpenRouter model header missing"` entirely and update the prefix test's mock:
+Replace the existing OpenRouter-specific tests in `cloudflare/digichat/src/app/api/byok/test/route.test.ts` (currently `"returns 400 for invalid OpenRouter key prefix"` and `"returns 400 when OpenRouter model header missing"`) — the second one no longer applies once validation doesn't need a model, so **delete** `"returns 400 when OpenRouter model header missing"` entirely and update the prefix test's mock:
 
 ```ts
   it("returns 400 for invalid OpenRouter key prefix", async () => {
@@ -1201,7 +1201,7 @@ Expected: all pass
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/app/api/byok/test/route.ts frontend/digichat/src/app/api/byok/test/route.test.ts
+git add cloudflare/digichat/src/app/api/byok/test/route.ts cloudflare/digichat/src/app/api/byok/test/route.test.ts
 git commit -m "feat(digichat): OpenRouter BYOK validation via GET /api/v1/key, not a completion
 
 Cheaper (no completions cost per ping) and no longer needs a model chosen
@@ -1216,8 +1216,8 @@ via limit/usage."
 ### Task 8: `lib/openrouter-catalog.ts` — pure tier-bucketing function
 
 **Files:**
-- Create: `frontend/digichat/src/lib/openrouter-catalog.ts`
-- Create: `frontend/digichat/src/lib/openrouter-catalog.test.ts`
+- Create: `cloudflare/digichat/src/lib/openrouter-catalog.ts`
+- Create: `cloudflare/digichat/src/lib/openrouter-catalog.test.ts`
 
 **Interfaces:**
 - Consumes: `ByokModelOption` (Task 3).
@@ -1228,7 +1228,7 @@ No network code here — pure, fully unit-testable logic, per the design spec's 
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-// frontend/digichat/src/lib/openrouter-catalog.test.ts
+// cloudflare/digichat/src/lib/openrouter-catalog.test.ts
 import { describe, expect, it } from "vitest";
 import { bucketOpenRouterModels, OPENROUTER_CATALOG_ENTRY_CAP } from "./openrouter-catalog";
 
@@ -1307,13 +1307,13 @@ describe("bucketOpenRouterModels", () => {
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/openrouter-catalog.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/openrouter-catalog.test.ts`
 Expected: FAIL — `Cannot find module './openrouter-catalog'`
 
 - [ ] **Step 3: Implement**
 
 ```ts
-// frontend/digichat/src/lib/openrouter-catalog.ts
+// cloudflare/digichat/src/lib/openrouter-catalog.ts
 
 /** One entry from OpenRouter's public GET /api/v1/models catalog (fields we use).
  * Exact field names per OpenRouter's documented response shape — re-verify against
@@ -1431,7 +1431,7 @@ Expected: PASS (9 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/openrouter-catalog.ts frontend/digichat/src/lib/openrouter-catalog.test.ts
+git add cloudflare/digichat/src/lib/openrouter-catalog.ts cloudflare/digichat/src/lib/openrouter-catalog.test.ts
 git commit -m "feat(digichat): price-derived OpenRouter tier bucketing (pure function)
 
 Tiers computed from each model's own live pricing/metadata, not a
@@ -1444,8 +1444,8 @@ docs/LLM_PROVIDERS.md documents for free-tier model ids."
 ### Task 9: `app/api/byok/models/route.ts` — the live OpenRouter catalog BFF route
 
 **Files:**
-- Create: `frontend/digichat/src/app/api/byok/models/route.ts`
-- Create: `frontend/digichat/src/app/api/byok/models/route.test.ts`
+- Create: `cloudflare/digichat/src/app/api/byok/models/route.ts`
+- Create: `cloudflare/digichat/src/app/api/byok/models/route.test.ts`
 
 **Interfaces:**
 - Consumes: `fetchWithTimeout`/`abortOrMessage` (Task 5), `bucketOpenRouterModels` (Task 8), `OPENROUTER_API_BASE` (existing, `lib/byok-openrouter.ts`), `requireDigiChatAuth`, `isEmbedChatRequest`/`resolveEmbedChatTenant`, `checkEmbedIpRateLimit`, `checkBffRateLimit` (all existing).
@@ -1456,7 +1456,7 @@ This route fixes the real gap the design review caught: `/api/byok/test` has **n
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-// frontend/digichat/src/app/api/byok/models/route.test.ts
+// cloudflare/digichat/src/app/api/byok/models/route.test.ts
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 import { mockAuthCtx, unauthorizedResponse } from "@/test/route-auth-mock";
@@ -1577,13 +1577,13 @@ describe("GET /api/byok/models", () => {
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/app/api/byok/models/route.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/app/api/byok/models/route.test.ts`
 Expected: FAIL — `Error: Cannot find module './route'`
 
 - [ ] **Step 3: Implement**
 
 ```ts
-// frontend/digichat/src/app/api/byok/models/route.ts
+// cloudflare/digichat/src/app/api/byok/models/route.ts
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { isEmbedChatRequest, resolveEmbedChatTenant } from "@/lib/embed-chat-tenant";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
@@ -1693,7 +1693,7 @@ Run: `npm run lint && npm run build`
 - [ ] **Step 7: Commit**
 
 ```bash
-git add frontend/digichat/src/app/api/byok/models/route.ts frontend/digichat/src/app/api/byok/models/route.test.ts
+git add cloudflare/digichat/src/app/api/byok/models/route.ts cloudflare/digichat/src/app/api/byok/models/route.test.ts
 git commit -m "feat(digichat): GET /api/byok/models — live OpenRouter catalog for BYOK picker
 
 Same auth gate as /api/byok/test, PLUS a rate limit on the authenticated
@@ -1707,8 +1707,8 @@ size-bounded, malformed-response falls back rather than throwing."
 ### Task 10: Non-secret provider/model selection persistence (cookie)
 
 **Files:**
-- Modify: `frontend/digichat/src/hooks/use-byok-key.ts`
-- Test: `frontend/digichat/src/hooks/use-byok-key.test.ts`
+- Modify: `cloudflare/digichat/src/hooks/use-byok-key.ts`
+- Test: `cloudflare/digichat/src/hooks/use-byok-key.test.ts`
 
 **Interfaces:**
 - Consumes: `BYOK_PROVIDER_LIST` (existing).
@@ -1718,7 +1718,7 @@ Client-side, non-`httpOnly` cookie (this is a UI preference, not a secret — th
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `frontend/digichat/src/hooks/use-byok-key.test.ts`:
+Add to `cloudflare/digichat/src/hooks/use-byok-key.test.ts`:
 
 ```ts
 describe("BYOK provider/model preference cookie (non-secret, client-side)", () => {
@@ -1760,12 +1760,12 @@ import { readByokPrefCookie, writeByokPrefCookie } from "@/hooks/use-byok-key";
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/hooks/use-byok-key.test.ts -t "preference cookie"`
+Run: `cd cloudflare/digichat && npx vitest run src/hooks/use-byok-key.test.ts -t "preference cookie"`
 Expected: FAIL — `readByokPrefCookie is not exported`
 
 - [ ] **Step 3: Implement**
 
-Add to `frontend/digichat/src/hooks/use-byok-key.ts`:
+Add to `cloudflare/digichat/src/hooks/use-byok-key.ts`:
 
 ```ts
 const BYOK_PREF_COOKIE = "digichat_byok_pref";
@@ -1839,7 +1839,7 @@ Expected: all pass
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/digichat/src/hooks/use-byok-key.ts frontend/digichat/src/hooks/use-byok-key.test.ts
+git add cloudflare/digichat/src/hooks/use-byok-key.ts cloudflare/digichat/src/hooks/use-byok-key.test.ts
 git commit -m "feat(digichat): persist BYOK provider+model choice (not the key) across sessions
 
 Plain client-side cookie, no new route — works identically on the
@@ -1852,7 +1852,7 @@ stays session-memory-only, unchanged."
 ### Task 11: `byok-cli-flow.tsx` — tier tabs, custom starred set, OpenRouter prefetch
 
 **Files:**
-- Modify: `frontend/digichat/src/components/byok-cli-flow.tsx`
+- Modify: `cloudflare/digichat/src/components/byok-cli-flow.tsx`
 
 **Interfaces:**
 - Consumes: `ByokModelOption` (Task 3), `GET /api/byok/models` (Task 9), `TestResult.models` (Task 6).
@@ -1860,7 +1860,7 @@ stays session-memory-only, unchanged."
 
 - [ ] **Step 1: Add imports and new state**
 
-At the top of `frontend/digichat/src/components/byok-cli-flow.tsx`, add:
+At the top of `cloudflare/digichat/src/components/byok-cli-flow.tsx`, add:
 
 ```tsx
 import type { ByokModelOption } from "@/hooks/use-byok-key";
@@ -2070,7 +2070,7 @@ Expected: all pass, clean build
 - [ ] **Step 8: Commit**
 
 ```bash
-git add frontend/digichat/src/components/byok-cli-flow.tsx
+git add cloudflare/digichat/src/components/byok-cli-flow.tsx
 git commit -m "feat(digichat): tier tabs + custom starred set + OpenRouter prefetch in BYOK picker
 
 Prefetch fires as soon as openrouter is the selected provider (no key
@@ -2084,7 +2084,7 @@ fetch failure — the flow never hard-blocks on the network."
 ### Task 12: `byok-cli-flow.test.tsx` — component test for the full stepper
 
 **Files:**
-- Create: `frontend/digichat/src/components/byok-cli-flow.test.tsx`
+- Create: `cloudflare/digichat/src/components/byok-cli-flow.test.tsx`
 
 **Interfaces:**
 - Consumes: `ByokCliFlow` (Task 11 and all prior).
@@ -2092,13 +2092,13 @@ fetch failure — the flow never hard-blocks on the network."
 
 - [ ] **Step 1: Check testing-library availability**
 
-Run: `grep -n "@testing-library/react" frontend/digichat/package.json`
-If absent, this repo may test components differently — check an existing `*.render.test.tsx` file (e.g. `frontend/digichat-ui/src/DigiChatSession.render.test.tsx`) for the actual rendering/query utilities already in use in this monorepo, and match that pattern instead of assuming `@testing-library/react` — adjust the imports below accordingly before writing Step 2.
+Run: `grep -n "@testing-library/react" cloudflare/digichat/package.json`
+If absent, this repo may test components differently — check an existing `*.render.test.tsx` file (e.g. `cloudflare/digichat-ui/src/DigiChatSession.render.test.tsx`) for the actual rendering/query utilities already in use in this monorepo, and match that pattern instead of assuming `@testing-library/react` — adjust the imports below accordingly before writing Step 2.
 
 - [ ] **Step 2: Write the test**
 
 ```tsx
-// frontend/digichat/src/components/byok-cli-flow.test.tsx
+// cloudflare/digichat/src/components/byok-cli-flow.test.tsx
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ByokCliFlow } from "./byok-cli-flow";
@@ -2196,7 +2196,7 @@ describe("ByokCliFlow", () => {
 
 - [ ] **Step 3: Run to verify it passes**
 
-Run: `cd frontend/digichat && npx vitest run src/components/byok-cli-flow.test.tsx`
+Run: `cd cloudflare/digichat && npx vitest run src/components/byok-cli-flow.test.tsx`
 Expected: PASS — if any query (`getByText`, `getByLabelText`) doesn't match the actual rendered DOM, read the component's current JSX (Task 11's result) and adjust the query, not the component — these are behavior assertions, not implementation details to bend to fit.
 
 - [ ] **Step 4: Run the full frontend suite**
@@ -2207,7 +2207,7 @@ Expected: all pass
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/components/byok-cli-flow.test.tsx
+git add cloudflare/digichat/src/components/byok-cli-flow.test.tsx
 git commit -m "test(digichat): component coverage for the BYOK stepper
 
 Closes the gap the original BYOK investigation found — no component/UI
@@ -2221,19 +2221,19 @@ the ping-failure retry path, and the new OpenRouter tier tabs."
 ### Task 13: `ARCHITECTURE.md` updates
 
 **Files:**
-- Modify: `frontend/digichat/ARCHITECTURE.md`
+- Modify: `cloudflare/digichat/ARCHITECTURE.md`
 - Modify: `digigraph/ARCHITECTURE.md`
 
-- [ ] **Step 1: Update `frontend/digichat/ARCHITECTURE.md`**
+- [ ] **Step 1: Update `cloudflare/digichat/ARCHITECTURE.md`**
 
-Run: `grep -n "BYOK providers listed" frontend/digichat/ARCHITECTURE.md` to find the current prose list of providers, and update it to name all 5 (openai, openrouter, anthropic, gemini, xai) and note the catalog file as the source of truth:
+Run: `grep -n "BYOK providers listed" cloudflare/digichat/ARCHITECTURE.md` to find the current prose list of providers, and update it to name all 5 (openai, openrouter, anthropic, gemini, xai) and note the catalog file as the source of truth:
 
 ```markdown
 BYOK providers: OpenAI, OpenRouter, Anthropic, Gemini, x.ai — the canonical
 list is `config/byok-providers.json`; `use-byok-key.ts`'s `BYOK_PROVIDER_LIST`
 is a hand-written mirror kept honest by a Vitest cross-check test
 (`use-byok-key.catalog-parity.test.ts`), the same pattern `languages.ts`
-documents for its own frontend/backend list.
+documents for its own cloudflare/backend list.
 ```
 
 - [ ] **Step 2: Update `digigraph/ARCHITECTURE.md`**
@@ -2257,7 +2257,7 @@ Expected: `check_doc_links: OK`
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/digichat/ARCHITECTURE.md digigraph/ARCHITECTURE.md
+git add cloudflare/digichat/ARCHITECTURE.md digigraph/ARCHITECTURE.md
 git commit -m "docs: update ARCHITECTURE.md for the byok-providers.json catalog + x.ai"
 ```
 
@@ -2266,7 +2266,7 @@ git commit -m "docs: update ARCHITECTURE.md for the byok-providers.json catalog 
 ## Final verification (run before opening the PR)
 
 ```bash
-cd frontend/digichat && npm run test && npm run lint && npm run build
+cd cloudflare/digichat && npm run test && npm run lint && npm run build
 cd .. && python -m pytest tests/dg -q
 ruff check digigraph/src && ruff format --check digigraph/src
 make doc-check

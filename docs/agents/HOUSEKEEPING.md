@@ -90,7 +90,7 @@ auth/crypto, brokers/live-trading, new external network exposure, PRs into
 Tracked as issues (see #3533):
 
 - **Token validity monitoring** — no active test that credentials haven't expired; failure signal is correlated scheduled failures. → #3522
-- **npm audit for `frontend/`** — only Python CVEs are scanned today. → #3523
+- **npm audit for `cloudflare/`** — only Python CVEs are scanned today. → #3523
 - **ADR numbering audit** — no check that `docs/adr/NNNN-*.md` files are sequentially numbered or without duplicates. → #3524
 - **Per-module ARCHITECTURE.md drift** — no check that module architecture docs are updated when the module's public interface changes. → #3525
 

@@ -37,7 +37,7 @@ def test_secrets_wired() -> None:
         "R2_BUCKET",
         "R2_ACCESS_KEY_ID",
         "R2_SECRET_ACCESS_KEY",
-        "DIGI_CHECKPOINTER_POSTGRES_URI",
+        "CORE_POSTGRES_URI",
     ):
         assert name in env, name
     for old in (
@@ -53,5 +53,5 @@ def test_runs_archiver_with_retention() -> None:
     steps = _load()["jobs"]["archive"]["steps"]
     runs = [s.get("run", "") for s in steps]
     assert any(
-        "scripts/digiquant_archive_checkpoints.py" in r and "--retain-days 2" in r for r in runs
+        "scripts/digiquant_archive_checkpoints.py" in r and "--retain-days 1" in r for r in runs
     )

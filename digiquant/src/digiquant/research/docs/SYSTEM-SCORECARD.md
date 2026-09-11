@@ -33,7 +33,7 @@ All 7 open issues from Session 4 have been resolved. The system now has full arg
 
 **Session 3** — `sedi()` cross-platform sed helper, `--help`/`-h` on all 18 bash scripts, PropTypes on 7 frontend files, inline comments on all Supabase migrations, `004_partition_strategy.sql` RANGE partitioning, `generate-snapshot.py` sidecar-preference + hardened regex + `--validate`/`--force` flags.
 
-**Session 4 (April 7)** — Full TypeScript migration: `strict: true`, all 16 JS files → TS/TSX, `prop-types` removed (replaced by TS types), `lib/types.ts` with domain types, `lib/database.types.ts` handwritten from schema, `declarations.d.ts` for CSS module support, `frontend/.gitignore` created, `tsconfig.tsbuildinfo` untracked. `npm run build` → 9/9 static routes clean.
+**Session 4 (April 7)** — Full TypeScript migration: `strict: true`, all 16 JS files → TS/TSX, `prop-types` removed (replaced by TS types), `lib/types.ts` with domain types, `lib/database.types.ts` handwritten from schema, `declarations.d.ts` for CSS module support, `cloudflare/.gitignore` created, `tsconfig.tsbuildinfo` untracked. `npm run build` → 9/9 static routes clean.
 
 **Session 5 (April 7)** — All 7 open issues resolved:
 - **Phase A**: `005_price_history.sql` migration; `price_history` type in `database.types.ts`; `preload-history.py --supabase` flag with batch upsert; `fill-entry-prices.py` back-filler
@@ -125,7 +125,7 @@ The system completes its three-tier cadence (baseline / delta / synthesis) relia
 
 **Session 3** — `sedi()` cross-platform sed helper, `--help`/`-h` on all 18 bash scripts, PropTypes on 7 frontend files, inline comments on all Supabase migrations, `004_partition_strategy.sql` RANGE partitioning, `generate-snapshot.py` sidecar-preference + hardened regex + `--validate`/`--force` flags.
 
-**Session 4 (April 7)** — Full TypeScript migration: `strict: true`, all 16 JS files → TS/TSX, `prop-types` removed (replaced by TS types), `lib/types.ts` with domain types, `lib/database.types.ts` handwritten from schema, `declarations.d.ts` for CSS module support, `frontend/.gitignore` created, `tsconfig.tsbuildinfo` untracked. `npm run build` → 9/9 static routes clean.
+**Session 4 (April 7)** — Full TypeScript migration: `strict: true`, all 16 JS files → TS/TSX, `prop-types` removed (replaced by TS types), `lib/types.ts` with domain types, `lib/database.types.ts` handwritten from schema, `declarations.d.ts` for CSS module support, `cloudflare/.gitignore` created, `tsconfig.tsbuildinfo` untracked. `npm run build` → 9/9 static routes clean.
 
 ---
 

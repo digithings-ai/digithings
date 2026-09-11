@@ -159,7 +159,7 @@ def test_language_lists_stay_in_sync_with_frontend() -> None:
     """
     frontend_path = (
         Path(__file__).resolve().parents[2]
-        / "frontend"
+        / "cloudflare"
         / "digichat"
         / "src"
         / "lib"

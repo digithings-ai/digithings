@@ -404,6 +404,26 @@ services:
       - ./digisearch/devdata/edgar_sample:/data/edgar_dev_corpus:ro
     command: ["python", "-m", "digisearch.cli", "mcp", "--port", "8765"]
 
+  # ─── digivault MCP server (optional: run with docker compose --profile digivault-mcp up) ───
+  digivault-mcp:
+    build:
+      context: .
+      dockerfile: digivault/Dockerfile.mcp
+    image: digi-digivault-mcp:latest
+    container_name: digi-digivault-mcp
+    profiles:
+      - digivault-mcp
+    ports:
+      - "127.0.0.1:8769:8769"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGIVAULT_ROOT=${DIGIVAULT_ROOT:-/data/vault}
+      # Loopback by default; set DIGIVAULT_MCP_HOST in .env for published-port access.
+    volumes:
+      - digivault_data:/data/vault
+
   # ─── Phase 3: Heartbeat (run with: docker compose --profile heartbeat up) ───
   heartbeat:
     build:
@@ -461,7 +481,7 @@ services:
       # Repo-root context: digichat is an npm workspace member; its lockfile and
       # the private @digithings/design package only exist at the root (#675).
       context: .
-      dockerfile: frontend/digichat/Dockerfile
+      dockerfile: cloudflare/digichat/Dockerfile
     image: digi-digichat:latest
     container_name: digi-digichat
     profiles:

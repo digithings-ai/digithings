@@ -49,7 +49,7 @@
 --
 -- SPEC BINDING
 --   Privacy boundary: docs/superpowers/specs/2026-08-29-kairos-tenancy-implementation-spec.md §2
---   T5 artifact matrix: §5-T5 / frontend/olympus/lib/entitlements.ts
+--   T5 artifact matrix: §5-T5 / cloudflare/olympus/lib/entitlements.ts
 --     research / narrative → Observer (free, authenticated) + anon research view
 --     house_weights_nav / glassbox_economics → Baseline+
 --   T0 deferred anon drop to "T1's release train"; T1 shipped flag-gated UI only.

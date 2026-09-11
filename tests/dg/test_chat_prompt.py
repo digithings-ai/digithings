@@ -120,7 +120,7 @@ def test_short_history_is_unaffected_by_trimming() -> None:
 @pytest.mark.unit
 def test_tool_role_messages_are_silently_omitted_today() -> None:
     """Documents the current, deliberate simplification: digichat never sends role="tool"
-    history to digigraph today (verified: frontend/digichat/src/lib/adapters/digithings/
+    history to digigraph today (verified: cloudflare/digichat/src/lib/adapters/digithings/
     never constructs one), so dropping it here is a right-sized simplification, not
     silent data loss. If this test starts failing because a real caller DOES send
     tool-role turns, chat_prompt.py needs real tool-turn support (see its module

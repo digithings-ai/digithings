@@ -89,7 +89,7 @@ Workflow: [`.github/workflows/db-migrate.yml`](../../../.github/workflows/db-mig
 5. **Apply loop:** skip if ledger has the basename; else run file under
    `--single-transaction` (or self-`BEGIN` path) and `INSERT` the ledger row
    atomically with the DDL for unwrapped files.
-6. **Secret:** `DIGI_CHECKPOINTER_POSTGRES_URI` (prod DB URI for project `core`).
+6. **Secret:** `CORE_POSTGRES_URI` (prod DB URI for project `core`).
 
 So: merge migrations to `develop` → promote `develop` → `main` → approve the
 `db-migrate` production run. Do **not** put the anon-drop file at top level until
@@ -100,7 +100,7 @@ cutover (§6).
 Use only when the workflow cannot run (emergency) or for a staging clone.
 
 ```bash
-# Link CLI to core (project ref from frontend/dashboard/lib/database.types.ts)
+# Link CLI to core (project ref from cloudflare/dashboard/lib/database.types.ts)
 supabase link --project-ref rwagjbkvxkdwqmouagad
 
 # Option A — Supabase CLI (applies pending files the CLI tracks; still prefer
@@ -108,7 +108,7 @@ supabase link --project-ref rwagjbkvxkdwqmouagad
 supabase db push
 
 # Option B — psql against the same URI the workflow uses (one file at a time)
-psql "$DIGI_CHECKPOINTER_POSTGRES_URI" -v ON_ERROR_STOP=1 --single-transaction <<'SQL'
+psql "$CORE_POSTGRES_URI" -v ON_ERROR_STOP=1 --single-transaction <<'SQL'
 -- paste one migration file body, then:
 INSERT INTO olympus_schema_migrations(version)
 VALUES ('096_workspaces_tenancy_tables.sql');
@@ -238,12 +238,12 @@ Behavior: classic anon client; Cloudflare Access may still gate `/dashboard/*`.
 | (same URL + anon key) | |
 
 Then **Retry deployment** / push to `main` so `scripts/build-digiquant.sh`
-rebuilds `frontend/dashboard` with the flag inlined (static export).
+rebuilds `cloudflare/dashboard` with the flag inlined (static export).
 
 Local verify:
 
 ```bash
-cd frontend/dashboard
+cd cloudflare/dashboard
 NEXT_PUBLIC_DASHBOARD_AUTH=1 npm run build
 # out/ must still be static-export clean
 ```
@@ -325,7 +325,7 @@ cutover PR merged/deployed → **then** remove Access.
 
 Cutover SQL revokes base `daily_snapshots` SELECT from anon/authenticated and
 exposes research via `public_daily_research`. Inventory of reads that break
-until the dashboard switches (file: `frontend/dashboard/lib/`):
+until the dashboard switches (file: `cloudflare/dashboard/lib/`):
 
 | Call site | Current read | Cutover change |
 |-----------|--------------|----------------|
@@ -428,5 +428,5 @@ verify anon **and** free JWT see zero weights/NAV → ship frontend
 
 - Staged SQL:
   [`digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql`](../../../digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql)
-- T1 cutover notes: [`frontend/dashboard/AUTH.md`](../../../frontend/dashboard/AUTH.md)
+- T1 cutover notes: [`cloudflare/dashboard/AUTH.md`](../../../cloudflare/dashboard/AUTH.md)
 - db-migrate mechanics: [`digiquant/supabase/README.md`](../../../digiquant/supabase/README.md)

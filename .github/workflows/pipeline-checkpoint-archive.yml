@@ -9,7 +9,7 @@
 #
 # Schedule 13:30 UTC runs after the morning daily-pipeline window (crons at
 # :17 past 09–12 UTC) plus buffer, so the just-finished run's thread is left
-# alone by --retain-days 2 and only older threads archive.
+# alone by --retain-days 1 and only older threads archive.
 #
 # R2 prerequisites completed 2026-09-09 (issue #3761): R2 enabled, bucket
 # `digithings-archive` created, GH secrets R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/
@@ -47,7 +47,7 @@ jobs:
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
+      CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -60,11 +60,11 @@ jobs:
       - name: Install from lockfile
         run: uv sync --frozen --package digiquant --extra research
 
-      - name: Archive checkpoint payloads older than 2 days
+      - name: Archive checkpoint payloads older than 1 day
         run: |
           set -euo pipefail
           uv run --frozen --no-sync python scripts/digiquant_archive_checkpoints.py \
-            --retain-days 2 \
+            --retain-days 1 \
             --manifest-out /tmp/checkpoint-archive-manifests.json
 
       - name: Upload manifests

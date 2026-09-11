@@ -78,3 +78,26 @@ def test_get_mcp_server_singleton() -> None:
     a = get_mcp_server()
     b = get_mcp_server()
     assert a is b
+
+
+@pytest.mark.unit
+def test_mcp_llm_path_uses_llm_client_not_direct_openai() -> None:
+    """C4 pin: workflow/chat reach the LLM via digigraph.llm_client, never a direct client."""
+    import inspect
+
+    from digigraph import mcp_server
+
+    source = inspect.getsource(mcp_server)
+    assert "OpenAI(" not in source
+    assert "run_digigraph_workflow" in source
+    assert "/v1/chat/completions" in source
+
+
+@pytest.mark.unit
+def test_mcp_chat_upstream_shares_server_llm_client() -> None:
+    """C4 pin: the in-process chat endpoint the mcp chat tool calls uses llm_client."""
+    import inspect
+
+    import digigraph.server as dg_server
+
+    assert "digigraph.llm_client" in inspect.getsource(dg_server)

@@ -29,7 +29,7 @@ jobs:
         run: |
           git fetch origin "${{ github.base_ref }}"
           # Exclusions (beyond docs/reviews + docs/superpowers):
-          #   frontend/**            — out of score's scope; the rubric is Python-oriented
+          #   cloudflare/**            — out of score's scope; the rubric is Python-oriented
           #                            and misfires on JS/CSS (CLAUDE.md), e.g. `regex.exec()`
           #                            flagged as "bare exec() code injection".
           #   scripts/{claude-,}hooks/** and digidev/*.example.yml — these DEFINE the
@@ -40,7 +40,7 @@ jobs:
           # example config is excluded). See #1443.
           git diff "origin/${{ github.base_ref }}...HEAD" -- . \
             ':(exclude)docs/reviews/**' ':(exclude)docs/superpowers/**' \
-            ':(exclude)frontend/**' \
+            ':(exclude)cloudflare/**' \
             ':(exclude)scripts/claude-hooks/**' ':(exclude)scripts/hooks/**' \
             ':(exclude)digidev/*.example.yml' \
             > /tmp/pr-code.diff || true

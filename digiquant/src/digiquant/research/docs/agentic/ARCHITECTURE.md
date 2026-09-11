@@ -346,13 +346,13 @@ H1/H2 consume `digest_briefing_for_portfolio` (`date` / `body` / `regime_label` 
 ### Phase 8 — Web dashboard / tearsheet
 
 ```bash
-python3 scripts/update_tearsheet.py   # NAV path + frontend/public/dashboard-data.json; Supabase when configured
+python3 scripts/update_tearsheet.py   # NAV path + cloudflare/public/dashboard-data.json; Supabase when configured
 ./scripts/git-commit.sh             # commit config / static JSON as needed
 ```
 
 **Behavior:** `update_tearsheet.py` uses `config/portfolio.json` and, when Supabase env is set, aligns dashboard history with `daily_snapshots` / documents. See script `--help` for optional disk scan behavior used in some operator workflows.
 
-The Next.js frontend reads from Supabase where wired, with `frontend/public/dashboard-data.json` as static fallback — no separate backend API for the digest loop.
+The Next.js frontend reads from Supabase where wired, with `cloudflare/public/dashboard-data.json` as static fallback — no separate backend API for the digest loop.
 
 ---
 
@@ -389,7 +389,7 @@ The Next.js frontend reads from Supabase where wired, with `frontend/public/dash
 
 ## Snapshot read path (frontend-consumable)
 
-**Goal:** the research frontend (Next.js dashboard at `frontend/dashboard/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
+**Goal:** the research frontend (Next.js dashboard at `cloudflare/dashboard/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
 
 ### Source of truth
 
@@ -469,7 +469,7 @@ Behavior:
 
 ## Run Checkpoint / Resume (#665)
 
-A failed or interrupted run (e.g. provider outage, credit exhaustion) can **resume from the last completed node** instead of re-running the whole pipeline. When `DIGI_CHECKPOINTER=postgres` + `DIGI_CHECKPOINTER_POSTGRES_URI` are set, the chain compiles research and portfolio with a LangGraph **PostgresSaver** and runs them under **distinct per-graph threads** — `{run_id}::research` and `{run_id}::portfolio` (never one shared thread; their state schemas differ). Each node (per-segment, per-(axis,ticker) analyst, per-(round,ticker) debater) is a checkpoint boundary, so resume re-runs only incomplete nodes. Publish is **not** checkpointed (cheap + idempotent upserts).
+A failed or interrupted run (e.g. provider outage, credit exhaustion) can **resume from the last completed node** instead of re-running the whole pipeline. When `DIGI_CHECKPOINTER=postgres` + `CORE_POSTGRES_URI` are set, the chain compiles research and portfolio with a LangGraph **PostgresSaver** and runs them under **distinct per-graph threads** — `{run_id}::research` and `{run_id}::portfolio` (never one shared thread; their state schemas differ). Each node (per-segment, per-(axis,ticker) analyst, per-(round,ticker) debater) is a checkpoint boundary, so resume re-runs only incomplete nodes. Publish is **not** checkpointed (cheap + idempotent upserts).
 
 - **Automatic within a run:** the workflow's 3× outer retry reuses the same `GITHUB_RUN_ID`, so attempt 2 finds attempt 1's checkpoint and continues from the failure point.
 - **Cross-dispatch:** re-dispatch with `--resume-run-id <prior GITHUB_RUN_ID>` (a `resume_run_id` workflow input) to continue a previously-dead run.
@@ -574,9 +574,9 @@ When signals conflict across phases, apply in order:
 Supabase (documents, daily_snapshots, price_history, …)
      │
      ▼  @supabase/supabase-js in Next.js (App Router)
-  frontend/app/ …                    Library, portfolio, architecture pages, …
+  cloudflare/app/ …                    Library, portfolio, architecture pages, …
      │
-     ├─ scripts/update_tearsheet.py → frontend/public/dashboard-data.json (static JSON used when present)
+     ├─ scripts/update_tearsheet.py → cloudflare/public/dashboard-data.json (static JSON used when present)
      └─ CI: .github/workflows/deploy.yml → static export → GitHub Pages (when configured)
 ```
 
@@ -595,7 +595,7 @@ digiquant-research/
   scripts/                   Bash + Python — run_db_first.py, materialize_snapshot.py,
                              publish_document.py, preload-history.py, smoke-test.sh, …
   agents/                    Named role files (*.agent.md)
-  frontend/                  Next.js (App Router) + TypeScript
+  cloudflare/                  Next.js (App Router) + TypeScript
   supabase/                  SQL migrations, config.toml
   tests/                     pytest
   cowork/                    Cowork tasks and project prompts

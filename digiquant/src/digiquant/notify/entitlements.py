@@ -5,7 +5,7 @@ Observer (free) teaser; Brief (weights/NAV); Desk (glass-box + paper brokers);
 Studio (overlay / private book / BYOK). Enterprise matches Studio for content.
 
 TypeScript mirror (T5 UI gate) MUST stay in sync:
-  frontend/dashboard/lib/entitlements.ts
+  cloudflare/dashboard/lib/entitlements.ts
 When either file changes the matrix, update the other in the same PR.
 """
 

@@ -22,8 +22,8 @@
 ### Task 1: `dailyContributions` type + prop wiring
 
 **Files:**
-- Modify: `frontend/digiweb/web/src/components/repo-activity/types.ts`
-- Modify: `frontend/digiweb/web/src/components/repo-activity/RepoActivity.tsx`
+- Modify: `cloudflare/digiweb/web/src/components/repo-activity/types.ts`
+- Modify: `cloudflare/digiweb/web/src/components/repo-activity/RepoActivity.tsx`
 
 **Interfaces:**
 - Consumes: `HeatDay` (already exported from `./heatmap`)
@@ -53,13 +53,13 @@ dailyContributions?: HeatDay[];
 
 - [ ] **Step 3: run component tests**
 
-Run: `npm test -- src/components/repo-activity` (from `frontend/digiweb/web`)
+Run: `npm test -- src/components/repo-activity` (from `cloudflare/digiweb/web`)
 Expected: 5 files / 19+ pass; `demo.ts` without the field still renders (fallback path).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/digiweb/web/src/components/repo-activity/types.ts frontend/digiweb/web/src/components/repo-activity/RepoActivity.tsx
+git add cloudflare/digiweb/web/src/components/repo-activity/types.ts cloudflare/digiweb/web/src/components/repo-activity/RepoActivity.tsx
 git commit -m "feat(digiweb): wire snapshot dailyContributions into RepoHeatmap"
 ```
 
@@ -191,8 +191,8 @@ git commit -m "feat(website): collect year-long daily contributions for the heat
 
 **Files:**
 - Modify: `scripts/fetch_repo_activity.py` (`check()` + `REQUIRED`)
-- Regenerate: `frontend/digithings-web/lib/repo-activity.json`
-- Modify: `frontend/digiweb/web/src/components/repo-activity/demo.ts`
+- Regenerate: `cloudflare/digithings-web/lib/repo-activity.json`
+- Modify: `cloudflare/digiweb/web/src/components/repo-activity/demo.ts`
 
 **Interfaces:**
 - Consumes: `dailyContributions` from Task 3, optional field from Task 1
@@ -213,12 +213,12 @@ assert [d["date"] for d in dc] == sorted(d["date"] for d in dc)
 Run: `scripts/fetch_repo_activity.py` (needs `GH_TOKEN`/`gh auth`), then `scripts/fetch_repo_activity.py --check --max-age-days 1`
 Expected: exit 0.
 
-- [ ] **Step 3: synthetic series for `demo.ts`** — a tiny `dailyContributions` (e.g. last 14 days nonzero) so the reference specimen shows graded cells without bloating the fixture; then `npm test -- src/components/repo-activity` (from `frontend/digiweb/web`) green.
+- [ ] **Step 3: synthetic series for `demo.ts`** — a tiny `dailyContributions` (e.g. last 14 days nonzero) so the reference specimen shows graded cells without bloating the fixture; then `npm test -- src/components/repo-activity` (from `cloudflare/digiweb/web`) green.
 
 - [ ] **Step 4: Commit** (JSON + script + demo together — the bare `--check` in `test-web.yml` must see the key in the same PR that requires it)
 
 ```bash
-git add scripts/fetch_repo_activity.py tests/scripts/test_fetch_repo_activity.py frontend/digithings-web/lib/repo-activity.json frontend/digiweb/web/src/components/repo-activity/demo.ts
+git add scripts/fetch_repo_activity.py tests/scripts/test_fetch_repo_activity.py cloudflare/digithings-web/lib/repo-activity.json cloudflare/digiweb/web/src/components/repo-activity/demo.ts
 git commit -m "feat(website): validate and ship daily contributions snapshot"
 ```
 
