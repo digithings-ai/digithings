@@ -98,27 +98,34 @@ def _bearer_from_headers(headers: Mapping[str, str] | None) -> str | None:
     return token or None
 
 
-def _authorize_mcp_headers(headers: Mapping[str, str] | None, required_scope: str) -> None:
+def _authorize_mcp_headers(headers: Mapping[str, str] | None, required_scope: str) -> str | None:
     """Verify a digikey RS256 bearer token for an MCP call, or raise ``McpAuthDenied``.
 
-    Reuses the same digikey verification path as ``DigiAuthMiddleware``
-    (``decode_token`` validates signature, issuer, audience and exp; scope
-    matching uses the shared wildcard-aware ``scope_grants_required``). Fails
-    closed: when auth is required and no verifier is configured, every call is
-    refused rather than silently allowed.
+    Reuses the same digikey verification path as ``DigiAuthMiddleware``:
+    ``decode_token`` validates signature, issuer, audience and exp;
+    ``blocklist`` applies the same fail-closed revocation policy (including
+    ``DIGIKEY_REQUIRE_BLOCKLIST=1``); scope matching uses the shared
+    wildcard-aware ``scope_grants_required``. Fails closed: when auth is
+    required and no verifier is configured, every call is refused rather than
+    silently allowed.
+
+    Returns the caller's bearer token so a caller can forward it to internal
+    same-process HTTP calls (which re-verify it via ``DigiAuthMiddleware``).
+    When auth is not required the token is returned unverified (or ``None``).
     """
+    token = _bearer_from_headers(headers)
     if not _mcp_auth_required():
-        return
+        return token
     if not _has_digikey_verifier_config():
         raise McpAuthDenied(
             "MCP auth required but no digikey verifier configured "
             "(set DIGIKEY_JWKS_URL or DIGIKEY_PUBLIC_KEY_PEM)"
         )
-    token = _bearer_from_headers(headers)
     if not token:
         raise McpAuthDenied("Bearer token required")
 
     import jwt
+    from digikey import blocklist
     from digikey.jwt_verify import JwtVerificationError, decode_token
     from digikey.scopes import scope_grants_required
 
@@ -126,8 +133,22 @@ def _authorize_mcp_headers(headers: Mapping[str, str] | None, required_scope: st
         claims = decode_token(token)
     except (jwt.PyJWTError, JwtVerificationError) as exc:
         raise McpAuthDenied("Invalid or expired bearer token") from exc
+    # Post-signature revocation check, mirroring DigiAuthMiddleware: fail closed
+    # when the blocklist policy is unmet or the backend is unreachable.
+    if claims.jti:
+        try:
+            blocklist.assert_blocklist_ready()
+        except blocklist.BlocklistUnavailable as exc:
+            raise McpAuthDenied("Auth backend temporarily unavailable") from exc
+    if claims.jti and blocklist.is_configured():
+        try:
+            if blocklist.is_blocked(claims.jti):
+                raise McpAuthDenied("Token has been revoked")
+        except blocklist.BlocklistUnavailable as exc:
+            raise McpAuthDenied("Auth backend temporarily unavailable") from exc
     if not scope_grants_required(claims.scopes, [required_scope]):
         raise McpAuthDenied(f"Insufficient scope: {required_scope} required")
+    return token
 
 
 def _headers_from_context(ctx: Any) -> Mapping[str, str] | None:
@@ -145,8 +166,19 @@ def _headers_from_context(ctx: Any) -> Mapping[str, str] | None:
     return getattr(request, "headers", None)
 
 
-def _authorize_mcp_ctx(ctx: Any, required_scope: str) -> None:
-    _authorize_mcp_headers(_headers_from_context(ctx), required_scope)
+def _authorize_mcp_ctx(ctx: Any, required_scope: str) -> str | None:
+    return _authorize_mcp_headers(_headers_from_context(ctx), required_scope)
+
+
+def _internal_auth_headers(token: str | None) -> dict[str, str]:
+    """Forward the caller's verified bearer to an in-process HTTP call.
+
+    The ``chat`` / ``thread_state`` tools call the digraph FastAPI app via
+    TestClient; without the header ``DigiAuthMiddleware`` 401s even a valid
+    caller. The token is re-verified by that middleware, so this is a
+    pass-through, not a bypass.
+    """
+    return {"Authorization": f"Bearer {token}"} if token else {}
 
 
 def _mcp_denied_json(exc: McpAuthDenied) -> str:
@@ -290,7 +322,7 @@ def create_mcp_server() -> Any:
             model: Model identifier (passed through to LiteLLM router; default: digigraph-rag).
         """
         try:
-            _authorize_mcp_ctx(ctx, SCOPE_CHAT)
+            token = _authorize_mcp_ctx(ctx, SCOPE_CHAT)
         except McpAuthDenied as exc:
             logger.warning("digigraph chat MCP tool denied: %s", exc)
             return "[digigraph chat error: unauthorized]"
@@ -310,7 +342,11 @@ def create_mcp_server() -> Any:
                 "stream": False,
                 "session_id": session_id,
             }
-            r = client.post("/v1/chat/completions", json=payload)
+            r = client.post(
+                "/v1/chat/completions",
+                json=payload,
+                headers=_internal_auth_headers(token),
+            )
             if r.status_code == 200:
                 data = r.json()
                 choices = data.get("choices", [])
@@ -332,7 +368,7 @@ def create_mcp_server() -> Any:
             thread_id: The session/thread ID to look up.
         """
         try:
-            _authorize_mcp_ctx(ctx, SCOPE_MCP)
+            token = _authorize_mcp_ctx(ctx, SCOPE_MCP)
         except McpAuthDenied as exc:
             return _mcp_denied_json(exc)
         try:
@@ -347,7 +383,7 @@ def create_mcp_server() -> Any:
             from digigraph.server import app as dg_app
 
             client = TestClient(dg_app, raise_server_exceptions=False)
-            r = client.get(f"/threads/{tid}/state")
+            r = client.get(f"/threads/{tid}/state", headers=_internal_auth_headers(token))
             if r.status_code == 200:
                 return json.dumps(r.json(), indent=2)
             return json.dumps({"error": f"HTTP {r.status_code}", "detail": r.text})

@@ -169,18 +169,50 @@ def _call_tool(name: str, headers: dict[str, str] | None, **kwargs: Any) -> str:
     return tool.fn(**kwargs)
 
 
-def _dummy_server_app() -> Any:
-    """Minimal ASGI app so a pre-fix chat tool cannot reach an LLM in unit tests."""
+def _auth_enforcing_server_app() -> Any:
+    """Stand-in digraph FastAPI app that runs the real DigiAuthMiddleware.
+
+    The chat/thread_state tools call the digraph app in-process; this proves the
+    forwarded bearer actually satisfies middleware auth rather than merely that
+    the MCP gate fired. A valid token reaches the route; a missing/invalid one
+    never does.
+    """
+    from digikey.integrations.service_middleware import (
+        DigiAuthMiddleware,
+        digigraph_path_scopes,
+    )
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
 
     app = FastAPI()
+    app.add_middleware(DigiAuthMiddleware, service="digraph", path_scopes=digigraph_path_scopes)
 
     @app.post("/v1/chat/completions")
     def _completions() -> JSONResponse:
-        return JSONResponse(status_code=401, content={"error": "no"})
+        return JSONResponse(
+            status_code=200,
+            content={"choices": [{"message": {"role": "assistant", "content": "pong"}}]},
+        )
+
+    @app.get("/threads/{thread_id}/state")
+    def _state(thread_id: str) -> JSONResponse:
+        return JSONResponse(status_code=200, content={"thread_id": thread_id})
 
     return app
+
+
+def _stub_digraph_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    import digigraph.server as dg_server
+
+    monkeypatch.setattr(dg_server, "app", _auth_enforcing_server_app())
+
+
+def _assert_denied(out: str) -> None:
+    """Assert an exact auth denial: structured marker, not a loose substring."""
+    if out.startswith("["):
+        assert out == "[digigraph chat error: unauthorized]"
+        return
+    assert json.loads(out).get("error") == "unauthorized", out
 
 
 @pytest.mark.unit
@@ -193,9 +225,7 @@ class TestMcpAuthGate:
         # No verifier and no token is fine when the gate is off.
         mcp_server._authorize_mcp_headers(None, "digigraph:workflow")
 
-    def test_missing_or_malformed_token_is_rejected(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_missing_or_malformed_token_is_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
         from digigraph import mcp_server
 
@@ -221,15 +251,14 @@ class TestMcpAuthGate:
                 _bearer_headers(["digigraph:workflow"]), "digigraph:workflow"
             )
 
-    def test_valid_token_with_scope_is_accepted(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_valid_token_with_scope_is_accepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
         from digigraph import mcp_server
 
-        mcp_server._authorize_mcp_headers(
-            _bearer_headers(["digigraph:workflow"]), "digigraph:workflow"
-        )
+        token = _mint(scopes=["digigraph:workflow"])
+        returned = mcp_server._authorize_mcp_headers(_bearer(token), "digigraph:workflow")
+        # The verified bearer is returned so it can be forwarded internally.
+        assert returned == token
 
     def test_wildcard_scope_is_accepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
@@ -271,6 +300,50 @@ class TestMcpAuthGate:
         with pytest.raises(mcp_server.McpAuthDenied):
             mcp_server._authorize_mcp_headers(_bearer(token), "digigraph:workflow")
 
+    def test_revoked_jti_is_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A blocklisted jti is refused, mirroring DigiAuthMiddleware."""
+        monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
+        monkeypatch.setattr("digikey.blocklist.is_configured", lambda: True)
+        monkeypatch.setattr("digikey.blocklist.is_blocked", lambda jti: True)
+        from digigraph import mcp_server
+
+        with pytest.raises(mcp_server.McpAuthDenied, match="revoked"):
+            mcp_server._authorize_mcp_headers(
+                _bearer_headers(["digigraph:workflow"]), "digigraph:workflow"
+            )
+
+    def test_blocklist_backend_unavailable_fails_closed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
+        from digikey.blocklist import BlocklistUnavailable
+
+        monkeypatch.setattr("digikey.blocklist.is_configured", lambda: True)
+
+        def _raise(_jti: str) -> bool:
+            raise BlocklistUnavailable("redis down")
+
+        monkeypatch.setattr("digikey.blocklist.is_blocked", _raise)
+        from digigraph import mcp_server
+
+        with pytest.raises(mcp_server.McpAuthDenied):
+            mcp_server._authorize_mcp_headers(
+                _bearer_headers(["digigraph:workflow"]), "digigraph:workflow"
+            )
+
+    def test_require_blocklist_without_redis_fails_closed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
+        monkeypatch.setenv("DIGIKEY_REQUIRE_BLOCKLIST", "1")
+        monkeypatch.delenv("DIGIKEY_BLOCKLIST_REDIS_URL", raising=False)
+        from digigraph import mcp_server
+
+        with pytest.raises(mcp_server.McpAuthDenied):
+            mcp_server._authorize_mcp_headers(
+                _bearer_headers(["digigraph:workflow"]), "digigraph:workflow"
+            )
+
 
 class _FakeWorkflowResult(SimpleNamespace):
     pass
@@ -300,13 +373,10 @@ class TestMcpToolEnforcement:
             return _fake_workflow_result()
 
         monkeypatch.setattr("digigraph.workflow.run_digigraph_workflow", _fake_workflow)
-        out = json.loads(_call_tool("workflow", None, prompt="hi"))
-        assert out["success"] is False
+        _assert_denied(_call_tool("workflow", None, prompt="hi"))
         assert called == {}
 
-    def test_workflow_accepts_valid_token(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_workflow_accepts_valid_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
         called: dict[str, bool] = {}
 
@@ -321,9 +391,7 @@ class TestMcpToolEnforcement:
         assert out["success"] is True
         assert called.get("ran") is True
 
-    def test_workflow_rejects_wrong_scope(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_workflow_rejects_wrong_scope(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
         called: dict[str, bool] = {}
 
@@ -332,10 +400,7 @@ class TestMcpToolEnforcement:
             return _fake_workflow_result()
 
         monkeypatch.setattr("digigraph.workflow.run_digigraph_workflow", _fake_workflow)
-        out = json.loads(
-            _call_tool("workflow", _bearer_headers(["digigraph:chat"]), prompt="hi")
-        )
-        assert out["success"] is False
+        _assert_denied(_call_tool("workflow", _bearer_headers(["digigraph:chat"]), prompt="hi"))
         assert called == {}
 
     @pytest.mark.parametrize(
@@ -354,16 +419,49 @@ class TestMcpToolEnforcement:
         kwargs: dict[str, Any],
     ) -> None:
         monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
-        if tool_name == "chat":
-            import digigraph.server as dg_server
+        if tool_name in ("chat", "thread_state"):
+            _stub_digraph_app(monkeypatch)
+        _assert_denied(_call_tool(tool_name, None, **kwargs))
 
-            monkeypatch.setattr(dg_server, "app", _dummy_server_app())
-        out = _call_tool(tool_name, None, **kwargs)
-        assert "unauthorized" in out.lower()
+    @pytest.mark.parametrize(
+        ("tool_name", "kwargs", "wrong_scopes"),
+        [
+            ("workflow", {"prompt": "hi"}, ["digigraph:chat"]),
+            ("chat", {"message": "hi"}, ["digigraph:workflow"]),
+            ("thread_state", {"thread_id": "abc"}, ["digigraph:chat"]),
+            ("list_orchestrator_tools", {}, ["digigraph:workflow"]),
+            ("list_orchestrator_tools_detailed", {}, ["digigraph:workflow"]),
+        ],
+    )
+    def test_wrong_scope_denied_for_each_tool(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tool_name: str,
+        kwargs: dict[str, Any],
+        wrong_scopes: list[str],
+    ) -> None:
+        monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
+        if tool_name in ("chat", "thread_state"):
+            _stub_digraph_app(monkeypatch)
+        _assert_denied(_call_tool(tool_name, _bearer_headers(wrong_scopes), **kwargs))
 
-    def test_every_registered_tool_enforces_auth(
+    def test_chat_forwards_valid_token_end_to_end(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
+        _stub_digraph_app(monkeypatch)
+        out = _call_tool("chat", _bearer_headers(["digigraph:chat"]), message="hi")
+        assert out == "pong"
+
+    def test_thread_state_forwards_valid_token_end_to_end(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
+        _stub_digraph_app(monkeypatch)
+        out = _call_tool("thread_state", _bearer_headers(["digigraph:mcp"]), thread_id="abc")
+        parsed = json.loads(out)
+        assert parsed.get("thread_id") == "abc"
+        assert "error" not in parsed
+
+    def test_every_registered_tool_enforces_auth(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
         import inspect
 
