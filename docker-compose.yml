@@ -380,8 +380,8 @@ services:
   # ─── digisearch MCP server (optional: run with docker compose --profile digisearch-mcp up) ───
   digisearch-mcp:
     build:
-      context: ./digisearch
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: digisearch/Dockerfile
     image: digi-digisearch:latest
     container_name: digi-digisearch-mcp
     profiles:
