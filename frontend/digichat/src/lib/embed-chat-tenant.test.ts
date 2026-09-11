@@ -325,7 +325,7 @@ describe("product embed YAML hosts", () => {
     expect(painted.gateMode).toBe("ungated");
   });
 
-  it("paints OCC YAML host without web_search", () => {
+  it("paints OCC YAML host with web_search", () => {
     vi.stubEnv("DIGICHAT_CONFIG_PATH", OCC_EMBED_YAML);
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
     resetDigichatConfigForTests();
@@ -337,7 +337,7 @@ describe("product embed YAML hosts", () => {
     expect(painted.skin).toBe("digichat");
     expect(painted.slug).toBe("occ");
     expect(painted.backendType).toBe("digigraph");
-    expect(painted.webSearch).toBe(false);
+    expect(painted.webSearch).toBe(true);
   });
 
   it("paints first-party DIGICHAT_EMBED_TENANTS as digichat when skin is omitted", () => {
