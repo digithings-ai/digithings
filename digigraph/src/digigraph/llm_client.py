@@ -255,9 +255,9 @@ def digifetch_web_search(
     ``ToolContext.state["digi_bearer"]``).
     """
     del model, usage_kind
-    from digigraph.orchestration.web_search_tools import _call_digisearch_web_search
+    from digigraph.orchestration.web_search_tools import call_digisearch_web_search
 
-    raw = _call_digisearch_web_search(
+    raw = call_digisearch_web_search(
         query,
         include_domains=include_domains,
         exclude_domains=exclude_domains,

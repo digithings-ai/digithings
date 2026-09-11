@@ -97,7 +97,7 @@ def call_web_search_tool(
     (``POST /v1/orchestrator_invoke``).
     """
     from digigraph.orchestration.registry import ToolContext
-    from digigraph.orchestration.web_search_tools import _call_digisearch_web_search
+    from digigraph.orchestration.web_search_tools import call_digisearch_web_search
 
     token = bearer_token if bearer_token is not None else _pipeline_bearer()
     context = ToolContext(
@@ -107,7 +107,7 @@ def call_web_search_tool(
         index_config={},
         state={"digi_bearer": token} if token else {},
     )
-    tool_out = _call_digisearch_web_search(
+    tool_out = call_digisearch_web_search(
         query,
         include_domains=list(include_domains or []),
         exclude_domains=list(exclude_domains or []),

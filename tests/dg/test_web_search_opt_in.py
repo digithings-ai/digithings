@@ -175,6 +175,30 @@ def test_handle_web_search_tool_error_raises(
         mod._handle_web_search({"query": "etf flows"}, ctx)
 
 
+def test_public_wrapper_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
+    from digigraph.orchestration import web_search_tools as mod
+
+    seen: dict[str, object] = {}
+
+    def fake_tool(query: str, **kwargs: object) -> dict[str, object]:
+        seen["query"] = query
+        seen.update(kwargs)
+        return {"content": "ok", "results": []}
+
+    monkeypatch.setattr(mod, "_call_digisearch_web_search", fake_tool)
+    out = mod.call_digisearch_web_search(
+        "etf flows",
+        include_domains=["a.com"],
+        exclude_domains=["b.com"],
+        max_results=7,
+    )
+    assert out == {"content": "ok", "results": []}
+    assert seen["query"] == "etf flows"
+    assert seen.get("include_domains") == ["a.com"]
+    assert seen.get("exclude_domains") == ["b.com"]
+    assert seen.get("max_results") == 7
+
+
 def test_web_search_handler_labels_external(monkeypatch: pytest.MonkeyPatch) -> None:
     from digigraph.orchestration import web_search_tools as mod
 

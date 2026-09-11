@@ -19,7 +19,8 @@ WEB_SEARCH_TOOL: dict[str, Any] = {
     "function": {
         "name": WEB_SEARCH_TOOL_NAME,
         "description": (
-            "Search the public web for current information via digillm. Results are "
+            "Search the public web for current information with the first-party "
+            "digisearch web_search tool. Results are "
             "External citations — they supplement digisearch/digivault corpus hits and "
             "must never replace them. Prefer digisearch/digivault first; use web_search "
             "only when the corpus cannot answer and live public facts are required."
@@ -30,6 +31,20 @@ WEB_SEARCH_TOOL: dict[str, Any] = {
                 "query": {
                     "type": "string",
                     "description": "Web search query (short, factual).",
+                },
+                "include_domains": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Restrict results to these domains.",
+                },
+                "exclude_domains": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Never return results from these domains.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max rows to return (default 4).",
                 },
             },
             "required": ["query"],
@@ -50,6 +65,27 @@ def _as_str_list(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(v).strip() for v in value if str(v).strip()]
     return []
+
+
+def call_digisearch_web_search(
+    query: str,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+    max_results: int = 4,
+    context: ToolContext | None = None,
+) -> dict[str, Any]:
+    """Public entry point for the digisearch ``web_search`` tool call.
+
+    Thin delegation to :func:`_call_digisearch_web_search` — external callers
+    (digiquant pipeline grounding) import this, never the private name.
+    """
+    return _call_digisearch_web_search(
+        query,
+        include_domains=include_domains,
+        exclude_domains=exclude_domains,
+        max_results=max_results,
+        context=context,
+    )
 
 
 def _call_digisearch_web_search(

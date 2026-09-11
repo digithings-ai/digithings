@@ -368,6 +368,27 @@ def test_detailed_tool_search_projection_matches_aggregate_token_semantics() -> 
 
 
 @pytest.mark.unit
+def test_digifetch_web_search_emits_web_search_purpose() -> None:
+    """The tool-only path records under CallPurpose.WEB_SEARCH — no synthesis purpose."""
+    from digigraph.orchestration import web_search_tools
+
+    rows = [{"content": "markets rallied", "doc_id": "https://example.com/a"}]
+    usage.start()
+    set_telemetry_observer(usage.DETAILED_USAGE_OBSERVER)
+
+    with (
+        usage.call_context(node_run_id=uuid4()),
+        patch.object(
+            web_search_tools, "_call_digisearch_web_search", return_value={"results": rows}
+        ),
+    ):
+        llm_client.digifetch_web_search("ignored-model", "ground this")
+
+    purposes = [call.purpose for call in usage.provider_calls_snapshot()]
+    assert purposes == [CallPurpose.WEB_SEARCH]
+
+
+@pytest.mark.unit
 def test_tool_search_tokens_count_toward_llm_totals() -> None:
     """Non-zero search tokens land in the llm totals of both projections (#3859).
 
