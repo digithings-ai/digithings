@@ -472,7 +472,7 @@ digichat depends on `digikey` and `digigraph` being healthy.
 |----------|---------|----------|---------|
 | `DIGIKEY_DATABASE_URL` | — | Yes | Postgres or SQLite URL |
 | `DIGIKEY_PRIVATE_KEY_PEM` | — | Prod: Yes | PEM private key for RS256 signing |
-| `DIGIKEY_ALLOW_EPHEMERAL_KEY` | `0` (compose: `1`) | Dev only | Generate ephemeral key if PEM not set |
+| `DIGIKEY_ALLOW_EPHEMERAL_KEY` | `0` (compose: `0`) | Dev only | Generate ephemeral key if PEM not set (set `1` for local dev only) |
 | `DIGIKEY_KEY_ID` | `digikey-1` | No | `kid` in JWKS and JWT header |
 | `DIGIKEY_ISSUER` | `http://127.0.0.1:8005` | Yes (match consumers) | JWT `iss` claim |
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | No | JWT `aud` claim |

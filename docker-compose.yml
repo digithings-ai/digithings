@@ -30,13 +30,16 @@ services:
       - DIGIKEY_DATABASE_URL=${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
       - DIGIKEY_BLOCKLIST_REDIS_URL=${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://digikey-blocklist-redis:6379/0}
-      # Set DIGIKEY_REQUIRE_BLOCKLIST=1 in production so auth fails closed without Redis.
-      - DIGIKEY_REQUIRE_BLOCKLIST=${DIGIKEY_REQUIRE_BLOCKLIST:-0}
+      # Fail closed by default: auth must not silently skip revocation when Redis is
+      # unreachable. Local dev without Redis sets DIGIKEY_REQUIRE_BLOCKLIST=0 explicitly.
+      - DIGIKEY_REQUIRE_BLOCKLIST=${DIGIKEY_REQUIRE_BLOCKLIST:-1}
       - DIGIKEY_LITELLM_PROXY_KEY=${DIGIKEY_LITELLM_PROXY_KEY:-${LITELLM_MASTER_KEY:-}}
       - DIGIKEY_ADMIN_TOKEN=${DIGIKEY_ADMIN_TOKEN:-}
       - DIGIKEY_BFF_TOKEN=${DIGIKEY_BFF_TOKEN:-}
       - DIGIKEY_ALLOW_DEV_GLOBAL=${DIGIKEY_ALLOW_DEV_GLOBAL:-0}
-      - DIGIKEY_ALLOW_EPHEMERAL_KEY=${DIGIKEY_ALLOW_EPHEMERAL_KEY:-1}
+      # Production default is 0: require DIGIKEY_PRIVATE_KEY_PEM so JWKS is stable across
+      # restarts. Local Docker dev opts in explicitly with DIGIKEY_ALLOW_EPHEMERAL_KEY=1.
+      - DIGIKEY_ALLOW_EPHEMERAL_KEY=${DIGIKEY_ALLOW_EPHEMERAL_KEY:-0}
       - PYTHONUNBUFFERED=1
       - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
