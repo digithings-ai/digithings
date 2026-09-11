@@ -1027,3 +1027,26 @@ describe("mapFoundryEvent MCP items (#3861)", () => {
     ]);
   });
 });
+
+describe("mapFoundryEvent call_id correlation (#3861)", () => {
+  it("passes call_id through on search call, output, and mcp_call spans", () => {
+    const call = mapFoundryEvent({
+      type: "response.output_item.done",
+      item: { type: "azure_ai_search_call", call_id: "call_xyz", arguments: JSON.stringify({ query: "Bob" }) },
+    });
+    const output = mapFoundryEvent({
+      type: "response.output_item.done",
+      item: { type: "azure_ai_search_call_output", call_id: "call_xyz", output: JSON.stringify({ documents: [] }) },
+    });
+    const mcp = mapFoundryEvent({
+      type: "response.output_item.done",
+      item: { type: "mcp_call", name: "datatap__list_connections", call_id: "call_m", arguments: "{}", output: "{}" },
+    });
+    for (const mapped of [call, output, mcp]) {
+      expect(mapped?.type).toBe("activity");
+    }
+    expect((call as { span: { callId?: string } }).span.callId).toBe("call_xyz");
+    expect((output as { span: { callId?: string } }).span.callId).toBe("call_xyz");
+    expect((mcp as { span: { callId?: string } }).span.callId).toBe("call_m");
+  });
+});
