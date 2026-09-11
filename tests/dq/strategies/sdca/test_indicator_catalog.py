@@ -22,7 +22,10 @@ from digiquant.strategies.sdca.indicator_catalog import (
     extra_indicators_for_window,
     load_date_value_frame,
     m2_liquidity_z,
+    onchain_asopr_z,
     onchain_mvrv_z,
+    onchain_puell_z,
+    onchain_rhodl_z,
     parse_indicator_weights_json,
     rs_eth_confluence_z,
     rs_eth_z,
@@ -162,6 +165,45 @@ class TestNamedExtras:
         tail = [v for v in z.to_list() if v is not None]
         assert tail
         assert sum(tail) / len(tail) > 0
+
+    @pytest.mark.parametrize(
+        "z_fn", [onchain_asopr_z, onchain_puell_z, onchain_rhodl_z], ids=lambda fn: fn.__name__
+    )
+    def test_onchain_ratio_rising_is_negative_z(self, z_fn) -> None:
+        n = 50
+        dates = _dates(n)
+        rising = pl.Series([1.0 * (1.05**i) for i in range(n)])
+        z = z_fn(dates, dates, rising, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) < 0
+
+    @pytest.mark.parametrize(
+        "z_fn", [onchain_asopr_z, onchain_puell_z, onchain_rhodl_z], ids=lambda fn: fn.__name__
+    )
+    def test_onchain_ratio_falling_is_positive_z(self, z_fn) -> None:
+        n = 50
+        dates = _dates(n)
+        falling = pl.Series([5.0 * (0.95**i) for i in range(n)])
+        z = z_fn(dates, dates, falling, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) > 0
+
+    @pytest.mark.parametrize(
+        "z_fn", [onchain_mvrv_z, onchain_asopr_z, onchain_puell_z, onchain_rhodl_z],
+        ids=lambda fn: fn.__name__,
+    )
+    def test_onchain_ratio_zero_warmup_does_not_produce_inf(self, z_fn) -> None:
+        """Pre-history days report 0.0 (not enough chain history yet) --
+        must be treated as missing, not logged into -inf."""
+        n = 30
+        dates = _dates(n)
+        values = pl.Series([0.0] * 10 + [2.0 * (1.02**i) for i in range(n - 10)])
+        z = z_fn(dates, dates, values, window=10, min_samples=5)
+        finite = [v for v in z.to_list() if v is not None]
+        assert finite
+        assert all(math.isfinite(v) for v in finite)
 
     def test_rs_eth_cheap_btc_is_positive_z(self) -> None:
         n = 50

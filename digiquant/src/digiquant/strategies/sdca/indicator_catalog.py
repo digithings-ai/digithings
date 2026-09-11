@@ -12,10 +12,16 @@ price oscillators (``price_oscillators.py``), applied to the BTC/ETH log
 ratio: ``rs_eth_confluence_z`` blends a slow leg (``rs_eth_z`` at a 90-day
 window, long-term rotation) with a fast leg (30-day, medium-term rotation).
 ``m2``/``dxy`` stay single-window — they track slow macro regimes without a
-comparably fast rotation to confluence against. ``onchain_mvrv`` (Bitview/BRK
-``mvrv``, full history back to 2010) is the same single-window shape: a
-log-transformed, sign-flipped rolling z of the realized-cap ratio — high
-MVRV means overvalued (sell-favorable, −z), same convention as ``dxy_z``.
+comparably fast rotation to confluence against. The four Bitview/BRK
+on-chain series (``onchain_mvrv``, ``onchain_asopr``, ``onchain_puell``,
+``onchain_rhodl``) are the same single-window shape and share one transform
+(``_log_ratio_sign_flipped_z``): each is a strictly-positive, right-skewed
+multiplicative ratio, so it's log-transformed first, then a sign-flipped
+rolling z — an elevated ratio (overheated/euphoric) means overvalued
+(sell-favorable, −z), same convention as ``dxy_z``. A handful of
+pre-history warmup days report ``0.0`` (chain history too short to compute
+the ratio yet); those are treated as missing rather than logged, same as
+any other pre-coverage gap.
 
 ``SdcaCompositeWeights`` defaults ``power_law=1``, extras ``0`` (disabled,
 excluded from the blend). Published ``btc_sdca`` in ``settings.json`` turns
@@ -32,7 +38,8 @@ null an unpublished path.
 Omitted on purpose (see ARCHITECTURE.md):
 - Mayer / 200w SMA — *r* ≈ 0.84 vs ``power_law_z`` (research PR #3232)
 - a second power-law residual ("alpha") — collinear with ``power_law_z``
-- on-chain NUPL — 1 − 1/MVRV, dual-counts ``onchain_mvrv`` below
+- on-chain NUPL — 1 − 1/MVRV, dual-counts ``onchain_mvrv`` below (Bitview
+  ``FORBIDDEN_SERIES``)
 - equity CAPE / Buffett / ERP — #3176 forbade equity RiskModel in v1
 - RS rotation pool — #1084; this module only uses ETH from the Coinbase cache
 """
@@ -61,7 +68,15 @@ from digiquant.strategies.sdca.price_oscillators import (
     weekly_monthly_rsi_confluence_z,
 )
 
-MACRO_INDICATOR_NAMES: tuple[str, ...] = ("m2", "rs_eth", "dxy", "onchain_mvrv")
+MACRO_INDICATOR_NAMES: tuple[str, ...] = (
+    "m2",
+    "rs_eth",
+    "dxy",
+    "onchain_mvrv",
+    "onchain_asopr",
+    "onchain_puell",
+    "onchain_rhodl",
+)
 PRICE_OSCILLATOR_NAMES: tuple[str, ...] = (
     "weekly_rsi",
     "weekly_macd",
@@ -85,6 +100,9 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "rs_eth": "rs_eth_weight",
     "dxy": "dxy_weight",
     "onchain_mvrv": "onchain_mvrv_weight",
+    "onchain_asopr": "onchain_asopr_weight",
+    "onchain_puell": "onchain_puell_weight",
+    "onchain_rhodl": "onchain_rhodl_weight",
     "weekly_rsi": "weekly_rsi_weight",
     "weekly_macd": "weekly_macd_weight",
     "sma_band": "sma_band_weight",
@@ -101,6 +119,9 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "rs_eth": "BTC/ETH relative strength",
     "dxy": "DXY",
     "onchain_mvrv": "on-chain MVRV",
+    "onchain_asopr": "on-chain aSOPR",
+    "onchain_puell": "on-chain Puell Multiple",
+    "onchain_rhodl": "on-chain RHODL Ratio",
     "weekly_rsi": "weekly RSI",
     "weekly_macd": "weekly log-MACD",
     "sma_band": "SMA band",
@@ -125,9 +146,13 @@ class SdcaCompositeWeights(BaseModel):
     m2: float = Field(0.0, ge=0.0)
     rs_eth: float = Field(0.0, ge=0.0)
     dxy: float = Field(0.0, ge=0.0)
-    # Bitview/BRK on-chain MVRV (research-only until validated via the
-    # RESEARCH_STATE.md Phase B playbook -- see onchain_mvrv_z below).
+    # Bitview/BRK on-chain series (research-only until validated via the
+    # RESEARCH_STATE.md Phase B playbook -- see _log_ratio_sign_flipped_z
+    # below, which all four share).
     onchain_mvrv: float = Field(0.0, ge=0.0)
+    onchain_asopr: float = Field(0.0, ge=0.0)
+    onchain_puell: float = Field(0.0, ge=0.0)
+    onchain_rhodl: float = Field(0.0, ge=0.0)
     weekly_rsi: float = Field(0.0, ge=0.0)
     weekly_macd: float = Field(0.0, ge=0.0)
     sma_band: float = Field(0.0, ge=0.0)
@@ -157,6 +182,9 @@ class SdcaCompositeWeights(BaseModel):
             ("rs_eth", self.rs_eth),
             ("dxy", self.dxy),
             ("onchain_mvrv", self.onchain_mvrv),
+            ("onchain_asopr", self.onchain_asopr),
+            ("onchain_puell", self.onchain_puell),
+            ("onchain_rhodl", self.onchain_rhodl),
             ("weekly_rsi", self.weekly_rsi),
             ("weekly_macd", self.weekly_macd),
             ("sma_band", self.sma_band),
@@ -188,6 +216,12 @@ class ExtraIndicatorSources(BaseModel):
     dxy_values: pl.Series | None = None
     onchain_mvrv_dates: pl.Series | None = None
     onchain_mvrv_values: pl.Series | None = None
+    onchain_asopr_dates: pl.Series | None = None
+    onchain_asopr_values: pl.Series | None = None
+    onchain_puell_dates: pl.Series | None = None
+    onchain_puell_values: pl.Series | None = None
+    onchain_rhodl_dates: pl.Series | None = None
+    onchain_rhodl_values: pl.Series | None = None
 
 
 def composite_weights_from_params(params: Mapping[str, float | int | str]) -> SdcaCompositeWeights:
@@ -198,6 +232,9 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         rs_eth=float(params.get("rs_eth_weight", 0.0)),
         dxy=float(params.get("dxy_weight", 0.0)),
         onchain_mvrv=float(params.get("onchain_mvrv_weight", 0.0)),
+        onchain_asopr=float(params.get("onchain_asopr_weight", 0.0)),
+        onchain_puell=float(params.get("onchain_puell_weight", 0.0)),
+        onchain_rhodl=float(params.get("onchain_rhodl_weight", 0.0)),
         weekly_rsi=float(params.get("weekly_rsi_weight", 0.0)),
         weekly_macd=float(params.get("weekly_macd_weight", 0.0)),
         sma_band=float(params.get("sma_band_weight", 0.0)),
@@ -222,6 +259,9 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         rs_eth=float(payload.get("rs_eth", 0.0)),
         dxy=float(payload.get("dxy", 0.0)),
         onchain_mvrv=float(payload.get("onchain_mvrv", 0.0)),
+        onchain_asopr=float(payload.get("onchain_asopr", 0.0)),
+        onchain_puell=float(payload.get("onchain_puell", 0.0)),
+        onchain_rhodl=float(payload.get("onchain_rhodl", 0.0)),
         weekly_rsi=float(payload.get("weekly_rsi", 0.0)),
         weekly_macd=float(payload.get("weekly_macd", 0.0)),
         sma_band=float(payload.get("sma_band", 0.0)),
@@ -336,6 +376,36 @@ def dxy_z(
     return (-causal_rolling_z(aligned, window=window, min_samples=min_samples)).alias("dxy")
 
 
+def _log_ratio_sign_flipped_z(
+    dates: pl.Series,
+    src_dates: pl.Series,
+    src_values: pl.Series,
+    *,
+    window: int,
+    min_samples: int,
+    name: str,
+) -> pl.Series:
+    """Shared core for the Bitview/BRK on-chain ratio indicators (MVRV,
+    aSOPR, Puell Multiple, RHODL Ratio): log-transformed rolling-z,
+    sign-flipped so an elevated ratio (overheated/euphoric) scores
+    sell-favorable (−z) and a depressed ratio (capitulation) scores
+    buy-favorable (+z) -- same convention as ``dxy_z``. Log-transformed
+    first since each is a strictly-positive, right-skewed multiplicative
+    ratio (bull-market spikes would otherwise dominate a level-based rolling
+    std). A handful of pre-history warmup days report ``0.0`` (not enough
+    chain history yet to compute the ratio) -- those are nulled before the
+    log so ``align_to_dates``'s forward-fill treats them as an ordinary
+    coverage gap instead of producing ``-inf``.
+    """
+    frame = pl.DataFrame({"value": src_values})
+    positive_values = frame.select(
+        pl.when(pl.col("value") > 0).then(pl.col("value")).otherwise(None)
+    )["value"]
+    aligned = align_to_dates(dates, src_dates, positive_values, forward_fill=True)
+    log_values = aligned.log()
+    return (-causal_rolling_z(log_values, window=window, min_samples=min_samples)).alias(name)
+
+
 def onchain_mvrv_z(
     dates: pl.Series,
     mvrv_dates: pl.Series,
@@ -344,16 +414,66 @@ def onchain_mvrv_z(
     window: int = DEFAULT_ROLLING_WINDOW,
     min_samples: int = _MIN_SAMPLES,
 ) -> pl.Series:
-    """Bitview/BRK MVRV, log-transformed rolling-z, sign-flipped: high MVRV
-    (overvalued realized-cap ratio) → −z (sell-favorable), same convention
-    as ``dxy_z``. Log-transformed first since MVRV is a strictly-positive,
-    right-skewed multiplicative ratio (bull-market spikes would otherwise
-    dominate a level-based rolling std).
-    """
-    aligned = align_to_dates(dates, mvrv_dates, mvrv_values, forward_fill=True)
-    log_mvrv = aligned.log()
-    return (-causal_rolling_z(log_mvrv, window=window, min_samples=min_samples)).alias(
-        "onchain_mvrv"
+    """Bitview/BRK MVRV -- see ``_log_ratio_sign_flipped_z``."""
+    return _log_ratio_sign_flipped_z(
+        dates, mvrv_dates, mvrv_values, window=window, min_samples=min_samples, name="onchain_mvrv"
+    )
+
+
+def onchain_asopr_z(
+    dates: pl.Series,
+    asopr_dates: pl.Series,
+    asopr_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Bitview/BRK adjusted SOPR (24h) -- see ``_log_ratio_sign_flipped_z``."""
+    return _log_ratio_sign_flipped_z(
+        dates,
+        asopr_dates,
+        asopr_values,
+        window=window,
+        min_samples=min_samples,
+        name="onchain_asopr",
+    )
+
+
+def onchain_puell_z(
+    dates: pl.Series,
+    puell_dates: pl.Series,
+    puell_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Bitview/BRK Puell Multiple -- see ``_log_ratio_sign_flipped_z``."""
+    return _log_ratio_sign_flipped_z(
+        dates,
+        puell_dates,
+        puell_values,
+        window=window,
+        min_samples=min_samples,
+        name="onchain_puell",
+    )
+
+
+def onchain_rhodl_z(
+    dates: pl.Series,
+    rhodl_dates: pl.Series,
+    rhodl_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Bitview/BRK RHODL Ratio -- see ``_log_ratio_sign_flipped_z``."""
+    return _log_ratio_sign_flipped_z(
+        dates,
+        rhodl_dates,
+        rhodl_values,
+        window=window,
+        min_samples=min_samples,
+        name="onchain_rhodl",
     )
 
 
@@ -463,6 +583,57 @@ def build_extra_indicators(
                     min_samples=min_samples,
                 ),
                 weight=enabled["onchain_mvrv"],
+            )
+        )
+    if "onchain_asopr" in enabled:
+        asopr_dates = _require_pair(
+            sources.onchain_asopr_dates, sources.onchain_asopr_values, "onchain_asopr"
+        )
+        extras.append(
+            IndicatorWeight(
+                name="onchain_asopr",
+                z=onchain_asopr_z(
+                    dates,
+                    asopr_dates,
+                    sources.onchain_asopr_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["onchain_asopr"],
+            )
+        )
+    if "onchain_puell" in enabled:
+        puell_dates = _require_pair(
+            sources.onchain_puell_dates, sources.onchain_puell_values, "onchain_puell"
+        )
+        extras.append(
+            IndicatorWeight(
+                name="onchain_puell",
+                z=onchain_puell_z(
+                    dates,
+                    puell_dates,
+                    sources.onchain_puell_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["onchain_puell"],
+            )
+        )
+    if "onchain_rhodl" in enabled:
+        rhodl_dates = _require_pair(
+            sources.onchain_rhodl_dates, sources.onchain_rhodl_values, "onchain_rhodl"
+        )
+        extras.append(
+            IndicatorWeight(
+                name="onchain_rhodl",
+                z=onchain_rhodl_z(
+                    dates,
+                    rhodl_dates,
+                    sources.onchain_rhodl_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["onchain_rhodl"],
             )
         )
     if allowlist is None or "weekly_rsi" in allowlist:
@@ -646,6 +817,9 @@ def sources_from_optional_paths(
     m2_path: Path | str | None = None,
     dxy_path: Path | str | None = None,
     onchain_mvrv_path: Path | str | None = None,
+    onchain_asopr_path: Path | str | None = None,
+    onchain_puell_path: Path | str | None = None,
+    onchain_rhodl_path: Path | str | None = None,
     eth_dates: pl.Series | None = None,
     eth_close: pl.Series | None = None,
 ) -> ExtraIndicatorSources:
@@ -659,6 +833,15 @@ def sources_from_optional_paths(
     onchain_mvrv_dates = onchain_mvrv_values = None
     if onchain_mvrv_path is not None:
         onchain_mvrv_dates, onchain_mvrv_values = load_date_value_frame(onchain_mvrv_path)
+    onchain_asopr_dates = onchain_asopr_values = None
+    if onchain_asopr_path is not None:
+        onchain_asopr_dates, onchain_asopr_values = load_date_value_frame(onchain_asopr_path)
+    onchain_puell_dates = onchain_puell_values = None
+    if onchain_puell_path is not None:
+        onchain_puell_dates, onchain_puell_values = load_date_value_frame(onchain_puell_path)
+    onchain_rhodl_dates = onchain_rhodl_values = None
+    if onchain_rhodl_path is not None:
+        onchain_rhodl_dates, onchain_rhodl_values = load_date_value_frame(onchain_rhodl_path)
     return ExtraIndicatorSources(
         m2_dates=m2_dates,
         m2_values=m2_values,
@@ -668,6 +851,12 @@ def sources_from_optional_paths(
         dxy_values=dxy_values,
         onchain_mvrv_dates=onchain_mvrv_dates,
         onchain_mvrv_values=onchain_mvrv_values,
+        onchain_asopr_dates=onchain_asopr_dates,
+        onchain_asopr_values=onchain_asopr_values,
+        onchain_puell_dates=onchain_puell_dates,
+        onchain_puell_values=onchain_puell_values,
+        onchain_rhodl_dates=onchain_rhodl_dates,
+        onchain_rhodl_values=onchain_rhodl_values,
     )
 
 
@@ -739,7 +928,10 @@ __all__ = [
     "load_date_value_frame",
     "m2_liquidity_z",
     "missing_extra_names",
+    "onchain_asopr_z",
     "onchain_mvrv_z",
+    "onchain_puell_z",
+    "onchain_rhodl_z",
     "parse_indicator_weights_json",
     "rs_eth_confluence_z",
     "rs_eth_z",

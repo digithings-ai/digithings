@@ -185,16 +185,31 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     # data/price-history/, not inside it) -- check there before an explicit
     # sibling file, so a fresh fetch_bitview_series() run is picked up
     # without a manual export step.
-    onchain_mvrv_path = _first_existing(base, ("ONCHAIN_MVRV.csv", "BITVIEW_MVRV.csv"))
-    if onchain_mvrv_path is None:
-        bitview_cache = base.parent / "onchain" / "bitview" / "mvrv.parquet"
-        if bitview_cache.exists():
-            onchain_mvrv_path = bitview_cache
+    def _bitview_path(csv_names: tuple[str, ...], cache_stem: str) -> Path | None:
+        path = _first_existing(base, csv_names)
+        if path is not None:
+            return path
+        cache = base.parent / "onchain" / "bitview" / f"{cache_stem}.parquet"
+        return cache if cache.exists() else None
+
+    onchain_mvrv_path = _bitview_path(("ONCHAIN_MVRV.csv", "BITVIEW_MVRV.csv"), "mvrv")
+    onchain_asopr_path = _bitview_path(("ONCHAIN_ASOPR.csv", "BITVIEW_ASOPR.csv"), "asopr_24h")
+    onchain_puell_path = _bitview_path(("ONCHAIN_PUELL.csv", "BITVIEW_PUELL.csv"), "puell_multiple")
+    onchain_rhodl_path = _bitview_path(("ONCHAIN_RHODL.csv", "BITVIEW_RHODL.csv"), "rhodl_ratio")
     m2_dates, m2_values = load_date_value_frame(m2_path) if m2_path else (None, None)
     eth_dates, eth_close = load_date_value_frame(eth_path) if eth_path else (None, None)
     dxy_dates, dxy_values = load_date_value_frame(dxy_path) if dxy_path else (None, None)
     onchain_mvrv_dates, onchain_mvrv_values = (
         load_date_value_frame(onchain_mvrv_path) if onchain_mvrv_path else (None, None)
+    )
+    onchain_asopr_dates, onchain_asopr_values = (
+        load_date_value_frame(onchain_asopr_path) if onchain_asopr_path else (None, None)
+    )
+    onchain_puell_dates, onchain_puell_values = (
+        load_date_value_frame(onchain_puell_path) if onchain_puell_path else (None, None)
+    )
+    onchain_rhodl_dates, onchain_rhodl_values = (
+        load_date_value_frame(onchain_rhodl_path) if onchain_rhodl_path else (None, None)
     )
     return ExtraIndicatorSources(
         m2_dates=m2_dates,
@@ -205,6 +220,12 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
         dxy_values=dxy_values,
         onchain_mvrv_dates=onchain_mvrv_dates,
         onchain_mvrv_values=onchain_mvrv_values,
+        onchain_asopr_dates=onchain_asopr_dates,
+        onchain_asopr_values=onchain_asopr_values,
+        onchain_puell_dates=onchain_puell_dates,
+        onchain_puell_values=onchain_puell_values,
+        onchain_rhodl_dates=onchain_rhodl_dates,
+        onchain_rhodl_values=onchain_rhodl_values,
     )
 
 
@@ -222,6 +243,12 @@ def drop_extras_missing_sources(
         payload["dxy"] = 0.0
     if payload["onchain_mvrv"] > 0.0 and sources.onchain_mvrv_dates is None:
         payload["onchain_mvrv"] = 0.0
+    if payload["onchain_asopr"] > 0.0 and sources.onchain_asopr_dates is None:
+        payload["onchain_asopr"] = 0.0
+    if payload["onchain_puell"] > 0.0 and sources.onchain_puell_dates is None:
+        payload["onchain_puell"] = 0.0
+    if payload["onchain_rhodl"] > 0.0 and sources.onchain_rhodl_dates is None:
+        payload["onchain_rhodl"] = 0.0
     return SdcaCompositeWeights(**payload)
 
 
@@ -236,8 +263,9 @@ def load_sdca_extra_z(
     """Load independent extras from sibling files next to the BTC OHLCV CSV.
 
     Looks for ``M2SL.csv``/``M2.csv``, ``ETH-USD.csv``, ``DTWEXBGS.csv``/``DXY.csv``,
-    and on-chain MVRV (``ONCHAIN_MVRV.csv``/``BITVIEW_MVRV.csv``, or the Bitview
-    client's own ``data/onchain/bitview/mvrv.parquet`` cache). Missing files omit
+    and four Bitview/BRK on-chain series -- MVRV, aSOPR, Puell Multiple, RHODL
+    Ratio (``ONCHAIN_<NAME>.csv``/``BITVIEW_<NAME>.csv``, or the Bitview
+    client's own ``data/onchain/bitview/*.parquet`` caches). Missing files omit
     that extra (trials that need it are skipped).
 
     ``oscillators`` defaults to ``SdcaOscillatorSpec()``'s production periods;
@@ -259,6 +287,9 @@ def load_sdca_extra_z(
         rs_eth=1.0 if sources.eth_dates is not None else 0.0,
         dxy=1.0 if sources.dxy_dates is not None else 0.0,
         onchain_mvrv=1.0 if sources.onchain_mvrv_dates is not None else 0.0,
+        onchain_asopr=1.0 if sources.onchain_asopr_dates is not None else 0.0,
+        onchain_puell=1.0 if sources.onchain_puell_dates is not None else 0.0,
+        onchain_rhodl=1.0 if sources.onchain_rhodl_dates is not None else 0.0,
     )
     extra.update(extra_z_vectors(date_s, price_s, weights, sources, oscillators=oscillators))
     return extra
