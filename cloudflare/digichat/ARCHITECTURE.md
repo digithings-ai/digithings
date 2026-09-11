@@ -862,8 +862,9 @@ through the mirrored ISO map (codes, English labels, and autonyms). `/provider` 
 `/byok`, `/key`) opens the composer-docked provider list, then a token field, then a model
 list when the provider requires one. PaywallCard / ChatShell still use `ByokCliFlow`.
 `/sessions` is full-app only. `/help`, `/new`, `/copy`, `/export`,
-`/compact`, `/undo`, `/redo` stay client-only. Reload and `/new` reset tools ON + English
-(not localStorage). No sign-in is required for these session prefs.
+`/compact`, `/undo`, `/redo` stay client-only. Reload and `/new` reset session prefs
+(tools ON + English — not localStorage); catalog and auth toggles persist to
+localStorage. No sign-in is required for these session prefs.
 
 **Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default? }` is
 forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?}`). **Operator URLs never reach the

@@ -23,7 +23,7 @@
 # reasoning).
 #
 # Tier philosophy:
-#   cheap     — open-weight OSS models (bare) for phases; first-party tool + cheap synthesis grounding
+#   cheap     — open-weight OSS models (bare) for phases; first-party tool-only grounding
 #   balanced  — cheap pool + mid-tier (Gemini Flash, GPT-5.6 Luna, Grok), all bare
 #   quality   — unbounded frontier models; no auto-router sanitization
 #

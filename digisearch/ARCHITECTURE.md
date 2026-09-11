@@ -1034,7 +1034,7 @@ docker compose --profile digisearch-mcp up
 
 The `searxng` service (`searxng/searxng`) is loopback-only on the host (`127.0.0.1:8080`) with config at `config/searxng/settings.yml` (`search.formats: [html, json]`, engine allowlist). `valkey` backs its limiter. digisearch reaches it in-container via `DIGISEARCH_SEARXNG_URL=http://searxng:8080`. No new digisearch port: `POST /v1/web_search`, MCP `web_search`, and orchestrator `web_search` all ride the existing apps.
 
-Rollout ops: single flag `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (default `auto`); a down sidecar or a ddgs 403/CAPTCHA fails over to the next backend, and the digigraph `web` skill stays corpus-only unless the session opts in (#3420) — fail-closed to corpus-only at every layer. Engine allowlist is `wikipedia, duckduckgo, bing, mojeek`; `search.formats` must keep `json` (the provider calls `/search?format=json`). `server.secret_key` ships as a dev-only placeholder — rotate before exposing beyond loopback. Upstream scrapers break without notice: `compose pull searxng` weekly, and watch per-engine 403/CAPTCHA rates as the early signal; the cost win shows up as a drop in grounding-model (gemini flash-lite) traffic on web-grounded segments. Eval: `digisearch/tests/test_web_search_eval.py` (20 queries across news/macro/docs/earnings, mocked offline; live sampling behind `DIGISEARCH_WEB_SEARCH_LIVE=1` with p50 fetch+extract < 5s). Known limitation: digiquant→hub calls carry the Task-1 service JWT (bearer threads via `ToolContext.state["digi_bearer"]`); legs without a token fail closed with `DashboardWebSearchError`, never silently ungrounded.
+Rollout ops: single flag `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (default `auto`); a down sidecar or a ddgs 403/CAPTCHA fails over to the next backend, and the digigraph `web` skill stays corpus-only unless the session opts in (#3420) — fail-closed to corpus-only at every layer. Engine allowlist is `wikipedia, duckduckgo, bing, mojeek`; `search.formats` must keep `json` (the provider calls `/search?format=json`). `server.secret_key` ships as a dev-only placeholder — rotate before exposing beyond loopback. Upstream scrapers break without notice: `compose pull searxng` weekly, and watch per-engine 403/CAPTCHA rates as the early signal; grounding is tool-only (#3859) — no synthesis-model traffic runs on web-grounded segments. Eval: `digisearch/tests/test_web_search_eval.py` (20 queries across news/macro/docs/earnings, mocked offline; live sampling behind `DIGISEARCH_WEB_SEARCH_LIVE=1` with p50 fetch+extract < 5s). Known limitation: digiquant→hub calls carry the Task-1 service JWT (bearer threads via `ToolContext.state["digi_bearer"]`); legs without a token fail closed with `DashboardWebSearchError`, never silently ungrounded.
 
 Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + what remains):
 
@@ -1056,6 +1056,9 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
   `2fb0fa85096f`, digest `sha256:2fb0fa85096fe6df5c3ab98ecb4d6e0ee2ef66b8fb96ce6fce0f75b51c4bd90a`
   (searxng `2026.9.10-931fd9787`). `server.secret_key` is still the dev-only
   placeholder — rotate before exposing beyond loopback (unchanged).
+  Owner decision (#3871): searxng floats on latest — the digest above is a
+  recorded observation, not an enforced pin; enforcing a digest pin is a
+  networked ops follow-up (owner-side).
 - Eval live leg: skipped-with-reason (gate: sidecar must return rows; it
   returns 429, so no p50/quality measured). Supplementary offline evidence on
   this branch: `pytest digisearch/tests/test_web_search_eval.py -v` → 3
