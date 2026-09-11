@@ -77,6 +77,8 @@ describe('DigichatPopup', () => {
     const link = cta?.querySelector('a');
     expect(link?.textContent).toBe(DIGICHAT_UPGRADE_CTA_LABEL);
     expect(link?.getAttribute('href')).toBe(DIGICHAT_UPGRADE_CTA_HREF);
+    // The upgrade-only panel must never offer New chat (#3785).
+    expect(document.body.querySelector('.digichat-launcher__new')).toBeNull();
   });
 
   it('builds no iframe for baseline, so free/brief never burn turns (#3662)', () => {
@@ -215,5 +217,20 @@ describe('DigichatPopup', () => {
       );
     });
     expect(container.querySelector('[data-digichat-popup]')).toBeNull();
+  });
+
+  it('never renders New chat until the host→embed protocol exists (#3785)', () => {
+    act(() => {
+      root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
+    });
+    const btn = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    act(() => {
+      btn.click();
+    });
+    expect(document.body.querySelector('.digichat-launcher__panel')).not.toBeNull();
+    expect(document.body.querySelector('.digichat-launcher__new')).toBeNull();
+    expect(document.querySelector('[aria-label="New chat"]')).toBeNull();
   });
 });
