@@ -440,3 +440,68 @@ that could both be read as "the baseline."
    directly — pending his read on the sell-side result and any further
    iteration on the bounds/objective per his own framing ("we'll have to
    play around with those variables").
+
+## North-star ceiling (benchmark only — NEVER a trading candidate)
+
+Chris's 2026-09-11 direction, after pausing new-indicator work to sanity-check
+the optimization pipeline itself: "if we had the perfect indicator, then how
+much could we really materially make? ... fit the perfect line, fit the
+perfect valuation index, and then fit the perfect buy and sell strategy
+around that and make a tier sheet for it ... as we add more indicators and
+keep optimizing, that's what we aim for. We won't realistically reach it, but
+at least it's a target."
+
+`scripts/run_oracle_ceiling.py` builds a **non-causal** ("oracle") risk index
+directly from realized BTC price — piecewise log-price position between the
+actual local price extreme inside every documented cycle window
+(`cycle_windows.SdcaCycleWindows.btc_v1()` / `btc_medium_term_v1()`), blended
+3:1 long:medium wherever both timeframes have real (non-extrapolated)
+coverage for a day, falling back to whichever timeframe does where only one
+does. This index uses future price information no live indicator could ever
+have — it is a theoretical ceiling, not a strategy, and must **never** be
+added to the Strategy Book artifact's `candidates` collection or
+`settings.json`. The resulting risk series is handed to the unmodified
+production curve search (`curve_optimize.search_wide_knee_curve`, same
+bounds/grid a real trial uses) so only the index is idealized, not the
+curve-fitting methodology.
+
+An independent adversarial review (2026-09-11) caught and fixed a real bug
+before this number was final: the long-term anchor set's last pin trails the
+price series by ~11 months, and the original naive fixed-ratio blend
+flat-extrapolated that stale peak value across the entire tail at 3:1
+weight — pinning risk to 75-100 through 2026-06-30's -53% trough and starving
+the "perfect" curve of its best late buying opportunity. Fixed via a
+coverage-aware blend (`_blend_risk`) that uses whichever timeframe has real
+(non-extrapolated) coverage alone when the other doesn't. The corrected
+ceiling is materially higher than the pre-fix run — this file records only
+the corrected, reviewed result.
+
+- **Window:** 2018-01-01 → 2026-09-02, $1,000 initial cash, unshifted (no
+  `signal_delay_days` — see caveat below).
+- **Benchmarks (same accounting `run_backtest`'s `vs_lump_pct`/
+  `vs_flat_dca_pct` are measured against):** lump-sum from first trade day
+  $17,340 (+1,634.0%); flat DCA from window start $4,791 (+379.1%).
+- **Oracle-optimal SDCA:** $148,330 (+14,733.0%) — +755.4% vs lump, +2,995.9%
+  vs flat DCA. Max drawdown 61.8%, `risk_adjusted_return=238.36`.
+- **Winning curve** (production `WIDE_KNEE_SEARCH_BOUNDS`/`WIDE_KNEE_COARSE_GRID`,
+  unmodified): `buy_max_rate=39.22, buy_knee_risk=21.81, sell_knee_risk=79.31,
+  sell_max_rate=35.48, buy_curvature=3.97, sell_curvature=5.95`.
+- **Caveats:**
+  - Non-causal by construction — uses realized future price every day. This
+    is a ceiling, never a deployable strategy.
+  - Does **not** apply `signal_delay_days=3` (real trials do, and run through
+    2026-08-30) — the oracle deliberately represents a zero-implementation-lag
+    theoretical ceiling, not a directly comparable trial.
+  - Not a claimed ceiling on `stage_a.combined_cycle_overlap_score` — that
+    score rewards saturating an *entire* peak/trough window at risk ≥80/≤35,
+    which a smooth interpolation does less aggressively than a step function
+    would (diagnostic sensitivity sweep in the script output, not treated as
+    a target to hit).
+  - Full tier sheet (anchors, sensitivity sweep, coverage stats):
+    `.scratch/oracle_ceiling/oracle_ceiling_result.json` (gitignored).
+
+This is the target referenced in item 6-8 above and any future indicator
+work: as real indicators + curve search improve, compare their OOS
+`total_return_pct` against this $148,330 / +14,733% figure to see how much
+headroom remains — never as a bar any real (causal) strategy is expected to
+clear.
