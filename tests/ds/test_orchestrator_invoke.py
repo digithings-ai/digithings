@@ -219,3 +219,33 @@ def test_v1_web_search_bad_backend_is_503(
     r = client.post("/v1/web_search", json={"query": "etf flows"})
     assert r.status_code == 503
     assert "bogus" in r.text
+
+
+@pytest.mark.unit
+def test_orchestrator_failing_web_search_surfaced_fail_hard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Failing web_search surfaces fail-hard through execute()/registry (#3871).
+
+    Pins actual surfacing: the registry execute path does not catch tool
+    failures, so a downed web_search raises instead of returning an envelope.
+    Patches the public call_digisearch_web_search wrapper, never the private one.
+    """
+    from digigraph.orchestration import builtin  # noqa: F401 - registration
+    from digigraph.orchestration import web_search_tools as ws_mod
+    from digigraph.orchestration.registry import ToolContext, execute
+
+    def _down(*args: object, **kwargs: object) -> dict[str, object]:
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(ws_mod, "call_digisearch_web_search", _down)
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={"enable_web_search": True},
+        allowed_tool_names=frozenset({ws_mod.WEB_SEARCH_TOOL_NAME}),
+    )
+    with pytest.raises(RuntimeError, match="down"):
+        execute(ws_mod.WEB_SEARCH_TOOL_NAME, {"query": "x"}, ctx)

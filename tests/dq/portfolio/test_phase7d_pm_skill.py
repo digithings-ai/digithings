@@ -36,22 +36,22 @@ def _stub_web_grounding_tool(monkeypatch: pytest.MonkeyPatch) -> None:
     the requested-search-must-succeed contract is covered by the grounding
     unit tests, so nodes get canned {summary, sources, as_of} grounding.
     """
-    from digiquant.research.testing.simulator import CANNED_WEB_GROUNDING
+    from digiquant.research.testing.simulator import CANNED_TOOL_SEARCH
 
     monkeypatch.setattr(
         "digiquant.research.data.web_grounding.fetch_web_grounding",
-        lambda **_kwargs: dict(CANNED_WEB_GROUNDING),
+        lambda **_kwargs: dict(CANNED_TOOL_SEARCH),
     )
     monkeypatch.setattr(
         "digiquant.research.data.web_grounding.call_web_search_tool",
         lambda **_kwargs: {
-            "summary": str(CANNED_WEB_GROUNDING["summary"]),
-            "sources": list(CANNED_WEB_GROUNDING["sources"]),
+            "summary": str(CANNED_TOOL_SEARCH["summary"]),
+            "sources": list(CANNED_TOOL_SEARCH["sources"]),
         },
     )
     monkeypatch.setattr(
         "digiquant.research.data.ai_portfolios.fetch_ai_portfolio_grounding",
-        lambda **_kwargs: dict(CANNED_WEB_GROUNDING),
+        lambda **_kwargs: dict(CANNED_TOOL_SEARCH),
     )
 
 

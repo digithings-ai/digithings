@@ -949,7 +949,7 @@ def seed_supabase_client(
 # it binds call_web_search_tool via a top-level from-import, which escapes
 # the web_grounding patch.
 
-CANNED_WEB_GROUNDING: dict[str, Any] = {
+CANNED_TOOL_SEARCH: dict[str, Any] = {
     "summary": "- canned",
     "sources": ["https://u"],
     "as_of": "2026-06-13",
@@ -958,20 +958,20 @@ CANNED_WEB_GROUNDING: dict[str, Any] = {
 
 def _canned_fetch_web_grounding(**kwargs: Any) -> dict[str, Any]:
     """Stand-in for ``fetch_web_grounding`` returning canned grounding."""
-    return dict(CANNED_WEB_GROUNDING)
+    return dict(CANNED_TOOL_SEARCH)
 
 
 def _canned_call_web_search_tool(**kwargs: Any) -> dict[str, Any]:
     """Stand-in for ``call_web_search_tool`` returning canned tool output."""
     return {
-        "summary": str(CANNED_WEB_GROUNDING["summary"]),
-        "sources": list(CANNED_WEB_GROUNDING["sources"]),
+        "summary": str(CANNED_TOOL_SEARCH["summary"]),
+        "sources": list(CANNED_TOOL_SEARCH["sources"]),
     }
 
 
 def _canned_fetch_ai_portfolio_grounding(**kwargs: Any) -> dict[str, Any]:
     """Stand-in for ``fetch_ai_portfolio_grounding`` returning canned grounding."""
-    return dict(CANNED_WEB_GROUNDING)
+    return dict(CANNED_TOOL_SEARCH)
 
 
 # ──────────────────────────────────────────────────────────────────────────
