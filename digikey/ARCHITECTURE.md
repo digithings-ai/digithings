@@ -243,9 +243,11 @@ Scopes follow a `service:action` namespace. Defined (implicitly) in `scopes.py` 
 | `digiquant:optimize` | digiquant | `/run_optimize`, `/run_pipeline`, `/v1/workflow` |
 | `digisearch:query` | digisearch | `/query`, `/v1/research_turn`, `/v1/orchestrator_tools`, `/indexes/*` |
 | `digisearch:ingest` | digisearch | `/ingest*` |
+| `digivault:read` | digivault | `/v1/orchestrator_tools`, `/v1/orchestrator_invoke`, `POST /v1/notes/by-path`, and all GET note routes |
+| `digivault:write` | digivault | Mutating note routes; `digivault_create_note` is additionally handler-enforced on the shared `/v1/orchestrator_invoke` |
 | `*` | all | Wildcard — all scopes |
 
-Default BFF session scopes (from `scopes.py`): `digigraph:workflow`, `digigraph:chat`, `digigraph:mcp`, `digiquant:backtest`, `digiquant:optimize`, `digisearch:query`, `digisearch:ingest`.
+Default BFF session scopes (from `scopes.py`): `digigraph:workflow`, `digigraph:chat`, `digigraph:mcp`, `digiquant:backtest`, `digiquant:optimize`, `digisearch:query`, `digisearch:ingest`, `digivault:read`.
 
 ### LiteLLM proxy key funnel
 
