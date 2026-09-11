@@ -117,13 +117,13 @@ def _macro_stale_days() -> int:
 
 
 def _ingested_macro_stale(run_date: Any) -> bool:
-    """Is the ingested FRED macro layer stale → should a fallback segment fire paid search?
+    """Is the ingested FRED macro layer stale → should the grounded-by-ingest segment search?
 
-    Returns ``True`` (→ use the paid fallback) unless the layer is *confirmed
+    Returns ``True`` (→ run the paid web_search) unless the layer is *confirmed
     fresh*: the latest ``macro_series_observations.obs_date`` is within
     ``DIGIQUANT_MACRO_STALE_DAYS`` of ``run_date``. Every failure mode — kill-switch
     off, no client, query error, empty table, unparseable/exotic ``run_date`` —
-    fail-soft to ``True`` so a ``live_search_is_fallback`` segment never silently
+    fail-soft to ``True`` so a grounded-by-ingest segment never silently
     loses its grounding (Phase D capability guarantee). Only the confirmed-fresh
     path returns ``False``, which is what lets the paid call be skipped on the
     hot path.
@@ -178,16 +178,19 @@ def build_grounding(
 
     - ``tools`` / ``execute_tool``: the Supabase data tools (function calling).
     - ``web_grounding``: a cited grounding-summary dict to inject into ``phase_inputs`` —
-      either a completion-synthesis pre-pass (``live_search``) or a web
-      search read of the tracked AI-portfolio accounts (``ai_portfolios``). ``None`` if
-      unavailable.
+      either a tool-only web_search pre-pass (``live_search``) or a web
+      search read of the tracked AI-portfolio accounts (``ai_portfolios``).
+      A requested search must succeed or raise ``DashboardWebSearchError``;
+      ``None`` only for skipped-by-design segments (fresh ingested layer,
+      ``live_search=False``).
 
-    When ``live_search_is_fallback`` is set, the ``web_search`` pre-pass is treated
-    as a *paid fallback*: it fires only when the ingested FRED macro layer is stale
-    (see ``_ingested_macro_stale``). On a normal run with fresh ingested data the
-    paid call is skipped entirely — the segment grounds on its in-process data
-    tools — which is the Phase D cost cut. A stale/broken ingested layer still
-    falls through to the paid call, so grounding is never silently dropped.
+    When ``live_search_is_fallback`` is set, the ``web_search`` pre-pass is
+    skipped whenever the ingested FRED macro layer is confirmed fresh (see
+    ``_ingested_macro_stale``) — a grounded-by-ingest skip. On a normal run
+    with fresh ingested data the paid call never fires — the segment grounds
+    on its in-process data tools — which is the Phase D cost cut. A
+    stale/broken ingested layer still falls through to the paid call, so
+    grounding is never silently dropped.
 
     Honors the ``DIGIQUANT_RESEARCH_DATA_TOOLS`` kill-switch. Shared by ``build_segment_node``
     and the bespoke phase nodes (equity / sectors) so the gating + wiring live in
@@ -259,7 +262,7 @@ def build_grounding(
         grounding = get_grounding_model(segment=segment or "research")
         if live_search_is_fallback and not _ingested_macro_stale(run_date):
             logger.info(
-                "%s: ingested macro layer fresh — skipping paid fallback web_search",
+                "%s: ingested macro layer fresh — grounded-by-ingest skip, no paid web_search",
                 segment or "macro",
             )
         elif grounding:
@@ -279,37 +282,30 @@ def apply_web_grounding_to_inputs(
     live_search: bool,
     live_search_is_fallback: bool = False,
 ) -> dict[str, Any]:
-    """Merge web grounding into ``phase_inputs``; flag or fail when absent.
+    """Merge web grounding into ``phase_inputs``; fail hard when requested but absent.
 
-    A ``live_search_is_fallback`` segment (e.g. macro, #711) is grounded by its primary
-    ingested-data layer; the paid web_search is a stale-only supplement that ``build_grounding``
-    skips on the fresh-data hot path. Its absence is the normal cost-cut, NOT an ungrounded
-    segment — so it is neither failed-hard (``OLYMPUS_WEB_SEARCH=required``) nor flagged
-    ``grounding_absent`` (which would wrongly tell the analyst to lower conviction; #946 is for
-    segments where web search is the *primary* grounding).
+    A requested live search must succeed or raise ``DashboardWebSearchError``
+    unconditionally — there is no required-gate and no ``grounding_absent``
+    flag; the run aborts rather than reasoning ungrounded (#3859).
+
+    Skipped-by-design segments return ``inputs`` unchanged with no call and no
+    raise: ``live_search=False`` segments (H6, options, onchain, short folds)
+    and grounded-by-ingest segments (``live_search_is_fallback`` with a fresh
+    ingested FRED layer, e.g. macro, #711), which ground on their in-process
+    data tools instead of the paid web_search.
     """
-    from digiquant.research.data.web_grounding import (
-        DashboardWebSearchError,
-        dashboard_web_search_required,
-    )
+    from digiquant.research.data.web_grounding import DashboardWebSearchError
 
     inputs = dict(phase_inputs)
     if web_grounding:
         inputs["web_grounding"] = web_grounding
         return inputs
     if not live_search or live_search_is_fallback:
+        # Grounded-by-ingest skip: this segment grounds on its primary
+        # ingested-data layer, so absent web grounding is the normal cost-cut,
+        # not an ungrounded segment.
         return inputs
-    if dashboard_web_search_required():
-        raise DashboardWebSearchError(
-            f"{segment}: OLYMPUS_WEB_SEARCH=required but web grounding unavailable"
-        )
-    inputs["grounding_absent"] = True
-    logger.warning(
-        "%s: grounding-dependent segment received no web_grounding; "
-        "flagging grounding_absent=True in phase_inputs",
-        segment,
-    )
-    return inputs
+    raise DashboardWebSearchError(f"{segment}: requested live search returned no web grounding")
 
 
 @dataclass(frozen=True)
@@ -335,14 +331,14 @@ class SegmentNodeSpec:
     """Enable the web_search grounding pre-pass (curated domains) for this segment."""
 
     live_search_is_fallback: bool = False
-    """Treat ``live_search`` as a paid *fallback* fired only when the ingested
-    FRED macro layer is stale (Phase D #711). With fresh ingested data the paid
-    web_search is skipped and the segment grounds on its data tools; a stale or
+    """Skip ``live_search`` when the ingested FRED macro layer is confirmed fresh
+    (grounded-by-ingest skip, Phase D #711). With fresh ingested data the paid
+    web_search never fires and the segment grounds on its data tools; a stale or
     broken ingested layer still falls through to the paid call. No effect unless
     ``live_search`` is also set."""
 
     ai_portfolios: bool = False
-    """Enable the OpenRouter web-search AI-portfolio grounding pre-pass for this segment."""
+    """Enable the tool-only web-search AI-portfolio grounding pre-pass for this segment."""
 
     extra_context_keys: tuple[str, ...] = ()
     """Prior-document keys (beyond this segment's own) to keep in shared context.

@@ -137,7 +137,10 @@ class TestPmNodeContract:
             return (
                 [{"type": "function", "function": {"name": "query_data"}}],
                 (lambda _n, _a: "{}"),
-                None,
+                # Requested live search must succeed or raise (#3859): hand the
+                # node canned grounding so this tools-wiring test stays
+                # search-independent.
+                {"summary": "- canned", "sources": ["https://u"], "as_of": "2026-06-13"},
             )
 
         monkeypatch.setattr(
