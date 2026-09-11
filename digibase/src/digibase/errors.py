@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import Request
@@ -9,6 +10,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+logger = logging.getLogger(__name__)
 
 
 class ApiErrorBody(BaseModel):
@@ -89,6 +92,7 @@ def register_fastapi_error_handlers(app: Any, *, service: str) -> None:
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
         req_id = _request_id(request)
+        logger.exception("unhandled error request_id=%s", req_id)
         headers = {"X-Request-ID": req_id} if req_id else None
         return json_error_response(
             status_code=500,

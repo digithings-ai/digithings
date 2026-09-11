@@ -157,7 +157,7 @@ Builds a `JSONResponse` with the standard `{"error": {...}}` body. Extracts `req
 ```python
 register_fastapi_error_handlers(app: Any, *, service: str) -> None
 ```
-Registers two exception handlers on the FastAPI application instance: one for `StarletteHTTPException` (maps to `http_<status_code>` code) and one for `RequestValidationError` (maps to `validation_error` code with first error message). Both produce `ApiErrorEnvelope` JSON bodies.
+Registers three exception handlers on the FastAPI application instance: one for `StarletteHTTPException` (maps to `http_<status_code>` code), one for `RequestValidationError` (maps to `validation_error` code with first error message), and one for `Exception` (maps to `internal_error`, HTTP 500). The HTTP and validation handlers produce `ApiErrorEnvelope` JSON bodies; the `Exception` handler additionally logs the unhandled exception at ERROR level with its traceback and the request id via the `digibase.errors` logger, then returns the standard envelope with `X-Request-ID` echoed when present. Logging inside the handler is required because registering `@app.exception_handler(Exception)` moves it out of Starlette's `ServerErrorMiddleware` default logging path, so without it the fleet's unhandled errors would be silent.
 
 ### `digibase.audit`
 
