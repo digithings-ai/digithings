@@ -368,6 +368,75 @@ def test_detailed_tool_search_projection_matches_aggregate_token_semantics() -> 
 
 
 @pytest.mark.unit
+def test_tool_search_tokens_count_toward_llm_totals() -> None:
+    """Non-zero search tokens land in the llm totals of both projections (#3859).
+
+    snapshot() sums chat + search kinds; the detailed projection folds
+    WEB_SEARCH/X_SEARCH attempts into prompt/completion the same way.
+    """
+    from digillm import (
+        CacheStatus,
+        ProviderAttemptOutcome,
+        ProviderAttemptRecord,
+        ProviderCallOutcome,
+        ProviderCallRecord,
+        RetryReason,
+    )
+
+    usage.start()
+    usage.record(
+        kind="web_search",
+        model="digisearch:web_search",
+        prompt_tokens=5,
+        completion_tokens=7,
+        sources=2,
+    )
+    call_id = uuid4()
+    now = datetime.now(tz=timezone.utc)
+    usage.observe_telemetry(
+        ProviderCallRecord(
+            call_id=call_id,
+            node_run_id=uuid4(),
+            parent_call_id=None,
+            purpose=CallPurpose.WEB_SEARCH,
+            requested_model="digisearch:web_search",
+            cache_status=CacheStatus.BYPASSED,
+            outcome=ProviderCallOutcome.SUCCEEDED,
+            attempt_count=1,
+            artifacts=(),
+            no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+            started_at=now,
+            finished_at=now,
+        )
+    )
+    usage.observe_telemetry(
+        ProviderAttemptRecord(
+            attempt_id=uuid4(),
+            call_id=call_id,
+            attempt_number=1,
+            provider="digisearch",
+            requested_model="digisearch:web_search",
+            served_model=None,
+            outcome=ProviderAttemptOutcome.SUCCEEDED,
+            retry_reason=RetryReason.NOT_APPLICABLE,
+            prompt_tokens=5,
+            completion_tokens=7,
+            cost_usd=None,
+            started_at=now,
+            finished_at=now,
+        )
+    )
+    aggregate = usage.snapshot()
+    detailed = usage.detailed_usage_projection()
+    assert aggregate["prompt_tokens"] == 5
+    assert aggregate["completion_tokens"] == 7
+    assert detailed["prompt_tokens"] == 5
+    assert detailed["completion_tokens"] == 7
+    assert detailed["llm_calls"] == aggregate["llm_calls"] == 0
+    assert detailed["search_calls"] == aggregate["search_calls"] == 1
+
+
+@pytest.mark.unit
 def test_reset_clears_and_deactivates():
     usage.start()
     usage.record(kind="chat", model="x", prompt_tokens=1, completion_tokens=1)

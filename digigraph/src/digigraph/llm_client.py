@@ -316,6 +316,10 @@ def _emit_web_search_telemetry(*, source_count: int) -> None:
             retry_reason=RetryReason.NOT_APPLICABLE,
             prompt_tokens=0,
             completion_tokens=0,
+            # None, not 0.0: detailed projections never fabricate cost
+            # evidence (WP1 / #2763) — the aggregate snapshot sums missing
+            # cost as 0.0 for diagnostics; both are pinned by
+            # test_detailed_tool_search_projection_matches_aggregate_token_semantics.
             cost_usd=None,
             started_at=now,
             finished_at=now,

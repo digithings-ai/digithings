@@ -45,8 +45,8 @@
 # CI-only (#3660): a house slug missing from the CI catalog raises — there is
 # no OpenRouter fallback. The cheap tier below is fully CI-mapped (no sonar /
 # :online / maverick pins); balanced/quality are CI-mapped too. Retrieval stays in-house
-# (digisearch / live_search / data tools); the grounding pre-pass synthesizes
-# on CI. LiteLLM overlay: config/litellm.cheaperinference.yaml (see
+# (digisearch / live_search / data tools); the grounding pre-pass is the first-party
+# digisearch web_search tool (no synthesis). LiteLLM overlay: config/litellm.cheaperinference.yaml (see
 # docs/providers/cheaperinference.md). Prefixes (openrouter/, gemini/, …) are
 # BYOK/diagnostics — do not put them on house pins.
 

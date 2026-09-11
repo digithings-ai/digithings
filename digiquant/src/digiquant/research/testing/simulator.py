@@ -945,7 +945,9 @@ def seed_supabase_client(
 # {summary, sources, as_of} grounding (same shape as the phase7d pm-skill
 # fixture). Canned grounding lives only in tests/simulator — never in
 # production paths. build_grounding needs no direct patch: it delegates to
-# the fetch functions above at call time.
+# the fetch functions above at call time. ai_portfolios needs its own patch:
+# it binds call_web_search_tool via a top-level from-import, which escapes
+# the web_grounding patch.
 
 CANNED_WEB_GROUNDING: dict[str, Any] = {
     "summary": "- canned",
@@ -1284,6 +1286,10 @@ def simulated_pipeline(
         ),
         patch(
             "digiquant.research.data.web_grounding.call_web_search_tool",
+            side_effect=_canned_call_web_search_tool,
+        ),
+        patch(
+            "digiquant.research.data.ai_portfolios.call_web_search_tool",
             side_effect=_canned_call_web_search_tool,
         ),
         patch(

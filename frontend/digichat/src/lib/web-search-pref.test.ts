@@ -59,4 +59,20 @@ describe("web-search-pref (#3420)", () => {
     writeWebSearchPref("datatap", false);
     expect(readWebSearchPref("datatap")).toBe(false);
   });
+
+  it("storage failure falls back to defaultOn, not off (#3859)", () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("private mode");
+      },
+      setItem: () => {
+        throw new Error("private mode");
+      },
+      removeItem: () => {},
+      clear: () => {},
+    });
+    expect(readWebSearchPref("broken-scope")).toBe(true);
+    expect(readWebSearchPref("broken-scope", true)).toBe(true);
+    expect(readWebSearchPref("broken-scope", false)).toBe(false);
+  });
 });

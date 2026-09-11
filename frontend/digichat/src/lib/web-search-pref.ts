@@ -20,13 +20,13 @@ export function webSearchStorageKey(scope: string): string {
  * opts a surface into default-off). Explicit "0" always opts out.
  */
 export function readWebSearchPref(scope: string, defaultOn = true): boolean {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") return defaultOn;
   try {
     const stored = window.localStorage.getItem(webSearchStorageKey(scope));
     if (stored === null) return defaultOn;
     return stored !== "0";
   } catch {
-    return false;
+    return defaultOn;
   }
 }
 

@@ -96,7 +96,7 @@ def get_data_client() -> Any:
 
 _MACRO_STALE_DAYS_DEFAULT = 7
 """Max age of the freshest ingested FRED observation before we treat the layer
-as stale and fire the paid fallback. The freshest series are daily (VIXCLS, DFF,
+as stale and fire the paid tool call. The freshest series are daily (VIXCLS, DFF,
 DGS10), so a healthy daily cron keeps the max obs_date within a normal market
 close gap (≤ a long holiday weekend); only a genuinely broken ingestion exceeds
 a week. Override via ``DIGIQUANT_MACRO_STALE_DAYS``."""
@@ -119,13 +119,13 @@ def _macro_stale_days() -> int:
 def _ingested_macro_stale(run_date: Any) -> bool:
     """Is the ingested FRED macro layer stale → should the grounded-by-ingest segment search?
 
-    Returns ``True`` (→ run the paid web_search) unless the layer is *confirmed
+    Returns ``True`` (→ run the paid web_search tool call) unless the layer is *confirmed
     fresh*: the latest ``macro_series_observations.obs_date`` is within
     ``DIGIQUANT_MACRO_STALE_DAYS`` of ``run_date``. Every failure mode — kill-switch
     off, no client, query error, empty table, unparseable/exotic ``run_date`` —
     fail-soft to ``True`` so a grounded-by-ingest segment never silently
     loses its grounding (Phase D capability guarantee). Only the confirmed-fresh
-    path returns ``False``, which is what lets the paid call be skipped on the
+    path returns ``False``, which is what lets the paid tool call be skipped on the
     hot path.
     """
     if not _data_tools_enabled():
@@ -187,9 +187,9 @@ def build_grounding(
     When ``live_search_is_fallback`` is set, the ``web_search`` pre-pass is
     skipped whenever the ingested FRED macro layer is confirmed fresh (see
     ``_ingested_macro_stale``) — a grounded-by-ingest skip. On a normal run
-    with fresh ingested data the paid call never fires — the segment grounds
+    with fresh ingested data the paid tool call never fires — the segment grounds
     on its in-process data tools — which is the Phase D cost cut. A
-    stale/broken ingested layer still falls through to the paid call, so
+    stale/broken ingested layer still falls through to the paid tool call, so
     grounding is never silently dropped.
 
     Honors the ``DIGIQUANT_RESEARCH_DATA_TOOLS`` kill-switch. Shared by ``build_segment_node``
@@ -255,7 +255,7 @@ def build_grounding(
     elif live_search:
         if live_search_is_fallback and not _ingested_macro_stale(run_date):
             logger.info(
-                "%s: ingested macro layer fresh — grounded-by-ingest skip, no paid web_search",
+                "%s: ingested macro layer fresh — grounded-by-ingest skip, no paid web_search tool call",
                 segment or "macro",
             )
         else:
@@ -285,7 +285,7 @@ def apply_web_grounding_to_inputs(
     raise: ``live_search=False`` segments (H6, options, onchain, short folds)
     and grounded-by-ingest segments (``live_search_is_fallback`` with a fresh
     ingested FRED layer, e.g. macro, #711), which ground on their in-process
-    data tools instead of the paid web_search.
+    data tools instead of the paid web_search tool call.
     """
     from digiquant.research.data.web_grounding import DashboardWebSearchError
 
@@ -326,8 +326,8 @@ class SegmentNodeSpec:
     live_search_is_fallback: bool = False
     """Skip ``live_search`` when the ingested FRED macro layer is confirmed fresh
     (grounded-by-ingest skip, Phase D #711). With fresh ingested data the paid
-    web_search never fires and the segment grounds on its data tools; a stale or
-    broken ingested layer still falls through to the paid call. No effect unless
+    web_search tool call never fires and the segment grounds on its data tools; a stale or
+    broken ingested layer still falls through to the paid tool call. No effect unless
     ``live_search`` is also set."""
 
     ai_portfolios: bool = False

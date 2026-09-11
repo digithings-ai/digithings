@@ -787,8 +787,15 @@ def test_apply_forces_openrouter_when_upstream_openrouter(
 
 @pytest.mark.unit
 def test_no_web_search_models_key() -> None:
-    """No tier keeps a web_search_models pin (tool-only grounding, #3859)."""
-    tiers = model_config._load_digiquant_models().tiers
+    """No tier keeps a web_search_models pin (tool-only grounding, #3859).
+
+    Raw-yaml assertion: DigiquantTierConfig has no extra="allow", so a
+    model_dump() check could never see the key — read the file instead.
+    """
+    import yaml
+
+    cfg = yaml.safe_load(Path("config/digiquant_models.yaml").read_text(encoding="utf-8"))
+    tiers = cfg.get("tiers") or {}
     assert tiers, "expected tiers in digiquant models config"
     for tier, body in tiers.items():
-        assert "web_search_models" not in body.model_dump(), tier
+        assert "web_search_models" not in body, tier

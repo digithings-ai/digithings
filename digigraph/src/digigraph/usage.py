@@ -526,14 +526,17 @@ def detailed_usage_projection() -> dict[str, int | float | None]:
         if call.call_id in attempts_by_call
     ]
     search_purposes = {CallPurpose.WEB_SEARCH, CallPurpose.X_SEARCH}
-    llm_call_ids = {call.call_id for call in aggregate_calls if call.purpose not in search_purposes}
-    llm_attempts = [attempt for attempt in successful_attempts if attempt.call_id in llm_call_ids]
+    # Tool search counts toward llm tokens (#3859): the first-party web_search
+    # tool is the only grounding, so token totals fold search attempts in —
+    # matching snapshot(), which sums chat + search kinds together.
     prompt_tokens = (
-        _nullable_sum([attempt.prompt_tokens for attempt in llm_attempts]) if llm_call_ids else 0
+        _nullable_sum([attempt.prompt_tokens for attempt in successful_attempts])
+        if aggregate_calls
+        else 0
     )
     completion_tokens = (
-        _nullable_sum([attempt.completion_tokens for attempt in llm_attempts])
-        if llm_call_ids
+        _nullable_sum([attempt.completion_tokens for attempt in successful_attempts])
+        if aggregate_calls
         else 0
     )
     cost_usd = _nullable_sum(
