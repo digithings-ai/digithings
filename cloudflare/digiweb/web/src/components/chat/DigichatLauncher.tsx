@@ -55,7 +55,7 @@ export type DigichatLauncherProps = {
   className?: string;
   /** Optional CSS custom properties such as panel dimensions or offsets. */
   style?: CSSProperties;
-  /** Reset the in-process thread. Gallery / product pass `switchToNewThread`. */
+  /** Reset the in-process thread. Rendered only when a caller wires it (e.g. the gallery specimen). */
   onNewChat?: () => void;
 };
 
