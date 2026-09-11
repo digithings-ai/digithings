@@ -113,10 +113,11 @@ Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/ap
 
 | Align | Rule |
 |---|---|
-| Host keys | `DIGICHAT_EMBED_TENANTS` object keys (and `aliases`) must match iframe `?host=` / `X-Embed-Host`. |
+| Host keys | `DIGICHAT_EMBED_TENANTS` object keys (and `aliases`) must match iframe `?host=` / `X-Embed-Host`. `X-Embed-Host` only selects the tenant — it never authorizes (see below). |
 | `DIGICHAT_EMBED_HOSTS` | Comma-separated parent hostnames allowed to frame `/embed`. Must include every live parent (marketing `digithings.ai` / `www` / `occ.digithings.ai`, plus `digiquant.io` if the dashboard popup iframes this origin). Not a secret. |
-| First-party token | `digithings.ai`, `www.digithings.ai`, and `occ.digithings.ai` skip `X-Embed-Token` when registered. The JSON schema still requires a `token` field — use a non-secret placeholder; do not invent or commit a real secret. |
+| First-party token | `digithings.ai`, `www.digithings.ai`, and `occ.digithings.ai` skip `X-Embed-Token` when registered **and** the request carries a first-party browser-attested origin (`Origin`/`Referer`). A spoofed `X-Embed-Host` alone does not qualify. The JSON schema still requires a `token` field — use a non-secret placeholder; do not invent or commit a real secret. |
 | First-party skin | Unset `skin` on those hosts defaults to `digichat` (DigichatThread). Set `"skin": "digichat"` in the wrangler secret anyway so the live JSON matches the YAML examples. Third-party tenants still default to catalog `base`. |
+| Legacy anonymous embed | The flag is deliberately **unset** in `wrangler.toml` `[vars]` (OFF). A stock deploy refuses unregistered hosts. To opt in, add `DIGICHAT_LEGACY_EMBED_ENABLED = "1"` to `[vars]` (the Worker forwards it; deprecated alias `DIGICHAT_EMBED_ENABLED` is also honored) — only on a deployment **without** `DIGICHAT_EMBED_TENANTS`; with tenants configured the flag is ignored and unregistered hosts get 503. |
 | Other hosts | Parent snippet / `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` must equal that tenant’s registry `token`. Put the real JSON only via `wrangler secret put DIGICHAT_EMBED_TENANTS`. |
 | Tools | `backend.type: digigraph` (and OCC `digisearchIndex` / `vaultPathPrefix`) is how digisearch + digivault reach Profile A. digichat only probes digigraph (`DIGICHAT_ENABLED_SERVICES`); it does not talk to those services directly. |
 

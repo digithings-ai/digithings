@@ -149,20 +149,28 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
  * embed-chat-tenant.ts; the authorization rule here is deliberately identical
  * to it — a registered host alone is never enough for a customer tenant, only
  * the matching per-tenant token unlocks the real config (#1339) — because this
- * path discloses the same fields to the same anonymous visitor. An unknown host
- * or a wrong/absent token yields the baseline defaults, never a partial tenant.
+ * path discloses the same fields to the same anonymous visitor. A first-party
+ * host additionally needs a first-party `originHost` (browser-attested
+ * `Origin`/`Referer`), never `?host=` alone. An unknown host or a wrong/absent
+ * token yields the baseline defaults, never a partial tenant.
  */
 export function resolveEmbedClientConfigFromParams(
   token: string | undefined,
   host: string | undefined,
+  originHost?: string | null,
 ): EmbedTenantClientConfig {
   const registered = resolveEmbedTenantByHost(host);
   if (!registered) return DEFAULT_EMBED_TENANT_CONFIG;
-  if (isFirstPartyEmbedHost(host)) return toEmbedClientConfig(registered);
   const trimmedToken = token?.trim();
-  return trimmedToken && trimmedToken === registered.token
-    ? toEmbedClientConfig(registered)
-    : DEFAULT_EMBED_TENANT_CONFIG;
+  if (trimmedToken && trimmedToken === registered.token) {
+    return toEmbedClientConfig(registered);
+  }
+  // First-party tokenless paint requires a first-party browser-attested origin
+  // too — `?host=`/`X-Embed-Host` alone is display-only and must not unlock it.
+  if (isFirstPartyEmbedHost(host) && isFirstPartyEmbedHost(originHost)) {
+    return toEmbedClientConfig(registered);
+  }
+  return DEFAULT_EMBED_TENANT_CONFIG;
 }
 
 /**

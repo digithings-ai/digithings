@@ -101,15 +101,22 @@ describe("resolveEmbedChatTenant with a registered host", () => {
     if (result instanceof Response) expect(result.status).toBe(503);
   });
 
-  it("falls back to the generic legacy embed tenant (not the registered one) when the token is missing but legacy embed is globally enabled", () => {
+  it("refuses an unauthorized host when tenants are configured even if legacy embed is enabled", () => {
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
     vi.stubEnv("DIGICHAT_LEGACY_EMBED_ENABLED", "1");
     resetEmbedTenantRegistryForTests();
     const result = resolveEmbedChatTenant(embedRequest({ "x-embed-host": "https://datatapstream.com" }));
-    expect(result).not.toBeInstanceOf(Response);
-    if (result instanceof Response) return;
-    expect(result.tenantSlug).toBe("embed");
-    expect(result.embedConfig).toBeNull();
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("refuses an unregistered host when tenants are configured even if legacy embed is enabled", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    vi.stubEnv("DIGICHAT_LEGACY_EMBED_ENABLED", "1");
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(embedRequest({ "x-embed-host": "https://unknown.example.com" }));
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
   });
 });
 
@@ -142,11 +149,11 @@ const DIGITHINGS_REGISTRY = JSON.stringify({
 });
 
 describe("first-party digithings host", () => {
-  it("resolves without X-Embed-Token when host is allowlisted and registered", () => {
+  it("resolves without X-Embed-Token when host is allowlisted, registered, and the request origin is first-party", () => {
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
     resetEmbedTenantRegistryForTests();
     const result = resolveEmbedChatTenant(
-      embedRequest({ "x-embed-host": "https://digithings.ai" }),
+      embedRequest({ "x-embed-host": "https://digithings.ai", origin: "https://digithings.ai" }),
     );
     expect(result).not.toBeInstanceOf(Response);
     if (result instanceof Response) return;
@@ -161,6 +168,72 @@ describe("first-party digithings host", () => {
       embedRequest({ "x-embed-host": "https://datatapstream.com" }),
     );
     expect(result).toBeInstanceOf(Response);
+  });
+});
+
+describe("X-Embed-Host is display-only (never authorization)", () => {
+  it("denies a spoofed first-party X-Embed-Host with no browser-attested origin", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://digithings.ai" }),
+    );
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("denies a spoofed first-party X-Embed-Host from a non-first-party origin", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://digithings.ai",
+        origin: "https://evil.example",
+      }),
+    );
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("does not let a first-party origin unlock a customer tenant", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://datatapstream.com",
+        origin: "https://digithings.ai",
+      }),
+    );
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("allows a first-party host only when the request origin is also first-party", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://digithings.ai",
+        origin: "https://www.digithings.ai",
+      }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("digithings");
+  });
+
+  it("uses a first-party referer as the browser-attested signal when Origin is absent", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://www.digithings.ai",
+        referer: "https://digithings.ai/chat",
+      }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("digithings");
   });
 });
 
@@ -181,7 +254,7 @@ describe("dev loopback first-party (dogfood)", () => {
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", LOCALHOST_REGISTRY);
     resetEmbedTenantRegistryForTests();
     const result = resolveEmbedChatTenant(
-      embedRequest({ "x-embed-host": "http://localhost:3000" }),
+      embedRequest({ "x-embed-host": "http://localhost:3000", origin: "http://localhost:3000" }),
     );
     expect(result).not.toBeInstanceOf(Response);
     if (result instanceof Response) return;
@@ -194,7 +267,7 @@ describe("dev loopback first-party (dogfood)", () => {
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", LOCALHOST_REGISTRY);
     resetEmbedTenantRegistryForTests();
     const result = resolveEmbedChatTenant(
-      embedRequest({ "x-embed-host": "http://127.0.0.1:3000" }),
+      embedRequest({ "x-embed-host": "http://127.0.0.1:3000", origin: "http://127.0.0.1:3000" }),
     );
     expect(result).not.toBeInstanceOf(Response);
     if (result instanceof Response) return;
@@ -206,7 +279,7 @@ describe("dev loopback first-party (dogfood)", () => {
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", LOCALHOST_REGISTRY);
     resetEmbedTenantRegistryForTests();
     const result = resolveEmbedChatTenant(
-      embedRequest({ "x-embed-host": "http://localhost:3000" }),
+      embedRequest({ "x-embed-host": "http://localhost:3000", origin: "http://localhost:3000" }),
     );
     expect(result).toBeInstanceOf(Response);
     if (result instanceof Response) expect(result.status).toBe(503);
@@ -215,7 +288,7 @@ describe("dev loopback first-party (dogfood)", () => {
   it("returns 503 for unregistered localhost in development", () => {
     vi.stubEnv("NODE_ENV", "development");
     const result = resolveEmbedChatTenant(
-      embedRequest({ "x-embed-host": "http://localhost:3000" }),
+      embedRequest({ "x-embed-host": "http://localhost:3000", origin: "http://localhost:3000" }),
     );
     expect(result).toBeInstanceOf(Response);
     if (result instanceof Response) expect(result.status).toBe(503);
@@ -317,6 +390,7 @@ describe("product embed YAML hosts", () => {
     const painted = resolveEmbedClientConfigForPaint(
       undefined,
       "https://digithings.ai",
+      "https://digithings.ai",
     );
     expect(painted.skin).toBe("digichat");
     expect(painted.slug).toBe("digithings-ai");
@@ -333,6 +407,7 @@ describe("product embed YAML hosts", () => {
     const painted = resolveEmbedClientConfigForPaint(
       undefined,
       "https://occ.digithings.ai",
+      "https://digithings.ai",
     );
     expect(painted.skin).toBe("digichat");
     expect(painted.slug).toBe("occ");
@@ -357,6 +432,7 @@ describe("product embed YAML hosts", () => {
     resetEmbedTenantRegistryForTests();
     const painted = resolveEmbedClientConfigForPaint(
       undefined,
+      "https://digithings.ai",
       "https://digithings.ai",
     );
     expect(painted.skin).toBe("digichat");

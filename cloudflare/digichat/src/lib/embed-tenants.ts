@@ -439,6 +439,20 @@ export function resetEmbedTenantRegistryForTests(): void {
   cachedRegistry = null;
 }
 
+/**
+ * True when `DIGICHAT_EMBED_TENANTS` configured at least one registered tenant.
+ * Once tenants exist, an unregistered host must be refused rather than falling
+ * back to the legacy generic anonymous embed — see `resolveEmbedChatTenant`.
+ * Fails closed (true) when the registry cannot be parsed.
+ */
+export function hasConfiguredEmbedTenants(): boolean {
+  try {
+    return getEmbedTenantRegistry().size > 0;
+  } catch {
+    return true;
+  }
+}
+
 export function resolveEmbedTenantByHost(
   hostOrOrigin: string | null | undefined
 ): EmbedTenantConfig | null {
