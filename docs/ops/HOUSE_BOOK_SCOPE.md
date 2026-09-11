@@ -93,6 +93,20 @@ script is house-owned).
 | Booked positions, missing H9 ledger | Operator recovery: `python digiquant/scripts/research/recover_h9_ledger_commit.py --date YYYY-MM-DD` (then `--apply`). Reads house `positions` / `nav_history`; calls `append_commit_chain`. Do not re-run the LLM pipeline. Do not `workflow_dispatch`. |
 | `DIGIQUANT_OVERLAY_PERSIST=1` (alias `OLYMPUS_OVERLAY_PERSIST`) before 113 on target | Persist-on still cannot prove a private overlay book while legacy uniques collide |
 
+## nav_history write order (provisional window)
+
+`nav_history` is written twice on a daily run, in order:
+
+1. **H9 / `portfolio_materialize`** may upsert a **provisional** arithmetic-chain
+   NAV for the date.
+2. **`verify_nav_replay.py --write`** then overwrites it with the Nautilus engine
+   NAV — the sole source of truth (SSOT) for NAV.
+
+Between those steps a dashboard reader that queries `nav_history` can briefly see
+the provisional value. Treat a date's `nav_history` row as provisional until the
+engine writer for that date has completed; after the overwrite the engine NAV is
+authoritative. Do not publish or quote the arithmetic-chain value as a settled NAV.
+
 ## Related
 
 - Contracts: `digiquant/src/digiquant/dashboard/tenancy.py`
