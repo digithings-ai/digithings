@@ -5,17 +5,18 @@
  *
  * First render is always `false` so server and client markup agree
  * (no hydration mismatch); an effect then syncs the stored value, falling
- * back to `defaultOn` when nothing is stored. Pass `defaultOn: true` only
- * for the baseline embed surface (slug "embed"); everywhere else the
- * default stays off so prior opt-outs are never silently re-enabled
- * (#3420). The setter persists via localStorage and updates state.
+ * back to `defaultOn` (on) when nothing is stored. Explicit stored "0"
+ * always opts out. The tenant AND-gate lives at the callers
+ * (`isWebSearchEnabled`): this hook returns the user pref only, so a deny
+ * tenant stays off regardless of the default. Pass `defaultOn: false`
+ * only for surfaces that stay default-off.
  */
 import { useCallback, useEffect, useState } from "react";
 import { readWebSearchPref, writeWebSearchPref } from "@/lib/web-search-pref";
 
 export function useSyncedWebSearchPref(
   scope: string,
-  defaultOn = false,
+  defaultOn = true,
 ): [boolean, (next: boolean) => void] {
   const [pref, setPref] = useState(false);
   useEffect(() => {

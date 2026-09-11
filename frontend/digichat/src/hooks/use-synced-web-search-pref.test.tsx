@@ -1,16 +1,16 @@
 /**
  * Websearch toggle pref must render SSR-identical first (off) on both
  * server and client, then sync the stored value after mount — falling back
- * to defaultOn (baseline-only default-on) when nothing is stored.
- * (tool-catalog-bar initialized from localStorage during render, which
- * hydrates_websearch_on tenants like ?host=digithings.ai.)
+ * to defaultOn (on unless a surface opts out) when nothing is stored.
+ * Explicit stored "0" always opts out; the tenant AND-gate
+ * (isWebSearchEnabled) still decides whether the pref sends.
  */
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, beforeEach } from "vitest";
 import { useSyncedWebSearchPref } from "./use-synced-web-search-pref";
-import { webSearchStorageKey } from "@/lib/web-search-pref";
+import { isWebSearchEnabled, webSearchStorageKey } from "@/lib/web-search-pref";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -69,11 +69,23 @@ describe("useSyncedWebSearchPref", () => {
     }
   });
 
-  it("missing key first-renders off, then syncs to default-on when opted in (baseline)", () => {
-    const { result, unmount } = renderHook("fresh-scope", true);
+  it("missing key with no override defaults on after mount (#3859)", () => {
+    const { result, unmount } = renderHook("fresh-default-scope");
     try {
       expect(result.renders[0]).toBe(false);
       expect(result.current[0]).toBe(true);
+    } finally {
+      unmount();
+    }
+  });
+
+  it("fresh pref sends only when the tenant allows (datatap deny stays off)", () => {
+    const { result, unmount } = renderHook("fresh-gate-scope");
+    try {
+      const pref = result.current[0];
+      expect(pref).toBe(true);
+      expect(isWebSearchEnabled({ tenantAllows: true, userPref: pref })).toBe(true);
+      expect(isWebSearchEnabled({ tenantAllows: false, userPref: pref })).toBe(false);
     } finally {
       unmount();
     }
@@ -90,7 +102,7 @@ describe("useSyncedWebSearchPref", () => {
     }
   });
 
-  it("missing key with defaultOn=false stays off after mount (non-baseline opt-in preserved)", () => {
+  it("missing key with defaultOn=false stays off after mount (explicit opt-out surface)", () => {
     const { result, unmount } = renderHook("optin-scope", false);
     try {
       expect(result.renders[0]).toBe(false);
