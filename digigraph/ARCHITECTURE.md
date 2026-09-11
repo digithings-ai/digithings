@@ -890,7 +890,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 
 - **Manifest:** `POST /v1/orchestrator_tools` — returns OpenAI tool dicts for `digisearch`, `digisearch_fetch_all`, `digisearch_research_delegate` (federated mode). Cached per `(base_url, index_config)`.
 - **Invoke:** `POST /v1/orchestrator_invoke` — dispatches tool execution. Accepts `{tool, arguments, default_index_name}`.
-- **web_search (built-in, #3853):** `orchestration/web_search_tools.py` owns the `web_search` tool dict (External evidence tier) and `_handle_web_search` calls the hub `web_search` tool first (`invoke_digisearch_tool`, never `import digisearch`), falling back to digillm synthesis (`openrouter_web_search`, then xai) over the tier's `web_search_models` pins when the service errors or yields no rows. The tool requires `enable_web_search`, which digichat forwards only after tenant + user opt-in (#3420) — default off so web never mixes into corpus RAG silently.
+- **web_search (built-in, #3853; tool-only #3859):** `orchestration/web_search_tools.py` owns the `web_search` tool dict (External evidence tier) and `_handle_web_search` calls the hub `web_search` tool (`invoke_digisearch_tool`, never `import digisearch`). There is no synthesis fallback: when the service errors or yields no rows, callers fail hard. The tool requires `enable_web_search`, which digichat forwards only after tenant + user opt-in (#3420) — default off so web never mixes into corpus RAG silently.
 - **Legacy:** `tools/digisearch.py` uses `POST /query` for non-orchestrator call sites (e.g. `_run_quant_or_augmented_path` in `research.py`).
 - **Auth:** Bearer token from `WorkflowState.digi_bearer` is forwarded via `Authorization: Bearer` header.
 - **Request correlation:** `X-Request-ID` forwarded from `ToolContext.request_id`.
@@ -967,8 +967,8 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
   `digigraph/src/digigraph/model_config.py`) points the default base at
   `openrouter.ai`; that is not LiteLLM, so prefixed BYOK uses the user Bearer
   against the vendor URL and leftover `gemini/` / `xai/` stay vendor clients.
-  Grounding synthesizes via plain completion over the tier's `web_search_models`
-  pins (`get_grounding_model()`). Optional OmniRoute is a separate overlay
+  Grounding is tool-only (#3859): the first-party digisearch `web_search` tool,
+  no synthesis-model pins. Optional OmniRoute is a separate overlay
   (`config/litellm.omniroute.yaml`, compose profile `omniroute`) — off by
   default; do not cut house pins over to it. See `docs/providers/omniroute.md`.
 - Caching: LiteLLM supports Redis-backed semantic caching when `REDIS_URL` is set (Compose profile: `litellm-cache`). BYOK must not share that cache across principals — digillm sends `no-cache` / `no-store` on every BYOK proxy request.

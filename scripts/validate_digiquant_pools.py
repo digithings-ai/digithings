@@ -91,12 +91,7 @@ _JSON_SCHEMA = {
 
 
 def collect_pool_slugs(config_dir: Path) -> list[str]:
-    """Distinct bare OpenRouter slugs from dashboard phase pools + model_modes pins.
-
-    ``web_search_models`` are excluded: those are ``:online``/native-search variants used
-    only by the grounding pre-pass and are never routed to tool or structured-output
-    phases (they would legitimately fail this check).
-    """
+    """Distinct bare OpenRouter slugs from dashboard phase pools + model_modes pins."""
     slugs: set[str] = set()
     dashboard = yaml.safe_load((config_dir / "digiquant_models.yaml").read_text()) or {}
     for tier in (dashboard.get("tiers") or {}).values():

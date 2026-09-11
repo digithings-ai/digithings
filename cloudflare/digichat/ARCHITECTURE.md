@@ -817,6 +817,19 @@ Each catalog tool has **one public name and two gestures**: empty Enter toggles 
 session pref (same as `/settings`); a remainder forces that tool for this send.
 `/digisearch RS256 JWT` and `/digivault notes` set `X-Digi-Force-Tool`. `/websearch query`
 sets a send-only web-search header. `/search`, `/vault`, and `/docs` are not public names.
+
+Web-search defaults (#3859, tool-only grounding — no synthesis-model pins):
+
+| surface | session pref | BFF forward |
+|---|---|---|
+| first-party chat (authenticated, null `embedConfig`) | on | when the browser asks AND `DIGICHAT_WEB_SEARCH=1` (deploy sets it) |
+| tenant embeds with `webSearch: true` (digithings.ai, occ, local app/cli/modal) | on | when the browser asks AND the tenant allows |
+| datatap (`webSearch: false`) | off | never |
+
+Pref semantics: `readWebSearchPref` defaults on; the user opts out per surface via
+`/websearch` empty-Enter, `/settings`, or the composer menu (persisted as `"0"` in
+localStorage). Either side false — tenant gate or user pref — means the BFF does not
+send `X-Digi-Enable-Web-Search`, so the turn stays corpus-only.
 Menu pick inserts `/digisearch ` (trailing space) and does not fire immediately.
 Extra YAML/MCP catalog ids (`/datatap`) use the same pattern. Disabled catalog ids travel
 as `X-Digi-Disabled-Tools` (BFF allowlists, digigraph subtracts). `/mcp`, `/models`, `/effort`,
@@ -1534,6 +1547,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_MODEL` | digigraph model name (default: `digigraph-rag`) | Optional |
 | `DIGICHAT_BASELINE_UPSTREAM` | Dev `/baseline` proxy target (allowlisted `https://digithings.ai/api/chat` only) | Dev only |
 | `DIGICHAT_OPENWEBUI_FORMAT` | Opt-in Open WebUI format (`1` only). Default off; digichat sends `X-Response-Format: plain` | Optional |
+| `DIGICHAT_WEB_SEARCH` | First-party web-search fallback (`1` = on): lets the BFF forward `X-Digi-Enable-Web-Search` for authenticated first-party chat (null `embedConfig`) when the browser asks. Tenant embeds still need `webSearch: true`; datatap stays off | Set `1` in deploy |
 | `DIGICHAT_ENDPOINT_HOST_ALLOWLIST` | Comma-separated hosts for SSRF guard | Security hardening |
 | `DIGICHAT_LEGACY_EMBED_ENABLED` | Enable legacy generic embed for **unregistered** hosts (`1` = on). Does not default on when `DIGICHAT_EMBED_TENANTS` is set. Deprecated alias: `DIGICHAT_EMBED_ENABLED` | Optional |
 | `DIGICHAT_EMBED_TOKEN` | Alternative to legacy flag: gate unregistered `/embed` on `X-Embed-Token` | Optional |

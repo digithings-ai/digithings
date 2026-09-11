@@ -70,6 +70,43 @@ class TestSimulatorContract:
     def test_parse_schema_name_returns_none_when_missing(self) -> None:
         assert parse_schema_name([{"content": [{"text": "no schema"}]}]) is None
 
+    def test_simulator_stubs_grounding(self) -> None:
+        """simulated_pipeline must stub the tool-only grounding boundary (#3859).
+
+        Task 4 made pipeline grounding tool-only with an unconditional
+        DashboardWebSearchError raise; simulated runs must never reach the
+        live web_search tool, so the simulator patches every grounding tool
+        boundary (fetch_web_grounding, call_web_search_tool, the
+        ai_portfolios from-import binding, fetch_ai_portfolio_grounding)
+        alongside completion_text + load_skill_edit.
+        """
+        import inspect
+
+        from digiquant.research.testing import simulator
+
+        src = inspect.getsource(simulator.simulated_pipeline)
+        assert "fetch_web_grounding" in src
+        assert "digiquant.research.data.web_grounding.call_web_search_tool" in src
+        assert "digiquant.research.data.ai_portfolios.call_web_search_tool" in src
+        assert "fetch_ai_portfolio_grounding" in src
+
+    def test_simulator_intercepts_ai_portfolios_tool_binding(self) -> None:
+        """The ai_portfolios from-import binding returns canned output (#3859).
+
+        ai_portfolios binds call_web_search_tool at import time, so patching
+        web_grounding alone would let the X leg reach the live tool — the
+        simulator patches the ai_portfolios binding too.
+        """
+        from digiquant.research.data import ai_portfolios
+        from digiquant.research.testing.simulator import CANNED_WEB_GROUNDING
+
+        with simulated_pipeline(watchlist=("AAPL",)):
+            out = ai_portfolios.call_web_search_tool(
+                query="probe", include_domains=["x.com"], max_results=1
+            )
+            assert out["summary"] == CANNED_WEB_GROUNDING["summary"]
+            assert out["sources"] == list(CANNED_WEB_GROUNDING["sources"])
+
     def test_coverage_directive_default_refreshes_rostered_tickers(self) -> None:
         """The simulator keeps the full H4 roster flowing to H5 (#3739).
 

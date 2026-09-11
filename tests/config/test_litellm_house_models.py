@@ -49,7 +49,6 @@ def _digiquant_house_slugs() -> set[str]:
     for tier in (digiquant.get("tiers") or {}).values():
         for pool in (tier.get("allowed_models") or {}).values():
             slugs.update(str(m) for m in (pool or []))
-        slugs.update(str(m) for m in (tier.get("web_search_models") or []))
     modes = yaml.safe_load((CONFIG / "model_modes.yaml").read_text(encoding="utf-8"))
     slugs.update(str(m) for m in (modes.get("phase_models") or {}).values())
     dogfood = yaml.safe_load((CONFIG / "dogfood-digiproject.yaml").read_text(encoding="utf-8"))

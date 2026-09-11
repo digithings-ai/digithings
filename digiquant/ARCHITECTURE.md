@@ -2326,17 +2326,17 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
 - Standalone CLI: `python -m digiquant.research.graph` — research-only consumers.
 - Terminal `publish_phase` is wired only when `deps.publish` is provided;
   the chain orchestrator passes `None` so publish runs once at the end (research artifacts).
-- Web grounding pre-pass for `live_search` segments (#3853): `fetch_web_grounding`
-  (`research/data/web_grounding.py`) tries the first-party digisearch `web_search`
-  tool first (`call_web_search_tool` via digigraph's orchestrator hub over HTTP —
+- Web grounding pre-pass for `live_search` segments (#3853 / #3859): `fetch_web_grounding`
+  (`research/data/web_grounding.py`) calls the first-party digisearch `web_search`
+  tool (`call_web_search_tool` via digigraph's orchestrator hub over HTTP —
   never `import digisearch`), with enforced `include_domains` from
-  `research/config/search_domains.yaml` (per-segment allowlists, capped at 5),
-  and falls back to a read-only digillm synthesis pass over the tier's
-  `web_search_models` pins. The cited summary is injected into `phase_inputs`
-  before the normal structured-output research call. `live_search_is_fallback`
-  segments (e.g. macro) skip the paid tool call on the fresh-data hot path.
-  Fail-soft (`grounding_absent=True`) unless `DIGIQUANT_WEB_SEARCH=required`
-  (legacy alias `OLYMPUS_WEB_SEARCH`), which raises `DashboardWebSearchError`.
+  `research/config/search_domains.yaml` (per-segment allowlists, capped at 5).
+  The cited summary is injected into `phase_inputs` before the normal
+  structured-output research call. `live_search_is_fallback` segments (e.g. macro)
+  skip the tool call on the fresh-data hot path (grounded-by-ingest skip).
+  Tool-only with an unconditional abort: a requested search must succeed or raise
+  `DashboardWebSearchError` — the run aborts rather than reasoning ungrounded.
+  There is no synthesis fallback and no fail-soft flag.
 
 ### portfolio (thesis-aware portfolio loop)
 

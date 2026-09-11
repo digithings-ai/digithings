@@ -36,7 +36,7 @@ digisearch is consumed as a **vertical** under digigraph (the hub). digigraph re
 - **digiclaw MCP clients** — via MCP attachment at `http://127.0.0.1:8765/mcp`
 - **Power users** — directly at `http://127.0.0.1:8002`
 
-In the federated hub model (`DIGI_HUB_MODE=federated`), digigraph exposes the `digisearch`, `digisearch_fetch_all`, and optionally `digisearch_research_delegate` tool names to its LLM. The tool schemas and dispatch logic live **entirely in digisearch**, not digigraph — which is the correct separation of concern.
+In the federated hub model (`DIGI_HUB_MODE=federated`), digigraph exposes the `digisearch`, `digisearch_fetch_all`, `web_search`, and optionally `digisearch_research_delegate` tool names to its LLM. The tool schemas and dispatch logic live **entirely in digisearch**, not digigraph — which is the correct separation of concern.
 
 ### RAG pipeline
 
@@ -286,7 +286,7 @@ Directly invokes the internal LangGraph pipeline (`plan → retrieve → aggrega
 
 Auth required (`digisearch:query` scope via the default `digisearch_path_scopes` fallthrough). Rate limited: 30 req/min (default bucket).
 
-Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4), recency_days (1–365, default 7; mapped onto provider recency filters, omitted when null)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. `run_web_search` tries the searxng sidecar first, fails over to embedded ddgs (`DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs`, sidecar URL from `DIGISEARCH_SEARXNG_URL`), then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). Fetch/extract failures keep the original search snippet — enrichment never fails the response. No new port: served by the existing digisearch HTTP app.
+Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4), recency_days (1–365, default 7; mapped onto provider recency filters — searxng day/month/year with a week mapping to month — omitted when null)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. `run_web_search` tries the searxng sidecar first, fails over to embedded ddgs (`DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs`, sidecar URL from `DIGISEARCH_SEARXNG_URL`), then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). Fetch/extract failures keep the original search snippet — enrichment never fails the response. No new port: served by the existing digisearch HTTP app.
 
 ### MCP Tools
 
@@ -1034,7 +1034,55 @@ docker compose --profile digisearch-mcp up
 
 The `searxng` service (`searxng/searxng`) is loopback-only on the host (`127.0.0.1:8080`) with config at `config/searxng/settings.yml` (`search.formats: [html, json]`, engine allowlist). `valkey` backs its limiter. digisearch reaches it in-container via `DIGISEARCH_SEARXNG_URL=http://searxng:8080`. No new digisearch port: `POST /v1/web_search`, MCP `web_search`, and orchestrator `web_search` all ride the existing apps.
 
-Rollout ops: single flag `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (default `auto`); a down sidecar or a ddgs 403/CAPTCHA fails over to the next backend, and the digigraph `web` skill stays corpus-only unless the session opts in (#3420) — fail-closed to corpus-only at every layer. Engine allowlist is `wikipedia, duckduckgo, bing, mojeek`; `search.formats` must keep `json` (the provider calls `/search?format=json`). `server.secret_key` ships as a dev-only placeholder — rotate before exposing beyond loopback. Upstream scrapers break without notice: `compose pull searxng` weekly, and watch per-engine 403/CAPTCHA rates plus the digillm synthesis fallback rate as the early signal; the cost win shows up as a drop in grounding-model (gemini flash-lite) traffic on web-grounded segments. Eval: `digisearch/tests/test_web_search_eval.py` (20 queries across news/macro/docs/earnings, mocked offline; live sampling behind `DIGISEARCH_WEB_SEARCH_LIVE=1` with p50 fetch+extract < 5s). Known limitation: digiquant→hub calls carry no service token today (bearer None path), so in authed prod the tool leg 401s and the synthesis fallback engages (fail-closed); service-token auth for that leg is a follow-up, not wired here.
+Rollout ops: single flag `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (default `auto`); a down sidecar or a ddgs 403/CAPTCHA fails over to the next backend, and the digigraph `web` skill stays corpus-only unless the session opts in (#3420) — fail-closed to corpus-only at every layer. Engine allowlist is `wikipedia, duckduckgo, bing, mojeek`; `search.formats` must keep `json` (the provider calls `/search?format=json`). `server.secret_key` ships as a dev-only placeholder — rotate before exposing beyond loopback. Upstream scrapers break without notice: `compose pull searxng` weekly, and watch per-engine 403/CAPTCHA rates as the early signal; the cost win shows up as a drop in grounding-model (gemini flash-lite) traffic on web-grounded segments. Eval: `digisearch/tests/test_web_search_eval.py` (20 queries across news/macro/docs/earnings, mocked offline; live sampling behind `DIGISEARCH_WEB_SEARCH_LIVE=1` with p50 fetch+extract < 5s). Known limitation: digiquant→hub calls carry the Task-1 service JWT (bearer threads via `ToolContext.state["digi_bearer"]`); legs without a token fail closed with `DashboardWebSearchError`, never silently ungrounded.
+
+Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + what remains):
+
+- Sidecar: `docker compose up -d searxng valkey` exited 0; `digi-searxng` and
+  `digi-searxng-valkey` both `Up (healthy)`. But every `GET /search` variant
+  returns HTTP 429 `Too Many Requests` with zero rows: plain GET, GET with
+  browser UA, GET with `X-Forwarded-For`/`X-Real-IP`, the provider-identical
+  param set (`q/pageno/language/safesearch`), POST with form fields, first
+  request after `docker compose restart searxng`, and first request after
+  `valkey-cli flushdb`. `/` and `/healthz` return 200, so only the search
+  plane is blocked. Container log shows `server.limiter: true` (from
+  `config/searxng/settings.yml`) combined with `missing config file:
+  /etc/searxng/limiter.toml` plus `X-Forwarded-For nor X-Real-IP header is
+  set!` — the stock limiter denies search outright in this environment, with
+  or without forwarding headers. No repo change made for this; unblocking
+  needs an owner decision (ship a `limiter.toml`, or set `limiter: false` for
+  the loopback-only sidecar — either is a config change with review).
+- Image digest pin: `searxng/searxng:latest` resolved 2026-09-11 to image ID
+  `2fb0fa85096f`, digest `sha256:2fb0fa85096fe6df5c3ab98ecb4d6e0ee2ef66b8fb96ce6fce0f75b51c4bd90a`
+  (searxng `2026.9.10-931fd9787`). `server.secret_key` is still the dev-only
+  placeholder — rotate before exposing beyond loopback (unchanged).
+- Eval live leg: skipped-with-reason (gate: sidecar must return rows; it
+  returns 429, so no p50/quality measured). Supplementary offline evidence on
+  this branch: `pytest digisearch/tests/test_web_search_eval.py -v` → 3
+  passed, 3 skipped (live leg behind `DIGISEARCH_WEB_SEARCH_LIVE=1`; two
+  extractor legs skip — `trafilatura` from the `[web-search]` extra is not
+  installed in this env), zero `Traceback`. p50 fetch+extract < 5s and
+  quality sampling remain unmeasured until the limiter is resolved.
+- Pipeline e2e: blocked — `DIGIQUANT_DIGIKEY_API_KEY` is absent from both the
+  environment and `.env`. Owner unblock (plan Task 8 ops note): `python -m
+  digikey.cli issue-key --tenant digiquant-pipeline --label pipeline --scopes
+  digisearch:query --kind standard`, then store as `DIGIQUANT_DIGIKEY_API_KEY`
+  in `.env` + compose passthrough. Offline fail-closed evidence instead (all
+  on this branch, zero `Traceback`): `test_web_search_service.py` +
+  `test_web_search_mcp_config.py` → 10 passed (bad-backend raises
+  `WebSearchConfigError`, MCP returns a clean `[web_search unavailable:]`
+  message); `tests/ds/test_orchestrator_invoke.py` bad-backend legs → 2
+  passed (`ok: False` on orchestrator invoke, HTTP 503 on `POST
+  /v1/web_search`); `tests/dq/research/data/test_web_grounding.py` → 14
+  passed (`DashboardWebSearchError` on empty/tool-error/blank-summary,
+  service-JWT bearer threading, `ServiceAuthError` propagation).
+- Browser checks: not attempted — `frontend/digichat/.env.local` is absent
+  and the full stack (digigraph/digisearch on this branch) is not running, so
+  a bare `next dev` could not exercise web-cite paths. Remains: baseline
+  `/embed` zero-click check (web cites without toggle) + datatap embed check
+  (no toggle, no web cites) against a running stack.
+- Gemini traffic delta: not measured (no live run yet) — record after the
+  live eval + pipeline e2e above go green.
 
 ### Environment variables reference
 

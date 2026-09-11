@@ -212,18 +212,19 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Hashes only (count still 53) re-recorded for the cloudflare/ directory rename (#3854) plus web_search docs (#3856) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 54 for #3854 Phase 2 Track A (digisearch MCP backend-gate + supervisord docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 57 for #3859 (Task 9 web_search docs: recency buckets, rollout-ops rewrite) plus merged develop prose — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 54
+    assert len(chunks) == 57
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
-        "2a6c63aff18cb155",
-        "05ee1579bfb41def",
+        "de1607a6f3e430c1",
+        "a5e3d5fc972070ef",
         "7e6b7b2044358888",
         "cea76b9e90df056e",
         "6f61da3b9ed54d44",
@@ -232,7 +233,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "4fe2b5f10b829673",
         "e446cea04444b3a8",
         "d48e16a1b753dc3a",
-        "b5bf4787c10afc02",
+        "50427e0515200055",
         "a901093c569d8ad4",
         "f5694c994b90e40c",
         "2f102978f3f92316",
@@ -264,7 +265,10 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5881d77c9811fa5d",
         "a063d09664500f97",
         "50b42145065d7d4e",
-        "d7f9e4835c9ff55e",
+        "e470174005c56ca6",
+        "ad2ccc6c2d6d88bc",
+        "fe9b58780a97b82b",
+        "a3987db99f2b72c5",
         "9496728548f7cd2a",
         "3132efab1e5ed61e",
         "aef71ba4fa072289",

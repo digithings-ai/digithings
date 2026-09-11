@@ -1,12 +1,10 @@
-"""Grounding pre-pass for the `alt-ai-portfolios` segment (#658 / #2567 / #3853).
+"""Tool-only grounding pre-pass for the `alt-ai-portfolios` segment (#658 / #2567 / #3859).
 
-Reads the latest public posts of tracked AI-run portfolio accounts on X via
-the cheap synthesis grounding model (tier ``web_search_models`` pin — any
-house-routed slug, no vendor prefix gate), returning a cited summary to
-inject into phase_inputs. Does not assemble Exa ``engine`` / ``max_results``
-params — those belong to the digillm toolkit fallback, not dashboard.
-
-Fails soft to ``None`` on error or empty synthesis.
+Reads the latest public posts of tracked AI-run portfolio accounts on X via the
+first-party digisearch ``web_search`` tool scoped to
+``include_domains=["x.com", "twitter.com"]``, returning a cited summary to
+inject into phase_inputs. There is no synthesis fallback: a missing roster,
+empty results, and tool errors all raise :exc:`DashboardWebSearchError`.
 """
 
 from __future__ import annotations
@@ -20,7 +18,12 @@ from typing import (
 
 import yaml
 
+from digiquant.research.data.web_grounding import DashboardWebSearchError, call_web_search_tool
+
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "ai_portfolio_accounts.yaml"
+
+# X-leg domain scope on the first-party web_search tool call.
+_X_DOMAINS = ["x.com", "twitter.com"]
 
 
 @lru_cache(maxsize=1)
@@ -52,26 +55,47 @@ def _build_query(accounts: list[dict[str, Any]], run_date: date, recency_days: i
 
 def fetch_ai_portfolio_grounding(
     *,
-    model: str,
+    model: str = "",
     run_date: date,
-) -> dict[str, Any] | None:
-    """Return ``{"summary", "sources", "accounts", "as_of"}`` or ``None`` (ungrounded)."""
-    # No vendor prefix gate (#3853): the tier's cheap synthesis-only pins are
-    # bare house slugs, and ``model`` already selects the synthesis route below.
+) -> dict[str, Any]:
+    """Return ``{"summary", "sources", "accounts", "as_of"}`` or raise.
+
+    Tool-only: the X leg goes through the first-party ``web_search`` tool
+    scoped to x.com / twitter.com. A missing roster, empty results, or a tool
+    error raises :exc:`DashboardWebSearchError` — never ``None``. ``model`` is
+    accepted for caller compatibility and ignored: grounding comes from the
+    tool, not a synthesis model.
+    """
     cfg = _config()
     accounts = list(cfg.get("accounts", []))
     if not accounts:
-        return None
+        raise DashboardWebSearchError(
+            "alt-ai-portfolios: no tracked accounts in ai_portfolio_accounts.yaml"
+        )
     recency = int(cfg.get("recency_days", 7))
-    from digigraph.llm_client import openrouter_web_search
-
-    # Native grounding only — no Exa toolkit params (#2567).
-    result = openrouter_web_search(model, _build_query(accounts, run_date, recency))
-    if result is None:
-        return None
-    summary, sources = result
-    if not summary.strip():
-        return None
+    try:
+        max_results = int(cfg.get("max_search_results", 8) or 8)
+    except (TypeError, ValueError):
+        max_results = 8
+    max_results = max(1, min(max_results, 10))
+    try:
+        tool_out = call_web_search_tool(
+            query=_build_query(accounts, run_date, recency),
+            include_domains=list(_X_DOMAINS),
+            max_results=max_results,
+        )
+    except DashboardWebSearchError:
+        raise
+    except Exception as exc:
+        raise DashboardWebSearchError(
+            f"web_search tool failed for alt-ai-portfolios: {exc}"
+        ) from exc
+    summary = str(tool_out.get("summary") or "").strip()
+    sources = list(tool_out.get("sources") or [])
+    if not summary:
+        raise DashboardWebSearchError(
+            "web_search tool returned empty summary for alt-ai-portfolios"
+        )
     return {
         "summary": summary,
         "sources": sources,

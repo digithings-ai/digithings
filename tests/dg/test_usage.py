@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -336,38 +335,126 @@ def test_detailed_projection_keeps_unavailable_provider_evidence_null() -> None:
 
 
 @pytest.mark.unit
-def test_detailed_grounding_projection_matches_aggregate_token_semantics(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("XAI_API_KEY", "xai-test")
-    message = MagicMock(content="grounded")
-    response = MagicMock()
-    response.choices = [MagicMock(message=message)]
-    response.model = "grok-served"
-    response.usage = SimpleNamespace(
-        prompt_tokens=0,
-        completion_tokens=0,
-        cost="0.0031",
-        prompt_tokens_details=None,
-    )
-    fake_client = MagicMock()
-    fake_client.chat.completions.create.return_value = response
+def test_detailed_tool_search_projection_matches_aggregate_token_semantics() -> None:
+    from digigraph.orchestration import web_search_tools
+
+    rows = [
+        {"content": "markets rallied", "doc_id": "https://example.com/a"},
+        {"content": "fed holds", "doc_id": "https://example.com/b"},
+    ]
     usage.start()
     set_telemetry_observer(usage.DETAILED_USAGE_OBSERVER)
 
     with (
         usage.call_context(node_run_id=uuid4()),
-        patch.object(digillm_client, "get_client_for_model", return_value=fake_client),
+        patch.object(
+            web_search_tools, "_call_digisearch_web_search", return_value={"results": rows}
+        ),
     ):
-        llm_client.web_search("xai/grok-4", "ground this")
+        summary, sources = llm_client.digifetch_web_search("ignored-model", "ground this")
 
+    assert len(sources) == 2
+    assert "markets rallied" in summary
     aggregate = usage.snapshot()
     detailed = usage.detailed_usage_projection()
     assert detailed["llm_calls"] == aggregate["llm_calls"] == 0
     assert detailed["search_calls"] == aggregate["search_calls"] == 1
     assert detailed["prompt_tokens"] == aggregate["prompt_tokens"] == 0
     assert detailed["completion_tokens"] == aggregate["completion_tokens"] == 0
-    assert detailed["cost_usd"] == aggregate["cost_usd"] == 0.0031
+    # The tool path carries no provider cost evidence: detailed stays
+    # unavailable while the token-less aggregate sums to zero.
+    assert detailed["cost_usd"] is None
+    assert aggregate["cost_usd"] == 0.0
+
+
+@pytest.mark.unit
+def test_digifetch_web_search_emits_web_search_purpose() -> None:
+    """The tool-only path records under CallPurpose.WEB_SEARCH — no synthesis purpose."""
+    from digigraph.orchestration import web_search_tools
+
+    rows = [{"content": "markets rallied", "doc_id": "https://example.com/a"}]
+    usage.start()
+    set_telemetry_observer(usage.DETAILED_USAGE_OBSERVER)
+
+    with (
+        usage.call_context(node_run_id=uuid4()),
+        patch.object(
+            web_search_tools, "_call_digisearch_web_search", return_value={"results": rows}
+        ),
+    ):
+        llm_client.digifetch_web_search("ignored-model", "ground this")
+
+    purposes = [call.purpose for call in usage.provider_calls_snapshot()]
+    assert purposes == [CallPurpose.WEB_SEARCH]
+
+
+@pytest.mark.unit
+def test_tool_search_tokens_count_toward_llm_totals() -> None:
+    """Non-zero search tokens land in the llm totals of both projections (#3859).
+
+    snapshot() sums chat + search kinds; the detailed projection folds
+    WEB_SEARCH/X_SEARCH attempts into prompt/completion the same way.
+    """
+    from digillm import (
+        CacheStatus,
+        ProviderAttemptOutcome,
+        ProviderAttemptRecord,
+        ProviderCallOutcome,
+        ProviderCallRecord,
+        RetryReason,
+    )
+
+    usage.start()
+    usage.record(
+        kind="web_search",
+        model="digisearch:web_search",
+        prompt_tokens=5,
+        completion_tokens=7,
+        sources=2,
+    )
+    call_id = uuid4()
+    now = datetime.now(tz=timezone.utc)
+    usage.observe_telemetry(
+        ProviderCallRecord(
+            call_id=call_id,
+            node_run_id=uuid4(),
+            parent_call_id=None,
+            purpose=CallPurpose.WEB_SEARCH,
+            requested_model="digisearch:web_search",
+            cache_status=CacheStatus.BYPASSED,
+            outcome=ProviderCallOutcome.SUCCEEDED,
+            attempt_count=1,
+            artifacts=(),
+            no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+            started_at=now,
+            finished_at=now,
+        )
+    )
+    usage.observe_telemetry(
+        ProviderAttemptRecord(
+            attempt_id=uuid4(),
+            call_id=call_id,
+            attempt_number=1,
+            provider="digisearch",
+            requested_model="digisearch:web_search",
+            served_model=None,
+            outcome=ProviderAttemptOutcome.SUCCEEDED,
+            retry_reason=RetryReason.NOT_APPLICABLE,
+            prompt_tokens=5,
+            completion_tokens=7,
+            cost_usd=None,
+            started_at=now,
+            finished_at=now,
+        )
+    )
+    aggregate = usage.snapshot()
+    detailed = usage.detailed_usage_projection()
+    assert aggregate["prompt_tokens"] == 5
+    assert aggregate["completion_tokens"] == 7
+    assert detailed["prompt_tokens"] == 5
+    assert detailed["completion_tokens"] == 7
+    assert detailed["llm_calls"] == aggregate["llm_calls"] == 0
+    assert detailed["search_calls"] == aggregate["search_calls"] == 1
 
 
 @pytest.mark.unit

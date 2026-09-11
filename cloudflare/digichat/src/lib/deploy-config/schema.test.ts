@@ -272,8 +272,13 @@ describe("DigichatConfigSchema", () => {
       expect(occHost.backend.digisearchIndex).toBe("occ_help");
       expect(occHost.backend.vaultPathPrefix).toBe("clients/online-compliance-center");
     }
-    expect(occHost?.tools?.catalog.map((t) => t.id)).toEqual(["digisearch", "digivault"]);
-    expect(occHost?.tools?.catalog.some((t) => t.id === "web_search")).toBe(false);
+    expect(occHost?.tools?.catalog.map((t) => t.id)).toEqual([
+      "digisearch",
+      "digivault",
+      "web_search",
+    ]);
+    expect(occHost?.tools?.catalog.find((t) => t.id === "web_search")?.default).toBe(true);
+    expect(occHost?.gate?.webSearch).toBe(true);
     expect(allowedForceTools(occHost)).toEqual(["digisearch", "digivault"]);
   });
 
@@ -286,6 +291,16 @@ describe("DigichatConfigSchema", () => {
     expect(dep?.mcp?.servers.map((s) => s.id)).toEqual(["datatap"]);
     expect(dep?.mcp?.allowUserServers).toBe(false);
     expect(allowedForceTools(dep)).toEqual(["digisearch", "digivault", "datatap"]);
+  });
+
+  it("denies web search on the DataTap tenant while keeping docs + MCP tools", () => {
+    const cfg = parseDigichatConfig(
+      loadYaml(readFileSync(resolve(examplesDir, "datatap-mcp.yaml"), "utf8")),
+      "datatap-mcp.yaml",
+    );
+    const dep = cfg.deployment;
+    expect(dep?.gate?.webSearch).toBe(false);
+    expect(dep?.tools?.catalog.some((t) => t.id === "web_search")).toBe(false);
   });
 
   it("ships a complete YAML install for every catalog template id", () => {

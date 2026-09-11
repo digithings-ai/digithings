@@ -225,7 +225,7 @@ services:
   # Loopback-only on the host; digisearch reaches searxng as http://searxng:8080
   # via DIGISEARCH_SEARXNG_URL. ddgs remains the zero-infra fallback.
   searxng:
-    image: searxng/searxng:2026.9.5
+    image: searxng/searxng:latest
     container_name: digi-searxng
     ports:
       - "127.0.0.1:8080:8080"
@@ -234,7 +234,9 @@ services:
     depends_on:
       - valkey
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/healthz"]
+      # searxng image ships wget (no curl): probe with wget or the
+      # container never becomes healthy (#3859).
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
       interval: 15s
       timeout: 5s
       retries: 3

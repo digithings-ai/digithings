@@ -24,17 +24,14 @@ catalog, digillm **raises** — there is no fallback to OpenRouter. A bad pin
 fails the run loudly so it can be fixed, instead of spending silently on
 another upstream.
 
-## Grounding (Chris lock, #3660)
+## Grounding (tool-only, #3859)
 
-CI has **no** Perplexity/sonar / `:online` search models. House grounding is:
-
-1. **Retrieval** in-house: digisearch / digiquant `live_search` / data tools.
-2. **Synthesis** on CI: primary `google/gemini-3.1-flash-lite`, alt
-   `deepseek/deepseek-v4-flash` (see `web_search_models` in
-   `config/digiquant_models.yaml` for all house tiers).
+CI has **no** Perplexity/sonar / `:online` search models. House grounding is
+tool-only: the first-party digisearch `web_search` tool (searxng sidecar with
+ddgs fallback). There are no synthesis-model pins and no fallback.
 
 Do not pin `perplexity/sonar`, `meta-llama/llama-4-maverick`, or `:online`
-variants in house phase pools or `web_search_models` when CI is preferred.
+variants in house phase pools when CI is preferred.
 
 ## Env (names only)
 

@@ -40,10 +40,10 @@ describe("ToolCatalogBar", () => {
     vi.unstubAllGlobals();
   });
   it("arms X-Digi-Force-Tool on Search / Vault and isolates web search prefs", async () => {
-    // Matched-tenant slug: the toggle starts off (#3420 opt-in) so this test
-    // exercises the interaction, not the baseline default-on path (covered
-    // below). Stubbed storage keeps the initial read deterministic in every
-    // environment regardless of happy-dom localStorage behavior.
+    // Matched-tenant slug: the toggle starts on (#3859 default-on) so this
+    // test exercises the interaction from the on state. Stubbed storage
+    // keeps the initial read deterministic in every environment regardless
+    // of happy-dom localStorage behavior.
     stubMapStorage();
     takePendingForceTool("host-a");
     const user = userEvent.setup();
@@ -61,10 +61,10 @@ describe("ToolCatalogBar", () => {
     await user.click(screen.getByRole("button", { name: "Vault" }));
     expect(takePendingForceTool("host-a")).toBe("digivault");
     const web = screen.getByRole("button", { name: "Web search" });
-    expect(web.getAttribute("aria-pressed")).toBe("false");
-    await user.click(web);
     expect(web.getAttribute("aria-pressed")).toBe("true");
-    expect(onWebSearchChange).toHaveBeenCalledWith(true);
+    await user.click(web);
+    expect(web.getAttribute("aria-pressed")).toBe("false");
+    expect(onWebSearchChange).toHaveBeenCalledWith(false);
   });
 
   it("hides when the catalog is empty or toggles are disabled", () => {
@@ -90,7 +90,7 @@ describe("ToolCatalogBar", () => {
     expect(document.querySelector("[data-tool-catalog]")).toBeNull();
   });
 
-  it("defaults the web toggle on for the baseline embed slug, off for matched tenants", () => {
+  it("defaults the web toggle on for baseline and matched tenants (#3859)", () => {
     // Baseline (slug "embed", no stored pref): default-on.
     stubMapStorage();
     const { unmount } = render(
@@ -105,9 +105,9 @@ describe("ToolCatalogBar", () => {
       "true",
     );
     unmount();
-    // Matched tenant slug with no stored pref: stays off (#3420 opt-in).
+    // Matched tenant slug with no stored pref: also default-on now.
     stubMapStorage();
-    render(
+    const { unmount: unmountTenant } = render(
       <ToolCatalogBar
         clientConfig={{ ...catalogConfig, slug: "occ" }}
         sessionKey="tenant-scope"
@@ -115,7 +115,36 @@ describe("ToolCatalogBar", () => {
       />,
     );
     expect(screen.getByRole("button", { name: "Web search" }).getAttribute("aria-pressed")).toBe(
-      "false",
+      "true",
     );
+    unmountTenant();
+  });
+
+  it("renders no web toggle for deny tenants (gate off, no web_search entry)", () => {
+    // datatap shape: gate.webSearch false and no web_search catalog entry —
+    // the tenant AND-gate denies, so no toggle renders and nothing sends.
+    stubMapStorage();
+    const denyConfig = {
+      ...catalogConfig,
+      slug: "datatap",
+      tools: {
+        allowUserToggle: true,
+        catalog: [
+          { id: "digisearch", default: true, label: "Search" },
+          { id: "digivault", default: true, label: "Vault" },
+        ],
+      },
+      gate: { ...DEFAULT_CLIENT_CONFIG.gate, webSearch: false },
+    };
+    render(
+      <ToolCatalogBar
+        clientConfig={denyConfig}
+        sessionKey="deny-scope"
+        webSearchScope="deny-web-default"
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Web search" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Search" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Vault" })).toBeDefined();
   });
 });
