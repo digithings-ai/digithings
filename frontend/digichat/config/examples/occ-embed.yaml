@@ -33,9 +33,13 @@ hosts:
           default: true
         - id: digivault
           default: true
+        - id: web_search
+          default: true
+          label: Web search
     gate:
       mode: ungated
       activityDetail: labels
       llmAccess: operator
       showByok: false
       showLanguageSelector: true
+      webSearch: true

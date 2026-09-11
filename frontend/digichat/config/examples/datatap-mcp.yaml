@@ -54,3 +54,5 @@ deployment:
     llmAccess: operator
     showByok: false
     showLanguageSelector: true
+    # web search explicitly off: docs + MCP surface only
+    webSearch: false

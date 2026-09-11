@@ -34,7 +34,7 @@ deployment:
         default: true
         label: Vault
       - id: web_search
-        default: false
+        default: true
         label: Web search
   mcp:
     servers: []

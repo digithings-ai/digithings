@@ -38,6 +38,9 @@ deployment:
       - id: digisearch
         default: true
         label: Search
+      - id: web_search
+        default: true
+        label: Web search
   mcp:
     servers: []
   gate:
@@ -46,4 +49,4 @@ deployment:
     llmAccess: operator
     showByok: false
     showLanguageSelector: false
-    webSearch: false
+    webSearch: true
