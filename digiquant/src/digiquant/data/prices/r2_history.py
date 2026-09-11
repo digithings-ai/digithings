@@ -19,7 +19,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any  # score:allow untyped any — R2 JSON rows
 
 from digiquant.ops.checkpoint_archive import ArchiveVerifyError, StorageBackend
 

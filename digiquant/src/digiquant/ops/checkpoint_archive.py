@@ -20,7 +20,7 @@ import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Protocol
+from typing import Any, Protocol  # score:allow untyped any — PostgREST/S3 rows
 
 from digiquant.dashboard.tenancy import house_workspace_id
 

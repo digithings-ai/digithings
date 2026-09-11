@@ -12,7 +12,7 @@ not need persisted tokens.
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any
+from typing import Any  # score:allow untyped any — checkpoint JSON
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
