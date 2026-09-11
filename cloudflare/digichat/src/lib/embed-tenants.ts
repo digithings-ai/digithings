@@ -95,9 +95,11 @@ export type EmbedTenantConfig = {
    */
   showLanguageSelector?: boolean;
   /**
-   * When true, this tenant may offer opt-in web search (#3420). Default off —
-   * corpus-only. User preference is a separate localStorage flag; both must
-   * be on before digichat sends X-Digi-Enable-Web-Search.
+   * When true, this tenant offers web search (#3420, default-on #3859):
+   * compat hydrate injects a default-on catalog entry and the user pref
+   * defaults on. Omit or false for corpus-only tenants (e.g. datatap) —
+   * tenant gate AND user pref must both be on before digichat sends
+   * X-Digi-Enable-Web-Search.
    */
   webSearch?: boolean;
   /** page = full content chrome inside iframe; embed = compact iframe child. */

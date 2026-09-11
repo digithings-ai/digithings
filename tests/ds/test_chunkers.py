@@ -213,6 +213,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 53) re-recorded for the cloudflare/ directory rename (#3854) plus web_search docs (#3856) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 54 for #3854 Phase 2 Track A (digisearch MCP backend-gate + supervisord docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 57 for #3859 (Task 9 web_search docs: recency buckets, rollout-ops rewrite) plus merged develop prose — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 57) re-recorded for #3871 (tool-only cost-win rewrite + searxng floats-on-latest owner decision in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -265,9 +266,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5881d77c9811fa5d",
         "a063d09664500f97",
         "50b42145065d7d4e",
-        "e470174005c56ca6",
-        "ad2ccc6c2d6d88bc",
-        "fe9b58780a97b82b",
+        "5dbc6c5291de10ab",
+        "e8874754e8823dbd",
+        "472ca1370eb9ef1a",
         "a3987db99f2b72c5",
         "9496728548f7cd2a",
         "3132efab1e5ed61e",

@@ -98,14 +98,14 @@ class TestSimulatorContract:
         simulator patches the ai_portfolios binding too.
         """
         from digiquant.research.data import ai_portfolios
-        from digiquant.research.testing.simulator import CANNED_WEB_GROUNDING
+        from digiquant.research.testing.simulator import CANNED_TOOL_SEARCH
 
         with simulated_pipeline(watchlist=("AAPL",)):
             out = ai_portfolios.call_web_search_tool(
                 query="probe", include_domains=["x.com"], max_results=1
             )
-            assert out["summary"] == CANNED_WEB_GROUNDING["summary"]
-            assert out["sources"] == list(CANNED_WEB_GROUNDING["sources"])
+            assert out["summary"] == CANNED_TOOL_SEARCH["summary"]
+            assert out["sources"] == list(CANNED_TOOL_SEARCH["sources"])
 
     def test_coverage_directive_default_refreshes_rostered_tickers(self) -> None:
         """The simulator keeps the full H4 roster flowing to H5 (#3739).

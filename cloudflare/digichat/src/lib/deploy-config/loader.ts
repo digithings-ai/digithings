@@ -67,7 +67,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
     ...(cfg.tools?.catalog ?? []),
   ];
   if (cfg.webSearch === true && !catalog.some((t) => t.id === "web_search")) {
-    catalog.push({ id: "web_search", default: false, label: "Web search" });
+    catalog.push({ id: "web_search", default: true, label: "Web search" });
   }
 
   const chromeMode =

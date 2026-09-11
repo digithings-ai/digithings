@@ -120,7 +120,9 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     // showByok, by product decision (#2103). DEFAULT_EMBED_TENANT_CONFIG
     // above (the unresolved/gated fallback) stays false.
     showLanguageSelector: cfg.showLanguageSelector ?? true,
-    // Default OFF — corpus-only until tenant + user both opt in (#3420).
+    // Tenant-gated default-on (#3420, #3859): omit/false stays corpus-only;
+    // an enabled tenant pairs with the default-on user pref before digichat
+    // sends X-Digi-Enable-Web-Search.
     webSearch: cfg.webSearch === true,
     tools: cfg.tools,
     mcp: cfg.mcp

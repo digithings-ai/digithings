@@ -270,11 +270,11 @@ def digifetch_web_search(
     summary = "\n".join(f"- {r.get('content', '')} ({r.get('doc_id', '')})" for r in rows)
     sources = [r.get("doc_id", "") for r in rows]
     _usage.record(kind="web_search", model="digisearch:web_search", sources=len(sources))
-    _emit_web_search_telemetry(source_count=len(sources))
+    _emit_web_search_telemetry()
     return summary, sources
 
 
-def _emit_web_search_telemetry(*, source_count: int) -> None:
+def _emit_web_search_telemetry() -> None:
     """Emit the detailed provider-call records for one tool-only web_search call.
 
     No-op unless a usage run is active. The tool path has no LLM attempt, so the
@@ -282,7 +282,6 @@ def _emit_web_search_telemetry(*, source_count: int) -> None:
     with :func:`digigraph.usage.snapshot` while ``cost_usd`` stays unavailable
     (never fabricated).
     """
-    del source_count
     node_run_id, _metadata = _usage.provider_call_metadata()
     if node_run_id is None:
         node_run_id = uuid4()

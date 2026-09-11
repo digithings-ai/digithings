@@ -18,6 +18,7 @@ export function webSearchStorageKey(scope: string): string {
 /**
  * Read user preference. Missing key → `defaultOn` (true unless the caller
  * opts a surface into default-off). Explicit "0" always opts out.
+ * Storage throw → `false` (fail closed on malfunction, #3871).
  */
 export function readWebSearchPref(scope: string, defaultOn = true): boolean {
   if (typeof window === "undefined") return defaultOn;
@@ -26,7 +27,7 @@ export function readWebSearchPref(scope: string, defaultOn = true): boolean {
     if (stored === null) return defaultOn;
     return stored !== "0";
   } catch {
-    return defaultOn;
+    return false;
   }
 }
 

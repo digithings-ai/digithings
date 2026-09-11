@@ -26,7 +26,7 @@ export function clientConfigFromEmbedTenant(
     ...(e.label ? { label: e.label } : {}),
   }));
   if (webSearch && !catalog.some((t) => t.id === "web_search")) {
-    catalog.push({ id: "web_search", default: false, label: "Web search" });
+    catalog.push({ id: "web_search", default: true, label: "Web search" });
   }
 
   return {

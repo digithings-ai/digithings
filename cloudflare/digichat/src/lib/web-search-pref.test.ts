@@ -60,7 +60,24 @@ describe("web-search-pref (#3420)", () => {
     expect(readWebSearchPref("datatap")).toBe(false);
   });
 
-  it("storage failure falls back to defaultOn, not off (#3859)", () => {
+  it("fails closed on storage throw, defaults on when missing (#3871)", () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+      clear: () => store.clear(),
+    });
+    // Missing key → defaultOn.
+    expect(readWebSearchPref("fresh-scope")).toBe(true);
+    // Explicit stored "0" → off.
+    writeWebSearchPref("fresh-scope", false);
+    expect(readWebSearchPref("fresh-scope")).toBe(false);
+    // Storage throw → off (fail closed), even when defaultOn is true.
     vi.stubGlobal("localStorage", {
       getItem: () => {
         throw new Error("private mode");
@@ -71,8 +88,8 @@ describe("web-search-pref (#3420)", () => {
       removeItem: () => {},
       clear: () => {},
     });
-    expect(readWebSearchPref("broken-scope")).toBe(true);
-    expect(readWebSearchPref("broken-scope", true)).toBe(true);
-    expect(readWebSearchPref("broken-scope", false)).toBe(false);
+    expect(readWebSearchPref("fresh-scope")).toBe(false);
+    expect(readWebSearchPref("fresh-scope", true)).toBe(false);
+    expect(readWebSearchPref("fresh-scope", false)).toBe(false);
   });
 });

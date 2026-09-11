@@ -18,6 +18,7 @@ from typing import (
 
 import yaml
 
+# simulator must patch this binding too — it escapes the web_grounding patch (from-import).
 from digiquant.research.data.web_grounding import DashboardWebSearchError, call_web_search_tool
 
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "ai_portfolio_accounts.yaml"

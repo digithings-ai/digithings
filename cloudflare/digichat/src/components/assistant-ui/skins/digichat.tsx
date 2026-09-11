@@ -251,7 +251,12 @@ export function DigichatSkin({
         }
         if (action.kind === "force-web") {
           event.preventDefault();
-          setPendingWebSearchForce(slashPrefs.sessionKey, true);
+          // Tenant-gated arm (#3871): a deny tenant (e.g. datatap) typing
+          // /websearch must not set the pending flag — same tenantAllowsWeb
+          // signal as the mention filter above. The BFF deny stays as backstop.
+          if (slashPrefs.tenantAllowsWeb) {
+            setPendingWebSearchForce(slashPrefs.sessionKey, true);
+          }
           if (gate?.shouldHold(action.text)) {
             aui.composer.setText("");
             void aui.composer.clearAttachments();
