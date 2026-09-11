@@ -343,6 +343,21 @@ class TestHonestStatusOnExtractionFailure:
         assert result.max_drawdown_pct is None
         assert "sharpe_ratio" in result.message
         assert "max_drawdown_pct" in result.message
+        assert "returns analyzer exploded" in result.message
+
+    def test_absent_sharpe_key_is_none_and_partial(self) -> None:
+        analyzer = _StubAnalyzer(
+            returns_stats={"Sortino Ratio": 0.5},
+            pnls_stats={"Max Drawdown %": -7.0},
+        )
+        engine = _StubEngine(analyzer, pd.DataFrame([{"total": 1_100_000.0}]))
+        with _patched_single_run(engine):
+            result = run_nautilus_backtest(strategy_name="s", symbols=["BTC"], data_path="BTC.csv")
+        assert result is not None
+        assert result.sharpe_ratio is None
+        assert result.status == "partial"
+        assert "sharpe_ratio" in result.message
+        assert result.max_drawdown_pct == pytest.approx(-7.0)
 
     def test_unparseable_perf_stats_is_partial(self) -> None:
         analyzer = _StubAnalyzer(
@@ -430,6 +445,20 @@ class TestMultiSymbolHonestStatus:
         assert result.status == "partial"
         assert result.per_symbol_pnl == pytest.approx({"AAA": 100.0})
         assert "BBB" in result.message
+
+    def test_partial_symbol_is_excluded_from_aggregates_and_noted(self) -> None:
+        result = self._run(
+            {
+                "AAA": _symbol_result("AAA", pnl=100.0),
+                "BBB": _symbol_result("BBB", status="partial", pnl=999.0),
+            }
+        )
+        assert result is not None
+        assert result.status == "partial"
+        assert result.per_symbol_pnl == pytest.approx({"AAA": 100.0})
+        assert result.total_pnl == pytest.approx(100.0)
+        assert "BBB" in result.message
+        assert "excluded" in result.message.lower()
 
     def test_all_healthy_multi_symbol_is_ok(self) -> None:
         result = self._run(
