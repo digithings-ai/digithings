@@ -343,11 +343,10 @@ def test_pipeline_bearer_auth_error_propagates(
 ) -> None:
     """`ServiceAuthError` from the JWT exchange propagates (never swallowed)."""
     import digibase.service_auth as sa_mod
-    from digibase.service_auth import ServiceAuthError
 
     def _raise(**k: Any) -> str:
-        raise ServiceAuthError("DIGIQUANT_DIGIKEY_API_KEY is not set")
+        raise sa_mod.ServiceAuthError("DIGIQUANT_DIGIKEY_API_KEY is not set")
 
     monkeypatch.setattr(sa_mod, "get_service_jwt", _raise)
-    with pytest.raises(ServiceAuthError):
+    with pytest.raises(sa_mod.ServiceAuthError):
         _real_call_web_search_tool(query="etf flows", include_domains=[], max_results=4)
