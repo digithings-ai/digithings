@@ -14,7 +14,7 @@ import json
 import logging
 import os
 import time
-from typing import Any, Literal, overload
+from typing import Any, Literal, overload  # score:allow untyped any — MCP payloads
 
 logger = logging.getLogger(__name__)
 

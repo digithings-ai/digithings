@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any  # score:allow untyped any — R2 JSON payloads
 
 
 def load_counts_from_manifest(manifest: dict[str, Any]) -> dict[str, int]:

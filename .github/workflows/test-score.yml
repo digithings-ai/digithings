@@ -35,12 +35,20 @@ jobs:
           #   scripts/{claude-,}hooks/** and digidev/*.example.yml — these DEFINE the
           #                            live-trading detection regex, so the live-trading
           #                            detector self-matches its own pattern definition.
+          #   tests/** + **/tests/**, config/**, **/*.md, **/Dockerfile* — non-source
+          #                            surfaces the Python rubric misfires on: a test that
+          #                            asserts a loopback bind, an EXPOSE directive, prose or
+          #                            an env-var *name* that reads as a hardcoded secret.
+          #                            Same rationale as cloudflare/** — score the shipped
+          #                            code, not findings no one can action (#3798).
           # These only bite on large mixed diffs (e.g. develop→main promotions); a normal
           # PR rarely touches them. digidev's one .py file is still scored (only the
           # example config is excluded). See #1443.
           git diff "origin/${{ github.base_ref }}...HEAD" -- . \
             ':(exclude)docs/reviews/**' ':(exclude)docs/superpowers/**' \
             ':(exclude)cloudflare/**' \
+            ':(exclude)tests/**' ':(exclude)**/tests/**' \
+            ':(exclude)config/**' ':(exclude)**/*.md' ':(exclude)**/Dockerfile*' \
             ':(exclude)scripts/claude-hooks/**' ':(exclude)scripts/hooks/**' \
             ':(exclude)digidev/*.example.yml' \
             > /tmp/pr-code.diff || true

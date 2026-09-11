@@ -278,3 +278,39 @@ def test_scan_todo_requires_word_boundary() -> None:
     comment_hits = score.scan(comment)["accuracy"].findings
     assert not any("TODO/FIXME" in f.description for f in id_hits)
     assert any("TODO/FIXME" in f.description for f in comment_hits)
+
+
+def test_score_workflow_excludes_non_source_surfaces() -> None:
+    """``test-score.yml`` must skip surfaces the Python rubric misfires on.
+
+    ``cloudflare/**`` set the precedent: scoring JS/CSS with a Python-oriented
+    rubric emits findings nobody can act on. Tests, config, prose and Dockerfiles
+    misfire the same way on a develop→main promotion — a test asserting a
+    ``0.0.0.0`` bind, an env-var *name* constant read as a hardcoded secret — so
+    the score check went red on a range with no actionable code change behind it
+    (#3798). Pin the exclusions so a future edit cannot silently drop them.
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / "test-score.yml").read_text(encoding="utf-8")
+    for pathspec in (
+        "':(exclude)tests/**'",
+        "':(exclude)**/tests/**'",
+        "':(exclude)config/**'",
+        "':(exclude)**/*.md'",
+        "':(exclude)**/Dockerfile*'",
+    ):
+        assert pathspec in workflow, f"score diff must exclude {pathspec}"
+
+
+def test_scan_allows_hardcoded_secret_with_inline_pragma() -> None:
+    """An inline ``# score:allow`` exempts a hardcoded-secret false positive (#3798).
+
+    ``_ENV_TOKEN = "BGEOMETRICS_API_TOKEN"`` holds the *name* of an environment
+    variable, but the secret heuristic reads the ``TOKEN = "..."`` substring as a
+    value. The line-scoped pragma is the escape hatch, mirroring ``untyped any``.
+    """
+    diff = _unified(
+        "digiquant/src/digiquant/data/onchain/bgeometrics.py",
+        '+_ENV_TOKEN = "BGEOMETRICS_API_TOKEN"  # score:allow potential hardcoded secret\n',
+    )
+    findings = score.scan(diff)["security"].findings
+    assert not any("hardcoded secret" in f.description for f in findings)

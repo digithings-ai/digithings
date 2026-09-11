@@ -46,7 +46,7 @@ import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable  # score:allow untyped any — R2 JSON + callbacks
 
 import polars as pl
 

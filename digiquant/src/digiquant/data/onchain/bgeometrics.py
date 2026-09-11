@@ -51,7 +51,7 @@ DEFAULT_TIMEOUT = 30.0
 DEFAULT_CACHE_DIR = Path("data/onchain/bgeometrics")
 _USER_AGENT = "digiquant-research/1.0 (+https://digiquant.io)"
 _ENV_FLAG = "DIGIQUANT_BGEOMETRICS_FETCH"
-_ENV_TOKEN = "BGEOMETRICS_API_TOKEN"
+_ENV_TOKEN = "BGEOMETRICS_API_TOKEN"  # score:allow potential hardcoded secret — env-var name
 
 # A curated subset of the ~700-endpoint catalog covering the BlockHorizon-style
 # valuation composites from issue #3694. Any other bitcoin-data.com metric slug
