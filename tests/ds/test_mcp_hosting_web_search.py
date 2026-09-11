@@ -7,10 +7,6 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("mcp.server.fastmcp")
-
-from digisearch import mcp_server
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -18,13 +14,18 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_stack_dockerfile_installs_web_search_extra():
     text = (ROOT / "Dockerfile.digithings-stack-cloudflare").read_text()
     line = next(
-        line for line in text.splitlines() if "digisearch[" in line and "uv pip install" in line
+        (line for line in text.splitlines() if "digisearch[" in line and "uv pip install" in line),
+        None,
     )
+    assert line is not None
     assert "web-search" in line
 
 
 @pytest.mark.unit
 def test_web_search_registered_on_mcp_singleton():
+    pytest.importorskip("mcp.server.fastmcp")
+    from digisearch import mcp_server
+
     sync_names = {tool.name for tool in mcp_server.mcp._tool_manager.list_tools()}
     assert "web_search" in sync_names
     async_tools = asyncio.run(mcp_server.mcp.list_tools())
@@ -35,6 +36,7 @@ def test_web_search_registered_on_mcp_singleton():
 def test_run_web_search_prefers_searxng_falls_back_to_ddgs_no_network(
     monkeypatch: pytest.MonkeyPatch,
 ):
+    pytest.importorskip("mcp.server.fastmcp")
     from digisearch.web_search import service as svc
     from digisearch.web_search.models import (
         WebSearchRequest,
@@ -80,6 +82,6 @@ def test_run_web_search_prefers_searxng_falls_back_to_ddgs_no_network(
     monkeypatch.setattr(svc, "DdgsWebSearchProvider", Ok)
     monkeypatch.setattr(svc, "HttpFetcher", _Fetcher)
     resp = svc.run_web_search(WebSearchRequest(query="etf"), config=svc.WebSearchConfig())
-    assert attempted[0] == "searxng"
+    assert attempted == ["searxng", "ddgs"]
     assert resp.provider == "ddgs"
     assert resp.results and resp.results[0].url == "https://a.com/1"

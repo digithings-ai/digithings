@@ -203,7 +203,8 @@ Ollama in this path unless you need them.
 | digivault-mcp `:8769` | loopback | vault-notes MCP (4 vault-local tools) |
 | digigraph-mcp `:8766` | loopback | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
 
-hosted `:8765` `web_search` uses the embedded ddgs fallback (no searxng sidecar in-stack); compose-local searxng via `DIGISEARCH_SEARXNG_URL` remains for dev.
+hosted `:8765` `web_search` uses the embedded ddgs fallback (no searxng sidecar in-stack);
+compose-local searxng via `DIGISEARCH_SEARXNG_URL` remains for dev.
 
 **Omitted on purpose:** digiquant, digismith HTTP, Ollama, heartbeat.
 
