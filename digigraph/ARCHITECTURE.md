@@ -56,7 +56,7 @@ The following is built and functional as of this architecture review (March 2026
 | Logical provider-call purpose and lineage | Built | `llm_client.py`, `usage.py`, `graph/research_agent.py`, `digillm` contracts |
 | Planning executor (topo-sort + parallel steps) | Built | `planning/executor.py` |
 | Graphiti graph memory | **Not built** | Phase 2 roadmap |
-| Operator remote MCP (trusted BFF `X-Digi-Mcp-Servers`) | **Built** | `orchestration/mcp_client.py`; YAML + SSRF-guarded session overlay in digichat |
+| Operator remote MCP (trusted BFF `X-Digi-Mcp-Servers`) | **Built** | `orchestration/mcp_client.py`; YAML + SSRF-guarded session overlay in digichat; connect-time DNS validation/pinning (#3879) |
 | Auth-bound checkpoints (per-key RBAC) | **Not built** | Phase 2 roadmap |
 | OpenAI Responses API | **Not built** | Phase 2 roadmap |
 
@@ -662,11 +662,23 @@ typed HTTP path. The list-tools cache key fingerprints the token (never the
 raw value) and folds in the header name so switching auth schemes busts the
 cache. `is_allowed_mcp_url` refuses
 loopback, link-local, RFC1918/ULA, metadata, IPv4-mapped, decimal/hex IPv4
-literals, and DNS-rebinding suffixes (`nip.io` / `sslip.io` / `xip.io`)
-without live DNS (TOCTOU). Docker hostnames such as `datatap-mcp` stay allowed.
-Visitor MCP is a BFF-proxied session overlay (`mcp.allowUserServers` in digichat),
-not browser MCP / `@assistant-ui/react-mcp`. Session `session_*` tools are always
-appended so the model can change session prefs; the client applies them.
+literals, and DNS-rebinding suffixes (`nip.io` / `sslip.io` / `xip.io`) from the
+literal host string alone. That literal pre-filter is not sufficient on its own
+(#3879): an attacker-controlled hostname can pass it and then resolve to an
+internal address. Every Streamable HTTP connect therefore goes through an
+SSRF-safe httpcore backend (`_SsrfSafeNetworkBackend`, wired via
+`_mcp_http_client_factory`): the host is resolved to its A/AAAA records
+immediately before the socket connects, the connect is refused unless **every**
+resolved address passes the blocklist, and the socket is pinned to the validated
+IP so a later DNS answer cannot redirect it (no TOCTOU / rebinding). DNS failure
+fails closed. A bare label with no dot (`datatap-mcp`) is container-internal
+service discovery, not public DNS, so RFC1918/ULA is expected there and allowed
+— loopback, link-local and metadata addresses stay blocked either way. The
+refusal is raised as `McpAddressRejected` and logged as a warning, never
+swallowed. Visitor MCP is a BFF-proxied session overlay (`mcp.allowUserServers` in
+digichat), not browser MCP / `@assistant-ui/react-mcp`. Session `session_*` tools
+are always appended so the model can change session prefs; the client applies
+them.
 
 #### 6.2.1 Tool Choice Requirement
 
@@ -1088,7 +1100,7 @@ The following are explicitly documented as roadmap items:
 | Feature | Gap | Current Workaround |
 |---------|-----|-------------------|
 | **Graphiti graph memory** | Not implemented; `ARCHITECTURE.md` describes Neo4j + Graphiti for temporal strategy memory | Strategies are not persisted between conversations |
-| **Remote MCP enumeration** | Arbitrary visitor URLs are not accepted on this API without the BFF | Operator YAML + SSRF-guarded session overlay on `X-Digi-Mcp-Servers` (`is_allowed_mcp_url`). digichat `mcp.allowUserServers` gates session URLs. |
+| **Remote MCP enumeration** | Arbitrary visitor URLs are not accepted on this API without the BFF | Operator YAML + SSRF-guarded session overlay on `X-Digi-Mcp-Servers` (`is_allowed_mcp_url` literal filter + connect-time DNS validation/pinning, #3879). digichat `mcp.allowUserServers` gates session URLs. |
 | **OpenAI Responses API** | Not implemented; Chat Completions is the only LLM protocol | LiteLLM `/v1/responses` compatibility noted as future path |
 | **Distributed checkpoints** | MemorySaver/SQLite are single-node; Postgres has no advisory locks | Single digigraph instance |
 | **Per-user RBAC** | JWT subject not bound to checkpoint or tool access | Shared `thread_id` namespace; allowlists are per-request not per-user |

@@ -8,6 +8,13 @@ Visitor URLs never come from an untrusted JSON body — only the BFF header
 
 ``DIGI_MCP_SERVERS`` (``id=https://…,id2=https://…``) is the process-wide
 fallback from the remote-MCP backlog item.
+
+The literal allowlist in :func:`is_allowed_mcp_url` is not sufficient on its
+own: an attacker-controlled hostname can pass it and then resolve to an
+internal address (SSRF / DNS rebinding, #3879). Every Streamable HTTP connect
+therefore goes through :class:`_SsrfSafeNetworkBackend`, which resolves the
+host immediately before connecting, refuses the connection unless **every**
+A/AAAA record passes the blocklist, and pins the socket to the validated IP.
 """
 
 from __future__ import annotations
@@ -19,10 +26,15 @@ import json
 import logging
 import os
 import re
+import socket
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any  # score:allow untyped any — MCP JSON payloads / tool results
 from urllib.parse import urlparse
+
+import anyio
+import httpcore
+import httpx
 
 log = logging.getLogger(__name__)
 
@@ -55,19 +67,22 @@ _cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="digi-mcp")
 
 
-def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+def _ip_is_blocked(
+    ip: ipaddress.IPv4Address | ipaddress.IPv6Address, *, allow_private: bool = False
+) -> bool:
+    """True when *ip* must never be dialed.
+
+    ``allow_private`` relaxes only RFC1918 / ULA. Loopback, link-local
+    (``169.254.0.0/16``), unspecified, multicast, reserved and the Alibaba
+    metadata address stay blocked either way.
+    """
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        return _ip_is_blocked(ip.ipv4_mapped)
+        return _ip_is_blocked(ip.ipv4_mapped, allow_private=allow_private)
     if ip == _ALIBABA_METADATA:
         return True
-    return bool(
-        ip.is_loopback
-        or ip.is_link_local
-        or ip.is_unspecified
-        or ip.is_multicast
-        or ip.is_private
-        or ip.is_reserved
-    )
+    if ip.is_loopback or ip.is_link_local or ip.is_unspecified or ip.is_multicast or ip.is_reserved:
+        return True
+    return ip.is_private and not allow_private
 
 
 def _parse_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
@@ -159,10 +174,13 @@ def _hostname_is_blocked(host: str) -> bool:
 def is_allowed_mcp_url(raw: str) -> bool:
     """https/http, no userinfo, no loopback / metadata / private-IP literals.
 
-    Docker DNS names such as ``http://datatap-mcp:8080/mcp`` stay allowed.
-    Literal RFC1918 / loopback / link-local / IPv4-mapped metadata hosts do not.
-    Shorthand IPv4 (``127.1``) and loopback DNS (``localtest.me``) are refused
-    without live DNS.
+    Literal-only pre-filter: it never resolves DNS. The connect-time guard
+    (:func:`_resolve_and_validate`) is the authoritative SSRF check — a
+    hostname accepted here can still be refused when it resolves to a blocked
+    address (#3879). Docker DNS names such as ``http://datatap-mcp:8080/mcp``
+    stay allowed. Literal RFC1918 / loopback / link-local / IPv4-mapped
+    metadata hosts do not. Shorthand IPv4 (``127.1``) and loopback DNS
+    (``localtest.me``) are refused here without live DNS.
     """
     try:
         u = urlparse(raw.strip())
@@ -176,6 +194,138 @@ def is_allowed_mcp_url(raw: str) -> bool:
     if _hostname_is_blocked(host):
         return False
     return True
+
+
+class McpAddressRejected(Exception):
+    """Refused to connect: the MCP host resolved to a blocked address.
+
+    Deliberately not an ``OSError``/``httpx`` error so it is never mistaken for
+    a transient network blip by retry logic; it surfaces in the existing
+    warning logs from :func:`_list_tools_blocking` / :func:`_call_tool_blocking`.
+    """
+
+
+def _resolve_host_ips(host: str, port: int) -> list[str]:
+    """Return every A/AAAA address for *host* (deduped). Raises ``OSError``."""
+    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    ips: list[str] = []
+    seen: set[str] = set()
+    for info in infos:
+        addr = str(info[4][0]).split("%", 1)[0]
+        if addr and addr not in seen:
+            seen.add(addr)
+            ips.append(addr)
+    return ips
+
+
+async def _resolve_and_validate(host: str, port: int) -> str:
+    """Resolve *host* and return the single validated IP to connect to.
+
+    Fails closed: a resolution error, an empty answer, or **any** blocked
+    A/AAAA record raises :class:`McpAddressRejected`. The returned IP is the
+    exact address the caller must dial — re-resolving later would reopen the
+    DNS-rebinding window this guard exists to close.
+
+    A bare label with no dot (``datatap-mcp``) is container-internal service
+    discovery rather than public DNS, so RFC1918 / ULA is expected and allowed;
+    loopback, link-local and metadata addresses stay blocked. Fully-qualified
+    names must resolve entirely to public addresses.
+    """
+    normalized = host.strip().strip("[]").lower().rstrip(".")
+    literal = _parse_ip(normalized)
+    if literal is not None:
+        if _ip_is_blocked(literal):
+            raise McpAddressRejected(f"MCP host {host!r} is a blocked address")
+        return str(literal)
+    allow_private = "." not in normalized
+    try:
+        ips = await anyio.to_thread.run_sync(_resolve_host_ips, host, port)
+    except OSError as exc:
+        raise McpAddressRejected(f"MCP host {host!r} did not resolve: {exc}") from exc
+    if not ips:
+        raise McpAddressRejected(f"MCP host {host!r} resolved to no address")
+    for ip_str in ips:
+        ip = _parse_ip(str(ip_str).strip())
+        if ip is None:
+            raise McpAddressRejected(f"MCP host {host!r} resolved to invalid address {ip_str!r}")
+        if _ip_is_blocked(ip, allow_private=allow_private):
+            raise McpAddressRejected(f"MCP host {host!r} resolved to blocked address {ip_str}")
+    return str(ips[0])
+
+
+class _SsrfSafeNetworkBackend(httpcore.AsyncNetworkBackend):
+    """httpcore backend that validates and pins DNS immediately before connect.
+
+    ``connect_tcp`` resolves the host, refuses it if any resolved address is
+    blocked, and hands the *validated* IP to the wrapped backend. The original
+    hostname is still used by httpcore for the HTTP ``Host`` header and TLS
+    SNI, so public HTTPS targets keep working.
+    """
+
+    def __init__(self, inner: httpcore.AsyncNetworkBackend | None = None) -> None:
+        self._inner = inner if inner is not None else httpcore.AnyIOBackend()
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: httpcore.SOCKET_OPTION | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        pinned = await _resolve_and_validate(host, port)
+        return await self._inner.connect_tcp(
+            pinned,
+            port,
+            timeout=timeout,
+            local_address=local_address,
+            socket_options=socket_options,
+        )
+
+    async def connect_unix_socket(
+        self,
+        path: str,
+        timeout: float | None = None,
+        socket_options: httpcore.SOCKET_OPTION | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        return await self._inner.connect_unix_socket(
+            path, timeout=timeout, socket_options=socket_options
+        )
+
+    async def sleep(self, seconds: float) -> None:
+        await self._inner.sleep(seconds)
+
+
+class _SsrfSafeAsyncHTTPTransport(httpx.AsyncHTTPTransport):
+    """httpx transport whose connection pool uses :class:`_SsrfSafeNetworkBackend`.
+
+    The response/stream handling is inherited from httpx; only the pool's
+    network backend is swapped, before the pool is entered, so no connection
+    can be created with the default resolver.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(verify=True, trust_env=True, retries=0)
+        self._network_backend = _SsrfSafeNetworkBackend()
+        self._pool._network_backend = self._network_backend
+
+
+def _mcp_http_client_factory(
+    headers: dict[str, str] | None = None,
+    timeout: httpx.Timeout | None = None,
+    auth: httpx.Auth | None = None,
+) -> httpx.AsyncClient:
+    """MCP Streamable HTTP client that validates DNS at connect time (#3879)."""
+    kwargs: dict[str, Any] = {
+        "transport": _SsrfSafeAsyncHTTPTransport(),
+        "follow_redirects": True,
+        "timeout": timeout if timeout is not None else httpx.Timeout(30.0, read=300.0),
+    }
+    if headers is not None:
+        kwargs["headers"] = headers
+    if auth is not None:
+        kwargs["auth"] = auth
+    return httpx.AsyncClient(**kwargs)
 
 
 def _auth_fields(item: dict[str, Any]) -> dict[str, str]:
@@ -395,7 +545,9 @@ async def _list_tools_async(server: dict[str, str]) -> list[dict[str, Any]]:
     url = server["url"]
     server_id = server["id"]
     headers = mcp_http_headers(server)
-    async with streamablehttp_client(url, headers=headers) as (read, write, _):
+    async with streamablehttp_client(
+        url, headers=headers, httpx_client_factory=_mcp_http_client_factory
+    ) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             listed = await session.list_tools()
@@ -426,7 +578,9 @@ async def _call_tool_async(
 
     url = server["url"]
     headers = mcp_http_headers(server)
-    async with streamablehttp_client(url, headers=headers) as (read, write, _):
+    async with streamablehttp_client(
+        url, headers=headers, httpx_client_factory=_mcp_http_client_factory
+    ) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.call_tool(tool, args)
