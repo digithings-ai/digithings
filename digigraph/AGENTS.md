@@ -45,6 +45,7 @@ Beyond root `AGENTS.md`:
 - **Never MemorySaver in production**: Default is fine for dev, but document `DIGI_CHECKPOINTER=postgres` for production.
 - **Checkpointer env**: Set `DIGI_CHECKPOINTER=memory|sqlite|postgres` explicitly in prod; `memory` does not survive restarts.
 - **MCP auth**: Bind MCP to loopback; set `DIGI_MCP_REQUIRE_AUTH=1` when exposing beyond localhost. The `workflow` tool refuses unauthenticated calls when auth is required.
+- **Remote MCP SSRF (#3879)**: `X-Digi-Mcp-Servers` / `DIGI_MCP_SERVERS` URLs are DNS-validated at connect time via `_mcp_http_client_factory` (`orchestration/mcp_client.py`): the host resolves immediately before the socket, every A/AAAA must be globally routable, and the validated IPs are dialed in order without a second lookup. Do not add a remote-MCP connect path that bypasses that httpcore backend. Dotless Docker names (`datatap-mcp`) are *assumed* to be internal and may resolve to RFC1918/ULA — an assumption, not a proof (a redirect to a dotless internal name, or a hostile search domain, can still reach private space). Set `DIGIGRAPH_MCP_PRIVATE_HOST_ALLOWLIST` (comma-separated) to allow only named hosts to resolve private. Loopback/link-local/metadata/CGNAT never may.
 - **No PII in spans**: digismith spans must not carry raw prompts, full document bodies, or bearer tokens. See `digismith/ARCHITECTURE.md` Section 4.
 
 ---
