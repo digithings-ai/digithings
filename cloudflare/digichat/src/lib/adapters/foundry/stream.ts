@@ -238,6 +238,8 @@ interface OutputItemDoneEvent extends FoundryStreamEvent {
     name?: string;
     /** mcp_call: MCP server label the tool belongs to. */
     server_label?: string;
+    /** Provider call correlation id, shared by a call item and its output. */
+    call_id?: string;
     /** reasoning: `{type, text}` parts — empty unless a summary is enabled. */
     summary?: unknown;
     status?: string;
@@ -479,6 +481,11 @@ function isRemoteFunctionsLeakPrefix(text: string): boolean {
   return /^\(?remote(_functions(\.[\w]+)*)?\)?$/.test(t);
 }
 
+/** Provider call correlation id shared by a call item and its output item. */
+function callIdOf(item: { call_id?: string }): string | undefined {
+  return typeof item.call_id === "string" && item.call_id.trim() ? item.call_id.trim() : undefined;
+}
+
 function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | null {
   const item = event.item;
 
@@ -488,6 +495,7 @@ function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | nul
   if (item?.type === "azure_ai_search_call") {
     const query = parseJsonObject(item.arguments)?.query;
     const q = typeof query === "string" && query.trim() ? query.trim() : undefined;
+    const callId = callIdOf(item);
     return {
       type: "activity",
       span: {
@@ -495,6 +503,7 @@ function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | nul
         toolName: SEARCH_TOOL,
         status: item.status === "failed" ? "failed" : "completed",
         ...(q ? { query: q } : {}),
+        ...(callId ? { callId } : {}),
         label: q ? `Searched for: "${q}"` : SEARCH_LABEL,
       },
     };
@@ -503,6 +512,7 @@ function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | nul
   // The tool OUTPUT: the chunks the search returned.
   if (item?.type === "azure_ai_search_call_output") {
     const documents = searchOutputDocuments(item.output);
+    const callId = callIdOf(item);
     return {
       type: "activity",
       span: {
@@ -511,6 +521,7 @@ function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | nul
         status: item.status === "failed" ? "failed" : "completed",
         label: "Sources",
         ...(documents.length ? { documents } : {}),
+        ...(callId ? { callId } : {}),
       },
     };
   }
@@ -526,6 +537,7 @@ function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | nul
     const name = mcpToolName(item);
     const args = parseJsonObject(item.arguments);
     const output = parseMcpResult(item.output);
+    const callId = callIdOf(item);
     return {
       type: "activity",
       span: {
@@ -534,6 +546,7 @@ function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | nul
         status: item.status === "failed" ? "failed" : "completed",
         ...(args && Object.keys(args).length ? { toolInput: args } : {}),
         ...(output !== undefined ? { toolResult: output } : {}),
+        ...(callId ? { callId } : {}),
         label: name,
       },
     };
@@ -652,27 +665,31 @@ export function mapFoundryEvent(event: FoundryStreamEvent): FoundryServerEvent |
     case "response.output_item.added": {
       const item = (event as OutputItemDoneEvent).item;
       if (item?.type === "azure_ai_search_call") {
+        const callId = callIdOf(item);
         return {
           type: "activity",
           span: {
             operation: "execute_tool",
             toolName: SEARCH_TOOL,
             status: "started",
+            ...(callId ? { callId } : {}),
             label: SEARCH_LABEL,
           },
         };
       }
       // MCP call opened early so the row reads "running" while the tool
-      // executes; `.done` settles it into the same row via the FIFO
-      // pending queue (same contract as the search branch above).
+      // executes; `.done` settles it into the same row via the call-id
+      // correlation (same contract as the search branch above).
       if (item?.type === "mcp_call") {
         const name = mcpToolName(item);
+        const callId = callIdOf(item);
         return {
           type: "activity",
           span: {
             operation: "execute_tool",
             toolName: name,
             status: "started",
+            ...(callId ? { callId } : {}),
             label: name,
           },
         };

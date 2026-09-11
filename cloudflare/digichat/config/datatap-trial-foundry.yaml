@@ -35,7 +35,7 @@ deployment:
     catalog: []
   gate:
     mode: ungated
-    activityDetail: labels
+    activityDetail: full
     llmAccess: operator
     showByok: false
     showLanguageSelector: true

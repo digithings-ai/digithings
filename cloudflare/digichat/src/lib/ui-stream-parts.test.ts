@@ -516,3 +516,34 @@ describe("finishStandardActivity on stream error", () => {
     expect(out?.output).toMatchObject({ status: "failed", query: "Bob" });
   });
 });
+
+describe("callId row correlation", () => {
+  it("settles an output span into the row its call opened, by call id", () => {
+    const chunks = collect([
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "azure_ai_search",
+        toolName: "azure_ai_search",
+        callId: "call_abc",
+      },
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "Sources",
+        toolName: "azure_ai_search",
+        callId: "call_abc",
+        documents: [{ title: "A", path: "a.md" }],
+      },
+    ]);
+    const starts = chunks.filter((c) => c.type === "tool-input-start");
+    const outputs = chunks.filter((c) => c.type === "tool-output-available");
+    // One row total: the output lands on the started row, no second row.
+    expect(starts).toHaveLength(1);
+    expect(outputs).toHaveLength(1);
+    expect(outputs[0]?.toolCallId).toBe(starts[0]?.toolCallId);
+    expect(outputs[0]?.output).toMatchObject({
+      documents: [{ title: "A", path: "a.md" }],
+    });
+  });
+});
