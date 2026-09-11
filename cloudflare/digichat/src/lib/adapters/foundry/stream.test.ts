@@ -888,3 +888,79 @@ describe("createFoundryStreamResponse activity detail", () => {
     ]);
   });
 });
+
+describe("mapFoundryEvent MCP items (#3861)", () => {
+  it("opens a started row on mcp_call.added", () => {
+    expect(
+      mapFoundryEvent({
+        type: "response.output_item.added",
+        item: { type: "mcp_call", name: "datatap__list_connections" },
+      })
+    ).toEqual({
+      type: "activity",
+      span: {
+        operation: "execute_tool",
+        toolName: "datatap__list_connections",
+        status: "started",
+        label: "datatap__list_connections",
+      },
+    });
+  });
+
+  it("maps a completed mcp_call to args + JSON result", () => {
+    expect(
+      mapFoundryEvent({
+        type: "response.output_item.done",
+        item: {
+          type: "mcp_call",
+          name: "datatap__list_connections",
+          arguments: "{}",
+          output: JSON.stringify({ connections: [{ name: "a" }] }),
+        },
+      })
+    ).toEqual({
+      type: "activity",
+      span: {
+        operation: "execute_tool",
+        toolName: "datatap__list_connections",
+        status: "completed",
+        toolResult: { connections: [{ name: "a" }] },
+        label: "datatap__list_connections",
+      },
+    });
+  });
+
+  it("keeps raw-string MCP output and failed status", () => {
+    expect(
+      mapFoundryEvent({
+        type: "response.output_item.done",
+        item: {
+          type: "mcp_call",
+          name: "datatap__get_item",
+          arguments: JSON.stringify({ itemId: "abc" }),
+          output: "not found",
+          status: "failed",
+        },
+      })
+    ).toEqual({
+      type: "activity",
+      span: {
+        operation: "execute_tool",
+        toolName: "datatap__get_item",
+        status: "failed",
+        toolInput: { itemId: "abc" },
+        toolResult: "not found",
+        label: "datatap__get_item",
+      },
+    });
+  });
+
+  it("leaves mcp_approval_request unmapped (server-side auto-approve)", () => {
+    expect(
+      mapFoundryEvent({
+        type: "response.output_item.done",
+        item: { type: "mcp_approval_request", name: "datatap__list_connections" },
+      })
+    ).toBeNull();
+  });
+});

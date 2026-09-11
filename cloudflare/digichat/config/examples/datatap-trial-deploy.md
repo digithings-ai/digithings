@@ -1,8 +1,13 @@
 # DataTap MCP trial chat — tenant deployment guide
 
-Deploys the `datatap-trial-test.yaml` container: a per-trial-tenant digichat
-that drives the DataTap dev MCP server through digigraph operator MCP
-(`X-API-Key` static auth, #3841) with generic tool-row args + JSON results.
+Two variants, one per backend:
+
+- **V1 (Foundry agent, current):** `config/datatap-trial-foundry.yaml` — UI-only
+  container on a tenant-local Foundry agent carrying the tenant search index +
+  MCP tool (#3861). Deploy this one.
+- **V2 (DigiGraph harness):** `config/datatap-trial-test.yaml` — digichat
+  driving the DataTap dev MCP server through digigraph operator MCP
+  (`X-API-Key` static auth, #3841). Parked follow-up.
 
 This is the **trial** chat, not the website docs chat. The website chat
 (`digichat` on `dg-agentic-datatap`, search-only, no MCP) is untouched.

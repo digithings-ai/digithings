@@ -1,0 +1,41 @@
+version: 1
+# V1 trial POC (#3861): UI-only container on a tenant-local Foundry agent.
+# Per-trial baked yaml — the pipeline clones this per trial with that
+# tenant's projectEndpoint + agentName. Foundry auth is the container's
+# managed identity (DefaultAzureCredential); no secret is baked here.
+# The agent itself carries the tenant search index + MCP tool.
+deployment:
+  slug: datatap-trial-foundry
+  chrome:
+    mode: embed
+    theme: dark
+    skin: digichat
+    title: ask datatap
+    welcome: Ask about your pipelines.
+    placeholder: Ask a question
+  persistence: none
+  auth: anonymous
+  features:
+    attachments: false
+    dictation: false
+    speech: false
+    reasoning: true
+    toolCalls: true
+    sources: true
+    branchPicker: true
+    modelPicker: false
+  backend:
+    type: foundry
+    # Per-trial values — replaced by the pipeline (see
+    # config/examples/datatap-trial-deploy.md).
+    projectEndpoint: https://REPLACE-FOUNDRY-ACCOUNT.services.ai.azure.com/api/projects/REPLACE-PROJECT
+    agentName: REPLACE-AGENT-NAME
+  tools:
+    allowUserToggle: true
+    catalog: []
+  gate:
+    mode: ungated
+    activityDetail: labels
+    llmAccess: operator
+    showByok: false
+    showLanguageSelector: true

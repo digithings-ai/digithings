@@ -766,7 +766,12 @@ id via `X-External-Conversation` / `data-conversation`. For ordinary
 `send` turns the adapter appends last-user text. Regen/edit use conversation
 item delete/create when available (#3475); otherwise the BFF returns 501.
 Foundry maps `azure_ai_search` calls and returned chunks into standard
-tool / `source-*` / `data-status` parts. A reasoning disclosure appears
+tool / `source-*` / `data-status` parts. Generic MCP tools map the same way
+(#3861): `mcp_call` opens the started row (args as `toolInput`), and the
+completed item carries the output as `toolResult`, rendered as JSON in the
+standard tool Result pane with mid-stream completion — display parity with a
+directly-plugged tool, no per-tool UI. `mcp_approval_request` is unmapped by
+design: trial agents auto-approve server-side. A reasoning disclosure appears
 only when the Foundry event includes summary text. Operators enable that
 summary on the agent definition: the Responses API refuses a per-call
 `reasoning.summary` request when using `agent_reference`. Empty reasoning
