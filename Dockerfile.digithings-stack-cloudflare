@@ -46,7 +46,7 @@ RUN uv pip install --system -e "./digigraph[mcp]"
 COPY digisearch/pyproject.toml digisearch/ARCHITECTURE.md ./digisearch/
 COPY digisearch/src ./digisearch/src
 COPY digisearch/seeds ./digisearch/seeds
-RUN uv pip install --system -e "./digisearch[server,ingestion,chroma]"
+RUN uv pip install --system -e "./digisearch[server,ingestion,chroma,web-search]"
 
 COPY digivault/pyproject.toml digivault/ARCHITECTURE.md ./digivault/
 COPY digivault/src ./digivault/src
