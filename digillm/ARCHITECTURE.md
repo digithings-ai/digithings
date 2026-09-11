@@ -218,7 +218,7 @@ chat_completion(
   the #802 curated candidate pool silently never fired for it either.
 - **Empty-response self-heal.** A 200-OK with no usable output (empty `choices` /
   blank content and no `tool_calls`) is treated as a transient provider hiccup and
-  retried with a short backoff (`DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_DELAY`).
+  retried with a short backoff (`DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_BACKOFF`).
    Provider errors surface to the caller — there is no fallback chain. Empty
    retries re-ask the same model. A persistent blank is returned unchanged
    (callers stay graceful).
@@ -387,7 +387,7 @@ a time bound (#3738).
 digiquant pipeline pins `DIGILLM_PROVIDER_MAX_ATTEMPTS=2`,
 `DIGILLM_EMPTY_RETRY_MAX=1`, and `DIGILLM_MAX_CONCURRENT_CALLS=8`
 (`.github/workflows/pipeline-digiquant.yml`). The library defaults (12 / 4 / 8)
-are deliberately generous for interactive callers, so a local
+preserve the historical non-pipeline behaviour, so a local
 `python -m digiquant.portfolio.chain` run without that env gets much longer retry
 budgets than the #3078/#3737 fail-fast intent. For local parity, export the pins:
 
