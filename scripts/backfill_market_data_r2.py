@@ -57,7 +57,7 @@ from digiquant.ops.checkpoint_archive import (  # noqa: E402
 )
 
 PAGE_SIZE = 500
-POSTGRES_URI_ENV = "MARKET_DATA_POSTGRES_URI"
+POSTGRES_URI_ENV = "CORE_POSTGRES_URI"
 
 FetchPage = Callable[[str, int, int], list[dict[str, Any]]]
 

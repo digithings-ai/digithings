@@ -89,7 +89,7 @@ Workflow: [`.github/workflows/db-migrate.yml`](../../../.github/workflows/db-mig
 5. **Apply loop:** skip if ledger has the basename; else run file under
    `--single-transaction` (or self-`BEGIN` path) and `INSERT` the ledger row
    atomically with the DDL for unwrapped files.
-6. **Secret:** `DIGI_CHECKPOINTER_POSTGRES_URI` (prod DB URI for project `core`).
+6. **Secret:** `CORE_POSTGRES_URI` (prod DB URI for project `core`).
 
 So: merge migrations to `develop` → promote `develop` → `main` → approve the
 `db-migrate` production run. Do **not** put the anon-drop file at top level until
@@ -108,7 +108,7 @@ supabase link --project-ref rwagjbkvxkdwqmouagad
 supabase db push
 
 # Option B — psql against the same URI the workflow uses (one file at a time)
-psql "$DIGI_CHECKPOINTER_POSTGRES_URI" -v ON_ERROR_STOP=1 --single-transaction <<'SQL'
+psql "$CORE_POSTGRES_URI" -v ON_ERROR_STOP=1 --single-transaction <<'SQL'
 -- paste one migration file body, then:
 INSERT INTO olympus_schema_migrations(version)
 VALUES ('096_workspaces_tenancy_tables.sql');

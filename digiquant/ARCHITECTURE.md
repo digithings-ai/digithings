@@ -310,7 +310,7 @@ Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`
 plus the four R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
 `R2_SECRET_ACCESS_KEY` (same `digithings-archive` bucket as the checkpoint
 archive). The read path is registry-read-only (registry inserts raise) so the
-cron's `MARKET_DATA_POSTGRES_URI` is deliberately NOT forwarded here.
+cron's `CORE_POSTGRES_URI` is deliberately NOT forwarded here.
 `DIGIQUANT_MARKET_DATA_BACKEND` is passed through with no Worker-side default:
 unset/empty keeps the library default (`supabase`); set it to `"r2"`
 explicitly via env for the hosted path.
@@ -379,7 +379,7 @@ cleared per sample, no network): Task 1 Supabase technicals p50 1413.2ms
 
 Prod gate (human): Worker-edge digikey JWT enforcement (scope
 `digiquant:backtest`) must land before production MCP use — not
-implemented here. Owner actions: `FRED_API_KEY` + `MARKET_DATA_POSTGRES_URI`
+implemented here. Owner actions: `FRED_API_KEY` + `CORE_POSTGRES_URI`
 are MISSING from GitHub secrets (refresh cron + backfill need them); live
 refresh runs stay supervised with the operator.
 

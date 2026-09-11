@@ -95,7 +95,7 @@ MACRO_VALUE_COLS = ("obs_date", "value")
 # Backfill macro generations carry exactly these columns (Task 5 writes the
 # direct-PG SELECT of source,series_id,obs_date,value,unit — no meta).
 MACRO_COLUMNS = ("source", "series_id", "obs_date", "value", "unit")
-POSTGRES_URI_ENV = "MARKET_DATA_POSTGRES_URI"
+POSTGRES_URI_ENV = "CORE_POSTGRES_URI"
 FRED_API_KEY_ENV = "FRED_API_KEY"
 
 

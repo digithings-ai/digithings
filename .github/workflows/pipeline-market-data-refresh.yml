@@ -5,7 +5,7 @@
 # previous objects keep serving, the manifest is written with stale=true,
 # and the non-zero exit fails the run so the failure alerts.
 #
-# MARKET_DATA_POSTGRES_URI is additional to the brief's pins: the store seam
+# CORE_POSTGRES_URI is additional to the brief's pins: the store seam
 # (R2HistoryStore) needs the direct-PG archive_objects registry insert, same
 # as the Task 5 backfill. Without it no generation can be recorded.
 name: market-data-refresh
@@ -28,7 +28,7 @@ jobs:
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-      MARKET_DATA_POSTGRES_URI: ${{ secrets.MARKET_DATA_POSTGRES_URI }}
+      CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI }}
     steps:
       - uses: actions/checkout@v4
       - run: uv sync --frozen --package digiquant --extra research
