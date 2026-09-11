@@ -156,10 +156,10 @@ def _docker_available() -> str | None:
     if docker is None:
         return None
     # ``docker info`` can outrun a cold or briefly unresponsive daemon on CI,
-    # which used to escape as a TimeoutExpired at setup and turn every test in
-    # this module into a collection ERROR (#3781 / #3797). Retry once, then
-    # treat a timeout or non-zero probe as "daemon unavailable" — never an
-    # exception.
+    # which used to escape as a TimeoutExpired during fixture setup and turn
+    # the five Docker-backed cases into setup ERRORs (#3781 / #3797). Retry
+    # once, then treat a timeout or non-zero probe as "daemon unavailable" —
+    # never an exception.
     for attempt in range(2):
         try:
             probe = subprocess.run(
