@@ -22,6 +22,7 @@ from digiquant.strategies.sdca.indicator_catalog import (
     extra_indicators_for_window,
     load_date_value_frame,
     m2_liquidity_z,
+    onchain_mvrv_z,
     parse_indicator_weights_json,
     rs_eth_confluence_z,
     rs_eth_z,
@@ -143,6 +144,24 @@ class TestNamedExtras:
         tail = [v for v in z.to_list() if v is not None]
         assert tail
         assert sum(tail) / len(tail) < 0
+
+    def test_onchain_mvrv_rising_is_negative_z(self) -> None:
+        n = 50
+        dates = _dates(n)
+        mvrv = pl.Series([1.0 * (1.05**i) for i in range(n)])
+        z = onchain_mvrv_z(dates, dates, mvrv, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) < 0
+
+    def test_onchain_mvrv_falling_is_positive_z(self) -> None:
+        n = 50
+        dates = _dates(n)
+        mvrv = pl.Series([5.0 * (0.95**i) for i in range(n)])
+        z = onchain_mvrv_z(dates, dates, mvrv, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) > 0
 
     def test_rs_eth_cheap_btc_is_positive_z(self) -> None:
         n = 50

@@ -12,7 +12,10 @@ price oscillators (``price_oscillators.py``), applied to the BTC/ETH log
 ratio: ``rs_eth_confluence_z`` blends a slow leg (``rs_eth_z`` at a 90-day
 window, long-term rotation) with a fast leg (30-day, medium-term rotation).
 ``m2``/``dxy`` stay single-window — they track slow macro regimes without a
-comparably fast rotation to confluence against.
+comparably fast rotation to confluence against. ``onchain_mvrv`` (Bitview/BRK
+``mvrv``, full history back to 2010) is the same single-window shape: a
+log-transformed, sign-flipped rolling z of the realized-cap ratio — high
+MVRV means overvalued (sell-favorable, −z), same convention as ``dxy_z``.
 
 ``SdcaCompositeWeights`` defaults ``power_law=1``, extras ``0`` (disabled,
 excluded from the blend). Published ``btc_sdca`` in ``settings.json`` turns
@@ -29,7 +32,7 @@ null an unpublished path.
 Omitted on purpose (see ARCHITECTURE.md):
 - Mayer / 200w SMA — *r* ≈ 0.84 vs ``power_law_z`` (research PR #3232)
 - a second power-law residual ("alpha") — collinear with ``power_law_z``
-- on-chain MVRV/NUPL — #1086, no in-repo history
+- on-chain NUPL — 1 − 1/MVRV, dual-counts ``onchain_mvrv`` below
 - equity CAPE / Buffett / ERP — #3176 forbade equity RiskModel in v1
 - RS rotation pool — #1084; this module only uses ETH from the Coinbase cache
 """
@@ -58,7 +61,7 @@ from digiquant.strategies.sdca.price_oscillators import (
     weekly_monthly_rsi_confluence_z,
 )
 
-MACRO_INDICATOR_NAMES: tuple[str, ...] = ("m2", "rs_eth", "dxy")
+MACRO_INDICATOR_NAMES: tuple[str, ...] = ("m2", "rs_eth", "dxy", "onchain_mvrv")
 PRICE_OSCILLATOR_NAMES: tuple[str, ...] = (
     "weekly_rsi",
     "weekly_macd",
@@ -81,6 +84,7 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "m2": "m2_weight",
     "rs_eth": "rs_eth_weight",
     "dxy": "dxy_weight",
+    "onchain_mvrv": "onchain_mvrv_weight",
     "weekly_rsi": "weekly_rsi_weight",
     "weekly_macd": "weekly_macd_weight",
     "sma_band": "sma_band_weight",
@@ -96,6 +100,7 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "m2": "M2 liquidity",
     "rs_eth": "BTC/ETH relative strength",
     "dxy": "DXY",
+    "onchain_mvrv": "on-chain MVRV",
     "weekly_rsi": "weekly RSI",
     "weekly_macd": "weekly log-MACD",
     "sma_band": "SMA band",
@@ -120,6 +125,9 @@ class SdcaCompositeWeights(BaseModel):
     m2: float = Field(0.0, ge=0.0)
     rs_eth: float = Field(0.0, ge=0.0)
     dxy: float = Field(0.0, ge=0.0)
+    # Bitview/BRK on-chain MVRV (research-only until validated via the
+    # RESEARCH_STATE.md Phase B playbook -- see onchain_mvrv_z below).
+    onchain_mvrv: float = Field(0.0, ge=0.0)
     weekly_rsi: float = Field(0.0, ge=0.0)
     weekly_macd: float = Field(0.0, ge=0.0)
     sma_band: float = Field(0.0, ge=0.0)
@@ -148,6 +156,7 @@ class SdcaCompositeWeights(BaseModel):
             ("m2", self.m2),
             ("rs_eth", self.rs_eth),
             ("dxy", self.dxy),
+            ("onchain_mvrv", self.onchain_mvrv),
             ("weekly_rsi", self.weekly_rsi),
             ("weekly_macd", self.weekly_macd),
             ("sma_band", self.sma_band),
@@ -177,6 +186,8 @@ class ExtraIndicatorSources(BaseModel):
     eth_close: pl.Series | None = None
     dxy_dates: pl.Series | None = None
     dxy_values: pl.Series | None = None
+    onchain_mvrv_dates: pl.Series | None = None
+    onchain_mvrv_values: pl.Series | None = None
 
 
 def composite_weights_from_params(params: Mapping[str, float | int | str]) -> SdcaCompositeWeights:
@@ -186,6 +197,7 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         m2=float(params.get("m2_weight", 0.0)),
         rs_eth=float(params.get("rs_eth_weight", 0.0)),
         dxy=float(params.get("dxy_weight", 0.0)),
+        onchain_mvrv=float(params.get("onchain_mvrv_weight", 0.0)),
         weekly_rsi=float(params.get("weekly_rsi_weight", 0.0)),
         weekly_macd=float(params.get("weekly_macd_weight", 0.0)),
         sma_band=float(params.get("sma_band_weight", 0.0)),
@@ -209,6 +221,7 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         m2=float(payload.get("m2", 0.0)),
         rs_eth=float(payload.get("rs_eth", 0.0)),
         dxy=float(payload.get("dxy", 0.0)),
+        onchain_mvrv=float(payload.get("onchain_mvrv", 0.0)),
         weekly_rsi=float(payload.get("weekly_rsi", 0.0)),
         weekly_macd=float(payload.get("weekly_macd", 0.0)),
         sma_band=float(payload.get("sma_band", 0.0)),
@@ -323,6 +336,27 @@ def dxy_z(
     return (-causal_rolling_z(aligned, window=window, min_samples=min_samples)).alias("dxy")
 
 
+def onchain_mvrv_z(
+    dates: pl.Series,
+    mvrv_dates: pl.Series,
+    mvrv_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Bitview/BRK MVRV, log-transformed rolling-z, sign-flipped: high MVRV
+    (overvalued realized-cap ratio) → −z (sell-favorable), same convention
+    as ``dxy_z``. Log-transformed first since MVRV is a strictly-positive,
+    right-skewed multiplicative ratio (bull-market spikes would otherwise
+    dominate a level-based rolling std).
+    """
+    aligned = align_to_dates(dates, mvrv_dates, mvrv_values, forward_fill=True)
+    log_mvrv = aligned.log()
+    return (-causal_rolling_z(log_mvrv, window=window, min_samples=min_samples)).alias(
+        "onchain_mvrv"
+    )
+
+
 def build_extra_indicators(
     dates: pl.Series,
     btc_price: pl.Series,
@@ -412,6 +446,23 @@ def build_extra_indicators(
                     min_samples=min_samples,
                 ),
                 weight=enabled["dxy"],
+            )
+        )
+    if "onchain_mvrv" in enabled:
+        mvrv_dates = _require_pair(
+            sources.onchain_mvrv_dates, sources.onchain_mvrv_values, "onchain_mvrv"
+        )
+        extras.append(
+            IndicatorWeight(
+                name="onchain_mvrv",
+                z=onchain_mvrv_z(
+                    dates,
+                    mvrv_dates,
+                    sources.onchain_mvrv_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["onchain_mvrv"],
             )
         )
     if allowlist is None or "weekly_rsi" in allowlist:
@@ -594,6 +645,7 @@ def sources_from_optional_paths(
     *,
     m2_path: Path | str | None = None,
     dxy_path: Path | str | None = None,
+    onchain_mvrv_path: Path | str | None = None,
     eth_dates: pl.Series | None = None,
     eth_close: pl.Series | None = None,
 ) -> ExtraIndicatorSources:
@@ -604,6 +656,9 @@ def sources_from_optional_paths(
     dxy_dates = dxy_values = None
     if dxy_path is not None:
         dxy_dates, dxy_values = load_date_value_frame(dxy_path)
+    onchain_mvrv_dates = onchain_mvrv_values = None
+    if onchain_mvrv_path is not None:
+        onchain_mvrv_dates, onchain_mvrv_values = load_date_value_frame(onchain_mvrv_path)
     return ExtraIndicatorSources(
         m2_dates=m2_dates,
         m2_values=m2_values,
@@ -611,6 +666,8 @@ def sources_from_optional_paths(
         eth_close=eth_close,
         dxy_dates=dxy_dates,
         dxy_values=dxy_values,
+        onchain_mvrv_dates=onchain_mvrv_dates,
+        onchain_mvrv_values=onchain_mvrv_values,
     )
 
 
@@ -681,6 +738,7 @@ __all__ = [
     "load_date_value_frame",
     "m2_liquidity_z",
     "missing_extra_names",
+    "onchain_mvrv_z",
     "parse_indicator_weights_json",
     "rs_eth_confluence_z",
     "rs_eth_z",
