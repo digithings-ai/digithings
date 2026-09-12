@@ -5,7 +5,7 @@
 > streams into the shared AI SDK UI message stream.
 
 **Status:** Living architecture note (2026-09-05)
-**Related:** [ADR-0018](../adr/0018-digichat-path-routing.md), [ADR-0028](../adr/0028-digichat-web-foundation-and-opencode-distribution.md), [product / renderer contract](digichat-renderer-contract.md), [`frontend/digichat/ARCHITECTURE.md`](../../frontend/digichat/ARCHITECTURE.md)
+**Related:** [ADR-0018](../adr/0018-digichat-path-routing.md), [ADR-0028](../adr/0028-digichat-web-foundation-and-opencode-distribution.md), [product / renderer contract](digichat-renderer-contract.md), [`cloudflare/digichat/ARCHITECTURE.md`](../../cloudflare/digichat/ARCHITECTURE.md)
 **Naming:** Digi module names are always lowercase in prose ([PR #2007](https://github.com/digithings-ai/digithings/pull/2007)).
 
 ---
@@ -67,7 +67,7 @@ flowchart TB
 **Layout**
 
 ```text
-frontend/digichat/src/lib/adapters/
+cloudflare/digichat/src/lib/adapters/
   digithings/
     stream.ts
     activity/{digivault.ts,digisearch.ts,index.ts}

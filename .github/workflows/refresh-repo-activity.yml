@@ -19,7 +19,7 @@
 # The snapshot reaches production at the next develop→main promotion, not on merge
 # here. That lag is why every surface rendering these figures prints the snapshot
 # date: an old snapshot reads as dated rather than as current.
-# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
+# Production clock: Cloudflare Worker digithings-cron (cloudflare/digithings-cron). Schedule removed #3579.
 name: "Refresh: repo activity snapshot"
 
 on:
@@ -63,7 +63,7 @@ jobs:
       - name: Open a PR when the figures moved
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SNAPSHOT: frontend/digithings-web/lib/repo-activity.json
+          SNAPSHOT: cloudflare/digithings-web/lib/repo-activity.json
         run: |
           set -euo pipefail
           # Only `generatedAt` changing is not worth a PR — it moves on every run by

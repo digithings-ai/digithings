@@ -54,7 +54,7 @@ and **`documents`**.
 | **Default** | `refresh_scope=none` — continuity via `skip`/`edit`/`full` per artifact |
 | **Full refresh** | Manual `workflow_dispatch` / `--refresh-scope all` (no Sunday force) |
 | **CLI** | `python -m digiquant.portfolio.chain --cadence daily [--refresh-scope …]` |
-| **Cost** | `OLYMPUS_MODEL_TIER` (`cheap` \| `balanced` \| `quality`) — not graph forks |
+| **Cost** | `DIGIQUANT_MODEL_TIER` (`cheap` \| `balanced` \| `quality`) — not graph forks |
 
 Quiet-day savings: triage `skip` (0 LLM) + `edit` (`DocumentPatch`) — not a separate delta graph.
 
@@ -346,13 +346,13 @@ H1/H2 consume `digest_briefing_for_portfolio` (`date` / `body` / `regime_label` 
 ### Phase 8 — Web dashboard / tearsheet
 
 ```bash
-python3 scripts/update_tearsheet.py   # NAV path + frontend/public/dashboard-data.json; Supabase when configured
+python3 scripts/update_tearsheet.py   # NAV path + cloudflare/public/dashboard-data.json; Supabase when configured
 ./scripts/git-commit.sh             # commit config / static JSON as needed
 ```
 
 **Behavior:** `update_tearsheet.py` uses `config/portfolio.json` and, when Supabase env is set, aligns dashboard history with `daily_snapshots` / documents. See script `--help` for optional disk scan behavior used in some operator workflows.
 
-The Next.js frontend reads from Supabase where wired, with `frontend/public/dashboard-data.json` as static fallback — no separate backend API for the digest loop.
+The Next.js frontend reads from Supabase where wired, with `cloudflare/public/dashboard-data.json` as static fallback — no separate backend API for the digest loop.
 
 ---
 
@@ -389,7 +389,7 @@ The Next.js frontend reads from Supabase where wired, with `frontend/public/dash
 
 ## Snapshot read path (frontend-consumable)
 
-**Goal:** the research frontend (Next.js dashboard at `frontend/dashboard/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
+**Goal:** the research frontend (Next.js dashboard at `cloudflare/dashboard/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
 
 ### Source of truth
 
@@ -469,7 +469,7 @@ Behavior:
 
 ## Run Checkpoint / Resume (#665)
 
-A failed or interrupted run (e.g. provider outage, credit exhaustion) can **resume from the last completed node** instead of re-running the whole pipeline. When `DIGI_CHECKPOINTER=postgres` + `DIGI_CHECKPOINTER_POSTGRES_URI` are set, the chain compiles research and portfolio with a LangGraph **PostgresSaver** and runs them under **distinct per-graph threads** — `{run_id}::research` and `{run_id}::portfolio` (never one shared thread; their state schemas differ). Each node (per-segment, per-(axis,ticker) analyst, per-(round,ticker) debater) is a checkpoint boundary, so resume re-runs only incomplete nodes. Publish is **not** checkpointed (cheap + idempotent upserts).
+A failed or interrupted run (e.g. provider outage, credit exhaustion) can **resume from the last completed node** instead of re-running the whole pipeline. When `DIGI_CHECKPOINTER=postgres` + `CORE_POSTGRES_URI` are set, the chain compiles research and portfolio with a LangGraph **PostgresSaver** and runs them under **distinct per-graph threads** — `{run_id}::research` and `{run_id}::portfolio` (never one shared thread; their state schemas differ). Each node (per-segment, per-(axis,ticker) analyst, per-(round,ticker) debater) is a checkpoint boundary, so resume re-runs only incomplete nodes. Publish is **not** checkpointed (cheap + idempotent upserts).
 
 - **Automatic within a run:** the workflow's 3× outer retry reuses the same `GITHUB_RUN_ID`, so attempt 2 finds attempt 1's checkpoint and continues from the failure point.
 - **Cross-dispatch:** re-dispatch with `--resume-run-id <prior GITHUB_RUN_ID>` (a `resume_run_id` workflow input) to continue a previously-dead run.
@@ -544,15 +544,14 @@ preflight (freshness probe; no pre-loaded values)
 
 - **Two data tools, one query layer** (`dashboard/research/data/queries.py`): exposed both in-process (`data/tools.py` → `DATA_TOOLS` + dispatcher, consumed by `build_grounding` in `phases/_node_factory.py`) and over MCP (`digiquant_get_price_technicals` / `digiquant_get_macro_series` in `mcp_server.py`).
 - **Per-phase flags** on `SegmentNodeSpec`: `use_data_tools` (macro, asset-classes, equity, sectors) and `live_search` (macro, all alt-/inst-, international). Equity/sector nodes are bespoke and call `build_grounding` directly.
-- **Web grounding** (`data/web_grounding.py` → `digigraph.llm_client.openrouter_web_search`):
-  a read-only **pre-pass** on a **web-search-capable** model from
-  `get_grounding_model()` (Perplexity / `:online` — provider built-in search).
-  Domain preferences from `config/search_domains.yaml` are folded into the
-  natural-language query (native search has no Exa allowlist tool params).
-  The digillm Exa `openrouter:web_search` server tool remains a **toolkit**
-  fallback for non-native models and is **not** used by dashboard (#2567).
-  Any search error degrades to ungrounded research (no crash).
-- **Env gate**: `ATLAS_DATA_TOOLS` (default on; set `0`/`false` to disable all tool grounding). If Supabase is unavailable, `build_grounding` degrades to tool-less rather than crashing the phase.
+- **Web grounding** (`data/web_grounding.py` → first-party digisearch
+  `web_search` tool): a read-only **pre-pass** over the tool, with domain
+  scoping from `config/search_domains.yaml` passed straight through as the
+  tool's `include_domains` / `exclude_domains` / `max_results`. There is no
+  synthesis fallback: a requested search must succeed or raise
+  `DashboardWebSearchError` — the run aborts rather than reasoning
+  ungrounded (#3859).
+- **Env gate**: `DIGIQUANT_RESEARCH_DATA_TOOLS` (default on; set `0`/`false` to disable all tool grounding). If Supabase is unavailable, `build_grounding` degrades to tool-less rather than crashing the phase.
 
 Function-tools and `response_format=json_schema` are mutually exclusive in one OpenAI-API call, so the structured-output contract is preserved by prompt + Pydantic validate-retry rather than by `response_format` on the tool path.
 
@@ -575,9 +574,9 @@ When signals conflict across phases, apply in order:
 Supabase (documents, daily_snapshots, price_history, …)
      │
      ▼  @supabase/supabase-js in Next.js (App Router)
-  frontend/app/ …                    Library, portfolio, architecture pages, …
+  cloudflare/app/ …                    Library, portfolio, architecture pages, …
      │
-     ├─ scripts/update_tearsheet.py → frontend/public/dashboard-data.json (static JSON used when present)
+     ├─ scripts/update_tearsheet.py → cloudflare/public/dashboard-data.json (static JSON used when present)
      └─ CI: .github/workflows/deploy.yml → static export → GitHub Pages (when configured)
 ```
 
@@ -596,7 +595,7 @@ digiquant-research/
   scripts/                   Bash + Python — run_db_first.py, materialize_snapshot.py,
                              publish_document.py, preload-history.py, smoke-test.sh, …
   agents/                    Named role files (*.agent.md)
-  frontend/                  Next.js (App Router) + TypeScript
+  cloudflare/                  Next.js (App Router) + TypeScript
   supabase/                  SQL migrations, config.toml
   tests/                     pytest
   cowork/                    Cowork tasks and project prompts
@@ -614,7 +613,7 @@ Skills are packaged as **`skills/<slug>/SKILL.md`**; use [`SKILLS-CATALOG.md`](S
 
 ## LLM Routing — digiquant capability tiers
 
-*Current since Jun 2026 (#859, #980, #998); house path via LiteLLM since #3413/#3414: digiquant phase LLM calls are **caller → digillm → LiteLLM**. Capability pools in [`config/digiquant_models.yaml`](../../../../../../config/digiquant_models.yaml) are digiquant **model categories** (`cheap` default / `balanced` / `quality` via `OLYMPUS_MODEL_TIER`) — not an OpenRouter preference. Unprefixed pool/pin slugs are LiteLLM `model_name` keys (upstream swap is a `litellm.yaml` edit). This superseded the 2026-04 three-tier free-provider model (Groq / Ollama / Gemini — [DESIGN-DECISIONS.md ADR-016](../DESIGN-DECISIONS.md#adr-016-three-tier-llm-provider-routing), retained as history). Operator knobs and cost levers: [RUNBOOK.md "OpenRouter model tiers"](../RUNBOOK.md#openrouter-model-tiers-configdashboard_modelsyaml) (section title is historical; knobs still apply when LiteLLM's upstream is OpenRouter). Historical per-phase budgets: [`docs/research/token-budget.md`](../../../../../../docs/research/token-budget.md).*
+*Current since Jun 2026 (#859, #980, #998); house path via LiteLLM since #3413/#3414: digiquant phase LLM calls are **caller → digillm → LiteLLM**. Capability pools in [`config/digiquant_models.yaml`](../../../../../../config/digiquant_models.yaml) are digiquant **model categories** (`cheap` default / `balanced` / `quality` via `DIGIQUANT_MODEL_TIER`) — not an OpenRouter preference. Unprefixed pool/pin slugs are LiteLLM `model_name` keys (upstream swap is a `litellm.yaml` edit). This superseded the 2026-04 three-tier free-provider model (Groq / Ollama / Gemini — [DESIGN-DECISIONS.md ADR-016](../DESIGN-DECISIONS.md#adr-016-three-tier-llm-provider-routing), retained as history). Operator knobs and cost levers: [RUNBOOK.md "OpenRouter model tiers"](../RUNBOOK.md#openrouter-model-tiers-configdashboard_modelsyaml) (section title is historical; knobs still apply when LiteLLM's upstream is OpenRouter). Historical per-phase budgets: [`docs/research/token-budget.md`](../../../../../../docs/research/token-budget.md).*
 
 The default `cheap` tier is **open-weight models only** — frontier models (`openai/*`, `anthropic/*`, GPT-5.x, Claude Opus/Sonnet, o-series) are rejected at runtime (`digigraph.model_config.is_flagship_openrouter_model`), a guard added after a bare-Auto-Router delta run landed on GPT-5.5 and cost $11.95.
 
@@ -624,12 +623,12 @@ Each phase slug maps to a **capability** (`phase_capabilities` / `phase_capabili
 
 | Capability | Pool (cheap tier) | Example phases |
 |------------|-------------------|----------------|
-| **extraction** | `deepseek/deepseek-v4-flash`, `meta-llama/llama-4-maverick` | `alt-*`, `inst-*`, 7C per-ticker analysts |
-| **research** | `deepseek/deepseek-v4-flash`, `meta-llama/llama-4-maverick` | `macro`, `bonds`, `sector-*`, 7D debate, `phase9-evolution` |
+| **extraction** | `deepseek/deepseek-v4-flash`, `google/gemini-3.7-flash` | `alt-*`, `inst-*`, 7C per-ticker analysts |
+| **research** | `deepseek/deepseek-v4-flash`, `google/gemini-3.7-flash` | `macro`, `bonds`, `sector-*`, 7D debate, `phase9-evolution` |
 | **reasoning** | `deepseek/deepseek-v4-flash` | `master-digest` (Phase 7), `pm-rebalance`, `monthly-digest` |
-| **web search** (grounding pre-pass only) | `perplexity/sonar`, `deepseek-v4-flash:online`, `llama-4-maverick:online` | live-search grounding; never phase/tool calls |
+| **web search** (grounding pre-pass only) | first-party digisearch `web_search` tool (no synthesis pin) | live-search grounding; never phase/tool calls |
 
-Pools rebalanced in #2368 (2026-08-14, grok-4.6 added 2026-08-15; see #1622 for the prior 2026 open-weight refresh) to prefer the latest generation slug per vendor where cost allows — `deepseek-v4-flash` on cheap; `grok-4.3` (untouched by #2368; `grok-4.6` is the current xAI flagship but reserved for quality), `gpt-5.6-luna`, `gemini-3.7-flash`, and `deepseek-v4-pro` on balanced; `grok-4.6`/`gpt-5.6-sol`/`claude-sonnet-5`/`deepseek-v4-pro` on quality. `deepseek-chat` is retired from every dashboard pool — within dashboard every reference now resolves to `deepseek-v4-flash` (other digithings products pin it independently and are out of scope here). `deepseek-r1` was removed from every phase pool — its chain-of-thought output is not reliably strict JSON (the 2026-07-18 digest `JSONDecodeError`) — and `llama-4-maverick` from the reasoning pools (empty completions under strict `json_schema`, #1006). `z-ai/glm-5` was evaluated and rejected: its endpoint-gate record over four runs was pass/fail/pass/fail (empty bodies under strict `json_schema` even with a retry — the same #1006 class). Every pooled slug is **endpoint-verified** (function tools + strict `json_schema` + context floor) by `scripts/validate_digiquant_pools.py`, which CI runs on any PR touching the routing configs (`validate-digiquant-pools.yml`).
+Pools rebalanced in #2368 (2026-08-14; see #1622 for the prior 2026 open-weight refresh) to prefer the latest generation slug per vendor where cost allows — `deepseek-v4-flash` (+ `gemini-3.7-flash`) on cheap; `deepseek-v4-flash`/`gemini-3.7-flash`/`gpt-5.6-luna`/`deepseek-v4-pro` on balanced; `deepseek-v4-pro`/`gpt-5.6-sol`/`gemini-3.7-flash` on quality. The CI-only house cutover (#3660 / #3788) then retired the OpenRouter-only pins (`meta-llama/llama-4-maverick`, `x-ai/grok-4.3`/`4.6`, `anthropic/claude-sonnet-5`, `perplexity/sonar`, and their `:online` aliases) from `config/litellm.yaml` and every pool. `deepseek-chat` is retired from every dashboard pool — within dashboard every reference now resolves to `deepseek-v4-flash` (other digithings products pin it independently and are out of scope here). `deepseek-r1` was removed from every phase pool — its chain-of-thought output is not reliably strict JSON (the 2026-07-18 digest `JSONDecodeError`) — and `llama-4-maverick` from the reasoning pools (empty completions under strict `json_schema`, #1006). `z-ai/glm-5` was evaluated and rejected: its endpoint-gate record over four runs was pass/fail/pass/fail (empty bodies under strict `json_schema` even with a retry — the same #1006 class). Every pooled slug is **endpoint-verified** (function tools + strict `json_schema` + context floor) by `scripts/validate_digiquant_pools.py`, which CI runs on any PR touching the routing configs (`validate-digiquant-pools.yml`).
 
 > **Synthesis context (#1559, #1622).** `master-digest` is pinned via `phase_models` to `deepseek/deepseek-v4-flash` (1M-token context), which removes the 64k context ceiling that broke synthesis daily 2026-07-08 → 07-17 (the 2025-era pool models' structured-output endpoints cap at 64,000 tokens against ~70–91k digest inputs). The #1559 input budget (`_slim_segment_body`, ≤64k target) is retained as a **cost bound** — prompt tokens are billed even when they fit. (Diagnostics note: the run-level `model` column in `atlas_run_diagnostics` is the first *served* model of the whole run, not the digest model — a failed digest call records no usage, so its model never appears there.)
 
@@ -645,7 +644,7 @@ Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `master-diges
 1. Explicit model= kwarg  (test overrides, never set in production)
 2. config/model_modes.yaml phase_models  →  explicit per-phase pin (escape hatch;
    frontier models are rejected on cheap/balanced tiers)
-3. config/digiquant_models.yaml  →  capability(phase_slug) × OLYMPUS_MODEL_TIER pool,
+3. config/digiquant_models.yaml  →  capability(phase_slug) × DIGIQUANT_MODEL_TIER pool,
    stable-hash pick
 4. get_model_for_mode()  →  legacy DIGI_LLM_MODE defaults; in an OpenRouter deploy a
    non-OpenRouter fallback is redirected to the active tier's reasoning pool
@@ -665,9 +664,9 @@ phase_models:
 
 House traffic is caller → digillm → LiteLLM. Unprefixed OpenRouter slugs (`deepseek/…`, `anthropic/…`) are `config/litellm.yaml` `model_name` keys. Leftover `openrouter/` / `gemini/` / `xai/` prefixes are vendor-client diagnostics when no LiteLLM proxy is configured (`digillm/src/digillm/client.py`).
 
-### Fan-out cap (`ATLAS_MAX_ANALYSTS`)
+### Fan-out cap (`DIGIQUANT_MAX_ANALYSTS`)
 
-Phase 7C spawns one LLM node per ticker in the watchlist (up to 98). The `ATLAS_MAX_ANALYSTS` env var caps the fan-out:
+Phase 7C spawns one LLM node per ticker in the watchlist (up to 98). The `DIGIQUANT_MAX_ANALYSTS` env var caps the fan-out:
 
 | Value | Behaviour |
 |-------|-----------|
@@ -679,7 +678,7 @@ and since #1767 it is actually enforced — the prior book is the only sanctione
 and thesis vehicles are prioritised within it. See
 `portfolio/docs/ARCHITECTURE.md` § "Roster cap enforcement (#1767)".
 
-This bounds the per-run OpenRouter call volume (and spend) during scheduled CI runs. Production / local runs can set `ATLAS_MAX_ANALYSTS=0` to use the full watchlist.
+This bounds the per-run OpenRouter call volume (and spend) during scheduled CI runs. Production / local runs can set `DIGIQUANT_MAX_ANALYSTS=0` to use the full watchlist.
 
 **Watchlist resolution (#694):** when the CLI is invoked without `--watchlist`
 (every scheduled workflow), `resolve_cli_inputs` falls back to
@@ -687,8 +686,8 @@ This bounds the per-run OpenRouter call volume (and spend) during scheduled CI r
 compiled from `ResearchInput.watchlist`, and an empty tuple silently skipped every
 analyst/debate node. An explicit `--watchlist` still overrides the file, and an
 empty file still disables the fan-out. Cost note: with the fallback active, a
-delta run adds `min(len(watchlist), ATLAS_MAX_ANALYSTS) × 4` analyst calls plus
-the debate/risk rounds — tune `ATLAS_MAX_ANALYSTS` in the workflow envs to
+delta run adds `min(len(watchlist), DIGIQUANT_MAX_ANALYSTS) × 4` analyst calls plus
+the debate/risk rounds — tune `DIGIQUANT_MAX_ANALYSTS` in the workflow envs to
 bound spend.
 
 ### Fallback behaviour
@@ -712,8 +711,8 @@ Tier-wide changes belong in `config/digiquant_models.yaml` (capability pools per
 | Variable | Purpose | Where set |
 |----------|---------|-----------|
 | `OPENROUTER_API_KEY` | All phase LLM calls + web grounding | GitHub secret + local `.env` |
-| `OLYMPUS_MODEL_TIER` | Tier select (`cheap` default / `balanced` / `quality`) | Optional; workflow env or shell |
-| `ATLAS_MAX_ANALYSTS` | H4/H5/H6 roster fan-out cap (#1767) | CI workflow env: `"30"` |
+| `DIGIQUANT_MODEL_TIER` | Tier select (`cheap` default / `balanced` / `quality`) | Optional; workflow env or shell |
+| `DIGIQUANT_MAX_ANALYSTS` | H4/H5/H6 roster fan-out cap (#1767) | CI workflow env: `"30"` |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Publishing + diagnostics | GitHub secret + local `.env` |
 
 House routing (default client base) is applied by `apply_digiquant_house_env()` at chain startup. Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test the configured providers.

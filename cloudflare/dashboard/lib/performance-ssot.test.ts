@@ -1,0 +1,490 @@
+import { describe, expect, it } from 'vitest';
+import { MIN_OVERLAP_DAYS } from '@digithings/web';
+import { buildPerformanceTearsheet } from './observability-queries';
+import {
+  MAX_DAY_RETURN_GAP_DAYS,
+  buildPerformanceSsotMeta,
+  crossesNavSeam,
+  isLiveMarksOverlay,
+  metricsDivergenceBadgeLabel,
+  navContractBadgeLabel,
+  persistedHeadlinesAgree,
+  persistedHeadlinesFromNav,
+  persistedInsightMetrics,
+  performanceFreshnessNote,
+  resolveInvestedPct,
+} from './performance-ssot';
+
+function weekdaySeries(
+  count: number,
+  startIso = '2026-06-01'
+): Array<{ date: string; nav: number; price: number }> {
+  const out: Array<{ date: string; nav: number; price: number }> = [];
+  let nav = 100;
+  let price = 500;
+  const start = Date.parse(`${startIso}T00:00:00Z`);
+  for (let i = 0; out.length < count; i++) {
+    const d = new Date(start + i * 86_400_000);
+    if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
+    nav *= 1 + 0.001 + (out.length % 5) * 0.0003;
+    price *= 1 + 0.0005 + (out.length % 7) * 0.0002;
+    out.push({ date: d.toISOString().slice(0, 10), nav, price });
+  }
+  return out;
+}
+
+describe('performance SSOT (#3580)', () => {
+  it('prefers accounting NAV tip invested % over stale portfolio_metrics', () => {
+    const resolved = resolveInvestedPct({
+      tipInvestedPct: 40.5,
+      bookWeightInvestedPct: 41,
+      metricsInvestedPct: 79,
+    });
+    expect(resolved.definition).toBe('accounting_nav_tip');
+    expect(resolved.investedPct).toBe(40.5);
+  });
+
+  it('Brief persisted since-% agrees with Tearsheet net return when live overlay is off', () => {
+    const nav = [
+      {
+        date: '2026-08-25',
+        nav: 100,
+        invested_pct: 80,
+        day_return_pct: 0,
+        source: 'legacy_nav_history',
+        contract: 'legacy_estimate',
+      },
+      {
+        date: '2026-09-03',
+        nav: 99.426595,
+        invested_pct: 45,
+        day_return_pct: 0,
+        source: 'legacy_nav_history',
+        contract: 'legacy_estimate',
+      },
+      {
+        date: '2026-09-04',
+        nav: 99.426595,
+        invested_pct: 40.5,
+        day_return_pct: 0,
+        source: 'legacy_nav_history',
+        contract: 'legacy_estimate',
+      },
+    ];
+    const brief = persistedHeadlinesFromNav(nav);
+    const tearsheet = buildPerformanceTearsheet({
+      nav: nav.map((row) => ({
+        date: row.date,
+        nav: row.nav,
+        cash_pct: 100 - row.invested_pct,
+        invested_pct: row.invested_pct,
+      })),
+      positions: [],
+      metrics: null,
+      attribution: [],
+      accountingNav: nav.map((row) => ({
+        ...row,
+        cash_pct: 100 - row.invested_pct,
+      })),
+    });
+    expect(persistedHeadlinesAgree(brief.sinceInceptionPct, tearsheet.netReturnPct)).toBe(true);
+    expect(brief.investedPct).toBe(40.5);
+    expect(tearsheet.navContract).toBe('legacy_estimate');
+    expect(tearsheet.tipInvestedPct).toBe(40.5);
+  });
+
+  it('flags metrics lag when portfolio_metrics trails the NAV tip by ≥1 day', () => {
+    const meta = buildPerformanceSsotMeta({
+      navRows: [
+        {
+          date: '2026-09-04',
+          nav: 99.4,
+          invested_pct: 40.5,
+          day_return_pct: 0,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+        },
+      ],
+      metricsAsOf: '2026-09-01',
+      snapshotDate: '2026-09-04',
+      positionDates: ['2026-09-04', '2026-09-03'],
+      positionMetricsAsOf: [null, null],
+      metricsInvestedPct: 79,
+    });
+    expect(meta.metricsLagging).toBe(true);
+    expect(meta.metricsLagDays).toBe(3);
+    expect(metricsDivergenceBadgeLabel(meta)).toBe('metrics lag');
+    expect(meta.marksUnstamped).toBe(true);
+    expect(meta.bookAsOf).toBe('2026-09-04');
+    expect(meta.navContract).toBe('legacy_estimate');
+    expect(meta.investedDefinition).toBe('accounting_nav_tip');
+  });
+
+  it('treats zero liveVsMarkPct as no live overlay', () => {
+    expect(isLiveMarksOverlay(0)).toBe(false);
+    expect(isLiveMarksOverlay(null)).toBe(false);
+    expect(isLiveMarksOverlay(0.12)).toBe(true);
+  });
+
+  it('returns null since-inception for a single NAV row (matches Tearsheet)', () => {
+    const brief = persistedHeadlinesFromNav([
+      { date: '2026-09-04', nav: 99.4, invested_pct: 40.5 },
+    ]);
+    const tearsheet = buildPerformanceTearsheet({
+      nav: [{ date: '2026-09-04', nav: 99.4, cash_pct: 59.5, invested_pct: 40.5 }],
+      positions: [],
+      metrics: null,
+      attribution: [],
+    });
+    expect(brief.sinceInceptionPct).toBeNull();
+    expect(tearsheet.netReturnPct).toBeNull();
+  });
+
+  it('ignores CASH when deciding marksUnstamped', () => {
+    const meta = buildPerformanceSsotMeta({
+      navRows: [
+        {
+          date: '2026-09-04',
+          nav: 99.4,
+          invested_pct: 40.5,
+          day_return_pct: 0,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+        },
+      ],
+      metricsAsOf: '2026-09-04',
+      snapshotDate: '2026-09-04',
+      positionDates: ['2026-09-04'],
+      positionMetricsAsOf: ['2026-09-04'], // equities stamped; CASH excluded by caller
+    });
+    expect(meta.marksUnstamped).toBe(false);
+  });
+
+  it('does not label a legacy-estimate tip as finalized accounting when history is mixed', () => {
+    const meta = buildPerformanceSsotMeta({
+      navRows: [
+        {
+          date: '2026-08-01',
+          nav: 100,
+          invested_pct: 80,
+          day_return_pct: 0.1,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+        },
+        {
+          date: '2026-09-04',
+          nav: 99.4,
+          invested_pct: 40.5,
+          day_return_pct: null,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+        },
+      ],
+      metricsAsOf: '2026-09-04',
+      snapshotDate: '2026-09-04',
+      positionDates: ['2026-09-04'],
+      positionMetricsAsOf: ['2026-09-04'],
+    });
+    expect(meta.navContract).toBe('legacy_estimate');
+    expect(navContractBadgeLabel(meta.navContract)).toBe('legacy estimate');
+    expect(navContractBadgeLabel('finalized_accounting')).toBe('finalized accounting');
+    expect(performanceFreshnessNote(meta)).toMatch(/legacy estimate/);
+  });
+
+  it('detects equal-magnitude NAV-behind-metrics divergence (finalizer stall)', () => {
+    const meta = buildPerformanceSsotMeta({
+      navRows: [
+        {
+          date: '2026-09-02',
+          nav: 99.4,
+          invested_pct: 40.5,
+          day_return_pct: 0,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+        },
+      ],
+      metricsAsOf: '2026-09-04',
+      snapshotDate: '2026-09-02',
+      positionDates: ['2026-09-02'],
+      positionMetricsAsOf: ['2026-09-02'],
+    });
+    expect(meta.metricsLagDays).toBe(-2);
+    expect(meta.metricsLagging).toBe(true);
+    expect(metricsDivergenceBadgeLabel(meta)).toBe('nav lag');
+    expect(performanceFreshnessNote(meta)).toMatch(/nav tip 2026-09-02/);
+  });
+
+  it(`does not invent a session day return across a gap wider than ${MAX_DAY_RETURN_GAP_DAYS} days`, () => {
+    const brief = persistedHeadlinesFromNav([
+      { date: '2026-08-21', nav: 100, invested_pct: 80, day_return_pct: null },
+      { date: '2026-09-04', nav: 104.5, invested_pct: 40.5, day_return_pct: null },
+    ]);
+    expect(brief.dayReturnPct).toBeNull();
+  });
+
+  it('derives day return across a weekend-sized adjacent gap when the tip omits day_return_pct', () => {
+    const brief = persistedHeadlinesFromNav([
+      { date: '2026-09-03', nav: 100, invested_pct: 40, day_return_pct: null },
+      { date: '2026-09-04', nav: 101, invested_pct: 40, day_return_pct: null },
+    ]);
+    expect(brief.dayReturnPct).toBeCloseTo(1, 6);
+  });
+
+  it('does not derive a day return across a legacy→finalized seam (#3767)', () => {
+    // Sep-8 shape: legacy 99.92 then finalized 110.75 with no stored day
+    // return must not render as a +10% session.
+    const brief = persistedHeadlinesFromNav([
+      {
+        date: '2026-09-07',
+        nav: 99.92,
+        invested_pct: 40,
+        day_return_pct: null,
+        source: 'legacy_nav_history',
+        series_seam: false,
+      },
+      {
+        date: '2026-09-08',
+        nav: 110.74928206,
+        invested_pct: 80,
+        day_return_pct: null,
+        source: 'finalized_accounting',
+        series_seam: true,
+      },
+    ]);
+    expect(brief.dayReturnPct).toBeNull();
+    expect(
+      crossesNavSeam(
+        { date: '2026-09-08', nav: 110.74928206, source: 'finalized_accounting', series_seam: true },
+        { date: '2026-09-07', nav: 99.92, source: 'legacy_nav_history' }
+      )
+    ).toBe(true);
+    // Same-series adjacent rows still derive.
+    expect(
+      crossesNavSeam(
+        { date: '2026-09-08', nav: 101, source: 'finalized_accounting', series_seam: false },
+        { date: '2026-09-07', nav: 100, source: 'finalized_accounting', series_seam: false }
+      )
+    ).toBe(false);
+  });
+
+  it('never returns a stored day_return_pct on a seam row (#3767)', () => {
+    // The stored finalizer value belongs to the new series; returning it on the
+    // seam row re-introduces the false jump the seam exists to suppress.
+    const brief = persistedHeadlinesFromNav([
+      {
+        date: '2026-09-07',
+        nav: 99.92,
+        invested_pct: 40,
+        day_return_pct: -0.08,
+        source: 'legacy_nav_history',
+        series_seam: false,
+      },
+      {
+        date: '2026-09-08',
+        nav: 110.74928206,
+        invested_pct: 80,
+        day_return_pct: 10.83,
+        source: 'finalized_accounting',
+        series_seam: true,
+      },
+    ]);
+    expect(brief.dayReturnPct).toBeNull();
+
+    const meta = buildPerformanceSsotMeta({
+      navRows: [
+        {
+          date: '2026-09-07',
+          nav: 99.92,
+          invested_pct: 40,
+          day_return_pct: -0.08,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+          series_seam: false,
+        },
+        {
+          date: '2026-09-08',
+          nav: 110.74928206,
+          invested_pct: 80,
+          day_return_pct: 10.83,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: true,
+        },
+      ],
+      metricsAsOf: '2026-09-08',
+      snapshotDate: '2026-09-08',
+      positionDates: ['2026-09-08'],
+      positionMetricsAsOf: ['2026-09-08'],
+    });
+    expect(meta.tipDayReturnPct).toBeNull();
+  });
+
+  it('computes since-inception from the current source run, not across a seam (#3767)', () => {
+    const brief = persistedHeadlinesFromNav([
+      {
+        date: '2026-09-06',
+        nav: 100,
+        invested_pct: 40,
+        day_return_pct: null,
+        source: 'legacy_nav_history',
+        series_seam: false,
+      },
+      {
+        date: '2026-09-07',
+        nav: 99.92,
+        invested_pct: 40,
+        day_return_pct: null,
+        source: 'legacy_nav_history',
+        series_seam: false,
+      },
+      {
+        date: '2026-09-08',
+        nav: 110.74928206,
+        invested_pct: 80,
+        day_return_pct: null,
+        source: 'finalized_accounting',
+        series_seam: true,
+      },
+      {
+        date: '2026-09-09',
+        nav: 111.84928206,
+        invested_pct: 80,
+        day_return_pct: null,
+        source: 'finalized_accounting',
+        series_seam: false,
+      },
+    ]);
+    expect(brief.sinceInceptionStartDate).toBe('2026-09-08');
+    expect(brief.sinceInceptionPct).toBeCloseTo(
+      (111.84928206 / 110.74928206 - 1) * 100,
+      5
+    );
+  });
+
+  it('excludes the legacy→finalized seam from persisted excess/alpha/IR (#3935)', () => {
+    // Legacy run below the finalized run: a cross-seam window would inflate
+    // excess and poison the β/IR daily estimator with the phantom jump.
+    const finalized = weekdaySeries(MIN_OVERLAP_DAYS + 6, '2026-09-08');
+    const legacy = [
+      { date: '2026-09-01', nav: 90, price: 480 },
+      { date: '2026-09-02', nav: 90.2, price: 481 },
+      { date: '2026-09-03', nav: 90.1, price: 479.5 },
+      { date: '2026-09-04', nav: 90.3, price: 482 },
+    ];
+    const seamedNav = [
+      ...legacy.map((p) => ({
+        date: p.date,
+        nav: p.nav,
+        source: 'legacy_nav_history',
+        series_seam: false,
+      })),
+      ...finalized.map((p, i) => ({
+        date: p.date,
+        nav: p.nav,
+        source: 'finalized_accounting',
+        series_seam: i === 0,
+      })),
+    ];
+    const bench = [...legacy, ...finalized].map((p) => ({ date: p.date, price: p.price }));
+
+    const seamed = persistedInsightMetrics(seamedNav, bench);
+    const currentRunOnly = persistedInsightMetrics(
+      finalized.map((p) => ({
+        date: p.date,
+        nav: p.nav,
+        source: 'finalized_accounting',
+        series_seam: false,
+      })),
+      bench
+    );
+
+    expect(seamed.excessReturnPct).not.toBeNull();
+    expect(seamed.alphaPct).not.toBeNull();
+    expect(seamed.informationRatio).not.toBeNull();
+    // Identical to computing on the post-seam run alone — the seam never enters.
+    expect(seamed).toEqual(currentRunOnly);
+  });
+
+  it('does not clamp an accounting-tip invested % over 100', () => {
+    const resolved = resolveInvestedPct({
+      tipInvestedPct: 137,
+      bookWeightInvestedPct: 40,
+      metricsInvestedPct: 79,
+    });
+    expect(resolved.definition).toBe('accounting_nav_tip');
+    expect(resolved.investedPct).toBe(137);
+  });
+
+  it('treats an empty open book as unstamped so as-of chrome stays caveated', () => {
+    const meta = buildPerformanceSsotMeta({
+      navRows: [
+        {
+          date: '2026-09-04',
+          nav: 99.4,
+          invested_pct: 40.5,
+          day_return_pct: 0,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+        },
+      ],
+      metricsAsOf: '2026-09-04',
+      snapshotDate: '2026-09-04',
+      positionDates: [],
+      positionMetricsAsOf: [],
+    });
+    expect(meta.marksUnstamped).toBe(true);
+  });
+
+  it('keeps alpha/IR when NAV/benchmark overlap meets MIN_OVERLAP_DAYS on a sparse (paginated) bench', () => {
+    const series = weekdaySeries(MIN_OVERLAP_DAYS + 8);
+    const nav = series.map((p) => ({ date: p.date, nav: p.nav }));
+    const sparseBench = series.filter((_, i) => i % 3 === 0).map((p) => ({ date: p.date, price: p.price }));
+    const insights = persistedInsightMetrics(nav, sparseBench);
+    expect(insights.excessReturnPct).not.toBeNull();
+    expect(insights.alphaPct).not.toBeNull();
+    expect(insights.informationRatio).not.toBeNull();
+  });
+
+  it('keeps alpha/IR when paginated bench drops early dates but remaining overlap is valid', () => {
+    const series = weekdaySeries(MIN_OVERLAP_DAYS + 12);
+    const nav = series.map((p) => ({ date: p.date, nav: p.nav }));
+    const lateBench = series.slice(8).map((p) => ({ date: p.date, price: p.price }));
+    const insights = persistedInsightMetrics(nav, lateBench);
+    expect(lateBench.length).toBeGreaterThan(MIN_OVERLAP_DAYS);
+    expect(insights.alphaPct).not.toBeNull();
+    expect(insights.informationRatio).not.toBeNull();
+  });
+
+  it('fails closed on alpha/IR when remaining overlap is under MIN_OVERLAP_DAYS', () => {
+    const series = weekdaySeries(12);
+    const insights = persistedInsightMetrics(
+      series.map((p) => ({ date: p.date, nav: p.nav })),
+      series.map((p) => ({ date: p.date, price: p.price }))
+    );
+    expect(insights.excessReturnPct).not.toBeNull();
+    expect(insights.alphaPct).toBeNull();
+    expect(insights.informationRatio).toBeNull();
+  });
+
+  it('surfaces tip cash % from the accounting NAV tip', () => {
+    const meta = buildPerformanceSsotMeta({
+      navRows: [
+        {
+          date: '2026-09-04',
+          nav: 99.4,
+          cash_pct: 59.5,
+          invested_pct: 40.5,
+          day_return_pct: 0,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+        },
+      ],
+      metricsAsOf: '2026-09-04',
+      snapshotDate: '2026-09-04',
+      positionDates: ['2026-09-04'],
+      positionMetricsAsOf: ['2026-09-04'],
+    });
+    expect(meta.tipCashPct).toBe(59.5);
+    expect(meta.tipInvestedPct).toBe(40.5);
+  });
+});

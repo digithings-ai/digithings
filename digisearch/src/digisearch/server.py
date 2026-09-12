@@ -18,6 +18,7 @@ from digikey.integrations.service_middleware import DigiAuthMiddleware, digisear
 
 from digisearch import __version__
 from digisearch.agent.pipeline_models import ResearchTurnOutput
+from digisearch.backend_require import require_real_search_backend
 from digisearch.core.models import Query
 from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TOP_K
 from digisearch.logging import configure_logging
@@ -25,16 +26,18 @@ from digisearch.orchestrator_tools import (
     TOOL_DIGISEARCH,
     TOOL_DIGISEARCH_FETCH_ALL,
     TOOL_DIGISEARCH_RESEARCH_DELEGATE,
+    TOOL_WEB_SEARCH,
     OpenAIToolDict,
 )
 from digisearch.pipeline.ingest import IngestError, ingest_source
-from digisearch.search._stub import _first_env, query_index
+from digisearch.search._stub import query_index
+from digisearch.web_search.models import WebSearchConfigError, WebSearchRequest, WebSearchResponse
 
 configure_logging()
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -64,36 +67,7 @@ app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=digisea
 @app.on_event("startup")
 def _require_real_search_backend() -> None:
     """Fail startup unless Vectorize, Azure, Chroma, or DIGISEARCH_ALLOW_STUB=1 (unit tests) is set."""
-    allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-    )
-    if allow_stub:
-        logger.warning("digisearch: DIGISEARCH_ALLOW_STUB=1 — in-memory stub allowed (tests only).")
-        return
-    # Canonical-first, legacy-fallback (#2239 credential rename) -- same precedence
-    # `_vectorize_backend` uses, so this startup gate can never disagree with the
-    # backend it's gating.
-    if _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID") and _first_env(
-        "CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN"
-    ):
-        return
-    from digisearch.indexes.backends import azure_search as _az
-
-    azure_ok = False
-    try:
-        azure_ok = _az.is_azure_configured()
-    except (OSError, ImportError, AttributeError, RuntimeError, TypeError) as exc:
-        logger.warning("Azure backend probe failed at startup: %s", exc)
-        azure_ok = False
-    chroma_ok = bool(os.environ.get("CHROMA_PATH") or os.environ.get("CHROMA_HOST"))
-    if not azure_ok and not chroma_ok:
-        raise RuntimeError(
-            "digisearch requires a real backend: set CLOUDFLARE_ACCOUNT_ID+CLOUDFLARE_API_TOKEN "
-            "(or legacy VECTORIZE_*/D1_* names), AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST, "
-            "or DIGISEARCH_ALLOW_STUB=1 for tests only."
-        )
+    require_real_search_backend()
 
 
 _rl_windows: dict[str, _deque] = {}
@@ -301,6 +275,13 @@ class ResearchTurnRequest(BaseModel):
         description="Structured filters [{field, op, value}]",
     )
     session_id: str | None = Field(default=None, description="Optional session id for tracing")
+    workspace_id: str | None = Field(
+        default=None,
+        description=(
+            "Optional tenant/workspace id. Injected as a mandatory structured filter "
+            "so the research path is scoped like POST /query (enterprise)."
+        ),
+    )
 
     @field_validator("mode", mode="before")
     @classmethod
@@ -349,10 +330,32 @@ def azure_status() -> dict[str, bool | str]:
         return {"configured": True, "reachable": False, "message": str(e)[:200]}
 
 
+def _reject_raw_filter_if_disallowed(filter_raw: str | None, index_name: str | None) -> None:
+    """Reject a raw OData filter for an index that has not opted in (#3909).
+
+    Only the Azure backend re-gated raw ``filter``; every other backend passed it
+    through. Raw OData is opt-in per ``digisearch/AGENTS.md``, so the server refuses
+    it up front with HTTP 400 regardless of which backend would serve the query.
+    """
+    if not filter_raw or not str(filter_raw).strip():
+        return
+    from digisearch.core.config import index_allows_raw_filter
+
+    if not index_allows_raw_filter(index_name):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"raw filter not allowed for index {index_name or 'default'!r}: "
+                "set allow_raw_filter=true in the index config, or use structured filters"
+            ),
+        )
+
+
 def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
     """Build Query.filters from request: either raw odata or structured list."""
     from digisearch.core.workspace_filter import build_query_filters
 
+    _reject_raw_filter_if_disallowed(req.filter, req.index_name)
     try:
         workspace_id = (
             req.workspace_id.strip() if req.workspace_id and req.workspace_id.strip() else None
@@ -457,7 +460,8 @@ class OrchestratorInvokeRequest(BaseModel):
     """Request for POST /v1/orchestrator_invoke."""
 
     tool: str = Field(
-        ..., description="digisearch | digisearch_fetch_all | digisearch_research_delegate"
+        ...,
+        description="digisearch | digisearch_fetch_all | digisearch_research_delegate | web_search",
     )
     arguments: dict[str, Any] = Field(default_factory=dict)
     default_index_name: str | None = Field(
@@ -497,7 +501,9 @@ class OrchestratorInvokeResponse(BaseModel):
     ok: bool
     service: str | None = None
     tool: str | None = None
-    data: QueryResponse | OrchestratorFetchAllData | ResearchTurnOutput | None = None
+    data: (
+        QueryResponse | OrchestratorFetchAllData | ResearchTurnOutput | WebSearchResponse | None
+    ) = None
     error: str | None = None
 
 
@@ -544,6 +550,8 @@ def _query_request_from_digisearch_args(
     response_mode = str(args.get("response_mode") or "full")
     summarize_raw = args.get("summarize_if_over")
     summarize_if_over = int(summarize_raw) if isinstance(summarize_raw, int) else None
+    workspace_raw = args.get("workspace_id")
+    workspace_id = str(workspace_raw).strip() if workspace_raw else None
     return QueryRequest(
         text=qtext or "",
         index_name=idx,
@@ -560,7 +568,38 @@ def _query_request_from_digisearch_args(
         skip=skip,
         include_total_count=include_total_count,
         skip_rerank=skip_rerank,
+        workspace_id=workspace_id,
     )
+
+
+def _coerce_web_search_max_results(raw: object) -> int | None:
+    """Defensively coerce an orchestrator max_results arg; None when invalid.
+
+    Accepts ints (never bools — the bool-is-int quirk silently mapped True to
+    1), integral floats, and int-looking strings; clamps the result to 1–10.
+    A missing arg (None) maps to the default 4; anything else is invalid.
+    """
+    if raw is None:
+        return 4
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        num = raw
+    elif isinstance(raw, float):
+        if not raw.is_integer():
+            return None
+        num = int(raw)
+    elif isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return None
+        try:
+            num = int(text)
+        except ValueError:
+            return None
+    else:
+        return None
+    return min(max(num, 1), 10)
 
 
 @app.post("/v1/orchestrator_invoke")
@@ -701,14 +740,17 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         top_raw = args.get("top_k", 10)
         top_k = int(top_raw) if isinstance(top_raw, int) else 10
         filt_raw = args.get("filter")
+        filt = str(filt_raw).strip() if filt_raw else None
+        _reject_raw_filter_if_disallowed(filt, idx)
         payload = {
             "user_message": msg,
             "index_name": idx,
             "top_k": top_k,
             "mode": str(args.get("mode") or "hybrid"),
-            "filter": str(filt_raw).strip() if filt_raw else None,
+            "filter": filt,
             "filters": args.get("filters") if isinstance(args.get("filters"), list) else None,
             "session_id": args.get("session_id"),
+            "workspace_id": args.get("workspace_id"),
         }
         body = run_research_turn(payload)
         return OrchestratorInvokeResponse(
@@ -716,6 +758,50 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             service="digisearch",
             tool=tool,
             data=ResearchTurnOutput.model_validate(body),
+        )
+
+    if tool == TOOL_WEB_SEARCH:
+        try:
+            from digisearch.web_search.service import run_web_search
+        except ImportError as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Install digisearch[web-search] for web_search: {e}",
+            ) from e
+        qtext = str(args.get("query") or "").strip()
+        if not qtext:
+            return OrchestratorInvokeResponse(ok=False, error="query is required")
+        include = (
+            args.get("include_domains") if isinstance(args.get("include_domains"), list) else []
+        )
+        exclude = (
+            args.get("exclude_domains") if isinstance(args.get("exclude_domains"), list) else []
+        )
+        max_results = _coerce_web_search_max_results(args.get("max_results", 4))
+        if max_results is None:
+            return OrchestratorInvokeResponse(ok=False, error="max_results must be an integer 1-10")
+        try:
+            web_req = WebSearchRequest(
+                query=qtext,
+                include_domains=[str(d) for d in include],
+                exclude_domains=[str(d) for d in exclude],
+                max_results=max_results,
+            )
+        except ValidationError as e:
+            from digisearch.web_search.models import summarize_validation_error
+
+            return OrchestratorInvokeResponse(
+                ok=False, error=f"invalid web_search input: {summarize_validation_error(e)}"
+            )
+        try:
+            resp = run_web_search(web_req)
+        except WebSearchConfigError as e:
+            return OrchestratorInvokeResponse(ok=False, error=f"invalid web_search config: {e}")
+        return OrchestratorInvokeResponse(
+            ok=True,
+            service="digisearch",
+            tool=tool,
+            data=resp,
         )
 
     raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
@@ -731,7 +817,27 @@ def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
             status_code=503,
             detail=f"Install digisearch[agent] for /v1/research_turn: {e}",
         ) from e
+    _reject_raw_filter_if_disallowed(req.filter, req.index_name)
     return ResearchTurnOutput.model_validate(run_research_turn(req.model_dump(mode="json")))
+
+
+@app.post("/v1/web_search", response_model=WebSearchResponse)
+def v1_web_search(req: WebSearchRequest) -> WebSearchResponse:
+    """Search the public web (searxng with ddgs fallback, fetch + extract enrichment)."""
+    try:
+        from digisearch.web_search.service import run_web_search
+    except ImportError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Install digisearch[web-search] for /v1/web_search: {e}",
+        ) from e
+    try:
+        return run_web_search(req)
+    except WebSearchConfigError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"invalid web_search config: {e}",
+        ) from e
 
 
 @app.post("/ingest", response_model=IngestResponse)

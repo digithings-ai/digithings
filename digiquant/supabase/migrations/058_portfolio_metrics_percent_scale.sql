@@ -23,7 +23,7 @@
 -- Percent is the resolution, not fraction: it matches two of the three writers, the
 -- `_pct` naming used by every neighbouring column (pnl_pct, net_return_pct,
 -- benchmark_return_pct, relative_return_pct, cash_pct, invested_pct), and the only
--- reader that renames the fields — frontend/olympus/lib/portfolio-risk-metrics.ts:93-94
+-- reader that renames the fields — cloudflare/olympus/lib/portfolio-risk-metrics.ts:93-94
 -- maps `volatility -> annVolPct` and `max_drawdown -> maxDrawdownPct`. The companion
 -- change makes update_tearsheet.py emit percent so the column stops being mixed-unit;
 -- widening the CHECK alone would legitimise the mixture and mis-scale readers by 100x.

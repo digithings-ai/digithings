@@ -8,7 +8,7 @@
 
 Phase 1 shipped a shared `ActivitySpan` vocabulary and made Foundry emit rich `tool_result` rows on the public embed. Two gaps remain before Phase 3 can point `digithings.ai/chat` at the digichat container:
 
-1. **digivault lives only in Cloudflare.** `frontend/digithings-web/functions/api/chat.ts` (~983 lines) runs the digivault RAG + OpenRouter free-pool agentic loop and streams NDJSON. The digichat container has no equivalent provider, so digithings cannot cut over to one runtime.
+1. **digivault lives only in Cloudflare.** `cloudflare/digithings-web/functions/api/chat.ts` (~983 lines) runs the digivault RAG + OpenRouter free-pool agentic loop and streams NDJSON. The digichat container has no equivalent provider, so digithings cannot cut over to one runtime.
 2. **Authenticated digichat still dual-emits.** `stream-digigraph-trace.ts` writes gated `data-digichatActivity` plus ungated legacy `data-digigraphTrace` on the auth path because `chat-panel.tsx` still renders `RagSourcesTrace` / `ResearchBriefTrace` off the legacy part. The flat Phase 1 `chat` span cannot carry evidence tier, year, snippet, or a research brief.
 
 Until both land, Phase 3 would either regress digithings chat or re-split auth vs embed UI again.
@@ -67,7 +67,7 @@ Browser (embed or auth chat-panel)
 
 ### Provider config
 
-Extend `EmbedBackendConfig` in `frontend/digichat/src/lib/embed-tenants.ts`:
+Extend `EmbedBackendConfig` in `cloudflare/digichat/src/lib/embed-tenants.ts`:
 
 ```ts
 | {
@@ -163,13 +163,13 @@ Supabase / digivault RPC `VaultHit.body_markdown` is **server-side only** — in
 
 | Component | Change |
 |---|---|
-| `frontend/digichat/src/lib/digivault-stream.ts` | **New.** Peer to `foundry-stream.ts`. Port agentic loop from `functions/api/chat.ts`: ≤3 tool rounds, `search_digivault` → Supabase `search_architecture_notes`, OpenRouter free pool + full BYOK, emit AI SDK UI stream (text + activity spans). |
-| `frontend/digichat/src/lib/chat-activity.ts` | Extend document + brief allowlist; `applyActivityDetail` strips documents **and** brief at `labels`/`off`. |
-| `frontend/digichat/src/lib/stream-digigraph-trace.ts` | Typed mapper for `rag_sources` / `graph_update`; delete legacy part writer and `emitLegacyTracePart`. |
-| `frontend/digichat/src/lib/embed-tenants.ts` | Parse/validate `digivault` backend variant (env-name fields). |
-| `frontend/digichat/src/app/api/chat/route.ts` | Branch `backend.type === "digivault"`; stop passing `emitLegacyTracePart`. |
-| `frontend/digichat/src/components/chat-panel.tsx` | Consume `data-digichatActivity` via `toDigiChatActivity` + digichat-ui; delete DigigraphTraceBlock / RagSourcesTrace / ResearchBriefTrace. |
-| `frontend/digichat-ui` | Richer hits + brief activity rendering. |
+| `cloudflare/digichat/src/lib/digivault-stream.ts` | **New.** Peer to `foundry-stream.ts`. Port agentic loop from `functions/api/chat.ts`: ≤3 tool rounds, `search_digivault` → Supabase `search_architecture_notes`, OpenRouter free pool + full BYOK, emit AI SDK UI stream (text + activity spans). |
+| `cloudflare/digichat/src/lib/chat-activity.ts` | Extend document + brief allowlist; `applyActivityDetail` strips documents **and** brief at `labels`/`off`. |
+| `cloudflare/digichat/src/lib/stream-digigraph-trace.ts` | Typed mapper for `rag_sources` / `graph_update`; delete legacy part writer and `emitLegacyTracePart`. |
+| `cloudflare/digichat/src/lib/embed-tenants.ts` | Parse/validate `digivault` backend variant (env-name fields). |
+| `cloudflare/digichat/src/app/api/chat/route.ts` | Branch `backend.type === "digivault"`; stop passing `emitLegacyTracePart`. |
+| `cloudflare/digichat/src/components/chat-panel.tsx` | Consume `data-digichatActivity` via `toDigiChatActivity` + digichat-ui; delete DigigraphTraceBlock / RagSourcesTrace / ResearchBriefTrace. |
+| `cloudflare/digichat-ui` | Richer hits + brief activity rendering. |
 | Rate limit helper | New small module or extension of existing digichat limiters — **60/min/IP** on digivault path. Implementation plan decides store (in-memory first if single-replica; Redis/Azure if multi-replica). |
 
 ### digivault event → span mapping

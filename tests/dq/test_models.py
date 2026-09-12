@@ -65,6 +65,21 @@ class TestBacktestResult:
         assert r2.run_id == r.run_id
         assert r2.message == r.message
 
+    def test_success_means_not_error(self) -> None:
+        def make(status: str) -> BacktestResult:
+            return BacktestResult(
+                run_id="r1",
+                strategy_name="s1",
+                symbols=[],
+                start_time="2024-01-01T00:00:00Z",
+                end_time="2024-12-31T23:59:59Z",
+                status=status,
+            )
+
+        assert make("ok").success is True
+        assert make("partial").success is True
+        assert make("error").success is False
+
 
 @pytest.mark.unit
 class TestOptimizeResult:

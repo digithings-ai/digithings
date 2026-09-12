@@ -5,7 +5,7 @@ description: digiskills agent-skill compiler — corpus builders, synthesizers, 
 tags: [digiskills, agent-skills, compiler, library]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
+    at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-cbdb08219f90905f9b1f840d
     resource: repo://digiskills/ARCHITECTURE.md

@@ -5,7 +5,7 @@ description: Auth plane design of digikey — opaque API keys, RS256 JWT issuanc
 tags: [digikey, auth, jwt, architecture]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
+    at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-89092abbe1894e77dc33d695
     resource: repo://digikey/ARCHITECTURE.md

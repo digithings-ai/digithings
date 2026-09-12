@@ -1,24 +1,24 @@
-# DigiChat language selector — design
+# digichat language selector — design
 
 - **Date:** 2026-08-10
 - **Issue:** [#2103](https://github.com/digithings-ai/digithings/issues/2103)
-- **Components:** `frontend/digichat`, `digigraph`
+- **Components:** `cloudflare/digichat`, `digigraph`
 
 ## Goal
 
-Add a language dropdown to the DigiChat top bar so a visitor can pick which
+Add a language dropdown to the digichat top bar so a visitor can pick which
 language the assistant replies in. Prompt templates stay English everywhere;
 the selection is threaded through as a short directive telling the model to
 respond in the chosen language. Only outgoing (assistant) text is affected —
 the UI chrome and the model's own tool-use/retrieval behavior are untouched.
 
-The feature must work identically on both backend adapters DigiChat ships
+The feature must work identically on both backend adapters digichat ships
 today, which currently have **no shared prompt-assembly code**:
 
-- The **digigraph** adapter (`frontend/digichat/src/lib/adapters/digithings/stream.ts`)
+- The **digigraph** adapter (`cloudflare/digichat/src/lib/adapters/digithings/stream.ts`)
   — used by digithings.ai/chat and OCC (`digithings.ai/chat/occ`), both on the
   Profile A stack.
-- The **Foundry** adapter (`frontend/digichat/src/lib/adapters/foundry/stream.ts`)
+- The **Foundry** adapter (`cloudflare/digichat/src/lib/adapters/foundry/stream.ts`)
   — used by DataTap (Profile B), which calls Azure AI Foundry directly via
   `@azure/ai-projects` and holds conversation state in Foundry, not digigraph.
 
@@ -41,7 +41,7 @@ path (which does have a resolved `system_prompt` string per request):
 | # | Approach | Verdict |
 |---|---|---|
 | **A** | **Dedicated per-request field, appended to whichever `system_prompt` is already resolved** (default or tenant override) | **Chosen.** Composes with any tenant's prompt without either side needing to know about the other. Mirrors the existing corpus-routing precedent (`digisearch_index`, `vault_path_prefix`) exactly. |
-| B | Overload `research_system_prompt_override` — DigiChat sends the *whole* tenant prompt + language directive as one override string | Rejected. Forces the frontend to know and duplicate each tenant's system-prompt text, which today lives only server-side in `digiproject.yaml` / `DIGI_TENANT_CORPUS_MAP`. Breaks single-source-of-truth and would drift the moment either side changes independently. |
+| B | Overload `research_system_prompt_override` — digichat sends the *whole* tenant prompt + language directive as one override string | Rejected. Forces the frontend to know and duplicate each tenant's system-prompt text, which today lives only server-side in `digiproject.yaml` / `DIGI_TENANT_CORPUS_MAP`. Breaks single-source-of-truth and would drift the moment either side changes independently. |
 | C | Inject into the visible user message (via `chat_prompt.py`'s `messages_to_workflow_prompt`) | Rejected for digigraph. Pollutes chat history shown to the model as part of the dialogue, and would repeat awkwardly on every turn now that full multi-turn history is preserved (#2100). |
 
 The Foundry adapter has **no system-prompt slot at all** in its current call
@@ -121,7 +121,7 @@ no directive, `input` unchanged from today's behavior.
 
 ## Components touched
 
-**Frontend (`frontend/digichat/src`):**
+**Frontend (`cloudflare/digichat/src`):**
 - `lib/embed-tenants.ts` — `EmbedTenantConfig.showLanguageSelector?: boolean`, validated like `showByok`; read as `tenant?.showLanguageSelector !== false` wherever consumed (default true unless explicitly disabled).
 - `components/language-select.tsx` — new dedicated dropdown component, rendered from `app/embed/embed-client.tsx`'s header (next to the embed's own `showByok`-gated BYOK button), gated by `uiFlags.showLanguageSelector`. New session-scoped React state on `embed-client.tsx`, seeded once from `navigator.language` matched against the curated list (else `"en"`).
 - A small shared `LANGUAGES: { code: string; label: string }[]` constant (English/German/Italian/Spanish/French) used by the dropdown, in `lib/languages.ts`.
@@ -160,7 +160,7 @@ no directive, `input` unchanged from today's behavior.
   adapter option (Foundry) matches the selected code, and that an
   unrecognized value never reaches either backend call.
 - `ARCHITECTURE.md` updated for `digigraph` (new state field) and
-  `frontend/digichat` (new tenant flag + dual-backend contract).
+  `cloudflare/digichat` (new tenant flag + dual-backend contract).
 
 ## Out of scope
 
@@ -171,7 +171,7 @@ no directive, `input` unchanged from today's behavior.
 - Server-side persistence of a visitor's language choice across sessions or
   devices (explicitly session-only, see Decisions).
 - Changing how the Foundry/DataTap agent's own instructions are configured in
-  the Azure portal — this design only affects what DigiChat sends per turn.
+  the Azure portal — this design only affects what digichat sends per turn.
 
 ## Rollout note
 

@@ -8,7 +8,7 @@ Proposed -- 2026-08-17
 
 `occ_help` is a bilingual EN/DE compliance help-center corpus retrieved
 through digisearch's Chroma backend (seeded by
-`frontend/digithings-stack-cloudflare/container/seed_chroma.sh`). digisearch
+`cloudflare/digithings-stack-cloudflare/container/seed_chroma.sh`). digisearch
 ships a working `EmbeddingProvider` abstraction --
 `digisearch/src/digisearch/embedding/base.py` defines the interface,
 `embedding/providers/minilm.py` and `embedding/providers/openai.py`
@@ -322,7 +322,7 @@ a deploy window).**
      path above, and it is what keeps the fail-loud property durable if
      Cloudflare credentials are added later and silently flip
      `DIGI_VECTORIZE_ACTIVE`.
-- If the Vectorize leg (`frontend/digithings-stack-cloudflare/container/entrypoint.sh`,
+- If the Vectorize leg (`cloudflare/digithings-stack-cloudflare/container/entrypoint.sh`,
   `DIGI_VECTORIZE_ACTIVE` gate at lines ~52-71/79-84) is in active use for
   any deployed environment, it must be migrated to the new index in the
   same window or explicitly decommissioned in this ADR's follow-up PR --
@@ -330,7 +330,7 @@ a deploy window).**
   moves on, or the two backends diverge.
 - **Cutover is executed through a shared, non-isolated config surface --
   correction, from independent review, since the ADR previously never
-  named it.** `frontend/digithings-stack-cloudflare/wrangler.toml`'s
+  named it.** `cloudflare/digithings-stack-cloudflare/wrangler.toml`'s
   `DIGISEARCH_INDEX` (line 123, currently `"digithings_docs"` -- the
   *other* tenant's default) and `DIGI_TENANT_CORPUS_MAP` (line 125, a
   single JSON blob carrying *both* the `digithings` and `occ` tenants'

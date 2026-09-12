@@ -184,3 +184,42 @@ class TestBitviewClient:
         _url, kwargs = session.calls[0]
         assert "digiquant" in kwargs["headers"]["User-Agent"]
         assert BITVIEW_BASE_URL.startswith("https://")
+
+    def test_allow_derived_bypasses_nupl_refusal(self) -> None:
+        session = _FakeSession(body=[_mvrv_slice()])
+        result = BitviewClient(session=session).fetch(["nupl"], allow_derived=True)
+        nupl = result.series["nupl"]
+        assert nupl.has_data
+        assert session.calls != []
+
+    def test_allow_derived_false_still_refuses_nupl(self) -> None:
+        session = _FakeSession(exc=AssertionError("must not fetch nupl"))
+        result = BitviewClient(session=session).fetch(["nupl"], allow_derived=False)
+        assert result.series["nupl"].error is not None
+        assert session.calls == []
+
+    def test_fetch_bitview_series_allow_derived_bypasses_nupl_refusal(self) -> None:
+        session = _FakeSession(body=[_mvrv_slice()])
+        result = fetch_bitview_series(["nupl"], session=session, allow_derived=True)
+        assert result.series["nupl"].has_data
+
+    def test_client_refuses_untrusted_base_url(self) -> None:
+        with pytest.raises(ValueError, match="not allowlisted"):
+            BitviewClient(
+                session=_FakeSession(body=[_mvrv_slice()]), base_url="https://evil.example.com"
+            )
+
+    def test_fetch_function_refuses_attacker_base_url_without_fetch(self) -> None:
+        session = _FakeSession(body=[_mvrv_slice()])
+        result = fetch_bitview_series(
+            ["mvrv"], session=session, base_url="http://169.254.169.254/latest/meta-data"
+        )
+        assert result.error is not None
+        assert "refusing untrusted base_url" in result.error
+        assert session.calls == []
+
+    def test_series_id_path_injection_rejected_without_fetch(self) -> None:
+        session = _FakeSession(body=[_mvrv_slice()])
+        result = BitviewClient(session=session).fetch(["../../etc/passwd"])
+        assert result.series["../../etc/passwd"].error is not None
+        assert session.calls == []

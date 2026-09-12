@@ -41,6 +41,7 @@ import logging
 import os
 import random
 import re
+import threading
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -117,6 +118,102 @@ except ImportError:  # pragma: no cover - exercised only when digismith is absen
 
 # Cap tool result text injected into the next LLM turn (full blobs stay upstream).
 _MAX_TOOL_MESSAGE_CHARS = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "12000"))
+
+
+# ── Banned models ─────────────────────────────────────────────────────────────
+# Central source of truth for model ids that must never run (#3078). A banned
+# id reaching digillm means routing above it failed — raise immediately with a
+# clear error instead of billing a call the house policy forbids.
+_BANNED_MODELS = frozenset({"ollama/qwen3:8b"})
+_BANNED_MODELS_LOWER = frozenset(m.lower() for m in _BANNED_MODELS)
+# A provider may serve a banned id under a suffixed tag/digest/qualifier. Matching
+# only the bare id lets `ollama/qwen3:8b:cloud`, `...-instruct` or `...@q4_K_M`
+# through the ban, so any of these separators marks a banned variant too.
+_BANNED_MODEL_SUFFIX_SEPARATORS = (":", "-", "@")
+
+
+def _reject_banned_model(model: str) -> None:
+    """Raise :class:`ValueError` when *model* is a banned id (see :data:`_BANNED_MODELS`).
+
+    Comparison is case-insensitive so ``OLLAMA/QWEN3:8B`` cannot bypass the ban, and
+    a suffixed variant (``ollama/qwen3:8b:cloud``, ``...-instruct``) is rejected too.
+    """
+    normalized = (model or "").strip().lower()
+    is_banned = normalized in _BANNED_MODELS_LOWER or any(
+        normalized.startswith(f"{banned_id}{sep}")
+        for banned_id in _BANNED_MODELS_LOWER
+        for sep in _BANNED_MODEL_SUFFIX_SEPARATORS
+    )
+    if is_banned:
+        raise ValueError(
+            f"model {model!r} is banned by house policy (#3078); "
+            "resolve a cheap-inference route through digillm instead"
+        )
+
+
+# ── Provider retry budget ─────────────────────────────────────────────────────
+# Per-error time budget (#3078): one logical provider call gets this many total
+# attempts (initial + retries). Default 12 preserves the historical behavior;
+# the daily pipeline sets ``DIGILLM_PROVIDER_MAX_ATTEMPTS=2`` (one retry only).
+def _provider_max_attempts() -> int:
+    """Total attempts for one provider call (default 12, minimum 1)."""
+    try:
+        return max(int((os.environ.get("DIGILLM_PROVIDER_MAX_ATTEMPTS") or "").strip() or 12), 1)
+    except ValueError:
+        logger.warning(
+            "invalid DIGILLM_PROVIDER_MAX_ATTEMPTS=%r; using default 12",
+            os.environ.get("DIGILLM_PROVIDER_MAX_ATTEMPTS"),
+        )
+        return 12
+
+
+# ── Same-tool error breaker ───────────────────────────────────────────────────
+# Stop instead of retrying when the same tool fails repeatedly with the same
+# error (#3078): after this many *consecutive* same-tool+same-error failures,
+# run_tools raises instead of feeding another identical error back to the model.
+_SAME_TOOL_ERROR_LIMIT = int(os.environ.get("DIGILLM_SAME_TOOL_ERROR_LIMIT", "") or 2)
+
+
+# ── Provider concurrency cap ────────────────────────────────────────────────
+# Burst smoothing (#3738): fan-out stages fire all LLM calls at once, and a
+# 429 burst with the 1-retry budget degrades many segments simultaneously.
+# Every provider call funnels through ``_create_with_retry`` (no tool
+# implementation calls back into the LLM, so the semaphore cannot deadlock),
+# and the slot is held for the whole logical call including short backoffs.
+# Default 8; the daily pipeline pins ``DIGILLM_MAX_CONCURRENT_CALLS``.
+_CONCURRENT_CALLS_DEFAULT = 8
+
+
+def _max_concurrent_calls() -> int:
+    """Max in-flight provider calls (default 8, minimum 1)."""
+    try:
+        return max(
+            int(
+                (os.environ.get("DIGILLM_MAX_CONCURRENT_CALLS") or "").strip()
+                or _CONCURRENT_CALLS_DEFAULT
+            ),
+            1,
+        )
+    except ValueError:
+        logger.warning(
+            "invalid DIGILLM_MAX_CONCURRENT_CALLS=%r; using default 8",
+            os.environ.get("DIGILLM_MAX_CONCURRENT_CALLS"),
+        )
+        return _CONCURRENT_CALLS_DEFAULT
+
+
+_PROVIDER_SEMAPHORE: threading.BoundedSemaphore | None = None
+_PROVIDER_SEMAPHORE_LIMIT = 0
+
+
+def _provider_semaphore() -> threading.BoundedSemaphore:
+    """Process-wide slot gate, rebuilt when the env-derived limit changes."""
+    global _PROVIDER_SEMAPHORE, _PROVIDER_SEMAPHORE_LIMIT
+    limit = _max_concurrent_calls()
+    if _PROVIDER_SEMAPHORE is None or _PROVIDER_SEMAPHORE_LIMIT != limit:
+        _PROVIDER_SEMAPHORE = threading.BoundedSemaphore(limit)
+        _PROVIDER_SEMAPHORE_LIMIT = limit
+    return _PROVIDER_SEMAPHORE
 
 
 # ── Provider registry ─────────────────────────────────────────────────────────
@@ -237,13 +334,27 @@ def _wire_model(provider: str | None, model_id: str, model: str) -> str:
     return model_id
 
 
+# Bearer for a declared trusted LiteLLM proxy running without auth — the
+# documented no-key loopback dev stack (`make stack-local`, default compose
+# before LITELLM_MASTER_KEY). Only ever sent to a base :func:`_litellm_proxy_configured`
+# accepts; direct/vendor endpoints still fail fast (#3939).
+_DEV_LITELLM_SENTINEL = "sk-no-key-required"
+
+
 def _default_client_api_key() -> str:
     """Bearer token for the default (non-prefixed) client.
 
     Priority (highest first):
     1. Per-request proxy-key override (:func:`set_proxy_key`).
     2. ``LITELLM_PROXY_API_KEY`` env var.
-    3. ``OPENAI_API_KEY`` env var (``"not-set"`` if unset).
+    3. ``OPENAI_API_KEY`` env var.
+    4. :data:`_DEV_LITELLM_SENTINEL` when ``OPENAI_API_BASE`` is a declared
+       trusted LiteLLM proxy (the documented no-key loopback/dev stack).
+
+    Raises:
+        RuntimeError: when no key is configured and the base is not a declared
+            trusted LiteLLM proxy. A vendor/direct base still fails fast — never
+            the sentinel ``"not-set"`` that used to produce a late provider 401.
     """
     override = _proxy_key_override.get()
     if override:
@@ -251,7 +362,19 @@ def _default_client_api_key() -> str:
     proxy = (os.environ.get("LITELLM_PROXY_API_KEY") or "").strip()
     if proxy:
         return proxy
-    return os.environ.get("OPENAI_API_KEY", "not-set")
+    openai_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+    if openai_key:
+        return openai_key
+    if _litellm_proxy_configured():
+        # A no-auth loopback LiteLLM (make stack-local / default compose without
+        # LITELLM_MASTER_KEY) still needs *a* bearer for the OpenAI SDK, but
+        # ignores its value. Gated on the trusted-proxy allowlist: a direct
+        # vendor ``OPENAI_API_BASE`` (or no base) keeps failing fast above (#3939).
+        return _DEV_LITELLM_SENTINEL
+    raise RuntimeError(
+        "No LLM API key configured: set LITELLM_PROXY_API_KEY or OPENAI_API_KEY "
+        "(or call set_proxy_key) before creating a house client."
+    )
 
 
 # ── Request timeout ───────────────────────────────────────────────────────────
@@ -338,6 +461,9 @@ _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "google/gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
     "openai/gpt-5.6-luna": "gpt-5.6-luna",
     "openai/gpt-5.6-sol": "gpt-5.6-sol",
+    "deepseek/deepseek-v4-flash-0731": "deepseek-v4-flash-0731",
+    "openai/gpt-oss-120b": "gpt-oss-120b",
+    "z-ai/glm-5.3-flash": "glm-5.3-flash",
 }
 
 
@@ -379,15 +505,46 @@ def cheaperinference_bare_id_for_house_slug(model: str) -> str | None:
     return _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE.get(model)
 
 
+def _cheaperinference_api_base() -> str:
+    return (
+        os.environ.get("CHEAPERINFERENCE_API_BASE") or ""
+    ).strip() or _DEFAULT_CHEAPERINFERENCE_API_BASE
+
+
+def _cheaperinference_direct_house() -> bool:
+    """True when mapped house slugs should hit hosted CI, not OpenRouter.
+
+    LiteLLM proxy stays on the overlay (merged ``model_name`` keys). Direct
+    clients (CLI / leftover ``OPENAI_API_BASE``) prefer CI whenever the key
+    is set — including when ``OPENROUTER_API_KEY`` is also present.
+    """
+    if _litellm_proxy_configured():
+        return False
+    return cheaperinference_house_preferred() or _api_base_is_cheaperinference()
+
+
+def _cheaperinference_direct_client() -> OpenAI:
+    """Uncached-on-key-change client pointed at hosted Cheaper Inference."""
+    key = (os.environ.get("CHEAPERINFERENCE_API_KEY") or "").strip() or _default_client_api_key()
+    base = _cheaperinference_api_base().rstrip("/")
+    cache_key: tuple[str, str | None] = (key, base)
+    client = _client_cache.get(cache_key)
+    if client is None:
+        client = OpenAI(api_key=key, base_url=base, timeout=_REQUEST_TIMEOUT)
+        _client_cache[cache_key] = client
+    return client
+
+
 def _is_ci_catalog_miss(model: str) -> bool:
-    """CI is the default base but this house slug is not on the CI catalog.
+    """Selected house upstream is CI but this house slug is not on the catalog.
 
     Fail-fast: callers raise via :func:`_raise_for_ci_catalog_miss` — there is
     no quiet OpenRouter fallback. A misconfigured pin must surface, not spend
-    silently on another upstream.
+    silently on another upstream. LiteLLM proxy is excluded: the merged overlay
+    still carries OpenRouter-only pins (sonar, :online, …).
     """
     return (
-        _api_base_is_cheaperinference()
+        _cheaperinference_direct_house()
         and _is_openrouter_backed_house_slug(model)
         and cheaperinference_bare_id_for_house_slug(model) is None
     )
@@ -543,7 +700,7 @@ def _with_byok_litellm_pass_through(kwargs: dict[str, Any]) -> dict[str, Any]:
 def _effective_model_id(model: str) -> str:
     """Model id on the wire: full caller string for LiteLLM; vendor slug otherwise."""
     bare = cheaperinference_bare_id_for_house_slug(model)
-    if bare is not None and _api_base_is_cheaperinference():
+    if bare is not None and _cheaperinference_direct_house():
         return bare
     if _is_ci_catalog_miss(model):
         _raise_for_ci_catalog_miss(model)
@@ -581,16 +738,23 @@ def get_client_for_model(model: str) -> OpenAI:
         cfg = _EXTERNAL_PROVIDERS.get(provider)
         if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
             return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
+        expected = cfg["base_url"] if cfg else "a registered provider base_url"
+        raise RuntimeError(
+            f"BYOK api_base {base_url!r} does not match registered base for "
+            f"provider {provider!r} (expected {expected!r}); refusing silent "
+            "house/vendor fallthrough."
+        )
     # Cheaper Inference default base: mapped house slugs use get_client(); a catalog
     # miss (sonar / :online / maverick / grok-4.3|4.6 / anthropic) always raises —
     # there is no OpenRouter fallback.
     if _is_ci_catalog_miss(model):
         _raise_for_ci_catalog_miss(model)
-    elif (
-        cheaperinference_bare_id_for_house_slug(model) is not None
-        and _api_base_is_cheaperinference()
+    elif cheaperinference_bare_id_for_house_slug(model) is not None and (
+        _cheaperinference_direct_house()
     ):
-        return get_client()
+        if _api_base_is_cheaperinference():
+            return get_client()
+        return _cheaperinference_direct_client()
     if provider is None or _use_default_base_client(model):
         return get_client()
     cfg = _EXTERNAL_PROVIDERS[provider]
@@ -1053,8 +1217,10 @@ def _record_usage(**fields: Any) -> None:
 def _normalize_tool_arguments(args_str: str | None) -> str:
     """Return a valid JSON string for tool-call arguments.
 
-    Some models stream invalid JSON (incomplete, trailing comma). Falls back to
-    ``"{}"`` when the value cannot be repaired.
+    Some models stream invalid JSON (incomplete, trailing comma). Best-effort
+    repairs (missing closing ``}``, trailing commas) are applied when they yield
+    valid JSON. Empty / whitespace-only becomes ``"{}"``. Irreparable garbage
+    raises ``ValueError`` (fail-fast) rather than silently substituting ``"{}"``.
     """
     s = (args_str or "").strip()
     if not s:
@@ -1077,8 +1243,10 @@ def _normalize_tool_arguments(args_str: str | None) -> str:
     try:
         json.loads(fixed)
         return fixed
-    except json.JSONDecodeError:
-        return "{}"
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"tool call arguments are not valid JSON and could not be repaired: {s!r}"
+        ) from exc
 
 
 def _compact_tool_message_content(msg_content: str) -> str:
@@ -1126,9 +1294,11 @@ def _create_with_retry(
     )
 
     transient = (RateLimitError, InternalServerError, APIConnectionError, APITimeoutError)
-    max_attempts = 12
+    max_attempts = _provider_max_attempts()
     delay = 5.0
-    with _logical_attempt_scope() as scope:
+    # The semaphore smooths fan-out bursts into a steady flow (#3738); it is
+    # held for the whole logical call, backoffs included.
+    with _provider_semaphore(), _logical_attempt_scope() as scope:
         requested_model = _requested_model or str(kwargs.get("model") or "unknown")
         provider = _provider_name(_provider)
         kwargs = _with_byok_litellm_pass_through(kwargs)
@@ -1254,13 +1424,22 @@ def completion(
       never cached (they may have side effects).
     - ``response_format``: OpenAI-compatible json_schema structured-output
       descriptor, e.g. ``{"type": "json_schema", "json_schema": {"name": ...,
-      "schema": {...}}}``. Mutually exclusive with ``tools`` (ignored when
-      ``tools`` is non-empty). Providers without json_schema support silently
+      "schema": {...}}}``. Mutually exclusive with ``tools`` — passing both
+      raises ``ValueError`` (fail-fast). Providers without json_schema support silently
       ignore it, so an in-prompt schema remains the primary contract there.
 
     Raises:
-        RuntimeError: when a registered provider's API key env var is unset.
+        RuntimeError: when a registered provider's API key env var is unset, or
+            when no house API key is configured for the default client.
+        ValueError: when ``model`` is a banned id (house policy, #3078), or when
+            both ``tools`` and ``response_format`` are provided.
     """
+    if tools and response_format is not None:
+        raise ValueError(
+            "completion: tools and response_format are mutually exclusive; "
+            "pass one or the other, not both."
+        )
+    _reject_banned_model(model)
     provider, _ = _parse_provider_prefix(model)
     client = get_client_for_model(model)
     effective_model = _effective_model_id(model)
@@ -1312,7 +1491,6 @@ def completion(
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
     elif response_format is not None:
-        # tools and response_format are mutually exclusive in the OpenAI API.
         kwargs["response_format"] = response_format
 
     try:
@@ -1575,8 +1753,9 @@ def _stream_completion_one_turn(
                 response=evidence,
             )
             raise
-        except Exception:
-            scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+        except Exception as error:
+            scope.terminal_outcome = ProviderCallOutcome.FAILED
+            scope.logical_error_type = type(error).__name__
             _emit_attempt(
                 scope=scope,
                 attempt_number=attempt_number,
@@ -1584,10 +1763,34 @@ def _stream_completion_one_turn(
                 provider=_provider_name(provider),
                 requested_model=model,
                 started_at=started_at,
-                outcome=ProviderAttemptOutcome.CANCELLED,
+                outcome=ProviderAttemptOutcome.FAILED,
                 response=evidence,
+                error=error,
             )
             raise
+    content = "".join(content_parts).strip()
+    tc_list: list[ToolCallDict] | None = None
+    if tool_calls_accum:
+        # Normalize BEFORE emitting SUCCEEDED. A malformed tool payload raises
+        # ValueError out of _normalize_tool_arguments (#3788); a turn that raises
+        # there must not already be on the record as a succeeded provider attempt
+        # (telemetry would show SUCCEEDED for a call the caller saw fail).
+        tc_list = []
+        for i in sorted(tool_calls_accum):
+            acc = tool_calls_accum[i]
+            tc_list.append(
+                {
+                    "id": acc["id"],
+                    "type": "function",
+                    "function": {
+                        "name": acc["function"]["name"],
+                        "arguments": _normalize_tool_arguments(
+                            acc["function"].get("arguments", "{}")
+                        ),
+                    },
+                }
+            )
+
     _emit_attempt(
         scope=scope,
         attempt_number=attempt_number,
@@ -1598,23 +1801,6 @@ def _stream_completion_one_turn(
         outcome=ProviderAttemptOutcome.SUCCEEDED,
         response=evidence,
     )
-
-    content = "".join(content_parts).strip()
-    if not tool_calls_accum:
-        return content, None
-    tc_list: list[ToolCallDict] = []
-    for i in sorted(tool_calls_accum):
-        acc = tool_calls_accum[i]
-        tc_list.append(
-            {
-                "id": acc["id"],
-                "type": "function",
-                "function": {
-                    "name": acc["function"]["name"],
-                    "arguments": _normalize_tool_arguments(acc["function"].get("arguments", "{}")),
-                },
-            }
-        )
     return content, tc_list
 
 
@@ -1722,10 +1908,36 @@ def run_tools(
 
     Returns:
         The model's final response content.
+
+    Raises:
+        ValueError: when ``model`` is a banned id (house policy, #3078).
+        RuntimeError: when the same tool fails with the same error
+            ``DIGILLM_SAME_TOOL_ERROR_LIMIT`` times consecutively (#3078).
     """
+    _reject_banned_model(model)
     current: list[ChatCompletionMessage] = list(messages)
     content = ""
     safe = parallel_safe_tools or set()
+    failure_streak: tuple[str, str, int] | None = None
+
+    def _note_tool_success() -> None:
+        nonlocal failure_streak
+        failure_streak = None
+
+    def _note_tool_error(name: str, error: BaseException) -> None:
+        """Track consecutive same-tool+same-error failures; raise at the limit."""
+        nonlocal failure_streak
+        signature = f"{type(error).__name__}: {error}"
+        if failure_streak is not None and failure_streak[:2] == (name, signature):
+            count = failure_streak[2] + 1
+        else:
+            count = 1
+        failure_streak = (name, signature, count)
+        if count >= _SAME_TOOL_ERROR_LIMIT:
+            raise RuntimeError(
+                f"run_tools: tool {name!r} failed {count}x consecutively with the "
+                f"same error; failing fast instead of retrying: {signature}"
+            )
 
     def _produce_turn(
         turn_messages: list[ChatCompletionMessage],
@@ -1857,16 +2069,16 @@ def run_tools(
             normalized = _normalize_tool_arguments(
                 args_str if isinstance(args_str, str) else str(args_str)
             )
-            try:
-                args = json.loads(normalized)
-            except json.JSONDecodeError as e:
-                logger.warning("Bad tool arguments (name=%s): %s — using {}", name, e)
-                args = {}
+            # _normalize_tool_arguments returns valid JSON or raises ValueError, so
+            # this cannot fail. The old try/except silently substituted {} and hid
+            # a malformed tool call (#3788) — let the failure surface instead.
+            args = json.loads(normalized)
             parsed.append((tc.get("id", ""), name, args))
 
         run_parallel = len(parsed) > 1 and all(name in safe for (_, name, _) in parsed)
         if run_parallel:
             results: dict[int, str | dict[str, Any]] = {}
+            tool_errors: dict[int, BaseException] = {}
             # A pool worker starts with an *empty* context, so every ContextVar bound
             # per-request -- the BYOK key/base-url override above all (:func:`set_byok`)
             # -- reads as its default inside it. A parallel-safe tool that itself calls
@@ -1893,6 +2105,7 @@ def run_tools(
                         results[i] = future.result()
                     except (RuntimeError, OSError, ValueError, TypeError, KeyError) as e:
                         results[i] = {"content": str(e)}
+                        tool_errors[i] = e
             ordered = [(parsed[i], results[i]) for i in range(len(parsed))]
         else:
             ordered = []
@@ -1906,10 +2119,18 @@ def run_tools(
                     # a raised exception here must become a recoverable tool result, not
                     # abort the whole run and discard every tool result already gathered
                     # this round.
+                    _note_tool_error(name, e)
                     result = {"content": str(e)}
+                else:
+                    _note_tool_success()
                 ordered.append(((tc_id, name, args), result))
 
-        for (tc_id, name, args), result in ordered:
+        for idx, ((tc_id, name, args), result) in enumerate(ordered):
+            if run_parallel:
+                if idx in tool_errors:
+                    _note_tool_error(name, tool_errors[idx])
+                else:
+                    _note_tool_success()
             if on_tool_step is not None:
                 if run_parallel:
                     on_tool_step("tool_call", {"name": name, "arguments": args})

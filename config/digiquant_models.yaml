@@ -1,42 +1,43 @@
 # dashboard (research + portfolio) — centralized model tier policy.
 #
 # Single source of truth for per-phase model selection and OpenRouter cost knobs.
-# Override the active tier at runtime: OLYMPUS_MODEL_TIER=cheap|balanced|quality
+# Override the active tier at runtime: DIGIQUANT_MODEL_TIER=cheap|balanced|quality
+# (OLYMPUS_MODEL_TIER is a retired alias listed in digiquant envcompat.)
 #
-# ── ROUTING MODEL (Jun 2026) ────────────────────────────────────────────────
-# Two pool kinds — do not conflate them:
+# ── ROUTING MODEL (Jun 2026; tool-only grounding #3859) ───────────────────────
+# One pool kind:
 #
 #   allowed_models   — phase LLM calls (structured JSON, function tools, reasoning).
 #                      BARE slugs only (no ``:online``). Every entry MUST support
 #                      OpenRouter function tools. ``:online`` is a web-search variant and
 #                      does NOT imply tool support — for open-weight models the ``:online``
 #                      endpoints 404 on function tools, so it is banned from phase pools.
-#                      Web grounding is NOT done here; it is a separate pre-pass (below).
+#                      Web grounding is NOT done here; it is a separate tool-only
+#                      pre-pass (below) with no synthesis-model pins.
 #
-#   web_search_models — grounding pre-passes only (research/portfolio live_search). Carries the
-#                      ``:online``/native-search models (perplexity/sonar). The pre-pass
-#                      injects a ``web_grounding`` block into the prompt before the phase
-#                      runs, so phase models never need ``:online`` themselves. These models
-#                      may lack function tools — NEVER routed to run_tools phases.
+# Grounding pre-pass (research/portfolio live_search): the first-party digisearch
+# web_search tool runs and injects a ``web_grounding`` block into the prompt
+# before the phase runs, so phase models never need ``:online`` themselves.
+# A requested search must succeed or raise — no synthesis fallback.
 #
 # Phase routing: stable hash(phase_slug) → capability pool (extraction / research /
-# reasoning). Grounding: hash(segment) → web_search_models pool.
+# reasoning).
 #
 # Tier philosophy:
-#   cheap     — open-weight OSS models (bare) for phases; ``:online``/perplexity grounding
+#   cheap     — open-weight OSS models (bare) for phases; first-party tool-only grounding
 #   balanced  — cheap pool + mid-tier (Gemini Flash, GPT-5.6 Luna, Grok), all bare
 #   quality   — unbounded frontier models; no auto-router sanitization
 #
-# Pools prefer the latest generation release per vendor as of #2368 (2026-08-14,
-# grok-4.6 added 2026-08-15) where cost allows — balanced keeps grok-4.3 rather
-# than the current grok-4.6 flagship, which is quality-only. See
-# docs/providers/snapshots/*.yaml for the vendor model IDs this was checked
-# against as of that file's own last_checked date; a slug added after a
-# snapshot was last refreshed won't appear there yet.
+# Pools are CI-mapped only (#3660 / #3788): maverick, grok-4.3/4.6, sonar, and
+# anthropic frontier pins are NOT in phase or web_search pools (and the matching
+# OpenRouter litellm.yaml routes were retired). See
+# docs/providers/snapshots/*.yaml for vendor model IDs checked historically;
+# a slug added after a snapshot was last refreshed won't appear there yet.
 # Endpoint capability (tools + strict json_schema + context floor) is live-verified
 # by scripts/validate_digiquant_pools.py (.github/workflows/validate-digiquant-pools.yml).
 #
-# Fail-hard when grounding unavailable: OLYMPUS_WEB_SEARCH=required.
+# Tool-only grounding (#3859): a requested web_search must succeed or raise;
+# no synthesis fallback, no env gate.
 #
 # Env contract: house calls go service → digillm → LiteLLM (OPENAI_API_BASE).
 # apply_digiquant_house_env() points the default client at the house upstream
@@ -45,31 +46,23 @@
 # CI-only (#3660): a house slug missing from the CI catalog raises — there is
 # no OpenRouter fallback. The cheap tier below is fully CI-mapped (no sonar /
 # :online / maverick pins); balanced/quality are CI-mapped too. Retrieval stays in-house
-# (digisearch / live_search / data tools); the grounding pre-pass synthesizes
-# on CI. LiteLLM overlay: config/litellm.cheaperinference.yaml (see
+# (digisearch / live_search / data tools); the grounding pre-pass is the first-party
+# digisearch web_search tool (no synthesis). LiteLLM overlay: config/litellm.cheaperinference.yaml (see
 # docs/providers/cheaperinference.md). Prefixes (openrouter/, gemini/, …) are
 # BYOK/diagnostics — do not put them on house pins.
 
 default_tier: cheap
 
-openrouter_defaults:
-  allowed_models: "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*,perplexity/*"
-  cost_quality_tradeoff: 10
-
 tiers:
   cheap:
-    openrouter:
-      allowed_models: "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*,perplexity/*"
-      cost_quality_tradeoff: 10
-    # Phase pools = bare slugs (function tools). ``:online`` is web-search-only and lives
-    # in ``web_search_models``; grounding is a separate pre-pass injected into the prompt.
+    # Phase pools = bare slugs (function tools). Web grounding is a separate
+    # first-party digisearch web_search pre-pass injected into the prompt.
     allowed_models:
       # House CI-only (#3660): every pin must map to the Cheaper Inference catalog
       # (see digillm ``_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE``). meta-llama/* is not
       # on CI — gemini-3.7-flash (native vision, gate-proven) carries the second
       # slot instead. flash-lite stays OUT of phase pools: lite variants have a
-      # loose/empty-JSON record under strict json_schema (#802) — it synthesizes
-      # grounding prose only (``web_search_models`` below).
+      # loose/empty-JSON record under strict json_schema (#802).
       extraction:
         - "deepseek/deepseek-v4-flash"
         - "google/gemini-3.7-flash"
@@ -78,18 +71,8 @@ tiers:
         - "google/gemini-3.7-flash"
       reasoning:
         - "deepseek/deepseek-v4-flash"
-    web_search_models:
-      # House CI-only (#3660): CI synthesis models, NOT sonar. perplexity/sonar
-      # and ``:online`` pins are not on CI and fail closed there — retrieval stays
-      # in-house (digisearch / live_search / data tools) and this pre-pass
-      # synthesizes on CI (primary gemini-3.1-flash-lite, alt deepseek-v4-flash).
-      - "google/gemini-3.1-flash-lite"
-      - "deepseek/deepseek-v4-flash"
 
   balanced:
-    openrouter:
-      allowed_models: "deepseek/*,google/*,openai/gpt-5.6-luna*"
-      cost_quality_tradeoff: 7
     allowed_models:
       # House CI-only (#3660): CI-mapped pins only (see digillm
       # ``_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE``). Dropped maverick / grok /
@@ -108,15 +91,8 @@ tiers:
         - "deepseek/deepseek-v4-pro"
         - "google/gemini-3.7-flash"
         - "openai/gpt-5.6-luna"
-    web_search_models:
-      # Same CI synthesis pattern as cheap (no sonar / :online).
-      - "google/gemini-3.1-flash-lite"
-      - "deepseek/deepseek-v4-flash"
 
   quality:
-    openrouter:
-      allowed_models: "deepseek/*,google/*,openai/gpt-5.6-*"
-      cost_quality_tradeoff: 0
     allowed_models:
       # House CI-only (#3660): capability tier still CI-mapped only. anthropic /
       # grok / sonar are not on the CI catalog and raise there.
@@ -132,9 +108,6 @@ tiers:
         - "deepseek/deepseek-v4-pro"
         - "openai/gpt-5.6-sol"
         - "google/gemini-3.7-flash"
-    web_search_models:
-      - "google/gemini-3.1-flash-lite"
-      - "deepseek/deepseek-v4-flash"
 
 phase_capabilities:
   macro: research
@@ -152,6 +125,7 @@ phase_capabilities:
   master-digest: reasoning
   monthly-digest: reasoning
   portfolio/pm-direction: reasoning
+  portfolio/coverage/director: reasoning
   beliefs-distillation: research
 
 phase_capability_prefixes:

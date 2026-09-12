@@ -31,6 +31,7 @@ from digiquant.dashboard.research_retrieval.cache import ResearchCache, _parse_r
 from digiquant.dashboard.research_retrieval.context import ContextItemKind, ContextManifest
 from digiquant.dashboard.research_retrieval.store import LoadedResearchState
 from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.ops.checkpoint_archive import read_archived_document
 from digiquant.research.decision_log import fetch_recent_lessons
 from digiquant.research.supabase_io import SupabaseClient
 from digiquant.supabase_retry import run_with_supabase_retry
@@ -162,11 +163,38 @@ def _resolve_document_key(
     return None
 
 
+def _hydrate_archived_row(
+    client: SupabaseClient,
+    row: dict[str, Any],
+    *,
+    store: Any | None,
+) -> dict[str, Any]:
+    """Read one NULL-payload row through the archive pointer (#3792).
+
+    ``archive_documents`` NULLs the payload cell of non-latest versions; the
+    row still resolves the version, so hydrate it from R2 instead of
+    degrading the caller to missing. Pointer-miss keeps the row as-is.
+    """
+    if row.get("payload") is not None or not row.get("document_key") or not row.get("date"):
+        return row
+    payload = read_archived_document(
+        client,
+        store,
+        workspace_id=str(house_workspace_id()),
+        document_key=str(row["document_key"]),
+        date_str=str(row["date"]),
+    )
+    if payload is None:
+        return row
+    return {**row, "payload": payload}
+
+
 def _query_documents_row(
     client: SupabaseClient,
     *,
     document_key: str,
     as_of_date: date,
+    store: Any | None = None,
 ) -> tuple[dict[str, Any] | None, date | None]:
     exact_resp = _eq_house(
         client.table("documents")
@@ -177,7 +205,7 @@ def _query_documents_row(
     ).execute()
     exact_rows = list(getattr(exact_resp, "data", None) or [])
     if exact_rows:
-        row = exact_rows[0]
+        row = _hydrate_archived_row(client, exact_rows[0], store=store)
         row_date = _parse_row_date(row.get("date"))
         return row, row_date
 
@@ -192,7 +220,7 @@ def _query_documents_row(
     fallback_rows = list(getattr(fallback_resp, "data", None) or [])
     if not fallback_rows:
         return None, None
-    row = fallback_rows[0]
+    row = _hydrate_archived_row(client, fallback_rows[0], store=store)
     return row, _parse_row_date(row.get("date"))
 
 
@@ -345,6 +373,7 @@ def query_research(
     phase: RetrievalPhase = "research_edit",
     cache: ResearchCache | None = None,
     retrieval_pin: RetrievalQueryPin | None = None,
+    store: Any | None = None,
 ) -> dict[str, Any]:
     """Fetch a research document or digest row with prior_published date semantics."""
     key = _resolve_document_key(document_key=document_key, segment=segment)
@@ -406,6 +435,7 @@ def query_research(
             client,
             document_key=key,
             as_of_date=effective_as_of,
+            store=store,
         )
         doc_payload = doc_row.get("payload") if isinstance(doc_row, dict) else None
         return doc_row, doc_date, "documents", doc_payload

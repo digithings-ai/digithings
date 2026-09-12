@@ -10,4 +10,4 @@
 | [`docs/SYSTEM-SCORECARD.md`](SYSTEM-SCORECARD.md) | Health / maturity snapshot (dated) |
 | [`docs/agentic/PLATFORMS.md`](agentic/PLATFORMS.md) | IDE and agent platform setup |
 
-The former long-form “review” (inventory diagrams, legacy Vite tree, extended schema ASCII) was **folded into** `docs/agentic/ARCHITECTURE.md` and trimmed so the migration baseline does not carry duplicate narratives. Database details: `supabase/migrations/` and generated types in `frontend/lib/database.types.ts`.
+The former long-form “review” (inventory diagrams, legacy Vite tree, extended schema ASCII) was **folded into** `docs/agentic/ARCHITECTURE.md` and trimmed so the migration baseline does not carry duplicate narratives. Database details: `supabase/migrations/` and generated types in `cloudflare/lib/database.types.ts`.

@@ -48,7 +48,7 @@ vdo = _load()
         "ARCHITECTURE.md",
         "digigraph/AGENTS.md",
         "digiquant/ARCHITECTURE.md",
-        "frontend/digichat/CLAUDE.md",
+        "cloudflare/digichat/CLAUDE.md",
     ],
 )
 def test_is_allowed_permits_doc_only_paths(path: str) -> None:
@@ -62,7 +62,7 @@ def test_is_allowed_permits_doc_only_paths(path: str) -> None:
         ".github/workflows/agent-docs-automerge.yml",
         "SECURITY.md",
         "docs/scoring/SECURITY.md",
-        "frontend/digichat/SECURITY.md",
+        "cloudflare/digichat/SECURITY.md",
         "digigraph/src/digigraph/server.py",
         "scripts/verify_doc_only_pr.py",
         "website/app.js",

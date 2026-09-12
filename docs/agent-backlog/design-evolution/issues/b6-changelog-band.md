@@ -1,16 +1,16 @@
 ## Goal
 
-Build **`ChangelogBand`** — Cursor-style dated release rows for marketing landings ([`cursor-full.md`](../../../../frontend/digiweb/design/references/scans/cursor-full.md)).
+Build **`ChangelogBand`** — Cursor-style dated release rows for marketing landings ([`cursor-full.md`](../../../../cloudflare/digiweb/design/references/scans/cursor-full.md)).
 
 ## Component
 
-- [x] cross-cutting (`frontend/digiweb/design/`)
+- [x] cross-cutting (`cloudflare/digiweb/design/`)
 
 ## Acceptance Criteria
 
 - [ ] CSS `.changelog-band` — section with mono date column + title + optional tag (`release`, `fix`)
 - [ ] Data shape documented (JSON or TS type): `{ date, version?, title, href, tag? }[]`
-- [ ] Static example JSON in `frontend/digiweb/design/` or consumed from `CHANGELOG.md` excerpt (document source of truth)
+- [ ] Static example JSON in `cloudflare/digiweb/design/` or consumed from `CHANGELOG.md` excerpt (document source of truth)
 - [ ] "View all releases →" footer link pattern
 - [ ] Responsive: stacked on mobile, row layout on desktop
 - [ ] Demo with 3–5 entries in smoke page
@@ -18,13 +18,13 @@ Build **`ChangelogBand`** — Cursor-style dated release rows for marketing land
 ## Test Requirements
 
 ```bash
-cd frontend/digithings-web && npm run build
+cd cloudflare/digithings-web && npm run build
 ```
 
 ## Documentation to Update
 
-- [ ] `frontend/digiweb/design/site/README.md`
-- [ ] `frontend/digiweb/design/EVOLUTION.md`
+- [ ] `cloudflare/digiweb/design/site/README.md`
+- [ ] `cloudflare/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

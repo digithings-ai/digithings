@@ -50,13 +50,15 @@ def _resolve_openwebui_format(req: ChatCompletionRequest, request: Request) -> b
 
 
 def _resolve_allowed_tools_chat(req: ChatCompletionRequest, request: Request) -> list[str] | None:
-    """Tool allowlist from JSON body or X-Allowed-Tools header. None = use project config / DIGI_ALLOWED_TOOLS."""
+    """Tool allowlist from JSON body or X-Allowed-Tools header. None = use project config / DIGI_ALLOWED_TOOLS.
+
+    Session disables travel as WorkflowRequest.disabled_tools (X-Digi-Disabled-Tools),
+    applied *after* that allowlist in tool_policy so they cannot escalate past DIGI_ALLOWED_TOOLS.
+    """
     if req.allowed_tools is not None:
         return req.allowed_tools
     h = (request.headers.get("X-Allowed-Tools") or "").strip()
-    if h:
-        return [p.strip() for p in h.split(",") if p.strip()]
-    return None
+    return [p.strip() for p in h.split(",") if p.strip()] if h else None
 
 
 def _resolve_require_tool_calls_chat(req: ChatCompletionRequest, request: Request) -> bool | None:
@@ -77,10 +79,25 @@ def _resolve_require_tool_calls_chat(req: ChatCompletionRequest, request: Reques
 
 def _resolve_force_tool_chat(req: ChatCompletionRequest, request: Request) -> str | None:
     """Locate tool to inject from JSON body or X-Digi-Force-Tool. None = model-driven."""
+    from digigraph.orchestration.mcp_client import (
+        merge_mcp_servers,
+        parse_mcp_servers_json,
+        resolve_mcp_force_id,
+    )
     from digigraph.retrieval import resolve_force_tool
 
-    return resolve_force_tool(req.force_tool) or resolve_force_tool(
+    aliased = resolve_force_tool(req.force_tool) or resolve_force_tool(
         request.headers.get("X-Digi-Force-Tool")
+    )
+    if aliased:
+        return aliased
+    servers = merge_mcp_servers(
+        parse_mcp_servers_json(
+            request.headers.get("X-Digi-Mcp-Servers") or request.headers.get("x-digi-mcp-servers")
+        )
+    )
+    return resolve_mcp_force_id(req.force_tool, servers) or resolve_mcp_force_id(
+        request.headers.get("X-Digi-Force-Tool"), servers
     )
 
 

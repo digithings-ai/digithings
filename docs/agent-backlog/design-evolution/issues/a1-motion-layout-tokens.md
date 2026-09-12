@@ -1,10 +1,10 @@
 ## Goal
 
-Add Graphite-inspired motion and layout tokens to `frontend/digiweb/design/tokens.css` so all surfaces share section rhythm, product-frame sizing, and glide easing — per [`EVOLUTION.md` §5](../../../../frontend/digiweb/design/EVOLUTION.md).
+Add Graphite-inspired motion and layout tokens to `cloudflare/digiweb/design/tokens.css` so all surfaces share section rhythm, product-frame sizing, and glide easing — per [`EVOLUTION.md` §5](../../../../cloudflare/digiweb/design/EVOLUTION.md).
 
 ## Component
 
-- [x] cross-cutting (`frontend/digiweb/design/`)
+- [x] cross-cutting (`cloudflare/digiweb/design/`)
 
 ## Acceptance Criteria
 
@@ -17,8 +17,8 @@ Add Graphite-inspired motion and layout tokens to `frontend/digiweb/design/token
   - `--duration-reveal: 0.6s`
   - `--duration-hover: 0.18s`
 - [ ] Existing `--transition-speed` / `--transition-ease` unchanged (no breaking consumers)
-- [ ] `frontend/digiweb/design/README.md` documents new tokens in Motion + Spacing sections
-- [ ] `frontend/digiweb/design/EVOLUTION.md` Phase A checkbox for tokens marked done
+- [ ] `cloudflare/digiweb/design/README.md` documents new tokens in Motion + Spacing sections
+- [ ] `cloudflare/digiweb/design/EVOLUTION.md` Phase A checkbox for tokens marked done
 - [ ] `npm run build` (or workspace equivalent) passes for `digithings-web` and `digiquant-web`
 
 ## Test Requirements
@@ -28,14 +28,14 @@ Add Graphite-inspired motion and layout tokens to `frontend/digiweb/design/token
 
 **Smoke:**
 ```bash
-cd frontend/digithings-web && npm run build
-cd frontend/digiquant-web && npm run build
+cd cloudflare/digithings-web && npm run build
+cd cloudflare/digiquant-web && npm run build
 ```
 
 ## Documentation to Update
 
-- [ ] `frontend/digiweb/design/README.md` — Motion & layout token tables
-- [ ] `frontend/digiweb/design/EVOLUTION.md` — Phase A checkbox
+- [ ] `cloudflare/digiweb/design/README.md` — Motion & layout token tables
+- [ ] `cloudflare/digiweb/design/EVOLUTION.md` — Phase A checkbox
 
 ## Scoring Targets
 

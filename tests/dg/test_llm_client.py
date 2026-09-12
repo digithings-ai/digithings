@@ -241,38 +241,50 @@ def test_llm_client_wires_digillm_detailed_observer() -> None:
 
 
 @pytest.mark.unit
-class TestGroundingWrappers:
-    """web_search/openrouter_web_search/x_search synthesize via plain completion."""
+class TestDigifetchWebSearch:
+    """digifetch_web_search is tool-only: raises on any failure, never None."""
 
-    def _resp(self, content: str) -> MagicMock:
-        resp = MagicMock()
-        resp.choices = [MagicMock(message=MagicMock(content=content))]
-        return resp
+    def test_raises_on_tool_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from digigraph.orchestration import web_search_tools as ws_mod
 
-    def test_extracts_citations_from_cited_summary(self) -> None:
-        with (
-            patch.object(llm_client, "resolve_request_model", return_value="m"),
-            patch.object(
-                llm_client,
-                "_digillm_completion",
-                return_value=self._resp("fact [s](https://e.test/x)"),
-            ) as comp,
+        monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", lambda *a, **k: {})
+        with pytest.raises(RuntimeError):
+            llm_client.digifetch_web_search("model", "etf flows")
+
+    def test_returns_summary_and_doc_ids(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from digigraph.orchestration import web_search_tools as ws_mod
+
+        def fake_tool(query: str, **kwargs: object) -> dict[str, object]:
+            assert query == "etf flows"
+            return {
+                "content": "md",
+                "results": [
+                    {"doc_id": "https://a.com/1", "content": "first snippet"},
+                    {"doc_id": "https://b.com/2", "content": "second snippet"},
+                ],
+            }
+
+        monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", fake_tool)
+        summary, urls = llm_client.digifetch_web_search("model", "etf flows")
+        assert urls == ["https://a.com/1", "https://b.com/2"]
+        assert "https://a.com/1" in summary
+        assert "first snippet" in summary
+
+    def test_deleted_synthesis_entries_import_error(self) -> None:
+        """Direct calls to deleted names fail loudly — no shims."""
+        for name in (
+            "web_search",
+            "openrouter_web_search",
+            "x_search",
+            "_ground_via_completion",
+            "_urls_from_grounding_text",
+            "_INLINE_URL_RE",
+            "_MD_LINK_URL_RE",
         ):
-            out = llm_client.web_search("m", "query")
-        assert out == ("fact [s](https://e.test/x)", ["https://e.test/x"])
-        assert comp.call_args[1]["usage_kind"] == "web_search"
-
-    def test_fail_soft_none_on_provider_error(self) -> None:
-        with (
-            patch.object(llm_client, "resolve_request_model", return_value="m"),
-            patch.object(llm_client, "_digillm_completion", side_effect=RuntimeError("down")),
-        ):
-            assert llm_client.openrouter_web_search("m", "query") is None
-            assert llm_client.x_search("m", "query") is None
-
-    def test_empty_content_returns_none(self) -> None:
-        with (
-            patch.object(llm_client, "resolve_request_model", return_value="m"),
-            patch.object(llm_client, "_digillm_completion", return_value=self._resp("   ")),
-        ):
-            assert llm_client.web_search("m", "query") is None
+            assert not hasattr(llm_client, name), name
+        with pytest.raises(ImportError):
+            from digigraph.llm_client import web_search  # noqa: F401
+        with pytest.raises(ImportError):
+            from digigraph.llm_client import openrouter_web_search  # noqa: F401
+        with pytest.raises(ImportError):
+            from digigraph.llm_client import x_search  # noqa: F401

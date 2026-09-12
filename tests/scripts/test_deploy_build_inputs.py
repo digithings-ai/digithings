@@ -3,9 +3,9 @@
 Both static sites deploy through Cloudflare Pages running one build script, and each
 site's `Deploy: … build check` workflow re-runs that script on PRs matching its
 ``paths:`` filter. Those filters are maintained by hand against a moving import graph and
-fell behind it: `frontend/digithings-web` took a dependency on `@digithings/digichat-ui`
+fell behind it: `cloudflare/digithings-web` took a dependency on `@digithings/digichat-ui`
 in #1384, and the digithings.ai filter was never updated. PR #1490 then edited
-`frontend/digichat-ui/src/DigiChatSession.tsx` — a file that site renders — alongside
+`cloudflare/digichat-ui/src/DigiChatSession.tsx` — a file that site renders — alongside
 digichat-only changes, matched no glob in that filter, and ran no deploy build check at
 all. PR #1859 repeated it.
 
@@ -69,7 +69,7 @@ def _workspace_packages() -> dict[str, tuple[str, set[str]]]:
     """Map every workspace package name to its repo-relative dir and workspace deps.
 
     Globbed from the root manifest's own ``workspaces`` patterns rather than a hardcoded
-    list, so `frontend/digiweb/brand` and `frontend/digiweb/scripts` — directories with no
+    list, so `cloudflare/digiweb/brand` and `cloudflare/digiweb/scripts` — directories with no
     package.json, and therefore not workspaces — are excluded for the right reason.
     """
     root: dict[str, Any] = json.loads((REPO_ROOT / "package.json").read_text(encoding="utf-8"))
@@ -139,6 +139,17 @@ def _build_input_dirs(build_script: Path) -> set[str]:
     return closure
 
 
+#: The thin cron Worker deploys from a push-gated workflow with no pull_request
+#: trigger, so _trigger_paths (which reads on.pull_request.paths) cannot see it.
+_WORKER_DEPLOY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "deploy-digithings-cron.yml"
+
+
+def _push_paths(workflow: Path) -> list[str]:
+    """The `on.push.paths` globs of a push-gated deploy workflow."""
+    parsed: dict[Any, Any] = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+    return list(parsed[True].get("push", {}).get("paths", []))
+
+
 def _trigger_paths(workflow: Path) -> list[str]:
     # PyYAML resolves a bare top-level `on:` key to the boolean True (YAML 1.1), so the
     # trigger block is not reachable under the string "on".
@@ -169,11 +180,11 @@ def test_every_workspace_manifest_is_watched_by_some_filter() -> None:
 
     The root ``npm install`` resolves all eight workspace manifests before either site
     compiles, so a bad range in any of them fails both production builds. Seven were
-    reached by some filter; ``frontend/digiweb/reference/package.json`` was in none at
+    reached by some filter; ``cloudflare/digiweb/reference/package.json`` was in none at
     all, and both deploy checks now name it.
 
     Naming it fixed the instance. This fixes the class: the set of workspaces moves —
-    ``frontend/digiweb/reference`` was itself scaffolded and then moved into place — and
+    ``cloudflare/digiweb/reference`` was itself scaffolded and then moved into place — and
     a ninth one lands unwatched by default, reopening the identical hole with no test
     failing. So assert the union, not a list.
 
@@ -181,7 +192,7 @@ def test_every_workspace_manifest_is_watched_by_some_filter() -> None:
     that runs a root install. The strong version would have to decide whether a lane's
     ``npm ci`` is equivalent cover to a build's ``npm install`` — they fail on different
     conditions — and that judgement does not belong in an assertion. This is a floor:
-    ``frontend/digichat``'s second cover is ``ruff_and_scripts``, which installs nothing.
+    ``cloudflare/digichat``'s second cover is ``ruff_and_scripts``, which installs nothing.
     A floor that fails on a new orphan is worth more than a ceiling nobody can state.
     """
     filters: dict[str, Any] = yaml.safe_load(
@@ -189,6 +200,10 @@ def test_every_workspace_manifest_is_watched_by_some_filter() -> None:
     )
     watched = {glob for globs in filters.values() if isinstance(globs, list) for glob in globs}
     watched.update(glob for p in DEPLOY_CHECKS for glob in _trigger_paths(p.values[0]))
+    # The cron Worker deploys from a push-gated workflow (no pull_request trigger),
+    # so its paths live under on.push.paths — a third cover the union must count,
+    # or every new push-deployed workspace reopens the orphan hole.
+    watched.update(_push_paths(_WORKER_DEPLOY_WORKFLOW))
 
     orphans = sorted(
         f"{directory}/package.json"
@@ -210,9 +225,9 @@ def test_digichat_ui_is_a_digithings_build_input_but_not_a_digiquant_one() -> No
     """
     digithings = _closure_for("digithings.ai")
     digiquant = _closure_for("digiquant.io")
-    assert "frontend/digichat-ui" in digithings
-    assert "frontend/digichat-ui" not in digiquant
+    assert "cloudflare/digichat-ui" in digithings
+    assert "cloudflare/digichat-ui" not in digiquant
     # The walk follows dependencies, not dependents: `digichat` consumes digichat-ui but is
     # built by neither site, so it must not be pulled in. Each check watches its own inputs,
     # never all eight workspaces.
-    assert "frontend/digichat" not in digithings | digiquant
+    assert "cloudflare/digichat" not in digithings | digiquant

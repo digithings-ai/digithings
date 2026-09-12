@@ -5,7 +5,7 @@ description: digibase outbound clients — bounded httpx factories, connector DT
 tags: [digibase, connectors, http-client, supabase]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
+    at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-d8b3f9cb7f77d6aa23c2355e
     resource: repo://digibase/src/digibase/connectors/base.py

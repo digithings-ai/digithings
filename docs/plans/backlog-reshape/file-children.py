@@ -37,7 +37,7 @@ TASKS = [
             "Playwright/Vitest smoke test: mount the page against a fixture snapshot and assert it renders.",
             "Empty-state handling: if snapshot is missing or stale > 48h, user sees a clear 'stale' banner.",
         ],
-        "docs": "apps/digiquant-atlas/frontend/README.md; frontend README after move to frontend/atlas/.",
+        "docs": "apps/digiquant-atlas/cloudflare/README.md; frontend README after move to cloudflare/atlas/.",
     },
     {
         "parent": 295, "slug": "295-alerting",
@@ -134,7 +134,7 @@ TASKS = [
             "On submit, profile is persisted and user returns to the main chat.",
             "Vitest/Playwright smoke test on the review screen.",
         ],
-        "docs": "frontend/digichat/README.md.",
+        "docs": "cloudflare/digichat/README.md.",
     },
     {
         "parent": 296, "slug": "296-revision",
@@ -147,7 +147,7 @@ TASKS = [
             "Edits bump `profile_version` and trigger JWT refresh on next request.",
             "Unit test: edit → persist → JWT claim version increments.",
         ],
-        "docs": "frontend/digichat/README.md.",
+        "docs": "cloudflare/digichat/README.md.",
     },
     {
         "parent": 296, "slug": "296-atlas-reads-profile",

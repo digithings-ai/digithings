@@ -24,6 +24,19 @@ LITELLM_YAMLS = (
 )
 EVIL_BASE = "https://evil.example/v1"
 
+# OpenRouter house routes retired by #3788 / #3849: they were billable but unused by
+# digiquant pools, so they were deleted from config/litellm.yaml. They must not
+# reappear in the base config, the CI overlay, or a merge of the two.
+_RETIRED_OPENROUTER_ROUTES = frozenset(
+    {
+        "meta-llama/llama-4-maverick",
+        "perplexity/sonar",
+        "anthropic/claude-sonnet-5",
+        "x-ai/grok-4.3",
+        "x-ai/grok-4.6",
+    }
+)
+
 
 def _model_names(path: Path) -> set[str]:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -49,7 +62,6 @@ def _digiquant_house_slugs() -> set[str]:
     for tier in (digiquant.get("tiers") or {}).values():
         for pool in (tier.get("allowed_models") or {}).values():
             slugs.update(str(m) for m in (pool or []))
-        slugs.update(str(m) for m in (tier.get("web_search_models") or []))
     modes = yaml.safe_load((CONFIG / "model_modes.yaml").read_text(encoding="utf-8"))
     slugs.update(str(m) for m in (modes.get("phase_models") or {}).values())
     dogfood = yaml.safe_load((CONFIG / "dogfood-digiproject.yaml").read_text(encoding="utf-8"))
@@ -229,22 +241,19 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
     names = _model_names(overlay)
     expected = {
         "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v4-flash-0731",
         "deepseek/deepseek-v4-pro",
         "google/gemini-3.7-flash",
         "google/gemini-3.1-flash-lite",
         "openai/gpt-5.6-luna",
         "openai/gpt-5.6-sol",
+        "openai/gpt-oss-120b",
+        "z-ai/glm-5.3-flash",
     }
     missing = sorted(expected - names)
     assert not missing, f"CI overlay missing house slugs: {missing}"
     # Must not claim OpenRouter-only pins
-    forbidden = {
-        "meta-llama/llama-4-maverick",
-        "perplexity/sonar",
-        "anthropic/claude-sonnet-5",
-        "x-ai/grok-4.3",
-        "x-ai/grok-4.6",
-    }
+    forbidden = _RETIRED_OPENROUTER_ROUTES
     assert not (names & forbidden), names & forbidden
     data = yaml.safe_load(overlay.read_text(encoding="utf-8"))
     for entry in data["model_list"]:
@@ -252,6 +261,48 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
         assert params.get("api_key") == "os.environ/CHEAPERINFERENCE_API_KEY", entry["model_name"]
         assert params.get("api_base") == "os.environ/CHEAPERINFERENCE_API_BASE", entry["model_name"]
         assert str(params.get("model", "")).startswith("openai/"), entry["model_name"]
+
+
+# Cheap CI house slugs for the default product picker. Must exist on both the
+# overlay and ``_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE``. Never OpenRouter ``:free``.
+_PRODUCT_CI_CHEAP_PICKER = (
+    "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash-0731",
+    "openai/gpt-oss-120b",
+    "z-ai/glm-5.3-flash",
+)
+
+
+def _assert_ci_only_product_picker(models: dict) -> None:
+    from digillm.client import cheaperinference_bare_id_for_house_slug
+
+    overlay_names = _model_names(CONFIG / "litellm.cheaperinference.yaml")
+    available = list(models["available"])
+    assert models["allowPicker"] is True
+    assert models["default"] == "deepseek/deepseek-v4-flash"
+    assert models["default"] in available
+    assert available == list(_PRODUCT_CI_CHEAP_PICKER)
+    assert not any(str(m).endswith(":free") for m in available)
+    missing_ci = sorted(set(available) - overlay_names)
+    assert not missing_ci, f"picker ids missing from CI overlay: {missing_ci}"
+    for slug in available:
+        assert cheaperinference_bare_id_for_house_slug(slug), slug
+
+
+def test_digichat_public_picker_is_ci_cheap_only() -> None:
+    """digithings.ai / dashboard pickers: CI cheap slugs only — never OpenRouter."""
+    embed = yaml.safe_load(
+        (
+            REPO_ROOT / "cloudflare/digichat/config/examples/digithings-ai-embed.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    _assert_ci_only_product_picker(embed["hosts"]["digithings.ai"]["models"])
+    dashboard = yaml.safe_load(
+        (
+            REPO_ROOT / "cloudflare/digichat/config/examples/dashboard-modal.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    _assert_ci_only_product_picker(dashboard["deployment"]["models"])
 
 
 def test_cheaperinference_overlay_has_no_bare_api_base() -> None:
@@ -278,7 +329,7 @@ def test_cheaperinference_overlay_has_no_bare_api_base() -> None:
             )
 
 
-def test_merge_litellm_cheaperinference_replaces_mapped_keeps_openrouter() -> None:
+def test_merge_litellm_cheaperinference_replaces_mapped_drops_retired() -> None:
     from scripts.merge_litellm_cheaperinference import merge
 
     merged = merge(CONFIG / "litellm.yaml", CONFIG / "litellm.cheaperinference.yaml")
@@ -286,10 +337,8 @@ def test_merge_litellm_cheaperinference_replaces_mapped_keeps_openrouter() -> No
     flash = by_name["deepseek/deepseek-v4-flash"]["litellm_params"]
     assert flash["api_key"] == "os.environ/CHEAPERINFERENCE_API_KEY"
     assert flash["model"] == "openai/deepseek-v4-flash"
-    sonar = by_name["perplexity/sonar"]["litellm_params"]
-    assert sonar["api_key"] == "os.environ/OPENROUTER_API_KEY"
-    mav = by_name["meta-llama/llama-4-maverick"]["litellm_params"]
-    assert mav["api_key"] == "os.environ/OPENROUTER_API_KEY"
+    resurrected = sorted(_RETIRED_OPENROUTER_ROUTES & by_name.keys())
+    assert not resurrected, f"merge resurrected retired OpenRouter routes: {resurrected}"
 
 
 def test_cheaperinference_overlay_merges_when_keyed() -> None:
@@ -311,9 +360,9 @@ def test_cheaperinference_overlay_merges_when_keyed() -> None:
         assert flash["api_base"] == "os.environ/CHEAPERINFERENCE_API_BASE"
         assert flash["model"].startswith("openai/"), flash["model"]
 
-        # OpenRouter-only models should keep their original creds
-        sonar = by_name["perplexity/sonar"]["litellm_params"]
-        assert sonar["api_key"] == "os.environ/OPENROUTER_API_KEY"
+        # Retired OpenRouter-only routes must stay gone (never resurrected by merge)
+        resurrected = sorted(_RETIRED_OPENROUTER_ROUTES & by_name.keys())
+        assert not resurrected, f"retired routes resurrected: {resurrected}"
 
         # gpt-5.6-luna should also be remapped to CI
         luna = by_name["openai/gpt-5.6-luna"]["litellm_params"]

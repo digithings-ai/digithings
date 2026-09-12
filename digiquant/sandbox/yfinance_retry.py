@@ -34,7 +34,7 @@ def download_with_retry(
                 f"yfinance.download returned empty data for {tickers!r} "
                 f"(attempt {attempt}/{max_attempts})"
             )
-        except Exception as exc:  # noqa: BLE001 — surface after retries
+        except Exception as exc:
             last_err = exc
         if attempt < max_attempts:
             time.sleep(base_delay_s * (2 ** (attempt - 1)))
@@ -57,10 +57,9 @@ def history_with_retry(
             if frame is not None and getattr(frame, "empty", False) is False:
                 return frame
             last_err = RuntimeError(
-                f"Ticker({ticker!r}).history returned empty data "
-                f"(attempt {attempt}/{max_attempts})"
+                f"Ticker({ticker!r}).history returned empty data (attempt {attempt}/{max_attempts})"
             )
-        except Exception as exc:  # noqa: BLE001 — surface after retries
+        except Exception as exc:
             last_err = exc
         if attempt < max_attempts:
             time.sleep(base_delay_s * (2 ** (attempt - 1)))

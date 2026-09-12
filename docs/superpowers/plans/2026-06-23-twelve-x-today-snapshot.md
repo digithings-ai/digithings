@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Olympus app dir: `frontend/olympus`. All paths below are relative to it.
+- Olympus app dir: `cloudflare/olympus`. All paths below are relative to it.
 - Every twelve-x component is a client component — first line `'use client';`.
 - Reuse existing tokens/classes: `glass-card`, `text-text-primary/secondary/muted`, `border-border-subtle`, `bg-bg-secondary`, `.fin-green/.fin-red/.fin-amber/.fin-blue`; sign semantics green=bullish/long, red=bearish/short, amber=watch.
 - Data access goes through the existing `querySupabase(...)` retry wrapper and the `twelveXSupabase` client; gate every fetcher on `isTwelveXConfigured()` and return `[]`/`null` when unconfigured (match the existing fetchers exactly).
@@ -788,12 +788,12 @@ git commit -m "feat(twelve-x): compose Today snapshot (A1) + briefs-index view +
 MAIN=/Users/chrisstefan/Code/digithings
 WT=/Users/chrisstefan/Code/digithings/.claude/worktrees/twelve-x-today-redesign
 [ -e "$WT/node_modules" ] || ln -s "$MAIN/node_modules" "$WT/node_modules"
-[ -e "$WT/frontend/olympus/node_modules" ] || ln -s "$MAIN/frontend/olympus/node_modules" "$WT/frontend/olympus/node_modules"
+[ -e "$WT/cloudflare/olympus/node_modules" ] || ln -s "$MAIN/cloudflare/olympus/node_modules" "$WT/cloudflare/olympus/node_modules"
 ```
 
 - [ ] **Step 2: Typecheck (no new errors).**
 
-Run (from `frontend/olympus`): `npx --no-install tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'components/twelve-x/|lib/twelve-x/' | grep -v security-headers || echo CLEAN`
+Run (from `cloudflare/olympus`): `npx --no-install tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'components/twelve-x/|lib/twelve-x/' | grep -v security-headers || echo CLEAN`
 Expected: `CLEAN`.
 
 - [ ] **Step 3: Lint twelve-x.**
@@ -816,7 +816,7 @@ Expected: "Compiled successfully", TypeScript clean, `/twelve-x` prerendered.
 - [ ] **Step 7: Final commit (if any fixups).**
 
 ```bash
-git add -A frontend/olympus/components/twelve-x frontend/olympus/lib/twelve-x
+git add -A cloudflare/olympus/components/twelve-x cloudflare/olympus/lib/twelve-x
 git commit -m "fix(twelve-x): Today snapshot render fixups from verification" || echo "nothing to fix"
 ```
 

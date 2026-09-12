@@ -30,6 +30,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pipeline-digiquant.yml"
+PIPELINE_CONFIG = REPO_ROOT / ".github" / "digiquant-pipeline.yml"
 CHAIN = REPO_ROOT / "digiquant" / "src" / "digiquant" / "portfolio" / "chain.py"
 DIAGNOSTICS = REPO_ROOT / "digiquant" / "src" / "digiquant" / "research" / "diagnostics.py"
 MIGRATION = (
@@ -217,3 +218,38 @@ class TestNoOpenrouterFallbackModels:
         assert not hits, (
             f"OPENROUTER_FALLBACK_MODELS must not appear in pipeline-digiquant.yml; found on {hits}"
         )
+
+
+class TestMarketDataCutoverGuardrails:
+    """#3780 final review (Critical): safe merge default + supervised-flip wiring.
+
+    The live backfill has NOT run yet (R2 is empty), so merging with the flag
+    at ``r2`` would break the daily pipeline on merge: the flag must read
+    ``supabase`` until the supervised post-merge flip. The flip itself is only
+    safe when the research job already carries the four R2 secrets (mirroring
+    pipeline-checkpoint-archive.yml), so both halves are pinned here.
+    """
+
+    _R2_SECRETS = (
+        "R2_ACCOUNT_ID",
+        "R2_BUCKET",
+        "R2_ACCESS_KEY_ID",
+        "R2_SECRET_ACCESS_KEY",
+    )
+
+    def test_pipeline_flag_defaults_to_supabase(self) -> None:
+        cfg = yaml.safe_load(PIPELINE_CONFIG.read_text(encoding="utf-8"))
+        assert cfg["env"]["DIGIQUANT_MARKET_DATA_BACKEND"] == "supabase", (
+            "R2 is empty until the live backfill runs: merging with the flag at "
+            "`r2` breaks the daily pipeline. Flip to `r2` only post-merge, supervised."
+        )
+
+    def test_research_job_wires_r2_secrets(self) -> None:
+        doc = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+        env = doc["jobs"]["run"]["env"]
+        for name in self._R2_SECRETS:
+            assert env.get(name) == "${{ secrets." + name + " }}", (
+                f"{name} must be wired from GitHub secrets into the research job env "
+                "(mirror pipeline-checkpoint-archive.yml) or the supervised flip to "
+                "`r2` has no credentials to read with"
+            )

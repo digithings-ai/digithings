@@ -1,8 +1,8 @@
-# DigiChat Language Selector Implementation Plan
+# digichat Language Selector Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a top-bar language dropdown to DigiChat's embed surface (digithings.ai/chat, OCC, DataTap) that makes the assistant respond in the visitor's chosen language, working identically on both the digigraph backend and the Foundry/DataTap backend.
+**Goal:** Add a top-bar language dropdown to digichat's embed surface (digithings.ai/chat, OCC, DataTap) that makes the assistant respond in the visitor's chosen language, working identically on both the digigraph backend and the Foundry/DataTap backend.
 
 **Architecture:** A curated 5-language list lives in parallel TS/Python constant modules. The browser sends the choice as an `X-Digi-Language` header (same transport pattern as `X-BYOK-Key`); `route.ts` reads it once and threads it to whichever backend adapter is active. digigraph declares a new `response_language` field on `WorkflowRequest`/`WorkflowState` and appends a short directive to whichever `system_prompt` `research_node` already resolved. Foundry has no system-prompt slot, so its adapter prepends a bracketed directive to the per-turn `input` text instead.
 
@@ -24,7 +24,7 @@
 - Default-on: `showLanguageSelector` is `true` for any real registered tenant unless explicitly set to `false`; the *fallback* gated config (`DEFAULT_EMBED_TENANT_CONFIG`, used when a tenant can't be resolved) stays `false`, matching that config's existing "fail restrictive" rule.
 - Session-only client state: no `localStorage`. Seeded once from `navigator.language` on mount; resets to a fresh auto-detect on reload.
 - Design reference: `docs/superpowers/specs/2026-08-10-digichat-language-selector-design.md`. Issue: [#2103](https://github.com/digithings-ai/digithings/issues/2103).
-- Branching: this feature touches both `digigraph` and `frontend/digichat`. Current repo precedent for cross-cutting work (PR #2101, PR #2099) branches `task/2103-<slug>` directly off **`develop`** rather than either module branch — follow that precedent, not the idealized two-hop split. (`module/digichat` and `module/digigraph` were separately synced with develop this session and remain available for any future single-component task.)
+- Branching: this feature touches both `digigraph` and `cloudflare/digichat`. Current repo precedent for cross-cutting work (PR #2101, PR #2099) branches `task/2103-<slug>` directly off **`develop`** rather than either module branch — follow that precedent, not the idealized two-hop split. (`module/digichat` and `module/digigraph` were separately synced with develop this session and remain available for any future single-component task.)
 
 ---
 
@@ -92,7 +92,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'digigraph.languages'`
 
 ```python
 # digigraph/src/digigraph/languages.py
-"""Curated response-language directive for DigiChat's language selector (#2103).
+"""Curated response-language directive for digichat's language selector (#2103).
 
 Only the mapped display name below ever reaches a prompt — the raw
 X-Digi-Language header/request value is never interpolated directly, so an
@@ -389,13 +389,13 @@ git commit -m "feat(digigraph): append response-language directive in research_n
 
 ---
 
-## Frontend (frontend/digichat) — shared language list
+## Frontend (cloudflare/digichat) — shared language list
 
 ### Task 4: Curated language list + browser detection helpers
 
 **Files:**
-- Create: `frontend/digichat/src/lib/languages.ts`
-- Test: `frontend/digichat/src/lib/languages.test.ts`
+- Create: `cloudflare/digichat/src/lib/languages.ts`
+- Test: `cloudflare/digichat/src/lib/languages.test.ts`
 
 **Interfaces:**
 - Produces: `LANGUAGES: { code: string; label: string }[]`, `DEFAULT_LANGUAGE_CODE: "en"`, `resolveLanguageCode(input: string | null | undefined): string`, `detectBrowserLanguageCode(): string` — used by Task 6 (dropdown), Task 8 (hook), Task 9 (embed wiring).
@@ -403,7 +403,7 @@ git commit -m "feat(digigraph): append response-language directive in research_n
 - [ ] **Step 1: Write the failing tests**
 
 ```typescript
-// frontend/digichat/src/lib/languages.test.ts
+// cloudflare/digichat/src/lib/languages.test.ts
 import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_LANGUAGE_CODE,
@@ -464,15 +464,15 @@ describe("detectBrowserLanguageCode", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/languages.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/languages.test.ts`
 Expected: FAIL with "Cannot find module '@/lib/languages'"
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```typescript
-// frontend/digichat/src/lib/languages.ts
+// cloudflare/digichat/src/lib/languages.ts
 /**
- * Curated response-language list for DigiChat's language selector (#2103).
+ * Curated response-language list for digichat's language selector (#2103).
  * Kept in exact sync with digigraph's `digigraph.languages.LANGUAGE_NAMES` —
  * see `tests/dg/test_languages.py` on the Python side and this file's test
  * for the codes; there is no shared module across the two languages, so any
@@ -512,13 +512,13 @@ export function detectBrowserLanguageCode(): string {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/languages.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/languages.test.ts`
 Expected: PASS (7 passed)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/languages.ts frontend/digichat/src/lib/languages.test.ts
+git add cloudflare/digichat/src/lib/languages.ts cloudflare/digichat/src/lib/languages.test.ts
 git commit -m "feat(digichat): add curated language list + browser detection (#2103)"
 ```
 
@@ -527,10 +527,10 @@ git commit -m "feat(digichat): add curated language list + browser detection (#2
 ### Task 5: Tenant config plumbing — `showLanguageSelector`
 
 **Files:**
-- Modify: `frontend/digichat/src/lib/embed-tenants.ts` (`EmbedTenantConfig` type + `validateEntry`)
-- Modify: `frontend/digichat/src/lib/embed-client-config.ts` (`EmbedTenantClientConfig`, `toEmbedClientConfig`, `DEFAULT_EMBED_TENANT_CONFIG`)
-- Modify: `frontend/digichat/src/lib/embed-ui-flags.ts` (`resolveEmbedUiFlags`)
-- Modify: `frontend/digichat/src/lib/embed-tenants.test.ts`, `frontend/digichat/src/lib/embed-ui-flags.test.ts`
+- Modify: `cloudflare/digichat/src/lib/embed-tenants.ts` (`EmbedTenantConfig` type + `validateEntry`)
+- Modify: `cloudflare/digichat/src/lib/embed-client-config.ts` (`EmbedTenantClientConfig`, `toEmbedClientConfig`, `DEFAULT_EMBED_TENANT_CONFIG`)
+- Modify: `cloudflare/digichat/src/lib/embed-ui-flags.ts` (`resolveEmbedUiFlags`)
+- Modify: `cloudflare/digichat/src/lib/embed-tenants.test.ts`, `cloudflare/digichat/src/lib/embed-ui-flags.test.ts`
 
 **Interfaces:**
 - Consumes: nothing new.
@@ -538,7 +538,7 @@ git commit -m "feat(digichat): add curated language list + browser detection (#2
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `frontend/digichat/src/lib/embed-tenants.test.ts` (mirror the existing `showByok` test cases in that file):
+Append to `cloudflare/digichat/src/lib/embed-tenants.test.ts` (mirror the existing `showByok` test cases in that file):
 
 ```typescript
 it("accepts showLanguageSelector: false", () => {
@@ -580,10 +580,10 @@ it("leaves showLanguageSelector undefined when unset", () => {
 });
 ```
 
-Add a new test file section (or append if a `toEmbedClientConfig` test already exists in `embed-tenants.test.ts` — check first; if not, add to `frontend/digichat/src/lib/embed-client-config.test.ts`, creating it if it does not exist):
+Add a new test file section (or append if a `toEmbedClientConfig` test already exists in `embed-tenants.test.ts` — check first; if not, add to `cloudflare/digichat/src/lib/embed-client-config.test.ts`, creating it if it does not exist):
 
 ```typescript
-// frontend/digichat/src/lib/embed-client-config.test.ts
+// cloudflare/digichat/src/lib/embed-client-config.test.ts
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_EMBED_TENANT_CONFIG,
@@ -626,7 +626,7 @@ describe("DEFAULT_EMBED_TENANT_CONFIG", () => {
 });
 ```
 
-Append to `frontend/digichat/src/lib/embed-ui-flags.test.ts`:
+Append to `cloudflare/digichat/src/lib/embed-ui-flags.test.ts`:
 
 ```typescript
 it("resolveEmbedUiFlags passes showLanguageSelector through", () => {
@@ -639,12 +639,12 @@ it("resolveEmbedUiFlags passes showLanguageSelector through", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/embed-tenants.test.ts src/lib/embed-client-config.test.ts src/lib/embed-ui-flags.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/embed-tenants.test.ts src/lib/embed-client-config.test.ts src/lib/embed-ui-flags.test.ts`
 Expected: FAIL — `showLanguageSelector` is not a recognized field / `toEmbedClientConfig` doesn't return it / module `embed-client-config.test.ts` doesn't exist yet if newly created.
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `frontend/digichat/src/lib/embed-tenants.ts`, add to the `EmbedTenantConfig` type, next to `showByok`:
+In `cloudflare/digichat/src/lib/embed-tenants.ts`, add to the `EmbedTenantConfig` type, next to `showByok`:
 
 ```typescript
   /**
@@ -670,7 +670,7 @@ In the same function's return object, next to `showByok`:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
 ```
 
-In `frontend/digichat/src/lib/embed-client-config.ts`, add to `EmbedTenantClientConfig`:
+In `cloudflare/digichat/src/lib/embed-client-config.ts`, add to `EmbedTenantClientConfig`:
 
 ```typescript
   showLanguageSelector?: boolean;
@@ -691,7 +691,7 @@ In `toEmbedClientConfig`, next to `showByok: cfg.showByok ?? false,`:
     showLanguageSelector: cfg.showLanguageSelector ?? true,
 ```
 
-In `frontend/digichat/src/lib/embed-ui-flags.ts`, extend the return type and object of `resolveEmbedUiFlags`:
+In `cloudflare/digichat/src/lib/embed-ui-flags.ts`, extend the return type and object of `resolveEmbedUiFlags`:
 
 ```typescript
 export function resolveEmbedUiFlags(cfg: EmbedTenantClientConfig): {
@@ -709,15 +709,15 @@ export function resolveEmbedUiFlags(cfg: EmbedTenantClientConfig): {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/embed-tenants.test.ts src/lib/embed-client-config.test.ts src/lib/embed-ui-flags.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/embed-tenants.test.ts src/lib/embed-client-config.test.ts src/lib/embed-ui-flags.test.ts`
 Expected: PASS (all cases green)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/embed-tenants.ts frontend/digichat/src/lib/embed-tenants.test.ts \
-        frontend/digichat/src/lib/embed-client-config.ts frontend/digichat/src/lib/embed-client-config.test.ts \
-        frontend/digichat/src/lib/embed-ui-flags.ts frontend/digichat/src/lib/embed-ui-flags.test.ts
+git add cloudflare/digichat/src/lib/embed-tenants.ts cloudflare/digichat/src/lib/embed-tenants.test.ts \
+        cloudflare/digichat/src/lib/embed-client-config.ts cloudflare/digichat/src/lib/embed-client-config.test.ts \
+        cloudflare/digichat/src/lib/embed-ui-flags.ts cloudflare/digichat/src/lib/embed-ui-flags.test.ts
 git commit -m "feat(digichat): thread showLanguageSelector through tenant config (#2103)"
 ```
 
@@ -726,8 +726,8 @@ git commit -m "feat(digichat): thread showLanguageSelector through tenant config
 ### Task 6: `LanguageSelect` dropdown component
 
 **Files:**
-- Create: `frontend/digichat/src/components/language-select.tsx`
-- Test: `frontend/digichat/src/components/language-select.test.tsx`
+- Create: `cloudflare/digichat/src/components/language-select.tsx`
+- Test: `cloudflare/digichat/src/components/language-select.test.tsx`
 
 **Interfaces:**
 - Consumes: `LANGUAGES` from Task 4.
@@ -736,7 +736,7 @@ git commit -m "feat(digichat): thread showLanguageSelector through tenant config
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
-// frontend/digichat/src/components/language-select.test.tsx
+// cloudflare/digichat/src/components/language-select.test.tsx
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -770,13 +770,13 @@ describe("LanguageSelect", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/components/language-select.test.tsx`
+Run: `cd cloudflare/digichat && npx vitest run src/components/language-select.test.tsx`
 Expected: FAIL with "Cannot find module '@/components/language-select'"
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```tsx
-// frontend/digichat/src/components/language-select.tsx
+// cloudflare/digichat/src/components/language-select.tsx
 "use client";
 
 import {
@@ -816,7 +816,7 @@ export function LanguageSelect({
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd frontend/digichat && npx vitest run src/components/language-select.test.tsx`
+Run: `cd cloudflare/digichat && npx vitest run src/components/language-select.test.tsx`
 Expected: PASS (3 passed)
 
 If the accessible name query doesn't match (Radix's `DropdownMenuTrigger`/`DropdownMenuItem` role names can differ slightly from a plain `button`/`menuitem`), inspect the rendered output with `screen.debug()` and adjust the queries to match `dropdown-menu.tsx`'s actual rendered roles — do not change the component's behavior to satisfy the test.
@@ -824,7 +824,7 @@ If the accessible name query doesn't match (Radix's `DropdownMenuTrigger`/`Dropd
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/components/language-select.tsx frontend/digichat/src/components/language-select.test.tsx
+git add cloudflare/digichat/src/components/language-select.tsx cloudflare/digichat/src/components/language-select.test.tsx
 git commit -m "feat(digichat): add LanguageSelect dropdown component (#2103)"
 ```
 
@@ -833,8 +833,8 @@ git commit -m "feat(digichat): add LanguageSelect dropdown component (#2103)"
 ### Task 7: `useEmbedDigiChat` sends `X-Digi-Language`
 
 **Files:**
-- Modify: `frontend/digichat/src/hooks/use-embed-digi-chat.ts`
-- Modify: `frontend/digichat/src/hooks/use-embed-digi-chat.test.ts`
+- Modify: `cloudflare/digichat/src/hooks/use-embed-digi-chat.ts`
+- Modify: `cloudflare/digichat/src/hooks/use-embed-digi-chat.test.ts`
 
 **Interfaces:**
 - Consumes: `resolveLanguageCode`, `DEFAULT_LANGUAGE_CODE` from Task 4.
@@ -842,7 +842,7 @@ git commit -m "feat(digichat): add LanguageSelect dropdown component (#2103)"
 
 - [ ] **Step 1: Write the failing test**
 
-Read `frontend/digichat/src/hooks/use-embed-digi-chat.test.ts` first to match its existing test harness for asserting on `prepareSendMessagesRequest`-produced headers (it already has cases for `X-BYOK-Key` — follow that exact pattern for the transport mock/assertion style). Add:
+Read `cloudflare/digichat/src/hooks/use-embed-digi-chat.test.ts` first to match its existing test harness for asserting on `prepareSendMessagesRequest`-produced headers (it already has cases for `X-BYOK-Key` — follow that exact pattern for the transport mock/assertion style). Add:
 
 ```typescript
 it("sets X-Digi-Language when responseLanguage is a non-English curated code", async () => {
@@ -868,12 +868,12 @@ it("omits X-Digi-Language when responseLanguage is English or unset", async () =
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/hooks/use-embed-digi-chat.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/hooks/use-embed-digi-chat.test.ts`
 Expected: FAIL — `X-Digi-Language` header is never set.
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `frontend/digichat/src/hooks/use-embed-digi-chat.ts`, add `responseLanguage?: string` to `UseEmbedDigiChatOptions` and destructure it in `useEmbedDigiChat`'s parameter list, then inside `prepareSendMessagesRequest`, next to the `byokKey` block:
+In `cloudflare/digichat/src/hooks/use-embed-digi-chat.ts`, add `responseLanguage?: string` to `UseEmbedDigiChatOptions` and destructure it in `useEmbedDigiChat`'s parameter list, then inside `prepareSendMessagesRequest`, next to the `byokKey` block:
 
 ```typescript
           if (responseLanguage && responseLanguage !== "en") {
@@ -885,13 +885,13 @@ Add `responseLanguage` to the `useMemo` dependency array that wraps the `Default
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd frontend/digichat && npx vitest run src/hooks/use-embed-digi-chat.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/hooks/use-embed-digi-chat.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/hooks/use-embed-digi-chat.ts frontend/digichat/src/hooks/use-embed-digi-chat.test.ts
+git add cloudflare/digichat/src/hooks/use-embed-digi-chat.ts cloudflare/digichat/src/hooks/use-embed-digi-chat.test.ts
 git commit -m "feat(digichat): forward response language as X-Digi-Language header (#2103)"
 ```
 
@@ -900,7 +900,7 @@ git commit -m "feat(digichat): forward response language as X-Digi-Language head
 ### Task 8: Wire the dropdown into the embed shell
 
 **Files:**
-- Modify: `frontend/digichat/src/app/embed/embed-client.tsx` (`EmbedChat`)
+- Modify: `cloudflare/digichat/src/app/embed/embed-client.tsx` (`EmbedChat`)
 
 **Interfaces:**
 - Consumes: `detectBrowserLanguageCode`, `resolveLanguageCode` (Task 4), `LanguageSelect` (Task 6), `useEmbedDigiChat`'s new `responseLanguage` option (Task 7), `uiFlags.showLanguageSelector` (Task 5).
@@ -987,16 +987,16 @@ with:
 
 - [ ] **Step 4: Manual smoke check**
 
-Run: `cd frontend/digichat && npm run dev`
+Run: `cd cloudflare/digichat && npm run dev`
 
-Open `http://localhost:3000/embed?host=digithings.ai` (or whatever local embed URL this repo's dev docs use for a first-party host — check `frontend/digichat/OPERATIONS.md` if unsure of the exact query params for local first-party embed testing).
+Open `http://localhost:3000/embed?host=digithings.ai` (or whatever local embed URL this repo's dev docs use for a first-party host — check `cloudflare/digichat/OPERATIONS.md` if unsure of the exact query params for local first-party embed testing).
 
 Expected: a language dropdown appears in the embed header showing "English" (or the browser's detected language if it's one of the curated 5); selecting "German" and sending a message shows the outgoing `/api/chat` request (Network tab) carrying an `X-Digi-Language: de` header.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/app/embed/embed-client.tsx
+git add cloudflare/digichat/src/app/embed/embed-client.tsx
 git commit -m "feat(digichat): render language selector in embed header (#2103)"
 ```
 
@@ -1005,8 +1005,8 @@ git commit -m "feat(digichat): render language selector in embed header (#2103)"
 ### Task 9: `route.ts` forwards the language to both backends
 
 **Files:**
-- Modify: `frontend/digichat/src/app/api/chat/route.ts`
-- Modify: `frontend/digichat/src/app/api/chat/route.test.ts`
+- Modify: `cloudflare/digichat/src/app/api/chat/route.ts`
+- Modify: `cloudflare/digichat/src/app/api/chat/route.test.ts`
 
 **Interfaces:**
 - Consumes: `resolveLanguageCode` (Task 4).
@@ -1046,7 +1046,7 @@ it("passes responseLanguage to the Foundry adapter", async () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd frontend/digichat && npx vitest run src/app/api/chat/route.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/app/api/chat/route.test.ts`
 Expected: FAIL — no `X-Digi-Language` header reaches either backend call yet.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1090,17 +1090,17 @@ In the digigraph branch, in the `upstreamHeaders` construction, next to the BYOK
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd frontend/digichat && npx vitest run src/app/api/chat/route.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/app/api/chat/route.test.ts`
 Expected: PASS
 
 Then run the full digichat Vitest suite:
-Run: `cd frontend/digichat && npx vitest run`
+Run: `cd cloudflare/digichat && npx vitest run`
 Expected: all green (Task 10 hasn't added the `responseLanguage` option to `createFoundryStreamResponse` yet, so this task's Foundry-forwarding test may need Task 10 done first — if it fails only on that one assertion, note it and proceed; Task 10 closes the loop).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/app/api/chat/route.ts frontend/digichat/src/app/api/chat/route.test.ts
+git add cloudflare/digichat/src/app/api/chat/route.ts cloudflare/digichat/src/app/api/chat/route.test.ts
 git commit -m "feat(digichat): forward response language to both backend adapters (#2103)"
 ```
 
@@ -1109,9 +1109,9 @@ git commit -m "feat(digichat): forward response language to both backend adapter
 ### Task 10: Foundry adapter prepends the language directive
 
 **Files:**
-- Modify: `frontend/digichat/src/lib/adapters/foundry/stream.ts`
-- Modify: `frontend/digichat/src/lib/adapters/foundry/stream.test.ts`
-- Modify: `frontend/digichat/ARCHITECTURE.md` (document the dual-backend language contract)
+- Modify: `cloudflare/digichat/src/lib/adapters/foundry/stream.ts`
+- Modify: `cloudflare/digichat/src/lib/adapters/foundry/stream.test.ts`
+- Modify: `cloudflare/digichat/ARCHITECTURE.md` (document the dual-backend language contract)
 
 **Interfaces:**
 - Consumes: nothing new from this plan (uses a plain string option).
@@ -1158,12 +1158,12 @@ it("does not alter input when responseLanguage is English or unset", async () =>
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/adapters/foundry/stream.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/adapters/foundry/stream.test.ts`
 Expected: FAIL — TypeScript error / runtime mismatch, since `responseLanguage` isn't an accepted option yet and `input` is never prefixed.
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `frontend/digichat/src/lib/adapters/foundry/stream.ts`, add a pure helper near the top (below the imports, alongside the other small pure helpers like `stripFoundryCitationMarkers`), using the `LANGUAGES` array from Task 4 (the frontend list is an array of `{code, label}`, not a map — unlike the Python-side `LANGUAGE_NAMES` from Task 1):
+In `cloudflare/digichat/src/lib/adapters/foundry/stream.ts`, add a pure helper near the top (below the imports, alongside the other small pure helpers like `stripFoundryCitationMarkers`), using the `LANGUAGES` array from Task 4 (the frontend list is an array of `{code, label}`, not a map — unlike the Python-side `LANGUAGE_NAMES` from Task 1):
 
 ```typescript
 /** Foundry has no per-call system-prompt slot (see module doc comment) — the
@@ -1197,24 +1197,24 @@ to:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/adapters/foundry/stream.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/adapters/foundry/stream.test.ts`
 Expected: PASS
 
 Then re-run Task 9's route tests, which depend on this option existing:
-Run: `cd frontend/digichat && npx vitest run src/app/api/chat/route.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/app/api/chat/route.test.ts`
 Expected: PASS
 
 Then the full suite:
-Run: `cd frontend/digichat && npx vitest run`
+Run: `cd cloudflare/digichat && npx vitest run`
 Expected: all green.
 
-In `frontend/digichat/ARCHITECTURE.md`, add a short paragraph (near wherever the digigraph vs. Foundry adapter split is already documented) noting: the language selector is the one feature with two independent implementations — `X-Digi-Language` header + digigraph's `research_node` system-prompt append on one side, `applyLanguageDirective`'s input-text prepend on the other — and link to `docs/superpowers/specs/2026-08-10-digichat-language-selector-design.md` for the rationale.
+In `cloudflare/digichat/ARCHITECTURE.md`, add a short paragraph (near wherever the digigraph vs. Foundry adapter split is already documented) noting: the language selector is the one feature with two independent implementations — `X-Digi-Language` header + digigraph's `research_node` system-prompt append on one side, `applyLanguageDirective`'s input-text prepend on the other — and link to `docs/superpowers/specs/2026-08-10-digichat-language-selector-design.md` for the rationale.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/adapters/foundry/stream.ts frontend/digichat/src/lib/adapters/foundry/stream.test.ts \
-        frontend/digichat/ARCHITECTURE.md
+git add cloudflare/digichat/src/lib/adapters/foundry/stream.ts cloudflare/digichat/src/lib/adapters/foundry/stream.test.ts \
+        cloudflare/digichat/ARCHITECTURE.md
 git commit -m "feat(digichat): Foundry adapter prepends response-language directive (#2103)"
 ```
 
@@ -1231,13 +1231,13 @@ Expected: all passing, including every test added in Tasks 1–3.
 
 - [ ] **Step 2: Run the full digichat suite**
 
-Run: `cd frontend/digichat && npx vitest run`
+Run: `cd cloudflare/digichat && npx vitest run`
 Expected: all passing, including every test added in Tasks 4–10.
 
 - [ ] **Step 3: Run ruff and lint**
 
 Run: `ruff check digigraph/src digigraph/../tests/dg && ruff format --check digigraph/src`
-Run: `cd frontend/digichat && npm run lint`
+Run: `cd cloudflare/digichat && npm run lint`
 Expected: clean on both.
 
 - [ ] **Step 4: Push and open the task PR**

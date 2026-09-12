@@ -3,9 +3,6 @@ type: frontend-architecture
 title: digichat Architecture
 description: BFF design of the digichat chat UI — Next.js route handlers, backend adapters, shared UI package, and the never-in-browser credential invariant.
 tags: [digichat, bff, nextjs, frontend]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-8e3c7688ec1299cb0d4d2721
     resource: repo://frontend/digichat/ARCHITECTURE.md
@@ -14,6 +11,9 @@ sources:
   - id: openwiki-source-64650938c858fae1d37aa390
     resource: repo://frontend/digichat/src/lib/ecosystem.test.ts
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digichat Architecture
@@ -68,3 +68,17 @@ Vitest from `frontend/digichat/`: `route.test.ts` for the chat handler,
 `ecosystem.test.ts` for the SSRF allowlist, plus adapter, persistence, and
 markdown-export suites; `npm run lint` (ESLint) and `npm run build`
 (type-check + production build) gate changes.
+
+## Claims-backed Desk+ plan proof (#3664)
+
+digichat never trusts client-asserted plan: raw `X-Embed-Plan-Tier` /
+`?plan_tier=` are ignored. Entitled Desk+ chat requires either:
+
+- HMAC `X-Embed-Plan-Proof` from dashboard `POST /api/plan-proof` (verifies the
+  Supabase access token and reads JWT `app_metadata.plan_tier`), or
+- an authenticated digichat session whose claims `plan_tier` is Desk+.
+
+Ops env names only: `DIGICHAT_PLAN_PROOF_SECRET`,
+`DIGICHAT_DASHBOARD_SUPABASE_URL`, `DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY`.
+Missing secrets → plan-proof **503**. See `frontend/digichat/README.md`.
+

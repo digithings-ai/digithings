@@ -3,13 +3,16 @@
 ``ci.yml`` runs ``validate_model_routing.py --routing`` against real config. The
 load-bearing logic is the offline resolver: exact ``phase_models`` pins, trailing-``-``
 prefix matches (per-ticker H6 deliberation slugs), and ``DIGI_LLM_MODE`` / default
-fallbacks when a slug is unpinned. Network ``--ping`` stays out of unit tests.
+fallbacks when a slug is unpinned. Network ``--ping`` stays out of unit tests; the
+skip/strict bookkeeping is exercised with a fake ``digigraph.llm_client`` so no call
+leaves the process (#3939).
 """
 
 from __future__ import annotations
 
 import importlib.util
 import sys
+import types
 from pathlib import Path
 from typing import Any  # score:allow untyped any — dynamically loaded module
 
@@ -92,9 +95,10 @@ def test_get_model_for_mode_respects_digi_llm_mode(
     assert routing.get_model_for_mode() == "ollama/medium-model"
 
 
-def test_get_model_for_mode_unknown_mode_falls_to_test_then_hardcoded(
+def test_get_model_for_mode_unknown_mode_raises_without_silent_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """#3787 — no silent gpt-4o-mini when defaults are empty."""
     mod = _load()
     (tmp_path / "model_modes.yaml").write_text(
         yaml.safe_dump({"defaults": {}, "phase_models": {}}),
@@ -102,7 +106,37 @@ def test_get_model_for_mode_unknown_mode_falls_to_test_then_hardcoded(
     )
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
     monkeypatch.setenv("DIGI_LLM_MODE", "free")
-    assert mod.get_model_for_mode() == "gpt-4o-mini"
+    with pytest.raises(ValueError, match="refusing silent gpt-4o-mini"):
+        mod.get_model_for_mode()
+
+
+def test_inventory_slugs_includes_digiquant_capabilities(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mod = _load()
+    (tmp_path / "model_modes.yaml").write_text(
+        yaml.safe_dump({"defaults": {"test": "ollama/x"}, "phase_models": {}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "digiquant_models.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "phase_capabilities": {
+                    "portfolio/pm-direction": {},
+                    "beliefs-distillation": {},
+                },
+                "phase_capability_prefixes": {
+                    "h6_analyst_response-": {},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+    slugs = {s for s, _ in mod.inventory_slugs()}
+    assert "portfolio/pm-direction" in slugs
+    assert "beliefs-distillation" in slugs
+    assert any(s.startswith("h6_analyst_response-") for s in slugs)
 
 
 def test_default_model_overrides_mode_table(
@@ -150,3 +184,74 @@ def test_repo_config_pins_h6_deliberation_prefix_and_master_digest(
     )
     assert mod.get_model_for_phase("master-digest") == "deepseek/deepseek-v4-flash"
     assert (REPO_ROOT / "config" / "model_modes.yaml").is_file()
+
+
+def test_ping_providers_skips_provider_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A missing provider key is a SKIP, not a failure (#3939)."""
+    mod = _load()
+    fake_llm = types.ModuleType("digigraph.llm_client")
+    fake_llm.completion_text = lambda *_args, **_kwargs: "ok"  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "digigraph.llm_client", fake_llm)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    ok, skipped = mod.ping_providers(
+        {
+            "gpt-4o-mini": ["decision-reflector"],
+            "openrouter/deepseek/deepseek-v4-flash": ["macro"],
+        }
+    )
+    assert ok is True
+    assert skipped == 1
+
+
+def _two_provider_ping_setup(mod: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the resolver at TWO providers, with exactly one key present.
+
+    The committed config resolves to a single provider, so a test built on it
+    cannot tell `skipped >= distinct_providers` (base) from `skipped` (head):
+    both reduce to the same boolean. Two providers make the distinction
+    observable — one pings, one skips, so base tolerates it and head exits 1.
+    """
+    fake_llm = types.ModuleType("digigraph.llm_client")
+    fake_llm.completion_text = lambda *_args, **_kwargs: "ok"  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "digigraph.llm_client", fake_llm)
+
+    cfg = {
+        # Every unpinned slug (the hand inventory) resolves here …
+        "defaults": {"test": "xai/grok-4.5"},
+        # … except this explicit pin, a different provider.
+        "phase_models": {"macro": "openrouter/deepseek/deepseek-v4-flash"},
+    }
+    (tmp_path / "model_modes.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")  # pings
+    monkeypatch.delenv("XAI_API_KEY", raising=False)  # SKIPs
+
+
+def test_main_ping_strict_fails_when_one_of_two_providers_is_skipped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#3939 — one skipped provider out of TWO must fail under --strict.
+
+    Discriminating regression: `distinct_providers == 2`, `skipped == 1`. The
+    pre-#3939 guard (`skipped >= distinct_providers`, i.e. `1 >= 2`) returns
+    cleanly; the head guard (`skipped`) exits 1. This test fails against the
+    pre-change expression and passes on the fix.
+    """
+    mod = _load()
+    _two_provider_ping_setup(mod, tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["validate_model_routing.py", "--ping", "--strict"])
+    with pytest.raises(SystemExit) as exc:
+        mod.main()
+    assert exc.value.code == 1
+
+
+def test_main_ping_without_strict_tolerates_one_skip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Control: the same one-of-two skip is non-fatal without --strict."""
+    mod = _load()
+    _two_provider_ping_setup(mod, tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["validate_model_routing.py", "--ping"])
+    mod.main()
