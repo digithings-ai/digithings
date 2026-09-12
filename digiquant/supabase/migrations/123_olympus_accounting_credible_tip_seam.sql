@@ -15,10 +15,12 @@
 -- olympus_accounting_* tables):
 --   * Credible-tip gate: a superseder voids a prior tip only when the
 --     superseder is itself credible — NOT when it is an incomplete/failed
---     zero-equity tombstone (opening_equity = 0 AND closing_equity = 0)
---     and/or carries a superseded_by_restatement_* quality reason. Restated
---     clean finals therefore surface again; the tombstones stay stored
---     (append-only) but stop voiding them.
+--     zero-equity tombstone (opening_equity = 0 AND closing_equity = 0).
+--     The gate is on that tombstone SHAPE alone; a
+--     `superseded_by_restatement_*` quality reason is corroborating evidence,
+--     not a standalone bypass (a marker on a credible superseder must not
+--     resurrect a stale prior tip). Restated clean finals therefore surface
+--     again; the tombstones stay stored (append-only) but stop voiding them.
 --   * series_seam marker on public_accounting_nav_history: additive boolean
 --     column, true on the first row after a source flip (legacy -> finalized
 --     or finalized -> legacy). Existing readers selecting explicit columns
@@ -64,17 +66,14 @@ WHERE NOT EXISTS (
     FROM public.olympus_accounting_periods s
     WHERE s.supersedes_id = p.id
       AND NOT (
-          -- #3767: zero-equity incomplete/failed tombstones do not void a tip.
-          (
-              s.status IN ('incomplete', 'failed')
-              AND s.opening_equity = 0
-              AND s.closing_equity = 0
-          )
-          OR EXISTS (
-              SELECT 1
-              FROM unnest(s.quality_reasons) AS qr
-              WHERE qr LIKE 'superseded_by_restatement%'
-          )
+          -- #3767 review: gate on the tombstone SHAPE only. A superseder voids
+          -- the prior tip unless it is an incomplete/failed zero-equity row. The
+          -- `superseded_by_restatement_*` marker is corroborating evidence, not a
+          -- standalone bypass — treating it as one could resurrect a stale tip
+          -- when a credible supersession happens to carry the marker.
+          s.status IN ('incomplete', 'failed')
+          AND s.opening_equity = 0
+          AND s.closing_equity = 0
       )
 )
   AND (
@@ -106,10 +105,10 @@ WHERE NOT EXISTS (
 
 COMMENT ON VIEW public.public_accounting_period_status IS
   'Curated tip-period status (#2599; day_return #2779; children-complete #2780; '
-  'credible-tip gate #3767). A superseder voids a tip only when credible — '
-  'zero-equity incomplete/failed tombstones and superseded_by_restatement_* rows '
-  'do not void restated finals. Incomplete child sets are withheld. '
-  'Never substitutes lookback.';
+  'credible-tip gate #3767). A superseder voids a tip unless it is an '
+  'incomplete/failed zero-equity tombstone — the gate is on that shape, so a '
+  'superseded_by_restatement_* marker alone never resurrects a stale tip. '
+  'Incomplete child sets are withheld. Never substitutes lookback.';
 
 -- 2) Finalized NAV — final + clean quality + credible tip + children complete.
 CREATE OR REPLACE VIEW public.public_finalized_nav
@@ -142,17 +141,10 @@ WHERE p.status = 'final'
       FROM public.olympus_accounting_periods s
       WHERE s.supersedes_id = p.id
         AND NOT (
-            -- #3767: zero-equity incomplete/failed tombstones do not void a tip.
-            (
-                s.status IN ('incomplete', 'failed')
-                AND s.opening_equity = 0
-                AND s.closing_equity = 0
-            )
-            OR EXISTS (
-                SELECT 1
-                FROM unnest(s.quality_reasons) AS qr
-                WHERE qr LIKE 'superseded_by_restatement%'
-            )
+            -- #3767 review: tombstone SHAPE only — see period_status above.
+            s.status IN ('incomplete', 'failed')
+            AND s.opening_equity = 0
+            AND s.closing_equity = 0
         )
   )
   AND (
@@ -297,17 +289,10 @@ WHERE p.status = 'final'
       FROM public.olympus_accounting_periods s
       WHERE s.supersedes_id = p.id
         AND NOT (
-            -- #3767: zero-equity incomplete/failed tombstones do not void a tip.
-            (
-                s.status IN ('incomplete', 'failed')
-                AND s.opening_equity = 0
-                AND s.closing_equity = 0
-            )
-            OR EXISTS (
-                SELECT 1
-                FROM unnest(s.quality_reasons) AS qr
-                WHERE qr LIKE 'superseded_by_restatement%'
-            )
+            -- #3767 review: tombstone SHAPE only — see period_status above.
+            s.status IN ('incomplete', 'failed')
+            AND s.opening_equity = 0
+            AND s.closing_equity = 0
         )
   )
   AND (

@@ -94,6 +94,13 @@ function weekdayOverlap(
   return out;
 }
 
+/** Read the rendered value of a `<Metric label=…>` tile from static markup. */
+function metricValue(html: string, label: string): string | null {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = html.match(new RegExp(`>${escaped}</dt>\\s*<dd[^>]*>([\\s\\S]*?)</dd>`));
+  return match ? match[1].replace(/<[^>]+>/g, '').trim() : null;
+}
+
 describe('Today (Overview) page', () => {
   it('uses the shared content-shaped loading state', () => {
     useDashboardMock.mockReturnValue({ data: null, loading: true, error: null });
@@ -269,6 +276,59 @@ describe('Today (Overview) page', () => {
     expect(html).not.toContain('9.99');
     expect(html).not.toMatch(/>Alpha<\/dt><dd[^>]*>—</);
     expect(html).not.toMatch(/>Info ratio<\/dt><dd[^>]*>—</);
+  });
+
+  it('rebases the vs-benchmark excess on the current run across a NAV seam (#3935)', () => {
+    const finalized = weekdayOverlap(MIN_OVERLAP_DAYS + 4, '2026-09-08').map((p) => ({
+      ...p,
+      nav: 110,
+      price: 500,
+    }));
+    const legacy = [
+      { date: '2026-09-01', nav: 90, price: 500 },
+      { date: '2026-09-02', nav: 90, price: 500 },
+      { date: '2026-09-03', nav: 90, price: 500 },
+      { date: '2026-09-04', nav: 90, price: 500 },
+    ];
+    const data = makeData([]);
+    data.portfolio.snapshots = [
+      ...legacy.map((p) => ({
+        date: p.date,
+        nav: p.nav,
+        invested_pct: 75,
+        cash_pct: 25,
+        contract: 'legacy_estimate',
+        source: 'legacy_nav_history',
+        series_seam: false,
+      })),
+      ...finalized.map((p, i) => ({
+        date: p.date,
+        nav: p.nav,
+        invested_pct: 75,
+        cash_pct: 25,
+        contract: 'finalized_accounting',
+        source: 'finalized_accounting',
+        series_seam: i === 0,
+      })),
+    ];
+    data.benchmarks = {
+      SPY: {
+        current: 500,
+        history: [...legacy, ...finalized].map((p) => ({ date: p.date, price: p.price })),
+      },
+    };
+    useDashboardMock.mockReturnValue({ data, loading: false, error: null });
+    const html = renderToStaticMarkup(createElement(OverviewPage));
+
+    const crossSeamPct = (finalized.at(-1)!.nav / legacy[0]!.nav - 1) * 100;
+    const rebasedPct = (finalized.at(-1)!.nav / finalized[0]!.nav - 1) * 100;
+    expect(crossSeamPct).toBeGreaterThan(15);
+    expect(rebasedPct).toBeCloseTo(0, 6);
+    const vsSpy = metricValue(html, 'vs SPY');
+    expect(vsSpy).not.toBeNull();
+    // Flat benchmark → rebased excess ≈ 0; the cross-seam ≈ +22% must be gone.
+    expect(Math.abs(parseFloat(vsSpy!))).toBeLessThan(1);
+    expect(html).not.toContain(`+${crossSeamPct.toFixed(1)}%`);
   });
 
   it('does not label live overlay numbers as finalized accounting', () => {
