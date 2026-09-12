@@ -76,11 +76,10 @@ export {
   type DigichatLauncherProps,
 } from "./components/chat/DigichatLauncher";
 export { ChatMarkdown, type ChatMarkdownProps } from "./components/chat/ChatMarkdown";
-export {
-  ChatMarkdownSource,
-  type ChatMarkdownSourceProps,
-  type CodeBlockOverride,
-} from "./components/chat/ChatMarkdownSource";
+// ChatMarkdownSource is internal to ChatMarkdown — not part of the public
+// barrel (#3819). The legacy ChatMarkdown / ChatThinking / ChatToolCall family
+// remains exported for its existing consumers only (dashboard SafeMarkdown
+// styling shell, digichat-ui MiniMarkdown + activity view); no new adoption.
 export { ChatMermaidBlock, type ChatMermaidBlockProps } from "./components/chat/ChatMermaidBlock";
 export { ChatCodeBlock, ChatCopyButton, type ChatCodeBlockProps, type ChatCopyButtonProps } from "./components/chat/ChatCodeBlock";
 export { ChatToolCall, type ChatToolCallProps, type ChatToolCallStatus, type ChatToolCallLine } from "./components/chat/ChatToolCall";
