@@ -481,8 +481,18 @@
 
 /* Portaled menus leave .digichat-thread. The gallery sheet owns the portaled
    menu skin (reference chatbot.css); chat-aui.css keeps only the rules it has
-   no twin for: catalog-skin popover items, tooltip/dialog accent tokens, the
-   hidden tooltip arrows, and launcher hover overrides (#3818). */
+   no twin for: the unwrapped-mount code-header hover, catalog-skin popover
+   items, tooltip/dialog accent tokens, and the hidden tooltip arrows (#3818). */
+
+/* No twin: /baseline mounts the gallery Thread without .aui-theme-stage or
+   [data-thread-skin], so chatbot.css's gated fence-copy hover never applies. */
+.digichat-thread .aui-code-header-root button:hover,
+.digichat-thread .aui-code-header-root button:focus-visible {
+  background: transparent;
+  background-color: transparent;
+  color: var(--ink);
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover [data-slot="composer-trigger-popover-item"],
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover [role="option"],
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [role="option"] {

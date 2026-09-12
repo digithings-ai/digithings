@@ -36,9 +36,10 @@ assistant-ui has no theme CDN. Custom look is:
    `.dc-composer-menu`, code-header buttons) is owned by the gallery sheet
    (`reference/app/(chatbot)/chatbot/chatbot.css`), which the product wrapper
    `@digithings/web/styles/chatbot.css` imports. `chat-aui.css` loads first and
-   keeps only the rules the gallery sheet has no twin for: catalog-skin popover
-   items, tooltip/dialog accent tokens, hidden tooltip arrows, launcher
-   overrides. Do not re-declare the base menu rules in both files (#3818).
+   keeps only the rules the gallery sheet has no twin for: the `.digichat-thread`
+   code-header hover (the unwrapped `/baseline` mount), catalog-skin popover
+   items, tooltip/dialog accent tokens, and hidden tooltip arrows. Do not
+   re-declare the base menu rules in both files (#3818).
 
 Keep defaults. Prefer a CSS-variable change over a slot override; prefer a
 `components` slot over forking `thread.aui.tsx`.
