@@ -1534,7 +1534,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 |---|---|---|
 | `AUTH_SECRET` | Auth.js session JWT signing/encryption key | Yes |
 | `AUTH_URL` | Public origin of digichat (OAuth redirect base) | Yes in production |
-| `AUTH_TRUST_HOST` | Allow `X-Forwarded-Host` from reverse proxy | Yes in Docker |
+| `AUTH_TRUST_HOST` | Allow `X-Forwarded-Host` from reverse proxy (compose default `false`) | Only behind a trusted proxy |
 | `AUTH_OIDC_ISSUER` | OIDC provider issuer URL | If using OIDC |
 | `AUTH_OIDC_CLIENT_ID` | OIDC client ID | If using OIDC |
 | `AUTH_OIDC_CLIENT_SECRET` | OIDC client secret | If using OIDC |
