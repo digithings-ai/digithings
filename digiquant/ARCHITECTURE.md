@@ -1843,9 +1843,11 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
    `commit_io.book_portfolio`) still writes provisional house rows at book time,
    but an existing row for the same `(workspace_id, date)` now keeps the stored
    NAV (refreshing only H9-owned `cash_pct`/`invested_pct`) — a book re-dispatch
-   after the engine step keeps the engine NAV instead of clobbering it (#3804). Fetches page by last-seen-key
-   cursor over a deterministic `(date, ticker)` order (never offsets) and refuse
-   to verify or write from a truncated/unstable page (#3803). A read-only
+    after the engine step keeps the engine NAV instead of clobbering it (#3804). Fetches
+    seek by keyset over a deterministic `(date, ticker)` order (never offsets), sized
+    under the PostgREST `max_rows` cap (a full page means "more", only a short page
+    ends the loop; asking above the cap raises), and refuse to verify or write from a
+    truncated/unstable page (#3803/#3948). A read-only
    `verify_nav_replay` (no `--write`) step runs after metrics so drift fails
    loudly.
   `refresh_performance_metrics.refresh_nav_point` only guards the engine row;
