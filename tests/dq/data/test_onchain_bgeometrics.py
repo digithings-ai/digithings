@@ -137,6 +137,7 @@ class TestBgeometricsClient:
                 "message": "Too many requests. Hourly limit of 10 requests exceeded.",
             }
         }
+
         class _RateLimited(_FakeSession):
             def get(self, url: str, **kwargs: Any) -> _FakeResp:
                 self.calls.append((url, kwargs))
@@ -153,7 +154,9 @@ class TestBgeometricsClient:
 
     def test_no_data_is_fail_soft_error(self) -> None:
         session = _FakeSession(body=[])
-        result = BgeometricsClient(session=session).fetch("mvrv", startday="2014-01-01", endday="2014-01-10")
+        result = BgeometricsClient(session=session).fetch(
+            "mvrv", startday="2014-01-01", endday="2014-01-10"
+        )
         assert result.error is not None
         assert result.has_data is False
 

@@ -223,9 +223,7 @@ class TestFetchBitviewMcp:
 
 class TestFetchBgeometricsMcp:
     def test_mocked_http_writes_parquet(self, tmp_path: Path) -> None:
-        session = _FakeSession(
-            [{"d": "2025-01-01", "unixTs": 1735689600, "mvrv": 2.3579}]
-        )
+        session = _FakeSession([{"d": "2025-01-01", "unixTs": 1735689600, "mvrv": 2.3579}])
         payload = json.loads(
             run_fetch_bgeometrics_series(
                 metric="mvrv",
@@ -286,7 +284,9 @@ class TestFetchCoinmetricsMcp:
 class TestListCoinmetricsCatalogMcp:
     def test_run_list_coinmetrics_catalog_returns_raw_payload(self) -> None:
         payload = {"data": [{"asset": "btc", "metrics": [{"metric": "CapMVRVCur"}]}]}
-        result = json.loads(run_list_coinmetrics_catalog(asset="btc", session=_FakeSession(payload)))
+        result = json.loads(
+            run_list_coinmetrics_catalog(asset="btc", session=_FakeSession(payload))
+        )
         assert result["error"] is None
         assert result["data"] == payload
 

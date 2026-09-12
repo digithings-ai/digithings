@@ -207,7 +207,9 @@ class TestCoinMetricsCatalog:
         assert result.error is not None
         assert result.has_data is False
 
-    def test_fetch_catalog_env_kill_switch_skips_network(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_fetch_catalog_env_kill_switch_skips_network(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("DIGIQUANT_COINMETRICS_FETCH", "0")
         result = fetch_coinmetrics_catalog("btc")
         assert result.error is not None

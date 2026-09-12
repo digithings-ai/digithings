@@ -41,7 +41,9 @@ def _bar(ts_ms: int, *, close: float = 100.0) -> list:
 class _FakeExchange:
     """Minimal CCXT-shaped fake: parse8601/parse_timeframe + scripted fetch_ohlcv pages."""
 
-    def __init__(self, *, pages: list[list[list]], timeframe_seconds: dict[str, int] | None = None) -> None:
+    def __init__(
+        self, *, pages: list[list[list]], timeframe_seconds: dict[str, int] | None = None
+    ) -> None:
         self._pages = list(pages)
         self._timeframe_seconds = timeframe_seconds or {"1d": 86400, "1h": 3600}
         self.rateLimit = 0
@@ -54,7 +56,9 @@ class _FakeExchange:
         return int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp() * 1000)
 
     def fetch_ohlcv(self, symbol: str, timeframe: str, *, since: int, limit: int) -> list[list]:
-        self.calls.append({"symbol": symbol, "timeframe": timeframe, "since": since, "limit": limit})
+        self.calls.append(
+            {"symbol": symbol, "timeframe": timeframe, "since": since, "limit": limit}
+        )
         if self._pages:
             return self._pages.pop(0)
         return []
@@ -63,14 +67,18 @@ class _FakeExchange:
 class TestFetchAllDaily:
     def test_paginates_daily_bars_until_now(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(_MODULE.time, "sleep", lambda _s: None)
-        monkeypatch.setattr(_MODULE.time, "time", lambda: datetime(2020, 1, 3, tzinfo=timezone.utc).timestamp())
+        monkeypatch.setattr(
+            _MODULE.time, "time", lambda: datetime(2020, 1, 3, tzinfo=timezone.utc).timestamp()
+        )
         day0 = int(datetime(2020, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
         day1 = day0 + 86_400_000
         exchange = _FakeExchange(pages=[[_bar(day0), _bar(day1)], []])
         bars = _MODULE.fetch_all_daily(exchange, "BTC/USD", "2020-01-01")
         assert [b[0] for b in bars] == [day0, day1]
 
-    def test_end_param_bounds_pagination_and_uses_daily_timeframe(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_end_param_bounds_pagination_and_uses_daily_timeframe(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(_MODULE.time, "sleep", lambda _s: None)
         day0 = int(datetime(2020, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
         exchange = _FakeExchange(pages=[[_bar(day0)]])
@@ -78,14 +86,18 @@ class TestFetchAllDaily:
         assert len(bars) == 1
         assert exchange.calls[0]["timeframe"] == "1d"
 
-    def test_non_daily_timeframe_is_forwarded_to_fetch_ohlcv(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_non_daily_timeframe_is_forwarded_to_fetch_ohlcv(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(_MODULE.time, "sleep", lambda _s: None)
         hour0 = int(datetime(2020, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
         exchange = _FakeExchange(pages=[[_bar(hour0)]])
         _MODULE.fetch_all_daily(exchange, "BTC/USD", "2020-01-01", timeframe="1h", end="2020-01-02")
         assert exchange.calls[0]["timeframe"] == "1h"
 
-    def test_empty_page_advances_since_by_batch_window(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_empty_page_advances_since_by_batch_window(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(_MODULE.time, "sleep", lambda _s: None)
         start_date = datetime(2020, 1, 1, tzinfo=timezone.utc)
         day0 = int(start_date.timestamp() * 1000)

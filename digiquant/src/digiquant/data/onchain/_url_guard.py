@@ -19,6 +19,10 @@ def is_allowed_base_url(base_url: str, allowed_hosts: frozenset[str]) -> bool:
     non-https scheme. A caller-nominated base therefore cannot reach an
     internal host or a cloud metadata endpoint even via the code seam.
     """
+    if not isinstance(base_url, str):
+        # Type hint says str, but a non-str (e.g. a JSON int) would otherwise
+        # raise AttributeError inside urlparse instead of the declared bool.
+        return False
     try:
         parsed = urlparse(base_url)
         port = parsed.port

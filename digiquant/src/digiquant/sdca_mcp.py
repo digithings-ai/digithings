@@ -152,9 +152,7 @@ def run_list_coinmetrics_catalog(
     from the frozen BTC-only metric list in ``digiquant.data.onchain.coinmetrics``.
     """
     try:
-        result = fetch_coinmetrics_catalog(
-            asset, timeout=timeout, api_key=api_key, session=session
-        )
+        result = fetch_coinmetrics_catalog(asset, timeout=timeout, api_key=api_key, session=session)
     except Exception as exc:
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
     return result.model_dump_json(indent=2)
