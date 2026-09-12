@@ -42,22 +42,18 @@ DATA_TOOLS: list[dict[str, Any]] = [
                 "(backed by digibase, scoped read-only to the data tables). Allowed tables: "
                 "positions, nav_history, theses, thesis_vehicles, position_events, "
                 "portfolio_metrics, trading_calendar. "
-                "Market history (price_history, price_technicals, "
-                "macro_series_observations) moved to the versioned R2 cache (#3780) — "
-                "ground price/macro claims with get_macro_series and the injected "
-                "market context instead "
-                "(NOTE: price_technicals had NO 'close' column — use the R2-backed "
-                "digiquant_get_price_technicals MCP tool for OHLCV/indicators). "
-                "Macro date column was 'obs_date' on the retired table; the "
-                "get_macro_series tool takes series_ids directly. "
+                "Market history (price_history, price_technicals, macro_series_observations) "
+                "is NOT readable here — it left the generic reader for the versioned R2 "
+                "cache (#3780). Ground price/macro claims with the dedicated tools "
+                "(get_macro_series; digiquant_get_price_technicals for OHLCV/indicators) "
+                "and the injected market context instead. "
                 "positions/nav_history/position_events/portfolio_metrics default to the "
                 "house workspace_id (overlay same-date rows are excluded); pass "
                 "eq.workspace_id to read another book. "
                 "Filter with eq/gte/lte/in_, sort with order+desc, cap with limit. Examples: "
-                "{table:'price_technicals', eq:{ticker:'XLK'}, order:'date', desc:true, limit:20} "
-                "or {table:'macro_series_observations', eq:{series_id:'DGS10'}, "
-                "order:'obs_date', desc:true, limit:6} "
-                "or {table:'price_history', eq:{ticker:'SPY'}, order:'date', desc:true, limit:5}."
+                "{table:'theses', eq:{ticker:'SPY'}, order:'date', desc:true, limit:10} "
+                "or {table:'position_events', eq:{ticker:'SPY'}, order:'date', desc:true, limit:20} "
+                "or {table:'trading_calendar', gte:{date:'2026-01-01'}, limit:10}."
             ),
             "parameters": {
                 "type": "object",
@@ -219,26 +215,11 @@ def build_data_tool_dispatcher(
                     "Allowed tables: positions, nav_history, theses, "
                     "thesis_vehicles, position_events, portfolio_metrics, trading_calendar."
                 )
-            # NOTE (#3780 + #814): macro_series_observations is still served
-            # by query_data on both backends, so the 'date' to 'obs_date'
-            # rewrite below stays: without it the model burns tool rounds
-            # on Postgres 42703 errors. (The R2 cutover routes dedicated
-            # macro reads via get_macro_series; this generic path keeps
-            # working for direct table queries.)
-            # Column allowlists for price_history / price_technicals live in
-            # ``query_data`` (#3771) so MCP digiquant_query_data shares the same choke.
-            # Server-side rewrite: the LLM sometimes sorts/filters macro_series_observations
-            # by 'date' (the generic name) instead of 'obs_date' (the real column). Silently
-            # correct it so the model gets useful data rather than a Postgres 42703 error (#814).
-            if table == "macro_series_observations":
-                for filter_arg in ("eq", "gte", "lte"):
-                    filt = args.get(filter_arg)
-                    if isinstance(filt, dict) and "date" in filt:
-                        filt = dict(filt)
-                        filt["obs_date"] = filt.pop("date")
-                        args = {**args, filter_arg: filt}
-                if args.get("order") == "date":
-                    args = {**args, "order": "obs_date"}
+            # Market history (price_history / price_technicals /
+            # macro_series_observations) is not served by query_data (#3780):
+            # the reader's allowlist refuses those tables before any column
+            # checks, and the dedicated R2-backed tools own the reads. No
+            # macro 'date' -> 'obs_date' rewrite is needed on this path.
             return query_data(
                 client=client,
                 table=table,

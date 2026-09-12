@@ -134,8 +134,10 @@ def _read_r2_window(
     skips the live fetch entirely, and the merged frame is additionally bounded
     to ``date <= as_of`` so historical reads (``as_of`` behind the seal — the
     cutover's backfill use case) cannot leak newer history (#3780 Task 7).
-    A missing ``latest`` pointer (KeyError)
-    maps to an unknown-ticker ``LookupError`` for the MCP error envelope.
+    A missing ``latest`` pointer (``KeyError`` from a dict-like store, or the
+    boto3 ``ClientError`` ``NoSuchKey``/404 the real R2 backend raises) maps to
+    an unknown-ticker ``LookupError`` for the MCP error envelope — other
+    backend faults (auth/transient) still propagate.
     A live-fetch failure raises (surfaced as the ``{"error"}`` envelope by
     the caller) — it is never swallowed into a valid-looking window.
     A per-ticker fetch *error entry* (``FetchResult.errors`` with no raised
@@ -153,7 +155,11 @@ def _read_r2_window(
     import polars as pl
 
     from digiquant.data.prices.merge import merge_history_live
-    from digiquant.data.prices.r2_history import latest_pointer_key, normalize_ticker
+    from digiquant.data.prices.r2_history import (
+        is_missing_object_error,
+        latest_pointer_key,
+        normalize_ticker,
+    )
     from digiquant.data.prices.technicals import compute_indicators
 
     manifest = manifest if manifest is not None else _read_manifest()
@@ -169,7 +175,9 @@ def _read_r2_window(
     else:
         try:
             gen_key = store.read_latest(latest_pointer_key(ticker))
-        except KeyError:
+        except Exception as exc:
+            if not is_missing_object_error(exc):
+                raise
             raise LookupError(f"unknown ticker {ticker!r}") from None
         sha: str | None = None
         for cand in datasets.values():
@@ -259,15 +267,22 @@ def _read_r2_macro_window(
     """Per-series ``{latest, window}`` macro observations sealed at *as_of*.
 
     A series whose generation is missing from the manifest (unknown sha) or
-    whose ``latest`` pointer is absent raises ``LookupError`` — surfaced as
+    whose ``latest`` pointer is absent (``KeyError`` or the boto3
+    ``ClientError`` ``NoSuchKey``/404) raises ``LookupError`` — surfaced as
     the ``{"error"}`` envelope by the caller — so backfill key mismatches
-    fail loud instead of serving empty windows.
+    fail loud instead of serving empty windows. Only the pointer read is
+    classified; a fault in parquet/row handling propagates as itself rather
+    than masquerading as an unknown series. Other backend faults
+    (auth/transient) propagate unchanged.
     """
     import io
 
     import polars as pl
 
-    from digiquant.data.prices.r2_history import macro_latest_pointer_key
+    from digiquant.data.prices.r2_history import (
+        is_missing_object_error,
+        macro_latest_pointer_key,
+    )
 
     manifest = manifest if manifest is not None else _read_manifest()
     datasets = manifest.get("datasets") or {}
@@ -276,24 +291,26 @@ def _read_r2_macro_window(
     for sid in series_ids:
         try:
             gen_key = store.read_latest(macro_latest_pointer_key("fred", sid))
-            sha = None
-            for cand in datasets.values():
-                if isinstance(cand, dict) and cand.get("object") == gen_key:
-                    sha = cand.get("sha256")
-                    break
-            if sha is None:
-                raise LookupError(f"unknown macro series {sid!r}")
-            frame = pl.read_parquet(io.BytesIO(store.get_generation(gen_key, str(sha))))
-            date_col = "obs_date" if "obs_date" in frame.columns else "date"
-            rows = (
-                frame.with_columns(pl.col(date_col).cast(pl.Date))
-                .filter(pl.col(date_col) <= pl.lit(as_of).cast(pl.Date))
-                .sort(date_col)
-                .to_dicts()
-            )
-            out[sid] = {"latest": rows[-1] if rows else {}, "window": rows}
-        except KeyError:
+        except Exception as exc:
+            if not is_missing_object_error(exc):
+                raise
             raise LookupError(f"unknown macro series {sid!r}") from None
+        sha = None
+        for cand in datasets.values():
+            if isinstance(cand, dict) and cand.get("object") == gen_key:
+                sha = cand.get("sha256")
+                break
+        if sha is None:
+            raise LookupError(f"unknown macro series {sid!r}")
+        frame = pl.read_parquet(io.BytesIO(store.get_generation(gen_key, str(sha))))
+        date_col = "obs_date" if "obs_date" in frame.columns else "date"
+        rows = (
+            frame.with_columns(pl.col(date_col).cast(pl.Date))
+            .filter(pl.col(date_col) <= pl.lit(as_of).cast(pl.Date))
+            .sort(date_col)
+            .to_dicts()
+        )
+        out[sid] = {"latest": rows[-1] if rows else {}, "window": rows}
     return out
 
 

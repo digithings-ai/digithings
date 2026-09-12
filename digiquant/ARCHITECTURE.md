@@ -360,12 +360,19 @@ plus an exact round-trip vs `compute_indicators` on the same history
 record goldens WITH a `close` column, then promote the premise guard to a
 real golden-value comparison.
 
-Macro carve-out: migration `124_drop_market_data_tables.sql` drops
-`price_history` + `price_technicals` ONLY — `macro_series_observations`
-stays (fedprob/bitview have no R2 homes; future work). Post-cutover size
-gate (`data/cutover_gate.py`, `POST_CUTOVER_SIZE_GATE_MB=320`) reads the
-`pg_database_size` total only: ~172MB of price tables dropped, revised
-saving ≈292MB target.
+Macro carve-out: migration `124_drop_market_data_tables.sql` is **deferred**
+(#3951) and is now a **no-op**: the `price_history` + `price_technicals` DROPs
+are commented out because the on-cron Supabase readers (`execute_at_open.py`,
+NAV replay, period accounting, entry-price backfill, metrics refresh,
+freshness probes) were not yet migrated to the R2 helpers — so both tables are
+**retained**. The real drop must land as a **new numbered migration** (e.g.
+`126_drop_market_data_tables.sql`), never by re-editing 124: `db-migrate.yml`
+records every executed file in `olympus_schema_migrations` by name, so once this
+no-op is ledgered a re-edited 124 is silently skipped. `macro_series_observations`
+likewise stays (fedprob/bitview have no R2 homes; future work). Post-cutover
+size gate (`data/cutover_gate.py`, `POST_CUTOVER_SIZE_GATE_MB=320`) reads the
+`pg_database_size` total only: the ~172MB price-table saving is not realized
+until the future drop migration lands toward the ≈292MB target.
 
 H9 seal coverage: H9 (`h9_cost_evidence.py`) reads the run-date session
 bar but R2 seals through the manifest `as_of`; seal < run_date fail-softs
@@ -2388,11 +2395,15 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
    REJECTED/base-preserved outcome (#3078) — a structurally invalid amendment is
    a model-output error that must surface, not be absorbed; the H6 node catches it
    and degrades that ticker to carried + PhaseError, never killing the chain (#3738). `query_data`
-   enforces per-table column allowlists for `price_history` / `price_technicals` (#3771;
-   covers MCP `digiquant_query_data` too): OHLCV/`close` on technicals redirects to
-   `price_history`; `sma_*`/technicals on history redirect to `price_technicals`. H9 cost
-   evidence reads `hist_vol_21`/`atr_pct` from `price_technicals`
-  (second read joined onto the history row), never from `price_history`.
+   no longer serves market history at all (#3780): its table allowlist refuses
+   `price_history` / `price_technicals` / `macro_series_observations` before the
+   #3771 per-table column allowlists (retained in code as a defensive choke, and
+   covered directly by unit tests) can run; dedicated R2-backed tools
+   (`digiquant_get_price_technicals`, `get_macro_series`) own those reads, and MCP
+   `digiquant_query_data` shares the same refusal. H9 cost
+   evidence reads `hist_vol_21`/`atr_pct` through the R2 seam when
+   `DIGIQUANT_MARKET_DATA_BACKEND=r2`, else from `price_technicals`
+  (second read joined onto the history row) — never from `price_history`.
   `conviction_delta` clamps to ±2 before validation; `DocumentPatch` drops ops
   missing `op`/`path` before validation; bias synonyms map hawkish→bearish,
   dovish→bullish (tightening→bearish).
