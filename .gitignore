@@ -89,14 +89,13 @@ digikey/examples/vault.yaml
 # Large data files and caches (CSV, Parquet, pickles)
 # note: sample data in repo may be checked in intentionally, but user-owned
 # datasets should not be
-**/data/*.csv
-**/data/*.parquet
-**/data/*.pkl
-**/data/*.pickle
-**/data/*/*.csv
-**/data/*/*.parquet
-**/data/*/*.pkl
-**/data/*/*.pickle
+# ** matches any nesting depth (data/*.ext, data/x/*.ext, data/x/y/*.ext, ...)
+# so cache dirs like data/onchain/bitview/ are covered without a new tier
+# each time a client nests one directory deeper.
+**/data/**/*.csv
+**/data/**/*.parquet
+**/data/**/*.pkl
+**/data/**/*.pickle
 
 # Packaging output
 digi-bundle-*.tar.gz
