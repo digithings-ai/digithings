@@ -670,11 +670,14 @@ ceiling too, not just the anonymous-embed one.
 
 **Redirect posture (#2572):** `isAllowedServiceUrl` gates only the *first* hop.
 Node/undici's default `redirect: "follow"` forwards custom headers (including
-`X-BYOK-Key` and `X-LiteLLM-Proxy-Key`) across origins while stripping only
+`X-BYOK-Key`, `X-LiteLLM-Proxy-Key`, and the MCP token headers
+`X-Digi-Mcp-Servers` / `X-Digi-Mcp-Session`) across origins while stripping only
 `Authorization`. Credentialed outbound fetches therefore go through
 `src/lib/fetch-guarded.ts` (`fetchGuarded`): `redirect: "manual"`, same-origin
 Location hops only, refuse cross-origin redirects while credentials are present.
-Wired into the digigraph trace stream (`adapters/digithings/stream.ts`), the
+Credential-bearing headers are the exact names in `CREDENTIAL_HEADER_NAMES` plus
+any `x-digi-mcp-*` prefix, so a future MCP token header is covered without an
+edit (#3933). Wired into the digigraph trace stream (`adapters/digithings/stream.ts`), the
 AI SDK / `streamText` client (`lib/digigraph.ts` custom `fetch`), and
 `fetchWithTimeout` (covers `POST /api/byok/test` provider probes). Vitest
 `fetch-guarded.test.ts` stands up two local origins and asserts the X-* headers
