@@ -236,7 +236,8 @@ def run_research_agent(
         execute_tool: Dispatcher ``(name, args) -> json_str`` bound to the tools.
             Required for the tool path; ignored when ``tools`` is empty.
         max_tool_rounds: Optional cap for the tool-calling loop. None (default)
-            keeps digillm's default (5); Olympus passes 24 via its wrapper.
+            keeps digillm's default (5); the digiquant research wrapper passes 24 via its own
+            ``max_tool_rounds``.
 
     Tool-path retry (#1739):
         A tool-grounded turn gets **no** provider-side schema enforcement, so a

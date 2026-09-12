@@ -98,7 +98,7 @@ def test_portfolio_thesis_and_portfolio_slugs_route_openrouter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """portfolio H1–H7 slugs must resolve via dashboard_models (CI has OPENROUTER_API_KEY only)."""
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     cfg = model_config._load_digiquant_models()
     cheap = cfg.tiers["cheap"]
     assert get_model_for_phase("portfolio/thesis/market-review") in cheap.allowed_models["research"]
@@ -119,7 +119,7 @@ def test_deliberation_pinned_to_json_reliable_deepseek_v4_flash(
     to deepseek-v4-flash — the json/tool-reliable open-weight model — for *every* ticker,
     bypassing the pool hash. Never maverick, never r1.
     """
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     # The live macro watchlist from the failing run.
@@ -149,7 +149,7 @@ def test_master_digest_pinned_to_v4_flash(monkeypatch: pytest.MonkeyPatch) -> No
     carried forward). v4-flash's 1M context also removes the 64k synthesis ceiling
     (#1559); the input budget remains as a cost bound. Never r1, never maverick.
     """
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     model = get_model_for_phase("master-digest")
     assert model == "deepseek/deepseek-v4-flash"
     assert is_tool_use_capable_model(model)
@@ -160,7 +160,7 @@ def test_asset_analyst_slug_resolves_to_known_good_openrouter_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """H5 asset-analyst must resolve from the extraction pool (CI run 27950332738)."""
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     model = get_model_for_phase("portfolio/asset-analyst-AAPL")
     assert model is not None
     assert model in _CHEAP_PHASE_MODELS
@@ -196,7 +196,7 @@ def test_decision_reflector_resolves_openrouter_house_slug(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """decision-reflector must keep the digiquant pool slug through resolve_request_model."""
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.delenv("OLLAMA_MODEL", raising=False)
     monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
     monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
@@ -213,7 +213,7 @@ def test_decision_reflector_resolves_openrouter_house_slug(
 
 
 def test_cheap_tier_resolves_extraction_and_reasoning(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     cfg = model_config._load_digiquant_models()
     cheap = cfg.tiers["cheap"]
     assert get_model_for_phase("alt-sentiment-news") in cheap.allowed_models["extraction"]
@@ -223,7 +223,7 @@ def test_cheap_tier_resolves_extraction_and_reasoning(monkeypatch: pytest.Monkey
 
 @pytest.mark.unit
 def test_quality_tier_uses_reasoning_pool(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "quality")
     cfg = model_config._load_digiquant_models()
     quality = cfg.tiers["quality"]
     assert get_model_for_phase("pm-rebalance") in quality.allowed_models["reasoning"]
@@ -232,7 +232,7 @@ def test_quality_tier_uses_reasoning_pool(monkeypatch: pytest.MonkeyPatch) -> No
 
 @pytest.mark.unit
 def test_balanced_tier_includes_mid_frontier_models(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "balanced")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "balanced")
     cfg = model_config._load_digiquant_models()
     balanced = cfg.tiers["balanced"]
     research = balanced.allowed_models["research"]
@@ -255,7 +255,7 @@ def test_quality_tier_allows_frontier_in_pools() -> None:
 
 @pytest.mark.unit
 def test_phase_slug_selection_is_stable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     first = get_model_for_phase("macro")
     second = get_model_for_phase("macro")
     assert first == second
@@ -338,7 +338,7 @@ def test_phase_models_flagship_override_rejected_on_cheap(
         Path(_REPO_CONFIG, "digiquant_models.yaml").read_text()
     )
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     assert get_model_for_phase("macro") in _cheap_research_pool()
@@ -356,7 +356,7 @@ def test_phase_models_mid_tier_override_wins_on_balanced(
         Path(_REPO_CONFIG, "digiquant_models.yaml").read_text()
     )
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "balanced")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "balanced")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     assert get_model_for_phase("macro") == "openrouter/openai/gpt-5.6-luna"
@@ -396,7 +396,7 @@ def test_phase_models_online_override_rejected(
         Path(_REPO_CONFIG, "digiquant_models.yaml").read_text()
     )
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     model = get_model_for_phase("macro")
@@ -500,7 +500,7 @@ def test_default_tier_is_cheap(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_digiquant_model_tier_wins_over_dashboard_alias(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """#3381: DIGIQUANT_MODEL_TIER is canonical; retired DASHBOARD_* is alias only."""
+    """#3381: DIGIQUANT_MODEL_TIER is canonical; the retired OLYMPUS_* name is ignored (#3784)."""
     monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "quality")
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     assert get_digiquant_tier() == "quality"
@@ -514,12 +514,11 @@ def test_digiquant_model_tier_alone(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_dashboard_model_tier_alias_when_canonical_absent(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_olympus_model_tier_alone_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#3784: sole-read — the retired OLYMPUS_MODEL_TIER no longer selects a tier."""
     monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
-    assert get_digiquant_tier() == "quality"
+    assert get_digiquant_tier() == "cheap"
 
 
 @pytest.mark.unit
@@ -625,7 +624,7 @@ def test_pipeline_phase_slugs_resolve_to_openrouter(
     monkeypatch: pytest.MonkeyPatch, slug: str
 ) -> None:
     """Every live-pipeline phase slug must resolve to an OpenRouter model (never None)."""
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     resolved = get_model_for_phase(slug)
     assert resolved is not None, (
@@ -645,7 +644,7 @@ def test_deliberation_slug_routes_to_research_pool(monkeypatch: pytest.MonkeyPat
     ``test_deliberation_pinned_to_json_reliable_deepseek_v4_flash``), so the pinned model need
     not also sit in the live ``research`` pool — that pool is cost-tuned independently (#2368).
     """
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     resolved = get_model_for_phase("portfolio/deliberation-NVDA")
     assert resolved is not None
@@ -657,7 +656,7 @@ def test_get_model_for_mode_does_not_auto_override_when_openrouter_key_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Having OPENROUTER_API_KEY alone must not swap digigraph chat onto dashboard paid models."""
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
     monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
@@ -707,7 +706,7 @@ def test_unresolved_capability_returns_none_under_a_bound_byok_key(
     """
     from digigraph.llm_auth import pop_byok, push_byok_header
 
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     # 'macro' maps to a capability, so the capability branch is entered; the resolver

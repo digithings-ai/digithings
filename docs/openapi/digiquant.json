@@ -205,6 +205,12 @@
             "title": "Strategy Name",
             "type": "string"
           },
+          "success": {
+            "description": "A completed backtest. ``partial`` (valid PnL, missing optional metric) is still success.",
+            "readOnly": true,
+            "title": "Success",
+            "type": "boolean"
+          },
           "symbols": {
             "description": "Instruments used",
             "items": {
@@ -230,7 +236,8 @@
           "run_id",
           "strategy_name",
           "start_time",
-          "end_time"
+          "end_time",
+          "success"
         ],
         "title": "BacktestResult",
         "type": "object"
