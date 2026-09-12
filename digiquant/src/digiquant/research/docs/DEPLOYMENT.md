@@ -32,7 +32,7 @@ into `$GITHUB_ENV` by the "Load pipeline configuration" step.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `OLYMPUS_MODEL_TIER` | `cheap` | Routes LLM nodes via `config/digiquant_models.yaml` (`cheap` \| `balanced` \| `quality`) — cost lever, alongside edit-mode (see [Cost monitoring](#cost-monitoring)) |
+| `DIGIQUANT_MODEL_TIER` | `cheap` | Routes LLM nodes via `config/digiquant_models.yaml` (`cheap` \| `balanced` \| `quality`) — cost lever, alongside edit-mode (see [Cost monitoring](#cost-monitoring)) |
 | `OLYMPUS_STALE_FULL_DAYS` | `7` | Prior gap > N calendar days → `full` rewrite instead of `edit` |
 | `OLYMPUS_BELIEFS_BACKLOG` | `20` | Additional trigger for a **full** beliefs rewrite when unfolded `decision_log` rows exceed the threshold. House runs already publish a **daily short fold**. |
 | `DIGIQUANT_MAX_ANALYSTS` | `30` (`.github/digiquant-pipeline.yml`) | Caps H4/H5/H6 fan-out width — enforced for the first time by #1767. Held tickers always survive (#936) and are the only sanctioned overshoot; thesis vehicles are prioritised *within* the cap, not exempt from it. `0` = uncapped |
@@ -208,7 +208,7 @@ Per-run token counts land in `atlas_run_diagnostics` via `digiquant.research.dia
 Flag runs where call count exceeds the rolling 4-week median by more than 3x — usually
 a triage miss (everything `full` instead of `skip`/`edit`) or a cache-control regression.
 
-Quiet-day cost is controlled by `OLYMPUS_MODEL_TIER` + edit-mode — not graph forks.
+Quiet-day cost is controlled by `DIGIQUANT_MODEL_TIER` + edit-mode — not graph forks.
 
 ## Changing the schedule
 
