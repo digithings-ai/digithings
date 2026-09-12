@@ -75,11 +75,12 @@ describe("gallery Thread is the product digichat skin", () => {
     );
     const aui = read("../../styles/chat-aui.css");
     expect(chatbot).toContain(gate);
-    expect(aui).toContain(gate);
     expect(chatbot).toContain(popoverGate);
-    expect(aui).toContain(popoverGate);
     expect(chatbot).not.toMatch(/^\.aui-action-bar-more-content \{/m);
-    expect(aui).not.toMatch(/^\.aui-action-bar-more-content \{/m);
+    // Single source: the gallery sheet owns the portaled base rules. chat-aui.css
+    // loads first and loses every tie, so it must not re-declare them (#3818).
+    expect(aui).not.toMatch(/\.aui-action-bar-more-content \{/);
+    expect(aui).not.toMatch(/\.aui-composer-trigger-popover \{/);
   });
 
   it("product tooltip matches /chatbot: no rotated-square arrow", () => {
