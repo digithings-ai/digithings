@@ -32,6 +32,7 @@ class ResearchTurnState(BaseModel):
     filter: str | None = None
     filters: list[dict[str, Any]] | None = None
     session_id: str | None = None
+    workspace_id: str | None = None
     service: str = "digisearch"
     trace: Annotated[list[ResearchTurnTraceStep], add] = Field(default_factory=list)
     results: list[dict[str, Any]] = Field(default_factory=list)

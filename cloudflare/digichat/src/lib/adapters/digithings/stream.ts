@@ -116,6 +116,18 @@ function relayableUpstreamCode(body: string): string | null {
   return code;
 }
 
+/**
+ * User-facing copy for a digigraph failure the visitor can only retry: a
+ * non-OK status with no actionable code, an empty body, or a refused
+ * credential redirect.
+ *
+ * Delivered as a stream `error` part (never an assistant `text-delta`) so the
+ * runtime marks the assistant message as errored and the error UI + retry
+ * shows, instead of a success-looking bubble (#3910).
+ */
+export const DIGIGRAPH_UNAVAILABLE_MESSAGE =
+  "The assistant is unavailable right now. Please try again shortly.";
+
 class DigigraphStreamContractError extends Error {
   constructor(payload: string) {
     super(payload);
@@ -188,6 +200,8 @@ export async function createDigigraphTraceStreamResponse(opts: {
       let textSeq = 0;
       let textId = "assistant-main";
       let textOpen = false;
+      /** Any answer text was written — the normal success signal. */
+      let textEmitted = false;
       const activityCtx = createActivityWriteContext();
       const openText = () => {
         if (textOpen) return;
@@ -241,14 +255,8 @@ export async function createDigigraphTraceStreamResponse(opts: {
       } catch (err) {
         if (err instanceof CredentialRedirectError) {
           console.error(`[digigraph] ${err.message}`);
-          openText();
-          writer.write({
-            type: "text-delta",
-            id: textId,
-            delta: "The assistant is unavailable right now. Please try again shortly.",
-          });
           closeText();
-          return;
+          throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
         }
         throw err;
       }
@@ -272,25 +280,15 @@ export async function createDigigraphTraceStreamResponse(opts: {
             digigraphErrorToEmbedPayload({ code: relayable })
           );
         }
-        openText();
-        writer.write({
-          type: "text-delta",
-          id: textId,
-          delta: "The assistant is unavailable right now. Please try again shortly.",
-        });
+        // #3910: no actionable code — fail the turn with a real error part so
+        // the runtime renders the error UI and a retry, not a fake reply.
         closeText();
-        return;
+        throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
       if (!res.body) {
         console.error(`[digigraph] upstream ${res.status} returned an empty body`);
-        openText();
-        writer.write({
-          type: "text-delta",
-          id: textId,
-          delta: "The assistant is unavailable right now. Please try again shortly.",
-        });
         closeText();
-        return;
+        throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
       for await (const delta of iterateOpenAiSse(res.body)) {
         const dgErr = delta.digigraph_error;
@@ -324,6 +322,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
           if (cleaned.length) {
             openText();
             writer.write({ type: "text-delta", id: textId, delta: cleaned });
+            textEmitted = true;
           }
         }
         const tr = delta.digigraph_trace;
@@ -354,6 +353,21 @@ export async function createDigigraphTraceStreamResponse(opts: {
             writeStandardActivity(writer, span, activityCtx);
           }
         }
+      }
+      // #3910: a real 200 always has a non-null body even when the upstream
+      // sends no bytes, so `!res.body` only catches 204/205/HEAD. Without this,
+      // an SSE stream that ends with zero events completes silently — no
+      // assistant text, no activity, no error, no Retry. Treat a stream that
+      // produced neither answer text nor any activity/tool part as an upstream
+      // failure. `activityCtx.seq` counts every non-text part written (reasoning,
+      // tool, source, data-status), so a tool-only or reasoning-only reply is
+      // not misclassified as empty.
+      if (!textEmitted && activityCtx.seq === 0) {
+        console.error(
+          `[digigraph] upstream ${res.status} streamed no text or activity`
+        );
+        closeText();
+        throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
       finishStandardActivity(writer, activityCtx);
       closeText();

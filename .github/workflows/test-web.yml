@@ -7,6 +7,9 @@ concurrency:
   group: web-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest

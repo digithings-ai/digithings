@@ -28,11 +28,11 @@ The library ships modules under `digibase/src/digibase/`, including the optional
 | `errors.py` | Pydantic error envelope models; FastAPI error handler registration | Yes |
 | `http.py` | Outbound header helpers plus inbound X-Request-ID correlation middleware, ContextVar, and logging filter (task #213) | Yes |
 | `http_client.py` | Bounded-timeout ``httpx`` client factories (epic #2 hardening) | Yes |
+| `service_auth.py` | Service-to-service digikey JWT exchange with a process-local token cache | Yes |
 | `audit.py` | Key-pattern-based redaction for audit payloads | Yes |
 | `metrics.py` | Prometheus `/metrics` endpoint + HTTP instrumentation middleware (ADR-0003) | Yes |
 | `otel.py` | Optional OTel FastAPI instrumentation wiring (requires `digibase[otel]`) | Yes |
 | `cors.py` | Shared CORS helper for FastAPI services | Yes |
-| `connectors/base.py` | Abstract `ConnectorPayload` / `ConnectorResult` DTOs for write actions | Yes |
 | `connectors/supabase.py` | Supabase upsert, filtered-select, and guarded filtered-delete connector (requires `digibase[supabase]`) | Yes |
 | `util.py` | Small shared utilities | Yes |
 
@@ -127,6 +127,39 @@ timeout and can hang forever against a slow upstream — never reach production
 code. Long-running call sites (optimization, 600 s backtest submission)
 continue to pass their explicit `timeout=` overrides; the helpers preserve
 that behaviour verbatim.
+
+### `digibase.service_auth`
+
+```python
+class ServiceAuthError(RuntimeError): ...
+
+clear_service_jwt_cache() -> None
+
+get_service_jwt(
+    *,
+    key_env: str = "DIGIQUANT_DIGIKEY_API_KEY",
+    digikey_url_env: str = "DIGIKEY_URL",
+    scopes: tuple[str, ...] = ("digisearch:query",),
+) -> str
+```
+
+Exchanges a long-lived service API key for a short-lived digikey JWT via
+`POST {digikey_url}/v1/oauth/token` (`grant_type=api_key`), for headless callers
+with no user session (e.g. digiquant's web-grounding pipeline hub calls).
+
+- `get_service_jwt` reads the raw key from `key_env` and the digikey base URL
+  from `digikey_url_env`, raising `ServiceAuthError` when either is unset. On a
+  cache miss it performs a **blocking network call** through
+  `digibase.http_client.sync_client` and caches the token until `expires_in`
+  minus `EXPIRY_SKEW_S` (60 s).
+- The cache is **module-global** and shared across threads (guarded by a lock),
+  keyed by env var name + SHA-256 of the raw key + base URL + canonical JSON of
+  `scopes`, so distinct keys, hosts, or scope sets never collide. It is
+  process-local and never persisted; call `clear_service_jwt_cache()` in tests or
+  after rotating credentials.
+- A response whose `access_token` is missing, `null`, or not a non-empty string
+  raises `ServiceAuthError` (never coerced to the string `"None"`). Transport and
+  non-2xx failures surface as `ServiceAuthError("digikey exchange failed: …")`.
 
 ### `digibase.errors`
 
@@ -278,8 +311,8 @@ instrumentation.
 ### `digibase.connectors.supabase`
 
 Requires the `digibase[supabase]` optional extra (`supabase>=2`). The `supabase`
-import is deferred into `from_env`, so importing the module — and the connector
-base types — never pulls the dependency on a lightweight base install. Mirrors
+import is deferred into `from_env`, so importing the module never pulls the
+dependency on a lightweight base install. Mirrors
 the digiquant Supabase wrappers (`SupabaseClient` Protocol, `from_env`,
 metadata-only audit redaction) so digiquant can adopt this connector later, and
 consolidates twelve-x's hand-rolled `client.table(T).upsert(...)` /

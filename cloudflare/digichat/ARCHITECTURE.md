@@ -528,8 +528,15 @@ Anthropic, Gemini, x.ai (model required for all non-OpenAI providers).
 Provider list is defined by `config/byok-providers.json`.
 
 A non-2xx digigraph reply is **not** relayed to an embed visitor: the body is
-logged server-side and the stream carries a generic "unavailable right now",
-because a 500 body can hold stack traces, internal hostnames and prompt echoes.
+logged server-side and the stream fails the turn with a generic "unavailable
+right now" `error` part — not an assistant `text-delta` — so the runtime marks
+the message errored and the error UI + Retry renders (`MessageError`). The copy
+is generic because a 500 body can hold stack traces, internal hostnames and
+prompt echoes. A 2xx SSE stream that ends having produced no answer text and no
+activity/tool part (an effectively empty reply, including a bare or
+`[DONE]`-only body) and a refused cross-origin credential redirect
+(`CredentialRedirectError`) take the same error path. A tool-only or
+reasoning-only reply counts as produced and is not misclassified.
 The one exception is a refusal the visitor can act on — `relayableUpstreamCode`
 in `lib/adapters/digithings/stream.ts` passes through the *code* alone, and only
 for codes in `BYOK_MODEL_REMEDIABLE_CODES`, so the BYOK sequence opens instead
@@ -663,11 +670,14 @@ ceiling too, not just the anonymous-embed one.
 
 **Redirect posture (#2572):** `isAllowedServiceUrl` gates only the *first* hop.
 Node/undici's default `redirect: "follow"` forwards custom headers (including
-`X-BYOK-Key` and `X-LiteLLM-Proxy-Key`) across origins while stripping only
+`X-BYOK-Key`, `X-LiteLLM-Proxy-Key`, and the MCP token headers
+`X-Digi-Mcp-Servers` / `X-Digi-Mcp-Session`) across origins while stripping only
 `Authorization`. Credentialed outbound fetches therefore go through
 `src/lib/fetch-guarded.ts` (`fetchGuarded`): `redirect: "manual"`, same-origin
 Location hops only, refuse cross-origin redirects while credentials are present.
-Wired into the digigraph trace stream (`adapters/digithings/stream.ts`), the
+Credential-bearing headers are the exact names in `CREDENTIAL_HEADER_NAMES` plus
+any `x-digi-mcp-*` prefix, so a future MCP token header is covered without an
+edit (#3933). Wired into the digigraph trace stream (`adapters/digithings/stream.ts`), the
 AI SDK / `streamText` client (`lib/digigraph.ts` custom `fetch`), and
 `fetchWithTimeout` (covers `POST /api/byok/test` provider probes). Vitest
 `fetch-guarded.test.ts` stands up two local origins and asserts the X-* headers
@@ -1527,7 +1537,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 |---|---|---|
 | `AUTH_SECRET` | Auth.js session JWT signing/encryption key | Yes |
 | `AUTH_URL` | Public origin of digichat (OAuth redirect base) | Yes in production |
-| `AUTH_TRUST_HOST` | Allow `X-Forwarded-Host` from reverse proxy | Yes in Docker |
+| `AUTH_TRUST_HOST` | Allow `X-Forwarded-Host` from reverse proxy (compose default `false`) | Only behind a trusted proxy |
 | `AUTH_OIDC_ISSUER` | OIDC provider issuer URL | If using OIDC |
 | `AUTH_OIDC_CLIENT_ID` | OIDC client ID | If using OIDC |
 | `AUTH_OIDC_CLIENT_SECRET` | OIDC client secret | If using OIDC |

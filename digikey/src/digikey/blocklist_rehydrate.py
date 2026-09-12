@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import time
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from digikey import blocklist
 from digikey.db_schema import ApiKeyRow, JtiIssuedRow
@@ -17,9 +17,12 @@ logger = logging.getLogger(__name__)
 
 
 def rehydrate_blocklist_from_db(session_factory) -> int:
-    """Push all live JTIs for revoked API keys into Redis.
+    """Push all live JTIs for revoked principals into Redis.
 
-    Returns the number of entries written. No-op when blocklist Redis is unset.
+    Covers both revoked API keys (via ``ApiKeyRow.revoked_at``) and revoked BFF
+    subjects (via ``JtiIssuedRow.revoked_at``, written by the subject revoke
+    endpoint). Returns the number of entries written. No-op when blocklist Redis
+    is unset.
     """
     if not blocklist.is_configured():
         return 0
@@ -28,9 +31,12 @@ def rehydrate_blocklist_from_db(session_factory) -> int:
     with sf() as session:
         rows = session.execute(
             select(JtiIssuedRow.jti, JtiIssuedRow.exp)
-            .join(ApiKeyRow, JtiIssuedRow.api_key_id == ApiKeyRow.id)
+            .outerjoin(ApiKeyRow, JtiIssuedRow.api_key_id == ApiKeyRow.id)
             .where(
-                ApiKeyRow.revoked_at.is_not(None),
+                or_(
+                    ApiKeyRow.revoked_at.is_not(None),
+                    JtiIssuedRow.revoked_at.is_not(None),
+                ),
                 JtiIssuedRow.exp > now_ts,
             )
         ).all()
@@ -38,5 +44,7 @@ def rehydrate_blocklist_from_db(session_factory) -> int:
     if not entries:
         return 0
     written = blocklist.write_blocklist_bulk(entries)
-    logger.info("blocklist rehydrate: wrote %s jti entries from %s revoked-key rows", written, len(entries))
+    logger.info(
+        "blocklist rehydrate: wrote %s jti entries from %s revoked-key rows", written, len(entries)
+    )
     return written

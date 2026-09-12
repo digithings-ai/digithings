@@ -1,7 +1,7 @@
 # Relative-strength asset rotation — Phase 0 design note (#1084)
 
 **Status:** Phase 0 research spike (chosen v1) + Phase 1 long-only implementation map.
-**Seeds:** DigiVault theory map; optimizer epic #1079; SDCA RS-driven risk hook #1082; macro regime gate #1085.
+**Seeds:** digivault theory map; optimizer epic #1079; SDCA RS-driven risk hook #1082; macro regime gate #1085.
 
 ## Literature map (compact)
 

@@ -392,11 +392,13 @@ def _phase_models_override(phase_slug: str, phase_models: dict[str, str]) -> str
 
 
 def get_digiquant_tier() -> str:
-    """Active dashboard tier from ``OLYMPUS_MODEL_TIER`` or ``digiquant_models.yaml`` default."""
-    if "DIGIQUANT_MODEL_TIER" in os.environ:
-        raw = os.environ.get("DIGIQUANT_MODEL_TIER", "").strip().lower()
-    else:
-        raw = os.environ.get("OLYMPUS_MODEL_TIER", "").strip().lower()
+    """Active tier from ``DIGIQUANT_MODEL_TIER`` or ``digiquant_models.yaml`` default.
+
+    Sole-read since #3784: the retired ``OLYMPUS_MODEL_TIER`` no longer selects a
+    tier here. ``digiquant.dashboard.envcompat`` keeps it as a listed retired
+    alias; no reader consults it, so rollback means reverting this change.
+    """
+    raw = os.environ.get("DIGIQUANT_MODEL_TIER", "").strip().lower()
     if raw in _VALID_MODEL_TIERS:
         return raw
     return _load_digiquant_models().default_tier or "cheap"
@@ -700,7 +702,7 @@ def get_model_for_phase(phase_slug: str) -> str | None:
 
     Resolution order:
     1. ``model_modes.yaml`` ``phase_models`` — explicit per-phase override (frontier escape hatch).
-    2. ``digiquant_models.yaml`` — capability tier × ``OLYMPUS_MODEL_TIER``.
+    2. ``digiquant_models.yaml`` — capability tier × ``DIGIQUANT_MODEL_TIER``.
     3. ``None`` → caller uses :func:`get_model_for_mode`.
 
     Prefix match in ``phase_models``: a key ending in '-' (e.g. 'analyst-') matches any

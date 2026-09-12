@@ -34,7 +34,7 @@ The rollout covers five FastAPI services: digigraph, digiquant, digisearch, digi
 
 ## 2. Current Implementation State
 
-digismith ships exactly four source files under `digismith/src/digismith/`:
+digismith ships exactly five source files under `digismith/src/digismith/`:
 
 | File | Role | Truly implemented | Placeholder / stub |
 |------|------|------------------|--------------------|
