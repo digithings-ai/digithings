@@ -177,6 +177,8 @@ export interface NavChartPoint {
   contract?: string | null;
   /** Tip day return when present on `public_accounting_nav_history`. */
   day_return_pct?: number | null;
+  /** Migration 123 (#3767): true on the first row after a legacy↔finalized flip. */
+  series_seam?: boolean | null;
 }
 
 /** One historical position row for sleeve / time-series aggregation. */

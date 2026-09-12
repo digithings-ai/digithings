@@ -262,7 +262,6 @@ def build_digiquant_fetch_bitview_series_tool() -> dict[str, Any]:
                     "timeout": {"type": "number", "default": 30},
                     "start": {"type": "integer"},
                     "end": {"type": "integer"},
-                    "base_url": {"type": "string", "description": "Override API base URL"},
                     "allow_derived": {
                         "type": "boolean",
                         "description": "Fetch series normally refused as derived/dual-count (e.g. nupl)",
@@ -310,7 +309,6 @@ def build_digiquant_fetch_bgeometrics_series_tool() -> dict[str, Any]:
                     "cache_dir": {"type": "string"},
                     "timeout": {"type": "number", "default": 30},
                     "token": {"type": "string", "description": "bitcoin-data.com API token"},
-                    "base_url": {"type": "string", "description": "Override API base URL"},
                 },
                 "required": ["metric"],
             },
@@ -346,7 +344,6 @@ def build_digiquant_fetch_coinmetrics_series_tool() -> dict[str, Any]:
                     "page_size": {"type": "integer", "default": 10000},
                     "cache_dir": {"type": "string"},
                     "timeout": {"type": "number", "default": 30},
-                    "base_url": {"type": "string", "description": "Override API base URL"},
                     "api_key": {
                         "type": "string",
                         "description": "Registered CoinMetrics API key (optional)",
@@ -374,7 +371,6 @@ def build_digiquant_list_coinmetrics_catalog_tool() -> dict[str, Any]:
                 "properties": {
                     "asset": {"type": "string", "description": "Restrict to one asset, e.g. 'btc'"},
                     "timeout": {"type": "number", "default": 30},
-                    "base_url": {"type": "string", "description": "Override API base URL"},
                     "api_key": {
                         "type": "string",
                         "description": "Registered CoinMetrics API key (optional)",

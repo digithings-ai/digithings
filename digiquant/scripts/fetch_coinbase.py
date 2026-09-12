@@ -81,6 +81,18 @@ def bars_to_polars(bars: list[list], ticker: str, *, timeframe: str = "1d") -> p
     )
 
 
+def cache_path_for(cache_dir: Path, ticker: str, timeframe: str) -> Path:
+    """Resolve the on-disk cache path for a ticker/timeframe.
+
+    Daily bars keep the canonical ``price-history/{ticker}.csv`` path every
+    other consumer reads. Intraday bars go under a ``{timeframe}/`` namespace
+    so ISO timestamps never overwrite the daily date-only cache (#3944).
+    """
+    if timeframe == "1d":
+        return cache_dir / f"{ticker}.csv"
+    return cache_dir / timeframe / f"{ticker}.csv"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch Coinbase daily OHLCV via CCXT")
     parser.add_argument(
@@ -129,7 +141,8 @@ def main() -> None:
             if before != len(df):
                 logger.info("  dropped incomplete bar(s) on/after %s", today)
 
-        out = args.cache_dir / f"{ticker}.csv"
+        out = cache_path_for(args.cache_dir, ticker, args.timeframe)
+        out.parent.mkdir(parents=True, exist_ok=True)
         df.write_csv(out)
         logger.info(
             "  %s: %d bars (%s → %s) → %s",

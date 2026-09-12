@@ -164,7 +164,7 @@ def inventory_slugs() -> list[tuple[str, str]]:
             continue
         if example in known:
             continue
-        out.append((example, f"from digiquant_models.yaml"))
+        out.append((example, "from digiquant_models.yaml"))
         known.add(example)
     return out
 
@@ -183,34 +183,6 @@ def _provider(model: str) -> str:
     if model.startswith("xai/"):
         return "xai"
     return "default-openai"
-
-
-# ── Routing table ─────────────────────────────────────────────────────────────
-
-
-def print_routing_table() -> dict[str, list[str]]:
-    mode = os.environ.get("DIGI_LLM_MODE", "test")
-    print(f"\n{'=' * 70}")
-    print(f"  research/portfolio model routing table  (DIGI_LLM_MODE={mode})")
-    print(f"{'=' * 70}")
-
-    by_model: dict[str, list[str]] = {}
-    prev_model = None
-    for slug, label in ALL_SLUGS:
-        model = _resolve(slug)
-        source = "phase_models" if get_model_for_phase(slug) else f"defaults[{mode}]"
-        if model != prev_model:
-            print(f"\n  ── {model}  [{source}]")
-            prev_model = model
-        print(f"     {slug:<36}  {label}")
-        by_model.setdefault(model, []).append(slug)
-
-    print(f"\n{'─' * 70}")
-    print(f"  Distinct models: {len(by_model)}")
-    for m in by_model:
-        print(f"    • {m}  ({len(by_model[m])} phases)")
-    print()
-    return by_model
 
 
 # ── Provider ping ─────────────────────────────────────────────────────────────
@@ -292,7 +264,7 @@ def main() -> None:
         "--fail-on-skip",
         action="store_true",
         dest="strict",
-        help="exit 1 when every provider ping was skipped (nothing checked) (#3787)",
+        help="exit 1 when any provider ping was skipped (nothing checked for it) (#3787)",
     )
     args = ap.parse_args()
 
@@ -331,9 +303,10 @@ def main() -> None:
             print("Provider ping failed — check API keys, routing, and network.", file=sys.stderr)
             sys.exit(1)
         distinct_providers = len({_provider(m) for m in by_model})
-        if args.strict and distinct_providers and skipped >= distinct_providers:
+        if args.strict and skipped:
             print(
-                f"STRICT: all {skipped} provider ping(s) skipped — nothing checked (#3787)",
+                f"STRICT: {skipped} of {distinct_providers} provider ping(s) skipped — "
+                "not every provider was checked (#3787)",
                 file=sys.stderr,
             )
             sys.exit(1)

@@ -701,7 +701,13 @@ def create_mcp_server(
         try:
             import ccxt
             import polars as pl
-            from fetch_coinbase import DEFAULT_CACHE, SYMBOLS, bars_to_polars, fetch_all_daily
+            from fetch_coinbase import (
+                DEFAULT_CACHE,
+                SYMBOLS,
+                bars_to_polars,
+                cache_path_for,
+                fetch_all_daily,
+            )
         except ImportError as exc:
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
@@ -724,7 +730,8 @@ def create_mcp_server(
                 if through_yesterday:
                     today = datetime.now(UTC).date().isoformat()
                     df = df.filter(pl.col("timestamp") < today)
-                path = cache / f"{ticker}.csv"
+                path = cache_path_for(cache, ticker, timeframe)
+                path.parent.mkdir(parents=True, exist_ok=True)
                 df.write_csv(path)
                 out[ticker] = {
                     "bars": len(df),
@@ -867,7 +874,6 @@ def create_mcp_server(
         timeout: float = 30.0,
         start: int | None = None,
         end: int | None = None,
-        base_url: str | None = None,
         allow_derived: bool = False,
     ) -> str:
         """Fetch Bitview/BRK on-chain ``day1`` series into ``data/onchain/bitview/``.
@@ -877,9 +883,9 @@ def create_mcp_server(
         avoids dual-counting it alongside MVRV); pass ``allow_derived=True``
         to fetch it anyway for uses outside that composite. Fail-soft +
         timeout. Coin Metrics community CC BY-NC series are not fetched.
-        Network is the operator opt-in of invoking this tool.
+        Network is the operator opt-in of invoking this tool. The upstream
+        base URL is fixed (SSRF guard, #3944) — it is not a caller parameter.
         """
-        from digiquant.data.onchain.bitview import BITVIEW_BASE_URL
         from digiquant.sdca_mcp import run_fetch_bitview_series
 
         return run_fetch_bitview_series(
@@ -888,7 +894,6 @@ def create_mcp_server(
             timeout=timeout,
             start=start,
             end=end,
-            base_url=base_url or BITVIEW_BASE_URL,
             allow_derived=allow_derived,
         )
 
@@ -901,7 +906,6 @@ def create_mcp_server(
         cache_dir: str | None = None,
         timeout: float = 30.0,
         token: str | None = None,
-        base_url: str | None = None,
     ) -> str:
         """Fetch one Bitcoin valuation/on-chain metric from bitcoin-data.com (BGeometrics).
 
@@ -910,16 +914,17 @@ def create_mcp_server(
         and more — see ``KNOWN_METRICS`` for a curated subset; any other
         bitcoin-data.com slug also works). Treat ``token`` as required —
         bitcoin-data.com now markets registration as mandatory even for the
-        free tier (pass it, or set ``BGEOMETRICS_API_TOKEN``).
+        free tier (pass it, or set ``BGEOMETRICS_API_TOKEN``; the env token is
+        only ever sent to the fixed bitcoin-data.com host).
 
         Free-tier limits (enforced by the API, not just documented): 10
         requests/hour, 15/day, shared across every metric — fetch **one
         metric per call**. History is capped at roughly the last 4 years;
         for deeper multi-cycle history use
         ``digiquant_fetch_coinmetrics_series`` instead (MVRV back to 2010,
-        no rate-limit concern). Fail-soft + timeout.
+        no rate-limit concern). Fail-soft + timeout. The upstream base URL is
+        fixed (SSRF guard, #3944) — it is not a caller parameter.
         """
-        from digiquant.data.onchain.bgeometrics import BGEOMETRICS_BASE_URL
         from digiquant.sdca_mcp import run_fetch_bgeometrics_series
 
         return run_fetch_bgeometrics_series(
@@ -930,7 +935,6 @@ def create_mcp_server(
             cache_dir=cache_dir,
             timeout=timeout,
             token=token,
-            base_url=base_url or BGEOMETRICS_BASE_URL,
         )
 
     @_maybe_tool("digiquant_fetch_coinmetrics_series")
@@ -942,7 +946,6 @@ def create_mcp_server(
         page_size: int = 10_000,
         cache_dir: str | None = None,
         timeout: float = 30.0,
-        base_url: str | None = None,
         api_key: str | None = None,
     ) -> str:
         """Fetch one on-chain metric for one asset from the CoinMetrics Community API.
@@ -955,9 +958,9 @@ def create_mcp_server(
         the free tier (generous rate limit); pass ``api_key`` if you have a
         registered CoinMetrics key for a higher limit. CC BY-NC —
         research-only, do not republish derived series commercially.
-        Fail-soft + timeout.
+        Fail-soft + timeout. The upstream base URL is fixed (SSRF guard,
+        #3944) — it is not a caller parameter.
         """
-        from digiquant.data.onchain.coinmetrics import COINMETRICS_BASE_URL
         from digiquant.sdca_mcp import run_fetch_coinmetrics_series
 
         return run_fetch_coinmetrics_series(
@@ -968,7 +971,6 @@ def create_mcp_server(
             page_size=page_size,
             cache_dir=cache_dir,
             timeout=timeout,
-            base_url=base_url or COINMETRICS_BASE_URL,
             api_key=api_key,
         )
 
@@ -976,7 +978,6 @@ def create_mcp_server(
     def digiquant_list_coinmetrics_catalog(
         asset: str | None = None,
         timeout: float = 30.0,
-        base_url: str | None = None,
         api_key: str | None = None,
     ) -> str:
         """List which CoinMetrics community metrics exist for ``asset`` (or all assets).
@@ -984,14 +985,12 @@ def create_mcp_server(
         Discovery tool — call before ``digiquant_fetch_coinmetrics_series``
         to find real metric names instead of guessing from the BTC-only
         ``KNOWN_COMMUNITY_METRICS`` snapshot. Returns the raw
-        ``catalog-v2/asset-metrics`` JSON. Fail-soft + timeout.
+        ``catalog-v2/asset-metrics`` JSON. Fail-soft + timeout. The upstream
+        base URL is fixed (SSRF guard, #3944) — it is not a caller parameter.
         """
-        from digiquant.data.onchain.coinmetrics import COINMETRICS_BASE_URL
         from digiquant.sdca_mcp import run_list_coinmetrics_catalog
 
-        return run_list_coinmetrics_catalog(
-            asset=asset, timeout=timeout, base_url=base_url or COINMETRICS_BASE_URL, api_key=api_key
-        )
+        return run_list_coinmetrics_catalog(asset=asset, timeout=timeout, api_key=api_key)
 
     @_maybe_tool("digiquant_fit_sdca_weights")
     def digiquant_fit_sdca_weights(

@@ -126,14 +126,25 @@ _MAX_TOOL_MESSAGE_CHARS = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "120
 # clear error instead of billing a call the house policy forbids.
 _BANNED_MODELS = frozenset({"ollama/qwen3:8b"})
 _BANNED_MODELS_LOWER = frozenset(m.lower() for m in _BANNED_MODELS)
+# A provider may serve a banned id under a suffixed tag/digest/qualifier. Matching
+# only the bare id lets `ollama/qwen3:8b:cloud`, `...-instruct` or `...@q4_K_M`
+# through the ban, so any of these separators marks a banned variant too.
+_BANNED_MODEL_SUFFIX_SEPARATORS = (":", "-", "@")
 
 
 def _reject_banned_model(model: str) -> None:
     """Raise :class:`ValueError` when *model* is a banned id (see :data:`_BANNED_MODELS`).
 
-    Comparison is case-insensitive so ``OLLAMA/QWEN3:8B`` cannot bypass the ban.
+    Comparison is case-insensitive so ``OLLAMA/QWEN3:8B`` cannot bypass the ban, and
+    a suffixed variant (``ollama/qwen3:8b:cloud``, ``...-instruct``) is rejected too.
     """
-    if (model or "").strip().lower() in _BANNED_MODELS_LOWER:
+    normalized = (model or "").strip().lower()
+    is_banned = normalized in _BANNED_MODELS_LOWER or any(
+        normalized.startswith(f"{banned_id}{sep}")
+        for banned_id in _BANNED_MODELS_LOWER
+        for sep in _BANNED_MODEL_SUFFIX_SEPARATORS
+    )
+    if is_banned:
         raise ValueError(
             f"model {model!r} is banned by house policy (#3078); "
             "resolve a cheap-inference route through digillm instead"
@@ -323,6 +334,13 @@ def _wire_model(provider: str | None, model_id: str, model: str) -> str:
     return model_id
 
 
+# Bearer for a declared trusted LiteLLM proxy running without auth — the
+# documented no-key loopback dev stack (`make stack-local`, default compose
+# before LITELLM_MASTER_KEY). Only ever sent to a base :func:`_litellm_proxy_configured`
+# accepts; direct/vendor endpoints still fail fast (#3939).
+_DEV_LITELLM_SENTINEL = "sk-no-key-required"
+
+
 def _default_client_api_key() -> str:
     """Bearer token for the default (non-prefixed) client.
 
@@ -330,10 +348,13 @@ def _default_client_api_key() -> str:
     1. Per-request proxy-key override (:func:`set_proxy_key`).
     2. ``LITELLM_PROXY_API_KEY`` env var.
     3. ``OPENAI_API_KEY`` env var.
+    4. :data:`_DEV_LITELLM_SENTINEL` when ``OPENAI_API_BASE`` is a declared
+       trusted LiteLLM proxy (the documented no-key loopback/dev stack).
 
     Raises:
-        RuntimeError: when no key is configured (fail-fast misconfig; never the
-            sentinel ``"not-set"`` that used to produce a late provider 401).
+        RuntimeError: when no key is configured and the base is not a declared
+            trusted LiteLLM proxy. A vendor/direct base still fails fast — never
+            the sentinel ``"not-set"`` that used to produce a late provider 401.
     """
     override = _proxy_key_override.get()
     if override:
@@ -344,6 +365,12 @@ def _default_client_api_key() -> str:
     openai_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
     if openai_key:
         return openai_key
+    if _litellm_proxy_configured():
+        # A no-auth loopback LiteLLM (make stack-local / default compose without
+        # LITELLM_MASTER_KEY) still needs *a* bearer for the OpenAI SDK, but
+        # ignores its value. Gated on the trusted-proxy allowlist: a direct
+        # vendor ``OPENAI_API_BASE`` (or no base) keeps failing fast above (#3939).
+        return _DEV_LITELLM_SENTINEL
     raise RuntimeError(
         "No LLM API key configured: set LITELLM_PROXY_API_KEY or OPENAI_API_KEY "
         "(or call set_proxy_key) before creating a house client."
@@ -1741,6 +1768,29 @@ def _stream_completion_one_turn(
                 error=error,
             )
             raise
+    content = "".join(content_parts).strip()
+    tc_list: list[ToolCallDict] | None = None
+    if tool_calls_accum:
+        # Normalize BEFORE emitting SUCCEEDED. A malformed tool payload raises
+        # ValueError out of _normalize_tool_arguments (#3788); a turn that raises
+        # there must not already be on the record as a succeeded provider attempt
+        # (telemetry would show SUCCEEDED for a call the caller saw fail).
+        tc_list = []
+        for i in sorted(tool_calls_accum):
+            acc = tool_calls_accum[i]
+            tc_list.append(
+                {
+                    "id": acc["id"],
+                    "type": "function",
+                    "function": {
+                        "name": acc["function"]["name"],
+                        "arguments": _normalize_tool_arguments(
+                            acc["function"].get("arguments", "{}")
+                        ),
+                    },
+                }
+            )
+
     _emit_attempt(
         scope=scope,
         attempt_number=attempt_number,
@@ -1751,23 +1801,6 @@ def _stream_completion_one_turn(
         outcome=ProviderAttemptOutcome.SUCCEEDED,
         response=evidence,
     )
-
-    content = "".join(content_parts).strip()
-    if not tool_calls_accum:
-        return content, None
-    tc_list: list[ToolCallDict] = []
-    for i in sorted(tool_calls_accum):
-        acc = tool_calls_accum[i]
-        tc_list.append(
-            {
-                "id": acc["id"],
-                "type": "function",
-                "function": {
-                    "name": acc["function"]["name"],
-                    "arguments": _normalize_tool_arguments(acc["function"].get("arguments", "{}")),
-                },
-            }
-        )
     return content, tc_list
 
 
@@ -2036,11 +2069,10 @@ def run_tools(
             normalized = _normalize_tool_arguments(
                 args_str if isinstance(args_str, str) else str(args_str)
             )
-            try:
-                args = json.loads(normalized)
-            except json.JSONDecodeError as e:
-                logger.warning("Bad tool arguments (name=%s): %s — using {}", name, e)
-                args = {}
+            # _normalize_tool_arguments returns valid JSON or raises ValueError, so
+            # this cannot fail. The old try/except silently substituted {} and hid
+            # a malformed tool call (#3788) — let the failure surface instead.
+            args = json.loads(normalized)
             parsed.append((tc.get("id", ""), name, args))
 
         run_parallel = len(parsed) > 1 and all(name in safe for (_, name, _) in parsed)
