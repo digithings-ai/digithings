@@ -88,9 +88,11 @@ Beyond root `AGENTS.md`:
 ## Test Commands
 
 ```bash
-# Full suite (offline; every provider call is monkeypatched). NOT `-m unit`:
-# no test in digillm/tests carries that marker.
+# Full suite (offline; every provider call is monkeypatched).
 pytest digillm/tests -v --tb=short
+
+# Unit-marked subset only (the suite is marked `unit` module-wide).
+pytest digillm/tests -m unit -q
 
 # Single file
 pytest digillm/tests/test_fail_fast.py -v
@@ -105,6 +107,14 @@ pip install -e digillm/ --dry-run
 > CI gate: [`.github/workflows/test-digillm.yml`](../.github/workflows/test-digillm.yml),
 > wired into `ci.yml`. It installs from the committed `uv.lock` (`uv sync --frozen
 > --all-packages --all-extras`) and runs ruff + the unfiltered suite.
+>
+> The suite **is** `unit`-marked module-wide (`pytestmark = pytest.mark.unit` in
+> `test_byok_isolation.py`, `test_digillm.py`, `test_fail_fast.py`, and
+> `test_provider_telemetry.py`, plus `@pytest.mark.unit` on two tests in
+> `test_mcp_server.py`), so `-m unit` selects most of it (the remaining tests are
+> the unmarked `test_mcp_server.py` cases). The workflow comment claiming "no test
+> in digillm/tests carries the `unit` marker" is stale — do not edit workflows from
+> this docs PR; correct that comment when the workflow is next touched.
 
 ---
 

@@ -119,7 +119,7 @@ MCP (Model Context Protocol) is the standard for tool discovery and invocation a
 
 - For normal chat operation, digigraph does **not** connect to digisearch/digiquant via MCP. It uses HTTP (`POST /v1/orchestrator_tools` + `/v1/orchestrator_invoke`) for vertical dispatch. MCP servers are for external clients (IDEs, digiclaw, Langflow) that want to attach directly to a vertical.
 - digigraph's own MCP server exposes the hub workflow surface. Clients that want single-entry-point access should connect here.
-- All four MCP servers default to the **streamable-http** transport on loopback with distinct ports — digigraph `8766`, digiquant `8767`, digisearch `8765`, digivault `8769` — so they can run side by side; each also offers `--stdio` for trusted local clients (Claude Desktop).
+- All four MCP servers default to the **streamable-http** transport on loopback with distinct ports — digigraph `8766`, digiquant `8767`, digisearch `8765`, digivault `8769` — so they can run side by side. digigraph, digiquant, and digivault also offer `--stdio` for trusted local clients (Claude Desktop); digisearch is streamable-http only (its CLI exposes `--config`/`--port`, no `--stdio`).
 - Use **hub-only** (digigraph MCP) when you want one digikey allowlist and unified trace stream. Use **direct vertical MCP** (digisearch or digiquant MCP) when a client should bypass digigraph.
 - MCP tool schemas for digisearch and digiquant are also served over HTTP (`GET /v1/orchestrator_tools`) so digigraph can fetch them without running a local MCP process.
 
@@ -217,9 +217,12 @@ docker compose --profile digivault-mcp up -d
 
 **Adds:** `prometheus` (127.0.0.1:9090) + `grafana` (127.0.0.1:3001, provisioned dashboards backed by Prometheus)
 
-**When to use:** Scrape and visualize the `GET /metrics` endpoint every FastAPI service mounts via `digibase.metrics.install_metrics`. Prometheus scrapes digigraph, digiquant, digisearch, digismith, and digikey over the internal network.
+**When to use:** Scrape and visualize the `GET /metrics` endpoint every FastAPI service mounts via `digibase.metrics.install_metrics`. Prometheus scrapes digigraph, digiquant, digisearch, digismith, and digikey over the internal network (digivault mounts `/metrics` too but is not in the default scrape config).
+
+Requires `GRAFANA_ADMIN_PASSWORD` in `.env` — Grafana fails fast without it (`${GRAFANA_ADMIN_PASSWORD:?...}`).
 
 ```bash
+# Add GRAFANA_ADMIN_PASSWORD to .env first
 make up-observability
 # or: docker compose --profile observability up -d
 # Prometheus: http://127.0.0.1:9090   Grafana: http://127.0.0.1:3001
@@ -291,7 +294,7 @@ digivault:read           digivault:write
 
 ### DigiAuthMiddleware (service-side validation)
 
-All three protected services (digigraph, digiquant, digisearch) use `digikey.integrations.service_middleware`. On every protected request:
+All four protected services (digigraph, digiquant, digisearch, digivault) use `digikey.integrations.service_middleware`. On every protected request:
 
 1. Read `Authorization: Bearer <token>` header.
 2. Fetch JWKS from `DIGIKEY_JWKS_URL` (cached; falls back to `DIGIKEY_PUBLIC_KEY_PEM` if set).
@@ -364,7 +367,7 @@ Every service exposes `GET /health` returning `{"status": "ok"}` (used by Docker
 
 digichat's ecosystem side panel displays health badges for digigraph, digiquant, digismith, and digisearch (configurable via `DIGICHAT_ENABLED_SERVICES`).
 
-**Metrics:** every FastAPI service (digigraph, digiquant, digisearch, digikey, digismith) mounts `GET /metrics` via `digibase.metrics.install_metrics` — HTTP request counters/histograms and an in-flight gauge, labelled by `service`, `version`, and `environment`. `/metrics` is auth-exempt (the same trust boundary as `/health`) so Prometheus can scrape it on the internal network. Prometheus + Grafana ship under the opt-in `observability` profile (`make up-observability`); OTLP spans ship under the `otel` profile.
+**Metrics:** every FastAPI service (digigraph, digiquant, digisearch, digikey, digismith, and digivault) mounts `GET /metrics` via `digibase.metrics.install_metrics` — HTTP request counters/histograms and an in-flight gauge, labelled by `service`, `version`, and `environment`. `/metrics` is auth-exempt (the same trust boundary as `/health`) so Prometheus can scrape it on the internal network. The default `docs/ops/prometheus/prometheus.yml` scrapes the first five, not digivault. Prometheus + Grafana ship under the opt-in `observability` profile (`make up-observability`, requires `GRAFANA_ADMIN_PASSWORD`); OTLP spans ship under the `otel` profile.
 
 ### Gap Analysis
 
@@ -504,6 +507,7 @@ make seed-digisearch-edgar-dev                # ingest into edgar_dev index
 | `AUTH_SECRET` | Next-Auth signing secret for digichat | Required for digichat |
 | `AUTH_URL` | Full public URL of digichat (must match browser origin) | Required for digichat |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password for digichat-DB | Required for `digichat` profile |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password (no default; fails fast if unset) | Required for `observability` profile |
 | `LANGSMITH_API_KEY` | Enables LangSmith trace export from digigraph | Optional |
 | `DIGI_LLM_MODE` | `test` / `medium` / `best` — model selection tier | Optional (default: `test`) |
 | `DIGI_HUB_MODE` | `legacy` / `federated` — vertical delegate tool exposure | Optional (default: `legacy`) |
