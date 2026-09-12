@@ -123,6 +123,59 @@ def test_from_env_good_backend_unchanged(monkeypatch):
     assert WebSearchConfig.from_env().backend == "ddgs"
 
 
+def test_from_env_parses_fetch_allowed_hosts(monkeypatch):
+    monkeypatch.delenv("DIGISEARCH_FETCH_ALLOWED_HOSTS", raising=False)
+    assert WebSearchConfig.from_env().fetch_allowed_hosts == ()
+    monkeypatch.setenv("DIGISEARCH_FETCH_ALLOWED_HOSTS", " Internal.Example.com , proxy.local ,")
+    assert WebSearchConfig.from_env().fetch_allowed_hosts == (
+        "internal.example.com",
+        "proxy.local",
+    )
+
+
+def test_run_passes_fetch_allowed_hosts_to_fetcher(monkeypatch):
+    from digisearch.web_search import service as svc
+    from digisearch.web_search.models import WebSearchResponse, WebSearchResult
+
+    seen: dict = {}
+
+    class _Provider:
+        name = "searxng"
+
+        def search(self, req):
+            return WebSearchResponse(
+                query=req.query,
+                provider="searxng",
+                results=[WebSearchResult(url="https://a.com/1", title="A", snippet="s")],
+            )
+
+    class _Fetcher:
+        def __init__(self, *a, **k):
+            seen.update(k)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def fetch(self, url):
+            raise RuntimeError("no network in unit")
+
+    monkeypatch.setattr(svc, "SearXNGWebSearchProvider", lambda **k: _Provider())
+    monkeypatch.setattr(svc, "HttpFetcher", _Fetcher)
+    run_web_search(
+        WebSearchRequest(query="etf"),
+        config=WebSearchConfig(
+            backend="searxng",
+            fetch_max_pages=1,
+            min_interval_s=0.0,
+            fetch_allowed_hosts=("internal.example.com",),
+        ),
+    )
+    assert seen.get("allowed_hosts") == ("internal.example.com",)
+
+
 def test_run_web_search_lets_config_error_propagate(monkeypatch):
     import pytest
 
