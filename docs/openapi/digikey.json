@@ -118,6 +118,22 @@
         "title": "RevokeResponse",
         "type": "object"
       },
+      "RevokeSessionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "subject": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject"
+        ],
+        "title": "RevokeSessionBody",
+        "type": "object"
+      },
       "TokenRequest": {
         "additionalProperties": false,
         "properties": {
@@ -369,6 +385,48 @@
         "summary": "Liveness probe",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/v1/admin/bff-sessions/revoke": {
+      "post": {
+        "description": "Blocklist all live BFF JWTs for a subject (#3917).\n\nBFF sessions have no ``digikey_api_keys`` row, so this mirrors the API-key\nrevoke endpoint for subject principals. Durable via\n``JtiIssuedRow.revoked_at`` so ``rehydrate_blocklist_from_db`` can restore\nthe entries after a Redis restart. Idempotent: already-revoked rows are\nskipped on the next call.\n\nScope: ``JtiIssuedRow`` has no tenant column, so this revokes the subject\nacross the whole deployment. Subjects are unique and the endpoint is gated\non ``DIGIKEY_ADMIN_TOKEN``, so this cannot be used cross-tenant by a\nnon-admin. (F2)\n\nLimitation: this blocks tokens already issued. It does not stop a caller\nholding ``DIGIKEY_BFF_TOKEN`` from minting a fresh JWT for the same subject;\nrotate the BFF secret to fully cut off a compromised BFF credential. (F3)",
+        "operationId": "admin_revoke_bff_subject_v1_admin_bff_sessions_revoke_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeSessionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke BFF sessions for a subject",
+        "tags": [
+          "admin"
         ]
       }
     },
