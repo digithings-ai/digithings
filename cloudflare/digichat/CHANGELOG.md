@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.1.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.0.0...digichat-v2.1.0) (2026-09-12)
+
+
+### Features
+
+* declare digiquant operator server and pin tenant corpus parity ([114ffb8](https://github.com/digithings-ai/digithings/commit/114ffb8daec345d37e55d078e363a46e41abfc3c)), closes [#3854](https://github.com/digithings-ai/digithings/issues/3854)
+* **digichat:** fail-closed pref catch, tenant-gated force arm, compat default-on ([633abfd](https://github.com/digithings-ai/digithings/commit/633abfdb40dfc50abfbad71d08ce45afdfae4715))
+* **digichat:** render foundry agent MCP tool calls and results ([f824c83](https://github.com/digithings-ai/digithings/commit/f824c83053a9cd62240ba716215f0898ee2872b5))
+* **digichat:** render foundry agent MCP tool calls and results ([#3861](https://github.com/digithings-ai/digithings/issues/3861)) ([7661174](https://github.com/digithings-ai/digithings/commit/7661174683bad664b4e2e3e2d0fab8d7b78e7542))
+* web search default-ON (zero-click) + pipeline tool-only with loud abort ([cff0bbb](https://github.com/digithings-ai/digithings/commit/cff0bbb4131e3ba3c4ce2ecee5dfd2b95aa12a4e))
+* web-search followups (fail-closed catch, force gate, compat default-on, docs) ([f4663b0](https://github.com/digithings-ai/digithings/commit/f4663b08af66ff749325adc53bf9afac9dff3b48))
+
+
+### Bug Fixes
+
+* **digichat:** default legacy embed off and require verifiable first-party embed proof ([9526a46](https://github.com/digithings-ai/digithings/commit/9526a46a32d865bcfd786417284bae0ab4719a5a))
+* **digichat:** default legacy embed off and require verifiable first-party proof ([65beb71](https://github.com/digithings-ai/digithings/commit/65beb71c089bb56784ab17ebab5027852659b37c)), closes [#3895](https://github.com/digithings-ai/digithings/issues/3895)
+* **digichat:** fail an effectively empty digigraph 200 stream ([a0b2427](https://github.com/digithings-ai/digithings/commit/a0b2427efdaa94e50fd9055be2cf1d26d6561fa5)), closes [#3910](https://github.com/digithings-ai/digithings/issues/3910)
+* **digichat:** settle orphaned tool rows as failed on stream error ([88793ad](https://github.com/digithings-ai/digithings/commit/88793ad718241f833cb6bbe5004ffe456c373f12))
+* **digichat:** settle orphaned tool rows as failed on stream error ([45fc954](https://github.com/digithings-ai/digithings/commit/45fc95408fdc2fec1c562945daef28fadd690646))
+* **digichat:** single-row tool correlation via provider call_id ([198dfda](https://github.com/digithings-ai/digithings/commit/198dfdac484b8eefcbde92e9c3b238dfda325084))
+* **digichat:** surface upstream failures as stream errors, not fake replies ([8034b71](https://github.com/digithings-ai/digithings/commit/8034b71b0921d1fa51cac396af147119906f61ab))
+* **digichat:** surface upstream failures as stream errors, not fake replies ([3d44651](https://github.com/digithings-ai/digithings/commit/3d4465187bf5843655ba7fa156a861072dc308ce)), closes [#3910](https://github.com/digithings-ai/digithings/issues/3910)
+* **digichat:** treat X-Digi-Mcp-* headers as credentials in redirect guard ([f1a1396](https://github.com/digithings-ai/digithings/commit/f1a1396edb9dbe393591c3fb0bb9e37df40cf271))
+* **digichat:** treat X-Digi-Mcp-* headers as credentials in redirect guard ([dba8486](https://github.com/digithings-ai/digithings/commit/dba84863a94993491389cfd3cc7902cdf7a0c119)), closes [#3933](https://github.com/digithings-ai/digithings/issues/3933)
+* **pr-3866:** review findings — drop dead mcp_call_output branch, array results, doc V1 table ([bb487ab](https://github.com/digithings-ai/digithings/commit/bb487ab0f142a93dcf9c1a8d346ade715e585c9c))
+* **root:** require compose secrets, disable workers.dev default ([#3921](https://github.com/digithings-ai/digithings/issues/3921)) ([#3924](https://github.com/digithings-ai/digithings/issues/3924)) ([12568b4](https://github.com/digithings-ai/digithings/commit/12568b4b85e8ba785cbace9e129c8e8bd89c2bff))
+
 ## [2.0.0](https://github.com/digithings-ai/digithings/compare/digichat-v1.5.0...digichat-v2.0.0) (2026-09-08)
 
 
