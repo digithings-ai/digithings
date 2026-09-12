@@ -369,15 +369,53 @@ jobs:
       - name: Validate model routing (config only)
         run: uv run --frozen --no-sync python scripts/validate_model_routing.py --routing
 
+      # Coverage guard for #3939. The --routing step above never reaches
+      # ping_providers, so before this the --strict skip branch was dead code in
+      # CI: CI could not tell a wired guard from an inert one. Provider keys are
+      # forced empty so every provider SKIPs deterministically (no network), and
+      # the step asserts a non-zero exit — if --strict stops failing on skips,
+      # this goes red instead of silently passing.
+      - name: Validate model routing strict-skip guard (offline)
+        env:
+          OPENAI_API_KEY: ""
+          OPENROUTER_API_KEY: ""
+          GEMINI_API_KEY: ""
+          XAI_API_KEY: ""
+        run: |
+          # Capture both the exit code and the output. "non-zero means the guard
+          # fired" is too weak: a crash in the --ping path (e.g. an import error)
+          # also exits non-zero and would read as success. Assert the STRICT:
+          # diagnosis the skip guard actually prints, so only the intended
+          # failure passes and a crash still goes red.
+          set +e
+          out=$(uv run --frozen --no-sync python scripts/validate_model_routing.py --ping --strict 2>&1)
+          code=$?
+          set -e
+          printf '%s\n' "$out"
+          if [ "$code" -eq 0 ]; then
+            echo "::error::validate_model_routing.py --ping --strict exited 0 with every provider skipped — strict-skip guard is inert."
+            exit 1
+          fi
+          if ! grep -q 'STRICT:' <<<"$out"; then
+            echo "::error::validate_model_routing.py --ping --strict exited $code without the STRICT: diagnosis — the ping path crashed rather than enforcing the skip guard."
+            exit 1
+          fi
+
       - name: Ruff (all src + tests)
         run: |
           uv run --frozen --no-sync ruff check \
             digibase/src digiclaw/src digigraph/src digiquant/src \
             digisearch/src digismith/src tests
 
-      - name: Pytest (scripts + agents + integration hops + baseline)
+      - name: Pytest (scripts + config + agents + integration hops + baseline)
+        # tests/config/ carries the house-model / LiteLLM-config contract
+        # (tests/config/test_litellm_house_models.py, test_compose_omniroute.py).
+        # It ran in NO lane before — a config retirement made `make test-unit` red
+        # on develop while every CI job stayed green (#3939). The `ruff_and_scripts`
+        # path filter already includes `tests/**` and `config/**`, so it fires for
+        # exactly the edits these tests guard.
         run: |
-          uv run --frozen --no-sync pytest tests/scripts/ tests/agents/ tests/integration/test_request_id_hops.py tests/baseline/ -m "unit or baseline" -v --tb=short --ignore=tests/baseline/test_cli.py
+          uv run --frozen --no-sync pytest tests/scripts/ tests/config/ tests/agents/ tests/integration/test_request_id_hops.py tests/baseline/ -m "unit or baseline" -v --tb=short --ignore=tests/baseline/test_cli.py
 
       - name: Pytest (provider review unit tests)
         run: uv run --frozen --no-sync pytest tests/provider_review/ -m unit -v --tb=short
