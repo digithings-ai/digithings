@@ -11,9 +11,12 @@ name = "digithings-stack"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
 compatibility_flags = ["nodejs_compat"]
-workers_dev = true
+# Public *.workers.dev endpoint disabled — it fronted digigraph:8000 / digikey on a
+# guessable hostname alongside the intended custom domains. Reach the stack only
+# through the custom-domain routes below.
+workers_dev = false
 
-# Custom domains (enabled after workers.dev /healthz returned 200).
+# Custom domains — the only ingress. Verify /healthz on each after deploy.
 # Human gate: public digigraph + digikey; JWT/BFF still required on APIs.
 [[routes]]
 pattern = "graph.digithings.ai"
