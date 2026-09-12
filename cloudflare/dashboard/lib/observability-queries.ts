@@ -41,6 +41,7 @@ import {
   ACCOUNTING_NAV_VIEW,
   AccountingNavContractError,
   accountingNavToHistoryShape,
+  currentNavRun,
   type AccountingNavRow,
 } from './accounting-views';
 import {
@@ -345,7 +346,7 @@ function periodReturnPct(values: number[]): number | null {
 }
 
 function buildPortfolioReturnSeries(
-  nav: TableRow<'nav_history'>[]
+  nav: ReadonlyArray<{ date: string; nav: number }>
 ): PortfolioReturnPoint[] {
   const sorted = [...nav].sort((a, b) => a.date.localeCompare(b.date));
   const baseline = sorted.find((row) => Number.isFinite(row.nav) && row.nav > 0)?.nav;
@@ -502,8 +503,31 @@ export function buildPerformanceTearsheet(args: {
   snapshotDate?: string | null;
 }): PerformanceTearsheet {
   const navAsc = [...args.nav].sort((a, b) => a.date.localeCompare(b.date));
-  const inceptionDate = navAsc[0]?.date ?? null;
-  const navSeries = buildPortfolioReturnSeries(navAsc);
+  // #3767: annotate the plotted rows with the curated seam marker, then rebase
+  // on the current source run — never bridge legacy estimates to finalized
+  // accounting (false Sep-8 ~+10% jump).
+  const seamByDate = new Map(
+    (args.accountingNav ?? []).map((row) => [
+      row.date,
+      { source: row.source, series_seam: row.series_seam },
+    ])
+  );
+  const navSeries = buildPortfolioReturnSeries(
+    currentNavRun(
+      navAsc.map((row) => {
+        const seam = seamByDate.get(row.date);
+        return {
+          date: row.date,
+          nav: row.nav,
+          source: seam?.source ?? null,
+          series_seam: seam?.series_seam ?? null,
+        };
+      })
+    )
+  );
+  // Rebased on the current source run — keep the displayed period honest with
+  // the since-inception KPI when a seam truncates the series.
+  const inceptionDate = navSeries[0]?.date ?? navAsc[0]?.date ?? null;
   const currentSnapshot = latestDateRows(args.positions);
   const marksByTicker = latestCloseByTicker(args.holdingMarks ?? []);
   const currentPositions = currentSnapshot.rows

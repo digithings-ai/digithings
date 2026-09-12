@@ -203,14 +203,23 @@ class TestBitviewClient:
         result = fetch_bitview_series(["nupl"], session=session, allow_derived=True)
         assert result.series["nupl"].has_data
 
-    def test_custom_base_url_used_for_bulk_request(self) -> None:
-        session = _FakeSession(body=[_mvrv_slice()])
-        BitviewClient(session=session, base_url="https://custom.example.com").fetch(["mvrv"])
-        url, _kwargs = session.calls[0]
-        assert url.startswith("https://custom.example.com")
+    def test_client_refuses_untrusted_base_url(self) -> None:
+        with pytest.raises(ValueError, match="not allowlisted"):
+            BitviewClient(
+                session=_FakeSession(body=[_mvrv_slice()]), base_url="https://evil.example.com"
+            )
 
-    def test_fetch_bitview_series_base_url_forwarded(self) -> None:
+    def test_fetch_function_refuses_attacker_base_url_without_fetch(self) -> None:
         session = _FakeSession(body=[_mvrv_slice()])
-        fetch_bitview_series(["mvrv"], session=session, base_url="https://custom.example.com")
-        url, _kwargs = session.calls[0]
-        assert url.startswith("https://custom.example.com")
+        result = fetch_bitview_series(
+            ["mvrv"], session=session, base_url="http://169.254.169.254/latest/meta-data"
+        )
+        assert result.error is not None
+        assert "refusing untrusted base_url" in result.error
+        assert session.calls == []
+
+    def test_series_id_path_injection_rejected_without_fetch(self) -> None:
+        session = _FakeSession(body=[_mvrv_slice()])
+        result = BitviewClient(session=session).fetch(["../../etc/passwd"])
+        assert result.series["../../etc/passwd"].error is not None
+        assert session.calls == []
