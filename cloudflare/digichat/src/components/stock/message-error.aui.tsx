@@ -1,6 +1,11 @@
 "use client";
 
-import { ErrorPrimitive, MessagePrimitive, useAuiState } from "@assistant-ui/react";
+import {
+  ActionBarPrimitive,
+  ErrorPrimitive,
+  MessagePrimitive,
+  useAuiState,
+} from "@assistant-ui/react";
 import type { FC } from "react";
 import { parseEmbedChatError, formatEmbedChatError } from "@/lib/embed-chat-error";
 
@@ -53,6 +58,15 @@ export const MessageError: FC = () => {
             </details>
           ) : null}
         </div>
+        {/* #3910: the errored turn must offer retry where the copy shows. */}
+        <ActionBarPrimitive.Reload asChild>
+          <button
+            type="button"
+            className="aui-message-error-retry mt-2 inline-flex shrink-0 items-center self-start rounded-md border border-hair bg-surface px-2.5 py-1 text-xs font-medium text-ink transition-colors hover:bg-muted"
+          >
+            Retry
+          </button>
+        </ActionBarPrimitive.Reload>
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   );

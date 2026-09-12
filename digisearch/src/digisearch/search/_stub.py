@@ -1,12 +1,13 @@
 """Search index router with pluggable backend registry (DESLOP-016 / SIMP-021).
 
 Backends are tried in registration order: Azure, then Vectorize, then Chroma.
-Vectorize/Azure/Chroma return :class:`SearchResponse` when configured. Vectorize is
-the authoritative remote index once configured, so a failure there raises
-``VectorizeBackendError`` (deliberately not a member of ``_BACKEND_ERRORS``) which
-propagates out of :func:`query_index` instead of falling through to Chroma and
-silently answering from a different corpus. Azure/Chroma failures still fall
-through on error -- they are optional local backends, not authoritative ones.
+Vectorize/Azure/Chroma return :class:`SearchResponse` when configured. A configured
+backend that fails to serve a query raises a ``SearchBackendError`` (deliberately not
+a member of ``_BACKEND_ERRORS``) which propagates out of :func:`query_index` instead
+of falling through to the next backend and silently answering from a different corpus
+(#3909). Vectorize raises its own ``VectorizeBackendError`` for the same reason.
+"Not configured"/"dependency missing" paths still return ``None`` so the router can
+continue to the next backend.
 In-memory stub runs only when ``DIGISEARCH_ALLOW_STUB=1`` (tests); stub branches
 are intentional fail-closed test hooks, not dead code.
 """
@@ -20,6 +21,7 @@ from typing import TYPE_CHECKING, Callable
 
 from digisearch.core.models import Chunk, Query, SearchResponse
 from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB, BACKEND_VECTORIZE
+from digisearch.indexes.backends.backend_errors import SearchBackendError
 from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
 
 if TYPE_CHECKING:
@@ -76,7 +78,7 @@ def _azure_backend(query: Query, index_name: str) -> SearchResponse | None:
         return None
     except _BACKEND_ERRORS as exc:
         logger.warning("Azure backend error: %s", exc)
-        return None
+        raise SearchBackendError(f"azure backend error: {exc}") from exc
 
 
 @register_backend
@@ -154,7 +156,7 @@ def _chroma_backend(query: Query, index_name: str) -> SearchResponse | None:
         return None
     except _BACKEND_ERRORS as exc:
         logger.warning("Chroma backend error: %s", exc)
-        return None
+        raise SearchBackendError(f"chroma backend error: {exc}") from exc
 
 
 _stub_index: dict[str, list[Chunk]] = {"default": []}

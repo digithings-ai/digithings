@@ -12,6 +12,9 @@ name: "Test: digillm"
 on:
   workflow_call:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

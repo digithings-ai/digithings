@@ -8,7 +8,7 @@ env:
   # House default: CHEAPERINFERENCE_API_KEY (GHA secret) → Cheaper Inference for
   # mapped pins; unmapped pins raise (no fallback).
   # DIGI_HOUSE_UPSTREAM=openrouter forces OpenRouter. See docs/providers/cheaperinference.md.
-  OLYMPUS_MODEL_TIER: "cheap"
+  DIGIQUANT_MODEL_TIER: "cheap"
   # Explicit (redundant when secret is set); use "openrouter" to force OR.
   DIGI_HOUSE_UPSTREAM: "cheaperinference"
 

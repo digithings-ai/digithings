@@ -23,7 +23,7 @@ Future chats = new Pages route under `/chat/<slug>` + a row in
 ```text
 Browser
   → digithings.ai/chat[/occ]     (Pages)
-       → iframe digithings.ai/embed?host=…   (Worker → one DigiChat Container)
+       → iframe digithings.ai/embed?host=…   (Worker → one digichat Container)
             → DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
             → DIGIKEY_URL=https://key.digithings.ai
 ```

@@ -308,6 +308,13 @@ def build_digisearch_research_delegate_tool() -> OpenAIToolDict:
                     "top_k": {"type": "integer", "description": "Hits to retrieve (default 10)"},
                     "mode": {"type": "string", "description": "keyword | vector | hybrid"},
                     "filter": {"type": "string", "description": "Optional raw OData filter"},
+                    "workspace_id": {
+                        "type": "string",
+                        "description": (
+                            "Optional tenant/workspace id, applied as a mandatory "
+                            "structured filter (multi-tenant isolation)."
+                        ),
+                    },
                 },
                 "required": ["user_message"],
             },
