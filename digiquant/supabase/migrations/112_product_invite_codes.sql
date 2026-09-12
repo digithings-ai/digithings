@@ -5,7 +5,8 @@
 -- caller's email. Plaintext is never stored. Login remains required — this is
 -- not a client-side passphrase on the static export.
 --
--- Migration 111 is reserved for the Group A unique-drop; do not reuse 111.
+-- 111 later became the trading-calendar creator (#3923, must sort below 116);
+-- the Group A unique-drop is the staged cutover/113, not a top-level 111.
 
 CREATE TABLE IF NOT EXISTS public.product_invite_codes (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
