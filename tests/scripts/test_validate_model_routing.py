@@ -3,13 +3,16 @@
 ``ci.yml`` runs ``validate_model_routing.py --routing`` against real config. The
 load-bearing logic is the offline resolver: exact ``phase_models`` pins, trailing-``-``
 prefix matches (per-ticker H6 deliberation slugs), and ``DIGI_LLM_MODE`` / default
-fallbacks when a slug is unpinned. Network ``--ping`` stays out of unit tests.
+fallbacks when a slug is unpinned. Network ``--ping`` stays out of unit tests; the
+skip/strict bookkeeping is exercised with a fake ``digigraph.llm_client`` so no call
+leaves the process (#3939).
 """
 
 from __future__ import annotations
 
 import importlib.util
 import sys
+import types
 from pathlib import Path
 from typing import Any  # score:allow untyped any — dynamically loaded module
 
@@ -181,3 +184,44 @@ def test_repo_config_pins_h6_deliberation_prefix_and_master_digest(
     )
     assert mod.get_model_for_phase("master-digest") == "deepseek/deepseek-v4-flash"
     assert (REPO_ROOT / "config" / "model_modes.yaml").is_file()
+
+
+def test_ping_providers_skips_provider_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A missing provider key is a SKIP, not a failure (#3939)."""
+    mod = _load()
+    fake_llm = types.ModuleType("digigraph.llm_client")
+    fake_llm.completion_text = lambda *_args, **_kwargs: "ok"  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "digigraph.llm_client", fake_llm)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    ok, skipped = mod.ping_providers(
+        {
+            "gpt-4o-mini": ["decision-reflector"],
+            "openrouter/deepseek/deepseek-v4-flash": ["macro"],
+        }
+    )
+    assert ok is True
+    assert skipped == 1
+
+
+def test_main_ping_strict_exits_when_any_provider_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#3939 — one skipped provider (not just all of them) must fail under --strict."""
+    mod = _load()
+    monkeypatch.setenv("DIGI_CONFIG_PATH", str(REPO_ROOT / "config"))
+    monkeypatch.setattr(mod, "ping_providers", lambda _by_model: (True, 1))
+    monkeypatch.setattr(sys, "argv", ["validate_model_routing.py", "--ping", "--strict"])
+    with pytest.raises(SystemExit) as exc:
+        mod.main()
+    assert exc.value.code == 1
+
+
+def test_main_ping_without_strict_tolerates_skips(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The same one-skip run is non-fatal without --strict."""
+    mod = _load()
+    monkeypatch.setenv("DIGI_CONFIG_PATH", str(REPO_ROOT / "config"))
+    monkeypatch.setattr(mod, "ping_providers", lambda _by_model: (True, 1))
+    monkeypatch.setattr(sys, "argv", ["validate_model_routing.py", "--ping"])
+    mod.main()

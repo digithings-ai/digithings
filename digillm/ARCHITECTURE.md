@@ -421,7 +421,7 @@ plain contextvar setters and reads them when building clients.
 
 | Setter | Reads in | Effect |
 |--------|----------|--------|
-| `set_proxy_key(token)` / `reset_proxy_key(tok)` (or `with proxy_key(token):`) | `get_client()` default path | Per-request LiteLLM proxy / bearer key. Priority: proxy override → `LITELLM_PROXY_API_KEY` → `OPENAI_API_KEY`. |
+| `set_proxy_key(token)` / `reset_proxy_key(tok)` (or `with proxy_key(token):`) | `get_client()` default path | Per-request LiteLLM proxy / bearer key. Priority: proxy override → `LITELLM_PROXY_API_KEY` → `OPENAI_API_KEY` → dev sentinel (declared trusted LiteLLM base only; see env table). |
 | `set_byok(api_key, base_url=...)` / `reset_byok(tok)` (or `with byok(api_key, base_url):`) | `get_client()` / `_create_with_retry` | Bring-your-own-key. With a **declared** LiteLLM proxy (`OPENAI_API_BASE` on the trusted-proxy allowlist), the LiteLLM client is reused and the user's key/base go in `extra_body` (clientside credentials) together with `cache: {no-cache, no-store}`. Without a declared proxy, returns an **uncached** client at the user's endpoint (prefixed BYOK against the vendor URL). Always **bypasses the in-process response cache**. |
 | `clear_byok()` | same var, no token | Drops the override token-free — for a thread running inside a `copy_context()` snapshot, which inherits the binding but not the reset token. Use `reset_byok` in the frame that bound it; clearing there would strand that frame's token. |
 | `detach_provider_call_context()` | `_provider_call_metadata`, no token | Drops the inherited logical-call metadata — for a fan-out worker running inside a `copy_context()` snapshot, which would otherwise share the caller's *mutable* `ProviderCallContextHandle` with every sibling. Restores what a worker with an empty context saw **for this var only**. |
@@ -492,7 +492,7 @@ digismith on the path) plus `LANGSMITH_API_KEY` to enable spans.
 |-----|---------|---------|
 | `OPENAI_API_KEY` / `OPENAI_API_BASE` | default client | Endpoint + key for non-prefixed models (LiteLLM / Ollama / OpenRouter / OpenAI). LiteLLM pass-through only when the base is a declared trusted proxy. |
 | `DIGILLM_TRUSTED_LITELLM_BASES` | default client | Comma-separated `OPENAI_API_BASE` allowlist that **replaces** the documented `:4000` defaults (`127.0.0.1`, `localhost`, `[::1]`, `litellm`, `host.docker.internal`). Unset → those defaults. |
-| `LITELLM_PROXY_API_KEY` | default client | Proxy bearer key (below per-request override, above `OPENAI_API_KEY`). |
+| `LITELLM_PROXY_API_KEY` | default client | Proxy bearer key (below per-request override, above `OPENAI_API_KEY`). When neither this nor `OPENAI_API_KEY` is set, a **declared trusted LiteLLM base** (`OPENAI_API_BASE` on the allowlist) gets the dev sentinel `sk-no-key-required` so the documented no-key loopback stack works; a direct/vendor base still raises `RuntimeError` (#3788 / #3939). |
 | `XAI_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY` | provider clients | Keys for the corresponding `provider/` prefixes. |
 | `DIGILLM_REQUEST_TIMEOUT_SECONDS` | all clients | Read/write/pool timeout per HTTP attempt (default 600, = the OpenAI SDK default). Read once at import. |
 | `DIGILLM_CONNECT_TIMEOUT_SECONDS` | all clients | Connect timeout (default 5, = the OpenAI SDK default). Separate from the above so a wider read timeout cannot silently widen connect. |
