@@ -2371,10 +2371,11 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
 - **Tool-round budget + log hygiene (#3299).** Every research/portfolio
   `run_research_agent(...)` call goes through the thin wrapper
   `digiquant.tool_rounds.run_olympus_research_agent`, which injects
-  `OLYMPUS_MAX_TOOL_ROUNDS` (default **24**, set in
-  `.github/digiquant-pipeline.yml`). The cap is high but finite: cheap models need
-  room for data-tool grounding before Pydantic validation. digigraph chat keeps its
-  own `max_tool_rounds=4` — never reuse the Olympus budget there.
+  `DIGIQUANT_MAX_TOOL_ROUNDS` (default **24**, set in
+  `.github/digiquant-pipeline.yml`); `OLYMPUS_MAX_TOOL_ROUNDS` stays readable as a
+  retired alias via `digiquant.dashboard.envcompat`. The cap is high but finite:
+  cheap models need room for data-tool grounding before Pydantic validation.
+  digigraph chat keeps its own `max_tool_rounds=4` — never reuse this budget there.
   Transient Supabase faults (disconnects, `PGRST002`, 502s) retry 3× with short
   backoff (`digiquant.supabase_retry`) in data tools, retrieval queries, and
   `query_returns_window`; anything else (notably 42703) still fails fast.
