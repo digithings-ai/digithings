@@ -267,6 +267,144 @@ describe('performance SSOT (#3580)', () => {
     ).toBe(false);
   });
 
+  it('never returns a stored day_return_pct on a seam row (#3767)', () => {
+    // The stored finalizer value belongs to the new series; returning it on the
+    // seam row re-introduces the false jump the seam exists to suppress.
+    const brief = persistedHeadlinesFromNav([
+      {
+        date: '2026-09-07',
+        nav: 99.92,
+        invested_pct: 40,
+        day_return_pct: -0.08,
+        source: 'legacy_nav_history',
+        series_seam: false,
+      },
+      {
+        date: '2026-09-08',
+        nav: 110.74928206,
+        invested_pct: 80,
+        day_return_pct: 10.83,
+        source: 'finalized_accounting',
+        series_seam: true,
+      },
+    ]);
+    expect(brief.dayReturnPct).toBeNull();
+
+    const meta = buildPerformanceSsotMeta({
+      navRows: [
+        {
+          date: '2026-09-07',
+          nav: 99.92,
+          invested_pct: 40,
+          day_return_pct: -0.08,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+          series_seam: false,
+        },
+        {
+          date: '2026-09-08',
+          nav: 110.74928206,
+          invested_pct: 80,
+          day_return_pct: 10.83,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: true,
+        },
+      ],
+      metricsAsOf: '2026-09-08',
+      snapshotDate: '2026-09-08',
+      positionDates: ['2026-09-08'],
+      positionMetricsAsOf: ['2026-09-08'],
+    });
+    expect(meta.tipDayReturnPct).toBeNull();
+  });
+
+  it('computes since-inception from the current source run, not across a seam (#3767)', () => {
+    const brief = persistedHeadlinesFromNav([
+      {
+        date: '2026-09-06',
+        nav: 100,
+        invested_pct: 40,
+        day_return_pct: null,
+        source: 'legacy_nav_history',
+        series_seam: false,
+      },
+      {
+        date: '2026-09-07',
+        nav: 99.92,
+        invested_pct: 40,
+        day_return_pct: null,
+        source: 'legacy_nav_history',
+        series_seam: false,
+      },
+      {
+        date: '2026-09-08',
+        nav: 110.74928206,
+        invested_pct: 80,
+        day_return_pct: null,
+        source: 'finalized_accounting',
+        series_seam: true,
+      },
+      {
+        date: '2026-09-09',
+        nav: 111.84928206,
+        invested_pct: 80,
+        day_return_pct: null,
+        source: 'finalized_accounting',
+        series_seam: false,
+      },
+    ]);
+    expect(brief.sinceInceptionStartDate).toBe('2026-09-08');
+    expect(brief.sinceInceptionPct).toBeCloseTo(
+      (111.84928206 / 110.74928206 - 1) * 100,
+      5
+    );
+  });
+
+  it('excludes the legacy→finalized seam from persisted excess/alpha/IR (#3935)', () => {
+    // Legacy run below the finalized run: a cross-seam window would inflate
+    // excess and poison the β/IR daily estimator with the phantom jump.
+    const finalized = weekdaySeries(MIN_OVERLAP_DAYS + 6, '2026-09-08');
+    const legacy = [
+      { date: '2026-09-01', nav: 90, price: 480 },
+      { date: '2026-09-02', nav: 90.2, price: 481 },
+      { date: '2026-09-03', nav: 90.1, price: 479.5 },
+      { date: '2026-09-04', nav: 90.3, price: 482 },
+    ];
+    const seamedNav = [
+      ...legacy.map((p) => ({
+        date: p.date,
+        nav: p.nav,
+        source: 'legacy_nav_history',
+        series_seam: false,
+      })),
+      ...finalized.map((p, i) => ({
+        date: p.date,
+        nav: p.nav,
+        source: 'finalized_accounting',
+        series_seam: i === 0,
+      })),
+    ];
+    const bench = [...legacy, ...finalized].map((p) => ({ date: p.date, price: p.price }));
+
+    const seamed = persistedInsightMetrics(seamedNav, bench);
+    const currentRunOnly = persistedInsightMetrics(
+      finalized.map((p) => ({
+        date: p.date,
+        nav: p.nav,
+        source: 'finalized_accounting',
+        series_seam: false,
+      })),
+      bench
+    );
+
+    expect(seamed.excessReturnPct).not.toBeNull();
+    expect(seamed.alphaPct).not.toBeNull();
+    expect(seamed.informationRatio).not.toBeNull();
+    // Identical to computing on the post-seam run alone — the seam never enters.
+    expect(seamed).toEqual(currentRunOnly);
+  });
+
   it('does not clamp an accounting-tip invested % over 100', () => {
     const resolved = resolveInvestedPct({
       tipInvestedPct: 137,
