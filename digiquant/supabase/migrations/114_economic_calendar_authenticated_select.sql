@@ -16,7 +16,7 @@
 --
 -- Numbering: 114, not 113. Top-level `113_*.sql` is reserved for the staged
 -- cutover `migrations/cutover/113_drop_legacy_book_uniques.sql` (human gate;
--- tests/dq/olympus/test_cutover_113.py). 111 is the `trading_calendar` creator
+-- tests/dq/dashboard/test_cutover_113.py). 111 is the `trading_calendar` creator
 -- (#3923). Do not steal 113. Live `core` already has this policy (applied
 -- out-of-band); this file is the repo ledger so a fresh db reset matches.
 -- Related: Auth Pages #3231; supersedes PR #3321 (which used 113).
