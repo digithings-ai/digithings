@@ -77,6 +77,59 @@ def test_read_r2_window_missing_pointer_maps_to_unknown_ticker(monkeypatch):
         mcp._read_r2_window("FOO", "2024-12-31", manifest)
 
 
+class _BotoClientError(Exception):
+    """boto3/botocore ClientError shape — what R2Backend.get really raises."""
+
+    def __init__(self, code: str = "NoSuchKey", status: int = 404) -> None:
+        super().__init__(f"An error occurred ({code}) when calling the GetObject operation")
+        self.response = {
+            "Error": {"Code": code, "Message": "The specified key does not exist."},
+            "ResponseMetadata": {"HTTPStatusCode": status},
+        }
+
+
+def test_read_r2_window_boto_client_error_pointer_miss_maps_to_unknown_ticker(monkeypatch):
+    """A real R2 backend raises ClientError, not KeyError — still fail-soft (#3951)."""
+
+    class _FakeStore:
+        def read_latest(self, pointer_key):
+            raise _BotoClientError("NoSuchKey", 404)
+
+    monkeypatch.setattr(mcp, "_get_r2_store", lambda: _FakeStore())
+    manifest = {"version": 1, "as_of": "2024-12-31", "datasets": {}}
+    with pytest.raises(LookupError, match="unknown ticker"):
+        mcp._read_r2_window("FOO", "2024-12-31", manifest)
+
+
+def test_read_r2_window_transient_client_error_still_propagates(monkeypatch):
+    """A non-miss backend fault (503/auth) must never read as unknown ticker."""
+
+    class _FakeStore:
+        def read_latest(self, pointer_key):
+            raise _BotoClientError("ServiceUnavailable", 503)
+
+    monkeypatch.setattr(mcp, "_get_r2_store", lambda: _FakeStore())
+    manifest = {"version": 1, "as_of": "2024-12-31", "datasets": {}}
+    with pytest.raises(Exception) as excinfo:
+        mcp._read_r2_window("FOO", "2024-12-31", manifest)
+    assert not isinstance(excinfo.value, LookupError)
+
+
+def test_macro_r2_boto_client_error_pointer_miss_yields_error_envelope(monkeypatch):
+    """Macro pointer miss as boto3 ClientError → per-series unknown LookupError (#3951)."""
+
+    class _NoPointer(_FakeR2Store):
+        def read_latest(self, pointer_key):
+            raise _BotoClientError("NoSuchKey", 404)
+
+    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
+    manifest = {"version": 1, "as_of": "2024-12-31", "datasets": {}}
+    monkeypatch.setattr(mcp, "_read_manifest", lambda: manifest)
+    monkeypatch.setattr(mcp, "_get_r2_store", lambda: _NoPointer(b""))
+    out = json.loads(mcp.digiquant_get_macro_series(["DGS10"], lookback=6, as_of="2024-12-31"))
+    assert "DGS10" in out["error"]
+
+
 def test_technicals_r2_ttl_caches_window(monkeypatch):
     monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
     monkeypatch.setattr(mcp, "_read_manifest", lambda: {"version": 1, "as_of": "2024-12-31"})

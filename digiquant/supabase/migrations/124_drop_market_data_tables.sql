@@ -5,12 +5,30 @@
 -- transaction. Do not write an unbackticked begin-statement in this file
 -- (comments included) — that grep drops the wrapping transaction.
 --
--- Point of no return for the R2 market-data cutover (#3780, spec §7.4).
--- Requires N retained R2 generations + green parity (Tasks 5–7b).
--- Post-cutover rollback = restore-from-generation + replay.
--- CARVE-OUT (ruling 2026-09-09): macro_series_observations is NOT dropped
--- here — it remains the sole store for fedprob/bitview series, which have
--- no R2 home yet (Task 7b review). R2 homes for those series are future
--- work outside this epic.
-DROP TABLE IF EXISTS price_history;
-DROP TABLE IF EXISTS price_technicals;
+-- DEFERRED (#3951, 2026-09-13): the R2 market-data cutover (#3780, spec §7.4)
+-- shipped this file as the point of no return, but the on-cron Supabase readers
+-- were NOT migrated to the R2 read helpers. Dropping price_history /
+-- price_technicals would break, under DIGIQUANT_MARKET_DATA_BACKEND=r2:
+--   * execute_at_open.py            (at-open fill reads price_history.open)
+--   * refresh_performance_metrics.py
+--   * verify_nav_replay.py
+--   * finalize_period_accounting.py
+--   * fill-entry-prices.py
+-- plus the research freshness/close probes in research/supabase_io.py and
+-- forecast_outcomes.py. The tables are therefore RETAINED until those readers
+-- have R2 seams with tests (tracked in #3951). The DROPs below are commented
+-- out on purpose; re-enable them in the follow-up migration once the readers
+-- are migrated (and restore the drop assertions in
+-- tests/dq/data/test_migration_124.py).
+--
+-- This correction lands before the ledger ever applied 124: the last db-migrate
+-- run on main predates #3840, so no production rollback or restore-from-
+-- generation is needed. Post-cutover rollback semantics (restore-from-generation
+-- + replay) still apply once the DROPs are re-enabled.
+--
+-- CARVE-OUT (ruling 2026-09-09): macro_series_observations is NOT dropped — it
+-- remains the sole store for fedprob/bitview series, which have no R2 home yet
+-- (Task 7b review). R2 homes for those series are future work outside this epic.
+--
+-- DROP TABLE IF EXISTS price_history;
+-- DROP TABLE IF EXISTS price_technicals;

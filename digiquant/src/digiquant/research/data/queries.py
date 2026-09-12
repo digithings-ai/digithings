@@ -105,7 +105,11 @@ def _r2_generation_window(
 
     import polars as pl
 
-    from digiquant.data.prices.r2_history import latest_pointer_key, normalize_ticker
+    from digiquant.data.prices.r2_history import (
+        is_missing_object_error,
+        latest_pointer_key,
+        normalize_ticker,
+    )
     from digiquant.mcp_server import _get_r2_store
 
     manifest = _r2_manifest()
@@ -125,7 +129,9 @@ def _r2_generation_window(
             else:
                 try:
                     gen_key = store.read_latest(latest_pointer_key(ticker))
-                except KeyError:
+                except Exception as exc:
+                    if not is_missing_object_error(exc):
+                        raise
                     raise LookupError(f"unknown ticker {ticker!r}") from None
                 sha: str | None = None
                 for cand in datasets.values():
@@ -831,8 +837,9 @@ _MAX_QUERY_ROWS = 500
 _SAFE_COLUMNS_RE = re.compile(r"^(\*|[A-Za-z_][A-Za-z0-9_]*(\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)$")
 
 # Per-table column allowlists for the two market-data tables agents confuse (#3771).
-# Enforced inside ``query_data`` so MCP ``digiquant_query_data`` and the in-process
-# dispatcher share one choke point (the dispatcher-only close guard missed MCP).
+# Retained as a defensive choke exercised directly by tests; since #3780 the
+# ``query_data`` table allowlist refuses these tables before this can run, so
+# neither MCP ``digiquant_query_data`` nor the in-process dispatcher reaches it.
 PRICE_HISTORY_COLUMNS: frozenset[str] = frozenset(
     {"date", "ticker", "open", "high", "low", "close", "volume"}
 )
@@ -991,9 +998,10 @@ def query_data(
     omits it, so overlay same-date rows cannot seed house research. Pass
     ``eq={"workspace_id": ...}`` to read another book.
 
-    ``price_history`` / ``price_technicals`` enforce column allowlists (#3771):
-    OHLCV on technicals (and technicals on history) fail fast with a redirect.
-    ``columns="*"`` is allowed; explicit select/order/filter keys are checked.
+    Market history (``price_history`` / ``price_technicals`` /
+    ``macro_series_observations``) is not readable here (#3780): the table
+    allowlist refuses it. The #3771 per-table column allowlists remain in code
+    as a defensive choke (exercised directly by tests), not on this path.
     """
     tables = (allowed_tables & ALLOWED_READ_TABLES) if allowed_tables else ALLOWED_READ_TABLES
     if table not in tables:

@@ -57,6 +57,37 @@ def macro_latest_pointer_key(source: str, series: str) -> str:
     return f"market-data/macro/{source}__{series}/latest"
 
 
+#: S3/R2 error codes that mean "this key does not exist".
+_MISSING_OBJECT_CODES = frozenset({"NoSuchKey", "NoSuchBucket", "404", "NotFound"})
+
+
+def is_missing_object_error(exc: BaseException) -> bool:
+    """True only when *exc* means the object key does not exist.
+
+    The real R2 backend surfaces a missing pointer/generation as a boto3
+    ``ClientError`` (``NoSuchKey``/404), not the ``KeyError`` a dict-like store
+    would raise (``R2Backend.get`` -> ``download_fileobj``). Pointer-miss
+    fail-soft (unknown ticker/series -> ``LookupError``/empty) must recognize
+    both shapes *without* importing botocore (an archiver-only optional dep),
+    so this classifies off the exception's ``response`` payload instead.
+
+    Deliberately conservative: credential/network/5xx faults carry other codes
+    (or no ``response``) and return ``False`` so callers keep propagating them
+    rather than reporting a transient outage as an unknown series.
+    """
+    if isinstance(exc, (KeyError, FileNotFoundError)):
+        return True
+    response = getattr(exc, "response", None)
+    if not isinstance(response, dict):
+        return False
+    error = response.get("Error")
+    code = error.get("Code") if isinstance(error, dict) else None
+    if str(code) in _MISSING_OBJECT_CODES:
+        return True
+    meta = response.get("ResponseMetadata")
+    return bool(isinstance(meta, dict) and meta.get("HTTPStatusCode") == 404)
+
+
 def build_manifest(
     as_of: str,
     datasets: dict[str, dict[str, Any]],
@@ -174,6 +205,7 @@ __all__ = [
     "RegistryInsert",
     "build_manifest",
     "generation_key",
+    "is_missing_object_error",
     "latest_pointer_key",
     "macro_key",
     "macro_latest_pointer_key",

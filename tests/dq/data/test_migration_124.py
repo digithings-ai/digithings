@@ -1,8 +1,11 @@
-"""Unit tests for migration 124 — drop Supabase price tables post-cutover (#3780).
+"""Unit tests for migration 124 — market-data table drop (DEFERRED, #3951).
 
-Point of no return for the R2 market-data cutover (spec §7.4): with reads
-routed via R2 (Task 7b dispatcher matrix) and parity green (Task 7), the
-Supabase ``price_history`` + ``price_technicals`` tables are dropped.
+History: #3780/#3840 landed this migration as the R2 cutover's point of no
+return, dropping Supabase ``price_history`` + ``price_technicals`` once reads
+were routed via R2 and parity was green. The on-cron Supabase readers were not
+actually migrated, so #3951 defers the irreversible DROP: the tables are
+retained until those readers have R2 seams with tests. These tests therefore
+assert the *deferral*, not the drop.
 
 Ruling 2026-09-09 (macro carve-out): ``macro_series_observations`` STAYS —
 fedprob/bitview series still have no R2 home, so this migration must neither
@@ -31,8 +34,14 @@ SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 _DROP_TABLE = re.compile(
     r"DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?(?P<table>\w+)", re.IGNORECASE
 )
+_LINE_COMMENT = re.compile(r"--[^\n]*")
 
-DROPPED_TABLES = ("price_history", "price_technicals")
+DEFERRED_TABLES = ("price_history", "price_technicals")
+
+
+def _strip_line_comments(raw: str) -> str:
+    """SQL active statements only — commented-out DROPs must not read as active."""
+    return _LINE_COMMENT.sub("", raw)
 
 
 @pytest.fixture(scope="module")
@@ -59,15 +68,20 @@ def test_single_transaction_compatible(raw: str) -> None:
     assert "COMMIT;" not in raw.upper()
 
 
-def test_drops_exactly_price_history_and_price_technicals(raw: str) -> None:
-    dropped = {m.group("table").lower() for m in _DROP_TABLE.finditer(raw)}
-    assert dropped == set(DROPPED_TABLES)
+def test_no_active_drop_before_on_cron_readers_are_migrated(raw: str) -> None:
+    """#3951: the DROPs are deferred — no active DROP TABLE remains."""
+    active = _strip_line_comments(raw)
+    assert _DROP_TABLE.search(active) is None, "DROP must stay commented/removed"
+    # The deferred point-of-no-return must remain discoverable, not silently gone.
+    for table in DEFERRED_TABLES:
+        assert table in raw, f"{table} deferral rationale must be documented"
+    assert "#3951" in raw, "deferral must link the follow-up that unblocks it"
+    assert "DIGIQUANT_MARKET_DATA_BACKEND=r2" in raw
 
 
 def test_macro_table_carve_out(raw: str) -> None:
     """macro_series_observations is documented but never dropped or gated."""
     assert "macro_series_observations" in raw.lower(), "carve-out ruling must be documented"
-    assert _DROP_TABLE.search(raw) is not None
     for match in _DROP_TABLE.finditer(raw):
         assert match.group("table").lower() != "macro_series_observations"
 

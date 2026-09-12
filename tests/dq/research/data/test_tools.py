@@ -130,25 +130,26 @@ def test_macro_query_data_refused_post_cutover(monkeypatch):
 
 
 @pytest.mark.unit
-def test_query_data_description_mentions_obs_date_not_date():
-    """The tool description must advertise obs_date as the date column for macro_series_observations
-    so the model learns the correct column name (#814)."""
+def test_query_data_description_refuses_market_history_and_steers_to_dedicated_tools():
+    """#3951: the description must not advertise market tables query_data refuses.
+
+    ``price_history`` / ``price_technicals`` / ``macro_series_observations`` left
+    the generic reader for the R2 cache (#3780), so naming them as queryable —
+    or showing `table:'…'` examples — sends the model into a refusal.
+    """
     query_data_tool = next(t for t in DATA_TOOLS if t["function"]["name"] == "query_data")
     description = query_data_tool["function"]["description"]
-    assert "obs_date" in description
-    # The hint must be specific to macro_series_observations context.
-    assert "macro_series_observations" in description
-
-
-@pytest.mark.unit
-def test_query_data_description_warns_no_close_in_price_technicals():
-    """The tool description must warn that price_technicals has no 'close' column (#814)."""
-    query_data_tool = next(t for t in DATA_TOOLS if t["function"]["name"] == "query_data")
-    description = query_data_tool["function"]["description"]
+    # Named, but only to say they are NOT readable here.
     assert "price_history" in description
-    assert "close" in description
-    # Must guide the model to use price_history for OHLCV.
-    assert "OHLCV" in description or "price_history" in description
+    assert "macro_series_observations" in description
+    assert "NOT readable" in description
+    # Steers to the dedicated tools that own the reads.
+    assert "get_macro_series" in description
+    assert "digiquant_get_price_technicals" in description
+    # No stale examples that would make the model call the refused tables.
+    assert "table:'price_technicals'" not in description
+    assert "table:'price_history'" not in description
+    assert "table:'macro_series_observations'" not in description
 
 
 @pytest.mark.unit
@@ -188,8 +189,10 @@ def test_price_technicals_close_rejected_before_supabase():
 
 @pytest.mark.unit
 def test_query_data_description_warns_no_technicals_on_price_history():
-    """DATA_TOOLS hint must warn price_history has no sma_*/indicators (#3771)."""
+    """Retired-table drift guard: no sma_/price_technicals query hints survive (#3951)."""
     query_data_tool = next(t for t in DATA_TOOLS if t["function"]["name"] == "query_data")
     description = query_data_tool["function"]["description"]
-    assert "sma_" in description or "indicators" in description
+    # price_technicals may only appear to say it is not readable here.
     assert "price_technicals" in description
+    assert "NOT readable" in description
+    assert "sma_" not in description

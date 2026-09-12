@@ -74,10 +74,15 @@ Promotion runbook (supervised with the operator — write the commands, do
 NOT run them from an agent env; no cloud creds there):
 
 ```bash
+# DEFERRED (#3951): do not run this gate/apply sequence until the on-cron
+# Supabase readers have R2 seams — migration 124 currently retains
+# price_history + price_technicals (DROPs commented out). Steps preserved for
+# the follow-up that un-defers them.
 # 1. Live size gate on the core project, evaluated through the gate script
 #    (PASS <= 320MB per data/cutover_gate.py;
 #    ~172MB of price tables drop toward a ≈292MB target; macro_series_observations
-#    stays per the carve-out — migration 124 drops price_history + price_technicals ONLY).
+#    stays per the carve-out — the re-enabled migration 124 would drop
+#    price_history + price_technicals ONLY).
 psql "$CORE_PG_URI" -c "SELECT pg_size_pretty(pg_database_size(current_database()));"
 SIZE_BYTES=$(psql "$CORE_PG_URI" -tAX -c "SELECT pg_database_size(current_database());")
 python -c "import sys; from digiquant.data.cutover_gate import cutover_size_gate_passes; sys.exit(0 if cutover_size_gate_passes(int(sys.argv[1])) else 1)" "$SIZE_BYTES"  # pre-migration: expect exit 1 (>320MB); record the bytes
