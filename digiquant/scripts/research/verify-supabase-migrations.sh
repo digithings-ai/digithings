@@ -13,7 +13,7 @@
 #
 # Duplicate prefixes are a hard failure with no exemptions. The old `025`
 # collision was resolved by renumbering `025_trading_calendar.sql` to
-# `126_trading_calendar.sql` (#3923); do not reintroduce a grandfather list.
+# `111_trading_calendar.sql` (#3923); do not reintroduce a grandfather list.
 # `.github/workflows/db-migrate.yml` enforces the same uniqueness at apply time.
 set -euo pipefail
 # This file lives at digiquant/scripts/research/, so the digiquant/ package root —

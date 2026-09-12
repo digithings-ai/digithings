@@ -165,5 +165,5 @@ population job is simpler to operate and backfill.
 - Epic: [#335](https://github.com/digithings-ai/digithings/issues/335)
 - This issue: [#336](https://github.com/digithings-ai/digithings/issues/336)
 - Child issues: [#337](https://github.com/digithings-ai/digithings/issues/337) (backfill), [#338](https://github.com/digithings-ai/digithings/issues/338) (full-history workflow), [#340](https://github.com/digithings-ai/digithings/issues/340) (frontend view)
-- Migration introduced by this ADR: `digiquant/supabase/migrations/126_trading_calendar.sql` (renumbered from `025_trading_calendar.sql` to break the duplicate `025` prefix in #3923)
+- Migration introduced by this ADR: `digiquant/supabase/migrations/111_trading_calendar.sql` (renumbered from `025_trading_calendar.sql` to break the duplicate `025` prefix; kept below `116`, which policies this table, in #3923)
 - Supersedes (in part): migration 013 pattern (`013_calendar_fill.sql`)

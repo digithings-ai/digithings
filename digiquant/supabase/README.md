@@ -4,7 +4,7 @@ The single Supabase CLI project dir for the suite-wide **`core`** backend (dashb
 portfolio, market data, strategy store — see
 [ADR 0021](../../docs/adr/0021-digiquant-supabase-project-topology.md)). There is exactly
 **one** migration chain: the numbered files under [`migrations/`](migrations/) —
-`001`–`126` at time of writing, with `037`, `038` and `059` never used and `062`
+`001`–`125` at time of writing, with `037`, `038` and `059` never used and `062`
 **burned — see below, do not reuse it**; new work appends the next unused prefix. [`SCHEMA.md`](SCHEMA.md) inventories the live
 tables and views.
 
@@ -24,10 +24,15 @@ the *full filename*, so renumbering either one mints a new ledger key for a file
 prod already ran. The calendar migration was chosen to move because it is fully
 idempotent (`CREATE TABLE`/`CREATE INDEX IF NOT EXISTS`, `DROP POLICY IF EXISTS`
 then `CREATE POLICY`), so a replay under its new key is safe; it is now
-`126_trading_calendar.sql`. `025_thesis_daily_fields.sql` stays put — it logically
-follows `024_thesis_deliberation_first_class` and is pinned by
-`tests/dq/research/test_migration_025.py`. Do not add an exemption list back; take
-the next free prefix for new work.
+`111_trading_calendar.sql`. **It had to land below `116`, not at the end of the
+chain**: `116_authenticated_read_public_reference.sql` runs `DROP`/`CREATE POLICY
+... ON public.trading_calendar`, so the creator must sort before it — a fresh apply
+at `126` died at `116` with `relation "public.trading_calendar" does not exist`.
+`111` is a genuine top-level gap (`113` is `cutover/`, not in the auto-applied set).
+`025_thesis_daily_fields.sql` stays put — it logically follows
+`024_thesis_deliberation_first_class` and is pinned by
+`tests/dq/research/test_migration_025.py`. Do not add an exemption list back; use
+the next free prefix (and check it does not precede a consumer) for new work.
 
 **`062` is burned, not merely free (#1807).** `037`, `038` and `059` were never written.
 `062` was. `062_realtime_broadcast_authorization.sql` tried to add RLS policies to
