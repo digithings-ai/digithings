@@ -13,6 +13,7 @@ import {
   sinceInceptionPctFromNav,
 } from '@digithings/web';
 import {
+  findNavSeriesSeams,
   navSeriesContractLabel,
   type AccountingNavRow,
 } from './accounting-views';
@@ -161,12 +162,14 @@ export function crossesNavSeam(tip: NavPoint, prior: NavPoint | null): boolean {
 }
 
 function derivedDayReturnPct(tip: NavPoint, prior: NavPoint | null): number | null {
+  // #3767: a seam row starts a new source run. Neither a stored nor a derived
+  // session return across the flip is honest — return null before the stored
+  // value can bypass the guard.
+  if (crossesNavSeam(tip, prior)) return null;
   if (tip.day_return_pct != null && Number.isFinite(tip.day_return_pct)) {
     return tip.day_return_pct;
   }
   if (!prior || !(prior.nav > 0)) return null;
-  // #3767: never derive a day return across a legacy↔finalized seam.
-  if (crossesNavSeam(tip, prior)) return null;
   const gap = calendarDaysBetween(prior.date, tip.date);
   if (gap == null || gap < 1 || gap > MAX_DAY_RETURN_GAP_DAYS) return null;
   return (tip.nav / prior.nav - 1) * 100;
@@ -190,13 +193,22 @@ export function persistedHeadlinesFromNav(
   const sorted = [...nav]
     .filter((row) => finiteNav(row.nav))
     .sort((a, b) => a.date.localeCompare(b.date));
-  const first = sorted[0] ?? null;
-  const tip = sorted.at(-1) ?? null;
+  // #3767: since-inception must be rebased on the current source run — a
+  // legacy→finalized seam must not produce a phantom jump (false Sep-8).
+  const seamDates = findNavSeriesSeams(sorted);
+  const currentRun = seamDates.length
+    ? sorted.filter((row) => row.date >= seamDates[seamDates.length - 1])
+    : sorted;
+  const run = currentRun.length ? currentRun : sorted;
+  const first = run[0] ?? null;
+  const tip = run.at(-1) ?? null;
+  // Day-return predecessor stays the immediately adjacent date in the full
+  // series so a seam at the tip is still detected (and refused).
   const prior = sorted.length >= 2 ? sorted[sorted.length - 2] : null;
 
   // Match Tearsheet `periodReturnPct`: need ≥2 finite NAV points for since-inception %.
   const sinceInceptionPct =
-    sorted.length >= 2 && first && tip ? sinceInceptionPctFromNav(first.nav, tip.nav) : null;
+    run.length >= 2 && first && tip ? sinceInceptionPctFromNav(first.nav, tip.nav) : null;
 
   const invested = resolveInvestedPct({
     tipInvestedPct: tip?.invested_pct ?? null,

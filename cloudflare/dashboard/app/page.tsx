@@ -194,6 +194,7 @@ export default function OverviewPage() {
       day_return_pct: row.day_return_pct ?? null,
       source: row.source ?? 'legacy_nav_history',
       contract: row.contract ?? 'legacy_estimate',
+      series_seam: row.series_seam === true,
     })),
     metricsAsOf:
       data.server_portfolio_metrics?.as_of_date ?? data.server_portfolio_metrics?.date ?? null,

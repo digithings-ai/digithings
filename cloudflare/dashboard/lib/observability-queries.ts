@@ -41,6 +41,7 @@ import {
   ACCOUNTING_NAV_VIEW,
   AccountingNavContractError,
   accountingNavToHistoryShape,
+  findNavSeriesSeams,
   type AccountingNavRow,
 } from './accounting-views';
 import {
@@ -345,12 +346,19 @@ function periodReturnPct(values: number[]): number | null {
 }
 
 function buildPortfolioReturnSeries(
-  nav: TableRow<'nav_history'>[]
+  nav: TableRow<'nav_history'>[],
+  seamDates: ReadonlyArray<string> = []
 ): PortfolioReturnPoint[] {
   const sorted = [...nav].sort((a, b) => a.date.localeCompare(b.date));
-  const baseline = sorted.find((row) => Number.isFinite(row.nav) && row.nav > 0)?.nav;
+  // #3767: a seam marks the first row of a new source run. Rebase the plotted
+  // return on the current run only — never bridge legacy estimates to finalized
+  // accounting (false Sep-8 ~+10% jump).
+  const lastSeam = seamDates.length ? [...seamDates].sort().at(-1)! : null;
+  const currentRun = lastSeam ? sorted.filter((row) => row.date >= lastSeam) : sorted;
+  const run = currentRun.length ? currentRun : sorted;
+  const baseline = run.find((row) => Number.isFinite(row.nav) && row.nav > 0)?.nav;
   if (baseline == null) return [];
-  return sorted
+  return run
     .filter((row) => Number.isFinite(row.nav) && row.nav > 0)
     .map((row) => ({
       date: row.date,
@@ -502,8 +510,11 @@ export function buildPerformanceTearsheet(args: {
   snapshotDate?: string | null;
 }): PerformanceTearsheet {
   const navAsc = [...args.nav].sort((a, b) => a.date.localeCompare(b.date));
-  const inceptionDate = navAsc[0]?.date ?? null;
-  const navSeries = buildPortfolioReturnSeries(navAsc);
+  const seamDates = args.accountingNav?.length ? findNavSeriesSeams(args.accountingNav) : [];
+  const navSeries = buildPortfolioReturnSeries(navAsc, seamDates);
+  // Rebased on the current source run — keep the displayed period honest with
+  // the since-inception KPI when a seam truncates the series.
+  const inceptionDate = navSeries[0]?.date ?? navAsc[0]?.date ?? null;
   const currentSnapshot = latestDateRows(args.positions);
   const marksByTicker = latestCloseByTicker(args.holdingMarks ?? []);
   const currentPositions = currentSnapshot.rows
