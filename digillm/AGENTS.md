@@ -108,11 +108,13 @@ pip install -e digillm/ --dry-run
 > wired into `ci.yml`. It installs from the committed `uv.lock` (`uv sync --frozen
 > --all-packages --all-extras`) and runs ruff + the unfiltered suite.
 >
-> The suite **is** `unit`-marked module-wide (`pytestmark = pytest.mark.unit` in
+> The suite is mostly `unit`-marked (`pytestmark = pytest.mark.unit` in
 > `test_byok_isolation.py`, `test_digillm.py`, `test_fail_fast.py`, and
 > `test_provider_telemetry.py`, plus `@pytest.mark.unit` on two tests in
-> `test_mcp_server.py`), so `-m unit` selects most of it (the remaining tests are
-> the unmarked `test_mcp_server.py` cases). The workflow comment claiming "no test
+> `test_mcp_server.py`), so `-m unit` selects most of it. The tests it excludes are
+> the wholly unmarked `test_cheaperinference_routing.py` and
+> `test_web_search_usage_kind.py` modules, plus the five unmarked cases in
+> `test_mcp_server.py`. The workflow comment claiming "no test
 > in digillm/tests carries the `unit` marker" is stale — do not edit workflows from
 > this docs PR; correct that comment when the workflow is next touched.
 
