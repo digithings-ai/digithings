@@ -184,3 +184,55 @@ class TestBgeometricsClient:
 
     def test_base_url_is_https(self) -> None:
         assert BGEOMETRICS_BASE_URL.startswith("https://")
+
+    # ── SSRF + env-token exfiltration guards (#3944) ──────────────────────
+
+    def test_untrusted_base_url_raises_at_client_construction(self) -> None:
+        with pytest.raises(ValueError, match="not allowlisted"):
+            BgeometricsClient(session=_FakeSession(), base_url="https://evil.example.com")
+
+    def test_fetch_function_refuses_attacker_base_url_without_fetch(self) -> None:
+        session = _FakeSession(body=_mvrv_last())
+        result = fetch_bgeometrics_series(
+            "mvrv", session=session, base_url="http://169.254.169.254/latest/meta-data"
+        )
+        assert result.error is not None
+        assert "refusing untrusted base_url" in result.error
+        assert session.calls == []
+
+    def test_env_token_never_sent_to_caller_nominated_host(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("BGEOMETRICS_API_TOKEN", "server-owned-secret")
+        session = _FakeSession(body=_mvrv_last())
+        result = fetch_bgeometrics_series(
+            "mvrv", session=session, last=True, base_url="https://evil.example.com"
+        )
+        assert result.error is not None
+        # Refused before any request, so the token cannot be attached to a
+        # caller-nominated host.
+        assert session.calls == []
+
+    def test_env_token_sent_only_to_trusted_base(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("BGEOMETRICS_API_TOKEN", "server-owned-secret")
+        session = _FakeSession(body=_mvrv_last())
+        fetch_bgeometrics_series("mvrv", session=session, last=True)
+        _url, kwargs = session.calls[0]
+        assert kwargs["headers"]["Authorization"] == "Bearer server-owned-secret"
+
+    @pytest.mark.parametrize(
+        "bad_metric",
+        ["../secret", "mvrv?x=1", "mvrv/../sopr", "MVRV", "mvrv%2f..", "mvrv last", "a/b"],
+    )
+    def test_metric_is_not_a_path_or_query_injection_sink(self, bad_metric: str) -> None:
+        session = _FakeSession(body=_mvrv_last())
+        result = BgeometricsClient(session=session).fetch(bad_metric, last=True)
+        assert result.error is not None
+        assert "metric must match" in result.error
+        assert session.calls == []
+
+    def test_known_metric_still_fetches(self) -> None:
+        session = _FakeSession(body=_mvrv_last())
+        result = BgeometricsClient(session=session).fetch("mvrv", last=True)
+        assert result.has_data
+        assert session.calls != []

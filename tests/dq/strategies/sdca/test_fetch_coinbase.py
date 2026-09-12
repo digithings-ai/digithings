@@ -119,3 +119,20 @@ class TestBarsToPolars:
         ts_ms = int(datetime(2020, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
         df = _MODULE.bars_to_polars([_bar(ts_ms)], "ETH-USD")
         assert df["symbol"][0] == "ETH-USD"
+
+
+class TestCachePathFor:
+    """Intraday bars must not overwrite the daily price-history cache (#3944)."""
+
+    def test_daily_uses_canonical_ticker_csv(self, tmp_path: Path) -> None:
+        assert _MODULE.cache_path_for(tmp_path, "BTC-USD", "1d") == tmp_path / "BTC-USD.csv"
+
+    def test_intraday_uses_timeframe_namespace(self, tmp_path: Path) -> None:
+        assert _MODULE.cache_path_for(tmp_path, "BTC-USD", "1h") == tmp_path / "1h" / "BTC-USD.csv"
+
+    def test_intraday_does_not_collide_with_daily_cache(self, tmp_path: Path) -> None:
+        daily = _MODULE.cache_path_for(tmp_path, "BTC-USD", "1d")
+        hourly = _MODULE.cache_path_for(tmp_path, "BTC-USD", "1h")
+        assert daily != hourly
+        assert daily.parent == tmp_path
+        assert hourly.parent.name == "1h"

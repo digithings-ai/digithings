@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import date
 from pathlib import Path
 from typing import Any, Protocol  # score:allow untyped any — bitcoin-data.com JSON rows
@@ -44,9 +45,18 @@ import httpx
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.data.onchain._url_guard import is_allowed_base_url
+
 logger = logging.getLogger(__name__)
 
 BGEOMETRICS_BASE_URL = "https://api.bitcoin-data.com"
+#: Hosts the client may talk to. A caller-nominated ``base_url`` is refused
+#: outright (#3944) — this is the code-only seam guard.
+ALLOWED_BASE_HOSTS: frozenset[str] = frozenset({"api.bitcoin-data.com"})
+#: bitcoin-data.com metric slugs are interpolated into the URL path, so a
+#: caller must not be able to smuggle ``/`` or ``?`` through the ``metric``
+#: segment. Catalog slugs are lowercase-hyphen (`mvrv`, `pi-cycle`, ...).
+_METRIC_SEGMENT = re.compile(r"^[a-z0-9-]+$")
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_CACHE_DIR = Path("data/onchain/bgeometrics")
 _USER_AGENT = "digiquant-research/1.0 (+https://digiquant.io)"
@@ -267,6 +277,8 @@ class BgeometricsClient:
         cache_dir: Path | str | None = None,
         token: str | None = None,
     ) -> None:
+        if not is_allowed_base_url(base_url, ALLOWED_BASE_HOSTS):
+            raise ValueError(f"base_url host is not allowlisted: {base_url!r} (#3944)")
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = session
@@ -284,6 +296,11 @@ class BgeometricsClient:
         metric = metric.strip().lstrip("/")
         if not metric:
             return BgeometricsSeriesResult(metric=metric or "?", error="metric id is required")
+        if not _METRIC_SEGMENT.fullmatch(metric):
+            return BgeometricsSeriesResult(
+                metric=metric,
+                error="metric must match ^[a-z0-9-]+$ (path/query not allowed)",
+            )
         suffix = "/last" if last else ""
         url = f"{self.base_url}/v1/{metric}{suffix}"
         params: dict[str, str | int] = {}
@@ -331,9 +348,23 @@ def fetch_bgeometrics_series(
     token: str | None = None,
 ) -> BgeometricsSeriesResult:
     """Fetch one bitcoin-data.com metric. Always fail-soft. Inject ``session`` in tests (no network)."""
+    if not is_allowed_base_url(base_url, ALLOWED_BASE_HOSTS):
+        # Refuse the caller-nominated base before any token is resolved or any
+        # request is made — SSRF + env-secret exfiltration guard (#3944).
+        return BgeometricsSeriesResult(
+            metric=metric,
+            error=f"refusing untrusted base_url {base_url!r} (allowed: {sorted(ALLOWED_BASE_HOSTS)})",
+        )
     if session is None and not _fetch_enabled():
         return BgeometricsSeriesResult(metric=metric, error=f"{_ENV_FLAG} disabled (no network)")
-    resolved_token = token if token is not None else os.environ.get(_ENV_TOKEN, "").strip() or None
+    if token is not None:
+        resolved_token = token
+    elif base_url.rstrip("/") == BGEOMETRICS_BASE_URL:
+        # Only the trusted, allowlisted default base ever receives the
+        # server-owned token; a caller-nominated (even allowlisted) base does not.
+        resolved_token = os.environ.get(_ENV_TOKEN, "").strip() or None
+    else:
+        resolved_token = None
     client = BgeometricsClient(
         base_url=base_url,
         timeout=timeout,
@@ -345,6 +376,7 @@ def fetch_bgeometrics_series(
 
 
 __all__ = [
+    "ALLOWED_BASE_HOSTS",
     "BGEOMETRICS_BASE_URL",
     "DEFAULT_CACHE_DIR",
     "FREE_TIER_NOTE",

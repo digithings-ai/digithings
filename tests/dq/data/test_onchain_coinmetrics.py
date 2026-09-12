@@ -165,13 +165,18 @@ class TestCoinMetricsClient:
         _url, kwargs = session.calls[0]
         assert "api_key" not in kwargs["params"]
 
-    def test_custom_base_url_used_for_request(self) -> None:
+    def test_client_refuses_untrusted_base_url(self) -> None:
+        with pytest.raises(ValueError, match="not allowlisted"):
+            CoinMetricsClient(session=_FakeSession(), base_url="https://evil.example.com/v4")
+
+    def test_fetch_function_refuses_attacker_base_url_without_fetch(self) -> None:
         session = _FakeSession(body=_mvrv_payload())
-        CoinMetricsClient(
-            session=session, base_url="https://custom.example.com/v4"
-        ).fetch("CapMVRVCur", asset="btc")
-        url, _kwargs = session.calls[0]
-        assert url.startswith("https://custom.example.com/v4")
+        result = fetch_coinmetrics_series(
+            "CapMVRVCur", session=session, base_url="http://169.254.169.254/latest/meta-data"
+        )
+        assert result.error is not None
+        assert "refusing untrusted base_url" in result.error
+        assert session.calls == []
 
 
 class TestCoinMetricsCatalog:
@@ -207,3 +212,12 @@ class TestCoinMetricsCatalog:
         result = fetch_coinmetrics_catalog("btc")
         assert result.error is not None
         assert "disabled" in (result.error or "")
+
+    def test_catalog_refuses_attacker_base_url_without_fetch(self) -> None:
+        session = _FakeSession(body={"data": []})
+        result = fetch_coinmetrics_catalog(
+            "btc", session=session, base_url="https://evil.example.com/v4"
+        )
+        assert result.error is not None
+        assert "refusing untrusted base_url" in result.error
+        assert session.calls == []

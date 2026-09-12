@@ -586,7 +586,6 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
 
     if tool == "digiquant_fetch_bitview_series":
-        from digiquant.data.onchain.bitview import BITVIEW_BASE_URL
         from digiquant.sdca_mcp import run_fetch_bitview_series
 
         series_ids = args.get("series_ids_json")
@@ -599,7 +598,6 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
                 timeout=float(args.get("timeout") or 30.0),
                 start=(int(args["start"]) if args.get("start") is not None else None),
                 end=(int(args["end"]) if args.get("end") is not None else None),
-                base_url=str(args["base_url"]) if args.get("base_url") else BITVIEW_BASE_URL,
                 allow_derived=bool(args.get("allow_derived", False)),
             )
         )

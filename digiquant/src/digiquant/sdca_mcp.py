@@ -11,17 +11,16 @@ import json
 from pathlib import Path
 from typing import Any  # score:allow untyped any — MCP JSON argument bags
 
-from digiquant.data.onchain.bgeometrics import BGEOMETRICS_BASE_URL, fetch_bgeometrics_series
 from digiquant.data.onchain.bgeometrics import DEFAULT_CACHE_DIR as BGEOMETRICS_CACHE
-from digiquant.data.onchain.bitview import BITVIEW_BASE_URL, DEFAULT_SERIES, fetch_bitview_series
+from digiquant.data.onchain.bgeometrics import fetch_bgeometrics_series
 from digiquant.data.onchain.bitview import DEFAULT_CACHE_DIR as BITVIEW_CACHE
+from digiquant.data.onchain.bitview import DEFAULT_SERIES, fetch_bitview_series
+from digiquant.data.onchain.coinmetrics import DEFAULT_CACHE_DIR as COINMETRICS_CACHE
 from digiquant.data.onchain.coinmetrics import (
-    COINMETRICS_BASE_URL,
     DEFAULT_PAGE_SIZE,
     fetch_coinmetrics_catalog,
     fetch_coinmetrics_series,
 )
-from digiquant.data.onchain.coinmetrics import DEFAULT_CACHE_DIR as COINMETRICS_CACHE
 from digiquant.data.prices.history_cache import DEFAULT_CACHE_DIR, incremental_update, load_cached
 from digiquant.strategies.sdca.asset_profile import daily_closes_from_ohlcv
 from digiquant.strategies.sdca.fit_weights import (
@@ -48,7 +47,6 @@ def run_fetch_bitview_series(
     timeout: float = 30.0,
     start: int | None = None,
     end: int | None = None,
-    base_url: str = BITVIEW_BASE_URL,
     allow_derived: bool = False,
     session: Any | None = None,
 ) -> str:
@@ -64,7 +62,6 @@ def run_fetch_bitview_series(
             session=session,
             start=start,
             end=end,
-            base_url=base_url,
             allow_derived=allow_derived,
         )
     except Exception as exc:
@@ -81,7 +78,6 @@ def run_fetch_bgeometrics_series(
     cache_dir: str | None = None,
     timeout: float = 30.0,
     token: str | None = None,
-    base_url: str = BGEOMETRICS_BASE_URL,
     session: Any | None = None,
 ) -> str:
     """Fail-soft bitcoin-data.com (BGeometrics) fetch. Returns JSON (never raises).
@@ -98,7 +94,6 @@ def run_fetch_bgeometrics_series(
             cache_dir=cache_dir or str(BGEOMETRICS_CACHE),
             timeout=timeout,
             token=token,
-            base_url=base_url,
             session=session,
         )
     except Exception as exc:
@@ -115,7 +110,6 @@ def run_fetch_coinmetrics_series(
     page_size: int = DEFAULT_PAGE_SIZE,
     cache_dir: str | None = None,
     timeout: float = 30.0,
-    base_url: str = COINMETRICS_BASE_URL,
     api_key: str | None = None,
     session: Any | None = None,
 ) -> str:
@@ -136,7 +130,6 @@ def run_fetch_coinmetrics_series(
             page_size=page_size,
             cache_dir=cache_dir or str(COINMETRICS_CACHE),
             timeout=timeout,
-            base_url=base_url,
             api_key=api_key,
             session=session,
         )
@@ -149,7 +142,6 @@ def run_list_coinmetrics_catalog(
     *,
     asset: str | None = None,
     timeout: float = 30.0,
-    base_url: str = COINMETRICS_BASE_URL,
     api_key: str | None = None,
     session: Any | None = None,
 ) -> str:
@@ -161,7 +153,7 @@ def run_list_coinmetrics_catalog(
     """
     try:
         result = fetch_coinmetrics_catalog(
-            asset, timeout=timeout, base_url=base_url, api_key=api_key, session=session
+            asset, timeout=timeout, api_key=api_key, session=session
         )
     except Exception as exc:
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
