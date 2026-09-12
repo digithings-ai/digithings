@@ -10,7 +10,7 @@ Daily market intelligence + portfolio loop. **Supabase-first** (no `data/agent-c
 
 **One daily cadence** ([#930](https://github.com/digithings-ai/digithings/issues/930)): research A0–A4 (research with
 edit-mode continuity) → portfolio H1–H9 (thesis-first) → `commit_run`. Cost is controlled by
-`OLYMPUS_MODEL_TIER` and per-artifact `skip`/`edit`/`full` — not separate baseline/delta graphs.
+`DIGIQUANT_MODEL_TIER` and per-artifact `skip`/`edit`/`full` — not separate baseline/delta graphs.
 
 ---
 

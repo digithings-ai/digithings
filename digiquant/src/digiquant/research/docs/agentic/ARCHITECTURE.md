@@ -54,7 +54,7 @@ and **`documents`**.
 | **Default** | `refresh_scope=none` — continuity via `skip`/`edit`/`full` per artifact |
 | **Full refresh** | Manual `workflow_dispatch` / `--refresh-scope all` (no Sunday force) |
 | **CLI** | `python -m digiquant.portfolio.chain --cadence daily [--refresh-scope …]` |
-| **Cost** | `OLYMPUS_MODEL_TIER` (`cheap` \| `balanced` \| `quality`) — not graph forks |
+| **Cost** | `DIGIQUANT_MODEL_TIER` (`cheap` \| `balanced` \| `quality`) — not graph forks |
 
 Quiet-day savings: triage `skip` (0 LLM) + `edit` (`DocumentPatch`) — not a separate delta graph.
 
@@ -613,7 +613,7 @@ Skills are packaged as **`skills/<slug>/SKILL.md`**; use [`SKILLS-CATALOG.md`](S
 
 ## LLM Routing — digiquant capability tiers
 
-*Current since Jun 2026 (#859, #980, #998); house path via LiteLLM since #3413/#3414: digiquant phase LLM calls are **caller → digillm → LiteLLM**. Capability pools in [`config/digiquant_models.yaml`](../../../../../../config/digiquant_models.yaml) are digiquant **model categories** (`cheap` default / `balanced` / `quality` via `OLYMPUS_MODEL_TIER`) — not an OpenRouter preference. Unprefixed pool/pin slugs are LiteLLM `model_name` keys (upstream swap is a `litellm.yaml` edit). This superseded the 2026-04 three-tier free-provider model (Groq / Ollama / Gemini — [DESIGN-DECISIONS.md ADR-016](../DESIGN-DECISIONS.md#adr-016-three-tier-llm-provider-routing), retained as history). Operator knobs and cost levers: [RUNBOOK.md "OpenRouter model tiers"](../RUNBOOK.md#openrouter-model-tiers-configdashboard_modelsyaml) (section title is historical; knobs still apply when LiteLLM's upstream is OpenRouter). Historical per-phase budgets: [`docs/research/token-budget.md`](../../../../../../docs/research/token-budget.md).*
+*Current since Jun 2026 (#859, #980, #998); house path via LiteLLM since #3413/#3414: digiquant phase LLM calls are **caller → digillm → LiteLLM**. Capability pools in [`config/digiquant_models.yaml`](../../../../../../config/digiquant_models.yaml) are digiquant **model categories** (`cheap` default / `balanced` / `quality` via `DIGIQUANT_MODEL_TIER`) — not an OpenRouter preference. Unprefixed pool/pin slugs are LiteLLM `model_name` keys (upstream swap is a `litellm.yaml` edit). This superseded the 2026-04 three-tier free-provider model (Groq / Ollama / Gemini — [DESIGN-DECISIONS.md ADR-016](../DESIGN-DECISIONS.md#adr-016-three-tier-llm-provider-routing), retained as history). Operator knobs and cost levers: [RUNBOOK.md "OpenRouter model tiers"](../RUNBOOK.md#openrouter-model-tiers-configdashboard_modelsyaml) (section title is historical; knobs still apply when LiteLLM's upstream is OpenRouter). Historical per-phase budgets: [`docs/research/token-budget.md`](../../../../../../docs/research/token-budget.md).*
 
 The default `cheap` tier is **open-weight models only** — frontier models (`openai/*`, `anthropic/*`, GPT-5.x, Claude Opus/Sonnet, o-series) are rejected at runtime (`digigraph.model_config.is_flagship_openrouter_model`), a guard added after a bare-Auto-Router delta run landed on GPT-5.5 and cost $11.95.
 
@@ -644,7 +644,7 @@ Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `master-diges
 1. Explicit model= kwarg  (test overrides, never set in production)
 2. config/model_modes.yaml phase_models  →  explicit per-phase pin (escape hatch;
    frontier models are rejected on cheap/balanced tiers)
-3. config/digiquant_models.yaml  →  capability(phase_slug) × OLYMPUS_MODEL_TIER pool,
+3. config/digiquant_models.yaml  →  capability(phase_slug) × DIGIQUANT_MODEL_TIER pool,
    stable-hash pick
 4. get_model_for_mode()  →  legacy DIGI_LLM_MODE defaults; in an OpenRouter deploy a
    non-OpenRouter fallback is redirected to the active tier's reasoning pool
@@ -711,7 +711,7 @@ Tier-wide changes belong in `config/digiquant_models.yaml` (capability pools per
 | Variable | Purpose | Where set |
 |----------|---------|-----------|
 | `OPENROUTER_API_KEY` | All phase LLM calls + web grounding | GitHub secret + local `.env` |
-| `OLYMPUS_MODEL_TIER` | Tier select (`cheap` default / `balanced` / `quality`) | Optional; workflow env or shell |
+| `DIGIQUANT_MODEL_TIER` | Tier select (`cheap` default / `balanced` / `quality`) | Optional; workflow env or shell |
 | `DIGIQUANT_MAX_ANALYSTS` | H4/H5/H6 roster fan-out cap (#1767) | CI workflow env: `"30"` |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Publishing + diagnostics | GitHub secret + local `.env` |
 
