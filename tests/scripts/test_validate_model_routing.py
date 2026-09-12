@@ -205,23 +205,53 @@ def test_ping_providers_skips_provider_without_key(monkeypatch: pytest.MonkeyPat
     assert skipped == 1
 
 
-def test_main_ping_strict_exits_when_any_provider_skipped(
-    monkeypatch: pytest.MonkeyPatch,
+def _two_provider_ping_setup(mod: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the resolver at TWO providers, with exactly one key present.
+
+    The committed config resolves to a single provider, so a test built on it
+    cannot tell `skipped >= distinct_providers` (base) from `skipped` (head):
+    both reduce to the same boolean. Two providers make the distinction
+    observable — one pings, one skips, so base tolerates it and head exits 1.
+    """
+    fake_llm = types.ModuleType("digigraph.llm_client")
+    fake_llm.completion_text = lambda *_args, **_kwargs: "ok"  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "digigraph.llm_client", fake_llm)
+
+    cfg = {
+        # Every unpinned slug (the hand inventory) resolves here …
+        "defaults": {"test": "xai/grok-4.5"},
+        # … except this explicit pin, a different provider.
+        "phase_models": {"macro": "openrouter/deepseek/deepseek-v4-flash"},
+    }
+    (tmp_path / "model_modes.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")  # pings
+    monkeypatch.delenv("XAI_API_KEY", raising=False)  # SKIPs
+
+
+def test_main_ping_strict_fails_when_one_of_two_providers_is_skipped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """#3939 — one skipped provider (not just all of them) must fail under --strict."""
+    """#3939 — one skipped provider out of TWO must fail under --strict.
+
+    Discriminating regression: `distinct_providers == 2`, `skipped == 1`. The
+    pre-#3939 guard (`skipped >= distinct_providers`, i.e. `1 >= 2`) returns
+    cleanly; the head guard (`skipped`) exits 1. This test fails against the
+    pre-change expression and passes on the fix.
+    """
     mod = _load()
-    monkeypatch.setenv("DIGI_CONFIG_PATH", str(REPO_ROOT / "config"))
-    monkeypatch.setattr(mod, "ping_providers", lambda _by_model: (True, 1))
+    _two_provider_ping_setup(mod, tmp_path, monkeypatch)
     monkeypatch.setattr(sys, "argv", ["validate_model_routing.py", "--ping", "--strict"])
     with pytest.raises(SystemExit) as exc:
         mod.main()
     assert exc.value.code == 1
 
 
-def test_main_ping_without_strict_tolerates_skips(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The same one-skip run is non-fatal without --strict."""
+def test_main_ping_without_strict_tolerates_one_skip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Control: the same one-of-two skip is non-fatal without --strict."""
     mod = _load()
-    monkeypatch.setenv("DIGI_CONFIG_PATH", str(REPO_ROOT / "config"))
-    monkeypatch.setattr(mod, "ping_providers", lambda _by_model: (True, 1))
+    _two_provider_ping_setup(mod, tmp_path, monkeypatch)
     monkeypatch.setattr(sys, "argv", ["validate_model_routing.py", "--ping"])
     mod.main()

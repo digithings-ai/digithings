@@ -382,8 +382,22 @@ jobs:
           GEMINI_API_KEY: ""
           XAI_API_KEY: ""
         run: |
-          if uv run --frozen --no-sync python scripts/validate_model_routing.py --ping --strict; then
+          # Capture both the exit code and the output. "non-zero means the guard
+          # fired" is too weak: a crash in the --ping path (e.g. an import error)
+          # also exits non-zero and would read as success. Assert the STRICT:
+          # diagnosis the skip guard actually prints, so only the intended
+          # failure passes and a crash still goes red.
+          set +e
+          out=$(uv run --frozen --no-sync python scripts/validate_model_routing.py --ping --strict 2>&1)
+          code=$?
+          set -e
+          printf '%s\n' "$out"
+          if [ "$code" -eq 0 ]; then
             echo "::error::validate_model_routing.py --ping --strict exited 0 with every provider skipped — strict-skip guard is inert."
+            exit 1
+          fi
+          if ! grep -q 'STRICT:' <<<"$out"; then
+            echo "::error::validate_model_routing.py --ping --strict exited $code without the STRICT: diagnosis — the ping path crashed rather than enforcing the skip guard."
             exit 1
           fi
 
