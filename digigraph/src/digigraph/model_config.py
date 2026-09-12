@@ -395,8 +395,8 @@ def get_digiquant_tier() -> str:
     """Active tier from ``DIGIQUANT_MODEL_TIER`` or ``digiquant_models.yaml`` default.
 
     Sole-read since #3784: the retired ``OLYMPUS_MODEL_TIER`` no longer selects a
-    tier here. ``digiquant.dashboard.envcompat`` still carries it as a readable
-    alias for digiquant's own readers (rollback only).
+    tier here. ``digiquant.dashboard.envcompat`` keeps it as a listed retired
+    alias; no reader consults it, so rollback means reverting this change.
     """
     raw = os.environ.get("DIGIQUANT_MODEL_TIER", "").strip().lower()
     if raw in _VALID_MODEL_TIERS:
