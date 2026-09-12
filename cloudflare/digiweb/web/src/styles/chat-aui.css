@@ -479,70 +479,15 @@
   }
 }
 
-/* Portaled menus leave .digichat-thread. Scope so catalog skins keep popover. */
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-content,
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover {
-  background: var(--bg, #0a0e0c);
-  color: var(--ink, #eceef0);
-  border: 1px solid var(--hair, rgba(255, 255, 255, 0.09));
-  border-radius: 0;
-  box-shadow: none;
-}
-
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item {
-  background: transparent;
-  color: var(--ink-mute, #6b7177);
-}
-
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:hover,
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:focus,
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:focus-visible,
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item[data-highlighted] {
-  background: transparent;
-  background-color: transparent;
-  color: var(--ink, #eceef0);
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover,
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover {
-  background: var(--bg, #0a0e0c);
-  color: var(--ink, #eceef0);
-  border: 1px solid var(--hair, rgba(255, 255, 255, 0.09));
-  border-radius: 0;
-  box-shadow: none;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-}
-
+/* Portaled menus leave .digichat-thread. The gallery sheet owns the portaled
+   menu skin (reference chatbot.css); chat-aui.css keeps only the rules it has
+   no twin for: catalog-skin popover items, tooltip/dialog accent tokens, the
+   hidden tooltip arrows, and launcher hover overrides (#3818). */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover [data-slot="composer-trigger-popover-item"],
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover [role="option"],
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [role="option"] {
   background: transparent;
   color: var(--ink-mute, #6b7177);
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover [data-highlighted],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [data-highlighted],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [aria-selected="true"],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [aria-selected="true"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [data-cursor="true"],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [data-cursor="true"] {
-  background: transparent;
-  background-color: transparent;
-  color: var(--ink, #eceef0);
-  outline: 1px solid var(--hair, rgba(255, 255, 255, 0.35));
-  outline-offset: -1px;
-}
-
-[data-thread-skin="digichat"][data-embed-settings],
-[data-thread-skin="digichat"] .dc-composer-menu,
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu {
-  background: var(--bg, #0a0e0c);
-  color: var(--ink, #eceef0);
-  border-color: var(--hair, rgba(255, 255, 255, 0.09));
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 
 [data-thread-skin="digichat"] [data-slot="tooltip-content"],
@@ -560,17 +505,6 @@
 .digichat-launcher [data-slot="tooltip-content"] svg,
 .digichat-launcher [data-slot="tooltip-content"] [class*="arrow"] {
   display: none;
-}
-
-[data-thread-skin="digichat"] .aui-code-header-root button:hover,
-[data-thread-skin="digichat"] .aui-code-header-root button:focus-visible,
-.digichat-thread .aui-code-header-root button:hover,
-.digichat-thread .aui-code-header-root button:focus-visible,
-.digichat-launcher .aui-code-header-root button:hover,
-.digichat-launcher .aui-code-header-root button:focus-visible {
-  background: transparent;
-  background-color: transparent;
-  color: var(--ink);
 }
 
 /* Tool chain: same rhythm on website / dashboard Thread as /chatbot. */

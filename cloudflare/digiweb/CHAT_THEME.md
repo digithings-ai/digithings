@@ -18,6 +18,11 @@ assistant-ui has no theme CDN. Custom look is:
 1. **One Thread module** — `@digithings/web/chat/thread` (`gallery-thread/thread.aui.tsx`
    + slots). Product `/embed` and this `/chatbot` page import that subpath.
    Do not keep a second registry copy under `reference/components/assistant-ui/`.
+   The **composer-trigger-popover is the one deliberate exemption**: the digichat
+   skin ships its own category implementation
+   (`skins/base/elements/composer-trigger-popover.aui.tsx`, byte-identical to the
+   reference base template) instead of the gallery's flat item list. Treat that
+   second source as accepted until the popover gets its own design pass (#3818).
 2. **shadcn token names → digiweb tokens** — `bg-background`, `text-foreground`,
    `bg-primary`, `border-border` read `--color-*`. Those aliases point at
    `--bg` / `--ink` / `--accent` / `--hair` so the gallery theme toggle and
@@ -26,6 +31,14 @@ assistant-ui has no theme CDN. Custom look is:
    `--composer-radius`, `--composer-padding` are inline on
    `ThreadPrimitive.Root`. Change them in the copied file, not from an outer
    class ([Thread — Restyle the shell](https://www.assistant-ui.com/elements/thread)).
+4. **One portaled-menu sheet** — the portaled menu skin
+   (`.aui-action-bar-more-content`, `.aui-composer-trigger-popover`,
+   `.dc-composer-menu`, code-header buttons) is owned by the gallery sheet
+   (`reference/app/(chatbot)/chatbot/chatbot.css`), which the product wrapper
+   `@digithings/web/styles/chatbot.css` imports. `chat-aui.css` loads first and
+   keeps only the rules the gallery sheet has no twin for: catalog-skin popover
+   items, tooltip/dialog accent tokens, hidden tooltip arrows, launcher
+   overrides. Do not re-declare the base menu rules in both files (#3818).
 
 Keep defaults. Prefer a CSS-variable change over a slot override; prefer a
 `components` slot over forking `thread.aui.tsx`.
