@@ -126,6 +126,11 @@ Keep defaults. Prefer a CSS-variable change over a slot override; prefer a
 
 - Do not compose a parallel Thread from `ChatMarkdown` / `ChatThinking` /
   `ChatToolCall` on this page
+- Do not adopt the legacy `ChatMarkdown` / `ChatThinking` / `ChatToolCall`
+  exports for new work. `ChatMarkdown` remains for the dashboard `SafeMarkdown`
+  styling shell and digichat-ui `MiniMarkdown`; the `ChatToolCallStatus` type
+  remains for the digichat-ui activity view. `ChatMarkdownSource` is internal
+  to `ChatMarkdown` and is not exported from the barrel (#3819)
 - Do not restyle or fork the 11 official catalog templates in the product
 - Do not import `ink` or `@assistant-ui/react-ink` into Next
 - Do not change `DEFAULT_THREAD_SKIN` as part of gallery iteration
