@@ -428,7 +428,7 @@ digigraph/src/digigraph/
 │   └── __init__.py              get_stream_formatter, neutral and Open WebUI formatters
 ```
 
-### 5.1.1 DigiSearch integration (single path)
+### 5.1.1 digisearch integration (single path)
 
 Built-in digisearch **tools** always go through `vertical_orchestrator/digisearch_hub.py`
 (`POST /v1/orchestrator_tools` + `POST /v1/orchestrator_invoke`). Handlers live in

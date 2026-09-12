@@ -47,6 +47,7 @@ Beyond root `AGENTS.md`:
 | Path | Reason | Migration |
 |------|--------|-------------|
 | `digiquant/nautilus_runner.py` | Nautilus `BarDataWrangler` requires pandas | None — documented boundary |
+| `digiquant/data/prices/fetchers.py` | yfinance returns pandas DataFrames; pandas is imported lazily only at the yfinance conversion boundary (`_pandas_to_polars` and the fetch path) | None — documented boundary |
 | `digiquant/strategies/sdca/nautilus_evaluator.py` | Same BarDataWrangler boundary for SDCA walk-forward trials (#3174) | None — documented boundary |
 | `digiquant/dashboard/replay/nautilus_portfolio.py` | Same BarDataWrangler boundary for shared-cash portfolio replay (#2784) | None — documented boundary |
 | `digiquant/tearsheet.py` | Nautilus `account_report` / `fills_report` are pandas DataFrames | Defer — Plotly quantstats bridge |
