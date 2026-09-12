@@ -57,8 +57,14 @@ def macro_latest_pointer_key(source: str, series: str) -> str:
     return f"market-data/macro/{source}__{series}/latest"
 
 
-#: S3/R2 error codes that mean "this key does not exist".
-_MISSING_OBJECT_CODES = frozenset({"NoSuchKey", "NoSuchBucket", "404", "NotFound"})
+#: S3/R2 error codes that mean "this object key does not exist".
+_MISSING_OBJECT_CODES = frozenset({"NoSuchKey", "404", "NotFound"})
+
+#: Bucket-level (not object-level) errors: loud, never a pointer miss. A
+#: missing/misconfigured bucket shares HTTP 404 with ``NoSuchKey``, so it must
+#: be excluded by code *before* the status fallback or a bucket outage would
+#: read as an unknown ticker/series.
+_BUCKET_LEVEL_CODES = frozenset({"NoSuchBucket"})
 
 
 def is_missing_object_error(exc: BaseException) -> bool:
@@ -71,9 +77,10 @@ def is_missing_object_error(exc: BaseException) -> bool:
     both shapes *without* importing botocore (an archiver-only optional dep),
     so this classifies off the exception's ``response`` payload instead.
 
-    Deliberately conservative: credential/network/5xx faults carry other codes
-    (or no ``response``) and return ``False`` so callers keep propagating them
-    rather than reporting a transient outage as an unknown series.
+    Deliberately conservative: bucket-level (``NoSuchBucket``) and
+    credential/network/5xx faults carry other codes (or no ``response``) and
+    return ``False`` so callers keep propagating them rather than reporting a
+    misconfiguration or transient outage as an unknown series.
     """
     if isinstance(exc, (KeyError, FileNotFoundError)):
         return True
@@ -82,6 +89,8 @@ def is_missing_object_error(exc: BaseException) -> bool:
         return False
     error = response.get("Error")
     code = error.get("Code") if isinstance(error, dict) else None
+    if str(code) in _BUCKET_LEVEL_CODES:
+        return False
     if str(code) in _MISSING_OBJECT_CODES:
         return True
     meta = response.get("ResponseMetadata")

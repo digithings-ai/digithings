@@ -270,7 +270,9 @@ def _read_r2_macro_window(
     whose ``latest`` pointer is absent (``KeyError`` or the boto3
     ``ClientError`` ``NoSuchKey``/404) raises ``LookupError`` — surfaced as
     the ``{"error"}`` envelope by the caller — so backfill key mismatches
-    fail loud instead of serving empty windows. Other backend faults
+    fail loud instead of serving empty windows. Only the pointer read is
+    classified; a fault in parquet/row handling propagates as itself rather
+    than masquerading as an unknown series. Other backend faults
     (auth/transient) propagate unchanged.
     """
     import io
@@ -289,26 +291,26 @@ def _read_r2_macro_window(
     for sid in series_ids:
         try:
             gen_key = store.read_latest(macro_latest_pointer_key("fred", sid))
-            sha = None
-            for cand in datasets.values():
-                if isinstance(cand, dict) and cand.get("object") == gen_key:
-                    sha = cand.get("sha256")
-                    break
-            if sha is None:
-                raise LookupError(f"unknown macro series {sid!r}")
-            frame = pl.read_parquet(io.BytesIO(store.get_generation(gen_key, str(sha))))
-            date_col = "obs_date" if "obs_date" in frame.columns else "date"
-            rows = (
-                frame.with_columns(pl.col(date_col).cast(pl.Date))
-                .filter(pl.col(date_col) <= pl.lit(as_of).cast(pl.Date))
-                .sort(date_col)
-                .to_dicts()
-            )
-            out[sid] = {"latest": rows[-1] if rows else {}, "window": rows}
         except Exception as exc:
             if not is_missing_object_error(exc):
                 raise
             raise LookupError(f"unknown macro series {sid!r}") from None
+        sha = None
+        for cand in datasets.values():
+            if isinstance(cand, dict) and cand.get("object") == gen_key:
+                sha = cand.get("sha256")
+                break
+        if sha is None:
+            raise LookupError(f"unknown macro series {sid!r}")
+        frame = pl.read_parquet(io.BytesIO(store.get_generation(gen_key, str(sha))))
+        date_col = "obs_date" if "obs_date" in frame.columns else "date"
+        rows = (
+            frame.with_columns(pl.col(date_col).cast(pl.Date))
+            .filter(pl.col(date_col) <= pl.lit(as_of).cast(pl.Date))
+            .sort(date_col)
+            .to_dicts()
+        )
+        out[sid] = {"latest": rows[-1] if rows else {}, "window": rows}
     return out
 
 

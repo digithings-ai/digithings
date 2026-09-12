@@ -17,14 +17,20 @@
 -- plus the research freshness/close probes in research/supabase_io.py and
 -- forecast_outcomes.py. The tables are therefore RETAINED until those readers
 -- have R2 seams with tests (tracked in #3951). The DROPs below are commented
--- out on purpose; re-enable them in the follow-up migration once the readers
--- are migrated (and restore the drop assertions in
--- tests/dq/data/test_migration_124.py).
+-- out on purpose: this file must stay a no-op.
+--
+-- IMPORTANT — do NOT un-comment the DROPs in this file later. db-migrate.yml
+-- records every executed file in olympus_schema_migrations by basename; once
+-- this no-op runs it is ledgered as applied and every future edit is silently
+-- skipped. The real drop MUST land as a NEW numbered migration file (e.g.
+-- 126_drop_market_data_tables.sql) once the readers are migrated — never by
+-- re-editing 124. Likewise do not "restore the drop assertions" here; the new
+-- file gets its own test.
 --
 -- This correction lands before the ledger ever applied 124: the last db-migrate
 -- run on main predates #3840, so no production rollback or restore-from-
 -- generation is needed. Post-cutover rollback semantics (restore-from-generation
--- + replay) still apply once the DROPs are re-enabled.
+-- + replay) apply to the future drop migration.
 --
 -- CARVE-OUT (ruling 2026-09-09): macro_series_observations is NOT dropped — it
 -- remains the sole store for fedprob/bitview series, which have no R2 home yet

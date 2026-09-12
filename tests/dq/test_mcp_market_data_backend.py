@@ -130,6 +130,35 @@ def test_macro_r2_boto_client_error_pointer_miss_yields_error_envelope(monkeypat
     assert "DGS10" in out["error"]
 
 
+def test_macro_r2_stray_keyerror_after_pointer_is_not_unknown_series(monkeypatch):
+    """Only the pointer read is classified (#3951 F3): a later KeyError propagates raw."""
+
+    class _GenerationMiss(_FakeR2Store):
+        def read_latest(self, pointer_key):
+            return "market-data/macro/FRED__DGS10/gen.parquet"
+
+        def get_generation(self, key, sha256):
+            raise KeyError("stray key fault in row handling")
+
+    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
+    manifest = {
+        "version": 1,
+        "as_of": "2024-12-31",
+        "datasets": {
+            "fred__DGS10": {
+                "object": "market-data/macro/FRED__DGS10/gen.parquet",
+                "sha256": "abc",
+            }
+        },
+    }
+    monkeypatch.setattr(mcp, "_read_manifest", lambda: manifest)
+    monkeypatch.setattr(mcp, "_get_r2_store", lambda: _GenerationMiss(b""))
+    with pytest.raises(KeyError):
+        mcp._read_r2_macro_window(["DGS10"], "2024-12-31", manifest)
+    out = json.loads(mcp.digiquant_get_macro_series(["DGS10"], lookback=6, as_of="2024-12-31"))
+    assert "unknown macro series" not in out["error"]
+
+
 def test_technicals_r2_ttl_caches_window(monkeypatch):
     monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
     monkeypatch.setattr(mcp, "_read_manifest", lambda: {"version": 1, "as_of": "2024-12-31"})

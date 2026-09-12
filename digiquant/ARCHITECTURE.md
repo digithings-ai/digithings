@@ -361,15 +361,18 @@ record goldens WITH a `close` column, then promote the premise guard to a
 real golden-value comparison.
 
 Macro carve-out: migration `124_drop_market_data_tables.sql` is **deferred**
-(#3951): the `price_history` + `price_technicals` DROPs are commented out
-because the on-cron Supabase readers (`execute_at_open.py`, NAV replay,
-period accounting, entry-price backfill, metrics refresh, freshness probes)
-were not yet migrated to the R2 helpers — so both tables are **retained**.
-`macro_series_observations` likewise stays (fedprob/bitview have no R2 homes;
-future work). Post-cutover size gate (`data/cutover_gate.py`,
-`POST_CUTOVER_SIZE_GATE_MB=320`) reads the `pg_database_size` total only: the
-~172MB price-table saving is not realized until #3951 re-enables the DROPs
-toward the ≈292MB target.
+(#3951) and is now a **no-op**: the `price_history` + `price_technicals` DROPs
+are commented out because the on-cron Supabase readers (`execute_at_open.py`,
+NAV replay, period accounting, entry-price backfill, metrics refresh,
+freshness probes) were not yet migrated to the R2 helpers — so both tables are
+**retained**. The real drop must land as a **new numbered migration** (e.g.
+`126_drop_market_data_tables.sql`), never by re-editing 124: `db-migrate.yml`
+records every executed file in `olympus_schema_migrations` by name, so once this
+no-op is ledgered a re-edited 124 is silently skipped. `macro_series_observations`
+likewise stays (fedprob/bitview have no R2 homes; future work). Post-cutover
+size gate (`data/cutover_gate.py`, `POST_CUTOVER_SIZE_GATE_MB=320`) reads the
+`pg_database_size` total only: the ~172MB price-table saving is not realized
+until the future drop migration lands toward the ≈292MB target.
 
 H9 seal coverage: H9 (`h9_cost_evidence.py`) reads the run-date session
 bar but R2 seals through the manifest `as_of`; seal < run_date fail-softs

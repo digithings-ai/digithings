@@ -191,6 +191,9 @@ def test_is_missing_object_error_does_not_swallow_backend_faults() -> None:
     assert not is_missing_object_error(_BotoClientError("SlowDown", 429))
     assert not is_missing_object_error(RuntimeError("missing R2 credentials"))
     assert not is_missing_object_error(ConnectionError("simulated disconnect"))
+    # Bucket-level misconfiguration shares HTTP 404 with NoSuchKey but must be
+    # loud, never read as an unknown ticker/series (#3951 F2).
+    assert not is_missing_object_error(_BotoClientError("NoSuchBucket", 404))
 
 
 def test_manifest_round_trip(fakes: Any) -> None:

@@ -69,7 +69,12 @@ def test_single_transaction_compatible(raw: str) -> None:
 
 
 def test_no_active_drop_before_on_cron_readers_are_migrated(raw: str) -> None:
-    """#3951: the DROPs are deferred — no active DROP TABLE remains."""
+    """#3951: the DROPs are deferred — no active DROP TABLE remains.
+
+    The real drop is a FUTURE NUMBERED FILE (e.g. ``126_drop_market_data_tables.sql``),
+    never a re-edit of 124: db-migrate.yml ledgers every executed file by basename,
+    so once this no-op runs a re-edited 124 is silently skipped as "already applied".
+    """
     active = _strip_line_comments(raw)
     assert _DROP_TABLE.search(active) is None, "DROP must stay commented/removed"
     # The deferred point-of-no-return must remain discoverable, not silently gone.
@@ -77,6 +82,9 @@ def test_no_active_drop_before_on_cron_readers_are_migrated(raw: str) -> None:
         assert table in raw, f"{table} deferral rationale must be documented"
     assert "#3951" in raw, "deferral must link the follow-up that unblocks it"
     assert "DIGIQUANT_MARKET_DATA_BACKEND=r2" in raw
+    # The header must warn against re-editing 124 and name a new numbered file.
+    assert "NEW numbered migration" in raw
+    assert "do NOT un-comment" in raw
 
 
 def test_macro_table_carve_out(raw: str) -> None:
