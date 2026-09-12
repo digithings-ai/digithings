@@ -13,7 +13,7 @@ import {
   sinceInceptionPctFromNav,
 } from '@digithings/web';
 import {
-  findNavSeriesSeams,
+  currentNavRun,
   navSeriesContractLabel,
   type AccountingNavRow,
 } from './accounting-views';
@@ -195,11 +195,7 @@ export function persistedHeadlinesFromNav(
     .sort((a, b) => a.date.localeCompare(b.date));
   // #3767: since-inception must be rebased on the current source run — a
   // legacy→finalized seam must not produce a phantom jump (false Sep-8).
-  const seamDates = findNavSeriesSeams(sorted);
-  const currentRun = seamDates.length
-    ? sorted.filter((row) => row.date >= seamDates[seamDates.length - 1])
-    : sorted;
-  const run = currentRun.length ? currentRun : sorted;
+  const run = currentNavRun(sorted);
   const first = run[0] ?? null;
   const tip = run.at(-1) ?? null;
   // Day-return predecessor stays the immediately adjacent date in the full
@@ -230,16 +226,24 @@ export function persistedHeadlinesFromNav(
  * Excess / alpha / IR from persisted NAV + benchmark (no live overlay).
  * Sparse or late-starting (paginated) benchmark series still render when the
  * remaining overlapping daily pairs meet {@link MIN_OVERLAP_DAYS}.
+ *
+ * #3767 / #3935: rebased on the current source run — the seam day must never
+ * enter the β/IR daily-return estimator nor the excess window.
  */
 export function persistedInsightMetrics(
-  nav: ReadonlyArray<{ date: string; nav: number }>,
+  nav: ReadonlyArray<{
+    date: string;
+    nav: number;
+    source?: string | null;
+    series_seam?: boolean | null;
+  }>,
   benchmarkHistory: ReadonlyArray<{ date: string; price: number }> | undefined
 ): {
   excessReturnPct: number | null;
   alphaPct: number | null;
   informationRatio: number | null;
 } {
-  const sorted = [...nav].filter((row) => finiteNav(row.nav));
+  const sorted = currentNavRun(nav).filter((row) => finiteNav(row.nav));
   if (sorted.length < 2 || !benchmarkHistory?.length) {
     return { excessReturnPct: null, alphaPct: null, informationRatio: null };
   }

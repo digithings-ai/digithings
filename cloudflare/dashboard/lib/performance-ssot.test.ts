@@ -361,6 +361,50 @@ describe('performance SSOT (#3580)', () => {
     );
   });
 
+  it('excludes the legacy→finalized seam from persisted excess/alpha/IR (#3935)', () => {
+    // Legacy run below the finalized run: a cross-seam window would inflate
+    // excess and poison the β/IR daily estimator with the phantom jump.
+    const finalized = weekdaySeries(MIN_OVERLAP_DAYS + 6, '2026-09-08');
+    const legacy = [
+      { date: '2026-09-01', nav: 90, price: 480 },
+      { date: '2026-09-02', nav: 90.2, price: 481 },
+      { date: '2026-09-03', nav: 90.1, price: 479.5 },
+      { date: '2026-09-04', nav: 90.3, price: 482 },
+    ];
+    const seamedNav = [
+      ...legacy.map((p) => ({
+        date: p.date,
+        nav: p.nav,
+        source: 'legacy_nav_history',
+        series_seam: false,
+      })),
+      ...finalized.map((p, i) => ({
+        date: p.date,
+        nav: p.nav,
+        source: 'finalized_accounting',
+        series_seam: i === 0,
+      })),
+    ];
+    const bench = [...legacy, ...finalized].map((p) => ({ date: p.date, price: p.price }));
+
+    const seamed = persistedInsightMetrics(seamedNav, bench);
+    const currentRunOnly = persistedInsightMetrics(
+      finalized.map((p) => ({
+        date: p.date,
+        nav: p.nav,
+        source: 'finalized_accounting',
+        series_seam: false,
+      })),
+      bench
+    );
+
+    expect(seamed.excessReturnPct).not.toBeNull();
+    expect(seamed.alphaPct).not.toBeNull();
+    expect(seamed.informationRatio).not.toBeNull();
+    // Identical to computing on the post-seam run alone — the seam never enters.
+    expect(seamed).toEqual(currentRunOnly);
+  });
+
   it('does not clamp an accounting-tip invested % over 100', () => {
     const resolved = resolveInvestedPct({
       tipInvestedPct: 137,
