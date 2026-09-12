@@ -4,6 +4,7 @@ import {
   accountingNavToHistoryShape,
   assertAccountingNavQueryOk,
   contributionsSumToDayReturn,
+  currentNavRun,
   findNavSeriesSeams,
   isMissingPublicRelationError,
   isNavSeriesSeam,
@@ -94,6 +95,22 @@ describe('NAV series seam (#3767)', () => {
         { date: '2026-09-08', source: 'legacy_nav_history' },
       ])
     ).toEqual([]);
+  });
+
+  it('rebases on the current run and drops the legacy pre-seam rows (#3935)', () => {
+    const rows = [
+      { date: '2026-09-06', source: 'legacy_nav_history', series_seam: false },
+      { date: '2026-09-07', source: 'legacy_nav_history', series_seam: false },
+      { date: '2026-09-08', source: 'finalized_accounting', series_seam: true },
+      { date: '2026-09-09', source: 'finalized_accounting', series_seam: false },
+    ];
+    expect(currentNavRun(rows).map((row) => row.date)).toEqual(['2026-09-08', '2026-09-09']);
+    // No seam → the whole series is the current run; empty in → empty out.
+    expect(currentNavRun(rows.slice(2)).map((row) => row.date)).toEqual([
+      '2026-09-08',
+      '2026-09-09',
+    ]);
+    expect(currentNavRun([])).toEqual([]);
   });
 });
 

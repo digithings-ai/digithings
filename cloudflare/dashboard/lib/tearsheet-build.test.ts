@@ -480,4 +480,76 @@ describe('buildPerformanceTearsheet', () => {
     expect(result.currentHoldings[0].unrealizedReturnPct).toBeCloseTo(2.417848, 5);
     expect(result.currentHoldings[0].attributionDate).toBe('2026-08-25');
   });
+
+  it('breaks the return series at a legacy→finalized seam instead of drawing the Sep-8 jump (#3767)', () => {
+    const nav = [
+      { date: '2026-09-06', nav: 100, cash_pct: 20, invested_pct: 80 },
+      { date: '2026-09-07', nav: 99.92, cash_pct: 20, invested_pct: 80 },
+      { date: '2026-09-08', nav: 110.74928206, cash_pct: 20, invested_pct: 80 },
+      { date: '2026-09-09', nav: 111.84928206, cash_pct: 20, invested_pct: 80 },
+    ];
+    const result = buildPerformanceTearsheet({
+      nav,
+      positions: [],
+      metrics: null,
+      attribution: [],
+      accountingNav: [
+        {
+          date: '2026-09-06',
+          nav: 100,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: null,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+          series_seam: false,
+        },
+        {
+          date: '2026-09-07',
+          nav: 99.92,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: null,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+          series_seam: false,
+        },
+        {
+          date: '2026-09-08',
+          nav: 110.74928206,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: null,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: true,
+        },
+        {
+          date: '2026-09-09',
+          nav: 111.84928206,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: null,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: false,
+        },
+      ],
+    });
+
+    // The plotted series is the current (finalized) run — no bridge from the
+    // legacy 99.92 across to the finalized 110.75.
+    expect(result.navSeries.map((point) => point.date)).toEqual([
+      '2026-09-08',
+      '2026-09-09',
+    ]);
+    expect(result.navSeries[0].returnPct).toBe(0);
+    expect(result.navSeries.at(-1)!.returnPct).toBeCloseTo(
+      (111.84928206 / 110.74928206 - 1) * 100,
+      5
+    );
+    // Since-inception is the current run, not the phantom +10.7% across the seam.
+    expect(result.netReturnPct).toBeCloseTo((111.84928206 / 110.74928206 - 1) * 100, 5);
+    expect(result.inceptionDate).toBe('2026-09-08');
+  });
 });

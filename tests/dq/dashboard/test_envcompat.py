@@ -11,6 +11,7 @@ from digiquant.dashboard.envcompat import (
     OVERLAY_PERSIST,
     RESEARCH_DATA_TOOLS,
     STAGING_USER_JWT,
+    TOOL_ROUNDS_MAX,
     env_lookup,
 )
 from digiquant.dashboard.overlay.persist import overlay_persist_enabled
@@ -39,6 +40,20 @@ def test_env_lookup_canonical_empty_does_not_fall_through() -> None:
 
 def test_env_lookup_default_when_neither_present() -> None:
     assert env_lookup(RESEARCH_DATA_TOOLS, environ={}, default="1") == "1"
+
+
+def test_env_lookup_tool_rounds_canonical_wins_over_olympus() -> None:
+    env = {TOOL_ROUNDS_MAX: "4", "OLYMPUS_MAX_TOOL_ROUNDS": "24"}
+    assert env_lookup(TOOL_ROUNDS_MAX, environ=env) == "4"
+
+
+def test_env_lookup_tool_rounds_alias_when_canonical_absent() -> None:
+    env = {"OLYMPUS_MAX_TOOL_ROUNDS": "8"}
+    assert env_lookup(TOOL_ROUNDS_MAX, environ=env) == "8"
+
+
+def test_env_lookup_tool_rounds_default_when_neither_present() -> None:
+    assert env_lookup(TOOL_ROUNDS_MAX, environ={}, default="24") == "24"
 
 
 def test_routing_enabled_reads_canonical(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -96,7 +111,9 @@ def test_operator_scripts_use_digiquant_prefix() -> None:
         assert (scripts / name).is_file(), name
     # GHA ``execution-cron-check.yml`` is protected on cursor/*; wrapper stays until
     # a feat/ hop renames the workflow.
-    leftover = [p.name for p in scripts.glob("execution_*.py") if p.name != "execution_cron_check.py"]
+    leftover = [
+        p.name for p in scripts.glob("execution_*.py") if p.name != "execution_cron_check.py"
+    ]
     assert leftover == [], leftover
     assert (scripts / "execution_cron_check.py").is_file()
 

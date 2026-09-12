@@ -366,7 +366,7 @@ is blocked: CI-mapped tier pools only, no frontier pins, no auto-router.
 
 | Env | Values | Effect |
 |---|---|---|
-| `OLYMPUS_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/digiquant_models.yaml` |
+| `DIGIQUANT_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/digiquant_models.yaml` |
 | `CHEAPERINFERENCE_API_KEY` | GitHub secret | House default upstream — all LLM calls route here when set |
 | `OPENROUTER_API_KEY` | GitHub secret | Fallback upstream when house is forced to OpenRouter (`DIGI_HOUSE_UPSTREAM=openrouter`) |
 
