@@ -25,7 +25,7 @@ export function StrategyCard({ e }: { e: StrategyIndexEntry }) {
   const dca = isDcaIndexEntry(e);
 
   return (
-    <TearsheetCard href={`/strategies/${e.strategy}`}>
+    <TearsheetCard href={e.href || `/strategies/${e.strategy}`}>
       <div className="ts-card-head">
         <div className="ts-card-title">
           <AssetLogoFor strategy={e.strategy} symbol={e.symbol} size={32} className="ts-card-logo" />
