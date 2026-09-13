@@ -186,7 +186,10 @@ Contribution bars read the finalized per-ticker daily contribution from
 `public_daily_realized_attribution` (#3956) so they no longer depend on
 `positions.current_price` enrichment arriving on time, falling back to the
 weight-times-mark accrual when the view yields no usable rows for the plotted
-window (days before the first finalized row stay flat). Bars contain only
+window (days before the first finalized row stay flat; rows that sit entirely
+outside the window are not usable). The view publishes price/fee contribution
+only — cash (dividends, interest) is not included, so bars do not reconcile to
+the NAV day return. Bars contain only
 tickers in the latest positive-weight book; the exact NAV return and selected
 benchmark remain separate line layers.
 Portfolio presentation changes must not introduce a second query path or replace
