@@ -1428,13 +1428,11 @@ explicit operator configuration — the projections (`toDigichatClientConfig`,
 host opts in. When enabled, the tenant gate still ANDs the BFF web-search
 forward (#3420) and session MCP URLs stay `https`-only + SSRF-allowlisted,
 operator YAML wins. The `/tools` slash row's websearch entry appears only once
-the tenant allows web search (`tenantAllowsWeb`). The BFF sends
-`research_system_prompt` (`DEFAULT_BASELINE_RESEARCH_SYSTEM_PROMPT`) only for
-this baseline case — trimmed non-empty `x-embed-host` matching no host
-deployment, on the unauthenticated baseline tenant (`tenantSlug "embed"`,
-`embedConfig` null) — never for matched hosts, spoofed-unknown-host
-authenticated traffic, empty/whitespace headers, or first paint without the
-header. YAML that omits
+the tenant allows web search (`tenantAllowsWeb`). The BFF does **not** send a
+`research_system_prompt`: digraph accepts-but-ignores that legacy client field and
+derives the research system prompt server-side (operator
+`agents.research_system_prompt` / tenant `DIGI_TENANT_CORPUS_MAP`), so the baseline
+embed stays grounded without a client-controlled prompt surface. YAML that omits
 `skin` still parses as catalog `base`. Product hosts (`digithings-ai-embed.yaml`,
 `occ-embed.yaml`) keep `chrome.skin: digichat` with the digisearch / digivault
 catalog (web_search tenant-allowed on digithings.ai; embed/popup session
