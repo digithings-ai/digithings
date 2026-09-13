@@ -5,6 +5,8 @@ Stable machine codes (never change without a digichat contract bump):
 - ``free_quota_exceeded`` — free-tier provider rate limit / RPD; digichat opens BYOK.
 - ``rate_limit`` — generic provider rate limit outside free mode.
 - ``llm_error`` — classified provider/API failure (sanitized message; optional detail).
+- ``empty_result`` — the workflow produced neither assistant text nor a backtest result;
+  an honest non-success instead of a fabricated completion.
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ import re
 FREE_QUOTA_EXCEEDED = "free_quota_exceeded"
 RATE_LIMIT = "rate_limit"
 LLM_ERROR = "llm_error"
+EMPTY_RESULT = "empty_result"
 
 _MAX_MESSAGE = 280
 _MAX_DETAIL = 2000
