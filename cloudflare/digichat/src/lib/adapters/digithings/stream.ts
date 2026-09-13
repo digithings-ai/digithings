@@ -22,22 +22,6 @@ import {
 import { BYOK_MODEL_REMEDIABLE_CODES } from "@/lib/embed-chat-error";
 import { CredentialRedirectError, fetchGuarded } from "@/lib/fetch-guarded";
 
-/**
- * Feature-focused research prompt for the unconfigured baseline embed only.
- * Guides digigraph document RAG mode toward digichat / digigraph / digisearch /
- * digivault capabilities. Owner-replaceable copy. Never sent for a matched host
- * deployment — see the route gate. When web search is on, its first-party
- * web-search results arrive as External cites: cite their real URLs inline and never
- * present them as corpus knowledge.
- */
-export const DEFAULT_BASELINE_RESEARCH_SYSTEM_PROMPT =
-  "Answer questions about what digichat, digigraph, digisearch, and digivault can do. " +
-  "Help the visitor explore the available tools and capabilities. " +
-  "Use the tools you are given when they help answer. " +
-  "When web search is on, its first-party web-search results are External cites: " +
-  "cite their real URLs inline and never present them as corpus knowledge. " +
-  "Keep answers short.";
-
 export type DigigraphTracePayload = {
   v?: number;
   type: string;
@@ -176,12 +160,6 @@ export async function createDigigraphTraceStreamResponse(opts: {
   activityDetail: ActivityDetail;
   /** AbortSignal from the inbound request — Stop must cancel the digigraph fetch (#3475). */
   signal?: AbortSignal;
-  /**
-   * Baseline-only research prompt. Sent as digigraph `research_system_prompt`
-   * (document RAG mode) for the unconfigured embed only — never for a matched
-   * host deployment, whose operator config owns the prompt surface.
-   */
-  researchSystemPrompt?: string;
 }) {
   const stripped = uiMessagesForUpstream(opts.messages).map((m) => {
     const { id: _omit, ...rest } = m;
@@ -220,9 +198,6 @@ export async function createDigigraphTraceStreamResponse(opts: {
         model,
         messages: coreMessagesToDigigraphOpenAi(coreMessages),
         stream: true,
-        ...(opts.researchSystemPrompt
-          ? { research_system_prompt: opts.researchSystemPrompt }
-          : {}),
       };
       // #2572: never follow cross-origin redirects while carrying BYOK /
       // LiteLLM / digikey credentials (Node forwards X-* across origins).

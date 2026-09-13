@@ -19,6 +19,7 @@ from digiquant.research.data.queries import (
     get_fed_rate_probabilities,
     get_macro_series,
     get_market_breadth,
+    get_price_technicals,
     get_sector_relative_strength,
     get_vix_term_structure,
     query_data,
@@ -45,8 +46,8 @@ DATA_TOOLS: list[dict[str, Any]] = [
                 "Market history (price_history, price_technicals, macro_series_observations) "
                 "is NOT readable here — it left the generic reader for the versioned R2 "
                 "cache (#3780). Ground price/macro claims with the dedicated tools "
-                "(get_macro_series; digiquant_get_price_technicals for OHLCV/indicators) "
-                "and the injected market context instead. "
+                "(get_price_technicals for per-ticker indicators; get_macro_series for "
+                "macro series) and the injected market context instead. "
                 "positions/nav_history/position_events/portfolio_metrics default to the "
                 "house workspace_id (overlay same-date rows are excluded); pass "
                 "eq.workspace_id to read another book. "
@@ -96,6 +97,30 @@ DATA_TOOLS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["series_ids"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_price_technicals",
+            "description": (
+                "Recent computed technical indicators for one ticker, newest first — "
+                "sma/rsi/macd/adx/atr/zscore and friends. Use to ground trend, momentum, "
+                "and relative-strength claims with real values. Reads the maintained "
+                "price_technicals reader (the R2 cache under the cutover flag, #3780); "
+                "price_history/price_technicals are NOT readable through query_data."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string", "description": "Ticker symbol, e.g. SPY."},
+                    "lookback": {
+                        "type": "integer",
+                        "description": "Recent rows to return (default 20, max 500).",
+                    },
+                },
+                "required": ["ticker"],
             },
         },
     },
@@ -238,6 +263,16 @@ def build_data_tool_dispatcher(
                 client=client,
                 series_ids=list(args.get("series_ids", [])),
                 lookback=int(args.get("lookback", 6)),
+                as_of=as_of,
+            )
+        if name == "get_price_technicals":
+            ticker = str(args.get("ticker") or "").strip()
+            if not ticker:
+                return "Error: get_price_technicals requires a 'ticker' argument."
+            return get_price_technicals(
+                client=client,
+                ticker=ticker,
+                lookback=int(args.get("lookback", 20)),
                 as_of=as_of,
             )
         if name == "get_market_breadth":

@@ -97,10 +97,13 @@ class ChatCompletionRequest(BaseModel):
     research_system_prompt: str | None = Field(
         None,
         max_length=4000,
+        deprecated=True,
         description=(
-            "Opt-in default research system prompt for sessions with no "
-            "server-configured prompt (single-tenant / baseline embed). Ignored "
-            "when DIGI_TENANT_CORPUS_MAP resolves a prompt for the tenant."
+            "Deprecated and IGNORED. Accepted only so clients that still send it do not "
+            "get a 422; its value never reaches graph state. The research system prompt "
+            "is operator-configured only — project config (agents.research_system_prompt) "
+            "or the tenant corpus map (DIGI_TENANT_CORPUS_MAP) — so a caller cannot "
+            "inject its own system prompt (CWE-639 / prompt injection)."
         ),
     )
 
@@ -192,7 +195,13 @@ class WorkflowRequest(BaseModel):
     )
     research_system_prompt_override: str | None = Field(
         None,
-        description="Optional research system prompt from DIGI_TENANT_CORPUS_MAP.",
+        description=(
+            "Research system prompt resolved server-side from the tenant corpus map "
+            "(DIGI_TENANT_CORPUS_MAP) or project config. Client-writable on this model "
+            "but never trusted as-is: _with_digi_request_context overwrites it "
+            "unconditionally (clearing a client value to None when no server prompt is "
+            "configured), so a caller cannot inject its own system prompt."
+        ),
     )
     response_language: str | None = Field(
         None,
