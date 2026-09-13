@@ -217,9 +217,9 @@ def build_data_tool_dispatcher(
                 )
             # Market history (price_history / price_technicals /
             # macro_series_observations) is not served by query_data (#3780):
-            # the reader's allowlist refuses those tables before any column
-            # checks, and the dedicated R2-backed tools own the reads. No
-            # macro 'date' -> 'obs_date' rewrite is needed on this path.
+            # the reader's table allowlist refuses those tables, and the
+            # dedicated R2-backed tools own the reads. No macro
+            # 'date' -> 'obs_date' rewrite is needed on this path.
             return query_data(
                 client=client,
                 table=table,

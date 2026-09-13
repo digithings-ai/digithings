@@ -9,20 +9,21 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from pathlib import Path
 
 import pytest
 from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.research.data.queries import (
     ALLOWED_READ_TABLES,
     HOUSE_BOOK_READ_TABLES,
-    PRICE_HISTORY_COLUMNS,
-    PRICE_TECHNICALS_COLUMNS,
     get_market_breadth,
     get_sector_relative_strength,
     get_vix_term_structure,
     query_data,
 )
 from digiquant.research.data.tools import DATA_TOOLS, build_data_tool_dispatcher
+
+_ARCHITECTURE_MD = Path(__file__).resolve().parents[4] / "digiquant" / "ARCHITECTURE.md"
 
 
 class _FakeTable:
@@ -423,10 +424,49 @@ class TestQueryData:
         assert "error" in out
         assert "not readable" in out["error"]
         assert "rows" not in out
-        assert "sma_50" in PRICE_TECHNICALS_COLUMNS
-        assert "close" not in PRICE_TECHNICALS_COLUMNS
-        assert "sma_50" not in PRICE_HISTORY_COLUMNS
-        assert "close" in PRICE_HISTORY_COLUMNS
+
+    def test_dead_market_column_allowlist_machinery_is_deleted(self) -> None:
+        # #3780 removed price_history/price_technicals from ALLOWED_READ_TABLES,
+        # so the #3771 per-table column allowlist could never run: the table
+        # allowlist refuses those tables before _validate_table_columns. The dead
+        # machinery must be deleted, not kept as a half-built "defensive choke"
+        # no test reaches (#3959).
+        import digiquant.research.data.queries as q
+
+        for name in (
+            "PRICE_HISTORY_COLUMNS",
+            "PRICE_TECHNICALS_COLUMNS",
+            "_TABLE_COLUMN_ALLOWLISTS",
+            "_OHLCV_COLUMNS",
+            "_TECHNICAL_INDICATOR_COLUMNS",
+            "_referenced_query_columns",
+            "_column_allowlist_error",
+            "_validate_table_columns",
+        ):
+            assert not hasattr(q, name), f"{name} is unreachable dead code; delete it (#3959)"
+
+    def test_filter_keys_must_be_bare_column_names(self) -> None:
+        # Column *shape* is enforced for every readable table, not just the deleted
+        # market choke: a PostgREST relationship/operator expression must not ride in
+        # through a filter key (parity with _SAFE_COLUMNS_RE on `columns`).
+        client = _FakeClient({"positions": [{"ticker": "SPY"}]})
+        out = query_data(client=client, table="positions", eq={"decision_log(*)": 1})
+        assert "error" in out
+        assert "rows" not in out
+
+    def test_order_must_be_a_bare_column_name(self) -> None:
+        client = _FakeClient({"positions": [{"ticker": "SPY"}]})
+        out = query_data(client=client, table="positions", order="decision_log(*)")
+        assert "error" in out
+        assert "rows" not in out
+
+    def test_architecture_no_longer_claims_the_dead_choke_is_live(self) -> None:
+        # ARCHITECTURE.md claimed the #3771 per-table column allowlists were
+        # "retained in code as a defensive choke, and covered directly by unit
+        # tests" — false on both counts after #3780. Pin the correction (#3959).
+        text = _ARCHITECTURE_MD.read_text(encoding="utf-8")
+        assert "defensive choke" not in text
+        assert "covered directly by unit tests" not in text
 
 
 @pytest.mark.unit
