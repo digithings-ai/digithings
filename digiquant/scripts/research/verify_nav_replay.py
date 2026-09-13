@@ -103,8 +103,8 @@ def _fetch_key(row: dict, has_ticker: bool) -> tuple[str, ...]:
 def _keyset_term(has_ticker: bool, last_key: tuple[str, ...]) -> str:
     """PostgREST seek past ``last_key`` in ``(date[, ticker])`` order.
 
-    Returns the inner OR expression (no outer ``or(...)``) so callers can nest
-    it inside a workspace ``or`` without dropping either predicate.
+    Returns the inner OR expression (no outer ``or(...)``) so it can be passed
+    straight to ``.or_()`` alongside any other predicate.
     """
     day = last_key[0]
     if not has_ticker:
