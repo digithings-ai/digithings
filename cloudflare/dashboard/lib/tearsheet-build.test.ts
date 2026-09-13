@@ -651,6 +651,22 @@ describe('buildPerformanceTearsheet', () => {
     expect(result.navSeries.at(-1)!.returnPct).toBeCloseTo(-0.5198, 3);
   });
 
+  it('leaves long book gaps as a jump instead of inventing flat days (#4014)', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-06-23', nav: 100, cash_pct: 25, invested_pct: 75 },
+        { date: '2026-08-26', nav: 98.5, cash_pct: 25, invested_pct: 75 },
+      ],
+      positions: [],
+      metrics: null,
+      attribution: [],
+      events: [],
+    });
+    // 64 missing days — a missing book run, not a weekend; no fill points.
+    expect(result.navSeries.map((point) => point.date)).toEqual(['2026-06-23', '2026-08-26']);
+    expect(result.navSeries.at(-1)!.returnPct).toBeCloseTo(-1.5, 6);
+  });
+
   it('drops an implausible accounting step instead of drawing a cliff (#4014)', () => {
     const result = buildPerformanceTearsheet({
       nav: [

@@ -198,7 +198,8 @@ export function chainNavContinuity(
 /**
  * Red-test helper: contribution fractions (as pct points) must sum to the shown
  * day return within a small absolute tolerance when both are present.
- */export function contributionsSumToDayReturn(
+ */
+export function contributionsSumToDayReturn(
   contributionPctPoints: number[],
   dayReturnPct: number,
   absTol = 1e-4
