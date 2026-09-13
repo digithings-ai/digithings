@@ -13,6 +13,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { sanitizeMermaidSvg } from "../../chat/sanitize-mermaid-svg";
 import { cn } from "../../chat/gallery-thread/cn";
 
 export type MermaidDiagramProps = {
@@ -48,10 +49,12 @@ function MermaidZoom({ svg, children }: MermaidZoomProps) {
 
   const zoomSvg = useMemo(
     () =>
-      svg
-        .replace(/id="([^"]+)"/g, 'id="$1-zoom"')
-        .replace(/url\(#([^)]+)\)/g, "url(#$1-zoom)")
-        .replace(/(href|xlink:href)="#([^"]+)"/g, '$1="#$2-zoom"'),
+      sanitizeMermaidSvg(
+        svg
+          .replace(/id="([^"]+)"/g, 'id="$1-zoom"')
+          .replace(/url\(#([^)]+)\)/g, "url(#$1-zoom)")
+          .replace(/(href|xlink:href)="#([^"]+)"/g, '$1="#$2-zoom"'),
+      ),
     [svg],
   );
 
@@ -255,14 +258,16 @@ const MermaidDiagramImpl: FC<MermaidDiagramProps> = ({
     if (streaming) return null;
     try {
       return {
-        svg: renderMermaidSVG(code, {
-          bg: "var(--background)",
-          fg: "var(--foreground)",
-          muted: "var(--muted-foreground)",
-          border: "var(--border)",
-          accent: "var(--foreground)",
-          transparent: true,
-        }),
+        svg: sanitizeMermaidSvg(
+          renderMermaidSVG(code, {
+            bg: "var(--background)",
+            fg: "var(--foreground)",
+            muted: "var(--muted-foreground)",
+            border: "var(--border)",
+            accent: "var(--foreground)",
+            transparent: true,
+          }),
+        ),
         error: null,
       };
     } catch (err) {

@@ -1314,12 +1314,14 @@ completes mid-stream with its args + JSON Result pane (no per-tool UI;
 `mcp_call` item. `toolResult` passes the `labels` detail gate
 untouched (tenant's own tool output for the tenant's own user). Vault search `rag_sources` traces map through `mapDigivaultSearchNotes` (not the digisearch retrieve-with-no-docs path). A failed vault invoke is `execute_tool`/`failed`, never `{ hitCount: 0 }`. The website-like dogfood host
 (`config/examples/digithings-ai-embed.yaml`) sets `gate.activityDetail: full` and `backend.vaultPathPrefix: clients/digithings` so D1 FTS is scoped and chunks are
-not replaced by `{ documentsWithheld: true }`. Stable `toolName` values remain the exact MCP / backend tool ids, and tool rows render those ids verbatim — `toolRowTitle(toolName)` in digichat and `humanizeToolName(toolName)` in the gallery thread are identity functions by owner decision (raw backend names with underscores, one-to-one with the backend). The streamed `tool-input-start` title is dropped by the assistant-stream / assistant-ui converters before render, so both fallback surfaces derive the row label client-side from the exact id; provider span labels such as the Foundry `Searching knowledge base…` progress row still reach the wire but are not displayed. Each reasoning burst between tool rounds gets its own `reasoning-start` id so later thinking is not appended into the first block. `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are auto-completed at
-stream end so ordinary retrieve / get_note / search_notes never sit on Allow/Deny.
-When the stream itself errors, leftovers settle as `failed` (the Foundry
-adapter passes its error state through) — auto-completing orphans as success
-would render a row whose tool never returned.
-`tool-input-available` is emitted only with `tool-output-available` during the call. 1.4 `data-digichatActivity` is not
+not replaced by `{ documentsWithheld: true }`. Stable `toolName` values remain the exact MCP / backend tool ids, and tool rows render those ids verbatim — `toolRowTitle(toolName)` in digichat and `humanizeToolName(toolName)` in the gallery thread are identity functions by owner decision (raw backend names with underscores, one-to-one with the backend). The streamed `tool-input-start` title is dropped by the assistant-stream / assistant-ui converters before render, so both fallback surfaces derive the row label client-side from the exact id; provider span labels such as the Foundry `Searching knowledge base…` progress row still reach the wire but are not displayed. Each reasoning burst between tool rounds gets its own `reasoning-start` id so later thinking is not appended into the first block. `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are settled at
+stream end as errors (`tool-output-error`, error text `Tool did not return a
+result before the stream ended.`) so ordinary retrieve / get_note / search_notes
+never sit on Allow/Deny *and* a call whose result never arrived is not reported
+as completed. Only a real result (`tool-output-available`) marks a row
+`completed`; `standardPartsToSpans` maps an AI SDK `output-error` part back to a
+`failed` span.
+`tool-input-available` is emitted when a row settles — with `tool-output-available` for a real result, `tool-output-error` for an orphan. 1.4 `data-digichatActivity` is not
 written. Auth `chat-panel` and embed both
 render those parts through assistant-ui `MessagePrimitive.Parts`
 (`cli-message-parts.tsx`). Old branded parts hydrate via `LegacyActivityHydrate`
@@ -1418,14 +1420,15 @@ wrong/absent customer token) is the unconfigured container default: skin
 `digichat` (gallery Thread UI, including hairline hover hints with no
 rotated-square arrow), generic “Ask a question” copy, compact attach+send
 composer, plus the baseline template defaults: 4 starter suggestion chips
-(`BASELINE_EMBED_SUGGESTIONS`, owner-replaceable copy), `gate.webSearch: true`
-with the websearch session pref defaulting ON for the baseline slug only
-(`defaultOn` when `clientConfig.slug === "embed"`; matched surfaces keep the
-#3420 opt-in default off so prior opt-outs are never silently re-enabled;
-tenant AND still gates the BFF forward), and
-`mcp.allowUserServers / allowAddForm: true` (session MCP URLs stay
-`https`-only + SSRF-allowlisted, operator YAML wins). The `/tools` slash row
-stays visible on empty catalogs via the websearch row. The BFF sends
+(`BASELINE_EMBED_SUGGESTIONS`, owner-replaceable copy). The fallback is
+least-privilege: `gate.showByok: false`, `gate.webSearch: false`, and
+`mcp.allowUserServers / allowAddForm: false`. Those flags turn on only via
+explicit operator configuration — the projections (`toDigichatClientConfig`,
+`toEmbedClientConfig`) gate on strict `=== true`, so a resolved deployment /
+host opts in. When enabled, the tenant gate still ANDs the BFF web-search
+forward (#3420) and session MCP URLs stay `https`-only + SSRF-allowlisted,
+operator YAML wins. The `/tools` slash row's websearch entry appears only once
+the tenant allows web search (`tenantAllowsWeb`). The BFF sends
 `research_system_prompt` (`DEFAULT_BASELINE_RESEARCH_SYSTEM_PROMPT`) only for
 this baseline case — trimmed non-empty `x-embed-host` matching no host
 deployment, on the unauthenticated baseline tenant (`tenantSlug "embed"`,

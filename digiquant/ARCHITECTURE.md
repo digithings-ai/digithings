@@ -3135,11 +3135,19 @@ oldest-first down from the 8.5GB high watermark to the 7GB low watermark (ledger
 `size` sum), never touching the latest run's keys; `reconcile_ledger` drops dead
 ledger rows and reports orphan R2 keys without auto-deleting them. Every key and
 ledger scan pages explicitly past the PostgREST 1000-row cap (`_scan_all` over
-`DOC_SCAN_PAGE_SIZE`); `evict_to_watermark` keeps a local running total instead of
-re-querying per row, and `reconcile_ledger` lists both `checkpoints/` and
-`documents/` prefixes. `resolve_payload`
+`DOC_SCAN_PAGE_SIZE`), and every page carries a unique ORDER BY tiebreak so
+offset paging is stable on an unordered table: `STABLE_ORDER_BY_TABLE` maps each
+table to its total-order key (`archive_objects` → `archived_at,r2_key`;
+`checkpoints` → `thread_id,checkpoint_ns,checkpoint_id`; `documents` and the blob
+tables → their key columns) and `_scan_all` appends it after any caller order
+(skipping columns the caller already ordered by). `evict_to_watermark` keeps a
+local running total instead of re-querying per row, and `reconcile_ledger` lists
+both `checkpoints/` and `documents/` prefixes. `resolve_payload`
 is the read-through contract: pointer lookup → R2 GET → sha256 verify
-(`ArchiveVerifyError`) → decompress (`ArchiveNotFoundError` when no pointer row).
+(`ArchiveVerifyError`) → decompress; `ArchiveNotFoundError` when no pointer row
+exists **or** when the pointed-to object is missing/evicted from the bucket
+(normalized via `r2_history.is_missing_object_error`, so a reader cannot
+distinguish "never archived" from "archived then evicted").
 Documents phase (migration 120): pointer-per-row for non-latest
 `(workspace_id, document_key, date)` versions under
 `documents/<ws>/<date>/<key>.zst`, newest date per key stays live. Creds are
@@ -3147,10 +3155,14 @@ Documents phase (migration 120): pointer-per-row for non-latest
 built as `https://<account>.r2.cloudflarestorage.com`.
 `.github/workflows/pipeline-checkpoint-archive.yml` runs it daily. The live
 checkpointer path is untouched. Read-through consumers (#3792):
-`read_archived_document` wraps `resolve_payload` + JSON decode (``None`` on
-pointer-miss / corrupt bytes, never raises on a read path); document readers
-take an optional `store` (tests inject a fake, production resolves the R2
-backend from `R2_*` env, absent creds disable read-through). Wired into the
+`read_archived_document` wraps `resolve_payload` + JSON decode and honors a
+"never raises" contract on the read path — ``None`` on pointer/object miss,
+corrupt bytes, undecodable JSON, **or** any storage/registry fault (logged at
+WARNING with the traceback, so a broken read-through is visible-but-soft).
+Document readers take an optional `store` (tests inject a fake, production
+resolves the R2 backend from `R2_*` env); when creds are absent the hydration
+point logs a WARNING ("archive read-through disabled (no R2 backend)") instead
+of silently degrading every archived row to missing. Wired into the
 dashboard fallback (`research_retrieval/queries.py::_query_documents_row` via
 `query_research`) and the research priors (`research/supabase_io.py`:
 `load_prior_context`, analyst/deliberation summaries, `load_latest_beliefs_document`).

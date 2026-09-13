@@ -218,6 +218,23 @@ describe("mergeMcpSessionOverlay", () => {
       }),
     ).toEqual([{ id: "secure", url: "https://mcp.datatap.example/mcp" }]);
   });
+
+  it("accepts a mixed-case HTTPS scheme but still rejects mixed-case HTTP", () => {
+    expect(
+      mergeMcpSessionOverlay({
+        operator: [],
+        overlay: [{ id: "linear", url: "HTTPS://mcp.linear.app/mcp" }],
+        allowSessionUrls: true,
+      }),
+    ).toEqual([{ id: "linear", url: "HTTPS://mcp.linear.app/mcp" }]);
+    expect(
+      mergeMcpSessionOverlay({
+        operator: [],
+        overlay: [{ id: "insecure", url: "HTTP://mcp.datatap.example/mcp" }],
+        allowSessionUrls: true,
+      }),
+    ).toEqual([]);
+  });
 });
 
 describe("dashboard-modal operator digiquant server", () => {
@@ -285,6 +302,25 @@ describe("resolveMcpOAuthResourceUrl", () => {
         operator: [],
         id: "linear",
         clientUrl: "http://localtest.me/mcp",
+        allowUserServers: true,
+      }),
+    ).toBe("");
+  });
+
+  it("accepts a mixed-case HTTPS scheme but still rejects mixed-case HTTP", () => {
+    expect(
+      resolveMcpOAuthResourceUrl({
+        operator: [],
+        id: "linear",
+        clientUrl: "HTTPS://mcp.linear.app/mcp",
+        allowUserServers: true,
+      }),
+    ).toBe("HTTPS://mcp.linear.app/mcp");
+    expect(
+      resolveMcpOAuthResourceUrl({
+        operator: [],
+        id: "insecure",
+        clientUrl: "HTTP://mcp.datatap.example/mcp",
         allowUserServers: true,
       }),
     ).toBe("");
