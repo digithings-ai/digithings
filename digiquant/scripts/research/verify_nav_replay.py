@@ -162,9 +162,10 @@ def _fetch_table(
     ``tickers`` narrows a market-data scan to the book the replay will trade
     (#4002): the house book spans a few dozen tickers while ``price_history``
     holds hundreds of thousands of rows, and fetching the whole table every
-    night is both slow and pointless. History before the first book date is
-    deliberately kept so a ticker's latest pre-grid close can seed the
-    forward-fill for a grid that starts on a non-trading day.
+    night is both slow and pointless. The caller keeps history back to
+    ``--inception-date`` (clipped in ``main``, #4005); within that window a
+    ticker's latest pre-grid close can seed the forward-fill for a grid that
+    starts on a non-trading day.
     """
     selected = {c.strip() for c in cols.split(",")}
     has_ticker = "ticker" in selected
