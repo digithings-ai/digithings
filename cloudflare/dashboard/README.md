@@ -55,7 +55,9 @@ Performance SSOT (#3580 / #3604): one accounting NAV series and one committed
 book date. Canonical metric-source matrix (source, date, units, null/fallback,
 stale/provenance) lives in [`lib/TABLES.md`](lib/TABLES.md) § Performance SSOT.
 Condensed: NAV / day / since-inception from the **tip** of
-`public_accounting_nav_history`; alpha/IR need ≥20 overlapping daily pairs;
+`public_accounting_nav_history` (chained across source runs with each row's own
+day return, calendar gaps ≤4 days forward-filled — #4014); alpha/IR need ≥20
+overlapping daily pairs;
 invested % is the tip (unclamped); live Brief marks are a `live marks` overlay
 and must never wear a `finalized accounting` badge; metrics↔NAV lag is
 symmetric (`metrics lag` / `nav lag`).
