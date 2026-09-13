@@ -533,3 +533,10 @@ def test_workflow_installs_uv_before_first_use() -> None:
     setup_index = next(i for i, u in enumerate(uses) if u.startswith("astral-sh/setup-uv"))
     first_uv_run = next(i for i, step in enumerate(steps) if "uv " in str(step.get("run", "")))
     assert setup_index < first_uv_run
+
+
+def test_workflow_installs_the_prices_extra_for_yahoo_fetches() -> None:
+    """refresh_market_data_r2.py imports yfinance from the `prices` extra (#4011)."""
+    steps = _workflow()["jobs"]["refresh"]["steps"]
+    sync = next(str(step["run"]) for step in steps if "uv sync" in str(step.get("run", "")))
+    assert "--extra prices" in sync
