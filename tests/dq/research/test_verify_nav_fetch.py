@@ -670,3 +670,50 @@ class TestScheduleAlignedSeries:
         for query in seen:
             assert ("in_", "ticker", ["AAA", "BBB"]) in query._filters
             assert all(col != "workspace_id" for _op, col, _val in query._filters)
+
+
+class TestFillDriftReserve:
+    """Fully-invested books must keep a reserve for integer-lot / split-fill drift (#4005)."""
+
+    @staticmethod
+    def _price(date_: str, ticker: str, close: float) -> dict:
+        return {
+            "date": date_,
+            "ticker": ticker,
+            "open": close,
+            "high": close,
+            "low": close,
+            "close": close,
+            "volume": 1000,
+        }
+
+    def test_fully_invested_book_keeps_a_fill_drift_reserve(self) -> None:
+        rows = [self._price("2026-09-01", "AAA", 100.0), self._price("2026-09-01", "BBB", 50.0)]
+        positions = [
+            {"date": "2026-09-01", "ticker": "AAA", "weight_pct": 60.0},
+            {"date": "2026-09-01", "ticker": "BBB", "weight_pct": 40.0},
+        ]
+        nav = [{"date": "2026-09-01", "nav": 100.0}]
+        request, _closes, _recorded = _mod.build_request(rows, positions, nav)
+        total = sum(t.weight for entry in request.weight_schedule for t in entry.weights)
+        assert total == Decimal("0.9975")
+
+    def test_book_with_idle_cash_is_not_scaled(self) -> None:
+        rows = [self._price("2026-09-01", "AAA", 100.0), self._price("2026-09-01", "BBB", 50.0)]
+        positions = [
+            {"date": "2026-09-01", "ticker": "AAA", "weight_pct": 60.0},
+            {"date": "2026-09-01", "ticker": "BBB", "weight_pct": 30.0},
+        ]
+        nav = [{"date": "2026-09-01", "nav": 100.0}]
+        request, _closes, _recorded = _mod.build_request(rows, positions, nav)
+        total = sum(t.weight for entry in request.weight_schedule for t in entry.weights)
+        assert total == Decimal("0.9")
+
+    def test_rows_from_inception_drops_pre_cutover_books(self) -> None:
+        rows = [
+            {"date": "2026-06-23", "ticker": "OLD"},
+            {"date": "2026-07-17", "ticker": "NEW"},
+            {"date": "2026-09-01", "ticker": "NEW"},
+        ]
+        kept = _mod._rows_from_inception(rows, "2026-07-17")
+        assert [r["date"] for r in kept] == ["2026-07-17", "2026-09-01"]

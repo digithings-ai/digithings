@@ -46,6 +46,16 @@ FAIL_TOL_BP = 25.0  # breach: engine vs recorded daily return differs by >25bp.
 # real methodology breaks (e.g. stale-book scale errors), not dust.
 WARN_TOL_BP = 1.0  # warning band: integer-lot quantization noise lives here
 SCALED_NOTIONAL_USD = 100_000_000.0  # scaled cash so integer lots ≈ arithmetic chain
+# Deploy at most this share of NAV per book date. Integer-lot sizing plus split
+# fills can execute a few ticks past the sizing close; on a fully-invested book
+# that drift overdraws cash and halts the whole replay (#4005). The reserve is
+# ~$250k at the scaled notional and costs a fraction of a basis point per day.
+FILL_DRIFT_CAP = Decimal("0.9975")
+
+
+def _rows_from_inception(rows: list[dict], inception_date: str) -> list[dict]:
+    """Drop rows dated before ``inception_date`` (pre-cutover books, #3695/#4005)."""
+    return [r for r in rows if str(r.get("date") or "") >= inception_date]
 
 
 def _load_env() -> None:
@@ -234,8 +244,12 @@ def build_request(price_rows, position_rows, nav_rows):
     for d in sorted(book_by_date):
         weights = book_by_date[d]
         gross = sum(weights.values())
-        if gross > 1:  # day-one style over-allocation: pro-rata normalize (locked decision)
-            weights = {t: w / gross for t, w in weights.items()}
+        # Over-allocation (broken pre-cutover books) pro-rata normalizes (locked
+        # decision); near-full deployment also keeps the fill-drift reserve so
+        # integer-lot fills and split partial fills can never overdraw the
+        # account and halt the replay (#4005).
+        if gross > FILL_DRIFT_CAP:
+            weights = {t: w * FILL_DRIFT_CAP / gross for t, w in weights.items()}
         schedule.append(
             ScheduledTargetWeights(
                 effective_date=date.fromisoformat(d),
@@ -470,19 +484,26 @@ def main() -> int:
     try:
         position_rows = _fetch_table(sb, "positions", house_id, "date,ticker,weight_pct")
         nav_rows = _fetch_table(sb, "nav_history", house_id, "date,nav")
+        # Only the verified window enters the replay: pre-cutover books are
+        # unreliable (#3695) and their broken gross weights trip the engine
+        # (#4005).
+        position_rows = _rows_from_inception(position_rows, args.inception_date)
         book_tickers = sorted(
             {str(r["ticker"]) for r in position_rows if r.get("ticker") != "CASH"}
         )
         # The replay only trades the book (#4002): scan just those tickers, not
         # every row of the market table.
         price_rows = (
-            _fetch_table(
-                sb,
-                "price_history",
-                house_id,
-                "date,ticker,open,high,low,close,volume",
-                workspace_scoped=False,
-                tickers=book_tickers,
+            _rows_from_inception(
+                _fetch_table(
+                    sb,
+                    "price_history",
+                    house_id,
+                    "date,ticker,open,high,low,close,volume",
+                    workspace_scoped=False,
+                    tickers=book_tickers,
+                ),
+                args.inception_date,
             )
             if book_tickers
             else []
