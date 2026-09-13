@@ -495,6 +495,7 @@ class TestToolDispatcher:
         names = {t["function"]["name"] for t in DATA_TOOLS}
         assert {
             "query_data",
+            "get_price_technicals",
             "get_macro_series",
             "get_market_breadth",
             "get_sector_relative_strength",

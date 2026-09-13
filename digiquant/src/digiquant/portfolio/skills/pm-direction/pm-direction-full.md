@@ -16,7 +16,7 @@ deterministic H8 risk sizing sizes from calibrated forecasts and scales each lon
 H8 haircuts that name's size by it (cash-first — leftover stays cash, never redistributed).
 
 Portfolio context is in `phase_inputs`. You have **data tools** — `query_data` for the book
-tables, `digiquant_get_price_technicals` for prices/technicals, `get_macro_series` for macro
+tables, `get_price_technicals` for per-ticker technicals, `get_macro_series` for macro
 series, plus `get_market_breadth` and `get_vix_term_structure`.
 
 ## Inputs (`phase_inputs`)

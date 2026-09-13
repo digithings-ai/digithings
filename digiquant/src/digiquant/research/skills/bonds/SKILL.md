@@ -7,11 +7,11 @@ description: Run bond market and interest rates analysis as part of the daily di
 
 ## Grounding Tools (use first)
 
-- **`digiquant_get_price_technicals`** — your primary grounding. For each ticker/ETF in scope
+- **`get_price_technicals`** — your primary grounding. For each ticker/ETF in scope
   (your watchlist and any `sector_config` / asset-class symbols in PHASE_INPUTS), call
-  `digiquant_get_price_technicals(ticker="<SYMBOL>", lookback=20)`
-  before asserting trend, momentum, or relative strength. The R2-backed response carries the
-  latest close and computed indicators (sma/rsi/macd/adx/atr/zscore) per day — use those
+  `get_price_technicals(ticker="<SYMBOL>", lookback=20)`
+  before asserting trend, momentum, or relative strength. The response carries the recent
+  computed indicators (sma/rsi/macd/adx/atr/zscore), newest first — use those
   values; **never invent a number** — every quantitative claim must cite a value you fetched.
   If a call returns no rows for a symbol, say so and lower conviction. Market history is not
   readable through `query_data` (#3780) — never use it to fetch prices or technicals.
