@@ -103,8 +103,8 @@ def _fetch_key(row: dict, has_ticker: bool) -> tuple[str, ...]:
 def _keyset_term(has_ticker: bool, last_key: tuple[str, ...]) -> str:
     """PostgREST seek past ``last_key`` in ``(date[, ticker])`` order.
 
-    Returns the inner OR expression (no outer ``or(...)``) so callers can nest
-    it inside a workspace ``or`` without dropping either predicate.
+    Returns the inner OR expression (no outer ``or(...)``) so it can be passed
+    straight to ``.or_()`` alongside any other predicate.
     """
     day = last_key[0]
     if not has_ticker:
@@ -117,7 +117,7 @@ def _fetch_table(
     table: str,
     house_id: str,
     cols: str,
-    or_null_workspace: bool = False,
+    workspace_scoped: bool = True,
     page_size: int = _MAX_ROWS,
     max_rows: int = _MAX_ROWS,
 ) -> list[dict]:
@@ -143,6 +143,10 @@ def _fetch_table(
     required key, a stalled cursor, or more than ``_MAX_PAGES`` pages raises
     ``RuntimeError`` instead of returning a truncated series. Callers must not
     write NAV from a partial fetch.
+
+    ``workspace_scoped=False`` is for market/reference tables (``price_history``)
+    that carry no ``workspace_id`` column: applying a workspace predicate there
+    raises PostgREST 42703 and kills the fetch (#3990).
     """
     selected = {c.strip() for c in cols.split(",")}
     has_ticker = "ticker" in selected
@@ -162,25 +166,13 @@ def _fetch_table(
         query = sb.table(table).select(cols).order("date")
         if has_ticker:
             query = query.order("ticker")
-        if or_null_workspace:
-            # Omitted workspace_id = house (HOUSE_BOOK_SCOPE.md): match both.
-            # When seeking, the keyset predicate must be ANDed inside each
-            # workspace branch so one ``or`` carries both conditions.
-            if last_key is None:
-                query = query.or_(f"workspace_id.eq.{house_id},workspace_id.is.null")
-            else:
-                seek = _keyset_term(has_ticker, last_key)
-                query = query.or_(
-                    f"and(workspace_id.eq.{house_id},or({seek})),"
-                    f"and(workspace_id.is.null,or({seek}))"
-                )
-        else:
+        if workspace_scoped:
             query = query.eq("workspace_id", house_id)
-            if last_key is not None:
-                if has_ticker:
-                    query = query.or_(_keyset_term(True, last_key))
-                else:
-                    query = query.gt("date", last_key[0])
+        if last_key is not None:
+            if has_ticker:
+                query = query.or_(_keyset_term(True, last_key))
+            else:
+                query = query.gt("date", last_key[0])
         page = query.limit(page_size).execute().data or []
 
         keys = [_fetch_key(r, has_ticker) for r in page]
@@ -414,7 +406,7 @@ def main() -> int:
             "price_history",
             house_id,
             "date,ticker,open,high,low,close,volume",
-            or_null_workspace=True,
+            workspace_scoped=False,
         )
         position_rows = _fetch_table(sb, "positions", house_id, "date,ticker,weight_pct")
         nav_rows = _fetch_table(sb, "nav_history", house_id, "date,nav")
