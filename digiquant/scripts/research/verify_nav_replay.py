@@ -216,20 +216,34 @@ def build_request(price_rows, position_rows, nav_rows):
     closes: dict[tuple[str, str], Decimal] = {}
     volumes: dict[tuple[str, str], Decimal] = {}
     per_ticker: dict[str, list[OhlcvBar]] = {}
+    repaired = 0
     for r in price_rows:
         d = str(r["date"])
-        closes[(d, r["ticker"])] = Decimal(str(r["close"]))
+        open_ = Decimal(str(r["open"]))
+        high = Decimal(str(r["high"]))
+        low = Decimal(str(r["low"]))
+        close = Decimal(str(r["close"]))
+        # Vendor bars can violate their own envelope: float-ULP close/low ties
+        # and open>high cents. Widen the envelope instead of aborting the
+        # nightly refresh; close is never rewritten (#3995).
+        repaired_high = max(high, open_, close)
+        repaired_low = min(low, open_, close)
+        if repaired_high != high or repaired_low != low:
+            repaired += 1
+        closes[(d, r["ticker"])] = close
         volumes[(d, r["ticker"])] = Decimal(str(r.get("volume") or 0))
         per_ticker.setdefault(r["ticker"], []).append(
             OhlcvBar(
                 ts=datetime.fromisoformat(d).replace(tzinfo=timezone.utc),
-                open=Decimal(str(r["open"])),
-                high=Decimal(str(r["high"])),
-                low=Decimal(str(r["low"])),
-                close=Decimal(str(r["close"])),
+                open=open_,
+                high=repaired_high,
+                low=repaired_low,
+                close=close,
                 volume=Decimal(str(r.get("volume") or 0)),
             )
         )
+    if repaired:
+        print(f"WARN: widened OHLC bounds on {repaired} bar(s) (#3995)")
     series = tuple(
         InstrumentBarSeries(ticker=t, bars=tuple(per_ticker[t])) for t in sorted(per_ticker)
     )
