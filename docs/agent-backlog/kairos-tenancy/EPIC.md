@@ -139,8 +139,8 @@ are on `develop`. House cron-check GHA is installed
 **Schema (`core`):** migrations **096–110** plus **112** applied. `110_anon_house_only_private_books`
 narrows `anon_read` on private books to house; documents house+system. **112**
 (`112_product_invite_codes.sql`, stamped 2026-09-01T01:10Z) adds hashed FX Hub
-invite tables (RLS on, `service_role` only; invite rows = 0). **111 unused**
-(reserved for Group A unique-drop). Staged cutover **113** (legacy book uniques)
+invite tables (RLS on, `service_role` only; invite rows = 0). **111** is the
+`trading_calendar` creator (#3923). Staged cutover **113** (legacy book uniques)
 **not applied**. Repo **114** (calendar authenticated SELECT) is **not** on the
 olympus ledger — live policy already existed; stamp via human [#3340](https://github.com/digithings-ai/digithings/pull/3340)
 `db-migrate` on `main`. CLI also lists `113_economic_calendar_authenticated_select`
@@ -292,7 +292,7 @@ it does not prove Stripe.
 **Landed 2026-08-31 — [#3325](https://github.com/digithings-ai/digithings/pull/3325) on `develop` (`a8bd41741`):**
 squash-merged from `cursor/dashboard-rebrand-rebase-3d52`. Combines #3320
 (no `/olympus/` source twin, `NEXT_PUBLIC_DASHBOARD_*`) + #3297
-(`frontend/olympus` → `frontend/dashboard`, npm package `dashboard`) + leftover-key
+(`cloudflare/olympus` → `cloudflare/dashboard`, npm package `dashboard`) + leftover-key
 sweep. Open foreign PRs **#3293 / #3297 / #3320** are superseded. Pins:
 `tests/scripts/test_build_digiquant_dashboard_path.py`,
 `tests/scripts/test_frontend_dashboard_workspace.py`. Live Pages (`main`
@@ -327,7 +327,7 @@ Staging E2E exit **3** (app-urls path contract). Vendor secrets still missing.
 
 **2026-09-01T00:20Z — Pages `/dashboard` twin:** [#3356](https://github.com/digithings-ai/digithings/pull/3356) on `main` (`332265428`) is CI-green (dual-export + review coverage) and **human-merge only**. Live still `/olympus` 200 / `/dashboard` 404. Fail-closed EF resume is `python scripts/kairos_pages_dashboard_gate.py` (exit 3 while 404; `--apply` only after 200). Do **not** redeploy settings EF until live `/dashboard` is 200. After 200: human Auth redirect + Access, then the gate `--apply`.
 
-**2026-09-01T00:05Z — Pages `/dashboard` twin:** [#3356](https://github.com/digithings-ai/digithings/pull/3356) on `main` (`6ea1846ec`) dual-exports `/olympus` + `/dashboard` from `frontend/olympus`. **Human-merge only**; parallel to house Python hotfixes. Live still `/olympus` 200 / `/dashboard` 404 until that merge + Pages rebuild. Do **not** redeploy settings EF until live `/dashboard` is 200. After 200: human Auth redirect + Access, then EF.
+**2026-09-01T00:05Z — Pages `/dashboard` twin:** [#3356](https://github.com/digithings-ai/digithings/pull/3356) on `main` (`6ea1846ec`) dual-exports `/olympus` + `/dashboard` from `cloudflare/olympus`. **Human-merge only**; parallel to house Python hotfixes. Live still `/olympus` 200 / `/dashboard` 404 until that merge + Pages rebuild. Do **not** redeploy settings EF until live `/dashboard` is 200. After 200: human Auth redirect + Access, then EF.
 
 **2026-09-01T03:22Z — [#3370](https://github.com/digithings-ai/digithings/pull/3370) on `develop` (`3b4e71c18`):** combined cron probe includes route `--check`. Live `kairos_cron_check.py` still exit **2** (Mailgun names empty).
 

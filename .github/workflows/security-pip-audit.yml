@@ -8,12 +8,15 @@
 #
 # Scope: Python components only. A sibling `npm audit --omit=dev` job for
 # digichat/ is a follow-up (see docs/backlog/epic-2-hardening.md).
-# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
+# Production clock: Cloudflare Worker digithings-cron (cloudflare/digithings-cron). Schedule removed #3579.
 name: "Security: pip-audit"
 
 on:
   workflow_dispatch:
   workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   audit:

@@ -67,6 +67,17 @@ def main():
         return
 
     mod.push_to_supabase(parsed_digests, docs, history, metrics_row, pj_positions)
+    if history or metrics_row:
+        # SSOT cutover (#3695): push_to_supabase retires nav_history +
+        # portfolio_metrics writes (engine replay + refresh script own them),
+        # so make the discard loud — an operator expecting a NAV rebuild
+        # must run verify_nav_replay.py --write instead.
+        print(
+            "⚠️  nav_history + portfolio_metrics were NOT backfilled (engine replay "
+            "owns NAV via verify_nav_replay.py --write; refresh script owns daily "
+            "metrics). Rebuild those paths separately.",
+            file=sys.stderr,
+        )
     print("✅ Backfill complete!")
 
 if __name__ == "__main__":

@@ -23,9 +23,19 @@ doc blindly; it has drifted from reality before (that's the story this section t
 | `Required checks passed` | `ci.yml` aggregator job | Fans in every path-gated component job (`digibase`, `digikey`, `digiquant`, `score`, `pip-audit`, `ruff-and-scripts`, `actionlint`, `compose-validate`, etc.) — tolerates `skipped`, fails only on real `failure`/`cancelled` **except advisory `score`** (#3528: optional rubric; red `score / score` is visible but non-blocking). Includes `changes` in its `needs` list as of `2825a57d3`, a CodeRabbit finding on #2341 (without it, a broken change-detector produced a false-green result). |
 | `doc-links + agents-init` | `ci-docs.yml` | Internal markdown link validation + `agents-init --check`. Not path-filtered on `pull_request`, so it posts on every PR. |
 | `mypy — digibase + digikey` | `ci-type-check.yml` | Type checking for `digibase`/`digikey`. Not path-filtered on `pull_request`, so it posts on every PR. |
+| `gitleaks-scan` | `security-gitleaks.yml` | Secrets scan over the PR diff (full history on `develop`/`main` push). Added to the required set in #3922. **Not yet applied live** — see the pre-apply note below. |
+
+> **Pre-apply note (#3922):** `security-gitleaks.yml` currently skips markdown/doc-only
+> PRs with a workflow-level `paths-ignore`. A workflow skipped by path filtering leaves
+> its required check in a **Pending** state, so GitHub would block docs-only PRs from
+> merging ("Waiting for status to be reported"). Before applying the updated script,
+> relocate that skip to a **job-level** conditional — a skipped *job* reports Success —
+> or drop the PR trigger filter. Do not apply `gitleaks-scan` as a required context
+> while the workflow can be skipped by path filtering.
 
 `strict: true` — the PR branch must be up-to-date with `develop` before merging.
-`scripts/set-branch-protection.sh` applies exactly this payload and refuses `--branch main`
+`scripts/set-branch-protection.sh` applies exactly this payload (once the
+[pre-apply note](#on-develop) above is resolved) and refuses `--branch main`
 (its contexts are develop-specific — see [On `main`](#on-main)).
 
 Verified before applying: a throwaway PR touching no component path (the worst case for
@@ -89,8 +99,10 @@ not planned; see its closing comment for the full comparison.
 
 ## How to apply protection
 
-Re-apply `develop`'s three checks (idempotent — safe to re-run any time the contexts in the
-script match what's actually live):
+Re-apply `develop`'s checks (idempotent — safe to re-run any time the contexts in the
+script match what's actually live). Read the [pre-apply note](#on-develop) first:
+`gitleaks-scan` must not be applied while `security-gitleaks.yml` can be skipped by path
+filtering.
 
 ```bash
 bash scripts/set-branch-protection.sh
@@ -119,7 +131,7 @@ gh api repos/digithings-ai/digithings/branches/develop/protection | python3 -m j
 gh api repos/digithings-ai/digithings/branches/main/protection    | python3 -m json.tool
 ```
 
-Look at `required_status_checks.contexts`: on `develop` it should list the three checks in
+Look at `required_status_checks.contexts`: on `develop` it should list the checks in
 [On `develop`](#on-develop) with `strict: true`; on `main` it should list only
 `Every commit reaching main was reviewed` per [On `main`](#on-main).
 

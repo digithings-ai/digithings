@@ -19,7 +19,13 @@
 
 ## Router fallbacks
 
-`config/litellm.yaml` defines **`litellm_settings.fallbacks`** (and **`default_fallbacks`**) so Ollama Cloud routes can fail over to **local** `ollama/qwen3:8b` after retries. Ensure that model is pulled when relying on fallbacks. Tuning **`num_retries`** / **`request_timeout`** is in the same block.
+`config/litellm.yaml` is strict routing: no `litellm_settings.fallbacks` and no
+`default_fallbacks` — provider errors surface to the caller (house policy #3078:
+fail fast, no fallback chains). The opt-in dev config `config/litellm.dev.yaml`
+defines local-Ollama fallbacks (`ollama/deepseek-r1:14b`) for Docker Compose use.
+Tuning **`num_retries`** / **`request_timeout`** lives in the same settings block.
+`ollama/qwen3:8b` is banned house-wide and refused by digillm (`_BANNED_MODELS`); it
+must not appear in any routing, fallback, or default.
 
 ## Modes (DIGI_LLM_MODE)
 
@@ -29,7 +35,7 @@ Set in `.env`:
 - **`medium`** – Balanced quality/speed.
 - **`best`** – Largest/best for hard tasks.
 
-digigraph reads `DIGI_LLM_MODE` and picks the default model from `config/model_modes.yaml`. If the file is missing or the mode is unset, it falls back to `test` and then to the env `OLLAMA_MODEL` or a built-in default.
+digigraph reads `DIGI_LLM_MODE` and picks the default model from `config/model_modes.yaml`. If the file is missing or the mode is unset, mode selection uses `test`, then env `OLLAMA_MODEL`, then a built-in default — that is **mode defaults only**, not a provider fallback chain. Provider errors still surface (see Router fallbacks / digillm ARCHITECTURE fail-fast).
 
 ## How agents should update the model list
 
@@ -49,6 +55,15 @@ digigraph reads `DIGI_LLM_MODE` and picks the default model from `config/model_m
 4. **After editing**  
    - Restart the stack (`docker compose up -d`) so LiteLLM and digigraph reload config.  
    - No code change is required for new models; only config and (if needed) this doc.
+
+## Grounding (tool-only web search)
+
+Grounding is tool-only (#3859): the first-party digisearch `web_search`
+tool (searxng sidecar with ddgs fallback, digifetch fetch + extract enrichment)
+runs in both the digigraph `web_search` handler and the digiquant research
+grounding pre-pass. There are no synthesis-model pins and no fallback: a
+requested search must succeed or raise. Monitor tool error rates alongside
+per-engine 403/CAPTCHA rates to see the cost win.
 
 ## Future: router (Claw-style)
 

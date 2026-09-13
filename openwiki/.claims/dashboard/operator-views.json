@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:75c3aaf6de862a88963ace5bf238db08b31a00bc49907afea80a284d3b953165",
+  "pageVersion": "sha256:542d7c3bd0d677004032ac8b369031c7f69aabe26bca5d640f01fe335c353a51",
   "claims": [
     {
       "id": "claim_0b7fef078ce14f44b7408295c5c8addd",
@@ -21,12 +21,16 @@
       "statement": "The performance tearsheet reads the public_accounting_nav_history view (finalized tips plus labeled legacy estimates) with rollback to legacy views by repointing constants.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/README.md#L30-L60",
-          "version": "repo-lines-v1:sha256:2db9e0f7f79362d936074477d3f2e2df01bfdf974a1b6cfb18c703903385a454:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2YTg3MzYxN2JhZTI2Y2I5MGVlMWQ4ZThiZTRkZDY1MmJiYWFlMWQyMGJkN2E0ODVlMDE4MTliZjE3MDM2ZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ2NmIxMTkxMThlOTliOTQ2N2I5OGJlNWFiMDNlOGM5NWI3ZGQ1YWU1YWE2NWE0NTgzMWY0NmIwZDJlZDA2ZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2NjMxOGY0ZjIzZjRiMDdjYjQwZTIwOGJkNWJlODg3Mzc2OTRlNGU2YzNiZDE0ZmNhYTlkOWIwNjE2YjlhMDYifQ"
+          "resource": "repo://frontend/dashboard/README.md#L21-L24",
+          "version": "repo-lines-v1:sha256:c71a867c6137a655e6f6b22780245970ffc7561b20b9cbe8b076cbaf4b93bfbc:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTExZjE3ZDJkMjNkYWZhMjU0YWZmNzI1NGIyYTA3ZGJjYzBmMjBlOTE0NmFjOWJkY2E5ZTc3ZDhmZTA2MDEyNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTEzZTgyMGFhZmVlMGQ5NWY1NzQyMmE2ODc5OThjOGM0MTgwOTFkNzE2ZmVjZTgwNmFiNDVhNmM2NjliODE2OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2JjNGJjY2M2MzNmYmM4ZjRlNjUwZDBmMDNhMTY4YmMzYTA0NTY2MTM5OTNkZjkxZTM4OGI3YWFkMjc0ZGIzZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzBiYWI0NTJiY2Q4MGE1NzcwMGQ1YWEyYzVjYTllZWRmZGUyYjM0MjEyOTkzNmU2OGM2NGJiYTVhN2FmMjc0NyJ9"
         },
         {
-          "resource": "repo://frontend/dashboard/lib/accounting-views.ts#L1-L30",
-          "version": "repo-lines-v1:sha256:c4e8400db2ae9986077adf2267e241504205a2834237e7a6286dfa9a75210563:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVhNTc4M2Y4MjlmYjAxNWUxOTc2ZTg5N2ZlNDYxMmU5Njc2N2Y4MWY2YTIxZDMxZDA5YzNjZmJlZmVjZTk4ZmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY5ZjRiM2I0OTY3N2ViMDBhMmNmZTc2NWQzZDkzNTNkNzNmNmRjY2MyZmE4MTRmNDA5MDcyMTkzMGNmOGQ5ZDMifQ"
+          "resource": "repo://frontend/dashboard/README.md#L54-L61",
+          "version": "repo-lines-v1:sha256:2f91ccf29246be67fbba0fea9bb4626f92259ac300374d8e9b89eb4664c405c4:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYWM4N2ViY2M0MTMyZDUwYmE4ODYwODMzOTIxZTVmMzE5ODVmZTcyOTE1YzU5NjIxNDFiN2Q4YTE1MDI0NjI1OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDIxMTk0YTYwNDczNzE2NDAwYjQ3YWM5ZDY3MWMyYzZkMjRlZTQ0NmRjMjllYmE3NjZkMjBiODcyN2U4OTVlOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODE4MGVlYjk0MzAwZWI1NmMzYmMwNGE3ODNiY2NiMmM2YjRkY2JjNDBmYzRhODBhZDg0ZDVlZTgxMGEwNmIxZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTVlNmE1YjdlNDZkZmNkY2FhMWY3NWI3MzM2ZGIxZTZkZDA4ODI3OWQwMTkyZjhhZWQ4NzhjNGQ0MThlMTVhMSJ9"
+        },
+        {
+          "resource": "repo://frontend/dashboard/lib/accounting-views.ts#L8-L12",
+          "version": "repo-lines-v1:sha256:3d6ee84228a309e77f20a6cbdec2dffd426097f772028bcf4b9bc8c83034ea30:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTgyZmU1OTg5NmFiNjkwY2U4MTg3NTE3NjNiYjAyZWNlODQ0ZTJjZGE2ODUxOWZkMzdhMDI5N2JiMWIxMDMxNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2E2OTkwMDQ5MjhjYWI3NGIyNDI0Y2E1ZDE2ZjE0OWU0NDE0YzlmNjk5NjI3ZWM3MWU4ZjA5NWMwYjllNjRjYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDczYmMzNzA2YzJjZTQxYWVmMzRlZjJkZGI2NWVmY2Y3YWZhMjk2Yjc0MjBlNzIxNTY5ZGQyZTliMjNmMmMyNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODY1YWY2YzZmMDdhM2M5MDY5MzJkOTQxNjBhYzU4OGNjMDM5NTM3MmRkMTA5MmU1ZmZjYTEwMGE3NzMyNzIxNiJ9"
         }
       ]
     },
@@ -35,8 +39,8 @@
       "statement": "Open-book Unrealized prefers stored unrealized_pnl_pct/since_entry_return_pct, derives from entry vs current price otherwise, fills missing marks from price_history stamped with that close date, and fails closed to em-dash without basis or mark.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/README.md#L30-L60",
-          "version": "repo-lines-v1:sha256:2db9e0f7f79362d936074477d3f2e2df01bfdf974a1b6cfb18c703903385a454:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2YTg3MzYxN2JhZTI2Y2I5MGVlMWQ4ZThiZTRkZDY1MmJiYWFlMWQyMGJkN2E0ODVlMDE4MTliZjE3MDM2ZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ2NmIxMTkxMThlOTliOTQ2N2I5OGJlNWFiMDNlOGM5NWI3ZGQ1YWU1YWE2NWE0NTgzMWY0NmIwZDJlZDA2ZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2NjMxOGY0ZjIzZjRiMDdjYjQwZTIwOGJkNWJlODg3Mzc2OTRlNGU2YzNiZDE0ZmNhYTlkOWIwNjE2YjlhMDYifQ"
+          "resource": "repo://frontend/dashboard/README.md#L29-L33",
+          "version": "repo-lines-v1:sha256:7f489d6eb20261694a7fe6026621004b10d3b43d1ee88afe8455ae9d746629cd:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTJhNTM4YWEwY2QxZTgwOWMwYzdiZmRiYmU2NDk1OWQ3YmNhOGFhNWU3Yzk2MmQxZGE0Yjg4NDNkNGNiZGRlYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmIxMzFhMGM3OTQ3NTgwMzFmMmZlZjM0MmNiNzJjY2RkZjIwYjEwYmMyM2ZhMjg3YWFjNDkwMjg3YWMxZWI0OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGNhYjVkZmU1ZDgyZDg0YzZmOWVhY2Q4NDQ2MmM5ZjY0YjJmMWI5ZjBiNjI1NmMwMjRlYTgyZWE1MjQwMGUzMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZmU4ZDZlNzllMTA0Yjg2MjQzNmRhMTVlNzE4ZDhmYWZmZTM5MTJhN2UxZWI5NTY2OTNhODIxNGFiODJmZjY4MyJ9"
         }
       ]
     },
@@ -45,8 +49,12 @@
       "statement": "Ledger is the single source of truth for OPEN/ADD/EXIT/TRIM fills with avg entry, fill price, and realized pct vs average entry; the tearsheet links there instead of duplicating closed positions.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/README.md#L30-L60",
-          "version": "repo-lines-v1:sha256:2db9e0f7f79362d936074477d3f2e2df01bfdf974a1b6cfb18c703903385a454:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2YTg3MzYxN2JhZTI2Y2I5MGVlMWQ4ZThiZTRkZDY1MmJiYWFlMWQyMGJkN2E0ODVlMDE4MTliZjE3MDM2ZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ2NmIxMTkxMThlOTliOTQ2N2I5OGJlNWFiMDNlOGM5NWI3ZGQ1YWU1YWE2NWE0NTgzMWY0NmIwZDJlZDA2ZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2NjMxOGY0ZjIzZjRiMDdjYjQwZTIwOGJkNWJlODg3Mzc2OTRlNGU2YzNiZDE0ZmNhYTlkOWIwNjE2YjlhMDYifQ"
+          "resource": "repo://frontend/dashboard/README.md#L24-L27",
+          "version": "repo-lines-v1:sha256:9b8dff6de38fd0067606efde85cc3e1bfd39ff9eb2351177ed925f4cdfc942c8:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTEzZTgyMGFhZmVlMGQ5NWY1NzQyMmE2ODc5OThjOGM0MTgwOTFkNzE2ZmVjZTgwNmFiNDVhNmM2NjliODE2OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWE4ODAwNGEzNDAwYWZhZTIwNWUyMTk5YmY5NTEzZjVkNTlmMjk2ODRhMDRhOGExYzJjYjY5ZmI3ODQwZmVlNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZWJmZDQwN2RjZmFkNDRjNTMzMWRmMjc5NzBkZTQ4YmIxYmZlNGMyY2I1NDBkYzI3MzNjOTdhZDE0M2U1MWIyYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTBlMzI0NWZjNWM2NTc0MDcwNTRkYzlmY2U5YTA0OGVmZTk2MTFhNWQyMWJjYzE3YjhkZTc1YTA0MjMxMmFjNiJ9"
+        },
+        {
+          "resource": "repo://frontend/dashboard/README.md#L33-L37",
+          "version": "repo-lines-v1:sha256:a6e805fc277184193f7ea73954ef75df1190b5d44de37205c49e82d775da2d17:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmIxMzFhMGM3OTQ3NTgwMzFmMmZlZjM0MmNiNzJjY2RkZjIwYjEwYmMyM2ZhMjg3YWFjNDkwMjg3YWMxZWI0OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDc0MzUwY2UxMTFmZTczZmNjYmIxOGM0MWI4NTQ4ZmI5YTA5NTJlZjZiMWRjZTc2Mjc4YjlhNTI4OWExMTQ0NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjdiN2ZjNTUxN2M2MzY1YWFhMDdiYjkwNjJiNTI3OThhODBmNDEyYTJiOTFmNWVlYmRlYjhkM2E3NjBiYTYyMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDYzYjg1MmRkNDhjZjhkYWJjYThmYTUzNTliMjhlZmJhMTczZTc2OTkxZjBkNjA0ODBkOTBkZWE2OTJmMjNkNCJ9"
         }
       ]
     },
@@ -55,14 +63,14 @@
       "statement": "Attribution defaults to a direction-adjusted decision-effectiveness monitor with book attribution and audit siblings, calibration gated on two buckets of 10 independent decisions, and audit paged at 25 rows.",
       "evidence": [
         {
-          "resource": "repo://frontend/dashboard/README.md#L30-L60",
-          "version": "repo-lines-v1:sha256:2db9e0f7f79362d936074477d3f2e2df01bfdf974a1b6cfb18c703903385a454:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2YTg3MzYxN2JhZTI2Y2I5MGVlMWQ4ZThiZTRkZDY1MmJiYWFlMWQyMGJkN2E0ODVlMDE4MTliZjE3MDM2ZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ2NmIxMTkxMThlOTliOTQ2N2I5OGJlNWFiMDNlOGM5NWI3ZGQ1YWU1YWE2NWE0NTgzMWY0NmIwZDJlZDA2ZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2NjMxOGY0ZjIzZjRiMDdjYjQwZTIwOGJkNWJlODg3Mzc2OTRlNGU2YzNiZDE0ZmNhYTlkOWIwNjE2YjlhMDYifQ"
+          "resource": "repo://frontend/dashboard/README.md#L38-L45",
+          "version": "repo-lines-v1:sha256:cb80224388681d3657eb5de9360a7c6121b221ad4243ffdb94f2de5b1d9e0c15:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdmMjE0ZWY4Njk0MWVjN2M2YTc0ODBlMDZiNGQ5MGRhOTlmMTAxZjRkMGMxMDY1MDAyODQzYTY1ZDZkNDJjNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjRiNDQxN2YxODhlODVhMGNlMWEwMGZkZDhhY2ZkODcyMTU4ZjdiMDk3OGVmN2NjNTIwMDFhMTIwYmUxYzQ2OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDUwMDdlMTAyM2E0ZjBjOGEzNjBlZTE4OWJiYWQ5MjcwMDBmNmQwMjgyMGUwYjljMWFhODkyYzMwYWU2YjRkNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGViZTk5MDZjNjhlNDJkMDYyYjkwMzIwMTY5NjEwNWEyYjM1YjM2MDA3NTgxZTU5OGQ5Mzc0ZTllMWNhZDgxNyJ9"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-07T22:38:58.074Z"
+    "at": "2026-09-09T14:37:17.158Z"
   }
 }

@@ -79,6 +79,39 @@ def test_house_preferred_false_without_key(monkeypatch: pytest.MonkeyPatch) -> N
     assert client_mod.cheaperinference_house_preferred() is False
 
 
+def test_ci_key_beats_openrouter_base_for_mapped_house_slug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """House slugs hit CI when keyed — not OpenRouter just because both keys exist."""
+    monkeypatch.delenv("DIGI_HOUSE_UPSTREAM", raising=False)
+    monkeypatch.delenv("CHEAPERINFERENCE_HOUSE", raising=False)
+    monkeypatch.setenv("CHEAPERINFERENCE_API_KEY", "ci_live_test")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-test")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-or-v1-test")
+    monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+    assert client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek-v4-flash"
+    made: dict[str, Any] = {}
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.update(kwargs)
+        return MagicMock()
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        digillm.get_client_for_model("deepseek/deepseek-v4-flash")
+    assert made["base_url"] == "https://api.cheaperinference.com/v1"
+    assert made["api_key"] == "ci_live_test"
+
+
+def test_litellm_proxy_keeps_house_slug_when_ci_keyed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """LiteLLM overlay is the house path — do not rewrite to a bare CI id."""
+    monkeypatch.setenv("CHEAPERINFERENCE_API_KEY", "ci_live_test")
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-litellm")
+    assert (
+        client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek/deepseek-v4-flash"
+    )
+
+
 # ── Fail-fast behavior (no OpenRouter fallback) ───────────────────────────
 
 
@@ -114,7 +147,9 @@ def test_mapped_house_slug_succeeds_on_ci(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_gemini_3_1_flash_lite_mapped_to_ci() -> None:
-    """gemini-3.1-flash-lite is on the CI catalog for web_search_models synthesis."""
+    """gemini-3.1-flash-lite stays mapped: the CI overlay still lists the slug
+    (pinned by test_cheaperinference_overlay_parses_and_maps_house_slugs) though
+    no tier pool references it since tool-only grounding (#3859)."""
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug("google/gemini-3.1-flash-lite")
         == "gemini-3.1-flash-lite"

@@ -3,9 +3,6 @@ type: service-architecture
 title: digigraph Architecture
 description: Hub design of digigraph — LangGraph state machine, orchestrator tool registry, HTTP-only vertical boundary, and module map.
 tags: [digigraph, orchestration, langgraph, architecture]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-deb1497ccdcada935084b098
     resource: repo://digigraph/AGENTS.md
@@ -16,6 +13,9 @@ sources:
   - id: openwiki-source-90658d6266af009ade56ec79
     resource: repo://digigraph/src/digigraph/orchestration/registry.py
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digigraph Architecture

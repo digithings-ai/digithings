@@ -6,10 +6,10 @@ name: "Deploy: digiquant.io build check"
 on:
   pull_request:
     paths:
-      - "frontend/digiquant-web/**"
-      - "frontend/digiweb/web/**"
-      - "frontend/dashboard/**"
-      - "frontend/digiweb/design/**"
+      - "cloudflare/digiquant-web/**"
+      - "cloudflare/digiweb/web/**"
+      - "cloudflare/dashboard/**"
+      - "cloudflare/digiweb/design/**"
       - "scripts/build-digiquant.sh"
       # The build script's callees. Watching the caller alone leaves the gap this
       # check exists to close, and the two files below fail in different places.
@@ -76,9 +76,9 @@ on:
       # manifest that *is* listed, at the end, is there for an install reason instead; see
       # the paragraph that names it.
       #
-      # The digithings check carries one extra entry, frontend/digichat-ui/**, because
+      # The digithings check carries one extra entry, cloudflare/digichat-ui/**, because
       # digithings-web imports digichat-ui at build time; nothing built here does. (It
-      # began as frontend/digichat-ui/package.json in #1956 and was widened to the whole
+      # began as cloudflare/digichat-ui/package.json in #1956 and was widened to the whole
       # directory in #1966, which supersedes the manifest line.) Re-derive the closure
       # before adding a glob rather than mirroring that file — `**/package.json` is still
       # rejected, because it would fire this check on every unrelated workspace including
@@ -88,22 +88,22 @@ on:
       # Residual, deliberate: the root `npm install` above resolves all eight
       # workspaces, so an unresolvable manifest in one outside that closure still fails
       # this build. Four sit outside it. Three are covered by a lane that installs at the
-      # root — frontend/digichat and frontend/digithings-web by ci.yml's `digichat` and
-      # `web`, and frontend/digichat-ui by those same two filters, which both list
-      # frontend/digichat-ui/**. (An earlier draft said the digithings deploy check was
+      # root — cloudflare/digichat and cloudflare/digithings-web by ci.yml's `digichat` and
+      # `web`, and cloudflare/digichat-ui by those same two filters, which both list
+      # cloudflare/digichat-ui/**. (An earlier draft said the digithings deploy check was
       # digichat-ui's *only* cover and called it a coupling rather than a guarantee. The
       # coupling is real but it is not the only cover, and #1966 made narrowing it fail
       # tests/scripts/test_deploy_build_inputs.py rather than pass quietly.) Those lanes
       # run `npm ci`, which catches a bad range by refusing to run when manifest and lock
       # disagree rather than by resolving it — a different route to the same cover. The
       # fourth,
-      # frontend/digiweb/reference, was in no path filter in this repo at all — of the
+      # cloudflare/digiweb/reference, was in no path filter in this repo at all — of the
       # eight it was the one manifest watched by nothing — so it is now named below. Note
       # that this site never builds that workspace: the entry is an install input, not a
       # build input, and it is here because the root `npm install` above resolves all
       # eight manifests before either site compiles.
       #
-      # Only the manifest, not `frontend/digiweb/reference/**`. Nothing in CI *builds*
+      # Only the manifest, not `cloudflare/digiweb/reference/**`. Nothing in CI *builds*
       # that app. Since #1981 the directory is reached by ci.yml's `web` lane, which
       # lints and type-checks it, as well as by the unconditional frontend-canon guard —
       # so the narrow entry here is a division of labour, not the app's only coverage:
@@ -119,8 +119,8 @@ on:
       # digithings-stack-cloudflare is an install-input workspace (CF Profile A
       # Containers Worker). Pages does not build it; name the manifest so it is
       # not an orphan under tests/scripts/test_deploy_build_inputs.py.
-      - "frontend/digithings-stack-cloudflare/package.json"
-      - "frontend/digiweb/reference/package.json"
+      - "cloudflare/digithings-stack-cloudflare/package.json"
+      - "cloudflare/digiweb/reference/package.json"
   workflow_dispatch:
 
 concurrency:

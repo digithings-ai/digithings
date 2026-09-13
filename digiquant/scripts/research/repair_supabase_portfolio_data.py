@@ -3,8 +3,13 @@
 repair_supabase_portfolio_data.py
 
 Removes zero-weight non-CASH rows from `positions` (stale EXIT placeholders),
-then re-runs `update_tearsheet.py` to rebuild nav_history, portfolio_metrics,
-and upserts from local digests.
+then re-runs `update_tearsheet.py` to rebuild positions/events/documents
+upserts from local digests.
+
+NOTE (SSOT cutover #3695): this no longer rebuilds nav_history or
+portfolio_metrics — the Nautilus schedule replay (verify_nav_replay.py --write)
+owns NAV and refresh_performance_metrics.py owns daily metrics. Rebuild those
+paths separately if needed.
 
 Usage:
   python3 scripts/repair_supabase_portfolio_data.py [--dry-run]
@@ -99,12 +104,14 @@ def main() -> int:
         return 0
 
     if not rows:
-        print("Nothing to delete; still running update_tearsheet to refresh metrics/NAV.")
+        print(
+            "Nothing to delete; still running update_tearsheet to refresh positions/events/documents."
+        )
     else:
         delete_house_zero_weight_non_cash(sb)
         print("Deleted zero-weight non-CASH position rows.")
 
-    ts = ROOT / "scripts" / "update_tearsheet.py"
+    ts = ROOT / "research" / "update_tearsheet.py"
     print(f"Running: {sys.executable} {ts}")
     r = subprocess.run([sys.executable, str(ts)], cwd=str(ROOT))
     return int(r.returncode)

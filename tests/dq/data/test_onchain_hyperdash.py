@@ -258,8 +258,8 @@ class TestHyperdashScraper:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # Kill-switch off (the default) → no provider construction, no network: empty result.
-        monkeypatch.delenv("ATLAS_ONCHAIN_POSITIONING", raising=False)
         monkeypatch.delenv("DIGIQUANT_ONCHAIN_POSITIONING", raising=False)
+        monkeypatch.delenv("ATLAS_ONCHAIN_POSITIONING", raising=False)
 
         def _boom(*_a: Any, **_k: Any) -> Any:
             raise AssertionError("must not construct a live scraper when the switch is off")
@@ -270,6 +270,18 @@ class TestHyperdashScraper:
 
     def test_default_path_enabled_runs_scraper(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Switch on → the default HyperdashScraper runs (here with an injected fake session).
+        monkeypatch.setenv("DIGIQUANT_ONCHAIN_POSITIONING", "1")
+        body = {"data": {"analytics": {"cohortSummary": _cohort_summary()}}}
+        monkeypatch.setattr(
+            "digiquant.data.onchain.hyperdash.HyperdashScraper",
+            lambda: HyperdashScraper(session=_FakeSession(body=body)),
+        )
+        pos = get_onchain_cohort_positioning()
+        assert pos.has_data and pos.total_traders == 12_345
+
+    def test_retired_atlas_alias_still_enables(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Canonical absent → the retired ATLAS alias must still opt in.
+        monkeypatch.delenv("DIGIQUANT_ONCHAIN_POSITIONING", raising=False)
         monkeypatch.setenv("ATLAS_ONCHAIN_POSITIONING", "1")
         body = {"data": {"analytics": {"cohortSummary": _cohort_summary()}}}
         monkeypatch.setattr(
@@ -278,3 +290,29 @@ class TestHyperdashScraper:
         )
         pos = get_onchain_cohort_positioning()
         assert pos.has_data and pos.total_traders == 12_345
+
+    def test_canonical_off_beats_retired_alias_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Canonical presence wins even when false — the alias cannot re-enable.
+        monkeypatch.setenv("DIGIQUANT_ONCHAIN_POSITIONING", "0")
+        monkeypatch.setenv("ATLAS_ONCHAIN_POSITIONING", "1")
+
+        def _boom(*_a: Any, **_k: Any) -> Any:
+            raise AssertionError("canonical 0 must keep the switch off")
+
+        monkeypatch.setattr("digiquant.data.onchain.hyperdash.HyperdashScraper", _boom)
+        pos = get_onchain_cohort_positioning()
+        assert pos.has_data is False and pos.error is None
+
+    def test_empty_canonical_keeps_off_over_retired_alias(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A present-but-empty canonical must not fall through to the retired alias (#3778).
+        monkeypatch.setenv("DIGIQUANT_ONCHAIN_POSITIONING", "")
+        monkeypatch.setenv("ATLAS_ONCHAIN_POSITIONING", "1")
+
+        def _boom(*_a: Any, **_k: Any) -> Any:
+            raise AssertionError("empty canonical must keep the switch off")
+
+        monkeypatch.setattr("digiquant.data.onchain.hyperdash.HyperdashScraper", _boom)
+        pos = get_onchain_cohort_positioning()
+        assert pos.has_data is False and pos.error is None

@@ -8,7 +8,7 @@ prices already ingested, rather than silently reading days-old indicators.
 
 This is distinct from the prices cron's ``fetch-quotes`` (which pulls *new* OHLCV from the
 network). The CI pre-baseline step still does a real fetch; this recompute is the in-graph
-fallback (opt-in via ``ATLAS_REFRESH_ON_DEMAND``) and the reusable core both can share.
+fallback (opt-in via ``DIGIQUANT_REFRESH_ON_DEMAND``) and the reusable core both can share.
 
 Read window vs write window (#1752)
 -----------------------------------

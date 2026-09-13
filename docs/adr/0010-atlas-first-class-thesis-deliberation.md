@@ -143,7 +143,7 @@ based in Supabase (not a policy), so we do not declare an explicit
 
 ## Appendix A — Dead doc_type audit (2026-04-20)
 
-Scan of `apps/digiquant-atlas/` (src/, scripts/, frontend/, tests/, templates/)
+Scan of `apps/digiquant-atlas/` (src/, scripts/, cloudflare/, tests/, templates/)
 for every string literal that appears as a `doc_type` value, compared against
 the `chk_documents_doc_type` CHECK constraint (migration 023).
 
@@ -176,7 +176,7 @@ Title-Case labels persisted in `documents.doc_type` column (checked by
 ### Potentially orphaned (allowed by CHECK but no live writer)
 
 - `'Daily Delta'` — no producer found in current `src/digiquant_atlas/`; one
-  reference in `frontend/lib/queries.ts` as a literal. Likely historical.
+  reference in `cloudflare/lib/queries.ts` as a literal. Likely historical.
   **Freeze for 1 sprint; candidate for drop in 025.**
 - `'Weekly Rollup'` vs payload `weekly_digest` — title/payload mismatch; the
   writer uses `weekly_digest`. Likely a legacy label. **Freeze; candidate for

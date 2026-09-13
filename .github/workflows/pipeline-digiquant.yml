@@ -1,4 +1,4 @@
-# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
+# Production clock: Cloudflare Worker digithings-cron (cloudflare/digithings-cron). Schedule removed #3579.
 name: "Pipeline: digiquant research"
 
 # Unified research+portfolio daily cron (replaces research-baseline/delta/monthly/fed-odds).
@@ -127,6 +127,13 @@ jobs:
     env:
       REFRESH_SCOPE: ${{ needs.resolve.outputs.refresh_scope }}
       RUN_DATE: ${{ needs.resolve.outputs.run_date }}
+      # R2 market-data creds (#3780): wired now so the supervised post-merge
+      # flip of DIGIQUANT_MARKET_DATA_BACKEND to `r2` is safe. Mirrors
+      # pipeline-checkpoint-archive.yml (same four names, same secrets).
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     steps:
       - name: Check out digiquant source
         uses: actions/checkout@v4
@@ -216,8 +223,17 @@ jobs:
           CHEAPERINFERENCE_API_BASE: ${{ vars.CHEAPERINFERENCE_API_BASE || secrets.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
           # Fail-fast: provider errors surface to the caller — no models+route=fallback
           # chain. Cheap→capable pool is enforced by config/digiquant_models.yaml tiers.
+          # Per-error budget (#3078): one retry only — provider attempts and
+          # empty-response self-heal are both capped at a single retry so a sick
+          # upstream fails the attempt in minutes, not hours.
+          DIGILLM_PROVIDER_MAX_ATTEMPTS: 2
+          DIGILLM_EMPTY_RETRY_MAX: 1
+          # Burst smoothing (#3738): at most 8 provider calls in flight — a wide
+          # analyst fan-out would otherwise 429 the provider all at once and burn
+          # the 1-retry budget across many segments in the same minute.
+          DIGILLM_MAX_CONCURRENT_CALLS: 8
           DRY_RUN: ${{ inputs.dry_run }}
-          DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
+          CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           LANGSMITH_PROJECT: digiquant-baseline

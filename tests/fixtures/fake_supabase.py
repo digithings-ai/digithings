@@ -23,6 +23,61 @@ from digiquant.dashboard.tenancy import house_workspace_id
 # ─── In-memory fake Supabase client ─────────────────────────────────────────
 
 
+def _split_logical(expr: str) -> list[str]:
+    """Split a PostgREST logical expression on top-level commas (paren-aware)."""
+    parts: list[str] = []
+    depth = 0
+    buf: list[str] = []
+    for ch in expr:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append("".join(buf).strip())
+            buf = []
+        else:
+            buf.append(ch)
+    parts.append("".join(buf).strip())
+    return [p for p in parts if p]
+
+
+def _eval_or_expression(row: dict[str, Any], expr: str) -> bool:
+    """Evaluate the body of PostgREST ``or=(...)``: a top-level list is OR."""
+    return any(_eval_condition(row, part) for part in _split_logical(expr))
+
+
+def _eval_condition(row: dict[str, Any], term: str) -> bool:
+    if term.startswith("and(") and term.endswith(")"):
+        return all(_eval_condition(row, p) for p in _split_logical(term[4:-1]))
+    if term.startswith("or(") and term.endswith(")"):
+        return any(_eval_condition(row, p) for p in _split_logical(term[3:-1]))
+    return _eval_leaf(row, term)
+
+
+def _eval_leaf(row: dict[str, Any], term: str) -> bool:
+    col, op, val = term.split(".", 2)
+    row_val = row.get(col)
+    if op == "is":
+        return (row_val is None) if val.lower() == "null" else (row_val is not None)
+    if op == "eq":
+        return row_val is not None and str(row_val) == val
+    if op == "neq":
+        return not (row_val is not None and str(row_val) == val)
+    text = str(row_val or "")
+    if op == "gt":
+        return text > val
+    if op == "gte":
+        return text >= val
+    if op == "lt":
+        return text < val
+    if op == "lte":
+        return text <= val
+    if op == "like":
+        return text.startswith(val.rstrip("%"))
+    raise AssertionError(f"FakeSupabaseClient.or_ cannot parse {term!r}")
+
+
 @dataclass
 class _FakeResponse:
     data: list[dict[str, Any]]
@@ -46,11 +101,16 @@ class _FakeQuery:
     _update_row: dict[str, Any] | None = None
     _delete: bool = False
     _filters: list[tuple[str, str, Any]] = field(default_factory=list)
-    _order: tuple[str, bool] | None = None
+    _orders: list[tuple[str, bool]] = field(default_factory=list)
+    _or_raw: str | None = None
     _limit: int | None = None
     _range: tuple[int, int] | None = None
 
     def select(self, _cols: str) -> "_FakeQuery":
+        return self
+
+    def gt(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("gt", col, val))
         return self
 
     def lt(self, col: str, val: Any) -> "_FakeQuery":
@@ -94,7 +154,26 @@ class _FakeQuery:
         return self
 
     def order(self, col: str, desc: bool = False) -> "_FakeQuery":
-        self._order = (col, desc)
+        # Chained ``.order()`` calls append (PostgREST honors each ``order=``
+        # param in call order: first call is the primary key). ``execute``
+        # applies them via reverse stable sorts.
+        self._orders.append((col, desc))
+        return self
+
+    @property
+    def _order(self) -> tuple[str, bool] | None:
+        # Backward compatibility for test-local ``_FakeQuery`` subclasses that
+        # read the old single-order attribute (e.g. the merging fake in
+        # ``test_finalize_period_accounting.py``). Multi-order callers read
+        # ``_orders``; this reports the most recent order only.
+        return self._orders[-1] if self._orders else None
+
+    def or_(self, filters: str) -> "_FakeQuery":
+        # PostgREST ``or=`` — ANDed with the other filters. The fake only
+        # needs the house-or-null shape used by Group A readers
+        # (``workspace_id.eq.<id>,workspace_id.is.null``); anything else
+        # raises loudly instead of silently matching everything.
+        self._or_raw = filters
         return self
 
     def limit(self, n: int) -> "_FakeQuery":
@@ -141,6 +220,14 @@ class _FakeQuery:
     def _matches(self, row: dict[str, Any]) -> bool:
         house = str(house_workspace_id())
         for op, col, val in self._filters:
+            if op == "eq" and "->>" in col:
+                # PostgREST JSON extraction (``source_key->>workspace_id``):
+                # compare against the nested object's text value (#3792).
+                parent, _, sub = col.partition("->>")
+                container = row.get(parent)
+                if not isinstance(container, dict) or container.get(sub) != val:
+                    return False
+                continue
             row_val = row.get(col)
             if op == "eq" and col == "workspace_id" and row_val is None and val == house:
                 # TEST-FAKE courtesy only: legacy house fixtures omit the column.
@@ -166,7 +253,21 @@ class _FakeQuery:
                     return False
                 if str(val).lower() != "null" and row_val is None:
                     return False
+            if op == "gt" and str(row.get(col, "")) <= str(val):
+                return False
+        if self._or_raw is not None and not self._matches_or(row):
+            return False
         return True
+
+    def _matches_or(self, row: dict[str, Any]) -> bool:
+        """Evaluate the stored ``or=`` string against one row.
+
+        Supports the house-or-null shape used by Group A readers and the
+        nested ``and(...)``/``or(...)`` keyset seeks used by
+        ``verify_nav_replay._fetch_table`` (#3948).
+        """
+        assert self._or_raw is not None
+        return _eval_or_expression(row, self._or_raw)
 
     def execute(self) -> _FakeResponse:
         if self._insert_rows is not None:
@@ -193,9 +294,8 @@ class _FakeQuery:
                     updated.append(row)
             return _FakeResponse(data=updated)
         rows = [r for r in self.canned if self._matches(r)]
-        if self._order is not None:
-            col, desc = self._order
-            rows.sort(key=lambda r: r.get(col, ""), reverse=desc)
+        for col, desc in reversed(self._orders):
+            rows.sort(key=lambda r, _c=col: r.get(_c, ""), reverse=desc)
         if self._range is not None:
             start, end = self._range
             rows = rows[start : end + 1]

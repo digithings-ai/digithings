@@ -3,10 +3,9 @@ type: api-operations-guide
 title: Status API and Operations
 description: digismith HTTP surface and operations — health probes, secret-free status, metrics, middleware, env vars, and container wiring.
 tags: [digismith, status-api, operations, health, metrics]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:31:53.755Z
 sources:
+  - id: openwiki-source-acc01443fc8b95f02bdc8db2
+    resource: repo://digibase/src/digibase/otel.py
   - id: openwiki-source-5c7b6be6bf0bcff60bbd689d
     resource: repo://digismith/Dockerfile
   - id: openwiki-source-e502a2c67cf187dc015ba472
@@ -22,6 +21,9 @@ sources:
   - id: openwiki-source-9a4673012f353df9d1250866
     resource: repo://tests/dsm/test_server.py
 generated: { by: "opencode", at: "2026-09-07T22:31:53.755Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # Status API and Operations

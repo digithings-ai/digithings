@@ -1,6 +1,6 @@
 # Task: Atlas daily update via GitHub Actions cron
 
-> **Historical note (2026-06):** References `apps/digiquant-atlas/` from before Atlas moved into `digiquant/` and Olympus (`frontend/olympus/`).
+> **Historical note (2026-06):** References `apps/digiquant-atlas/` from before Atlas moved into `digiquant/` and Olympus (`cloudflare/olympus/`).
 
 **Title:** `[agent] Atlas daily pipeline — GitHub Actions scheduled run`
 
@@ -19,7 +19,7 @@ Atlas refreshes its price data and recomputes daily outputs on a fixed schedule 
 
 - [ ] `.github/workflows/atlas-daily.yml` runs on `schedule: cron '15 6 * * 1-5'` (06:15 UTC weekdays, post-US-close data availability) and on `workflow_dispatch`.
 - [ ] Workflow invokes the digiquant price pipeline entry point (post #149 migration) against the configured universe and writes outputs to the Atlas storage backend.
-- [ ] Workflow publishes a JSON snapshot consumable by `apps/digiquant-atlas/frontend/` (path TBD in acceptance review; default: upload artifact + commit to a `data/` branch or push to object store).
+- [ ] Workflow publishes a JSON snapshot consumable by `apps/digiquant-atlas/cloudflare/` (path TBD in acceptance review; default: upload artifact + commit to a `data/` branch or push to object store).
 - [ ] Failure notification: workflow fails loudly (non-zero exit) and posts a GitHub issue comment or Slack webhook on failure. Minimal bar: job fails visibly on the Actions tab.
 - [ ] Secrets documented: list every env var the workflow needs in `apps/digiquant-atlas/AGENTS.md`.
 - [ ] Manual `workflow_dispatch` run succeeds end-to-end before merge.

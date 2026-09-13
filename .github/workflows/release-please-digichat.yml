@@ -30,7 +30,7 @@ on:
     branches:
       - develop
     paths:
-      - "frontend/digichat/**"
+      - "cloudflare/digichat/**"
       - "release-please-config.json"
       - ".release-please-manifest.json"
 

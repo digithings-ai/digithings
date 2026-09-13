@@ -21,7 +21,7 @@
 - digithings marketing chat: **Pages Function**, not Containers. CSP: `frame-src 'none'`.
 - digithings has **no Azure**. Do **not** use DataTap ACA or `chat.digithings.ai` for marketing.
 - UI: `showByok: true`, `showStatusBar: true`, `layout: "page"` on digithings-web DigiChatSession.
-- Run digithings-web tests: `cd frontend/digithings-web && npx vitest run`.
+- Run digithings-web tests: `cd cloudflare/digithings-web && npx vitest run`.
 - Presentation-only digithings-web CSS/shell changes are exempt from `make score` Python rubrics.
 
 ---
@@ -30,23 +30,23 @@
 
 | File | Responsibility |
 |---|---|
-| `frontend/digichat/src/lib/embed-first-party.ts` | First-party hostname set + `isFirstPartyEmbedHost` |
-| `frontend/digichat/src/lib/embed-chat-tenant.ts` | Skip token when first-party + registered |
-| `frontend/digichat/src/lib/embed-tenants.ts` | Parse `showByok` / `showStatusBar` / `layout` |
-| `frontend/digichat/src/hooks/use-embed-tenant-config.ts` | Client-safe UI flag fields |
-| `frontend/digichat/src/app/api/embed/tenant-config/route.ts` | Project UI flags |
-| `frontend/digichat/src/app/embed/page.tsx` | Honor flags; emit ready; accept seed |
-| `frontend/digichat/src/lib/embed-seed-messages.ts` | ready/seed validators + caps |
-| `frontend/digichat/src/hooks/use-embed-digi-chat.ts` | Expose `seed(messages)` |
-| `frontend/digichat/src/lib/security-headers.ts` | Add `www.digithings.ai` to first-party ancestors |
-| `frontend/digichat/ARCHITECTURE.md` + `.env.example` | digithings tenant + first-party + seed protocol |
-| `frontend/digithings-web/lib/chatHandoff.ts` | Keep write/read; own `ChatMessage` type |
-| `frontend/digithings-web/lib/digichatEmbed.ts` | iframe URL + origin helpers |
-| `frontend/digithings-web/lib/digichatSeedBridge.ts` | Parent ready listener + seed post |
-| `frontend/digithings-web/components/ChatEmbedShell.tsx` | Full-height iframe + handoff bridge + error UI |
-| `frontend/digithings-web/app/chat/page.tsx` | DtNav + `ChatEmbedShell` |
-| `frontend/digithings-web/public/_headers` | CSP `frame-src` for digichat origin |
-| `frontend/digithings-web/.env.example` | `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` |
+| `cloudflare/digichat/src/lib/embed-first-party.ts` | First-party hostname set + `isFirstPartyEmbedHost` |
+| `cloudflare/digichat/src/lib/embed-chat-tenant.ts` | Skip token when first-party + registered |
+| `cloudflare/digichat/src/lib/embed-tenants.ts` | Parse `showByok` / `showStatusBar` / `layout` |
+| `cloudflare/digichat/src/hooks/use-embed-tenant-config.ts` | Client-safe UI flag fields |
+| `cloudflare/digichat/src/app/api/embed/tenant-config/route.ts` | Project UI flags |
+| `cloudflare/digichat/src/app/embed/page.tsx` | Honor flags; emit ready; accept seed |
+| `cloudflare/digichat/src/lib/embed-seed-messages.ts` | ready/seed validators + caps |
+| `cloudflare/digichat/src/hooks/use-embed-digi-chat.ts` | Expose `seed(messages)` |
+| `cloudflare/digichat/src/lib/security-headers.ts` | Add `www.digithings.ai` to first-party ancestors |
+| `cloudflare/digichat/ARCHITECTURE.md` + `.env.example` | digithings tenant + first-party + seed protocol |
+| `cloudflare/digithings-web/lib/chatHandoff.ts` | Keep write/read; own `ChatMessage` type |
+| `cloudflare/digithings-web/lib/digichatEmbed.ts` | iframe URL + origin helpers |
+| `cloudflare/digithings-web/lib/digichatSeedBridge.ts` | Parent ready listener + seed post |
+| `cloudflare/digithings-web/components/ChatEmbedShell.tsx` | Full-height iframe + handoff bridge + error UI |
+| `cloudflare/digithings-web/app/chat/page.tsx` | DtNav + `ChatEmbedShell` |
+| `cloudflare/digithings-web/public/_headers` | CSP `frame-src` for digichat origin |
+| `cloudflare/digithings-web/.env.example` | `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` |
 | `scripts/build-digithings.sh` | Drop chat Function assert; tolerate empty/no functions |
 | **Delete** | `functions/api/chat.ts`, `lib/useStackChat.ts`, `lib/chatStream.ts`, `components/DigiChatSession.tsx`, `components/ProviderSettings.tsx`, `lib/providerSettings.ts`, `functions/api/byok/test.ts`, dead `.dc-settings-*` CSS |
 
@@ -55,11 +55,11 @@
 ### Task 1: First-party host allowlist (no token)
 
 **Files:**
-- Create: `frontend/digichat/src/lib/embed-first-party.ts`
-- Create: `frontend/digichat/src/lib/embed-first-party.test.ts`
-- Modify: `frontend/digichat/src/lib/embed-chat-tenant.ts`
-- Modify: `frontend/digichat/src/lib/embed-chat-tenant.test.ts`
-- Modify: `frontend/digichat/src/app/api/embed/tenant-config/route.test.ts`
+- Create: `cloudflare/digichat/src/lib/embed-first-party.ts`
+- Create: `cloudflare/digichat/src/lib/embed-first-party.test.ts`
+- Modify: `cloudflare/digichat/src/lib/embed-chat-tenant.ts`
+- Modify: `cloudflare/digichat/src/lib/embed-chat-tenant.test.ts`
+- Modify: `cloudflare/digichat/src/app/api/embed/tenant-config/route.test.ts`
 
 **Interfaces:**
 - Consumes: `normalizeEmbedHost`, `resolveEmbedTenantByHost`
@@ -70,7 +70,7 @@
 
 - [ ] **Step 1: Write the failing test**
 
-Create `frontend/digichat/src/lib/embed-first-party.test.ts`:
+Create `cloudflare/digichat/src/lib/embed-first-party.test.ts`:
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -93,7 +93,7 @@ describe("isFirstPartyEmbedHost", () => {
 });
 ```
 
-Append to `frontend/digichat/src/lib/embed-chat-tenant.test.ts` (keep existing DataTap “no token → 503” cases):
+Append to `cloudflare/digichat/src/lib/embed-chat-tenant.test.ts` (keep existing DataTap “no token → 503” cases):
 
 ```ts
 const DIGITHINGS_REGISTRY = JSON.stringify({
@@ -138,12 +138,12 @@ describe("first-party digithings host", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/embed-first-party.test.ts src/lib/embed-chat-tenant.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/embed-first-party.test.ts src/lib/embed-chat-tenant.test.ts`
 Expected: FAIL — `embed-first-party` module missing / first-party digithings case still 503
 
 - [ ] **Step 3: Implement allowlist + auth branch**
 
-Create `frontend/digichat/src/lib/embed-first-party.ts`:
+Create `cloudflare/digichat/src/lib/embed-first-party.ts`:
 
 ```ts
 import { normalizeEmbedHost } from "@/lib/embed-tenants";
@@ -176,7 +176,7 @@ export function resolveVerifiedEmbedTenant(req: Request): EmbedTenantConfig | nu
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/embed-first-party.test.ts src/lib/embed-chat-tenant.test.ts src/app/api/embed/tenant-config/route.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/embed-first-party.test.ts src/lib/embed-chat-tenant.test.ts src/app/api/embed/tenant-config/route.test.ts`
 Expected: PASS — DataTap still needs token; digithings first-party succeeds; tenant-config GET returns digithings config without token when host is first-party (add a matching case if route tests only cover token path)
 
 Add to `tenant-config/route.test.ts` if missing:
@@ -200,11 +200,11 @@ it("returns digithings config for first-party host without token", async () => {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/embed-first-party.ts \
-  frontend/digichat/src/lib/embed-first-party.test.ts \
-  frontend/digichat/src/lib/embed-chat-tenant.ts \
-  frontend/digichat/src/lib/embed-chat-tenant.test.ts \
-  frontend/digichat/src/app/api/embed/tenant-config/route.test.ts
+git add cloudflare/digichat/src/lib/embed-first-party.ts \
+  cloudflare/digichat/src/lib/embed-first-party.test.ts \
+  cloudflare/digichat/src/lib/embed-chat-tenant.ts \
+  cloudflare/digichat/src/lib/embed-chat-tenant.test.ts \
+  cloudflare/digichat/src/app/api/embed/tenant-config/route.test.ts
 git commit -m "$(cat <<'EOF'
 feat(digichat): allow first-party digithings hosts without embed token
 
@@ -217,8 +217,8 @@ EOF
 ### Task 2: Tenant UI flags on EmbedTenantConfig
 
 **Files:**
-- Modify: `frontend/digichat/src/lib/embed-tenants.ts`
-- Modify: `frontend/digichat/src/lib/embed-tenants.test.ts`
+- Modify: `cloudflare/digichat/src/lib/embed-tenants.ts`
+- Modify: `cloudflare/digichat/src/lib/embed-tenants.test.ts`
 
 **Interfaces:**
 - Consumes: existing `validateEntry` / `EmbedTenantConfig`
@@ -292,7 +292,7 @@ it("omits UI flags when absent (callers default)", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/embed-tenants.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/embed-tenants.test.ts`
 Expected: FAIL — properties not on type / not parsed
 
 - [ ] **Step 3: Extend type + validateEntry**
@@ -332,13 +332,13 @@ Include on the returned object:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/embed-tenants.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/embed-tenants.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/embed-tenants.ts frontend/digichat/src/lib/embed-tenants.test.ts
+git add cloudflare/digichat/src/lib/embed-tenants.ts cloudflare/digichat/src/lib/embed-tenants.test.ts
 git commit -m "$(cat <<'EOF'
 feat(digichat): parse independent embed UI flags from tenant config
 
@@ -351,9 +351,9 @@ EOF
 ### Task 3: Project UI flags to client config API
 
 **Files:**
-- Modify: `frontend/digichat/src/hooks/use-embed-tenant-config.ts`
-- Modify: `frontend/digichat/src/app/api/embed/tenant-config/route.ts`
-- Modify: `frontend/digichat/src/app/api/embed/tenant-config/route.test.ts`
+- Modify: `cloudflare/digichat/src/hooks/use-embed-tenant-config.ts`
+- Modify: `cloudflare/digichat/src/app/api/embed/tenant-config/route.ts`
+- Modify: `cloudflare/digichat/src/app/api/embed/tenant-config/route.test.ts`
 
 **Interfaces:**
 - Consumes: `EmbedTenantConfig.showByok` / `showStatusBar` / `layout`
@@ -398,7 +398,7 @@ it("projects showByok, showStatusBar, layout to the client body", async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/app/api/embed/tenant-config/route.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/app/api/embed/tenant-config/route.test.ts`
 Expected: FAIL — fields undefined
 
 - [ ] **Step 3: Project fields**
@@ -446,15 +446,15 @@ And on the gated fallback body, include the same defaults (`false` / `false` / `
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd frontend/digichat && npx vitest run src/app/api/embed/tenant-config/route.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/app/api/embed/tenant-config/route.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/hooks/use-embed-tenant-config.ts \
-  frontend/digichat/src/app/api/embed/tenant-config/route.ts \
-  frontend/digichat/src/app/api/embed/tenant-config/route.test.ts
+git add cloudflare/digichat/src/hooks/use-embed-tenant-config.ts \
+  cloudflare/digichat/src/app/api/embed/tenant-config/route.ts \
+  cloudflare/digichat/src/app/api/embed/tenant-config/route.test.ts
 git commit -m "$(cat <<'EOF'
 feat(digichat): project embed UI flags through tenant-config API
 
@@ -467,9 +467,9 @@ EOF
 ### Task 4: Honor UI flags on embed page
 
 **Files:**
-- Modify: `frontend/digichat/src/app/embed/page.tsx`
-- Create: `frontend/digichat/src/lib/embed-ui-flags.ts`
-- Create: `frontend/digichat/src/lib/embed-ui-flags.test.ts`
+- Modify: `cloudflare/digichat/src/app/embed/page.tsx`
+- Create: `cloudflare/digichat/src/lib/embed-ui-flags.ts`
+- Create: `cloudflare/digichat/src/lib/embed-ui-flags.test.ts`
 
 **Interfaces:**
 - Consumes: `EmbedTenantClientConfig`
@@ -513,7 +513,7 @@ describe("resolveEmbedUiFlags", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/embed-ui-flags.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/embed-ui-flags.test.ts`
 Expected: FAIL — module missing
 
 - [ ] **Step 3: Implement helper and wire page**
@@ -556,15 +556,15 @@ and the hardcoded DigiChatSession props with:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/embed-ui-flags.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/embed-ui-flags.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/embed-ui-flags.ts \
-  frontend/digichat/src/lib/embed-ui-flags.test.ts \
-  frontend/digichat/src/app/embed/page.tsx
+git add cloudflare/digichat/src/lib/embed-ui-flags.ts \
+  cloudflare/digichat/src/lib/embed-ui-flags.test.ts \
+  cloudflare/digichat/src/app/embed/page.tsx
 git commit -m "$(cat <<'EOF'
 feat(digichat): drive embed BYOK/status/layout from tenant flags
 
@@ -577,8 +577,8 @@ EOF
 ### Task 5: digichat:ready / digichat:seed validators
 
 **Files:**
-- Create: `frontend/digichat/src/lib/embed-seed-messages.ts`
-- Create: `frontend/digichat/src/lib/embed-seed-messages.test.ts`
+- Create: `cloudflare/digichat/src/lib/embed-seed-messages.ts`
+- Create: `cloudflare/digichat/src/lib/embed-seed-messages.test.ts`
 
 **Interfaces:**
 - Consumes: first-party parent origins via hostname allowlist
@@ -657,7 +657,7 @@ describe("embed-seed-messages", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/embed-seed-messages.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/embed-seed-messages.test.ts`
 Expected: FAIL — module missing
 
 - [ ] **Step 3: Implement module**
@@ -717,14 +717,14 @@ export function parseSeedMessage(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/embed-seed-messages.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/embed-seed-messages.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/embed-seed-messages.ts \
-  frontend/digichat/src/lib/embed-seed-messages.test.ts
+git add cloudflare/digichat/src/lib/embed-seed-messages.ts \
+  cloudflare/digichat/src/lib/embed-seed-messages.test.ts
 git commit -m "$(cat <<'EOF'
 feat(digichat): add digichat ready/seed postMessage validators
 
@@ -737,9 +737,9 @@ EOF
 ### Task 6: Emit ready, accept seed, apply to controller
 
 **Files:**
-- Modify: `frontend/digichat/src/hooks/use-embed-digi-chat.ts`
-- Create: `frontend/digichat/src/hooks/use-embed-digi-chat.seed.test.ts` (unit the mapper + seed helper if hook is hard to mount; prefer extracting `toUiMessages` + documenting seed call)
-- Modify: `frontend/digichat/src/app/embed/page.tsx`
+- Modify: `cloudflare/digichat/src/hooks/use-embed-digi-chat.ts`
+- Create: `cloudflare/digichat/src/hooks/use-embed-digi-chat.seed.test.ts` (unit the mapper + seed helper if hook is hard to mount; prefer extracting `toUiMessages` + documenting seed call)
+- Modify: `cloudflare/digichat/src/app/embed/page.tsx`
 
 **Interfaces:**
 - Consumes: `parseSeedMessage`, `READY_MESSAGE`, `SeedChatMessage`
@@ -747,7 +747,7 @@ EOF
 
 - [ ] **Step 1: Write the failing test**
 
-Create a pure helper test file `frontend/digichat/src/lib/embed-seed-apply.ts` + test (keep React out of the unit):
+Create a pure helper test file `cloudflare/digichat/src/lib/embed-seed-apply.ts` + test (keep React out of the unit):
 
 ```ts
 // embed-seed-apply.test.ts
@@ -784,7 +784,7 @@ describe("applyEmbedSeed", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/embed-seed-apply.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/embed-seed-apply.test.ts`
 Expected: FAIL — module missing
 
 - [ ] **Step 3: Implement apply helper + seed on hook + page effects**
@@ -877,16 +877,16 @@ Keep DataTap gated/unlocked effects unchanged.
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/embed-seed-apply.test.ts src/lib/embed-seed-messages.test.ts`
-Expected: PASS. Also run a quick typecheck: `cd frontend/digichat && npx tsc --noEmit` (or project’s existing check) if `seed` typing breaks DigiChatController — extend local controller type only if needed; digichat-ui `DigiChatController` does not require `seed`.
+Run: `cd cloudflare/digichat && npx vitest run src/lib/embed-seed-apply.test.ts src/lib/embed-seed-messages.test.ts`
+Expected: PASS. Also run a quick typecheck: `cd cloudflare/digichat && npx tsc --noEmit` (or project’s existing check) if `seed` typing breaks DigiChatController — extend local controller type only if needed; digichat-ui `DigiChatController` does not require `seed`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/embed-seed-apply.ts \
-  frontend/digichat/src/lib/embed-seed-apply.test.ts \
-  frontend/digichat/src/hooks/use-embed-digi-chat.ts \
-  frontend/digichat/src/app/embed/page.tsx
+git add cloudflare/digichat/src/lib/embed-seed-apply.ts \
+  cloudflare/digichat/src/lib/embed-seed-apply.test.ts \
+  cloudflare/digichat/src/hooks/use-embed-digi-chat.ts \
+  cloudflare/digichat/src/app/embed/page.tsx
 git commit -m "$(cat <<'EOF'
 feat(digichat): wire ready/seed protocol into embed session
 
@@ -899,8 +899,8 @@ EOF
 ### Task 7: digithings digivault tenant docs + GHCR install shape
 
 **Files:**
-- Modify: `frontend/digichat/ARCHITECTURE.md` (embed tenants + Phase 3 section)
-- Modify: `frontend/digichat/.env.example` (document digithings env names + first-party)
+- Modify: `cloudflare/digichat/ARCHITECTURE.md` (embed tenants + Phase 3 section)
+- Modify: `cloudflare/digichat/.env.example` (document digithings env names + first-party)
 - Create: `docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md`
 
 **Interfaces:**
@@ -965,7 +965,7 @@ Grep the new files for `dgk_`, `sk-`, raw supabase keys. Expected: none.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/digichat/ARCHITECTURE.md frontend/digichat/.env.example \
+git add cloudflare/digichat/ARCHITECTURE.md cloudflare/digichat/.env.example \
   docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md
 git commit -m "$(cat <<'EOF'
 docs(digichat): Phase 3 digithings tenant + GHCR install checklist
@@ -979,13 +979,13 @@ EOF
 ### Task 8: digithings-web — vitest + handoff type + embed URL helper
 
 **Files:**
-- Modify: `frontend/digithings-web/package.json` (add `vitest`, `"test": "vitest run"`)
-- Create: `frontend/digithings-web/vitest.config.ts`
-- Modify: `frontend/digithings-web/lib/chatHandoff.ts`
-- Create: `frontend/digithings-web/lib/chatHandoff.test.ts`
-- Create: `frontend/digithings-web/lib/digichatEmbed.ts`
-- Create: `frontend/digithings-web/lib/digichatEmbed.test.ts`
-- Create: `frontend/digithings-web/.env.example`
+- Modify: `cloudflare/digithings-web/package.json` (add `vitest`, `"test": "vitest run"`)
+- Create: `cloudflare/digithings-web/vitest.config.ts`
+- Modify: `cloudflare/digithings-web/lib/chatHandoff.ts`
+- Create: `cloudflare/digithings-web/lib/chatHandoff.test.ts`
+- Create: `cloudflare/digithings-web/lib/digichatEmbed.ts`
+- Create: `cloudflare/digithings-web/lib/digichatEmbed.test.ts`
+- Create: `cloudflare/digithings-web/.env.example`
 
 **Interfaces:**
 - Consumes: `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`
@@ -1039,7 +1039,7 @@ describe("digichatEmbed", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd frontend/digithings-web && npm install -D vitest && npx vitest run lib/digichatEmbed.test.ts`
+Run: `cd cloudflare/digithings-web && npm install -D vitest && npx vitest run lib/digichatEmbed.test.ts`
 Expected: FAIL — module missing
 
 - [ ] **Step 3: Implement**
@@ -1082,19 +1082,19 @@ NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://chat.digithings.ai
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd frontend/digithings-web && npx vitest run lib/`
+Run: `cd cloudflare/digithings-web && npx vitest run lib/`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digithings-web/package.json frontend/digithings-web/package-lock.json \
-  frontend/digithings-web/vitest.config.ts \
-  frontend/digithings-web/lib/chatHandoff.ts \
-  frontend/digithings-web/lib/chatHandoff.test.ts \
-  frontend/digithings-web/lib/digichatEmbed.ts \
-  frontend/digithings-web/lib/digichatEmbed.test.ts \
-  frontend/digithings-web/.env.example
+git add cloudflare/digithings-web/package.json cloudflare/digithings-web/package-lock.json \
+  cloudflare/digithings-web/vitest.config.ts \
+  cloudflare/digithings-web/lib/chatHandoff.ts \
+  cloudflare/digithings-web/lib/chatHandoff.test.ts \
+  cloudflare/digithings-web/lib/digichatEmbed.ts \
+  cloudflare/digithings-web/lib/digichatEmbed.test.ts \
+  cloudflare/digithings-web/.env.example
 git commit -m "$(cat <<'EOF'
 feat(website): add digichat embed URL helper and handoff self-types
 
@@ -1107,10 +1107,10 @@ EOF
 ### Task 9: digithings-web seed bridge + ChatEmbedShell
 
 **Files:**
-- Create: `frontend/digithings-web/lib/digichatSeedBridge.ts`
-- Create: `frontend/digithings-web/lib/digichatSeedBridge.test.ts`
-- Create: `frontend/digithings-web/components/ChatEmbedShell.tsx`
-- Modify: `frontend/digithings-web/app/chat/page.tsx`
+- Create: `cloudflare/digithings-web/lib/digichatSeedBridge.ts`
+- Create: `cloudflare/digithings-web/lib/digichatSeedBridge.test.ts`
+- Create: `cloudflare/digithings-web/components/ChatEmbedShell.tsx`
+- Modify: `cloudflare/digithings-web/app/chat/page.tsx`
 
 **Interfaces:**
 - Consumes: `readAndClearHandoff`, `getDigichatEmbedOrigin`, `buildDigichatEmbedSrc`, `READY_TIMEOUT_MS` (duplicate constant `8000` locally to avoid cross-package import)
@@ -1159,7 +1159,7 @@ describe("digichatSeedBridge", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digithings-web && npx vitest run lib/digichatSeedBridge.test.ts`
+Run: `cd cloudflare/digithings-web && npx vitest run lib/digichatSeedBridge.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Implement bridge + shell**
@@ -1286,16 +1286,16 @@ export default function ChatPage() {
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd frontend/digithings-web && npx vitest run lib/`
+Run: `cd cloudflare/digithings-web && npx vitest run lib/`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digithings-web/lib/digichatSeedBridge.ts \
-  frontend/digithings-web/lib/digichatSeedBridge.test.ts \
-  frontend/digithings-web/components/ChatEmbedShell.tsx \
-  frontend/digithings-web/app/chat/page.tsx
+git add cloudflare/digithings-web/lib/digichatSeedBridge.ts \
+  cloudflare/digithings-web/lib/digichatSeedBridge.test.ts \
+  cloudflare/digithings-web/components/ChatEmbedShell.tsx \
+  cloudflare/digithings-web/app/chat/page.tsx
 git commit -m "$(cat <<'EOF'
 feat(website): iframe digichat shell with postMessage handoff seed
 
@@ -1308,8 +1308,8 @@ EOF
 ### Task 10: digithings-web CSP `frame-src`
 
 **Files:**
-- Modify: `frontend/digithings-web/public/_headers`
-- Create: `frontend/digithings-web/public/_headers` comment + CSP line (no vitest for static headers — add a tiny node assert in `lib/cspFrameSrc.test.ts` that documents the expected origin string used in `_headers`, OR a shell check in Step 2)
+- Modify: `cloudflare/digithings-web/public/_headers`
+- Create: `cloudflare/digithings-web/public/_headers` comment + CSP line (no vitest for static headers — add a tiny node assert in `lib/cspFrameSrc.test.ts` that documents the expected origin string used in `_headers`, OR a shell check in Step 2)
 
 **Interfaces:**
 - Consumes: `https://chat.digithings.ai` (must match `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` prod value)
@@ -1317,7 +1317,7 @@ EOF
 
 - [ ] **Step 1: Write a grep/assert test**
 
-Create `frontend/digithings-web/lib/cspHeaders.contract.test.ts`:
+Create `cloudflare/digithings-web/lib/cspHeaders.contract.test.ts`:
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -1335,7 +1335,7 @@ describe("_headers CSP", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digithings-web && npx vitest run lib/cspHeaders.contract.test.ts`
+Run: `cd cloudflare/digithings-web && npx vitest run lib/cspHeaders.contract.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Update `_headers`**
@@ -1358,14 +1358,14 @@ Also add `https://www.digithings.ai` to digichat `FIRST_PARTY_FRAME_ANCESTORS` i
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd frontend/digithings-web && npx vitest run lib/cspHeaders.contract.test.ts`
+Run: `cd cloudflare/digithings-web && npx vitest run lib/cspHeaders.contract.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digithings-web/public/_headers \
-  frontend/digithings-web/lib/cspHeaders.contract.test.ts
+git add cloudflare/digithings-web/public/_headers \
+  cloudflare/digithings-web/lib/cspHeaders.contract.test.ts
 git commit -m "$(cat <<'EOF'
 fix(website): allow digichat origin in frame-src CSP
 
@@ -1378,18 +1378,18 @@ EOF
 ### Task 11: digichat `www` frame-ancestors + delete native digithings chat stack
 
 **Files:**
-- Modify: `frontend/digichat/src/lib/security-headers.ts`
-- Modify: `frontend/digichat/src/lib/security-headers.test.ts`
-- Delete: `frontend/digithings-web/functions/api/chat.ts`
-- Delete: `frontend/digithings-web/functions/api/byok/test.ts`
-- Delete: `frontend/digithings-web/lib/useStackChat.ts`
-- Delete: `frontend/digithings-web/lib/chatStream.ts`
-- Delete: `frontend/digithings-web/components/DigiChatSession.tsx`
-- Delete: `frontend/digithings-web/components/ProviderSettings.tsx`
-- Delete: `frontend/digithings-web/lib/providerSettings.ts`
-- Modify: `frontend/digithings-web/app/globals.css` (remove `.dc-settings-*` block)
+- Modify: `cloudflare/digichat/src/lib/security-headers.ts`
+- Modify: `cloudflare/digichat/src/lib/security-headers.test.ts`
+- Delete: `cloudflare/digithings-web/functions/api/chat.ts`
+- Delete: `cloudflare/digithings-web/functions/api/byok/test.ts`
+- Delete: `cloudflare/digithings-web/lib/useStackChat.ts`
+- Delete: `cloudflare/digithings-web/lib/chatStream.ts`
+- Delete: `cloudflare/digithings-web/components/DigiChatSession.tsx`
+- Delete: `cloudflare/digithings-web/components/ProviderSettings.tsx`
+- Delete: `cloudflare/digithings-web/lib/providerSettings.ts`
+- Modify: `cloudflare/digithings-web/app/globals.css` (remove `.dc-settings-*` block)
 - Modify: `scripts/build-digithings.sh`
-- Modify: `frontend/digithings-web/.dev.vars.example` (note secrets move to digichat runtime; optional delete of CF-only keys)
+- Modify: `cloudflare/digithings-web/.dev.vars.example` (note secrets move to digichat runtime; optional delete of CF-only keys)
 
 **Interfaces:**
 - Consumes: none from deleted modules
@@ -1409,7 +1409,7 @@ Also add a build-script contract test or Step 4 shell check that `functions/api/
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/security-headers.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/security-headers.test.ts`
 Expected: FAIL — www missing
 
 - [ ] **Step 3: Implement deletes + headers + build script**
@@ -1430,8 +1430,8 @@ Replace the chat Function assert in `scripts/build-digithings.sh`:
 ```bash
 echo "--- mirroring Pages Functions to repo root (if any) ---"
 rm -rf functions
-if [ -d frontend/digithings-web/functions ] && [ -n "$(find frontend/digithings-web/functions -type f 2>/dev/null | head -1)" ]; then
-  cp -r frontend/digithings-web/functions functions
+if [ -d cloudflare/digithings-web/functions ] && [ -n "$(find cloudflare/digithings-web/functions -type f 2>/dev/null | head -1)" ]; then
+  cp -r cloudflare/digithings-web/functions functions
 else
   echo "No Pages Functions to mirror (Phase 3: /api/chat retired)."
 fi
@@ -1447,12 +1447,12 @@ Delete the listed files. Remove `.dc-settings-*` from `globals.css`. Confirm `Mo
 - [ ] **Step 4: Verify**
 
 ```bash
-cd frontend/digichat && npx vitest run src/lib/security-headers.test.ts
-test ! -f frontend/digithings-web/functions/api/chat.ts
-test ! -f frontend/digithings-web/lib/useStackChat.ts
-test ! -f frontend/digithings-web/lib/chatStream.ts
-rg -n "useStackChat|chatStream|functions/api/chat" frontend/digithings-web scripts/build-digithings.sh && exit 1 || true
-cd frontend/digithings-web && npx vitest run lib/ && npm run build
+cd cloudflare/digichat && npx vitest run src/lib/security-headers.test.ts
+test ! -f cloudflare/digithings-web/functions/api/chat.ts
+test ! -f cloudflare/digithings-web/lib/useStackChat.ts
+test ! -f cloudflare/digithings-web/lib/chatStream.ts
+rg -n "useStackChat|chatStream|functions/api/chat" cloudflare/digithings-web scripts/build-digithings.sh && exit 1 || true
+cd cloudflare/digithings-web && npx vitest run lib/ && npm run build
 ```
 
 Expected: PASS; static export succeeds; no dead imports.
@@ -1460,9 +1460,9 @@ Expected: PASS; static export succeeds; no dead imports.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A frontend/digichat/src/lib/security-headers.ts \
-  frontend/digichat/src/lib/security-headers.test.ts \
-  frontend/digithings-web scripts/build-digithings.sh
+git add -A cloudflare/digichat/src/lib/security-headers.ts \
+  cloudflare/digichat/src/lib/security-headers.test.ts \
+  cloudflare/digithings-web scripts/build-digithings.sh
 git commit -m "$(cat <<'EOF'
 feat(website): retire CF chat Function and native useStackChat stack
 
@@ -1475,8 +1475,8 @@ EOF
 ### Task 12: Final regression suites + ARCHITECTURE cross-links
 
 **Files:**
-- Modify: `frontend/digichat/ARCHITECTURE.md` (confirm Phase 3 section complete)
-- Modify: `frontend/digithings-web` README or comment on chat page if one exists
+- Modify: `cloudflare/digichat/ARCHITECTURE.md` (confirm Phase 3 section complete)
+- Modify: `cloudflare/digithings-web` README or comment on chat page if one exists
 - Touch: `docs/DEPLOYMENT.md` only if it still claims ADR-0018 path-routing *is* digichat — add a short note that Phase 3 keeps `/chat` as Pages shell + iframe to `chat.digithings.ai` (do not rewrite the whole ADR in this PR; one clarifying paragraph is enough)
 
 **Interfaces:** none new
@@ -1484,7 +1484,7 @@ EOF
 - [ ] **Step 1: Run digichat regression**
 
 ```bash
-cd frontend/digichat && npx vitest run \
+cd cloudflare/digichat && npx vitest run \
   src/lib/embed-first-party.test.ts \
   src/lib/embed-chat-tenant.test.ts \
   src/lib/embed-tenants.test.ts \
@@ -1502,7 +1502,7 @@ Expected: PASS — DataTap token + trial messages unchanged; digivault route sti
 - [ ] **Step 2: Run digithings-web**
 
 ```bash
-cd frontend/digithings-web && npx vitest run lib/ && npm run lint && npm run build
+cd cloudflare/digithings-web && npx vitest run lib/ && npm run lint && npm run build
 ```
 
 Expected: PASS
@@ -1519,7 +1519,7 @@ Expected: PASS
 - [ ] **Step 4: Commit docs clarifications if any**
 
 ```bash
-git add frontend/digichat/ARCHITECTURE.md docs/DEPLOYMENT.md
+git add cloudflare/digichat/ARCHITECTURE.md docs/DEPLOYMENT.md
 git commit -m "$(cat <<'EOF'
 docs: note Phase 3 /chat iframe cutover vs path-routing ADR
 

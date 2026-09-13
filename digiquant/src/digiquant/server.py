@@ -598,6 +598,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
                 timeout=float(args.get("timeout") or 30.0),
                 start=(int(args["start"]) if args.get("start") is not None else None),
                 end=(int(args["end"]) if args.get("end") is not None else None),
+                allow_derived=bool(args.get("allow_derived", False)),
             )
         )
         if payload.get("error") and not payload.get("series"):

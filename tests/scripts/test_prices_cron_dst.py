@@ -36,8 +36,8 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pipeline-digiquant-prices.yml"
-JOBS_SOURCE = REPO_ROOT / "frontend" / "digithings-cron" / "src" / "jobs.ts"
-WRANGLER = REPO_ROOT / "frontend" / "digithings-cron" / "wrangler.toml"
+JOBS_SOURCE = REPO_ROOT / "cloudflare" / "digithings-cron" / "src" / "jobs.ts"
+WRANGLER = REPO_ROOT / "cloudflare" / "digithings-cron" / "wrangler.toml"
 
 ET = ZoneInfo("America/New_York")
 CASH_OPEN = time(9, 30)

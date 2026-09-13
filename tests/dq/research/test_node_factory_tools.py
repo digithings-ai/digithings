@@ -21,7 +21,7 @@ def _state() -> ResearchState:
 def _run_macro_node_capturing(monkeypatch, *, enabled: bool, grounding: dict | None) -> dict:
     """Build the real macro node with its spec flags forced on, capturing the
     kwargs passed to run_research_agent."""
-    monkeypatch.setenv("ATLAS_DATA_TOOLS", "1" if enabled else "0")
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1" if enabled else "0")
     _node_factory._research_data_client.cache_clear()
     # Avoid a real Supabase connection + a real web_search call in the unit test.
     monkeypatch.setattr(_node_factory, "_research_data_client", object)

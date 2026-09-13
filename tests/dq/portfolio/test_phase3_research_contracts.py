@@ -140,7 +140,7 @@ def test_planner_helpers_are_not_graph_nodes() -> None:
 
 
 def test_h4_roster_unchanged_across_shadow_attention_plan(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "4")
+    monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "4")
     monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
     roster_a = compute_focus_roster(
         watchlist=["AAPL", "MSFT", "SPY", "QQQ"],

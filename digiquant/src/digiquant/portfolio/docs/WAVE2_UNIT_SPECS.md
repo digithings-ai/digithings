@@ -255,7 +255,7 @@ class AssetRecommendation(BaseModel):
 - Modify: `digiquant/src/digiquant/research/graph.py` — wire h6 after h5.
 - Modify: `digiquant/src/digiquant/research/state.py` — confirm `RecessRequest` + `_append_list` from W2-B are used.
 - Persistence: writes `documents` (`doc_type='Deliberation Transcript'` per ticker + one `doc_type='Deliberation Session Index'`; Title-Case tokens already in migration-023 allowlist) + `deliberation_sessions` (run-level; `kind` ∈ `{'baseline', 'delta_scoped', 'monthly'}`) + `deliberation_rounds` (per round per ticker) + `deep_dive_triggers` (per `RecessRequest`; `triggered_by='pm_recess'` — see W2-F phase_h6). Adapters from W2-A.
-- Env var reader: `ATLAS_DELIBERATION_MAX_ROUNDS` with default 6 (canonical definition: [PORTFOLIO_SUBGRAPH §2.2](PORTFOLIO_SUBGRAPH.md#22-safety-cap)).
+- Env var reader: `DIGIQUANT_DELIBERATION_MAX_ROUNDS` with default 6 (canonical definition: [PORTFOLIO_SUBGRAPH §2.2](PORTFOLIO_SUBGRAPH.md#22-safety-cap)).
 
 **Inline Pydantic contracts:**
 

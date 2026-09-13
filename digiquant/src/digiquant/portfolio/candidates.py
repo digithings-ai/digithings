@@ -1,12 +1,13 @@
 """Deterministic portfolio focus-list selection (#696).
 
 Phase 7C/7CD per-ticker deliberation previously fanned out over the first
-``ATLAS_MAX_ANALYSTS`` tickers of the watchlist — an arbitrary alphabetical
+``DIGIQUANT_MAX_ANALYSTS`` tickers of the watchlist — an arbitrary alphabetical
 slice. The focus list applies the same analytical depth where it matters
 instead: **current portfolio holdings** (reviewed every day, always included)
 plus the **top-scored opportunity candidates** ranked by simple, explainable
-technical signals from ``price_technicals``. Zero LLM calls — one bulk
-Supabase read; thematic market coverage is unchanged (phases 1-6 research the
+technical signals from ``price_technicals`` (R2 sealed generations after the
+#3780 cutover). Zero LLM calls — one technicals read per candidate via the
+shared helper; thematic market coverage is unchanged (phases 1-6 research the
 whole market regardless).
 
 **Interim roster (not thesis-first):** the intended portfolio entry translates
@@ -24,12 +25,10 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import date, timedelta
+from datetime import date
 from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: duck-typed Supabase client + rows
 )
-
-from digiquant.research.data.queries import TECHNICAL_COLUMNS
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +122,15 @@ def select_focus_tickers(
 
     ``holdings`` overrides ``portfolio.json`` when provided (e.g. from Supabase
     ``positions`` via preflight ``prior_book``).
+
+    Candidate scoring reads the newest technicals row per ticker through
+    :func:`get_price_technicals` — the helper owns the market-data backend, so
+    this rides the R2 cutover (#3780 Task 7b) with no flag check here.
+    Candidates with no row (unknown ticker, empty window) are unscored and
+    fall out of the ranking, mirroring the old bulk query's first-seen pass.
     """
+    from digiquant.research.data.queries import get_price_technicals
+
     n = _focus_top_n() if top_n is None else max(0, top_n)
     holdings_list = list(holdings) if holdings is not None else load_portfolio_holdings()
     seen: set[str] = set(holdings_list)
@@ -136,21 +143,16 @@ def select_focus_tickers(
         logger.info("portfolio focus list (%d): %s", len(holdings_list), ", ".join(holdings_list))
         return list(holdings_list)
     try:
-        since = (run_date - timedelta(days=price_window_days)).isoformat()
-        resp = (
-            client.table("price_technicals")
-            .select(",".join(("ticker", *TECHNICAL_COLUMNS)))
-            .in_("ticker", candidates)
-            .gte("date", since)
-            .order("date", desc=True)
-            .limit(len(candidates) * price_window_days)
-            .execute()
-        )
         latest: dict[str, dict[str, Any]] = {}
-        for row in getattr(resp, "data", None) or []:
-            ticker = row.get("ticker")
-            if ticker and ticker not in latest:
-                latest[ticker] = row
+        for ticker in candidates:
+            tech = get_price_technicals(
+                client=client,
+                ticker=ticker,
+                lookback=price_window_days,
+                as_of=run_date,
+            )
+            if tech["latest"]:
+                latest[ticker] = tech["latest"]
         ranked = sorted(
             (t for t in candidates if t in latest),
             key=lambda t: score_technicals(latest[t]),

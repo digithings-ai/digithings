@@ -6,7 +6,7 @@ Real engine work runs only inside spawned workers (one engine per process).
 from __future__ import annotations
 
 import ast
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -18,6 +18,7 @@ from digiquant.dashboard.replay.models import (
     OhlcvBar,
     PortfolioReplayRequest,
     PortfolioReplayStatus,
+    ScheduledTargetWeights,
     TargetWeight,
 )
 from digiquant.dashboard.replay.worker import run_portfolio_replay_isolated
@@ -301,3 +302,89 @@ def test_nautilus_portfolio_module_never_calls_multi_symbol_runner() -> None:
             func = node.func
             name = getattr(func, "attr", None) or getattr(func, "id", None)
             assert name != "_run_multi_symbol_backtest"
+
+
+# ---------------------------------------------------------------------------
+# weight_schedule engine (schema 2.0, #3695)
+#
+# Bar volumes are deliberately huge: Nautilus market-order fills are
+# constrained by bar volume, and the 1M default would split/slew orders
+# at production notional. Real ETF volumes are tens of millions.
+# ---------------------------------------------------------------------------
+
+
+def _sched_bar(day: int, close: str, volume: str = "10000000000") -> OhlcvBar:
+    px = Decimal(close)
+    return OhlcvBar(
+        ts=datetime(2024, 1, day, tzinfo=_UTC),
+        open=px,
+        high=px,
+        low=px,
+        close=px,
+        volume=Decimal(volume),
+    )
+
+
+def test_schedule_rotation_same_bar_fills(tmp_path: Path) -> None:
+    req = PortfolioReplayRequest(
+        request_id="sched-rot",
+        starting_cash=Decimal("100000000"),
+        series=(
+            InstrumentBarSeries(
+                ticker="AAPL",
+                bars=tuple(_sched_bar(d, "100") for d in (2, 3, 4, 5, 6)),
+            ),
+            InstrumentBarSeries(
+                ticker="MSFT",
+                bars=tuple(
+                    _sched_bar(d, c)
+                    for d, c in zip((2, 3, 4, 5, 6), ("200", "210", "220", "230", "240"))
+                ),
+            ),
+        ),
+        target_weights=(),
+        schema_version="2.0",
+        execution=ExecutionPolicy(commission_rate=Decimal("0"), next_bar_execution=False),
+        weight_schedule=(
+            ScheduledTargetWeights(
+                effective_date=date(2024, 1, 2),
+                weights=(
+                    TargetWeight(ticker="AAPL", weight=Decimal("0.5")),
+                    TargetWeight(ticker="MSFT", weight=Decimal("0.5")),
+                ),
+            ),
+            ScheduledTargetWeights(
+                effective_date=date(2024, 1, 4),
+                weights=(TargetWeight(ticker="AAPL", weight=Decimal("1.0")),),
+            ),
+        ),
+    )
+    res = run_portfolio_replay_isolated(req, work_dir=tmp_path / "sched-rot")
+    assert res.status == PortfolioReplayStatus.OK
+    assert res.schema_version == "2.0"
+
+    # Day-2 entry fills land at the submitting bar's exact close (causal,
+    # same-bar fills — the book dated D earns the move into D+1). Schedule
+    # orders are tagged "rebalance", never "seed".
+    by_day: dict[str, set[tuple[str, str, Decimal]]] = {}
+    for f in res.fills:
+        by_day.setdefault(f.ts.date().isoformat(), set()).add((f.ticker, f.side, f.price))
+    assert by_day.get("2024-01-02") == {
+        ("AAPL", "BUY", Decimal("100")),
+        ("MSFT", "BUY", Decimal("200")),
+    }
+
+    # Day-4 rotation fills land at that bar's exact close.
+    assert ("MSFT", "SELL", Decimal("220")) in by_day.get("2024-01-04", set())
+    assert ("AAPL", "BUY", Decimal("100")) in by_day.get("2024-01-04", set())
+
+    # NAV math: 100M → day3 102.5M (MSFT 200→210) → day4 105M
+    # (MSFT 210→220) → flat at 105M fully in AAPL.
+    assert res.ending_nav == Decimal("105000000.00")
+    aapl_end = next(h for h in res.holdings if h.ticker == "AAPL")
+    assert aapl_end.quantity == Decimal("1050000")
+    msft_end = next(h for h in res.holdings if h.ticker == "MSFT")
+    assert msft_end.quantity == 0
+    nav_by_day = {p.ts.date().isoformat(): p.nav for p in res.nav_path}
+    assert nav_by_day["2024-01-03"] == Decimal("102500000.00")
+    assert nav_by_day["2024-01-04"] == Decimal("105000000.00")

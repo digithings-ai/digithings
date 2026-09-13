@@ -201,7 +201,7 @@ def test_read_is_look_ahead_guarded() -> None:
 def test_read_paginates_past_the_postgrest_row_cap() -> None:
     """The recompute must reach the freshest bar, not the oldest 1 000 rows.
 
-    Regression proof for #1752 / ``ATLAS_REFRESH_ON_DEMAND``: the unfixed rangeless read
+    Regression proof for #1752 / ``DIGIQUANT_REFRESH_ON_DEMAND``: the unfixed rangeless read
     returned the oldest 1 000 rows of the window, so the newest date written was ~10 months
     stale and the write window held nothing at all.
     """

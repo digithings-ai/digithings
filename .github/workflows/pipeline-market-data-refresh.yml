@@ -1,0 +1,40 @@
+# Daily R2 market-data refresh (#3780, Task 6).
+#
+# yfinance/FRED/Yahoo-FX latest -> merge into new immutable R2 generations
+# via scripts/refresh_market_data_r2.py. Fail-soft: on a fetch failure the
+# previous objects keep serving, the manifest is written with stale=true,
+# and the non-zero exit fails the run so the failure alerts.
+#
+# CORE_POSTGRES_URI is additional to the brief's pins: the store seam
+# (R2HistoryStore) needs the direct-PG archive_objects registry insert, same
+# as the Task 5 backfill. Without it no generation can be recorded.
+name: market-data-refresh
+on:
+  schedule:
+    - cron: "0 13 * * *"
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: market-data-refresh
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: uv sync --frozen --package digiquant --extra research
+      - run: uv run --frozen --no-sync python scripts/refresh_market_data_r2.py --manifest-out /tmp/market-data-refresh.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: market-data-refresh-manifest
+          path: /tmp/market-data-refresh.json
+          retention-days: 90

@@ -23,7 +23,7 @@
 - digivault IP rate limit: **60 req / 60 s / IP**, wording `"rate limit exceeded — slow down a moment"`, store = existing in-memory `checkBffRateLimit` / `BoundedTTLMap` (not Workers KV).
 - Browser protocol remains the **AI SDK UI message stream** — NDJSON mapping is internal.
 - digichat-ui brief kind name: **`"brief"`**.
-- Run digichat tests from `frontend/digichat` with `npx vitest run <path>`. Run digichat-ui tests from `frontend/digichat-ui` with `npx vitest run <path>`.
+- Run digichat tests from `cloudflare/digichat` with `npx vitest run <path>`. Run digichat-ui tests from `cloudflare/digichat-ui` with `npx vitest run <path>`.
 - Import `DigiChatActivity` with `import type` only in server modules.
 
 ---
@@ -32,39 +32,39 @@
 
 | File | Responsibility |
 |---|---|
-| `frontend/digichat-ui/src/types.ts` | Extend `VaultHitSummary`; add `brief` to `DigiChatActivity` |
-| `frontend/digichat-ui/src/components/ChatActivities.tsx` | Render tier/year/snippet hits + brief block |
-| `frontend/digichat-ui/src/styles/session.css` | Hit meta + brief styles |
-| `frontend/digichat-ui/src/ChatActivities.test.ts` | Unit coverage for new kinds |
-| `frontend/digichat/src/lib/chat-activity.ts` | Allowlist for tier/year/snippet + brief; detail gate; projector |
-| `frontend/digichat/src/lib/chat-activity.test.ts` | Allowlist / detail / projector tests |
-| `frontend/digichat/src/lib/digigraph-activity-map.ts` | Typed `rag_sources` / `graph_update` → `ActivitySpan[]` |
-| `frontend/digichat/src/lib/digigraph-activity-map.test.ts` | Mapper fixtures |
-| `frontend/digichat/src/lib/stream-digigraph-trace.ts` | Use mapper; delete dual-emit / `emitLegacyTracePart` |
-| `frontend/digichat/src/lib/stream-digigraph-trace.test.ts` | Assert no `data-digigraphTrace`; rich activity |
-| `frontend/digichat/src/components/chat-panel.tsx` | Consume `data-digichatActivity` via `ChatActivities`; delete DigigraphTraceBlock / RagSourcesTrace / ResearchBriefTrace |
-| `frontend/digichat/src/components/digigraph-trace.tsx` | **Delete** (unused legacy card) |
-| `frontend/digichat/src/lib/embed-tenants.ts` | Parse/validate `digivault` backend variant |
-| `frontend/digichat/src/lib/digivault-env.ts` | Resolve per-tenant env-name refs fail-closed |
-| `frontend/digichat/src/lib/digivault-ip-rate-limit.ts` | 60/min/IP wrapper over `checkBffRateLimit` |
-| `frontend/digichat/src/lib/digivault-vault.ts` | Supabase `search_architecture_notes` + context builder (body server-side only) |
-| `frontend/digichat/src/lib/digivault-byok.ts` | Free pool + full BYOK route resolution (incl. Gemini) |
-| `frontend/digichat/src/lib/digivault-stream.ts` | Agentic loop → AI SDK UI stream + activity spans |
-| `frontend/digichat/src/lib/digivault-ndjson-adapter.ts` | CF NDJSON event → internal server events (parity) |
-| `frontend/digichat/src/lib/fixtures/digivault/*` | Recorded NDJSON + vault RPC + golden spans/text |
-| `frontend/digichat/src/app/api/chat/route.ts` | Branch `digivault`; stop passing `emitLegacyTracePart` |
-| `frontend/digichat/src/hooks/use-byok-key.ts` (+ settings UI) | Add `gemini` to BYOK providers for parity |
-| `frontend/digichat/ARCHITECTURE.md` | Document digivault backend + dual-emit removal |
+| `cloudflare/digichat-ui/src/types.ts` | Extend `VaultHitSummary`; add `brief` to `DigiChatActivity` |
+| `cloudflare/digichat-ui/src/components/ChatActivities.tsx` | Render tier/year/snippet hits + brief block |
+| `cloudflare/digichat-ui/src/styles/session.css` | Hit meta + brief styles |
+| `cloudflare/digichat-ui/src/ChatActivities.test.ts` | Unit coverage for new kinds |
+| `cloudflare/digichat/src/lib/chat-activity.ts` | Allowlist for tier/year/snippet + brief; detail gate; projector |
+| `cloudflare/digichat/src/lib/chat-activity.test.ts` | Allowlist / detail / projector tests |
+| `cloudflare/digichat/src/lib/digigraph-activity-map.ts` | Typed `rag_sources` / `graph_update` → `ActivitySpan[]` |
+| `cloudflare/digichat/src/lib/digigraph-activity-map.test.ts` | Mapper fixtures |
+| `cloudflare/digichat/src/lib/stream-digigraph-trace.ts` | Use mapper; delete dual-emit / `emitLegacyTracePart` |
+| `cloudflare/digichat/src/lib/stream-digigraph-trace.test.ts` | Assert no `data-digigraphTrace`; rich activity |
+| `cloudflare/digichat/src/components/chat-panel.tsx` | Consume `data-digichatActivity` via `ChatActivities`; delete DigigraphTraceBlock / RagSourcesTrace / ResearchBriefTrace |
+| `cloudflare/digichat/src/components/digigraph-trace.tsx` | **Delete** (unused legacy card) |
+| `cloudflare/digichat/src/lib/embed-tenants.ts` | Parse/validate `digivault` backend variant |
+| `cloudflare/digichat/src/lib/digivault-env.ts` | Resolve per-tenant env-name refs fail-closed |
+| `cloudflare/digichat/src/lib/digivault-ip-rate-limit.ts` | 60/min/IP wrapper over `checkBffRateLimit` |
+| `cloudflare/digichat/src/lib/digivault-vault.ts` | Supabase `search_architecture_notes` + context builder (body server-side only) |
+| `cloudflare/digichat/src/lib/digivault-byok.ts` | Free pool + full BYOK route resolution (incl. Gemini) |
+| `cloudflare/digichat/src/lib/digivault-stream.ts` | Agentic loop → AI SDK UI stream + activity spans |
+| `cloudflare/digichat/src/lib/digivault-ndjson-adapter.ts` | CF NDJSON event → internal server events (parity) |
+| `cloudflare/digichat/src/lib/fixtures/digivault/*` | Recorded NDJSON + vault RPC + golden spans/text |
+| `cloudflare/digichat/src/app/api/chat/route.ts` | Branch `digivault`; stop passing `emitLegacyTracePart` |
+| `cloudflare/digichat/src/hooks/use-byok-key.ts` (+ settings UI) | Add `gemini` to BYOK providers for parity |
+| `cloudflare/digichat/ARCHITECTURE.md` | Document digivault backend + dual-emit removal |
 
 ---
 
 ### Task 1: digichat-ui — richer hits + `brief` kind
 
 **Files:**
-- Modify: `frontend/digichat-ui/src/types.ts`
-- Modify: `frontend/digichat-ui/src/components/ChatActivities.tsx`
-- Modify: `frontend/digichat-ui/src/styles/session.css`
-- Create: `frontend/digichat-ui/src/ChatActivities.test.ts`
+- Modify: `cloudflare/digichat-ui/src/types.ts`
+- Modify: `cloudflare/digichat-ui/src/components/ChatActivities.tsx`
+- Modify: `cloudflare/digichat-ui/src/styles/session.css`
+- Create: `cloudflare/digichat-ui/src/ChatActivities.test.ts`
 
 **Interfaces:**
 - Consumes: existing `DigiChatActivity` / `VaultHitSummary`
@@ -74,7 +74,7 @@
 
 - [ ] **Step 1: Write the failing test**
 
-Create `frontend/digichat-ui/src/ChatActivities.test.ts`:
+Create `cloudflare/digichat-ui/src/ChatActivities.test.ts`:
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -114,7 +114,7 @@ describe("VaultHitSummary / DigiChatActivity Phase 2 shapes", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat-ui && npx vitest run src/ChatActivities.test.ts`
+Run: `cd cloudflare/digichat-ui && npx vitest run src/ChatActivities.test.ts`
 Expected: FAIL — type errors / `kind: "brief"` not assignable (or PASS on shapes if types already updated — then proceed; if types missing, TypeScript in vitest should fail the brief assignment).
 
 If the suite only typechecks at compile time and vitest runs JS without typecheck, force the contract by also asserting a switch exhaustiveness helper:
@@ -153,7 +153,7 @@ Expected before types change: FAIL compiling `case "brief"` / `assertNever`.
 
 - [ ] **Step 3: Extend types**
 
-In `frontend/digichat-ui/src/types.ts` replace:
+In `cloudflare/digichat-ui/src/types.ts` replace:
 
 ```ts
 export type VaultHitSummary = { title: string; path: string };
@@ -204,7 +204,7 @@ export type DigiChatActivity =
 
 - [ ] **Step 4: Render richer hits + brief in ChatActivities**
 
-In `frontend/digichat-ui/src/components/ChatActivities.tsx`, update `tool_result` hit list items and add `case "brief"`:
+In `cloudflare/digichat-ui/src/components/ChatActivities.tsx`, update `tool_result` hit list items and add `case "brief"`:
 
 ```tsx
 case "tool_result":
@@ -265,7 +265,7 @@ Keep the `default: never` exhaustive check — `brief` must be handled so the sw
 
 - [ ] **Step 5: Add CSS**
 
-Append to `frontend/digichat-ui/src/styles/session.css`:
+Append to `cloudflare/digichat-ui/src/styles/session.css`:
 
 ```css
 .dc-act-hit-tier,
@@ -316,16 +316,16 @@ Append to `frontend/digichat-ui/src/styles/session.css`:
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `cd frontend/digichat-ui && npx vitest run src/ChatActivities.test.ts`
+Run: `cd cloudflare/digichat-ui && npx vitest run src/ChatActivities.test.ts`
 Expected: PASS
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add frontend/digichat-ui/src/types.ts \
-  frontend/digichat-ui/src/components/ChatActivities.tsx \
-  frontend/digichat-ui/src/styles/session.css \
-  frontend/digichat-ui/src/ChatActivities.test.ts
+git add cloudflare/digichat-ui/src/types.ts \
+  cloudflare/digichat-ui/src/components/ChatActivities.tsx \
+  cloudflare/digichat-ui/src/styles/session.css \
+  cloudflare/digichat-ui/src/ChatActivities.test.ts
 git commit -m "$(cat <<'EOF'
 feat(digichat-ui): richer vault hits and research brief activity
 
@@ -338,8 +338,8 @@ EOF
 ### Task 2: Allowlist — document fields + `brief` + detail gate
 
 **Files:**
-- Modify: `frontend/digichat/src/lib/chat-activity.ts`
-- Modify: `frontend/digichat/src/lib/chat-activity.test.ts`
+- Modify: `cloudflare/digichat/src/lib/chat-activity.ts`
+- Modify: `cloudflare/digichat/src/lib/chat-activity.test.ts`
 
 **Interfaces:**
 - Consumes: digichat-ui `VaultHitSummary` / `DigiChatActivity` (type only)
@@ -355,7 +355,7 @@ EOF
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `frontend/digichat/src/lib/chat-activity.test.ts`:
+Append to `cloudflare/digichat/src/lib/chat-activity.test.ts`:
 
 ```ts
 import {
@@ -484,12 +484,12 @@ describe("Phase 2 document fields + brief allowlist", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/chat-activity.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/chat-activity.test.ts`
 Expected: FAIL — `MAX_SNIPPET_CHARS` / `brief` not defined / documents drop new fields
 
 - [ ] **Step 3: Implement allowlist extensions**
 
-In `frontend/digichat/src/lib/chat-activity.ts`:
+In `cloudflare/digichat/src/lib/chat-activity.ts`:
 
 1. Add constants after `MAX_REASONING_CHARS`:
 
@@ -607,13 +607,13 @@ Also update the existing Phase 1 test `"strips documents and reasoning at labels
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/chat-activity.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/chat-activity.test.ts`
 Expected: PASS (including prior Phase 1 cases — thin `{title,path}` still valid)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/chat-activity.ts frontend/digichat/src/lib/chat-activity.test.ts
+git add cloudflare/digichat/src/lib/chat-activity.ts cloudflare/digichat/src/lib/chat-activity.test.ts
 git commit -m "$(cat <<'EOF'
 feat(digichat): allowlist document tier/year/snippet and brief
 
@@ -626,8 +626,8 @@ EOF
 ### Task 3: Projector — rich hits + `brief` rows
 
 **Files:**
-- Modify: `frontend/digichat/src/lib/chat-activity.ts` (`toDigiChatActivity`)
-- Modify: `frontend/digichat/src/lib/chat-activity.test.ts`
+- Modify: `cloudflare/digichat/src/lib/chat-activity.ts` (`toDigiChatActivity`)
+- Modify: `cloudflare/digichat/src/lib/chat-activity.test.ts`
 
 **Interfaces:**
 - Consumes: `ActivitySpan` with optional `brief` / rich documents
@@ -712,7 +712,7 @@ describe("toDigiChatActivity — Phase 2 rich hits + brief", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/chat-activity.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/chat-activity.test.ts`
 Expected: FAIL — brief projects as `trace` / hits lack fields (if documents already carry fields, first test may pass; brief test fails)
 
 - [ ] **Step 3: Update projector**
@@ -739,13 +739,13 @@ Retrieve path already assigns `hits = span.documents ?? []` — once documents c
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/chat-activity.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/chat-activity.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/chat-activity.ts frontend/digichat/src/lib/chat-activity.test.ts
+git add cloudflare/digichat/src/lib/chat-activity.ts cloudflare/digichat/src/lib/chat-activity.test.ts
 git commit -m "$(cat <<'EOF'
 feat(digichat): project brief spans and rich vault hits
 
@@ -758,8 +758,8 @@ EOF
 ### Task 4: digigraph mapper — `rag_sources` / `graph_update`
 
 **Files:**
-- Create: `frontend/digichat/src/lib/digigraph-activity-map.ts`
-- Create: `frontend/digichat/src/lib/digigraph-activity-map.test.ts`
+- Create: `cloudflare/digichat/src/lib/digigraph-activity-map.ts`
+- Create: `cloudflare/digichat/src/lib/digigraph-activity-map.test.ts`
 
 **Interfaces:**
 - Consumes: `DigigraphTracePayload` (import type from `stream-digigraph-trace` **or** define a narrow input type in the mapper file to avoid cycles — prefer local `DigigraphTraceLike` matching `{ type; payload? }`)
@@ -903,12 +903,12 @@ describe("mapDigigraphTraceToSpans", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/digigraph-activity-map.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/digigraph-activity-map.test.ts`
 Expected: FAIL — module not found
 
 - [ ] **Step 3: Implement mapper**
 
-Create `frontend/digichat/src/lib/digigraph-activity-map.ts`:
+Create `cloudflare/digichat/src/lib/digigraph-activity-map.ts`:
 
 ```ts
 import {
@@ -1031,14 +1031,14 @@ export function mapDigigraphTraceToSpans(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/digigraph-activity-map.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/digigraph-activity-map.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/digigraph-activity-map.ts \
-  frontend/digichat/src/lib/digigraph-activity-map.test.ts
+git add cloudflare/digichat/src/lib/digigraph-activity-map.ts \
+  cloudflare/digichat/src/lib/digigraph-activity-map.test.ts
 git commit -m "$(cat <<'EOF'
 feat(digichat): map digigraph rag_sources and graph_update to ActivitySpan
 
@@ -1051,8 +1051,8 @@ EOF
 ### Task 5: Wire digigraph mapper (still dual-emit)
 
 **Files:**
-- Modify: `frontend/digichat/src/lib/stream-digigraph-trace.ts`
-- Modify: `frontend/digichat/src/lib/stream-digigraph-trace.test.ts`
+- Modify: `cloudflare/digichat/src/lib/stream-digigraph-trace.ts`
+- Modify: `cloudflare/digichat/src/lib/stream-digigraph-trace.test.ts`
 
 **Interfaces:**
 - Consumes: `mapDigigraphTraceToSpans`
@@ -1114,7 +1114,7 @@ it("emits rich retrieve activity for rag_sources on the gated path", async () =>
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/stream-digigraph-trace.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/stream-digigraph-trace.test.ts`
 Expected: FAIL — still emits flat `operation":"chat"` without retrieve/tier
 
 - [ ] **Step 3: Wire mapper**
@@ -1144,14 +1144,14 @@ import { mapDigigraphTraceToSpans } from "@/lib/digigraph-activity-map";
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/stream-digigraph-trace.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/stream-digigraph-trace.test.ts`
 Expected: PASS (existing dual-emit test still passes)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/stream-digigraph-trace.ts \
-  frontend/digichat/src/lib/stream-digigraph-trace.test.ts
+git add cloudflare/digichat/src/lib/stream-digigraph-trace.ts \
+  cloudflare/digichat/src/lib/stream-digigraph-trace.test.ts
 git commit -m "$(cat <<'EOF'
 feat(digichat): emit rich digigraph activity spans from typed mapper
 
@@ -1164,8 +1164,8 @@ EOF
 ### Task 6: Migrate chat-panel to `data-digichatActivity`
 
 **Files:**
-- Modify: `frontend/digichat/src/components/chat-panel.tsx`
-- Delete: `frontend/digichat/src/components/digigraph-trace.tsx` (unused)
+- Modify: `cloudflare/digichat/src/components/chat-panel.tsx`
+- Delete: `cloudflare/digichat/src/components/digigraph-trace.tsx` (unused)
 
 **Interfaces:**
 - Consumes: `ACTIVITY_PART_TYPE`, `sanitizeActivitySpan`, `toDigiChatActivity`, `ChatActivities`
@@ -1210,7 +1210,7 @@ it("messageActivities projects activity parts and ignores digigraphTrace", () =>
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/chat-activity.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/chat-activity.test.ts`
 Expected: FAIL — `messageActivities` missing
 
 - [ ] **Step 3: Implement `messageActivities` + migrate panel**
@@ -1255,25 +1255,25 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
 }
 ```
 
-4. Delete `frontend/digichat/src/components/digigraph-trace.tsx`.
+4. Delete `cloudflare/digichat/src/components/digigraph-trace.tsx`.
 
 - [ ] **Step 4: Run tests**
 
 Run:
 ```bash
-cd frontend/digichat && npx vitest run src/lib/chat-activity.test.ts
+cd cloudflare/digichat && npx vitest run src/lib/chat-activity.test.ts
 ```
 Expected: PASS
 
-Also run a typecheck if available: `cd frontend/digichat && npx tsc --noEmit -p tsconfig.json` (or `npm run build` if that is the project’s type gate). Fix any unused imports in chat-panel.
+Also run a typecheck if available: `cd cloudflare/digichat && npx tsc --noEmit -p tsconfig.json` (or `npm run build` if that is the project’s type gate). Fix any unused imports in chat-panel.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/chat-activity.ts \
-  frontend/digichat/src/lib/chat-activity.test.ts \
-  frontend/digichat/src/components/chat-panel.tsx
-git rm frontend/digichat/src/components/digigraph-trace.tsx
+git add cloudflare/digichat/src/lib/chat-activity.ts \
+  cloudflare/digichat/src/lib/chat-activity.test.ts \
+  cloudflare/digichat/src/components/chat-panel.tsx
+git rm cloudflare/digichat/src/components/digigraph-trace.tsx
 git commit -m "$(cat <<'EOF'
 feat(digichat): render auth chat activities from digichatActivity parts
 
@@ -1286,11 +1286,11 @@ EOF
 ### Task 7: Delete dual-emit / legacy digigraphTrace writer
 
 **Files:**
-- Modify: `frontend/digichat/src/lib/stream-digigraph-trace.ts`
-- Modify: `frontend/digichat/src/lib/stream-digigraph-trace.test.ts`
-- Modify: `frontend/digichat/src/app/api/chat/route.ts`
-- Modify: `frontend/digichat/src/hooks/use-embed-digi-chat.ts` (optional: keep legacy reader for one release — design says delete dual-emit **writer**; embed fallback reader may remain until Phase 3, but prefer updating tests that asserted dual-emit)
-- Modify: `frontend/digichat/src/hooks/use-embed-digi-chat.test.ts` as needed
+- Modify: `cloudflare/digichat/src/lib/stream-digigraph-trace.ts`
+- Modify: `cloudflare/digichat/src/lib/stream-digigraph-trace.test.ts`
+- Modify: `cloudflare/digichat/src/app/api/chat/route.ts`
+- Modify: `cloudflare/digichat/src/hooks/use-embed-digi-chat.ts` (optional: keep legacy reader for one release — design says delete dual-emit **writer**; embed fallback reader may remain until Phase 3, but prefer updating tests that asserted dual-emit)
+- Modify: `cloudflare/digichat/src/hooks/use-embed-digi-chat.test.ts` as needed
 
 **Interfaces:**
 - Consumes: mapper only
@@ -1323,7 +1323,7 @@ Update every call site that passed `emitLegacyTracePart`.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/stream-digigraph-trace.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/stream-digigraph-trace.test.ts`
 Expected: FAIL — still emits legacy part / type error on missing option
 
 - [ ] **Step 3: Delete legacy writer**
@@ -1335,7 +1335,7 @@ Expected: FAIL — still emits legacy part / type error on missing option
 - [ ] **Step 4: Run full related suites**
 
 ```bash
-cd frontend/digichat && npx vitest run \
+cd cloudflare/digichat && npx vitest run \
   src/lib/stream-digigraph-trace.test.ts \
   src/lib/chat-activity.test.ts \
   src/hooks/use-embed-digi-chat.test.ts \
@@ -1346,11 +1346,11 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/stream-digigraph-trace.ts \
-  frontend/digichat/src/lib/stream-digigraph-trace.test.ts \
-  frontend/digichat/src/app/api/chat/route.ts \
-  frontend/digichat/src/hooks/use-embed-digi-chat.ts \
-  frontend/digichat/src/hooks/use-embed-digi-chat.test.ts
+git add cloudflare/digichat/src/lib/stream-digigraph-trace.ts \
+  cloudflare/digichat/src/lib/stream-digigraph-trace.test.ts \
+  cloudflare/digichat/src/app/api/chat/route.ts \
+  cloudflare/digichat/src/hooks/use-embed-digi-chat.ts \
+  cloudflare/digichat/src/hooks/use-embed-digi-chat.test.ts
 git commit -m "$(cat <<'EOF'
 feat(digichat): retire digigraphTrace dual-emit
 
@@ -1363,10 +1363,10 @@ EOF
 ### Task 8: Embed tenant `digivault` backend + env-name validation
 
 **Files:**
-- Modify: `frontend/digichat/src/lib/embed-tenants.ts`
-- Modify: `frontend/digichat/src/lib/embed-tenants.test.ts`
-- Create: `frontend/digichat/src/lib/digivault-env.ts`
-- Create: `frontend/digichat/src/lib/digivault-env.test.ts`
+- Modify: `cloudflare/digichat/src/lib/embed-tenants.ts`
+- Modify: `cloudflare/digichat/src/lib/embed-tenants.test.ts`
+- Create: `cloudflare/digichat/src/lib/digivault-env.ts`
+- Create: `cloudflare/digichat/src/lib/digivault-env.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -1472,7 +1472,7 @@ it("fails closed without echoing values", () => {
 
 Run:
 ```bash
-cd frontend/digichat && npx vitest run src/lib/embed-tenants.test.ts src/lib/digivault-env.test.ts
+cd cloudflare/digichat && npx vitest run src/lib/embed-tenants.test.ts src/lib/digivault-env.test.ts
 ```
 Expected: FAIL
 
@@ -1553,10 +1553,10 @@ Run same vitest command — Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/embed-tenants.ts \
-  frontend/digichat/src/lib/embed-tenants.test.ts \
-  frontend/digichat/src/lib/digivault-env.ts \
-  frontend/digichat/src/lib/digivault-env.test.ts
+git add cloudflare/digichat/src/lib/embed-tenants.ts \
+  cloudflare/digichat/src/lib/embed-tenants.test.ts \
+  cloudflare/digichat/src/lib/digivault-env.ts \
+  cloudflare/digichat/src/lib/digivault-env.test.ts
 git commit -m "$(cat <<'EOF'
 feat(digichat): add digivault embed backend with per-tenant env-name refs
 
@@ -1569,8 +1569,8 @@ EOF
 ### Task 9: digivault IP rate limit (60/min)
 
 **Files:**
-- Create: `frontend/digichat/src/lib/digivault-ip-rate-limit.ts`
-- Create: `frontend/digichat/src/lib/digivault-ip-rate-limit.test.ts`
+- Create: `cloudflare/digichat/src/lib/digivault-ip-rate-limit.ts`
+- Create: `cloudflare/digichat/src/lib/digivault-ip-rate-limit.test.ts`
 
 **Interfaces:**
 - Consumes: `checkBffRateLimit`, `clientIpForRateLimit` from `embed-ip-rate-limit.ts` (or re-export IP helper)
@@ -1599,7 +1599,7 @@ it("allows up to 60 requests per IP per window", () => {
 
 - [ ] **Step 2: Run to verify fail**
 
-Run: `cd frontend/digichat && npx vitest run src/lib/digivault-ip-rate-limit.test.ts`
+Run: `cd cloudflare/digichat && npx vitest run src/lib/digivault-ip-rate-limit.test.ts`
 Expected: FAIL — module missing
 
 - [ ] **Step 3: Implement**
@@ -1625,8 +1625,8 @@ export const DIGIVAULT_RATE_LIMIT_MESSAGE = "rate limit exceeded — slow down a
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/digivault-ip-rate-limit.ts \
-  frontend/digichat/src/lib/digivault-ip-rate-limit.test.ts
+git add cloudflare/digichat/src/lib/digivault-ip-rate-limit.ts \
+  cloudflare/digichat/src/lib/digivault-ip-rate-limit.test.ts
 git commit -m "$(cat <<'EOF'
 feat(digichat): add digivault 60/min IP rate limit
 
@@ -1639,11 +1639,11 @@ EOF
 ### Task 10: Vault RPC + NDJSON→activity adapter (parity foundation)
 
 **Files:**
-- Create: `frontend/digichat/src/lib/digivault-vault.ts`
-- Create: `frontend/digichat/src/lib/digivault-vault.test.ts`
-- Create: `frontend/digichat/src/lib/digivault-ndjson-adapter.ts`
-- Create: `frontend/digichat/src/lib/digivault-ndjson-adapter.test.ts`
-- Create fixtures under `frontend/digichat/src/lib/fixtures/digivault/`
+- Create: `cloudflare/digichat/src/lib/digivault-vault.ts`
+- Create: `cloudflare/digichat/src/lib/digivault-vault.test.ts`
+- Create: `cloudflare/digichat/src/lib/digivault-ndjson-adapter.ts`
+- Create: `cloudflare/digichat/src/lib/digivault-ndjson-adapter.test.ts`
+- Create fixtures under `cloudflare/digichat/src/lib/fixtures/digivault/`
 
 **Interfaces:**
 - Produces:
@@ -1738,7 +1738,7 @@ Add a minimal recorded fixture file for Task 12, e.g. `fixtures/digivault/sample
 
 - [ ] **Step 3: Implement vault + adapter**
 
-Port `searchVault` / `buildContext` behaviour from `frontend/digithings-web/functions/api/chat.ts` (~339–414): POST `${supabaseUrl}/rest/v1/rpc/search_architecture_notes` with `{ query_text, match_count: TOP_K }`, headers `apikey` + `Authorization: Bearer ${anon}`. Truncate `body_markdown` with `MAX_NOTE_CHARS` **only in toolText**. Activity documents: `{ title, path: vault_path }` only.
+Port `searchVault` / `buildContext` behaviour from `cloudflare/digithings-web/functions/api/chat.ts` (~339–414): POST `${supabaseUrl}/rest/v1/rpc/search_architecture_notes` with `{ query_text, match_count: TOP_K }`, headers `apikey` + `Authorization: Bearer ${anon}`. Truncate `body_markdown` with `MAX_NOTE_CHARS` **only in toolText**. Activity documents: `{ title, path: vault_path }` only.
 
 Adapter maps as in the tests. For `tool_result`, also emit a completed `execute_tool` companion only if needed by projector — prefer Foundry’s pattern: `execute_tool` started + `retrieve` completed is enough when the stream emits both (CF already emits tool_call then tool_result).
 
@@ -1747,11 +1747,11 @@ Adapter maps as in the tests. For `tool_result`, also emit a completed `execute_
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/digivault-vault.ts \
-  frontend/digichat/src/lib/digivault-vault.test.ts \
-  frontend/digichat/src/lib/digivault-ndjson-adapter.ts \
-  frontend/digichat/src/lib/digivault-ndjson-adapter.test.ts \
-  frontend/digichat/src/lib/fixtures/digivault/
+git add cloudflare/digichat/src/lib/digivault-vault.ts \
+  cloudflare/digichat/src/lib/digivault-vault.test.ts \
+  cloudflare/digichat/src/lib/digivault-ndjson-adapter.ts \
+  cloudflare/digichat/src/lib/digivault-ndjson-adapter.test.ts \
+  cloudflare/digichat/src/lib/fixtures/digivault/
 git commit -m "$(cat <<'EOF'
 feat(digichat): digivault vault RPC helper and NDJSON activity adapter
 
@@ -1764,10 +1764,10 @@ EOF
 ### Task 11: digivault BYOK + free pool
 
 **Files:**
-- Create: `frontend/digichat/src/lib/digivault-byok.ts`
-- Create: `frontend/digichat/src/lib/digivault-byok.test.ts`
-- Modify: `frontend/digichat/src/hooks/use-byok-key.ts` (add `gemini`)
-- Modify: `frontend/digichat/src/components/byok-settings-panel.tsx` and embed BYOK UI provider lists to include `gemini`
+- Create: `cloudflare/digichat/src/lib/digivault-byok.ts`
+- Create: `cloudflare/digichat/src/lib/digivault-byok.test.ts`
+- Modify: `cloudflare/digichat/src/hooks/use-byok-key.ts` (add `gemini`)
+- Modify: `cloudflare/digichat/src/components/byok-settings-panel.tsx` and embed BYOK UI provider lists to include `gemini`
 
 **Interfaces:**
 - Produces:
@@ -1788,11 +1788,11 @@ EOF
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/digivault-byok.ts \
-  frontend/digichat/src/lib/digivault-byok.test.ts \
-  frontend/digichat/src/hooks/use-byok-key.ts \
-  frontend/digichat/src/components/byok-settings-panel.tsx \
-  frontend/digichat/src/app/embed/page.tsx
+git add cloudflare/digichat/src/lib/digivault-byok.ts \
+  cloudflare/digichat/src/lib/digivault-byok.test.ts \
+  cloudflare/digichat/src/hooks/use-byok-key.ts \
+  cloudflare/digichat/src/components/byok-settings-panel.tsx \
+  cloudflare/digichat/src/app/embed/page.tsx
 git commit -m "$(cat <<'EOF'
 feat(digichat): digivault BYOK routes including Gemini and free pool
 
@@ -1807,8 +1807,8 @@ Note: only touch `embed/page.tsx` for the BYOK provider list (`gemini`) — **do
 ### Task 12: digivault stream — agentic loop → AI SDK UI message stream
 
 **Files:**
-- Create: `frontend/digichat/src/lib/digivault-stream.ts`
-- Create: `frontend/digichat/src/lib/digivault-stream.test.ts`
+- Create: `cloudflare/digichat/src/lib/digivault-stream.ts`
+- Create: `cloudflare/digichat/src/lib/digivault-stream.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -1868,9 +1868,9 @@ it("honours activityDetail labels (no documents on wire)", async () => {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/digivault-stream.ts \
-  frontend/digichat/src/lib/digivault-stream.test.ts \
-  frontend/digichat/src/lib/digivault-llm.ts  # if split
+git add cloudflare/digichat/src/lib/digivault-stream.ts \
+  cloudflare/digichat/src/lib/digivault-stream.test.ts \
+  cloudflare/digichat/src/lib/digivault-llm.ts  # if split
 git commit -m "$(cat <<'EOF'
 feat(digichat): digivault agentic stream provider
 
@@ -1883,11 +1883,11 @@ EOF
 ### Task 13: Wire digivault into `/api/chat` + fixture parity gate
 
 **Files:**
-- Modify: `frontend/digichat/src/app/api/chat/route.ts`
-- Modify: `frontend/digichat/src/app/api/chat/route.test.ts`
-- Create/complete: `frontend/digichat/src/lib/fixtures/digivault/*`
-- Create: `frontend/digichat/src/lib/digivault-parity.test.ts`
-- Modify: `frontend/digichat/ARCHITECTURE.md`
+- Modify: `cloudflare/digichat/src/app/api/chat/route.ts`
+- Modify: `cloudflare/digichat/src/app/api/chat/route.test.ts`
+- Create/complete: `cloudflare/digichat/src/lib/fixtures/digivault/*`
+- Create: `cloudflare/digichat/src/lib/digivault-parity.test.ts`
+- Modify: `cloudflare/digichat/ARCHITECTURE.md`
 
 **Interfaces:**
 - Route branch (after auth / shared rate limits, peer to foundry):
@@ -1978,25 +1978,25 @@ Update `ARCHITECTURE.md`: digivault backend, env-name secrets, dual-emit removed
 - [ ] **Step 4: Run suites**
 
 ```bash
-cd frontend/digichat && npx vitest run \
+cd cloudflare/digichat && npx vitest run \
   src/app/api/chat/route.test.ts \
   src/lib/digivault-parity.test.ts \
   src/lib/digivault-stream.test.ts \
   src/lib/stream-digigraph-trace.test.ts \
   src/lib/chat-activity.test.ts \
   src/lib/foundry-stream.test.ts
-cd frontend/digichat-ui && npx vitest run
+cd cloudflare/digichat-ui && npx vitest run
 ```
 Expected: PASS — Foundry thin-document regression still green
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/app/api/chat/route.ts \
-  frontend/digichat/src/app/api/chat/route.test.ts \
-  frontend/digichat/src/lib/digivault-parity.test.ts \
-  frontend/digichat/src/lib/fixtures/digivault/ \
-  frontend/digichat/ARCHITECTURE.md
+git add cloudflare/digichat/src/app/api/chat/route.ts \
+  cloudflare/digichat/src/app/api/chat/route.test.ts \
+  cloudflare/digichat/src/lib/digivault-parity.test.ts \
+  cloudflare/digichat/src/lib/fixtures/digivault/ \
+  cloudflare/digichat/ARCHITECTURE.md
 git commit -m "$(cat <<'EOF'
 feat(digichat): wire digivault provider and fixture parity gate
 

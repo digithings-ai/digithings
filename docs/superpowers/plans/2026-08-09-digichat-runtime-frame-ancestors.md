@@ -23,7 +23,7 @@
 - `DIGICHAT_EMBED_HOSTS` is non-secret hostnames only; after this plan it is primarily a **runtime** container env (build-arg optional/legacy).
 - Do **not** implement Pick 2 (stack GHCR) or Pick 3 (`scripts/docs_onboard` client docs onboard) here — note seams only (see **Fit with picks 2–3**).
 - Every shipping PR must link a GitHub Issue (`task/<N>-slug` or `Fixes #<N>`).
-- Before editing digichat code: read `frontend/digichat/AGENTS.md` + `ARCHITECTURE.md`; read Next 16 `proxy.md` under `node_modules/next/dist/docs/`.
+- Before editing digichat code: read `cloudflare/digichat/AGENTS.md` + `ARCHITECTURE.md`; read Next 16 `proxy.md` under `node_modules/next/dist/docs/`.
 
 ---
 
@@ -31,15 +31,15 @@
 
 | File | Responsibility |
 |---|---|
-| `frontend/digichat/src/lib/security-headers.ts` | Pure host→origin parsing, reject `*`, build `frame-ancestors` string; callable per request |
-| `frontend/digichat/src/lib/security-headers.test.ts` | Unit tests for parsing, fail-closed, no `*` |
-| `frontend/digichat/src/proxy.ts` | Next 16 Proxy: match `/embed`, set runtime CSP (+ nosniff) |
-| `frontend/digichat/src/proxy.test.ts` (or colocated) | Unit-test proxy header output with stubbed env |
-| `frontend/digichat/next.config.ts` | `/embed` baked headers → fail-closed `frame-ancestors 'none'` only; app routes unchanged |
-| `frontend/digichat/Dockerfile` | Stop requiring build-arg for CSP; comment that hosts are runtime |
+| `cloudflare/digichat/src/lib/security-headers.ts` | Pure host→origin parsing, reject `*`, build `frame-ancestors` string; callable per request |
+| `cloudflare/digichat/src/lib/security-headers.test.ts` | Unit tests for parsing, fail-closed, no `*` |
+| `cloudflare/digichat/src/proxy.ts` | Next 16 Proxy: match `/embed`, set runtime CSP (+ nosniff) |
+| `cloudflare/digichat/src/proxy.test.ts` (or colocated) | Unit-test proxy header output with stubbed env |
+| `cloudflare/digichat/next.config.ts` | `/embed` baked headers → fail-closed `frame-ancestors 'none'` only; app routes unchanged |
+| `cloudflare/digichat/Dockerfile` | Stop requiring build-arg for CSP; comment that hosts are runtime |
 | `.github/workflows/publish-digichat-image.yml` | Stop baking `DIGICHAT_EMBED_HOSTS` from `embed-hosts.txt` (or make no-op) |
-| `frontend/digichat/embed-hosts.txt` | Reclassify as operator seed / docs list, not image bake input |
-| `frontend/digichat/ARCHITECTURE.md` | CSP section + env table: runtime proxy owns `/embed` CSP |
+| `cloudflare/digichat/embed-hosts.txt` | Reclassify as operator seed / docs list, not image bake input |
+| `cloudflare/digichat/ARCHITECTURE.md` | CSP section + env table: runtime proxy owns `/embed` CSP |
 | `docs/digichat/INSTALL.md` | Replace rebuild-first instructions with runtime env |
 | `infra/digichat-release/.env.profile-a.example` / `.env.profile-b.example` | Document `DIGICHAT_EMBED_HOSTS` runtime (or registry-only) |
 | `infra/digichat-digithings/README.md` | Drop “must build-arg CSP” operator copy |
@@ -81,8 +81,8 @@ runner image
 ### Task 1: Harden host parsing + fail-closed builders (TDD)
 
 **Files:**
-- Modify: `frontend/digichat/src/lib/security-headers.ts`
-- Modify: `frontend/digichat/src/lib/security-headers.test.ts`
+- Modify: `cloudflare/digichat/src/lib/security-headers.ts`
+- Modify: `cloudflare/digichat/src/lib/security-headers.test.ts`
 
 **Interfaces:**
 - Consumes: `normalizeEmbedHost` from `./embed-tenants` (optional — may keep local trim/split if already sufficient).
@@ -138,7 +138,7 @@ describe("runtime embed host parsing (fail closed)", () => {
 Run:
 
 ```bash
-cd frontend/digichat && npm run test -- src/lib/security-headers.test.ts
+cd cloudflare/digichat && npm run test -- src/lib/security-headers.test.ts
 ```
 
 Expected: new `*` rejection cases fail until filtering exists (today `*` would become `https://*`).
@@ -213,7 +213,7 @@ Deprecate/remove build-time evaluation of `embedFrameAncestorsCsp()` inside a fr
 - [ ] **Step 4: Re-run tests — expect PASS**
 
 ```bash
-cd frontend/digichat && npm run test -- src/lib/security-headers.test.ts
+cd cloudflare/digichat && npm run test -- src/lib/security-headers.test.ts
 ```
 
 Expected: PASS. Adjust existing “prefers DIGICHAT_EMBED_HOSTS over registry” tests if empty-string semantics change — document chosen rule in test names.
@@ -221,8 +221,8 @@ Expected: PASS. Adjust existing “prefers DIGICHAT_EMBED_HOSTS over registry”
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/security-headers.ts \
-  frontend/digichat/src/lib/security-headers.test.ts
+git add cloudflare/digichat/src/lib/security-headers.ts \
+  cloudflare/digichat/src/lib/security-headers.test.ts
 git commit -m "$(cat <<'EOF'
 feat(digichat): harden embed host parsing for runtime CSP
 
@@ -235,8 +235,8 @@ EOF
 ### Task 2: next.config fail-closed bake (remove build-time allowlist)
 
 **Files:**
-- Modify: `frontend/digichat/next.config.ts`
-- Modify: `frontend/digichat/src/lib/security-headers.test.ts` (header export assertions)
+- Modify: `cloudflare/digichat/next.config.ts`
+- Modify: `cloudflare/digichat/src/lib/security-headers.test.ts` (header export assertions)
 
 **Interfaces:**
 - Consumes: `DIGICHAT_EMBED_BAKED_SECURITY_HEADERS`, `DIGICHAT_APP_SECURITY_HEADERS`.
@@ -268,7 +268,7 @@ Replace assertions that `DIGICHAT_EMBED_SECURITY_HEADERS` CSP equals `embedFrame
 - [ ] **Step 3: Run unit tests**
 
 ```bash
-cd frontend/digichat && npm run test -- src/lib/security-headers.test.ts
+cd cloudflare/digichat && npm run test -- src/lib/security-headers.test.ts
 ```
 
 Expected: PASS.
@@ -276,8 +276,8 @@ Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/digichat/next.config.ts frontend/digichat/src/lib/security-headers.ts \
-  frontend/digichat/src/lib/security-headers.test.ts
+git add cloudflare/digichat/next.config.ts cloudflare/digichat/src/lib/security-headers.ts \
+  cloudflare/digichat/src/lib/security-headers.test.ts
 git commit -m "$(cat <<'EOF'
 fix(digichat): bake fail-closed frame-ancestors on /embed
 
@@ -290,9 +290,9 @@ EOF
 ### Task 3: `src/proxy.ts` sets runtime CSP on `/embed`
 
 **Files:**
-- Create: `frontend/digichat/src/proxy.ts`
-- Create: `frontend/digichat/src/proxy.test.ts`
-- Modify: `frontend/digichat/AGENTS.md` only if a one-line “Proxy owns embed CSP” note helps (optional)
+- Create: `cloudflare/digichat/src/proxy.ts`
+- Create: `cloudflare/digichat/src/proxy.test.ts`
+- Modify: `cloudflare/digichat/AGENTS.md` only if a one-line “Proxy owns embed CSP” note helps (optional)
 
 **Interfaces:**
 - Consumes: `embedFrameAncestorsCsp()` from `./lib/security-headers` (Node runtime — Next 16 Proxy defaults to Node.js).
@@ -341,7 +341,7 @@ describe("proxy embed CSP", () => {
 - [ ] **Step 2: Run test — expect FAIL (module missing)**
 
 ```bash
-cd frontend/digichat && npm run test -- src/proxy.test.ts
+cd cloudflare/digichat && npm run test -- src/proxy.test.ts
 ```
 
 Expected: FAIL — `proxy` not found.
@@ -373,7 +373,7 @@ If Vitest cannot import `next/server` cleanly, mirror the pattern used elsewhere
 - [ ] **Step 4: Run tests — expect PASS**
 
 ```bash
-cd frontend/digichat && npm run test -- src/proxy.test.ts src/lib/security-headers.test.ts
+cd cloudflare/digichat && npm run test -- src/proxy.test.ts src/lib/security-headers.test.ts
 ```
 
 Expected: PASS.
@@ -381,7 +381,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/proxy.ts frontend/digichat/src/proxy.test.ts
+git add cloudflare/digichat/src/proxy.ts cloudflare/digichat/src/proxy.test.ts
 git commit -m "$(cat <<'EOF'
 feat(digichat): set /embed frame-ancestors at request time via proxy
 
@@ -394,9 +394,9 @@ EOF
 ### Task 4: Dockerfile + publish workflow — stop baking client hosts
 
 **Files:**
-- Modify: `frontend/digichat/Dockerfile`
+- Modify: `cloudflare/digichat/Dockerfile`
 - Modify: `.github/workflows/publish-digichat-image.yml`
-- Modify: `frontend/digichat/embed-hosts.txt` (header comment only)
+- Modify: `cloudflare/digichat/embed-hosts.txt` (header comment only)
 
 **Interfaces:**
 - Consumes: none at build for CSP.
@@ -431,7 +431,7 @@ Remove (or no-op) the “Read embed CSP hostnames” step and the `build-args: D
 - [ ] **Step 4: Smoke locally without full publish (dev server)**
 
 ```bash
-cd frontend/digichat
+cd cloudflare/digichat
 DIGICHAT_EMBED_HOSTS=runtime-client.example.com NODE_ENV=production \
   npx next start --hostname 127.0.0.1 --port 3015 &
 # after build: npm run build && next start …
@@ -450,9 +450,9 @@ Expected: CSP reflects runtime host; single header; no `*`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/Dockerfile \
+git add cloudflare/digichat/Dockerfile \
   .github/workflows/publish-digichat-image.yml \
-  frontend/digichat/embed-hosts.txt
+  cloudflare/digichat/embed-hosts.txt
 git commit -m "$(cat <<'EOF'
 build(digichat): stop baking embed hosts into GHCR image CSP
 
@@ -466,12 +466,12 @@ EOF
 
 **Files:**
 - Modify: `docs/digichat/INSTALL.md` (§ Custom embed parent hosts)
-- Modify: `frontend/digichat/ARCHITECTURE.md` (CSP + `DIGICHAT_EMBED_HOSTS` row)
+- Modify: `cloudflare/digichat/ARCHITECTURE.md` (CSP + `DIGICHAT_EMBED_HOSTS` row)
 - Modify: `infra/digichat-release/.env.profile-a.example`
 - Modify: `infra/digichat-release/.env.profile-b.example`
 - Modify: `infra/digichat-digithings/README.md` (build-arg CSP bullets)
 - Modify: `docs/architecture/digichat-self-hosted-release.md` §3 + §5
-- Modify: `frontend/digichat/.env.example` (comment: runtime CSP)
+- Modify: `cloudflare/digichat/.env.example` (comment: runtime CSP)
 
 **Interfaces:**
 - Consumes: Tasks 1–4 behavior.
@@ -500,7 +500,7 @@ DIGICHAT_EMBED_TENANTS={"client.example.com":{...}}
 Security: digichat never emits `frame-ancestors *`. If neither source yields hosts,
 only first-party digithings origins (plus `'self'`) remain allowlisted.
 
-Optional seed list of known hosts: `frontend/digichat/embed-hosts.txt` (not baked into the image).
+Optional seed list of known hosts: `cloudflare/digichat/embed-hosts.txt` (not baked into the image).
 ```
 
 - [ ] **Step 2: ARCHITECTURE.md**
@@ -527,10 +527,10 @@ Add to both profile `.env.*.example` files (commented or with example.com):
 ```bash
 ! rg -n '\bDigi(Chat|Graph|Key|Vault|Things)\b' \
   docs/digichat/INSTALL.md docs/architecture/digichat-self-hosted-release.md \
-  frontend/digichat/ARCHITECTURE.md infra/digichat-release/ \
+  cloudflare/digichat/ARCHITECTURE.md infra/digichat-release/ \
   || (echo "Fix Digi CamelCase in prose" && exit 1)
 rg -n "runtime|frame-ancestors|DIGICHAT_EMBED_HOSTS" docs/digichat/INSTALL.md
-rg -n "proxy\.ts|fail-closed|DIGICHAT_EMBED_FAIL_CLOSED" frontend/digichat/ARCHITECTURE.md
+rg -n "proxy\.ts|fail-closed|DIGICHAT_EMBED_FAIL_CLOSED" cloudflare/digichat/ARCHITECTURE.md
 ```
 
 Expected: no CamelCase Digi product names; INSTALL describes runtime; ARCHITECTURE mentions proxy.
@@ -538,12 +538,12 @@ Expected: no CamelCase Digi product names; INSTALL describes runtime; ARCHITECTU
 - [ ] **Step 6: Commit**
 
 ```bash
-git add docs/digichat/INSTALL.md frontend/digichat/ARCHITECTURE.md \
+git add docs/digichat/INSTALL.md cloudflare/digichat/ARCHITECTURE.md \
   infra/digichat-release/.env.profile-a.example \
   infra/digichat-release/.env.profile-b.example \
   infra/digichat-digithings/README.md \
   docs/architecture/digichat-self-hosted-release.md \
-  frontend/digichat/.env.example
+  cloudflare/digichat/.env.example
 git commit -m "$(cat <<'EOF'
 docs(digichat): document runtime frame-ancestors for stock GHCR
 
@@ -560,7 +560,7 @@ EOF
 - [ ] **Step 1: Unit suite**
 
 ```bash
-cd frontend/digichat && npm run test && npm run lint
+cd cloudflare/digichat && npm run test && npm run lint
 ```
 
 Expected: PASS / zero errors.
@@ -568,7 +568,7 @@ Expected: PASS / zero errors.
 - [ ] **Step 2: Build without embed hosts, run with runtime hosts**
 
 ```bash
-cd frontend/digichat
+cd cloudflare/digichat
 unset DIGICHAT_EMBED_HOSTS DIGICHAT_EMBED_TENANTS
 npm run build
 DIGICHAT_EMBED_HOSTS=accept.example.com NODE_ENV=production \

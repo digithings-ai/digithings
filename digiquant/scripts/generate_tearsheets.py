@@ -8,7 +8,7 @@ This is the digiquant flagship path for published strategies:
       → NautilusTrader backtest
       → round-trip trades from the engine's positions report (Slapper)
       → TradingView-style percent-of-equity compounding equity curve
-      → TearsheetData JSON in frontend/digiquant-web/public/strategies/
+      → TearsheetData JSON in cloudflare/digiquant-web/public/strategies/
 
 ``settings.json`` ``strategy_type`` selects the family (``slapper`` default,
 ``sdca`` for ``btc_sdca``). Slapper calibrations stay in gitignored
@@ -71,7 +71,7 @@ logger = logging.getLogger(__name__)
 # Repo root = scripts/.. /.. (this file lives at <repo>/digiquant/scripts/).
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DIGIQUANT_ROOT = Path(__file__).resolve().parents[1]
-FRONTEND_STRATEGIES = REPO_ROOT / "frontend" / "digiquant-web" / "public" / "strategies"
+FRONTEND_STRATEGIES = REPO_ROOT / "cloudflare" / "digiquant-web" / "public" / "strategies"
 # Must match fetch_coinbase / export_sdca_macro (ROOT = digiquant/). Repo-root
 # data/price-history is a different tree — #3472 / run 33705882823.
 DEFAULT_CACHE = DIGIQUANT_ROOT / "data" / "price-history"

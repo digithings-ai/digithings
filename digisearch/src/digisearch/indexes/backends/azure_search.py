@@ -9,6 +9,7 @@ from typing import Any
 
 from digisearch.core.models import Chunk, Query, Result, SearchResponse
 from digisearch.core.standard_hits import BACKEND_AZURE_AI_SEARCH
+from digisearch.indexes.backends.backend_errors import SearchBackendError
 
 logger = logging.getLogger(__name__)
 
@@ -334,7 +335,7 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
                 "index_name": index_name,
             },
         )
-        return SearchResponse(results=[], facets=None)
+        raise SearchBackendError(f"azure query failed (index={index_name!r}): {exc}") from exc
 
 
 def is_azure_configured() -> bool:

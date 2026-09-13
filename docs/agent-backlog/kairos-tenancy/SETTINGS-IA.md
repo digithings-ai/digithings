@@ -78,7 +78,7 @@ interval is annual.
 **Supersedes prior note:** Brief does **not** unlock broker connect — Desk does.
 Free is teaser-only (digest conclusions + light portfolio glimpse — not enough to
 reverse-engineer the PM product). The **creator** email (seeded `chris.stefan@proton.me`) holds
-`plan_floor=studio` so overlay + Kairos Settings writes work **without
+`plan_floor=studio` so overlay + dashboard Settings writes work **without
 Stripe**; paying customers still go through Checkout.
 
 ## Client products (FX Hub + future)
@@ -103,7 +103,7 @@ Tier writes use **effective** plan (workspace + `entitlement_grants`).
 
 ## Testing without Stripe
 
-- Creator path: sign in as allowlisted email → effective custom → Settings writes 200.
+- Creator path: sign in as allowlisted email → effective tier (studio floor) → Settings writes 200.
 - Free path: non-allowlisted free workspace → `TIER_FORBIDDEN` on profile/keys/brokers.
 - Ops: insert into `entitlement_grants` / `client_product_grants` (service_role),
 or share a hashed FX Hub invite (`FX_HUB_INVITE_HASH` / `product_invite_codes`)

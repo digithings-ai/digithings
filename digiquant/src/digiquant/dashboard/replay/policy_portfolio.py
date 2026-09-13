@@ -191,5 +191,6 @@ def run_policy_arm_replay_isolated(
                 status=PortfolioReplayStatus.ERROR,
                 message=f"reconcile failed: {exc}",
                 starting_cash=snapshot.starting_cash,
+                schema_version=request.schema_version,
             )
     return result

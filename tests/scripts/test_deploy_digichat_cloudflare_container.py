@@ -60,8 +60,8 @@ def test_the_paths_filter_covers_every_signal_the_gate_checks() -> None:
     if either falls out of this filter, the workflow never runs to check it."""
     triggers = _spec().get("on") or _spec().get(True)
     paths = set(triggers["push"]["paths"])
-    assert "frontend/digichat/package.json" in paths
-    assert "frontend/digichat-cloudflare/**" in paths
+    assert "cloudflare/digichat/package.json" in paths
+    assert "cloudflare/digichat-cloudflare/**" in paths
     assert "Dockerfile.digichat-cloudflare" in paths
 
 
@@ -89,7 +89,7 @@ def test_the_deploy_step_targets_the_right_directory_and_command() -> None:
         for s in _deploy_job()["steps"]
         if s.get("uses", "").startswith("cloudflare/wrangler-action")
     )
-    assert deploy_step["with"]["workingDirectory"] == "frontend/digichat-cloudflare"
+    assert deploy_step["with"]["workingDirectory"] == "cloudflare/digichat-cloudflare"
     command = deploy_step["with"]["command"]
     assert command.split()[0] == "deploy"
     assert "--message" in command
@@ -123,7 +123,7 @@ def test_the_deploy_step_does_not_pin_wrangler_4_28_0_on_with() -> None:
     assert "--message" in deploy_step["with"]["command"]
 
     declared = json.loads(
-        (REPO_ROOT / "frontend" / "digichat-cloudflare" / "package.json").read_text(
+        (REPO_ROOT / "cloudflare" / "digichat-cloudflare" / "package.json").read_text(
             encoding="utf-8"
         )
     )["devDependencies"]["wrangler"]
@@ -133,7 +133,7 @@ def test_the_deploy_step_does_not_pin_wrangler_4_28_0_on_with() -> None:
 
 
 def test_workspace_dependencies_are_installed_before_deploying() -> None:
-    """frontend/digichat-cloudflare has no lockfile of its own -- it's an npm
+    """cloudflare/digichat-cloudflare has no lockfile of its own -- it's an npm
     workspace under the root package-lock.json. Without a real `npm ci` at repo
     root first, wrangler 4.x fails loudly trying to bundle
     src/index.ts's `@cloudflare/containers` import (verified locally: `Could not
@@ -217,13 +217,13 @@ def scratch_repo() -> Path:
         _git(repo, "init", "-q")
         _git(repo, "config", "user.email", "test@example.com")
         _git(repo, "config", "user.name", "test")
-        (repo / "frontend" / "digichat").mkdir(parents=True)
-        (repo / "frontend" / "digichat-cloudflare").mkdir(parents=True)
+        (repo / "cloudflare" / "digichat").mkdir(parents=True)
+        (repo / "cloudflare" / "digichat-cloudflare").mkdir(parents=True)
         yield repo
 
 
 def _write_version(repo: Path, version: str) -> None:
-    (repo / "frontend" / "digichat" / "package.json").write_text(f'{{"version": "{version}"}}\n')
+    (repo / "cloudflare" / "digichat" / "package.json").write_text(f'{{"version": "{version}"}}\n')
 
 
 def _commit(repo: Path, message: str) -> str:
@@ -237,7 +237,7 @@ def test_gate_skips_when_neither_version_nor_wrapper_changed(scratch_repo: Path)
     _write_version(scratch_repo, "1.0.0")
     before = _commit(scratch_repo, "initial")
     # An unrelated file changes; version and wrapper both stay untouched.
-    (scratch_repo / "frontend" / "digichat" / "README.md").write_text("noop\n")
+    (scratch_repo / "cloudflare" / "digichat" / "README.md").write_text("noop\n")
     _commit(scratch_repo, "docs: noop")
 
     assert _run_gate(scratch_repo, before) == "false"
@@ -250,7 +250,7 @@ def test_gate_refuses_to_guess_when_version_field_is_missing(scratch_repo: Path)
     prior version -- the gate must fail loudly instead of guessing."""
     _write_version(scratch_repo, "1.0.0")
     before = _commit(scratch_repo, "initial")
-    (scratch_repo / "frontend" / "digichat" / "package.json").write_text('{"name": "digichat"}\n')
+    (scratch_repo / "cloudflare" / "digichat" / "package.json").write_text('{"name": "digichat"}\n')
     _commit(scratch_repo, "oops: dropped the version field")
 
     script = _gating_step()["run"]
@@ -292,7 +292,7 @@ def test_gate_deploys_when_only_the_wrapper_itself_changes(scratch_repo: Path) -
     purely to it must still trigger a deploy."""
     _write_version(scratch_repo, "1.0.0")
     before = _commit(scratch_repo, "initial")
-    (scratch_repo / "frontend" / "digichat-cloudflare" / "src.ts").write_text("// fix\n")
+    (scratch_repo / "cloudflare" / "digichat-cloudflare" / "src.ts").write_text("// fix\n")
     _commit(scratch_repo, "fix(digichat-cloudflare): router bug")
 
     assert _run_gate(scratch_repo, before) == "true"

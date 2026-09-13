@@ -41,7 +41,7 @@
 -- rejected too: the detector has false negatives (an attempt 1 that died before its own
 -- diagnostics write leaves no prior insert, so its row reads clean), and guessing 1 on those
 -- is the same fabrication in a smaller dose. Attempts are 1-based, so 0 can never collide with
--- a real value. Nothing consumes the legacy value — frontend/olympus/lib/run-episodes.ts
+-- a real value. Nothing consumes the legacy value — cloudflare/olympus/lib/run-episodes.ts
 -- counts rows and orders by created_at.
 --
 -- Unwrapped on purpose: db-migrate.yml runs an unwrapped file and its ledger INSERT in ONE

@@ -41,12 +41,12 @@ RUN uv pip install --system -e "./digillm"
 
 COPY digigraph/pyproject.toml ./digigraph/
 COPY digigraph/src ./digigraph/src
-RUN uv pip install --system -e "./digigraph"
+RUN uv pip install --system -e "./digigraph[mcp]"
 
 COPY digisearch/pyproject.toml digisearch/ARCHITECTURE.md ./digisearch/
 COPY digisearch/src ./digisearch/src
 COPY digisearch/seeds ./digisearch/seeds
-RUN uv pip install --system -e "./digisearch[server,ingestion,chroma]"
+RUN uv pip install --system -e "./digisearch[server,ingestion,chroma,web-search]"
 
 COPY digivault/pyproject.toml digivault/ARCHITECTURE.md ./digivault/
 COPY digivault/src ./digivault/src
@@ -60,13 +60,13 @@ COPY infra/digichat-release/config /app/config
 # House Cheaper Inference overlay + merge script (boot-time merge when key set)
 COPY config/litellm.cheaperinference.yaml /app/config/litellm.cheaperinference.yaml
 COPY scripts/merge_litellm_cheaperinference.py /app/scripts/merge_litellm_cheaperinference.py
-COPY frontend/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
+COPY cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
      /etc/supervisor/conf.d/digithings.conf
-COPY frontend/digithings-stack-cloudflare/container/entrypoint.sh /entrypoint.sh
-COPY frontend/digithings-stack-cloudflare/container/seed_chroma.sh /seed_chroma.sh
-COPY frontend/digithings-stack-cloudflare/container/start_digikey.sh /start_digikey.sh
-COPY frontend/digithings-stack-cloudflare/container/start_digisearch.sh /start_digisearch.sh
-COPY frontend/digithings-stack-cloudflare/container/seed /seed
+COPY cloudflare/digithings-stack-cloudflare/container/entrypoint.sh /entrypoint.sh
+COPY cloudflare/digithings-stack-cloudflare/container/seed_chroma.sh /seed_chroma.sh
+COPY cloudflare/digithings-stack-cloudflare/container/start_digikey.sh /start_digikey.sh
+COPY cloudflare/digithings-stack-cloudflare/container/start_digisearch.sh /start_digisearch.sh
+COPY cloudflare/digithings-stack-cloudflare/container/seed /seed
 RUN chmod +x /entrypoint.sh /seed_chroma.sh /start_digikey.sh /start_digisearch.sh \
     && mkdir -p /data/chroma /data/vault /data/digikey /var/log/supervisor
 

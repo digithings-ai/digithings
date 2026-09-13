@@ -7,7 +7,7 @@
 -- RLS threat model (Olympus): anon_read policies below allow SELECT for the
 -- public demo dashboard using NEXT_PUBLIC_SUPABASE_ANON_KEY. This is intentional
 -- read-only public data — not a BFF/session model. Tightening requires product
--- sign-off (see frontend/olympus/README.md § Supabase / RLS).
+-- sign-off (see cloudflare/olympus/README.md § Supabase / RLS).
 -- ============================================================================
 
 -- 1. daily_snapshots — one row per daily run

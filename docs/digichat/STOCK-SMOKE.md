@@ -14,7 +14,7 @@ From the digichat 2.0 worktree:
 PATH="$PWD/.venv/bin:$PATH" make stack-local
 
 # Prefer YAML tenants — unset a mangled DIGICHAT_EMBED_TENANTS JSON:
-cd frontend/digichat
+cd cloudflare/digichat
 env -u DIGICHAT_EMBED_TENANTS \
   DIGICHAT_CONFIG_PATH="$PWD/config/examples/digithings-ai-embed.yaml" \
   npm run dev -- --hostname 127.0.0.1 -p 3005
@@ -46,7 +46,7 @@ env -u DIGICHAT_EMBED_TENANTS \
    - `features.reasoning: expanded` / `locked_open` → disclosure opens (locked stays open).
    - `gate.showLanguageSelector` / model picker: not mounted on the stock baseline.
    - `data-user-align` / bubbles respect `chrome.transcript.userAlign`.
-8. **CLI (optional)** — `frontend/digichat/cli` with `local-cli.yaml` (`cli.enabled: true`) hits the same `POST /api/chat`. Confirm Next/product sources still do not import `ink` / `@assistant-ui/react-ink` (`cli-isolation` unit test).
+8. **CLI (optional)** — `cloudflare/digichat/cli` with `local-cli.yaml` (`cli.enabled: true`) hits the same `POST /api/chat`. Confirm Next/product sources still do not import `ink` / `@assistant-ui/react-ink` (`cli-isolation` unit test).
 
 ## Record (2026-09-05, worktree `feat/digichat-2.0-assistant-ui`)
 

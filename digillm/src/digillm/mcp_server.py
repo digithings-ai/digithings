@@ -135,7 +135,9 @@ def run_mcp(
     if not _MCP_AVAILABLE or mcp is None:
         raise RuntimeError("the 'mcp' package is not installed (pip install 'digillm[mcp]')")
     bind = host or os.environ.get("DIGILLM_MCP_HOST", "127.0.0.1")
-    mcp.run(transport=transport, host=bind, port=port)
+    mcp.settings.host = bind
+    mcp.settings.port = port
+    mcp.run(transport=transport)
 
 
 def main(argv: list[str] | None = None) -> None:

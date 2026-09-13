@@ -1,10 +1,10 @@
 ## Goal
 
-Replace digithings.ai long architecture-only scroll with a **Cursor-style bento module grid** — each cell = module accent + capability card + optional `ProductFrame` UI crop ([`EVOLUTION.md` §3](../../../../frontend/digiweb/design/EVOLUTION.md)).
+Replace digithings.ai long architecture-only scroll with a **Cursor-style bento module grid** — each cell = module accent + capability card + optional `ProductFrame` UI crop ([`EVOLUTION.md` §3](../../../../cloudflare/digiweb/design/EVOLUTION.md)).
 
 ## Component
 
-- [x] `frontend/digithings-web/`
+- [x] `cloudflare/digithings-web/`
 
 ## Acceptance Criteria
 
@@ -19,12 +19,12 @@ Replace digithings.ai long architecture-only scroll with a **Cursor-style bento 
 ## Test Requirements
 
 ```bash
-cd frontend/digithings-web && npm run build
+cd cloudflare/digithings-web && npm run build
 ```
 
 ## Documentation to Update
 
-- [ ] `frontend/digiweb/design/EVOLUTION.md`
+- [ ] `cloudflare/digiweb/design/EVOLUTION.md`
 - [ ] Landing component comments if architecture section renamed
 
 ## Out of Scope

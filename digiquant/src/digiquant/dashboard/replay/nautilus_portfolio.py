@@ -1,7 +1,9 @@
 """WP10.4/WP16.4 — one-account shared-cash Nautilus portfolio replay (#2784, #2991).
 
 Builds a single ``BacktestEngine`` with one cash account, all instruments, and
-global event ordering. Target deltas execute on the next synchronized bar.
+global event ordering. Schema 1.0 target deltas execute on the next
+synchronized bar; schema 2.0 weight-schedule entries submit and fill on
+their own entry bar (causal convention).
 Worker-local imports only — never call the independent per-symbol average runner.
 
 WP16.4 adds :func:`reconcile_portfolio_replay_result` so every successful arm
@@ -15,7 +17,7 @@ reconciles NAV, cash, positions, fills, and commission totals in one engine.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import ROUND_DOWN, Decimal
 from typing import Any
 
@@ -51,6 +53,7 @@ def run_shared_cash_portfolio_replay(request: PortfolioReplayRequest) -> Portfol
             status=PortfolioReplayStatus.ERROR,
             message=f"{type(exc).__name__}: {exc}",
             starting_cash=request.starting_cash,
+            schema_version=request.schema_version,
         )
 
 
@@ -108,10 +111,26 @@ def _run_engine(request: PortfolioReplayRequest) -> PortfolioReplayResult:
                 status=PortfolioReplayStatus.ERROR,
                 message=f"no bars produced for {series.ticker}",
                 starting_cash=request.starting_cash,
+                schema_version=request.schema_version,
             )
         prepared_bars[series.ticker] = bars
 
-    targets = {t.ticker: t.weight for t in request.target_weights}
+    # Schema 1.0: one target set executed once (legacy trigger semantics;
+    # submission now sells-first for both paths — see _submit_rebalance_orders).
+    # Schema 2.0: ordered {effective_date: weights} executed per entry bar —
+    # submission and execution share the bar (causal convention: the book
+    # dated D earns the move into D+1, never retroactively). Daily bars
+    # assumed: one execution per date (first sync bar wins).
+    if request.weight_schedule:
+        schedule: dict[date, dict[str, Decimal]] = {
+            entry.effective_date: {t.ticker: t.weight for t in entry.weights}
+            for entry in request.weight_schedule
+        }
+        scheduled_mode = True
+    else:
+        schedule = {}
+        scheduled_mode = False
+    legacy_targets = {t.ticker: t.weight for t in request.target_weights}
     initial = {h.ticker: h.quantity for h in request.initial_holdings}
     tickers = [s.ticker for s in request.series]
     needs_seed = any(q > 0 for q in initial.values())
@@ -126,6 +145,7 @@ def _run_engine(request: PortfolioReplayRequest) -> PortfolioReplayResult:
             self._sync_count = 0
             self._seeded = not needs_seed
             self._rebalanced = False
+            self._executed_dates: set[date] = set()
             self._fills: list[FillRecord] = []
             self._nav_path: list[NavPoint] = []
 
@@ -150,6 +170,14 @@ def _run_engine(request: PortfolioReplayRequest) -> PortfolioReplayResult:
                 self._seeded = True
                 return
 
+            if scheduled_mode:
+                # One submission per schedule entry bar; fills land the same
+                # bar (causal convention, next_bar_execution=False enforced).
+                if ts.date() in schedule and ts.date() not in self._executed_dates:
+                    self._submit_rebalance_orders(schedule[ts.date()])
+                    self._executed_dates.add(ts.date())
+                return
+
             if self._rebalanced:
                 return
 
@@ -160,7 +188,7 @@ def _run_engine(request: PortfolioReplayRequest) -> PortfolioReplayResult:
             exec_sync = decision_sync + (1 if next_bar else 0)
             if self._sync_count < exec_sync:
                 return
-            self._submit_rebalance_orders()
+            self._submit_rebalance_orders(legacy_targets)
             self._rebalanced = True
 
         def _nav_and_qty(self) -> tuple[Decimal, dict[str, Decimal], dict[str, Decimal]]:
@@ -195,12 +223,16 @@ def _run_engine(request: PortfolioReplayRequest) -> PortfolioReplayResult:
                 )
                 self.submit_order(order)
 
-        def _submit_rebalance_orders(self) -> None:
+        def _submit_rebalance_orders(self, weights: dict[str, Decimal]) -> None:
             nav, qty, last = self._nav_and_qty()
             if nav <= 0:
                 return
+            # Two passes, sells before buys: a fully-invested book cannot fund
+            # buys from sale proceeds until the sells actually fill, so issuing
+            # buys first trips AccountBalanceNegative halts.
+            pending_buys: list[tuple[Any, int]] = []
             for ticker in tickers:
-                weight = targets.get(ticker, Decimal("0"))
+                weight = weights.get(ticker, Decimal("0"))
                 px = last[ticker]
                 if px <= 0:
                     continue
@@ -216,9 +248,21 @@ def _run_engine(request: PortfolioReplayRequest) -> PortfolioReplayResult:
                     units = min(units, int(qty[ticker]))
                 if units <= 0:
                     continue
+                if side == OrderSide.BUY:
+                    pending_buys.append((instruments[ticker].id, units))
+                    continue
                 order = self.order_factory.market(
                     instrument_id=instruments[ticker].id,
                     order_side=side,
+                    quantity=Quantity.from_int(units),
+                    time_in_force=TimeInForce.GTC,
+                    tags=["rebalance"],
+                )
+                self.submit_order(order)
+            for instrument_id, units in pending_buys:
+                order = self.order_factory.market(
+                    instrument_id=instrument_id,
+                    order_side=OrderSide.BUY,
                     quantity=Quantity.from_int(units),
                     time_in_force=TimeInForce.GTC,
                     tags=["rebalance"],
@@ -309,7 +353,7 @@ def _run_engine(request: PortfolioReplayRequest) -> PortfolioReplayResult:
     ).quantize(_MONEY_QUANTUM)
 
     draft = PortfolioReplayResult.model_construct(
-        schema_version="1.0",
+        schema_version=request.schema_version,
         request_id=request.request_id,
         request_content_hash=request.content_hash(),
         status=PortfolioReplayStatus.OK,
@@ -326,6 +370,7 @@ def _run_engine(request: PortfolioReplayRequest) -> PortfolioReplayResult:
     )
     digest = portfolio_replay_result_content_hash(draft)
     return PortfolioReplayResult(
+        schema_version=request.schema_version,
         request_id=request.request_id,
         request_content_hash=request.content_hash(),
         status=PortfolioReplayStatus.OK,

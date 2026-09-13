@@ -1,8 +1,9 @@
 """Unit tests for dashboard EOD accounting persistence (#2597, Task 3.2).
 
 Covers: idempotent exact retry; provisional H9 never selected as final;
-incomplete marks remain non-final; restatement supersedes; metrics consume
-finalized period; mid-chain failure publishes no partial final.
+incomplete marks remain non-final; restatement supersedes; metrics ignore
+finalized periods (engine NAV is the sole pnl source, #3695); mid-chain
+failure publishes no partial final.
 """
 
 from __future__ import annotations
@@ -113,9 +114,8 @@ class _MergingQuery(_FakeQuery):
             seen.add(key)
             if self._matches(row):
                 rows.append(row)
-        if self._order is not None:
-            col, desc = self._order
-            rows.sort(key=lambda r: r.get(col, ""), reverse=desc)
+        for col, desc in reversed(self._orders):
+            rows.sort(key=lambda r, _c=col: r.get(_c, ""), reverse=desc)
         if self._range is not None:
             start, end = self._range
             rows = rows[start : end + 1]
@@ -288,7 +288,13 @@ def _load_metrics_mod():
     return mod
 
 
-def test_metrics_prefer_finalized_period_over_attribution() -> None:
+def test_metrics_ignore_finalized_period_uses_engine_nav() -> None:
+    """Finalized periods must NOT feed daily pnl (#3695 SSOT cutover).
+
+    The Nautilus engine NAV series is the sole pnl source; a persisted final
+    period (2.0 here) and poisoned attribution (21-day-scale 9.99) must both
+    lose to the engine-written nav row (100.0 -> 101.0 = 1.0).
+    """
     mod = _load_metrics_mod()
     client = MergingFake()
     period = compute_period(_final_hold_input())
@@ -311,8 +317,9 @@ def test_metrics_prefer_finalized_period_over_attribution() -> None:
     mod.upsert_portfolio_metrics_daily(client, PERIOD.isoformat())
     rows = client.store.get("portfolio_metrics", [])
     assert rows, "expected portfolio_metrics upsert"
-    # Final period return: (51000-50000)/50000 * 100 = 2.0
-    assert rows[0]["pnl_pct"] == pytest.approx(2.0, abs=1e-6)
+    # Final period return would be (51000-50000)/50000 * 100 = 2.0, but the
+    # engine NAV series wins: (101.0-100.0)/100.0 * 100 = 1.0.
+    assert rows[0]["pnl_pct"] == pytest.approx(1.0, abs=1e-6)
 
 
 def test_metrics_ignore_incomplete_period() -> None:

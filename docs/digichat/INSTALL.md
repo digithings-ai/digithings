@@ -33,7 +33,7 @@ docker pull ghcr.io/digithings-ai/digichat:v1.0.0
 |---|---|
 | Git tag | `digichat-vX.Y.Z` |
 | GHCR image | `ghcr.io/digithings-ai/digichat:vX.Y.Z` |
-| Changelog | `frontend/digichat/CHANGELOG.md` |
+| Changelog | `cloudflare/digichat/CHANGELOG.md` |
 | Current app version | `1.0.0` |
 
 **Existing clients (DataTap and others) stay on `v0.9.3`.** That GHCR tag remains
@@ -78,6 +78,13 @@ docker compose -f infra/digichat-release/compose.profile-a.yml \
   --env-file infra/digichat-release/.env.profile-a up -d
 ```
 
+**digikey signing key (production hardening).** The template ships
+`DIGIKEY_ALLOW_EPHEMERAL_KEY=1` so a local/dev install starts without a PEM —
+digikey generates an in-process RS256 key and its JWKS rotates on every restart.
+Production must set `DIGIKEY_PRIVATE_KEY_PEM` to a stable RS256 private key
+(multiline PEM or base64) and set `DIGIKEY_ALLOW_EPHEMERAL_KEY=0`; digikey then
+fails closed at startup if the PEM is missing.
+
 Does **not** start digiquant / digisearch / digismith / heartbeat / observability.
 
 **Local / digithings website parity:** one supervisord image (same as Cloudflare
@@ -119,7 +126,7 @@ in digichat env.
 
 ## Env checklist
 
-Full schema: [`frontend/digichat/ARCHITECTURE.md`](../../frontend/digichat/ARCHITECTURE.md).
+Full schema: [`cloudflare/digichat/ARCHITECTURE.md`](../../cloudflare/digichat/ARCHITECTURE.md).
 Product sketch: [`digichat-self-hosted-release.md`](../architecture/digichat-self-hosted-release.md) §3.
 
 ### Always (both profiles)
@@ -196,7 +203,7 @@ DIGICHAT_EMBED_TENANTS={"client.example.com":{...}}
 Security: digichat never emits `frame-ancestors *`. If neither source yields hosts,
 only first-party digithings origins (plus `'self'`) remain allowlisted.
 
-Optional seed list of known hosts: `frontend/digichat/embed-hosts.txt` (not baked into the image).
+Optional seed list of known hosts: `cloudflare/digichat/embed-hosts.txt` (not baked into the image).
 
 ## Smoke
 
@@ -229,6 +236,6 @@ orthogonal — see
 
 - Overlays: [`infra/digichat-release/README.md`](../../infra/digichat-release/README.md)
 - digithings operator Tunnel host: [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md)
-- Local ops: [`frontend/digichat/OPERATIONS.md`](../../frontend/digichat/OPERATIONS.md)
+- Local ops: [`cloudflare/digichat/OPERATIONS.md`](../../cloudflare/digichat/OPERATIONS.md)
 - Product model: [`digichat-modular-frontend.md`](../architecture/digichat-modular-frontend.md) §5
 - Docs onboard: [`CLIENT-DOCS-ONBOARD.md`](CLIENT-DOCS-ONBOARD.md)

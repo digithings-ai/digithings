@@ -1,0 +1,61 @@
+# digichat — Next.js standalone.
+# Build from the REPO ROOT (compose: context '.', dockerfile cloudflare/digichat/Dockerfile):
+# the app is an npm workspace member whose lockfile lives at the repo root and whose
+# private @digithings/design dependency only resolves through the workspace link.
+FROM node:22-alpine AS deps
+WORKDIR /app
+RUN apk add --no-cache libc6-compat
+COPY package.json package-lock.json ./
+COPY cloudflare/digichat/package.json cloudflare/digichat/
+COPY cloudflare/digichat-ui/package.json cloudflare/digichat-ui/
+COPY cloudflare/digiweb/design/package.json cloudflare/digiweb/design/
+COPY cloudflare/digiweb/web/package.json cloudflare/digiweb/web/
+COPY cloudflare/dashboard/package.json cloudflare/dashboard/
+RUN npm ci --workspace cloudflare/digichat --include-workspace-root
+
+FROM node:22-alpine AS builder
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+# /embed frame-ancestors are set at request time by src/proxy.ts from runtime
+# DIGICHAT_EMBED_HOSTS and/or DIGICHAT_EMBED_TENANTS host keys.
+# Do NOT pass DIGICHAT_EMBED_TENANTS as a build-arg (tokens in layer history).
+# DIGICHAT_EMBED_HOSTS build-arg is unused for CSP after runtime proxy; omit it.
+COPY --from=deps /app ./
+COPY cloudflare/digiweb/design ./cloudflare/digiweb/design
+COPY cloudflare/digiweb/web ./cloudflare/digiweb/web
+# Product skin @imports gallery chatbot.css from outside web/ (#3717).
+COPY ["cloudflare/digiweb/reference/app/(chatbot)/chatbot/chatbot.css", "cloudflare/digiweb/reference/app/(chatbot)/chatbot/chatbot.css"]
+COPY cloudflare/digichat-ui ./cloudflare/digichat-ui
+COPY cloudflare/digichat ./cloudflare/digichat
+# Same bake as Dockerfile.digichat-cloudflare: health version matches package.json.
+ARG DIGICHAT_VERSION
+RUN VERSION="${DIGICHAT_VERSION:-$(node -p "require('./cloudflare/digichat/package.json').version")}" \
+ && printf '%s' "$VERSION" > /tmp/digichat-version \
+ && DIGICHAT_VERSION="$VERSION" npm run build --workspace cloudflare/digichat
+
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN apk add --no-cache curl
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
+# Workspace standalone output mirrors the monorepo: server.js lives at
+# cloudflare/digichat/server.js inside the standalone tree.
+COPY --from=builder --chown=nextjs:nodejs /app/cloudflare/digichat/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/cloudflare/digichat/.next/static ./cloudflare/digichat/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/cloudflare/digichat/public ./cloudflare/digichat/public
+COPY --from=builder --chown=nextjs:nodejs /app/cloudflare/digichat/scripts/trusted-proxy-server.mjs ./cloudflare/digichat/scripts/trusted-proxy-server.mjs
+# Drizzle migrations: the standalone server.js chdir()s to its own directory,
+# so runMigrate() resolves process.cwd()/drizzle = cloudflare/digichat/drizzle.
+# Compose sets DIGICHAT_AUTO_MIGRATE=1, so the folder MUST ship in the image.
+COPY --from=builder --chown=nextjs:nodejs /app/cloudflare/digichat/drizzle ./cloudflare/digichat/drizzle
+# Operator deploy YAML examples (DIGICHAT_CONFIG_PATH=/app/config/examples/skins/<id>.yaml)
+COPY --from=builder --chown=nextjs:nodejs /app/cloudflare/digichat/config /app/config
+COPY --from=builder /tmp/digichat-version /etc/digichat-version
+ARG DIGICHAT_VERSION
+ENV DIGICHAT_VERSION=$DIGICHAT_VERSION
+USER nextjs
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+CMD ["node", "cloudflare/digichat/scripts/trusted-proxy-server.mjs"]

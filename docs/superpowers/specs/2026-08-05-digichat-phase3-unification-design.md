@@ -18,7 +18,7 @@ Still locked from earlier Phase 3 product intent:
 - digithings has **no Azure**; DataTap ACA is client-only
 - Do **not** use `chat.digithings.ai` as the marketing chat host
 
-Deferred (optional later, Paid-only): `frontend/digichat-cloudflare/` Containers scaffold + iframe shell.
+Deferred (optional later, Paid-only): `cloudflare/digichat-cloudflare/` Containers scaffold + iframe shell.
 *Superseded 2026-08-06 — that scaffold was deleted unused; see ADR-0018 historical note 4.*
 
 ## Problem

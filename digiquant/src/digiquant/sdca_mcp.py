@@ -11,8 +11,16 @@ import json
 from pathlib import Path
 from typing import Any  # score:allow untyped any — MCP JSON argument bags
 
+from digiquant.data.onchain.bgeometrics import DEFAULT_CACHE_DIR as BGEOMETRICS_CACHE
+from digiquant.data.onchain.bgeometrics import fetch_bgeometrics_series
 from digiquant.data.onchain.bitview import DEFAULT_CACHE_DIR as BITVIEW_CACHE
 from digiquant.data.onchain.bitview import DEFAULT_SERIES, fetch_bitview_series
+from digiquant.data.onchain.coinmetrics import DEFAULT_CACHE_DIR as COINMETRICS_CACHE
+from digiquant.data.onchain.coinmetrics import (
+    DEFAULT_PAGE_SIZE,
+    fetch_coinmetrics_catalog,
+    fetch_coinmetrics_series,
+)
 from digiquant.data.prices.history_cache import DEFAULT_CACHE_DIR, incremental_update, load_cached
 from digiquant.strategies.sdca.asset_profile import daily_closes_from_ohlcv
 from digiquant.strategies.sdca.fit_weights import (
@@ -39,6 +47,7 @@ def run_fetch_bitview_series(
     timeout: float = 30.0,
     start: int | None = None,
     end: int | None = None,
+    allow_derived: bool = False,
     session: Any | None = None,
 ) -> str:
     """Fail-soft Bitview/BRK fetch. Returns JSON (never raises)."""
@@ -53,7 +62,97 @@ def run_fetch_bitview_series(
             session=session,
             start=start,
             end=end,
+            allow_derived=allow_derived,
         )
+    except Exception as exc:
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+    return result.model_dump_json(indent=2)
+
+
+def run_fetch_bgeometrics_series(
+    *,
+    metric: str,
+    startday: str | None = None,
+    endday: str | None = None,
+    last: bool = False,
+    cache_dir: str | None = None,
+    timeout: float = 30.0,
+    token: str | None = None,
+    session: Any | None = None,
+) -> str:
+    """Fail-soft bitcoin-data.com (BGeometrics) fetch. Returns JSON (never raises).
+
+    Free tier: 10 req/hour, 15 req/day, ~4-year history cap — fetch one
+    metric per call.
+    """
+    try:
+        result = fetch_bgeometrics_series(
+            metric,
+            startday=startday,
+            endday=endday,
+            last=last,
+            cache_dir=cache_dir or str(BGEOMETRICS_CACHE),
+            timeout=timeout,
+            token=token,
+            session=session,
+        )
+    except Exception as exc:
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+    return result.model_dump_json(indent=2)
+
+
+def run_fetch_coinmetrics_series(
+    *,
+    metric: str,
+    asset: str = "btc",
+    start_time: str | None = None,
+    end_time: str | None = None,
+    page_size: int = DEFAULT_PAGE_SIZE,
+    cache_dir: str | None = None,
+    timeout: float = 30.0,
+    api_key: str | None = None,
+    session: Any | None = None,
+) -> str:
+    """Fail-soft CoinMetrics Community API fetch. Returns JSON (never raises).
+
+    One asset/metric per call (comma lists are rejected by the client — see
+    ``digiquant_list_coinmetrics_catalog`` to discover what's available first).
+    Free community tier exposes a narrow metric set per asset; of the
+    valuation family only CapMVRVCur (MVRV) is included for BTC, with full
+    history back to 2010-07-18. CC BY-NC — research-only.
+    """
+    try:
+        result = fetch_coinmetrics_series(
+            metric,
+            asset=asset,
+            start_time=start_time,
+            end_time=end_time,
+            page_size=page_size,
+            cache_dir=cache_dir or str(COINMETRICS_CACHE),
+            timeout=timeout,
+            api_key=api_key,
+            session=session,
+        )
+    except Exception as exc:
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+    return result.model_dump_json(indent=2)
+
+
+def run_list_coinmetrics_catalog(
+    *,
+    asset: str | None = None,
+    timeout: float = 30.0,
+    api_key: str | None = None,
+    session: Any | None = None,
+) -> str:
+    """Fail-soft CoinMetrics catalog discovery. Returns JSON (never raises).
+
+    Lists which metrics actually exist for ``asset`` (or every asset when
+    omitted) on the community tier, so a caller isn't limited to guessing
+    from the frozen BTC-only metric list in ``digiquant.data.onchain.coinmetrics``.
+    """
+    try:
+        result = fetch_coinmetrics_catalog(asset, timeout=timeout, api_key=api_key, session=session)
     except Exception as exc:
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
     return result.model_dump_json(indent=2)
@@ -190,6 +289,9 @@ def run_build_sdca_risk_index(
 
 __all__ = [
     "run_build_sdca_risk_index",
+    "run_fetch_bgeometrics_series",
     "run_fetch_bitview_series",
+    "run_fetch_coinmetrics_series",
     "run_fit_sdca_weights",
+    "run_list_coinmetrics_catalog",
 ]

@@ -204,8 +204,8 @@ def test_a_slow_consumer_still_gets_backpressure() -> None:
 
 
 @pytest.mark.unit
-def test_streaming_digigraph_error_channel_requires_error_code() -> None:
-    """The SSE digigraph_error contract is gated on error_code — not every error."""
+def test_streaming_digigraph_error_channel_always_emits() -> None:
+    """Every graph error is an SSE digigraph_error (sanitized); never assistant text."""
     from queue import Queue
     from types import SimpleNamespace
 
@@ -223,8 +223,11 @@ def test_streaming_digigraph_error_channel_requires_error_code() -> None:
         return events
 
     without_code = _collect_events({"error": "Internal stack trace at db.internal:5432"})
-    assert ("error",) not in {e[0] for e in without_code}
-    assert any(e == ("content", "Error: Internal stack trace at db.internal:5432") for e in without_code)
+    error_events = [e for e in without_code if e[0] == "error"]
+    assert len(error_events) == 1
+    assert error_events[0][1]["code"] == "llm_error"
+    assert "db.internal" not in error_events[0][1]["message"]
+    assert not any(e[0] == "content" for e in without_code)
 
     quota_message = "Free-tier model quota is exhausted."
     with_code = _collect_events(
@@ -234,3 +237,4 @@ def test_streaming_digigraph_error_channel_requires_error_code() -> None:
     assert error_events == [
         ("error", {"code": "free_quota_exceeded", "message": quota_message})
     ]
+    assert not any(e[0] == "content" for e in with_code)

@@ -71,8 +71,9 @@ class TestResearchNode:
                 m.side_effect = RuntimeError("API down")
                 out = research_node({"prompt": "mean reversion on tech"})
         assert out["research_note"] == "error"
-        assert out.get("error") == "Research failed. Please try again shortly."
-        assert "API down" not in out.get("error", "")
+        assert "API down" in out.get("error", "")
+        assert "Research failed" not in out.get("error", "")
+        assert out.get("error_code") == "llm_error"
 
     def test_empty_prompt_returns_error(self) -> None:
         """Empty prompt returns error; no defaults."""

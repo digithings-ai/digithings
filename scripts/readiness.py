@@ -72,7 +72,7 @@ DOC_MODULES = {
     "digigraph": ["digigraph/src"],
     "digiquant": ["digiquant/src"],
     "digisearch": ["digisearch/src"],
-    "digichat": ["frontend/digichat/src"],
+    "digichat": ["cloudflare/digichat/src"],
     "digikey": ["digikey/src"],
     "digismith": ["digismith/src"],
     "digiclaw": ["digiclaw/src"],

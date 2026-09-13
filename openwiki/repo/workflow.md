@@ -3,9 +3,6 @@ type: repo-guide
 title: Repo Workflow
 description: Branching model, make targets, and review/merge policy pointers for the digithings monorepo.
 tags: [repo, branching, make, review-policy]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-4b2266e051b2270b6ec5aa4f
     resource: repo://BRANCHING.md
@@ -14,6 +11,9 @@ sources:
   - id: openwiki-source-012f2c78e3b1446dfc35803f
     resource: repo://Makefile
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # Repo Workflow

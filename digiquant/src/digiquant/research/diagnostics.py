@@ -406,7 +406,7 @@ def summarize_run(
     # Deliberately unchanged from the pre-#1736 gate, because this is what decides whether
     # CI spends another two attempts plus ~20 min of backoff (#726/#809/#1555). The
     # ``degraded_pct`` share rule lives HERE and nowhere else now: with the STRICT rule below,
-    # it no longer has any influence on ``status`` — ``ATLAS_DEGRADED_RUN_PCT`` has narrowed
+    # it no longer has any influence on ``status`` — ``DIGIQUANT_DEGRADED_RUN_PCT`` has narrowed
     # from "how much damage is unhealthy" to "how much damage is worth re-running".
     #
     # A run that published a snapshot before SIGINT / ctrl-C did useful work — promote from

@@ -10,16 +10,12 @@ import pytest
 from digigraph.model_config import (
     apply_digiquant_house_env,
     get_digiquant_tier,
-    get_grounding_model,
     get_model_for_mode,
     get_model_for_phase,
-    is_flagship_allowed_models_entry,
     is_flagship_openrouter_model,
     is_native_search_only_model,
     is_tool_use_capable_model,
-    is_web_search_capable_model,
     resolve_request_model,
-    sanitize_allowed_models,
     tier_allows_phase_model,
 )
 
@@ -39,9 +35,10 @@ def _clear_env(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
-# Phase pools = bare OpenRouter slugs (function tools). The ``:online`` suffix is a
+# Phase pools = bare slugs (function tools). The ``:online`` suffix is a
 # web-search variant only and must never appear in a phase pool — it 404s on tool use
-# for open-weight models. Web-search/grounding slugs keep ``:online``/perplexity below.
+# for open-weight models. Grounding is the first-party web_search tool (#3859),
+# so no pool carries ``:online`` / perplexity pins.
 _CHEAP_PHASE_MODELS = frozenset(
     {
         "deepseek/deepseek-v4-flash",  # #1622: 1M ctx, tools + strict json_schema
@@ -68,14 +65,8 @@ _QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
     }
 )
 
-# #3660 house grounding: CI synthesis after digisearch (not sonar / :online).
-_WEB_SEARCH_MODELS = frozenset(
-    {
-        "google/gemini-3.1-flash-lite",
-        "deepseek/deepseek-v4-flash",
-    }
-)
-
+# #3859: no separate web-search model pool — grounding is the first-party
+# web_search tool, so every pool below is the full tool-capable surface.
 _TIER_PHASE_MODELS = {
     "cheap": _CHEAP_PHASE_MODELS,
     "balanced": _BALANCED_PHASE_MODELS,
@@ -107,7 +98,7 @@ def test_portfolio_thesis_and_portfolio_slugs_route_openrouter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """portfolio H1–H7 slugs must resolve via dashboard_models (CI has OPENROUTER_API_KEY only)."""
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     cfg = model_config._load_digiquant_models()
     cheap = cfg.tiers["cheap"]
     assert get_model_for_phase("portfolio/thesis/market-review") in cheap.allowed_models["research"]
@@ -128,7 +119,7 @@ def test_deliberation_pinned_to_json_reliable_deepseek_v4_flash(
     to deepseek-v4-flash — the json/tool-reliable open-weight model — for *every* ticker,
     bypassing the pool hash. Never maverick, never r1.
     """
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     # The live macro watchlist from the failing run.
@@ -158,7 +149,7 @@ def test_master_digest_pinned_to_v4_flash(monkeypatch: pytest.MonkeyPatch) -> No
     carried forward). v4-flash's 1M context also removes the 64k synthesis ceiling
     (#1559); the input budget remains as a cost bound. Never r1, never maverick.
     """
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     model = get_model_for_phase("master-digest")
     assert model == "deepseek/deepseek-v4-flash"
     assert is_tool_use_capable_model(model)
@@ -169,7 +160,7 @@ def test_asset_analyst_slug_resolves_to_known_good_openrouter_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """H5 asset-analyst must resolve from the extraction pool (CI run 27950332738)."""
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     model = get_model_for_phase("portfolio/asset-analyst-AAPL")
     assert model is not None
     assert model in _CHEAP_PHASE_MODELS
@@ -193,9 +184,6 @@ def test_digiquant_research_config_never_uses_ollama_model_ids() -> None:
             for model in pool or []:
                 if str(model).startswith("ollama/"):
                     offenders.append(f"tiers.{tier_name}.allowed_models.{cap}:{model}")
-        for model in tier.get("web_search_models") or []:
-            if str(model).startswith("ollama/"):
-                offenders.append(f"tiers.{tier_name}.web_search_models:{model}")
     modes = yaml.safe_load(Path("config/model_modes.yaml").read_text(encoding="utf-8"))
     for phase, model in (modes.get("phase_models") or {}).items():
         if str(model).startswith("ollama/"):
@@ -208,7 +196,7 @@ def test_decision_reflector_resolves_openrouter_house_slug(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """decision-reflector must keep the digiquant pool slug through resolve_request_model."""
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.delenv("OLLAMA_MODEL", raising=False)
     monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
     monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
@@ -225,7 +213,7 @@ def test_decision_reflector_resolves_openrouter_house_slug(
 
 
 def test_cheap_tier_resolves_extraction_and_reasoning(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     cfg = model_config._load_digiquant_models()
     cheap = cfg.tiers["cheap"]
     assert get_model_for_phase("alt-sentiment-news") in cheap.allowed_models["extraction"]
@@ -235,7 +223,7 @@ def test_cheap_tier_resolves_extraction_and_reasoning(monkeypatch: pytest.Monkey
 
 @pytest.mark.unit
 def test_quality_tier_uses_reasoning_pool(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "quality")
     cfg = model_config._load_digiquant_models()
     quality = cfg.tiers["quality"]
     assert get_model_for_phase("pm-rebalance") in quality.allowed_models["reasoning"]
@@ -244,7 +232,7 @@ def test_quality_tier_uses_reasoning_pool(monkeypatch: pytest.MonkeyPatch) -> No
 
 @pytest.mark.unit
 def test_balanced_tier_includes_mid_frontier_models(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "balanced")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "balanced")
     cfg = model_config._load_digiquant_models()
     balanced = cfg.tiers["balanced"]
     research = balanced.allowed_models["research"]
@@ -267,7 +255,7 @@ def test_quality_tier_allows_frontier_in_pools() -> None:
 
 @pytest.mark.unit
 def test_phase_slug_selection_is_stable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     first = get_model_for_phase("macro")
     second = get_model_for_phase("macro")
     assert first == second
@@ -333,27 +321,10 @@ def test_apply_does_not_override_explicit_env(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.unit
-def test_grounding_model_from_web_search_pool(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    model = get_grounding_model(segment="macro")
-    assert model is not None
-    cfg = model_config._load_digiquant_models()
-    assert model in cfg.tiers["cheap"].web_search_models
-
-
-@pytest.mark.unit
-def test_grounding_model_uses_ci_synthesis_pool(monkeypatch: pytest.MonkeyPatch) -> None:
-    """#3660: house grounding synthesizers are CI pins, not sonar/:online."""
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    cfg = model_config._load_digiquant_models()
-    assert "google/gemini-3.1-flash-lite" in cfg.tiers["cheap"].web_search_models
-    assert "deepseek/deepseek-v4-flash" in cfg.tiers["cheap"].web_search_models
-    assert "perplexity/sonar" not in cfg.tiers["cheap"].web_search_models
-    for segment in ("macro", "bonds", "ci-grounding", "alt-sentiment-news"):
-        model = get_grounding_model(segment=segment)
-        assert model is not None
-        assert model in cfg.tiers["cheap"].web_search_models
-        assert not is_native_search_only_model(model)
+def test_no_synthesis_grounding_model() -> None:
+    """#3859: grounding is the first-party web_search tool — no synthesis model hook."""
+    assert not hasattr(model_config, "get_grounding_model")
+    assert not hasattr(model_config, "is_web_search_capable_model")
 
 
 @pytest.mark.unit
@@ -367,7 +338,7 @@ def test_phase_models_flagship_override_rejected_on_cheap(
         Path(_REPO_CONFIG, "digiquant_models.yaml").read_text()
     )
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     assert get_model_for_phase("macro") in _cheap_research_pool()
@@ -385,7 +356,7 @@ def test_phase_models_mid_tier_override_wins_on_balanced(
         Path(_REPO_CONFIG, "digiquant_models.yaml").read_text()
     )
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "balanced")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "balanced")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     assert get_model_for_phase("macro") == "openrouter/openai/gpt-5.6-luna"
@@ -425,7 +396,7 @@ def test_phase_models_online_override_rejected(
         Path(_REPO_CONFIG, "digiquant_models.yaml").read_text()
     )
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     model = get_model_for_phase("macro")
@@ -449,16 +420,10 @@ def test_flagship_detection(model: str, flagship: bool) -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize(
-    "model",
-    (
-        "openrouter/deepseek/deepseek-chat:online",
-        "openrouter/meta-llama/llama-4-maverick:online",
-        "openrouter/perplexity/sonar",
-    ),
-)
-def test_web_search_capable_models(model: str) -> None:
-    assert is_web_search_capable_model(model)
+def test_perplexity_is_native_search_only() -> None:
+    assert is_native_search_only_model("openrouter/perplexity/sonar")
+    assert not is_tool_use_capable_model("openrouter/perplexity/sonar")
+    assert not tier_allows_phase_model("openrouter/perplexity/sonar", "quality")
 
 
 @pytest.mark.unit
@@ -483,35 +448,8 @@ def test_tool_use_capable_models(model: str, capable: bool) -> None:
 
 
 @pytest.mark.unit
-def test_perplexity_is_native_search_only() -> None:
-    assert is_native_search_only_model("openrouter/perplexity/sonar")
-    assert is_web_search_capable_model("openrouter/perplexity/sonar")
-    assert not is_tool_use_capable_model("openrouter/perplexity/sonar")
-    assert not tier_allows_phase_model("openrouter/perplexity/sonar", "quality")
-
-
-@pytest.mark.unit
-def test_non_online_deepseek_not_web_search_capable() -> None:
-    assert not is_web_search_capable_model("openrouter/deepseek/deepseek-chat")
-
-
-@pytest.mark.unit
-def test_sanitize_allowed_models_strips_frontier_on_cheap() -> None:
-    raw = "deepseek/*,openai/*,anthropic/*,meta-llama/*"
-    assert sanitize_allowed_models(raw, tier="cheap") == "deepseek/*,meta-llama/*"
-    assert is_flagship_allowed_models_entry("openai/*")
-    assert not is_flagship_allowed_models_entry("deepseek/*")
-
-
-@pytest.mark.unit
-def test_sanitize_allowed_models_preserves_frontier_on_quality() -> None:
-    raw = "deepseek/*,openai/*,anthropic/*"
-    assert sanitize_allowed_models(raw, tier="quality") == raw
-
-
-@pytest.mark.unit
-def test_no_native_search_in_phase_pools_and_ci_web_search() -> None:
-    """#3660: phase pools stay tool-capable; web_search_models are CI synthesizers."""
+def test_no_native_search_in_phase_pools() -> None:
+    """Phase pools stay tool-capable; grounding is the web_search tool (#3859)."""
     cfg = model_config._load_digiquant_models()
     for tier_name, tier_cfg in cfg.tiers.items():
         for capability, pool in tier_cfg.allowed_models.items():
@@ -522,10 +460,6 @@ def test_no_native_search_in_phase_pools_and_ci_web_search() -> None:
                 assert ":online" not in model, (
                     f"tier {tier_name} {capability} must not pool :online {model}"
                 )
-        assert tier_cfg.web_search_models, f"tier {tier_name} needs web_search_models"
-        assert "perplexity/sonar" not in tier_cfg.web_search_models
-        assert all(":online" not in m for m in tier_cfg.web_search_models)
-        assert "google/gemini-3.1-flash-lite" in tier_cfg.web_search_models
 
 
 @pytest.mark.unit
@@ -553,9 +487,6 @@ def test_no_stale_qwen_model_ids_in_dashboard_config() -> None:
                 assert is_tool_use_capable_model(model), (
                     f"tier {tier_name} {capability} model {model!r} lacks tool use"
                 )
-        for model in tier_cfg.web_search_models:
-            assert model.lower() in {m.lower() for m in _WEB_SEARCH_MODELS}
-    assert "qwen" not in cfg.openrouter_defaults.allowed_models.lower()
 
 
 @pytest.mark.unit
@@ -569,7 +500,7 @@ def test_default_tier_is_cheap(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_digiquant_model_tier_wins_over_dashboard_alias(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """#3381: DIGIQUANT_MODEL_TIER is canonical; retired DASHBOARD_* is alias only."""
+    """#3381: DIGIQUANT_MODEL_TIER is canonical; the retired OLYMPUS_* name is ignored (#3784)."""
     monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "quality")
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     assert get_digiquant_tier() == "quality"
@@ -583,12 +514,11 @@ def test_digiquant_model_tier_alone(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_dashboard_model_tier_alias_when_canonical_absent(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_olympus_model_tier_alone_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#3784: sole-read — the retired OLYMPUS_MODEL_TIER no longer selects a tier."""
     monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
-    assert get_digiquant_tier() == "quality"
+    assert get_digiquant_tier() == "cheap"
 
 
 @pytest.mark.unit
@@ -638,8 +568,6 @@ def test_cheap_tier_has_no_flagship_pins() -> None:
             assert not is_flagship_openrouter_model(model), (
                 f"cheap {capability} pools flagship {model}"
             )
-    for model in cheap.web_search_models:
-        assert not is_flagship_openrouter_model(model)
 
 
 @pytest.mark.unit
@@ -649,8 +577,8 @@ def test_no_online_slug_in_any_phase_pool() -> None:
     For every tier and every capability pool in ``allowed_models``, no model may carry
     the ``:online`` suffix AND ``tier_allows_phase_model`` must hold. ``:online`` endpoints
     reject function tools for open-weight models, so routing a tool phase to one 404s
-    ("No endpoints found that support tool use"). Grounding is a separate web-search
-    pre-pass over ``web_search_models``; phase pools stay bare.
+    ("No endpoints found that support tool use"). Grounding is the first-party
+    web_search tool (#3859); phase pools stay bare.
     """
     cfg = model_config._load_digiquant_models()
     for tier_name, tier_cfg in cfg.tiers.items():
@@ -696,7 +624,7 @@ def test_pipeline_phase_slugs_resolve_to_openrouter(
     monkeypatch: pytest.MonkeyPatch, slug: str
 ) -> None:
     """Every live-pipeline phase slug must resolve to an OpenRouter model (never None)."""
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     resolved = get_model_for_phase(slug)
     assert resolved is not None, (
@@ -716,7 +644,7 @@ def test_deliberation_slug_routes_to_research_pool(monkeypatch: pytest.MonkeyPat
     ``test_deliberation_pinned_to_json_reliable_deepseek_v4_flash``), so the pinned model need
     not also sit in the live ``research`` pool — that pool is cost-tuned independently (#2368).
     """
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     resolved = get_model_for_phase("portfolio/deliberation-NVDA")
     assert resolved is not None
@@ -728,7 +656,7 @@ def test_get_model_for_mode_does_not_auto_override_when_openrouter_key_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Having OPENROUTER_API_KEY alone must not swap digigraph chat onto dashboard paid models."""
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
     monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
@@ -778,7 +706,7 @@ def test_unresolved_capability_returns_none_under_a_bound_byok_key(
     """
     from digigraph.llm_auth import pop_byok, push_byok_header
 
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     # 'macro' maps to a capability, so the capability branch is entered; the resolver
@@ -854,3 +782,19 @@ def test_apply_forces_openrouter_when_upstream_openrouter(
     apply_digiquant_house_env()
     assert os.environ["OPENAI_API_BASE"] == "https://openrouter.ai/api/v1"
     assert os.environ["OPENAI_API_KEY"] == "sk-or-test"
+
+
+@pytest.mark.unit
+def test_no_web_search_models_key() -> None:
+    """No tier keeps a web_search_models pin (tool-only grounding, #3859).
+
+    Raw-yaml assertion: DigiquantTierConfig has no extra="allow", so a
+    model_dump() check could never see the key — read the file instead.
+    """
+    import yaml
+
+    cfg = yaml.safe_load(Path("config/digiquant_models.yaml").read_text(encoding="utf-8"))
+    tiers = cfg.get("tiers") or {}
+    assert tiers, "expected tiers in digiquant models config"
+    for tier, body in tiers.items():
+        assert "web_search_models" not in body, tier

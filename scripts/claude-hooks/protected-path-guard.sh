@@ -38,7 +38,7 @@ done
 
 # Live-trading path regex (matches root agents.yml human_gates). The directory
 # fragment is anchored to digiquant — a bare '/live[/.]' also matched design
-# screenshots under frontend/**/references/**/live/ (false positives).
+# screenshots under cloudflare/**/references/**/live/ (false positives).
 live_trading_regex='(live_trading|execute_trade|place_order|(^|/)digiquant/(.*/)?live[/.])'
 
 # Branch check — agent-task branches (task-N-*) are allowed for protected edits
