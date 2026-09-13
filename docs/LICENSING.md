@@ -66,7 +66,7 @@ Why acceptance is proportionate:
   around its ELK layout path) removes it from the bundle entirely, with no
   relicensing of digithings-authored code required.
 - **Source availability.** Upstream source for the exact version is public at
-  [github.com/kieler/elkjs](https://github.com/kieler/elkjs) (tag `v0.11.1`); the
+  [github.com/kieler/elkjs](https://github.com/kieler/elkjs) (tag `0.11.1`); the
   published npm tarball carries the EPL-2.0 text (`LICENSE.md`). This record names
   the version and where to obtain the source, satisfying the EPL-2.0 §3.1
   object-code distribution condition.
