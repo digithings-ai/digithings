@@ -126,6 +126,9 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `brokers/stubs.py` | IB, Alpaca, QuantConnect stubs (all `NotImplementedError`) |
 | `tradingview.py` | PyneCore stubs (not implemented) |
 | `data/loader.py` | Polars OHLCV CSV loading and synthetic data generation |
+| `data/prices/_primitives.py` | Shared Wilder/true-range/ATR `pl.Expr` primitives (promoted from `technicals.py`, #137) |
+| `data/prices/levels.py` | Causal ATR / swing-pivot / Donchian levels engine (config, causal derivations, trail stop) (#137) |
+| `data/prices/levels_api.py` | Levels JSON contract + caller-frame parsing + non-blocking ticker-cache convenience (#137) |
 | `tearsheet.py` | Plotly HTML tearsheet orchestration (`create_tearsheet`); helpers split in #1185 |
 | `tearsheet_extract.py` | Equity/fill/drawdown extraction from Nautilus reports (#1185) |
 | `tearsheet_stats.py` | Categorized / full / risk HTML stats tables (#1185) |
@@ -225,6 +228,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_fetch_bgeometrics_series` | Fetch a single bitcoin-data.com (BGeometrics) metric by `startday`/`endday` into `data/onchain/bgeometrics/` parquet. Free tier is rate-limited; `token` (or `BGEOMETRICS_API_TOKEN`, sent only to the fixed bitcoin-data.com host) is sent as both `Authorization: Bearer` and `X-Bgapi-Token` (exact header name unconfirmed). `metric` is validated against `^[a-z0-9-]+$` (no path/query injection). No caller `base_url` (SSRF / env-token exfiltration guard #3944). Fail-soft. A vendor `mcp.bitcoin-data.com/mcp` server already exists; prefer it for general BGeometrics access. |
 | `digiquant_fetch_coinmetrics_series` | Fetch a single CoinMetrics Community API metric for one asset (`asset`/`metric` must each be a single value, not comma-separated, and a safe slug matching `^[A-Za-z0-9_-]+$` — cache-path traversal guard #3947) by `start_time`/`end_time` into `data/onchain/coinmetrics/` parquet. `page_size`/`api_key` widen beyond SDCA's default free-tier keyless usage; upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944). Fail-soft. No vendor MCP server exists for CoinMetrics, unlike Coinbase/BGeometrics/Bitview — hence this tool and the catalog tool below carry more of the general-purpose surface in-house. CC BY-NC, research-only. |
 | `digiquant_list_coinmetrics_catalog` | Discovery tool: lists available CoinMetrics assets/metrics from `/catalog-v2/asset-metrics` (optionally filtered by `asset`), so a caller can find a metric name before calling `digiquant_fetch_coinmetrics_series`. Returns the raw catalog payload. Upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944). Fail-soft. |
+| `digiquant_get_trade_levels` | Causal ATR / swing-pivot / Donchian trade levels for a direction (READ scope, read-only — never sizes or places orders). Primary path is a caller-supplied `ohlc_json` array of OHLC bars; `ticker` is a non-blocking local-cache convenience. Returns `{pair, direction, entry{low,high,ref}, sl, tp_ladder[{r,price,src}], trail_policy, source_ref, computed_at}`. `source_ref` grammar: `computed:atr14@<asof>\|k=<k_eff>\|reg=<regime>\|br=atr\|pivot\|donchian\|piv=<width>\|rr=<floor>\|src=base`. Full-precision floats (never 4dp-rounded). Refs #137 |
 | `digiquant_fit_sdca_weights` | Stage A cycle-window weight fit for an `SdcaAssetProfile` (`btc_v1` / `eth_research_v1` / `profile_json`), then `regularize_weights`. Not a second optimizer: Stage B is `digiquant_run_optimize` with `strategy_name=sdca` and frozen `*_weight` keys in `strategy_params`. Returns `{weights, regularized_weights, regularized_weight_params, score, ...}` or `{"error": ...}` |
 | `digiquant_compile_research_portfolio` | digigraph product-graph dry path (#3415): compile research + portfolio LangGraphs with no LLM / no book write. Returns `{dry_run, graphs[], idempotency_key, ...}` via orchestrator_invoke |
 | `digiquant_generate_slapper_tearsheet` | Runs the NautilusTrader backtest for the Slapper family and writes TV-style tearsheet JSON to the digiquant.io frontend. Delegates each strategy to `generate_tearsheets.run_strategy_isolated` (spawn-per-strategy, #1389 — a second in-process engine would SIGABRT the long-lived server); resolves calibrations file → Supabase (example only via `allow_example_calibrations`), accepts `signal_delay_days` (#1462), and returns `{"entries", "failures"}` with per-strategy errors as data. Does **not** write `index.json` (the CLI `main()` owns that) |
@@ -236,9 +240,10 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `dashboard_get_policy_gate_evaluation` | Fetch a gate-evaluation summary by `evaluation_id` |
 
 `create_mcp_server(scope=...)` gates registration: `scope="full"` (default)
-registers all 23 tools; `scope="read"` registers only the 9 dashboard-chat
-reads (strategy list, price/macro reads, `query_data`, policy
-replay/comparison reads, gate reads + evaluations, coinmetrics catalog).
+registers all 24 tools; `scope="read"` registers only the 10 dashboard-chat
+reads (strategy list, price/macro reads, causal trade levels, `query_data`,
+policy replay/comparison reads, gate reads + evaluations, coinmetrics
+catalog).
 `--scope` / `DIGIQUANT_MCP_SCOPE` select the scope; `host`/`port` live on the
 `FastMCP(...)` constructor — `run()` takes transport only.
 
@@ -943,6 +948,58 @@ The drawdown pair is therefore **not** interchangeable with
 which is a negative percent — check each field's own docstring before comparing them. Also
 `buy_days`/`sell_days`/`no_trade_days`, and `avg_risk`/`avg_rate` (means over
 non-null days only).
+
+### Causal trade-levels engine (Track E, #137)
+
+`data/prices/levels.py` computes deterministic entry/stop/target candidates
+from an OHLC frame and a direction. It is **pure Polars, no I/O**, and every
+derivation is causal — the value at bar *i* is a function of bars ``≤ i`` only,
+which `tests/dq/data/test_levels.py::test_augment_is_causal_at_every_row`
+asserts by recomputing over truncated prefixes:
+
+- **Wilder ATR / true range** live in `data/prices/_primitives.py` and are
+  shared with `technicals.py` (one implementation, not two).
+- **Regime scaling** — `regime = atr / SMA(atr, regime_len)` clamped to
+  `k_regime_bounds` (default `(0.75, 1.5)`); `k_eff = k_base * regime`, so a
+  high-volatility regime widens the ATR stop and a quiet one tightens it.
+- **Fractal pivots** — a bar is a strict `fractal_width`-bar fractal high/low;
+  detection looks forward but the exposed `piv_high` / `piv_low` columns are
+  `shift(fractal_width)`, i.e. visible only once the pivot was confirmable.
+- **Donchian** — `don_high_prev` / `don_low_prev` are `rolling_max/min(len)`
+  `.shift(1)`, so the channel never includes the current bar.
+- **S/R clustering** — confirmed pivots within `cluster_atr * ATR` merge into
+  support (low edge) / resistance (high edge) zones.
+
+**Branch preference:** pivot structure → Donchian channel → ATR. A structural
+stop is only used when it sits on the correct side of the reference price and
+the nearest opposite structure clears `rr_floor`; otherwise the engine falls
+back to the `k_eff * ATR` stop. Take-profit rungs are the `tp_rmultiples`
+(default `1R/2R/3R`); a rung within `snap_tol_atr * ATR` of a structural level
+is snapped onto it and its `src` records the structure (`pivot` / `donchian`),
+otherwise `src="atr"`. `trail_stop()` is the ratchet-only ATR trail
+(`trail_atr`, activation at `trail_activate_r`).
+
+`LevelsConfig` defaults mirror the Phase 1 brief: `atr_len=14`,
+`fractal_width=2`, `cluster_atr=0.5`, `donchian_len=20`, `k_base=1.5`,
+`k_regime_bounds=(0.75, 1.5)`, `rr_floor=1.5`, `tp_rmultiples=(1, 2, 3)`,
+`trail_atr=2.0`.
+
+**JSON contract** (`levels_api.py`): `{pair, direction, entry{low,high,ref},
+sl, tp_ladder[{r,price,src}], trail_policy, source_ref, computed_at}` plus the
+diagnostic scalars `atr`, `k_eff`, `regime`, `branch`, `pivot_count`, `asof`.
+Values are the raw engine floats — deliberately **not** passed through
+`_utils.safe_float`, which would round to 4dp.
+
+**`source_ref` grammar:** `computed:atr14@<asof>|k=<k_eff>|reg=<regime>|br=atr|pivot|donchian|piv=<fractal_width>|rr=<rr_floor>|src=base`.
+The `computed:` prefix is shared with the twelve-x dashboard label, which is
+extended to parse `atr` in the Track E follow-on (the engine does not rename
+the prefix). No writes, sizing or order placement anywhere in this path — the
+existing twelve-x `apply_guard` remains the final authority on published levels.
+
+`digiquant_get_trade_levels` exposes the engine on both the MCP (READ scope)
+and orchestrator manifest surfaces; see the MCP tools table above. The
+NautilusTrader parity harness is described in
+[docs/NAUTILUS_NAVIGATION.md](docs/NAUTILUS_NAVIGATION.md).
 
 ### Macro-liquidity regime gauge (#1085)
 
