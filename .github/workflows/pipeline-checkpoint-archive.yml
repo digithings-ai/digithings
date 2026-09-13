@@ -60,6 +60,15 @@ jobs:
       - name: Install from lockfile
         run: uv sync --frozen --package digiquant --extra research
 
+      # Baseline for the post-VACUUM relief gate (#3968). Read-only and
+      # advisory: the relief comparison is operator-run ~16h later, after the
+      # 05:50 pg_cron vacuum, so it never runs in this same workflow.
+      - name: Capture pre-archive size snapshot (advisory)
+        continue-on-error: true
+        run: |
+          uv run --frozen --no-sync python scripts/digiquant_checkpoint_size_gate.py \
+            --snapshot-out /tmp/checkpoint-size-pre.json
+
       - name: Archive checkpoint payloads older than 1 day
         run: |
           set -euo pipefail
@@ -73,3 +82,11 @@ jobs:
           name: checkpoint-archive-manifests
           path: /tmp/checkpoint-archive-manifests.json
           retention-days: 90
+
+      - name: Upload pre-archive size snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkpoint-size-pre-snapshot
+          path: /tmp/checkpoint-size-pre.json
+          retention-days: 90
+          if-no-files-found: ignore
