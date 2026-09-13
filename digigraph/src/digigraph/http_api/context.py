@@ -76,22 +76,20 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
     # digisearch_index / vault_path_prefix must be written unconditionally so a client
     # body value cannot survive into graph state (digisearch has no server-side
     # tenant→index bind; digivault does for prefixes).
-    # research_system_prompt_override is the deliberate exception: a mapped tenant
-    # prompt still wins, but when the map has no prompt for this tenant the client
-    # value (e.g. the baseline embed default) stands — workflow.py rewrites the
-    # initial override from the request every turn, so nothing sticks across turns.
+    # research_system_prompt_override is written unconditionally for the same reason:
+    # the research system prompt is operator-configured only (digiproject.yaml
+    # agents.research_system_prompt or the tenant corpus map). A client body value
+    # must never become it — an unmapped tenant (or the map-unset single-tenant path)
+    # clears to None rather than letting a caller inject its own system prompt.
+    updates["research_system_prompt_override"] = corpus.research_system_prompt
     if corpus_map:
         updates["digisearch_index"] = corpus.digisearch_index
         updates["vault_path_prefix"] = corpus.vault_path_prefix
-        if corpus.research_system_prompt:
-            updates["research_system_prompt_override"] = corpus.research_system_prompt
     else:
         if corpus.digisearch_index:
             updates["digisearch_index"] = corpus.digisearch_index
         if corpus.vault_path_prefix:
             updates["vault_path_prefix"] = corpus.vault_path_prefix
-        if corpus.research_system_prompt:
-            updates["research_system_prompt_override"] = corpus.research_system_prompt
     # Per-request response language (X-Digi-Language) — a per-request signal, not a
     # tenant-derived value, so it's read directly rather than via resolve_corpus_override.
     # The raw header is never interpolated: resolve_language_directive / apply_language_preference

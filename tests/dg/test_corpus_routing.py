@@ -328,11 +328,15 @@ def _merge_http(auth_tenant: str | None) -> object:
     )
 
 
-def test_merge_keeps_client_override_when_map_configured_but_unmapped(
+def test_merge_clears_client_override_when_map_configured_but_unmapped(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Baseline/default prompt: a map configured for another tenant must not wipe
-    an explicit client override for an unmapped tenant."""
+    """Multi-tenant: an unmapped tenant gets no prompt, not a client-supplied one.
+
+    A map configured for another tenant must not let a client body value stand as
+    this tenant's research system prompt (CWE-639 — the map is authoritative and
+    its silence means "no override").
+    """
     from digigraph.models import WorkflowRequest
     from digigraph.server import _with_digi_request_context
 
@@ -340,9 +344,9 @@ def test_merge_keeps_client_override_when_map_configured_but_unmapped(
         "DIGI_TENANT_CORPUS_MAP",
         '{"occ": {"digisearch_index": "occ_help", "research_system_prompt": "OCC prompt"}}',
     )
-    req = WorkflowRequest(prompt="hi", research_system_prompt_override="baseline default")
+    req = WorkflowRequest(prompt="hi", research_system_prompt_override="client injected prompt")
     out = _with_digi_request_context(_merge_http("baseline"), req)
-    assert out.research_system_prompt_override == "baseline default"
+    assert out.research_system_prompt_override is None
 
 
 def test_merge_server_prompt_wins_when_mapped_with_prompt(
@@ -361,12 +365,15 @@ def test_merge_server_prompt_wins_when_mapped_with_prompt(
     assert out.research_system_prompt_override == "OCC prompt"
 
 
-def test_merge_no_map_keeps_client_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Guard: single-tenant path already preserves an explicit client override."""
+def test_merge_clears_client_override_when_map_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Single-tenant path must not trust a client-supplied system prompt either.
+
+    With no server-configured prompt the override is None — never the client body.
+    """
     from digigraph.models import WorkflowRequest
     from digigraph.server import _with_digi_request_context
 
     monkeypatch.delenv("DIGI_TENANT_CORPUS_MAP", raising=False)
-    req = WorkflowRequest(prompt="hi", research_system_prompt_override="client value")
+    req = WorkflowRequest(prompt="hi", research_system_prompt_override="client injected prompt")
     out = _with_digi_request_context(_merge_http("baseline"), req)
-    assert out.research_system_prompt_override == "client value"
+    assert out.research_system_prompt_override is None

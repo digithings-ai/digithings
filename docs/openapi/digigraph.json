@@ -70,19 +70,6 @@
             "description": "Optional per-request signal that this completion needs tool_choice='required'. Also accepted via X-Require-Tool-Calls header. Combined with project agents.require_tool_calls and env DIGI_REQUIRE_TOOL_CALLS as a FLOOR (any true value wins) \u2014 unlike allowed_tools, this can only raise the requirement, never lower one the deployment already mandates.",
             "title": "Require Tool Calls"
           },
-          "research_system_prompt": {
-            "anyOf": [
-              {
-                "maxLength": 4000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Opt-in default research system prompt for sessions with no server-configured prompt (single-tenant / baseline embed). Ignored when DIGI_TENANT_CORPUS_MAP resolves a prompt for the tenant.",
-            "title": "Research System Prompt"
-          },
           "session_id": {
             "anyOf": [
               {
@@ -536,7 +523,7 @@
                 "type": "null"
               }
             ],
-            "description": "Optional research system prompt from DIGI_TENANT_CORPUS_MAP.",
+            "description": "Research system prompt resolved server-side from the tenant corpus map (DIGI_TENANT_CORPUS_MAP) or project config. Client-writable on this model but never trusted as-is: _with_digi_request_context overwrites it unconditionally (clearing a client value to None when no server prompt is configured), so a caller cannot inject its own system prompt.",
             "title": "Research System Prompt Override"
           },
           "response_language": {

@@ -75,9 +75,18 @@ class TestChatCompletionRequest:
         req = ChatCompletionRequest(messages=[], force_tool="docs")
         assert req.force_tool == "docs"
 
-    def test_chat_completion_request_accepts_research_system_prompt(self) -> None:
-        req = ChatCompletionRequest(messages=[], research_system_prompt="baseline default")
-        assert req.research_system_prompt == "baseline default"
+    def test_chat_completion_request_rejects_client_research_system_prompt(self) -> None:
+        """The research system prompt is operator-configured only.
+
+        ChatCompletionRequest forbids extra fields, so a client-body
+        ``research_system_prompt`` is rejected at the request boundary rather than
+        silently promoted into graph state (CWE-639 / prompt injection).
+        """
+        with pytest.raises(ValidationError):
+            ChatCompletionRequest(messages=[], research_system_prompt="baseline default")
+
+    def test_chat_completion_request_has_no_research_system_prompt_field(self) -> None:
+        assert "research_system_prompt" not in ChatCompletionRequest.model_fields
 
 
 @pytest.mark.unit
