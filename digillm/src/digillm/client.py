@@ -55,7 +55,7 @@ from typing import (  # score:allow untyped any — OpenAI message dict payloads
 )
 from uuid import UUID, uuid4
 
-from openai import OpenAI, Timeout
+from openai import BadRequestError, OpenAI, Timeout
 from openai.types.chat import ChatCompletion
 
 from digillm import cache as _cache
@@ -1644,13 +1644,30 @@ def _stream_completion_one_turn(
         kwargs["tool_choice"] = tool_choice
 
     usage_started = time.perf_counter()
-    stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
-        client,
-        _provider=provider,
-        _requested_model=model,
-        _defer_success=True,
-        **kwargs,
-    )
+    try:
+        stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
+            client,
+            _provider=provider,
+            _requested_model=model,
+            _defer_success=True,
+            **kwargs,
+        )
+    except BadRequestError as error:
+        # Strict OpenAI-compatible endpoints 400 on the unknown ``stream_options``
+        # field rather than ignoring it. Retry once without the field so streaming
+        # still works there; usage then simply arrives only if that provider reports
+        # it some other way. Only a 400 that names the field is treated as this
+        # dialect mismatch — every other bad request propagates untouched.
+        if "stream_options" not in str(error).lower():
+            raise
+        kwargs.pop("stream_options", None)
+        stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
+            client,
+            _provider=provider,
+            _requested_model=model,
+            _defer_success=True,
+            **kwargs,
+        )
     content_parts: list[str] = []
     tool_calls_accum: dict[int, ToolCallDict] = {}
     evidence = _StreamEvidence()

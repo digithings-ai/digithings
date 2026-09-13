@@ -131,6 +131,20 @@ def _stream_completions_progressive(
     from digigraph import usage
     from digigraph.llm_auth import clear_byok_bindings
 
+    # Usage totals are request-scoped (#3982). The module-global accumulator that
+    # ``usage.start()``/``reset()`` drives is one-run-per-process by design (the
+    # portfolio chain and the research diagnostics writer each pair start/reset once),
+    # so overlapping streams sharing it would sum each other's tokens and let whichever
+    # finishes first clear the other's snapshot window -- the barrier-synced two-stream
+    # repro reported 6+6 for one response and no usage chunk at all for the other.
+    # Bind a dedicated run only for the context copy below, then reset in this same
+    # frame: the copy -- and every ``record()`` the worker reaches through it -- keeps
+    # the run, while callers that consume this generator without a threadpool (tests)
+    # do not leak the binding into their own context. ``UsageRun`` itself is held by
+    # this frame until the response ends; the module-global state is never touched.
+    run_usage = usage.UsageRun()
+    usage_token = usage.bind_run(run_usage)
+
     # Run the worker inside a copy of *this* frame's context. A bare Thread starts
     # with an empty context, so every ContextVar bound per-request -- above all the
     # three BYOK bindings pushed by ``push_byok_header`` (digigraph's key/provider and
@@ -154,6 +168,7 @@ def _stream_completions_progressive(
     # wedge inside a node, never reach the ``finally``, and strand the key for the
     # lifetime of the process rather than for one more node.
     ctx = contextvars.copy_context()
+    usage.unbind_run(usage_token)
 
     def _run_worker() -> None:
         # Late-bind through digigraph.server so tests can patch
@@ -165,7 +180,6 @@ def _stream_completions_progressive(
         finally:
             clear_byok_bindings()
 
-    usage.start()
     worker = Thread(target=ctx.run, args=(_run_worker,))
     worker.start()
 
@@ -256,7 +270,6 @@ def _stream_completions_progressive(
                     yield f"data: {_sse_chunk(cid, created, model, content, None)}\n\n"
     except GeneratorExit:
         cancel_event.set()
-        usage.reset()
         raise
     except STREAM_SSE_ERRORS as e:
         logger.exception("stream_completions error")
@@ -264,10 +277,11 @@ def _stream_completions_progressive(
     finally:
         cancel_event.set()
 
-    # Emit the run's real provider-reported usage as a final OpenAI-style chunk
+    # Emit this run's real provider-reported usage as a final OpenAI-style chunk
     # (prompt/completion/total tokens) before the stop marker. Only emitted when
     # the provider actually reported tokens -- usage.record never fabricates zeros.
-    _usage_snapshot = usage.snapshot()
+    # Read from the request-scoped accumulator, never the process-global one.
+    _usage_snapshot = run_usage.snapshot()
     if _usage_snapshot.get("total_tokens"):
         yield (
             "data: "
@@ -287,7 +301,6 @@ def _stream_completions_progressive(
             )
             + "\n\n"
         )
-    usage.reset()
 
     yield f"data: {_sse_chunk(cid, created, model, '', 'stop')}\n\n"
     yield "data: [DONE]\n\n"
