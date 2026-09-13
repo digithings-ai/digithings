@@ -21,7 +21,10 @@ from digiquant.data.prices.levels import (
     LevelsConfig,
     LevelsError,
     augment,
+    cluster_levels,
     compute_levels,
+    select_structure,
+    snap_to_structure,
     trail_stop,
 )
 from digiquant.data.prices.technicals import compute_indicators
@@ -58,6 +61,21 @@ def _fixture(n: int = 220, *, ampl: float = 3.0) -> pl.DataFrame:
             "low": low,
             "close": close,
             "volume": volume,
+        }
+    )
+
+
+def _monotonic_fixture(n: int = 60) -> pl.DataFrame:
+    """Strictly increasing series — has no fractal pivots by construction."""
+    closes = [100.0 + i for i in range(n)]
+    return pl.DataFrame(
+        {
+            "timestamp": [date(2024, 1, 1) + timedelta(days=i) for i in range(n)],
+            "open": [c - 0.2 for c in closes],
+            "high": [c + 0.5 for c in closes],
+            "low": [c - 0.5 for c in closes],
+            "close": closes,
+            "volume": [1_000_000.0] * n,
         }
     )
 
@@ -168,18 +186,18 @@ def test_augment_is_causal_at_every_row() -> None:
 
 
 def test_atr_stop_long_and_short_are_correct_side_of_ref() -> None:
-    df = _fixture(220)
+    df = _monotonic_fixture()
     cfg = LevelsConfig()
     long = compute_levels(df, "long", cfg, pair="EUR/USD")
     short = compute_levels(df, "short", cfg, pair="EUR/USD")
+    assert long.branch == "atr" and short.branch == "atr"
     assert long.sl == pytest.approx(long.entry_ref - long.k_eff * long.atr)
     assert short.sl == pytest.approx(short.entry_ref + short.k_eff * short.atr)
     assert long.sl < long.entry_ref < short.sl
-    assert long.branch == "atr"
 
 
 def test_entry_band_and_ladder_r_multiples() -> None:
-    df = _fixture(220)
+    df = _monotonic_fixture()
     cfg = LevelsConfig()
     result = compute_levels(df, "long", cfg, pair="EUR/USD")
     half = cfg.entry_half_atr * result.atr
@@ -253,3 +271,105 @@ def test_technicals_columns_unchanged_by_refactor() -> None:
     df = _fixture(80)
     out = compute_indicators(df)
     assert list(out.columns) == list(TECHNICAL_COLUMNS)
+
+
+# ─── E2: causal fractal pivots + clustering + structural stop + snap ─────────
+
+
+def _structural_fixture(
+    *,
+    n: int = 60,
+    support: float = 99.0,
+    resistance: float = 102.0,
+) -> pl.DataFrame:
+    """Flat 100 +/- 0.5 range with one swing low (idx 30) and high (idx 40)."""
+    rows = {
+        "timestamp": [date(2024, 1, 1) + timedelta(days=i) for i in range(n)],
+        "open": [100.0] * n,
+        "high": [100.5] * n,
+        "low": [99.5] * n,
+        "close": [100.0] * n,
+        "volume": [1_000_000.0] * n,
+    }
+    rows["low"][30] = support
+    rows["high"][40] = resistance
+    return pl.DataFrame(rows)
+
+
+def test_fractal_pivots_confirmed_only_after_width_bars() -> None:
+    df = _structural_fixture()
+    cfg = LevelsConfig(fractal_width=2)
+    aug = augment(df, cfg)
+    piv_low = aug["piv_low"].to_list()
+    piv_high = aug["piv_high"].to_list()
+    assert piv_low[30] is None  # not yet confirmed at the pivot bar
+    assert piv_low[31] is None
+    assert piv_low[32] == pytest.approx(99.0)  # confirmed after `width` bars
+    assert piv_high[41] is None
+    assert piv_high[42] == pytest.approx(102.0)
+
+
+def test_pivot_columns_are_causal_at_every_row() -> None:
+    df = _structural_fixture()
+    cfg = LevelsConfig(fractal_width=2)
+    full = augment(df, cfg)
+    for i in (29, 30, 31, 32, 41, 42, 59):
+        sliced = augment(df[: i + 1], cfg).tail(1).to_dicts()[0]
+        row = full.row(i, named=True)
+        assert sliced["piv_low"] == row["piv_low"], i
+        assert sliced["piv_high"] == row["piv_high"], i
+
+
+def test_cluster_levels_groups_within_tolerance() -> None:
+    # support reps use the cluster low; resistance reps use the cluster high.
+    values = [100.0, 100.3, 101.0, 95.0]
+    assert cluster_levels(values, 1.5, side="support") == [95.0, 100.0]
+    assert cluster_levels(values, 1.5, side="resistance") == [95.0, 101.0]
+    assert cluster_levels([], 1.5, side="support") == []
+
+
+def test_select_structure_picks_nearest_valid_side() -> None:
+    support, resistance = select_structure(
+        [90.0, 98.0, 101.0],  # lows: 101 is above ref, must be ignored
+        [97.0, 103.0, 110.0],  # highs: 97 is below ref, must be ignored
+        100.0,
+        0.5,
+    )
+    assert support == pytest.approx(98.0)
+    assert resistance == pytest.approx(103.0)
+    assert select_structure([], [], 100.0, 0.5) == (None, None)
+
+
+def test_snap_to_structure_within_tolerance() -> None:
+    assert snap_to_structure(102.4, [102.0, 110.0], 0.5) == pytest.approx(102.0)
+    assert snap_to_structure(105.0, [102.0, 110.0], 0.5) is None
+
+
+def test_structural_branch_uses_pivot_stop_and_snaps_ladder() -> None:
+    df = _structural_fixture(support=99.0, resistance=102.0)
+    cfg = LevelsConfig(structural_buffer_atr=0.0)
+    result = compute_levels(df, "long", cfg, pair="EUR/USD")
+    assert result.branch == "pivot"
+    assert result.pivot_count == 2
+    assert result.sl == pytest.approx(99.0)
+    snapped = [rung for rung in result.tp_ladder if rung.src == "pivot"]
+    assert len(snapped) == 1
+    assert snapped[0].r == 2.0
+    assert snapped[0].price == pytest.approx(102.0)
+    assert "br=pivot" in result.source_ref
+
+
+def test_structural_stop_short_mirrors_long() -> None:
+    df = _structural_fixture(support=98.0, resistance=101.0)
+    cfg = LevelsConfig(structural_buffer_atr=0.0)
+    result = compute_levels(df, "short", cfg, pair="EUR/USD")
+    assert result.branch == "pivot"
+    assert result.sl == pytest.approx(101.0)
+    assert result.sl > result.entry_ref
+
+
+def test_monotonic_series_falls_back_to_atr_branch() -> None:
+    result = compute_levels(_monotonic_fixture(), "long", LevelsConfig(), pair="EUR/USD")
+    assert result.branch == "atr"
+    assert result.pivot_count == 0
+    assert "br=atr" in result.source_ref

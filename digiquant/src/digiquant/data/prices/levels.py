@@ -144,6 +144,84 @@ def _k_eff_expr(cfg: LevelsConfig) -> pl.Expr:
     return (pl.lit(cfg.k_base) * pl.col("regime_factor")).alias("k_eff")
 
 
+def _pivot_high_raw_expr(cfg: LevelsConfig) -> pl.Expr:
+    """Boolean: is this bar a strict fractal high? (Consumes future bars.)"""
+    cond = pl.lit(True)
+    for j in range(1, cfg.fractal_width + 1):
+        cond = cond & (pl.col("high") > pl.col("high").shift(j))
+        cond = cond & (pl.col("high") > pl.col("high").shift(-j))
+    return cond.alias("_piv_high_raw")
+
+
+def _pivot_low_raw_expr(cfg: LevelsConfig) -> pl.Expr:
+    cond = pl.lit(True)
+    for j in range(1, cfg.fractal_width + 1):
+        cond = cond & (pl.col("low") < pl.col("low").shift(j))
+        cond = cond & (pl.col("low") < pl.col("low").shift(-j))
+    return cond.alias("_piv_low_raw")
+
+
+def _confirmed_pivot_expr(cfg: LevelsConfig, *, side: str) -> pl.Expr:
+    """Pivot price made visible only ``fractal_width`` bars after the pivot.
+
+    Detection may look forward, but ``shift(width)`` aligns the value to the
+    first bar at which the fractal was knowable — so the exposed column is
+    causal even though the raw detector is not.
+    """
+    if side == "high":
+        raw = pl.when(pl.col("_piv_high_raw")).then(pl.col("high")).otherwise(None)
+        return raw.cast(pl.Float64).shift(cfg.fractal_width).alias("piv_high")
+    raw = pl.when(pl.col("_piv_low_raw")).then(pl.col("low")).otherwise(None)
+    return raw.cast(pl.Float64).shift(cfg.fractal_width).alias("piv_low")
+
+
+def cluster_levels(values: list[float], tol: float, *, side: str) -> list[float]:
+    """Greedy 1-D clustering of pivot prices.
+
+    Values are sorted and merged while they stay within ``tol`` of the current
+    cluster's anchor. Support clusters report their *low* edge (where a long
+    stop sits) and resistance clusters their *high* edge.
+    """
+    if not values:
+        return []
+    ordered = sorted(float(v) for v in values)
+    clusters: list[list[float]] = [[ordered[0]]]
+    for value in ordered[1:]:
+        if value - clusters[-1][0] <= tol:
+            clusters[-1].append(value)
+        else:
+            clusters.append([value])
+    if side == "support":
+        return [min(cluster) for cluster in clusters]
+    if side == "resistance":
+        return [max(cluster) for cluster in clusters]
+    raise LevelsError(f"side must be 'support' or 'resistance'; got {side!r}")
+
+
+def select_structure(
+    pivot_lows: list[float],
+    pivot_highs: list[float],
+    ref: float,
+    tol: float,
+) -> tuple[float | None, float | None]:
+    """Nearest support below *ref* and nearest resistance above *ref*."""
+    supports = [level for level in cluster_levels(pivot_lows, tol, side="support") if level < ref]
+    resistances = [
+        level for level in cluster_levels(pivot_highs, tol, side="resistance") if level > ref
+    ]
+    support = max(supports) if supports else None
+    resistance = min(resistances) if resistances else None
+    return support, resistance
+
+
+def snap_to_structure(price: float, structures: list[float], tol: float) -> float | None:
+    """Snap *price* to the closest structural level within *tol*, else ``None``."""
+    candidates = [level for level in structures if abs(level - price) <= tol]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda level: abs(level - price))
+
+
 def augment(df: pl.DataFrame, cfg: LevelsConfig) -> pl.DataFrame:
     """Attach every causal derivation column the engine consumes.
 
@@ -160,6 +238,13 @@ def augment(df: pl.DataFrame, cfg: LevelsConfig) -> pl.DataFrame:
     out = out.with_columns(_regime_expr(cfg))
     out = out.with_columns(_regime_factor_expr(cfg))
     out = out.with_columns(_k_eff_expr(cfg))
+    out = out.with_columns([_pivot_high_raw_expr(cfg), _pivot_low_raw_expr(cfg)])
+    out = out.with_columns(
+        [
+            _confirmed_pivot_expr(cfg, side="high"),
+            _confirmed_pivot_expr(cfg, side="low"),
+        ]
+    )
     return out
 
 
@@ -190,7 +275,6 @@ def _source_ref(
     k_eff: float,
     regime: float,
     branch: str,
-    pivot_count: int,
 ) -> str:
     atr_tag = f"atr{cfg.atr_len}"
     asof_tag = asof if asof else "na"
@@ -260,16 +344,56 @@ def compute_levels(
     entry_low = ref - half
     entry_high = ref + half
 
-    branch: str = "atr"
-    sl = ref - sign * k_eff * atr_value
+    tol = cfg.cluster_atr * atr_value
+    pivot_lows = aug["piv_low"].drop_nulls().to_list()
+    pivot_highs = aug["piv_high"].drop_nulls().to_list()
+    pivot_count = len(pivot_lows) + len(pivot_highs)
 
+    support, resistance = select_structure(pivot_lows, pivot_highs, ref, tol)
+
+    # E2 branch: prefer the structural (pivot) stop when it sits on the correct
+    # side and the nearest opposite structure clears the R:R floor. Donchian
+    # (E3) is considered later when no pivot structure exists.
+    buffer = cfg.structural_buffer_atr * atr_value
+    stop_value: float | None = None
+    branch: str = "atr"
+    if direction == "long" and support is not None and support < ref:
+        candidate = support - buffer
+        reward = (resistance - ref) if resistance is not None else None
+        if ref - candidate > 0 and (reward is None or reward / (ref - candidate) >= cfg.rr_floor):
+            stop_value = candidate
+            branch = "pivot"
+    elif direction == "short" and resistance is not None and resistance > ref:
+        candidate = resistance + buffer
+        reward = (ref - support) if support is not None else None
+        if candidate - ref > 0 and (reward is None or reward / (candidate - ref) >= cfg.rr_floor):
+            stop_value = candidate
+            branch = "pivot"
+
+    if stop_value is None:
+        stop_value = ref - sign * k_eff * atr_value
+        branch = "atr"
+
+    sl = stop_value
     risk = abs(ref - sl)
-    ladder = tuple(
-        TpRung(r=float(r), price=ref + sign * float(r) * risk, src="atr") for r in cfg.tp_rmultiples
+    snap_tol = cfg.snap_tol_atr * atr_value
+    snap_pool = (
+        cluster_levels(pivot_highs, tol, side="resistance")
+        if direction == "long"
+        else cluster_levels(pivot_lows, tol, side="support")
     )
+    ladder: list[TpRung] = []
+    for r in cfg.tp_rmultiples:
+        base_price = ref + sign * float(r) * risk
+        snapped = snap_to_structure(base_price, snap_pool, snap_tol)
+        if snapped is not None:
+            ladder.append(TpRung(r=float(r), price=snapped, src="pivot"))
+        else:
+            ladder.append(TpRung(r=float(r), price=base_price, src="atr"))
+    ladder_tuple = tuple(ladder)
 
     asof = _asof(aug)
-    src_ref = _source_ref(cfg, asof=asof, k_eff=k_eff, regime=regime, branch=branch, pivot_count=0)
+    src_ref = _source_ref(cfg, asof=asof, k_eff=k_eff, regime=regime, branch=branch)
     return LevelsResult(
         pair=pair,
         direction=direction,
@@ -277,7 +401,7 @@ def compute_levels(
         entry_low=entry_low,
         entry_high=entry_high,
         sl=sl,
-        tp_ladder=ladder,
+        tp_ladder=ladder_tuple,
         trail_policy=trail_policy_str(cfg),
         source_ref=src_ref,
         computed_at=computed_at or "",
@@ -285,7 +409,7 @@ def compute_levels(
         k_eff=k_eff,
         regime=regime,
         branch=branch,
-        pivot_count=0,
+        pivot_count=pivot_count,
         asof=asof,
     )
 
@@ -296,7 +420,10 @@ __all__ = [
     "LevelsResult",
     "TpRung",
     "augment",
+    "cluster_levels",
     "compute_levels",
+    "select_structure",
+    "snap_to_structure",
     "trail_policy_str",
     "trail_stop",
 ]
