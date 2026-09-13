@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,6 +27,7 @@ from digiquant.ops.checkpoint_archive import (  # noqa: E402
     main,
     parse_postgrest_bytea,
     previous_threads,
+    read_archived_document,
     reconcile_ledger,
     resolve_payload,
     restore_thread,
@@ -52,6 +54,7 @@ class _Query:
     _order_cols: list[str] = field(default_factory=list)
     _range: tuple[int, int] | None = None
     fail: bool = False
+    unstable: bool = False
     _selected: bool = False
     _select_cols: str = ""
     _action: str | None = None
@@ -108,6 +111,14 @@ class _Query:
         if self._order_cols:
             cols = self._order_cols
             rows.sort(key=lambda r: tuple(r.get(c) for c in cols))
+        elif self.unstable and self._range is not None:
+            # Simulate a source whose row order is not stable across offset
+            # pages (Postgres makes no guarantee without ORDER BY): rotate the
+            # window by the requested offset so pagination can duplicate/skip.
+            start = self._range[0]
+            if rows:
+                shift = start % len(rows)
+                rows = rows[shift:] + rows[:shift]
         if self._range is not None:
             start, end = self._range
             rows = rows[start : end + 1]
@@ -139,10 +150,15 @@ class FakeClient:
     store: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     fail_tables: set[str] = field(default_factory=set)
     log: list[tuple[str, tuple[tuple[str, Any], ...], int]] = field(default_factory=list)
+    unstable_pagination: bool = False
 
     def table(self, name: str) -> _Query:
         return _Query(
-            table_name=name, store=self.store, fail=name in self.fail_tables, log=self.log
+            table_name=name,
+            store=self.store,
+            fail=name in self.fail_tables,
+            log=self.log,
+            unstable=self.unstable_pagination,
         )
 
     def fail_on_table(self, name: str) -> None:
@@ -1019,3 +1035,147 @@ def test_reconcile_reports_documents_prefix_orphans():
         "checkpoints/orphan/x.bin",
         "documents/house/2026-09-07/thesis.zst",
     }
+
+
+class _BotoClientError(Exception):
+    """boto3 ``ClientError``-shaped double (no botocore dependency in tests)."""
+
+    def __init__(self, code: str, status: int = 404) -> None:
+        super().__init__(code)
+        self.response = {
+            "Error": {"Code": code},
+            "ResponseMetadata": {"HTTPStatusCode": status},
+        }
+
+
+class _MissingObjectStore(FakeStore):
+    """Store whose ``get`` raises the boto3 missing-object shape."""
+
+    def get(self, key: str) -> bytes:
+        raise _BotoClientError("NoSuchKey")
+
+
+def _document_pointer(**over: Any) -> dict[str, Any]:
+    row = {
+        "source_table": "documents",
+        "source_key": {
+            "workspace_id": "house",
+            "document_key": "thesis",
+            "date": "2026-09-07",
+        },
+        "r2_key": "documents/house/2026-09-07/thesis.zst",
+        "sha256": "0" * 64,
+        "size": 1,
+        "owner": "house",
+    }
+    row.update(over)
+    return row
+
+
+class TestReadArchivedDocumentSoftFailures:
+    """#3954: read-through must never raise into ``load_prior_context``."""
+
+    def test_no_backend_warns_and_returns_none(self, monkeypatch: pytest.MonkeyPatch, caplog):
+        for var in (
+            "R2_ACCOUNT_ID",
+            "R2_BUCKET",
+            "R2_ACCESS_KEY_ID",
+            "R2_SECRET_ACCESS_KEY",
+        ):
+            monkeypatch.delenv(var, raising=False)
+        client = FakeClient(store={"archive_objects": [_document_pointer()]})
+        with caplog.at_level(logging.WARNING, logger="digiquant.ops.checkpoint_archive"):
+            got = read_archived_document(
+                client,
+                None,
+                workspace_id="house",
+                document_key="thesis",
+                date_str="2026-09-07",
+            )
+        assert got is None
+        assert "read-through disabled" in caplog.text
+        assert "thesis" in caplog.text
+
+    def test_missing_object_returns_none_not_raise(self, caplog):
+        client = FakeClient(store={"archive_objects": [_document_pointer()]})
+        with caplog.at_level(logging.WARNING, logger="digiquant.ops.checkpoint_archive"):
+            got = read_archived_document(
+                client,
+                _MissingObjectStore(),
+                workspace_id="house",
+                document_key="thesis",
+                date_str="2026-09-07",
+            )
+        assert got is None
+
+    def test_registry_query_failure_returns_none_not_raise(self, caplog):
+        class _RaisingClient:
+            def table(self, name: str) -> Any:
+                raise RuntimeError("registry unavailable")
+
+        with caplog.at_level(logging.WARNING, logger="digiquant.ops.checkpoint_archive"):
+            got = read_archived_document(
+                _RaisingClient(),
+                FakeStore(),
+                workspace_id="house",
+                document_key="thesis",
+                date_str="2026-09-07",
+            )
+        assert got is None
+        assert "read-through failed" in caplog.text
+
+    def test_resolve_payload_normalizes_missing_object_to_not_found(self):
+        client = FakeClient(store={"archive_objects": [_document_pointer()]})
+        with pytest.raises(ArchiveNotFoundError):
+            resolve_payload(
+                client,
+                _MissingObjectStore(),
+                "documents",
+                {"workspace_id": "house", "document_key": "thesis", "date": "2026-09-07"},
+            )
+
+
+class TestStablePagination:
+    """#3954: offset pages must carry a unique ORDER BY tiebreak."""
+
+    def test_list_threads_stable_under_nonstable_source_order(self):
+        expected = [f"t{i:04d}" for i in range(2500)]
+        client = FakeClient(
+            store={"checkpoints": [{"thread_id": t} for t in expected]},
+            unstable_pagination=True,
+        )
+        assert list_threads(client) == expected
+
+    def test_bucket_usage_stable_under_nonstable_source_order(self):
+        client = FakeClient(unstable_pagination=True)
+        for i in range(2500):
+            client.table("archive_objects").insert(
+                {
+                    "source_table": "checkpoint_blobs",
+                    "source_key": {"thread_id": f"t{i:04d}"},
+                    "r2_key": f"r2/k{i:04d}",
+                    "sha256": "0" * 64,
+                    "size": i + 1,
+                    "owner": "house",
+                    "archived_at": f"2026-09-01T{i:04d}",
+                }
+            ).execute()
+        assert bucket_usage(client) == sum(range(1, 2501))
+
+    def test_reconcile_ledger_stable_under_nonstable_source_order(self):
+        client = FakeClient(unstable_pagination=True)
+        for i in range(2500):
+            client.table("archive_objects").insert(
+                {
+                    "source_table": "checkpoint_blobs",
+                    "source_key": {"thread_id": f"t{i:04d}"},
+                    "r2_key": f"checkpoints/gone{i:04d}",
+                    "sha256": "0" * 64,
+                    "size": 1,
+                    "owner": "house",
+                    "archived_at": f"2026-09-01T{i:04d}",
+                }
+            ).execute()
+        assert reconcile_ledger(client, FakeStore()) == []
+        remaining = client.table("archive_objects").select("r2_key").range(0, 9999).execute().data
+        assert remaining == []
