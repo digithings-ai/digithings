@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -848,7 +849,7 @@ class TestOpenMarksAreDecimal:
 
 class TestBuildEventsFromPaperFills:
     def test_event_names_come_from_the_weight_delta_with_lot_open_exit(self) -> None:
-        events, declined = _mod.build_events_from_paper_fills(
+        events, declined, _ = _mod.build_events_from_paper_fills(
             _day().client(), _RUN_D, _EXEC_D, now=_NOW
         )
         assert declined == ""
@@ -863,7 +864,7 @@ class TestBuildEventsFromPaperFills:
 
     def test_ledger_projection_stamps_authoritative_book_source(self) -> None:
         """#2422: ledger fills must never land unlabeled or as legacy."""
-        events, declined = _mod.build_events_from_paper_fills(
+        events, declined, _ = _mod.build_events_from_paper_fills(
             _day().client(), _RUN_D, _EXEC_D, now=_NOW
         )
         assert declined == ""
@@ -878,12 +879,16 @@ class TestBuildEventsFromPaperFills:
         whatever price they could find. The ledger records the rejection instead, and the
         projection stays silent about a trade that did not happen.
         """
-        events, _ = _mod.build_events_from_paper_fills(_day().client(), _RUN_D, _EXEC_D, now=_NOW)
+        events, _, _ = _mod.build_events_from_paper_fills(
+            _day().client(), _RUN_D, _EXEC_D, now=_NOW
+        )
         assert events is not None
         assert "IBIT" not in _events_by_ticker(events)
 
     def test_weight_pct_is_the_approved_weight_in_percent(self) -> None:
-        events, _ = _mod.build_events_from_paper_fills(_day().client(), _RUN_D, _EXEC_D, now=_NOW)
+        events, _, _ = _mod.build_events_from_paper_fills(
+            _day().client(), _RUN_D, _EXEC_D, now=_NOW
+        )
         assert events is not None
         by_ticker = _events_by_ticker(events)
         # The ×100 happens in Decimal. Scaled as a float instead, 0.07 lands on
@@ -896,7 +901,9 @@ class TestBuildEventsFromPaperFills:
         assert by_ticker["DBO"]["weight_pct"] is None
 
     def test_price_is_the_fill_price(self) -> None:
-        events, _ = _mod.build_events_from_paper_fills(_day().client(), _RUN_D, _EXEC_D, now=_NOW)
+        events, _, _ = _mod.build_events_from_paper_fills(
+            _day().client(), _RUN_D, _EXEC_D, now=_NOW
+        )
         assert events is not None
         assert _events_by_ticker(events)["UUP"]["price"] == 27.40
 
@@ -907,7 +914,9 @@ class TestBuildEventsFromPaperFills:
         the event, but `prev_weight_pct` is display-only and still read from `positions`,
         so it still has to skip gap days.
         """
-        events, _ = _mod.build_events_from_paper_fills(_day().client(), _RUN_D, _EXEC_D, now=_NOW)
+        events, _, _ = _mod.build_events_from_paper_fills(
+            _day().client(), _RUN_D, _EXEC_D, now=_NOW
+        )
         assert events is not None
         by_ticker = _events_by_ticker(events)
         assert by_ticker["UUP"]["prev_weight_pct"] == pytest.approx(39.9226)
@@ -928,7 +937,7 @@ class TestBuildEventsFromPaperFills:
             .order("IJR", "add", "0.14", weight="0.05", mark="35.36")
             .holding("IJR", "100", open_price="35.00")
         )
-        events, declined = _mod.build_events_from_paper_fills(
+        events, declined, _ = _mod.build_events_from_paper_fills(
             ledger.client(), _RUN_D, _EXEC_D, now=_NOW
         )
         assert declined == ""
@@ -957,7 +966,7 @@ class TestBuildEventsFromPaperFills:
             .order("FXI", "add", "20", weight="0.15", mark="38.00")
             .holding("FXI", "100", open_price="37.00")
         )
-        events, declined = _mod.build_events_from_paper_fills(
+        events, declined, _ = _mod.build_events_from_paper_fills(
             ledger.client(books=books),
             run_d,
             exec_d,
@@ -988,7 +997,7 @@ class TestBuildEventsFromPaperFills:
             .order("FXI", "add", "20", weight="0.15", mark="38.00")
             .holding("FXI", "100", open_price="37.00")
         )
-        events, declined = _mod.build_events_from_paper_fills(
+        events, declined, _ = _mod.build_events_from_paper_fills(
             ledger.client(books=books),
             run_d,
             exec_d,
@@ -1011,7 +1020,9 @@ class TestBuildEventsFromPaperFills:
         ledger = (
             _Ledger().order("XLE", "trim", "25", weight="0.0", mark="88.00").holding("XLE", "25")
         )
-        events, _ = _mod.build_events_from_paper_fills(ledger.client(), _RUN_D, _EXEC_D, now=_NOW)
+        events, _, _ = _mod.build_events_from_paper_fills(
+            ledger.client(), _RUN_D, _EXEC_D, now=_NOW
+        )
         assert events is not None
         assert _events_by_ticker(events)["XLE"]["event"] == "EXIT"
 
@@ -1024,7 +1035,9 @@ class TestBuildEventsFromPaperFills:
         residual honest, and the executor logs the surplus separately.
         """
         ledger = _Ledger().order("XLI", "exit", "60", mark="41.00").holding("XLI", "40")
-        events, _ = _mod.build_events_from_paper_fills(ledger.client(), _RUN_D, _EXEC_D, now=_NOW)
+        events, _, _ = _mod.build_events_from_paper_fills(
+            ledger.client(), _RUN_D, _EXEC_D, now=_NOW
+        )
         assert events is not None
         assert _events_by_ticker(events)["XLI"]["event"] == "EXIT"
 
@@ -1071,7 +1084,9 @@ class TestBuildEventsFromPaperFills:
                 "supersedes_id": None,
             }
         )
-        events, _ = _mod.build_events_from_paper_fills(ledger.client(), _RUN_D, _EXEC_D, now=_NOW)
+        events, _, _ = _mod.build_events_from_paper_fills(
+            ledger.client(), _RUN_D, _EXEC_D, now=_NOW
+        )
         assert events is not None
         # One row per fill, and `position_events` is unique on (date, ticker) — so the
         # writer's last upsert wins. The sell consumed everything the buy opened, so the
@@ -1097,7 +1112,7 @@ class TestBuildEventsFromPaperFillsDeclines:
     """``(None, reason)`` — the ledger has no opinion, so a prose fallback is legitimate."""
 
     def test_declines_when_no_commit_row_exists_for_the_run_date(self) -> None:
-        events, declined = _mod.build_events_from_paper_fills(
+        events, declined, _ = _mod.build_events_from_paper_fills(
             _day().client(with_commit=False), _RUN_D, _EXEC_D, now=_NOW
         )
         assert events is None
@@ -1105,7 +1120,7 @@ class TestBuildEventsFromPaperFillsDeclines:
 
     def test_declines_when_the_kill_switch_is_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("OLYMPUS_PORTFOLIO_LEDGER", "0")
-        events, declined = _mod.build_events_from_paper_fills(
+        events, declined, _ = _mod.build_events_from_paper_fills(
             _day().client(), _RUN_D, _EXEC_D, now=_NOW
         )
         assert events is None
@@ -1125,7 +1140,7 @@ class TestBuildEventsFromPaperFillsDeclines:
                     raise RuntimeError('relation "portfolio_ledger_commits" does not exist')
                 return super().table(name)
 
-        events, declined = _mod.build_events_from_paper_fills(
+        events, declined, _ = _mod.build_events_from_paper_fills(
             _Exploding(tables={"positions": [*_BOOK_0729, *_BOOK_0731]}),
             _RUN_D,
             _EXEC_D,
@@ -1141,7 +1156,7 @@ class TestBuildEventsFromPaperFillsDeclines:
         no pending orders is a genuine no-op day, and reconstructing events from prose
         would invent activity the authority says did not happen.
         """
-        events, declined = _mod.build_events_from_paper_fills(
+        events, declined, _ = _mod.build_events_from_paper_fills(
             _Ledger().client(), _RUN_D, _EXEC_D, now=_NOW
         )
         assert events == []
@@ -1155,7 +1170,7 @@ class TestBuildEventsFromPaperFillsDeclines:
         an unguarded `date.fromisoformat` would instead raise out of a function documented
         never to — taking the prose fallback down with it.
         """
-        events, declined = _mod.build_events_from_paper_fills(
+        events, declined, _ = _mod.build_events_from_paper_fills(
             _day().client(), "2026-07-30T09:35:00", _EXEC_D, now=_NOW
         )
         assert events is None
@@ -1176,7 +1191,7 @@ class TestBuildEventsFromPaperFillsDeclines:
         )
         # Pending trim, no lots — cold-start without a successful seed.
         ledger = _Ledger().order("XLF", "trim", "10", weight="0.15", mark="52.10")
-        events, declined = _mod.build_events_from_paper_fills(
+        events, declined, _ = _mod.build_events_from_paper_fills(
             ledger.client(), _RUN_D, _EXEC_D, now=_NOW
         )
         assert events is None
@@ -1207,7 +1222,7 @@ class TestBuildEventsOpeningSnapshotSeed:
             {"ticker": "XLF", "date": "2026-07-29", "close": "50"}
         )
 
-        events, declined = _mod.build_events_from_paper_fills(client, _RUN_D, _EXEC_D, now=_NOW)
+        events, declined, _ = _mod.build_events_from_paper_fills(client, _RUN_D, _EXEC_D, now=_NOW)
         assert declined == ""
         assert events is not None
         by_ticker = _events_by_ticker(events)
@@ -1235,7 +1250,7 @@ class TestAnAllRejectedDayIsNotAQuietDay:
             .order("FXI", "add", "40", weight="0.07")
             .order("UUP", "add", "20", weight="0.25")
         )
-        events, declined = _mod.build_events_from_paper_fills(
+        events, declined, pageable = _mod.build_events_from_paper_fills(
             ledger.client(), _RUN_D, _EXEC_D, now=_NOW
         )
 
@@ -1243,9 +1258,30 @@ class TestAnAllRejectedDayIsNotAQuietDay:
         # to project and no prose reconstruction to fall back to.
         assert declined == ""
         assert events == []
+        # Every refusal was `data_unavailable`: the executed book is short of the
+        # committed targets, so `main` must fail the run (#4017).
+        assert pageable is not None and "drifted" in pageable
+        assert "data_unavailable" in pageable
         out = capsys.readouterr().out
         assert "rejected all 2 order(s)" in out
         assert "not a quiet day" in out
+
+    def test_stale_only_refusals_are_bookkeeping_not_pageable(self) -> None:
+        """A superseded chain's orders were never meant to fill — no missed trade (#4017)."""
+        result = SimpleNamespace(fills=[], rejections=[SimpleNamespace(reason="stale_target")])
+        assert _mod._pageable_rejection(result, _RUN_D) is None
+
+    def test_drift_implying_refusals_are_pageable(self) -> None:
+        result = SimpleNamespace(
+            fills=[],
+            rejections=[
+                SimpleNamespace(reason="stale_target"),
+                SimpleNamespace(reason="data_unavailable"),
+            ],
+        )
+        message = _mod._pageable_rejection(result, _RUN_D)
+        assert message is not None
+        assert "data_unavailable" in message and "drifted" in message
 
     def test_a_genuinely_quiet_day_stays_quiet(self, capsys: pytest.CaptureFixture[str]) -> None:
         """The discriminating half: no orders at all must not raise the alarm.
@@ -1254,7 +1290,10 @@ class TestAnAllRejectedDayIsNotAQuietDay:
         firing on every no-op day — and an alarm that cries on quiet days is one an
         operator learns to scroll past.
         """
-        _mod.build_events_from_paper_fills(_Ledger().client(), _RUN_D, _EXEC_D, now=_NOW)
+        events, declined, pageable = _mod.build_events_from_paper_fills(
+            _Ledger().client(), _RUN_D, _EXEC_D, now=_NOW
+        )
+        assert events == [] and declined == "" and pageable is None
         assert "not a quiet day" not in capsys.readouterr().out
 
     def test_a_day_that_filled_something_does_not_warn(
@@ -1265,7 +1304,10 @@ class TestAnAllRejectedDayIsNotAQuietDay:
         The per-rejection line still prints — that is the operator's record of *which*
         order was refused, and it is what makes the summary warning redundant here.
         """
-        _mod.build_events_from_paper_fills(_day().client(), _RUN_D, _EXEC_D, now=_NOW)
+        events, declined, pageable = _mod.build_events_from_paper_fills(
+            _day().client(), _RUN_D, _EXEC_D, now=_NOW
+        )
+        assert events and declined == "" and pageable is None
         out = capsys.readouterr().out
         assert "IBIT" in out and "data_unavailable" in out
         assert "not a quiet day" not in out
@@ -1311,6 +1353,23 @@ class TestMainPrefersTheLedger:
         self._run(monkeypatch, sb, "--date", _EXEC_D, "--rebalance-date", _RUN_D)
         holds = {row["ticker"] for row in sb.upserts if row["event"] == "HOLD"}
         assert holds == {"IJR", "VGK", "XLE", "XLV", "IBIT"}
+
+    def test_a_drift_implying_all_rejected_day_exits_5(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The 09-04 failure mode, pinned: every order refused for a missing mark -> exit 5 (#4017).
+
+        The run stays authoritative (no prose fallback) and still records HOLD continuity,
+        but the red run is what pages an operator before the executed book silently drifts.
+        """
+        ledger = (
+            _Ledger()
+            .order("FXI", "add", "40", weight="0.07")
+            .order("UUP", "add", "20", weight="0.25")
+        )
+        sb = ledger.client()
+        rc = self._run(monkeypatch, sb, "--date", _EXEC_D, "--rebalance-date", _RUN_D)
+        assert rc == 5
 
     def test_require_ledger_refuses_to_fall_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Exit 3, the post-cutover lever: a silent prose fallback becomes fatal."""

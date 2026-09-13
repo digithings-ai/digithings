@@ -2928,7 +2928,10 @@ opinion" — no `portfolio_ledger_commits` row for the run date, the kill switch
 read raising — and `([], "")` for "authoritatively a quiet day", which the caller must not
 conflate. The read probe is wrapped; `execute_pending_orders` is deliberately **outside** the
 guard so a partial write stays loud. Exit codes: `2` for conflicting flags or an unresolvable
-prior trading date, `3` for `--require-ledger` when the ledger declined, `0` otherwise.
+prior trading date, `3` for `--require-ledger` when the ledger declined, `5` when the
+ledger rejected every order for a drift-implying reason — the executed book fell short of
+the committed targets (#4017; a `stale_target`-only refusal is superseded-chain
+bookkeeping and stays `0`) — and `0` otherwise.
 
 Two projection details are easy to get wrong. `approved_weight` is a 0..1 fraction while
 `position_events.weight_pct` is a percent, so the ×100 happens in `Decimal` and only then
