@@ -11,11 +11,13 @@ from tests.dq.research.data.test_queries import _FakeClient
 @pytest.mark.unit
 def test_tool_definitions_shape():
     names = {t["function"]["name"] for t in DATA_TOOLS}
-    # get_price_technicals/get_price_history retired from the tool surface in favor of
-    # the generic query_data reader; get_macro_series kept (per-series-latest across
-    # mixed cadences, which query_data can't do without starving slow series).
+    # get_price_history stays retired (query_data never served OHLCV), but
+    # get_price_technicals is back on the in-process surface after #3780 moved
+    # market history out of query_data: the skills must call a tool the
+    # dispatcher actually handles, not the MCP-only `digiquant_`-prefixed name.
     assert names == {
         "query_data",
+        "get_price_technicals",
         "get_macro_series",
         "get_market_breadth",
         "get_sector_relative_strength",
@@ -60,6 +62,38 @@ def test_dispatcher_routes_and_returns_json_string():
     assert mc["DFF"]["latest"]["value"] == 4.5
     err = dispatch("nonexistent_tool", {})
     assert "unknown tool" in err.lower()
+
+
+@pytest.mark.unit
+def test_dispatcher_routes_get_price_technicals():
+    """The in-process price-technicals tool is dispatched, not rejected (#3972).
+
+    The research/portfolio skills execute against DATA_TOOLS, so pointing them
+    at the MCP-only `digiquant_get_price_technicals` produced
+    ``Error: unknown tool``. This pins the unprefixed in-process name.
+    """
+    client = _FakeClient(
+        {
+            "price_technicals": [
+                {"ticker": "SPY", "date": "2026-06-08", "rsi_14": 55.0, "sma_50": 1.0},
+                {"ticker": "SPY", "date": "2026-06-05", "rsi_14": 54.0, "sma_50": 1.0},
+            ]
+        }
+    )
+    dispatch = build_data_tool_dispatcher(client)
+    out = json.loads(dispatch("get_price_technicals", {"ticker": "SPY", "lookback": 2}))
+    assert out["ticker"] == "SPY"
+    assert out["latest"]["rsi_14"] == 55.0
+    assert len(out["window"]) == 2
+
+
+@pytest.mark.unit
+def test_dispatcher_get_price_technicals_missing_ticker_is_actionable_error():
+    """Missing ticker returns an Error string, not a KeyError/unknown-tool (#814)."""
+    dispatch = build_data_tool_dispatcher(_FakeClient({}))
+    err = dispatch("get_price_technicals", {})
+    assert "Error" in err
+    assert "ticker" in err.lower()
 
 
 @pytest.mark.unit
@@ -143,9 +177,12 @@ def test_query_data_description_refuses_market_history_and_steers_to_dedicated_t
     assert "price_history" in description
     assert "macro_series_observations" in description
     assert "NOT readable" in description
-    # Steers to the dedicated tools that own the reads.
+    # Steers to the dedicated tools that own the reads. The price tool must be
+    # the in-process `get_price_technicals` the dispatcher handles — not the
+    # MCP-only `digiquant_get_price_technicals` the research graph can't call.
     assert "get_macro_series" in description
-    assert "digiquant_get_price_technicals" in description
+    assert "get_price_technicals" in description
+    assert "digiquant_get_price_technicals" not in description
     # No stale examples that would make the model call the refused tables.
     assert "table:'price_technicals'" not in description
     assert "table:'price_history'" not in description
