@@ -16,7 +16,15 @@ import DivergenceChip from './DivergenceChip';
 
 export type RowFilter = 'all' | 'bullish' | 'bearish' | 'strong';
 export type SortDir = 'asc' | 'desc';
-export type SortKey = 'currency' | 'actualNow' | 'avgNow' | 'priorChange' | 'n_views' | 'agreement';
+export type SortKey =
+  | 'currency'
+  | 'actualNow'
+  | 'avgNow'
+  | 'priorChange'
+  | 'n_views'
+  | 'agreement'
+  | 'confidence'
+  | 'n_eff';
 
 const FILTERS: { key: RowFilter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -36,6 +44,11 @@ export function passesFilter(row: ConsensusCurrencyRow, filter: RowFilter): bool
 function fmtSigned(v: number | null): string {
   if (v === null || !Number.isFinite(v)) return '—';
   return `${v >= 0 ? '+' : ''}${v.toFixed(2)}`;
+}
+
+function fmtNEff(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return '—';
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
 export interface ConsensusDataTableProps {
@@ -81,10 +94,10 @@ export function ConsensusDataTable({
       if (sortKey === 'currency') {
         return mul * a.currency.localeCompare(b.currency);
       }
-      const av = (sortKey === 'n_views' || sortKey === 'agreement')
+      const av = (sortKey === 'n_views' || sortKey === 'agreement' || sortKey === 'confidence' || sortKey === 'n_eff')
         ? (latestByRow.get(a.currency)?.[sortKey] ?? null)
         : a[sortKey];
-      const bv = (sortKey === 'n_views' || sortKey === 'agreement')
+      const bv = (sortKey === 'n_views' || sortKey === 'agreement' || sortKey === 'confidence' || sortKey === 'n_eff')
         ? (latestByRow.get(b.currency)?.[sortKey] ?? null)
         : b[sortKey];
 
@@ -138,7 +151,7 @@ export function ConsensusDataTable({
 
       <div className="oly-slab overflow-hidden p-0">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px] border-collapse">
+          <table className="w-full min-w-[880px] border-collapse">
             <thead>
               <tr className="border-b border-hair">
                 <th className="px-3.5 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
@@ -196,6 +209,26 @@ export function ConsensusDataTable({
                     Agreement
                   </button>
                 </th>
+                <th className="px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
+                  <button
+                    type="button"
+                    onClick={() => onHeaderClick('confidence')}
+                    className="hover:text-ink transition-colors"
+                    title="Relevance-weighted conviction share"
+                  >
+                    Conf
+                  </button>
+                </th>
+                <th className="px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
+                  <button
+                    type="button"
+                    onClick={() => onHeaderClick('n_eff')}
+                    className="hover:text-ink transition-colors"
+                    title="Effective sample size"
+                  >
+                    n_eff
+                  </button>
+                </th>
                 <th className="px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
                   Score
                 </th>
@@ -244,6 +277,17 @@ export function ConsensusDataTable({
                     </td>
                     <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-ink-soft">
                       {agreement !== null && Number.isFinite(agreement) ? `${Math.round(agreement * 100)}%` : '—'}
+                    </td>
+                    <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-ink-soft">
+                      {(() => {
+                        const confidence = latestRow?.confidence ?? null;
+                        return confidence !== null && Number.isFinite(confidence)
+                          ? `${Math.round(confidence * 100)}%`
+                          : '—';
+                      })()}
+                    </td>
+                    <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-ink-soft">
+                      {fmtNEff(latestRow?.n_eff)}
                     </td>
                     <td className="px-3.5 py-2.5">
                       <div className="flex min-w-[120px]">
