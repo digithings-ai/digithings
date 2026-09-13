@@ -127,3 +127,36 @@ class TestIncoherentEnvelope:
         assert bar.close == Decimal("101.0")
         assert bar.high == Decimal("101.0")
         assert bar.low == Decimal("100.0")
+
+
+class TestNonFiniteAndNegativePrices:
+    """Corrupt rows must fail loudly, never be laundered into a valid bar.
+
+    ``price_history`` is Postgres ``numeric``, which stores ``NaN`` / ``Infinity``
+    (the same class ``execute_at_open`` already guards for). ``min``/``max``
+    widening would otherwise replace a non-finite bound (e.g. ``low=+Inf`` /
+    ``high=-Inf``) with a finite open/close and accept the row, so finiteness is
+    checked before any comparison — Decimal NaN comparisons raise
+    ``InvalidOperation``, so the guard must inspect ``is_finite()`` first.
+    """
+
+    @pytest.mark.parametrize("field", ["open", "high", "low", "close"])
+    @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+    def test_non_finite_value_is_rejected(self, field: str, value: float) -> None:
+        row = _price_row("2026-09-01", "SPY", 100.0, 103.0, 99.0, 102.0)
+        row[field] = value
+        with pytest.raises(ValueError, match="non-finite"):
+            _bars([row])
+
+    def test_low_positive_inf_high_negative_inf_is_rejected(self) -> None:
+        """The laundering exploit: both bounds non-finite but ``hi < lo`` is true."""
+        row = _price_row("2026-09-01", "SPY", 100.0, float("-inf"), float("inf"), 102.0)
+        with pytest.raises(ValueError, match="non-finite"):
+            _bars([row])
+
+    def test_negative_price_is_rejected(self) -> None:
+        from pydantic import ValidationError
+
+        row = _price_row("2026-09-01", "SPY", 100.0, 103.0, 99.0, -1.0)
+        with pytest.raises(ValidationError):
+            _bars([row])

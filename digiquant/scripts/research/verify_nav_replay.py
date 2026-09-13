@@ -223,13 +223,25 @@ def build_request(price_rows, position_rows, nav_rows):
         hi = Decimal(str(r["high"]))
         lo = Decimal(str(r["low"]))
         cl = Decimal(str(r["close"]))
+        # Fail loudly on non-finite bounds before any comparison: Postgres
+        # ``numeric`` stores NaN/Infinity, and widening would otherwise
+        # launder low=+Inf / high=-Inf into a finite, valid-looking bar
+        # (#3994 review). Decimal NaN comparisons raise InvalidOperation,
+        # so is_finite() must come first.
+        if not (op.is_finite() and hi.is_finite() and lo.is_finite() and cl.is_finite()):
+            raise ValueError(
+                f"{r['ticker']} {d}: non-finite OHLC value "
+                f"(open={op}, high={hi}, low={lo}, close={cl}) — refusing to build a bar"
+            )
         # Reconcile the envelope to the observed prices: vendor rows and
         # float64 round-trips through PostgREST can put open/close just
         # outside [low, high] (SPY 1993-02-12 is one ulp; ATOM-USD/DOT-USD
         # 2026-09-11 close below the low), and OhlcvBar enforces the
         # envelope — one poisoned row must not abort the whole NAV write
         # (#3994). open/close are preserved: the engine marks and fills at
-        # close, so widening high/low cannot move NAV.
+        # close, so widening high/low cannot move NAV. A stored high < low
+        # is repaired the same way rather than rejected: the observed
+        # prices are the evidence.
         if hi < lo or op > hi or op < lo or cl > hi or cl < lo:
             widened += 1
             hi = max(hi, op, cl)
