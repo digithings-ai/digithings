@@ -1418,14 +1418,15 @@ wrong/absent customer token) is the unconfigured container default: skin
 `digichat` (gallery Thread UI, including hairline hover hints with no
 rotated-square arrow), generic “Ask a question” copy, compact attach+send
 composer, plus the baseline template defaults: 4 starter suggestion chips
-(`BASELINE_EMBED_SUGGESTIONS`, owner-replaceable copy), `gate.webSearch: true`
-with the websearch session pref defaulting ON for the baseline slug only
-(`defaultOn` when `clientConfig.slug === "embed"`; matched surfaces keep the
-#3420 opt-in default off so prior opt-outs are never silently re-enabled;
-tenant AND still gates the BFF forward), and
-`mcp.allowUserServers / allowAddForm: true` (session MCP URLs stay
-`https`-only + SSRF-allowlisted, operator YAML wins). The `/tools` slash row
-stays visible on empty catalogs via the websearch row. The BFF sends
+(`BASELINE_EMBED_SUGGESTIONS`, owner-replaceable copy). The fallback is
+least-privilege: `gate.showByok: false`, `gate.webSearch: false`, and
+`mcp.allowUserServers / allowAddForm: false`. Those flags turn on only via
+explicit operator configuration — the projections (`toDigichatClientConfig`,
+`toEmbedClientConfig`) gate on strict `=== true`, so a resolved deployment /
+host opts in. When enabled, the tenant gate still ANDs the BFF web-search
+forward (#3420) and session MCP URLs stay `https`-only + SSRF-allowlisted,
+operator YAML wins. The `/tools` slash row's websearch entry appears only once
+the tenant allows web search (`tenantAllowsWeb`). The BFF sends
 `research_system_prompt` (`DEFAULT_BASELINE_RESEARCH_SYSTEM_PROMPT`) only for
 this baseline case — trimmed non-empty `x-embed-host` matching no host
 deployment, on the unauthenticated baseline tenant (`tenantSlug "embed"`,
