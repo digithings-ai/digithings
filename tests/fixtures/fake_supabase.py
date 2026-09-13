@@ -23,6 +23,61 @@ from digiquant.dashboard.tenancy import house_workspace_id
 # ─── In-memory fake Supabase client ─────────────────────────────────────────
 
 
+def _split_logical(expr: str) -> list[str]:
+    """Split a PostgREST logical expression on top-level commas (paren-aware)."""
+    parts: list[str] = []
+    depth = 0
+    buf: list[str] = []
+    for ch in expr:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append("".join(buf).strip())
+            buf = []
+        else:
+            buf.append(ch)
+    parts.append("".join(buf).strip())
+    return [p for p in parts if p]
+
+
+def _eval_or_expression(row: dict[str, Any], expr: str) -> bool:
+    """Evaluate the body of PostgREST ``or=(...)``: a top-level list is OR."""
+    return any(_eval_condition(row, part) for part in _split_logical(expr))
+
+
+def _eval_condition(row: dict[str, Any], term: str) -> bool:
+    if term.startswith("and(") and term.endswith(")"):
+        return all(_eval_condition(row, p) for p in _split_logical(term[4:-1]))
+    if term.startswith("or(") and term.endswith(")"):
+        return any(_eval_condition(row, p) for p in _split_logical(term[3:-1]))
+    return _eval_leaf(row, term)
+
+
+def _eval_leaf(row: dict[str, Any], term: str) -> bool:
+    col, op, val = term.split(".", 2)
+    row_val = row.get(col)
+    if op == "is":
+        return (row_val is None) if val.lower() == "null" else (row_val is not None)
+    if op == "eq":
+        return row_val is not None and str(row_val) == val
+    if op == "neq":
+        return not (row_val is not None and str(row_val) == val)
+    text = str(row_val or "")
+    if op == "gt":
+        return text > val
+    if op == "gte":
+        return text >= val
+    if op == "lt":
+        return text < val
+    if op == "lte":
+        return text <= val
+    if op == "like":
+        return text.startswith(val.rstrip("%"))
+    raise AssertionError(f"FakeSupabaseClient.or_ cannot parse {term!r}")
+
+
 @dataclass
 class _FakeResponse:
     data: list[dict[str, Any]]
@@ -205,21 +260,14 @@ class _FakeQuery:
         return True
 
     def _matches_or(self, row: dict[str, Any]) -> bool:
-        """Evaluate the stored ``or=`` string against one row (OR semantics)."""
+        """Evaluate the stored ``or=`` string against one row.
+
+        Supports the house-or-null shape used by Group A readers and the
+        nested ``and(...)``/``or(...)`` keyset seeks used by
+        ``verify_nav_replay._fetch_table`` (#3948).
+        """
         assert self._or_raw is not None
-        for part in self._or_raw.split(","):
-            part = part.strip()
-            if ".is.null" in part:
-                col = part.split(".is.null")[0]
-                if row.get(col) is None:
-                    return True
-            elif ".eq." in part:
-                col, _, want = part.partition(".eq.")
-                if str(row.get(col)) == want:
-                    return True
-            else:
-                raise AssertionError(f"FakeSupabaseClient.or_ cannot parse {part!r}")
-        return False
+        return _eval_or_expression(row, self._or_raw)
 
     def execute(self) -> _FakeResponse:
         if self._insert_rows is not None:

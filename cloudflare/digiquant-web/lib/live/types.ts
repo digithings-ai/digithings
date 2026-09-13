@@ -108,6 +108,8 @@ export interface NavPoint {
   source?: string | null;
   /** finalized_accounting | legacy_estimate */
   contract?: string | null;
+  /** Migration 123 (#3767): true on the first row after a legacy↔finalized flip. */
+  seriesSeam?: boolean | null;
 }
 
 /** Return shape of {@link useLivePortfolio}. */

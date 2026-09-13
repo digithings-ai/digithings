@@ -120,10 +120,17 @@ jobs:
           mapfile -t FILES < <(find digiquant/supabase/migrations -maxdepth 1 -name '*.sql' | sort)
           echo "Found ${#FILES[@]} migration files; the ledger alone decides which are pending."
 
-          # Fail fast on duplicate numeric prefixes (version key is the full filename,
-          # so this is belt-and-suspenders for ordering clarity).
+          # Hard-fail on duplicate numeric prefixes. The ledger keys on the full
+          # filename, so a collision does not corrupt the ledger — but it makes
+          # ordering ambiguous and lets a new file hide behind a green check.
+          # Renumber one of the colliding files before this can apply anything.
           dups="$(printf '%s\n' "${FILES[@]}" | sed -E 's#.*/##; s/_.*//' | sort | uniq -d || true)"
-          [ -n "${dups}" ] && echo "::warning::duplicate migration prefixes present: ${dups}"
+          if [ -n "${dups}" ]; then
+            echo "::error::duplicate migration version prefix(es): ${dups}"
+            echo "renumber each colliding file (keeping one) to the next unused prefix,"
+            echo "then update any docs/tests that name the old filename. Refusing to apply."
+            exit 1
+          fi
 
           applied=0; skipped=0
           for f in "${FILES[@]}"; do

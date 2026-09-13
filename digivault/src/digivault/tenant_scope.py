@@ -96,9 +96,11 @@ def _load_tenant_prefix_map(raw: str | None = None) -> dict[str, str]:
     Tolerant of the sibling keys (``digisearchIndex``, ``researchSystemPrompt``)
     digigraph's own copy of this map also carries — only the vault prefix
     matters here. An individual entry with no usable prefix (wrong type, no
-    ``vaultPathPrefix``/``vault_path_prefix`` key) is dropped with a warning —
-    a typo for one tenant must not by itself take down every other tenant's
-    requests. But the env var as a whole is a different story: unset (empty
+    ``vaultPathPrefix``/``vault_path_prefix`` key, or a value that normalizes to
+    empty like ``"/"``/``"   "``/``".md"``) is dropped with a warning — a typo for
+    one tenant must not by itself take down every other tenant's requests, and a
+    normalized-empty prefix is never stored (see the empty-normalization guard
+    below). But the env var as a whole is a different story: unset (empty
     string) returns ``{}``, the genuine "tenant binding is off" case; anything
     *set* that ends up producing zero usable entries — invalid JSON, a
     non-object top level, or a dict where every single entry was individually
@@ -124,7 +126,25 @@ def _load_tenant_prefix_map(raw: str | None = None) -> dict[str, str]:
         if not prefix:
             logger.warning("%s: entry %r has no vaultPathPrefix", _ENV_VAR, slug)
             continue
-        out[slug.strip().lower()] = normalize_vault_path(str(prefix))
+        normalized = normalize_vault_path(str(prefix))
+        if not normalized:
+            # Normalize BEFORE storing: a prefix that is present but normalizes to
+            # empty ("/", "///", "   ", ".md") is mapped-but-unusable. Storing the
+            # "" would make `mapped_tenant_path_prefix` return a non-None empty
+            # prefix that `server._tenant_scoped_vault_root` conflates with the map
+            # being unset, falling back to the SHARED root — a cross-tenant
+            # fail-open (found in the #3915 review). Dropping the entry instead
+            # makes a lone one "set but broken" (zero usable mappings ->
+            # TenantCorpusMapError -> 503) and, alongside valid entries, simply
+            # absent from the map (403 on lookup).
+            logger.warning(
+                "%s: entry %r has a vaultPathPrefix that normalizes to empty (%r)",
+                _ENV_VAR,
+                slug,
+                prefix,
+            )
+            continue
+        out[slug.strip().lower()] = normalized
     if not out:
         raise TenantCorpusMapError(
             f"{_ENV_VAR} is set but produced no usable tenant -> prefix mappings"

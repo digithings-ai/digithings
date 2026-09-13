@@ -118,6 +118,24 @@ export function findNavSeriesSeams(
 }
 
 /**
+ * Rows of the most recent source run (#3767 / #3935). A stitched NAV series can
+ * hold several runs (legacy → finalized → …); returns must be rebased on the
+ * current run, never computed across a seam (the false Sep-8 jump). Sorted
+ * ascending; falls back to the full series when a seam date is absent. Empty in
+ * → empty out. Uses the explicit `series_seam` flag or a detected source flip.
+ */
+export function currentNavRun<
+  T extends { date: string; source?: string | null; series_seam?: boolean | null },
+>(rows: ReadonlyArray<T>): T[] {
+  if (rows.length === 0) return [];
+  const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+  const seams = findNavSeriesSeams(sorted);
+  if (seams.length === 0) return sorted;
+  const current = sorted.filter((row) => row.date >= seams[seams.length - 1]);
+  return current.length ? current : sorted;
+}
+
+/**
  * Red-test helper: contribution fractions (as pct points) must sum to the shown
  * day return within a small absolute tolerance when both are present.
  */

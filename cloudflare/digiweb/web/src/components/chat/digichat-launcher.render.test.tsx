@@ -32,4 +32,27 @@ describe("DigichatLauncher", () => {
     expect(html).toContain('title="digichat embed"');
     expect(html).not.toContain("digichat-launcher__trigger");
   });
+
+  it("omits the New chat control when no handler is provided", () => {
+    const html = renderToStaticMarkup(
+      <DigichatLauncher portal={false} defaultOpen title="page assistant">
+        <iframe title="digichat embed" />
+      </DigichatLauncher>,
+    );
+
+    expect(html).toContain('aria-label="Close digichat"');
+    expect(html).not.toContain("digichat-launcher__new");
+    expect(html).not.toContain('aria-label="New chat"');
+  });
+
+  it("renders the New chat control when a handler is provided", () => {
+    const html = renderToStaticMarkup(
+      <DigichatLauncher portal={false} defaultOpen onNewChat={() => {}}>
+        <iframe title="digichat embed" />
+      </DigichatLauncher>,
+    );
+
+    expect(html).toContain("digichat-launcher__new");
+    expect(html).toContain('aria-label="New chat"');
+  });
 });

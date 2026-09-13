@@ -145,13 +145,15 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
   },
   cli: { enabled: false },
   tools: { allowUserToggle: true, catalog: [] },
-  mcp: { servers: [], allowUserServers: true, allowAddForm: true },
+  // Least-privilege fallback: an unconfigured container must not expose BYOK,
+  // user MCP servers, or web search. A resolved deployment opts in explicitly.
+  mcp: { servers: [], allowUserServers: false, allowAddForm: false },
   gate: {
     mode: "turn_limited",
     activityDetail: "labels",
-    showByok: true,
+    showByok: false,
     showLanguageSelector: false,
-    webSearch: true,
+    webSearch: false,
   },
   backendType: "digigraph",
 };

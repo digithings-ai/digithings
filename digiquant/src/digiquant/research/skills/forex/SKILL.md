@@ -7,14 +7,14 @@ description: Run forex and currency analysis as part of the daily digest. Covers
 
 ## Grounding Tools (use first)
 
-- **`query_data`** — your primary grounding. For each ticker/ETF in scope (your watchlist and
-  any `sector_config` / asset-class symbols in PHASE_INPUTS), call
-  `query_data(table="price_technicals", columns="date,sma_50,sma_200,pct_vs_sma50,pct_vs_sma200,rsi_14,macd_hist,roc_21,adx_14,atr_pct,bb_pct_b,zscore_200", eq={"ticker": "<SYMBOL>"}, order="date", desc=true, limit=20)`
-  before asserting trend, momentum, or relative strength. Pass that exact `columns` list so you
-  fetch only the indicators you need (not all 35+ columns). Use the returned
-  sma/rsi/macd/adx/atr/zscore values; **never invent a number** — every quantitative claim must
-  cite a value you fetched. If a call returns no rows for a symbol, say so and lower conviction.
-  Need raw prices? `query_data(table="price_history", columns="date,open,high,low,close,volume", eq={"ticker": "<SYMBOL>"}, order="date", desc=true, limit=30)`.
+- **`get_price_technicals`** — your primary grounding. For each ticker/ETF in scope
+  (your watchlist and any `sector_config` / asset-class symbols in PHASE_INPUTS), call
+  `get_price_technicals(ticker="<SYMBOL>", lookback=20)`
+  before asserting trend, momentum, or relative strength. The response carries the recent
+  computed indicators (sma/rsi/macd/adx/atr/zscore), newest first — use those
+  values; **never invent a number** — every quantitative claim must cite a value you fetched.
+  If a call returns no rows for a symbol, say so and lower conviction. Market history is not
+  readable through `query_data` (#3780) — never use it to fetch prices or technicals.
 - Also **`get_macro_series`** for `DTWEXBGS` (broad USD index) to anchor the dollar view.
 
 ## Inputs
@@ -25,7 +25,7 @@ description: Run forex and currency analysis as part of the daily digest. Covers
 
 ## Data Layer
 
-> DB-first: read FX levels from Supabase `macro_series_observations` (series IDs `FX/EUR`, `FX/GBP`, `FX/JPY`, `FX/CAD`; `source = "yahoo"`; `meta.quote_convention` documents direction — `USD_per_EUR`, `USD_per_GBP`, `JPY_per_USD`, `CAD_per_USD`). Daily-snapshot consolidations also surface in `daily_snapshots.market_data` / `documents.payload`.
+> DB-first: read DXY and FX levels from published `daily_snapshots.market_data` / `documents.payload` (web for fresh intraday). Anchor the dollar view with `get_macro_series` (`DTWEXBGS`, and `DGS10` / `DGS2` for rate differentials). The per-pair Yahoo feed (`EURUSD=X` → `FX/EUR`, `GBPUSD=X` → `FX/GBP`, `JPY=X` → `FX/JPY`, `CAD=X` → `FX/CAD`; directions `USD_per_EUR`, `USD_per_GBP`, `JPY_per_USD`, `CAD_per_USD`) is not part of the injected `market_context` macro block — read the pairs from the snapshot payload; market history is not readable through `query_data` (#3780).
 
 For live or intraday rates that have not yet been snapshotted, query the same Yahoo Finance symbols directly (`EURUSD=X`, `GBPUSD=X`, `JPY=X`, `CAD=X`) — the underlying provider for the daily feed.
 

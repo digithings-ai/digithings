@@ -110,15 +110,16 @@ MCP (Model Context Protocol) is the standard for tool discovery and invocation a
 
 | Component | MCP Server Command | Host Port | Exposed Tools (examples) | Typical Clients |
 |-----------|-------------------|-----------|--------------------------|-----------------|
-| **digigraph** | `python -m digigraph.mcp_server` (install: `pip install -e "digigraph[mcp]"`); in the cloudflare stack, loopback `:8766` inside `DigiStackContainer` via the `digigraph-mcp` supervisord program (no public route yet) | 8766 or stdio | `workflow`, `chat`, `thread_state`, `list_orchestrator_tools`, `list_orchestrator_tools_detailed` | digiclaw (Phase 2), IDE plugins, Claude Desktop |
-| **digiquant** | `python -m digiquant.mcp_server` | stdio or SSE | `digiquant_run_pipeline`, `digiquant_list_strategies`, `run_backtest`, `run_optimize`, `run_validation` | digigraph (invokes via HTTP orchestrator), power-user IDE |
-| **digisearch** | `docker compose --profile digisearch-mcp up` → container port 8765; in the cloudflare stack, loopback `:8765` inside `DigiStackContainer` via the `digisearch-mcp` supervisord program (no public route yet) | 8765 | `digisearch_query`, `digisearch_fetch_all`, `digisearch_research_turn` (with `digisearch[agent]`), `digisearch_research_delegate` | digigraph (invokes via HTTP orchestrator), Langflow, IDE |
-| **digivault** | `docker compose --profile digivault-mcp up` → container port 8769; in the cloudflare stack, loopback `:8769` inside `DigiStackContainer` via the `digivault-mcp` supervisord program (no public route yet) | 8769 | `digivault_search_tag`, `digivault_backlinks`, `digivault_lint`, `digivault_create_note` (`digivault_search_notes` / `digivault_get_note` stay orchestrator-only) | digigraph (invokes via HTTP orchestrator), IDE |
+| **digigraph** | `python -m digigraph.mcp_server` (install: `pip install -e "digigraph[mcp]"`); in the cloudflare stack, loopback `:8766` inside `DigiStackContainer` via the `digigraph-mcp` supervisord program (no public route yet) | 8766 (streamable-http) or stdio | `workflow`, `chat`, `thread_state`, `list_orchestrator_tools`, `list_orchestrator_tools_detailed` | digiclaw (Phase 2), IDE plugins, Claude Desktop |
+| **digiquant** | `python -m digiquant.mcp_server` | 8767 (streamable-http) or stdio | `digiquant_run_pipeline`, `digiquant_list_strategies`, `run_backtest`, `run_optimize`, `run_validation` | digigraph (invokes via HTTP orchestrator), power-user IDE |
+| **digisearch** | `docker compose --profile digisearch-mcp up` → container port 8765; in the cloudflare stack, loopback `:8765` inside `DigiStackContainer` via the `digisearch-mcp` supervisord program (no public route yet) | 8765 (streamable-http) | `digisearch_query`, `digisearch_fetch_all`, `digisearch_research_turn` (with `digisearch[agent]`), `digisearch_research_delegate` | digigraph (invokes via HTTP orchestrator), Langflow, IDE |
+| **digivault** | `docker compose --profile digivault-mcp up` → container port 8769; in the cloudflare stack, loopback `:8769` inside `DigiStackContainer` via the `digivault-mcp` supervisord program (no public route yet) | 8769 (streamable-http) | `digivault_search_tag`, `digivault_backlinks`, `digivault_lint`, `digivault_create_note` (`digivault_search_notes` / `digivault_get_note` stay orchestrator-only) | digigraph (invokes via HTTP orchestrator), IDE |
 
 **Design notes:**
 
 - For normal chat operation, digigraph does **not** connect to digisearch/digiquant via MCP. It uses HTTP (`POST /v1/orchestrator_tools` + `/v1/orchestrator_invoke`) for vertical dispatch. MCP servers are for external clients (IDEs, digiclaw, Langflow) that want to attach directly to a vertical.
 - digigraph's own MCP server exposes the hub workflow surface. Clients that want single-entry-point access should connect here.
+- All four MCP servers default to the **streamable-http** transport on loopback with distinct ports — digigraph `8766`, digiquant `8767`, digisearch `8765`, digivault `8769` — so they can run side by side. digigraph, digiquant, and digivault also offer `--stdio` for trusted local clients (Claude Desktop); digisearch is streamable-http only (its CLI exposes `--config`/`--port`, no `--stdio`).
 - Use **hub-only** (digigraph MCP) when you want one digikey allowlist and unified trace stream. Use **direct vertical MCP** (digisearch or digiquant MCP) when a client should bypass digigraph.
 - MCP tool schemas for digisearch and digiquant are also served over HTTP (`GET /v1/orchestrator_tools`) so digigraph can fetch them without running a local MCP process.
 
@@ -128,9 +129,9 @@ MCP (Model Context Protocol) is the standard for tool discovery and invocation a
 
 ### Default / Core (no profile flag)
 
-**Includes:** digikey (8005), Ollama (11435), digismith (8003), digigraph (8000), digiquant (8001), digisearch (8002), LiteLLM (4000)
+**Includes:** digikey (8005), digikey-blocklist-redis (Redis 7, internal only), Ollama (11435), digismith (8003), digigraph (8000), digiquant (8001), digisearch (8002), LiteLLM (4000)
 
-**When to use:** Standard developer stack. All core services. No chat UI, no Redis cache, no heartbeat agent.
+**When to use:** Standard developer stack. All core services. No chat UI, no LiteLLM response-cache Redis, no heartbeat agent. `digikey-blocklist-redis` has no profile, so it always runs and digikey waits for it (`condition: service_healthy`); it backs JWT revocation (ADR-0007).
 
 ```bash
 make build
@@ -199,6 +200,61 @@ docker compose --profile digisearch-mcp up -d
 
 ---
 
+### Profile: `digivault-mcp`
+
+**Adds:** `digivault-mcp` container (digivault MCP server on host port 8769)
+
+**When to use:** Expose digivault MCP tools to external clients (IDE plugins, Claude Desktop) without going through digigraph.
+
+```bash
+docker compose --profile digivault-mcp up -d
+# MCP endpoint: http://127.0.0.1:8769/mcp
+```
+
+---
+
+### Profile: `observability`
+
+**Adds:** `prometheus` (127.0.0.1:9090) + `grafana` (127.0.0.1:3001, provisioned dashboards backed by Prometheus)
+
+**When to use:** Scrape and visualize the `GET /metrics` endpoint every FastAPI service mounts via `digibase.metrics.install_metrics`. Prometheus scrapes digigraph, digiquant, digisearch, digismith, and digikey over the internal network (digivault mounts `/metrics` too but is not in the default scrape config).
+
+Requires `GRAFANA_ADMIN_PASSWORD` in `.env` — Grafana fails fast without it (`${GRAFANA_ADMIN_PASSWORD:?...}`).
+
+```bash
+# Add GRAFANA_ADMIN_PASSWORD to .env first
+make up-observability
+# or: docker compose --profile observability up -d
+# Prometheus: http://127.0.0.1:9090   Grafana: http://127.0.0.1:3001
+```
+
+---
+
+### Profile: `otel`
+
+**Adds:** `otel-collector` (OTLP gRPC 127.0.0.1:4317, OTLP HTTP 127.0.0.1:4318)
+
+**When to use:** Export infra-level OpenTelemetry spans from services with `digibase[otel]` installed. Separate from the `observability` profile (metrics) — enable both for traces and metrics.
+
+```bash
+docker compose --profile otel up -d
+# Then set DIGI_OTEL_ENDPOINT=http://otel-collector:4318 in .env
+```
+
+---
+
+### Profile: `omniroute`
+
+**Adds:** `omniroute` (self-hosted OpenAI-compatible router, 127.0.0.1:20128/v1) + `omniroute-auth-guard` (preflight container that refuses to start the profile without a non-default `OMNIROUTE_AUTH_PASSWORD`)
+
+**When to use:** Self-hosted OpenAI-compatible routing. Off by default; requires `OMNIROUTE_AUTH_PASSWORD`. Do not cut digiquant house pins over to it (see [docs/providers/omniroute.md](docs/providers/omniroute.md)).
+
+```bash
+docker compose --profile omniroute up -d
+```
+
+---
+
 ## 6. Authentication and Authorization
 
 ### Key Types
@@ -220,8 +276,8 @@ digikey issues RS256 JWTs. Relevant claims:
 | `aud` | `digi-ecosystem` (or `DIGIKEY_AUDIENCE`) | Validated by all protected services |
 | `sub` | key prefix or OIDC subject | Tenant/user identifier |
 | `scopes` | array of strings | e.g. `["digigraph:workflow", "digisearch:query"]` |
-| `exp` | Unix timestamp | Short-lived; no revocation today (see Known Gaps) |
-| `jti` | UUID | Included in audit events; not checked against blocklist today |
+| `exp` | Unix timestamp | Short-lived; revocation before expiry via the Redis `jti` blocklist (ADR-0007) |
+| `jti` | UUID | Checked against the Redis revocation blocklist (ADR-0007); included in audit events |
 | `litellm_proxy_api_key` | string | Injected by digikey when `DIGIKEY_LITELLM_PROXY_KEY` is set; forwarded as `X-LiteLLM-Proxy-Key` |
 
 ### Scope Naming Convention
@@ -232,18 +288,20 @@ Scopes follow the pattern `service:action`:
 digigraph:workflow       digigraph:chat          digigraph:mcp
 digiquant:backtest       digiquant:optimize
 digisearch:query         digisearch:ingest
+digivault:read           digivault:write
 *                        # matches all (dev_global only)
 ```
 
 ### DigiAuthMiddleware (service-side validation)
 
-All three protected services (digigraph, digiquant, digisearch) use `digikey.integrations.service_middleware`. On every protected request:
+All four protected services (digigraph, digiquant, digisearch, digivault) use `digikey.integrations.service_middleware`. On every protected request:
 
 1. Read `Authorization: Bearer <token>` header.
 2. Fetch JWKS from `DIGIKEY_JWKS_URL` (cached; falls back to `DIGIKEY_PUBLIC_KEY_PEM` if set).
 3. Validate RS256 signature, `iss`, `aud`, `exp`.
-4. Check required scope for the route (e.g. `digiquant:backtest` for `POST /backtest/start`).
-5. Attach `request.state.tenant`, `request.state.key_prefix`, `request.state.jti` for audit events.
+4. Check the `jti` against the Redis revocation blocklist (ADR-0007): `401 token_revoked` when blocklisted, `503 auth_backend_unavailable` when the configured backend is unreachable.
+5. Check required scope for the route (e.g. `digiquant:backtest` for `POST /backtest/start`).
+6. Attach `request.state.tenant`, `request.state.key_prefix`, `request.state.jti` for audit events.
 
 **Fail-closed behavior:** If neither `DIGIKEY_JWKS_URL` nor `DIGIKEY_PUBLIC_KEY_PEM` is configured, protected routes return `503 auth_not_configured`. There is no anonymous access to protected routes.
 
@@ -273,7 +331,7 @@ Machine clients use `grant_type=api_key` with a `dgk_live_` key for the same exc
 
 ### Known Gaps
 
-- **No JWT revocation:** Revoked keys remain valid until `exp`. A `jti` blocklist is on the roadmap ([ROADMAP.md](ROADMAP.md), digikey section in [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md)).
+- **JWT revocation depends on the blocklist backend:** digikey writes revoked `jti` values to a Redis blocklist with a per-entry TTL, and protected services reject a blocklisted `jti` (ADR-0007). Compose sets `DIGIKEY_REQUIRE_BLOCKLIST=1` and a `digikey-blocklist-redis` URL, so an unreachable Redis fails closed with `503 auth_backend_unavailable`. A deployment that leaves both `DIGIKEY_BLOCKLIST_REDIS_URL` and `DIGIKEY_REQUIRE_BLOCKLIST` unset keeps pre-revocation behavior (tokens valid until `exp`).
 - **Multi-tenant incomplete:** `X-Digi-Tenant` is propagated but tenant isolation within digisearch and digiquant is not enforced at the data layer today.
 - **digibase credential broker not shipped:** Each service holds its own raw `DATABASE_URL` / `REDIS_URL`. Central credential rotation is Phase 1 of the digibase service roadmap.
 
@@ -281,7 +339,7 @@ Machine clients use `grant_type=api_key` with a `dgk_live_` key for the same exc
 
 ## 7. Observability Stack
 
-Observability in digithings operates across three layers. None of them are fully integrated into a single dashboard today.
+Observability in digithings operates across three layers. Metrics are scraped by Prometheus and visualized in Grafana, but only when the opt-in `observability` profile is running; tracing and audit logs are not wired into that dashboard.
 
 ### Layer 1: Distributed Tracing
 
@@ -309,12 +367,14 @@ Every service exposes `GET /health` returning `{"status": "ok"}` (used by Docker
 
 digichat's ecosystem side panel displays health badges for digigraph, digiquant, digismith, and digisearch (configurable via `DIGICHAT_ENABLED_SERVICES`).
 
+**Metrics:** every FastAPI service (digigraph, digiquant, digisearch, digikey, digismith, and digivault) mounts `GET /metrics` via `digibase.metrics.install_metrics` — HTTP request counters/histograms and an in-flight gauge, labelled by `service`, `version`, and `environment`. `/metrics` is auth-exempt (the same trust boundary as `/health`) so Prometheus can scrape it on the internal network. The default `docs/ops/prometheus/prometheus.yml` scrapes the first five, not digivault. Prometheus + Grafana ship under the opt-in `observability` profile (`make up-observability`, requires `GRAFANA_ADMIN_PASSWORD`); OTLP spans ship under the `otel` profile.
+
 ### Gap Analysis
 
 | Gap | Impact | Roadmap |
 |-----|--------|---------|
-| No Prometheus endpoints | Cannot scrape service metrics into Grafana without custom instrumentation | Phase 2 |
-| No centralized metrics dashboard | Must use LangSmith UI + log files separately | Phase 2 (digibase + Prometheus) |
+| Metrics collection is opt-in | `/metrics` is mounted on every FastAPI service, but Prometheus only runs under the `observability` profile, so nothing is scraped in the default stack | Run `make up-observability`; make it the default in production |
+| Metrics dashboard not part of core | Grafana and its provisioned dashboards require the `observability` profile; there is no default single pane of glass | `make up-observability`; fold into the Kubernetes target |
 | Span PII not enforced | Operators must configure LangSmith data masking manually | Policy gap; no automated check today |
 | Audit sink not wired in digisearch | digisearch audit events may be missed by remote collectors | Phase 2 |
 | No distributed trace correlation across services | `X-Request-ID` propagates but is not auto-injected into OTel spans | Requires digibase[otel] instrumentation per service |
@@ -349,7 +409,7 @@ Human-in-the-loop interrupt before code execution is supported via `DIGI_INTERRU
 
 | Risk | Severity | Mitigation Today | Roadmap Fix |
 |------|----------|-----------------|-------------|
-| No JWT revocation | High | Short-lived tokens; network isolation | `jti` blocklist in digikey |
+| JWT revocation off when blocklist unset | Medium | Short-lived tokens; Redis `jti` blocklist (ADR-0007); Compose sets `DIGIKEY_REQUIRE_BLOCKLIST=1` and fails closed | Durable/HA Redis; alert on blocklist unavailability |
 | Unsandboxed code execution | High | Off by default (`DIGI_ALLOW_CODE_EXEC`); loopback-only network | gVisor or subprocess sandboxing |
 | Multi-tenant incomplete | Medium | Network isolation; per-key scopes | digibase + per-tenant index isolation |
 | Ephemeral JWKS rotates on restart | Medium | Dev-only (`DIGIKEY_ALLOW_EPHEMERAL_KEY=1`); use PEM or stable key in production | Vault/KMS-backed signing keys |
@@ -442,9 +502,12 @@ make seed-digisearch-edgar-dev                # ingest into edgar_dev index
 | `DIGIKEY_ALLOW_EPHEMERAL_KEY` | `1` permits ephemeral JWKS (local dev only) | Set to `1` for local; use stable key in prod |
 | `DIGIKEY_PRIVATE_KEY_PEM` | RS256 private key for stable JWT signing | Required for production (not ephemeral) |
 | `DIGIKEY_LITELLM_PROXY_KEY` | Injected into token exchange response | Set to same as LITELLM_MASTER_KEY for funnel |
+| `DIGIKEY_BLOCKLIST_REDIS_URL` | Redis URL backing the JWT `jti` revocation blocklist (ADR-0007) | Recommended for production; required when `DIGIKEY_REQUIRE_BLOCKLIST=1` |
+| `DIGIKEY_REQUIRE_BLOCKLIST` | `1` makes an unset/unreachable blocklist fail closed (503) | Set to `1` in production (Compose default) |
 | `AUTH_SECRET` | Next-Auth signing secret for digichat | Required for digichat |
 | `AUTH_URL` | Full public URL of digichat (must match browser origin) | Required for digichat |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password for digichat-DB | Required for `digichat` profile |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password (no default; fails fast if unset) | Required for `observability` profile |
 | `LANGSMITH_API_KEY` | Enables LangSmith trace export from digigraph | Optional |
 | `DIGI_LLM_MODE` | `test` / `medium` / `best` — model selection tier | Optional (default: `test`) |
 | `DIGI_HUB_MODE` | `legacy` / `federated` — vertical delegate tool exposure | Optional (default: `legacy`) |

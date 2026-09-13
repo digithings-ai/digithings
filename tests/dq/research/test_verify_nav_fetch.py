@@ -168,6 +168,127 @@ class TestConcurrentUpsertStability:
         ]
 
 
+class TestMaxRowsCap:
+    """Regression (#3948): a capped PostgREST response must never be a silent truncation.
+
+    ``verify_nav_replay._fetch_table`` used to widen each request by the
+    already-seen boundary count (``limit(page_size + boundary_seen)``). With the
+    production cap (``max_rows=1000``, ``page_size=1000``) the server clamps the
+    response, ``len(page) < page_size + boundary_seen`` becomes true, and the
+    loop breaks *before* the stall guard — silently dropping rows that
+    ``--write`` then persists as NAV truth.
+    """
+
+    def _capped_client(self, rows: list[dict[str, Any]], *, cap: int):
+        """Fake that mirrors PostgREST ``max_rows``: never returns more than ``cap``."""
+
+        class _Capped(FakeSupabaseClient):
+            def table(self, name: str):  # type: ignore[no-untyped-def]
+                query = super().table(name)
+                if name != "positions":
+                    return query
+                inner = query.execute
+
+                def execute():  # type: ignore[no-untyped-def]
+                    resp = inner()
+                    resp.data = list(resp.data or [])[:cap]
+                    return resp
+
+                query.execute = execute  # type: ignore[method-assign]
+                return query
+
+        return _Capped(canned_reads={"positions": rows})
+
+    def test_over_cap_dataset_is_never_silently_truncated(self) -> None:
+        """3000 rows > max_rows=1000 with page_size=1000 must return all 3000."""
+        from datetime import date, timedelta
+
+        house = "house-id"
+        # One ticker per distinct date, so every page after the first re-anchors
+        # on a date that already emitted a row (``boundary_seen == 1``) — the
+        # exact shape that tripped the old ``limit(page_size + boundary_seen)``
+        # overflow and returned 1999/3000 rows without error.
+        start = date(2026, 1, 1)
+        canned = _positions(
+            [((start + timedelta(days=i)).isoformat(), "SPY", 100.0) for i in range(3000)]
+        )
+        sb = self._capped_client(
+            [{**r, "workspace_id": house} for r in canned],
+            cap=1000,
+        )
+        rows = _mod._fetch_table(sb, "positions", house, _POSITIONS, page_size=1000)
+        assert len(rows) == 3000, f"expected all 3000 rows, got {len(rows)} (silent truncation)"
+        assert len({(r["date"], r["ticker"]) for r in rows}) == 3000
+
+    def test_page_size_above_the_cap_fails_loudly(self) -> None:
+        """A page request larger than ``max_rows`` must raise, not be clamped silently."""
+        house = "house-id"
+        sb = self._capped_client(
+            [{**_positions([("2026-09-01", "SPY", 100.0)])[0], "workspace_id": house}],
+            cap=1000,
+        )
+        with pytest.raises(RuntimeError, match="max_rows"):
+            _mod._fetch_table(
+                sb,
+                "positions",
+                house,
+                _POSITIONS,
+                page_size=1500,
+                max_rows=1000,
+            )
+
+
+class TestOrNullWorkspaceKeyset:
+    def test_house_and_null_workspace_rows_page_across_the_keyset(self) -> None:
+        """The combined workspace-or-null + keyset ``or`` must not drop either branch.
+
+        ``price_history`` is fetched with ``or_null_workspace=True`` (omitted
+        workspace_id = house). The seek has to be ANDed inside *both* workspace
+        branches, so this pins that house and NULL rows page together.
+        """
+        house = "house-id"
+        rows = [
+            {"date": "2026-09-01", "ticker": "SPY", "close": 1.0, "workspace_id": house},
+            {"date": "2026-09-01", "ticker": "TLT", "close": 2.0, "workspace_id": None},
+            {"date": "2026-09-02", "ticker": "SPY", "close": 3.0, "workspace_id": house},
+            {"date": "2026-09-02", "ticker": "TLT", "close": 4.0, "workspace_id": None},
+            {"date": "2026-09-03", "ticker": "SPY", "close": 5.0, "workspace_id": house},
+        ]
+        sb = FakeSupabaseClient(canned_reads={"price_history": rows})
+        out = _mod._fetch_table(
+            sb,
+            "price_history",
+            house,
+            "date,ticker,close",
+            or_null_workspace=True,
+            page_size=2,
+        )
+        assert [(r["date"], r["ticker"]) for r in out] == [
+            ("2026-09-01", "SPY"),
+            ("2026-09-01", "TLT"),
+            ("2026-09-02", "SPY"),
+            ("2026-09-02", "TLT"),
+            ("2026-09-03", "SPY"),
+        ]
+
+
+class TestMissingTicker:
+    def test_missing_ticker_raises_instead_of_false_duplicate(self) -> None:
+        """A null ticker must not collapse to ``""`` and masquerade as a valid key.
+
+        Two null-ticker rows on one date would previously key as ``("date", "")``
+        twice and trip the duplicate-key guard — flagging a *pagination* failure
+        for what is really corrupt input. Fail loudly on the missing key instead.
+        """
+        house = "house-id"
+        rows = [
+            {"date": "2026-09-01", "ticker": None, "weight_pct": 50.0, "workspace_id": house},
+        ]
+        sb = FakeSupabaseClient(canned_reads={"positions": rows})
+        with pytest.raises(RuntimeError, match="ticker"):
+            _mod._fetch_table(sb, "positions", house, _POSITIONS, page_size=10)
+
+
 class TestFailClosed:
     def test_out_of_order_page_raises(self) -> None:
         """A server that ignores the secondary order must not yield a series."""

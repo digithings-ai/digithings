@@ -13,6 +13,7 @@ from digisearch.core.filter_apply import chunk_metadata_matches
 from digisearch.core.models import Chunk, Query, Result
 from digisearch.core.workspace_filter import chunk_matches_workspace
 from digisearch.embedding.providers.minilm import get_default_minilm_embedder
+from digisearch.indexes.backends.backend_errors import SearchBackendError
 from digisearch.indexes.backends.chroma_errors import EmbeddingModelMismatchError
 from digisearch.indexes.base import DigiIndex
 
@@ -267,7 +268,7 @@ class ChromaBackend(DigiIndex):
                     query_embeddings=[[float(v) for v in vector]],
                     **q_kw,
                 )
-        except (OSError, RuntimeError, TypeError, ValueError):
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
             logger.error(
                 "ChromaDB query failed for collection %r",
                 self.name,
@@ -280,7 +281,9 @@ class ChromaBackend(DigiIndex):
                     "top_k": n,
                 },
             )
-            return []
+            raise SearchBackendError(
+                f"chroma query failed for collection {self.name!r}: {exc}"
+            ) from exc
         out: list[Result] = []
         ids = results.get("ids", [[]])[0]
         docs = results.get("documents", [[]])[0]

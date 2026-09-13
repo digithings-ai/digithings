@@ -15,7 +15,7 @@ import sys
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable  # score:allow untyped any — R2 JSON + callbacks
 
 DATES = ("2024-12-31", "2025-03-15", "2025-08-29")
 TICKERS = ("SPY", "QQQ", "AAPL")

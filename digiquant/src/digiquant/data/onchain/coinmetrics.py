@@ -40,9 +40,14 @@ import httpx
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.data.onchain._url_guard import is_allowed_base_url
+
 logger = logging.getLogger(__name__)
 
 COINMETRICS_BASE_URL = "https://community-api.coinmetrics.io/v4"
+#: Hosts the client may talk to. A caller-nominated ``base_url`` is refused
+#: outright (#3944) — this is the code-only seam guard.
+ALLOWED_BASE_HOSTS: frozenset[str] = frozenset({"community-api.coinmetrics.io"})
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_PAGE_SIZE = 10_000
 DEFAULT_CACHE_DIR = Path("data/onchain/coinmetrics")
@@ -223,6 +228,8 @@ class CoinMetricsClient:
         session: _HttpGet | None = None,
         cache_dir: Path | str | None = None,
     ) -> None:
+        if not is_allowed_base_url(base_url, ALLOWED_BASE_HOSTS):
+            raise ValueError(f"base_url host is not allowlisted: {base_url!r} (#3944)")
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = session
@@ -304,6 +311,12 @@ def fetch_coinmetrics_series(
     api_key: str | None = None,
 ) -> CoinMetricsSeriesResult:
     """Fetch one CoinMetrics community metric. Always fail-soft. Inject ``session`` in tests (no network)."""
+    if not is_allowed_base_url(base_url, ALLOWED_BASE_HOSTS):
+        return CoinMetricsSeriesResult(
+            asset=asset,
+            metric=metric,
+            error=f"refusing untrusted base_url {base_url!r} (allowed: {sorted(ALLOWED_BASE_HOSTS)})",
+        )
     if session is None and not _fetch_enabled():
         return CoinMetricsSeriesResult(
             asset=asset, metric=metric, error=f"{_ENV_FLAG} disabled (no network)"
@@ -349,6 +362,10 @@ def fetch_coinmetrics_catalog(
     tuple above is a BTC-only snapshot from 2026-09-10, not a general answer.
     Pass ``asset=None`` for the full catalog across all assets.
     """
+    if not is_allowed_base_url(base_url, ALLOWED_BASE_HOSTS):
+        return CoinMetricsCatalogResult(
+            error=f"refusing untrusted base_url {base_url!r} (allowed: {sorted(ALLOWED_BASE_HOSTS)})"
+        )
     if session is None and not _fetch_enabled():
         return CoinMetricsCatalogResult(error=f"{_ENV_FLAG} disabled (no network)")
     url = f"{base_url.rstrip('/')}/catalog-v2/asset-metrics"
@@ -366,6 +383,7 @@ def fetch_coinmetrics_catalog(
 
 
 __all__ = [
+    "ALLOWED_BASE_HOSTS",
     "COINMETRICS_BASE_URL",
     "DEFAULT_CACHE_DIR",
     "DEFAULT_PAGE_SIZE",

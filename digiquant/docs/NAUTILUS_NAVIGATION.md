@@ -91,7 +91,10 @@ BacktestEngine with zero-fee, same-bar fills:
   rebuilds the causal schedule + bars from Supabase and compares engine NAV
   vs `nav_history` (non-zero exit on breach). Reads page by last-seen-key
   cursor over a deterministic `(date, ticker)` order (#3803) — never offsets —
-  and refuses to verify or `--write` from a truncated/unstable page.
+  and refuses to verify or `--write` from a truncated/unstable page. The engine
+  value is the NAV SSOT — a provisional arithmetic-chain row may exist briefly
+  before `--write` overwrites it; see
+  [HOUSE_BOOK_SCOPE.md](../../docs/ops/HOUSE_BOOK_SCOPE.md#nav_history-write-order-provisional-window).
 
 ## 8. External Links
 

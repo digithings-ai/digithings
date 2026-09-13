@@ -139,16 +139,20 @@ public tip.
 `net_pnl_total / E0` alone. Migration 074's formula is superseded by
 `084_olympus_accounting_day_return_pct.sql`; 085 retains that equity-delta formula.
 
-**Credible tip + `series_seam` (123 / #3767 / #3824):** CREATE OR REPLACE on
-`public_accounting_period_status`, `public_finalized_nav`, and
-`public_accounting_nav_history` only (no new grants on base accounting tables).
-A superseder voids a prior tip only when it is itself credible — incomplete/failed
-zero-equity tombstones and `superseded_by_restatement_*` quality reasons do **not**
-void restated clean finals. `public_accounting_nav_history` adds an additive boolean
-`series_seam` (true on the first row after a legacy↔finalized source flip). Dashboard
-performance SSOT must break the line / refuse cross-seam day return rather than draw
-one continuous series. Opening-equity chaining of restated days remains
-**#3803 / #3804** (finalize-writer path) — 123 is display/view-only.
+**Credible tip + `series_seam` (123 / #3767 / #3824, review #3935):** CREATE OR
+REPLACE on `public_accounting_period_status`, `public_finalized_nav`,
+`public_accounting_nav_history`, and `public_daily_realized_attribution`
+(no new grants on base accounting tables). A superseder voids a prior tip
+unless it is an incomplete/failed **zero-equity tombstone**; the gate keys on
+that shape, so a `superseded_by_restatement_*` marker is corroborating only and
+never resurrects a stale tip on its own. `public_accounting_nav_history` adds an
+additive boolean `series_seam` (true on the first row after a legacy↔finalized
+source flip). Dashboard performance SSOT breaks the plotted return series on the
+current source run (`buildPortfolioReturnSeries` via `findNavSeriesSeams`) and
+`persistedHeadlinesFromNav` rebases since-inception on that run; `crossesNavSeam`
+is checked before any stored `day_return_pct` is returned. Opening-equity
+chaining of restated days remains **#3803 / #3804** (finalize-writer path) — 123
+is display/view-only.
 
 **Cutover gate:** point public readers only after an approved shadow interval (including one
 rebalance session) has zero unexplained reconciliation failures. Do **not** enable

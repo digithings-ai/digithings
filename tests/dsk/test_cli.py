@@ -9,6 +9,7 @@ import pytest
 pytest.importorskip("typer")
 
 from digiskills.cli import app
+from digiskills.ingest import DEFAULT_MAX_FILE_CHARS
 from typer.testing import CliRunner
 
 pytestmark = pytest.mark.unit
@@ -66,21 +67,23 @@ def _big_reference(out: Path) -> str:
 def test_compile_truncates_large_file_by_default(tmp_path: Path) -> None:
     src = tmp_path / "src"
     src.mkdir()
-    # Comfortably over the 200k-char default per-file cap.
-    (src / "big.json").write_text("x" * 250_000)
+    # Comfortably over the default per-file cap.
+    oversized = DEFAULT_MAX_FILE_CHARS + 50_000
+    (src / "big.json").write_text("x" * oversized)
     out = tmp_path / "out"
 
     result = runner.invoke(app, ["compile", str(src), "--name", "acme-sdk", "--out", str(out)])
 
     assert result.exit_code == 0, result.output
     assert "truncated" in result.output  # warning surfaced on stderr
-    assert _big_reference(out).count("x") <= 200_000
+    assert _big_reference(out).count("x") <= DEFAULT_MAX_FILE_CHARS
 
 
 def test_max_file_chars_flag_lifts_truncation(tmp_path: Path) -> None:
     src = tmp_path / "src"
     src.mkdir()
-    (src / "big.json").write_text("x" * 250_000)
+    oversized = DEFAULT_MAX_FILE_CHARS + 50_000
+    (src / "big.json").write_text("x" * oversized)
     out = tmp_path / "out"
 
     result = runner.invoke(
@@ -93,10 +96,10 @@ def test_max_file_chars_flag_lifts_truncation(tmp_path: Path) -> None:
             "--out",
             str(out),
             "--max-file-chars",
-            "300000",
+            str(oversized + 10_000),
         ],
     )
 
     assert result.exit_code == 0, result.output
     assert "truncated" not in result.output
-    assert _big_reference(out).count("x") == 250_000
+    assert _big_reference(out).count("x") == oversized

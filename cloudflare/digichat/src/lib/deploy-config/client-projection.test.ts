@@ -128,13 +128,32 @@ describe("baseline embed models catalog (Cheaper Inference default)", () => {
   });
 });
 
-describe("baseline embed defaults (unconfigured container)", () => {
-  it("ships template suggestions, user MCP, web search, and BYOK", () => {
+describe("baseline embed defaults (unconfigured container) are least-privilege", () => {
+  it("ships template suggestions but leaves user MCP, web search, and BYOK off", () => {
     expect(BASELINE_EMBED_SUGGESTIONS).toHaveLength(4);
     expect(DEFAULT_CLIENT_CONFIG.chrome.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
-    expect(DEFAULT_CLIENT_CONFIG.mcp.allowUserServers).toBe(true);
-    expect(DEFAULT_CLIENT_CONFIG.mcp.allowAddForm).toBe(true);
-    expect(DEFAULT_CLIENT_CONFIG.gate.webSearch).toBe(true);
-    expect(DEFAULT_CLIENT_CONFIG.gate.showByok).toBe(true);
+    expect(DEFAULT_CLIENT_CONFIG.mcp.allowUserServers).toBe(false);
+    expect(DEFAULT_CLIENT_CONFIG.mcp.allowAddForm).toBe(false);
+    expect(DEFAULT_CLIENT_CONFIG.gate.webSearch).toBe(false);
+    expect(DEFAULT_CLIENT_CONFIG.gate.showByok).toBe(false);
+  });
+
+  it("enables user MCP, web search, and BYOK only for an explicitly-configured deployment", () => {
+    const client = toDigichatClientConfig({
+      slug: "configured",
+      chrome: { mode: "embed", theme: "dark" },
+      persistence: "none",
+      auth: "anonymous",
+      features: {},
+      models: { available: [] },
+      gate: { mode: "turn_limited", activityDetail: "labels", showByok: true, webSearch: true },
+      backend: { type: "digigraph" },
+      tools: { allowUserToggle: true, catalog: [] },
+      mcp: { servers: [], allowUserServers: true, allowAddForm: true },
+    } as unknown as DigichatDeployment);
+    expect(client.mcp.allowUserServers).toBe(true);
+    expect(client.mcp.allowAddForm).toBe(true);
+    expect(client.gate.webSearch).toBe(true);
+    expect(client.gate.showByok).toBe(true);
   });
 });

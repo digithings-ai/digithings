@@ -22,6 +22,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Start core stack
+        env:
+          # test-only explicit opt-in: compose defaults are now prod-safe
+          # (ephemeral=0 + fail-closed). Do not rely on the compose default here.
+          DIGIKEY_ALLOW_EPHEMERAL_KEY: "1"
+          DIGIKEY_REQUIRE_BLOCKLIST: "0"
         run: |
           cp .env.example .env
           docker compose up -d --wait digikey digigraph digiquant digisearch digismith

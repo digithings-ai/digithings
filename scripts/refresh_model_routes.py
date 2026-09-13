@@ -17,7 +17,7 @@ import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping  # score:allow untyped any — provider JSON
 
 
 @dataclass(frozen=True)

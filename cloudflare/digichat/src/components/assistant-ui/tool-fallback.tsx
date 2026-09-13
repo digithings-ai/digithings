@@ -12,7 +12,6 @@ import { toolRowTitle } from "@/lib/adapters/digithings/activity/tool-display";
 
 export const ToolFallback: FC<ToolCallMessagePartProps> = ({
   toolName,
-  args,
   argsText,
   result,
   status,
@@ -20,7 +19,7 @@ export const ToolFallback: FC<ToolCallMessagePartProps> = ({
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const running = status?.type === "running";
-  const title = toolRowTitle(toolName, args);
+  const title = toolRowTitle(toolName);
   const resultText =
     result === undefined
       ? null

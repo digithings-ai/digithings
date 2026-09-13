@@ -24,6 +24,19 @@ LITELLM_YAMLS = (
 )
 EVIL_BASE = "https://evil.example/v1"
 
+# OpenRouter house routes retired by #3788 / #3849: they were billable but unused by
+# digiquant pools, so they were deleted from config/litellm.yaml. They must not
+# reappear in the base config, the CI overlay, or a merge of the two.
+_RETIRED_OPENROUTER_ROUTES = frozenset(
+    {
+        "meta-llama/llama-4-maverick",
+        "perplexity/sonar",
+        "anthropic/claude-sonnet-5",
+        "x-ai/grok-4.3",
+        "x-ai/grok-4.6",
+    }
+)
+
 
 def _model_names(path: Path) -> set[str]:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -240,13 +253,7 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
     missing = sorted(expected - names)
     assert not missing, f"CI overlay missing house slugs: {missing}"
     # Must not claim OpenRouter-only pins
-    forbidden = {
-        "meta-llama/llama-4-maverick",
-        "perplexity/sonar",
-        "anthropic/claude-sonnet-5",
-        "x-ai/grok-4.3",
-        "x-ai/grok-4.6",
-    }
+    forbidden = _RETIRED_OPENROUTER_ROUTES
     assert not (names & forbidden), names & forbidden
     data = yaml.safe_load(overlay.read_text(encoding="utf-8"))
     for entry in data["model_list"]:
@@ -322,7 +329,7 @@ def test_cheaperinference_overlay_has_no_bare_api_base() -> None:
             )
 
 
-def test_merge_litellm_cheaperinference_replaces_mapped_keeps_openrouter() -> None:
+def test_merge_litellm_cheaperinference_replaces_mapped_drops_retired() -> None:
     from scripts.merge_litellm_cheaperinference import merge
 
     merged = merge(CONFIG / "litellm.yaml", CONFIG / "litellm.cheaperinference.yaml")
@@ -330,10 +337,8 @@ def test_merge_litellm_cheaperinference_replaces_mapped_keeps_openrouter() -> No
     flash = by_name["deepseek/deepseek-v4-flash"]["litellm_params"]
     assert flash["api_key"] == "os.environ/CHEAPERINFERENCE_API_KEY"
     assert flash["model"] == "openai/deepseek-v4-flash"
-    sonar = by_name["perplexity/sonar"]["litellm_params"]
-    assert sonar["api_key"] == "os.environ/OPENROUTER_API_KEY"
-    mav = by_name["meta-llama/llama-4-maverick"]["litellm_params"]
-    assert mav["api_key"] == "os.environ/OPENROUTER_API_KEY"
+    resurrected = sorted(_RETIRED_OPENROUTER_ROUTES & by_name.keys())
+    assert not resurrected, f"merge resurrected retired OpenRouter routes: {resurrected}"
 
 
 def test_cheaperinference_overlay_merges_when_keyed() -> None:
@@ -355,9 +360,9 @@ def test_cheaperinference_overlay_merges_when_keyed() -> None:
         assert flash["api_base"] == "os.environ/CHEAPERINFERENCE_API_BASE"
         assert flash["model"].startswith("openai/"), flash["model"]
 
-        # OpenRouter-only models should keep their original creds
-        sonar = by_name["perplexity/sonar"]["litellm_params"]
-        assert sonar["api_key"] == "os.environ/OPENROUTER_API_KEY"
+        # Retired OpenRouter-only routes must stay gone (never resurrected by merge)
+        resurrected = sorted(_RETIRED_OPENROUTER_ROUTES & by_name.keys())
+        assert not resurrected, f"retired routes resurrected: {resurrected}"
 
         # gpt-5.6-luna should also be remapped to CI
         luna = by_name["openai/gpt-5.6-luna"]["litellm_params"]

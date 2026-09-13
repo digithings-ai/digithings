@@ -275,6 +275,13 @@ class ResearchTurnRequest(BaseModel):
         description="Structured filters [{field, op, value}]",
     )
     session_id: str | None = Field(default=None, description="Optional session id for tracing")
+    workspace_id: str | None = Field(
+        default=None,
+        description=(
+            "Optional tenant/workspace id. Injected as a mandatory structured filter "
+            "so the research path is scoped like POST /query (enterprise)."
+        ),
+    )
 
     @field_validator("mode", mode="before")
     @classmethod
@@ -323,10 +330,32 @@ def azure_status() -> dict[str, bool | str]:
         return {"configured": True, "reachable": False, "message": str(e)[:200]}
 
 
+def _reject_raw_filter_if_disallowed(filter_raw: str | None, index_name: str | None) -> None:
+    """Reject a raw OData filter for an index that has not opted in (#3909).
+
+    Only the Azure backend re-gated raw ``filter``; every other backend passed it
+    through. Raw OData is opt-in per ``digisearch/AGENTS.md``, so the server refuses
+    it up front with HTTP 400 regardless of which backend would serve the query.
+    """
+    if not filter_raw or not str(filter_raw).strip():
+        return
+    from digisearch.core.config import index_allows_raw_filter
+
+    if not index_allows_raw_filter(index_name):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"raw filter not allowed for index {index_name or 'default'!r}: "
+                "set allow_raw_filter=true in the index config, or use structured filters"
+            ),
+        )
+
+
 def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
     """Build Query.filters from request: either raw odata or structured list."""
     from digisearch.core.workspace_filter import build_query_filters
 
+    _reject_raw_filter_if_disallowed(req.filter, req.index_name)
     try:
         workspace_id = (
             req.workspace_id.strip() if req.workspace_id and req.workspace_id.strip() else None
@@ -521,6 +550,8 @@ def _query_request_from_digisearch_args(
     response_mode = str(args.get("response_mode") or "full")
     summarize_raw = args.get("summarize_if_over")
     summarize_if_over = int(summarize_raw) if isinstance(summarize_raw, int) else None
+    workspace_raw = args.get("workspace_id")
+    workspace_id = str(workspace_raw).strip() if workspace_raw else None
     return QueryRequest(
         text=qtext or "",
         index_name=idx,
@@ -537,6 +568,7 @@ def _query_request_from_digisearch_args(
         skip=skip,
         include_total_count=include_total_count,
         skip_rerank=skip_rerank,
+        workspace_id=workspace_id,
     )
 
 
@@ -708,14 +740,17 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         top_raw = args.get("top_k", 10)
         top_k = int(top_raw) if isinstance(top_raw, int) else 10
         filt_raw = args.get("filter")
+        filt = str(filt_raw).strip() if filt_raw else None
+        _reject_raw_filter_if_disallowed(filt, idx)
         payload = {
             "user_message": msg,
             "index_name": idx,
             "top_k": top_k,
             "mode": str(args.get("mode") or "hybrid"),
-            "filter": str(filt_raw).strip() if filt_raw else None,
+            "filter": filt,
             "filters": args.get("filters") if isinstance(args.get("filters"), list) else None,
             "session_id": args.get("session_id"),
+            "workspace_id": args.get("workspace_id"),
         }
         body = run_research_turn(payload)
         return OrchestratorInvokeResponse(
@@ -782,6 +817,7 @@ def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
             status_code=503,
             detail=f"Install digisearch[agent] for /v1/research_turn: {e}",
         ) from e
+    _reject_raw_filter_if_disallowed(req.filter, req.index_name)
     return ResearchTurnOutput.model_validate(run_research_turn(req.model_dump(mode="json")))
 
 

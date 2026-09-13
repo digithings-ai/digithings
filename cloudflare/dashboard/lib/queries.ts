@@ -859,6 +859,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       source: shaped.source,
       contract: shaped.contract,
       day_return_pct: row.day_return_pct != null ? Number(row.day_return_pct) : null,
+      series_seam: row.series_seam === true,
     };
   });
   const metricsRow = metricsRes.data as TableRow<'portfolio_metrics'> | null;

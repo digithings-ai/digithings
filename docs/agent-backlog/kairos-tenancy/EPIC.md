@@ -139,8 +139,8 @@ are on `develop`. House cron-check GHA is installed
 **Schema (`core`):** migrations **096–110** plus **112** applied. `110_anon_house_only_private_books`
 narrows `anon_read` on private books to house; documents house+system. **112**
 (`112_product_invite_codes.sql`, stamped 2026-09-01T01:10Z) adds hashed FX Hub
-invite tables (RLS on, `service_role` only; invite rows = 0). **111 unused**
-(reserved for Group A unique-drop). Staged cutover **113** (legacy book uniques)
+invite tables (RLS on, `service_role` only; invite rows = 0). **111** is the
+`trading_calendar` creator (#3923). Staged cutover **113** (legacy book uniques)
 **not applied**. Repo **114** (calendar authenticated SELECT) is **not** on the
 olympus ledger — live policy already existed; stamp via human [#3340](https://github.com/digithings-ai/digithings/pull/3340)
 `db-migrate` on `main`. CLI also lists `113_economic_calendar_authenticated_select`

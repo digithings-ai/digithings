@@ -366,12 +366,14 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
             allowPicker: true,
           },
           backend: { type: "digigraph" },
-          mcp: { servers: [], allowUserServers: true, allowAddForm: true },
+          // Least-privilege fallback: the unconfigured container opts into
+          // nothing; BYOK / user MCP / web search require an explicit config.
+          mcp: { servers: [], allowUserServers: false, allowAddForm: false },
           gate: {
             mode: "ungated",
             activityDetail: "labels",
-            showByok: true,
-            webSearch: true,
+            showByok: false,
+            webSearch: false,
           },
         },
       },

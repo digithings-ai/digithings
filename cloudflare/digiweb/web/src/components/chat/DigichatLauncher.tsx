@@ -55,7 +55,7 @@ export type DigichatLauncherProps = {
   className?: string;
   /** Optional CSS custom properties such as panel dimensions or offsets. */
   style?: CSSProperties;
-  /** Reset the in-process thread. Gallery / product pass `switchToNewThread`. */
+  /** Reset the in-process thread. Rendered only when a caller wires it (e.g. the gallery specimen). */
   onNewChat?: () => void;
 };
 
@@ -242,15 +242,17 @@ export function DigichatLauncher({
           <header className="digichat-launcher__header">
             <span>{title}</span>
             <div className="digichat-launcher__header-actions">
-              <button
-                type="button"
-                className="digichat-launcher__new"
-                aria-label="New chat"
-                data-tooltip="New chat"
-                onClick={onNewChat}
-              >
-                <DotMatrix state="newChat" label="New chat" className="size-3.5" />
-              </button>
+              {onNewChat ? (
+                <button
+                  type="button"
+                  className="digichat-launcher__new"
+                  aria-label="New chat"
+                  data-tooltip="New chat"
+                  onClick={onNewChat}
+                >
+                  <DotMatrix state="newChat" label="New chat" className="size-3.5" />
+                </button>
+              ) : null}
               <button
                 ref={closeRef}
                 type="button"

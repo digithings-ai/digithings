@@ -1,4 +1,10 @@
-"""Contract tests for migration 123 — credible-tip gate + seam marker (#3767)."""
+"""Contract tests for migration 123 — credible-tip gate + seam marker (#3767).
+
+Static-only: these parse the migration SQL as text and assert its structure.
+No Postgres executes in unit runs, so they cannot prove view behaviour against
+real rows — they lock the *shape* of the predicate. Behaviour is covered by the
+dashboard vitest seam tests (#3935).
+"""
 
 from __future__ import annotations
 
@@ -77,10 +83,23 @@ def test_credible_tip_gate_ignores_zero_equity_tombstones(sql: str, view: str) -
 
 
 @pytest.mark.parametrize("view", TIP_VIEWS)
-def test_credible_tip_gate_ignores_restatement_markers(sql: str, view: str) -> None:
+def test_credible_tip_gate_is_tombstone_shape_only(sql: str, view: str) -> None:
+    """#3935 review: the restatement marker must not be a standalone bypass.
+
+    A superseder voids the prior tip unless it is an incomplete/failed,
+    zero-equity tombstone. Treating `superseded_by_restatement_*` as an
+    independent qualifier could resurrect a stale tip when a credible
+    supersession carries the marker. The gate therefore keys on the tombstone
+    SHAPE only. (Static check — no SQL executes.)
+    """
     body = _view_body(sql, view)
-    assert "superseded_by_restatement" in body
-    assert "unnest" in body.lower()
+    assert "supersedes_id" in body
+    # Tombstone shape: incomplete/failed + zero opening and closing equity.
+    assert re.search(r"status\s+IN\s*\(\s*'incomplete'\s*,\s*'failed'\s*\)", body, re.I)
+    assert re.search(r"opening_equity\s*=\s*0", body, re.I)
+    assert re.search(r"closing_equity\s*=\s*0", body, re.I)
+    # The marker is corroborating only — not an alternative disjunct.
+    assert "superseded_by_restatement" not in body
 
 
 @pytest.mark.parametrize("view", TIP_VIEWS)

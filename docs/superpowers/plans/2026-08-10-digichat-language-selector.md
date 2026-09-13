@@ -1,8 +1,8 @@
-# DigiChat Language Selector Implementation Plan
+# digichat Language Selector Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a top-bar language dropdown to DigiChat's embed surface (digithings.ai/chat, OCC, DataTap) that makes the assistant respond in the visitor's chosen language, working identically on both the digigraph backend and the Foundry/DataTap backend.
+**Goal:** Add a top-bar language dropdown to digichat's embed surface (digithings.ai/chat, OCC, DataTap) that makes the assistant respond in the visitor's chosen language, working identically on both the digigraph backend and the Foundry/DataTap backend.
 
 **Architecture:** A curated 5-language list lives in parallel TS/Python constant modules. The browser sends the choice as an `X-Digi-Language` header (same transport pattern as `X-BYOK-Key`); `route.ts` reads it once and threads it to whichever backend adapter is active. digigraph declares a new `response_language` field on `WorkflowRequest`/`WorkflowState` and appends a short directive to whichever `system_prompt` `research_node` already resolved. Foundry has no system-prompt slot, so its adapter prepends a bracketed directive to the per-turn `input` text instead.
 
@@ -92,7 +92,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'digigraph.languages'`
 
 ```python
 # digigraph/src/digigraph/languages.py
-"""Curated response-language directive for DigiChat's language selector (#2103).
+"""Curated response-language directive for digichat's language selector (#2103).
 
 Only the mapped display name below ever reaches a prompt — the raw
 X-Digi-Language header/request value is never interpolated directly, so an
@@ -472,7 +472,7 @@ Expected: FAIL with "Cannot find module '@/lib/languages'"
 ```typescript
 // cloudflare/digichat/src/lib/languages.ts
 /**
- * Curated response-language list for DigiChat's language selector (#2103).
+ * Curated response-language list for digichat's language selector (#2103).
  * Kept in exact sync with digigraph's `digigraph.languages.LANGUAGE_NAMES` —
  * see `tests/dg/test_languages.py` on the Python side and this file's test
  * for the codes; there is no shared module across the two languages, so any

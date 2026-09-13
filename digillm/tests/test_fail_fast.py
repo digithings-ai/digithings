@@ -87,6 +87,21 @@ def test_run_tools_rejects_banned_model() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "variant",
+    ["ollama/qwen3:8b:cloud", "ollama/qwen3:8b-instruct", "ollama/qwen3:8b@q4_K_M"],
+)
+def test_completion_rejects_banned_model_suffix_variants(variant: str) -> None:
+    """A suffixed tag/digest of a banned id must not slip past the bare-id match (#3939)."""
+    fake_client = MagicMock()
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        pytest.raises(ValueError, match="banned"),
+    ):
+        digillm.completion(variant, [{"role": "user", "content": "hi"}])
+    assert fake_client.chat.completions.create.call_count == 0
+
+
 def test_run_tools_stops_after_two_consecutive_same_tool_errors() -> None:
     execute_tool = MagicMock(side_effect=ValueError("column close does not exist"))
     with (
@@ -172,6 +187,7 @@ def test_default_client_api_key_fail_fast_when_unset(monkeypatch: pytest.MonkeyP
     """Missing house key must raise — never the late-401 sentinel ``not-set`` (#3788)."""
     monkeypatch.delenv("LITELLM_PROXY_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
     digillm.clear_caches()
     with pytest.raises(RuntimeError, match="No LLM API key configured"):
         client_mod._default_client_api_key()
@@ -181,6 +197,29 @@ def test_default_client_api_key_fail_fast_when_unset(monkeypatch: pytest.MonkeyP
     ):
         digillm.get_client()
     openai_ctor.assert_not_called()
+
+
+def test_default_client_api_key_dev_sentinel_for_trusted_local_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A declared no-auth loopback LiteLLM still works without a key (#3939)."""
+    monkeypatch.delenv("LITELLM_PROXY_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    digillm.clear_caches()
+    assert client_mod._default_client_api_key() == client_mod._DEV_LITELLM_SENTINEL
+
+
+def test_default_client_api_key_still_fails_for_untrusted_base(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The sentinel is scoped to the trusted-proxy allowlist; a vendor base fails fast."""
+    monkeypatch.delenv("LITELLM_PROXY_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+    digillm.clear_caches()
+    with pytest.raises(RuntimeError, match="No LLM API key configured"):
+        client_mod._default_client_api_key()
 
 
 def test_byok_non_proxy_base_mismatch_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:

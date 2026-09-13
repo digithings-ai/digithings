@@ -47,6 +47,7 @@ Beyond root `AGENTS.md`:
 | Path | Reason | Migration |
 |------|--------|-------------|
 | `digiquant/nautilus_runner.py` | Nautilus `BarDataWrangler` requires pandas | None — documented boundary |
+| `digiquant/data/prices/fetchers.py` | yfinance returns pandas DataFrames; pandas is imported lazily only at the yfinance conversion boundary (`_pandas_to_polars` and the fetch path) | None — documented boundary |
 | `digiquant/strategies/sdca/nautilus_evaluator.py` | Same BarDataWrangler boundary for SDCA walk-forward trials (#3174) | None — documented boundary |
 | `digiquant/dashboard/replay/nautilus_portfolio.py` | Same BarDataWrangler boundary for shared-cash portfolio replay (#2784) | None — documented boundary |
 | `digiquant/tearsheet.py` | Nautilus `account_report` / `fills_report` are pandas DataFrames | Defer — Plotly quantstats bridge |
@@ -108,7 +109,7 @@ When touching `digiquant/src/digiquant/dashboard/` **or** `cloudflare/dashboard/
 3. Read component guides: [`src/digiquant/research/docs/AGENTS.md`](src/digiquant/research/docs/AGENTS.md),
    [`src/digiquant/portfolio/docs/AGENTS.md`](src/digiquant/portfolio/docs/AGENTS.md).
 4. **One graph, one daily cadence** — do not add a portfolio-lite env fork, `run_type` graph forks,
-   or `monthly` synthesis paths. Cost control = `OLYMPUS_MODEL_TIER` (frozen production env; dual-read `DIGIQUANT_MODEL_TIER`) + per-artifact `skip`/`edit`/`full`.
+   or `monthly` synthesis paths. Cost control = `DIGIQUANT_MODEL_TIER` (canonical since #3784; `OLYMPUS_MODEL_TIER` remains a listed retired alias in `digiquant.dashboard.envcompat`) + per-artifact `skip`/`edit`/`full`.
 5. **Edit-mode extension pattern** (`digiquant.dashboard.edit_mode`):
    - Call `resolve_edit_mode(artifact_key, run_date, prior_loader, triage, force_full_rewrite)`
      at node entry.

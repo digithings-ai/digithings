@@ -321,10 +321,44 @@ deployment:
       allowPicker: true,
     });
     expect(cfg.deployment?.chrome.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
-    expect(cfg.deployment?.mcp?.allowUserServers).toBe(true);
-    expect(cfg.deployment?.mcp?.allowAddForm).toBe(true);
-    expect(cfg.deployment?.gate.webSearch).toBe(true);
-    expect(cfg.deployment?.gate.showByok).toBe(true);
+    // Least-privilege fallback: an unconfigured container must not expose BYOK,
+    // user MCP servers, or web search to anonymous visitors (regression #3852).
+    expect(cfg.deployment?.mcp?.allowUserServers).toBe(false);
+    expect(cfg.deployment?.mcp?.allowAddForm).toBe(false);
+    expect(cfg.deployment?.gate.webSearch).toBe(false);
+    expect(cfg.deployment?.gate.showByok).toBe(false);
+  });
+
+  it("keeps BYOK, user MCP servers, and web search when a deployment explicitly enables them", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+deployment:
+  slug: configured
+  chrome:
+    mode: embed
+    theme: dark
+  persistence: none
+  auth: anonymous
+  backend:
+    type: digigraph
+  mcp:
+    servers: []
+    allowUserServers: true
+    allowAddForm: true
+  gate:
+    mode: turn_limited
+    activityDetail: labels
+    showByok: true
+    webSearch: true
+`,
+      env: {},
+    });
+    const client = toDigichatClientConfig(cfg.deployment!);
+    expect(client.mcp.allowUserServers).toBe(true);
+    expect(client.mcp.allowAddForm).toBe(true);
+    expect(client.gate.webSearch).toBe(true);
+    expect(client.gate.showByok).toBe(true);
   });
 });
 

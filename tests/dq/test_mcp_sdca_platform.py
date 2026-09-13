@@ -154,6 +154,17 @@ class TestPlatformToolRegistration:
         assert "strategy_params" in props
         assert "param_grid" in props
 
+    def test_no_data_source_tool_schema_exposes_base_url(self) -> None:
+        rows = {row["function"]["name"]: row for row in build_orchestrator_tool_manifest()}
+        for name in (
+            "digiquant_fetch_bitview_series",
+            "digiquant_fetch_bgeometrics_series",
+            "digiquant_fetch_coinmetrics_series",
+            "digiquant_list_coinmetrics_catalog",
+        ):
+            props = rows[name]["function"]["parameters"]["properties"]
+            assert "base_url" not in props, f"{name} still exposes base_url (#3944)"
+
 
 class TestFetchBitviewMcp:
     def test_mocked_http_writes_parquet(self, tmp_path: Path) -> None:
@@ -198,17 +209,21 @@ class TestFetchBitviewMcp:
         payload = json.loads(raw)
         assert "error" in payload
 
-    def test_mcp_tool_exposes_base_url_and_allow_derived(self) -> None:
+    def test_mcp_tool_exposes_allow_derived_but_not_base_url(self) -> None:
         sig = inspect.signature(_mcp("digiquant_fetch_bitview_series"))
-        assert "base_url" in sig.parameters
         assert "allow_derived" in sig.parameters
+        assert "base_url" not in sig.parameters
+
+    def test_mcp_bgeometrics_tool_rejects_caller_base_url(self) -> None:
+        with pytest.raises(TypeError):
+            _mcp("digiquant_fetch_bgeometrics_series")(
+                metric="mvrv", base_url="http://169.254.169.254"
+            )
 
 
 class TestFetchBgeometricsMcp:
     def test_mocked_http_writes_parquet(self, tmp_path: Path) -> None:
-        session = _FakeSession(
-            [{"d": "2025-01-01", "unixTs": 1735689600, "mvrv": 2.3579}]
-        )
+        session = _FakeSession([{"d": "2025-01-01", "unixTs": 1735689600, "mvrv": 2.3579}])
         payload = json.loads(
             run_fetch_bgeometrics_series(
                 metric="mvrv",
@@ -259,17 +274,19 @@ class TestFetchCoinmetricsMcp:
         payload = json.loads(raw)
         assert "error" in payload
 
-    def test_mcp_tool_exposes_page_size_base_url_api_key(self) -> None:
+    def test_mcp_tool_exposes_page_size_api_key_but_not_base_url(self) -> None:
         sig = inspect.signature(_mcp("digiquant_fetch_coinmetrics_series"))
         assert "page_size" in sig.parameters
-        assert "base_url" in sig.parameters
         assert "api_key" in sig.parameters
+        assert "base_url" not in sig.parameters
 
 
 class TestListCoinmetricsCatalogMcp:
     def test_run_list_coinmetrics_catalog_returns_raw_payload(self) -> None:
         payload = {"data": [{"asset": "btc", "metrics": [{"metric": "CapMVRVCur"}]}]}
-        result = json.loads(run_list_coinmetrics_catalog(asset="btc", session=_FakeSession(payload)))
+        result = json.loads(
+            run_list_coinmetrics_catalog(asset="btc", session=_FakeSession(payload))
+        )
         assert result["error"] is None
         assert result["data"] == payload
 
@@ -280,11 +297,11 @@ class TestListCoinmetricsCatalogMcp:
         assert "error" in payload
         assert "disabled" in payload["error"]
 
-    def test_mcp_tool_exposes_asset_base_url_api_key(self) -> None:
+    def test_mcp_tool_exposes_asset_api_key_but_not_base_url(self) -> None:
         sig = inspect.signature(_mcp("digiquant_list_coinmetrics_catalog"))
         assert "asset" in sig.parameters
-        assert "base_url" in sig.parameters
         assert "api_key" in sig.parameters
+        assert "base_url" not in sig.parameters
 
 
 class TestFitSdcaWeightsMcp:

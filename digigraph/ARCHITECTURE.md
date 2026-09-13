@@ -271,10 +271,10 @@ real node executions rather than compiled graph nodes.
 | `workflow_profile` | `str` | Active profile (`full_stack`, `research_rag`, `quant_backtest`, `plan_execute`) |
 | `digisearch_index` | `str \| None` | Per-request digisearch index override (`X-Digi-Corpus-Index` / tenant map). **Must** be declared — LangGraph drops undeclared keys. `_initial_graph_state` writes this (and `vault_path_prefix` / `research_system_prompt_override` / `digi_subject`) **unconditionally including `None`**, so a map-driven clear for an unmapped tenant actually clears checkpointed state instead of leaving the prior turn's corpus sticky. |
 | `vault_path_prefix` | `str \| None` | Per-request digivault path prefix (`X-Digi-Vault-Prefix` / tenant map); same unconditional-None write as `digisearch_index`. |
-| `research_system_prompt_override` | `str \| None` | Optional research system prompt from tenant corpus map; same unconditional-None write as `digisearch_index`. |
+| `research_system_prompt_override` | `str \| None` | Research system prompt resolved **server-side only** (tenant corpus map / project config) and written unconditionally including `None` — a client body value is always overwritten so a caller cannot inject a system prompt. |
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`). **Must** be declared — LangGraph drops undeclared keys. `research_node` prepends a mapped directive to **this turn's user query** (not the tenant system prompt). See `digigraph.languages`. |
 | `force_tool` | `str \| None` | Per-request locate tool to inject with the user string as its query (`X-Digi-Force-Tool`; aliases `search`/`digisearch`, `docs`/`digivault`). Extra operator MCP **server ids** are accepted too: those hint the model with `tool_choice="required"` rather than injecting a locate. **Must** be declared. |
-| `mcp_servers` | `list[dict]` | Streamable HTTP MCP `{id, url, auth?, token?, authHeader?}` pairs (`X-Digi-Mcp-Servers` after BFF merge). **Must** be declared. Always overwritten from the BFF header (empty list clears a prior tenant). URLs never come from an untrusted JSON body. Tokens are never logged. `authHeader` is operator-only (#3841), never session-overlay-settable. **In-request only for persistence (#3794):** `token` is stripped by `McpTokenRedactingCheckpointer` before checkpointer write so durable/R2-archived blobs do not retain OAuth/session bearer values; the same-turn graph state still carries tokens for MCP calls. |
+| `mcp_servers` | `list[dict]` | Streamable HTTP MCP `{id, url, auth?, token?, authHeader?}` pairs (`X-Digi-Mcp-Servers` after BFF merge). **Must** be declared. Always overwritten from the BFF header (empty list clears a prior tenant). URLs never come from an untrusted JSON body. Tokens are never logged. `authHeader` is operator-only (#3841), never session-overlay-settable. **In-request only for persistence (#3794, #3969):** secret-named keys (`token`, `authorization`, `api_key`, `client_secret`, and comparable `*_token` / `*_secret` / `*_password` names, including nested `headers` / `auth` sub-objects) are stripped recursively by `McpTokenRedactingCheckpointer` before checkpointer write so durable/R2-archived blobs do not retain OAuth/session bearer values; the same-turn graph state still carries tokens for MCP calls. |
 | `disabled_tools` | `list[str] \| None` | Catalog ids to hide this turn (`X-Digi-Disabled-Tools`), including extra MCP server ids. **Must** be declared. |
 | `effort` | `str \| None` | Per-request reasoning effort (`X-Digi-Effort`: low/medium/high). **Must** be declared. |
 | `supervisor_depth_remaining` | `int` | Depth budget for supervisor loop |
@@ -350,7 +350,8 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 | `allowed_tools` | `list[str] \| None` | Tool allowlist for this request |
 | `require_tool_calls` | `bool \| None` | Also accepted via `X-Require-Tool-Calls` header; floor semantics, see 4.1/4.2 |
 | `force_tool` | `str \| None` | Also accepted via `X-Digi-Force-Tool`; aliases `search`/`digisearch`, `docs`/`digivault`. Injected locate then synthesize — the model is not asked to write the query |
-| `research_system_prompt` | `str \| None` | Opt-in default research system prompt for sessions with no server-configured prompt (single-tenant / baseline embed). `max_length=4000`; rejected with 422 when longer. Ignored when `DIGI_TENANT_CORPUS_MAP` resolves a prompt for the tenant |
+
+**`research_system_prompt` is accepted but ignored.** The field remains on `ChatCompletionRequest` only so legacy clients (pre-fix `cloudflare/digichat`) do not get a 422; its value never reaches graph state. The research system prompt is operator-configured only: project config (`agents.research_system_prompt` in `digiproject.yaml`) or the authenticated tenant's `DIGI_TENANT_CORPUS_MAP` entry. `_digi_fields_from_request` always overwrites `WorkflowRequest.research_system_prompt_override` from the resolved corpus, clearing it to `None` when no server prompt applies, so a request body can never inject one (CWE-639 / prompt injection). The field is marked deprecated in the OpenAPI schema; do not reintroduce a trust path for it.
 
 ---
 
@@ -428,7 +429,7 @@ digigraph/src/digigraph/
 │   └── __init__.py              get_stream_formatter, neutral and Open WebUI formatters
 ```
 
-### 5.1.1 DigiSearch integration (single path)
+### 5.1.1 digisearch integration (single path)
 
 Built-in digisearch **tools** always go through `vertical_orchestrator/digisearch_hub.py`
 (`POST /v1/orchestrator_tools` + `POST /v1/orchestrator_invoke`). Handlers live in

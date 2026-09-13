@@ -1,4 +1,7 @@
--- 025_trading_calendar.sql — Venue-aware trading calendar table (epic #335)
+-- 111_trading_calendar.sql — Venue-aware trading calendar table (epic #335)
+-- (renumbered from 025_trading_calendar.sql to break the duplicate 025 prefix; #3923)
+-- Must precede 116_authenticated_read_public_reference.sql, which GRANTs a SELECT
+-- policy on public.trading_calendar — do not renumber above 116 without moving it.
 --
 -- A separate trading_calendar table keyed by (date, venue) replaces the
 -- is_trading_day flag on price_history (migration 013).  Separating the
