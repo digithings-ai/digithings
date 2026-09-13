@@ -1355,7 +1355,7 @@ class TestMainPrefersTheLedger:
         assert holds == {"IJR", "VGK", "XLE", "XLV", "IBIT"}
 
     def test_a_drift_implying_all_rejected_day_exits_5(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """The 09-04 failure mode, pinned: every order refused for a missing mark -> exit 5 (#4017).
 
@@ -1370,6 +1370,10 @@ class TestMainPrefersTheLedger:
         sb = ledger.client()
         rc = self._run(monkeypatch, sb, "--date", _EXEC_D, "--rebalance-date", _RUN_D)
         assert rc == 5
+        assert "drifted" in capsys.readouterr().err
+        # HOLD continuity lands before the run fails: the red run is the alert, not a
+        # lost day of Activity rows.
+        assert any(row["event"] == "HOLD" for row in sb.upserts)
 
     def test_require_ledger_refuses_to_fall_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Exit 3, the post-cutover lever: a silent prose fallback becomes fatal."""

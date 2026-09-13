@@ -2923,10 +2923,11 @@ the grants would refuse anyway.
   `data_layer_scope`). Live-venue refusals in `execution/policy.py` are untouched.
 
 `execute_at_open.py` tries the ledger first and reaches the prose builders only when it
-declines. `build_events_from_paper_fills` returns `(None, reason)` for "the ledger has no
-opinion" — no `portfolio_ledger_commits` row for the run date, the kill switch off, or the
-read raising — and `([], "")` for "authoritatively a quiet day", which the caller must not
-conflate. The read probe is wrapped; `execute_pending_orders` is deliberately **outside** the
+declines. `build_events_from_paper_fills` returns `(None, reason, None)` for "the ledger
+has no opinion" — no `portfolio_ledger_commits` row for the run date, the kill switch off,
+or the read raising — and `([], "", None)` for "authoritatively a quiet day", which the
+caller must not conflate. An all-rejected run returns `(events, "", pageable)`, where
+`pageable` carries the drift warning minus a `stale_target`-only refusal (#4017). The read probe is wrapped; `execute_pending_orders` is deliberately **outside** the
 guard so a partial write stays loud. Exit codes: `2` for conflicting flags or an unresolvable
 prior trading date, `3` for `--require-ledger` when the ledger declined, `5` when the
 ledger rejected every order for a drift-implying reason — the executed book fell short of
@@ -2961,7 +2962,7 @@ switch defaults *on*. After #2589 the morning job and backfill run the ledger pa
    quantity targets → executed order → paper fill (fee=0, slippage=0) → open lot. It does
    not invent pre-cutover fill history beyond that single snapshot.
 2. If lots are still empty while the prior book has holdings,
-   `cold_start_requires_seed` / `build_events_from_paper_fills` returns `(None, reason)` and
+   `cold_start_requires_seed` / `build_events_from_paper_fills` returns `(None, reason, None)` and
    `--require-ledger` exits 3 — it will not book OPEN/EXIT mislabels into append-only 069
    rows, and prose cannot hide the handover.
 
