@@ -655,4 +655,47 @@ describe('buildPerformanceTearsheet', () => {
 
     expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([0, 2]);
   });
+
+  it('keeps pre-coverage days flat when the realized view starts mid-run', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-09-08', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-09-09', nav: 101, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-09-10', nav: 102, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [position('2026-09-10', 'AAA', 100)],
+      metrics: null,
+      attribution: [],
+      events: [],
+      realizedAttribution: [
+        realized('2026-09-09', 'AAA', 0.4),
+        realized('2026-09-10', 'AAA', 0.6),
+      ],
+    });
+
+    // No finalized row for day one: the bar stays flat at the base rather than
+    // switching back to the weight-times-mark series mid-window.
+    expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([
+      0, 0.4, 1,
+    ]);
+  });
+
+  it('skips realized rows with a null contribution value', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-09-09', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-09-10', nav: 101, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [position('2026-09-10', 'AAA', 100)],
+      metrics: null,
+      attribution: [],
+      events: [],
+      realizedAttribution: [
+        { ...realized('2026-09-09', 'AAA', 0), contribution_pct: null },
+        realized('2026-09-10', 'AAA', 0.5),
+      ],
+    });
+
+    expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([0, 0.5]);
+  });
 });

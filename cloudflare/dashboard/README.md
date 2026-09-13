@@ -185,7 +185,8 @@ ledgers, and PDF action remain presentation over `nav_history`, `positions`,
 Contribution bars read the finalized per-ticker daily contribution from
 `public_daily_realized_attribution` (#3956) so they no longer depend on
 `positions.current_price` enrichment arriving on time, falling back to the
-weight-times-mark accrual only when the view has no rows. Bars contain only
+weight-times-mark accrual when the view yields no usable rows for the plotted
+window (days before the first finalized row stay flat). Bars contain only
 tickers in the latest positive-weight book; the exact NAV return and selected
 benchmark remain separate line layers.
 Portfolio presentation changes must not introduce a second query path or replace

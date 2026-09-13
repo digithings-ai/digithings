@@ -477,7 +477,9 @@ function buildPositionContributionSeries(
  * `daily_realized_attribution` already publishes each ticker's daily contribution
  * in percentage points (they sum to the NAV day return), so the tearsheet no
  * longer depends on the position marks the nightly refresh may not have written
- * yet. Day one is the base (0), matching the weight-times-mark series.
+ * yet. Day one is the base (0), matching the weight-times-mark series. Days before
+ * the first finalized row render flat at 0 — the view is final-only, consistent
+ * with the current accounting run the NAV line already plots.
  */
 function buildRealizedContributionSeries(
   navSeries: PortfolioReturnPoint[],
@@ -813,15 +815,18 @@ export async function getPerformanceBundle(
         .order('date', { ascending: false })
         .limit(ATTRIBUTION_LIMIT)
     ),
-    safeSelect<ViewRow<'public_daily_realized_attribution'>>(
-      'public_daily_realized_attribution',
-      (sb) =>
-        sb
-          .from(PUBLIC_REALIZED_ATTRIBUTION_VIEW)
-          .select('*')
-          .order('date', { ascending: false })
-          .limit(ATTRIBUTION_LIMIT)
-    ),
+    navRows.length
+      ? safeSelect<ViewRow<'public_daily_realized_attribution'>>(
+          'public_daily_realized_attribution',
+          (sb) =>
+            sb
+              .from(PUBLIC_REALIZED_ATTRIBUTION_VIEW)
+              .select('*')
+              .gte('date', navRows[0].date)
+              .order('date', { ascending: false })
+              .limit(ATTRIBUTION_LIMIT)
+        )
+      : Promise.resolve({ rows: [], ok: true as const }),
     safeSelect<TableRow<'position_events'>>('position_events', (sb) =>
       houseBook(sb, 'position_events')
         .in('event', ['EXIT', 'TRIM'])
