@@ -523,3 +523,13 @@ def test_main_marks_stale_and_exits_nonzero_on_ticker_failure(
     by_ticker = {o["ticker"]: o for o in artifact["outcomes"]}
     assert by_ticker["SPY"]["mode"] == "incremental"
     assert by_ticker["BOOM"]["mode"] == "history-only"
+
+
+def test_workflow_installs_uv_before_first_use() -> None:
+    """`uv` is not on the GitHub runner; the job must set it up before running it (#4008)."""
+    steps = _workflow()["jobs"]["refresh"]["steps"]
+    uses = [str(step.get("uses", "")) for step in steps]
+    assert any(u.startswith("astral-sh/setup-uv") for u in uses), "missing astral-sh/setup-uv"
+    setup_index = next(i for i, u in enumerate(uses) if u.startswith("astral-sh/setup-uv"))
+    first_uv_run = next(i for i, step in enumerate(steps) if "uv " in str(step.get("run", "")))
+    assert setup_index < first_uv_run
