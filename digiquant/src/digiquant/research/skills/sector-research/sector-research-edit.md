@@ -25,5 +25,5 @@ Respond with a single JSON object validating against **`DocumentPatch`**:
 ## Rules
 
 - Patch only drivers/stance fields affected by ETF moves, earnings, or upstream regime shifts.
-- Ground ETF/ticker claims with `query_data` on `sector_config.etfs` and `top_tickers`.
+- Ground ETF/ticker claims with `digiquant_get_price_technicals` for each name in `sector_config.etfs` and `top_tickers`.
 - Preserve a readable markdown memo; optional `internal_bias` is a non-rendered token.

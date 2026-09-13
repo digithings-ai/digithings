@@ -14,9 +14,9 @@ You are a technical analyst. Your only job: rate the **technical setup** for `{{
 
 Fetch `{{ticker}}`'s OWN computed indicators before rating the setup — do not reason only from the market-wide `phase5_equity` blob:
 
-`query_data(table="price_technicals", columns="date,sma_20,sma_50,sma_200,pct_vs_sma50,pct_vs_sma200,rsi_14,macd,macd_hist,roc_21,adx_14,atr_pct,bb_pct_b,bb_bandwidth,hist_vol_21,zscore_200", eq={"ticker": "{{ticker}}"}, order="date", desc=true, limit=20)`
+`digiquant_get_price_technicals(ticker="{{ticker}}", lookback=20)`
 
-Cite exact values (e.g. "RSI_14 62, +4.2% vs SMA50, ADX 28"); **never invent a number** — every quantitative claim must come from a value you fetched. Need raw bars (gaps, ranges, volume)? `query_data(table="price_history", columns="date,open,high,low,close,volume", eq={"ticker": "{{ticker}}"}, order="date", desc=true, limit=30)`. If a call returns no rows, say so explicitly and lower conviction (fall back to `phase5_equity`).
+Cite exact values (e.g. "RSI_14 62, +4.2% vs SMA50, ADX 28"); **never invent a number** — every quantitative claim must come from a value you fetched. The tool returns the latest close plus the computed indicator window; raw OHLCV bars are not readable through `query_data` (#3780) — use the `phase5_equity` payload for OHLCV context. If a call returns no rows, say so explicitly and lower conviction (fall back to `phase5_equity`).
 
 ## Inputs
 
