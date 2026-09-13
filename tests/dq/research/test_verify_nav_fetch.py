@@ -238,29 +238,39 @@ class TestMaxRowsCap:
             )
 
 
-class TestOrNullWorkspaceKeyset:
-    def test_house_and_null_workspace_rows_page_across_the_keyset(self) -> None:
-        """The combined workspace-or-null + keyset ``or`` must not drop either branch.
+class TestUnscopedTablePaging:
+    def test_price_history_pages_without_any_workspace_predicate(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``price_history`` is market/reference data — it has no ``workspace_id``.
 
-        ``price_history`` is fetched with ``or_null_workspace=True`` (omitted
-        workspace_id = house). The seek has to be ANDed inside *both* workspace
-        branches, so this pins that house and NULL rows page together.
+        Filtering it by ``workspace_id`` raises PostgREST 42703 in prod and kills
+        the research-metrics refresh before the derived surfaces update (#3990),
+        so the fetch must page on the keyset alone.
         """
-        house = "house-id"
+        queries: list[Any] = []
+        original_table = FakeSupabaseClient.table
+
+        def spy_table(client: Any, name: str) -> Any:
+            query = original_table(client, name)
+            queries.append(query)
+            return query
+
+        monkeypatch.setattr(FakeSupabaseClient, "table", spy_table)
         rows = [
-            {"date": "2026-09-01", "ticker": "SPY", "close": 1.0, "workspace_id": house},
-            {"date": "2026-09-01", "ticker": "TLT", "close": 2.0, "workspace_id": None},
-            {"date": "2026-09-02", "ticker": "SPY", "close": 3.0, "workspace_id": house},
-            {"date": "2026-09-02", "ticker": "TLT", "close": 4.0, "workspace_id": None},
-            {"date": "2026-09-03", "ticker": "SPY", "close": 5.0, "workspace_id": house},
+            {"date": "2026-09-01", "ticker": "SPY", "close": 1.0},
+            {"date": "2026-09-01", "ticker": "TLT", "close": 2.0},
+            {"date": "2026-09-02", "ticker": "SPY", "close": 3.0},
+            {"date": "2026-09-02", "ticker": "TLT", "close": 4.0},
+            {"date": "2026-09-03", "ticker": "SPY", "close": 5.0},
         ]
         sb = FakeSupabaseClient(canned_reads={"price_history": rows})
         out = _mod._fetch_table(
             sb,
             "price_history",
-            house,
+            "house-id",
             "date,ticker,close",
-            or_null_workspace=True,
+            workspace_scoped=False,
             page_size=2,
         )
         assert [(r["date"], r["ticker"]) for r in out] == [
@@ -270,6 +280,35 @@ class TestOrNullWorkspaceKeyset:
             ("2026-09-02", "TLT"),
             ("2026-09-03", "SPY"),
         ]
+        assert queries, "expected the fetch to issue at least one query"
+        for query in queries:
+            assert not query._or_raw or "workspace_id" not in query._or_raw
+            assert all(col != "workspace_id" for _op, col, _val in query._filters)
+
+    def test_scoped_tables_still_pin_the_house_workspace(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """House-scoped tables keep the ``workspace_id`` pin."""
+        queries: list[Any] = []
+        original_table = FakeSupabaseClient.table
+
+        def spy_table(client: Any, name: str) -> Any:
+            query = original_table(client, name)
+            queries.append(query)
+            return query
+
+        monkeypatch.setattr(FakeSupabaseClient, "table", spy_table)
+        rows = [
+            {"date": "2026-09-01", "ticker": "AAA", "weight_pct": 20.0, "workspace_id": "house-id"},
+            {"date": "2026-09-02", "ticker": "AAA", "weight_pct": 25.0, "workspace_id": "house-id"},
+        ]
+        sb = FakeSupabaseClient(canned_reads={"positions": rows})
+        out = _mod._fetch_table(sb, "positions", "house-id", "date,ticker,weight_pct", page_size=2)
+        assert [(r["date"], r["ticker"]) for r in out] == [
+            ("2026-09-01", "AAA"),
+            ("2026-09-02", "AAA"),
+        ]
+        assert any(("eq", "workspace_id", "house-id") in query._filters for query in queries)
 
 
 class TestMissingTicker:
