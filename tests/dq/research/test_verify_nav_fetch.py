@@ -6,6 +6,10 @@ pages can neither shift rows out of the series nor duplicate them into the
 weight schedule that ``--write`` persists as truth. A truncated or unstable
 page must raise — never return a partial series.
 
+``build_request`` must also repair vendor OHLC envelope drift — a float ULP or
+a few cents — by widening ``high``/``low`` around ``open``/``close`` before the
+strict replay contract validates each bar (#3995).
+
 The script is loaded via importlib like the other script-level tests
 (``digiquant/scripts`` are not installed packages).
 """
@@ -13,6 +17,7 @@ The script is loaded via importlib like the other script-level tests
 from __future__ import annotations
 
 import importlib.util
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -430,7 +435,8 @@ class TestBarBoundsRepair:
         }
         (bar,) = self._bars(row)
         assert float(bar.close) == 24.536466598510742
-        assert bar.low <= bar.close <= bar.high
+        assert bar.low == Decimal("24.536466598510742")
+        assert bar.high == Decimal("24.691216563042346")
 
     def test_open_above_high_is_repaired(self) -> None:
         """DHR 2026-09-09: the vendor open exceeded its own high by a cent."""
@@ -465,3 +471,37 @@ class TestBarBoundsRepair:
             float(bar.low),
             float(bar.close),
         ) == (100.0, 110.0, 95.0, 105.0)
+
+    def test_warn_is_one_aggregate_line_for_all_repairs(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Several repaired bars still emit a single aggregate WARN (#3995)."""
+        rows = [
+            {
+                "date": "2026-09-01",
+                "ticker": "AAA",
+                "open": 24.691216563042346,
+                "high": 24.691216563042346,
+                "low": 24.536466598510746,
+                "close": 24.536466598510742,
+                "volume": 42500,
+            },
+            {
+                "date": "2026-09-01",
+                "ticker": "BBB",
+                "open": 206.0,
+                "high": 205.99,
+                "low": 201.95,
+                "close": 204.85,
+                "volume": 1000,
+            },
+        ]
+        positions = [
+            {"date": "2026-09-01", "ticker": "AAA", "weight_pct": 50.0},
+            {"date": "2026-09-01", "ticker": "BBB", "weight_pct": 50.0},
+        ]
+        nav = [{"date": "2026-09-01", "nav": 100.0}]
+        _mod.build_request(rows, positions, nav)
+        out = capsys.readouterr().out
+        assert out.count("widened OHLC bounds") == 1
+        assert "widened OHLC bounds on 2 bar(s)" in out
