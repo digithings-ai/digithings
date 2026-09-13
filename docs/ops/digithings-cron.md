@@ -9,6 +9,9 @@ Canonical package + deploy docs:
 
 -> [`cloudflare/digithings-cron/README.md`](../../cloudflare/digithings-cron/README.md)
 
+The dispatched pipelines' shared Postgres secret is documented in
+[`core-postgres-uri-secret.md`](core-postgres-uri-secret.md) (#3979).
+
 Issue #3579. Default branch stays `develop`; this Worker is the production clock, not a branch flip.
 
 House research/portfolio retries (`house-run-09`…`12`) fire every day (`DOW=*`) with
