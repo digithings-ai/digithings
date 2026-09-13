@@ -222,6 +222,30 @@ def snap_to_structure(price: float, structures: list[float], tol: float) -> floa
     return min(candidates, key=lambda level: abs(level - price))
 
 
+def snap_sourced(
+    price: float, structures: list[tuple[float, str]], tol: float
+) -> tuple[float, str] | None:
+    """Like :func:`snap_to_structure` but preserves each level's provenance."""
+    candidates = [item for item in structures if abs(item[0] - price) <= tol]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda item: abs(item[0] - price))
+
+
+def _donchian_exprs(cfg: LevelsConfig) -> list[pl.Expr]:
+    """Prior-bar Donchian extremes (``shift(1)`` keeps the channel causal)."""
+    return [
+        pl.col("high")
+        .rolling_max(window_size=cfg.donchian_len, min_periods=cfg.donchian_len)
+        .shift(1)
+        .alias("don_high_prev"),
+        pl.col("low")
+        .rolling_min(window_size=cfg.donchian_len, min_periods=cfg.donchian_len)
+        .shift(1)
+        .alias("don_low_prev"),
+    ]
+
+
 def augment(df: pl.DataFrame, cfg: LevelsConfig) -> pl.DataFrame:
     """Attach every causal derivation column the engine consumes.
 
@@ -245,6 +269,7 @@ def augment(df: pl.DataFrame, cfg: LevelsConfig) -> pl.DataFrame:
             _confirmed_pivot_expr(cfg, side="low"),
         ]
     )
+    out = out.with_columns(_donchian_exprs(cfg))
     return out
 
 
@@ -285,7 +310,9 @@ def _source_ref(
 
 
 def trail_policy_str(cfg: LevelsConfig) -> str:
-    return f"atr_trail:{_format_meta(cfg.trail_atr)}"
+    return (
+        f"atr_trail:{_format_meta(cfg.trail_atr)}|activate_r={_format_meta(cfg.trail_activate_r)}"
+    )
 
 
 def trail_stop(
@@ -350,25 +377,55 @@ def compute_levels(
     pivot_count = len(pivot_lows) + len(pivot_highs)
 
     support, resistance = select_structure(pivot_lows, pivot_highs, ref, tol)
+    don_high = _last_float(aug, "don_high_prev")
+    don_low = _last_float(aug, "don_low_prev")
 
-    # E2 branch: prefer the structural (pivot) stop when it sits on the correct
-    # side and the nearest opposite structure clears the R:R floor. Donchian
-    # (E3) is considered later when no pivot structure exists.
+    pivot_res = cluster_levels(pivot_highs, tol, side="resistance")
+    pivot_sup = cluster_levels(pivot_lows, tol, side="support")
+    targets_above = sorted(
+        [level for level in pivot_res if level > ref]
+        + ([don_high] if don_high is not None and don_high > ref else [])
+    )
+    targets_below = sorted(
+        [level for level in pivot_sup if level < ref]
+        + ([don_low] if don_low is not None and don_low < ref else []),
+        reverse=True,
+    )
+    reward_long = targets_above[0] if targets_above else None
+    reward_short = targets_below[0] if targets_below else None
+
+    # Branch preference: pivot structure > Donchian channel > ATR. A structural
+    # branch is only taken when its stop sits on the correct side and the
+    # nearest opposite structure clears the R:R floor.
     buffer = cfg.structural_buffer_atr * atr_value
     stop_value: float | None = None
     branch: str = "atr"
-    if direction == "long" and support is not None and support < ref:
-        candidate = support - buffer
-        reward = (resistance - ref) if resistance is not None else None
-        if ref - candidate > 0 and (reward is None or reward / (ref - candidate) >= cfg.rr_floor):
-            stop_value = candidate
-            branch = "pivot"
-    elif direction == "short" and resistance is not None and resistance > ref:
-        candidate = resistance + buffer
-        reward = (ref - support) if support is not None else None
-        if candidate - ref > 0 and (reward is None or reward / (candidate - ref) >= cfg.rr_floor):
-            stop_value = candidate
-            branch = "pivot"
+    if direction == "long":
+        if support is not None and support < ref:
+            candidate = support - buffer
+            risk = ref - candidate
+            if risk > 0 and (reward_long is None or reward_long / risk >= cfg.rr_floor):
+                stop_value = candidate
+                branch = "pivot"
+        if stop_value is None and don_low is not None and don_low < ref:
+            candidate = don_low - buffer
+            risk = ref - candidate
+            if risk > 0 and (reward_long is None or reward_long / risk >= cfg.rr_floor):
+                stop_value = candidate
+                branch = "donchian"
+    else:
+        if resistance is not None and resistance > ref:
+            candidate = resistance + buffer
+            risk = candidate - ref
+            if risk > 0 and (reward_short is None or reward_short / risk >= cfg.rr_floor):
+                stop_value = candidate
+                branch = "pivot"
+        if stop_value is None and don_high is not None and don_high > ref:
+            candidate = don_high + buffer
+            risk = candidate - ref
+            if risk > 0 and (reward_short is None or reward_short / risk >= cfg.rr_floor):
+                stop_value = candidate
+                branch = "donchian"
 
     if stop_value is None:
         stop_value = ref - sign * k_eff * atr_value
@@ -377,17 +434,21 @@ def compute_levels(
     sl = stop_value
     risk = abs(ref - sl)
     snap_tol = cfg.snap_tol_atr * atr_value
-    snap_pool = (
-        cluster_levels(pivot_highs, tol, side="resistance")
-        if direction == "long"
-        else cluster_levels(pivot_lows, tol, side="support")
-    )
+    snap_pool: list[tuple[float, str]] = []
+    if direction == "long":
+        snap_pool.extend((level, "pivot") for level in pivot_res)
+        if don_high is not None and don_high > ref:
+            snap_pool.append((don_high, "donchian"))
+    else:
+        snap_pool.extend((level, "pivot") for level in pivot_sup)
+        if don_low is not None and don_low < ref:
+            snap_pool.append((don_low, "donchian"))
     ladder: list[TpRung] = []
     for r in cfg.tp_rmultiples:
         base_price = ref + sign * float(r) * risk
-        snapped = snap_to_structure(base_price, snap_pool, snap_tol)
+        snapped = snap_sourced(base_price, snap_pool, snap_tol)
         if snapped is not None:
-            ladder.append(TpRung(r=float(r), price=snapped, src="pivot"))
+            ladder.append(TpRung(r=float(r), price=snapped[0], src=snapped[1]))
         else:
             ladder.append(TpRung(r=float(r), price=base_price, src="atr"))
     ladder_tuple = tuple(ladder)
@@ -423,6 +484,7 @@ __all__ = [
     "cluster_levels",
     "compute_levels",
     "select_structure",
+    "snap_sourced",
     "snap_to_structure",
     "trail_policy_str",
     "trail_stop",

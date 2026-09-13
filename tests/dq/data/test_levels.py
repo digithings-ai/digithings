@@ -24,7 +24,9 @@ from digiquant.data.prices.levels import (
     cluster_levels,
     compute_levels,
     select_structure,
+    snap_sourced,
     snap_to_structure,
+    trail_policy_str,
     trail_stop,
 )
 from digiquant.data.prices.technicals import compute_indicators
@@ -186,7 +188,9 @@ def test_augment_is_causal_at_every_row() -> None:
 
 
 def test_atr_stop_long_and_short_are_correct_side_of_ref() -> None:
-    df = _monotonic_fixture()
+    # 15 bars: ATR(14) is defined but Donchian(20)/regime(100) are not, so the
+    # ATR branch is the only available stop.
+    df = _monotonic_fixture(15)
     cfg = LevelsConfig()
     long = compute_levels(df, "long", cfg, pair="EUR/USD")
     short = compute_levels(df, "short", cfg, pair="EUR/USD")
@@ -368,8 +372,79 @@ def test_structural_stop_short_mirrors_long() -> None:
     assert result.sl > result.entry_ref
 
 
-def test_monotonic_series_falls_back_to_atr_branch() -> None:
-    result = compute_levels(_monotonic_fixture(), "long", LevelsConfig(), pair="EUR/USD")
-    assert result.branch == "atr"
+def test_monotonic_trend_uses_donchian_branch() -> None:
+    df = _monotonic_fixture()
+    result = compute_levels(df, "long", LevelsConfig(), pair="EUR/USD")
     assert result.pivot_count == 0
+    assert result.branch == "donchian"
+    assert "br=donchian" in result.source_ref
+
+
+def test_atr_branch_when_donchian_not_yet_defined() -> None:
+    # 15 bars clears ATR(14) but not Donchian(20) or the 100-bar regime.
+    result = compute_levels(_monotonic_fixture(15), "long", LevelsConfig(), pair="EUR/USD")
+    assert result.branch == "atr"
     assert "br=atr" in result.source_ref
+
+
+# ─── E3: Donchian branch + trail policy + regime scaling ─────────────────────
+
+
+def test_donchian_channel_uses_prior_bars_only() -> None:
+    df = _fixture(60)
+    cfg = LevelsConfig(donchian_len=20)
+    aug = augment(df, cfg)
+    highs = df["high"].to_list()
+    lows = df["low"].to_list()
+    don_high = aug["don_high_prev"].to_list()
+    don_low = aug["don_low_prev"].to_list()
+    assert don_high[19] is None and don_low[19] is None
+    for i in (20, 35, 59):
+        assert don_high[i] == pytest.approx(max(highs[i - 20 : i]))
+        assert don_low[i] == pytest.approx(min(lows[i - 20 : i]))
+
+
+def test_donchian_columns_are_causal() -> None:
+    df = _fixture(80)
+    cfg = LevelsConfig()
+    full = augment(df, cfg)
+    for i in (25, 50, 79):
+        sliced = augment(df[: i + 1], cfg).tail(1).to_dicts()[0]
+        row = full.row(i, named=True)
+        assert sliced["don_high_prev"] == pytest.approx(row["don_high_prev"], abs=1e-12)
+        assert sliced["don_low_prev"] == pytest.approx(row["don_low_prev"], abs=1e-12)
+
+
+def test_donchian_stop_sits_beyond_prior_channel_low() -> None:
+    df = _monotonic_fixture()
+    cfg = LevelsConfig()
+    aug = augment(df, cfg)
+    result = compute_levels(df, "long", cfg, pair="EUR/USD")
+    expected = aug["don_low_prev"][-1] - cfg.structural_buffer_atr * result.atr
+    assert result.sl == pytest.approx(expected)
+
+
+def test_snap_sourced_keeps_provenance() -> None:
+    pool = [(102.0, "pivot"), (110.0, "donchian")]
+    assert snap_sourced(102.3, pool, 0.5) == (102.0, "pivot")
+    assert snap_sourced(110.2, pool, 0.5) == (110.0, "donchian")
+    assert snap_sourced(105.0, pool, 0.5) is None
+
+
+def test_trail_policy_carries_multiple_and_activation() -> None:
+    cfg = LevelsConfig(trail_atr=2.5, trail_activate_r=1.0)
+    policy = trail_policy_str(cfg)
+    assert "2.5" in policy and "1" in policy
+    result = compute_levels(_monotonic_fixture(), "long", cfg, pair="EUR/USD")
+    assert result.trail_policy == policy
+
+
+def test_regime_scaling_both_raises_and_lowers_k_eff() -> None:
+    cfg = LevelsConfig()
+    aug = augment(_fixture(240), cfg)
+    factors = aug["regime_factor"].drop_nulls().to_list()
+    assert min(factors) < 1.0 < max(factors), (min(factors), max(factors))
+    k_eff = aug["k_eff"].drop_nulls().to_list()
+    lo, hi = cfg.k_regime_bounds
+    assert min(k_eff) >= cfg.k_base * lo - 1e-12
+    assert max(k_eff) <= cfg.k_base * hi + 1e-12
