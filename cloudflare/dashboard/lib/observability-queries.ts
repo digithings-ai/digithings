@@ -39,6 +39,7 @@ import type { ContributionReturnPoint } from '@digithings/web';
 import { DASHBOARD_BENCHMARK_TICKERS } from './benchmark-tickers';
 import {
   ACCOUNTING_NAV_VIEW,
+  PUBLIC_REALIZED_ATTRIBUTION_VIEW,
   AccountingNavContractError,
   accountingNavToHistoryShape,
   currentNavRun,
@@ -470,6 +471,58 @@ function buildPositionContributionSeries(
   }));
 }
 
+/**
+ * Cumulative per-asset contribution from finalized accounting (#3956).
+ *
+ * `daily_realized_attribution` already publishes each ticker's daily contribution
+ * in percentage points (they sum to the NAV day return), so the tearsheet no
+ * longer depends on the position marks the nightly refresh may not have written
+ * yet. Day one is the base (0), matching the weight-times-mark series. Days before
+ * the first finalized row render flat at 0 — the view is final-only, consistent
+ * with the current accounting run the NAV line already plots.
+ */
+function buildRealizedContributionSeries(
+  navSeries: PortfolioReturnPoint[],
+  realized: ViewRow<'public_daily_realized_attribution'>[],
+  tickers: Set<string>
+): ContributionReturnPoint[] {
+  if (navSeries.length === 0 || realized.length === 0 || tickers.size === 0) return [];
+  const byTicker = new Map<string, Map<string, number>>();
+  for (const row of realized) {
+    const ticker = row.ticker.toUpperCase();
+    if (!tickers.has(ticker)) continue;
+    const value = row.contribution_pct;
+    if (value == null || !Number.isFinite(value)) continue;
+    let byDate = byTicker.get(ticker);
+    if (!byDate) {
+      byDate = new Map<string, number>();
+      byTicker.set(ticker, byDate);
+    }
+    byDate.set(row.date, value);
+  }
+  if (byTicker.size === 0) return [];
+  const cumulativeByTicker = new Map<string, number[]>();
+  for (const [ticker, byDate] of byTicker) {
+    const cumulative: number[] = [];
+    let running = 0;
+    navSeries.forEach((point, index) => {
+      const contribution = index > 0 ? byDate.get(point.date) : undefined;
+      if (contribution != null) running += contribution;
+      cumulative.push(roundPct(running));
+    });
+    cumulativeByTicker.set(ticker, cumulative);
+  }
+  return navSeries.map((point, index) => ({
+    t: point.date,
+    returnPct: point.returnPct,
+    contributions: Object.fromEntries(
+      [...cumulativeByTicker.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([ticker, values]) => [ticker, values[index]])
+    ),
+  }));
+}
+
 function latestPositionByTicker(
   positions: TableRow<'positions'>[]
 ): Map<string, TableRow<'positions'>> {
@@ -493,6 +546,8 @@ export function buildPerformanceTearsheet(args: {
   positions: TableRow<'positions'>[];
   metrics: TableRow<'portfolio_metrics'> | null;
   attribution: TableRow<'position_attribution'>[];
+  /** Finalized per-ticker daily contribution rows from the public view (#3956). */
+  realizedAttribution?: ViewRow<'public_daily_realized_attribution'>[];
   events?: TableRow<'position_events'>[];
   benchmarkPrices?: Array<{ ticker?: string; date: string; close: number }>;
   /** Latest closes for open-book tickers when positions rows lack marks. */
@@ -619,6 +674,11 @@ export function buildPerformanceTearsheet(args: {
     positions: args.positions,
     holdingsAsOf,
   });
+  const realizedSeries = buildRealizedContributionSeries(
+    navSeries,
+    args.realizedAttribution ?? [],
+    currentTickers
+  );
 
   return {
     currentNav: navAsc.at(-1)?.nav ?? null,
@@ -633,11 +693,9 @@ export function buildPerformanceTearsheet(args: {
     holdingsAsOf,
     generatedAt: args.metrics?.generated_at ?? null,
     navSeries,
-    contributionSeries: buildPositionContributionSeries(
-      navSeries,
-      args.positions,
-      currentTickers
-    ),
+    contributionSeries: realizedSeries.length
+      ? realizedSeries
+      : buildPositionContributionSeries(navSeries, args.positions, currentTickers),
     currentHoldings,
     historicalHoldings,
     ...ssot,
@@ -741,7 +799,7 @@ export async function getPerformanceBundle(
   }
   const navRows = (navQuery.data ?? []) as AccountingNavRow[];
 
-  const [positionsRes, metricsRes, attributionRes, eventsRes] = await Promise.all([
+  const [positionsRes, metricsRes, attributionRes, realizedRes, eventsRes] = await Promise.all([
     safeSelect<TableRow<'positions'>>('positions', (sb) =>
       houseBook(sb, 'positions')
         .order('date', { ascending: false })
@@ -757,6 +815,18 @@ export async function getPerformanceBundle(
         .order('date', { ascending: false })
         .limit(ATTRIBUTION_LIMIT)
     ),
+    navRows.length
+      ? safeSelect<ViewRow<'public_daily_realized_attribution'>>(
+          'public_daily_realized_attribution',
+          (sb) =>
+            sb
+              .from(PUBLIC_REALIZED_ATTRIBUTION_VIEW)
+              .select('*')
+              .gte('date', navRows[0].date)
+              .order('date', { ascending: false })
+              .limit(ATTRIBUTION_LIMIT)
+        )
+      : Promise.resolve({ rows: [], ok: true as const }),
     safeSelect<TableRow<'position_events'>>('position_events', (sb) =>
       houseBook(sb, 'position_events')
         .in('event', ['EXIT', 'TRIM'])
@@ -820,6 +890,7 @@ export async function getPerformanceBundle(
     positions: positionsRes.rows,
     metrics: metricsRow,
     attribution: attributionRes.rows,
+    realizedAttribution: realizedRes.rows,
     events: eventsRes.rows,
     benchmarkPrices,
     holdingMarks: holdingMarksRes.rows,
