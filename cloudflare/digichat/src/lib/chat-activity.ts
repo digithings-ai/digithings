@@ -484,7 +484,7 @@ export function standardPartsToSpans(
       }
 
       const status: ActivitySpan["status"] =
-        output?.status === "failed"
+        output?.status === "failed" || state === "output-error" || state === "output-denied"
           ? "failed"
           : output?.status === "completed" || state === "output-available"
             ? "completed"
