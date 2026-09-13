@@ -616,7 +616,28 @@ class TestScheduleAlignedSeries:
         with pytest.raises(ValueError, match="BBB"):
             _mod.build_request(rows, positions, nav)
 
-    def test_fetch_table_scopes_tickers_and_min_date(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_first_book_date_fills_from_a_bar_before_the_grid(self) -> None:
+        rows = [
+            self._price("2026-09-04", "AAA", 100.0),
+            self._price("2026-09-08", "AAA", 110.0),
+        ]
+        positions = [
+            {"date": "2026-09-05", "ticker": "AAA", "weight_pct": 100.0},
+            {"date": "2026-09-08", "ticker": "AAA", "weight_pct": 100.0},
+        ]
+        nav = [
+            {"date": "2026-09-05", "nav": 100.0},
+            {"date": "2026-09-08", "nav": 110.0},
+        ]
+        request, _closes, _recorded = _mod.build_request(rows, positions, nav)
+        aaa = next(s for s in request.series if s.ticker == "AAA")
+        assert [str(b.ts.date()) for b in aaa.bars] == ["2026-09-05", "2026-09-08"]
+        seeded = aaa.bars[0]
+        assert seeded.close == Decimal("100.0")
+        assert seeded.open == seeded.high == seeded.low == seeded.close
+        assert seeded.volume == 0
+
+    def test_fetch_table_scopes_tickers(self, monkeypatch: pytest.MonkeyPatch) -> None:
         seen: list[Any] = []
         original_table = FakeSupabaseClient.table
 
@@ -640,13 +661,12 @@ class TestScheduleAlignedSeries:
             "date,ticker,open,high,low,close,volume",
             workspace_scoped=False,
             tickers=["AAA", "BBB"],
-            min_date="2026-09-01",
         )
         assert [(str(r["date"]), r["ticker"]) for r in out] == [
+            ("2026-08-29", "AAA"),
             ("2026-09-01", "AAA"),
             ("2026-09-01", "BBB"),
         ]
         for query in seen:
             assert ("in_", "ticker", ["AAA", "BBB"]) in query._filters
-            assert ("gte", "date", "2026-09-01") in query._filters
             assert all(col != "workspace_id" for _op, col, _val in query._filters)

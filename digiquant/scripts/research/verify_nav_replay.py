@@ -119,7 +119,6 @@ def _fetch_table(
     cols: str,
     workspace_scoped: bool = True,
     tickers: list[str] | None = None,
-    min_date: str = "",
     page_size: int = _MAX_ROWS,
     max_rows: int = _MAX_ROWS,
 ) -> list[dict]:
@@ -150,10 +149,12 @@ def _fetch_table(
     that carry no ``workspace_id`` column: applying a workspace predicate there
     raises PostgREST 42703 and kills the fetch (#3990).
 
-    ``tickers`` and ``min_date`` narrow a market-data scan to the book the
-    replay will trade (#4002): the house book spans a few dozen tickers while
-    ``price_history`` holds hundreds of thousands of rows, and fetching the
-    whole table every night is both slow and pointless.
+    ``tickers`` narrows a market-data scan to the book the replay will trade
+    (#4002): the house book spans a few dozen tickers while ``price_history``
+    holds hundreds of thousands of rows, and fetching the whole table every
+    night is both slow and pointless. History before the first book date is
+    deliberately kept so a ticker's latest pre-grid close can seed the
+    forward-fill for a grid that starts on a non-trading day.
     """
     selected = {c.strip() for c in cols.split(",")}
     has_ticker = "ticker" in selected
@@ -177,8 +178,6 @@ def _fetch_table(
             query = query.eq("workspace_id", house_id)
         if tickers:
             query = query.in_("ticker", list(tickers))
-        if min_date:
-            query = query.gte("date", min_date)
         if last_key is not None:
             if has_ticker:
                 query = query.or_(_keyset_term(True, last_key))
@@ -285,12 +284,15 @@ def build_request(price_rows, position_rows, nav_rows):
     # The strict contract needs one shared grid across instruments (#4002):
     # walk each schedule ticker over the book dates and forward-fill a missing
     # bar flat at the last close (volume 0) so a weekend/holiday book executes
-    # on the last mark instead of aborting the refresh.
+    # on the last mark instead of aborting the refresh. A ticker's latest bar
+    # *before* the grid seeds the first book date, so a grid that starts on a
+    # non-trading day still fills from the Friday close.
     series_bars: dict[str, list[OhlcvBar]] = {}
     filled = 0
     for ticker in schedule_tickers:
         by_date = bars_by_ticker.get(ticker, {})
-        prior: OhlcvBar | None = None
+        earlier = [d for d in by_date if d < grid[0]]
+        prior: OhlcvBar | None = by_date[max(earlier)] if earlier else None
         bars: list[OhlcvBar] = []
         for d in grid:
             bar = by_date.get(d)
@@ -471,8 +473,8 @@ def main() -> int:
         book_tickers = sorted(
             {str(r["ticker"]) for r in position_rows if r.get("ticker") != "CASH"}
         )
-        # The replay only trades the book (#4002): scan just those tickers from
-        # the first book date, not every row of the market table.
+        # The replay only trades the book (#4002): scan just those tickers, not
+        # every row of the market table.
         price_rows = (
             _fetch_table(
                 sb,
@@ -481,7 +483,6 @@ def main() -> int:
                 "date,ticker,open,high,low,close,volume",
                 workspace_scoped=False,
                 tickers=book_tickers,
-                min_date=min((str(r["date"]) for r in position_rows), default=""),
             )
             if book_tickers
             else []
