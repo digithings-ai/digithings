@@ -55,3 +55,11 @@ def test_runs_archiver_with_retention() -> None:
     assert any(
         "scripts/digiquant_archive_checkpoints.py" in r and "--retain-days 1" in r for r in runs
     )
+
+
+def test_captures_pre_archive_size_snapshot() -> None:
+    steps = _load()["jobs"]["archive"]["steps"]
+    runs = [s.get("run", "") for s in steps]
+    assert any(
+        "scripts/digiquant_checkpoint_size_gate.py" in r and "--snapshot-out" in r for r in runs
+    )
