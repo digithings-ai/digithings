@@ -460,6 +460,26 @@ class TestQueryData:
         assert "error" in out
         assert "rows" not in out
 
+    @pytest.mark.parametrize("filter_arg", ["eq", "gte", "lte", "in_"])
+    def test_list_of_pairs_filter_is_shape_checked_like_a_mapping(self, filter_arg: str) -> None:
+        # A list-of-pairs is mapping-convertible (dict() accepts it), so it must be
+        # shape-checked like a dict rather than smuggled past the guard. ``eq`` was
+        # the real bypass: _eq_for_query's dict() converted it and it reached the
+        # client; gte/lte/in_ only failed later with a generic connector error
+        # (#3959 review).
+        class _ExplodingClient:
+            def table(self, *_a: object, **_k: object) -> object:
+                raise AssertionError("must not reach Supabase")
+
+        out = query_data(
+            client=_ExplodingClient(),  # type: ignore[arg-type]
+            table="positions",
+            **{filter_arg: [("decision_log(*)", 1)]},
+        )
+        assert "error" in out
+        assert "must be a bare column name" in out["error"]
+        assert "rows" not in out
+
     def test_architecture_no_longer_claims_the_dead_choke_is_live(self) -> None:
         # ARCHITECTURE.md claimed the #3771 per-table column allowlists were
         # "retained in code as a defensive choke, and covered directly by unit

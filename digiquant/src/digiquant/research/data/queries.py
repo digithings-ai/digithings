@@ -853,14 +853,21 @@ def _filter_column_names(
 ) -> list[str]:
     """Central enumeration of the columns ``query_data`` filters/sorts on.
 
-    Single place to extend when ``query_data`` grows a filter operator, so the
-    bare-column shape check in :func:`query_data` covers the whole filter surface
-    (#3959).
+    Each filter arg is coerced through ``dict()`` (mirroring ``_eq_for_query`` and
+    the connector) so mapping-convertible forms such as a list of pairs cannot
+    smuggle a column past the bare-column shape check. Single place to extend when
+    ``query_data`` grows a filter operator (#3959).
     """
     names: list[str] = []
     for filt in (eq, gte, lte, in_):
-        if isinstance(filt, dict):
-            names.extend(str(key).strip() for key in filt)
+        if filt is None:
+            continue
+        try:
+            mapping = dict(filt)
+        except (TypeError, ValueError):
+            # Not mapping-like (e.g. a bare string/int); the connector rejects it.
+            continue
+        names.extend(str(key).strip() for key in mapping)
     if order is not None:
         names.append(str(order).strip())
     return names
