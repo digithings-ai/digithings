@@ -1,7 +1,8 @@
 # dashboard (research + portfolio) — centralized model tier policy.
 #
 # Single source of truth for per-phase model selection and OpenRouter cost knobs.
-# Override the active tier at runtime: OLYMPUS_MODEL_TIER=cheap|balanced|quality
+# Override the active tier at runtime: DIGIQUANT_MODEL_TIER=cheap|balanced|quality
+# (OLYMPUS_MODEL_TIER is a retired alias listed in digiquant envcompat.)
 #
 # ── ROUTING MODEL (Jun 2026; tool-only grounding #3859) ───────────────────────
 # One pool kind:

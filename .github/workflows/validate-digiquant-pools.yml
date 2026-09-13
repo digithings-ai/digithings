@@ -39,4 +39,8 @@ jobs:
       - name: Validate pooled slugs against live OpenRouter endpoints
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: uv run --frozen --no-sync python scripts/validate_digiquant_pools.py
+        # --strict (#3787 / #3939): a missing OPENROUTER_API_KEY used to print a
+        # notice and exit 0, so this gate silently checked nothing and reported
+        # green. With --strict the validator exits 1 when the secret is absent —
+        # fail loud and configure the secret rather than trust a green no-op.
+        run: uv run --frozen --no-sync python scripts/validate_digiquant_pools.py --strict

@@ -78,6 +78,13 @@ docker compose -f infra/digichat-release/compose.profile-a.yml \
   --env-file infra/digichat-release/.env.profile-a up -d
 ```
 
+**digikey signing key (production hardening).** The template ships
+`DIGIKEY_ALLOW_EPHEMERAL_KEY=1` so a local/dev install starts without a PEM —
+digikey generates an in-process RS256 key and its JWKS rotates on every restart.
+Production must set `DIGIKEY_PRIVATE_KEY_PEM` to a stable RS256 private key
+(multiline PEM or base64) and set `DIGIKEY_ALLOW_EPHEMERAL_KEY=0`; digikey then
+fails closed at startup if the PEM is missing.
+
 Does **not** start digiquant / digisearch / digismith / heartbeat / observability.
 
 **Local / digithings website parity:** one supervisord image (same as Cloudflare

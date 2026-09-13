@@ -11,6 +11,7 @@
  */
 
 import { DigichatLauncher } from '@digithings/web';
+import { usePathname } from 'next/navigation';
 import {
   useCallback,
   useContext,
@@ -25,6 +26,7 @@ import { usePlanTier } from '@/lib/use-entitlement';
 import {
   buildDigichatEmbedSrc,
   buildPageContextMessage,
+  buildPageContextSignature,
   buildPlanTierMessage,
   buildThemeMessage,
   canUseDigichatPopup,
@@ -36,6 +38,7 @@ import {
   extractPageContext,
   fetchDigichatChromeConfig,
   mergeDigichatChromeIntoPopup,
+  PAGE_CONTEXT_RESEND_DEBOUNCE_MS,
   readDigichatPopupConfig,
   readDocumentTheme,
   type DigichatChromeApiResponse,
@@ -61,6 +64,7 @@ export default function DigichatPopup({
   config: configOverride,
 }: DigichatPopupProps) {
   const sessionTier = usePlanTier();
+  const pathname = usePathname();
   const tier = tierOverride ?? sessionTier;
   const auth = useContext(AuthContext);
   const accessToken = auth?.session?.access_token ?? null;
@@ -102,7 +106,8 @@ export default function DigichatPopup({
   const [iframeSrc, setIframeSrc] = useState('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const iframeReadyRef = useRef(false);
-  const pageContextSentRef = useRef(false);
+  const pageContextSigRef = useRef<string | null>(null);
+  const digichatPageContextOffRef = useRef(false);
   const themeRef = useRef<DigichatPopupTheme>('dark');
 
   useEffect(() => {
@@ -125,28 +130,41 @@ export default function DigichatPopup({
 
   useEffect(() => {
     if (!open || !config || !entitled) return;
-    pageContextSentRef.current = false;
+    pageContextSigRef.current = null;
     const nextSrc = buildDigichatEmbedSrc(config, themeRef.current);
     if (nextSrc === iframeSrc) return;
     iframeReadyRef.current = false;
+    // A rebuilt iframe is a fresh digichat document: its page-context mode
+    // hint (from `digichat:ready`) applies from scratch.
+    digichatPageContextOffRef.current = false;
     setIframeSrc(nextSrc);
   }, [open, config, entitled, iframeSrc]);
 
-  const sendPageContext = useCallback(() => {
-    if (!config?.pageContext || pageContextSentRef.current) return;
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
-    const { html, text } = extractPageContext();
-    try {
-      win.postMessage(
-        buildPageContextMessage(text, { html: html || undefined }),
-        config.origin,
+  const sendPageContext = useCallback(
+    (routePathname?: string) => {
+      if (!config?.pageContext || digichatPageContextOffRef.current) return;
+      const win = iframeRef.current?.contentWindow;
+      if (!win) return;
+      const { html, text } = extractPageContext();
+      const signature = buildPageContextSignature(
+        routePathname ?? window.location.pathname,
+        window.location.search,
+        html,
+        text,
       );
-      pageContextSentRef.current = true;
-    } catch {
-      /* allow retry on next ready */
-    }
-  }, [config]);
+      if (pageContextSigRef.current === signature) return;
+      try {
+        win.postMessage(
+          buildPageContextMessage(text, { html: html || undefined }),
+          config.origin,
+        );
+        pageContextSigRef.current = signature;
+      } catch {
+        /* allow retry on next ready */
+      }
+    },
+    [config],
+  );
 
   // A closed launcher retains its iframe so the conversation survives. On
   // reopen, refresh the theme and page context without waiting for another
@@ -159,13 +177,49 @@ export default function DigichatPopup({
     sendPageContext();
   }, [config, open, sendPageContext]);
 
+  // Change-based page context: resend while open only when the route/query or
+  // the sanitized content signature changes (data refresh, filter change, tab
+  // switch). The signature was reset on open, so the first post still happens
+  // once per open; unchanged signatures are dropped inside `sendPageContext`.
+  useEffect(() => {
+    if (!config?.pageContext || !open || !entitled) return;
+    if (digichatPageContextOffRef.current) return;
+    const root = document.querySelector('main') ?? document.body;
+    let timer: number | null = null;
+    const schedule = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = null;
+        if (iframeReadyRef.current && !digichatPageContextOffRef.current) {
+          sendPageContext(pathname);
+        }
+      }, PAGE_CONTEXT_RESEND_DEBOUNCE_MS);
+    };
+    const observer = new MutationObserver(schedule);
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    window.addEventListener('popstate', schedule);
+    schedule();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('popstate', schedule);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [config, open, entitled, pathname, sendPageContext]);
+
   useEffect(() => {
     if (!config || !iframeSrc) return;
     function onMessage(ev: MessageEvent) {
       if (ev.origin !== config!.origin) return;
-      const data = ev.data as { type?: string } | null;
+      const data = ev.data as { type?: string; pageContext?: string } | null;
       if (!data || data.type !== DIGICHAT_READY) return;
       iframeReadyRef.current = true;
+      if (data.pageContext === 'off') {
+        digichatPageContextOffRef.current = true;
+      }
       const win = iframeRef.current?.contentWindow;
       if (win) {
         win.postMessage(buildThemeMessage(themeRef.current), config!.origin);
@@ -179,7 +233,7 @@ export default function DigichatPopup({
           );
         }
       }
-      if (open) sendPageContext();
+      if (open && !digichatPageContextOffRef.current) sendPageContext();
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);

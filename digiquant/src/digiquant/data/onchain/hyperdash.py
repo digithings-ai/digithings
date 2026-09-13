@@ -25,7 +25,6 @@ Boundaries (deliberate):
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from typing import (  # score:allow untyped any — scored-lint: heterogeneous GraphQL/JSON payload shapes
     Any,
@@ -33,6 +32,8 @@ from typing import (  # score:allow untyped any — scored-lint: heterogeneous G
 )
 
 import polars as pl
+
+from digiquant.dashboard.envcompat import ONCHAIN_POSITIONING, env_lookup
 
 logger = logging.getLogger(__name__)
 
@@ -353,17 +354,15 @@ class HyperdashScraper:
 
 
 def _onchain_enabled() -> bool:
-    """Opt-in kill-switch for the LIVE Hyperdash scrape (env DIGIQUANT_ONCHAIN_POSITIONING).
+    """Opt-in kill-switch for the LIVE Hyperdash scrape (env
+    ``DIGIQUANT_ONCHAIN_POSITIONING``; retired ``ATLAS_ONCHAIN_POSITIONING`` still reads).
 
     Defaults OFF so unit tests never hit the network just by invoking preflight (the scrape is an
     external HTTP call, unlike the DB-backed fed_odds path). The research workflows set it to "1" to
     enable the signal in CI/prod; the owner can flip it off instantly if the third-party endpoint
     becomes unavailable or its ToS changes — no code change. An injected ``provider`` bypasses the
     switch entirely (tests + alternative providers)."""
-    if "DIGIQUANT_ONCHAIN_POSITIONING" in os.environ:
-        raw = os.environ.get("DIGIQUANT_ONCHAIN_POSITIONING", "0")
-    else:
-        raw = os.environ.get("ATLAS_ONCHAIN_POSITIONING", "0")
+    raw = env_lookup(ONCHAIN_POSITIONING, default="0")
     return raw.strip().lower() in ("1", "true", "yes")
 
 

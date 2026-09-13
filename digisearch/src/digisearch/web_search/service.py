@@ -26,14 +26,23 @@ class WebSearchConfig(BaseModel):
     fetch_max_pages: int = Field(default=3, ge=1, le=10)
     fetch_timeout: float = Field(default=15.0, gt=0)
     min_interval_s: float = Field(default=1.0, ge=0)
+    # Operator-trusted hosts exempted from the digifetch SSRF address refusal
+    # (e.g. a company egress proxy). Sourced from DIGISEARCH_FETCH_ALLOWED_HOSTS.
+    fetch_allowed_hosts: tuple[str, ...] = ()
 
     @classmethod
     def from_env(cls) -> WebSearchConfig:
         backend = os.environ.get("DIGISEARCH_WEB_SEARCH_BACKEND", "auto")
+        allowed_hosts = tuple(
+            host.strip().lower()
+            for host in os.environ.get("DIGISEARCH_FETCH_ALLOWED_HOSTS", "").split(",")
+            if host.strip()
+        )
         try:
             return cls(
                 backend=backend,
                 searxng_url=os.environ.get("DIGISEARCH_SEARXNG_URL", "http://127.0.0.1:8080"),
+                fetch_allowed_hosts=allowed_hosts,
             )
         except ValidationError as e:
             raise WebSearchConfigError(
@@ -90,7 +99,9 @@ def run_web_search(
     policy = RetryPolicy(attempts=2, base_delay=1.0, factor=2.0, max_delay=5.0)
     limiter = _limiter_for(config.min_interval_s)
     enriched: list[WebSearchResult] = []
-    with HttpFetcher(timeout=config.fetch_timeout) as fetcher:
+    with HttpFetcher(
+        timeout=config.fetch_timeout, allowed_hosts=config.fetch_allowed_hosts
+    ) as fetcher:
         for hit in resp.results[: config.fetch_max_pages]:
             try:
                 limiter.acquire()

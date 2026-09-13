@@ -1,6 +1,28 @@
+import type { PageContextMode } from "@/lib/deploy-config/schema";
 import { isFirstPartyEmbedHost } from "@/lib/embed-first-party";
 
 export const READY_MESSAGE = { type: "digichat:ready" } as const;
+
+export type ReadyMessage = {
+  type: "digichat:ready";
+  /**
+   * Deployment `features.pageContext` hint. Parents may stop posting
+   * `digichat:page-context` when this is `"off"`; absent means legacy
+   * behavior (send).
+   */
+  pageContext?: PageContextMode;
+};
+
+/**
+ * `digichat:ready` handshake. Carries the page-context mode so the parent
+ * (dashboard popup / widget.js) can stop sending snapshots when the embed
+ * is configured `off`. Used purely as an optional hint — parents that never
+ * read it keep working because the embed ignores messages when off.
+ */
+export function buildReadyMessage(pageContext?: PageContextMode): ReadyMessage {
+  return pageContext ? { type: "digichat:ready", pageContext } : READY_MESSAGE;
+}
+
 export const SEED_MESSAGE_TYPE = "digichat:seed" as const;
 /** Parent shell waits this long for digichat:ready (CF Container cold start). */
 export const READY_TIMEOUT_MS = 30_000;

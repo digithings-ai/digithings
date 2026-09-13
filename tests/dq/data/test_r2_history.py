@@ -161,6 +161,41 @@ def test_key_grammar() -> None:
     )
 
 
+class _BotoClientError(Exception):
+    """boto3/botocore ``ClientError`` shape (code + HTTP status), no import needed."""
+
+    def __init__(self, code: str = "NoSuchKey", status: int = 404) -> None:
+        super().__init__(f"An error occurred ({code}) when calling the GetObject operation")
+        self.response = {
+            "Error": {"Code": code, "Message": "The specified key does not exist."},
+            "ResponseMetadata": {"HTTPStatusCode": status},
+        }
+
+
+def test_is_missing_object_error_recognizes_dict_like_and_boto_misses() -> None:
+    from digiquant.data.prices.r2_history import is_missing_object_error
+
+    assert is_missing_object_error(KeyError("market-data/price/FOO/latest"))
+    assert is_missing_object_error(FileNotFoundError("market-data/manifest.json"))
+    assert is_missing_object_error(_BotoClientError("NoSuchKey", 404))
+    assert is_missing_object_error(_BotoClientError("NotFound", 404))
+    assert is_missing_object_error(_BotoClientError("404", 404))
+
+
+def test_is_missing_object_error_does_not_swallow_backend_faults() -> None:
+    """Credential/network/5xx faults must propagate, not read as unknown series."""
+    from digiquant.data.prices.r2_history import is_missing_object_error
+
+    assert not is_missing_object_error(_BotoClientError("AccessDenied", 403))
+    assert not is_missing_object_error(_BotoClientError("ServiceUnavailable", 503))
+    assert not is_missing_object_error(_BotoClientError("SlowDown", 429))
+    assert not is_missing_object_error(RuntimeError("missing R2 credentials"))
+    assert not is_missing_object_error(ConnectionError("simulated disconnect"))
+    # Bucket-level misconfiguration shares HTTP 404 with NoSuchKey but must be
+    # loud, never read as an unknown ticker/series (#3951 F2).
+    assert not is_missing_object_error(_BotoClientError("NoSuchBucket", 404))
+
+
 def test_manifest_round_trip(fakes: Any) -> None:
     from digiquant.data.prices.r2_history import build_manifest
 

@@ -4,6 +4,8 @@ Shared **digithings** building blocks for HTTP services:
 
 - **HTTP** — outbound `X-Request-ID` header helper for service-to-service calls.
 - **Errors** — consistent JSON error envelope for FastAPI (`code`, `message`, `request_id`).
+- **Service auth** — exchange a service API key for a cached digikey JWT
+  (`digibase.service_auth.get_service_jwt`), for headless service-to-service calls.
 - **Audit** — shared redaction keys for audit payloads.
 - **OpenTelemetry** (optional extra `digibase[otel]`) — wire FastAPI + httpx when
   `DIGI_OTEL_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` is set. No-op otherwise.

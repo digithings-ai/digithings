@@ -2,8 +2,9 @@
  * Credential-aware fetch (#2572).
  *
  * Node/undici follows redirects by default and forwards custom headers across
- * origins, stripping only `Authorization`. That means `X-BYOK-Key` and
- * `X-LiteLLM-Proxy-Key` (and other non-Authorization credential headers) would
+ * origins, stripping only `Authorization`. That means `X-BYOK-Key`,
+ * `X-LiteLLM-Proxy-Key`, and the MCP token headers `X-Digi-Mcp-Servers` /
+ * `X-Digi-Mcp-Session` (and other non-Authorization credential headers) would
  * ride a cross-origin 302 to an attacker-chosen host if an allowlisted digigraph
  * (or provider) ever redirected.
  *
@@ -22,7 +23,18 @@ export const CREDENTIAL_HEADER_NAMES = [
   "x-goog-api-key",
   "x-byok-key",
   "x-litellm-proxy-key",
+  "x-digi-mcp-servers",
+  "x-digi-mcp-session",
 ] as const;
+
+/**
+ * Any header under one of these prefixes is credential-bearing even if it is not
+ * listed in `CREDENTIAL_HEADER_NAMES`. The MCP BFF forwards serialized upstream
+ * tokens in `X-Digi-Mcp-Servers` (with `row.token`) and a client overlay in
+ * `X-Digi-Mcp-Session`; prefix matching keeps a future `X-Digi-Mcp-*` token
+ * header covered without editing the exact-name list (#3933).
+ */
+export const CREDENTIAL_HEADER_PREFIXES = ["x-digi-mcp-"] as const;
 
 const CREDENTIAL_HEADER_SET = new Set<string>(CREDENTIAL_HEADER_NAMES);
 
@@ -48,7 +60,9 @@ export function normalizeHeaderName(name: string): string {
 }
 
 export function isCredentialHeaderName(name: string): boolean {
-  return CREDENTIAL_HEADER_SET.has(normalizeHeaderName(name));
+  const normalized = normalizeHeaderName(name);
+  if (CREDENTIAL_HEADER_SET.has(normalized)) return true;
+  return CREDENTIAL_HEADER_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
 /** True when `init.headers` contains any credential-bearing header. */
@@ -78,6 +92,21 @@ function resolveRequestUrl(input: RequestInfo | URL): URL {
 
 function isRedirectStatus(status: number): boolean {
   return status >= 300 && status < 400;
+}
+
+type RequestInitWithDuplex = RequestInit & { duplex?: "half" };
+
+/**
+ * Release a redirect response we refuse to follow. An unconsumed body holds the
+ * underlying undici socket open; cancel (not drain) avoids blocking on a stream
+ * the peer may never finish.
+ */
+async function discardResponseBody(res: Response): Promise<void> {
+  try {
+    await res.body?.cancel();
+  } catch {
+    // Body absent, already consumed, or locked — nothing further to release.
+  }
 }
 
 /**
@@ -112,16 +141,35 @@ export async function fetchGuarded(
   void _ignoredRedirect;
 
   let currentUrl = resolveRequestUrl(input);
+  const requestInput =
+    typeof Request !== "undefined" && input instanceof Request ? input : null;
+
   // Prefer explicit init headers; fall back to Request headers when input is a Request.
   let headers = rest.headers;
-  if (
-    !headers &&
-    typeof Request !== "undefined" &&
-    input instanceof Request
-  ) {
-    headers = input.headers;
+  if (!headers && requestInput) {
+    headers = requestInput.headers;
   }
-  let currentInit: RequestInit = { ...rest, headers, redirect: "manual" };
+
+  // Merge fields from a Request input that the explicit init does not override.
+  // Without this, `fetchGuarded(request)` downgrades the credentialed request to
+  // a bodyless GET and drops its abort signal.
+  const derived: RequestInitWithDuplex = {};
+  if (requestInput) {
+    if (rest.method === undefined) derived.method = requestInput.method;
+    if (rest.signal === undefined && requestInput.signal) derived.signal = requestInput.signal;
+    if (rest.body === undefined && requestInput.body) {
+      derived.body = requestInput.body;
+      // Node/undici requires an explicit duplex mode for a stream body.
+      derived.duplex = "half";
+    }
+  }
+
+  let currentInit: RequestInitWithDuplex = {
+    ...rest,
+    ...derived,
+    headers,
+    redirect: "manual",
+  };
 
   for (let hop = 0; hop <= MAX_SAME_ORIGIN_HOPS; hop++) {
     const res = await fetchImpl(currentUrl.toString(), currentInit);
@@ -135,9 +183,11 @@ export async function fetchGuarded(
     }
     const nextUrl = new URL(loc, currentUrl);
     if (!sameOrigin(currentUrl, nextUrl)) {
+      await discardResponseBody(res);
       throw new CredentialRedirectError(currentUrl.origin, nextUrl.origin);
     }
     if (hop === MAX_SAME_ORIGIN_HOPS) {
+      await discardResponseBody(res);
       throw new Error("too_many_same_origin_redirects");
     }
     currentUrl = nextUrl;

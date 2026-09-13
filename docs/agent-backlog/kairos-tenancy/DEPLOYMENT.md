@@ -43,7 +43,7 @@ Applied via the runbook §2 manual path (`execute_sql` / `apply_migration` +
 | 105 | `documents.workspace_id` | T4 | stamped |
 | 106 | align prefs/log to canonical 103 columns | K5/T3 | **applied 2026-08-30** (empty-table rebuild; 103 IF NOT EXISTS had no-op'd on drift) |
 | 107–110 | personal workspace trigger, entitlements, house teaser, anon house-only private books | T0/T1/T5 | stamped |
-| 111 | reserved Group A unique-drop | — | **no file** |
+| 111 | `trading_calendar` creator (#3923; renumbered from 126 to sort below 116) | house | file present; not stamped on the olympus ledger |
 | 112 | hashed FX Hub invite tables | product | **applied 2026-09-01** (`olympus_schema_migrations` `112_product_invite_codes.sql`; CLI name `112_product_invite_codes`; rows = 0) |
 | (cutover 113) | staged `migrations/cutover/113_drop_legacy_book_uniques.sql` | overlay persist | **not applied** |
 | 114 | `economic_calendar` authenticated SELECT | house | **not stamped** on olympus ledger; human [#3340](https://github.com/digithings-ai/digithings/pull/3340) `db-migrate` |

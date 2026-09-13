@@ -13,12 +13,15 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
+import type { PageContextMode } from "@/lib/deploy-config/schema";
 import {
   defaultThreadSkinForTenant,
   isThreadSkin,
   threadSkinChoices,
   type ThreadSkin,
 } from "@/lib/thread-skins";
+
+const PAGE_CONTEXT_MODES: readonly PageContextMode[] = ["off", "silent", "visible"];
 
 /**
  * digichat Node backends: digigraph (digithings stack) or foundry (client Azure).
@@ -115,6 +118,12 @@ export type EmbedTenantConfig = {
   };
   /** User file picker on the composer. JSON omit stays off (Foundry/DataTap). */
   attachments?: boolean;
+  /**
+   * Popup widget page-context injection. `off` ignores `digichat:page-context`
+   * messages; `silent` still sends the snapshot to the model but renders no
+   * attachment chip; omit/`visible` keeps the chip (default).
+   */
+  pageContext?: PageContextMode;
   tools?: {
     allowUserToggle?: boolean;
     catalog: Array<{ id: string; default?: boolean; label?: string }>;
@@ -320,6 +329,14 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.attachments !== undefined && typeof v.attachments !== "boolean") {
     throw new Error(`${ctx}: attachments must be a boolean`);
   }
+  if (v.pageContext !== undefined) {
+    if (
+      typeof v.pageContext !== "string" ||
+      !PAGE_CONTEXT_MODES.includes(v.pageContext as PageContextMode)
+    ) {
+      throw new Error(`${ctx}: pageContext must be "off", "silent", or "visible"`);
+    }
+  }
   let welcomeBody: string[] | undefined;
   if (v.welcomeBody !== undefined) {
     if (typeof v.welcomeBody === "string") {
@@ -382,6 +399,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
     attachments: typeof v.attachments === "boolean" ? v.attachments : undefined,
+    pageContext: PAGE_CONTEXT_MODES.includes(v.pageContext as PageContextMode)
+      ? (v.pageContext as PageContextMode)
+      : undefined,
     layout: v.layout === "page" || v.layout === "embed" ? v.layout : undefined,
     llmAccess: LLM_ACCESS.includes(v.llmAccess as EmbedLlmAccess)
       ? (v.llmAccess as EmbedLlmAccess)
@@ -437,6 +457,20 @@ export function getEmbedTenantRegistry(): Map<string, EmbedTenantConfig> {
 /** Test hook — clears the module-level cache so stubbed envs take effect. */
 export function resetEmbedTenantRegistryForTests(): void {
   cachedRegistry = null;
+}
+
+/**
+ * True when `DIGICHAT_EMBED_TENANTS` configured at least one registered tenant.
+ * Once tenants exist, an unregistered host must be refused rather than falling
+ * back to the legacy generic anonymous embed — see `resolveEmbedChatTenant`.
+ * Fails closed (true) when the registry cannot be parsed.
+ */
+export function hasConfiguredEmbedTenants(): boolean {
+  try {
+    return getEmbedTenantRegistry().size > 0;
+  } catch {
+    return true;
+  }
 }
 
 export function resolveEmbedTenantByHost(

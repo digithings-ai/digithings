@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  createContext,
+  useContext,
   type PropsWithChildren,
   useState,
   type FC,
@@ -78,6 +80,26 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
   );
 };
 
+/**
+ * Attachment names hidden from both composer and sent-message chips. Generic:
+ * any attachment name can be filtered (e.g. the embed's system
+ * `page-context.html` snapshot in `features.pageContext: "silent"` mode).
+ */
+const HiddenAttachmentNamesContext = createContext<readonly string[]>([]);
+
+export const HiddenAttachmentNamesProvider: FC<
+  PropsWithChildren<{ names: readonly string[] }>
+> = ({ names, children }) => (
+  <HiddenAttachmentNamesContext.Provider value={names}>
+    {children}
+  </HiddenAttachmentNamesContext.Provider>
+);
+
+/** Hidden-name list for file parts rendered in message content. */
+export function useHiddenAttachmentNames(): readonly string[] {
+  return useContext(HiddenAttachmentNamesContext);
+}
+
 const attachmentTypeLabel = (type: string) => {
   switch (type) {
     case "image":
@@ -114,6 +136,9 @@ const AttachmentUI: FC = () => {
   const aui = useAui();
   const isComposer = aui.attachment.source !== "message";
 
+  const hiddenNames = useContext(HiddenAttachmentNamesContext);
+  const attachmentName = useAuiState((s) => s.attachment.name);
+
   const isImage = useAuiState((s) => s.attachment.type === "image");
   const typeLabel = useAuiState((s) => attachmentTypeLabel(s.attachment.type));
 
@@ -134,6 +159,10 @@ const AttachmentUI: FC = () => {
       ? (s.attachment.status.message ?? "Upload failed")
       : undefined,
   );
+
+  // All hooks above — safe to bail now. Keeps the attachment in the runtime
+  // (so its file part still reaches the model) while rendering no chip.
+  if (hiddenNames.includes(attachmentName)) return null;
 
   const body = (
     <span

@@ -10,6 +10,7 @@ import type { FormEvent } from "react";
 import {
   Thread,
   type ComposerLayout,
+  type GroupDisclosureMode,
   type ThreadComponents,
   type ThreadGroupPart,
   type ThreadProps,
@@ -31,6 +32,12 @@ export type DigichatThreadProps = {
   slash?: ThreadSlashTrigger;
   /** Native `@` mention popover for catalog tools. */
   mention?: ThreadMentionTrigger;
+  /** Attachment names whose chips render nowhere (file part still reaches the model). */
+  hiddenAttachmentNames?: readonly string[];
+  /** Deploy `reasoning` disclosure mode. Defaults to `collapsed`. */
+  reasoningMode?: GroupDisclosureMode;
+  /** Deploy `toolCalls` disclosure mode. Defaults to `collapsed`. */
+  toolCallsMode?: GroupDisclosureMode;
 };
 
 export function DigichatThread({
@@ -43,6 +50,9 @@ export function DigichatThread({
   components,
   slash,
   mention,
+  hiddenAttachmentNames,
+  reasoningMode,
+  toolCallsMode,
 }: DigichatThreadProps) {
   return (
     <Thread
@@ -55,6 +65,9 @@ export function DigichatThread({
       components={components}
       slash={slash}
       mention={mention}
+      hiddenAttachmentNames={hiddenAttachmentNames}
+      reasoningMode={reasoningMode}
+      toolCallsMode={toolCallsMode}
     />
   );
 }
@@ -62,6 +75,7 @@ export function DigichatThread({
 export {
   Thread,
   type ComposerLayout,
+  type GroupDisclosureMode,
   type ThreadComponents,
   type ThreadGroupPart,
   type ThreadProps,

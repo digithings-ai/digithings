@@ -154,7 +154,7 @@ Use https://tradingeconomics.com/calendar or https://forexfactory.com for the ca
 
 ## Programmatic Data Sources (Auto-Fetched — No API Keys)
 
-These sources are available when you run `./scripts/fetch-market-data.sh` locally (optional). Scripts may write transient JSON + Markdown under `data/agent-cache/daily/YYYY-MM-DD/data/` (gitignored; see [`data/README.md`](../../data/README.md)). **Canonical** market state is **Supabase**; Cowork tasks do not depend on this folder. Prefer `price_technicals` / published payloads; use fetched files only if present on disk. Web browsing remains for narrative/qualitative context.
+These sources are available when you run `./scripts/fetch-market-data.sh` locally (optional). Scripts may write transient JSON + Markdown under `data/agent-cache/daily/YYYY-MM-DD/data/` (gitignored; see [`data/README.md`](../../data/README.md)). Market history is served by the dedicated `get_price_technicals` / `get_macro_series` tools (it left the generic `query_data` reader, #3780) — Cowork tasks do not depend on this folder. Prefer those tools / published payloads; use fetched files only if present on disk. Web browsing remains for narrative/qualitative context.
 
 ### Quotes & Technicals
 | Source | Library | Data | Output |

@@ -138,7 +138,7 @@ describe("writeStandardActivity", () => {
     expect(chunks.some((c) => c.type === "tool-output-available")).toBe(false);
   });
 
-  it("auto-completes leftover read tools on finish so Allow/Deny never sticks", () => {
+  it("settles leftover started tools as failed on finish so Allow/Deny never sticks", () => {
     const chunks = collect({
       operation: "execute_tool",
       status: "started",
@@ -146,13 +146,37 @@ describe("writeStandardActivity", () => {
       toolName: "digivault_get_note",
       toolInput: { vault_paths: ["clients/digithings/architecture.md"] },
     });
+    // The row still settles (so an Approve/Deny affordance cannot stick)...
     expect(chunks.some((c) => c.type === "tool-input-available")).toBe(true);
-    const out = chunks.find((c) => c.type === "tool-output-available");
-    expect(out?.output).toMatchObject({
-      vault_paths: ["clients/digithings/architecture.md"],
-    });
+    const err = chunks.find((c) => c.type === "tool-output-error");
+    expect(err).toBeDefined();
+    expect(typeof err?.errorText).toBe("string");
+    // ...but a tool that never returned is never reported as a success.
+    expect(chunks.some((c) => c.type === "tool-output-available")).toBe(false);
     const start = chunks.find((c) => c.type === "tool-input-start");
-    expect(out?.toolCallId).toBe(start?.toolCallId);
+    expect(err?.toolCallId).toBe(start?.toolCallId);
+  });
+
+  it("keeps a real result as the only path to a completed row", () => {
+    const chunks = collect([
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "datatap__list_connections",
+        toolName: "datatap__list_connections",
+      },
+      {
+        operation: "execute_tool",
+        status: "completed",
+        label: "datatap__list_connections",
+        toolName: "datatap__list_connections",
+        toolResult: { connections: [{ name: "a" }] },
+      },
+    ]);
+    const outputs = chunks.filter((c) => c.type === "tool-output-available");
+    expect(outputs).toHaveLength(1);
+    expect(outputs[0]?.output).toMatchObject({ result: { connections: [{ name: "a" }] } });
+    expect(chunks.some((c) => c.type === "tool-output-error")).toBe(false);
   });
 
   it("keeps started MCP args on the retrieve result row", () => {
@@ -489,8 +513,8 @@ describe("writeStandardActivity toolResult", () => {
   });
 });
 
-describe("finishStandardActivity on stream error", () => {
-  it("settles orphaned started rows as failed, not completed", () => {
+describe("finishStandardActivity", () => {
+  it("settles orphaned started rows as failed, not completed, on a clean end", () => {
     const chunks: Record<string, unknown>[] = [];
     const writer = {
       write: (c: Record<string, unknown>) => chunks.push(c),
@@ -507,13 +531,14 @@ describe("finishStandardActivity on stream error", () => {
       },
       ctx,
     );
-    finishStandardActivity(
-      writer as Parameters<typeof finishStandardActivity>[0],
-      ctx,
-      true,
-    );
-    const out = chunks.find((c) => c.type === "tool-output-available");
-    expect(out?.output).toMatchObject({ status: "failed", query: "Bob" });
+    finishStandardActivity(writer as Parameters<typeof finishStandardActivity>[0], ctx);
+    const start = chunks.find((c) => c.type === "tool-input-start");
+    const err = chunks.find((c) => c.type === "tool-output-error");
+    expect(err).toBeDefined();
+    expect(err?.toolCallId).toBe(start?.toolCallId);
+    expect(typeof err?.errorText).toBe("string");
+    // The fake success — an orphan reported as completed — must be gone.
+    expect(chunks.some((c) => c.type === "tool-output-available")).toBe(false);
   });
 });
 

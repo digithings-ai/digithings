@@ -6,6 +6,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { p } from "@/lib/base-path";
 import { isAllowedMcpServerUrl } from "@/lib/deploy-config/mcp-servers";
+import { sameOrigin } from "@/lib/fetch-guarded";
 
 export const MCP_OAUTH_COOKIE = "dc_mcp_oauth";
 export const MCP_OAUTH_MESSAGE = "digichat-mcp-oauth";
@@ -41,7 +42,24 @@ export function parseResourceMetadataUrl(wwwAuthenticate: string | null): string
 
 const MAX_HOPS = 4;
 
-/** SSRF-safe fetch: refuse blocked hosts and do not follow redirects to them. */
+async function discardResponseBody(res: Response): Promise<void> {
+  try {
+    await res.body?.cancel();
+  } catch {
+    // Body absent, already consumed, or locked — nothing further to release.
+  }
+}
+
+/**
+ * SSRF-safe fetch: refuse blocked hosts and follow redirects only within the
+ * same origin.
+ *
+ * The redirect hop re-issues `init` verbatim, and `exchangeAuthorizationCode`
+ * sends `client_secret` in a POST body. Following a cross-origin 3xx would hand
+ * that secret (and any bearer material) to an attacker-chosen host, so
+ * cross-origin redirects are refused outright — same posture as
+ * `fetch-guarded.ts`. Same-origin redirects are preserved (bounded hops).
+ */
 export async function ssrfFetch(
   url: string,
   init: RequestInit,
@@ -64,7 +82,12 @@ export async function ssrfFetch(
       if (res.status >= 300 && res.status < 400) {
         const loc = res.headers.get("location");
         if (!loc) throw new Error("redirect_without_location");
-        current = new URL(loc, current).toString();
+        const next = new URL(loc, current);
+        if (!sameOrigin(new URL(current), next)) {
+          await discardResponseBody(res);
+          throw new Error("cross_origin_redirect");
+        }
+        current = next.toString();
         continue;
       }
       return res;

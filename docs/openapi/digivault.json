@@ -760,7 +760,7 @@
     },
     "/v1/notes": {
       "get": {
-        "description": "List every note in the vault with its tags, links, and backlinks.",
+        "description": "List every note in the caller's vault (tenant-scoped when configured).",
         "operationId": "list_notes_v1_notes_get",
         "responses": {
           "200": {

@@ -179,6 +179,7 @@ try:
         index_name: str | None = None,
         top_k: int = 10,
         mode: str = "hybrid",
+        workspace_id: str | None = None,
     ) -> str:
         """Composite research turn (plan → retrieve → aggregate) with citations for hub/trace parity."""
         payload = {
@@ -186,6 +187,7 @@ try:
             "index_name": index_name or DIGISEARCH_INDEX or "default",
             "top_k": top_k,
             "mode": mode,
+            "workspace_id": workspace_id,
         }
         return _json.dumps(_run_research_turn(payload), indent=2)
 

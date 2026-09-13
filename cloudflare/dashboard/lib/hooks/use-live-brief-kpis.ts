@@ -15,6 +15,7 @@ import {
 } from '@digithings/web';
 import { pickBriefBenchmarkTicker } from '@/lib/benchmark-tickers';
 import { isCashTicker } from '@/lib/book-reconciliation';
+import { currentNavRun } from '@/lib/accounting-views';
 import { useLivePrices } from '@/lib/hooks/use-live-prices';
 import { isQuoteFresh, quoteAgeMs, type LiveQuoteMap } from '@/lib/live-valuation';
 import type { BenchmarkHistoryMap, NavChartPoint, Position } from '@/lib/types';
@@ -93,7 +94,9 @@ export function useLiveBriefKpis(
 
     return computeLivePerformanceKpis({
       positions: kpiPositions,
-      navHistory: navHistory.map((p) => ({ date: p.date, nav: p.nav })),
+      // #3767 / #3935: rebase on the current source run so the live-overlay
+      // inception and the β/IR estimator never cross a legacy→finalized seam.
+      navHistory: currentNavRun(navHistory).map((p) => ({ date: p.date, nav: p.nav })),
       benchmarkHistory,
       benchmarkTicker: benchTicker,
     });

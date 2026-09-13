@@ -15,13 +15,24 @@
 # Options:
 #   --dry-run         Print the payload without calling the GitHub API
 #
-# Required status checks configured (verified live and applied 2026-08-19, #2469):
+# Required status checks configured (verified live and applied 2026-08-19, #2469;
+# gitleaks-scan added #3922):
 #   - "Required checks passed"     — ci.yml aggregator job, fans in every
 #                                    path-gated component job
 #   - "doc-links + agents-init"    — ci-docs.yml (unconditional on pull_request
 #                                    since fd6de617f)
 #   - "mypy — digibase + digikey"  — ci-type-check.yml (unconditional on
 #                                    pull_request since fd6de617f)
+#   - "gitleaks-scan"              — security-gitleaks.yml secrets scan (#3922).
+#                                    PRE-APPLY NOTE: that workflow skips
+#                                    markdown/doc-only PRs with a workflow-level
+#                                    `paths-ignore`, and a workflow skipped that
+#                                    way leaves its required check "Pending" —
+#                                    GitHub then blocks the merge forever. Before
+#                                    running this script, relocate that skip to a
+#                                    job-level conditional (a skipped *job*
+#                                    reports Success) or drop the PR trigger
+#                                    filter. See docs/BRANCH_PROTECTION.md.
 #
 # Prerequisites:
 #   - gh CLI installed and authenticated (gh auth login)
@@ -85,7 +96,8 @@ PAYLOAD=$(cat <<'EOF'
     "contexts": [
       "Required checks passed",
       "doc-links + agents-init",
-      "mypy — digibase + digikey"
+      "mypy — digibase + digikey",
+      "gitleaks-scan"
     ]
   },
   "enforce_admins": false,

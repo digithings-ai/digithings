@@ -194,7 +194,7 @@ Key request fields:
 | `index_name` | `str` | Default: `"default"` |
 | `top_k` | `int` | 1–100; default 10 |
 | `mode` | `str` | `keyword` \| `vector` \| `hybrid` (validated). Backend capability hint — see [query.mode semantics](#querymode-semantics) |
-| `filter` | `str?` | Raw OData (only when `allow_raw_filter` is on) |
+| `filter` | `str?` | Raw OData — rejected (HTTP 400) unless the index config sets `allow_raw_filter: true` |
 | `filters` | `list[dict]?` | Structured: `[{field, op, value}]` |
 | `columns` | `list[str]?` | Metadata fields to return |
 | `facets` | `list[str]?` | Azure facet expressions |
@@ -282,11 +282,13 @@ Auth required. Rate limited: 10 req/min.
 
 Directly invokes the internal LangGraph pipeline (`plan → retrieve → aggregate`). Requires `digisearch[agent]` install. Returns `{service, error, trace, query, index_name, total, backend, results, rag_sources, formatted_context}`.
 
+Request: `ResearchTurnRequest {user_message, index_name, top_k, mode, filter?, filters?, session_id?, workspace_id?}`. Raw `filter` is rejected (HTTP 400) unless the index config sets `allow_raw_filter: true`. When `workspace_id` is set it is injected as a mandatory `workspace_id eq …` structured filter into the retrieve step, identical to `POST /query` (#3909).
+
 #### `POST /v1/web_search`
 
 Auth required (`digisearch:query` scope via the default `digisearch_path_scopes` fallthrough). Rate limited: 30 req/min (default bucket).
 
-Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4), recency_days (1–365, default 7; mapped onto provider recency filters — searxng day/month/year with a week mapping to month — omitted when null)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. `run_web_search` tries the searxng sidecar first, fails over to embedded ddgs (`DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs`, sidecar URL from `DIGISEARCH_SEARXNG_URL`), then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). Fetch/extract failures keep the original search snippet — enrichment never fails the response. No new port: served by the existing digisearch HTTP app.
+Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4), recency_days (1–365, default 7; mapped onto provider recency filters — searxng day/month/year with a week mapping to month — omitted when null)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. `run_web_search` tries the searxng sidecar first, fails over to embedded ddgs (`DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs`, sidecar URL from `DIGISEARCH_SEARXNG_URL`), then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). The fetch is SSRF-guarded by digifetch (#3934): http/https only, internal/metadata addresses refused, and every redirect hop re-validated (no auto-follow) with the operator `DIGISEARCH_FETCH_ALLOWED_HOSTS` allowlist as the explicit escape hatch. Fetch/extract failures keep the original search snippet — enrichment never fails the response. No new port: served by the existing digisearch HTTP app.
 
 ### MCP Tools
 
@@ -670,7 +672,7 @@ When `DIGISEARCH_RERANK_ENABLED` is truthy and `Query.skip_rerank` is false, `_m
 
 Azure is registered first (preferred), then Vectorize, then Chroma, stub last. Adding a new backend requires only calling `register_backend()` at import time. There is no configuration-driven selection — the first configured backend wins.
 
-**Weakness:** if Azure is misconfigured (credentials present but wrong), the Azure backend raises, logs a warning, returns `None`, and silently falls through to Chroma. Operators may not notice that a production query is served by the wrong backend. Vectorize is deliberately exempt from this fall-through — see below.
+**Fail-loud backends:** Azure (first) and Chroma (last) are optional local backends, but once one is *configured* a serving failure must not be silently answered from a different corpus. A failing `query_azure()` / `ChromaBackend.query()` now raises `SearchBackendError` (`indexes/backends/backend_errors.py`); `_stub.py`'s `_azure_backend` / `_chroma_backend` wrappers re-raise instead of returning `None`, and `SearchBackendError` is deliberately absent from `_BACKEND_ERRORS`, so `query_index` cannot swallow it and fall through (#3909). Only the "not configured" and optional-dependency-`ImportError` paths still return `None` so the router continues. Vectorize has the same contract via its own `VectorizeBackendError` — see below. A healthy backend with no matches still returns an empty result (not an error).
 
 #### Vectorize (remote index)
 
@@ -706,8 +708,9 @@ refuses to upsert under a different model) both live in `vectorize_sync.py`,
 not in `VectorizeBackend` itself — a chunk added through the generic
 `POST /ingest` → `route_add_chunks` path is not stamped or checked this way.
 
-Second, unlike `ChromaBackend.query`, which catches its errors and returns
-`[]`, a Vectorize failure propagates. `VectorizeBackend.query()` raises a plain
+Second, a Vectorize failure propagates rather than collapsing into an empty
+result — the same fail-loud contract Chroma/Azure now follow via
+`SearchBackendError` (#3909). `VectorizeBackend.query()` raises a plain
 `RuntimeError` on an HTTP error status or an HTTP-200-with-`success: false`
 body; `_vectorize_backend` then wraps *any* exception from that call —
 including an `ImportError` while importing `VectorizeBackend` itself — as
@@ -825,9 +828,11 @@ When `workspace_id` is set on `POST /query`, the server injects a mandatory stru
 
 Callers omitting `workspace_id` receive unscoped results (single-tenant default). Multi-tenant deployments should require `workspace_id` at the BFF layer.
 
+The research path is scoped the same way (#3909): `POST /v1/research_turn`, the `digisearch_research_delegate` orchestrator tool, and the `digisearch_research_turn` MCP tool all accept `workspace_id`, carry it on `ResearchTurnState`, and inject the mandatory `workspace_id eq …` clause in the retrieve step.
+
 ### Filter injection risks
 
-**Raw OData path:** `POST /query` accepts a `filter` string when `allow_raw_filter=True` is set in the index config. The `filter_validator.py` applies:
+**Raw OData path:** `POST /query`, `POST /v1/research_turn`, and the orchestrator invoke paths that feed them reject a raw `filter` (HTTP 400) when the configured index does not set `allow_raw_filter: true` (#3909); previously only the Azure backend re-gated it. When enabled, `filter_validator.py` applies:
 
 1. Blocked pattern regex: rejects `exec(`, `eval(`, `<script`, `javascript:`, `data:`
 2. Character allowlist: rejects non-OData characters including newlines
@@ -1114,6 +1119,7 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGISEARCH_RERANK_PROVIDER` | `bge` | `bge` (`BAAI/bge-reranker-v2-m3`) or `cohere` (`rerank-multilingual-v3.0`) when rerank is enabled |
 | `DIGISEARCH_WEB_SEARCH_BACKEND` | `auto` | `auto` (searxng→ddgs failover) \| `searxng` \| `ddgs` (#3853) |
 | `DIGISEARCH_SEARXNG_URL` | `http://127.0.0.1:8080` | searxng sidecar base URL (compose sets `http://searxng:8080` in-container; #3853) |
+| `DIGISEARCH_FETCH_ALLOWED_HOSTS` | _(unset)_ | Comma-separated operator-trusted hostnames exempted from the digifetch SSRF address refusal (e.g. an egress proxy). Also accepted per-call via `WebSearchConfig.fetch_allowed_hosts`; passed to `HttpFetcher(allowed_hosts=…)` (#3934) |
 | `DIGISEARCH_WEB_SEARCH_LIVE` | _(unset)_ | Set `1` to run the live-sampled leg of `digisearch/tests/test_web_search_eval.py` (real backends, p50 fetch+extract < 5s); default runs fully mocked offline (#3853) |
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
 | `DIGISEARCH_EMBED` | `1` (on when unset) | Set `0` to skip pipeline-level embed on ingest |
@@ -1162,6 +1168,8 @@ The current graph is minimal: `node_plan` validates input, `node_retrieve` calls
 - **Azure:** inject an OData filter clause `(workspace_id eq '{workspace_id}')` for all queries
 - **Vectorize:** `VectorizeBackend.query()` raises `VectorizeBackendError` when filters / `workspace_id` are present (#2219 fail-loud). Full fix: translate `Query.filters` into Vectorize metadata `filter`, register filterable fields as metadata indexes at index creation, or keep routing to a per-workspace index and omit filters
 - **Stub:** filter post-retrieval by `chunk.metadata.get("workspace_id")`
+
+The research path (`POST /v1/research_turn`, orchestrator `digisearch_research_delegate`, MCP `digisearch_research_turn`) applies the same server-side `workspace_id` injection as `POST /query` (#3909).
 
 Without this, `workspace_id` is decorative on backends that neither filter nor fail closed.
 

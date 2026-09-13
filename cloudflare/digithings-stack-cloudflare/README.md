@@ -156,9 +156,9 @@ supervisorctl start digisearch
 
 Do **not** point digichat at `*.trycloudflare.com` tunnels.
 
-1. Confirm workers.dev health (also kept after custom domains — `workers_dev = true`):
-   - `https://digithings-stack.<account>.workers.dev/healthz` → digigraph
-   - `https://digithings-stack.<account>.workers.dev/_stack/key/healthz` → digikey
+1. Confirm the stack is healthy on the custom domains (`workers_dev = false`):
+   - `https://graph.digithings.ai/healthz` → digigraph
+   - `https://key.digithings.ai/healthz` → digikey
 2. Custom domains `graph.digithings.ai` / `key.digithings.ai` are already declared
    as `[[routes]]` in `wrangler.toml` (human gate — public backends). Redeploy if
    you change routes.
@@ -170,12 +170,7 @@ Until step 3, leave existing digichat secrets; Mac tunnels may still be required
 ## Smoke (backends only)
 
 ```bash
-# workers.dev
-curl -sf https://digithings-stack.<account>.workers.dev/_stack/meta
-curl -sf https://digithings-stack.<account>.workers.dev/healthz
-curl -sf https://digithings-stack.<account>.workers.dev/_stack/key/healthz
-
-# custom domains (declared in wrangler.toml)
+# custom domains (declared in wrangler.toml; the only ingress)
 curl -sf https://graph.digithings.ai/healthz
 curl -sf https://key.digithings.ai/healthz
 ```

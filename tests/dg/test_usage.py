@@ -76,6 +76,26 @@ def test_record_snapshots_return_copies() -> None:
 
 
 @pytest.mark.unit
+def test_bound_run_isolates_records_from_the_process_global() -> None:
+    """A bound UsageRun captures records and leaves the global accumulator empty (#3982)."""
+    run = usage.UsageRun()
+    record = _node_record()
+    token = usage.bind_run(run)
+    try:
+        usage.record(kind="chat", model="scoped", prompt_tokens=2, completion_tokens=3)
+        usage.record_tool_call(name="search", arguments={"q": "x"})
+        usage.observe_telemetry(record)
+    finally:
+        usage.unbind_run(token)
+    assert run.snapshot()["total_tokens"] == 5
+    assert [event["kind"] for event in run.events_snapshot()] == ["model_call", "tool_call"]
+    assert run.node_runs_snapshot() == [record]
+    assert usage.snapshot()["total_tokens"] == 0
+    assert usage.events_snapshot() == []
+    assert usage.node_runs_snapshot() == []
+
+
+@pytest.mark.unit
 def test_start_stores_the_run_id_verbatim() -> None:
     usage.start(run_id="gha-1978")
     assert usage.active_run_id() == "gha-1978"

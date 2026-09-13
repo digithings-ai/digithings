@@ -3,8 +3,11 @@ name: "Pipeline: digiquant prices"
 
 # Writers-stop (#3780, Task 7b fix round): the Supabase market-table writers
 # below are PAUSED on the cron cadence and run only when manually dispatched
-# with `run_writers: true` — readers are all on the versioned R2 cache, and
-# this workflow never loads `DIGIQUANT_MARKET_DATA_BACKEND=r2`, so the
+# with `run_writers: true` — most readers are on the versioned R2 cache, but
+# the ops readers listed under Verification below still query the Supabase
+# tables directly, so migration 124's DROPs are DEFERRED (#3951) until those
+# readers have R2 seams with tests. This workflow never loads
+# `DIGIQUANT_MARKET_DATA_BACKEND=r2`, so the
 # `digiquant prices` CLI refusal gates cannot bite here. Pause map:
 #
 #   KEPT on cadence (load-bearing Supabase consumers — see verification):
@@ -42,8 +45,9 @@ name: "Pipeline: digiquant prices"
 #   default) bodies, the two writer files, the gated recompute path, and the
 #   fedprob/bitview writes above; ops scripts that still read Supabase
 #   directly (execute_at_open, refresh_performance_metrics, verify_nav_replay,
-#   finalize_period_accounting, export_sdca_macro) are covered by the KEPT
-#   rows or fail-soft as noted.
+#   finalize_period_accounting, fill-entry-prices, export_sdca_macro) are NOT
+#   on R2 and would break if migration 124 dropped the tables — hence the
+#   deferral in #3951. They stay covered by the KEPT cadence writes until then.
 #
 # Re-enable: `gh workflow run pipeline-digiquant-prices.yml -f mode=<job>
 # -f run_writers=true`, or revert the `run_writers` gates to resume cadence.

@@ -197,6 +197,7 @@
 }
 
 .digichat-thread .aui-composer-input {
+  display: block;
   min-height: calc(1.375rem + 0.4rem);
   padding-block: 0.2rem;
   line-height: 1.375rem;
@@ -223,6 +224,7 @@
 }
 
 .digichat-launcher [data-slot="aui_composer-shell"][data-layout="compact"] .aui-composer-input {
+  display: block;
   box-sizing: border-box;
   field-sizing: content;
   min-height: 1lh;
@@ -479,38 +481,18 @@
   }
 }
 
-/* Portaled menus leave .digichat-thread. Scope so catalog skins keep popover. */
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-content,
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover {
-  background: var(--bg, #0a0e0c);
-  color: var(--ink, #eceef0);
-  border: 1px solid var(--hair, rgba(255, 255, 255, 0.09));
-  border-radius: 0;
-  box-shadow: none;
-}
+/* Portaled menus leave .digichat-thread. The gallery sheet owns the portaled
+   menu skin (reference chatbot.css); chat-aui.css keeps only the rules it has
+   no twin for: the unwrapped-mount code-header hover, catalog-skin popover
+   items, tooltip/dialog accent tokens, and the hidden tooltip arrows (#3818). */
 
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item {
-  background: transparent;
-  color: var(--ink-mute, #6b7177);
-}
-
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:hover,
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:focus,
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item:focus-visible,
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item[data-highlighted] {
+/* No twin: /baseline mounts the gallery Thread without .aui-theme-stage or
+   [data-thread-skin], so chatbot.css's gated fence-copy hover never applies. */
+.digichat-thread .aui-code-header-root button:hover,
+.digichat-thread .aui-code-header-root button:focus-visible {
   background: transparent;
   background-color: transparent;
-  color: var(--ink, #eceef0);
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover,
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover {
-  background: var(--bg, #0a0e0c);
-  color: var(--ink, #eceef0);
-  border: 1px solid var(--hair, rgba(255, 255, 255, 0.09));
-  border-radius: 0;
-  box-shadow: none;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  color: var(--ink);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover [data-slot="composer-trigger-popover-item"],
@@ -518,32 +500,6 @@
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [role="option"] {
   background: transparent;
   color: var(--ink-mute, #6b7177);
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover [data-highlighted],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [data-highlighted],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [aria-selected="true"],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [aria-selected="true"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [data-cursor="true"],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [data-cursor="true"] {
-  background: transparent;
-  background-color: transparent;
-  color: var(--ink, #eceef0);
-  outline: 1px solid var(--hair, rgba(255, 255, 255, 0.35));
-  outline-offset: -1px;
-}
-
-[data-thread-skin="digichat"] .embed-settings-pane,
-[data-thread-skin="digichat"][data-embed-settings],
-[data-thread-skin="digichat"] .dc-composer-menu,
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu {
-  background: var(--bg, #0a0e0c);
-  color: var(--ink, #eceef0);
-  border-color: var(--hair, rgba(255, 255, 255, 0.09));
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 
 [data-thread-skin="digichat"] [data-slot="tooltip-content"],
@@ -561,17 +517,6 @@
 .digichat-launcher [data-slot="tooltip-content"] svg,
 .digichat-launcher [data-slot="tooltip-content"] [class*="arrow"] {
   display: none;
-}
-
-[data-thread-skin="digichat"] .aui-code-header-root button:hover,
-[data-thread-skin="digichat"] .aui-code-header-root button:focus-visible,
-.digichat-thread .aui-code-header-root button:hover,
-.digichat-thread .aui-code-header-root button:focus-visible,
-.digichat-launcher .aui-code-header-root button:hover,
-.digichat-launcher .aui-code-header-root button:focus-visible {
-  background: transparent;
-  background-color: transparent;
-  color: var(--ink);
 }
 
 /* Tool chain: same rhythm on website / dashboard Thread as /chatbot. */
@@ -725,4 +670,105 @@
 .digichat-launcher [data-slot="reasoning-text"] {
   animation: none;
   transition: none;
+}
+
+/* Grouped tool-call disclosure: match the reasoning trigger rhythm. */
+.digichat-thread [data-slot="tool-group-trigger"],
+.digichat-launcher [data-slot="tool-group-trigger"] {
+  width: 100%;
+  align-items: center;
+  transform: none;
+}
+
+.digichat-thread [data-slot="tool-group-trigger"]:active,
+.digichat-launcher [data-slot="tool-group-trigger"]:active {
+  transform: none;
+}
+
+.digichat-thread [data-slot="tool-group-trigger-label"],
+.digichat-launcher [data-slot="tool-group-trigger-label"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.digichat-thread [data-slot="tool-group-trigger-loader"],
+.digichat-launcher [data-slot="tool-group-trigger-loader"] {
+  display: inline-flex;
+  width: 0.875rem;
+  height: 0.875rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.digichat-thread [data-slot="tool-group-trigger-chevron"],
+.digichat-launcher [data-slot="tool-group-trigger-chevron"] {
+  display: inline-flex;
+  width: 0.55rem;
+  height: 0.55rem;
+  align-items: center;
+  justify-content: center;
+  transform: none;
+  transform-origin: 50% 50%;
+  transition: none;
+  animation: none;
+}
+
+.digichat-thread [data-slot="tool-group-trigger-chevron"] [data-slot="dot-matrix"],
+.digichat-launcher [data-slot="tool-group-trigger-chevron"] [data-slot="dot-matrix"] {
+  width: 0.55rem;
+  height: 0.55rem;
+}
+
+.digichat-thread [data-slot="tool-group-root"][data-state="open"] [data-slot="tool-group-trigger-chevron"],
+.digichat-launcher [data-slot="tool-group-root"][data-state="open"] [data-slot="tool-group-trigger-chevron"] {
+  transform: rotate(90deg);
+}
+
+.digichat-thread [data-slot="tool-group-root"],
+.digichat-launcher [data-slot="tool-group-root"] {
+  --animation-duration: 0ms;
+}
+
+.digichat-thread [data-slot="tool-group-content"],
+.digichat-thread [data-slot="tool-group-content"] > div,
+.digichat-launcher [data-slot="tool-group-content"],
+.digichat-launcher [data-slot="tool-group-content"] > div {
+  animation: none;
+  transition: none;
+}
+
+.digichat-thread [data-slot="tool-group-root"][data-variant="ghost"] [data-slot="tool-group-content"] > div,
+.digichat-launcher [data-slot="tool-group-root"][data-variant="ghost"] [data-slot="tool-group-content"] > div {
+  margin-top: 0.75rem;
+}
+
+/* Chain-of-thought runs (and the tool groups nested inside them) get a light
+   rhythm so consecutive blocks never sit flush against each other. */
+.digichat-thread [data-slot="aui_chain-of-thought"],
+.digichat-launcher [data-slot="aui_chain-of-thought"] {
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Portaled layers (tooltips, menus, dialogs) render under <body>, outside the
+   .digichat-thread / .digichat-launcher subtree that declares the palette
+   vars. Mirror the palette on <html> so --bg / --ink / --hair resolve in
+   portals and those layers get an opaque surface instead of a transparent
+   one (the tooltip-content background comes from chatbot.css). */
+html:has([data-thread-skin="digichat"]) {
+  --bg: #0a0e0c;
+  --ink: #eceef0;
+  --hair: rgba(255, 255, 255, 0.09);
+}
+
+html[data-theme="light"]:has([data-thread-skin="digichat"]),
+html.light:has([data-thread-skin="digichat"]) {
+  --bg: #f4f3ee;
+  --ink: #1a1c1e;
+  --hair: rgba(12, 12, 10, 0.12);
+}
+
+/* Portaled tooltips follow the chat's mono stack instead of the page body font. */
+html:has([data-thread-skin="digichat"]) [data-slot="tooltip-content"] {
+  font-family: var(--font-mono, ui-monospace, monospace);
 }

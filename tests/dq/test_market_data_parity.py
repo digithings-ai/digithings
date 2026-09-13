@@ -931,3 +931,30 @@ def test_r2_generation_window_unknown_ticker_fails_loud(monkeypatch):
     _use_r2(monkeypatch)
     with pytest.raises(LookupError):
         q.r2_close_rows(tickers=["NOPE"], since=_t7b_dates()[0], until=_T7B_AS_OF)
+
+
+def test_r2_generation_window_boto_client_error_pointer_miss_fails_loud(monkeypatch):
+    """The real R2 backend's ClientError pointer miss → LookupError, not a raw boto error (#3951)."""
+
+    class _BotoClientError(Exception):
+        def __init__(self) -> None:
+            super().__init__("An error occurred (NoSuchKey) when calling the GetObject operation")
+            self.response = {
+                "Error": {"Code": "NoSuchKey", "Message": "The specified key does not exist."},
+                "ResponseMetadata": {"HTTPStatusCode": 404},
+            }
+
+    class _NoPointerStore:
+        def get_generation(self, key, sha256):
+            raise KeyError(key)
+
+        def read_latest(self, pointer_key):
+            raise _BotoClientError()
+
+    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
+    monkeypatch.setattr(
+        mcp, "_read_manifest", lambda: {"version": 1, "as_of": _T7B_AS_OF, "datasets": {}}
+    )
+    monkeypatch.setattr(mcp, "_get_r2_store", lambda: _NoPointerStore())
+    with pytest.raises(LookupError, match="unknown ticker"):
+        q.r2_close_rows(tickers=["NOPE"], since=_t7b_dates()[0], until=_T7B_AS_OF)

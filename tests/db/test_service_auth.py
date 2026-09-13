@@ -154,3 +154,112 @@ def test_expired_entry_reexchanges(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(time, "monotonic", _later)
     assert get_service_jwt() == "jwt-2"
     assert len(calls) == 2
+
+
+def test_null_access_token_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DIGIQUANT_DIGIKEY_API_KEY", "dgk_live_testkey1234567890")
+    monkeypatch.setenv("DIGIKEY_URL", "http://digikey:8005")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/oauth/token"
+        return httpx.Response(
+            200, json={"access_token": None, "token_type": "Bearer", "expires_in": 900}
+        )
+
+    def _fake_post(url: str, payload: dict) -> dict:
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            return client.post(url, json=payload).json()
+
+    monkeypatch.setattr("digibase.service_auth._http_post", _fake_post)
+    clear_service_jwt_cache()
+    with pytest.raises(ServiceAuthError, match="empty token"):
+        get_service_jwt()
+
+
+def test_distinct_digikey_bases_get_distinct_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DIGIQUANT_DIGIKEY_API_KEY", "dgk_live_testkey1234567890")
+    monkeypatch.setenv("DIGIKEY_URL", "http://digikey-a:8005")
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url.host))
+        return httpx.Response(
+            200,
+            json={
+                "access_token": f"jwt-{len(calls)}",
+                "token_type": "Bearer",
+                "expires_in": 900,
+            },
+        )
+
+    def _fake_post(url: str, payload: dict) -> dict:
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            return client.post(url, json=payload).json()
+
+    monkeypatch.setattr("digibase.service_auth._http_post", _fake_post)
+    clear_service_jwt_cache()
+    assert get_service_jwt() == "jwt-1"
+    monkeypatch.setenv("DIGIKEY_URL", "http://digikey-b:8005")
+    assert get_service_jwt() == "jwt-2"
+    assert calls == ["digikey-a", "digikey-b"]
+
+
+def test_comma_scope_tuple_collision_regression(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DIGIQUANT_DIGIKEY_API_KEY", "dgk_live_testkey1234567890")
+    monkeypatch.setenv("DIGIKEY_URL", "http://digikey:8005")
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(
+            200,
+            json={
+                "access_token": f"jwt-{len(calls)}",
+                "token_type": "Bearer",
+                "expires_in": 900,
+            },
+        )
+
+    def _fake_post(url: str, payload: dict) -> dict:
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            return client.post(url, json=payload).json()
+
+    monkeypatch.setattr("digibase.service_auth._http_post", _fake_post)
+    clear_service_jwt_cache()
+    # ``",".join(("a,b",)) == ",".join(("a", "b")) == "a,b"`` — these must not share.
+    assert get_service_jwt(scopes=("a,b",)) == "jwt-1"
+    assert get_service_jwt(scopes=("a", "b")) == "jwt-2"
+    assert len(calls) == 2
+
+
+def test_http_post_uses_shared_sync_client_factory() -> None:
+    import digibase.service_auth as service_auth
+
+    from digibase import http_client
+
+    assert service_auth.sync_client is http_client.sync_client
+
+
+def test_http_post_routes_through_sync_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import digibase.service_auth as service_auth
+
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"access_token": "jwt-x", "expires_in": 900})
+
+    def fake_sync_client(**kwargs: object) -> httpx.Client:
+        seen.append(kwargs)
+        return httpx.Client(transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr("digibase.service_auth.sync_client", fake_sync_client)
+    payload = service_auth._http_post("http://digikey:8005/v1/oauth/token", {"a": 1})
+    assert payload["access_token"] == "jwt-x"
+    # No ``timeout=`` override: the bounded default from the factory applies.
+    assert seen == [{}]

@@ -36,6 +36,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
+_MAX_ROWS = 1000  # PostgREST [api].max_rows (digiquant/supabase/config.toml); page cap.
 _MAX_PAGES = 10_000  # runaway-fetch guard: ~10M rows, far beyond any book table.
 
 FAIL_TOL_BP = 25.0  # breach: engine vs recorded daily return differs by >25bp.
@@ -81,10 +82,34 @@ def _get_client():
 
 
 def _fetch_key(row: dict, has_ticker: bool) -> tuple[str, ...]:
-    """Sort/fetch cursor for one row: ``(date, ticker)`` or ``(date,)``."""
-    if has_ticker:
-        return (str(row.get("date") or ""), str(row.get("ticker") or ""))
-    return (str(row.get("date") or ""),)
+    """Sort/fetch cursor for one row: ``(date, ticker)`` or ``(date,)``.
+
+    A blank fallback for a missing key (the old ``str(row.get(...) or "")``)
+    collides with a real key and turns corrupt input into a bogus duplicate-key
+    pagination error — so a projection that requires a key refuses a row without
+    one instead.
+    """
+    day = str(row.get("date") or "")
+    if not day:
+        raise RuntimeError("row is missing its date — cannot build a pagination cursor")
+    if not has_ticker:
+        return (day,)
+    ticker = row.get("ticker")
+    if ticker is None or not str(ticker).strip():
+        raise RuntimeError(f"row for date {day} is missing its ticker — refusing the fetch")
+    return (day, str(ticker))
+
+
+def _keyset_term(has_ticker: bool, last_key: tuple[str, ...]) -> str:
+    """PostgREST seek past ``last_key`` in ``(date[, ticker])`` order.
+
+    Returns the inner OR expression (no outer ``or(...)``) so callers can nest
+    it inside a workspace ``or`` without dropping either predicate.
+    """
+    day = last_key[0]
+    if not has_ticker:
+        return f"date.gt.{day}"
+    return f"date.gt.{day},and(date.eq.{day},ticker.gt.{last_key[1]})"
 
 
 def _fetch_table(
@@ -93,51 +118,70 @@ def _fetch_table(
     house_id: str,
     cols: str,
     or_null_workspace: bool = False,
-    page_size: int = 1000,
+    page_size: int = _MAX_ROWS,
+    max_rows: int = _MAX_ROWS,
 ) -> list[dict]:
-    """Fetch every row of ``table`` with cursor (keyset) pagination (#3803).
+    """Fetch every row of ``table`` with keyset (seek) pagination (#3803, #3948).
 
-    Ordering is deterministic — ``(date, ticker)`` when the projection
-    carries ``ticker``, else ``(date,)`` — so same-date rows have a stable
-    tiebreak instead of an arbitrary server order. Pages are anchored on the
-    last-seen key (``date >= cursor`` + client-side skip of seen keys), never
-    on an offset: a concurrent book upsert between pages cannot shift offsets
-    and silently drop/duplicate rows into the weight schedule that ``--write``
-    persists as truth.
+    Ordering is deterministic — ``(date, ticker)`` when the projection carries
+    ``ticker``, else ``(date,)`` — and each page seeks strictly past the last
+    key it saw (``date > d OR (date = d AND ticker > t)``), never on an offset:
+    a concurrent book upsert between pages can neither shift rows out of the
+    series nor duplicate them into the weight schedule that ``--write`` persists
+    as truth.
 
-    Fail-closed: a page arriving out of order, a page with duplicate keys, a
-    stalled cursor (full page, zero new keys — e.g. a server ignoring the
-    limit), or more than ``_MAX_PAGES`` pages raises ``RuntimeError`` instead
-    of returning a truncated series. Same-date groups larger than
-    ``page_size`` are handled by widening each request window by the
-    already-seen boundary count, so the stall branch only fires on a server
-    that misbehaves. Callers must not write NAV from a partial fetch.
+    The request size is bounded by the server's configured ``max_rows`` cap
+    (PostgREST ``[api].max_rows``, mirrored by ``_MAX_ROWS``). A page that comes
+    back the full requested size means "there may be more" and the cursor
+    advances; only a short page ends the loop. Asking for more than the cap
+    raises instead of accepting a server-clamped page — the #3948 bug, where a
+    boundary-widened ``limit(page_size + boundary_seen)`` exceeded the cap,
+    ``len(page) < page_size + boundary_seen`` looked like "done", and the loop
+    broke *before* the stall guard, silently dropping 1001 rows.
+
+    Fail-closed: a page out of order, duplicate keys within a page, a missing
+    required key, a stalled cursor, or more than ``_MAX_PAGES`` pages raises
+    ``RuntimeError`` instead of returning a truncated series. Callers must not
+    write NAV from a partial fetch.
     """
     selected = {c.strip() for c in cols.split(",")}
     has_ticker = "ticker" in selected
+    if page_size > max_rows:
+        raise RuntimeError(
+            f"{table}: page_size={page_size} exceeds max_rows={max_rows} — "
+            "refusing a request the server would silently clamp"
+        )
     rows: list[dict] = []
     seen: set[tuple[str, ...]] = set()
-    last_date: str | None = None
+    last_key: tuple[str, ...] | None = None
     pages = 0
     while True:
         pages += 1
         if pages > _MAX_PAGES:
             raise RuntimeError(f"{table}: exceeded {_MAX_PAGES} pages — refusing a runaway fetch")
-        # Rows already emitted for the cursor date ride along on the next
-        # page (``gte`` re-anchors on the date, not the full key) and are
-        # skipped client-side — so the request window covers them.
-        boundary_seen = sum(1 for key in seen if key[0] == last_date) if last_date else 0
         query = sb.table(table).select(cols).order("date")
         if has_ticker:
             query = query.order("ticker")
         if or_null_workspace:
             # Omitted workspace_id = house (HOUSE_BOOK_SCOPE.md): match both.
-            query = query.or_(f"workspace_id.eq.{house_id},workspace_id.is.null")
+            # When seeking, the keyset predicate must be ANDed inside each
+            # workspace branch so one ``or`` carries both conditions.
+            if last_key is None:
+                query = query.or_(f"workspace_id.eq.{house_id},workspace_id.is.null")
+            else:
+                seek = _keyset_term(has_ticker, last_key)
+                query = query.or_(
+                    f"and(workspace_id.eq.{house_id},or({seek})),"
+                    f"and(workspace_id.is.null,or({seek}))"
+                )
         else:
             query = query.eq("workspace_id", house_id)
-        if last_date is not None:
-            query = query.gte("date", last_date)
-        page = query.limit(page_size + boundary_seen).execute().data or []
+            if last_key is not None:
+                if has_ticker:
+                    query = query.or_(_keyset_term(True, last_key))
+                else:
+                    query = query.gt("date", last_key[0])
+        page = query.limit(page_size).execute().data or []
 
         keys = [_fetch_key(r, has_ticker) for r in page]
         if any(a > b for a, b in zip(keys, keys[1:])):
@@ -154,17 +198,17 @@ def _fetch_table(
         for r, k in fresh:
             seen.add(k)
             rows.append(r)
-        if len(page) < page_size + boundary_seen:
-            break
-        if not fresh:
-            # Full page, zero new keys: the cursor cannot advance past a
-            # same-date group larger than page_size. Truncating here would
-            # silently drop rows, so fail instead.
+        # Stall guard runs before any break: a page that yields no new key
+        # means the cursor did not advance (e.g. a server ignoring the seek),
+        # and breaking here would silently drop the rest of the table.
+        if page and not fresh:
             raise RuntimeError(
-                f"{table}: pagination stalled at date {last_date} "
+                f"{table}: pagination stalled at {last_key} "
                 f"(page_size={page_size}) — refusing a truncated fetch"
             )
-        last_date = fresh[-1][1][0]
+        if len(page) < page_size:
+            break
+        last_key = keys[-1]
     return rows
 
 

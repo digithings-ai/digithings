@@ -3,7 +3,9 @@
 import {
   ComposerAddAttachment,
   ComposerAttachments,
+  HiddenAttachmentNamesProvider,
   UserMessageAttachments,
+  useHiddenAttachmentNames,
 } from "./attachment.aui";
 import { File } from "./file";
 import { ThreadFollowupSuggestions } from "./follow-up-suggestions.aui";
@@ -16,7 +18,13 @@ import {
   ReasoningText,
   ReasoningTrigger,
 } from "./reasoning.aui";
+import { MessageTiming } from "./message-timing.aui";
 import { ToolFallback } from "./tool-fallback.aui";
+import {
+  ToolGroupContent,
+  ToolGroupRoot,
+  ToolGroupTrigger,
+} from "./tool-group.aui";
 import {
   CheckActionIcon,
   CopyActionIcon,
@@ -45,11 +53,13 @@ import {
 import {
   createContext,
   useContext,
+  useEffect,
   useRef,
   type ComponentPropsWithoutRef,
   type ComponentType,
   type FC,
   type FormEvent,
+  type MouseEvent as ReactMouseEvent,
   type PropsWithChildren,
 } from "react";
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
@@ -57,6 +67,17 @@ import { MessageError } from "./message-error.aui";
 import { ComposerBlockCaret } from "./block-caret";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
+
+/**
+ * Disclosure behavior for a grouped chain of reasoning / tool-call steps.
+ * `off` hides the group entirely, `collapsed` (default) renders a closed
+ * dropdown, `expanded` starts open, and `locked_open` pins it open.
+ */
+export type GroupDisclosureMode =
+  | "off"
+  | "collapsed"
+  | "expanded"
+  | "locked_open";
 
 /**
  * Optional component overrides for the thread. `AssistantMessage` and
@@ -110,6 +131,17 @@ export type ThreadProps = {
   slash?: ThreadSlashTrigger | undefined;
   /** Native `@` mention adapter (`unstable_useMentionAdapter`). */
   mention?: ThreadMentionTrigger | undefined;
+  /**
+   * Attachment names that render no chip in the composer or sent messages.
+   * The attachment still lives on the runtime (its file part reaches the
+   * model) — only the UI is suppressed. Generic; callers pass system names
+   * such as the embed's `page-context.html` in `silent` mode.
+   */
+  hiddenAttachmentNames?: readonly string[] | undefined;
+  /** Disclosure mode for grouped reasoning runs. Default collapsed. */
+  reasoningMode?: GroupDisclosureMode | undefined;
+  /** Disclosure mode for grouped tool-call runs. Default collapsed. */
+  toolCallsMode?: GroupDisclosureMode | undefined;
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -140,6 +172,20 @@ const EMPTY_COMPONENTS: ThreadComponents = {};
 
 const ThreadComponentsContext =
   createContext<ThreadComponents>(EMPTY_COMPONENTS);
+
+type ThreadGroupDisclosure = {
+  reasoning: GroupDisclosureMode;
+  toolCalls: GroupDisclosureMode;
+};
+
+const DEFAULT_GROUP_DISCLOSURE: ThreadGroupDisclosure = {
+  reasoning: "collapsed",
+  toolCalls: "collapsed",
+};
+
+const ThreadGroupDisclosureContext = createContext<ThreadGroupDisclosure>(
+  DEFAULT_GROUP_DISCLOSURE,
+);
 
 type ThreadChrome = {
   welcome: string;
@@ -192,6 +238,8 @@ const ThreadHistorySkeleton: FC = () => (
   </div>
 );
 
+const EMPTY_HIDDEN_ATTACHMENTS: readonly string[] = [];
+
 export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
   autoFocus = true,
@@ -204,6 +252,9 @@ export const Thread: FC<ThreadProps> = ({
   onComposerSubmit,
   slash,
   mention,
+  hiddenAttachmentNames,
+  reasoningMode = "collapsed",
+  toolCallsMode = "collapsed",
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -218,17 +269,23 @@ export const Thread: FC<ThreadProps> = ({
     mention,
   };
   return (
-    <ThreadChromeContext.Provider value={chrome}>
-      <ThreadActionsContext.Provider value={resolvedActions}>
-        <ThreadComponentsContext.Provider value={components}>
-          <ThreadRoot
-            autoFocus={autoFocus}
-            placeholder={placeholder}
-            composerLayout={composerLayout}
-          />
-        </ThreadComponentsContext.Provider>
-      </ThreadActionsContext.Provider>
-    </ThreadChromeContext.Provider>
+    <HiddenAttachmentNamesProvider names={hiddenAttachmentNames ?? EMPTY_HIDDEN_ATTACHMENTS}>
+      <ThreadChromeContext.Provider value={chrome}>
+        <ThreadActionsContext.Provider value={resolvedActions}>
+          <ThreadComponentsContext.Provider value={components}>
+            <ThreadGroupDisclosureContext.Provider
+              value={{ reasoning: reasoningMode, toolCalls: toolCallsMode }}
+            >
+              <ThreadRoot
+                autoFocus={autoFocus}
+                placeholder={placeholder}
+                composerLayout={composerLayout}
+              />
+            </ThreadGroupDisclosureContext.Provider>
+          </ThreadComponentsContext.Provider>
+        </ThreadActionsContext.Provider>
+      </ThreadChromeContext.Provider>
+    </HiddenAttachmentNamesProvider>
   );
 };
 
@@ -382,6 +439,51 @@ const Composer: FC<{
   const compact = layout === "compact";
   const { onComposerSubmit, slash, mention } = useContext(ThreadChromeContext);
   const inputWrapRef = useRef<HTMLDivElement | null>(null);
+  const focusComposerInput = () => {
+    inputWrapRef.current
+      ?.querySelector<HTMLTextAreaElement>("textarea")
+      ?.focus({ preventScroll: true });
+  };
+
+  // Focus the composer on mount. The runtime's own autoFocus effect can miss
+  // when the embed hydrates inside an iframe, and a retry covers engines that
+  // ignore focus() until the first paint.
+  useEffect(() => {
+    if (!autoFocus) return;
+    let cancelled = false;
+    let attempts = 0;
+    const focus = () => {
+      if (cancelled) return;
+      const area =
+        inputWrapRef.current?.querySelector<HTMLTextAreaElement>("textarea");
+      if (!area || document.activeElement === area) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body) return;
+      area.focus({ preventScroll: true });
+      if (document.activeElement !== area && attempts < 6) {
+        attempts += 1;
+        window.requestAnimationFrame(focus);
+      }
+    };
+    const frame = window.requestAnimationFrame(focus);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
+  }, [autoFocus]);
+
+  const handleShellMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (
+      target?.closest(
+        "button, a, input, textarea, select, [contenteditable='true']",
+      )
+    ) {
+      return;
+    }
+    event.preventDefault();
+    focusComposerInput();
+  };
   const bar = (
     <ComposerPrimitive.Root
       className="aui-composer-root relative flex w-full flex-col"
@@ -391,6 +493,7 @@ const Composer: FC<{
         <div
           data-slot="aui_composer-shell"
           data-layout={layout}
+          onMouseDown={handleShellMouseDown}
           className="border-border/60 data-[dragging=true]:border-ring dark:border-muted-foreground/15 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
         >
           <ComposerAttachments />
@@ -572,6 +675,9 @@ const AssistantMessage: FC = () => {
     ToolGroup,
     ReasoningGroup,
   } = useContext(ThreadComponentsContext);
+  const { reasoning: reasoningMode, toolCalls: toolCallsMode } = useContext(
+    ThreadGroupDisclosureContext,
+  );
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -597,22 +703,47 @@ const AssistantMessage: FC = () => {
           {({ part, children }) => {
             switch (part.type) {
               case "group-chainOfThought":
-                return <div data-slot="aui_chain-of-thought">{children}</div>;
-              case "group-tool":
+                return (
+                  <div data-slot="aui_chain-of-thought">{children}</div>
+                );
+              case "group-tool": {
+                if (toolCallsMode === "off") return null;
                 if (ToolGroup) {
                   return <ToolGroup group={part}>{children}</ToolGroup>;
                 }
-                return <div data-slot="aui_tool-chain">{children}</div>;
+                const locked = toolCallsMode === "locked_open";
+                return (
+                  <ToolGroupRoot
+                    variant="ghost"
+                    defaultOpen={toolCallsMode === "expanded" || locked}
+                    {...(locked ? { open: true, onOpenChange: () => {} } : {})}
+                  >
+                    <ToolGroupTrigger
+                      count={part.indices.length}
+                      active={part.status.type === "running"}
+                      disabled={locked}
+                    />
+                    <ToolGroupContent>{children}</ToolGroupContent>
+                  </ToolGroupRoot>
+                );
+              }
               case "group-reasoning": {
+                if (reasoningMode === "off") return null;
                 if (ReasoningGroup) {
                   return (
                     <ReasoningGroup group={part}>{children}</ReasoningGroup>
                   );
                 }
                 const running = part.status.type === "running";
+                const locked = reasoningMode === "locked_open";
                 return (
-                  <ReasoningRoot variant="ghost" streaming={running}>
-                    <ReasoningTrigger active={running} />
+                  <ReasoningRoot
+                    variant="ghost"
+                    streaming={running}
+                    defaultOpen={running || reasoningMode === "expanded" || locked}
+                    {...(locked ? { open: true, onOpenChange: () => {} } : {})}
+                  >
+                    <ReasoningTrigger active={running} disabled={locked} />
                     <ReasoningContent aria-busy={running}>
                       <ReasoningText>{children}</ReasoningText>
                     </ReasoningContent>
@@ -621,9 +752,12 @@ const AssistantMessage: FC = () => {
               }
               case "text":
                 return <MarkdownText />;
-              case "reasoning":
+              case "reasoning": {
+                if (reasoningMode === "off") return null;
                 return <Reasoning {...part} />;
+              }
               case "tool-call":
+                if (toolCallsMode === "off") return null;
                 return part.toolUI ?? <ToolFallbackComponent {...part} />;
               case "data":
                 return part.dataRendererUI;
@@ -730,15 +864,20 @@ const AssistantActionBar: FC = () => {
           </ActionBarPrimitive.ExportMarkdown>
         </ActionBarMorePrimitive.Content>
       </ActionBarMorePrimitive.Root>
+      <MessageTiming />
     </ActionBarPrimitive.Root>
   );
 };
 
-const UserFilePart: FileMessagePartComponent = (part) => (
-  <div data-slot="aui_user-message-file" className="py-1">
-    <File {...part} />
-  </div>
-);
+const UserFilePart: FileMessagePartComponent = (part) => {
+  const hiddenNames = useHiddenAttachmentNames();
+  if (part.filename && hiddenNames.includes(part.filename)) return null;
+  return (
+    <div data-slot="aui_user-message-file" className="py-1">
+      <File {...part} />
+    </div>
+  );
+};
 
 const UserImagePart: ImageMessagePartComponent = (part) => (
   <div data-slot="aui_user-message-image" className="py-1">
