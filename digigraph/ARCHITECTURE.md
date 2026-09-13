@@ -154,6 +154,13 @@ path (§8.4, `planning/executor.py` and `digillm.run_tools`) submit through
 through by hand. dashboard keeps the explicit labels — passing a display string is cheaper than
 a context copy and does not silently widen what a worker inherits.
 
+The streaming chat path does not use this process-global sink. Each SSE response binds a
+`UsageRun` via `usage.bind_run(...)` before the worker's `contextvars.copy_context()` snapshot, so
+the worker's `record(...)` calls land in that response's own buffers and `snapshot()` reads only
+them: overlapping streams cannot sum or clear each other's totals (#3982). The process-global
+`start()`/`reset()` pair is unchanged for its one-run-per-process callers (portfolio chain,
+research diagnostics).
+
 `RunCallEvent` is a frozen Pydantic v2 model. It stores fixed labels, status, duration, retries,
 usage totals, source count, and code-generated shape summaries. All public text is length-bounded.
 It never stores prompts, argument or result values, document bodies, credentials, PII-heavy
@@ -221,7 +228,7 @@ nothing and is deliberately not used.
 | Off CI, via `cli_main` | `{cadence}-{run_date}-local` — reused, not minted | `-local` is a suffix no CI run id can carry, so the two can never be confused |
 | `deps.diagnostics is None` (library/test callers) | `None` | No node records, no logical calls; physical attempts unchanged. Such a run writes no diagnostics row either, so there is nothing to reconcile against |
 | Blank/whitespace | normalised to `None` | `run_id text NOT NULL CHECK (length(run_id) > 0)` can never be violated from this producer |
-| `usage.start()` with no argument (operator scripts, the research simulator, the chat workflow) | `None` | Emits nothing **by design** |
+| `usage.start()` with no argument (operator scripts, the research simulator) | `None` | Emits nothing **by design** |
 
 **A NULL `fanout_key` means "this execution had no fan-out cursor", never "instrumentation
 missing".** research `phase5_sectors` nodes and the compile-time per-ticker H5/H6 variants already

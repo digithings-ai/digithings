@@ -38,6 +38,14 @@ describe("embed stock chrome wiring", () => {
     expect(embedClientSrc).toMatch(/webSearchScope=\{webSearchScope\}/);
   });
 
+  it("ignores and drops page context when the deploy mode is off", () => {
+    expect(embedClientSrc).toMatch(/if \(pageContextMode === "off"\)/);
+    expect(embedClientSrc).toMatch(
+      /pageContextMode === "off" \? null : pageContextRef\.current/,
+    );
+    expect(embedClientSrc).toMatch(/buildReadyMessage\(pageContextMode\)/);
+  });
+
   it("hides the in-iframe brand header on the first-party digichat skin (#3733)", () => {
     expect(embedClientSrc).toMatch(/shouldRenderEmbedBrandHeader/);
     expect(embedClientSrc).toMatch(/EmbedChatPrefsProvider/);

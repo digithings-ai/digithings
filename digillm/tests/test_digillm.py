@@ -12,7 +12,7 @@ from typing import Any  # score:allow untyped any — fake OpenAI client dict sh
 from unittest.mock import MagicMock, patch
 
 import pytest
-from openai import Timeout
+from openai import BadRequestError, Timeout
 from openai.types.chat import ChatCompletion
 from openai.types.chat import ChatCompletionMessage as OpenAIMessage
 from openai.types.chat.chat_completion import Choice
@@ -1365,6 +1365,51 @@ def test_stream_deltas_emits_content_and_returns_joined() -> None:
     # stream=True must reach the wire on the streaming path.
     _, kwargs = fake_client.chat.completions.create.call_args
     assert kwargs["stream"] is True
+
+
+def _bad_request(message: str) -> BadRequestError:
+    """A 400-shaped OpenAI error; only the message and status matter to the client."""
+    response = MagicMock()
+    response.status_code = 400
+    return BadRequestError(message, response=response, body=None)
+
+
+def test_stream_falls_back_without_stream_options_on_a_400_that_names_it() -> None:
+    """Strict endpoints that 400 on ``stream_options`` get one retry without the field."""
+    reject = _bad_request("Unrecognized request argument supplied: stream_options")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [reject, [_stream_chunk("hi")]]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "hi"}],
+            [],
+            execute_tool=lambda *_: "",
+            stream_deltas=True,
+        )
+    assert out == "hi"
+    calls = fake_client.chat.completions.create.call_args_list
+    assert [call.kwargs.get("stream_options") for call in calls] == [
+        {"include_usage": True},
+        None,
+    ]
+
+
+def test_stream_400_that_does_not_name_stream_options_propagates() -> None:
+    """An unrelated 400 is not silently retried without the usage request."""
+    reject = _bad_request("Unrecognized request argument supplied: temperature")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = reject
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with pytest.raises(BadRequestError, match="temperature"):
+            digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "hi"}],
+                [],
+                execute_tool=lambda *_: "",
+                stream_deltas=True,
+            )
+    assert fake_client.chat.completions.create.call_count == 1
 
 
 def test_stream_deltas_emits_reasoning_then_content() -> None:

@@ -121,6 +121,65 @@ it("still streams a genuinely non-empty 200 SSE reply", async () => {
   expect(body).toContain("Hello.");
 });
 
+// #3978: digigraph appends the run's provider-reported usage as a final SSE chunk
+// with a top-level `usage` object. The adapter forwards it as message metadata,
+// which the runtime folds into `metadata.custom.usage` — never fabricated when the
+// upstream reports none.
+it("forwards the provider-reported SSE usage chunk as message metadata", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Hi" } }] })}\n\n`,
+        `data: ${JSON.stringify({
+          choices: [{ delta: {} }],
+          usage: { prompt_tokens: 11, completion_tokens: 4, total_tokens: 15 },
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(eventsFrom(body)).toContainEqual({
+    type: "message-metadata",
+    messageMetadata: {
+      usage: { inputTokens: 11, outputTokens: 4, totalTokens: 15 },
+    },
+  });
+});
+
+it("omits usage metadata when the upstream stream reports no usage", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Hi" } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(eventsFrom(body).some((event) => event.type === "message-metadata")).toBe(false);
+});
+
 // A reply that streams only a tool/activity part and no answer text is not
 // empty — it must not be rewritten as "the assistant is unavailable".
 it("does not misclassify an activity-only 200 stream as empty", async () => {
@@ -938,6 +997,21 @@ it("sends the Authorization supplied in upstreamHeaders", async () => {
   const init = fetchSpy.mock.calls[0]?.[1] as RequestInit;
   expect(new Headers(init.headers).get("Authorization")).toBe("Bearer from-upstream-headers");
 });
+
+const eventsFrom = (body: string): Array<Record<string, unknown>> =>
+  body
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => line.slice(6))
+    .map((raw) => {
+      try {
+        return JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    })
+    .filter((chunk): chunk is Record<string, unknown> => chunk !== null);
 
 const errorTextFrom = (body: string): string | undefined =>
   body
