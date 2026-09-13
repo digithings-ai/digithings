@@ -13,6 +13,7 @@ import {
   sinceInceptionPctFromNav,
 } from '@digithings/web';
 import {
+  chainNavContinuity,
   currentNavRun,
   navSeriesContractLabel,
   type AccountingNavRow,
@@ -193,18 +194,22 @@ export function persistedHeadlinesFromNav(
   const sorted = [...nav]
     .filter((row) => finiteNav(row.nav))
     .sort((a, b) => a.date.localeCompare(b.date));
-  // #3767: since-inception must be rebased on the current source run — a
-  // legacy→finalized seam must not produce a phantom jump (false Sep-8).
-  const run = currentNavRun(sorted);
-  const first = run[0] ?? null;
-  const tip = run.at(-1) ?? null;
+  // #3767 / #4014: chain the source runs instead of truncating to the current
+  // one — since-inception spans the tracked history without the phantom seam
+  // jump, and it stays in step with the Tearsheet's chained chart series.
+  const chained = chainNavContinuity(sorted);
+  const first = chained[0] ?? null;
+  const chainTip = chained.at(-1) ?? null;
+  const tip = sorted.at(-1) ?? null;
   // Day-return predecessor stays the immediately adjacent date in the full
   // series so a seam at the tip is still detected (and refused).
   const prior = sorted.length >= 2 ? sorted[sorted.length - 2] : null;
 
-  // Match Tearsheet `periodReturnPct`: need ≥2 finite NAV points for since-inception %.
+  // Match the Tearsheet's chained series: need ≥2 finite NAV points.
   const sinceInceptionPct =
-    run.length >= 2 && first && tip ? sinceInceptionPctFromNav(first.nav, tip.nav) : null;
+    chained.length >= 2 && first && chainTip
+      ? sinceInceptionPctFromNav(first.nav, chainTip.nav)
+      : null;
 
   const invested = resolveInvestedPct({
     tipInvestedPct: tip?.invested_pct ?? null,

@@ -452,7 +452,12 @@ def test_workflow_secrets_wired() -> None:
         assert name in env, name
     # Recorded deviation (Task 6 report): the store seam needs the direct-PG
     # registry insert, so the workflow wires one extra secret past the brief pins.
-    assert env["CORE_POSTGRES_URI"] == "${{ secrets.CORE_POSTGRES_URI }}"
+    # #3979: the pre-#3860 names are a transitional fallback until the repo
+    # secret itself is renamed; the env var the reader sees stays CORE_POSTGRES_URI.
+    assert env["CORE_POSTGRES_URI"] == (
+        "${{ secrets.CORE_POSTGRES_URI || secrets.DIGI_CHECKPOINTER_POSTGRES_URI"
+        " || secrets.MARKET_DATA_POSTGRES_URI }}"
+    )
 
 
 def test_workflow_runs_refresh_and_uploads_manifest() -> None:
@@ -518,3 +523,21 @@ def test_main_marks_stale_and_exits_nonzero_on_ticker_failure(
     by_ticker = {o["ticker"]: o for o in artifact["outcomes"]}
     assert by_ticker["SPY"]["mode"] == "incremental"
     assert by_ticker["BOOM"]["mode"] == "history-only"
+
+
+def test_workflow_installs_uv_before_first_use() -> None:
+    """`uv` is not on the GitHub runner; the job must set it up before running it (#4008)."""
+    steps = _workflow()["jobs"]["refresh"]["steps"]
+    uses = [str(step.get("uses", "")) for step in steps]
+    assert any(u.startswith("astral-sh/setup-uv") for u in uses), "missing astral-sh/setup-uv"
+    setup_index = next(i for i, u in enumerate(uses) if u.startswith("astral-sh/setup-uv"))
+    first_uv_run = next(i for i, step in enumerate(steps) if "uv " in str(step.get("run", "")))
+    assert setup_index < first_uv_run
+
+
+def test_workflow_installs_the_prices_extra_for_yahoo_fetches() -> None:
+    """refresh_market_data_r2.py imports yfinance from the `prices` extra (#4011)."""
+    steps = _workflow()["jobs"]["refresh"]["steps"]
+    sync = next(str(step["run"]) for step in steps if "uv sync" in str(step.get("run", "")))
+    assert "--extra prices" in sync
+    assert "--extra research" in sync

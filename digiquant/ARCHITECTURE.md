@@ -223,7 +223,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` selector: `btc_power_law` / `generic_valuation` / `rolling_z` (`sdca/providers.py`). Oscillators are computed from **that ticker's** OHLCV. `indicator_weights` JSON `{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Macro extras need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
 | `digiquant_fetch_bitview_series` | Fetch Bitview/BRK on-chain `day1` series (`mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`) into `data/onchain/bitview/` parquet. JSON API only (no HTML scrape). `nupl` is refused by default (monotone of MVRV); `allow_derived=True` opts a caller who understands the caveat back in. Upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944); the code-only seam is an injected HTTP session / allowlisted host. Fail-soft + timeout. Hosted bitview.space is optional / no SLA — a vendor `mcp.bitview.space` MCP server already exists; prefer it for general Bitview access. Coin Metrics community CC BY-NC is **not** fetched and must not be republished commercially. Refs #1086 |
 | `digiquant_fetch_bgeometrics_series` | Fetch a single bitcoin-data.com (BGeometrics) metric by `startday`/`endday` into `data/onchain/bgeometrics/` parquet. Free tier is rate-limited; `token` (or `BGEOMETRICS_API_TOKEN`, sent only to the fixed bitcoin-data.com host) is sent as both `Authorization: Bearer` and `X-Bgapi-Token` (exact header name unconfirmed). `metric` is validated against `^[a-z0-9-]+$` (no path/query injection). No caller `base_url` (SSRF / env-token exfiltration guard #3944). Fail-soft. A vendor `mcp.bitcoin-data.com/mcp` server already exists; prefer it for general BGeometrics access. |
-| `digiquant_fetch_coinmetrics_series` | Fetch a single CoinMetrics Community API metric for one asset (`asset`/`metric` must each be a single value, not comma-separated) by `start_time`/`end_time` into `data/onchain/coinmetrics/` parquet. `page_size`/`api_key` widen beyond SDCA's default free-tier keyless usage; upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944). Fail-soft. No vendor MCP server exists for CoinMetrics, unlike Coinbase/BGeometrics/Bitview — hence this tool and the catalog tool below carry more of the general-purpose surface in-house. CC BY-NC, research-only. |
+| `digiquant_fetch_coinmetrics_series` | Fetch a single CoinMetrics Community API metric for one asset (`asset`/`metric` must each be a single value, not comma-separated, and a safe slug matching `^[A-Za-z0-9_-]+$` — cache-path traversal guard #3947) by `start_time`/`end_time` into `data/onchain/coinmetrics/` parquet. `page_size`/`api_key` widen beyond SDCA's default free-tier keyless usage; upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944). Fail-soft. No vendor MCP server exists for CoinMetrics, unlike Coinbase/BGeometrics/Bitview — hence this tool and the catalog tool below carry more of the general-purpose surface in-house. CC BY-NC, research-only. |
 | `digiquant_list_coinmetrics_catalog` | Discovery tool: lists available CoinMetrics assets/metrics from `/catalog-v2/asset-metrics` (optionally filtered by `asset`), so a caller can find a metric name before calling `digiquant_fetch_coinmetrics_series`. Returns the raw catalog payload. Upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944). Fail-soft. |
 | `digiquant_fit_sdca_weights` | Stage A cycle-window weight fit for an `SdcaAssetProfile` (`btc_v1` / `eth_research_v1` / `profile_json`), then `regularize_weights`. Not a second optimizer: Stage B is `digiquant_run_optimize` with `strategy_name=sdca` and frozen `*_weight` keys in `strategy_params`. Returns `{weights, regularized_weights, regularized_weight_params, score, ...}` or `{"error": ...}` |
 | `digiquant_compile_research_portfolio` | digigraph product-graph dry path (#3415): compile research + portfolio LangGraphs with no LLM / no book write. Returns `{dry_run, graphs[], idempotency_key, ...}` via orchestrator_invoke |
@@ -1858,8 +1858,8 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
     outside `[low, high]` (vendor/float64 noise; first prod row SPY 1993-02-12) are
     reconciled by widening the envelope to contain the observed prices — the engine
     marks and fills at `close`, so NAV is unaffected — instead of aborting the
-    replay; non-finite bounds (NaN/±Inf, storable in Postgres `numeric`) are refused
-    before any widening (#3994). A read-only
+    replay (#3995); non-finite bounds (NaN/±Inf, storable in Postgres `numeric`)
+    are refused before any widening (#3994). A read-only
    `verify_nav_replay` (no `--write`) step runs after metrics so drift fails
    loudly.
   `refresh_performance_metrics.refresh_nav_point` only guards the engine row;
@@ -2928,12 +2928,16 @@ the grants would refuse anyway.
   `data_layer_scope`). Live-venue refusals in `execution/policy.py` are untouched.
 
 `execute_at_open.py` tries the ledger first and reaches the prose builders only when it
-declines. `build_events_from_paper_fills` returns `(None, reason)` for "the ledger has no
-opinion" — no `portfolio_ledger_commits` row for the run date, the kill switch off, or the
-read raising — and `([], "")` for "authoritatively a quiet day", which the caller must not
-conflate. The read probe is wrapped; `execute_pending_orders` is deliberately **outside** the
+declines. `build_events_from_paper_fills` returns `(None, reason, None)` for "the ledger
+has no opinion" — no `portfolio_ledger_commits` row for the run date, the kill switch off,
+or the read raising — and `([], "", None)` for "authoritatively a quiet day", which the
+caller must not conflate. An all-rejected run returns `(events, "", pageable)`, where
+`pageable` carries the drift warning minus a `stale_target`-only refusal (#4017). The read probe is wrapped; `execute_pending_orders` is deliberately **outside** the
 guard so a partial write stays loud. Exit codes: `2` for conflicting flags or an unresolvable
-prior trading date, `3` for `--require-ledger` when the ledger declined, `0` otherwise.
+prior trading date, `3` for `--require-ledger` when the ledger declined, `5` when the
+ledger rejected every order for a drift-implying reason — the executed book fell short of
+the committed targets (#4017; a `stale_target`-only refusal is superseded-chain
+bookkeeping and stays `0`) — and `0` otherwise.
 
 Two projection details are easy to get wrong. `approved_weight` is a 0..1 fraction while
 `position_events.weight_pct` is a percent, so the ×100 happens in `Decimal` and only then
@@ -2963,7 +2967,7 @@ switch defaults *on*. After #2589 the morning job and backfill run the ledger pa
    quantity targets → executed order → paper fill (fee=0, slippage=0) → open lot. It does
    not invent pre-cutover fill history beyond that single snapshot.
 2. If lots are still empty while the prior book has holdings,
-   `cold_start_requires_seed` / `build_events_from_paper_fills` returns `(None, reason)` and
+   `cold_start_requires_seed` / `build_events_from_paper_fills` returns `(None, reason, None)` and
    `--require-ledger` exits 3 — it will not book OPEN/EXIT mislabels into append-only 069
    rows, and prose cannot hide the handover.
 
