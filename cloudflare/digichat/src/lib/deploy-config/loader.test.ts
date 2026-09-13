@@ -479,10 +479,28 @@ describe("embed tenant round-trip", () => {
       attribution: true,
       activityDetail: "labels",
       webSearch: false,
+      pageContext: "silent",
     };
-    const back = deploymentToEmbedTenant(embedTenantToDeployment(original));
+    const dep = embedTenantToDeployment(original);
+    expect(dep.features.pageContext).toBe("silent");
+    const back = deploymentToEmbedTenant(dep);
     expect(back.backend).toEqual(original.backend);
     expect(back.token).toBe("tok");
+    expect(back.pageContext).toBe("silent");
+  });
+
+  it("defaults pageContext to visible when the tenant omits it", () => {
+    const dep = embedTenantToDeployment({
+      slug: "plain",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "dark",
+      attribution: false,
+      activityDetail: "labels",
+    });
+    expect(dep.features.pageContext).toBe("visible");
+    expect(deploymentToEmbedTenant(dep).pageContext).toBe("visible");
   });
 
   it("preserves requiredPlanTier through YAML converters (#3662)", () => {
@@ -561,6 +579,7 @@ describe("matchHostDeployment", () => {
       expect.arrayContaining(["digisearch", "digivault", "web_search"]),
     );
     expect(client.features.attachments).toBe(false);
+    expect(client.features.pageContext).toBe("visible");
     expect(cfg.hosts!["digithings.ai"]!.gate.activityDetail).toBe("full");
     expect(tenant.activityDetail).toBe("full");
     expect(cfg.hosts!["digithings.ai"]!.backend.vaultPathPrefix).toBe("clients/digithings");

@@ -128,6 +128,7 @@ def _stream_completions_progressive(
     wf_kw["force_tool"] = force_tool
     workflow_req = WorkflowRequest(**wf_kw)
 
+    from digigraph import usage
     from digigraph.llm_auth import clear_byok_bindings
 
     # Run the worker inside a copy of *this* frame's context. A bare Thread starts
@@ -164,6 +165,7 @@ def _stream_completions_progressive(
         finally:
             clear_byok_bindings()
 
+    usage.start()
     worker = Thread(target=ctx.run, args=(_run_worker,))
     worker.start()
 
@@ -254,12 +256,38 @@ def _stream_completions_progressive(
                     yield f"data: {_sse_chunk(cid, created, model, content, None)}\n\n"
     except GeneratorExit:
         cancel_event.set()
+        usage.reset()
         raise
     except STREAM_SSE_ERRORS as e:
         logger.exception("stream_completions error")
         yield f"data: {_sse_chunk(cid, created, model, f'Error: {e!s}', None)}\n\n"
     finally:
         cancel_event.set()
+
+    # Emit the run's real provider-reported usage as a final OpenAI-style chunk
+    # (prompt/completion/total tokens) before the stop marker. Only emitted when
+    # the provider actually reported tokens -- usage.record never fabricates zeros.
+    _usage_snapshot = usage.snapshot()
+    if _usage_snapshot.get("total_tokens"):
+        yield (
+            "data: "
+            + json.dumps(
+                {
+                    "id": cid,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": None}],
+                    "usage": {
+                        "prompt_tokens": _usage_snapshot.get("prompt_tokens", 0),
+                        "completion_tokens": _usage_snapshot.get("completion_tokens", 0),
+                        "total_tokens": _usage_snapshot.get("total_tokens", 0),
+                    },
+                }
+            )
+            + "\n\n"
+        )
+    usage.reset()
 
     yield f"data: {_sse_chunk(cid, created, model, '', 'stop')}\n\n"
     yield "data: [DONE]\n\n"

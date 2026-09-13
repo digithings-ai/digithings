@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   READY_MESSAGE,
+  buildReadyMessage,
   parseSeedMessage,
   isAllowedSeedParentOrigin,
   resolveReadyTargetOrigin,
@@ -10,6 +11,23 @@ import {
 describe("embed-seed-messages", () => {
   it("exports digichat:ready", () => {
     expect(READY_MESSAGE.type).toBe("digichat:ready");
+  });
+
+  it("buildReadyMessage carries the page-context mode", () => {
+    expect(buildReadyMessage("silent")).toEqual({
+      type: "digichat:ready",
+      pageContext: "silent",
+    });
+    expect(buildReadyMessage("off")).toEqual({
+      type: "digichat:ready",
+      pageContext: "off",
+    });
+    expect(buildReadyMessage("visible")).toEqual({
+      type: "digichat:ready",
+      pageContext: "visible",
+    });
+    // Absent mode keeps the legacy shape (parent default = send).
+    expect(buildReadyMessage()).toEqual(READY_MESSAGE);
   });
 
   describe("resolveReadyTargetOrigin", () => {

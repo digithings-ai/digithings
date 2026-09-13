@@ -82,7 +82,7 @@ import { resolveAttributionPlacement, resolveEmbedUiFlags, shouldRenderEmbedBran
 import { DEFAULT_LANGUAGE_CODE, tryResolveLanguageInput } from "@/lib/languages";
 import { applyEmbedSeed } from "@/lib/embed-seed-apply";
 import {
-  READY_MESSAGE,
+  buildReadyMessage,
   isAllowedSeedParentOrigin,
   parseSeedMessage,
   resolveReadyTargetOrigin,
@@ -346,6 +346,8 @@ function EmbedChat({
     () => clientConfigFromEmbedTenant(tenantCfg),
     [tenantCfg],
   );
+  /** Deploy `features.pageContext` — off / silent / visible (default). */
+  const pageContextMode = stockClient.features.pageContext;
   const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
     ...DEFAULT_EMBED_CHAT_PREFS,
     extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
@@ -697,8 +699,8 @@ function EmbedChat({
       });
       return;
     }
-    window.parent.postMessage(READY_MESSAGE, target);
-  }, []);
+    window.parent.postMessage(buildReadyMessage(pageContextMode), target);
+  }, [pageContextMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -739,8 +741,18 @@ function EmbedChat({
   // Popup widget (#3421): accept visible-page context from the immediate parent
   // after digichat:ready. Not first-party-only — registered third-party hosts
   // describe their own already-visible DOM (no behind-auth scrape).
+  //
+  // features.pageContext `off`: no listener at all — `digichat:page-context`
+  // messages are ignored even if the parent keeps sending them.
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (pageContextMode === "off") {
+      // Drop any snapshot that arrived before the config resolved. Deferred
+      // out of the effect body — react-hooks/set-state-in-effect.
+      pageContextRef.current = null;
+      queueMicrotask(() => setPageContextAttached(false));
+      return;
+    }
     const ancestorOrigins =
       "ancestorOrigins" in window.location ? window.location.ancestorOrigins : null;
     const parentOrigin = resolveReadyTargetOrigin({
@@ -757,7 +769,7 @@ function EmbedChat({
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, []);
+  }, [pageContextMode]);
 
   // The upstream conversation id is the useful handle (it maps to the real backend
   // conversation); fall back to nothing rather than blocking the gate.
@@ -959,7 +971,9 @@ function EmbedChat({
         });
       },
       takePendingPageContextAttachment: () =>
-        pageContextCreateAttachment(pageContextRef.current),
+        pageContextCreateAttachment(
+          pageContextMode === "off" ? null : pageContextRef.current,
+        ),
     }),
     [
       gate.locked,
@@ -970,6 +984,7 @@ function EmbedChat({
       llmAccess,
       byokIsSet,
       accent,
+      pageContextMode,
     ],
   );
 
@@ -1257,7 +1272,17 @@ function PageContextComposerBridge({
     if (consumedTsRef.current === contextTs) return;
     if (addedTsRef.current === contextTs) return;
     addedTsRef.current = contextTs;
-    void aui.composer.addAttachment(attachment);
+    // A newer snapshot REPLACES the previous page-context chip — appending
+    // stacked one chip per parent post instead of one current snapshot.
+    void (async () => {
+      const existing = aui.composer.getState().attachments ?? [];
+      for (const a of existing) {
+        if (a.name === attachment.name) {
+          await aui.composer.attachment({ id: a.id }).remove();
+        }
+      }
+      await aui.composer.addAttachment(attachment);
+    })();
   }, [attachment, contextTs, aui]);
   return null;
 }
