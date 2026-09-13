@@ -202,6 +202,8 @@ Preferred remediation, in order:
 2. Swap the dependency if no fix is available.
 3. Only then: add to `pip-audit-ignore.txt` with justification.
 
+This policy covers vulnerabilities only. Third-party **license** obligations — including recorded acceptances of weak-copyleft dependencies — are handled separately in [docs/LICENSING.md](docs/LICENSING.md).
+
 ## PR security rubric
 
 Every pull request is expected to pass the `docs/scoring/SECURITY.md` rubric at ≥ 8/10 before merge. Doc-only PRs touching `SECURITY.md` itself are excluded from auto-merge (see [docs/agent-backlog/AUTOMERGE.md](docs/agent-backlog/AUTOMERGE.md)).

@@ -43,8 +43,9 @@ import {
   PUBLIC_REALIZED_ATTRIBUTION_VIEW,
   AccountingNavContractError,
   accountingNavToHistoryShape,
-  currentNavRun,
+  chainNavContinuity,
   type AccountingNavRow,
+  type NavContinuityRow,
 } from './accounting-views';
 import {
   averageEntryAsOf,
@@ -395,19 +396,59 @@ function periodReturnPct(values: number[]): number | null {
   return roundPct((last / first - 1) * 100);
 }
 
-function buildPortfolioReturnSeries(
-  nav: ReadonlyArray<{ date: string; nav: number }>
-): PortfolioReturnPoint[] {
-  const sorted = [...nav].sort((a, b) => a.date.localeCompare(b.date));
-  const baseline = sorted.find((row) => Number.isFinite(row.nav) && row.nav > 0)?.nav;
-  if (baseline == null) return [];
-  return sorted
-    .filter((row) => Number.isFinite(row.nav) && row.nav > 0)
-    .map((row) => ({
-      date: row.date,
-      nav: row.nav,
-      returnPct: roundPct((row.nav / baseline - 1) * 100),
-    }));
+/** Gaps up to this many calendar days are non-trading stretches (weekend/holiday). */
+const CONTINUITY_MAX_FILL_DAYS = 4;
+
+function nextIsoDate(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10);
+}
+
+function calendarDaysBetween(start: string, end: string): number {
+  return Math.round(
+    (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000
+  );
+}
+
+/**
+ * Plot-ready NAV series for the tearsheet + Brief charts (#4014).
+ *
+ * Chains the accounting source runs onto one base-100 index (see
+ * {@link chainNavContinuity}) and forward-fills calendar gaps of up to
+ * `CONTINUITY_MAX_FILL_DAYS` from the last index value, so weekends and
+ * holidays stay continuous; longer gaps are missing book runs and are left as
+ * a jump rather than invented flat days.
+ */
+function buildContinuityNavSeries(rows: ReadonlyArray<NavContinuityRow>): PortfolioReturnPoint[] {
+  const chained = chainNavContinuity(rows);
+  if (chained.length === 0) return [];
+  const points: PortfolioReturnPoint[] = [];
+  for (let position = 0; position < chained.length; position += 1) {
+    const point = chained[position];
+    if (position > 0) {
+      const previous = chained[position - 1];
+      const gap = calendarDaysBetween(previous.date, point.date);
+      if (gap > 1 && gap - 1 <= CONTINUITY_MAX_FILL_DAYS) {
+        for (
+          let cursor = nextIsoDate(previous.date);
+          cursor < point.date;
+          cursor = nextIsoDate(cursor)
+        ) {
+          points.push({
+            date: cursor,
+            nav: roundPct(previous.nav),
+            returnPct: roundPct(previous.nav - 100),
+          });
+        }
+      }
+    }
+    points.push({
+      date: point.date,
+      nav: roundPct(point.nav),
+      returnPct: roundPct(point.nav - 100),
+    });
+  }
+  return points;
 }
 
 function buildBenchmarkComparisons(
@@ -624,30 +665,32 @@ export function buildPerformanceTearsheet(args: {
   snapshotDate?: string | null;
 }): PerformanceTearsheet {
   const navAsc = [...args.nav].sort((a, b) => a.date.localeCompare(b.date));
-  // #3767: annotate the plotted rows with the curated seam marker, then rebase
-  // on the current source run — never bridge legacy estimates to finalized
-  // accounting (false Sep-8 ~+10% jump).
+  // #3767 / #4014: carry the curated seam marker (and day return) onto every
+  // plotted row, then chain the runs — never bridge legacy estimates to
+  // finalized accounting (the false Sep-8 ~+10% jump), never hide the history.
   const seamByDate = new Map(
     (args.accountingNav ?? []).map((row) => [
       row.date,
-      { source: row.source, series_seam: row.series_seam },
+      {
+        source: row.source,
+        series_seam: row.series_seam === true,
+        day_return_pct: row.day_return_pct ?? null,
+      },
     ])
   );
-  const navSeries = buildPortfolioReturnSeries(
-    currentNavRun(
-      navAsc.map((row) => {
-        const seam = seamByDate.get(row.date);
-        return {
-          date: row.date,
-          nav: row.nav,
-          source: seam?.source ?? null,
-          series_seam: seam?.series_seam ?? null,
-        };
-      })
-    )
+  const navSeries = buildContinuityNavSeries(
+    navAsc.map((row) => {
+      const seam = seamByDate.get(row.date);
+      return {
+        date: row.date,
+        nav: row.nav,
+        source: seam?.source ?? null,
+        series_seam: seam?.series_seam ?? false,
+        day_return_pct: seam?.day_return_pct ?? null,
+      };
+    })
   );
-  // Rebased on the current source run — keep the displayed period honest with
-  // the since-inception KPI when a seam truncates the series.
+  // Chained across runs, so the chart and the since-inception KPI agree.
   const inceptionDate = navSeries[0]?.date ?? navAsc[0]?.date ?? null;
   const currentSnapshot = latestDateRows(args.positions);
   const marksByTicker = latestCloseByTicker(args.holdingMarks ?? []);

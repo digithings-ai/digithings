@@ -33,7 +33,10 @@ jobs:
       CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI || secrets.DIGI_CHECKPOINTER_POSTGRES_URI || secrets.MARKET_DATA_POSTGRES_URI }}
     steps:
       - uses: actions/checkout@v4
-      - run: uv sync --frozen --package digiquant --extra research
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --package digiquant --extra prices --extra research
       - run: uv run --frozen --no-sync python scripts/refresh_market_data_r2.py --manifest-out /tmp/market-data-refresh.json
       - uses: actions/upload-artifact@v4
         with:
