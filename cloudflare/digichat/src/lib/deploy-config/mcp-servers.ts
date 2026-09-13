@@ -142,6 +142,19 @@ export function isAllowedMcpServerUrl(raw: string): boolean {
   return !hostnameIsBlocked(u.hostname);
 }
 
+/**
+ * Session client URLs must be https. Parse rather than string-match so a valid
+ * mixed-case scheme (`HTTPS://host`) is accepted — WHATWG lowercases `protocol`,
+ * matching the `new URL`-based `isAllowedMcpServerUrl` check.
+ */
+function isHttpsUrl(raw: string): boolean {
+  try {
+    return new URL(raw).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export type McpServerForward = {
   id: string;
   url: string;
@@ -184,7 +197,7 @@ export function resolveMcpOAuthResourceUrl(opts: {
   if (op?.url) return op.url;
   if (!opts.allowUserServers) return "";
   const url = opts.clientUrl.trim();
-  if (!url.startsWith("https://") || !isAllowedMcpServerUrl(url)) return "";
+  if (!isHttpsUrl(url) || !isAllowedMcpServerUrl(url)) return "";
   return url;
 }
 
@@ -276,7 +289,7 @@ export function mergeMcpSessionOverlay(opts: {
     }
     if (!opts.allowSessionUrls) continue;
     const url = (item.url ?? "").trim();
-    if (!url.startsWith("https://") || !isAllowedMcpServerUrl(url)) continue;
+    if (!isHttpsUrl(url) || !isAllowedMcpServerUrl(url)) continue;
     if (sessionCount >= MAX_SESSION_SERVERS) continue;
     sessionCount += 1;
     const row: McpUpstreamServer = { id: item.id, url };
