@@ -682,7 +682,6 @@ function ToolFallbackApproval({
 
 const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   toolName,
-  args,
   argsText,
   result,
   status,
@@ -710,7 +709,7 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
     <ToolFallbackRoot open={open} onOpenChange={setOpen}>
       <ToolFallbackTrigger
         toolName={toolName}
-        title={toolRowTitle(toolName, args)}
+        title={toolRowTitle(toolName)}
         status={status}
       />
       <ToolFallbackContent>

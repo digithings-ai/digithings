@@ -11,6 +11,7 @@ import {
   MAX_SNIPPET_CHARS,
   MAX_BRIEF_THEMES,
   MAX_BRIEF_QUESTIONS,
+  standardPartsToSpans,
   type ActivitySpan,
 } from "./chat-activity";
 
@@ -883,5 +884,45 @@ describe("sanitizeActivitySpan toolResult", () => {
     );
     expect(out?.documentsWithheld).toBe(true);
     expect(out).toMatchObject({ toolResult: { count: 2 } });
+  });
+});
+
+describe("standardPartsToSpans tool status", () => {
+  it("maps an errored tool part to a failed span, not completed", () => {
+    const spans = standardPartsToSpans([
+      {
+        type: "dynamic-tool",
+        toolCallId: "t1",
+        toolName: "digivault_get_note",
+        state: "output-error",
+        input: { vault_paths: ["clients/digithings/a.md"] },
+        errorText: "Tool did not return a result before the stream ended.",
+      },
+    ] as unknown as UIMessage["parts"]);
+    expect(spans).toContainEqual({
+      operation: "execute_tool",
+      status: "failed",
+      label: "digivault_get_note",
+      toolName: "digivault_get_note",
+    });
+  });
+
+  it("maps a returned tool part to a completed span", () => {
+    const spans = standardPartsToSpans([
+      {
+        type: "dynamic-tool",
+        toolCallId: "t1",
+        toolName: "datatap__list_connections",
+        state: "output-available",
+        input: {},
+        output: { result: { connections: [] } },
+      },
+    ] as unknown as UIMessage["parts"]);
+    expect(spans).toContainEqual({
+      operation: "execute_tool",
+      status: "completed",
+      label: "datatap__list_connections",
+      toolName: "datatap__list_connections",
+    });
   });
 });

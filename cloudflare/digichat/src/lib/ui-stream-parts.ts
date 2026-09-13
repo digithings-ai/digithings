@@ -14,6 +14,9 @@ import { toolRowTitle } from "@/lib/adapters/digithings/activity/tool-display";
 /** Unbranded conversation-id part (Foundry continuity). Was data-externalConversation. */
 export const CONVERSATION_PART_TYPE = "data-conversation" as const;
 
+/** Error text on a tool row whose call started but never returned a result. */
+export const ABANDONED_TOOL_ERROR = "Tool did not return a result before the stream ended.";
+
 export type UiStreamWriter = {
   write: (chunk: UIMessageChunk) => void;
 };
@@ -216,6 +219,19 @@ function writeToolOutput(
   });
 }
 
+/**
+ * Settle a row whose result never arrived. `tool-output-error` is what flips
+ * the AI SDK / assistant-ui tool part to an error state; a
+ * `tool-output-available` with no result would render it as a success.
+ */
+function writeAbandonedTool(writer: UiStreamWriter, id: string): void {
+  writer.write({
+    type: "tool-output-error",
+    toolCallId: id,
+    errorText: ABANDONED_TOOL_ERROR,
+  });
+}
+
 function writeSource(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
@@ -321,16 +337,17 @@ export function writeStandardActivity(
 }
 
 /**
- * Close an open reasoning block and settle leftover tool rows. Rows still
- * open at stream end normally completed without a final trace — complete
- * them. When the stream itself errored (`failed`), mark them failed instead:
- * auto-completing orphans as success renders a lie (a "success" row whose
- * tool never returned).
+ * Close an open reasoning block and settle leftover tool rows. A row still
+ * open at stream end never returned a result — its completion trace never
+ * arrived — so it is settled as an error, not a success. Most `execute_tool`
+ * rows complete mid-stream via their result span; only genuine orphans reach
+ * this backstop (which exists so an Approve/Deny affordance cannot stick).
+ * Auto-completing them as `completed` renders a lie: a success row whose tool
+ * never returned.
  */
 export function finishStandardActivity(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
-  failed = false,
 ): void {
   closeOpenReasoning(writer, ctx);
   for (const [name, queue] of ctx.pendingByName) {
@@ -339,13 +356,13 @@ export function finishStandardActivity(
       const stored = ctx.inputById.get(id) ?? {};
       const span: ActivitySpan = {
         operation: "execute_tool",
-        status: failed ? "failed" : "completed",
+        status: "failed",
         label: name,
         toolName: name,
         ...(Object.keys(stored).length ? { toolInput: stored } : {}),
       };
       ensureToolInput(writer, ctx, id, name, span);
-      writeToolOutput(writer, ctx, id, span);
+      writeAbandonedTool(writer, id);
     }
   }
 }
