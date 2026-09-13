@@ -592,7 +592,9 @@ export async function getTradeIdeaArchive(): Promise<FxTradeIdeaRow[]> {
 }
 
 /** Idea lifecycle eval rows. Eval tables only — no core FX. */
-export async function getIdeaEval(): Promise<FxIdeaEvalRow[]> {
+export async function getIdeaEval(
+  opts: { netCarried?: boolean } = {},
+): Promise<FxIdeaEvalRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
   const rows = await querySupabase<FxIdeaEvalRow[]>((sb) =>
     sb
@@ -604,7 +606,11 @@ export async function getIdeaEval(): Promise<FxIdeaEvalRow[]> {
       .order('run_date', { ascending: true })
       .order('rank', { ascending: true }),
   );
-  return netCarriedIdeas(rows ?? []);
+  // netCarried:false returns the RAW rows — the track-record tab needs the
+  // un-netted carried boards so carriedCount stays honest. Default stays
+  // netted for the Trades board.
+  const { netCarried = true } = opts;
+  return netCarried ? netCarriedIdeas(rows ?? []) : (rows ?? []);
 }
 
 /** Consensus jump + accuracy eval rows. Eval tables only — no core FX / raw PMT. */

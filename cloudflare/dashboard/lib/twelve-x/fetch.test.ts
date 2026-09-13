@@ -4,6 +4,7 @@ import {
   assembleMatrix,
   boardColumn,
   calendarWindow,
+  getIdeaEval,
   getTodayEvents,
   getUpcomingEvents,
   localDateKey,
@@ -19,6 +20,7 @@ import type {
   FxConfluenceSnapshotRow,
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
+  FxIdeaEvalRow,
   FxLedgerRow,
   MatrixCell,
 } from './types';
@@ -40,6 +42,10 @@ const tradeIdeasDb = vi.hoisted(() => ({
   gte: [] as [string, string][],
   lte: [] as [string, string][],
   order: [] as [string, unknown][],
+}));
+
+const ideaEvalDb = vi.hoisted(() => ({
+  rows: [] as Partial<FxIdeaEvalRow>[],
 }));
 
 vi.mock('./supabase', () => {
@@ -75,10 +81,23 @@ vi.mock('./supabase', () => {
     };
     return builder;
   };
+  const makeIdeaEvalBuilder = (): TradeIdeasBuilder => {
+    const builder: TradeIdeasBuilder = {
+      select: () => builder,
+      eq: () => builder,
+      gte: () => builder,
+      lte: () => builder,
+      order: () => builder,
+      then: (onFulfilled) =>
+        Promise.resolve(onFulfilled({ data: ideaEvalDb.rows, error: null })),
+    };
+    return builder;
+  };
   return {
     isTwelveXConfigured: () => true,
     twelveXSupabase: {
       from: (table: string): TradeIdeasBuilder => {
+        if (table === 'fx_idea_eval') return makeIdeaEvalBuilder();
         if (table !== 'fx_trade_ideas_snapshot') throw new Error(`unexpected table: ${table}`);
         return makeBuilder();
       },
@@ -187,6 +206,38 @@ describe('getTradeIdeaHistory', () => {
     await getTradeIdeaHistory(10, '2026-08-20');
     expect(tradeIdeasDb.gte).toEqual([['run_date', '2026-08-10']]);
     expect(tradeIdeasDb.lte).toEqual([['run_date', '2026-08-20']]);
+  });
+});
+
+describe('getIdeaEval netCarried option', () => {
+  const carried = (run_date: string): Partial<FxIdeaEvalRow> => ({
+    run_date,
+    rank: 1,
+    horizon_days: 0,
+    pair: 'EUR/USD',
+    direction: 'long',
+    status: 'carried',
+    as_of: '2026-06-26T00:00:00Z',
+  });
+
+  beforeEach(() => {
+    ideaEvalDb.rows = [carried('2026-06-19'), carried('2026-06-26')];
+  });
+
+  afterEach(() => {
+    ideaEvalDb.rows = [];
+  });
+
+  it('nets same-axis carried boards by default (Trades board)', async () => {
+    const rows = await getIdeaEval();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].run_date).toBe('2026-06-26');
+  });
+
+  it('returns raw rows with netCarried:false (honest track-record carried count)', async () => {
+    const rows = await getIdeaEval({ netCarried: false });
+    expect(rows).toHaveLength(2);
+    expect(rows.filter((r) => r.status === 'carried')).toHaveLength(2);
   });
 });
 

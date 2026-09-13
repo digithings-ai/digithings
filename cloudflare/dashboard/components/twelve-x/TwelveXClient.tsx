@@ -6,6 +6,7 @@ import {
   CalendarDays,
   ClipboardList,
   Grid3x3,
+  History,
   LineChart as LineChartIcon,
   Workflow,
 } from 'lucide-react';
@@ -55,6 +56,7 @@ import EventsTab from './EventsTab';
 import HowItWorksTab from './HowItWorksTab';
 import MatrixTab from './MatrixTab';
 import TradesTab from './TradesTab';
+import TrackRecordTab from './TrackRecordTab';
 import BriefPanel from './BriefPanel';
 import TwelveXHeading from './TwelveXHeading';
 import { TwelveXProvider, type TwelveXContextValue, type CrossLink, type TwelveXTab } from './context';
@@ -67,6 +69,7 @@ export const TWELVE_X_TABS: ReadonlyArray<{ id: TwelveXTab; Icon: typeof Calenda
   { id: 'today', Icon: CalendarClock, label: 'Today' },
   { id: 'consensus', Icon: LineChartIcon, label: 'Consensus' },
   { id: 'trades', Icon: ClipboardList, label: 'Trades' },
+  { id: 'track-record', Icon: History, label: 'Track record' },
   { id: 'matrix', Icon: Grid3x3, label: 'Matrix' },
   { id: 'events', Icon: CalendarDays, label: 'Events' },
   { id: 'how-it-works', Icon: Workflow, label: 'How it works' },
@@ -149,13 +152,15 @@ interface TwelveXData {
   researchBriefs: FxBriefRow[];
   divergenceByCurrency: Record<string, FxConsensusDivergence>;
   ideaEval: FxIdeaEvalRow[];
+  /** Raw (un-netted) eval rows for the track-record tab's honest carried count. */
+  ideaEvalRaw: FxIdeaEvalRow[];
   consensusEval: FxConsensusEvalRow[];
 }
 
 export function resolveTab(urlTab: string | null): TwelveXTab {
   if (urlTab === 'consensus') return 'consensus';
   if (urlTab === 'trades') return 'trades';
-  if (urlTab === 'track-record') return 'trades'; // Legacy redirect
+  if (urlTab === 'track-record') return 'track-record';
   if (urlTab === 'intelligence') return 'consensus'; // Legacy redirect
   if (urlTab === 'events') return 'events';
   if (urlTab === 'matrix') return 'matrix';
@@ -282,6 +287,7 @@ export default function TwelveXClient() {
           matrix,
           researchBriefs,
           ideaEval,
+          ideaEvalRaw,
           consensusEval,
           tradeIdeaArchive,
         ] = await Promise.all([
@@ -292,6 +298,7 @@ export default function TwelveXClient() {
           getMatrix(),
           getBriefs(30),
           getIdeaEval(),
+          getIdeaEval({ netCarried: false }),
           getConsensusEval(),
           getTradeIdeaArchive(),
         ]);
@@ -329,6 +336,7 @@ export default function TwelveXClient() {
           researchBriefs,
           divergenceByCurrency,
           ideaEval,
+          ideaEvalRaw,
           consensusEval,
           tradeIdeaArchive,
         });
@@ -430,6 +438,14 @@ export default function TwelveXClient() {
           <TradesTab
             ideas={data?.tradeIdeaArchive ?? []}
             ideaEval={data?.ideaEval ?? []}
+            consensusEval={data?.consensusEval ?? []}
+          />
+        );
+      case 'track-record':
+        return (
+          <TrackRecordTab
+            ideas={data?.tradeIdeaArchive ?? []}
+            ideaEvalRaw={data?.ideaEvalRaw ?? []}
             consensusEval={data?.consensusEval ?? []}
           />
         );
