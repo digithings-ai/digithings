@@ -196,6 +196,19 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     onchain_asopr_path = _bitview_path(("ONCHAIN_ASOPR.csv", "BITVIEW_ASOPR.csv"), "asopr_24h")
     onchain_puell_path = _bitview_path(("ONCHAIN_PUELL.csv", "BITVIEW_PUELL.csv"), "puell_multiple")
     onchain_rhodl_path = _bitview_path(("ONCHAIN_RHODL.csv", "BITVIEW_RHODL.csv"), "rhodl_ratio")
+    # CoinMetrics' client caches under data/onchain/coinmetrics/ (sibling of
+    # data/price-history/, not inside it), same layout as Bitview above --
+    # check there before an explicit sibling file.
+    def _coinmetrics_path(csv_names: tuple[str, ...], cache_stem: str) -> Path | None:
+        path = _first_existing(base, csv_names)
+        if path is not None:
+            return path
+        cache = base.parent / "onchain" / "coinmetrics" / f"{cache_stem}.parquet"
+        return cache if cache.exists() else None
+
+    onchain_addr_ratio_path = _coinmetrics_path(
+        ("ONCHAIN_ADDR_RATIO.csv", "COINMETRICS_ADRACTCNT.csv"), "btc_AdrActCnt"
+    )
     m2_dates, m2_values = load_date_value_frame(m2_path) if m2_path else (None, None)
     eth_dates, eth_close = load_date_value_frame(eth_path) if eth_path else (None, None)
     dxy_dates, dxy_values = load_date_value_frame(dxy_path) if dxy_path else (None, None)
@@ -210,6 +223,9 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     )
     onchain_rhodl_dates, onchain_rhodl_values = (
         load_date_value_frame(onchain_rhodl_path) if onchain_rhodl_path else (None, None)
+    )
+    onchain_addr_ratio_dates, onchain_addr_ratio_values = (
+        load_date_value_frame(onchain_addr_ratio_path) if onchain_addr_ratio_path else (None, None)
     )
     return ExtraIndicatorSources(
         m2_dates=m2_dates,
@@ -226,6 +242,8 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
         onchain_puell_values=onchain_puell_values,
         onchain_rhodl_dates=onchain_rhodl_dates,
         onchain_rhodl_values=onchain_rhodl_values,
+        onchain_addr_ratio_dates=onchain_addr_ratio_dates,
+        onchain_addr_ratio_values=onchain_addr_ratio_values,
     )
 
 
@@ -249,6 +267,8 @@ def drop_extras_missing_sources(
         payload["onchain_puell"] = 0.0
     if payload["onchain_rhodl"] > 0.0 and sources.onchain_rhodl_dates is None:
         payload["onchain_rhodl"] = 0.0
+    if payload["onchain_addr_ratio"] > 0.0 and sources.onchain_addr_ratio_dates is None:
+        payload["onchain_addr_ratio"] = 0.0
     return SdcaCompositeWeights(**payload)
 
 
@@ -263,10 +283,12 @@ def load_sdca_extra_z(
     """Load independent extras from sibling files next to the BTC OHLCV CSV.
 
     Looks for ``M2SL.csv``/``M2.csv``, ``ETH-USD.csv``, ``DTWEXBGS.csv``/``DXY.csv``,
-    and four Bitview/BRK on-chain series -- MVRV, aSOPR, Puell Multiple, RHODL
+    four Bitview/BRK on-chain series -- MVRV, aSOPR, Puell Multiple, RHODL
     Ratio (``ONCHAIN_<NAME>.csv``/``BITVIEW_<NAME>.csv``, or the Bitview
-    client's own ``data/onchain/bitview/*.parquet`` caches). Missing files omit
-    that extra (trials that need it are skipped).
+    client's own ``data/onchain/bitview/*.parquet`` caches) -- and one
+    CoinMetrics series, the active-address ratio (``ONCHAIN_ADDR_RATIO.csv``/
+    ``COINMETRICS_ADRACTCNT.csv``, or ``data/onchain/coinmetrics/btc_AdrActCnt.parquet``).
+    Missing files omit that extra (trials that need it are skipped).
 
     ``oscillators`` defaults to ``SdcaOscillatorSpec()``'s production periods;
     pass an explicit spec to freeze the price-oscillator extras (weekly_rsi,
@@ -290,6 +312,7 @@ def load_sdca_extra_z(
         onchain_asopr=1.0 if sources.onchain_asopr_dates is not None else 0.0,
         onchain_puell=1.0 if sources.onchain_puell_dates is not None else 0.0,
         onchain_rhodl=1.0 if sources.onchain_rhodl_dates is not None else 0.0,
+        onchain_addr_ratio=1.0 if sources.onchain_addr_ratio_dates is not None else 0.0,
     )
     extra.update(extra_z_vectors(date_s, price_s, weights, sources, oscillators=oscillators))
     return extra

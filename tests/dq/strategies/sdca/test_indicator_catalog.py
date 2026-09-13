@@ -22,6 +22,7 @@ from digiquant.strategies.sdca.indicator_catalog import (
     extra_indicators_for_window,
     load_date_value_frame,
     m2_liquidity_z,
+    onchain_addr_ratio_z,
     onchain_asopr_z,
     onchain_mvrv_z,
     onchain_puell_z,
@@ -205,6 +206,42 @@ class TestNamedExtras:
         assert finite
         assert all(math.isfinite(v) for v in finite)
 
+    def test_onchain_addr_ratio_price_rising_addr_flat_is_negative_z(self) -> None:
+        """Price rising with flat active-address count -- ratio rises (more
+        expensive per network user) -- elevated ratio is overvalued/sell-favorable."""
+        n = 50
+        dates = _dates(n)
+        price = pl.Series([100.0 * (1.05**i) for i in range(n)])
+        addr = pl.Series([1000.0] * n)
+        z = onchain_addr_ratio_z(dates, price, dates, addr, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) < 0
+
+    def test_onchain_addr_ratio_addr_rising_price_flat_is_positive_z(self) -> None:
+        """Flat price with rising active-address count -- ratio falls (cheaper
+        per network user) -- depressed ratio is undervalued/buy-favorable."""
+        n = 50
+        dates = _dates(n)
+        price = pl.Series([100.0] * n)
+        addr = pl.Series([1000.0 * (1.05**i) for i in range(n)])
+        z = onchain_addr_ratio_z(dates, price, dates, addr, window=10, min_samples=8)
+        tail = [v for v in z.to_list() if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) > 0
+
+    def test_onchain_addr_ratio_zero_addr_warmup_does_not_produce_inf(self) -> None:
+        """Pre-adoption days report 0 active addresses -- must be nulled before
+        the divide, not just the resulting ratio, so it can't produce inf."""
+        n = 30
+        dates = _dates(n)
+        price = pl.Series([100.0] * n)
+        addr = pl.Series([0.0] * 10 + [1000.0 * (1.02**i) for i in range(n - 10)])
+        z = onchain_addr_ratio_z(dates, price, dates, addr, window=10, min_samples=5)
+        finite = [v for v in z.to_list() if v is not None]
+        assert finite
+        assert all(math.isfinite(v) for v in finite)
+
     def test_rs_eth_cheap_btc_is_positive_z(self) -> None:
         n = 50
         dates = _dates(n)
@@ -369,6 +406,35 @@ class TestBuildExtraIndicators:
                 SdcaCompositeWeights(power_law=1.0, m2=0.5),
                 ExtraIndicatorSources(),
             )
+
+    def test_positive_onchain_addr_ratio_weight_without_source_raises(self) -> None:
+        dates = _dates(30)
+        with pytest.raises(ValueError, match="onchain_addr_ratio"):
+            build_extra_indicators(
+                dates,
+                pl.Series([100.0] * 30),
+                SdcaCompositeWeights(power_law=1.0, onchain_addr_ratio=0.5),
+                ExtraIndicatorSources(),
+            )
+
+    def test_onchain_addr_ratio_wires_into_build_extra_indicators(self) -> None:
+        dates = _dates(30)
+        price = pl.Series([100.0] * 30)
+        addr = pl.Series([1000.0 + i for i in range(30)])
+        sources = ExtraIndicatorSources(onchain_addr_ratio_dates=dates, onchain_addr_ratio_values=addr)
+        extras = build_extra_indicators(
+            dates,
+            price,
+            SdcaCompositeWeights(power_law=1.0, onchain_addr_ratio=1.0),
+            sources,
+            window=10,
+            min_samples=5,
+        )
+        by_name = {e.name: e for e in extras}
+        assert "onchain_addr_ratio" in by_name
+        assert by_name["onchain_addr_ratio"].enabled
+        expected = onchain_addr_ratio_z(dates, price, dates, addr, window=10, min_samples=5)
+        assert by_name["onchain_addr_ratio"].z.to_list() == expected.to_list()
 
     def test_window_slice_keeps_alignment(self) -> None:
         dates = [date(2020, 1, 1) + _dt.timedelta(days=i) for i in range(10)]

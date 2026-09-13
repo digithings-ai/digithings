@@ -23,6 +23,15 @@ pre-history warmup days report ``0.0`` (chain history too short to compute
 the ratio yet); those are treated as missing rather than logged, same as
 any other pre-coverage gap.
 
+``onchain_addr_ratio`` shares the same transform but is a different signal
+class: the four series above are all price-derived valuation transforms
+(realized cap, spent-output profit, issuance cost, coin-age); this instead
+prices BTC against network usage — CoinMetrics' daily active-address count
+(``AdrActCnt``, free/no-auth, full history back to 2010) — via
+``btc_price / active_addresses`` (an NVT/Metcalfe-ratio-style valuation),
+computed here rather than fetched pre-derived. Research-only until it
+clears the Phase B playbook (see ``RESEARCH_STATE.md``).
+
 ``SdcaCompositeWeights`` defaults ``power_law=1``, extras ``0`` (disabled,
 excluded from the blend). Published ``btc_sdca`` in ``settings.json`` turns
 on M2, DXY, and weekly log-MACD — see ``btc_richer_composite.json``. (That
@@ -76,6 +85,7 @@ MACRO_INDICATOR_NAMES: tuple[str, ...] = (
     "onchain_asopr",
     "onchain_puell",
     "onchain_rhodl",
+    "onchain_addr_ratio",
 )
 PRICE_OSCILLATOR_NAMES: tuple[str, ...] = (
     "weekly_rsi",
@@ -103,6 +113,7 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "onchain_asopr": "onchain_asopr_weight",
     "onchain_puell": "onchain_puell_weight",
     "onchain_rhodl": "onchain_rhodl_weight",
+    "onchain_addr_ratio": "onchain_addr_ratio_weight",
     "weekly_rsi": "weekly_rsi_weight",
     "weekly_macd": "weekly_macd_weight",
     "sma_band": "sma_band_weight",
@@ -122,6 +133,7 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "onchain_asopr": "on-chain aSOPR",
     "onchain_puell": "on-chain Puell Multiple",
     "onchain_rhodl": "on-chain RHODL Ratio",
+    "onchain_addr_ratio": "on-chain price/active-address ratio",
     "weekly_rsi": "weekly RSI",
     "weekly_macd": "weekly log-MACD",
     "sma_band": "SMA band",
@@ -153,6 +165,10 @@ class SdcaCompositeWeights(BaseModel):
     onchain_asopr: float = Field(0.0, ge=0.0)
     onchain_puell: float = Field(0.0, ge=0.0)
     onchain_rhodl: float = Field(0.0, ge=0.0)
+    # CoinMetrics active-address ratio (btc_price / AdrActCnt) -- a network-usage
+    # signal, not a price-derived valuation transform like the four above.
+    # Research-only until validated via the Phase B playbook.
+    onchain_addr_ratio: float = Field(0.0, ge=0.0)
     weekly_rsi: float = Field(0.0, ge=0.0)
     weekly_macd: float = Field(0.0, ge=0.0)
     sma_band: float = Field(0.0, ge=0.0)
@@ -185,6 +201,7 @@ class SdcaCompositeWeights(BaseModel):
             ("onchain_asopr", self.onchain_asopr),
             ("onchain_puell", self.onchain_puell),
             ("onchain_rhodl", self.onchain_rhodl),
+            ("onchain_addr_ratio", self.onchain_addr_ratio),
             ("weekly_rsi", self.weekly_rsi),
             ("weekly_macd", self.weekly_macd),
             ("sma_band", self.sma_band),
@@ -222,6 +239,8 @@ class ExtraIndicatorSources(BaseModel):
     onchain_puell_values: pl.Series | None = None
     onchain_rhodl_dates: pl.Series | None = None
     onchain_rhodl_values: pl.Series | None = None
+    onchain_addr_ratio_dates: pl.Series | None = None
+    onchain_addr_ratio_values: pl.Series | None = None
 
 
 def composite_weights_from_params(params: Mapping[str, float | int | str]) -> SdcaCompositeWeights:
@@ -235,6 +254,7 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         onchain_asopr=float(params.get("onchain_asopr_weight", 0.0)),
         onchain_puell=float(params.get("onchain_puell_weight", 0.0)),
         onchain_rhodl=float(params.get("onchain_rhodl_weight", 0.0)),
+        onchain_addr_ratio=float(params.get("onchain_addr_ratio_weight", 0.0)),
         weekly_rsi=float(params.get("weekly_rsi_weight", 0.0)),
         weekly_macd=float(params.get("weekly_macd_weight", 0.0)),
         sma_band=float(params.get("sma_band_weight", 0.0)),
@@ -262,6 +282,7 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         onchain_asopr=float(payload.get("onchain_asopr", 0.0)),
         onchain_puell=float(payload.get("onchain_puell", 0.0)),
         onchain_rhodl=float(payload.get("onchain_rhodl", 0.0)),
+        onchain_addr_ratio=float(payload.get("onchain_addr_ratio", 0.0)),
         weekly_rsi=float(payload.get("weekly_rsi", 0.0)),
         weekly_macd=float(payload.get("weekly_macd", 0.0)),
         sma_band=float(payload.get("sma_band", 0.0)),
@@ -477,6 +498,34 @@ def onchain_rhodl_z(
     )
 
 
+def onchain_addr_ratio_z(
+    dates: pl.Series,
+    btc_price: pl.Series,
+    addr_dates: pl.Series,
+    addr_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Price-per-active-address ratio (NVT/Metcalfe-style) -- see module
+    docstring and ``_log_ratio_sign_flipped_z``. Unlike the four on-chain
+    series above, the ratio isn't fetched pre-derived: ``addr_values`` is
+    CoinMetrics' raw daily active-address count (``AdrActCnt``), so the
+    ratio is computed here. Pre-adoption days report 0 addresses; those are
+    nulled *before* the divide (not just the resulting ratio) so a zero
+    denominator can't produce ``inf`` before ``_log_ratio_sign_flipped_z``
+    ever sees it.
+    """
+    addr_aligned = align_to_dates(dates, addr_dates, addr_values, forward_fill=True)
+    positive_addr = pl.DataFrame({"value": addr_aligned}).select(
+        pl.when(pl.col("value") > 0).then(pl.col("value")).otherwise(None)
+    )["value"]
+    ratio = (btc_price / positive_addr).alias("value")
+    return _log_ratio_sign_flipped_z(
+        dates, dates, ratio, window=window, min_samples=min_samples, name="onchain_addr_ratio"
+    )
+
+
 def build_extra_indicators(
     dates: pl.Series,
     btc_price: pl.Series,
@@ -634,6 +683,26 @@ def build_extra_indicators(
                     min_samples=min_samples,
                 ),
                 weight=enabled["onchain_rhodl"],
+            )
+        )
+    if "onchain_addr_ratio" in enabled:
+        addr_dates = _require_pair(
+            sources.onchain_addr_ratio_dates,
+            sources.onchain_addr_ratio_values,
+            "onchain_addr_ratio",
+        )
+        extras.append(
+            IndicatorWeight(
+                name="onchain_addr_ratio",
+                z=onchain_addr_ratio_z(
+                    dates,
+                    btc_price,
+                    addr_dates,
+                    sources.onchain_addr_ratio_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["onchain_addr_ratio"],
             )
         )
     if allowlist is None or "weekly_rsi" in allowlist:
@@ -928,6 +997,7 @@ __all__ = [
     "load_date_value_frame",
     "m2_liquidity_z",
     "missing_extra_names",
+    "onchain_addr_ratio_z",
     "onchain_asopr_z",
     "onchain_mvrv_z",
     "onchain_puell_z",
