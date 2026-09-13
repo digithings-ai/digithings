@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.models import WorkflowRequest, WorkflowResult
-from digigraph.workflow import run_digigraph_workflow
+from digigraph.workflow import _workflow_result_from_state, run_digigraph_workflow
 
 
 @pytest.mark.unit
@@ -238,3 +238,126 @@ def test_streaming_digigraph_error_channel_always_emits() -> None:
         ("error", {"code": "free_quota_exceeded", "message": quota_message})
     ]
     assert not any(e[0] == "content" for e in with_code)
+
+
+def _backtest_state(**overrides: object) -> dict:
+    """Graph state carrying one digiquant BacktestResult (defaults to status=ok)."""
+    backtest: dict = {
+        "run_id": "run-1",
+        "strategy_name": "ema_cross",
+        "symbols": ["BTC-USD"],
+        "start_time": "2024-01-01T00:00:00",
+        "end_time": "2024-06-01T00:00:00",
+        "total_pnl": 100.0,
+        "total_return_pct": 5.0,
+        "sharpe_ratio": None,
+        "max_drawdown_pct": -3.0,
+        "num_trades": 12,
+        "status": "ok",
+        "message": "",
+    }
+    backtest.update(overrides)
+    return {"error": None, "error_code": None, "backtest_result": backtest}
+
+
+@pytest.mark.unit
+class TestHonestBacktestStatus:
+    """#3877: digiquant status=partial is success-with-warnings, never a failure."""
+
+    def test_partial_backtest_is_success_with_warning(self) -> None:
+        result = _workflow_result_from_state(
+            _backtest_state(status="partial", message="missing sharpe_ratio")
+        )
+        assert result.success is True
+        assert "partial" in result.message.lower()
+        # The warning names the missing metric, so an operator can see what degraded.
+        assert "missing sharpe_ratio" in result.message
+        assert result.backtest_result is not None
+
+    def test_error_backtest_stays_failure_and_says_failed(self) -> None:
+        result = _workflow_result_from_state(
+            _backtest_state(status="error", message="pnl parse failed")
+        )
+        assert result.success is False
+        assert "fail" in result.message.lower()
+        assert "completed" not in result.message.lower()
+        assert "pnl parse failed" in result.message
+
+    def test_ok_backtest_message_is_unchanged(self) -> None:
+        result = _workflow_result_from_state(_backtest_state(status="ok"))
+        assert result.success is True
+        assert result.message.startswith("Backtest completed:")
+
+    def test_derived_success_boolean_is_preferred(self) -> None:
+        """digiquant's derived BacktestResult.success (status != error) wins when present."""
+        partial = _workflow_result_from_state(_backtest_state(status="partial", success=True))
+        assert partial.success is True
+        degraded = _workflow_result_from_state(_backtest_state(status="ok", success=False))
+        assert degraded.success is False
+
+    def test_error_status_overrides_derived_success_true(self) -> None:
+        result = _workflow_result_from_state(_backtest_state(status="error", success=True))
+        assert result.success is False
+
+
+@pytest.mark.unit
+class TestHonestEmptyRunResult:
+    """An empty run must never be reported as a fabricated success."""
+
+    def test_empty_run_is_failure_not_fabricated_success(self) -> None:
+        result = _workflow_result_from_state({"error": None})
+        assert result.success is False
+        assert result.error_code == "empty_result"
+        assert "Research completed" not in result.message
+        assert result.backtest_result is None
+
+    def test_real_research_response_still_succeeds(self) -> None:
+        result = _workflow_result_from_state(
+            {"error": None, "research_response": "Here is your answer."}
+        )
+        assert result.success is True
+        assert result.message == "Here is your answer."
+
+
+@pytest.mark.unit
+class TestHonestStreamingRunStatus:
+    """The SSE fallback must not fabricate content for an empty run."""
+
+    @staticmethod
+    def _collect_events(final: dict) -> list[tuple]:
+        from queue import Queue
+        from types import SimpleNamespace
+
+        from digigraph.workflow import run_digigraph_workflow_streaming
+
+        queue: Queue = Queue()
+        with patch("digigraph.workflow.build_workflow_graph") as m_build:
+            m_build.return_value.stream.return_value = iter([])
+            m_build.return_value.get_state.return_value = SimpleNamespace(values=final)
+            run_digigraph_workflow_streaming(WorkflowRequest(prompt="test"), queue)
+        events: list[tuple] = []
+        while not queue.empty():
+            events.append(queue.get_nowait())
+        return events
+
+    def test_empty_run_emits_error_not_fabricated_content(self) -> None:
+        events = self._collect_events({"error": None})
+        assert not any(e[0] == "content" for e in events)
+        errors = [e for e in events if e[0] == "error"]
+        assert len(errors) == 1
+        assert errors[0][1]["code"] == "empty_result"
+        assert errors[0][1]["message"]
+        assert "Research completed" not in errors[0][1]["message"]
+        assert events[-1] == ("done", None)
+
+    def test_research_response_still_streams_content(self) -> None:
+        events = self._collect_events({"error": None, "research_response": "the answer"})
+        contents = [e[1] for e in events if e[0] == "content"]
+        assert contents == ["the answer"]
+        assert not any(e[0] == "error" for e in events)
+
+    def test_backtest_only_run_still_streams_backtest_summary(self) -> None:
+        events = self._collect_events(_backtest_state(status="ok"))
+        contents = [e[1] for e in events if e[0] == "content"]
+        assert contents and "Backtest completed" in contents[0]
+        assert not any(e[0] == "error" for e in events)
