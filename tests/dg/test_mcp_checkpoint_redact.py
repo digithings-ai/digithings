@@ -29,6 +29,40 @@ def test_redact_mcp_servers_value_strips_token_keeps_auth() -> None:
 
 
 @pytest.mark.unit
+def test_redact_mcp_servers_value_strips_nested_denylisted_keys_keeps_public() -> None:
+    """Any secret-named key (not just ``token``) is stripped, recursively (#3969)."""
+    servers = [
+        {
+            "id": "s",
+            "url": "https://mcp.example/mcp",
+            "auth": "oauth",
+            "authorization": "Bearer top-level",
+            "api_key": "key-123",
+            "client_secret": "cs-456",
+            "headers": {"Authorization": "Bearer nested", "X-Trace": "keep"},
+            "auth_config": {"type": "oauth", "client_secret": "nested-cs"},
+            "items": [{"refresh_token": "rt-789", "label": "keep"}],
+        }
+    ]
+    out = redact_mcp_servers_value(servers)
+    assert out == [
+        {
+            "id": "s",
+            "url": "https://mcp.example/mcp",
+            "auth": "oauth",
+            "headers": {"X-Trace": "keep"},
+            "auth_config": {"type": "oauth"},
+            "items": [{"label": "keep"}],
+        }
+    ]
+    # in-request original still carries the secrets
+    assert servers[0]["authorization"] == "Bearer top-level"
+    assert servers[0]["headers"]["Authorization"] == "Bearer nested"
+    assert servers[0]["auth_config"]["client_secret"] == "nested-cs"
+    assert servers[0]["items"][0]["refresh_token"] == "rt-789"
+
+
+@pytest.mark.unit
 def test_redact_checkpoint_payload_omits_token() -> None:
     fake_token = "tok"
     checkpoint = {
@@ -108,3 +142,28 @@ def test_redacting_checkpointer_put_strips_token_from_durable_payload() -> None:
         task_id="task-1",
     )
     assert fake_token not in repr(inner.writes[0])
+
+
+@pytest.mark.unit
+def test_redacting_checkpointer_setup_forwards_to_inner() -> None:
+    """``setup()`` is proxied for parity with the wrapped saver (#3969)."""
+    calls: list[str] = []
+
+    class _FakeSaverWithSetup:
+        def setup(self) -> None:
+            calls.append("setup")
+
+    saver = McpTokenRedactingCheckpointer(_FakeSaverWithSetup())
+    saver.setup()
+    assert calls == ["setup"]
+
+
+@pytest.mark.unit
+def test_redacting_checkpointer_setup_noop_when_inner_lacks_setup() -> None:
+    """An inner saver without ``setup`` (e.g. MemorySaver) must not raise."""
+
+    class _FakeSaverNoSetup:
+        pass
+
+    saver = McpTokenRedactingCheckpointer(_FakeSaverNoSetup())
+    saver.setup()
