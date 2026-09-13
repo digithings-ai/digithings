@@ -118,6 +118,8 @@ def _fetch_table(
     house_id: str,
     cols: str,
     workspace_scoped: bool = True,
+    tickers: list[str] | None = None,
+    min_date: str = "",
     page_size: int = _MAX_ROWS,
     max_rows: int = _MAX_ROWS,
 ) -> list[dict]:
@@ -147,6 +149,11 @@ def _fetch_table(
     ``workspace_scoped=False`` is for market/reference tables (``price_history``)
     that carry no ``workspace_id`` column: applying a workspace predicate there
     raises PostgREST 42703 and kills the fetch (#3990).
+
+    ``tickers`` and ``min_date`` narrow a market-data scan to the book the
+    replay will trade (#4002): the house book spans a few dozen tickers while
+    ``price_history`` holds hundreds of thousands of rows, and fetching the
+    whole table every night is both slow and pointless.
     """
     selected = {c.strip() for c in cols.split(",")}
     has_ticker = "ticker" in selected
@@ -168,6 +175,10 @@ def _fetch_table(
             query = query.order("ticker")
         if workspace_scoped:
             query = query.eq("workspace_id", house_id)
+        if tickers:
+            query = query.in_("ticker", list(tickers))
+        if min_date:
+            query = query.gte("date", min_date)
         if last_key is not None:
             if has_ticker:
                 query = query.or_(_keyset_term(True, last_key))
@@ -213,41 +224,6 @@ def build_request(price_rows, position_rows, nav_rows):
         TargetWeight,
     )
 
-    closes: dict[tuple[str, str], Decimal] = {}
-    volumes: dict[tuple[str, str], Decimal] = {}
-    per_ticker: dict[str, list[OhlcvBar]] = {}
-    repaired = 0
-    for r in price_rows:
-        d = str(r["date"])
-        open_ = Decimal(str(r["open"]))
-        high = Decimal(str(r["high"]))
-        low = Decimal(str(r["low"]))
-        close = Decimal(str(r["close"]))
-        # Vendor bars can violate their own envelope: float-ULP close/low ties
-        # and open>high cents. Widen the envelope instead of aborting the
-        # nightly refresh; close is never rewritten (#3995).
-        repaired_high = max(high, open_, close)
-        repaired_low = min(low, open_, close)
-        if repaired_high != high or repaired_low != low:
-            repaired += 1
-        closes[(d, r["ticker"])] = close
-        volumes[(d, r["ticker"])] = Decimal(str(r.get("volume") or 0))
-        per_ticker.setdefault(r["ticker"], []).append(
-            OhlcvBar(
-                ts=datetime.fromisoformat(d).replace(tzinfo=timezone.utc),
-                open=open_,
-                high=repaired_high,
-                low=repaired_low,
-                close=close,
-                volume=Decimal(str(r.get("volume") or 0)),
-            )
-        )
-    if repaired:
-        print(f"WARN: widened OHLC bounds on {repaired} bar(s) (#3995)")
-    series = tuple(
-        InstrumentBarSeries(ticker=t, bars=tuple(per_ticker[t])) for t in sorted(per_ticker)
-    )
-
     book_by_date: dict[str, dict[str, Decimal]] = {}
     for r in position_rows:
         d = str(r["date"])
@@ -267,6 +243,81 @@ def build_request(price_rows, position_rows, nav_rows):
                 weights=tuple(TargetWeight(ticker=t, weight=w) for t, w in sorted(weights.items())),
             )
         )
+
+    grid = sorted(book_by_date)
+    schedule_tickers = sorted({t for entry in book_by_date.values() for t in entry})
+    if not grid or not schedule_tickers:
+        raise ValueError("position rows carry no book tickers/dates; refusing an empty replay grid")
+
+    closes: dict[tuple[str, str], Decimal] = {}
+    volumes: dict[tuple[str, str], Decimal] = {}
+    bars_by_ticker: dict[str, dict[str, OhlcvBar]] = {}
+    repaired = 0
+    for r in price_rows:
+        ticker = r["ticker"]
+        if ticker not in schedule_tickers:
+            continue
+        d = str(r["date"])
+        open_ = Decimal(str(r["open"]))
+        high = Decimal(str(r["high"]))
+        low = Decimal(str(r["low"]))
+        close = Decimal(str(r["close"]))
+        # Vendor bars can violate their own envelope: float-ULP close/low ties
+        # and open>high cents. Widen the envelope instead of aborting the
+        # nightly refresh; close is never rewritten (#3995).
+        repaired_high = max(high, open_, close)
+        repaired_low = min(low, open_, close)
+        if repaired_high != high or repaired_low != low:
+            repaired += 1
+        closes[(d, ticker)] = close
+        volumes[(d, ticker)] = Decimal(str(r.get("volume") or 0))
+        bars_by_ticker.setdefault(ticker, {})[d] = OhlcvBar(
+            ts=datetime.fromisoformat(d).replace(tzinfo=timezone.utc),
+            open=open_,
+            high=repaired_high,
+            low=repaired_low,
+            close=close,
+            volume=Decimal(str(r.get("volume") or 0)),
+        )
+    if repaired:
+        print(f"WARN: widened OHLC bounds on {repaired} bar(s) (#3995)")
+
+    # The strict contract needs one shared grid across instruments (#4002):
+    # walk each schedule ticker over the book dates and forward-fill a missing
+    # bar flat at the last close (volume 0) so a weekend/holiday book executes
+    # on the last mark instead of aborting the refresh.
+    series_bars: dict[str, list[OhlcvBar]] = {}
+    filled = 0
+    for ticker in schedule_tickers:
+        by_date = bars_by_ticker.get(ticker, {})
+        prior: OhlcvBar | None = None
+        bars: list[OhlcvBar] = []
+        for d in grid:
+            bar = by_date.get(d)
+            if bar is None:
+                if prior is None:
+                    raise ValueError(
+                        f"{ticker}: no price_history bar at or before {d} "
+                        "(cannot forward-fill a series before its first bar)"
+                    )
+                bar = OhlcvBar(
+                    ts=datetime.fromisoformat(d).replace(tzinfo=timezone.utc),
+                    open=prior.close,
+                    high=prior.close,
+                    low=prior.close,
+                    close=prior.close,
+                    volume=Decimal("0"),
+                )
+                filled += 1
+            prior = bar
+            bars.append(bar)
+        series_bars[ticker] = bars
+    if filled:
+        print(f"WARN: forward-filled {filled} missing bar(s) on the book grid (#4002)")
+
+    series = tuple(
+        InstrumentBarSeries(ticker=t, bars=tuple(series_bars[t])) for t in schedule_tickers
+    )
 
     return (
         PortfolioReplayRequest(
@@ -415,15 +466,26 @@ def main() -> int:
     house_id = str(house_workspace_id())
 
     try:
-        price_rows = _fetch_table(
-            sb,
-            "price_history",
-            house_id,
-            "date,ticker,open,high,low,close,volume",
-            workspace_scoped=False,
-        )
         position_rows = _fetch_table(sb, "positions", house_id, "date,ticker,weight_pct")
         nav_rows = _fetch_table(sb, "nav_history", house_id, "date,nav")
+        book_tickers = sorted(
+            {str(r["ticker"]) for r in position_rows if r.get("ticker") != "CASH"}
+        )
+        # The replay only trades the book (#4002): scan just those tickers from
+        # the first book date, not every row of the market table.
+        price_rows = (
+            _fetch_table(
+                sb,
+                "price_history",
+                house_id,
+                "date,ticker,open,high,low,close,volume",
+                workspace_scoped=False,
+                tickers=book_tickers,
+                min_date=min((str(r["date"]) for r in position_rows), default=""),
+            )
+            if book_tickers
+            else []
+        )
     except RuntimeError as exc:
         # Unstable/truncated pagination (#3803): never verify — and never
         # `--write` — against a partial series.
@@ -431,6 +493,9 @@ def main() -> int:
         return 2
     if not position_rows or not nav_rows:
         print("SKIP: no house positions/nav_history rows readable")
+        return 1
+    if not price_rows:
+        print("SKIP: no price_history rows for the book tickers")
         return 1
 
     request, _closes, recorded = build_request(price_rows, position_rows, nav_rows)

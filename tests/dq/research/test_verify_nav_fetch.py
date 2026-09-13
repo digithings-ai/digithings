@@ -505,3 +505,148 @@ class TestBarBoundsRepair:
         out = capsys.readouterr().out
         assert out.count("widened OHLC bounds") == 1
         assert "widened OHLC bounds on 2 bar(s)" in out
+
+
+class TestScheduleAlignedSeries:
+    """The replay contract needs one shared bar grid across instruments (#4002).
+
+    Price history is per-ticker: tickers start on different dates, unrelated
+    tickers sit in the table, and weekend/holiday books have no bars at all.
+    The request must restrict the series to the schedule tickers, use the book
+    dates as the grid, and forward-fill a hole flat at the last close so a
+    weekend book still executes on the last mark.
+    """
+
+    @staticmethod
+    def _price(date_: str, ticker: str, close: float, open_: float | None = None) -> dict:
+        open_value = close if open_ is None else open_
+        return {
+            "date": date_,
+            "ticker": ticker,
+            "open": open_value,
+            "high": max(open_value, close),
+            "low": min(open_value, close),
+            "close": close,
+            "volume": 1000,
+        }
+
+    def test_unrelated_tickers_are_excluded_from_the_series(self) -> None:
+        rows = [
+            self._price("2026-09-01", "AAA", 100.0),
+            self._price("2026-09-01", "BBB", 50.0),
+            self._price("2026-09-01", "ZZZ", 10.0),
+        ]
+        positions = [
+            {"date": "2026-09-01", "ticker": "AAA", "weight_pct": 60.0},
+            {"date": "2026-09-01", "ticker": "BBB", "weight_pct": 40.0},
+        ]
+        nav = [{"date": "2026-09-01", "nav": 100.0}]
+        request, _closes, _recorded = _mod.build_request(rows, positions, nav)
+        assert [s.ticker for s in request.series] == ["AAA", "BBB"]
+
+    def test_weekend_book_date_forward_fills_flat_bars(self) -> None:
+        rows = [
+            self._price("2026-09-04", "AAA", 100.0),
+            self._price("2026-09-08", "AAA", 110.0),
+            self._price("2026-09-04", "BBB", 50.0),
+            self._price("2026-09-08", "BBB", 55.0),
+        ]
+        positions = [
+            {"date": "2026-09-04", "ticker": "AAA", "weight_pct": 60.0},
+            {"date": "2026-09-04", "ticker": "BBB", "weight_pct": 40.0},
+            {"date": "2026-09-05", "ticker": "AAA", "weight_pct": 61.0},
+            {"date": "2026-09-05", "ticker": "BBB", "weight_pct": 39.0},
+            {"date": "2026-09-08", "ticker": "AAA", "weight_pct": 60.0},
+            {"date": "2026-09-08", "ticker": "BBB", "weight_pct": 40.0},
+        ]
+        nav = [
+            {"date": "2026-09-04", "nav": 100.0},
+            {"date": "2026-09-05", "nav": 100.0},
+            {"date": "2026-09-08", "nav": 103.0},
+        ]
+        request, _closes, _recorded = _mod.build_request(rows, positions, nav)
+        aaa = next(s for s in request.series if s.ticker == "AAA")
+        bbb = next(s for s in request.series if s.ticker == "BBB")
+        assert len(aaa.bars) == len(bbb.bars) == 3
+        assert [str(b.ts.date()) for b in aaa.bars] == ["2026-09-04", "2026-09-05", "2026-09-08"]
+        flat = aaa.bars[1]
+        assert flat.close == aaa.bars[0].close
+        assert flat.open == flat.high == flat.low == flat.close
+        assert flat.volume == 0
+        assert bbb.bars[1].close == bbb.bars[0].close
+
+    def test_ticker_hole_on_a_book_date_forward_fills_last_close(self) -> None:
+        rows = [
+            self._price("2026-09-04", "AAA", 100.0),
+            self._price("2026-09-08", "AAA", 110.0),
+            self._price("2026-09-04", "BBB", 50.0),
+            self._price("2026-09-05", "BBB", 51.0),
+            self._price("2026-09-08", "BBB", 55.0),
+        ]
+        positions = [
+            {"date": "2026-09-04", "ticker": "AAA", "weight_pct": 60.0},
+            {"date": "2026-09-04", "ticker": "BBB", "weight_pct": 40.0},
+            {"date": "2026-09-05", "ticker": "AAA", "weight_pct": 60.0},
+            {"date": "2026-09-05", "ticker": "BBB", "weight_pct": 40.0},
+            {"date": "2026-09-08", "ticker": "AAA", "weight_pct": 60.0},
+            {"date": "2026-09-08", "ticker": "BBB", "weight_pct": 40.0},
+        ]
+        nav = [
+            {"date": "2026-09-04", "nav": 100.0},
+            {"date": "2026-09-05", "nav": 100.0},
+            {"date": "2026-09-08", "nav": 103.0},
+        ]
+        request, _closes, _recorded = _mod.build_request(rows, positions, nav)
+        aaa = next(s for s in request.series if s.ticker == "AAA")
+        bbb = next(s for s in request.series if s.ticker == "BBB")
+        assert aaa.bars[1].close == aaa.bars[0].close
+        assert aaa.bars[1].volume == 0
+        assert bbb.bars[1].close == Decimal("51.0")
+
+    def test_ticker_without_a_bar_at_or_before_the_first_book_date_fails(self) -> None:
+        rows = [
+            self._price("2026-09-04", "AAA", 100.0),
+            self._price("2026-09-05", "BBB", 50.0),
+        ]
+        positions = [
+            {"date": "2026-09-04", "ticker": "AAA", "weight_pct": 60.0},
+            {"date": "2026-09-04", "ticker": "BBB", "weight_pct": 40.0},
+        ]
+        nav = [{"date": "2026-09-04", "nav": 100.0}]
+        with pytest.raises(ValueError, match="BBB"):
+            _mod.build_request(rows, positions, nav)
+
+    def test_fetch_table_scopes_tickers_and_min_date(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: list[Any] = []
+        original_table = FakeSupabaseClient.table
+
+        def spy_table(client: FakeSupabaseClient, name: str) -> Any:
+            query = original_table(client, name)
+            seen.append(query)
+            return query
+
+        monkeypatch.setattr(FakeSupabaseClient, "table", spy_table)
+        rows = [
+            self._price("2026-08-29", "AAA", 90.0),
+            self._price("2026-09-01", "AAA", 100.0),
+            self._price("2026-09-01", "BBB", 50.0),
+            self._price("2026-09-01", "ZZZ", 10.0),
+        ]
+        sb = FakeSupabaseClient(canned_reads={"price_history": rows})
+        out = _mod._fetch_table(
+            sb,
+            "price_history",
+            "house-id",
+            "date,ticker,open,high,low,close,volume",
+            workspace_scoped=False,
+            tickers=["AAA", "BBB"],
+            min_date="2026-09-01",
+        )
+        assert [(str(r["date"]), r["ticker"]) for r in out] == [
+            ("2026-09-01", "AAA"),
+            ("2026-09-01", "BBB"),
+        ]
+        for query in seen:
+            assert ("in_", "ticker", ["AAA", "BBB"]) in query._filters
+            assert ("gte", "date", "2026-09-01") in query._filters
+            assert all(col != "workspace_id" for _op, col, _val in query._filters)
