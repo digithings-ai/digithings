@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LivePriceMap, LiveQuote } from "./types";
-import { positionRowToLive } from "./quote-transforms";
+import { navRowToPoint, positionRowToLive } from "./quote-transforms";
 
 function seed(symbol: string, price: number, changePct: number): LiveQuote {
   return {
@@ -92,5 +92,25 @@ describe("positionRowToLive — public_price_latest seed fallback (#3447)", () =
     expect(pos.currentPrice).toBeNull();
     expect(pos.livePrice).toBeNull();
     expect(pos.isLive).toBe(false);
+  });
+});
+
+describe("navRowToPoint — series_seam threading (#3935)", () => {
+  it("carries the migration-123 series_seam flag off the accounting view", () => {
+    const point = navRowToPoint({
+      date: "2026-09-08",
+      nav: 110.74928206,
+      source: "finalized_accounting",
+      contract: "finalized_accounting",
+      series_seam: true,
+    });
+    expect(point?.seriesSeam).toBe(true);
+  });
+
+  it("treats a missing/false series_seam as not-a-seam", () => {
+    expect(
+      navRowToPoint({ date: "2026-09-07", nav: 99.92, series_seam: false })?.seriesSeam,
+    ).toBe(false);
+    expect(navRowToPoint({ date: "2026-09-07", nav: 99.92 })?.seriesSeam).toBe(false);
   });
 });

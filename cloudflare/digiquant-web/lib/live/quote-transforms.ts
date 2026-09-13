@@ -250,6 +250,7 @@ export function navRowToPoint(row: {
   day_return_pct?: unknown;
   source?: unknown;
   contract?: unknown;
+  series_seam?: unknown;
 }): NavPoint | null {
   const date = asStr(row.date);
   const nav = num(row.nav);
@@ -262,6 +263,7 @@ export function navRowToPoint(row: {
     dayReturnPct: num(row.day_return_pct),
     source: asStr(row.source),
     contract: asStr(row.contract),
+    seriesSeam: row.series_seam === true,
   };
 }
 
