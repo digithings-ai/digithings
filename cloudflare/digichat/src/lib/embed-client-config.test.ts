@@ -92,6 +92,18 @@ describe("resolveEmbedClientConfigFromParams", () => {
     );
   });
 
+  it("gives an unmatched host the restrictive default, never the tenant's BYOK/MCP/web-search flags", () => {
+    withRegistry();
+    const unmatched = resolveEmbedClientConfigFromParams(
+      "datatap-dev-secret",
+      "https://unmatched.example",
+    );
+    expect(unmatched.showByok).toBe(false);
+    expect(unmatched.webSearch).toBe(false);
+    expect(unmatched.mcp?.allowUserServers).toBe(false);
+    expect(unmatched.mcp?.allowAddForm).toBe(false);
+  });
+
   it("allows the first-party host without a token when the request origin is first-party", () => {
     withRegistry();
     const cfg = resolveEmbedClientConfigFromParams(
@@ -231,22 +243,41 @@ describe("DEFAULT_EMBED_TENANT_CONFIG", () => {
       "Ask about anything you need help with.",
     ]);
     expect(DEFAULT_EMBED_TENANT_CONFIG.attachments).toBe(true);
-    expect(DEFAULT_EMBED_TENANT_CONFIG.showByok).toBe(true);
-    expect(DEFAULT_EMBED_TENANT_CONFIG.webSearch).toBe(true);
     expect(DEFAULT_EMBED_TENANT_CONFIG.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
+    // Least-privilege fallback: unconfigured/unmatched hosts must not get BYOK,
+    // web search, or user MCP servers by default (regression #3852).
+    expect(DEFAULT_EMBED_TENANT_CONFIG.showByok).toBe(false);
+    expect(DEFAULT_EMBED_TENANT_CONFIG.webSearch).toBe(false);
     expect(DEFAULT_EMBED_TENANT_CONFIG.mcp).toEqual({
       servers: [],
-      allowUserServers: true,
-      allowAddForm: true,
+      allowUserServers: false,
+      allowAddForm: false,
     });
   });
 
   it("projects baseline mcp user-server flags through the deploy-config bridge", () => {
-    // The bridge replaces base.mcp wholesale (no spread), so a missing mcp on
-    // the legacy default would diverge from the deploy path (allowUserServers
-    // true). Both baselines must agree.
     const projected = clientConfigFromEmbedTenant(DEFAULT_EMBED_TENANT_CONFIG);
-    expect(projected.mcp.allowUserServers).toBe(true);
-    expect(projected.mcp.allowAddForm).toBe(true);
+    expect(projected.mcp.allowUserServers).toBe(false);
+    expect(projected.mcp.allowAddForm).toBe(false);
+    expect(projected.gate.showByok).toBe(false);
+    expect(projected.gate.webSearch).toBe(false);
+  });
+
+  it("still enables BYOK, web search, and user MCP servers for an explicitly-configured tenant", () => {
+    const cfg = toEmbedClientConfig({
+      slug: "configured",
+      theme: "dark",
+      attribution: false,
+      gateMode: "ungated",
+      activityDetail: "labels",
+      backend: { type: "digigraph" },
+      showByok: true,
+      webSearch: true,
+      mcp: { servers: [], allowUserServers: true, allowAddForm: true },
+    });
+    expect(cfg.showByok).toBe(true);
+    expect(cfg.webSearch).toBe(true);
+    expect(cfg.mcp?.allowUserServers).toBe(true);
+    expect(cfg.mcp?.allowAddForm).toBe(true);
   });
 });
