@@ -70,6 +70,20 @@
             "description": "Optional per-request signal that this completion needs tool_choice='required'. Also accepted via X-Require-Tool-Calls header. Combined with project agents.require_tool_calls and env DIGI_REQUIRE_TOOL_CALLS as a FLOOR (any true value wins) \u2014 unlike allowed_tools, this can only raise the requirement, never lower one the deployment already mandates.",
             "title": "Require Tool Calls"
           },
+          "research_system_prompt": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "deprecated": true,
+            "description": "Deprecated and IGNORED. Accepted only so clients that still send it do not get a 422; its value never reaches graph state. The research system prompt is operator-configured only \u2014 project config (agents.research_system_prompt) or the tenant corpus map (DIGI_TENANT_CORPUS_MAP) \u2014 so a caller cannot inject its own system prompt (CWE-639 / prompt injection).",
+            "title": "Research System Prompt"
+          },
           "session_id": {
             "anyOf": [
               {

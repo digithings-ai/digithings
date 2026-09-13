@@ -94,6 +94,18 @@ class ChatCompletionRequest(BaseModel):
             "vault/search hits and never replace them (#3420)."
         ),
     )
+    research_system_prompt: str | None = Field(
+        None,
+        max_length=4000,
+        deprecated=True,
+        description=(
+            "Deprecated and IGNORED. Accepted only so clients that still send it do not "
+            "get a 422; its value never reaches graph state. The research system prompt "
+            "is operator-configured only — project config (agents.research_system_prompt) "
+            "or the tenant corpus map (DIGI_TENANT_CORPUS_MAP) — so a caller cannot "
+            "inject its own system prompt (CWE-639 / prompt injection)."
+        ),
+    )
 
 
 class WorkflowRequest(BaseModel):
