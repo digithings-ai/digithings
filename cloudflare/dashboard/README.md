@@ -180,9 +180,14 @@ Holdings.
 `/portfolio/performance` applies the same flat grammar to the shared
 finance-tearsheet primitives. Its command band, contribution chart, position
 ledgers, and PDF action remain presentation over `nav_history`, `positions`,
-`portfolio_metrics`, `position_attribution`, `position_events`, and
-`price_history`. Contribution bars contain only tickers in the latest positive-weight
-book; the exact NAV return and selected benchmark remain separate line layers.
+`portfolio_metrics`, `position_attribution`,
+`public_daily_realized_attribution`, `position_events`, and `price_history`.
+Contribution bars read the finalized per-ticker daily contribution from
+`public_daily_realized_attribution` (#3956) so they no longer depend on
+`positions.current_price` enrichment arriving on time, falling back to the
+weight-times-mark accrual only when the view has no rows. Bars contain only
+tickers in the latest positive-weight book; the exact NAV return and selected
+benchmark remain separate line layers.
 Portfolio presentation changes must not introduce a second query path or replace
 that persisted truth model. Narrow finance chart panes reduce date axes to endpoint
 labels while preserving the complete print view.
