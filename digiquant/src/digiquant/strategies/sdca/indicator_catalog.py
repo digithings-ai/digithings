@@ -32,6 +32,21 @@ prices BTC against network usage — CoinMetrics' daily active-address count
 computed here rather than fetched pre-derived. Research-only until it
 clears the Phase B playbook (see ``RESEARCH_STATE.md``).
 
+``fast_crash_vol`` is a different signal class again: every extra above is a
+slow/structural valuation or on-chain read that lags a sharp price move by
+construction. This is deliberately fast instead — a short-window (default 14
+days, vs. ``DEFAULT_ROLLING_WINDOW``'s 90) realized volatility of daily log
+returns, then rolling-z-scored (``causal_rolling_z``, same as every other
+indicator here) and sign-flipped: a vol spike (crash or violent rally) reads
+sell/de-risk-favorable (−z), same convention as ``sma_band_z``. Tracking
+return *magnitude* rather than price level or distance-from-peak means it
+decays back toward 0 once daily swings shrink again, instead of staying
+pinned negative for as long as price sits below a recent high — so it does
+not keep fighting a slower indicator's "cheap, buy" read once a crash has
+bottomed. Research-only, unvalidated: not yet in
+``EXTRA_INDICATOR_NAMES``/settings.json pending the Phase B solo-validation
+gate.
+
 ``SdcaCompositeWeights`` defaults ``power_law=1``, extras ``0`` (disabled,
 excluded from the blend). Published ``btc_sdca`` in ``settings.json`` turns
 on M2, DXY, and weekly log-MACD — see ``btc_richer_composite.json``. (That
@@ -101,6 +116,10 @@ BTC_PLUGIN_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES
 EXTRA_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES + PRICE_OSCILLATOR_NAMES
 DEFAULT_ROLLING_WINDOW = 90
 _MIN_SAMPLES = 20
+# fast_crash_vol's raw realized-vol lookback -- short on purpose (see module
+# docstring); the z-normalization stage still reuses DEFAULT_ROLLING_WINDOW.
+_FAST_CRASH_VOL_WINDOW = 14
+_FAST_CRASH_VOL_MIN_SAMPLES = 7
 _RS_ETH_CONFLUENCE_SLOW_WEIGHT = 0.5
 _RS_ETH_CONFLUENCE_AGREEMENT_BOOST = 0.5
 _RS_ETH_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
@@ -121,6 +140,7 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "monthly_macd": "monthly_macd_weight",
     "weekly_monthly_rsi": "weekly_monthly_rsi_weight",
     "weekly_monthly_macd": "weekly_monthly_macd_weight",
+    "fast_crash_vol": "fast_crash_vol_weight",
 }
 
 # User-facing labels. The fallback (``name.replace("_", " ")``) covers every
@@ -141,6 +161,7 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "monthly_macd": "monthly log-MACD",
     "weekly_monthly_rsi": "weekly+monthly RSI",
     "weekly_monthly_macd": "weekly+monthly log-MACD",
+    "fast_crash_vol": "fast-crash volatility",
 }
 
 
@@ -185,6 +206,10 @@ class SdcaCompositeWeights(BaseModel):
     # Wired into build_extra_indicators below; research-only until validated.
     weekly_monthly_rsi: float = Field(0.0, ge=0.0)
     weekly_monthly_macd: float = Field(0.0, ge=0.0)
+    # Fast crash-detection vote (indicator_catalog.fast_crash_vol_z) -- short-window
+    # realized-vol z, sign-flipped. Research-only, unvalidated: not yet in
+    # EXTRA_INDICATOR_NAMES/settings.json pending the Phase B solo-validation gate.
+    fast_crash_vol: float = Field(0.0, ge=0.0)
 
     @model_validator(mode="after")
     def _at_least_one_positive(self) -> SdcaCompositeWeights:
@@ -209,6 +234,7 @@ class SdcaCompositeWeights(BaseModel):
             ("monthly_macd", self.monthly_macd),
             ("weekly_monthly_rsi", self.weekly_monthly_rsi),
             ("weekly_monthly_macd", self.weekly_monthly_macd),
+            ("fast_crash_vol", self.fast_crash_vol),
         )
 
     def enabled_extras(self) -> dict[str, float]:
@@ -262,6 +288,7 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         monthly_macd=float(params.get("monthly_macd_weight", 0.0)),
         weekly_monthly_rsi=float(params.get("weekly_monthly_rsi_weight", 0.0)),
         weekly_monthly_macd=float(params.get("weekly_monthly_macd_weight", 0.0)),
+        fast_crash_vol=float(params.get("fast_crash_vol_weight", 0.0)),
     )
 
 
@@ -290,6 +317,7 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         monthly_macd=float(payload.get("monthly_macd", 0.0)),
         weekly_monthly_rsi=float(payload.get("weekly_monthly_rsi", 0.0)),
         weekly_monthly_macd=float(payload.get("weekly_monthly_macd", 0.0)),
+        fast_crash_vol=float(payload.get("fast_crash_vol", 0.0)),
     )
 
 
@@ -524,6 +552,31 @@ def onchain_addr_ratio_z(
     return _log_ratio_sign_flipped_z(
         dates, dates, ratio, window=window, min_samples=min_samples, name="onchain_addr_ratio"
     )
+
+
+def fast_crash_vol_z(
+    dates: pl.Series,
+    btc_price: pl.Series,
+    *,
+    window: int = _FAST_CRASH_VOL_WINDOW,
+    min_samples: int = _FAST_CRASH_VOL_MIN_SAMPLES,
+    z_window: int = DEFAULT_ROLLING_WINDOW,
+    z_min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Short-window realized volatility of daily log returns, sign-flipped z.
+
+    See module docstring. ``window``/``min_samples`` control the raw
+    realized-vol lookback (short -- the fast-reacting part); the resulting
+    series is then rolling-z-scored against its own trailing history
+    (``z_window``/``z_min_samples``, ``causal_rolling_z`` as everywhere else)
+    and sign-flipped so an unusual vol spike reads sell-favorable (−z).
+    """
+    if dates.len() != btc_price.len():
+        raise ValueError("dates and btc_price must be the same length")
+    log_ret = btc_price.log() - btc_price.shift(1).log()
+    realized_vol = log_ret.rolling_std(window_size=window, min_samples=min_samples)
+    z = causal_rolling_z(realized_vol, window=z_window, min_samples=z_min_samples)
+    return (-z).alias("fast_crash_vol")
 
 
 def build_extra_indicators(
@@ -815,6 +868,15 @@ def build_extra_indicators(
                 enabled=weights.weekly_monthly_macd > 0.0,
             )
         )
+    if allowlist is None or "fast_crash_vol" in allowlist:
+        extras.append(
+            IndicatorWeight(
+                name="fast_crash_vol",
+                z=fast_crash_vol_z(dates, btc_price),
+                weight=weights.fast_crash_vol,
+                enabled=weights.fast_crash_vol > 0.0,
+            )
+        )
     return extras
 
 
@@ -993,6 +1055,7 @@ __all__ = [
     "dxy_z",
     "extra_indicators_for_window",
     "extra_z_vectors",
+    "fast_crash_vol_z",
     "indicator_display_name",
     "load_date_value_frame",
     "m2_liquidity_z",

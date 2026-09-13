@@ -361,6 +361,7 @@ class TestBuildExtraIndicators:
             "monthly_macd",
             "weekly_monthly_rsi",
             "weekly_monthly_macd",
+            "fast_crash_vol",
         }
         assert all(not e.enabled for e in extras)
 

@@ -1004,7 +1004,7 @@ class TestCatalogWiring:
             SdcaCompositeWeights(),
             ExtraIndicatorSources(),
         )
-        assert {e.name for e in extras} == set(PRICE_OSCILLATOR_NAMES)
+        assert {e.name for e in extras} == set(PRICE_OSCILLATOR_NAMES) | {"fast_crash_vol"}
         assert all(not e.enabled for e in extras)
 
     def test_positive_weekly_rsi_weight_emits_series(self) -> None:
@@ -1019,7 +1019,7 @@ class TestCatalogWiring:
             min_samples=10,
         )
         by_name = {e.name: e for e in extras}
-        assert set(by_name) == set(PRICE_OSCILLATOR_NAMES)
+        assert set(by_name) == set(PRICE_OSCILLATOR_NAMES) | {"fast_crash_vol"}
         assert by_name["weekly_rsi"].enabled
         assert not by_name["weekly_macd"].enabled
         assert not by_name["sma_band"].enabled
@@ -1037,7 +1037,7 @@ class TestCatalogWiring:
             min_samples=10,
         )
         by_name = {e.name: e for e in extras}
-        assert set(by_name) == set(PRICE_OSCILLATOR_NAMES)
+        assert set(by_name) == set(PRICE_OSCILLATOR_NAMES) | {"fast_crash_vol"}
         assert by_name["monthly_rsi"].enabled
         assert not by_name["monthly_macd"].enabled
         assert not by_name["weekly_rsi"].enabled
@@ -1055,7 +1055,7 @@ class TestCatalogWiring:
             min_samples=10,
         )
         by_name = {e.name: e for e in extras}
-        assert set(by_name) == set(PRICE_OSCILLATOR_NAMES)
+        assert set(by_name) == set(PRICE_OSCILLATOR_NAMES) | {"fast_crash_vol"}
         assert by_name["monthly_macd"].enabled
         assert not by_name["monthly_rsi"].enabled
         assert not by_name["weekly_macd"].enabled
