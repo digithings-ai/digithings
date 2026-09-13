@@ -17,7 +17,7 @@ not need persisted tokens.
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any
+from typing import Any  # score:allow untyped any — checkpoint JSON
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
@@ -51,7 +51,9 @@ _SECRET_KEY_SUFFIXES = ("_token", "_secret", "_password", "_api_key")
 
 
 def _is_secret_key(key: str) -> bool:
-    normalized = key.strip().lower()
+    # Normalize wire-style hyphenated header names (`X-API-Key`) to the
+    # underscore form the denylist is written in (`api_key`).
+    normalized = key.strip().lower().replace("-", "_")
     return normalized in _SECRET_KEY_NAMES or normalized.endswith(_SECRET_KEY_SUFFIXES)
 
 

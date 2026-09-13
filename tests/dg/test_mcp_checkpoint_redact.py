@@ -63,6 +63,40 @@ def test_redact_mcp_servers_value_strips_nested_denylisted_keys_keeps_public() -
 
 
 @pytest.mark.unit
+def test_redact_mcp_servers_value_strips_hyphenated_secret_keys() -> None:
+    """Wire-style hyphenated header names are normalized before matching (#3969).
+
+    ``X-API-Key`` is the codebase's own example auth header (``models.py``), so it
+    must not sneak a secret past a denylist that only knows ``api_key``.
+    """
+    servers = [
+        {
+            "id": "s",
+            "url": "https://mcp.example/mcp",
+            "X-API-Key": "key-123",
+            "headers": {
+                "x-api-key": "lower-key",
+                "X-Auth-Token": "auth-tok",
+                "x-client-secret": "cs-456",
+                "X-Trace": "keep",
+            },
+        }
+    ]
+    out = redact_mcp_servers_value(servers)
+    assert out == [
+        {
+            "id": "s",
+            "url": "https://mcp.example/mcp",
+            "headers": {"X-Trace": "keep"},
+        }
+    ]
+    # in-request original untouched
+    assert servers[0]["X-API-Key"] == "key-123"
+    assert servers[0]["headers"]["x-api-key"] == "lower-key"
+    assert servers[0]["headers"]["X-Auth-Token"] == "auth-tok"
+
+
+@pytest.mark.unit
 def test_redact_checkpoint_payload_omits_token() -> None:
     fake_token = "tok"
     checkpoint = {
