@@ -98,4 +98,18 @@ describe('TrackRecordTab', () => {
     expect(html).toContain('Bank vs quant');
     expect(html).toContain('Divergent-call accuracy');
   });
+
+  it('renders recent idea rows joined to their eval rows', () => {
+    const html = renderToStaticMarkup(
+      createElement(TrackRecordTab, {
+        ideas: [archiveRow({ run_date: '2026-06-26', rank: 1 })],
+        ideaEvalRaw: [idea({ run_date: '2026-06-26', rank: 1 })],
+        consensusEval: [],
+      }),
+    );
+    expect(html).toContain('Recent ideas · levels vs fix');
+    expect(html).toContain('resolved');
+    // LevelFixSection is client-fetched: static markup shows its loading state.
+    expect(html).toContain('Loading fix series');
+  });
 });

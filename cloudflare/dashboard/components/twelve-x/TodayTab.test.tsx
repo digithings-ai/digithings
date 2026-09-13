@@ -297,4 +297,10 @@ describe('TodayTab layout (Task 2.2)', () => {
     expect(html).toContain('data-disputes-line="true"');
     expect(html).toContain('The data disputes 1 of today');
   });
+
+  it('links to the track-record tab', () => {
+    const html = render({}, []);
+    expect(html).toContain('data-track-record-link="true"');
+    expect(html).toContain('Full track record');
+  });
 });
