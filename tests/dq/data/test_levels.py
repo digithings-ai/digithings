@@ -187,6 +187,17 @@ def test_augment_is_causal_at_every_row() -> None:
             assert sliced[col] == pytest.approx(row[col], abs=1e-12), (i, col)
 
 
+def test_augment_emits_no_lookahead_raw_columns() -> None:
+    # The raw fractal detectors consume future bars (shift(-j)); they must never
+    # be exposed on the public augment() frame. Only the shift(width)-confirmed
+    # pivot columns are causal and therefore emitted.
+    aug = augment(_fixture(160), LevelsConfig())
+    assert "_piv_high_raw" not in aug.columns
+    assert "_piv_low_raw" not in aug.columns
+    assert "piv_high" in aug.columns
+    assert "piv_low" in aug.columns
+
+
 def test_atr_stop_long_and_short_are_correct_side_of_ref() -> None:
     # 15 bars: ATR(14) is defined but Donchian(20)/regime(100) are not, so the
     # ATR branch is the only available stop.
@@ -385,6 +396,23 @@ def test_atr_branch_when_donchian_not_yet_defined() -> None:
     result = compute_levels(_monotonic_fixture(15), "long", LevelsConfig(), pair="EUR/USD")
     assert result.branch == "atr"
     assert "br=atr" in result.source_ref
+
+
+def test_reward_uncapped_flag_tracks_missing_opposite_structure() -> None:
+    # No pivot/Donchian target above a monotonic advance: reward is undefined and
+    # the structural stop is accepted uncapped by design.
+    uncapped = compute_levels(_monotonic_fixture(), "long", LevelsConfig(), pair="EUR/USD")
+    assert uncapped.as_dict()["reward_uncapped"] is True
+
+    # A resistance pivot above ref means a real R:R check actually ran.
+    checked = compute_levels(
+        _structural_fixture(support=99.0, resistance=102.0),
+        "long",
+        LevelsConfig(structural_buffer_atr=0.0),
+        pair="EUR/USD",
+    )
+    assert checked.branch == "pivot"
+    assert checked.as_dict()["reward_uncapped"] is False
 
 
 # ─── E3: Donchian branch + trail policy + regime scaling ─────────────────────

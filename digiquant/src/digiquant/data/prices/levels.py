@@ -249,9 +249,11 @@ def _donchian_exprs(cfg: LevelsConfig) -> list[pl.Expr]:
 def augment(df: pl.DataFrame, cfg: LevelsConfig) -> pl.DataFrame:
     """Attach every causal derivation column the engine consumes.
 
-    Exposed (not underscore-private) so causality is directly testable: the
-    value of each column at row *i* must equal the value computed from
-    ``df[: i + 1]`` alone.
+    Every returned column is causal: the value at row *i* equals the value
+    computed from ``df[: i + 1]`` alone. The raw fractal detectors consume
+    future bars (``shift(-j)``), so they exist only as intermediates here and
+    are dropped before return; the exposed ``piv_high``/``piv_low`` columns are
+    the ``shift(fractal_width)``-confirmed, knowable-only versions.
     """
     out = _normalize(df)
     if out.height < cfg.atr_len + 1:
@@ -270,7 +272,8 @@ def augment(df: pl.DataFrame, cfg: LevelsConfig) -> pl.DataFrame:
         ]
     )
     out = out.with_columns(_donchian_exprs(cfg))
-    return out
+    # Drop the non-causal raw detectors so the public frame is causal throughout.
+    return out.drop(["_piv_high_raw", "_piv_low_raw"])
 
 
 def _last_float(df: pl.DataFrame, column: str) -> float | None:
@@ -350,6 +353,12 @@ def compute_levels(
     Raises :class:`LevelsError` when the frame is too short or ATR is not yet
     defined, so callers can surface a structured error instead of a partial
     level set.
+
+    When no opposite structure exists the reward is undefined rather than zero:
+    the engine accepts the stop uncapped (open-sky breakout) instead of failing
+    an R:R check it cannot compute. The contract exposes that choice as the
+    ``reward_uncapped`` diagnostic (``true`` = no opposite structure, accepted
+    without an R:R check; ``false`` = a real R:R check ran).
     """
     cfg = cfg or LevelsConfig()
     if direction not in ("long", "short"):
@@ -393,10 +402,19 @@ def compute_levels(
     )
     reward_long = targets_above[0] if targets_above else None
     reward_short = targets_below[0] if targets_below else None
+    # True when there is no opposite structure, so the chosen stop was accepted
+    # without a bounded reward (and therefore without an R:R check).
+    reward = reward_long if direction == "long" else reward_short
+    reward_uncapped = reward is None
 
     # Branch preference: pivot structure > Donchian channel > ATR. A structural
-    # branch is only taken when its stop sits on the correct side and the
-    # nearest opposite structure clears the R:R floor.
+    # branch is taken when its stop sits on the correct side and either the
+    # nearest opposite structure clears the R:R floor or there is no opposite
+    # structure at all. In the latter case ``reward`` is ``None`` (undefined),
+    # which means the upside/downside is uncapped and the stop is accepted
+    # without an R:R check *by design* — an open-sky breakout has no structure
+    # to measure reward against. ``reward_uncapped`` in the contract records
+    # which branch of this rule applied.
     buffer = cfg.structural_buffer_atr * atr_value
     stop_value: float | None = None
     branch: str = "atr"
@@ -472,6 +490,7 @@ def compute_levels(
         branch=branch,
         pivot_count=pivot_count,
         asof=asof,
+        extras={"reward_uncapped": reward_uncapped},
     )
 
 
