@@ -20,7 +20,7 @@ import { selectBriefLedgerDayEvents } from '@/lib/brief-book-event';
 import { buildDisplayRationaleByTicker } from '@/lib/pm-rationale';
 import { committedBookDate } from '@/lib/dashboard-ssot';
 import { isCashTicker } from '@/lib/book-reconciliation';
-import { currentNavRun } from '@/lib/accounting-views';
+import { chainNavContinuity } from '@/lib/accounting-views';
 import {
   buildPerformanceSsotMeta,
   isLiveMarksOverlay,
@@ -44,9 +44,10 @@ function inceptionVsBenchmark(
   if (!ticker || snaps.length < 2) return null;
   const hist = benchmarks[ticker]?.history;
   if (!hist?.length) return null;
-  // #3767 / #3935: rebase on the current source run so the legacy→finalized
-  // seam never enters the vs-benchmark window (false Sep-8 excess).
-  const run = currentNavRun(snaps);
+  // #3767 / #4014: chain the source runs (same continuity index as the
+  // since-inception tile) so the legacy→finalized seam never enters the
+  // vs-benchmark window and the window spans the tracked history.
+  const run = chainNavContinuity(snaps);
   if (run.length < 2) return null;
   const sortedBench = [...hist].sort((a, b) => a.date.localeCompare(b.date));
   const first = run[0];

@@ -319,7 +319,7 @@ describe('performance SSOT (#3580)', () => {
     expect(meta.tipDayReturnPct).toBeNull();
   });
 
-  it('computes since-inception from the current source run, not across a seam (#3767)', () => {
+  it('chains the source runs for since-inception without crossing a seam (#3767 / #4014)', () => {
     const brief = persistedHeadlinesFromNav([
       {
         date: '2026-09-06',
@@ -354,11 +354,10 @@ describe('performance SSOT (#3580)', () => {
         series_seam: false,
       },
     ]);
-    expect(brief.sinceInceptionStartDate).toBe('2026-09-08');
-    expect(brief.sinceInceptionPct).toBeCloseTo(
-      (111.84928206 / 110.74928206 - 1) * 100,
-      5
-    );
+    expect(brief.sinceInceptionStartDate).toBe('2026-09-06');
+    // ~+0.91% chained from the legacy base — the seam row carries flat rather
+    // than bridging 99.92 to 110.75 (+10.8% phantom).
+    expect(brief.sinceInceptionPct).toBeCloseTo(0.9124, 3);
   });
 
   it('excludes the legacy→finalized seam from persisted excess/alpha/IR (#3935)', () => {
