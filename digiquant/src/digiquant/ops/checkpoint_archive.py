@@ -47,6 +47,18 @@ KEY_COLUMNS_BY_TABLE: dict[str, tuple[str, ...]] = {
     **BLOB_KEY_COLUMNS,
     "documents": DOCUMENT_KEY_COLUMNS,
 }
+# Unique ordering key per table so offset pagination is stable across pages.
+# Postgres gives no guaranteed order for an ORDER BY-less scan, so a `.range()`
+# page without a total order over rows can silently duplicate or skip rows
+# (#3954). Every paginated scan appends its table's tiebreak (skipping any
+# column the caller already ordered by).
+STABLE_ORDER_BY_TABLE: dict[str, tuple[str, ...]] = {
+    "archive_objects": ("archived_at", "r2_key"),
+    "checkpoints": ("thread_id", "checkpoint_ns", "checkpoint_id"),
+    "documents": DOCUMENT_KEY_COLUMNS,
+    "checkpoint_blobs": BLOB_KEY_COLUMNS["checkpoint_blobs"],
+    "checkpoint_writes": BLOB_KEY_COLUMNS["checkpoint_writes"],
+}
 
 
 class ArchiveVerifyError(RuntimeError):
@@ -74,12 +86,29 @@ def decompress_payload(blob: bytes) -> bytes:
     return zstd.decompress(blob[1:])
 
 
+def _is_missing_object_error(exc: BaseException) -> bool:
+    """True when *exc* means the R2 object key does not exist.
+
+    Reuses the market-data classifier
+    (:func:`digiquant.data.prices.r2_history.is_missing_object_error`) so a
+    missing pointer/generation is recognized identically here without importing
+    botocore (an archiver-only optional dependency). Imported lazily because
+    ``r2_history`` imports this module — a top-level import would cycle.
+    """
+    from digiquant.data.prices.r2_history import is_missing_object_error
+
+    return is_missing_object_error(exc)
+
+
 def resolve_payload(
     client: Any, store: StorageBackend, source_table: str, source_key: dict[str, Any]
 ) -> bytes:
     """Read-through: pointer → R2 GET → sha256 verify → decompress.
 
-    Raises :class:`ArchiveNotFoundError` when no pointer row exists — the
+    Raises :class:`ArchiveNotFoundError` when no pointer row exists, or when the
+    pointer exists but its R2 object is missing (evicted/garbage-collected — a
+    reader cannot distinguish that from never-archived). Other storage faults
+    propagate; :func:`read_archived_document` is the never-raise boundary. The
     caller is expected to have already checked Supabase directly.
     """
     query = client.table("archive_objects").select("*").eq("source_table", source_table)
@@ -89,7 +118,14 @@ def resolve_payload(
     if not rows:
         raise ArchiveNotFoundError(f"no archive pointer for {source_table} {source_key}")
     row = rows[0]
-    blob = store.get(row["r2_key"])
+    try:
+        blob = store.get(row["r2_key"])
+    except Exception as exc:  # classify the miss; real faults re-raise
+        if _is_missing_object_error(exc):
+            raise ArchiveNotFoundError(
+                f"archived object missing from bucket: {row['r2_key']}"
+            ) from exc
+        raise
     if hashlib.sha256(blob).hexdigest() != row["sha256"]:
         raise ArchiveVerifyError(f"stored object corrupted: {row['r2_key']}")
     return decompress_payload(blob)
@@ -100,8 +136,9 @@ def maybe_archive_store(store: StorageBackend | None) -> StorageBackend | None:
 
     Document readers take an optional ``store`` so unit tests can inject a
     fake; production callers omit it and read through the real bucket when
-    ``R2_*`` creds are present. Missing creds disable read-through silently —
-    callers keep their pre-archive missing-row behavior.
+    ``R2_*`` creds are present. Missing creds disable read-through, but the
+    hydration caller logs a warning so "archived but not hydrated" stays
+    observable rather than silently degrading every archived row to missing.
     """
     if store is not None:
         return store
@@ -122,14 +159,22 @@ def read_archived_document(
 ) -> Any:
     """Archived-document read-through for NULL-payload ``documents`` rows (#3792).
 
-    Returns the decoded JSON payload, or ``None`` on pointer-miss (row still
-    live in Supabase or never archived), checksum failure, or undecodable
-    bytes. Corruption degrades to a warning + ``None`` — the daily graph must
-    never hard-fail on an archived prior; the un-degraded signal is the
-    failed-archive alarm on the write path, not the read path.
+    Returns the decoded JSON payload, or ``None`` when read-through is disabled
+    (no R2 backend), the pointer/object is missing (row still live in Supabase,
+    never archived, or evicted), the registry query fails, the checksum fails,
+    or the bytes are undecodable. Every failure degrades to a warning + ``None``
+    — the daily graph must never hard-fail on an archived prior; the un-degraded
+    signal is the failed-archive alarm on the write path, not the read path.
     """
     backend = maybe_archive_store(store)
     if backend is None:
+        logger.warning(
+            "archive read-through disabled (no R2 backend); archived document "
+            "%s/%s/%s needs hydration but cannot be read — treating as missing",
+            workspace_id,
+            date_str,
+            document_key,
+        )
         return None
     try:
         raw = resolve_payload(
@@ -150,6 +195,15 @@ def read_archived_document(
             workspace_id,
             date_str,
             document_key,
+        )
+        return None
+    except Exception:  # never raise on a read path (documented contract)
+        logger.warning(
+            "archived document %s/%s/%s read-through failed; treating as missing",
+            workspace_id,
+            date_str,
+            document_key,
+            exc_info=True,
         )
         return None
     try:
@@ -189,15 +243,20 @@ def _scan_all(
 
     Every unbounded select silently truncates at 1000 rows, so key scans and
     ledger scans page explicitly with ``.range()`` — the same pattern as
-    :func:`archive_documents` (``DOC_SCAN_PAGE_SIZE``).
+    :func:`archive_documents` (``DOC_SCAN_PAGE_SIZE``). Pages carry a stable
+    total order (the caller's *order* plus the table's unique tiebreak) so
+    offset paging never duplicates or skips a row on an unordered table (#3954).
     """
+    stable_order = tuple(order) + tuple(
+        col for col in STABLE_ORDER_BY_TABLE.get(table, ()) if col not in order
+    )
     rows: list[dict[str, Any]] = []
     offset = 0
     while True:
         query = client.table(table).select(cols)
         for col, val in filters:
             query = query.eq(col, val)
-        for col in order:
+        for col in stable_order:
             query = query.order(col)
         page = query.range(offset, offset + DOC_SCAN_PAGE_SIZE - 1).execute().data or []
         rows.extend(page)
@@ -782,6 +841,7 @@ __all__ = [
     "MANAGED_PREFIXES",
     "PG_URI_ENV",
     "R2Backend",
+    "STABLE_ORDER_BY_TABLE",
     "StorageBackend",
     "archive_thread",
     "archive_documents",
