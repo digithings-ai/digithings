@@ -955,6 +955,28 @@ describe("mapFoundryEvent MCP items (#3861)", () => {
     });
   });
 
+  it("treats a JSON null MCP output as no result, not the string 'null'", () => {
+    expect(
+      mapFoundryEvent({
+        type: "response.output_item.done",
+        item: {
+          type: "mcp_call",
+          name: "datatap__list_connections",
+          arguments: "{}",
+          output: "null",
+        },
+      })
+    ).toEqual({
+      type: "activity",
+      span: {
+        operation: "execute_tool",
+        toolName: "datatap__list_connections",
+        status: "completed",
+        label: "datatap__list_connections",
+      },
+    });
+  });
+
   it("leaves mcp_approval_request unmapped (server-side auto-approve)", () => {
     expect(
       mapFoundryEvent({

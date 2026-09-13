@@ -1314,12 +1314,14 @@ completes mid-stream with its args + JSON Result pane (no per-tool UI;
 `mcp_call` item. `toolResult` passes the `labels` detail gate
 untouched (tenant's own tool output for the tenant's own user). Vault search `rag_sources` traces map through `mapDigivaultSearchNotes` (not the digisearch retrieve-with-no-docs path). A failed vault invoke is `execute_tool`/`failed`, never `{ hitCount: 0 }`. The website-like dogfood host
 (`config/examples/digithings-ai-embed.yaml`) sets `gate.activityDetail: full` and `backend.vaultPathPrefix: clients/digithings` so D1 FTS is scoped and chunks are
-not replaced by `{ documentsWithheld: true }`. Stable `toolName` values remain the exact MCP / backend tool ids, and tool rows render those ids verbatim — `toolRowTitle(toolName)` in digichat and `humanizeToolName(toolName)` in the gallery thread are identity functions by owner decision (raw backend names with underscores, one-to-one with the backend). The streamed `tool-input-start` title is dropped by the assistant-stream / assistant-ui converters before render, so both fallback surfaces derive the row label client-side from the exact id; provider span labels such as the Foundry `Searching knowledge base…` progress row still reach the wire but are not displayed. Each reasoning burst between tool rounds gets its own `reasoning-start` id so later thinking is not appended into the first block. `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are auto-completed at
-stream end so ordinary retrieve / get_note / search_notes never sit on Allow/Deny.
-When the stream itself errors, leftovers settle as `failed` (the Foundry
-adapter passes its error state through) — auto-completing orphans as success
-would render a row whose tool never returned.
-`tool-input-available` is emitted only with `tool-output-available` during the call. 1.4 `data-digichatActivity` is not
+not replaced by `{ documentsWithheld: true }`. Stable `toolName` values remain the exact MCP / backend tool ids, and tool rows render those ids verbatim — `toolRowTitle(toolName)` in digichat and `humanizeToolName(toolName)` in the gallery thread are identity functions by owner decision (raw backend names with underscores, one-to-one with the backend). The streamed `tool-input-start` title is dropped by the assistant-stream / assistant-ui converters before render, so both fallback surfaces derive the row label client-side from the exact id; provider span labels such as the Foundry `Searching knowledge base…` progress row still reach the wire but are not displayed. Each reasoning burst between tool rounds gets its own `reasoning-start` id so later thinking is not appended into the first block. `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are settled at
+stream end as errors (`tool-output-error`, error text `Tool did not return a
+result before the stream ended.`) so ordinary retrieve / get_note / search_notes
+never sit on Allow/Deny *and* a call whose result never arrived is not reported
+as completed. Only a real result (`tool-output-available`) marks a row
+`completed`; `standardPartsToSpans` maps an AI SDK `output-error` part back to a
+`failed` span.
+`tool-input-available` is emitted when a row settles — with `tool-output-available` for a real result, `tool-output-error` for an orphan. 1.4 `data-digichatActivity` is not
 written. Auth `chat-panel` and embed both
 render those parts through assistant-ui `MessagePrimitive.Parts`
 (`cli-message-parts.tsx`). Old branded parts hydrate via `LegacyActivityHydrate`

@@ -291,6 +291,9 @@ function parseMcpResult(value: unknown): Record<string, unknown> | unknown[] | n
     if (!trimmed) return undefined;
     try {
       const parsed = JSON.parse(trimmed) as unknown;
+      // JSON `null` parses to a value, but it is not a result. Returning the
+      // raw string here would render the literal text `null` as the output.
+      if (parsed === null) return undefined;
       if (parsed && typeof parsed === "object") return parsed as Record<string, unknown> | unknown[];
       if (typeof parsed === "number" && Number.isFinite(parsed)) return parsed;
     } catch {
@@ -774,7 +777,6 @@ export async function createFoundryStreamResponse(opts: {
     execute: async ({ writer }) => {
       const textId = "assistant-main";
       let textOpen = false;
-      let streamFailed = false;
       const activityCtx = createActivityWriteContext();
       const openText = () => {
         if (!textOpen) {
@@ -871,7 +873,6 @@ export async function createFoundryStreamResponse(opts: {
         }
       } catch (err) {
         if (opts.signal?.aborted) return;
-        streamFailed = true;
         openText();
         if (err instanceof FoundryProtocolError) {
           writer.write({
@@ -895,9 +896,9 @@ export async function createFoundryStreamResponse(opts: {
           });
         }
       } finally {
-        // Orphaned started rows settle as failed when the stream errored —
-        // auto-completing them as success would render a lie.
-        finishStandardActivity(writer, activityCtx, streamFailed);
+        // Orphaned started rows settle as failed — a row whose tool never
+        // returned must not render as a successful completion.
+        finishStandardActivity(writer, activityCtx);
         closeText();
       }
     },
