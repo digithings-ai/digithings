@@ -44,10 +44,11 @@ import {
   ACCOUNTING_NAV_VIEW,
   AccountingNavContractError,
 } from "./accounting-nav-contract";
+import { currentNavRun } from "./nav-seam";
 
 const POSITION_COLUMNS =
   "ticker, name, category, sector_bucket, weight_pct, entry_price, entry_date, current_price, day_change_pct, unrealized_pnl_pct, since_entry_return_pct, metrics_as_of";
-const NAV_COLUMNS = "date, nav, cash_pct, invested_pct, day_return_pct, source, contract";
+const NAV_COLUMNS = "date, nav, cash_pct, invested_pct, day_return_pct, source, contract, series_seam";
 const LANDING_BENCHMARK_TICKER = "SPY";
 
 export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePortfolioResult {
@@ -181,7 +182,9 @@ export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePor
     });
     return computeLivePerformanceKpis({
       positions: kpiPositions,
-      navHistory: nav.map((n) => ({ date: n.date, nav: n.nav })),
+      // #3767 / #3935: rebase on the current source run so the live-overlay
+      // inception and the β/IR estimator never cross a legacy→finalized seam.
+      navHistory: currentNavRun(nav).map((n) => ({ date: n.date, nav: n.nav })),
       benchmarkHistory,
       benchmarkTicker: benchmarkHistory.length ? LANDING_BENCHMARK_TICKER : null,
     });
