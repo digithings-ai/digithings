@@ -540,3 +540,4 @@ def test_workflow_installs_the_prices_extra_for_yahoo_fetches() -> None:
     steps = _workflow()["jobs"]["refresh"]["steps"]
     sync = next(str(step["run"]) for step in steps if "uv sync" in str(step.get("run", "")))
     assert "--extra prices" in sync
+    assert "--extra research" in sync
