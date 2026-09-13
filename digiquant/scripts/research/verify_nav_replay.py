@@ -216,19 +216,40 @@ def build_request(price_rows, position_rows, nav_rows):
     closes: dict[tuple[str, str], Decimal] = {}
     volumes: dict[tuple[str, str], Decimal] = {}
     per_ticker: dict[str, list[OhlcvBar]] = {}
+    widened = 0
     for r in price_rows:
         d = str(r["date"])
-        closes[(d, r["ticker"])] = Decimal(str(r["close"]))
+        op = Decimal(str(r["open"]))
+        hi = Decimal(str(r["high"]))
+        lo = Decimal(str(r["low"]))
+        cl = Decimal(str(r["close"]))
+        # Reconcile the envelope to the observed prices: vendor rows and
+        # float64 round-trips through PostgREST can put open/close just
+        # outside [low, high] (SPY 1993-02-12 is one ulp; ATOM-USD/DOT-USD
+        # 2026-09-11 close below the low), and OhlcvBar enforces the
+        # envelope — one poisoned row must not abort the whole NAV write
+        # (#3994). open/close are preserved: the engine marks and fills at
+        # close, so widening high/low cannot move NAV.
+        if hi < lo or op > hi or op < lo or cl > hi or cl < lo:
+            widened += 1
+            hi = max(hi, op, cl)
+            lo = min(lo, op, cl)
+        closes[(d, r["ticker"])] = cl
         volumes[(d, r["ticker"])] = Decimal(str(r.get("volume") or 0))
         per_ticker.setdefault(r["ticker"], []).append(
             OhlcvBar(
                 ts=datetime.fromisoformat(d).replace(tzinfo=timezone.utc),
-                open=Decimal(str(r["open"])),
-                high=Decimal(str(r["high"])),
-                low=Decimal(str(r["low"])),
-                close=Decimal(str(r["close"])),
+                open=op,
+                high=hi,
+                low=lo,
+                close=cl,
                 volume=Decimal(str(r.get("volume") or 0)),
             )
+        )
+    if widened:
+        print(
+            f"NOTE: widened OHLC envelope on {widened} price row(s) with "
+            "open/close outside [low, high] (vendor/float noise, #3994)"
         )
     series = tuple(
         InstrumentBarSeries(ticker=t, bars=tuple(per_ticker[t])) for t in sorted(per_ticker)
