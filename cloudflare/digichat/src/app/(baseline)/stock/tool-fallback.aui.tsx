@@ -61,6 +61,25 @@ export const formatToolDuration = (ms: number) => {
   return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s${whole}`;
 };
 
+/**
+ * assistant-ui's `toMessagePartStatus` returns `{ type: "complete" }` for any
+ * tool-call part with a defined `result` — even when `isError` is set, because
+ * an `output-error` part carries `result = { error }`. Derive the error state
+ * from `isError` so a failed or orphaned row does not render as success.
+ */
+function resolveToolStatus(
+  status: ToolCallMessagePartStatus | undefined,
+  isError: boolean | undefined,
+  result: unknown,
+): ToolCallMessagePartStatus | undefined {
+  if (!isError || status?.type === "incomplete") return status;
+  const error =
+    result && typeof result === "object" && "error" in result
+      ? (result as { error?: unknown }).error
+      : undefined;
+  return { type: "incomplete", reason: "error", error };
+}
+
 export type ToolFallbackRootProps = Omit<
   React.ComponentProps<typeof Collapsible>,
   "open" | "onOpenChange"
@@ -163,9 +182,15 @@ function ToolFallbackTrigger({
   const isRunning = statusType === "running";
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled";
+  const isErrorStatus =
+    status?.type === "incomplete" && status.reason === "error";
 
   const Icon = statusIconMap[statusType];
-  const label = isCancelled ? "Cancelled tool" : "Used tool";
+  const label = isCancelled
+    ? "Cancelled tool"
+    : isErrorStatus
+      ? "Failed tool"
+      : "Used tool";
 
   return (
     <CollapsibleTrigger
@@ -685,17 +710,24 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   argsText,
   result,
   status,
+  isError,
   addResult,
   resume,
   interrupt,
   approval,
   respondToApproval,
 }) => {
+  const effectiveStatus = resolveToolStatus(status, isError, result);
   const isCancelled =
-    status?.type === "incomplete" && status.reason === "cancelled";
-  const isRequiresAction = status?.type === "requires-action";
+    effectiveStatus?.type === "incomplete" &&
+    effectiveStatus.reason === "cancelled";
+  const isErrorStatus =
+    effectiveStatus?.type === "incomplete" &&
+    effectiveStatus.reason === "error";
+  const isRequiresAction = effectiveStatus?.type === "requires-action";
   const shouldRenderApproval =
-    isRequiresAction && offersInterruptAction(status, approval, interrupt);
+    isRequiresAction &&
+    offersInterruptAction(effectiveStatus, approval, interrupt);
 
   const [open, setOpen] = useState(isRequiresAction);
   const [prevRequiresAction, setPrevRequiresAction] =
@@ -710,10 +742,10 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
       <ToolFallbackTrigger
         toolName={toolName}
         title={toolRowTitle(toolName)}
-        status={status}
+        status={effectiveStatus}
       />
       <ToolFallbackContent>
-        <ToolFallbackError status={status} />
+        <ToolFallbackError status={effectiveStatus} />
         <ToolFallbackArgs
           argsText={argsText}
           className={cn(isCancelled && "opacity-60")}
@@ -725,10 +757,12 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
             interrupt={interrupt}
             approval={approval}
             respondToApproval={respondToApproval}
-            status={status}
+            status={effectiveStatus}
           />
         )}
-        {!isCancelled && <ToolFallbackResult result={result} />}
+        {!isCancelled && !isErrorStatus && (
+          <ToolFallbackResult result={result} />
+        )}
       </ToolFallbackContent>
     </ToolFallbackRoot>
   );
