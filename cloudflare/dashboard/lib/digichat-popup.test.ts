@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDigichatEmbedSrc,
   buildPageContextMessage,
+  buildPageContextSignature,
   buildPlanTierMessage,
   buildThemeMessage,
   canUseDigichatPopup,
@@ -19,9 +20,11 @@ import {
   embedHostRequiresToken,
   extractPageHtml,
   extractVisiblePageText,
+  hashPageContext,
   isDigichatPopupEnabled,
   PAGE_CONTEXT_HTML_MAX_CHARS,
   PAGE_CONTEXT_MAX_CHARS,
+  PAGE_CONTEXT_RESEND_DEBOUNCE_MS,
   readDigichatPopupConfig,
   readDocumentTheme,
   resolveDigichatEmbedOrigin,
@@ -319,6 +322,42 @@ describe('page context + theme helpers', () => {
       tier: 'studio',
       accessToken: 'tok-2',
     });
+  });
+});
+
+describe('page-context change signature', () => {
+  it('exports the debounce shared with the widget', () => {
+    expect(PAGE_CONTEXT_RESEND_DEBOUNCE_MS).toBe(500);
+  });
+
+  it('hashes deterministically and differs when html or text changes', () => {
+    const base = hashPageContext('<p>House book</p>', 'House book');
+    expect(base).toMatch(/^[0-9a-f]{8}$/);
+    expect(hashPageContext('<p>House book</p>', 'House book')).toBe(base);
+    expect(hashPageContext('<p>Portfolio</p>', 'House book')).not.toBe(base);
+    expect(hashPageContext('<p>House book</p>', 'Portfolio')).not.toBe(base);
+    expect(hashPageContext('', '')).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it('signs pathname + search + content, stable per input', () => {
+    const route = buildPageContextSignature(
+      '/portfolio',
+      '?tab=positions',
+      '<p>x</p>',
+      'x',
+    );
+    expect(
+      buildPageContextSignature('/portfolio', '?tab=positions', '<p>x</p>', 'x'),
+    ).toBe(route);
+    expect(
+      buildPageContextSignature('/portfolio', '?tab=orders', '<p>x</p>', 'x'),
+    ).not.toBe(route);
+    expect(
+      buildPageContextSignature('/research', '?tab=positions', '<p>x</p>', 'x'),
+    ).not.toBe(route);
+    expect(
+      buildPageContextSignature('/portfolio', '?tab=positions', '<p>y</p>', 'y'),
+    ).not.toBe(route);
   });
 });
 

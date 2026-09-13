@@ -152,6 +152,24 @@ describe("toEmbedClientConfig", () => {
     expect(toEmbedClientConfig(registry.get("dev.datatap.stream")!).skin).toBe("base");
   });
 
+  it("projects pageContext, defaulting legacy entries to visible", () => {
+    const registry = parseEmbedTenants(REGISTRY);
+    expect(toEmbedClientConfig(registry.get("digithings.ai")!).pageContext).toBe("visible");
+    const silent = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          attribution: false,
+          token: "t",
+          pageContext: "silent",
+        },
+      }),
+    );
+    expect(toEmbedClientConfig(silent.get("example.com")!).pageContext).toBe("silent");
+  });
+
   it("strips operator MCP URLs from the client projection", () => {
     const cfg = toEmbedClientConfig({
       slug: "datatap",
@@ -220,6 +238,7 @@ describe("DEFAULT_EMBED_TENANT_CONFIG", () => {
       "Ask about anything you need help with.",
     ]);
     expect(DEFAULT_EMBED_TENANT_CONFIG.attachments).toBe(true);
+    expect(DEFAULT_EMBED_TENANT_CONFIG.pageContext).toBe("visible");
     expect(DEFAULT_EMBED_TENANT_CONFIG.showByok).toBe(true);
     expect(DEFAULT_EMBED_TENANT_CONFIG.webSearch).toBe(true);
     expect(DEFAULT_EMBED_TENANT_CONFIG.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);

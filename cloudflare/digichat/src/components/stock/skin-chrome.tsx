@@ -8,7 +8,7 @@
 
 import { createContext, useContext } from "react";
 import { DEFAULT_THREAD_SKIN, type ThreadSkin } from "@/lib/thread-skins";
-import type { ChromeMode } from "@/lib/deploy-config";
+import type { ChromeMode, PageContextMode } from "@/lib/deploy-config";
 
 export type SkinChromeValue = {
   skin: ThreadSkin;
@@ -22,6 +22,11 @@ export type SkinChromeValue = {
   suggestions: readonly string[];
   accent: { color: string; foreground: string } | null;
   modelPicker: boolean;
+  /**
+   * Deploy `features.pageContext`. `silent` keeps the system
+   * `page-context.html` attachment out of the composer and sent-message chips.
+   */
+  pageContext: PageContextMode;
 };
 
 export const DEFAULT_SKIN_CHROME: SkinChromeValue = {
@@ -31,6 +36,7 @@ export const DEFAULT_SKIN_CHROME: SkinChromeValue = {
   suggestions: [],
   accent: null,
   modelPicker: false,
+  pageContext: "visible",
 };
 
 const SkinChromeContext = createContext<SkinChromeValue>(DEFAULT_SKIN_CHROME);

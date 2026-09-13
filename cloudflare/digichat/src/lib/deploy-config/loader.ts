@@ -106,6 +106,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       sources: true,
       modelPicker: false,
       branchPicker: true,
+      pageContext: cfg.pageContext ?? "visible",
     },
     models: {
       ...(cfg.models?.default ? { default: cfg.models.default } : {}),
@@ -160,6 +161,7 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     showByok: dep.gate.showByok,
     showLanguageSelector: dep.gate.showLanguageSelector,
     attachments: dep.features.attachments === true,
+    pageContext: dep.features.pageContext,
     webSearch:
       dep.gate.webSearch === true ||
       dep.tools?.catalog?.some((t) => t.id === "web_search") === true,

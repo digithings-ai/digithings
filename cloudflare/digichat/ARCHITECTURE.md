@@ -954,6 +954,14 @@ The dashboard popup posts the payload once per open. Screenshot data URLs are
 optional and acknowledged in the prompt only — vision multimodal / LiteLLM image
 parts are deferred. Config/URL helpers: `src/lib/embed-popup-config.ts`.
 
+Injection is deployment-configured via `features.pageContext` (`off` | `silent` |
+`visible`, default `visible`). `off` mounts no `digichat:page-context` listener at
+all; `silent` keeps the `page-context.html` file-part transport and server-side
+`expandPageContextFileParts` fold, but renders no attachment chip (composer or
+sent message) — the snapshot still reaches the model. The `digichat:ready`
+handshake carries the mode so parents can stop sending when `off`; an absent
+field means legacy send-always behavior.
+
 **Page-context privacy contract.** Regex tag-stripping is not the boundary.
 Sender and receiver both run the structural sanitizer in
 `src/lib/page-context-sanitize.ts` (widget.js ports the same DOM walk):

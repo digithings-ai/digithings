@@ -124,7 +124,8 @@ class DigigraphStreamContractError extends Error {
 }
 
 async function* iterateOpenAiSse(
-  body: ReadableStream<Uint8Array>
+  body: ReadableStream<Uint8Array>,
+  onUsage?: (usage: Record<string, unknown>) => void
 ): AsyncGenerator<Record<string, unknown>> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -144,7 +145,11 @@ async function* iterateOpenAiSse(
         try {
           const json = JSON.parse(raw) as {
             choices?: Array<{ delta?: Record<string, unknown> }>;
+            usage?: Record<string, unknown>;
           };
+          if (json.usage && typeof json.usage === "object") {
+            onUsage?.(json.usage);
+          }
           const delta = json.choices?.[0]?.delta;
           if (delta && Object.keys(delta).length) yield delta;
         } catch {
@@ -292,7 +297,29 @@ export async function createDigigraphTraceStreamResponse(opts: {
         closeText();
         return;
       }
-      for await (const delta of iterateOpenAiSse(res.body)) {
+      let usageMetadata:
+        | { inputTokens: number; outputTokens: number; totalTokens: number }
+        | undefined;
+      for await (const delta of iterateOpenAiSse(res.body, (usage) => {
+        const inputTokens = usage.prompt_tokens;
+        const outputTokens = usage.completion_tokens;
+        const totalTokens = usage.total_tokens;
+        if (
+          typeof inputTokens === "number" &&
+          Number.isFinite(inputTokens) &&
+          typeof outputTokens === "number" &&
+          Number.isFinite(outputTokens)
+        ) {
+          usageMetadata = {
+            inputTokens,
+            outputTokens,
+            totalTokens:
+              typeof totalTokens === "number" && Number.isFinite(totalTokens)
+                ? totalTokens
+                : inputTokens + outputTokens,
+          };
+        }
+      })) {
         const dgErr = delta.digigraph_error;
         if (dgErr && typeof dgErr === "object") {
           closeText();
@@ -354,6 +381,16 @@ export async function createDigigraphTraceStreamResponse(opts: {
             writeStandardActivity(writer, span, activityCtx);
           }
         }
+      }
+      if (usageMetadata) {
+        // Real provider-reported token usage: digigraph appends a final SSE
+        // chunk carrying top-level `usage` whose prompt/completion tokens came
+        // from the LiteLLM stream. Surface it as message metadata so the client
+        // folds it into `metadata.custom.usage` (never fabricate zeros).
+        writer.write({
+          type: "message-metadata",
+          messageMetadata: { usage: usageMetadata },
+        });
       }
       finishStandardActivity(writer, activityCtx);
       closeText();

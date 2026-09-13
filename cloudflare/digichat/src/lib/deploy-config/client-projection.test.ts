@@ -99,6 +99,20 @@ describe("clientConfigFromEmbedTenant omitted-default fail-closed (#3805)", () =
   });
 });
 
+describe("pageContext feature projection", () => {
+  it("defaults to visible and passes an explicit silent through the bridge", () => {
+    expect(DEFAULT_CLIENT_CONFIG.features.pageContext).toBe("visible");
+    const base = { slug: "test", gateMode: "ungated", theme: "dark", accent: null, attribution: false } as EmbedTenantClientConfig;
+    expect(clientConfigFromEmbedTenant(base).features.pageContext).toBe("visible");
+    expect(
+      clientConfigFromEmbedTenant({ ...base, pageContext: "silent" }).features.pageContext,
+    ).toBe("silent");
+    expect(
+      clientConfigFromEmbedTenant({ ...base, pageContext: "off" }).features.pageContext,
+    ).toBe("off");
+  });
+});
+
 describe("baseline embed models catalog (Cheaper Inference default)", () => {
   it("ships the 4-slug catalog with deepseek default and an enabled picker", () => {
     expect(DEFAULT_CLIENT_CONFIG.models).toEqual({

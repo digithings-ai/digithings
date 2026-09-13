@@ -55,6 +55,7 @@ describe("GET /api/embed/tenant-config", () => {
       showLanguageSelector: true,
       webSearch: false,
       attachments: false,
+      pageContext: "visible",
       backendType: "foundry",
       mcp: { servers: [], allowUserServers: false, allowAddForm: false },
       models: { available: [] },
@@ -118,6 +119,7 @@ describe("GET /api/embed/tenant-config", () => {
           layout: "page",
           llmAccess: "free_then_byok",
           activityDetail: "full",
+          pageContext: "silent",
           token: "t",
         },
       }),
@@ -132,5 +134,6 @@ describe("GET /api/embed/tenant-config", () => {
     expect(body.showByok).toBe(true);
     expect(body.layout).toBe("page");
     expect(body.llmAccess).toBe("free_then_byok");
+    expect(body.pageContext).toBe("silent");
   });
 });
