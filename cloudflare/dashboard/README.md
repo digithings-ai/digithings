@@ -250,13 +250,17 @@ so the current conversation survives the next open.
 
 The panel iframes digichat `/embed?layout=embed` with page-context
 (`digichat:page-context`) for the visible dashboard DOM — structurally
-sanitized **HTML** (preferred, ≤12k chars) plus visible text (≤8k). The sender
-walks the live DOM (computed style, `hidden` / `inert` / `aria-hidden`,
-password/autofill controls) and honors `data-digichat-private` opt-out regions;
-the embed receiver re-allowlists the HTML. Nothing is rendered for it in the
-panel (#3590); the model receives HTML+text via the existing prompt-prefix path
-(screenshot/vision multimodal deferred). Same contract as digichat `widget.js`
-(#3421 / #3602), implemented in-React so CSP stays `script-src 'self'`.
+sanitized **HTML** (preferred, ≤12k chars) plus visible text (≤8k), sent on
+open and then only when the page signature changes (route/query or sanitized
+content, ~500ms debounced, deduped by signature). The sender walks the live DOM
+(computed style, `hidden` / `inert` / `aria-hidden`, password/autofill
+controls) and honors `data-digichat-private` opt-out regions; the embed
+receiver re-allowlists the HTML. The embed can opt out for a deployment by
+including `pageContext: "off"` on its `digichat:ready` payload. Nothing is
+rendered for it in the panel (#3590); the model receives HTML+text via the
+existing prompt-prefix path (screenshot/vision multimodal deferred). Same
+contract as digichat `widget.js` (#3421 / #3602), implemented in-React so CSP
+stays `script-src 'self'`.
 
 On by default (#3638): unset env uses origin `https://digithings.ai` and host
 `digiquant.io`. Kill with `NEXT_PUBLIC_DIGICHAT_POPUP=0`. Origin must be in the

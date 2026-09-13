@@ -27,6 +27,14 @@ const ThreadSkinInputSchema = z.preprocess(
 );
 export const GateModeSchema = z.enum(["turn_limited", "ungated", "trial_form"]);
 export const ActivityDetailSchema = z.enum(["off", "labels", "full"]);
+/**
+ * Host-page context injection from the popup widget (`digichat:page-context`):
+ * - `off` — ignore incoming page-context messages entirely (no listener).
+ * - `silent` — the snapshot still reaches the model, but no attachment chip.
+ * - `visible` — current behavior: chip in composer and sent message.
+ * Deployment-configured; parents see the mode on `digichat:ready`.
+ */
+export const PageContextModeSchema = z.enum(["off", "silent", "visible"]);
 export const LlmAccessSchema = z.enum([
   "free_then_byok",
   "byok_only",
@@ -157,6 +165,7 @@ export const FeaturesSchema = z
     sources: z.boolean().default(true),
     modelPicker: z.boolean().default(false),
     branchPicker: z.boolean().default(true),
+    pageContext: PageContextModeSchema.default("visible"),
   })
   .strict();
 
@@ -310,6 +319,7 @@ export const DeploymentSchema = z
       sources: true,
       modelPicker: false,
       branchPicker: true,
+      pageContext: "visible",
     }),
     models: ModelsSchema.default({ available: [] }),
     cli: CliSchema.default({ enabled: false }),
@@ -351,6 +361,7 @@ export type ThreadSkin = z.infer<typeof ThreadSkinSchema>;
 export type PersistenceMode = z.infer<typeof PersistenceSchema>;
 export type AuthMode = z.infer<typeof AuthModeSchema>;
 export type UserAlign = z.infer<typeof UserAlignSchema>;
+export type PageContextMode = z.infer<typeof PageContextModeSchema>;
 export type DigichatDeployment = z.infer<typeof DeploymentSchema>;
 export type DigichatConfig = z.infer<typeof DigichatConfigSchema>;
 export type ToolCatalogEntry = z.infer<typeof ToolCatalogEntrySchema>;

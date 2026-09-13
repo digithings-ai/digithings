@@ -332,6 +332,37 @@ export function extractVisiblePageText(
   return extractPageContextShared(undefined, PAGE_CONTEXT_HTML_MAX_CHARS, maxChars).text;
 }
 
+/** Debounce before a page mutation triggers another page-context post. */
+export const PAGE_CONTEXT_RESEND_DEBOUNCE_MS = 500;
+
+/**
+ * Deterministic FNV-1a 32-bit hex digest over `html\u0000text`. Used only to
+ * dedupe change-based page-context sends; never a security primitive.
+ */
+export function hashPageContext(html: string, text: string): string {
+  const input = `${html}\u0000${text}`;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * Change key for one rendered page: route + query + content digest. A new
+ * signature (user navigated, filtered, or data re-rendered) resends context;
+ * an unchanged one is dropped.
+ */
+export function buildPageContextSignature(
+  pathname: string,
+  search: string,
+  html: string,
+  text: string,
+): string {
+  return `${pathname}|${search}|${hashPageContext(html, text)}`;
+}
+
 /**
  * Structural allowlist — same walk as digichat `page-context-sanitize.ts`.
  * Posted to the embed as HTML + text; never re-hydrate as live page DOM.

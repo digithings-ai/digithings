@@ -1637,11 +1637,13 @@ def _stream_completion_one_turn(
         "messages": messages,
         "temperature": temperature,
         "stream": True,
+        "stream_options": {"include_usage": True},
     }
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
 
+    usage_started = time.perf_counter()
     stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
         client,
         _provider=provider,
@@ -1801,6 +1803,18 @@ def _stream_completion_one_turn(
         outcome=ProviderAttemptOutcome.SUCCEEDED,
         response=evidence,
     )
+    if evidence.usage is not None:
+        _prompt_tokens, _completion_tokens, _cost_usd = _response_usage(evidence)
+        _record_usage(
+            kind="chat",
+            model=evidence.model or effective_model,
+            prompt_tokens=_optional_nonnegative_int(_prompt_tokens),
+            completion_tokens=_optional_nonnegative_int(_completion_tokens),
+            cost=float(_cost_usd) if _cost_usd is not None else None,
+            ok=True,
+            duration_ms=round((time.perf_counter() - usage_started) * 1000),
+        )
+
     return content, tc_list
 
 

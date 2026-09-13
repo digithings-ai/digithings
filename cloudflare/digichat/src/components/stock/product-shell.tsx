@@ -207,6 +207,7 @@ export function ProductStockShell({
       suggestions: (suggestions?.length ? suggestions : cfg.chrome.suggestions) ?? [],
       accent: cfg.chrome.accent,
       modelPicker: features.modelPicker || cfg.models.allowPicker,
+      pageContext: features.pageContext,
     }),
     [
       cfg.chrome.skin,
@@ -219,6 +220,7 @@ export function ProductStockShell({
       cfg.chrome.suggestions,
       cfg.chrome.accent,
       features.modelPicker,
+      features.pageContext,
       cfg.models.allowPicker,
       welcome,
       placeholder,

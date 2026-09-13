@@ -8,6 +8,7 @@ import type {
   ChromeMode,
   DigichatDeployment,
   DisclosureMode,
+  PageContextMode,
   PersistenceMode,
   ToolCatalogEntry,
   UserAlign,
@@ -32,6 +33,7 @@ export type DigichatClientFeatures = {
   sources: boolean;
   modelPicker: boolean;
   branchPicker: boolean;
+  pageContext: PageContextMode;
 };
 
 export type DigichatClientChrome = {
@@ -129,6 +131,7 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     sources: true,
     modelPicker: false,
     branchPicker: true,
+    pageContext: "visible",
   },
   models: {
     default: "deepseek/deepseek-v4-flash",

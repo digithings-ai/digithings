@@ -37,6 +37,38 @@ describe("DigichatConfigSchema", () => {
     expect(cfg.deployment?.models.available).toEqual([]);
     expect(cfg.deployment?.gate.activityDetail).toBe("labels");
     expect(cfg.deployment?.features.attachments).toBe(true);
+    expect(cfg.deployment?.features.pageContext).toBe("visible");
+  });
+
+  it("accepts pageContext modes and fails closed on unknown values", () => {
+    const silent = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        features: { pageContext: "silent" },
+      },
+    });
+    expect(silent.deployment?.features.pageContext).toBe("silent");
+    const off = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        features: { pageContext: "off" },
+      },
+    });
+    expect(off.deployment?.features.pageContext).toBe("off");
+    expect(() =>
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "acme",
+          backend: { type: "digigraph" },
+          features: { pageContext: "hidden" },
+        },
+      }),
+    ).toThrow(/pageContext/);
   });
 
   it("coerces reasoning/toolCalls booleans", () => {
@@ -211,6 +243,7 @@ describe("DigichatConfigSchema", () => {
     expect(welcomeTitle(cfg.deployment?.chrome.welcome)).toBe("Ask about this page.");
     expect(cfg.deployment?.chrome.mode).toBe("modal");
     expect(cfg.deployment?.features.attachments).toBe(false);
+    expect(cfg.deployment?.features.pageContext).toBe("silent");
     expect(cfg.deployment?.gate.requiredPlanTier).toBe("desk");
     expect(cfg.deployment?.gate.showByok).toBe(true);
     expect(cfg.deployment?.gate.llmAccess).toBe("operator");
