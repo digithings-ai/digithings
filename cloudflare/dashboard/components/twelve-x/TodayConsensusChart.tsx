@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { deriveConsensusRows } from '@/lib/twelve-x/consensus-view';
 import { currencyColor, scoreColorClass } from '@/lib/twelve-x/consensus-bar';
+import { fmtSigned } from '@/lib/twelve-x/format';
 import type { FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
 import { ConsensusScoreBar } from './ConsensusScoreBars';
 import { TwelveXSectionHeading } from './TwelveXSectionHeading';
@@ -27,12 +28,6 @@ import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 export interface TodayConsensusChartProps {
   /** Per-currency consensus time series (one row per currency per run_date). */
   series: FxConsensusSnapshotRow[];
-}
-
-/** Format a score as a signed 2-dp string, or an em dash for null. */
-function fmtSigned(v: number | null): string {
-  if (v === null || !Number.isFinite(v)) return '—';
-  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}`;
 }
 
 /** Score → directional text-color class, neutral (`null`) → muted. */

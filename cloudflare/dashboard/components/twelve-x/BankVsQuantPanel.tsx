@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import type { FxConsensusDivergence } from '@/lib/twelve-x/types';
 import type { ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
 import { currencyColor } from '@/lib/twelve-x/consensus-bar';
+import { fmtSigned } from '@/lib/twelve-x/format';
 import { ConsensusScoreBar } from './ConsensusScoreBars';
 import DivergencePanel from './DivergencePanel';
 
@@ -26,31 +27,18 @@ export function buildBankVsQuantRows(
   consensusRows: ConsensusCurrencyRow[],
 ): BankVsQuantRow[] {
   const labelByCcy = new Map(consensusRows.map((r) => [r.currency, r.label]));
-  const currencies = new Set<string>([
-    ...Object.keys(divergenceByCurrency),
-    ...consensusRows.map((r) => r.currency),
-  ]);
-  const rows: BankVsQuantRow[] = [];
-  for (const currency of currencies) {
-    const div = divergenceByCurrency[currency];
-    if (!div) continue;
-    rows.push({
-      currency,
-      label: labelByCcy.get(currency) ?? '',
-      streetScore: div.consensusScore,
-      quantScore: div.pmtScore,
-      gap: div.gap,
-      isDivergent: div.isDivergent,
-    });
-  }
+  const rows: BankVsQuantRow[] = Object.entries(divergenceByCurrency).map(([currency, div]) => ({
+    currency,
+    label: labelByCcy.get(currency) ?? '',
+    streetScore: div.consensusScore,
+    quantScore: div.pmtScore,
+    gap: div.gap,
+    isDivergent: div.isDivergent,
+  }));
   return rows.sort((a, b) => {
     if (a.isDivergent !== b.isDivergent) return a.isDivergent ? -1 : 1;
     return b.gap - a.gap;
   });
-}
-
-function fmtSigned(v: number): string {
-  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}`;
 }
 
 /**

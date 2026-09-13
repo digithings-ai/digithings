@@ -57,8 +57,6 @@ describe('summarizeDivergenceAccuracy', () => {
     expect(summary.divergent.k).toBe(1);
     expect(summary.aligned.n).toBe(1);
     expect(summary.aligned.k).toBe(1);
-    expect(summary.divergentRows).toBe(2);
-    expect(summary.alignedRows).toBe(1);
   });
 
   it('ignores unscored rows and pins timeframe/weighted', () => {

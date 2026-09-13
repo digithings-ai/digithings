@@ -10,6 +10,7 @@ import {
 } from '@/lib/twelve-x/consensus-bar';
 import type { ConsensusDeltaSet, FxConsensusDivergence, FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
 import { deriveConsensusRows, type ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
+import { fmtNEff, fmtSigned } from '@/lib/twelve-x/format';
 import { ConsensusScoreBar } from './ConsensusScoreBars';
 import DeltaChip from './DeltaChip';
 import DivergenceChip from './DivergenceChip';
@@ -39,16 +40,6 @@ export function passesFilter(row: ConsensusCurrencyRow, filter: RowFilter): bool
   if (filter === 'bearish') return score <= -LEAN_BAND;
   if (filter === 'strong') return Math.abs(score) >= STRONG_BAND;
   return true;
-}
-
-function fmtSigned(v: number | null): string {
-  if (v === null || !Number.isFinite(v)) return '—';
-  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}`;
-}
-
-function fmtNEff(v: number | null | undefined): string {
-  if (v === null || v === undefined || !Number.isFinite(v)) return '—';
-  return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
 export interface ConsensusDataTableProps {

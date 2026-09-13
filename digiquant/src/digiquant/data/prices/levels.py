@@ -14,14 +14,10 @@ twelve-x consumer maps the contract onto ``Level(provenance="computed")`` and
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
 
 import polars as pl
 
 from digiquant.data.prices._primitives import atr as _atr_expr
-
-Direction = Literal["long", "short"]
-Branch = Literal["atr", "pivot", "donchian"]
 
 
 class LevelsError(ValueError):
@@ -170,9 +166,9 @@ def _confirmed_pivot_expr(cfg: LevelsConfig, *, side: str) -> pl.Expr:
     """
     if side == "high":
         raw = pl.when(pl.col("_piv_high_raw")).then(pl.col("high")).otherwise(None)
-        return raw.cast(pl.Float64).shift(cfg.fractal_width).alias("piv_high")
+        return raw.shift(cfg.fractal_width).alias("piv_high")
     raw = pl.when(pl.col("_piv_low_raw")).then(pl.col("low")).otherwise(None)
-    return raw.cast(pl.Float64).shift(cfg.fractal_width).alias("piv_low")
+    return raw.shift(cfg.fractal_width).alias("piv_low")
 
 
 def cluster_levels(values: list[float], tol: float, *, side: str) -> list[float]:
@@ -214,18 +210,10 @@ def select_structure(
     return support, resistance
 
 
-def snap_to_structure(price: float, structures: list[float], tol: float) -> float | None:
-    """Snap *price* to the closest structural level within *tol*, else ``None``."""
-    candidates = [level for level in structures if abs(level - price) <= tol]
-    if not candidates:
-        return None
-    return min(candidates, key=lambda level: abs(level - price))
-
-
 def snap_sourced(
     price: float, structures: list[tuple[float, str]], tol: float
 ) -> tuple[float, str] | None:
-    """Like :func:`snap_to_structure` but preserves each level's provenance."""
+    """Snap *price* to the closest structural level within *tol*, keeping its provenance."""
     candidates = [item for item in structures if abs(item[0] - price) <= tol]
     if not candidates:
         return None
@@ -504,7 +492,6 @@ __all__ = [
     "compute_levels",
     "select_structure",
     "snap_sourced",
-    "snap_to_structure",
     "trail_policy_str",
     "trail_stop",
 ]

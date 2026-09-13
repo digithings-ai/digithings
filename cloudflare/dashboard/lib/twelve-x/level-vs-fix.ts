@@ -166,7 +166,6 @@ function numOrNull(v: string | null | undefined): number | null {
 
 export interface LevelFixSeries {
   pair: string;
-  direction: string;
   entryLow: number | null;
   entryHigh: number | null;
   stop: number | null;
@@ -211,7 +210,6 @@ export function buildLevelFixSeries(
 
   return {
     pair: idea.pair,
-    direction: idea.direction,
     entryLow: numOrNull(tl?.entry_low?.value),
     entryHigh: numOrNull(tl?.entry_high?.value),
     stop: numOrNull(tl?.stop?.value),

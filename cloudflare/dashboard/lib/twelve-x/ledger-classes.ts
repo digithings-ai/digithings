@@ -9,8 +9,6 @@ import type { IntelligenceWhyDesk } from './types';
 /** Canonical display order for known ledger lifecycle classes. */
 export const LEDGER_CLASS_ORDER = ['active', 'confirmed', 'invalidated', 'superseded'] as const;
 
-export type KnownLedgerClass = (typeof LEDGER_CLASS_ORDER)[number];
-
 /** Normalize a raw classification value to its grouping key. */
 export function normalizeLedgerClass(classification: string | null | undefined): string {
   const key = (classification ?? '').trim().toLowerCase();
@@ -49,9 +47,4 @@ export function groupLedgerByClass(desks: IntelligenceWhyDesk[]): LedgerClassGro
     label: ledgerClassLabel(classification),
     desks: buckets.get(classification) ?? [],
   }));
-}
-
-/** Per-class desk counts in display order (for headers / summaries). */
-export function countLedgerByClass(desks: IntelligenceWhyDesk[]): { classification: string; count: number }[] {
-  return groupLedgerByClass(desks).map((g) => ({ classification: g.classification, count: g.desks.length }));
 }

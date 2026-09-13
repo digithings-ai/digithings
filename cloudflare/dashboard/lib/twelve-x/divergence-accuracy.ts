@@ -12,23 +12,18 @@ import type { FxConsensusDivergence, FxConsensusEvalRow } from './types';
 export interface DivergenceAccuracySummary {
   divergent: WilsonInterval;
   aligned: WilsonInterval;
-  divergentRows: number;
-  alignedRows: number;
 }
 
 export function summarizeDivergenceAccuracy(
   divergenceByCurrency: Record<string, FxConsensusDivergence>,
   rows: FxConsensusEvalRow[],
-  opts: { timeframe?: string; weighted?: boolean } = {},
 ): DivergenceAccuracySummary {
-  const timeframe = opts.timeframe ?? 'medium';
-  const weighted = opts.weighted ?? true;
   let divK = 0;
   let divN = 0;
   let aliK = 0;
   let aliN = 0;
   for (const r of rows) {
-    if (r.timeframe !== timeframe || r.weighted !== weighted) continue;
+    if (r.timeframe !== 'medium' || r.weighted !== true) continue;
     if (r.accuracy_status !== 'scored') continue;
     if (r.hit_5d === null || r.hit_5d === undefined) continue;
     const divergent = divergenceByCurrency[r.currency]?.isDivergent === true;
@@ -43,7 +38,5 @@ export function summarizeDivergenceAccuracy(
   return {
     divergent: wilsonInterval(divK, divN),
     aligned: wilsonInterval(aliK, aliN),
-    divergentRows: divN,
-    alignedRows: aliN,
   };
 }

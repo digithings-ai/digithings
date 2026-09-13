@@ -25,7 +25,6 @@ from digiquant.data.prices.levels import (
     compute_levels,
     select_structure,
     snap_sourced,
-    snap_to_structure,
     trail_policy_str,
     trail_stop,
 )
@@ -353,11 +352,6 @@ def test_select_structure_picks_nearest_valid_side() -> None:
     assert support == pytest.approx(98.0)
     assert resistance == pytest.approx(103.0)
     assert select_structure([], [], 100.0, 0.5) == (None, None)
-
-
-def test_snap_to_structure_within_tolerance() -> None:
-    assert snap_to_structure(102.4, [102.0, 110.0], 0.5) == pytest.approx(102.0)
-    assert snap_to_structure(105.0, [102.0, 110.0], 0.5) is None
 
 
 def test_structural_branch_uses_pivot_stop_and_snaps_ladder() -> None:

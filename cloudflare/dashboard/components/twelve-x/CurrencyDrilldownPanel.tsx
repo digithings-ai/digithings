@@ -4,13 +4,9 @@ import { X } from 'lucide-react';
 import { Sheet, SheetClose, SheetContent, SheetTitle } from '@digithings/web';
 
 import type { ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
+import { fmtNEff } from '@/lib/twelve-x/format';
 import type { FxBriefRow, IntelligenceWhyItem } from '@/lib/twelve-x/types';
 import OppositionLedger from './OppositionLedger';
-
-function formatNEff(v: number | null): string {
-  if (v === null || !Number.isFinite(v)) return '—';
-  return Number.isInteger(v) ? String(v) : v.toFixed(1);
-}
 
 /**
  * The loaded currency drilldown content (consensus metrics, confluence, desk
@@ -113,7 +109,7 @@ export function CurrencyDrilldownPanelBody({
             </div>
             <div>
               <dt className="text-ink-mute">Effective n</dt>
-              <dd className="font-mono text-ink">{formatNEff(consensus.n_eff)}</dd>
+              <dd className="font-mono text-ink">{fmtNEff(consensus.n_eff)}</dd>
             </div>
           </dl>
         </div>

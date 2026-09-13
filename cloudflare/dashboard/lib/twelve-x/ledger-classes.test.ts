@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  countLedgerByClass,
   groupLedgerByClass,
   ledgerClassLabel,
   normalizeLedgerClass,
@@ -63,16 +62,5 @@ describe('groupLedgerByClass', () => {
 
   it('returns no groups for no desks', () => {
     expect(groupLedgerByClass([])).toEqual([]);
-  });
-});
-
-describe('countLedgerByClass', () => {
-  it('counts per class in display order', () => {
-    expect(
-      countLedgerByClass([desk('B1', 'active'), desk('B2', 'active'), desk('B3', 'superseded')]),
-    ).toEqual([
-      { classification: 'active', count: 2 },
-      { classification: 'superseded', count: 1 },
-    ]);
   });
 });

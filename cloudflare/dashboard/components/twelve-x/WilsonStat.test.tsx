@@ -24,7 +24,7 @@ describe('WilsonStat', () => {
     expect(html).not.toContain('95% CI');
   });
 
-  it('flags small-n samples below the insufficientN threshold', () => {
+  it('flags small-n samples below the 10-sample threshold', () => {
     const small = renderToStaticMarkup(
       createElement(WilsonStat, { label: 'Long', interval: wilsonInterval(2, 3) }),
     );
@@ -33,7 +33,6 @@ describe('WilsonStat', () => {
       createElement(WilsonStat, {
         label: 'Long',
         interval: wilsonInterval(8, 12),
-        insufficientN: 10,
       }),
     );
     expect(enough).not.toContain('small n');

@@ -36,6 +36,7 @@ import {
 } from '@/lib/twelve-x/fetch';
 import { selectLatestCompleteConsensus } from '@/lib/twelve-x/consensus-derive';
 import { isTwelveXConfigured } from '@/lib/twelve-x/supabase';
+import { netCarriedIdeas } from '@/lib/twelve-x/trade-history';
 import type {
   FxBriefRow,
   FxConfluenceSnapshotRow,
@@ -286,7 +287,6 @@ export default function TwelveXClient() {
           upcomingEvents,
           matrix,
           researchBriefs,
-          ideaEval,
           ideaEvalRaw,
           consensusEval,
           tradeIdeaArchive,
@@ -297,11 +297,13 @@ export default function TwelveXClient() {
           getUpcomingEvents(),
           getMatrix(),
           getBriefs(30),
-          getIdeaEval(),
           getIdeaEval({ netCarried: false }),
           getConsensusEval(),
           getTradeIdeaArchive(),
         ]);
+        // The raw rows are a superset: net the carried boards locally so the
+        // page fetches fx_idea_eval once instead of twice.
+        const ideaEval = netCarriedIdeas(ideaEvalRaw);
         const opinionsDate = intelligence[0]?.run_date ?? digest?.run_date ?? null;
         const intelRunDate = intelligence[0]?.run_date ?? undefined;
         const [eventOpinions, intelligenceWhy] = await Promise.all([

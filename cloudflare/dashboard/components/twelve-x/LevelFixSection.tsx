@@ -23,11 +23,6 @@ function fixesForPair(pair: string): Promise<Record<string, FxFixPoint[]>> {
   return pending;
 }
 
-/** Test seam: reset the module fix cache between tests. */
-export function resetLevelFixCache(): void {
-  fixCache.clear();
-}
-
 /**
  * Self-loading level-vs-fix block: fetches the pair's fix history, builds the
  * series against the idea's published levels (+ eval anchors when provided),

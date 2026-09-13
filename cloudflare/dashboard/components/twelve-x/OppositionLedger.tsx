@@ -3,7 +3,7 @@
 import type { IntelligenceWhyDesk } from '@/lib/twelve-x/types';
 import { groupLedgerByClass } from '@/lib/twelve-x/ledger-classes';
 
-export function deskDirectionClasses(direction: string): { card: string; label: string } {
+function deskDirectionClasses(direction: string): { card: string; label: string } {
   const normalized = direction.trim().toLowerCase();
   if (normalized === 'bullish' || normalized === 'long' || normalized === 'buy') {
     return { card: 'border-accent/30 bg-accent/[0.05]', label: 'text-accent' };
