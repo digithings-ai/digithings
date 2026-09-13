@@ -3,7 +3,9 @@
 import { useMemo } from 'react';
 import { History } from 'lucide-react';
 import type {
+  FxConsensusDivergence,
   FxConsensusEvalRow,
+  FxConsensusSnapshotRow,
   FxIdeaEvalRow,
   FxTradeIdeaRow,
 } from '@/lib/twelve-x/types';
@@ -13,8 +15,12 @@ import {
   summarizeConsensusStability,
   summarizeIdeaOutcomes,
 } from '@/lib/twelve-x/track-record';
+import { summarizeDivergenceAccuracy } from '@/lib/twelve-x/divergence-accuracy';
+import { deriveConsensusRows } from '@/lib/twelve-x/consensus-view';
 import { biasLabel } from '@/lib/twelve-x/trade-history';
 import CalibrationPanel from './CalibrationPanel';
+import BankVsQuantPanel from './BankVsQuantPanel';
+import WilsonStat from './WilsonStat';
 
 /**
  * Track record tab: calibration (Wilson hit-rates for ideas + consensus),
@@ -27,15 +33,24 @@ export default function TrackRecordTab({
   ideas,
   ideaEvalRaw,
   consensusEval,
+  divergenceByCurrency = {},
+  series = [],
 }: {
   ideas: FxTradeIdeaRow[];
   ideaEvalRaw: FxIdeaEvalRow[];
   consensusEval: FxConsensusEvalRow[];
+  divergenceByCurrency?: Record<string, FxConsensusDivergence>;
+  series?: FxConsensusSnapshotRow[];
 }) {
   const ideaSummary = useMemo(() => summarizeIdeaOutcomes(ideaEvalRaw), [ideaEvalRaw]);
   const stability = useMemo(() => summarizeConsensusStability(consensusEval), [consensusEval]);
   const accuracy = useMemo(() => summarizeConsensusAccuracy(consensusEval), [consensusEval]);
   const carried = useMemo(() => carriedIdeas(ideaEvalRaw), [ideaEvalRaw]);
+  const consensusRows = useMemo(() => deriveConsensusRows(series), [series]);
+  const divAccuracy = useMemo(
+    () => summarizeDivergenceAccuracy(divergenceByCurrency, consensusEval),
+    [divergenceByCurrency, consensusEval],
+  );
 
   const titleByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -60,6 +75,22 @@ export default function TrackRecordTab({
         consensusStability={stability}
         consensusAccuracy={accuracy}
       />
+
+      <BankVsQuantPanel divergenceByCurrency={divergenceByCurrency} consensusRows={consensusRows} />
+
+      <section className="oly-slab space-y-2 p-5" data-testid="track-record-divergence-accuracy">
+        <p className="font-mono text-xs font-medium uppercase tracking-[0.08em] text-ink-soft">
+          Divergent-call accuracy
+        </p>
+        <p className="max-w-2xl text-xs text-ink-mute">
+          5-day hit-rate split by whether the currency is currently divergent —
+          descriptive, not causal.
+        </p>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          <WilsonStat label="Divergent now" interval={divAccuracy.divergent} />
+          <WilsonStat label="Aligned now" interval={divAccuracy.aligned} />
+        </div>
+      </section>
 
       <section className="oly-slab space-y-2 p-5" data-testid="track-record-carried">
         <p className="font-mono text-xs font-medium uppercase tracking-[0.08em] text-ink-soft">

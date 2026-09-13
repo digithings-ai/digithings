@@ -68,4 +68,34 @@ describe('TrackRecordTab', () => {
     );
     expect(html).toContain('nothing currently live');
   });
+
+  it('renders the bank-vs-quant corroboration section when divergence reads exist', () => {
+    const html = renderToStaticMarkup(
+      createElement(TrackRecordTab, {
+        ideas: [],
+        ideaEvalRaw: [idea({ run_date: '2026-06-12', rank: 1 })],
+        consensusEval: [],
+        divergenceByCurrency: {
+          EUR: {
+            currency: 'EUR',
+            consensusScore: 1.0,
+            consensusTilt: 0.5,
+            consensusAsOf: '2026-06-26T00:00:00Z',
+            pmtSentiment: 'bearish',
+            pmtScore: -1.0,
+            pmtAsOf: '2026-06-21',
+            gap: 2.0,
+            isDivergent: true,
+            snapshotId: null,
+            rawSnapshot: null,
+            streetStatement: '',
+            pmtStatement: '',
+          },
+        },
+        series: [],
+      }),
+    );
+    expect(html).toContain('Bank vs quant');
+    expect(html).toContain('Divergent-call accuracy');
+  });
 });

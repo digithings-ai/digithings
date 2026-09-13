@@ -447,6 +447,8 @@ export default function TwelveXClient() {
             ideas={data?.tradeIdeaArchive ?? []}
             ideaEvalRaw={data?.ideaEvalRaw ?? []}
             consensusEval={data?.consensusEval ?? []}
+            divergenceByCurrency={data?.divergenceByCurrency ?? {}}
+            series={data?.consensusSeries ?? []}
           />
         );
       case 'events':
