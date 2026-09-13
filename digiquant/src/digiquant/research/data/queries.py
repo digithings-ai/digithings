@@ -836,131 +836,41 @@ _MAX_QUERY_ROWS = 500
 # otherwise read a NON-whitelisted table through an embedded select.
 _SAFE_COLUMNS_RE = re.compile(r"^(\*|[A-Za-z_][A-Za-z0-9_]*(\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)$")
 
-# Per-table column allowlists for the two market-data tables agents confuse (#3771).
-# Retained as a defensive choke exercised directly by tests; since #3780 the
-# ``query_data`` table allowlist refuses these tables before this can run, so
-# neither MCP ``digiquant_query_data`` nor the in-process dispatcher reaches it.
-PRICE_HISTORY_COLUMNS: frozenset[str] = frozenset(
-    {"date", "ticker", "open", "high", "low", "close", "volume"}
-)
-# Migration 007 columns minus ``bb_middle`` (dropped in 035 — duplicate of sma_20).
-PRICE_TECHNICALS_COLUMNS: frozenset[str] = frozenset(
-    {
-        "date",
-        "ticker",
-        "sma_20",
-        "sma_50",
-        "sma_200",
-        "ema_12",
-        "ema_26",
-        "ema_50",
-        "pct_vs_sma20",
-        "pct_vs_sma50",
-        "pct_vs_sma200",
-        "adx_14",
-        "dmi_plus",
-        "dmi_minus",
-        "rsi_7",
-        "rsi_14",
-        "rsi_21",
-        "macd",
-        "macd_signal",
-        "macd_hist",
-        "roc_5",
-        "roc_10",
-        "roc_21",
-        "atr_14",
-        "atr_pct",
-        "bb_upper",
-        "bb_lower",
-        "bb_pct_b",
-        "bb_bandwidth",
-        "hist_vol_21",
-        "stoch_k",
-        "stoch_d",
-        "zscore_50",
-        "zscore_200",
-    }
-)
-_TABLE_COLUMN_ALLOWLISTS: dict[str, frozenset[str]] = {
-    "price_history": PRICE_HISTORY_COLUMNS,
-    "price_technicals": PRICE_TECHNICALS_COLUMNS,
-}
-# Non-technical OHLCV (and volume) — never on price_technicals.
-_OHLCV_COLUMNS: frozenset[str] = frozenset({"open", "high", "low", "close", "volume"})
-# Technical indicator columns — never on price_history (date/ticker shared).
-_TECHNICAL_INDICATOR_COLUMNS: frozenset[str] = PRICE_TECHNICALS_COLUMNS - {"date", "ticker"}
+# Every column-bearing argument is shape-checked to a bare identifier: ``columns``
+# via :data:`_SAFE_COLUMNS_RE`, and order/filter keys via :data:`_BARE_COLUMN_RE`.
+# Together they keep PostgREST relationship syntax (e.g. "*,decision_log(*)") from
+# reaching a NON-whitelisted table through *any* argument, not just ``columns``.
+_BARE_COLUMN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
-def _referenced_query_columns(
+def _filter_column_names(
     *,
-    columns: str,
-    eq: dict[str, Any] | None,
-    gte: dict[str, Any] | None,
-    lte: dict[str, Any] | None,
-    in_: dict[str, list[Any] | tuple[Any, ...]] | None,
-    order: str | None,
+    eq: dict[str, Any] | None = None,
+    gte: dict[str, Any] | None = None,
+    lte: dict[str, Any] | None = None,
+    in_: dict[str, list[Any] | tuple[Any, ...]] | None = None,
+    order: str | None = None,
 ) -> list[str]:
-    """Collect explicit column names from select/order/filter args (``*`` adds none)."""
-    found: list[str] = []
-    seen: set[str] = set()
+    """Central enumeration of the columns ``query_data`` filters/sorts on.
 
-    def _add(name: str) -> None:
-        key = name.strip().lower()
-        if not key or key in seen:
-            return
-        seen.add(key)
-        found.append(key)
-
-    safe = (columns or "*").strip()
-    if safe != "*":
-        for part in safe.split(","):
-            _add(part)
-    if order:
-        _add(str(order))
+    Each filter arg is coerced through ``dict()`` (mirroring ``_eq_for_query`` and
+    the connector) so mapping-convertible forms such as a list of pairs cannot
+    smuggle a column past the bare-column shape check. Single place to extend when
+    ``query_data`` grows a filter operator (#3959).
+    """
+    names: list[str] = []
     for filt in (eq, gte, lte, in_):
-        if isinstance(filt, dict):
-            for key in filt:
-                _add(str(key))
-    return found
-
-
-def _column_allowlist_error(table: str, bad: str) -> str:
-    """Fail-fast redirect when a column belongs on the sibling market-data table."""
-    if table == "price_technicals" and bad in _OHLCV_COLUMNS:
-        return (
-            f"price_technicals has no {bad!r} column (OHLCV lives on price_history). "
-            "Query price_history for open/high/low/close/volume."
-        )
-    if table == "price_history" and (bad in _TECHNICAL_INDICATOR_COLUMNS or bad.startswith("sma_")):
-        return (
-            f"price_history has no {bad!r} column (technicals live on price_technicals). "
-            "Query price_technicals for sma_*/rsi_*/macd/… indicators."
-        )
-    allowed = sorted(_TABLE_COLUMN_ALLOWLISTS[table])
-    return f"column {bad!r} is not allowed on {table}; choose from {allowed}"
-
-
-def _validate_table_columns(
-    table: str,
-    *,
-    columns: str,
-    eq: dict[str, Any] | None,
-    gte: dict[str, Any] | None,
-    lte: dict[str, Any] | None,
-    in_: dict[str, list[Any] | tuple[Any, ...]] | None,
-    order: str | None,
-) -> str | None:
-    """Return an error string if any referenced column is outside the table allowlist."""
-    allow = _TABLE_COLUMN_ALLOWLISTS.get(table)
-    if allow is None:
-        return None
-    for col in _referenced_query_columns(
-        columns=columns, eq=eq, gte=gte, lte=lte, in_=in_, order=order
-    ):
-        if col not in allow:
-            return _column_allowlist_error(table, col)
-    return None
+        if filt is None:
+            continue
+        try:
+            mapping = dict(filt)
+        except (TypeError, ValueError):
+            # Not mapping-like (e.g. a bare string/int); the connector rejects it.
+            continue
+        names.extend(str(key).strip() for key in mapping)
+    if order is not None:
+        names.append(str(order).strip())
+    return names
 
 
 def _eq_for_query(table: str, eq: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -1000,8 +910,10 @@ def query_data(
 
     Market history (``price_history`` / ``price_technicals`` /
     ``macro_series_observations``) is not readable here (#3780): the table
-    allowlist refuses it. The #3771 per-table column allowlists remain in code
-    as a defensive choke (exercised directly by tests), not on this path.
+    allowlist refuses it and the dedicated R2-backed tools own those reads.
+    Explicit columns, ``order``, and filter keys are shape-checked to bare column
+    names (:data:`_BARE_COLUMN_RE`) so no argument can smuggle PostgREST
+    relationship syntax.
     """
     tables = (allowed_tables & ALLOWED_READ_TABLES) if allowed_tables else ALLOWED_READ_TABLES
     if table not in tables:
@@ -1010,13 +922,15 @@ def query_data(
     if not _SAFE_COLUMNS_RE.fullmatch(safe_columns):
         # Block PostgREST relationship/embedding syntax that could reach other tables.
         return {"error": "columns must be '*' or a comma-separated list of plain column names"}
-    # Per-table allowlists (#3771): catch cross-table column mistakes before Supabase 42703.
-    # ``*`` is allowed; explicit columns + order + eq/gte/lte/in_ keys are validated.
-    col_err = _validate_table_columns(
-        table, columns=safe_columns, eq=eq, gte=gte, lte=lte, in_=in_, order=order
-    )
-    if col_err is not None:
-        return {"error": col_err}
+    # Filter/order keys are equally column-bearing: reject PostgREST syntax there too.
+    for col_name in _filter_column_names(eq=eq, gte=gte, lte=lte, in_=in_, order=order):
+        if not _BARE_COLUMN_RE.fullmatch(col_name):
+            return {
+                "error": (
+                    f"filter/order column {col_name!r} must be a bare column name "
+                    "(no PostgREST relationship or operator syntax)"
+                )
+            }
     from digibase.connectors.supabase import SupabaseConnector
 
     capped = max(1, min(int(limit), _MAX_QUERY_ROWS))

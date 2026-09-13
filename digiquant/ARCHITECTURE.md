@@ -2396,11 +2396,15 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
    a model-output error that must surface, not be absorbed; the H6 node catches it
    and degrades that ticker to carried + PhaseError, never killing the chain (#3738). `query_data`
    no longer serves market history at all (#3780): its table allowlist refuses
-   `price_history` / `price_technicals` / `macro_series_observations` before the
-   #3771 per-table column allowlists (retained in code as a defensive choke, and
-   covered directly by unit tests) can run; dedicated R2-backed tools
+   `price_history` / `price_technicals` / `macro_series_observations`, so those
+   tables are simply not readable here; dedicated R2-backed tools
    (`digiquant_get_price_technicals`, `get_macro_series`) own those reads, and MCP
-   `digiquant_query_data` shares the same refusal. H9 cost
+   `digiquant_query_data` shares the same refusal. The #3771 per-table column
+   allowlist that once guarded the two price tables was deleted with the cutover
+   (it could never run once the tables left the reader, #3959). For the tables
+   still readable here, explicit columns/order/filter keys are shape-checked to
+   bare column names (`_BARE_COLUMN_RE`) so no argument can smuggle PostgREST
+   relationship syntax. H9 cost
    evidence reads `hist_vol_21`/`atr_pct` through the R2 seam when
    `DIGIQUANT_MARKET_DATA_BACKEND=r2`, else from `price_technicals`
   (second read joined onto the history row) — never from `price_history`.
