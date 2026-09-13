@@ -31,6 +31,7 @@ import type { TableRow, ViewRow } from './database.types';
 import type { ResearchRunDiagnostics, BenchmarkHistoryMap } from './types';
 import type {
   BenchmarkComparison,
+  PerformanceContributionSource,
   PerformanceTearsheet,
   PerformanceHoldingRow,
   PortfolioReturnPoint,
@@ -64,6 +65,8 @@ const DECISION_PAGE_SIZE = 1000;
 const DECISION_MAX_ROWS = 50000;
 const PERFORMANCE_HISTORY_LIMIT = 5000;
 const ATTRIBUTION_LIMIT = 5000;
+const ATTRIBUTION_PAGE_SIZE = 1000;
+const ATTRIBUTION_MAX_ROWS = 50000;
 
 export interface ObservabilityData {
   decisions: TableRow<'decision_log'>[];
@@ -110,6 +113,52 @@ async function fetchDecisionHistory(): Promise<TableRow<'decision_log'>[]> {
     if (!page.ok || page.rows.length < DECISION_PAGE_SIZE) break;
   }
   return decisions;
+}
+
+/**
+ * Collect a paged read into one array (#3983).
+ *
+ * `fetchPage` receives inclusive PostgREST `.range()` offsets. Stops at the
+ * first error or short page. `truncated` is true when `maxRows` was exhausted
+ * on full pages, so callers can flag understated data instead of rendering it
+ * silently.
+ */
+export async function collectPagedRows<T>(
+  pageSize: number,
+  maxRows: number,
+  fetchPage: (from: number, to: number) => Promise<{ rows: T[]; ok: boolean }>
+): Promise<{ rows: T[]; ok: boolean; truncated: boolean }> {
+  const rows: T[] = [];
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
+    const page = await fetchPage(offset, offset + pageSize - 1);
+    rows.push(...page.rows);
+    if (!page.ok) return { rows, ok: false, truncated: false };
+    if (page.rows.length < pageSize) return { rows, ok: true, truncated: false };
+  }
+  return { rows, ok: true, truncated: true };
+}
+
+/**
+ * Page the realized view from the plotted-window start (#3956 / #3983).
+ * Orders by date then ticker so page boundaries are deterministic.
+ */
+function fetchRealizedAttribution(fromDate: string) {
+  return collectPagedRows<ViewRow<'public_daily_realized_attribution'>>(
+    ATTRIBUTION_PAGE_SIZE,
+    ATTRIBUTION_MAX_ROWS,
+    (from, to) =>
+      safeSelect<ViewRow<'public_daily_realized_attribution'>>(
+        'public_daily_realized_attribution',
+        (sb) =>
+          sb
+            .from(PUBLIC_REALIZED_ATTRIBUTION_VIEW)
+            .select('*')
+            .gte('date', fromDate)
+            .order('date', { ascending: false })
+            .order('ticker', { ascending: true })
+            .range(from, to)
+      )
+  );
 }
 
 export async function fetchObservabilityData(): Promise<ObservabilityData> {
@@ -474,12 +523,17 @@ function buildPositionContributionSeries(
 /**
  * Cumulative per-asset contribution from finalized accounting (#3956).
  *
- * `daily_realized_attribution` already publishes each ticker's daily contribution
- * in percentage points (they sum to the NAV day return), so the tearsheet no
- * longer depends on the position marks the nightly refresh may not have written
- * yet. Day one is the base (0), matching the weight-times-mark series. Days before
- * the first finalized row render flat at 0 — the view is final-only, consistent
- * with the current accounting run the NAV line already plots.
+ * `daily_realized_attribution` publishes each ticker's daily contribution in
+ * percentage points — price, fees, and slippage only. Cash (dividends,
+ * interest) is booked to the period's `cash_contribution` and is **not**
+ * published by the view, so these bars do not reconcile to the NAV day return;
+ * the difference is cash. The tearsheet still no longer depends on the position
+ * marks the nightly refresh may not have written yet. Day one is the base (0),
+ * matching the weight-times-mark series. Days before the first finalized row
+ * render flat at 0 — the view is final-only, consistent with the current
+ * accounting run the NAV line already plots. Returns [] when no row lands in the
+ * plotted run (#3983): rows from a prior finalized run must not render as an
+ * all-zero series that suppresses the marks fallback.
  */
 function buildRealizedContributionSeries(
   navSeries: PortfolioReturnPoint[],
@@ -502,16 +556,26 @@ function buildRealizedContributionSeries(
   }
   if (byTicker.size === 0) return [];
   const cumulativeByTicker = new Map<string, number[]>();
+  let hasPlottedContribution = false;
   for (const [ticker, byDate] of byTicker) {
     const cumulative: number[] = [];
     let running = 0;
     navSeries.forEach((point, index) => {
+      // Index 0 is the base row (always 0) — never counts as coverage.
       const contribution = index > 0 ? byDate.get(point.date) : undefined;
-      if (contribution != null) running += contribution;
+      if (contribution != null) {
+        running += contribution;
+        hasPlottedContribution = true;
+      }
       cumulative.push(roundPct(running));
     });
     cumulativeByTicker.set(ticker, cumulative);
   }
+  // Rows from a prior finalized run can sit entirely before the plotted window
+  // (e.g. across a trailing seam). All-zero cumulatives would then suppress the
+  // marks accrual and present missing attribution as a flat zero — leave the
+  // realized source unusable so the caller falls back.
+  if (!hasPlottedContribution) return [];
   return navSeries.map((point, index) => ({
     t: point.date,
     returnPct: point.returnPct,
@@ -548,6 +612,8 @@ export function buildPerformanceTearsheet(args: {
   attribution: TableRow<'position_attribution'>[];
   /** Finalized per-ticker daily contribution rows from the public view (#3956). */
   realizedAttribution?: ViewRow<'public_daily_realized_attribution'>[];
+  /** True when that read errored or hit the paging cap (#3983). */
+  realizedAttributionDegraded?: boolean;
   events?: TableRow<'position_events'>[];
   benchmarkPrices?: Array<{ ticker?: string; date: string; close: number }>;
   /** Latest closes for open-book tickers when positions rows lack marks. */
@@ -679,6 +745,13 @@ export function buildPerformanceTearsheet(args: {
     args.realizedAttribution ?? [],
     currentTickers
   );
+  const contributionSource: PerformanceContributionSource = realizedSeries.length
+    ? args.realizedAttributionDegraded
+      ? 'realized_truncated'
+      : 'realized'
+    : args.realizedAttributionDegraded
+      ? 'marks_degraded'
+      : 'marks';
 
   return {
     currentNav: navAsc.at(-1)?.nav ?? null,
@@ -696,6 +769,7 @@ export function buildPerformanceTearsheet(args: {
     contributionSeries: realizedSeries.length
       ? realizedSeries
       : buildPositionContributionSeries(navSeries, args.positions, currentTickers),
+    contributionSource,
     currentHoldings,
     historicalHoldings,
     ...ssot,
@@ -816,17 +890,8 @@ export async function getPerformanceBundle(
         .limit(ATTRIBUTION_LIMIT)
     ),
     navRows.length
-      ? safeSelect<ViewRow<'public_daily_realized_attribution'>>(
-          'public_daily_realized_attribution',
-          (sb) =>
-            sb
-              .from(PUBLIC_REALIZED_ATTRIBUTION_VIEW)
-              .select('*')
-              .gte('date', navRows[0].date)
-              .order('date', { ascending: false })
-              .limit(ATTRIBUTION_LIMIT)
-        )
-      : Promise.resolve({ rows: [], ok: true as const }),
+      ? fetchRealizedAttribution(navRows[0].date)
+      : Promise.resolve({ rows: [], ok: true as const, truncated: false }),
     safeSelect<TableRow<'position_events'>>('position_events', (sb) =>
       houseBook(sb, 'position_events')
         .in('event', ['EXIT', 'TRIM'])
@@ -834,6 +899,13 @@ export async function getPerformanceBundle(
         .limit(PERFORMANCE_HISTORY_LIMIT)
     ),
   ]);
+
+  if (realizedRes.truncated) {
+    console.error(
+      `Supabase public_daily_realized_attribution hit the ${ATTRIBUTION_MAX_ROWS}-row ` +
+        'paging cap; contribution bars may understate older days.'
+    );
+  }
 
   const navHistory: TableRow<'nav_history'>[] = navRows.map((row) => {
     const shaped = accountingNavToHistoryShape(row);
@@ -891,6 +963,7 @@ export async function getPerformanceBundle(
     metrics: metricsRow,
     attribution: attributionRes.rows,
     realizedAttribution: realizedRes.rows,
+    realizedAttributionDegraded: !realizedRes.ok || realizedRes.truncated,
     events: eventsRes.rows,
     benchmarkPrices,
     holdingMarks: holdingMarksRes.rows,
