@@ -20,10 +20,11 @@ describe("formatJsonDump", () => {
 });
 
 describe("formatToolDurationMs", () => {
-  it("shows milliseconds under one second instead of <1s", () => {
+  it("shows milliseconds under 100ms, then seconds with one decimal", () => {
     expect(formatToolDurationMs(0)).toBe("0ms");
-    expect(formatToolDurationMs(412)).toBe("412ms");
-    expect(formatToolDurationMs(999)).toBe("999ms");
+    expect(formatToolDurationMs(42)).toBe("42ms");
+    expect(formatToolDurationMs(412)).toBe("0.4s");
+    expect(formatToolDurationMs(999)).toBe("1.0s");
   });
 
   it("switches from milliseconds to seconds at one second", () => {

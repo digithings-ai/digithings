@@ -8,13 +8,8 @@ import {
   TooltipTrigger,
 } from "./ui/tooltip";
 import { cn } from "./cn";
+import { formatToolDurationMs } from "./format-json-dump";
 import type { FC } from "react";
-
-const formatTimingMs = (ms: number | undefined): string => {
-  if (ms === undefined) return "—";
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-};
 
 const formatTokens = (count: number): string => count.toLocaleString("en-US");
 
@@ -74,7 +69,7 @@ export const MessageTiming: FC<{
               className,
             )}
           >
-            {formatTimingMs(timing.totalStreamTime)}
+            {formatToolDurationMs(timing.totalStreamTime)}
           </button>
         </TooltipTrigger>
         <TooltipContent
@@ -89,10 +84,13 @@ export const MessageTiming: FC<{
             {timing.firstTokenTime !== undefined && (
               <TimingRow
                 label="First token"
-                value={formatTimingMs(timing.firstTokenTime)}
+                value={formatToolDurationMs(timing.firstTokenTime)}
               />
             )}
-            <TimingRow label="Total" value={formatTimingMs(timing.totalStreamTime)} />
+            <TimingRow
+              label="Total"
+              value={formatToolDurationMs(timing.totalStreamTime)}
+            />
             {timing.tokensPerSecond !== undefined && (
               <TimingRow
                 label="Speed"

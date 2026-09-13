@@ -322,7 +322,7 @@ describe("DigichatThread", () => {
     await act(async () => {});
     const trigger = host.querySelector('[data-slot="message-timing-trigger"]');
     expect(trigger).toBeTruthy();
-    expect(trigger?.textContent).toContain("2.40s");
+    expect(trigger?.textContent).toContain("2.4s");
     unmount();
   });
 

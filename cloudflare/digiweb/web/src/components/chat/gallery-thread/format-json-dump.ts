@@ -20,9 +20,9 @@ export function formatJsonDump(value: unknown): string {
 export function formatToolDurationMs(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return "0ms";
   const rounded = Math.round(ms);
-  if (rounded < 1000) return `${rounded}ms`;
+  if (rounded < 100) return `${rounded}ms`;
   const seconds = rounded / 1000;
-  if (seconds < 10) return `${(Math.floor(seconds * 10) / 10).toFixed(1)}s`;
+  if (seconds < 10) return `${(Math.round(seconds * 10) / 10).toFixed(1)}s`;
   if (seconds < 60) return `${Math.floor(seconds)}s`;
   return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
 }
