@@ -144,6 +144,24 @@ def test_levels_for_ticker_missing_is_fail_soft(tmp_path) -> None:
     assert "error" in payload
 
 
+@pytest.mark.parametrize(
+    "evil", ["../secret", "..\\secret", "/abs/path", "", "a/b", ".", "EUR/USD"]
+)
+def test_levels_for_ticker_rejects_unsafe_ticker(tmp_path, evil: str) -> None:
+    """M5/LOW7: no slug/traversal reaches the cache path — fail-soft envelope."""
+    payload = json.loads(levels_for_ticker(evil, "long", cache_dir=tmp_path))
+    assert "error" in payload
+
+
+@pytest.mark.parametrize("evil", ["../secret", "..\\secret", "/abs/path", "", "a/b"])
+def test_cache_path_rejects_traversal(tmp_path, evil: str) -> None:
+    """M5/LOW7: history_cache.cache_path raises on unsafe tickers."""
+    from digiquant.data.prices.history_cache import cache_path
+
+    with pytest.raises(ValueError, match="unsafe ticker"):
+        cache_path(evil, tmp_path)
+
+
 # ─── MCP function + manifest + dispatch ───────────────────────────────────────
 
 

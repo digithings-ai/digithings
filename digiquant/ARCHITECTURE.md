@@ -986,7 +986,9 @@ otherwise `src="atr"`. `trail_stop()` is the ratchet-only ATR trail
 
 **JSON contract** (`levels_api.py`): `{pair, direction, entry{low,high,ref},
 sl, tp_ladder[{r,price,src}], trail_policy, source_ref, computed_at}` plus the
-diagnostic scalars `atr`, `k_eff`, `regime`, `branch`, `pivot_count`, `asof`.
+diagnostic scalars `atr`, `k_eff`, `regime`, `branch`, `pivot_count`, `asof`
+and `reward_uncapped` (`true` = no opposite structure, so the structural stop
+was accepted without a bounded R:R check — uncapped upside by design).
 Values are the raw engine floats — deliberately **not** passed through
 `_utils.safe_float`, which would round to 4dp.
 
