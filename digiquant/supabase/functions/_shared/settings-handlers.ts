@@ -64,6 +64,8 @@ import {
   settingsBillingReturnUrl,
 } from "./app-url.ts";
 import {
+  FX_HUB_PRODUCT,
+  planFloorOutranks,
   redeemProductInvite,
   type InviteStore,
 } from "./invite.ts";
@@ -85,6 +87,10 @@ export type SettingsDeps = {
   appUrl?: string;
   /** SHA-256 hex of the FX Hub invite (Supabase secret FX_HUB_INVITE_HASH). */
   inviteHash?: string | null;
+  /** fx-hub-grant-sync call config (twelve-x project has no shared DB —
+   *  FX_HUB_GRANT_SYNC_URL / FX_HUB_GRANT_SYNC_SECRET). Unset ⇒ sync is
+   *  skipped (best-effort; see redeemProductInvite's syncExternalGrant). */
+  fxHubGrantSync?: { url: string; secret: string } | null;
   /** Tests inject an in-memory store; production uses PostgREST. */
   inviteStore?: InviteStore;
 };
@@ -1528,6 +1534,7 @@ async function exchangeAlpacaCodeDefault(args: {
 function postgrestInviteStore(
   admin: AdminClient,
   uuid: () => string,
+  fxHubGrantSync?: { url: string; secret: string },
 ): InviteStore {
   return {
     async countAttempts(userId, sinceIso) {
@@ -1554,7 +1561,7 @@ function postgrestInviteStore(
     async listActiveCodes(productKey) {
       const { data, error } = await admin
         .from("product_invite_codes")
-        .select("id, code_hash, max_redemptions, redemption_count, revoked_at")
+        .select("id, code_hash, max_redemptions, redemption_count, revoked_at, plan_floor")
         .eq("product_key", productKey);
       if (error || !Array.isArray(data)) return [];
       return data.filter((row): row is {
@@ -1563,6 +1570,7 @@ function postgrestInviteStore(
         max_redemptions: number | null;
         redemption_count: number;
         revoked_at: string | null;
+        plan_floor: string | null;
       } => typeof row.id === "string" && typeof row.code_hash === "string");
     },
     async hasGrant(email, productKey) {
@@ -1581,6 +1589,39 @@ function postgrestInviteStore(
       });
       if (error && error.code !== "23505") {
         throw new Error("product grant insert failed");
+      }
+    },
+    async upsertPlanFloor(email, planFloor, note) {
+      const { data, error: readError } = await admin
+        .from("entitlement_grants")
+        .select("plan_floor")
+        .eq("email", email)
+        .maybeSingle();
+      if (readError && !String(readError.message ?? "").includes("does not exist")) {
+        throw new Error("entitlement grant read failed");
+      }
+      const current = data && typeof data.plan_floor === "string" ? data.plan_floor : null;
+      if (!planFloorOutranks(planFloor, current)) return;
+      const { error } = await admin.from("entitlement_grants").upsert(
+        { email, plan_floor: planFloor, note },
+        { onConflict: "email" },
+      );
+      if (error) {
+        throw new Error("entitlement grant upsert failed");
+      }
+    },
+    async syncExternalGrant(email, productKey) {
+      if (productKey !== FX_HUB_PRODUCT || !fxHubGrantSync) return;
+      const res = await fetch(fxHubGrantSync.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Sync-Secret": fxHubGrantSync.secret,
+        },
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        throw new Error(`fx-hub-grant-sync failed: ${res.status}`);
       }
     },
     async recordRedemption(row) {
@@ -1629,7 +1670,11 @@ async function redeemInvite(req: Request, deps: SettingsDeps): Promise<Response>
   const member = await resolveMember(deps, requestedWorkspaceId);
   const workspaceId = member.ok ? member.workspace.id : null;
   const store = deps.inviteStore ??
-    postgrestInviteStore(deps.admin, deps.uuid ?? (() => crypto.randomUUID()));
+    postgrestInviteStore(
+      deps.admin,
+      deps.uuid ?? (() => crypto.randomUUID()),
+      deps.fxHubGrantSync ?? undefined,
+    );
   const result = await redeemProductInvite({
     userId: deps.user.id,
     email: deps.user.email,
@@ -1647,14 +1692,18 @@ async function redeemInvite(req: Request, deps: SettingsDeps): Promise<Response>
     ok: true,
     already_granted: result.alreadyGranted,
     product_key: result.productKey,
+    plan_floor: result.planFloor,
   });
 }
 
 /** Helper for index.ts — build deps from a verified user + admin client. */
 export function createDefaultDeps(user: AuthUser, admin?: AdminClient): SettingsDeps {
+  const syncUrl = Deno.env.get("FX_HUB_GRANT_SYNC_URL");
+  const syncSecret = Deno.env.get("FX_HUB_GRANT_SYNC_SECRET");
   return {
     admin: admin ?? createAdminClient(),
     user,
     inviteHash: Deno.env.get("FX_HUB_INVITE_HASH") ?? null,
+    fxHubGrantSync: syncUrl && syncSecret ? { url: syncUrl, secret: syncSecret } : null,
   };
 }

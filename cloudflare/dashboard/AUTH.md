@@ -199,3 +199,59 @@ Cloudflare Access on FX Hub remains a human Zero Trust option if the team should
 never see the rest of the dashboard — it is not encoded here.
 Do not flip production Access or auth flags as part of the invite-link change.
 
+### Tiered invites (migration 126)
+
+`product_invite_codes` can carry an optional `plan_floor` alongside its
+`product_key`. Redeeming such a code both grants the product (as above) AND
+raises the caller's `entitlement_grants.plan_floor` if the code's tier
+outranks their current one (never downgrades — see `invite.ts`
+`planFloorOutranks`). Operator step 3 above extends to:
+
+```
+INSERT INTO product_invite_codes (product_key, code_hash, label, plan_floor)
+VALUES ('fx_hub', '<hex>', 'desk', 'desk');
+```
+
+Tier-only codes (no `product_key`) are not supported yet — `ClientProductKey`
+(`lib/access.ts`) only enumerates `fx_hub` today.
+
+### twelve-x is a SEPARATE Supabase project — the FX Hub gate above is UI-only
+
+Everything in this file (RLS, `client_product_grants`, the invite system) is
+scoped to the CORE project. The FX Hub page's own data — every `fx_*` table —
+lives in a second, independent Supabase project (`twelve-x`, its own repo,
+its own migrations). That project has never had its own logins, and every
+`fx_*` table there still has `anon_read USING (true)`: the invite/
+`ClientProductGate` system controls whether the *page* renders, not whether
+the *data* is readable. Anyone holding `NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY`
+(a `NEXT_PUBLIC_*` var, baked into the static bundle same as the core anon
+key) can already read all FX research directly, invited or not.
+
+**Do not treat an FX Hub invite as a real access boundary until the twelve-x
+cutover below has shipped.** The fix lives in the twelve-x repo:
+`supabase/migrations/cutover/fx_hub_rls_cutover.sql` (staged, inert — see
+that file's own header for the full precondition list and inventory). Summary:
+
+1. Third-Party Auth: twelve-x's Supabase project trusts this (core) project
+   as a JWT issuer, so the SAME login session RLS's `auth.jwt()` there.
+   Manual dashboard step (Authentication → Sign In / Providers → Third-Party
+   Auth), one-time, no migration covers it.
+2. `fx-hub-grant-sync` Edge Function (deployed to twelve-x) mirrors
+   `client_product_grants(product_key='fx_hub')` into a local `fx_hub_grants`
+   table there — twelve-x's RLS has no other way to know who core granted.
+   Called from `redeemProductInvite`'s `syncExternalGrant` (best-effort; see
+   `_shared/invite.ts` / `_shared/settings-handlers.ts`).
+3. `FX_HUB_GRANT_SYNC_SECRET` — same value — set on BOTH projects:
+   ```
+   supabase secrets set FX_HUB_GRANT_SYNC_SECRET=<value> --project-ref rwagjbkvxkdwqmouagad
+   supabase secrets set FX_HUB_GRANT_SYNC_SECRET=<value> --project-ref lfghjucjrsabiqwxerxv
+   ```
+   and `FX_HUB_GRANT_SYNC_URL=https://lfghjucjrsabiqwxerxv.functions.supabase.co/fx-hub-grant-sync`
+   on core (settings function only reads it — no need to set it on twelve-x).
+4. `cloudflare/dashboard/lib/twelve-x/supabase.ts` already forwards the
+   signed-in session's access token to the twelve-x client (`accessToken`
+   callback) — ships independently of the above, harmless pre-cutover.
+5. Once 1–4 are live, promote the staged migration (copy, don't move, per its
+   header) and verify: bare anon key against any fx_* table returns empty,
+   not an error.
+

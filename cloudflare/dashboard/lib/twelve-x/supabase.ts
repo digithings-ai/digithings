@@ -15,6 +15,7 @@
  * configured, and callers must guard with {@link isTwelveXConfigured}.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { supabase as coreSupabase } from '../supabase';
 
 const twelveXUrl =
   process.env.NEXT_PUBLIC_TWELVEX_SUPABASE_URL ??
@@ -32,6 +33,13 @@ const twelveXAnonKey =
  * twelve-x FX tables live outside the main dashboard `database.types.ts`, and the
  * typed fetchers in `./fetch.ts` cast their selected rows to the contract types
  * in `./types.ts`.
+ *
+ * `accessToken` forwards the CORE project's signed-in session (Third-Party
+ * Auth: twelve-x is configured to trust core as a JWT issuer — see
+ * supabase/migrations/cutover/fx_hub_rls_cutover.sql in the twelve-x repo).
+ * Harmless pre-cutover (anon still reads everything until that migration
+ * lands); required post-cutover for RLS there to know who is signed in.
+ * `null`/no session ⇒ supabase-js falls back to the anon key, same as today.
  */
 /** Secondary client: never share GoTrue storage with the dashboard auth singleton. */
 export const twelveXSupabase: SupabaseClient | null =
@@ -41,6 +49,11 @@ export const twelveXSupabase: SupabaseClient | null =
           persistSession: false,
           autoRefreshToken: false,
           detectSessionInUrl: false,
+        },
+        accessToken: async () => {
+          if (!coreSupabase) return null;
+          const { data } = await coreSupabase.auth.getSession();
+          return data.session?.access_token ?? null;
         },
       })
     : null;
