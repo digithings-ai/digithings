@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +60,12 @@ def _sb():
 
 
 def fetch_context(as_of_date: str) -> dict[str, Any]:
+    # Imported per call (cached in sys.modules afterwards) so the default path needs no
+    # digiquant import at module scope, matching fill-entry-prices.py.
+    from digiquant.research.data.queries import r2_backend_enabled
+
+    if r2_backend_enabled():
+        return _fetch_context_r2(as_of_date)
     sb = _sb()
 
     # ── 1. Latest price_technicals on or before as_of_date ────────────────────
@@ -201,6 +208,55 @@ def fetch_context(as_of_date: str) -> dict[str, Any]:
         "macro_series": macro_series,
         "prior_snapshot": prior_snapshot,
         "baseline_snapshot": baseline_snapshot,
+    }
+
+
+def _fetch_context_r2(as_of_date: str) -> dict[str, Any]:
+    """R2 branch of :func:`fetch_context` (#4013).
+
+    Prices come from the sealed R2 generations and technicals from
+    :func:`get_price_technicals` (backend-branched internally — no flag check
+    around it here). Macro series and snapshots have no R2 source, so those
+    keys keep the empty body shape.
+    """
+    # Imported per call (cached in sys.modules afterwards) so the default path needs no
+    # digiquant import at module scope, matching fill-entry-prices.py.
+    from digiquant.research.data.queries import (
+        get_price_technicals,
+        r2_close_rows,
+        r2_ohlcv_rows,
+    )
+
+    floor = (date.fromisoformat(as_of_date) - timedelta(days=7)).isoformat()
+    spy = r2_close_rows(tickers=["SPY"], since=floor, until=as_of_date)
+    latest_price_date = max((str(r["date"])[:10] for r in spy), default=None)
+    prices: list[dict] = []
+    technicals: dict[str, dict] = {}
+    if latest_price_date:
+        rows = r2_ohlcv_rows(
+            tickers=sorted(CORE_TICKERS), since=latest_price_date, until=latest_price_date
+        )
+        prices = [r for r in rows if r.get("ticker") in CORE_TICKERS]
+        for ticker in sorted(CORE_TICKERS):
+            res = get_price_technicals(
+                client=None,
+                ticker=ticker,
+                lookback=1,
+                as_of=date.fromisoformat(latest_price_date),
+            )
+            latest = res.get("latest") or {}
+            if latest:
+                technicals[ticker] = latest
+    return {
+        "as_of_date": as_of_date,
+        "latest_price_date": latest_price_date,
+        "prior_snapshot_date": None,
+        "baseline_date": None,
+        "prices": prices,
+        "macro_series": {},
+        "prior_snapshot": None,
+        "baseline_snapshot": None,
+        "technicals": technicals,
     }
 
 
