@@ -23,9 +23,11 @@ export const MCP_CONTAINER_ID = "mcp-v1";
 
 /** Single Durable Object / Container id for the shared Profile A stack.
  * Bump the suffix when a deploy must force a new Firecracker instance
- * (old DO can keep a stale image until sleepAfter expires).
+ * (old DO can keep a stale image until sleepAfter expires) — e.g. v15,
+ * to pick up the rotated DIGIKEY_ADMIN_TOKEN, since the container reads
+ * worker env only when the instance starts.
  */
-export const SHARED_STACK_CONTAINER_ID = "shared-v14";
+export const SHARED_STACK_CONTAINER_ID = "shared-v15";
 
 /**
  * Map public hostname → container port.

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildLevelFixSeries,
   composeFixSeries,
+  fixWindowDays,
   normalizeFixPair,
   pairFixSpec,
   type FxFixPoint,
@@ -180,5 +181,20 @@ describe('buildLevelFixSeries', () => {
     expect(s.targets).toEqual([]);
     expect(s.points).toEqual([]);
     expect(s.anchorsOnly).toBe(false);
+  });
+});
+
+describe('fixWindowDays', () => {
+  it('covers the idea age plus margin for old ideas', () => {
+    // 2026-01-01 → 2026-06-12 is 162 days; window must cover it, not stop at 90.
+    expect(fixWindowDays('2026-01-01', '2026-06-12')).toBe(162 + 30);
+  });
+
+  it('keeps the 90d floor for recent ideas', () => {
+    expect(fixWindowDays('2026-06-01', '2026-06-12')).toBe(90);
+  });
+
+  it('clamps unparseable run dates to the floor', () => {
+    expect(fixWindowDays('not-a-date', '2026-06-12')).toBe(90);
   });
 });
