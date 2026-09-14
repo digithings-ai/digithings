@@ -3,6 +3,9 @@
 Fetches one URL via the shared digifetch client, extracts markdown with the
 existing web_search extractor, stages it to a locked temp dir, and indexes it
 through the canonical filesystem ingest path. No new policy module, no routes.
+
+``digifetch`` (``[web-search]`` extra) is imported lazily, inside the functions
+that need it, so importing this module never requires the extra.
 """
 
 from __future__ import annotations
@@ -11,16 +14,17 @@ import os
 import shutil
 import tempfile
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
-from digifetch import DownloadTooLargeError, HttpFetcher
-from digifetch.ssrf import SsrfBlockedError, validate_fetch_url
 from pydantic import BaseModel, ConfigDict, Field
 
 from digisearch.embedding.base import EmbeddingProvider
 from digisearch.pipeline.ingest import IngestError, ingest_source
 from digisearch.web_search.extractor import extract_markdown
+
+if TYPE_CHECKING:
+    from digifetch import HttpFetcher
 
 EXTRACTOR = "trafilatura"
 
@@ -65,6 +69,8 @@ def _effective_allowed_hosts(allowed_hosts: Iterable[str] | None) -> tuple[str, 
 
 def _default_fetcher(allowed: tuple[str, ...]) -> HttpFetcher:
     """Build the owned fetch client, reusing the web_search timeout when set."""
+    from digifetch import HttpFetcher
+
     timeout: float = 15.0
     try:
         from digisearch.web_search.service import WebSearchConfig
@@ -116,6 +122,9 @@ def ingest_url(
     ``evidence_tier: web`` into document metadata, and removes the temp
     dir in a ``finally`` block.
     """
+    from digifetch import DownloadTooLargeError
+    from digifetch.ssrf import SsrfBlockedError, validate_fetch_url
+
     effective = _effective_allowed_hosts(allowed_hosts)
     try:
         url = validate_fetch_url(url, allowed_hosts=effective)

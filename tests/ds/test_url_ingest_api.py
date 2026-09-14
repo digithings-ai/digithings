@@ -102,6 +102,18 @@ def test_ingest_url_route_ingest_error_maps_status(
     assert resp.status_code == 503, resp.text
 
 
+def test_ingest_url_route_missing_extra_maps_503(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    def _raise(allowed: tuple[str, ...]) -> None:
+        raise ImportError("No module named 'digifetch'")
+
+    monkeypatch.setattr(url_ingest_mod, "_default_fetcher", _raise)
+    resp = client.post("/ingest/url", json={"source_url": f"https://{_PUBLIC}/article"})
+    assert resp.status_code == 503, resp.text
+    assert "digisearch[web-search]" in resp.json()["error"]["message"]
+
+
 def test_ingest_url_route_malformed_port(client: TestClient) -> None:
     resp = client.post("/ingest/url", json={"source_url": f"http://{_PUBLIC}:99999999/"})
     assert resp.status_code == 400, resp.text

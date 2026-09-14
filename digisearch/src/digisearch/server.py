@@ -1018,6 +1018,11 @@ def api_ingest_url(req: IngestUrlRequest) -> UrlIngestResult:
     """Ingest a URL via :func:`digisearch.pipeline.url_ingest.ingest_url`."""
     try:
         return ingest_url(req.source_url, index_name=req.index_name, metadata=req.metadata)
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Install digisearch[web-search] for /ingest/url: {exc}",
+        ) from exc
     except IngestError as exc:
         raise HTTPException(status_code=exc.http_status, detail=exc.message) from exc
 
