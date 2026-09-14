@@ -31,6 +31,12 @@ Pages digithings.ai/chat[/occ]
 Mac Compose + quick tunnels remain **dev-only** — see
 [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md).
 
+Read-only market data (#4013): `GET /v1/market/tickers` and
+`GET /v1/market/closes?tickers=A,B&from=YYYY-MM-DD&to=YYYY-MM-DD` (max 25
+tickers per request) are served by the Worker itself from the `MARKET_DATA`
+R2 binding (`digithings-archive`); browser CORS is allowlisted via the
+`MARKET_DATA_ALLOWED_ORIGINS` var.
+
 ## Prerequisites
 
 - Docker running (for `wrangler deploy` image build)

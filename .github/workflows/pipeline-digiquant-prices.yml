@@ -54,8 +54,10 @@ name: "Pipeline: digiquant prices"
 #   R2 seams in #4013, but migration 124's DROPs stay DEFERRED (#3951) while
 #   same-day reads and the documented rollback still need the Supabase
 #   bodies; `export_sdca_macro.py` has no R2 seam (FRED API / keyless
-#   fredgraph CSV). The tables stay current via the KEPT cadence writes
-#   until a real retirement.
+#   fredgraph CSV). On the KEPT cadence, only `price_history` (intraday
+#   fetch-quotes) and `trading_calendar` stay current; `price_technicals`
+#   receives no workflow writes since Task 11 retired its writer. The tables
+#   themselves stay until a real retirement.
 #
 # Re-enable: `gh workflow run pipeline-digiquant-prices.yml -f mode=<job>
 # -f run_writers=true`, or revert the `run_writers` gates to resume cadence.
