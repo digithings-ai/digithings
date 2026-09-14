@@ -229,7 +229,26 @@ config that cannot load raises — never a silent no-op. Chunker selection (no
 code change): `DIGISEARCH_CHUNKER=semantic|token|recursive|fixed`, or per-index
 YAML `chunker:` via `DigiSearchConfig`.
 
-**Critical gap:** `source` is a **filesystem path** on the server. The caller must ensure the path is accessible from inside the container. There is no URL-based ingest in the production path.
+**Critical gap:** `source` is a **filesystem path** on the server. The caller must ensure the path is accessible from inside the container. URL ingest is a separate, SSRF-guarded route — `POST /ingest/url`, below.
+
+#### `POST /ingest/url`
+
+Auth required (`digisearch:ingest` scope; the `/ingest` path prefix covers this
+route). One URL per request.
+
+```
+Request:  IngestUrlRequest { source_url: str, index_name: str = "default", metadata: dict? }
+Response: UrlIngestResult { doc_id, chunks_created, index_name, source_url, final_url, extractor }
+```
+
+`pipeline/url_ingest.py` validates with digifetch's `validate_fetch_url` (SSRF
+guard; operator hatch `DIGISEARCH_FETCH_ALLOWED_HOSTS`), fetches via
+`HttpFetcher`, extracts markdown (`web_search.extractor`: trafilatura →
+readability), stages it as a temp `page.md`, and delegates to the same
+`pipeline.ingest.ingest_source` filesystem path. `text/*` and
+`application/xhtml+xml` only. Error mapping: blocked/malformed URL → 400,
+download too large → 413, unsupported content type → 415, empty extract → 422,
+other ingest failures → their `IngestError.http_status`.
 
 #### query.mode semantics
 
@@ -831,6 +850,7 @@ digisearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middlewa
 |----------|---------------|
 | `POST /query` | `digisearch:query` |
 | `POST /ingest` | `digisearch:ingest` |
+| `POST /ingest/url` | `digisearch:ingest` |
 | `POST /v1/orchestrator_tools` | `digisearch:query` |
 | `POST /v1/orchestrator_invoke` | `digisearch:query` |
 | `POST /v1/research_turn` | `digisearch:query` |

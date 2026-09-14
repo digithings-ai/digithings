@@ -191,7 +191,7 @@ note}` (advisory-only; "OSS total excludes LLM spend"); `usage` travels as a
 separate `TurnUsage` return value / turn-state key, never inside
 `WebSearchData` (which is `extra="ignore"` and drops extras).
 EXA (`web_exa.py`) and OSS (`web/`) therefore stay interchangeable at
-`POST /v1/web_search`-shaped consumers. Note: `format_web_results` reads
+`POST /v1/digisearch_web_search`-shaped consumers. Note: `format_web_results` reads
 `title/url/publishedDate/author/highlights/text` keys — OSS web hits carry
 `snippet` (not `highlights`/`text`), so OSS payloads render Title/URL-only
 through it; `node_web_aggregate` therefore builds its own numbered
@@ -1026,7 +1026,7 @@ Expected: PASS, zero ruff errors. Then live (requires SearXNG sidecar +
 `digillm` key): `DIGISEARCH_WEB_LIVE=1 pytest
 tests/ds/test_web_eval_live.py -v` → record fast/thorough p50 +
 citation coverage; confirm zero `Traceback`; confirm EXA-paid path untouched
-(`POST /v1/web_search` still EXA-gated).
+(`POST /v1/digisearch_web_search` still EXA-gated).
 
 - [ ] **Step 5: Verify deliverable independently**
 

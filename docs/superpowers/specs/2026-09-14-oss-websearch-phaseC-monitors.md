@@ -27,10 +27,10 @@ no `service_auth.py`; see Task 8).
 
 Landed-behavior note (not new work): `server.py` already passes
 `include_domains`/`exclude_domains` through in BOTH dispatch arms
-(`api_orchestrator_invoke` web-search arm at `server.py:739-752` +
-`POST /v1/web_search` at `server.py:806-826`) and the tool-schema properties
-exist in `orchestrator_tools.py:352-361`. Monitors consume that passthrough;
-no task re-specifies it.
+(`api_orchestrator_invoke` web-search arm at `server.py:817-844` +
+`POST /v1/digisearch_web_search` at `server.py:916-944`) and the tool-schema
+properties exist in `orchestrator_tools.py:397-406`. Monitors consume that
+passthrough; no task re-specifies it.
 
 **Produces:** Watch CRUD + schedule config + dedup rules + delivery config +
 durable run history, over HTTP (`:8002`), MCP (`:8765`), and the orchestrator
