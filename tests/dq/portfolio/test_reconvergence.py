@@ -294,3 +294,27 @@ def test_apply_refuses_a_backdated_plan_in_v1() -> None:
     plan = rc.plan_convergence(client=client, book_date=BOOK_D, mode="backdated", since=BOOK_D)
     with pytest.raises(ValueError, match="backdated"):
         rc.apply_catch_up(client=client, plan=plan, now=NOW)
+
+
+def test_orphan_held_symbol_absent_from_the_book_is_sold_back_to_zero() -> None:
+    client = _client(
+        positions=_book_rows(BOOK_D, {"AAA": 5.0}),
+        navs=_nav_rows({BOOK_D: 100_000.0}),
+        prices=_marks(EXEC_D.isoformat(), {"AAA": 100.0, "BBB": 50.0}),
+        lots=[_lot("BBB", "10")],
+    )
+    plan = rc.plan_convergence(client=client, book_date=BOOK_D, exec_date=EXEC_D)
+    orphan = next(leg for leg in plan.legs if leg.symbol == "BBB")
+    assert orphan.side == "sell"
+    assert orphan.quantity == Decimal("10")
+    assert orphan.target_quantity == Decimal("0")
+
+
+def test_missing_mark_for_a_weighted_symbol_raises() -> None:
+    client = _client(
+        positions=_book_rows(BOOK_D, {"AAA": 5.0, "ZZZ": 5.0}),
+        navs=_nav_rows({BOOK_D: 100_000.0}),
+        prices=_marks(EXEC_D.isoformat(), {"AAA": 100.0}),
+    )
+    with pytest.raises(ValueError, match="ZZZ"):
+        rc.plan_convergence(client=client, book_date=BOOK_D, exec_date=EXEC_D)

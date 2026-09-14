@@ -132,6 +132,8 @@ def main(argv: list[str] | None = None) -> int:
         exec_date = _parse_date(args.exec_date, "--exec-date") if args.exec_date else None
         since = _parse_date(args.since, "--since") if args.since else None
         min_notional = Decimal(str(args.min_notional))
+        if not min_notional.is_finite() or min_notional < 0:
+            raise ValueError("--min-notional must be a finite non-negative amount")
     except (ValueError, ArithmeticError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

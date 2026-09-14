@@ -4,6 +4,8 @@ live paper ledger back onto the committed book (#4010).
 Dry-run first by design: :func:`plan_convergence` only reads. :func:`apply_catch_up`
 writes one labeled ``ledger_reconvergence`` recovery chain; backdated plans are
 refused in v1 because restating finalized accounting is a separate, deliberate step.
+Applying is not transactional: the commit row is written first, so a failure mid-chain
+leaves a partial recovery that refuses a plain re-run and needs an operator.
 """
 
 from __future__ import annotations
@@ -62,6 +64,7 @@ _RECON_ID_NAMESPACE = UUID("5f8d2c1b-9a3e-4b7c-8d1f-2e6b0a4c7d91")
 
 _POSITIONS = "positions"
 _NAV_HISTORY = "nav_history"
+_LOT_PAGE_SIZE = 1000
 
 __all__ = [
     "CASH",
@@ -126,13 +129,27 @@ def _plain(value: Decimal) -> str:
 
 
 def _read_lots(client: SupabaseClient) -> list[dict[str, Any]]:
-    resp = (
-        client.table(HOLDING_LOTS)
-        .select("*")
-        .eq("workspace_id", str(house_workspace_id()))
-        .execute()
-    )
-    return list(resp.data or [])
+    """Read every house lot, paging past the PostgREST 1000-row response cap.
+
+    The live-quantity read drives both the plan and the apply-side FIFO consume,
+    so a silently truncated page would understate holdings and over-buy.
+    """
+    rows: list[dict[str, Any]] = []
+    start = 0
+    while True:
+        resp = (
+            client.table(HOLDING_LOTS)
+            .select("*")
+            .eq("workspace_id", str(house_workspace_id()))
+            .order("id")
+            .range(start, start + _LOT_PAGE_SIZE - 1)
+            .execute()
+        )
+        page = list(resp.data or [])
+        rows.extend(page)
+        if len(page) < _LOT_PAGE_SIZE:
+            return rows
+        start += _LOT_PAGE_SIZE
 
 
 def _read_live_quantities(client: SupabaseClient) -> dict[str, Decimal]:
@@ -192,10 +209,9 @@ def _legs_for_day(
     nav: Decimal,
     running: dict[str, Decimal],
     min_notional: Decimal,
-) -> tuple[list[TradeLeg], list[str]]:
+) -> tuple[list[TradeLeg], list[str], dict[str, Decimal]]:
     symbols = set(weights) | set(running)
     marks = _marks(client, day=mark_day, symbols=symbols)
-    cutoff = mark_day + timedelta(days=1)
     legs: list[TradeLeg] = []
     dust: list[str] = []
     for symbol in sorted(symbols):
@@ -205,7 +221,7 @@ def _legs_for_day(
             mark = marks.get(symbol)
             if mark is None:
                 raise ValueError(
-                    f"{symbol}: no price_history close at or before {cutoff.isoformat()} "
+                    f"{symbol}: no price_history close on or before {mark_day.isoformat()} "
                     "— cannot size a reconvergence leg"
                 )
             target_qty = _quantize_qty(weight / 100 * nav / mark)
@@ -216,12 +232,12 @@ def _legs_for_day(
         mark = marks.get(symbol)
         if mark is None:
             raise ValueError(
-                f"{symbol}: no price_history close at or before {cutoff.isoformat()} "
+                f"{symbol}: no price_history close on or before {mark_day.isoformat()} "
                 "— cannot size a reconvergence leg"
             )
         notional = _quantize_money(abs(delta) * mark)
         if notional < min_notional:
-            dust.append(symbol)
+            dust.append(f"{book_date.isoformat()}:{symbol}")
             continue
         legs.append(
             TradeLeg(
@@ -235,7 +251,7 @@ def _legs_for_day(
                 target_quantity=target_qty,
             )
         )
-    return legs, dust
+    return legs, dust, marks
 
 
 def _assemble_plan(
@@ -284,12 +300,14 @@ def plan_convergence(
     """
     if mode not in ("catch-up", "backdated"):
         raise ValueError(f"unknown reconvergence mode {mode!r}")
+    if not min_notional.is_finite() or min_notional < 0:
+        raise ValueError(f"min_notional must be a finite non-negative amount, got {min_notional!r}")
     if mode == "catch-up":
         exec_day = exec_date or book_date
         running = _read_live_quantities(client)
         weights = _read_book(client, book_date=book_date)
         nav = _read_nav(client, day=book_date)
-        legs, dust = _legs_for_day(
+        legs, dust, _ = _legs_for_day(
             client=client,
             book_date=book_date,
             mark_day=exec_day,
@@ -340,7 +358,7 @@ def plan_convergence(
     for day in sorted(by_day):
         weights = by_day[day]
         nav = _read_nav(client, day=day)
-        day_legs, day_dust = _legs_for_day(
+        day_legs, day_dust, day_marks = _legs_for_day(
             client=client,
             book_date=day,
             mark_day=day,
@@ -353,11 +371,10 @@ def plan_convergence(
         dust.extend(day_dust)
         for symbol in set(weights) | set(running):
             weight = weights.get(symbol, _ZERO)
-            if weight > 0:
-                mark = _marks(client, day=day, symbols={symbol}).get(symbol)
-                if mark is not None:
-                    running[symbol] = _quantize_qty(weight / 100 * nav / mark)
-            else:
+            mark = day_marks.get(symbol)
+            if weight > 0 and mark is not None:
+                running[symbol] = _quantize_qty(weight / 100 * nav / mark)
+            elif weight <= 0:
                 running[symbol] = _ZERO
     return _assemble_plan(
         mode=mode,

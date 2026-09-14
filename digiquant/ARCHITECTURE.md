@@ -2867,11 +2867,13 @@ a dark schema needs opting into, a live writer needs an escape hatch.
 
 H9 records what the portfolio *decided*; this is what it *did*.
 `digiquant/src/digiquant/portfolio/writers/execution_io.py` is the only writer into
-`portfolio_ledger_paper_executions` and `portfolio_ledger_holding_lots`, and
+`portfolio_ledger_paper_executions` and `portfolio_ledger_holding_lots` on the daily path, and
 `execute_pending_orders(...)` has exactly one caller: `digiquant/scripts/research/execute_at_open.py`,
-the job the prices pipeline runs at 09:35 ET. Two structural tests hold both halves of that
-(`tests/dq/portfolio/test_execution_io.py::TestSoleAuthority`) — a second writer would give one
-position two irreconcilable records, and the append-only trigger cannot tell a rogue insert
+the job the prices pipeline runs at 09:35 ET. Two labeled writers are allowed beside it — the
+`opening_snapshot` seed and the `ledger_reconvergence` reconvergence chain (#4010) — because both
+mirror the executor's deterministic-id writing contract. Structural tests hold both halves
+(`tests/dq/portfolio/test_execution_io.py::TestSoleAuthority`) — a second *daily* writer would give
+one position two irreconcilable records, and the append-only trigger cannot tell a rogue insert
 from a legitimate one.
 
 The executor reads the day's pending `OrderIntent` heads, resolves each one's direction from
