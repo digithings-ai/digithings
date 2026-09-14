@@ -262,3 +262,23 @@ def test_unknown_r2_ticker_declines_instead_of_raising(r2_market) -> None:
     assert bep._fetch_open(None, "ZZZ", "2026-09-10") is None
     assert fep.lookup_close(None, "ZZZ", "2026-09-10") is None
     assert pfe._close_on_or_after(None, "ZZZ", "2026-09-10") is None
+
+
+def test_open_marks_declines_only_the_unknown_ticker(r2_market) -> None:
+    """One unknown symbol must not decline every pending order's mark (#4013 fix round)."""
+    r2_market(
+        {
+            "GLD": [
+                {
+                    "date": "2026-09-10",
+                    "open": 250.5,
+                    "high": 251.0,
+                    "low": 249.0,
+                    "close": 260.0,
+                    "volume": 1000,
+                }
+            ]
+        },
+        as_of="2026-09-10",
+    )
+    assert eao._open_marks(None, ["GLD", "ZZZ"], "2026-09-10") == {"GLD": Decimal("250.5")}

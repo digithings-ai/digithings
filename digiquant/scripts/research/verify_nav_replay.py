@@ -244,9 +244,9 @@ def _fetch_price_rows(
 
     inception_date = inception.isoformat() if isinstance(inception, date) else str(inception)
     if r2_backend_enabled():
-        rows = r2_ohlcv_rows(
-            tickers=book_tickers, since=inception_date, until=date.today().isoformat()
-        )
+        # UTC, not local: the seal is a UTC date and `date.today()` tripped DTZ011.
+        today = datetime.now(timezone.utc).date().isoformat()
+        rows = r2_ohlcv_rows(tickers=book_tickers, since=inception_date, until=today)
         return _rows_from_inception(rows, inception_date)
     return _rows_from_inception(
         _fetch_table(

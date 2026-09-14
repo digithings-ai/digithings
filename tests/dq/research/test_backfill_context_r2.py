@@ -3,17 +3,22 @@
 ``fetch_context`` keeps its Supabase body for the default backend and gains an
 R2 branch (``r2_backend_enabled`` / ``r2_close_rows`` / ``r2_ohlcv_rows`` /
 ``get_price_technicals`` — the technicals helper owns its own backend switch).
-Loaded via ``importlib.util`` like the other script-level tests
-(``digiquant/scripts/`` is not an installed package).
+Macro series and snapshots stay on Supabase even under R2 (D2), so the R2 branch
+still builds a client through ``_sb`` — the ``fake_sb`` fixture keeps these unit
+tests off a real one. Loaded via ``importlib.util`` like the other script-level
+tests (``digiquant/scripts/`` is not an installed package).
 """
 
 from __future__ import annotations
 
 import importlib.util
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any  # score:allow untyped any — script modules loaded by path
 
 import pytest
+
+from tests.fixtures.fake_supabase import FakeSupabaseClient
 
 # Registers Task 1's `r2_market` builder fixture for this module; pytest requires
 # plugin modules to be named here rather than imported (an imported fixture would
@@ -34,6 +39,14 @@ def _load(name: str, filename: str) -> Any:
 
 
 bc = _load("backfill_context_r2", "backfill_context.py")
+
+
+@pytest.fixture(autouse=True)
+def fake_sb(monkeypatch: pytest.MonkeyPatch) -> FakeSupabaseClient:
+    """Install an in-memory client as ``_sb``; seed ``canned_reads`` to serve rows."""
+    client = FakeSupabaseClient()
+    monkeypatch.setattr(bc, "_sb", lambda: client)
+    return client
 
 
 def test_latest_price_date_and_technicals_from_r2(r2_market, monkeypatch) -> None:
@@ -101,3 +114,87 @@ def test_r2_price_rows_carry_supabase_indicator_keys_and_prompt_renders(
     assert "Price & Technical Indicators" in prompt
     spy_line = next(line for line in prompt.splitlines() if line.startswith("| SPY |"))
     assert "—" in spy_line
+
+
+def test_r2_context_keeps_macro_and_snapshots_on_supabase(r2_market, monkeypatch, fake_sb) -> None:
+    """D2: only market/price data moves to R2 — macro and snapshots stay on Supabase.
+
+    The prompt must not claim a false "first run": with the canned Supabase rows the
+    R2 context carries the real prior/baseline dates and a non-empty macro block, and
+    overlapping indicators (rsi_14) still flow from the R2 technicals envelope.
+    """
+    bars = [
+        {
+            "date": (date(2026, 8, 12) + timedelta(days=offset)).isoformat(),
+            "open": 100.0 + offset,
+            "high": 101.0 + offset,
+            "low": 99.0 + offset,
+            "close": 100.0 + offset,
+            "volume": 10,
+        }
+        for offset in range(30)
+    ]
+    r2_market({"SPY": bars}, as_of="2026-09-10")
+    fake_sb.canned_reads = {
+        "macro_series_observations": [
+            {
+                "series_id": "DGS10",
+                "source": "fred",
+                "obs_date": "2026-09-09",
+                "value": 4.2,
+                "unit": "percent",
+                "meta": None,
+            }
+        ],
+        "daily_snapshots": [
+            {
+                "date": "2026-09-09",
+                "run_type": "daily",
+                "baseline_date": "2026-09-06",
+                "snapshot": {
+                    "regime": {"bias": "neutral", "label": "range"},
+                    "portfolio": {
+                        "posture": "balanced",
+                        "cash_pct": 10,
+                        "positions": [
+                            {
+                                "ticker": "SPY",
+                                "weight_pct": 20,
+                                "action": "HOLD",
+                                "rationale": "core",
+                            }
+                        ],
+                    },
+                    "theses": [{"id": "T1", "name": "core", "status": "active"}],
+                    "actionable": ["watch CPI"],
+                },
+            },
+            {
+                "date": "2026-09-06",
+                "run_type": "baseline",
+                "snapshot": {"regime": {"bias": "neutral", "label": "range"}},
+            },
+        ],
+    }
+    monkeypatch.setattr(bc, "CORE_TICKERS", ["SPY"])
+    ctx = bc.fetch_context("2026-09-10")
+
+    assert set(ctx) == {
+        "as_of_date",
+        "latest_price_date",
+        "prior_snapshot_date",
+        "baseline_date",
+        "prices",
+        "macro_series",
+        "prior_snapshot",
+        "baseline_snapshot",
+    }
+    assert ctx["macro_series"]["fred:DGS10"]["value"] == 4.2
+    assert ctx["prior_snapshot"] and ctx["prior_snapshot_date"] == "2026-09-09"
+    assert ctx["baseline_snapshot"] and ctx["baseline_date"] == "2026-09-06"
+    assert any(row.get("rsi_14") is not None for row in ctx["prices"])
+
+    prompt = bc.build_agent_prompt(ctx)
+    assert "DGS10" in prompt
+    assert "**Prior regime:** neutral — range" in prompt
+    assert "No prior snapshot found" not in prompt

@@ -496,19 +496,24 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
     `position_events` is a display table; this one feeds the record of what was bought.
 
     Sealed dates read the R2 generation; same-day opens stay on the Supabase table the
-    intraday writer keeps fresh (#4013 D3).
+    intraday writer keeps fresh (#4013 D3). The R2 seam fetches one generation per
+    ticker and raises ``LookupError`` for an unknown one, so that branch loops per
+    ticker and skips only the unknown symbol's mark instead of declining every
+    pending order in the batch (#4013 fix round).
     """
     if not tickers:
         return {}
     if r2_backend_enabled():
         seal, _ = r2_manifest_seal()
         if str(d)[:10] <= seal.isoformat():
-            try:
-                rows = r2_ohlcv_rows(
-                    tickers=sorted(set(tickers)), since=str(d)[:10], until=str(d)[:10]
-                )
-            except LookupError:
-                return {}
+            rows: List[dict] = []
+            for ticker in sorted(set(tickers)):
+                try:
+                    rows.extend(
+                        r2_ohlcv_rows(tickers=[ticker], since=str(d)[:10], until=str(d)[:10])
+                    )
+                except LookupError:
+                    continue
             marks: Dict[str, Decimal] = {}
             for row in rows:
                 ticker = row.get("ticker")
