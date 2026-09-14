@@ -496,7 +496,7 @@ describe('buildPerformanceTearsheet', () => {
     expect(result.currentHoldings[0].attributionDate).toBe('2026-08-25');
   });
 
-  it('breaks the return series at a legacy→finalized seam instead of drawing the Sep-8 jump (#3767)', () => {
+  it('chains legacy and finalized runs without drawing the Sep-8 jump (#3767 / #4014)', () => {
     const nav = [
       { date: '2026-09-06', nav: 100, cash_pct: 20, invested_pct: 80 },
       { date: '2026-09-07', nav: 99.92, cash_pct: 20, invested_pct: 80 },
@@ -552,20 +552,191 @@ describe('buildPerformanceTearsheet', () => {
       ],
     });
 
-    // The plotted series is the current (finalized) run — no bridge from the
-    // legacy 99.92 across to the finalized 110.75.
+    // Every row plots; the seam row carries flat instead of bridging 99.92 to
+    // 110.75, so the legacy history stays visible without the phantom jump.
     expect(result.navSeries.map((point) => point.date)).toEqual([
+      '2026-09-06',
+      '2026-09-07',
       '2026-09-08',
       '2026-09-09',
     ]);
     expect(result.navSeries[0].returnPct).toBe(0);
-    expect(result.navSeries.at(-1)!.returnPct).toBeCloseTo(
-      (111.84928206 / 110.74928206 - 1) * 100,
-      5
-    );
-    // Since-inception is the current run, not the phantom +10.7% across the seam.
-    expect(result.netReturnPct).toBeCloseTo((111.84928206 / 110.74928206 - 1) * 100, 5);
-    expect(result.inceptionDate).toBe('2026-09-08');
+    expect(result.navSeries[1].returnPct).toBeCloseTo(-0.08, 5);
+    expect(result.navSeries[2].returnPct).toBeCloseTo(-0.08, 5);
+    const chained = result.navSeries.at(-1)!.returnPct;
+    // ~+0.91% chained from the legacy base — never the +10.8% basis bridge.
+    expect(chained).toBeCloseTo(0.9124, 3);
+    expect(chained).toBeLessThan(2);
+    // The KPI and chart agree across the whole series again (#3935 / #4014).
+    expect(result.netReturnPct).toBeCloseTo(chained, 5);
+    expect(result.inceptionDate).toBe('2026-09-06');
+  });
+
+  it("splices runs with each row's own day return instead of the basis jump (#4014)", () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-09-07', nav: 99.92, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-09-08', nav: 110.74928206, cash_pct: 18.16, invested_pct: 81.84 },
+        { date: '2026-09-09', nav: 110.27496181, cash_pct: 18.24, invested_pct: 81.76 },
+      ],
+      positions: [],
+      metrics: null,
+      attribution: [],
+      events: [],
+      accountingNav: [
+        {
+          date: '2026-09-07',
+          nav: 99.92,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: 0,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+          series_seam: false,
+        },
+        {
+          date: '2026-09-08',
+          nav: 110.74928206,
+          cash_pct: 18.16,
+          invested_pct: 81.84,
+          day_return_pct: -1.102422,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: true,
+        },
+        {
+          date: '2026-09-09',
+          nav: 110.27496181,
+          cash_pct: 18.24,
+          invested_pct: 81.76,
+          day_return_pct: -0.428283,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: false,
+        },
+      ],
+    });
+
+    expect(result.navSeries.map((point) => point.date)).toEqual([
+      '2026-09-07',
+      '2026-09-08',
+      '2026-09-09',
+    ]);
+    // The seam row applies the finalized period's own return, not the +10.8%
+    // level jump the stitched view shows between the two bases.
+    expect(result.navSeries[1].returnPct).toBeCloseTo(-1.102422, 5);
+    expect(result.navSeries[2].returnPct).toBeCloseTo(-1.526, 2);
+  });
+
+  it('forward-fills weekend gaps so the plotted series stays continuous (#4014)', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-09-04', nav: 100.886423, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-09-08', nav: 100.362022, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [],
+      metrics: null,
+      attribution: [],
+      events: [],
+    });
+
+    expect(result.navSeries.map((point) => point.date)).toEqual([
+      '2026-09-04',
+      '2026-09-05',
+      '2026-09-06',
+      '2026-09-07',
+      '2026-09-08',
+    ]);
+    expect(result.navSeries.slice(0, 4).map((point) => point.returnPct)).toEqual([0, 0, 0, 0]);
+    expect(result.navSeries.at(-1)!.returnPct).toBeCloseTo(-0.5198, 3);
+  });
+
+  it('leaves long book gaps as a jump instead of inventing flat days (#4014)', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-06-23', nav: 100, cash_pct: 25, invested_pct: 75 },
+        { date: '2026-08-26', nav: 98.5, cash_pct: 25, invested_pct: 75 },
+      ],
+      positions: [],
+      metrics: null,
+      attribution: [],
+      events: [],
+    });
+    // 64 missing days — a missing book run, not a weekend; no fill points.
+    expect(result.navSeries.map((point) => point.date)).toEqual(['2026-06-23', '2026-08-26']);
+    expect(result.navSeries.at(-1)!.returnPct).toBeCloseTo(-1.5, 6);
+  });
+
+  it('drops an implausible accounting step instead of drawing a cliff (#4014)', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-08-24', nav: 101.327006, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-08-25', nav: 3.35208926, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-08-26', nav: 15.13, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-08-27', nav: 102.477988, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [],
+      metrics: null,
+      attribution: [],
+      events: [],
+      accountingNav: [
+        {
+          date: '2026-08-24',
+          nav: 101.327006,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: 0.2822,
+          source: 'legacy_nav_history',
+          contract: 'legacy_estimate',
+          series_seam: false,
+        },
+        {
+          date: '2026-08-25',
+          nav: 3.35208926,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: 3252.08926,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: true,
+        },
+        {
+          date: '2026-08-26',
+          nav: 15.13,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: 0,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: false,
+        },
+        {
+          date: '2026-08-27',
+          nav: 102.477988,
+          cash_pct: 20,
+          invested_pct: 80,
+          day_return_pct: -0.436605,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+          series_seam: false,
+        },
+      ],
+    });
+
+    expect(result.navSeries.map((point) => point.date)).toEqual([
+      '2026-08-24',
+      '2026-08-25',
+      '2026-08-26',
+      '2026-08-27',
+    ]);
+    // The 0.10 → 3.35 opening period is a funding artifact, not a +3252% return.
+    expect(result.navSeries.every((point) => Math.abs(point.returnPct) < 1)).toBe(true);
+    expect(result.navSeries.map((point) => point.returnPct)).toEqual([
+      0,
+      0,
+      0,
+      -0.436605,
+    ]);
   });
 
   it('draws per-asset contribution from daily realized attribution when marks are stale', () => {
@@ -766,11 +937,16 @@ describe('buildPerformanceTearsheet', () => {
     });
 
     expect(result.navSeries.map((point) => point.date)).toEqual([
+      '2026-09-05',
+      '2026-09-06',
+      '2026-09-07',
       '2026-09-08',
       '2026-09-09',
       '2026-09-10',
     ]);
-    expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([0, 0, 10]);
+    expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([
+      0, 0, 0, 0, 0, 10,
+    ]);
     expect(result.contributionSource).toBe('marks');
   });
 

@@ -32,7 +32,8 @@ jobs:
 
       - name: Run OpenWiki
         id: openwiki
-        continue-on-error: true
+        # No continue-on-error: a non-zero exit must fail the run here. The steps
+        # below use `!cancelled()`, so a failed run still opens the partial PR.
         run: openwiki code --update --print
         env:
           # This repo has no metered OPENAI_API_KEY secret. House LLM traffic runs
@@ -99,7 +100,3 @@ jobs:
             When the result is `failure`, this PR intentionally preserves only the
             pages completed before the failure. Merge it to make that progress the
             baseline for the next scheduled run.
-
-      - name: Propagate OpenWiki failure
-        if: ${{ steps.openwiki.outcome == 'failure' }}
-        run: exit 1
