@@ -232,26 +232,40 @@ cutover below has shipped.** The fix lives in the twelve-x repo:
 `supabase/migrations/cutover/fx_hub_rls_cutover.sql` (staged, inert — see
 that file's own header for the full precondition list and inventory). Summary:
 
-1. Third-Party Auth: twelve-x's Supabase project trusts this (core) project
-   as a JWT issuer, so the SAME login session RLS's `auth.jwt()` there.
-   Manual dashboard step (Authentication → Sign In / Providers → Third-Party
-   Auth), one-time, no migration covers it.
-2. `fx-hub-grant-sync` Edge Function (deployed to twelve-x) mirrors
+**Correction**: an earlier draft of this section assumed Supabase's
+Third-Party Auth could trust core as a JWT issuer directly. It cannot —
+that feature (Authentication → Sign In / Providers → Third-Party Auth) only
+supports named identity providers (Firebase, Clerk, WorkOS, Auth0, Amazon
+Cognito), not "trust another Supabase project's JWTs". There is no dashboard
+step for this at all; twelve-x instead mints its own real session:
+
+1. `fx-hub-grant-sync` Edge Function (deployed to twelve-x) mirrors
    `client_product_grants(product_key='fx_hub')` into a local `fx_hub_grants`
    table there — twelve-x's RLS has no other way to know who core granted.
    Called from `redeemProductInvite`'s `syncExternalGrant` (best-effort; see
    `_shared/invite.ts` / `_shared/settings-handlers.ts`).
-3. `FX_HUB_GRANT_SYNC_SECRET` — same value — set on BOTH projects:
+2. `fx-hub-session` Edge Function (also deployed to twelve-x) mints a REAL
+   twelve-x-native session for a caller already confirmed granted — the
+   standard server-side `generateLink` (magiclink) + `verifyOtp` technique,
+   no email sent. Called from core's new `GET /access/twelvex-session`
+   (`getTwelvexSession` in `_shared/settings-handlers.ts`), which itself
+   re-checks `client_product_grants` before calling it.
+3. `FX_HUB_GRANT_SYNC_SECRET` — same value — set on BOTH projects (both
+   Edge Functions on the twelve-x side read it):
    ```
    supabase secrets set FX_HUB_GRANT_SYNC_SECRET=<value> --project-ref rwagjbkvxkdwqmouagad
    supabase secrets set FX_HUB_GRANT_SYNC_SECRET=<value> --project-ref lfghjucjrsabiqwxerxv
    ```
    and `FX_HUB_GRANT_SYNC_URL=https://lfghjucjrsabiqwxerxv.functions.supabase.co/fx-hub-grant-sync`
-   on core (settings function only reads it — no need to set it on twelve-x).
-4. `cloudflare/dashboard/lib/twelve-x/supabase.ts` already forwards the
-   signed-in session's access token to the twelve-x client (`accessToken`
-   callback) — ships independently of the above, harmless pre-cutover.
+   on core only (`getTwelvexSession` derives the session-mint URL from this
+   one by replacing the function name — no third env var needed).
+4. `cloudflare/dashboard/lib/twelve-x/supabase.ts` + new
+   `lib/twelve-x/session.ts` (`ensureTwelveXSession`, wired into
+   `ClientProductGate`) already call the bridge above once a product is
+   granted — ships independently of the rest, harmless pre-cutover (falls
+   back to the anon key when no session is minted yet).
 5. Once 1–4 are live, promote the staged migration (copy, don't move, per its
    header) and verify: bare anon key against any fx_* table returns empty,
-   not an error.
+   not an error — AND an actual granted user's FX Hub page load succeeds
+   end-to-end (not just the negative anon-denied case).
 

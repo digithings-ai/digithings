@@ -15,7 +15,6 @@
  * configured, and callers must guard with {@link isTwelveXConfigured}.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { supabase as coreSupabase } from '../supabase';
 
 const twelveXUrl =
   process.env.NEXT_PUBLIC_TWELVEX_SUPABASE_URL ??
@@ -34,26 +33,26 @@ const twelveXAnonKey =
  * typed fetchers in `./fetch.ts` cast their selected rows to the contract types
  * in `./types.ts`.
  *
- * `accessToken` forwards the CORE project's signed-in session (Third-Party
- * Auth: twelve-x is configured to trust core as a JWT issuer — see
- * supabase/migrations/cutover/fx_hub_rls_cutover.sql in the twelve-x repo).
- * Harmless pre-cutover (anon still reads everything until that migration
- * lands); required post-cutover for RLS there to know who is signed in.
- * `null`/no session ⇒ supabase-js falls back to the anon key, same as today.
+ * Starts on the anon key alone (today's behavior — harmless pre-cutover,
+ * since anon still reads everything until supabase/migrations/cutover/
+ * fx_hub_rls_cutover.sql in the twelve-x repo is promoted). Post-cutover,
+ * `./session.ts` `ensureTwelveXSession()` calls `auth.setSession()` with a
+ * session minted server-side by twelve-x's own `fx-hub-session` Edge
+ * Function — see that file for why (Supabase's Third-Party Auth only
+ * supports named identity providers, not "trust another Supabase project",
+ * so this project needs its own real session rather than a forwarded JWT).
+ * `persistSession: true` (own storage key, distinct from the dashboard auth
+ * singleton) so the minted session survives reloads within its ~1hr expiry.
  */
 /** Secondary client: never share GoTrue storage with the dashboard auth singleton. */
 export const twelveXSupabase: SupabaseClient | null =
   twelveXUrl && twelveXAnonKey
     ? createClient(twelveXUrl, twelveXAnonKey, {
         auth: {
-          persistSession: false,
-          autoRefreshToken: false,
+          storageKey: 'twelvex-auth',
+          persistSession: true,
+          autoRefreshToken: true,
           detectSessionInUrl: false,
-        },
-        accessToken: async () => {
-          if (!coreSupabase) return null;
-          const { data } = await coreSupabase.auth.getSession();
-          return data.session?.access_token ?? null;
         },
       })
     : null;

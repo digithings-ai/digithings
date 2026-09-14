@@ -39,6 +39,10 @@ vi.mock('@/lib/settings-api', () => ({
   },
 }));
 
+vi.mock('@/lib/twelve-x/session', () => ({
+  ensureTwelveXSession: vi.fn(async () => false),
+}));
+
 import { AuthContext } from '@/lib/auth-context';
 import { ClientProductGate } from './client-product-gate';
 

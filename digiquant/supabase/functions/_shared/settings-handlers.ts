@@ -192,6 +192,9 @@ export async function handleSettingsRequest(
   if (method === "POST" && path === "/access/redeem-invite") {
     return redeemInvite(req, deps);
   }
+  if (method === "GET" && path === "/access/twelvex-session") {
+    return getTwelvexSession(req, deps);
+  }
   return jsonError(404, "NOT_FOUND", "Unknown settings route");
 }
 
@@ -1693,6 +1696,64 @@ async function redeemInvite(req: Request, deps: SettingsDeps): Promise<Response>
     already_granted: result.alreadyGranted,
     product_key: result.productKey,
     plan_floor: result.planFloor,
+  });
+}
+
+/**
+ * GET /access/twelvex-session — mints a session in the twelve-x project for
+ * the caller, gated on client_product_grants(product_key='fx_hub').
+ *
+ * twelve-x has no login of its own (separate Supabase project, no OAuth/
+ * password flow) and Supabase's Third-Party Auth only supports named
+ * identity providers (Firebase/Clerk/WorkOS/Auth0/Cognito) — there is no
+ * "trust another Supabase project's JWTs" option, so forwarding this
+ * project's JWT was never viable. Instead, twelve-x's `fx-hub-session` Edge
+ * Function mints a REAL twelve-x-native session (magiclink generate +
+ * verify, server-side, no email sent) for the caller's email — the same
+ * shared-secret trust boundary as `fx-hub-grant-sync`.
+ */
+async function getTwelvexSession(_req: Request, deps: SettingsDeps): Promise<Response> {
+  const email = (deps.user.email ?? "").trim().toLowerCase();
+  if (!email) {
+    return jsonError(400, "EMAIL_REQUIRED", "Sign in with an account that has an email.");
+  }
+  const { data, error } = await deps.admin
+    .from("client_product_grants")
+    .select("product_key")
+    .eq("email", email)
+    .eq("product_key", FX_HUB_PRODUCT)
+    .maybeSingle();
+  if (error || !data) {
+    return jsonError(403, "NOT_GRANTED", "fx_hub access is required.");
+  }
+  if (!deps.fxHubGrantSync) {
+    return jsonError(500, "NOT_CONFIGURED", "twelve-x session bridge is not configured.");
+  }
+  const sessionUrl = deps.fxHubGrantSync.url.replace(/\/fx-hub-grant-sync$/, "/fx-hub-session");
+  const res = await fetch(sessionUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Sync-Secret": deps.fxHubGrantSync.secret,
+    },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    return jsonError(502, "SESSION_MINT_FAILED", "Could not create a twelve-x session.");
+  }
+  const session = (await res.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+  };
+  if (!session.access_token || !session.refresh_token) {
+    return jsonError(502, "SESSION_MINT_FAILED", "twelve-x session response was incomplete.");
+  }
+  return jsonOk({
+    ok: true,
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+    expires_in: session.expires_in ?? 3600,
   });
 }
 
