@@ -41,7 +41,7 @@ export async function ensureTwelveXSession(
     fetchSession?: typeof fetchTwelveXSession;
   } = {},
 ): Promise<boolean> {
-  const client = deps.client === undefined ? twelveXSupabase : deps.client;
+  const client = deps.client === undefined ? (twelveXSupabase?.auth ?? null) : deps.client;
   const fetchSession = deps.fetchSession ?? fetchTwelveXSession;
 
   if (!accessToken) return false;
