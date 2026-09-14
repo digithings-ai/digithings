@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-Fill position_events.price from price_history.open when execution ran before opens existed.
+Fill position_events.price from the execution day's open when it ran before opens existed.
 
 Typical flow: pre-market run_db_first → execute_at_open records events with price=null →
-after the session (or after price sync), run this script for that date.
+after the session (or after the R2 generation seals, or via the same-day live open), run
+this script for that date. Sealed dates read the R2 generations; unsealed (same-day)
+opens come from the live fetch (#4053 D1).
 
 Usage:
   python3 scripts/backfill_execution_prices.py [--date YYYY-MM-DD]
-Environment: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+Environment: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (position_events read/write only)
 """
 
 from __future__ import annotations
@@ -21,7 +23,6 @@ from typing import Any, Dict, List, Optional
 
 from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.research.data.queries import (
-    r2_backend_enabled,
     r2_manifest_seal,
     r2_ohlcv_rows,
 )
@@ -54,34 +55,29 @@ def _sb():
 
 def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
     day = str(d)[:10]
-    if r2_backend_enabled():
-        seal, _ = r2_manifest_seal()
-        if day <= seal.isoformat():
-            try:
-                rows = r2_ohlcv_rows(tickers=[ticker], since=day, until=day)
-            except LookupError:
-                return None
-            if not rows or rows[0].get("open") is None:
-                return None
-            try:
-                price = float(rows[0]["open"])
-            except (TypeError, ValueError):
-                return None
-            return price if math.isfinite(price) and price > 0 else None
-    # same-day (or unsealed) prices come from the intraday Supabase writer (#4013 D3)
-    res = (
-        sb.table("price_history")
-        .select("open")
-        .eq("ticker", ticker)
-        .eq("date", d)
-        .limit(1)
-        .execute()
-    )
-    rows = getattr(res, "data", None) or []
-    if not rows:
+    seal, _ = r2_manifest_seal()
+    if day <= seal.isoformat():
+        try:
+            rows = r2_ohlcv_rows(tickers=[ticker], since=day, until=day)
+        except LookupError:
+            return None
+        if not rows or rows[0].get("open") is None:
+            return None
+        try:
+            price = float(rows[0]["open"])
+        except (TypeError, ValueError):
+            return None
+        return price if math.isfinite(price) and price > 0 else None
+    # Same-day (unsealed) opens have no sealed R2 bar yet — fetch live (#4053 D1).
+    # Never raises into the backfill: a failed fetch is None (row stays null).
+    try:
+        from digiquant.data.prices.live_opens import fetch_live_open
+    except Exception:
         return None
-    o = rows[0].get("open")
-    return float(o) if o is not None else None
+    try:
+        return fetch_live_open(ticker, day)
+    except Exception:
+        return None
 
 
 def _house_id() -> str:
@@ -93,7 +89,7 @@ def _eq_house(query: Any) -> Any:
 
 
 def backfill_prices_for_date(sb: Any, d: str) -> int:
-    """Fill null ``position_events.price`` from ``price_history.open`` for house rows."""
+    """Fill null ``position_events.price`` from the day's open for house rows."""
     res = (
         _eq_house(sb.table("position_events").select("date,ticker,event,price,weight_pct,reason,thesis_id"))
         .eq("date", d)
@@ -112,7 +108,7 @@ def backfill_prices_for_date(sb: Any, d: str) -> int:
             continue
         px = _fetch_open(sb, str(ticker), d)
         if px is None:
-            print(f"   skip {ticker}: no price_history.open for {d}")
+            print(f"   skip {ticker}: no open for {d}")
             continue
         up = {
             "workspace_id": _house_id(),
@@ -132,7 +128,7 @@ def backfill_prices_for_date(sb: Any, d: str) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Backfill position_events.price from price_history.open.")
+    ap = argparse.ArgumentParser(description="Backfill position_events.price from the day's open.")
     ap.add_argument("--date", default=dt_date.today().isoformat(), help="YYYY-MM-DD")
     args = ap.parse_args()
     return 0 if backfill_prices_for_date(_sb(), args.date) >= 0 else 1

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """fill-entry-prices.py — Back-fill entry_price_usd for portfolio positions.
 
-Queries the Supabase price_history table for the closing price on each position's
-entry_date, then writes the result back to config/portfolio.json.
+Looks up each position's entry-date close in the sealed R2 generations (#4053),
+then writes the result back to config/portfolio.json.
 
 Usage:
     python3 scripts/fill-entry-prices.py            # fill all null entry prices
@@ -10,80 +10,50 @@ Usage:
     python3 scripts/fill-entry-prices.py --ticker IAU  # fill a single ticker only
 
 Requires:
-    SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars (or config/supabase.env)
+    R2 credentials (R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)
+    for the sealed-generation market-data read.
 """
 
 import argparse
 import json
 import math
-import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 
-# Load .env if present
+# Load .env if present (repo root carries the R2 credentials this read needs).
 try:
     from dotenv import load_dotenv
     load_dotenv(ROOT / "config" / "supabase.env")
+    load_dotenv()
 except ImportError:
     pass
 
-try:
-    from supabase import create_client
-    _HAS_SUPABASE = True
-except ImportError:
-    _HAS_SUPABASE = False
 
+def lookup_close(ticker: str, entry_date: str) -> float | None:
+    """Return the entry date's close from the sealed R2 generations, or None.
 
-def get_supabase_client():
-    url = os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL"))
-    key = os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY"))
-    if not _HAS_SUPABASE:
-        print("❌ supabase-py not installed — pip install supabase", file=sys.stderr)
-        sys.exit(1)
-    if not url or not key:
-        print("❌ SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set", file=sys.stderr)
-        sys.exit(1)
-    return create_client(url, key)
-
-
-def lookup_close(sb, ticker: str, entry_date: str) -> float | None:
-    """Return closing price for ticker on entry_date from price_history, or None."""
+    R2-only since #4053: an unsealed date (today, before the evening refresh) has
+    no generation row yet, so a same-day lookup returns None rather than a
+    Supabase read — there is no live close source.
+    """
     # Imported per call (cached in sys.modules afterwards) so the default path needs no
     # digiquant import at module scope.
-    from digiquant.research.data.queries import (
-        r2_backend_enabled,
-        r2_close_rows,
-        r2_manifest_seal,
-    )
+    from digiquant.research.data.queries import r2_close_rows
 
-    if r2_backend_enabled():
-        day = str(entry_date)[:10]
-        seal, _ = r2_manifest_seal()
-        if day <= seal.isoformat():
-            try:
-                rows = r2_close_rows(tickers=[ticker], since=day, until=day)
-            except LookupError:
-                return None
-            if not rows or rows[0].get("close") is None:
-                return None
-            try:
-                price = float(rows[0]["close"])
-            except (TypeError, ValueError):
-                return None
-            return price if math.isfinite(price) and price > 0 else None
-    resp = (
-        sb.table("price_history")
-        .select("close")
-        .eq("ticker", ticker)
-        .eq("date", entry_date)
-        .single()
-        .execute()
-    )
-    if resp.data and resp.data.get("close") is not None:
-        return float(resp.data["close"])
-    return None
+    day = str(entry_date)[:10]
+    try:
+        rows = r2_close_rows(tickers=[ticker], since=day, until=day)
+    except LookupError:
+        return None
+    if not rows or rows[0].get("close") is None:
+        return None
+    try:
+        price = float(rows[0]["close"])
+    except (TypeError, ValueError):
+        return None
+    return price if math.isfinite(price) and price > 0 else None
 
 
 def main():
@@ -133,14 +103,13 @@ def main():
         return
 
     print(f"{'[dry-run] ' if args.dry_run else ''}Filling entry prices for {len(candidates)} position(s)...")
-    sb = get_supabase_client()
 
     filled = 0
     not_found = []
     for pos in candidates:
         ticker = pos["ticker"]
         entry_date = pos["entry_date"]
-        price = lookup_close(sb, ticker, entry_date)
+        price = lookup_close(ticker, entry_date)
         if price is not None:
             old = pos.get("entry_price_usd")
             print(f"  {ticker:6s}  {entry_date}  close={price:.4f}"
@@ -149,7 +118,7 @@ def main():
                 pos["entry_price_usd"] = price
             filled += 1
         else:
-            print(f"  {ticker:6s}  {entry_date}  ⚠️  not found in price_history")
+            print(f"  {ticker:6s}  {entry_date}  ⚠️  no sealed R2 close")
             not_found.append(f"{ticker}@{entry_date}")
 
     if not args.dry_run and filled:
@@ -164,8 +133,8 @@ def main():
         print("\nℹ️  Nothing to update")
 
     if not_found:
-        print(f"\n⚠️  {len(not_found)} ticker(s) not found in price_history: {', '.join(not_found)}")
-        print("   Run: python3 scripts/preload-history.py --supabase  to populate price_history first")
+        print(f"\n⚠️  {len(not_found)} ticker(s) have no sealed R2 close: {', '.join(not_found)}")
+        print("   Run: python3 scripts/refresh_market_data_r2.py  to refresh the R2 generations first")
 
 
 if __name__ == "__main__":

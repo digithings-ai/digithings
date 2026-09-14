@@ -1,7 +1,7 @@
 """Verify recorded house NAV against an independent Nautilus schedule replay.
 
-Rebuilds the house book from ``positions`` book weights + ``price_history``
-OHLCV (real volumes), runs the hardened schedule replay
+Rebuilds the house book from ``positions`` book weights + sealed R2 market
+OHLCV (real volumes, #4053), runs the hardened schedule replay
 (``digiquant.dashboard.replay``, schema 2.0, causal-fill convention), and
 compares the engine NAV path against recorded ``nav_history``.
 
@@ -159,12 +159,12 @@ def _fetch_table(
     ``RuntimeError`` instead of returning a truncated series. Callers must not
     write NAV from a partial fetch.
 
-    ``workspace_scoped=False`` is for market/reference tables (``price_history``)
-    that carry no ``workspace_id`` column: applying a workspace predicate there
-    raises PostgREST 42703 and kills the fetch (#3990).
+    ``workspace_scoped=False`` is for market/reference tables that carry no
+    ``workspace_id`` column: applying a workspace predicate there raises
+    PostgREST 42703 and kills the fetch (#3990).
 
     ``tickers`` narrows a market-data scan to the book the replay will trade
-    (#4002): the house book spans a few dozen tickers while ``price_history``
+    (#4002): the house book spans a few dozen tickers while the price table
     holds hundreds of thousands of rows, and fetching the whole table every
     night is both slow and pointless. The caller keeps history back to
     ``--inception-date`` (clipped in ``main``, #4005); within that window a
@@ -232,33 +232,21 @@ def _fetch_table(
 def _fetch_price_rows(
     sb: SupabaseClient, house_id: str, book_tickers: list[str], inception: date | str
 ) -> list[dict[str, Any]]:
-    """OHLCV rows for the replay: sealed R2 generations under the R2 backend, else Supabase.
+    """OHLCV rows for the replay from the sealed R2 generations (#4053: R2 only).
 
     ``inception`` is the ``--inception-date`` value — ``main`` passes the parsed
     ISO string, callers may pass a ``date``; both clip through the same
     :func:`_rows_from_inception` guard (#4005).
     """
-    # Imported per call (cached in sys.modules afterwards) so the default path needs no
+    # Imported per call (cached in sys.modules afterwards) so loading the module needs no
     # digiquant import at module scope, matching fill-entry-prices.py.
-    from digiquant.research.data.queries import r2_backend_enabled, r2_ohlcv_rows
+    from digiquant.research.data.queries import r2_ohlcv_rows
 
     inception_date = inception.isoformat() if isinstance(inception, date) else str(inception)
-    if r2_backend_enabled():
-        # UTC, not local: the seal is a UTC date and `date.today()` tripped DTZ011.
-        today = datetime.now(timezone.utc).date().isoformat()
-        rows = r2_ohlcv_rows(tickers=book_tickers, since=inception_date, until=today)
-        return _rows_from_inception(rows, inception_date)
-    return _rows_from_inception(
-        _fetch_table(
-            sb,
-            "price_history",
-            house_id,
-            "date,ticker,open,high,low,close,volume",
-            workspace_scoped=False,
-            tickers=book_tickers,
-        ),
-        inception_date,
-    )
+    # UTC, not local: the seal is a UTC date and `date.today()` tripped DTZ011.
+    today = datetime.now(timezone.utc).date().isoformat()
+    rows = r2_ohlcv_rows(tickers=book_tickers, since=inception_date, until=today)
+    return _rows_from_inception(rows, inception_date)
 
 
 def build_request(price_rows, position_rows, nav_rows):
@@ -363,7 +351,7 @@ def build_request(price_rows, position_rows, nav_rows):
             if bar is None:
                 if prior is None:
                     raise ValueError(
-                        f"{ticker}: no price_history bar at or before {d} "
+                        f"{ticker}: no market bar at or before {d} "
                         "(cannot forward-fill a series before its first bar)"
                     )
                 bar = OhlcvBar(
@@ -557,7 +545,7 @@ def main() -> int:
         print("SKIP: no house positions/nav_history rows readable")
         return 1
     if not price_rows:
-        print("SKIP: no price_history rows for the book tickers")
+        print("SKIP: no sealed R2 rows for the book tickers")
         return 1
 
     request, _closes, recorded = build_request(price_rows, position_rows, nav_rows)

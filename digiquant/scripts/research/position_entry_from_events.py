@@ -11,11 +11,7 @@ from datetime import date, timedelta
 from typing import Any, Dict, Optional, Tuple
 
 from digiquant.dashboard.tenancy import house_workspace_id
-from digiquant.research.data.queries import (
-    r2_backend_enabled,
-    r2_close_rows,
-    r2_manifest_seal,
-)
+from digiquant.research.data.queries import r2_close_rows
 
 
 def _house_id() -> str:
@@ -55,51 +51,33 @@ def first_open_add_mark(sb: Any, ticker: str, as_of: str) -> Tuple[Optional[str]
 
 
 def _close_on_or_after(sb: Any, ticker: str, iso: str) -> Optional[float]:
-    """First available close on or after ``iso`` for ticker (walk forward a few days)."""
+    """First sealed-R2 close on or after ``iso`` for ticker (walk forward a few days).
+
+    An unsealed/unknown window returns ``None`` (the caller keeps the existing
+    entry) — a missing generation is not an outage.
+    """
     t = (ticker or "").strip().upper()
     if not t:
         return None
-    if r2_backend_enabled():
-        since = str(iso)[:10]
-        seal, _ = r2_manifest_seal()
-        if since <= seal.isoformat():
-            try:
-                until = (date.fromisoformat(since) + timedelta(days=12)).isoformat()
-            except (TypeError, ValueError):
-                return None
-            try:
-                rows = r2_close_rows(tickers=[t], since=since, until=until)
-            except LookupError:
-                return None
-            for row in rows:
-                c = row.get("close")
-                if c is None:
-                    continue
-                try:
-                    x = float(c)
-                except (TypeError, ValueError):
-                    continue
-                if math.isfinite(x) and x > 0:
-                    return x
-            return None
-    res = (
-        sb.table("price_history")
-        .select("date,close")
-        .eq("ticker", t)
-        .gte("date", iso)
-        .order("date")
-        .limit(12)
-        .execute()
-    )
-    for row in getattr(res, "data", None) or []:
+    since = str(iso)[:10]
+    try:
+        until = (date.fromisoformat(since) + timedelta(days=12)).isoformat()
+    except (TypeError, ValueError):
+        return None
+    try:
+        rows = r2_close_rows(tickers=[t], since=since, until=until)
+    except LookupError:
+        return None
+    for row in rows:
         c = row.get("close")
-        if c is not None:
-            try:
-                x = float(c)
-            except (TypeError, ValueError):
-                continue
-            if x > 0:
-                return x
+        if c is None:
+            continue
+        try:
+            x = float(c)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(x) and x > 0:
+            return x
     return None
 
 

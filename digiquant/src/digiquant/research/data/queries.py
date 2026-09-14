@@ -1,7 +1,10 @@
-"""Read structured price/technical + macro values from Supabase for the research agent.
+"""Read structured price/technical + macro values for the research agent.
 
-These return compact, token-budgeted JSON (latest snapshot + a short recent window),
-not full history. Selected technical columns only — the model gets signal, not noise.
+Market history is moving to the versioned R2 cache (#3780): price technicals are
+R2-only since #4053; the remaining readers here keep their Supabase bodies for
+now. These return compact, token-budgeted JSON (latest snapshot + a short recent
+window), not full history. Selected technical columns only — the model gets
+signal, not noise.
 """
 
 from __future__ import annotations
@@ -246,29 +249,19 @@ def get_price_technicals(
 
     ``window`` is newest-first, length <= lookback. ``latest`` is window[0] or {}.
     ``as_of`` bounds rows to ``date <= as_of`` (look-ahead-safe for historical
-    reads); omit it for "latest available" (Supabase) or the manifest watermark
-    (R2 backend — never wall-clock).
+    reads); omit it for the manifest watermark (never wall-clock).
 
-    Under ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` the rows are recomputed
-    indicators over the sealed R2 generation (``_read_r2_window``), projected
-    onto :data:`TECHNICAL_COLUMNS` with ISO date strings — the same envelope
-    shape as the Supabase body. An unknown ticker returns the empty
-    latest/window (Supabase parity — a missing ticker is not an outage).
+    R2 is the only path (#4053): the rows are recomputed indicators over the
+    sealed R2 generation (``_read_r2_window``), projected onto
+    :data:`TECHNICAL_COLUMNS` with ISO date strings. ``client`` is kept for
+    caller-signature stability and is never read. An unknown ticker returns the
+    empty latest/window (a missing ticker is not an outage).
     """
-    if r2_backend_enabled():
-        return _r2_price_technicals(ticker=ticker, lookback=lookback, as_of=as_of)
-    query = (
-        client.table("price_technicals").select(",".join(TECHNICAL_COLUMNS)).eq("ticker", ticker)
-    )
-    if as_of is not None:
-        query = query.lte("date", as_of.isoformat())
-    resp = query.order("date", desc=True).limit(lookback).execute()
-    rows = getattr(resp, "data", None) or []
-    return {"ticker": ticker, "latest": rows[0] if rows else {}, "window": rows}
+    return _r2_price_technicals(ticker=ticker, lookback=lookback, as_of=as_of)
 
 
 def _r2_price_technicals(*, ticker: str, lookback: int, as_of: date | None) -> dict[str, Any]:
-    """R2 branch of :func:`get_price_technicals` (see it for the contract)."""
+    """The sole :func:`get_price_technicals` read path (#4053; see it for the contract)."""
     from digiquant.mcp_server import _read_r2_window
 
     try:
