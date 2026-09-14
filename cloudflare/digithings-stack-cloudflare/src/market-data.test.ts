@@ -27,6 +27,11 @@ describe("market-data helpers", () => {
     expect(resolvePointer(MANIFEST, "BRK/B")).toBeUndefined();
   });
 
+  it("does not resolve macro dataset ids as tickers", () => {
+    expect(resolvePointer(MANIFEST, "fred__DGS10")).toBeUndefined();
+    expect(resolvePointer(MANIFEST, "FRED__DGS10")).toBeUndefined();
+  });
+
   it("shapes and sorts close rows", () => {
     expect(
       shapeCloses([
@@ -105,6 +110,26 @@ describe("handleMarketData", () => {
     const res = await handleMarketData(
       new Request(url.toString()),
       fakeEnv({ "market-data/manifest.json": MANIFEST_OBJECT }),
+      url,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ as_of: "2026-09-11", rows: [] });
+  });
+
+  it("treats a macro dataset id as an unknown ticker instead of parsing it", async () => {
+    const url = new URL("https://graph.digithings.ai/v1/market/closes?tickers=fred__DGS10");
+    const res = await handleMarketData(
+      new Request(url.toString()),
+      fakeEnv({
+        "market-data/manifest.json": MANIFEST_OBJECT,
+        // A macro object whose bytes must never be fetched: same 404-ish shape
+        // as an unknown ticker, never a parquet parse or a throw.
+        "market-data/macro/fred__DGS10/2026-09-11.parquet": {
+          arrayBuffer: async () => {
+            throw new Error("macro parquet must never be read");
+          },
+        },
+      }),
       url,
     );
     expect(res.status).toBe(200);

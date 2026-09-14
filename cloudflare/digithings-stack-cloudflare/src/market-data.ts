@@ -16,7 +16,11 @@ export function resolvePointer(manifest: Manifest, ticker: string): { object: st
   const norm = ticker.trim().toUpperCase().replace("/", "-");
   const entry = (manifest.datasets ?? {})[norm] ?? (manifest.datasets ?? {})[ticker];
   if (!entry?.object || !entry?.sha256) return undefined;
-  return { object: String(entry.object), sha256: String(entry.sha256) };
+  const object = String(entry.object);
+  // /closes serves price bars only. Macro datasets (fred__*) carry different
+  // columns and throw in the parquet reader, so a non-price id is unknown here.
+  if (!object.startsWith("market-data/price/")) return undefined;
+  return { object, sha256: String(entry.sha256) };
 }
 
 export function shapeCloses(rows: Array<Record<string, unknown>>) {
