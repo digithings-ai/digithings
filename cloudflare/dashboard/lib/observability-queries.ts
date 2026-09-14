@@ -323,7 +323,8 @@ function latestCloseByTicker(
 
 /**
  * When the nightly metrics refresh did not stamp `current_price` /
- * `unrealized_pnl_pct` (sync-only book rows), fill the mark from `price_history`
+ * `unrealized_pnl_pct` (sync-only book rows), fill the mark from the market API
+ * (fetchMarketCloses)
  * so open-book unrealized can derive from entry vs close. Never invent a mark.
  */
 function applyHoldingMarks(

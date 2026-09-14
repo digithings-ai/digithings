@@ -584,6 +584,22 @@ export async function fetchTickerDossier(ticker: string): Promise<TickerDossier>
 }
 
 /**
+ * Ticker universe (#4053): the R2 archive via the market API. When it answers
+ * empty, fall back to the benchmark keys so ticker surfaces still enumerate.
+ */
+export function resolveTickerUniverse(
+  marketTickers: string[],
+  benchmarks: BenchmarkHistoryMap
+): string[] {
+  if (marketTickers.length > 0) return sortTickerUniverse(marketTickers);
+  const fb = new Set<string>(Object.keys(benchmarks));
+  for (const t of DASHBOARD_BENCHMARK_TICKERS) {
+    fb.add(t);
+  }
+  return sortTickerUniverse([...fb]);
+}
+
+/**
  * Distinct union of every ticker known to the dashboard's per-ticker surfaces
  * (`positions`, `decision_log`, analyst documents via `documents.sector`, and
  * `analyst_coverage`) — feeds the command palette's "Tickers" group and any
@@ -962,19 +978,10 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     benchMax,
   );
 
-  // Ticker universe (#4053): the R2 archive via the market API. When it answers
-  // empty, fall back to the benchmark keys so ticker surfaces still enumerate.
+  // Ticker universe (#4053): the R2 archive via the market API, with a
+  // benchmark-keys fallback when it answers empty (see resolveTickerUniverse).
   const universeTickers = await fetchMarketTickers();
-  let price_history_tickers: string[] = [];
-  if (universeTickers.length > 0) {
-    price_history_tickers = sortTickerUniverse(universeTickers);
-  } else {
-    const fb = new Set<string>(Object.keys(benchmarks));
-    for (const t of DASHBOARD_BENCHMARK_TICKERS) {
-      fb.add(t);
-    }
-    price_history_tickers = sortTickerUniverse([...fb]);
-  }
+  const price_history_tickers: string[] = resolveTickerUniverse(universeTickers, benchmarks);
 
   const theses: Thesis[] = currentTheses.map(mapThesisRow);
 
@@ -1192,7 +1199,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   const positions: Position[] = effectiveCurrentPositions.map((p) => {
     const identity = resolveInstrumentIdentity(p, instrumentByTicker);
     return {
-    // Prices: prefer explicit position fields; else derive from price_history
+    // Prices: prefer explicit position fields; else derive from the market API (fetchMarketCloses)
     ticker: p.ticker,
     name: identity.name,
     instrument: identity.instrument,

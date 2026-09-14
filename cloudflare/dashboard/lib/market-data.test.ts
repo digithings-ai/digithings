@@ -11,7 +11,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fetchMarketCloses, fetchMarketTickers } from './market-data';
-import { fetchComparablePriceHistory } from './queries';
+import { fetchComparablePriceHistory, resolveTickerUniverse } from './queries';
+import { DASHBOARD_BENCHMARK_TICKERS, sortTickerUniverse } from './benchmark-tickers';
+import type { BenchmarkHistoryMap } from './types';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MARKET_URL = 'https://graph.digithings.ai';
@@ -196,5 +198,29 @@ describe('dashboard market-data wiring', () => {
     expect(src).not.toContain('fetchPositionPriceChart');
     expect(src).not.toContain("from('price_history')");
     expect(src).not.toContain('trading_calendar');
+  });
+});
+
+describe('ticker universe fallback', () => {
+  const benchmarks = {
+    GLD: { current: 260, history: [{ date: '2026-09-11', price: 260 }] },
+  } as BenchmarkHistoryMap;
+
+  it('empty tickers API falls back to benchmark keys + DASHBOARD_BENCHMARK_TICKERS', async () => {
+    vi.stubEnv('NEXT_PUBLIC_MARKET_DATA_URL', MARKET_URL);
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ as_of: '2026-09-11', tickers: [] })));
+    const universeTickers = await fetchMarketTickers();
+    expect(universeTickers).toEqual([]);
+    expect(resolveTickerUniverse(universeTickers, benchmarks)).toEqual(
+      sortTickerUniverse([...Object.keys(benchmarks), ...DASHBOARD_BENCHMARK_TICKERS])
+    );
+  });
+
+  it('non-empty tickers API returns the sorted R2 universe', async () => {
+    vi.stubEnv('NEXT_PUBLIC_MARKET_DATA_URL', MARKET_URL);
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ as_of: '2026-09-11', tickers: ['SPY', 'GLD'] })));
+    expect(resolveTickerUniverse(await fetchMarketTickers(), benchmarks)).toEqual(
+      sortTickerUniverse(['SPY', 'GLD'])
+    );
   });
 });
