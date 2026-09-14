@@ -25,12 +25,14 @@ from nautilus_trader.persistence.wranglers import BarDataWrangler
 from nautilus_trader.test_kit.providers import TestInstrumentProvider
 
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight
+from digiquant.strategies.sdca.crash_override import apply_crash_override
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.dca_metrics import (
     breakdown_from_daily,
     daily_state_from_fills,
     fills_from_nautilus_report,
 )
+from digiquant.strategies.sdca.indicator_catalog import fast_crash_vol_z
 from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
 from digiquant.strategies.sdca.risk_index import build_risk_index, write_risk_index
 from digiquant.strategies.sdca.risk_model import RiskModel
@@ -95,8 +97,22 @@ def evaluate_sdca_trial_nautilus(
     extra_indicators: Sequence[IndicatorWeight] | None = None,
     *,
     initial_cash: float = DEFAULT_TRIAL_CASH,
+    crash_override_enabled: bool = False,
+    crash_override_window: int = 14,
+    crash_override_min_samples: int = 7,
+    crash_override_trigger_z: float = -2.0,
+    crash_override_ramp_z: float = 1.0,
+    crash_override_risk: float = 95.0,
 ) -> SdcaTrialMetrics:
-    """Run one Nautilus ``BacktestEngine`` trial and return DCA-native metrics."""
+    """Run one Nautilus ``BacktestEngine`` trial and return DCA-native metrics.
+
+    ``crash_override_*`` (default: disabled, a no-op) mirrors
+    ``curve_sim.evaluate_sdca_trial_curve_sim``'s independent circuit-breaker
+    — see that function's docstring. It is applied to the composite risk
+    immediately after ``build_risk_index`` and before the risk index is
+    written for ``SdcaStrategy`` to read, so the two evaluators stay
+    near-identical for the same trial.
+    """
     if len(dates) != len(prices) or not dates:
         raise ValueError("evaluate_sdca_trial_nautilus needs aligned non-empty dates/prices")
     date_s = pl.Series("date", list(dates), dtype=pl.Date)
@@ -108,6 +124,25 @@ def evaluate_sdca_trial_nautilus(
         extra_indicators=list(extra_indicators) if extra_indicators is not None else None,
         power_law_weight=power_law_weight,
     )
+    if crash_override_enabled:
+        crash_z = fast_crash_vol_z(
+            date_s,
+            price_s,
+            window=crash_override_window,
+            min_samples=crash_override_min_samples,
+        )
+        index = index.with_columns(
+            pl.Series(
+                "risk",
+                apply_crash_override(
+                    index["risk"],
+                    crash_z,
+                    trigger_z=crash_override_trigger_z,
+                    ramp_z=crash_override_ramp_z,
+                    override_risk=crash_override_risk,
+                ),
+            )
+        )
     instrument = TestInstrumentProvider.btcusdt_binance()
     bar_type = BarType(instrument.id, BarSpecification(1, BarAggregation.DAY, PriceType.LAST))
     with tempfile.TemporaryDirectory(prefix="sdca-opt-") as tmp:

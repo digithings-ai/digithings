@@ -71,6 +71,15 @@ SDCA_SHAPE_DEFAULTS: dict[str, float] = {
     "weekly_rsi_weight": 0.0,
     "weekly_macd_weight": 0.0,
     "sma_band_weight": 0.0,
+    # Independent fast-crash circuit-breaker (crash_override.py) -- NOT a
+    # composite weight. Disabled by default so every existing trial dict and
+    # test is byte-for-byte unaffected unless a trial opts in explicitly.
+    "crash_override_enabled": False,
+    "crash_override_window": 14,
+    "crash_override_min_samples": 7,
+    "crash_override_trigger_z": -2.0,
+    "crash_override_ramp_z": 1.0,
+    "crash_override_risk": 95.0,
 }
 
 
@@ -91,7 +100,7 @@ class SdcaWalkForwardResult(BaseModel):
 
     model_config = ConfigDict(frozen=True, strict=True)
 
-    best_params: dict[str, float | int | str]
+    best_params: dict[str, bool | float | int | str]
     folds: list[WalkForwardFold]
     holdout: tuple[date, date]
     fold_scores: list[FoldScore]
@@ -118,7 +127,7 @@ class SdcaOptimizeProvenance(BaseModel):
     fit_window: tuple[date, date]
     folds: list[WalkForwardFold]
     holdout: tuple[date, date]
-    best_params: dict[str, float | int | str]
+    best_params: dict[str, bool | float | int | str]
     mean_is_vs_flat_dca_pct: float
     mean_oos_vs_flat_dca_pct: float
     is_oos_gap_pct: float
