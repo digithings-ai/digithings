@@ -276,9 +276,22 @@ def build_request(price_rows, position_rows, nav_rows):
         high = Decimal(str(r["high"]))
         low = Decimal(str(r["low"]))
         close = Decimal(str(r["close"]))
+        # Fail loudly on non-finite bounds before any comparison: Postgres
+        # ``numeric`` stores NaN/Infinity, and widening would otherwise
+        # launder low=+Inf / high=-Inf into a finite, valid-looking bar.
+        # Decimal NaN comparisons raise InvalidOperation, so is_finite()
+        # must come first (#3994 review).
+        if not (open_.is_finite() and high.is_finite() and low.is_finite() and close.is_finite()):
+            raise ValueError(
+                f"{ticker} {d}: non-finite OHLC value "
+                f"(open={open_}, high={high}, low={low}, close={close}) "
+                "— refusing to build a bar"
+            )
         # Vendor bars can violate their own envelope: float-ULP close/low ties
         # and open>high cents. Widen the envelope instead of aborting the
-        # nightly refresh; close is never rewritten (#3995).
+        # nightly refresh; close is never rewritten (#3995). A stored
+        # high<low is repaired the same way rather than rejected: the
+        # observed prices are the evidence.
         repaired_high = max(high, open_, close)
         repaired_low = min(low, open_, close)
         if repaired_high != high or repaired_low != low:
