@@ -33,7 +33,7 @@ const unmarkedVgk = {
   metrics_as_of: null,
 };
 
-describe("positionRowToLive — public_price_latest seed fallback (#3447)", () => {
+describe("positionRowToLive — R2 closes seed fallback (#3447)", () => {
   it("uses a stale seed close for mark / day / since-entry when the book has no current_price", () => {
     const quotes: LivePriceMap = { VGK: seed("VGK", 90.9, 0.2) };
     const pos = positionRowToLive(unmarkedVgk, quotes);
