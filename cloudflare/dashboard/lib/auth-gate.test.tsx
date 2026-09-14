@@ -71,9 +71,13 @@ vi.mock('@/components/login-screen', () => ({
 
 const inviteState = vi.hoisted(() => ({ pending: false }));
 
-vi.mock('@/lib/invite-stash', () => ({
-  hasPendingInvite: () => inviteState.pending,
-}));
+vi.mock('@/lib/invite-stash', async () => {
+  // Preserve the real exports — useInviteLink() (unmocked) calls
+  // stashInviteFromSearch/pathWithoutInviteParam from this same module in
+  // its effects; a full-module mock would silently undefine them.
+  const actual = await vi.importActual<typeof import('./invite-stash')>('./invite-stash');
+  return { ...actual, hasPendingInvite: () => inviteState.pending };
+});
 
 vi.mock('@/components/dashboard-mark', () => ({ DashboardMark: () => null }));
 
