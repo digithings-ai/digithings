@@ -290,6 +290,23 @@ Auth required (`digisearch:query` scope via the default `digisearch_path_scopes`
 
 Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4), recency_days (1–365, default 7; mapped onto provider recency filters — searxng day/month/year with a week mapping to month — omitted when null)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. `run_web_search` tries the searxng sidecar first, fails over to embedded ddgs (`DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs`, sidecar URL from `DIGISEARCH_SEARXNG_URL`), then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). The fetch is SSRF-guarded by digifetch (#3934): http/https only, internal/metadata addresses refused, and every redirect hop re-validated (no auto-follow) with the operator `DIGISEARCH_FETCH_ALLOWED_HOSTS` allowlist as the explicit escape hatch. Fetch/extract failures keep the original search snippet — enrichment never fails the response. No new port: served by the existing digisearch HTTP app.
 
+#### Optional EXA live web search (`digisearch/web_exa.py`)
+
+Thin wrapper over the EXA neural web-search API (https://exa.ai) — an *alternative*
+retrieval path for the live web, never mixed into owned-corpus results. **Dormant by
+default:** every entry point fails closed without `EXA_API_KEY` (503 / disabled string /
+`ok=False`). No new dependencies (`httpx` only); no env reads at import time.
+
+| Surface | Shape |
+|---------|-------|
+| `POST /v1/digisearch_web_search` | `search_type` instant\|fast\|auto\|deep-lite\|deep\|deep-reasoning, `category`, `contents_text`, `output_schema`, `system_prompt` → `WebSearchData{results, output, search_type, cost_dollars}` (mounted here — not `/v1/web_search` — because the first-party search above owns that route) |
+| `POST /v1/web_contents` | Known-URL fetch (`text`/`highlights`/`summary`) |
+| `POST /v1/web_answer` | Grounded answer with citations |
+| Orchestrator `digisearch_web_search` | Advertised in the manifest only when `EXA_API_KEY` is set; dispatched via `POST /v1/orchestrator_invoke` |
+| MCP `digisearch_web_search` | `query`, `search_type`, `num_results`, `category` → formatted text |
+
+Auth: same `digisearch:query` scope via `DigiAuthMiddleware` (default path rule; no digikey change).
+
 ### MCP Tools
 
 MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streamable HTTP.
@@ -299,6 +316,7 @@ MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streama
 | `digisearch_query` | Search documents; returns formatted string of hits with score and content preview | No |
 | `web_search` | Search the public web; returns JSON `WebSearchResponse` (#3853) | Yes (`digisearch[web-search]`) |
 | `digisearch_research_turn` | Composite research turn (plan → retrieve → aggregate) with citations | Yes (`digisearch[agent]`) |
+| `digisearch_web_search` | Live web search via EXA; disabled message without `EXA_API_KEY` | Yes (`EXA_API_KEY`) |
 
 Tool parameters for `digisearch_query`: `text`, `index_name`, `top_k`, `mode`.
 

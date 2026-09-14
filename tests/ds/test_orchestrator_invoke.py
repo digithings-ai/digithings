@@ -108,6 +108,39 @@ def test_orchestrator_invoke_fetch_all_flags_vectorize_clamp_truncation(
 
 
 @pytest.mark.unit
+def test_orchestrator_invoke_web_search_forwards_domains(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Domain scoping must reach exa_search — never silently run unscoped."""
+    import digisearch.web_exa as web_exa_mod
+
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    seen: dict = {}
+
+    def _fake_search(query: str, **kwargs: object) -> web_exa_mod.WebSearchData:
+        seen["query"] = query
+        seen.update(kwargs)
+        return web_exa_mod.WebSearchData(results=[])
+
+    monkeypatch.setattr(web_exa_mod, "exa_search", _fake_search)
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={
+            "tool": "digisearch_web_search",
+            "arguments": {
+                "query": "reactors",
+                "include_domains": ["example.com"],
+                "exclude_domains": ["spam.example"],
+            },
+        },
+    )
+    assert r.status_code == 200
+    assert r.json().get("ok") is True
+    assert seen.get("include_domains") == ["example.com"]
+    assert seen.get("exclude_domains") == ["spam.example"]
+
+
+@pytest.mark.unit
 def test_orchestrator_invoke_unknown_tool(client: TestClient) -> None:
     r = client.post(
         "/v1/orchestrator_invoke",

@@ -195,6 +195,37 @@ except ImportError:
     logger.info("digisearch_research_turn MCP tool omitted (install digisearch[agent])")
 
 
+@mcp.tool()
+def digisearch_web_search(
+    query: str,
+    search_type: str = "auto",
+    num_results: int = 8,
+    category: str | None = None,
+) -> str:
+    """Live web search via EXA (alternative to the owned corpus).
+
+    Dormant without EXA_API_KEY — returns a disabled message instead of failing.
+    search_type: instant|fast|auto|deep-lite|deep|deep-reasoning.
+    """
+    from digisearch import web_exa
+
+    if not web_exa.is_exa_configured():
+        return "EXA web search is disabled (EXA_API_KEY is not set)."
+    if search_type not in web_exa.VALID_SEARCH_TYPES:
+        return f"[digisearch web search error: invalid search_type: {search_type!r}]"
+    try:
+        data = web_exa.exa_search(
+            query,
+            search_type=search_type,  # type: ignore[arg-type]
+            num_results=max(1, min(int(num_results), 100)),
+            category=category,
+        )
+    except (web_exa.ExaError, ValueError) as e:
+        logger.error("digisearch web search failed: %s", e)
+        return f"[digisearch web search error: {e}]"
+    return web_exa.format_web_results(data)
+
+
 def run_mcp(
     transport: str = "streamable-http",
     host: str | None = None,
