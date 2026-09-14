@@ -220,6 +220,19 @@ def snap_sourced(
     return min(candidates, key=lambda item: abs(item[0] - price))
 
 
+def _dedupe_snap_pool(pool: list[tuple[float, str]]) -> list[tuple[float, str]]:
+    """Drop repeat prices from a snap pool, keeping the first src label.
+
+    A Donchian extreme can coincide exactly with a pivot cluster level; without
+    this the pool carries the same price twice and attribution between the
+    ``pivot``/``donchian`` labels is cosmetic noise.
+    """
+    seen: dict[float, str] = {}
+    for level, src in pool:
+        seen.setdefault(level, src)
+    return list(seen.items())
+
+
 def _donchian_exprs(cfg: LevelsConfig) -> list[pl.Expr]:
     """Prior-bar Donchian extremes (``shift(1)`` keeps the channel causal)."""
     return [
@@ -449,6 +462,7 @@ def compute_levels(
         snap_pool.extend((level, "pivot") for level in pivot_sup)
         if don_low is not None and don_low < ref:
             snap_pool.append((don_low, "donchian"))
+    snap_pool = _dedupe_snap_pool(snap_pool)
     ladder: list[TpRung] = []
     for r in cfg.tp_rmultiples:
         base_price = ref + sign * float(r) * risk

@@ -456,6 +456,15 @@ def test_snap_sourced_keeps_provenance() -> None:
     assert snap_sourced(105.0, pool, 0.5) is None
 
 
+def test_snap_pool_dedupes_duplicate_price_keeping_first_src() -> None:
+    """T5a M3: a Donchian level coinciding with a pivot cluster must not appear
+    twice — attribution stays with the first (pivot) label."""
+    from digiquant.data.prices.levels import _dedupe_snap_pool
+
+    pool = [(102.0, "pivot"), (102.0, "donchian"), (103.0, "pivot")]
+    assert _dedupe_snap_pool(pool) == [(102.0, "pivot"), (103.0, "pivot")]
+
+
 def test_trail_policy_carries_multiple_and_activation() -> None:
     cfg = LevelsConfig(trail_atr=2.5, trail_activate_r=1.0)
     policy = trail_policy_str(cfg)
