@@ -429,7 +429,7 @@ def test_workflow_schedule_and_dispatch() -> None:
     spec = _workflow()
     on = spec[True]  # YAML 1.1 parses the `on:` key as boolean True
     assert "workflow_dispatch" in on
-    assert "0 13 * * *" in [entry["cron"] for entry in on["schedule"]]
+    assert {entry["cron"] for entry in on["schedule"]} == {"0 13 * * *", "30 21 * * *"}
 
 
 def test_workflow_concurrency_and_timeout() -> None:
