@@ -1293,6 +1293,31 @@ class TestSoleAuthority:
             f"{writers}/opening_snapshot.py",
         ]
 
+    def test_labeled_writers_are_the_only_constant_importers(self) -> None:
+        """Constant imports count too: a writer can bypass the literal-string grep.
+
+        ``reconvergence.py`` (#4010) reaches the fill tables through ``HOLDING_LOTS``
+        and ``PAPER_EXECUTIONS`` instead of naming them, so this constant-aware
+        sibling keeps the sole-authority guard honest. The labeled
+        ``ledger_reconvergence`` chain is an allowed second writer beside the
+        ``opening_snapshot`` seed; anything else must route through the executor.
+        """
+        writers = "digiquant/src/digiquant/portfolio/writers"
+        assert self._files_naming("HOLDING_LOTS") == [
+            "digiquant/scripts/research/finalize_period_accounting.py",
+            f"{writers}/execution_io.py",
+            f"{writers}/opening_snapshot.py",
+            f"{writers}/reconvergence.py",
+        ]
+        assert self._files_naming("PAPER_EXECUTIONS") == [
+            "digiquant/scripts/research/finalize_period_accounting.py",
+            f"{writers}/execution_io.py",
+            f"{writers}/ledger_io.py",
+            f"{writers}/opening_snapshot.py",
+            f"{writers}/reconvergence.py",
+            "digiquant/src/digiquant/research/cost_liquidity_registry.py",
+        ]
+
     def test_the_executor_has_exactly_one_caller(self) -> None:
         """``execute_pending_orders(`` — the paren keeps prose cross-references out.
 

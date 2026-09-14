@@ -109,7 +109,14 @@ def test_read_scope_includes_coinmetrics_catalog():
 
 
 @pytest.mark.unit
+def test_read_scope_includes_trade_levels():
+    # Track E (#137): causal levels are a pure read/compute surface.
+    assert "digiquant_get_trade_levels" in READ_SCOPE_TOOLS
+    assert "digiquant_get_trade_levels" not in COMPUTE_TOOLS
+
+
+@pytest.mark.unit
 def test_tool_counts_pin_post_3855_surface():
-    assert len(READ_SCOPE_TOOLS) == 9
+    assert len(READ_SCOPE_TOOLS) == 10
     assert len(COMPUTE_TOOLS) == 14
-    assert len(_tool_names(create_mcp_server())) == 23
+    assert len(_tool_names(create_mcp_server())) == 24

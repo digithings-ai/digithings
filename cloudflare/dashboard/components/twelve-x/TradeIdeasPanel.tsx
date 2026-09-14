@@ -12,8 +12,10 @@ import {
   type IdeaContinuityMeta,
 } from '@/lib/twelve-x/idea-continuity';
 import { buildIdeaDetailModel, type IdeaDetailLevelRow } from '@/lib/twelve-x/trade-levels';
+import type { FxIdeaEvalRow } from '@/lib/twelve-x/types';
 import { useTwelveX } from './context';
 import { TwelveXSectionHeading } from './TwelveXSectionHeading';
+import LevelFixSection from './LevelFixSection';
 
 function dirClass(direction: string): string {
   const d = direction.toLowerCase();
@@ -91,7 +93,7 @@ export function ideaDetailBlocksClass(hasLevels: boolean, hasEvidence: boolean):
     : 'grid grid-cols-1 gap-3';
 }
 
-export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
+export function IdeaDetail({ idea, evalRow = null }: { idea: FxTradeIdeaRow; evalRow?: FxIdeaEvalRow | null }) {
   const { status, riskRewardLabel, levelRows, evidenceRows } = buildIdeaDetailModel(idea);
   const desks = contributingDesks(idea.citations);
   const showLevels = levelRows.length > 0;
@@ -138,6 +140,11 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
               ))}
             </div>
           ) : null}
+        </div>
+      ) : null}
+      {showLevels ? (
+        <div className="pt-1">
+          <LevelFixSection idea={idea} evalRow={evalRow} />
         </div>
       ) : null}
       {desks.length > 0 ? (

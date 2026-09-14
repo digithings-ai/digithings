@@ -42,7 +42,7 @@ export default function TodayTab({
   divergenceByCurrency?: Record<string, FxConsensusDivergence>;
   onSeeAllBriefs: () => void;
 }) {
-  const { openBrief } = useTwelveX();
+  const { crossLink, openBrief } = useTwelveX();
   const [highlightDisputed, setHighlightDisputed] = useState(false);
 
   const disputeCount = useMemo(
@@ -98,6 +98,18 @@ export default function TodayTab({
           </button>
         </p>
       ) : null}
+
+      <p className="px-1 text-sm text-ink-soft">
+        How have past calls done?{' '}
+        <button
+          type="button"
+          data-track-record-link="true"
+          className="text-accent hover:underline"
+          onClick={() => crossLink({ kind: 'tab', tab: 'track-record' })}
+        >
+          Full track record →
+        </button>
+      </p>
 
       {/* Left stack (digest → ideas → consensus) + wider briefs rail, height-matched. */}
       <div className="today-main grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)]">
