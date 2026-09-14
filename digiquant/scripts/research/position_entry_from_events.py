@@ -6,9 +6,11 @@ Earliest OPEN or ADD row with a non-null price on or before ``as_of`` (same rule
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any, Dict, Optional, Tuple
 
 from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.research.data.queries import r2_backend_enabled, r2_close_rows
 
 
 def _house_id() -> str:
@@ -51,6 +53,14 @@ def _close_on_or_after(sb: Any, ticker: str, iso: str) -> Optional[float]:
     """First available close on or after ``iso`` for ticker (walk forward a few days)."""
     t = (ticker or "").strip().upper()
     if not t:
+        return None
+    if r2_backend_enabled():
+        since = str(iso)[:10]
+        until = (date.fromisoformat(since) + timedelta(days=12)).isoformat()
+        rows = r2_close_rows(tickers=[t], since=since, until=until)
+        for row in rows:
+            if row.get("close") is not None:
+                return float(row["close"])
         return None
     res = (
         sb.table("price_history")

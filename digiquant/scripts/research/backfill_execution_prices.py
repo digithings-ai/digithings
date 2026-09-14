@@ -19,6 +19,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.research.data.queries import (
+    r2_backend_enabled,
+    r2_manifest_seal,
+    r2_ohlcv_rows,
+)
 
 try:
     from supabase import create_client  # type: ignore
@@ -47,6 +52,15 @@ def _sb():
 
 
 def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
+    day = str(d)[:10]
+    if r2_backend_enabled():
+        seal, _ = r2_manifest_seal()
+        if day <= seal.isoformat():
+            rows = r2_ohlcv_rows(tickers=[ticker], since=day, until=day)
+            if rows and rows[0].get("open") is not None:
+                return float(rows[0]["open"])
+            return None
+    # same-day (or unsealed) prices come from the intraday Supabase writer (#4013 D3)
     res = (
         sb.table("price_history")
         .select("open")

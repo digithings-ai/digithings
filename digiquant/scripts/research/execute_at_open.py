@@ -34,6 +34,11 @@ _ensure_importable()
 from digiquant.dashboard.tenancy import house_workspace_id  # noqa: E402
 from digiquant.portfolio.models.portfolio_ledger import OrderRejectionReason  # noqa: E402
 from digiquant.portfolio.models.position_event import PositionEventKind  # noqa: E402
+from digiquant.research.data.queries import (  # noqa: E402
+    r2_backend_enabled,
+    r2_manifest_seal,
+    r2_ohlcv_rows,
+)
 from digiquant.research.supabase_io import (  # noqa: E402
     SupabaseConfig,
     SupabaseNotConfiguredError,
@@ -229,6 +234,15 @@ def _parse_pct(value: Any) -> Optional[float]:
 
 
 def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
+    day = str(d)[:10]
+    if r2_backend_enabled():
+        seal, _ = r2_manifest_seal()
+        if day <= seal.isoformat():
+            rows = r2_ohlcv_rows(tickers=[ticker], since=day, until=day)
+            if rows and rows[0].get("open") is not None:
+                return float(rows[0]["open"])
+            return None
+    # same-day (or unsealed) prices come from the intraday Supabase writer (#4013 D3)
     res = (
         sb.table("price_history")
         .select("open")
@@ -472,9 +486,19 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
     lot's cost basis, and the ledger's whole numeric contract is that money never passes
     through binary floating point. Every other path in this file returns floats because
     `position_events` is a display table; this one feeds the record of what was bought.
+
+    Sealed dates read the R2 generation; same-day opens stay on the Supabase table the
+    intraday writer keeps fresh (#4013 D3).
     """
     if not tickers:
         return {}
+    if r2_backend_enabled():
+        seal, _ = r2_manifest_seal()
+        if str(d)[:10] <= seal.isoformat():
+            rows = r2_ohlcv_rows(tickers=sorted(set(tickers)), since=str(d)[:10], until=str(d)[:10])
+            return {
+                str(r["ticker"]): Decimal(str(r["open"])) for r in rows if r.get("open") is not None
+            }
     res = (
         sb.table("price_history")
         .select("ticker,open")
