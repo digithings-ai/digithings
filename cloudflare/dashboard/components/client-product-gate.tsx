@@ -1,13 +1,22 @@
-'use client';
+"use client";
 
-import { useContext, useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import Link from 'next/link';
-import { Lock } from 'lucide-react';
-import { AuthContext } from '@/lib/auth-context';
-import { useCanAccessProduct, requestAccessRefresh } from '@/lib/use-entitlement';
-import { isDashboardAuthEnabled } from '@/lib/supabase';
-import { redeemInvite, SettingsHttpError } from '@/lib/settings-api';
-import { ensureTwelveXSession } from '@/lib/twelve-x/session';
+import {
+  useContext,
+  useEffect,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import Link from "next/link";
+import { Lock } from "lucide-react";
+import { AuthContext } from "@/lib/auth-context";
+import {
+  useCanAccessProduct,
+  requestAccessRefresh,
+} from "@/lib/use-entitlement";
+import { isDashboardAuthEnabled } from "@/lib/supabase";
+import { redeemInvite, SettingsHttpError } from "@/lib/settings-api";
+import { ensureTwelveXSession } from "@/lib/twelve-x/session";
 
 /**
  * Gate a custom dashboard client product (FX Hub now; future products reuse this).
@@ -20,8 +29,8 @@ import { ensureTwelveXSession } from '@/lib/twelve-x/session';
 export function ClientProductGate({
   productKey,
   children,
-  title = 'Client product',
-  body = 'This surface is available to allowlisted client emails. Contact the operator if you expected access.',
+  title = "Client product",
+  body = "This surface is available to allowlisted client emails. Contact the operator if you expected access.",
 }: {
   productKey: string;
   children: ReactNode;
@@ -30,21 +39,43 @@ export function ClientProductGate({
 }) {
   const allowed = useCanAccessProduct(productKey);
   const session = useContext(AuthContext)?.session ?? null;
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unlocked, setUnlocked] = useState(false);
+  const [bridgeDone, setBridgeDone] = useState(false);
 
   // Once granted, bridge into a real twelve-x session (separate Supabase
   // project — see lib/twelve-x/session.ts) so its RLS can identify the
   // caller post-cutover. Best-effort/no-op pre-cutover and if unconfigured.
+  // Hold children until the bridge settles on the first load: while a core
+  // session is already present, the twelve-x queries render and fire before
+  // the freshly-minted session is persisted, so every one 401s until a manual
+  // reload (see #4050). Once settled, bridgeDone stays true, so the hourly
+  // token refresh never unmounts children.
   useEffect(() => {
     if (!(allowed || unlocked)) return;
-    void ensureTwelveXSession(session?.access_token);
+    if (!session?.access_token) return;
+    let cancelled = false;
+    void ensureTwelveXSession(session.access_token)
+      .finally(() => {
+        if (!cancelled) setBridgeDone(true);
+      })
+      .catch(() => {
+        // ensureTwelveXSession resolves `false` on failure; guard a future
+        // throwing refactor so it cannot wedge the gate closed forever.
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [allowed, unlocked, session?.access_token]);
 
-  if (!isDashboardAuthEnabled() || allowed || unlocked) {
+  if (!isDashboardAuthEnabled()) {
     return <>{children}</>;
+  }
+  if (allowed || unlocked) {
+    const waiting = !bridgeDone && Boolean(session?.access_token);
+    return waiting ? null : <>{children}</>;
   }
 
   async function onRedeem(event: FormEvent<HTMLFormElement>) {
@@ -52,12 +83,12 @@ export function ClientProductGate({
     setError(null);
     const token = session?.access_token;
     if (!token) {
-      setError('Sign in first, then enter the invite code.');
+      setError("Sign in first, then enter the invite code.");
       return;
     }
     const trimmed = code.trim();
     if (trimmed.length < 10) {
-      setError('Invite code is not valid.');
+      setError("Invite code is not valid.");
       return;
     }
     setPending(true);
@@ -72,7 +103,7 @@ export function ClientProductGate({
       if (err instanceof SettingsHttpError) {
         setError(err.message);
       } else {
-        setError('Invite redeem failed.');
+        setError("Invite redeem failed.");
       }
     } finally {
       setPending(false);
@@ -126,7 +157,7 @@ export function ClientProductGate({
               className="btn-ghost"
               data-testid="client-product-invite-submit"
             >
-              {pending ? 'Checking…' : 'Redeem invite'}
+              {pending ? "Checking…" : "Redeem invite"}
             </button>
           </form>
           {error ? (
