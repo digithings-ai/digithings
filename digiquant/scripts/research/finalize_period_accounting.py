@@ -60,6 +60,7 @@ from digiquant.dashboard.accounting.models import (
     PeriodFill,
     PeriodStatus,
 )
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.portfolio.models.portfolio_ledger import (
     DecisionAction,
     HoldingLotStatus,
@@ -78,7 +79,7 @@ from digiquant.portfolio.writers.ledger_io import (
     _rows_for_date,
 )
 from digiquant.portfolio.writers.opening_snapshot import cold_start_requires_seed
-from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.research.data.queries import r2_backend_enabled, r2_close_rows
 
 logger = logging.getLogger(__name__)
 
@@ -150,18 +151,23 @@ def _mark_from_close(
     as_of: date,
     observed_at: datetime,
 ) -> MarkObservation | None:
-    resp = (
-        client.table("price_history")
-        .select("close, date")
-        .eq("ticker", symbol)
-        .eq("date", as_of.isoformat())
-        .limit(1)
-        .execute()
-    )
-    rows = list(getattr(resp, "data", None) or [])
-    if not rows:
-        return None
-    close = _decimal(rows[0].get("close"))
+    if r2_backend_enabled():
+        rows = r2_close_rows(tickers=[symbol], since=as_of, until=as_of)
+        closes = [float(r["close"]) for r in rows if r.get("close") is not None]
+        close = _decimal(closes[0]) if closes else None
+    else:
+        resp = (
+            client.table("price_history")
+            .select("close, date")
+            .eq("ticker", symbol)
+            .eq("date", as_of.isoformat())
+            .limit(1)
+            .execute()
+        )
+        rows = list(getattr(resp, "data", None) or [])
+        if not rows:
+            return None
+        close = _decimal(rows[0].get("close"))
     if close is None or close <= 0:
         return None
     return MarkObservation(

@@ -50,6 +50,7 @@ def _ensure_importable() -> None:
 
 _ensure_importable()
 from digiquant.dashboard.tenancy import house_workspace_id  # noqa: E402
+from digiquant.research.data.queries import r2_backend_enabled, r2_close_rows  # noqa: E402
 
 
 def _house_id() -> str:
@@ -81,6 +82,12 @@ def _window_return(client: Any, ticker: str, start_iso: str, end_iso: str) -> fl
 
     Look-ahead-guarded (``.lte(end)``). ``None`` when fewer than two closes are available.
     """
+    if r2_backend_enabled():
+        rows = r2_close_rows(tickers=[ticker], since=start_iso, until=end_iso)
+        closes = [float(r["close"]) for r in rows if r.get("close") is not None]
+        if len(closes) < 2 or closes[0] <= 0 or closes[-1] <= 0:
+            return None
+        return closes[-1] / closes[0] - 1.0
     resp = (
         client.table("price_history")
         .select("date,close")
