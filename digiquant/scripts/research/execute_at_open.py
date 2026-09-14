@@ -239,7 +239,10 @@ def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
     if r2_backend_enabled():
         seal, _ = r2_manifest_seal()
         if day <= seal.isoformat():
-            rows = r2_ohlcv_rows(tickers=[ticker], since=day, until=day)
+            try:
+                rows = r2_ohlcv_rows(tickers=[ticker], since=day, until=day)
+            except LookupError:
+                return None
             if not rows or rows[0].get("open") is None:
                 return None
             try:
@@ -500,7 +503,12 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
     if r2_backend_enabled():
         seal, _ = r2_manifest_seal()
         if str(d)[:10] <= seal.isoformat():
-            rows = r2_ohlcv_rows(tickers=sorted(set(tickers)), since=str(d)[:10], until=str(d)[:10])
+            try:
+                rows = r2_ohlcv_rows(
+                    tickers=sorted(set(tickers)), since=str(d)[:10], until=str(d)[:10]
+                )
+            except LookupError:
+                return {}
             marks: Dict[str, Decimal] = {}
             for row in rows:
                 ticker = row.get("ticker")
@@ -511,6 +519,7 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
                     price = Decimal(str(raw))
                 except (TypeError, ValueError, InvalidOperation):
                     continue
+                # Stricter than the Supabase twin: non-finite marks would break PaperExecution.
                 if price.is_finite() and price > 0:
                     marks[str(ticker).upper()] = price
             return marks

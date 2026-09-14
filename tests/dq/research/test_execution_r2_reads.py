@@ -220,5 +220,45 @@ def test_close_on_or_after_skips_unusable_r2_closes(r2_market) -> None:
     )
     assert pfe._close_on_or_after(None, "EWZ", "2026-09-09") == 31.0
     assert pfe._close_on_or_after(None, "UNP", "2026-09-09") is None
-    # Unparseable `iso` returns None instead of raising out of the R2 branch.
-    assert pfe._close_on_or_after(None, "EWZ", "not-a-date") is None
+    # Unparseable `iso` that still compares <= the seal returns None instead of raising
+    # out of the R2 branch ("2026-09-0" sorts before the 2026-09-12 seal).
+    assert pfe._close_on_or_after(None, "EWZ", "2026-09-0") is None
+
+
+# ─── D3 deferral: unsealed dates fall through to the Supabase body (#4013 fix round 2) ───
+
+
+def test_close_on_or_after_defers_unsealed_dates_to_supabase(r2_market) -> None:
+    r2_market({"EWZ": [{"date": "2026-09-09", "close": 30.0}]}, as_of="2026-09-09")
+    supabase = FakeSupabaseClient(
+        canned_reads={"price_history": [{"ticker": "EWZ", "date": "2026-09-10", "close": 999.0}]}
+    )
+    assert pfe._close_on_or_after(supabase, "EWZ", "2026-09-10") == 999.0  # today -> Supabase
+
+
+def test_lookup_close_defers_unsealed_dates_to_supabase(r2_market) -> None:
+    r2_market({"XLV": [{"date": "2026-09-09", "close": 150.0}]}, as_of="2026-09-09")
+    supabase = FakeSupabaseClient(
+        canned_reads={"price_history": [{"ticker": "XLV", "date": "2026-09-10", "close": 999.0}]}
+    )
+    assert fep.lookup_close(supabase, "XLV", "2026-09-10") == 999.0  # today -> Supabase
+
+
+def test_open_marks_defers_unsealed_dates_to_supabase(r2_market) -> None:
+    r2_market({"GLD": [{"date": "2026-09-09", "open": 240.0}]}, as_of="2026-09-09")
+    supabase = FakeSupabaseClient(
+        canned_reads={"price_history": [{"ticker": "GLD", "date": "2026-09-10", "open": 999.0}]}
+    )
+    assert eao._open_marks(supabase, ["GLD"], "2026-09-10") == {"GLD": Decimal("999.0")}
+
+
+# ─── Unknown ticker declines per symbol instead of aborting the job (#4013 fix round 2) ───
+
+
+def test_unknown_r2_ticker_declines_instead_of_raising(r2_market) -> None:
+    r2_market({"GLD": [{"date": "2026-09-10", "open": 250.0}]}, as_of="2026-09-10")
+    assert eao._fetch_open(None, "ZZZ", "2026-09-10") is None
+    assert eao._open_marks(None, ["ZZZ"], "2026-09-10") == {}
+    assert bep._fetch_open(None, "ZZZ", "2026-09-10") is None
+    assert fep.lookup_close(None, "ZZZ", "2026-09-10") is None
+    assert pfe._close_on_or_after(None, "ZZZ", "2026-09-10") is None

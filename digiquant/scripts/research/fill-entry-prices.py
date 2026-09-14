@@ -50,19 +50,29 @@ def get_supabase_client():
 
 def lookup_close(sb, ticker: str, entry_date: str) -> float | None:
     """Return closing price for ticker on entry_date from price_history, or None."""
-    # Lazy import: this script has no digiquant dependency unless the R2 backend is on.
-    from digiquant.research.data.queries import r2_backend_enabled, r2_close_rows
+    # Imported per call (cached in sys.modules afterwards) so the default path needs no
+    # digiquant import at module scope.
+    from digiquant.research.data.queries import (
+        r2_backend_enabled,
+        r2_close_rows,
+        r2_manifest_seal,
+    )
 
     if r2_backend_enabled():
         day = str(entry_date)[:10]
-        rows = r2_close_rows(tickers=[ticker], since=day, until=day)
-        if not rows or rows[0].get("close") is None:
-            return None
-        try:
-            price = float(rows[0]["close"])
-        except (TypeError, ValueError):
-            return None
-        return price if math.isfinite(price) and price > 0 else None
+        seal, _ = r2_manifest_seal()
+        if day <= seal.isoformat():
+            try:
+                rows = r2_close_rows(tickers=[ticker], since=day, until=day)
+            except LookupError:
+                return None
+            if not rows or rows[0].get("close") is None:
+                return None
+            try:
+                price = float(rows[0]["close"])
+            except (TypeError, ValueError):
+                return None
+            return price if math.isfinite(price) and price > 0 else None
     resp = (
         sb.table("price_history")
         .select("close")

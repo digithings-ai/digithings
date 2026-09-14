@@ -57,7 +57,10 @@ def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
     if r2_backend_enabled():
         seal, _ = r2_manifest_seal()
         if day <= seal.isoformat():
-            rows = r2_ohlcv_rows(tickers=[ticker], since=day, until=day)
+            try:
+                rows = r2_ohlcv_rows(tickers=[ticker], since=day, until=day)
+            except LookupError:
+                return None
             if not rows or rows[0].get("open") is None:
                 return None
             try:
