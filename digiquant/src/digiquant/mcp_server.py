@@ -434,6 +434,9 @@ def digiquant_get_trade_levels(
 
     Returns the contract ``{pair, direction, entry{low,high,ref}, sl,
     tp_ladder[], trail_policy, source_ref, computed_at}`` or ``{"error": ...}``.
+    The contract also carries the ``reward_uncapped`` diagnostic (``true`` when
+    no opposite structure bounded the reward, so the stop was accepted without
+    an R:R check).
     """
     try:
         from digiquant.data.prices.levels_api import (

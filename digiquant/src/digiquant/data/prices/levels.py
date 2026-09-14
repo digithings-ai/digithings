@@ -220,6 +220,46 @@ def snap_sourced(
     return min(candidates, key=lambda item: abs(item[0] - price))
 
 
+def _dedupe_snap_pool(pool: list[tuple[float, str]]) -> list[tuple[float, str]]:
+    """Drop repeat prices from a snap pool, keeping the first src label.
+
+    A Donchian extreme can coincide exactly with a pivot cluster level; without
+    this the pool carries the same price twice and attribution between the
+    ``pivot``/``donchian`` labels is cosmetic noise.
+    """
+    seen: dict[float, str] = {}
+    for level, src in pool:
+        seen.setdefault(level, src)
+    return list(seen.items())
+
+
+def _entry_side_snap_pool(
+    direction: str,
+    ref: float,
+    pivot_res: list[float],
+    pivot_sup: list[float],
+    don_high: float | None,
+    don_low: float | None,
+) -> list[tuple[float, str]]:
+    """Snap candidates on the trade's side of entry only (LOW2).
+
+    A rung base always sits on the target side of ``ref``; letting it snap to a
+    same-name cluster on the wrong side (e.g. a long 1R pulled under entry by a
+    stale resistance-turned-support) inverts the target. Mirrors the
+    ``targets_above``/``targets_below`` entry-side convention.
+    """
+    pool: list[tuple[float, str]] = []
+    if direction == "long":
+        pool.extend((level, "pivot") for level in pivot_res if level > ref)
+        if don_high is not None and don_high > ref:
+            pool.append((don_high, "donchian"))
+    else:
+        pool.extend((level, "pivot") for level in pivot_sup if level < ref)
+        if don_low is not None and don_low < ref:
+            pool.append((don_low, "donchian"))
+    return _dedupe_snap_pool(pool)
+
+
 def _donchian_exprs(cfg: LevelsConfig) -> list[pl.Expr]:
     """Prior-bar Donchian extremes (``shift(1)`` keeps the channel causal)."""
     return [
@@ -440,15 +480,9 @@ def compute_levels(
     sl = stop_value
     risk = abs(ref - sl)
     snap_tol = cfg.snap_tol_atr * atr_value
-    snap_pool: list[tuple[float, str]] = []
-    if direction == "long":
-        snap_pool.extend((level, "pivot") for level in pivot_res)
-        if don_high is not None and don_high > ref:
-            snap_pool.append((don_high, "donchian"))
-    else:
-        snap_pool.extend((level, "pivot") for level in pivot_sup)
-        if don_low is not None and don_low < ref:
-            snap_pool.append((don_low, "donchian"))
+    snap_pool = _entry_side_snap_pool(
+        direction, ref, pivot_res, pivot_sup, don_high, don_low
+    )
     ladder: list[TpRung] = []
     for r in cfg.tp_rmultiples:
         base_price = ref + sign * float(r) * risk

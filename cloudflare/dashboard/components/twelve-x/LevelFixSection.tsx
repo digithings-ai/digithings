@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { getFxFixSeries } from '@/lib/twelve-x/fetch';
 import {
   buildLevelFixSeries,
+  fixWindowDays,
   normalizeFixPair,
   type FxFixPoint,
   type LevelFixSeries,
@@ -14,12 +15,24 @@ import LevelFixChart from './LevelFixChart';
 /** Module-level promise cache so N rows on one pair share a single fetch. */
 const fixCache = new Map<string, Promise<Record<string, FxFixPoint[]>>>();
 
-function fixesForPair(pair: string): Promise<Record<string, FxFixPoint[]>> {
+/**
+ * Shared fix-history fetch for one pair+window. A transient failure resolves
+ * empty for the current caller but is evicted, so the next mount retries
+ * instead of pinning the empty series for the module lifetime (LOW3).
+ */
+export function fixesForPair(pair: string, windowDays: number): Promise<Record<string, FxFixPoint[]>> {
   const key = normalizeFixPair(pair);
-  const cached = fixCache.get(key);
+  const cacheKey = `${key}::${windowDays}`;
+  const cached = fixCache.get(cacheKey);
   if (cached) return cached;
-  const pending = getFxFixSeries([pair]).catch(() => ({ [key]: [] as FxFixPoint[] }));
-  fixCache.set(key, pending);
+  const pending = getFxFixSeries([pair], windowDays).then(
+    (result) => result,
+    () => {
+      if (fixCache.get(cacheKey) === pending) fixCache.delete(cacheKey);
+      return { [key]: [] as FxFixPoint[] };
+    },
+  );
+  fixCache.set(cacheKey, pending);
   return pending;
 }
 
@@ -40,7 +53,7 @@ export function LevelFixSection({
 
   useEffect(() => {
     let cancelled = false;
-    fixesForPair(idea.pair).then((byPair) => {
+    fixesForPair(idea.pair, fixWindowDays(idea.run_date)).then((byPair) => {
       if (cancelled) return;
       setSeries(
         buildLevelFixSeries(idea, evalRow, byPair[normalizeFixPair(idea.pair)] ?? []),

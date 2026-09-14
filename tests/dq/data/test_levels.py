@@ -377,7 +377,10 @@ def test_structural_stop_short_mirrors_long() -> None:
     assert result.sl > result.entry_ref
 
 
-def test_monotonic_trend_uses_donchian_branch() -> None:
+def test_monotonic_trend_accepts_donchian_stop_uncapped_without_opposite_structure() -> None:
+    # M4 rename: the old name claimed a plain donchian-branch take, but what
+    # this pins includes the uncapped accept (no opposite structure, no R:R
+    # check) documented on the structural-branch rule.
     df = _monotonic_fixture()
     result = compute_levels(df, "long", LevelsConfig(), pair="EUR/USD")
     assert result.pivot_count == 0
@@ -451,6 +454,30 @@ def test_snap_sourced_keeps_provenance() -> None:
     assert snap_sourced(102.3, pool, 0.5) == (102.0, "pivot")
     assert snap_sourced(110.2, pool, 0.5) == (110.0, "donchian")
     assert snap_sourced(105.0, pool, 0.5) is None
+
+
+def test_snap_pool_dedupes_duplicate_price_keeping_first_src() -> None:
+    """T5a M3: a Donchian level coinciding with a pivot cluster must not appear
+    twice — attribution stays with the first (pivot) label."""
+    from digiquant.data.prices.levels import _dedupe_snap_pool
+
+    pool = [(102.0, "pivot"), (102.0, "donchian"), (103.0, "pivot")]
+    assert _dedupe_snap_pool(pool) == [(102.0, "pivot"), (103.0, "pivot")]
+
+
+def test_snap_pool_keeps_entry_side_only() -> None:
+    """LOW2: rungs must never snap to a level on the wrong side of entry —
+    a same-name cluster just under entry must not pull a long target down."""
+    from digiquant.data.prices.levels import _entry_side_snap_pool
+
+    assert _entry_side_snap_pool("long", 100.0, [99.7, 100.5], [], 100.9, None) == [
+        (100.5, "pivot"),
+        (100.9, "donchian"),
+    ]
+    assert _entry_side_snap_pool("short", 100.0, [], [99.5, 100.3], None, 99.2) == [
+        (99.5, "pivot"),
+        (99.2, "donchian"),
+    ]
 
 
 def test_trail_policy_carries_multiple_and_activation() -> None:
