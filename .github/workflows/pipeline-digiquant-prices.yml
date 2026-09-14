@@ -6,9 +6,11 @@ name: "Pipeline: digiquant prices"
 # with `run_writers: true` — most readers are on the versioned R2 cache, but
 # the ops readers listed under Verification below still query the Supabase
 # tables directly, so migration 124's DROPs are DEFERRED (#3951) until those
-# readers have R2 seams with tests. This workflow never loads
-# `DIGIQUANT_MARKET_DATA_BACKEND=r2`, so the
-# `digiquant prices` CLI refusal gates cannot bite here. Pause map:
+# readers have R2 seams with tests. Only the at-open job sets
+# `DIGIQUANT_MARKET_DATA_BACKEND=r2` (#4013, sealed dates — the Task 3 date
+# guard keeps same-day opens on Supabase); the paused `digiquant prices`
+# writer jobs below never see the flag, so the refusal gates cannot bite.
+# Pause map:
 #
 #   KEPT on cadence (load-bearing Supabase consumers — see verification):
 #   * intraday fetch-quotes → price_history OHLCV. `execute_at_open.py`
@@ -289,6 +291,9 @@ jobs:
       # transition (#1090): legacy names fed from the same secrets until readers migrate
       SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      # Sealed dates read the R2 generation; the Task 3 date guard in
+      # execute_at_open.py keeps same-day opens on the Supabase table (#4013).
+      DIGIQUANT_MARKET_DATA_BACKEND: r2
     steps:
       - uses: actions/checkout@v4
         with:
