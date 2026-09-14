@@ -221,12 +221,13 @@ class TestNoOpenrouterFallbackModels:
 
 
 class TestMarketDataCutoverGuardrails:
-    """#3780 final review (Critical): safe merge default + supervised-flip wiring.
+    """#3780/#4013: the cutover flag + the credentials it reads with.
 
-    The live backfill has NOT run yet (R2 is empty), so merging with the flag
-    at ``r2`` would break the daily pipeline on merge: the flag must read
-    ``supabase`` until the supervised post-merge flip. The flip itself is only
-    safe when the research job already carries the four R2 secrets (mirroring
+    #3780 pinned the pre-flip default (``supabase``) until the supervised
+    cutover. Task 7 of #4013 flipped the shared fragment to ``r2`` on
+    2026-09-14, so the pin now asserts the flip landed and only a deliberate
+    revert may move it back. The flip is only safe because the research job
+    already carries the four R2 secrets (mirroring
     pipeline-checkpoint-archive.yml), so both halves are pinned here.
     """
 
@@ -237,11 +238,12 @@ class TestMarketDataCutoverGuardrails:
         "R2_SECRET_ACCESS_KEY",
     )
 
-    def test_pipeline_flag_defaults_to_supabase(self) -> None:
+    def test_pipeline_flag_flipped_to_r2(self) -> None:
         cfg = yaml.safe_load(PIPELINE_CONFIG.read_text(encoding="utf-8"))
-        assert cfg["env"]["DIGIQUANT_MARKET_DATA_BACKEND"] == "supabase", (
-            "R2 is empty until the live backfill runs: merging with the flag at "
-            "`r2` breaks the daily pipeline. Flip to `r2` only post-merge, supervised."
+        assert cfg["env"]["DIGIQUANT_MARKET_DATA_BACKEND"] == "r2", (
+            "The supervised cutover (#4013, Task 7) sets the shared pipeline env to `r2`; "
+            "flipping it back is the documented rollback to the Supabase market-data "
+            "writer path, not a merge-time default."
         )
 
     def test_research_job_wires_r2_secrets(self) -> None:
