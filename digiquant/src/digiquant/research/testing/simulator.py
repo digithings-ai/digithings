@@ -936,7 +936,46 @@ def seed_supabase_client(
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 4. End-to-end harness
+# 5. Canned web grounding (tool-boundary stub, #3859)
+# ──────────────────────────────────────────────────────────────────────────
+# Pipeline grounding is tool-only: a requested live search must succeed or
+# raise DashboardWebSearchError — there is no synthesis fallback. Simulated
+# runs must never reach the live web_search tool, so simulated_pipeline
+# patches the grounding tool boundary below to return this canned
+# {summary, sources, as_of} grounding (same shape as the phase7d pm-skill
+# fixture). Canned grounding lives only in tests/simulator — never in
+# production paths. build_grounding needs no direct patch: it delegates to
+# the fetch functions above at call time. ai_portfolios needs its own patch:
+# it binds call_web_search_tool via a top-level from-import, which escapes
+# the web_grounding patch.
+
+CANNED_TOOL_SEARCH: dict[str, Any] = {
+    "summary": "- canned",
+    "sources": ["https://u"],
+    "as_of": "2026-06-13",
+}
+
+
+def _canned_fetch_web_grounding(**kwargs: Any) -> dict[str, Any]:
+    """Stand-in for ``fetch_web_grounding`` returning canned grounding."""
+    return dict(CANNED_TOOL_SEARCH)
+
+
+def _canned_call_web_search_tool(**kwargs: Any) -> dict[str, Any]:
+    """Stand-in for ``call_web_search_tool`` returning canned tool output."""
+    return {
+        "summary": str(CANNED_TOOL_SEARCH["summary"]),
+        "sources": list(CANNED_TOOL_SEARCH["sources"]),
+    }
+
+
+def _canned_fetch_ai_portfolio_grounding(**kwargs: Any) -> dict[str, Any]:
+    """Stand-in for ``fetch_ai_portfolio_grounding`` returning canned grounding."""
+    return dict(CANNED_TOOL_SEARCH)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 6. End-to-end harness
 # ──────────────────────────────────────────────────────────────────────────
 
 
@@ -1141,7 +1180,7 @@ def simulated_pipeline(
     replace_canned_defaults: bool = False,
     evidence_bundle_store: EvidenceBundleStore | None = None,
 ) -> Iterator[SimulationRun]:
-    """Patch chat_completion + thread a fake client through every dep slot.
+    """Patch chat_completion + the grounding tool boundary + thread a fake client.
 
     Parameters
     ----------
@@ -1240,6 +1279,22 @@ def simulated_pipeline(
         patch(
             "digiquant.portfolio.phases.thesis_common.load_skill_edit",
             side_effect=_simulator_portfolio_load_skill_edit,
+        ),
+        patch(
+            "digiquant.research.data.web_grounding.fetch_web_grounding",
+            side_effect=_canned_fetch_web_grounding,
+        ),
+        patch(
+            "digiquant.research.data.web_grounding.call_web_search_tool",
+            side_effect=_canned_call_web_search_tool,
+        ),
+        patch(
+            "digiquant.research.data.ai_portfolios.call_web_search_tool",
+            side_effect=_canned_call_web_search_tool,
+        ),
+        patch(
+            "digiquant.research.data.ai_portfolios.fetch_ai_portfolio_grounding",
+            side_effect=_canned_fetch_ai_portfolio_grounding,
         ),
     ):
         yield run

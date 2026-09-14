@@ -5,7 +5,7 @@ description: digikey HTTP surface and operations — health, JWKS, admin key iss
 tags: [digikey, api, auth, operations]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
+    at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-9219d171d061bc6f0f3c0bae
     resource: repo://digikey/src/digikey/ratelimit.py

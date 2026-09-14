@@ -1,19 +1,19 @@
 ## Goal
 
-Extract a reusable **`ScrollyFeatures`** primitive from digiquant's `PipelineScene` / strategy scroll patterns — Graphite-style pinned section + progress rail + N slides ([`graphite-full.md`](../../../../frontend/digiweb/design/references/scans/graphite-full.md)).
+Extract a reusable **`ScrollyFeatures`** primitive from digiquant's `PipelineScene` / strategy scroll patterns — Graphite-style pinned section + progress rail + N slides ([`graphite-full.md`](../../../../cloudflare/digiweb/design/references/scans/graphite-full.md)).
 
 ## Component
 
-- [x] cross-cutting (`frontend/digiweb/design/`)
+- [x] cross-cutting (`cloudflare/digiweb/design/`)
 
 ## Acceptance Criteria
 
-- [ ] Shared module (JS + CSS) under `frontend/digiweb/design/`:
+- [ ] Shared module (JS + CSS) under `cloudflare/digiweb/design/`:
   - Sticky pin container with configurable slide count
   - **Progress rail** — vertical or horizontal indicator showing active slide index (Graphite pattern)
   - Scroll-driven slide transitions using existing scroll-trigger patterns
   - Dynamic scrolly height from measured pin content (lesson from #1198)
-- [ ] Refactor `frontend/digiquant-web` Olympus `PipelineScene` to consume primitive **without visual regression** (screenshot or manual checklist)
+- [ ] Refactor `cloudflare/digiquant-web` Olympus `PipelineScene` to consume primitive **without visual regression** (screenshot or manual checklist)
 - [ ] API documented: `initScrollyFeatures(rootEl, { slides, onSlideChange? })` or React hook equivalent
 - [ ] Anti-pattern enforced: primitive docs warn **max one pinned section per page**
 - [ ] `prefers-reduced-motion`: show all slides in flow layout
@@ -21,13 +21,13 @@ Extract a reusable **`ScrollyFeatures`** primitive from digiquant's `PipelineSce
 ## Test Requirements
 
 - Manual scroll test on digiquant landing at 100% and 125% browser zoom
-- `cd frontend/digiquant-web && npm run build`
+- `cd cloudflare/digiquant-web && npm run build`
 
 ## Documentation to Update
 
-- [ ] `frontend/digiweb/design/site/README.md` — ScrollyFeatures API
-- [ ] `frontend/digiquant-web/ARCHITECTURE.md` if landing structure changes
-- [ ] `frontend/digiweb/design/EVOLUTION.md`
+- [ ] `cloudflare/digiweb/design/site/README.md` — ScrollyFeatures API
+- [ ] `cloudflare/digiquant-web/ARCHITECTURE.md` if landing structure changes
+- [ ] `cloudflare/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

@@ -146,8 +146,21 @@ def _refresh_stale_technicals(
 
     Opt-in via ``DIGIQUANT_REFRESH_ON_DEMAND``; fail-soft → ``False`` (keep the stale data and
     the ``"scripts"`` fallback signal). Returns True only when rows were actually upserted.
+
+    Under ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` this is a no-op returning False
+    (#3780 Task 7b second cutover): the recompute writes the Supabase
+    ``price_technicals`` table whose writers are stopped — the R2 refresh cron
+    owns freshness, and the seal probe below reports it.
     """
     if not _refresh_on_demand_enabled():
+        return False
+    from digiquant.research.data.queries import r2_backend_enabled
+
+    if r2_backend_enabled():
+        logger.info(
+            "preflight: on-demand technicals refresh skipped "
+            "(DIGIQUANT_MARKET_DATA_BACKEND=r2 owns freshness via R2)"
+        )
         return False
     tickers = list(config.watchlist)
     if not tickers:
@@ -171,7 +184,15 @@ def _refresh_stale_technicals(
 def _data_layer_snapshot(
     deps: PreflightDeps, run_date: date, config: ResearchConfigBundle
 ) -> DataLayerSnapshot:
-    """Probe price_technicals + macro_series freshness; empty tables are valid."""
+    """Probe price_technicals + macro_series freshness; empty tables are valid.
+
+    The probes route to the R2 manifest seal under
+    ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` (see the freshness helpers in
+    ``research.supabase_io``). ``fallback_used`` keeps its legacy vocabulary:
+    ``"supabase"`` means the primary market store is fresh (the Supabase
+    tables by default, the R2 seal under the cutover flag) — triage only
+    branches on ``!= "supabase"``, so no consumer changes.
+    """
     latest_tech, ticker_count = query_price_technicals_freshness(client=deps.client)
     macro_latest = query_macro_series_freshness(client=deps.client)
 

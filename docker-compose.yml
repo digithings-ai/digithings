@@ -1,7 +1,7 @@
 # Digi Ecosystem – Docker Compose (Phase 0+)
 # See ARCHITECTURE.md, SECURITY.md. For hardened deploy: docker compose --profile hardened up
 # Usage: docker compose up --build
-# For testing without OpenAI: set OLLAMA_MODEL=ollama/qwen3:8b in .env; Ollama runs in Docker below.
+# For testing without OpenAI: set OLLAMA_MODEL=ollama/deepseek-r1:14b in .env; Ollama runs in Docker below.
 
 services:
   # ─── Redis for digikey JWT revocation blocklist (ADR-0007) ───
@@ -30,13 +30,16 @@ services:
       - DIGIKEY_DATABASE_URL=${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
       - DIGIKEY_BLOCKLIST_REDIS_URL=${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://digikey-blocklist-redis:6379/0}
-      # Set DIGIKEY_REQUIRE_BLOCKLIST=1 in production so auth fails closed without Redis.
-      - DIGIKEY_REQUIRE_BLOCKLIST=${DIGIKEY_REQUIRE_BLOCKLIST:-0}
+      # Fail closed by default: auth must not silently skip revocation when Redis is
+      # unreachable. Local dev without Redis sets DIGIKEY_REQUIRE_BLOCKLIST=0 explicitly.
+      - DIGIKEY_REQUIRE_BLOCKLIST=${DIGIKEY_REQUIRE_BLOCKLIST:-1}
       - DIGIKEY_LITELLM_PROXY_KEY=${DIGIKEY_LITELLM_PROXY_KEY:-${LITELLM_MASTER_KEY:-}}
       - DIGIKEY_ADMIN_TOKEN=${DIGIKEY_ADMIN_TOKEN:-}
       - DIGIKEY_BFF_TOKEN=${DIGIKEY_BFF_TOKEN:-}
       - DIGIKEY_ALLOW_DEV_GLOBAL=${DIGIKEY_ALLOW_DEV_GLOBAL:-0}
-      - DIGIKEY_ALLOW_EPHEMERAL_KEY=${DIGIKEY_ALLOW_EPHEMERAL_KEY:-1}
+      # Production default is 0: require DIGIKEY_PRIVATE_KEY_PEM so JWKS is stable across
+      # restarts. Local Docker dev opts in explicitly with DIGIKEY_ALLOW_EPHEMERAL_KEY=1.
+      - DIGIKEY_ALLOW_EPHEMERAL_KEY=${DIGIKEY_ALLOW_EPHEMERAL_KEY:-0}
       - PYTHONUNBUFFERED=1
       - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
@@ -202,6 +205,7 @@ services:
       - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - DIGISEARCH_INDEX=${DIGISEARCH_INDEX:-default}
+      - DIGISEARCH_SEARXNG_URL=${DIGISEARCH_SEARXNG_URL:-http://searxng:8080}
       - CHROMA_PATH=/data/chroma
       - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
@@ -219,6 +223,37 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  # ─── searxng + valkey: proprietary web-search sidecar for digisearch (#3853) ───
+  # Loopback-only on the host; digisearch reaches searxng as http://searxng:8080
+  # via DIGISEARCH_SEARXNG_URL. ddgs remains the zero-infra fallback.
+  searxng:
+    image: searxng/searxng:latest
+    container_name: digi-searxng
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./config/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    depends_on:
+      - valkey
+    healthcheck:
+      # searxng image ships wget (no curl): probe with wget or the
+      # container never becomes healthy (#3859).
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  valkey:
+    image: valkey/valkey:9-alpine
+    container_name: digi-searxng-valkey
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping || redis-cli ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   # ─── digivault: Obsidian-style markdown vault management (profile: digivault) ───
   digivault:
@@ -305,9 +340,11 @@ services:
   # house pins over to OmniRoute. See docs/providers/omniroute.md.
   #
   # Compose interpolates env for EVERY service at `docker compose config`,
-  # including inactive profiles — never use ${VAR:?} here or compose-validate
-  # fails without OMNIROUTE_AUTH_PASSWORD. Require the password only when the
-  # profile actually starts (omniroute-auth-guard below).
+  # including inactive profiles — a `${VAR:?}` here must be seeded in
+  # .env.example or compose-validate fails (the digichat AUTH_SECRET / grafana
+  # GRAFANA_ADMIN_PASSWORD required vars are; OMNIROUTE_AUTH_PASSWORD
+  # deliberately is not, because there is no safe placeholder for it). Require
+  # the password only when the profile actually starts (omniroute-auth-guard below).
   omniroute-auth-guard:
     image: busybox:1.36
     container_name: digi-omniroute-auth-guard
@@ -348,8 +385,8 @@ services:
   # ─── digisearch MCP server (optional: run with docker compose --profile digisearch-mcp up) ───
   digisearch-mcp:
     build:
-      context: ./digisearch
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: digisearch/Dockerfile
     image: digi-digisearch:latest
     container_name: digi-digisearch-mcp
     profiles:
@@ -371,6 +408,26 @@ services:
       - digisearch_chroma:/data/chroma
       - ./digisearch/devdata/edgar_sample:/data/edgar_dev_corpus:ro
     command: ["python", "-m", "digisearch.cli", "mcp", "--port", "8765"]
+
+  # ─── digivault MCP server (optional: run with docker compose --profile digivault-mcp up) ───
+  digivault-mcp:
+    build:
+      context: .
+      dockerfile: digivault/Dockerfile.mcp
+    image: digi-digivault-mcp:latest
+    container_name: digi-digivault-mcp
+    profiles:
+      - digivault-mcp
+    ports:
+      - "127.0.0.1:8769:8769"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGIVAULT_ROOT=${DIGIVAULT_ROOT:-/data/vault}
+      # Loopback by default; set DIGIVAULT_MCP_HOST in .env for published-port access.
+    volumes:
+      - digivault_data:/data/vault
 
   # ─── Phase 3: Heartbeat (run with: docker compose --profile heartbeat up) ───
   heartbeat:
@@ -429,7 +486,7 @@ services:
       # Repo-root context: digichat is an npm workspace member; its lockfile and
       # the private @digithings/design package only exist at the root (#675).
       context: .
-      dockerfile: frontend/digichat/Dockerfile
+      dockerfile: cloudflare/digichat/Dockerfile
     image: digi-digichat:latest
     container_name: digi-digichat
     profiles:
@@ -441,8 +498,13 @@ services:
       - .env
     environment:
       - NODE_ENV=production
-      - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-true}
-      - AUTH_SECRET=${AUTH_SECRET:-change-me-use-openssl-rand-base64-32}
+      # Deny-by-default. Set AUTH_TRUST_HOST=true in .env ONLY when digichat is
+      # behind a trusted reverse proxy that sets X-Forwarded-Host; always pin
+      # AUTH_URL to the public origin as well (see cloudflare/digichat/ARCHITECTURE.md §6).
+      - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-false}
+      # Required: no predictable fallback. Local dev gets a placeholder from
+      # .env.example; production must generate one: openssl rand -base64 32
+      - AUTH_SECRET=${AUTH_SECRET:?set AUTH_SECRET (openssl rand -base64 32)}
       # Must match the origin you open in the browser (host + publish port).
       - AUTH_URL=${AUTH_URL:-http://127.0.0.1:${DIGICHAT_PUBLISH_PORT:-3005}}
       - DIGICHAT_DATABASE_URL=postgresql://digichat:${DIGICHAT_POSTGRES_PASSWORD:-digichat}@digichat-db:5432/digichat
@@ -504,8 +566,10 @@ services:
     ports:
       - "127.0.0.1:3001:3000"
     environment:
+      # No admin/admin fallback: Grafana refuses to start without a password.
+      # Set GRAFANA_ADMIN_PASSWORD in .env before `make up-observability`.
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD (observability profile)}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_ANALYTICS_REPORTING_ENABLED=false
     volumes:

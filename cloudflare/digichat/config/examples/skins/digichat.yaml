@@ -1,0 +1,34 @@
+version: 1
+# First-party digichat Thread — unconfigured container default.
+# Copy to DIGICHAT_CONFIG_PATH or set DIGICHAT_CHROME_SKIN=digichat.
+# Empty catalog: no Search / Vault / MCP until the operator adds them.
+# YAML that omits `skin` still parses as catalog `base`.
+deployment:
+  slug: client-digichat
+  chrome:
+    mode: embed
+    theme: dark
+    skin: digichat
+    welcome:
+      title: Ask a question
+      body: Ask about anything you need help with.
+    placeholder: Ask a question
+    transcript:
+      userAlign: left
+  persistence: none
+  auth: anonymous
+  features:
+    attachments: true
+    dictation: false
+    speech: false
+    reasoning: collapsed
+    toolCalls: collapsed
+    sources: true
+    branchPicker: true
+    modelPicker: false
+  backend:
+    type: digigraph
+  gate:
+    mode: ungated
+    activityDetail: labels
+    llmAccess: operator

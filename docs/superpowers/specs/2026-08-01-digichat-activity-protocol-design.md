@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-01
 **Status:** Approved
-**Scope:** Phase 1 of the digichat unification program. Entirely within `frontend/digichat`.
+**Scope:** Phase 1 of the digichat unification program. Entirely within `cloudflare/digichat`.
 
 ## Problem
 

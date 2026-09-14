@@ -48,6 +48,7 @@ from digiquant.portfolio.writers.ledger_io import (
     _rows_for_date,
     _symbol,
 )
+from digiquant.research.data.queries import r2_backend_enabled
 from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
@@ -175,6 +176,16 @@ def _price_for_symbol(
     entry = _decimal(entry_price)
     if entry is not None and entry > 0:
         return entry
+    if r2_backend_enabled():
+        # Sealed R2 generation; single-date window (#3780 Task 7b).
+        from digiquant.research.data.queries import r2_close_rows
+
+        rows = r2_close_rows(tickers=[symbol], since=book_date, until=book_date)
+        want = symbol.strip().upper()
+        raws = [r.get("close") for r in rows if str(r.get("ticker") or "").upper() == want]
+        closes = [_decimal(raw) for raw in raws]
+        closes = [c for c in closes if c is not None and c > 0]
+        return closes[0] if closes else None
     resp = (
         client.table("price_history")
         .select("close")

@@ -2,17 +2,17 @@
 # Phase 0 — Foundation Implementation Plan
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development or superpowers:executing-plans. Steps use checkbox (- [ ]) syntax.
 **Goal:** Land every cross-surface prerequisite — widened data layer, the Why→Pipeline IA rename, the weight_pct/thesis_id correctness fixes, the F5 token rule, the shared conviction/freshness components, the copy sweep, and the locked deep-link grammar — so Phases 1–3 build on an honest, non-conflicting foundation.
-**Architecture:** Pure `frontend/olympus` work (Next.js 16 static export, `basePath /olympus`). The data layer (`lib/queries.ts` + `lib/types.ts` + `lib/database.types.ts`) stops dropping live DB columns; the shell (`lib/nav.ts`, `components/sidebar.tsx`, `command-palette.tsx`, `legacy-spa-redirect.tsx`) renames Why→Pipeline behind a query-param deep-link helper; new pure-presentational shared components (`ConvictionMeter`, `SignedConvictionBadge`, the F7 `AsOfBadge` upgrade) live under `components/shared/`.
+**Architecture:** Pure `cloudflare/olympus` work (Next.js 16 static export, `basePath /olympus`). The data layer (`lib/queries.ts` + `lib/types.ts` + `lib/database.types.ts`) stops dropping live DB columns; the shell (`lib/nav.ts`, `components/sidebar.tsx`, `command-palette.tsx`, `legacy-spa-redirect.tsx`) renames Why→Pipeline behind a query-param deep-link helper; new pure-presentational shared components (`ConvictionMeter`, `SignedConvictionBadge`, the F7 `AsOfBadge` upgrade) live under `components/shared/`.
 **Tech Stack:** React 19, TypeScript, Tailwind v4 (`@theme` tokens, `[data-theme]`), lucide-react, recharts, `@supabase/supabase-js`, vitest.
 
 ## Global Constraints
 - **Static export only.** `output: 'export'`, `basePath: '/olympus'`. No server actions, no route handlers, no runtime env reads beyond `NEXT_PUBLIC_*`. Every new route must be statically renderable.
 - **Tailwind v4 tokens, inherited exactly.** dark-first; cyan-phosphor `--accent` #3DD6C4; Instrument Serif `--font-display`; Geist sans/mono; `glass-card`; semantic `text-fin-green`/`text-fin-red`/`text-fin-amber`; `bg-bg-primary`/`bg-bg-secondary`/`bg-bg-glass`; `border-border-subtle`; `text-text-primary`/`text-text-secondary`/`text-text-muted`. `--color-fin-blue` and `--color-fin-purple` are both already aliased to `--accent` (cyan) in `app/globals.css:31,35` — do not "fix" the alias; purge the *off-palette literals* instead.
-- **Vitest, from `frontend/olympus`.** Run `npm run test -- <path>` (or `npx vitest run <path>`). 150+ plumbing tests + page-level tests MUST stay green. Page-level tests are updated *as part of* the task that changes their surface.
+- **Vitest, from `cloudflare/olympus`.** Run `npm run test -- <path>` (or `npx vitest run <path>`). 150+ plumbing tests + page-level tests MUST stay green. Page-level tests are updated *as part of* the task that changes their surface.
 - **The F5 token rule (verbatim, applied everywhere):** cyan `--accent` #3DD6C4 for links/chrome/the single conviction encoding/the live-fresh dot only; `fin-green`/`fin-red` *strictly* for signed financial values; `fin-amber` for caution/stale/carried/mixed-regime; **no gradients** beyond the existing faint regime wash; **no decorative numbering** unless it encodes the system's own priority.
 - **Empty-state discipline:** time-series elements gate on a data predicate and render a calm element-specific line — never an em-dash placeholder, a 1-row "table over time," or a single-dot chart. Per-day elements are the marquee.
 - **Issue linkage:** every commit traces to a GitHub issue. Frontend Phase 0 work lands under the redesign tracking issue; four backend issues are filed (see Task 12) and referenced as `Fixes #<N>` placeholders where the durable fix lives backend-side.
-- **No hand-editing `.claude/`** generated agent surface. Not relevant to this plan (all work is under `frontend/olympus`), noted for completeness.
+- **No hand-editing `.claude/`** generated agent surface. Not relevant to this plan (all work is under `cloudflare/olympus`), noted for completeness.
 
 ---
 
@@ -30,7 +30,7 @@
 
 ## Task 1: Widen `database.types.ts` — add `atlas_run_diagnostics` + the six `theses` columns
 
-**Files:** Modify `frontend/olympus/lib/database.types.ts` (theses Row 54-67; Views block 235-260) / Test: none (type-only; covered by `tsc`).
+**Files:** Modify `cloudflare/olympus/lib/database.types.ts` (theses Row 54-67; Views block 235-260) / Test: none (type-only; covered by `tsc`).
 **Interfaces:** Produces `TableRow<'atlas_run_diagnostics'>` and the widened `TableRow<'theses'>` (consumed by Tasks 2, 4, and Phase-1 System / Phase-2 Theses).
 
 - [ ] Add the six live columns to the `theses` Row in `lib/database.types.ts` (after `notes` on line 63, before the closing of `Row`):
@@ -96,14 +96,14 @@
       };
 ```
 
-- [ ] Run the type check: `cd frontend/olympus && npx tsc --noEmit` — expect PASS (no new errors; the additions are purely additive optional fields + a new table key).
+- [ ] Run the type check: `cd cloudflare/olympus && npx tsc --noEmit` — expect PASS (no new errors; the additions are purely additive optional fields + a new table key).
 - [ ] Commit: `git commit -am "chore(olympus): widen database.types for theses columns + atlas_run_diagnostics"`
 
 ---
 
 ## Task 2: Widen the `Thesis` + `Position` domain types and add the diagnostics type
 
-**Files:** Modify `frontend/olympus/lib/types.ts` (Position 24-47; Thesis 50-57; new `AtlasRunDiagnostics` type) / Test: `frontend/olympus/lib/types.test.ts` (new — a compile-shape assertion).
+**Files:** Modify `cloudflare/olympus/lib/types.ts` (Position 24-47; Thesis 50-57; new `AtlasRunDiagnostics` type) / Test: `cloudflare/olympus/lib/types.test.ts` (new — a compile-shape assertion).
 **Interfaces:** Consumes widened `TableRow<'theses'>`, `TableRow<'positions'>`, `TableRow<'atlas_run_diagnostics'>` (Task 1). Produces the widened `Thesis`, `Position`, and new `AtlasRunDiagnostics` exported types (consumed by Task 3 mapping + Phases 1–3).
 
 - [ ] Write the failing shape test `lib/types.test.ts`:
@@ -219,7 +219,7 @@ export interface AtlasRunDiagnostics {
 
 ## Task 3: Widen the `queries.ts` mappings + add the `fetchAtlasRunDiagnostics` direct read
 
-**Files:** Modify `frontend/olympus/lib/queries.ts` (thesis mapping 648-655; position mapping 864-915; new exported `fetchAtlasRunDiagnostics` near `fetchObservabilityData`-style readers) / Test: `frontend/olympus/lib/queries-widening.test.ts` (new — pure-mapping units).
+**Files:** Modify `cloudflare/olympus/lib/queries.ts` (thesis mapping 648-655; position mapping 864-915; new exported `fetchAtlasRunDiagnostics` near `fetchObservabilityData`-style readers) / Test: `cloudflare/olympus/lib/queries-widening.test.ts` (new — pure-mapping units).
 **Interfaces:** Consumes widened types (Task 2). Produces:
 - `mapThesisRow(row: TableRow<'theses'>): Thesis` (exported pure fn — testable without Supabase)
 - `mapPositionConviction` folded into the existing position map (no new export; conviction etc. flow through the `Position[]` mapping)
@@ -377,7 +377,7 @@ describe('mapThesisRow (F1)', () => {
 
 ## Task 4: F4 — `thesis_id` join normalization helper + dedupe usage
 
-**Files:** Modify `frontend/olympus/lib/thesis-id.ts` / Test: `frontend/olympus/lib/thesis-id.test.ts` (extend if present, else create).
+**Files:** Modify `cloudflare/olympus/lib/thesis-id.ts` / Test: `cloudflare/olympus/lib/thesis-id.test.ts` (extend if present, else create).
 **Interfaces:** Consumes nothing. Produces `joinPositionsToThesis(positions, thesisId)` and the documented `normalizeThesisId` contract (consumed by Phase-2 Theses "holdings expressing this thesis", Holdings→thesis links, Today's book strip).
 
 **Problem (verified):** `positions.thesis_id` holds lowercase vehicle tickers (`ewt`, `ijr`) while `theses.thesis_id` holds `vehicle-ewt` / `MT1`. The existing `normalizeThesisId` only upper-cases — it will NOT match `EWT` to `VEHICLE-EWT`. The interim normalization must strip the `vehicle-` prefix and compare on the bare ticker.
@@ -450,7 +450,7 @@ export function joinPositionsToThesis<T extends { thesis_ids: string[] }>(
 
 ## Task 5: F3 — book-reconciliation primitive (weight_pct dedupe → 100%)
 
-**Files:** Create `frontend/olympus/lib/book-reconciliation.ts` / Test: `frontend/olympus/lib/book-reconciliation.test.ts`.
+**Files:** Create `cloudflare/olympus/lib/book-reconciliation.ts` / Test: `cloudflare/olympus/lib/book-reconciliation.test.ts`.
 **Interfaces:** Consumes `Position[]` (Task 2) and `NavChartPoint`/`ServerPortfolioMetrics` cash/invested. Produces:
 - `reconcileBook(positions: Position[], opts?: { investedPct?: number | null }): BookReconciliation`
 - `interface BookReconciliation { rows: ReconciledPosition[]; investedPct: number; cashPct: number; grossPct: number; netPct: number; }`
@@ -573,7 +573,7 @@ export function reconcileBook(
 
 ## Task 6: F2a — the locked deep-link helper `lib/pipeline-links.ts`
 
-**Files:** Create `frontend/olympus/lib/pipeline-links.ts` / Test: `frontend/olympus/lib/pipeline-links.test.ts`.
+**Files:** Create `cloudflare/olympus/lib/pipeline-links.ts` / Test: `cloudflare/olympus/lib/pipeline-links.test.ts`.
 **Interfaces:** Produces the LOCKED grammar consumed by six callers (command palette, Today doorways, Theses provenance, Holdings linkage, Documents redirects, System links):
 - `buildPipelineHref(opts: { date?: string | null; stage?: PipelineStage | null; node?: string | null }): string`
 - `type PipelineStage = 'inputs' | 'research' | 'synthesis' | 'selection' | 'decision'`
@@ -660,7 +660,7 @@ export function stageForDocumentKey(documentKey: string): PipelineStage | null {
 
 ## Task 7: F2b — the `/pipeline` placeholder route + `nav.ts` flip + sidebar `routeActive`
 
-**Files:** Create `frontend/olympus/app/pipeline/page.tsx`; Modify `frontend/olympus/lib/nav.ts`, `frontend/olympus/components/sidebar.tsx` (routeActive 31-46) / Test: `frontend/olympus/lib/nav.test.ts`, `frontend/olympus/components/sidebar.test.tsx`.
+**Files:** Create `cloudflare/olympus/app/pipeline/page.tsx`; Modify `cloudflare/olympus/lib/nav.ts`, `cloudflare/olympus/components/sidebar.tsx` (routeActive 31-46) / Test: `cloudflare/olympus/lib/nav.test.ts`, `cloudflare/olympus/components/sidebar.test.tsx`.
 **Interfaces:** Consumes nothing new. Produces the live `/pipeline` nav target. **Must land in one commit** so nav never points at a 404.
 
 - [ ] Create the `/pipeline` placeholder route. Per spec, until the Pipeline surface build lands, `/pipeline` redirects to `/why` rather than 404. Write `app/pipeline/page.tsx`:
@@ -755,7 +755,7 @@ import { LayoutDashboard, PieChart, GitBranch, Activity } from 'lucide-react';
 
 ## Task 8: F2c — command palette re-authored to Pipeline-native commands + cross-day doc search
 
-**Files:** Modify `frontend/olympus/components/command-palette.tsx` (items 45-130) / Test: `frontend/olympus/components/command-palette.test.tsx` (new — pure item-builder unit via an extracted helper).
+**Files:** Modify `cloudflare/olympus/components/command-palette.tsx` (items 45-130) / Test: `cloudflare/olympus/components/command-palette.test.tsx` (new — pure item-builder unit via an extracted helper).
 **Interfaces:** Consumes `buildPipelineHref` + `stageForDocumentKey` (Task 6). Produces the re-pointed palette items; extracts `buildCommandItems(data)` as a pure exported fn so it is testable without the React tree (the palette's dynamic thesis + recent-run blocks are the palette's best feature — keep them).
 
 - [ ] Replace the three "Why —" base entries (`command-palette.tsx:71-91`, the `go-read` / `go-delib` / `go-docs` items) with Pipeline-native commands using the locked grammar. New entries:
@@ -861,7 +861,7 @@ describe('buildCommandItems (F2 palette)', () => {
 
 ## Task 9: F2d — legacy redirects re-pointed + visible ⌘K search pill
 
-**Files:** Modify `frontend/olympus/components/legacy-spa-redirect.tsx` (Library 11-35, Strategy 37-60, Research 73-92), `frontend/olympus/components/app-shell-context.tsx`, `frontend/olympus/components/command-palette.tsx`, `frontend/olympus/components/sidebar.tsx` (header), `frontend/olympus/components/mobile-app-bar.tsx` / Test: `frontend/olympus/components/legacy-spa-redirect.test.tsx` (extend if present, else create the redirect-target assertions).
+**Files:** Modify `cloudflare/olympus/components/legacy-spa-redirect.tsx` (Library 11-35, Strategy 37-60, Research 73-92), `cloudflare/olympus/components/app-shell-context.tsx`, `cloudflare/olympus/components/command-palette.tsx`, `cloudflare/olympus/components/sidebar.tsx` (header), `cloudflare/olympus/components/mobile-app-bar.tsx` / Test: `cloudflare/olympus/components/legacy-spa-redirect.test.tsx` (extend if present, else create the redirect-target assertions).
 **Interfaces:** Consumes `buildPipelineHref` (Task 6) + `openCommandPalette` (new, this task). Produces `commandPaletteOpen` / `openCommandPalette()` / `closeCommandPalette()` on the app-shell context.
 
 - [ ] Re-point the three Why-targeting redirects in `legacy-spa-redirect.tsx`. `LibraryToWhyInner` (lines 16-24) → Pipeline node grammar:
@@ -955,7 +955,7 @@ and add `commandPaletteOpen, openCommandPalette, closeCommandPalette` to the `va
 
 ## Task 10: F6 — shared `ConvictionMeter` + `SignedConvictionBadge` components
 
-**Files:** Create `frontend/olympus/components/shared/conviction-meter.tsx`, `frontend/olympus/components/shared/signed-conviction-badge.tsx` / Test: `frontend/olympus/components/shared/conviction.test.tsx`.
+**Files:** Create `cloudflare/olympus/components/shared/conviction-meter.tsx`, `cloudflare/olympus/components/shared/signed-conviction-badge.tsx` / Test: `cloudflare/olympus/components/shared/conviction.test.tsx`.
 **Interfaces:** Pure-presentational. Produces (consumed identically by Holdings, Theses, Performance):
 - `ConvictionMeter({ value, max?, srLabel }: { value: number; max?: number; srLabel: string }): JSX.Element` — cyan pip/dot meter for UNSIGNED strength. Used for `positions.conviction` (1–3, integer pips) and `theses.confidence` (0.0–1.0 → filled fraction). Caller passes integers with `max=3` for positions, or pre-scales confidence to a 0–`max` value.
 - `SignedConvictionBadge({ value }: { value: number }): JSX.Element` — signed `+N`/`−N` badge (fin-green for ≥0, fin-red for <0) for `decision_log.conviction`. **Domain is −5..+5** (`decision_log.conviction` → `AnalystPayload.conviction_score`, `ge=-5 le=5`, per `lib/decision-scorecard.ts`); render any signed int, **do NOT clamp** to ±3. The ONLY accent on its row.
@@ -1063,7 +1063,7 @@ export function SignedConvictionBadge({ value }: { value: number }) {
 
 ## Task 11: F7 — canonical `AsOfBadge` (relocate to shared, consume snapshot-staleness) + Settings Docs hotfix guard
 
-**Files:** Create `frontend/olympus/components/shared/as-of-badge.tsx`; Modify `frontend/olympus/components/overview/as-of-badge.tsx` (re-export shim) / Test: `frontend/olympus/components/shared/as-of-badge.test.tsx`, extend `frontend/olympus/components/settings-content.test.tsx`.
+**Files:** Create `cloudflare/olympus/components/shared/as-of-badge.tsx`; Modify `cloudflare/olympus/components/overview/as-of-badge.tsx` (re-export shim) / Test: `cloudflare/olympus/components/shared/as-of-badge.test.tsx`, extend `cloudflare/olympus/components/settings-content.test.tsx`.
 **Interfaces:** Consumes `isStale` / `formatAge` from `lib/snapshot-staleness.ts` (existing). Produces the single canonical `AsOfBadge` (consumed by Settings canonical Status block, Today inline pill, System freshness banner — Phases 1/8).
 
 `AsOfBadge` today (in `components/overview/as-of-badge.tsx`) derives staleness from the date string alone and ignores `snapshot-staleness.ts`. F7 makes it the single component, optionally consuming a `created_at` timestamp for true age, while preserving the date-only fast path so existing callers don't break.
@@ -1190,7 +1190,7 @@ Then `grep -rn "overview/as-of-badge" components app` and confirm every importer
 
 ## Task 12: F5 token-hygiene purge + F8 copy-voice sweep + backend issue filing
 
-**Files:** Modify `frontend/olympus/components/portfolio/AllocationsPositionsTable.tsx:123`, `frontend/olympus/components/portfolio/PositionDrilldown.tsx:336`, `frontend/olympus/components/today/why-today.tsx`, `frontend/olympus/components/why/deliberations-tab.tsx`, `frontend/olympus/components/portfolio/tabs/PerformanceTab.tsx` / Test: covered by the surface page tests staying green + a lint guard.
+**Files:** Modify `cloudflare/olympus/components/portfolio/AllocationsPositionsTable.tsx:123`, `cloudflare/olympus/components/portfolio/PositionDrilldown.tsx:336`, `cloudflare/olympus/components/today/why-today.tsx`, `cloudflare/olympus/components/why/deliberations-tab.tsx`, `cloudflare/olympus/components/portfolio/tabs/PerformanceTab.tsx` / Test: covered by the surface page tests staying green + a lint guard.
 **Interfaces:** None produced — this is a hygiene sweep that establishes the F5/F8 baseline the per-surface tasks inherit. Per-surface owners apply the *same* rule to their own components in Phases 1–3; this task removes the cross-cutting literals that exist *today* and would otherwise conflict if touched per-surface.
 
 > Scope discipline: F5/F8 are "one rule applied verbatim everywhere." Phase 0 purges only the literals that already exist on shared/today/holdings code so the rule is demonstrably enforced from day one; deep per-surface restyling belongs to that surface's phase task. Do not redesign these components here — only swap off-palette literals for tokens and fix operator-voice strings that are not the surface owner's responsibility.
@@ -1216,7 +1216,7 @@ Apply via Edit per occurrence so each is reviewed in context.
 
 - [ ] F8 copy sweep — fix the operator-voice strings that are NOT a single surface owner's job. The deep per-surface copy (Theses "Expand for DB snapshots", System file paths/CLI flags, Documents "No files found") is owned by those phase tasks; Phase 0 only fixes any operator-voice string in shared/today chrome touched above. Re-grep after the token edits: `grep -rn "(database)\|No files found\|migration 041" components/today components/shared` — fix any hit found to product voice; if none, note "no shared-scope F8 hits — per-surface copy deferred to phase tasks."
 
-- [ ] Add a lightweight lint guard so the purged literals cannot creep back. Create `frontend/olympus/lib/token-hygiene.test.ts`:
+- [ ] Add a lightweight lint guard so the purged literals cannot creep back. Create `cloudflare/olympus/lib/token-hygiene.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest';
@@ -1266,7 +1266,7 @@ describe('F5 token hygiene', () => {
 
 ## Done criteria (Phase 0 exit)
 
-- [ ] `npx vitest run` green from `frontend/olympus` (150+ plumbing + page tests + the new Phase-0 tests).
+- [ ] `npx vitest run` green from `cloudflare/olympus` (150+ plumbing + page tests + the new Phase-0 tests).
 - [ ] `npx tsc --noEmit` clean.
 - [ ] `npx next build` exports cleanly (the `/pipeline` route is reachable, nav has no 404).
 - [ ] The Phase-0 contract surface is exported and importable: `mapThesisRow`, `fetchAtlasRunDiagnostics`, `reconcileBook`, `joinPositionsToThesis`, `buildPipelineHref`/`stageForDocumentKey`, `ConvictionMeter`/`SignedConvictionBadge`, the canonical `AsOfBadge`, widened `Thesis`/`Position`/`AtlasRunDiagnostics`.

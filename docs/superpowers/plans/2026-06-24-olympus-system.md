@@ -10,7 +10,7 @@
 - **F5 token rule (verbatim):** cyan `--accent` #3DD6C4 for links / chrome / the single conviction encoding / the live-fresh dot only; `fin-green`/`fin-red` *strictly* for signed financial values; `fin-amber` for caution / stale / carried / mixed-regime / degraded; **no gradients** beyond the existing faint regime wash; **no decorative numbering** unless it encodes the system's own priority. System currently ships three color-coded card families (`fin-blue`/`fin-purple`/`fin-green` per cadence/phase/agent) and `border-${t.color}` template strings — all must be purged.
 - **Empty-state discipline:** every zone element is gated on a real data predicate (≥1 diagnostics row for economics; ≥2 grouped episodes for a timeline; `breakdown.phaseN_outputs` present for the health strip). Each renders a calm, *element-specific* line ("No runs recorded yet", "history builds from the first run") — never an em-dash placeholder, a 1-row "table over time", or a single-dot chart. Some elements are simply absent rather than narrating emptiness.
 - **F8 operator-voice → PM-voice:** no file paths, no CLI flags, no raw 30-row run lists as hero content. Engine internals (model routing, run cadence flags) live behind ONE collapsed "Operator controls" disclosure. Fix the stale/false "migration 041 pending / requires owner sign-off" copy — the diagnostics read is live.
-- **vitest stays green:** the repo has 150+ plumbing tests plus page-level tests that MUST stay green. Run `npm test` from `frontend/olympus`. Logic (episode grouping, phase-strip parsing, economics formatting) is TDD'd with `renderToStaticMarkup`/pure-function tests in node env (no DOM, no jsdom). Pure-presentational JSX (prose, persistence table) may skip the test cycle.
+- **vitest stays green:** the repo has 150+ plumbing tests plus page-level tests that MUST stay green. Run `npm test` from `cloudflare/olympus`. Logic (episode grouping, phase-strip parsing, economics formatting) is TDD'd with `renderToStaticMarkup`/pure-function tests in node env (no DOM, no jsdom). Pure-presentational JSX (prose, persistence table) may skip the test cycle.
 - **Traceability:** every commit is conventional `feat|fix|refactor|chore(olympus): …`. This surface consumes Phase-0 outputs (`fetchAtlasRunDiagnostics`, `AsOfBadge`, `buildPipelineHref`, the `/system` nav entry); it does not redefine them. Backend issue #2 (`backtest-seed`) and the stale-copy provenance are noted inline.
 
 ---
@@ -36,7 +36,7 @@
 
 - [ ] Run the presence check; if every symbol exists, **skip this task entirely** and go to Task 1:
   ```bash
-  cd frontend/olympus
+  cd cloudflare/olympus
   grep -q "fetchAtlasRunDiagnostics" lib/observability-queries.ts \
     && grep -q "export interface AtlasRunDiagnostics" lib/types.ts \
     && test -f components/shared/as-of-badge.tsx \
@@ -51,9 +51,9 @@
 ### Task 1: Land the `/system` route as the System surface entry point
 
 **Files:**
-- Create `frontend/olympus/app/system/page.tsx` (route shell → renders `<SystemPage>`)
-- Create `frontend/olympus/components/system/system-page.tsx` (the client surface; filled across Tasks 2–8)
-- Modify `frontend/olympus/app/architecture/page.tsx` (replace the old phase-table page with a redirect to `/system`)
+- Create `cloudflare/olympus/app/system/page.tsx` (route shell → renders `<SystemPage>`)
+- Create `cloudflare/olympus/components/system/system-page.tsx` (the client surface; filled across Tasks 2–8)
+- Modify `cloudflare/olympus/app/architecture/page.tsx` (replace the old phase-table page with a redirect to `/system`)
 **Interfaces:**
 - Consumes: `/system` nav entry (Phase 0, Task 0 verified).
 - Produces: `<SystemPage>` default export (`components/system/system-page.tsx`); the `/system` route.
@@ -111,7 +111,7 @@
   ```
 - [ ] Verify the build and lint compile:
   ```bash
-  cd frontend/olympus && npm run lint && npx tsc --noEmit
+  cd cloudflare/olympus && npm run lint && npx tsc --noEmit
   ```
   Expected: PASS (no unused imports; old `Layers/Clock/Zap/Bot/Database/Globe`, `Badge`, `SUBPAGE_MAX` heavy page gone).
 - [ ] Commit:
@@ -125,8 +125,8 @@
 ### Task 2: Wire the diagnostics loader into SystemPage
 
 **Files:**
-- Modify `frontend/olympus/components/system/system-page.tsx`
-- Test `frontend/olympus/components/system/system-page.test.tsx`
+- Modify `cloudflare/olympus/components/system/system-page.tsx`
+- Test `cloudflare/olympus/components/system/system-page.test.tsx`
 **Interfaces:**
 - Consumes: `fetchAtlasRunDiagnostics(): Promise<AtlasRunDiagnostics[]>` (`lib/observability-queries.ts`), `AtlasRunDiagnostics` (`lib/types.ts`), `AtlasLoader` (`@/components/AtlasLoader`), `EmptyState` (`@/components/observability/shared`).
 - Produces: `diagnostics: AtlasRunDiagnostics[]` state passed down to Zone-1 sub-components.
@@ -152,7 +152,7 @@
   ```
 - [ ] Run it — expect FAIL (`SystemStatus` is not exported yet):
   ```bash
-  cd frontend/olympus && npm test -- system-page
+  cd cloudflare/olympus && npm test -- system-page
   ```
 - [ ] In `components/system/system-page.tsx`, add the loader and the exported `SystemStatus` shell (sub-zones are stubs filled by later tasks; the empty branch is real now):
   ```tsx
@@ -225,7 +225,7 @@
   ```
 - [ ] Run the test — expect PASS:
   ```bash
-  cd frontend/olympus && npm test -- system-page
+  cd cloudflare/olympus && npm test -- system-page
   ```
 - [ ] Commit:
   ```bash
@@ -238,9 +238,9 @@
 ### Task 3: Zone 1 — Freshness banner (F7)
 
 **Files:**
-- Create `frontend/olympus/components/system/freshness-banner.tsx`
-- Test `frontend/olympus/components/system/freshness-banner.test.tsx`
-- Modify `frontend/olympus/components/system/system-page.tsx` (mount in `SystemStatus`)
+- Create `cloudflare/olympus/components/system/freshness-banner.tsx`
+- Test `cloudflare/olympus/components/system/freshness-banner.test.tsx`
+- Modify `cloudflare/olympus/components/system/system-page.tsx` (mount in `SystemStatus`)
 **Interfaces:**
 - Consumes: `AtlasRunDiagnostics` (`lib/types.ts`); `AsOfBadge({ date, createdAt?, now?, staleHours? })` (`components/shared/as-of-badge.tsx`).
 - Produces: `FreshnessBanner({ latest }: { latest: AtlasRunDiagnostics })`; helper `latestSuccessfulRun(diagnostics): AtlasRunDiagnostics | null`.
@@ -288,7 +288,7 @@
   ```
 - [ ] Run — expect FAIL (module missing):
   ```bash
-  cd frontend/olympus && npm test -- freshness-banner
+  cd cloudflare/olympus && npm test -- freshness-banner
   ```
 - [ ] Create `components/system/freshness-banner.tsx`. `AsOfBadge` carries the stale/age treatment (F7); the banner supplies the prose. `latestSuccessfulRun` matches a status of ok/success/complete (mirror `RunHealthTab`'s `statusColor` ok-words):
   ```tsx
@@ -346,7 +346,7 @@
   ```
 - [ ] Run — expect PASS:
   ```bash
-  cd frontend/olympus && npm test -- freshness-banner system-page
+  cd cloudflare/olympus && npm test -- freshness-banner system-page
   ```
 - [ ] Commit:
   ```bash
@@ -359,9 +359,9 @@
 ### Task 4: Zone 1 — Run-economics row (D3, the differentiator)
 
 **Files:**
-- Create `frontend/olympus/components/system/run-economics-row.tsx`
-- Test `frontend/olympus/components/system/run-economics-row.test.tsx`
-- Modify `frontend/olympus/components/system/system-page.tsx` (mount)
+- Create `cloudflare/olympus/components/system/run-economics-row.tsx`
+- Test `cloudflare/olympus/components/system/run-economics-row.test.tsx`
+- Modify `cloudflare/olympus/components/system/system-page.tsx` (mount)
 **Interfaces:**
 - Consumes: `AtlasRunDiagnostics` (`lib/types.ts`); `StatTile` (`@/components/observability/shared`).
 - Produces: `RunEconomicsRow({ latest })`; pure helpers `formatUsd(n)`, `formatTokens(n)`, `cacheHitPct(latest)`.
@@ -405,7 +405,7 @@
   ```
 - [ ] Run — expect FAIL:
   ```bash
-  cd frontend/olympus && npm test -- run-economics-row
+  cd cloudflare/olympus && npm test -- run-economics-row
   ```
 - [ ] Create `components/system/run-economics-row.tsx`. Reuse `StatTile` (tabular-nums baked in). The "39% cached" chip is the cost story; render it neutral cyan (chrome), not green (it is not a signed financial value — F5):
   ```tsx
@@ -468,7 +468,7 @@
   Import: `import { RunEconomicsRow } from './run-economics-row';`
 - [ ] Run — expect PASS:
   ```bash
-  cd frontend/olympus && npm test -- run-economics-row
+  cd cloudflare/olympus && npm test -- run-economics-row
   ```
 - [ ] Commit:
   ```bash
@@ -481,10 +481,10 @@
 ### Task 5: Zone 1 — Failed→recovered run-health timeline
 
 **Files:**
-- Create `frontend/olympus/lib/run-episodes.ts` (pure grouping logic)
-- Create `frontend/olympus/components/system/run-health-timeline.tsx`
-- Test `frontend/olympus/lib/run-episodes.test.ts`
-- Modify `frontend/olympus/components/system/system-page.tsx` (mount)
+- Create `cloudflare/olympus/lib/run-episodes.ts` (pure grouping logic)
+- Create `cloudflare/olympus/components/system/run-health-timeline.tsx`
+- Test `cloudflare/olympus/lib/run-episodes.test.ts`
+- Modify `cloudflare/olympus/components/system/system-page.tsx` (mount)
 **Interfaces:**
 - Consumes: `AtlasRunDiagnostics` (`lib/types.ts`).
 - Produces: `RunEpisode` type + `groupRunEpisodes(diagnostics): RunEpisode[]`; `RunHealthTimeline({ diagnostics })`.
@@ -539,7 +539,7 @@
   ```
 - [ ] Run — expect FAIL:
   ```bash
-  cd frontend/olympus && npm test -- run-episodes
+  cd cloudflare/olympus && npm test -- run-episodes
   ```
 - [ ] Create `lib/run-episodes.ts`. Episodes keyed on `(run_date|run_type)`; attempts ordered oldest→newest within; outcome from the final (newest) attempt; "recovered" iff final is ok AND ≥1 earlier attempt was not ok. Episodes returned newest-first by their latest attempt's `created_at`:
   ```ts
@@ -599,7 +599,7 @@
   ```
 - [ ] Run — expect PASS:
   ```bash
-  cd frontend/olympus && npm test -- run-episodes
+  cd cloudflare/olympus && npm test -- run-episodes
   ```
 - [ ] Create the presentational `components/system/run-health-timeline.tsx` (vertical event list; dot color per outcome per F5 — green=ok/recovered, amber=degraded, red=failed; cyan is reserved for chrome so it is NOT used for status dots):
   ```tsx
@@ -658,7 +658,7 @@
   Import: `import { RunHealthTimeline } from './run-health-timeline';`
 - [ ] Run the suite — expect PASS:
   ```bash
-  cd frontend/olympus && npm test -- run-episodes system-page
+  cd cloudflare/olympus && npm test -- run-episodes system-page
   ```
 - [ ] Commit:
   ```bash
@@ -671,10 +671,10 @@
 ### Task 6: Zone 1 — Per-phase health strip from `breakdown` jsonb
 
 **Files:**
-- Create `frontend/olympus/lib/run-phase-health.ts` (pure parser)
-- Create `frontend/olympus/components/system/per-phase-health-strip.tsx`
-- Test `frontend/olympus/lib/run-phase-health.test.ts`
-- Modify `frontend/olympus/components/system/system-page.tsx` (mount)
+- Create `cloudflare/olympus/lib/run-phase-health.ts` (pure parser)
+- Create `cloudflare/olympus/components/system/per-phase-health-strip.tsx`
+- Test `cloudflare/olympus/lib/run-phase-health.test.ts`
+- Modify `cloudflare/olympus/components/system/system-page.tsx` (mount)
 **Interfaces:**
 - Consumes: `AtlasRunDiagnostics` (`lib/types.ts`); `breakdown: Record<string, unknown> | null`.
 - Produces: `PhaseHealth` type + `parsePhaseHealth(breakdown): PhaseHealth[]`; `PerPhaseHealthStrip({ latest })`.
@@ -714,7 +714,7 @@
   ```
 - [ ] Run — expect FAIL:
   ```bash
-  cd frontend/olympus && npm test -- run-phase-health
+  cd cloudflare/olympus && npm test -- run-phase-health
   ```
 - [ ] Create `lib/run-phase-health.ts`. Match keys `^phase(\d+)_outputs?$`; coerce `{ok,failed,carried}` defensively (jsonb values are `unknown`):
   ```ts
@@ -750,7 +750,7 @@
   ```
 - [ ] Run — expect PASS:
   ```bash
-  cd frontend/olympus && npm test -- run-phase-health
+  cd cloudflare/olympus && npm test -- run-phase-health
   ```
 - [ ] Create `components/system/per-phase-health-strip.tsx`. A segmented bar (one segment per phase) sized by total outputs; green=ok, amber=carried, red=failed (F5 — these are health states, not signed values, so amber/red are the caution/failure semantics, which is permitted). Renders nothing when the parse is empty (element-absent discipline):
   ```tsx
@@ -799,7 +799,7 @@
   Import: `import { PerPhaseHealthStrip } from './per-phase-health-strip';`
 - [ ] Run — expect PASS:
   ```bash
-  cd frontend/olympus && npm test -- run-phase-health system-page
+  cd cloudflare/olympus && npm test -- run-phase-health system-page
   ```
 - [ ] Commit:
   ```bash
@@ -812,8 +812,8 @@
 ### Task 7: Zone 2 — "How it works" narrative + persistence table + Pipeline link
 
 **Files:**
-- Create `frontend/olympus/components/system/how-it-works.tsx`
-- Modify `frontend/olympus/components/system/system-page.tsx` (mount Zone 2)
+- Create `cloudflare/olympus/components/system/how-it-works.tsx`
+- Modify `cloudflare/olympus/components/system/system-page.tsx` (mount Zone 2)
 **Interfaces:**
 - Consumes: `buildPipelineHref({ date?, stage?, node? })` (`lib/pipeline-links.ts`); `SectionCard` (`@/components/observability/shared`); `next/link`.
 - Produces: `HowItWorks()` (presentational).
@@ -894,7 +894,7 @@ This replaces the deleted phase tables + 14-card file-path map + flow strip. Pur
   Import: `import { HowItWorks } from './how-it-works';`
 - [ ] Verify compile + tests:
   ```bash
-  cd frontend/olympus && npx tsc --noEmit && npm test -- system-page
+  cd cloudflare/olympus && npx tsc --noEmit && npm test -- system-page
   ```
   Expected: PASS.
 - [ ] Commit:
@@ -908,8 +908,8 @@ This replaces the deleted phase tables + 14-card file-path map + flow strip. Pur
 ### Task 8: Zone 2 — Operator-controls disclosure (F8)
 
 **Files:**
-- Create `frontend/olympus/components/system/operator-controls.tsx`
-- Modify `frontend/olympus/components/system/how-it-works.tsx` (mount the disclosure)
+- Create `cloudflare/olympus/components/system/operator-controls.tsx`
+- Modify `cloudflare/olympus/components/system/how-it-works.tsx` (mount the disclosure)
 **Interfaces:**
 - Consumes: nothing external (native `<details>`); `lucide-react` `ChevronDown`/`Terminal` (already in repo).
 - Produces: `OperatorControls()` (presentational, collapsed by default).
@@ -962,7 +962,7 @@ Engine internals — model routing as prose, run cadence flags — live behind O
   Import: `import { OperatorControls } from './operator-controls';`
 - [ ] Verify:
   ```bash
-  cd frontend/olympus && npx tsc --noEmit && npm run lint
+  cd cloudflare/olympus && npx tsc --noEmit && npm run lint
   ```
   Expected: PASS.
 - [ ] Commit:
@@ -976,10 +976,10 @@ Engine internals — model routing as prose, run cadence flags — live behind O
 ### Task 9: Relocate Attribution → Performance and Position-risk → Holdings; fix stale RunHealthTab copy; retire `atlas_run_health` read
 
 **Files:**
-- Modify `frontend/olympus/app/observability/page.tsx` (drop Attribution + Position-risk tabs)
-- Modify `frontend/olympus/lib/observability-queries.ts` (drop the `atlas_run_health` view read + attribution/positions reads now owned elsewhere; keep `decision_log`)
-- Delete `frontend/olympus/components/observability/RunHealthTab.tsx` (replaced by Zone-1 timeline + strip on `/system`)
-- Test `frontend/olympus/components/observability/AttributionTab.test.tsx` stays in place (Attribution lands on Performance in Phase 3, which owns its tests) — **do not delete the component or its test**; only unmount it from the observability route.
+- Modify `cloudflare/olympus/app/observability/page.tsx` (drop Attribution + Position-risk tabs)
+- Modify `cloudflare/olympus/lib/observability-queries.ts` (drop the `atlas_run_health` view read + attribution/positions reads now owned elsewhere; keep `decision_log`)
+- Delete `cloudflare/olympus/components/observability/RunHealthTab.tsx` (replaced by Zone-1 timeline + strip on `/system`)
+- Test `cloudflare/olympus/components/observability/AttributionTab.test.tsx` stays in place (Attribution lands on Performance in Phase 3, which owns its tests) — **do not delete the component or its test**; only unmount it from the observability route.
 **Interfaces:**
 - Consumes: `ObservabilityData` (trimmed); `DecisionScorecardTab` (unchanged).
 - Produces: a trimmed `fetchObservabilityData()` (no `runHealth`, no `runHealthAvailable`).
@@ -990,7 +990,7 @@ Engine internals — model routing as prose, run cadence flags — live behind O
 
 - [ ] Update the failing expectation first — the observability page test (if present) asserts four tabs. Check and update:
   ```bash
-  cd frontend/olympus && ls app/observability/*.test.* components/observability/*.test.* 2>/dev/null
+  cd cloudflare/olympus && ls app/observability/*.test.* components/observability/*.test.* 2>/dev/null
   ```
   If an observability page test asserts the Attribution/Position-risk tabs, update it to assert only `Decision Scorecard` remains; run it to confirm it FAILS against current code first, then passes after the edit below. (`AttributionTab.test.tsx` is a component test and stays green — it tests the component in isolation, not the route.)
 - [ ] In `app/observability/page.tsx`, reduce `TABS` to the Scorecard only and drop the unused tab branches + imports:
@@ -1048,16 +1048,16 @@ Engine internals — model routing as prose, run cadence flags — live behind O
   Remove the now-unused `RUN_HEALTH_LIMIT`, `ATTRIBUTION_LIMIT`, `POSITIONS_LIMIT` constants, the `latestDateRows` helper, and the `ViewRow` import. Update the file's header comment to drop the `atlas_run_health` / migration-041 reference (it described the stripping view this surface no longer reads).
 - [ ] Delete the dead component (its stale "migration 041 pending" copy goes with it):
   ```bash
-  cd frontend/olympus && git rm components/observability/RunHealthTab.tsx
+  cd cloudflare/olympus && git rm components/observability/RunHealthTab.tsx
   ```
 - [ ] Verify nothing else imports the removed surface:
   ```bash
-  cd frontend/olympus && grep -rn "RunHealthTab\|runHealth\|atlas_run_health\|attributionDate\|positionsDate" app/ components/ lib/ | grep -v node_modules
+  cd cloudflare/olympus && grep -rn "RunHealthTab\|runHealth\|atlas_run_health\|attributionDate\|positionsDate" app/ components/ lib/ | grep -v node_modules
   ```
   Expected: only the **`/system`** components (none reference these names) and `lib/database.types.ts`'s `atlas_run_health` view type (leave the type; it is harmless and Phase 0 owns `database.types.ts`). If `app/page.tsx`/`command-palette.tsx` referenced `fetchObservabilityData`'s dropped fields, fix those call sites here.
 - [ ] Run the full suite — expect PASS (AttributionTab.test.tsx still green; observability page test updated):
   ```bash
-  cd frontend/olympus && npm test && npx tsc --noEmit
+  cd cloudflare/olympus && npm test && npx tsc --noEmit
   ```
 - [ ] Commit:
   ```bash
@@ -1072,14 +1072,14 @@ Engine internals — model routing as prose, run cadence flags — live behind O
 **Files:** none (verification + documentation).
 **Interfaces:** none.
 
-- [ ] Full green run from `frontend/olympus`:
+- [ ] Full green run from `cloudflare/olympus`:
   ```bash
-  cd frontend/olympus && npm test && npm run lint && npx tsc --noEmit && npm run build
+  cd cloudflare/olympus && npm test && npm run lint && npx tsc --noEmit && npm run build
   ```
   Expected: tests PASS, lint clean, types clean, static export builds (`/system` and `/architecture` both emit; `/architecture` is the redirect shell).
 - [ ] Confirm F5 token hygiene on the new surface — no off-palette literals introduced:
   ```bash
-  cd frontend/olympus && grep -rn "fin-blue\|fin-purple\|rgba(59,130,246)\|#a78bfa\|border-\${" components/system/ app/system/
+  cd cloudflare/olympus && grep -rn "fin-blue\|fin-purple\|rgba(59,130,246)\|#a78bfa\|border-\${" components/system/ app/system/
   ```
   Expected: **no matches** (cyan = `var(--accent)`, fin-green/red/amber used only for status/financial semantics).
 - [ ] **Backend issues to file** (the System surface depends on these; reference in the PR body, do not block on them):

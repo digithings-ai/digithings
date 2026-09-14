@@ -4,7 +4,7 @@ Operator steps for pointing the digithings-stack Cloudflare Container at
 Cloudflare Vectorize instead of the container-local Chroma index. See
 [`digisearch/ARCHITECTURE.md`](../../digisearch/ARCHITECTURE.md#vectorize-remote-index)
 for the backend's implementation details and
-[`frontend/digithings-stack-cloudflare/README.md`](../../frontend/digithings-stack-cloudflare/README.md)
+[`cloudflare/digithings-stack-cloudflare/README.md`](../../cloudflare/digithings-stack-cloudflare/README.md)
 for the rest of the stack's deploy flow. This page covers only the
 Vectorize-specific slice: creating the indexes, syncing them, and verifying a
 sync landed before traffic depends on it.
@@ -24,7 +24,7 @@ sync landed before traffic depends on it.
   similarity scores.
 - **Name: must equal `DIGISEARCH_INDEX` / the `DIGI_TENANT_CORPUS_MAP` entry**
   for that tenant, set in
-  [`frontend/digithings-stack-cloudflare/wrangler.toml`](../../frontend/digithings-stack-cloudflare/wrangler.toml).
+  [`cloudflare/digithings-stack-cloudflare/wrangler.toml`](../../cloudflare/digithings-stack-cloudflare/wrangler.toml).
   `_vectorize_backend` (`digisearch/src/digisearch/search/_stub.py`) passes
   `index_name` straight into the Vectorize URL with no translation — a
   mismatched name means every chat query 404s against an index nothing ever
@@ -47,7 +47,7 @@ sync landed before traffic depends on it.
   `DIGISEARCH_INDEX` or the Chroma collection names is needed —
   `digithings_docs` / `occ_help` remain the single canonical name across
   both sides of the pairing, including the hardcoded collection names in
-  `frontend/digithings-stack-cloudflare/container/seed_chroma.sh`.
+  `cloudflare/digithings-stack-cloudflare/container/seed_chroma.sh`.
 
 ## 0. Prerequisites for running the sync script locally
 
@@ -195,7 +195,7 @@ On the `digithings-stack` Worker (same one that runs `wrangler deploy` for the
 Container):
 
 ```bash
-cd frontend/digithings-stack-cloudflare
+cd cloudflare/digithings-stack-cloudflare
 npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
 npx wrangler secret put CLOUDFLARE_API_TOKEN
 ```

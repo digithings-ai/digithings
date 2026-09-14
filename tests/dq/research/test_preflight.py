@@ -128,6 +128,28 @@ class TestPreflight:
         # Refresh failed → keep the stale data + the scripts signal (never crashes preflight).
         assert out["data_layer"].fallback_used == "scripts"
 
+    def test_on_demand_refresh_skipped_under_r2_backend(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # #3780 Task 7b (second cutover): the Supabase writers are stopped
+        # under the R2 backend, so the on-demand recompute (a
+        # price_technicals writer) must not run even when opted in — the R2
+        # refresh cron owns freshness now. The stale seal keeps the scripts
+        # signal; only the write path is gated.
+        monkeypatch.setenv("DIGIQUANT_REFRESH_ON_DEMAND", "1")
+        monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
+        monkeypatch.setattr(
+            "digiquant.mcp_server._read_manifest",
+            lambda: {"version": 1, "as_of": "2026-04-01", "datasets": {}},
+        )
+        _client, deps = self._stale_deps()
+        with patch.object(refresh_mod, "recompute_technicals_from_history") as recompute:
+            out = build_preflight_node(deps)(
+                ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+            )
+        recompute.assert_not_called()
+        assert out["data_layer"].fallback_used == "scripts"
+
     def test_missing_price_technicals_signals_no_source(self) -> None:
         run_date = date(2026, 4, 26)
         client = FakeSupabaseClient(

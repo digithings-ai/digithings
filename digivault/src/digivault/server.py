@@ -13,6 +13,7 @@ import os
 import time as _time
 from collections import deque as _deque
 from collections.abc import Callable
+from pathlib import Path
 from threading import Lock as _Lock
 from typing import (
     Any,  # score:allow untyped any — frontmatter / orchestrator argument maps are arbitrary
@@ -140,9 +141,9 @@ def _vault_root() -> str:
     return root
 
 
-def _open_vault() -> Vault:
+def _open_vault(root: str | None = None) -> Vault:
     try:
-        return Vault(_vault_root())
+        return Vault(root or _vault_root())
     except VaultError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -371,6 +372,45 @@ def _tenant_slug(request: Request) -> str | None:
     return getattr(auth, "tenant_slug", None) if auth is not None else None
 
 
+def _tenant_scoped_vault_root(root: str, prefix: str | None) -> str:
+    """Resolve a tenant's mapped ``prefix`` under ``root``, refusing an escape.
+
+    ``DIGI_TENANT_CORPUS_MAP`` is operator config, but a prefix is still resolved
+    against the vault root rather than trusted: ``normalize_vault_path`` does not
+    strip ``..`` segments, so a stray ``../`` in a prefix would otherwise point
+    ``Vault`` outside the vault entirely. Fails closed (503) rather than opening
+    anything outside ``root``.
+    """
+    if not prefix:
+        return root
+    base = Path(root).resolve()
+    candidate = (base / prefix).resolve()
+    if candidate != base and base not in candidate.parents:
+        raise HTTPException(
+            status_code=503,
+            detail=f"DIGI_TENANT_CORPUS_MAP prefix {prefix!r} escapes DIGIVAULT_ROOT",
+        )
+    return str(candidate)
+
+
+def _open_scoped_vault(request: Request) -> Vault:
+    """Open the filesystem vault narrowed to the caller's authenticated tenant corpus.
+
+    The filesystem note routes carry no caller-supplied ``path_prefix`` (unlike D1's
+    by-path/search family), so there is nothing to bind: when
+    ``DIGI_TENANT_CORPUS_MAP`` is configured the tenant's own mapped prefix is the
+    only correct scope, applied structurally by opening the vault at that
+    subdirectory — the filesystem analogue of D1's one-database-per-corpus
+    isolation, so writes cannot escape the tenant subtree either.
+    ``mapped_tenant_path_prefix`` fails closed (403 for a tenant absent from the
+    map, 503 for a map set but unusable). When the map is genuinely unset it
+    returns ``None`` and this is ``_open_vault()`` over the shared root — every
+    single-tenant deployment (local dev, a self-hosted single vault) is unchanged.
+    """
+    prefix = mapped_tenant_path_prefix(_tenant_slug(request))
+    return _open_vault(_tenant_scoped_vault_root(_vault_root(), prefix))
+
+
 # ── request/response models ────────────────────────────────────────────────
 class CreateNoteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -500,9 +540,9 @@ def status() -> dict[str, Any]:
 
 # ── note routes ────────────────────────────────────────────────────────────
 @app.get("/v1/notes", response_model=NoteList)
-def list_notes() -> NoteList:
-    """List every note in the vault with its tags, links, and backlinks."""
-    return NoteList(notes=_open_vault().list_notes())
+def list_notes(request: Request) -> NoteList:
+    """List every note in the caller's vault (tenant-scoped when configured)."""
+    return NoteList(notes=_open_scoped_vault(request).list_notes())
 
 
 # Literal path registered ahead of the `{name}` routes below — POST already makes it
@@ -562,8 +602,8 @@ def get_note_by_path(req: NoteByPathRequest, request: Request) -> NoteDetail:
 
 
 @app.get("/v1/notes/{name}", response_model=Note)
-def get_note(name: str) -> Note:
-    note = _open_vault().get_note(name)
+def get_note(name: str, request: Request) -> Note:
+    note = _open_scoped_vault(request).get_note(name)
     if note is None:
         raise HTTPException(status_code=404, detail=f"No such note: {name!r}")
     return note
@@ -586,10 +626,10 @@ def _write_note_request(vault: Vault, req: CreateNoteRequest) -> Note:
 
 
 @app.post("/v1/notes/batch", response_model=NoteList, status_code=201)
-def create_notes_batch(req: CreateNotesBatchRequest) -> NoteList:
+def create_notes_batch(req: CreateNotesBatchRequest, request: Request) -> NoteList:
     """Upsert notes through one index load for efficient bulk ingest."""
     try:
-        vault = _open_vault()
+        vault = _open_scoped_vault(request)
         notes = [_write_note_request(vault, note) for note in req.notes]
         for prune in req.prunes:
             vault.prune_children(prune.parent_doc, set(prune.keep_names), subdir=prune.subdir)
@@ -600,18 +640,18 @@ def create_notes_batch(req: CreateNotesBatchRequest) -> NoteList:
 
 
 @app.post("/v1/notes", response_model=Note, status_code=201)
-def create_note(req: CreateNoteRequest) -> Note:
+def create_note(req: CreateNoteRequest, request: Request) -> Note:
     try:
-        return _write_note_request(_open_vault(), req)
+        return _write_note_request(_open_scoped_vault(request), req)
     except VaultError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/v1/notes/prune-children", response_model=PruneChildrenResponse)
-def prune_children(req: PruneChildrenRequest) -> PruneChildrenResponse:
+def prune_children(req: PruneChildrenRequest, request: Request) -> PruneChildrenResponse:
     """Remove stale segment children for one parent, scoped to a vault subdirectory."""
     try:
-        deleted = _open_vault().prune_children(
+        deleted = _open_scoped_vault(request).prune_children(
             req.parent_doc, set(req.keep_names), subdir=req.subdir
         )
     except VaultError as exc:
@@ -620,38 +660,38 @@ def prune_children(req: PruneChildrenRequest) -> PruneChildrenResponse:
 
 
 @app.patch("/v1/notes/{name}/frontmatter", response_model=Note)
-def set_frontmatter(name: str, req: SetFrontmatterRequest) -> Note:
+def set_frontmatter(name: str, req: SetFrontmatterRequest, request: Request) -> Note:
     try:
-        return _open_vault().set_frontmatter(name, req.updates)
+        return _open_scoped_vault(request).set_frontmatter(name, req.updates)
     except VaultError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/v1/notes/{name}/rename", response_model=Note)
-def rename_note(name: str, req: RenameRequest) -> Note:
+def rename_note(name: str, req: RenameRequest, request: Request) -> Note:
     try:
-        return _open_vault().rename(name, req.new_name)
+        return _open_scoped_vault(request).rename(name, req.new_name)
     except VaultError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/v1/notes/{name}/backlinks", response_model=BacklinksResponse)
-def get_backlinks(name: str) -> BacklinksResponse:
-    vault = _open_vault()
+def get_backlinks(name: str, request: Request) -> BacklinksResponse:
+    vault = _open_scoped_vault(request)
     if vault.get_note(name) is None:
         raise HTTPException(status_code=404, detail=f"No such note: {name!r}")
     return BacklinksResponse(name=name, backlinks=list(vault.backlinks(name)))
 
 
 @app.get("/v1/tags/{tag}", response_model=NoteList)
-def search_by_tag(tag: str) -> NoteList:
-    return NoteList(notes=_open_vault().search_by_tag(tag))
+def search_by_tag(tag: str, request: Request) -> NoteList:
+    return NoteList(notes=_open_scoped_vault(request).search_by_tag(tag))
 
 
 @app.get("/v1/lint", response_model=LintReport)
-def lint() -> LintReport:
+def lint(request: Request) -> LintReport:
     """Validate the vault: unresolved links, missing frontmatter, orphans, tags."""
-    return _open_vault().lint()
+    return _open_scoped_vault(request).lint()
 
 
 # ── orchestrator (hub) ─────────────────────────────────────────────────────
@@ -945,7 +985,7 @@ def orchestrator_invoke(
             ok=True, tool=tool, data={"notes": notes, "errors": errors}
         )
 
-    vault = _open_vault()
+    vault = _open_scoped_vault(request)
     if tool not in VAULT_HANDLERS:
         raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
     result = dispatch_vault_tool(tool, args, vault)

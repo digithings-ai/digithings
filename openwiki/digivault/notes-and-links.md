@@ -3,9 +3,6 @@ type: behavior-guide
 title: digivault Notes and Links
 description: digivault note behavior — frontmatter round-trips, wikilink parsing and rewrites, backlinks, tags, lint, and maintenance ops.
 tags: [digivault, notes, wikilinks, frontmatter]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-7bbef4a62375238afea229da
     resource: repo://digivault/src/digivault/frontmatter.py
@@ -14,6 +11,9 @@ sources:
   - id: openwiki-source-618990bdda68881766759160
     resource: repo://digivault/src/digivault/wikilinks.py
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digivault Notes and Links

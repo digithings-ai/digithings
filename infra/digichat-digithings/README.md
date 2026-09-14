@@ -32,10 +32,10 @@ and [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) (Profile A or B
 - DataTap digichat ACA is **client-only**.
 - Chat UI is **digithings.ai only** — do **not** add a digiquant.io `/chat` page.
 - **Production digichat:** Cloudflare Containers —
-  [`frontend/digichat-cloudflare/README.md`](../../frontend/digichat-cloudflare/README.md).
+  [`cloudflare/digichat-cloudflare/README.md`](../../cloudflare/digichat-cloudflare/README.md).
   One Container serves digithings + OCC (and future) tenants.
 - **Production backends:** Cloudflare Containers Profile A stack —
-  [`frontend/digithings-stack-cloudflare/README.md`](../../frontend/digithings-stack-cloudflare/README.md)
+  [`cloudflare/digithings-stack-cloudflare/README.md`](../../cloudflare/digithings-stack-cloudflare/README.md)
   (`graph.digithings.ai` / `key.digithings.ai`). **Do not** point production
   digichat at Mac Docker or `*.trycloudflare.com` quick tunnels.
 - **Dev-only:** Mac Compose (+ optional quick tunnels) below.
@@ -55,7 +55,7 @@ Public chat is the ungated embed iframe (`gateMode: ungated`). Do not enable
 
 ### digichat (BFF)
 
-See [`frontend/digichat-cloudflare/README.md`](../../frontend/digichat-cloudflare/README.md).
+See [`cloudflare/digichat-cloudflare/README.md`](../../cloudflare/digichat-cloudflare/README.md).
 
 1. Workers Paid on the digithings Cloudflare account.
 2. Deploy digichat Worker + Container; zone routes for `/embed*`, digichat APIs, `/_dtchat*`.
@@ -64,13 +64,13 @@ See [`frontend/digichat-cloudflare/README.md`](../../frontend/digichat-cloudflar
 
 ### Profile A stack (digigraph + digikey + …)
 
-See [`frontend/digithings-stack-cloudflare/README.md`](../../frontend/digithings-stack-cloudflare/README.md).
+See [`cloudflare/digithings-stack-cloudflare/README.md`](../../cloudflare/digithings-stack-cloudflare/README.md).
 
 **Human gate — infra/network:** `graph.digithings.ai` and `key.digithings.ai`
 are public hostnames (JWT/BFF still required). Review before merge/deploy.
 
 ```bash
-cd frontend/digithings-stack-cloudflare
+cd cloudflare/digithings-stack-cloudflare
 npx wrangler secret put DIGIKEY_PRIVATE_KEY_PEM
 npx wrangler secret put DIGIKEY_BFF_TOKEN
 npx wrangler secret put GROQ_API_KEY
@@ -80,7 +80,7 @@ npx wrangler deploy
 Retarget digichat:
 
 ```bash
-cd frontend/digichat-cloudflare
+cd cloudflare/digichat-cloudflare
 printf '%s' 'https://graph.digithings.ai' | npx wrangler secret put DIGIGRAPH_INTERNAL_URL
 printf '%s' 'https://key.digithings.ai'   | npx wrangler secret put DIGIKEY_URL
 npx wrangler secret put DIGIKEY_BFF_TOKEN   # must match stack
@@ -135,7 +135,7 @@ cp infra/digichat-release/.env.profile-a-bundle.example \
 make digichat-profile-a-bundle-up
 ```
 
-Details: [`frontend/digithings-stack-cloudflare/README.md`](../../frontend/digithings-stack-cloudflare/README.md)
+Details: [`cloudflare/digithings-stack-cloudflare/README.md`](../../cloudflare/digithings-stack-cloudflare/README.md)
 (local `docker run` / compose). digiquant, digismith HTTP, and Ollama stay off.
 
 ### Monorepo build (full N-container stack)
@@ -222,7 +222,7 @@ OCC full apply waits on crawl approval (GAPLOG). CF stack ships a static seed.
 
 ## Historical note
 
-Containers scaffold lives at `frontend/digichat-cloudflare/` (#2073).
-Profile A stack Container: `frontend/digithings-stack-cloudflare/` (#2078).
+Containers scaffold lives at `cloudflare/digichat-cloudflare/` (#2073).
+Profile A stack Container: `cloudflare/digithings-stack-cloudflare/` (#2078).
 Earlier digichat-only deletion (#1949) assumed Workers Free forever; Paid unlocks
 same-hostname digichat without a separate Tunnel hostname.

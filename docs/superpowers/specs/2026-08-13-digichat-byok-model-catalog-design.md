@@ -3,7 +3,7 @@
 - **Date:** 2026-08-13
 - **Issue:** [#201](https://github.com/digithings-ai/digithings/issues/201) — "[FEATURE] Model selector settings panel — multi-provider BYOK"
 - **Related:** [#8](https://github.com/digithings-ai/digithings/issues/8) (parent epic, BYOK flow shipped in PR #135), [#1873](https://github.com/digithings-ai/digithings/issues/1873) (closed 2026-08-10 — fixed the provider-allowlist truthfulness gap this spec builds on top of)
-- **Components:** `frontend/digichat`, `digigraph`, `digillm`, `config/`
+- **Components:** `cloudflare/digichat`, `digigraph`, `digillm`, `config/`
 
 ## Goal
 
@@ -41,7 +41,7 @@ scope" instead of silently dropping it — every divergence is named here:
 | AC bullet (verbatim) | What ships instead | Why |
 |---|---|---|
 | "Supports: OpenAI, Anthropic, Gemini, Ollama (local), and a generic \"custom\" provider" | **Mostly ships**: OpenAI, Anthropic, Gemini, OpenRouter (already shipped) + **x.ai** (new). Ollama and generic-custom-URL are **deferred, explicitly out of scope** (see Out of scope). | digigraph runs server-side; a "custom base URL" is user-supplied and reachable from digigraph's own container network (SSRF-adjacent: internal service IPs, cloud metadata endpoints). Local Ollama is worse than SSRF-risky — it is **architecturally unreachable**: "localhost" from digigraph's perspective is digigraph's own container, never the visitor's machine. Neither can be a same-PR add to a hardcoded-provider allowlist; each needs its own design (client-side direct-fetch for Ollama; an SSRF-hardened proxy — scheme/host allowlist, no RFC1918/link-local/loopback, no redirects followed — for custom URLs). |
-| "API key stored encrypted in DigiStore per user (never in localStorage)" | **Deviates.** Key stays **session-memory-only** (unchanged) — never DigiStore, never `localStorage`. | DigiStore [doesn't exist yet](../../vision/README.md) ("designed and specced but not yet implemented as standalone modules"). `docs/vision/digichat.md`'s claim that keys "persist in the digichat Drizzle/Postgres store today" is **false** against the shipped, tested code (`frontend/digichat/ARCHITECTURE.md:446-451`, the BYOK section, and `use-byok-key.ts`'s own doc comment) — this spec treats the shipped/tested behavior as authoritative and flags the vision doc for correction, not the other way around. |
+| "API key stored encrypted in DigiStore per user (never in localStorage)" | **Deviates.** Key stays **session-memory-only** (unchanged) — never DigiStore, never `localStorage`. | DigiStore [doesn't exist yet](../../vision/README.md) ("designed and specced but not yet implemented as standalone modules"). `docs/vision/digichat.md`'s claim that keys "persist in the digichat Drizzle/Postgres store today" is **false** against the shipped, tested code (`cloudflare/digichat/ARCHITECTURE.md:446-451`, the BYOK section, and `use-byok-key.ts`'s own doc comment) — this spec treats the shipped/tested behavior as authoritative and flags the vision doc for correction, not the other way around. |
 | "Existing BYOK flow migrated to use this panel" | **Ships, reinterpreted.** The issue's own "Files affected" sketched a new `components/model-selector/` + `app/api/settings/` surface; this spec instead **extends the existing `byok-cli-flow.tsx` terminal stepper in place** (new tier tabs, live data, custom multi-select) rather than building a separate settings-panel component tree that the existing flow migrates into. | The existing stepper already carries the session-only-key precedent, the embed/main-app dual mounting, and the activation-gate logic this spec depends on; rebuilding it as a new component tree would duplicate all of that for no functional gain. Named here so the reinterpretation is visible, not implicit. |
 
 "Provider selection persists across sessions" (AC4) is **not** a deviation —
@@ -377,18 +377,18 @@ and is named here as explicit follow-up work, not silently assumed.
 **digillm (`digillm/src/digillm`):**
 - `client.py` — `run_tools()` gains `tool_choice: str = "auto"` (L1969-1981), threaded into both `_produce_turn` call sites (L2046, L2056) in place of the hardcoded literal.
 
-**Frontend (`frontend/digichat/src`):**
+**Frontend (`cloudflare/digichat/src`):**
 - `hooks/use-byok-key.ts` — `ByokModelOption` type added; `byokModelPresets` becomes the JSON catalog's `fallbackModels`, wrapped as options with no tier metadata.
 - `app/api/byok/models/route.ts` — **new** BFF route: live OpenRouter catalog fetch + tier bucketing (pure function, separately unit-tested).
 - `app/api/byok/test/route.ts` — `testOpenAIKey`/`testAnthropicKey`/`testGeminiKey` extended to return the full `models` array; OpenRouter's validation call switches from a 1-token completion to `GET /api/v1/key`.
 - `components/byok-cli-flow.tsx` — model step renders tier tabs + custom multi-select when live data is present, falls back to a flat list otherwise; new brief "fetching models" transitional state.
 - `lib/embed-tenants.ts` — no new tenant field needed (tool-calling requirement is deployment-, not tenant-, grain). The advisory "may not support tools" UI badge (a natural follow-up, not built by this spec's plans) would need `require_tool_calls` bridged from digigraph's project config into `api/embed/tenant-config/route.ts`'s response — **no such bridge exists today**; that route is derived entirely from the `DIGICHAT_EMBED_TENANTS` env var, with zero digigraph round-trip. Building it is its own design decision, named as follow-up work.
 - A new Vitest `use-byok-key.catalog-parity.test.ts` reading `config/byok-providers.json` directly (Node `fs`, same pattern any other Node-side fixture test in this repo already uses) and asserting parity with the hand-written TS provider list.
-- `ARCHITECTURE.md` (`frontend/digichat`) — update the BYOK section's provider table and note the new catalog file as the source of truth for the allowlist.
+- `ARCHITECTURE.md` (`cloudflare/digichat`) — update the BYOK section's provider table and note the new catalog file as the source of truth for the allowlist.
 - `ARCHITECTURE.md` (`digigraph`) — document `agents.require_tool_calls` beside the existing `agents.allowed_tools` entry.
 
 **Deferred / out of scope (named, not silently skipped):**
-- `frontend/digithings-web/lib/providerSettings.ts` and `components/ProviderSettings.tsx` — not converged onto the new catalog in this PR.
+- `cloudflare/digithings-web/lib/providerSettings.ts` and `components/ProviderSettings.tsx` — not converged onto the new catalog in this PR.
 - Ollama (local) and generic custom-base-URL providers — see "Deviations" above.
 - DigiStore-encrypted key persistence — blocked on DigiStore shipping.
 
@@ -430,7 +430,7 @@ section rather than folding it away for shape-consistency alone.
 
 - Ollama (local) and generic custom-base-URL BYOK providers — need their own dedicated design (client-side direct-fetch architecture for Ollama; SSRF-hardened proxy design for custom URLs). Tracked as follow-up work off this spec, not folded in here.
 - DigiStore-encrypted, cross-device key persistence — blocked on DigiStore itself shipping (`docs/vision/README.md`).
-- Converging `frontend/digithings-web`'s independent BYOK picker (`providerSettings.ts`) onto the new catalog.
+- Converging `cloudflare/digithings-web`'s independent BYOK picker (`providerSettings.ts`) onto the new catalog.
 - Rewriting Olympus's own `is_tool_use_capable_model()` heuristic or its `_FLAGSHIP_MODEL_ID_MARKERS` tiering — those stay as they are for the Atlas/Hermes pipelines; this spec only adds a separate, decoupled tiering path for the BYOK picker.
 - A generic per-model tool-calling capability database — the OpenRouter live signal and "assume yes" for the other three are treated as good enough for this iteration; revisit if false negatives/positives turn out to matter in practice.
 - The advisory "may not support tools" UI badge on the model picker — needs a digigraph-project-config-to-digichat-tenant-config bridge that does not exist today (see Data flow, "Tool-calling requirement gate"). Not implemented by either implementation plan derived from this spec.

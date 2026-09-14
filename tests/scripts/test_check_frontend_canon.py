@@ -158,7 +158,7 @@ def _write(path: Path, text: str) -> None:
 def test_family_census_flags_new_family(mod, tmp_path, monkeypatch) -> None:
     baseline = tmp_path / "scripts" / "frontend_class_families.json"
     _write(baseline, json.dumps({"digichat-ui": ["msg"]}))
-    rel = "frontend/digichat-ui/styles.css"
+    rel = "cloudflare/digichat-ui/styles.css"
     _write(
         tmp_path / rel,
         ".msg-bubble { color: red; }\n.widget-shell { display: flex; }\n",
@@ -178,7 +178,7 @@ def test_family_census_flags_new_family(mod, tmp_path, monkeypatch) -> None:
 def test_family_census_silent_when_baselined(mod, tmp_path, monkeypatch) -> None:
     baseline = tmp_path / "scripts" / "frontend_class_families.json"
     _write(baseline, json.dumps({"digichat-ui": ["msg", "widget"]}))
-    rel = "frontend/digichat-ui/styles.css"
+    rel = "cloudflare/digichat-ui/styles.css"
     _write(tmp_path / rel, ".msg-bubble {}\n.widget-shell {}\n")
     monkeypatch.setattr(mod, "REPO", tmp_path)
     monkeypatch.setattr(mod, "FAMILY_BASELINE", baseline)
@@ -193,7 +193,7 @@ def test_main_end_to_end(mod, tmp_path, monkeypatch, capsys) -> None:
     baseline = tmp_path / "scripts" / "frontend_class_families.json"
     _write(baseline, json.dumps({"digichat-ui": ["msg"]}))
 
-    bad_tsx = "frontend/digichat/src/bad.tsx"
+    bad_tsx = "cloudflare/digichat/src/bad.tsx"
     _write(
         tmp_path / bad_tsx,
         "\n".join(
@@ -212,12 +212,12 @@ def test_main_end_to_end(mod, tmp_path, monkeypatch, capsys) -> None:
 
     # Letter-bearing hexes: pure-digit ``#123456`` reads as an issue ref, not a
     # color, so the allowlist contrast would be vacuous without a letter.
-    allow_ts = "frontend/dashboard/lib/chart-colors.ts"
+    allow_ts = "cloudflare/dashboard/lib/chart-colors.ts"
     _write(tmp_path / allow_ts, 'export const up = "#12ab56";\n')  # allowlisted home
-    other_ts = "frontend/dashboard/lib/other.ts"
+    other_ts = "cloudflare/dashboard/lib/other.ts"
     _write(tmp_path / other_ts, 'export const x = "#65cd21";\n')  # NOT allowlisted
 
-    census_css = "frontend/digichat-ui/styles.css"
+    census_css = "cloudflare/digichat-ui/styles.css"
     _write(tmp_path / census_css, ".msg-bubble {}\n.widget-shell {}\n")
 
     tracked = [bad_tsx, allow_ts, other_ts, census_css]
@@ -246,7 +246,7 @@ def test_main_end_to_end(mod, tmp_path, monkeypatch, capsys) -> None:
 def test_main_clean_tree_returns_zero(mod, tmp_path, monkeypatch, capsys) -> None:
     baseline = tmp_path / "scripts" / "frontend_class_families.json"
     _write(baseline, json.dumps({}))
-    rel = "frontend/digichat/src/ok.tsx"
+    rel = "cloudflare/digichat/src/ok.tsx"
     _write(tmp_path / rel, '<div className="text-ink bg-surface border-hair" />\n')
     monkeypatch.setattr(mod, "REPO", tmp_path)
     monkeypatch.setattr(mod, "FAMILY_BASELINE", baseline)
@@ -258,15 +258,15 @@ def test_main_clean_tree_returns_zero(mod, tmp_path, monkeypatch, capsys) -> Non
 
 def test_canon_skips_vendor_template_copies(mod) -> None:
     assert mod.is_canon_skipped(
-        "frontend/digichat/reference/assistant-ui-templates/foo.tsx"
+        "cloudflare/digichat/reference/assistant-ui-templates/foo.tsx"
     )
-    assert mod.is_canon_skipped("frontend/digichat/src/app/(baseline)/page.tsx")
+    assert mod.is_canon_skipped("cloudflare/digichat/src/app/(baseline)/page.tsx")
     assert mod.is_canon_skipped(
-        "frontend/digichat/src/components/assistant-ui/skins/chatgpt.tsx"
+        "cloudflare/digichat/src/components/assistant-ui/skins/chatgpt.tsx"
     )
     assert mod.is_canon_skipped(
-        "frontend/digiweb/reference/components/chatbot/chatbot-theme.tsx"
+        "cloudflare/digiweb/reference/components/chatbot/chatbot-theme.tsx"
     )
     assert not mod.is_canon_skipped(
-        "frontend/digichat/src/app/(digichat)/embed/embed-client.tsx"
+        "cloudflare/digichat/src/app/(digichat)/embed/embed-client.tsx"
     )

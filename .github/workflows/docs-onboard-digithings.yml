@@ -21,7 +21,7 @@
 # a workflow offering fewer aliases than the runtime it drives passes the
 # documented cutover and then fails here anyway).
 # D1_DATABASE_MAP is the same {"clients/...": "<id>"} JSON the Worker holds
-# (frontend/digithings-stack-cloudflare/wrangler.toml) -- one secret, one source
+# (cloudflare/digithings-stack-cloudflare/wrangler.toml) -- one secret, one source
 # of truth, so CI and the container can never read different databases for the
 # same prefix. --database is derived from map["clients/digithings"] below.
 # digithings only — the online-compliance-center corpus has its own onboarding path.
@@ -69,8 +69,8 @@ on:
       - 'digifetch/ARCHITECTURE.md'
       - 'digifetch/AGENTS.md'
       - 'digillm/ARCHITECTURE.md'
-      - 'frontend/digichat/ARCHITECTURE.md'
-      - 'frontend/digichat/AGENTS.md'
+      - 'cloudflare/digichat/ARCHITECTURE.md'
+      - 'cloudflare/digichat/AGENTS.md'
       - 'scripts/docs_onboard/**'
       - 'scripts/d1_sync.py'
       - 'scripts/sync_architecture_vault.py'

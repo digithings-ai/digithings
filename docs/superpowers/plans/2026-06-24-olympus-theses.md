@@ -22,7 +22,7 @@
   > `lib/thesis-route-canon.test.ts`.
 - **Tailwind v4 design tokens, inherited exactly** — dark-first; cyan-phosphor `--accent` `#3DD6C4`; `font-display` (Instrument Serif) for claims/headlines; Geist sans/mono; `glass-card`; `bg-bg-primary`/`bg-bg-secondary`/`bg-bg-glass`; `border-border-subtle`; `text-text-primary`/`text-text-secondary`/`text-text-muted`.
 - **F5 token rule (verbatim):** cyan `--accent` `#3DD6C4` for links/chrome/the single conviction encoding/the live-fresh dot only; `fin-green`/`fin-red` **strictly** for signed financial values; `fin-amber` for caution/stale/carried/mixed-regime; **no gradients** beyond the existing faint regime wash; **no decorative numbering**. This surface specifically purges: the gradient panel headers (`bg-gradient-to-br`), the red "Risk radar" gradient (`bg-gradient-to-b from-fin-red/5`), and all `text-fin-blue` link/icon literals (→ `text-accent`).
-- **Tests stay green** — 150+ plumbing/page tests must pass. `npm test` runs `vitest run` from `frontend/olympus`. Page-level tests are updated as part of this work.
+- **Tests stay green** — 150+ plumbing/page tests must pass. `npm test` runs `vitest run` from `cloudflare/olympus`. Page-level tests are updated as part of this work.
 - **Empty-state discipline** — element-specific calm copy ("tracking from 2026-06-23", "Unlinked expressions"); never an em-dash placeholder, a 1-row table-over-time, or a single-dot chart. History on single-day data collapses to one quiet line, it does not render an empty table.
 - **Slop guards** — the conviction meter is the only accent on its row and encodes exactly one quantity (`confidence`); "Link to Pipeline" is contextual (a thesis → ITS provenance day), never a cloned generic button; the two tiers are driven by `thesis_kind`, not stamped symmetry.
 - **PM-voice copy (F8)** — no operator strings ("Expand for DB snapshots", "(database)", "No thesis row in the database"). Investor-readable everywhere.
@@ -80,7 +80,7 @@ If Phase 0 has not landed when a task starts, the task is **blocked** — do not
 - **Delete:** `components/portfolio/StrategyThesisPanel.tsx`, `components/portfolio/tabs/ThesesTab.tsx` (landing absorbs it).
 - **Test:** `lib/theses-ledger.test.ts`, update existing page tests that import the deleted/rewritten components (grep gate in Task 7).
 
-All component/lib paths below are under `frontend/olympus/`.
+All component/lib paths below are under `cloudflare/olympus/`.
 
 ---
 
@@ -89,8 +89,8 @@ All component/lib paths below are under `frontend/olympus/`.
 Pure functions that drive the two-tier landing and the detail joins. No React. TDD.
 
 **Files:**
-- Create: `frontend/olympus/lib/theses-ledger.ts`
-- Test: `frontend/olympus/lib/theses-ledger.test.ts`
+- Create: `cloudflare/olympus/lib/theses-ledger.ts`
+- Test: `cloudflare/olympus/lib/theses-ledger.test.ts`
 
 **Interfaces:**
 - Consumes: `Thesis` (widened, Phase 0 `lib/types.ts`); `thesisIdEquals`, `normalizeThesisId` (Phase 0 `lib/thesis-id.ts`).
@@ -103,7 +103,7 @@ Pure functions that drive the two-tier landing and the detail joins. No React. T
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// frontend/olympus/lib/theses-ledger.test.ts
+// cloudflare/olympus/lib/theses-ledger.test.ts
 import { describe, expect, it } from 'vitest';
 import { splitTheses, sortByConfidenceDesc, groupVehicleTheses, findThesisById } from './theses-ledger';
 import type { Thesis } from './types';
@@ -179,13 +179,13 @@ describe('findThesisById', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/olympus && npx vitest run lib/theses-ledger.test.ts`
+Run: `cd cloudflare/olympus && npx vitest run lib/theses-ledger.test.ts`
 Expected: FAIL — `Failed to resolve import "./theses-ledger"`.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```ts
-// frontend/olympus/lib/theses-ledger.ts
+// cloudflare/olympus/lib/theses-ledger.ts
 import { thesisIdEquals } from './thesis-id';
 import type { Thesis } from './types';
 
@@ -256,13 +256,13 @@ export function findThesisById(theses: Thesis[], id: string): Thesis | null {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd frontend/olympus && npx vitest run lib/theses-ledger.test.ts`
+Run: `cd cloudflare/olympus && npx vitest run lib/theses-ledger.test.ts`
 Expected: PASS — 5 tests pass.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/olympus/lib/theses-ledger.ts frontend/olympus/lib/theses-ledger.test.ts
+git add cloudflare/olympus/lib/theses-ledger.ts cloudflare/olympus/lib/theses-ledger.test.ts
 git commit -m "feat(olympus): theses-ledger tier split + grouping helpers"
 ```
 
@@ -273,8 +273,8 @@ git commit -m "feat(olympus): theses-ledger tier split + grouping helpers"
 Theses landing shows "the book weight it drives" per view. The existing `aggregateWeightByThesis` (in `lib/portfolio-aggregates.ts:117`) buckets `weight_actual` by `thesis_ids` keyed on `normalizeThesisId`. Per the F4 contract, `normalizeThesisId` is widened in Phase 0 to strip `^VEHICLE-`, so `positions.thesis_id='ewt'` and `theses.thesis_id='vehicle-ewt'` collapse to one key — the existing aggregate becomes correct **for free**. This task adds a tested wrapper that resolves a `Thesis` to its book weight, rolling a market view up over its linked vehicle theses (holdings are usually tagged at the vehicle level).
 
 **Files:**
-- Modify: `frontend/olympus/lib/portfolio-aggregates.ts` (append only)
-- Test: `frontend/olympus/lib/theses-ledger.test.ts` (extend — same module concern)
+- Modify: `cloudflare/olympus/lib/portfolio-aggregates.ts` (append only)
+- Test: `cloudflare/olympus/lib/theses-ledger.test.ts` (extend — same module concern)
 
 **Interfaces:**
 - Consumes: `aggregateWeightByThesis(positions: Pick<Position,'weight_actual'|'thesis_ids'>[]): Map<string, number>` (existing `lib/portfolio-aggregates.ts:117`); `normalizeThesisId`, `thesisIdEquals` (already imported at `portfolio-aggregates.ts:2`); `Thesis` (already imported at `:3`).
@@ -284,7 +284,7 @@ Theses landing shows "the book weight it drives" per view. The existing `aggrega
 - [ ] **Step 1: Write the failing test (append to theses-ledger.test.ts)**
 
 ```ts
-// append to frontend/olympus/lib/theses-ledger.test.ts
+// append to cloudflare/olympus/lib/theses-ledger.test.ts
 import { aggregateWeightByThesis, bookWeightForThesis } from './portfolio-aggregates';
 
 describe('bookWeightForThesis', () => {
@@ -314,7 +314,7 @@ describe('bookWeightForThesis', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/olympus && npx vitest run lib/theses-ledger.test.ts`
+Run: `cd cloudflare/olympus && npx vitest run lib/theses-ledger.test.ts`
 Expected: FAIL — `bookWeightForThesis is not a function` / import unresolved.
 
 - [ ] **Step 3: Write minimal implementation (append to portfolio-aggregates.ts)**
@@ -322,7 +322,7 @@ Expected: FAIL — `bookWeightForThesis is not a function` / import unresolved.
 `portfolio-aggregates.ts` already imports `normalizeThesisId`, `thesisIdEquals` (line 2) and `Thesis` (line 3 — `import type { Position, PositionHistoryRow, Thesis } from './types';`). Do **not** add duplicate imports; only append the function:
 
 ```ts
-// append to frontend/olympus/lib/portfolio-aggregates.ts (existing imports already cover Thesis/thesisIdEquals/normalizeThesisId)
+// append to cloudflare/olympus/lib/portfolio-aggregates.ts (existing imports already cover Thesis/thesisIdEquals/normalizeThesisId)
 
 /**
  * Book weight a single thesis drives, using the F4-normalized weightByThesisId map.
@@ -349,13 +349,13 @@ export function bookWeightForThesis(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd frontend/olympus && npx vitest run lib/theses-ledger.test.ts`
+Run: `cd cloudflare/olympus && npx vitest run lib/theses-ledger.test.ts`
 Expected: PASS — 7 tests pass (5 from Task 1 + 2 here).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/olympus/lib/portfolio-aggregates.ts frontend/olympus/lib/theses-ledger.test.ts
+git add cloudflare/olympus/lib/portfolio-aggregates.ts cloudflare/olympus/lib/theses-ledger.test.ts
 git commit -m "feat(olympus): bookWeightForThesis rollup over F4-normalized join"
 ```
 
@@ -366,8 +366,8 @@ git commit -m "feat(olympus): bookWeightForThesis rollup over F4-normalized join
 Two presentational pieces for the landing. Pure JSX, no test cycle, real code only.
 
 **Files:**
-- Create: `frontend/olympus/components/portfolio/theses/MarketViewCard.tsx`
-- Create: `frontend/olympus/components/portfolio/theses/VehicleThesisRow.tsx`
+- Create: `cloudflare/olympus/components/portfolio/theses/MarketViewCard.tsx`
+- Create: `cloudflare/olympus/components/portfolio/theses/VehicleThesisRow.tsx`
 
 **Interfaces:**
 - Consumes: `Thesis` (Phase 0); `ConvictionMeter` (Phase 0 `components/shared/conviction-meter.tsx`).
@@ -380,7 +380,7 @@ A `confidence` of 0.0–1.0 maps to a 4-pip cyan meter via `Math.round(confidenc
 - [ ] **Step 1: Write MarketViewCard**
 
 ```tsx
-// frontend/olympus/components/portfolio/theses/MarketViewCard.tsx
+// cloudflare/olympus/components/portfolio/theses/MarketViewCard.tsx
 'use client';
 
 import Link from 'next/link';
@@ -454,7 +454,7 @@ export function MarketViewCard({
 - [ ] **Step 2: Write VehicleThesisRow**
 
 ```tsx
-// frontend/olympus/components/portfolio/theses/VehicleThesisRow.tsx
+// cloudflare/olympus/components/portfolio/theses/VehicleThesisRow.tsx
 'use client';
 
 import Link from 'next/link';
@@ -505,13 +505,13 @@ export function VehicleThesisRow({
 
 - [ ] **Step 3: Type-check the two new files**
 
-Run: `cd frontend/olympus && npx tsc --noEmit`
+Run: `cd cloudflare/olympus && npx tsc --noEmit`
 Expected: PASS — no errors (the files compile against Phase 0 types/components).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/olympus/components/portfolio/theses/MarketViewCard.tsx frontend/olympus/components/portfolio/theses/VehicleThesisRow.tsx
+git add cloudflare/olympus/components/portfolio/theses/MarketViewCard.tsx cloudflare/olympus/components/portfolio/theses/VehicleThesisRow.tsx
 git commit -m "feat(olympus): MarketViewCard + VehicleThesisRow conviction tiles"
 ```
 
@@ -522,8 +522,8 @@ git commit -m "feat(olympus): MarketViewCard + VehicleThesisRow conviction tiles
 Replace the calendar/`ThesesTab` landing with two calm sections: **Market views** (conviction cards, confidence desc) and **Vehicle theses** (grouped by linked market view; "Unlinked expressions" trailing group). History collapses to one quiet "tracking from {firstDate}" line. Delete `ThesesTab.tsx`.
 
 **Files:**
-- Rewrite: `frontend/olympus/components/portfolio/theses/ThesesPageInner.tsx`
-- Delete: `frontend/olympus/components/portfolio/tabs/ThesesTab.tsx`
+- Rewrite: `cloudflare/olympus/components/portfolio/theses/ThesesPageInner.tsx`
+- Delete: `cloudflare/olympus/components/portfolio/tabs/ThesesTab.tsx`
 
 **Interfaces:**
 - Consumes: `useDashboard()` → `data.portfolio.strategy.theses: Thesis[]`, `data.positions: Position[]` (`weight_actual`, `thesis_ids`), `data.position_history: { date }[]`, `data.portfolio.meta.last_updated`; `splitTheses`, `sortByConfidenceDesc`, `groupVehicleTheses` (Task 1); `aggregateWeightByThesis`, `bookWeightForThesis` (Task 2); `MarketViewCard`, `VehicleThesisRow` (Task 3); `PortfolioSectionNav` (existing, `active="theses"`), `SUBPAGE_MAX` (existing = `'max-w-[1600px] mx-auto w-full px-4 md:px-6'`), `AtlasLoader` (existing).
@@ -532,7 +532,7 @@ Replace the calendar/`ThesesTab` landing with two calm sections: **Market views*
 - [ ] **Step 1: Rewrite ThesesPageInner.tsx**
 
 ```tsx
-// frontend/olympus/components/portfolio/theses/ThesesPageInner.tsx
+// cloudflare/olympus/components/portfolio/theses/ThesesPageInner.tsx
 'use client';
 
 import { useMemo } from 'react';
@@ -659,26 +659,26 @@ export default function ThesesPageInner() {
 - [ ] **Step 2: Delete the retired ThesesTab**
 
 ```bash
-git rm frontend/olympus/components/portfolio/tabs/ThesesTab.tsx
+git rm cloudflare/olympus/components/portfolio/tabs/ThesesTab.tsx
 ```
 
 - [ ] **Step 3: Verify no dangling ThesesTab importers + type-check**
 
-Run: `cd frontend/olympus && git grep -n "tabs/ThesesTab" -- '*.tsx' '*.ts' | grep -v node_modules`
+Run: `cd cloudflare/olympus && git grep -n "tabs/ThesesTab" -- '*.tsx' '*.ts' | grep -v node_modules`
 Expected: no output (`ThesesPageInner` was the only importer).
 
-Run: `cd frontend/olympus && npx tsc --noEmit`
+Run: `cd cloudflare/olympus && npx tsc --noEmit`
 Expected: PASS — no errors.
 
 - [ ] **Step 4: Run the full suite**
 
-Run: `cd frontend/olympus && npm test`
+Run: `cd cloudflare/olympus && npm test`
 Expected: PASS, except any test asserting old `ThesesTab` copy — note it; fix in Task 7 (do not patch inline now).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/olympus/components/portfolio/theses/ThesesPageInner.tsx
+git add cloudflare/olympus/components/portfolio/theses/ThesesPageInner.tsx
 git commit -m "refactor(olympus): two-tier theses landing (market views + vehicle theses)"
 ```
 
@@ -689,9 +689,9 @@ git commit -m "refactor(olympus): two-tier theses landing (market views + vehicl
 Three presentational pieces for the detail page. Pure JSX. No test cycle, real code only.
 
 **Files:**
-- Create: `frontend/olympus/components/portfolio/theses/ThesisCriteriaColumns.tsx`
-- Create: `frontend/olympus/components/portfolio/theses/ThesisHoldingsExpressing.tsx`
-- Create: `frontend/olympus/components/portfolio/theses/ThesisProvenanceStrip.tsx`
+- Create: `cloudflare/olympus/components/portfolio/theses/ThesisCriteriaColumns.tsx`
+- Create: `cloudflare/olympus/components/portfolio/theses/ThesisHoldingsExpressing.tsx`
+- Create: `cloudflare/olympus/components/portfolio/theses/ThesisProvenanceStrip.tsx`
 
 **Interfaces:**
 - Consumes: `Position` (Phase 0); `buildPipelineHref`, `stageForDocumentKey` (Phase 0 `lib/pipeline-links.ts`); `ConvictionMeter` (Phase 0); lucide `Check`, `X`, `ArrowUpRight`.
@@ -705,7 +705,7 @@ Three presentational pieces for the detail page. Pure JSX. No test cycle, real c
 "What confirms this" uses `fin-green`, "What breaks this" uses `fin-red` — these encode a directional financial judgment of the thesis (confirm/break), permitted under F5. Per-column element-specific empty-state.
 
 ```tsx
-// frontend/olympus/components/portfolio/theses/ThesisCriteriaColumns.tsx
+// cloudflare/olympus/components/portfolio/theses/ThesisCriteriaColumns.tsx
 'use client';
 
 import { Check, X } from 'lucide-react';
@@ -771,7 +771,7 @@ export function ThesisCriteriaColumns({
 - [ ] **Step 2: Write ThesisHoldingsExpressing**
 
 ```tsx
-// frontend/olympus/components/portfolio/theses/ThesisHoldingsExpressing.tsx
+// cloudflare/olympus/components/portfolio/theses/ThesisHoldingsExpressing.tsx
 'use client';
 
 import Link from 'next/link';
@@ -818,7 +818,7 @@ export function ThesisHoldingsExpressing({ positions }: { positions: Position[] 
 - [ ] **Step 3: Write ThesisProvenanceStrip**
 
 ```tsx
-// frontend/olympus/components/portfolio/theses/ThesisProvenanceStrip.tsx
+// cloudflare/olympus/components/portfolio/theses/ThesisProvenanceStrip.tsx
 'use client';
 
 import Link from 'next/link';
@@ -850,13 +850,13 @@ export function ThesisProvenanceStrip({
 
 - [ ] **Step 4: Type-check**
 
-Run: `cd frontend/olympus && npx tsc --noEmit`
+Run: `cd cloudflare/olympus && npx tsc --noEmit`
 Expected: PASS — no errors.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/olympus/components/portfolio/theses/ThesisCriteriaColumns.tsx frontend/olympus/components/portfolio/theses/ThesisHoldingsExpressing.tsx frontend/olympus/components/portfolio/theses/ThesisProvenanceStrip.tsx
+git add cloudflare/olympus/components/portfolio/theses/ThesisCriteriaColumns.tsx cloudflare/olympus/components/portfolio/theses/ThesisHoldingsExpressing.tsx cloudflare/olympus/components/portfolio/theses/ThesisProvenanceStrip.tsx
 git commit -m "feat(olympus): thesis-detail building blocks (criteria/holdings/provenance)"
 ```
 
@@ -867,7 +867,7 @@ git commit -m "feat(olympus): thesis-detail building blocks (criteria/holdings/p
 Replace the 5-table stack with the ledger artifact: claim/conviction/horizon/status header (serif claim, one cyan conviction meter, horizon chip, status only when non-ACTIVE, an `AsOfBadge`), two criteria columns, "Holdings expressing this thesis" via the F4 join, and the slim Provenance strip. `_unlinked` keeps its honest note + holdings. No DB-snapshot tables, no markdown re-render, no network thesis-history fetch.
 
 **Files:**
-- Rewrite: `frontend/olympus/components/portfolio/theses/ThesisDetailPageInner.tsx`
+- Rewrite: `cloudflare/olympus/components/portfolio/theses/ThesisDetailPageInner.tsx`
 
 **Interfaces:**
 - Consumes: `useDashboard()` → `data.portfolio.strategy.theses: Thesis[]`, `data.positions: Position[]`, `data.portfolio.meta.last_updated`; `findThesisById` (Task 1); `joinPositionsToThesis` (Phase 0 `lib/thesis-id.ts`); `ConvictionMeter`, `AsOfBadge` (Phase 0); `ThesisCriteriaColumns`, `ThesisHoldingsExpressing`, `ThesisProvenanceStrip` (Task 5); `PortfolioSectionNav`, `SUBPAGE_MAX`, `AtlasLoader` (existing). `CONFIDENCE_PIPS = 4` matches Task 3.
@@ -878,7 +878,7 @@ Replace the 5-table stack with the ledger artifact: claim/conviction/horizon/sta
 - [ ] **Step 1: Rewrite ThesisDetailPageInner.tsx**
 
 ```tsx
-// frontend/olympus/components/portfolio/theses/ThesisDetailPageInner.tsx
+// cloudflare/olympus/components/portfolio/theses/ThesisDetailPageInner.tsx
 'use client';
 
 import { useMemo } from 'react';
@@ -1046,25 +1046,25 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
 
 - [ ] **Step 2: Type-check**
 
-Run: `cd frontend/olympus && npx tsc --noEmit`
+Run: `cd cloudflare/olympus && npx tsc --noEmit`
 Expected: PASS — no errors.
 
 - [ ] **Step 3: Verify dropped query helpers are not orphaned elsewhere**
 
 The rewrite drops `getThesisHistoryById`, `aggregateThesisWeightsByDate`, `aggregateUnlinkedWeightsByDate`, `collectThesisRelatedDocLinks` from this page. They remain exported from `queries.ts` (harmless); do **not** delete them — out of scope.
 
-Run: `cd frontend/olympus && git grep -n "getThesisHistoryById\|collectThesisRelatedDocLinks" -- '*.tsx' '*.ts' | grep -v node_modules | grep -v "lib/queries.ts"`
+Run: `cd cloudflare/olympus && git grep -n "getThesisHistoryById\|collectThesisRelatedDocLinks" -- '*.tsx' '*.ts' | grep -v node_modules | grep -v "lib/queries.ts"`
 Expected: no references in this plan's rewritten files; any remaining references are in untouched files (fine).
 
 - [ ] **Step 4: Run the full suite**
 
-Run: `cd frontend/olympus && npm test`
+Run: `cd cloudflare/olympus && npm test`
 Expected: PASS, except tests asserting old detail-page copy (fixed in Task 7).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/olympus/components/portfolio/theses/ThesisDetailPageInner.tsx
+git add cloudflare/olympus/components/portfolio/theses/ThesisDetailPageInner.tsx
 git commit -m "refactor(olympus): theses detail as research-ledger artifact (criteria/holdings/provenance)"
 ```
 
@@ -1075,8 +1075,8 @@ git commit -m "refactor(olympus): theses detail as research-ledger artifact (cri
 Delete the orphaned `StrategyThesisPanel.tsx` (zero importers), point the `/strategy` no-thesis redirect at the canonical theses landing, and update tests so the suite stays green.
 
 **Files:**
-- Delete: `frontend/olympus/components/portfolio/StrategyThesisPanel.tsx`
-- Modify: `frontend/olympus/components/legacy-spa-redirect.tsx` (the `/strategy` no-thesis branch)
+- Delete: `cloudflare/olympus/components/portfolio/StrategyThesisPanel.tsx`
+- Modify: `cloudflare/olympus/components/legacy-spa-redirect.tsx` (the `/strategy` no-thesis branch)
 - Test: update any failing tests surfaced by `npm test`
 
 **Interfaces:**
@@ -1085,21 +1085,21 @@ Delete the orphaned `StrategyThesisPanel.tsx` (zero importers), point the `/stra
 
 - [ ] **Step 1: Confirm StrategyThesisPanel is dead, then delete it**
 
-Run: `cd frontend/olympus && git grep -n "StrategyThesisPanel" -- '*.tsx' '*.ts' | grep -v node_modules | grep -v "components/portfolio/StrategyThesisPanel.tsx"`
+Run: `cd cloudflare/olympus && git grep -n "StrategyThesisPanel" -- '*.tsx' '*.ts' | grep -v node_modules | grep -v "components/portfolio/StrategyThesisPanel.tsx"`
 Expected: no output (no importers).
 
 ```bash
-git rm frontend/olympus/components/portfolio/StrategyThesisPanel.tsx
+git rm cloudflare/olympus/components/portfolio/StrategyThesisPanel.tsx
 ```
 
 (`StrategyThesisPanel` imports `renderDocumentMarkdownFromPayload`, which has other importers in `lib/queries.ts` and `lib/render-document-from-payload.ts` — deleting the panel does not orphan it.)
 
 - [ ] **Step 2: Re-point the `/strategy` no-thesis redirect**
 
-In `frontend/olympus/components/legacy-spa-redirect.tsx`, `StrategyToAnalysisInner` currently sends the no-thesis case to `/portfolio?tab=analysis`. Change only the final `router.replace`:
+In `cloudflare/olympus/components/legacy-spa-redirect.tsx`, `StrategyToAnalysisInner` currently sends the no-thesis case to `/portfolio?tab=analysis`. Change only the final `router.replace`:
 
 ```tsx
-// frontend/olympus/components/legacy-spa-redirect.tsx — inside StrategyToAnalysisInner useEffect
+// cloudflare/olympus/components/legacy-spa-redirect.tsx — inside StrategyToAnalysisInner useEffect
     const thesis = searchParams.get('thesis');
     if (thesis) {
       router.replace(`/portfolio/theses/${encodeURIComponent(thesis)}`);
@@ -1112,10 +1112,10 @@ In `frontend/olympus/components/legacy-spa-redirect.tsx`, `StrategyToAnalysisInn
 
 - [ ] **Step 3: Run the suite and locate failures**
 
-Run: `cd frontend/olympus && npm test`
+Run: `cd cloudflare/olympus && npm test`
 Expected: identify FAILs.
 
-Run: `cd frontend/olympus && git grep -ln "ThesesTab\|StrategyThesisPanel\|tab=analysis" -- '*.test.ts' '*.test.tsx' | grep -v node_modules`
+Run: `cd cloudflare/olympus && git grep -ln "ThesesTab\|StrategyThesisPanel\|tab=analysis" -- '*.test.ts' '*.test.tsx' | grep -v node_modules`
 Expected: the list of test files needing updates.
 
 - [ ] **Step 4: Update the failing tests to the new behavior**
@@ -1128,16 +1128,16 @@ Use the existing render style: `renderToStaticMarkup(createElement(...))` for pu
 
 - [ ] **Step 5: Re-run the full suite + lint + types until green**
 
-Run: `cd frontend/olympus && npm test`
+Run: `cd cloudflare/olympus && npm test`
 Expected: PASS — all green.
 
-Run: `cd frontend/olympus && npx eslint . && npx tsc --noEmit`
+Run: `cd cloudflare/olympus && npx eslint . && npx tsc --noEmit`
 Expected: PASS — lint + types clean.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add -A frontend/olympus/components frontend/olympus/lib
+git add -A cloudflare/olympus/components cloudflare/olympus/lib
 git commit -m "refactor(olympus): retire StrategyThesisPanel, route /strategy to theses ledger, update tests"
 ```
 

@@ -3,9 +3,6 @@ type: behavior-guide
 title: digisearch Ingest and Index
 description: digisearch ingest behavior — parsing, chunker selection, embeddings with cache, and index writes.
 tags: [digisearch, ingest, chunking, embeddings]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-d16d9586117b95e03b7f1549
     resource: repo://digisearch/AGENTS.md
@@ -16,6 +13,9 @@ sources:
   - id: openwiki-source-b230342b440603a7430466cc
     resource: repo://digisearch/src/digisearch/embedding/cache.py
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digisearch Ingest and Index

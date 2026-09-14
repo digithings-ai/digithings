@@ -30,6 +30,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pipeline-digiquant.yml"
+PIPELINE_CONFIG = REPO_ROOT / ".github" / "digiquant-pipeline.yml"
 CHAIN = REPO_ROOT / "digiquant" / "src" / "digiquant" / "portfolio" / "chain.py"
 DIAGNOSTICS = REPO_ROOT / "digiquant" / "src" / "digiquant" / "research" / "diagnostics.py"
 MIGRATION = (
@@ -217,3 +218,40 @@ class TestNoOpenrouterFallbackModels:
         assert not hits, (
             f"OPENROUTER_FALLBACK_MODELS must not appear in pipeline-digiquant.yml; found on {hits}"
         )
+
+
+class TestMarketDataCutoverGuardrails:
+    """#3780/#4013: the cutover flag + the credentials it reads with.
+
+    #3780 pinned the pre-flip default (``supabase``) until the supervised
+    cutover. Task 7 of #4013 flipped the shared fragment to ``r2`` on
+    2026-09-14, so the pin now asserts the flip landed and only a deliberate
+    revert may move it back. The flip is only safe because the research job
+    already carries the four R2 secrets (mirroring
+    pipeline-checkpoint-archive.yml), so both halves are pinned here.
+    """
+
+    _R2_SECRETS = (
+        "R2_ACCOUNT_ID",
+        "R2_BUCKET",
+        "R2_ACCESS_KEY_ID",
+        "R2_SECRET_ACCESS_KEY",
+    )
+
+    def test_pipeline_flag_flipped_to_r2(self) -> None:
+        cfg = yaml.safe_load(PIPELINE_CONFIG.read_text(encoding="utf-8"))
+        assert cfg["env"]["DIGIQUANT_MARKET_DATA_BACKEND"] == "r2", (
+            "The supervised cutover (#4013, Task 7) sets the shared pipeline env to `r2`; "
+            "flipping it back is the documented rollback to the Supabase market-data "
+            "writer path, not a merge-time default."
+        )
+
+    def test_research_job_wires_r2_secrets(self) -> None:
+        doc = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+        env = doc["jobs"]["run"]["env"]
+        for name in self._R2_SECRETS:
+            assert env.get(name) == "${{ secrets." + name + " }}", (
+                f"{name} must be wired from GitHub secrets into the research job env "
+                "(mirror pipeline-checkpoint-archive.yml) or the supervised flip to "
+                "`r2` has no credentials to read with"
+            )

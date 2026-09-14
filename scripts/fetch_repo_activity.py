@@ -72,8 +72,8 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-OUT = REPO_ROOT / "frontend" / "digithings-web" / "lib" / "repo-activity.json"
-MODULES_TS = REPO_ROOT / "frontend" / "digiweb" / "web" / "src" / "data" / "modules.ts"
+OUT = REPO_ROOT / "cloudflare" / "digithings-web" / "lib" / "repo-activity.json"
+MODULES_TS = REPO_ROOT / "cloudflare" / "digiweb" / "web" / "src" / "data" / "modules.ts"
 SLUG = "digithings-ai/digithings"
 WINDOW_DAYS = 30
 BRANCH = "main"
@@ -132,7 +132,7 @@ def _module_paths() -> dict[str, str]:
     for mid, tier in found:
         if tier == "roadmap":
             continue  # no directory exists yet; a last-commit date would be a lie
-        for cand in (mid, f"frontend/{mid}"):
+        for cand in (mid, f"cloudflare/{mid}"):
             if (REPO_ROOT / cand).is_dir():
                 paths[mid] = cand
                 break

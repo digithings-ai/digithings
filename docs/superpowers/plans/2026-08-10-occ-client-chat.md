@@ -77,13 +77,13 @@ Written approval to index `help.online-compliance-center.com` (SCOPE open questi
 
 ```text
 Browser digithings.ai/chat
-  → frontend/digithings-web/app/chat/page.tsx (DtNav + iframe)
+  → cloudflare/digithings-web/app/chat/page.tsx (DtNav + iframe)
   → ${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}/embed?host=digithings.ai&layout=page
   → digichat POST /api/chat (X-Embed-Host: digithings.ai)
   → digigraph → digillm + digivault hub (+ digisearch when configured)
 ```
 
-References: [`infra/digichat-digithings/README.md`](../../../infra/digichat-digithings/README.md), [`docs/adr/0018-digichat-path-routing.md`](../../adr/0018-digichat-path-routing.md), [`frontend/digithings-web/components/ChatEmbedShell.tsx`](../../../frontend/digithings-web/components/ChatEmbedShell.tsx).
+References: [`infra/digichat-digithings/README.md`](../../../infra/digichat-digithings/README.md), [`docs/adr/0018-digichat-path-routing.md`](../../adr/0018-digichat-path-routing.md), [`cloudflare/digithings-web/components/ChatEmbedShell.tsx`](../../../cloudflare/digithings-web/components/ChatEmbedShell.tsx).
 
 | Layer | Mechanism | OCC implication |
 |-------|-----------|-----------------|
@@ -96,7 +96,7 @@ References: [`infra/digichat-digithings/README.md`](../../../infra/digichat-digi
 
 **Recommendation: virtual first-party embed host + parameterized Pages shell.**
 
-1. **Pages:** Add `frontend/digithings-web/app/chat/occ/page.tsx` reusing `ChatEmbedShell` with `embedHostKey="occ.digithings.ai"` (new prop) instead of hardcoded `digithings.ai`.
+1. **Pages:** Add `cloudflare/digithings-web/app/chat/occ/page.tsx` reusing `ChatEmbedShell` with `embedHostKey="occ.digithings.ai"` (new prop) instead of hardcoded `digithings.ai`.
 2. **digichat registry:** Add a second first-party tenant entry (no new DNS):
 
 ```bash
@@ -128,7 +128,7 @@ References: [`infra/digichat-digithings/README.md`](../../../infra/digichat-digi
 }
 ```
 
-3. **First-party allowlist:** Extend `FIRST_PARTY_EMBED_HOSTS` in `frontend/digichat/src/lib/embed-first-party.ts` with `occ.digithings.ai` so the iframe works without `?token=` (same pattern as #1866 for `digithings.ai`).
+3. **First-party allowlist:** Extend `FIRST_PARTY_EMBED_HOSTS` in `cloudflare/digichat/src/lib/embed-first-party.ts` with `occ.digithings.ai` so the iframe works without `?token=` (same pattern as #1866 for `digithings.ai`).
 4. **Iframe URL:** `/embed?host=occ.digithings.ai&layout=page` — `X-Embed-Host` resolves to OCC tenant slug `occ`.
 
 **Why not path-only (`?tenant=occ` on same host)?** Viable alternative (one registry entry, slug query param). Virtual host avoids new digichat resolution rules and matches the existing host-keyed registry. Pick one in Stage 3; virtual host is fewer moving parts.
@@ -163,8 +163,8 @@ Dogfood assumes **one** corpus per digigraph instance. OCC needs a small cross-c
 
 | Component | Change (smallest) |
 |-----------|-------------------|
-| `frontend/digichat` `EmbedBackendConfig` | Optional `digisearchIndex`, `vaultPathPrefix` on `digigraph` backend |
-| `frontend/digichat` `/api/chat` | Forward `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` when set on tenant backend |
+| `cloudflare/digichat` `EmbedBackendConfig` | Optional `digisearchIndex`, `vaultPathPrefix` on `digigraph` backend |
+| `cloudflare/digichat` `/api/chat` | Forward `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` when set on tenant backend |
 | `digigraph` research + digisearch hub | Honor corpus headers or `DIGI_TENANT_CORPUS_MAP[tenant_slug]` for `default_index_name` |
 | `digivault` `digivault_search_notes` | Optional `path_prefix` argument; filter Supabase/local hits |
 
@@ -334,7 +334,7 @@ From SCOPE gaps — not blocking first deploy:
 | [`docs/superpowers/plans/2026-08-10-digithings-dogfood-cutover.md`](./2026-08-10-digithings-dogfood-cutover.md) | Prerequisite program |
 | [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../../digichat/CLIENT-DOCS-ONBOARD.md) | Operator runbook |
 | [`infra/digichat-digithings/README.md`](../../../infra/digichat-digithings/README.md) | Tunnel + embed env |
-| [`frontend/digichat/ARCHITECTURE.md`](../../../frontend/digichat/ARCHITECTURE.md) | Embed tenant registry |
+| [`cloudflare/digichat/ARCHITECTURE.md`](../../../cloudflare/digichat/ARCHITECTURE.md) | Embed tenant registry |
 | [`docs/adr/0018-digichat-path-routing.md`](../../adr/0018-digichat-path-routing.md) | `/chat` path model |
 
 ---

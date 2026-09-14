@@ -5,7 +5,7 @@ description: digiquant HTTP and MCP surface plus operations — pipeline endpoin
 tags: [digiquant, api, mcp, operations]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
+    at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-7f45b1234a1e80c66e4d2b61
     resource: repo://digiquant/Dockerfile

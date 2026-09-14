@@ -147,8 +147,6 @@ def _run_beliefs_llm(
     prior_body: str | None = None,
     max_tokens: int | None = None,
 ) -> BeliefsBlob:
-    from digigraph.model_config import get_grounding_model
-
     from digiquant.research.data.web_grounding import fetch_web_grounding
     from digiquant.research.phases._node_factory import apply_web_grounding_to_inputs
     from digiquant.research.skills import load_skill
@@ -158,14 +156,11 @@ def _run_beliefs_llm(
     skill_text = load_skill(skill_slug)
     web_grounding = None
     if fold_mode == "full":
-        grounding_model = get_grounding_model(segment="beliefs-distillation")
-        if grounding_model:
-            web_grounding = fetch_web_grounding(
-                model=grounding_model,
-                segment="beliefs-distillation",
-                run_date=run_date,
-                scope="portfolio lessons and active theses",
-            )
+        web_grounding = fetch_web_grounding(
+            segment="beliefs-distillation",
+            run_date=run_date,
+            scope="portfolio lessons and active theses",
+        )
     phase_inputs = apply_web_grounding_to_inputs(
         {
             "segment": "learning/beliefs-distillation",

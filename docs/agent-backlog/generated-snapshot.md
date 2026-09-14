@@ -21,7 +21,7 @@
 - [Make digiquant pipeline a complete glass-box run inspector](https://github.com/digithings-ai/digithings/issues/1945)
 - [[agent] digiweb: SyncedTearsheet overlay/markers/range extensions + conviction vocabulary in the reference](https://github.com/digithings-ai/digithings/issues/1577)
 - [[agent] digiquant: Alpaca paper-trading broker adapter (NautilusTrader ExecutionClient) — backlog/future, human-gate required](https://github.com/digithings-ai/digithings/issues/1536)
-- [[agent] chore: rename frontend/digithings-web → digithings, digiquant-web → digiquant](https://github.com/digithings-ai/digithings/issues/1370)
+- [[agent] chore: rename cloudflare/digithings-web → digithings, digiquant-web → digiquant](https://github.com/digithings-ai/digithings/issues/1370)
 - [[agent] design: rebuild design-reference as a React + Tailwind + Motion app](https://github.com/digithings-ai/digithings/issues/1369)
 - [[agent] design: terminal widget (adapted from Canon's #mo-term) + budget sidebar](https://github.com/digithings-ai/digithings/issues/1364)
 - [[agent] design: StrategySuite sticky-stack rebuild + vertical rail](https://github.com/digithings-ai/digithings/issues/1353)

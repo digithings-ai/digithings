@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - "digichat" and "digithings" are ALWAYS lowercase in user-facing copy (both repos, hard rule).
-- digithings repo: every PR links a GitHub issue (`task/<N>-slug` branch); PRs go into `module/digichat`, never directly into `develop`; run `make score` on staged changes before the PR; the implementing PR **always requires human review** (new external network dependency, per CLAUDE.md); update `frontend/digichat/ARCHITECTURE.md` after interface changes; never hand-edit `.claude/`.
+- digithings repo: every PR links a GitHub issue (`task/<N>-slug` branch); PRs go into `module/digichat`, never directly into `develop`; run `make score` on staged changes before the PR; the implementing PR **always requires human review** (new external network dependency, per CLAUDE.md); update `cloudflare/digichat/ARCHITECTURE.md` after interface changes; never hand-edit `.claude/`.
 - Legacy embed behavior must be byte-compatible when the registry is empty or the host is unknown: `{tenantSlug: "embed", ownerUserSub: "embed:anonymous"}`, `DIGICHAT_EMBED_ENABLED`/`X-Embed-Token` gating, digigraph backend, turn-limited client gate.
 - Backend config (relay URLs) is NEVER sent to the client; the tenant-config endpoint returns only `{slug, gateMode, theme, accent, attribution}`.
 - The external-relay path must not call `resolveDigigraphUpstreamAuth` or require any digigraph/digikey env.
@@ -48,21 +48,21 @@
    git add docs/superpowers/specs/2026-07-02-digichat-embed-external-backend-design.md \
            docs/superpowers/plans/2026-07-02-digichat-embed-external-backend.md
    git commit -m "docs(digichat): spec + plan for pluggable embed backends [#<N>]"
-   cd frontend/digichat && npm ci   # workspace deps (run from repo root if workspaces hoist: npm ci at root)
+   cd cloudflare/digichat && npm ci   # workspace deps (run from repo root if workspaces hoist: npm ci at root)
    ```
-4. **Test command sanity check:** `cd frontend/digichat && npx vitest run src/lib/embed-ip-rate-limit.test.ts` — expect PASS (proves the vitest setup works before you write anything).
+4. **Test command sanity check:** `cd cloudflare/digichat && npx vitest run src/lib/embed-ip-rate-limit.test.ts` — expect PASS (proves the vitest setup works before you write anything).
 5. Group B (Tasks 11–13) runs in `~/Code/datatap-web` on the existing `feat/digichat` branch. Tasks 11–12 are buildable anytime; **Task 13 is blocked until a deployed digichat embed URL exists** (Epic #1248 Phase 3 or an interim deployment — outside this plan).
 
 ---
 
-## Group A — digithings (`~/Code/digithings`, all paths relative to `frontend/digichat/`)
+## Group A — digithings (`~/Code/digithings`, all paths relative to `cloudflare/digichat/`)
 
 ### Task 1: Embed tenant registry module
 
 **Repo:** digithings
 **Files:**
-- Create: `frontend/digichat/src/lib/embed-tenants.ts`
-- Test: `frontend/digichat/src/lib/embed-tenants.test.ts`
+- Create: `cloudflare/digichat/src/lib/embed-tenants.ts`
+- Test: `cloudflare/digichat/src/lib/embed-tenants.test.ts`
 
 **Interfaces:**
 - Produces: `EmbedTenantConfig`, `EmbedBackendConfig` types; `normalizeEmbedHost(input: string | null | undefined): string | null`; `parseEmbedTenants(raw: string | undefined): Map<string, EmbedTenantConfig>`; `getEmbedTenantRegistry(): Map<string, EmbedTenantConfig>`; `resolveEmbedTenantByHost(hostOrOrigin: string | null | undefined): EmbedTenantConfig | null`; `resetEmbedTenantRegistryForTests(): void`. Consumed by Tasks 2, 4, 6.
@@ -70,7 +70,7 @@
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// frontend/digichat/src/lib/embed-tenants.test.ts
+// cloudflare/digichat/src/lib/embed-tenants.test.ts
 import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   parseEmbedTenants,
@@ -222,13 +222,13 @@ describe("resolveEmbedTenantByHost", () => {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `cd ~/Code/digithings/frontend/digichat && npx vitest run src/lib/embed-tenants.test.ts`
+Run: `cd ~/Code/digithings/cloudflare/digichat && npx vitest run src/lib/embed-tenants.test.ts`
 Expected: FAIL — cannot resolve `./embed-tenants`.
 
 - [ ] **Step 3: Write the implementation**
 
 ```ts
-// frontend/digichat/src/lib/embed-tenants.ts
+// cloudflare/digichat/src/lib/embed-tenants.ts
 /**
  * Embed tenant registry — one env var (DIGICHAT_EMBED_TENANTS, JSON keyed by
  * hostname) drives embed host→tenant resolution, backend routing, gate mode,
@@ -406,7 +406,7 @@ Expected: PASS (all tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/embed-tenants.ts frontend/digichat/src/lib/embed-tenants.test.ts
+git add cloudflare/digichat/src/lib/embed-tenants.ts cloudflare/digichat/src/lib/embed-tenants.test.ts
 git commit -m "feat(digichat): embed tenant registry from DIGICHAT_EMBED_TENANTS env [#<N>]"
 ```
 
@@ -414,8 +414,8 @@ git commit -m "feat(digichat): embed tenant registry from DIGICHAT_EMBED_TENANTS
 
 **Repo:** digithings
 **Files:**
-- Modify: `frontend/digichat/src/lib/security-headers.ts`
-- Test: `frontend/digichat/src/lib/security-headers.test.ts` (extend, keep existing assertions)
+- Modify: `cloudflare/digichat/src/lib/security-headers.ts`
+- Test: `cloudflare/digichat/src/lib/security-headers.test.ts` (extend, keep existing assertions)
 
 **Interfaces:**
 - Consumes: `getEmbedTenantRegistry`, `resetEmbedTenantRegistryForTests` (Task 1).
@@ -424,7 +424,7 @@ git commit -m "feat(digichat): embed tenant registry from DIGICHAT_EMBED_TENANTS
 - [ ] **Step 1: Extend the test file** (add to the existing `security-headers.test.ts`; do not delete existing tests — they pin the first-party behavior with an empty registry)
 
 ```ts
-// Append to frontend/digichat/src/lib/security-headers.test.ts
+// Append to cloudflare/digichat/src/lib/security-headers.test.ts
 import { afterEach as afterEach2, vi as vi2 } from "vitest"; // if imports exist already, just reuse them
 import { resetEmbedTenantRegistryForTests } from "./embed-tenants";
 import { embedFrameAncestors, embedFrameAncestorsCsp } from "./security-headers";
@@ -518,7 +518,7 @@ Expected: PASS (old + new).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/security-headers.ts frontend/digichat/src/lib/security-headers.test.ts
+git add cloudflare/digichat/src/lib/security-headers.ts cloudflare/digichat/src/lib/security-headers.test.ts
 git commit -m "feat(digichat): derive embed frame-ancestors from the tenant registry [#<N>]"
 ```
 
@@ -526,8 +526,8 @@ git commit -m "feat(digichat): derive embed frame-ancestors from the tenant regi
 
 **Repo:** digithings
 **Files:**
-- Create: `frontend/digichat/src/lib/external-relay-stream.ts`
-- Test: `frontend/digichat/src/lib/external-relay-stream.test.ts`
+- Create: `cloudflare/digichat/src/lib/external-relay-stream.ts`
+- Test: `cloudflare/digichat/src/lib/external-relay-stream.test.ts`
 
 **Interfaces:**
 - Produces: `parseRelaySse(body: ReadableStream<Uint8Array>): AsyncGenerator<RelayEvent>` where `RelayEvent = {event: string; data: Record<string, unknown>}`; `lastUserMessageText(messages: UIMessage[]): string`; `createExternalRelayStreamResponse(opts: {relayUrl: string; messages: UIMessage[]; conversationId: string | null; responseHeaders: Record<string, string>; signal?: AbortSignal}): Promise<Response>`. Consumed by Task 5.
@@ -536,7 +536,7 @@ git commit -m "feat(digichat): derive embed frame-ancestors from the tenant regi
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// frontend/digichat/src/lib/external-relay-stream.test.ts
+// cloudflare/digichat/src/lib/external-relay-stream.test.ts
 import { describe, it, expect, afterEach, vi } from "vitest";
 import type { UIMessage } from "ai";
 import {
@@ -702,7 +702,7 @@ Expected: FAIL — cannot resolve `./external-relay-stream`.
 - [ ] **Step 3: Implement**
 
 ```ts
-// frontend/digichat/src/lib/external-relay-stream.ts
+// cloudflare/digichat/src/lib/external-relay-stream.ts
 /**
  * External relay backend adapter: translates the DataTapStream-style relay
  * SSE contract (event: conversation|text-delta|trace|done|error) into an AI
@@ -860,7 +860,7 @@ Expected: PASS. If the error-part test fails on the exact chunk shape, inspect t
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/external-relay-stream.ts frontend/digichat/src/lib/external-relay-stream.test.ts
+git add cloudflare/digichat/src/lib/external-relay-stream.ts cloudflare/digichat/src/lib/external-relay-stream.test.ts
 git commit -m "feat(digichat): external-relay SSE stream adapter [#<N>]"
 ```
 
@@ -868,8 +868,8 @@ git commit -m "feat(digichat): external-relay SSE stream adapter [#<N>]"
 
 **Repo:** digithings
 **Files:**
-- Modify: `frontend/digichat/src/lib/embed-chat-tenant.ts`
-- Test: `frontend/digichat/src/lib/embed-chat-tenant.test.ts` (create if absent; if a test file already exists, extend it and keep its cases green)
+- Modify: `cloudflare/digichat/src/lib/embed-chat-tenant.ts`
+- Test: `cloudflare/digichat/src/lib/embed-chat-tenant.test.ts` (create if absent; if a test file already exists, extend it and keep its cases green)
 
 **Interfaces:**
 - Consumes: `resolveEmbedTenantByHost`, `EmbedTenantConfig` (Task 1).
@@ -878,7 +878,7 @@ git commit -m "feat(digichat): external-relay SSE stream adapter [#<N>]"
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-// frontend/digichat/src/lib/embed-chat-tenant.test.ts
+// cloudflare/digichat/src/lib/embed-chat-tenant.test.ts
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { resolveEmbedChatTenant, embedHostOf } from "./embed-chat-tenant";
 import { resetEmbedTenantRegistryForTests } from "./embed-tenants";
@@ -992,7 +992,7 @@ Expected: PASS. The widened return type is structurally compatible — `route.ts
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/lib/embed-chat-tenant.ts frontend/digichat/src/lib/embed-chat-tenant.test.ts
+git add cloudflare/digichat/src/lib/embed-chat-tenant.ts cloudflare/digichat/src/lib/embed-chat-tenant.test.ts
 git commit -m "feat(digichat): resolve embed tenants from the registry in /api/chat context [#<N>]"
 ```
 
@@ -1000,8 +1000,8 @@ git commit -m "feat(digichat): resolve embed tenants from the registry in /api/c
 
 **Repo:** digithings
 **Files:**
-- Modify: `frontend/digichat/src/app/api/chat/route.ts`
-- Test: `frontend/digichat/src/app/api/chat/route.test.ts` (extend — follow the file's existing mocking patterns exactly)
+- Modify: `cloudflare/digichat/src/app/api/chat/route.ts`
+- Test: `cloudflare/digichat/src/app/api/chat/route.test.ts` (extend — follow the file's existing mocking patterns exactly)
 
 **Interfaces:**
 - Consumes: `createExternalRelayStreamResponse` (Task 3), `embedConfig` on the tenant context (Task 4).
@@ -1011,7 +1011,7 @@ git commit -m "feat(digichat): resolve embed tenants from the registry in /api/c
 - [ ] **Step 2: Add the failing tests**
 
 ```ts
-// Add to frontend/digichat/src/app/api/chat/route.test.ts
+// Add to cloudflare/digichat/src/app/api/chat/route.test.ts
 import { resetEmbedTenantRegistryForTests } from "@/lib/embed-tenants";
 
 const RELAY_REGISTRY = JSON.stringify({
@@ -1122,7 +1122,7 @@ Expected: PASS — new test and all pre-existing tests (embed IP rate limiting, 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/digichat/src/app/api/chat/route.ts frontend/digichat/src/app/api/chat/route.test.ts
+git add cloudflare/digichat/src/app/api/chat/route.ts cloudflare/digichat/src/app/api/chat/route.test.ts
 git commit -m "feat(digichat): route external-relay embed tenants through the relay adapter [#<N>]"
 ```
 
@@ -1130,8 +1130,8 @@ git commit -m "feat(digichat): route external-relay embed tenants through the re
 
 **Repo:** digithings
 **Files:**
-- Create: `frontend/digichat/src/app/api/embed/tenant-config/route.ts`
-- Test: `frontend/digichat/src/app/api/embed/tenant-config/route.test.ts`
+- Create: `cloudflare/digichat/src/app/api/embed/tenant-config/route.ts`
+- Test: `cloudflare/digichat/src/app/api/embed/tenant-config/route.test.ts`
 
 **Interfaces:**
 - Consumes: `resolveEmbedTenantByHost` (Task 1), `embedHostOf` (Task 4).
@@ -1140,7 +1140,7 @@ git commit -m "feat(digichat): route external-relay embed tenants through the re
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// frontend/digichat/src/app/api/embed/tenant-config/route.test.ts
+// cloudflare/digichat/src/app/api/embed/tenant-config/route.test.ts
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { GET } from "./route";
 import { resetEmbedTenantRegistryForTests } from "@/lib/embed-tenants";
@@ -1205,7 +1205,7 @@ Expected: FAIL — module not found.
 - [ ] **Step 3: Implement**
 
 ```ts
-// frontend/digichat/src/app/api/embed/tenant-config/route.ts
+// cloudflare/digichat/src/app/api/embed/tenant-config/route.ts
 import { resolveEmbedTenantByHost } from "@/lib/embed-tenants";
 import { embedHostOf } from "@/lib/embed-chat-tenant";
 
@@ -1236,7 +1236,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/app/api/embed/tenant-config
+git add cloudflare/digichat/src/app/api/embed/tenant-config
 git commit -m "feat(digichat): client-safe embed tenant-config endpoint [#<N>]"
 ```
 
@@ -1244,8 +1244,8 @@ git commit -m "feat(digichat): client-safe embed tenant-config endpoint [#<N>]"
 
 **Repo:** digithings
 **Files:**
-- Create: `frontend/digichat/src/hooks/use-embed-tenant-config.ts`
-- Modify: `frontend/digichat/src/app/embed/page.tsx`
+- Create: `cloudflare/digichat/src/hooks/use-embed-tenant-config.ts`
+- Modify: `cloudflare/digichat/src/app/embed/page.tsx`
 
 **Interfaces:**
 - Consumes: `GET /api/embed/tenant-config` (Task 6).
@@ -1256,7 +1256,7 @@ Note: this app has no React component test infra (no @testing-library). The hook
 - [ ] **Step 1: Create the hook**
 
 ```ts
-// frontend/digichat/src/hooks/use-embed-tenant-config.ts
+// cloudflare/digichat/src/hooks/use-embed-tenant-config.ts
 "use client";
 
 import { useEffect, useState } from "react";
@@ -1413,7 +1413,7 @@ Expected: clean lint; all unit tests pass (page has no unit tests; this catches 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/hooks/use-embed-tenant-config.ts frontend/digichat/src/app/embed/page.tsx
+git add cloudflare/digichat/src/hooks/use-embed-tenant-config.ts cloudflare/digichat/src/app/embed/page.tsx
 git commit -m "feat(digichat): config-driven embed gate/theme/accent/attribution [#<N>]"
 ```
 
@@ -1421,7 +1421,7 @@ git commit -m "feat(digichat): config-driven embed gate/theme/accent/attribution
 
 **Repo:** digithings
 **Files:**
-- Modify: `frontend/digichat/src/app/embed/page.tsx`
+- Modify: `cloudflare/digichat/src/app/embed/page.tsx`
 
 **Interfaces:**
 - Consumes: `data-digigraphTrace` and `data-externalConversation` stream parts (Task 3); `gate.host` from `useEmbedGate`.
@@ -1546,7 +1546,7 @@ Then `npm run dev` → `http://127.0.0.1:3005/embed`: legacy embed still renders
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/digichat/src/app/embed/page.tsx
+git add cloudflare/digichat/src/app/embed/page.tsx
 git commit -m "feat(digichat): embed markdown rendering, activity box, relay conversation continuity [#<N>]"
 ```
 
@@ -1554,8 +1554,8 @@ git commit -m "feat(digichat): embed markdown rendering, activity box, relay con
 
 **Repo:** digithings
 **Files:**
-- Modify: `frontend/digichat/ARCHITECTURE.md` (required by repo rules after interface changes)
-- Modify: `frontend/digichat/README.md` (env var table/section, if one exists — otherwise ARCHITECTURE.md's env section only)
+- Modify: `cloudflare/digichat/ARCHITECTURE.md` (required by repo rules after interface changes)
+- Modify: `cloudflare/digichat/README.md` (env var table/section, if one exists — otherwise ARCHITECTURE.md's env section only)
 
 - [ ] **Step 1: ARCHITECTURE.md.** Add a subsection at the end of "5. Internal Architecture":
 
@@ -1600,7 +1600,7 @@ there is no open-proxy/SSRF surface. First consumer: DataTapStream
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/digichat/ARCHITECTURE.md frontend/digichat/README.md
+git add cloudflare/digichat/ARCHITECTURE.md cloudflare/digichat/README.md
 git commit -m "docs(digichat): document embed tenant registry + external backends [#<N>]"
 ```
 
@@ -1611,7 +1611,7 @@ git commit -m "docs(digichat): document embed tenant registry + external backend
 - [ ] **Step 1: Full unit suite + lint + build**
 
 ```bash
-cd ~/Code/digithings/frontend/digichat
+cd ~/Code/digithings/cloudflare/digichat
 npx vitest run && npm run lint && npm run build
 ```
 Expected: everything green. (`npm run build` needs no registry env — empty registry is valid.)

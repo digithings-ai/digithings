@@ -1,10 +1,18 @@
 """Thread-safe per-run LLM/search usage accumulator (#663).
 
-A process-global, opt-in sink: ``start()`` activates capture for a run, the LLM
-helpers (``chat_completion`` / ``web_search`` / ``x_search``) call ``record(...)``,
+By default a process-global, opt-in sink: ``start()`` activates capture for a run, the
+LLM helpers (``chat_completion`` / ``web_search`` / ``x_search``) call ``record(...)``,
 and the pipeline reads ``snapshot()`` at run end to write a diagnostics row.
 No-op until ``start()`` so library callers pay nothing. Phases may fan out across
 threads, so all mutation is under a lock.
+
+That global is deliberately one-run-per-process -- the portfolio chain and the research
+diagnostics writer pair ``start()`` with ``reset()`` once each. Concurrent HTTP streams
+cannot share it: two overlapping responses would record into one buffer and whichever
+finishes first would clear the other's totals (#3982). Those callers bind a
+:class:`UsageRun` with :func:`bind_run` before the worker thread's
+``contextvars.copy_context()`` snapshot instead; every ``record(...)`` reached from that
+context lands in the request's own buffers, and the module-global state is untouched.
 """
 
 from __future__ import annotations
@@ -12,7 +20,7 @@ from __future__ import annotations
 import logging
 import threading
 from contextlib import contextmanager
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from datetime import datetime, timezone
 from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous call records
@@ -139,6 +147,14 @@ class LogicalCallContext(BaseModel):
 
 _LOGICAL_CALL_CONTEXT: ContextVar[LogicalCallContext | None] = ContextVar(
     "digigraph_usage_logical_call_context",
+    default=None,
+)
+
+# Request-scoped accumulator selected by ``bind_run`` (#3982). ``None`` routes every
+# recorder to the process-global buffers above, preserving the start()/reset() contract
+# the portfolio chain and research diagnostics rely on.
+_SCOPED_RUN: ContextVar["UsageRun | None"] = ContextVar(
+    "digigraph_usage_scoped_run",
     default=None,
 )
 
@@ -307,37 +323,30 @@ def is_active() -> bool:
     return _ACTIVE
 
 
-def record(
+def _record_call_into(
     *,
+    calls: list[dict[str, Any]],
+    events: list[RunCallEvent],
+    empty_retries: dict[str, int],
+    lock: threading.Lock,
     kind: str,
     model: str,
-    prompt_tokens: int | None = None,
-    completion_tokens: int | None = None,
-    cached_tokens: int | None = None,
-    cost: float | None = None,
-    sources: int = 0,
-    ok: bool = True,
-    duration_ms: int | None = None,
-    retry_count: int = 0,
-    call_id: UUID | str | None = None,
-    attempt_id: UUID | str | None = None,
-    node_run_id: UUID | str | None = None,
-    **_ignored: Any,
+    prompt_tokens: int | None,
+    completion_tokens: int | None,
+    cached_tokens: int | None,
+    cost: float | None,
+    sources: int,
+    ok: bool,
+    duration_ms: int | None,
+    retry_count: int,
+    call_id: UUID | str | None,
+    attempt_id: UUID | str | None,
+    node_run_id: UUID | str | None,
 ) -> None:
-    """Record one LLM/search call. No-op unless capture is active.
-
-    ``cached_tokens`` is the prompt-cache-hit portion of ``prompt_tokens`` (OpenRouter
-    ``prompt_tokens_details.cached_tokens``) — surfaced so a run can show how much of the
-    repeated shared-context prefix was billed at the cheaper cached rate. ``cost`` is the actual
-    USD charged when the provider reports it; ``None`` when unknown (never fabricate 0 on the
-    glass-box event path — WP1 / #2763). Aggregate run totals still treat missing as 0 for
-    diagnostics counters only. ``call_id`` / ``attempt_id`` soft-stamp the WP1 ledger (067).
-    ``**_ignored`` keeps the observer forward-compatible with future digillm fields."""
-    if not _ACTIVE:
-        return
+    """Append one call to the given buffers; shared by the global and scoped runs."""
     if kind == "empty_retry":
-        with _LOCK:
-            _EMPTY_RETRIES[model] = _EMPTY_RETRIES.get(model, 0) + 1
+        with lock:
+            empty_retries[model] = empty_retries.get(model, 0) + 1
         return
     context = _CALL_CONTEXT.get()
     event_kind: Literal["model_call", "search_call"] = (
@@ -357,9 +366,9 @@ def record(
     stamped_call = _optional_uuid(call_id)
     stamped_attempt = _optional_uuid(attempt_id)
     stamped_node = _optional_uuid(node_run_id if node_run_id is not None else context.node_run_id)
-    with _LOCK:
+    with lock:
         # Aggregate counters: missing usage contributes 0 to run totals (diagnostics only).
-        _CALLS.append(
+        calls.append(
             {
                 "kind": kind,
                 "model": model,
@@ -371,9 +380,9 @@ def record(
                 "ok": bool(ok),
             }
         )
-        _EVENTS.append(
+        events.append(
             RunCallEvent(
-                sequence=len(_EVENTS) + 1,
+                sequence=len(events) + 1,
                 kind=event_kind,
                 phase=context.phase,
                 operation=context.operation,
@@ -400,17 +409,108 @@ def record(
         )
 
 
-def observe_telemetry(record: TelemetryRecord) -> None:
-    """Collect strict logical/attempt records for the active run without persistence."""
+def record(
+    *,
+    kind: str,
+    model: str,
+    prompt_tokens: int | None = None,
+    completion_tokens: int | None = None,
+    cached_tokens: int | None = None,
+    cost: float | None = None,
+    sources: int = 0,
+    ok: bool = True,
+    duration_ms: int | None = None,
+    retry_count: int = 0,
+    call_id: UUID | str | None = None,
+    attempt_id: UUID | str | None = None,
+    node_run_id: UUID | str | None = None,
+    **_ignored: Any,
+) -> None:
+    """Record one LLM/search call. No-op unless capture is active.
+
+    ``cached_tokens`` is the prompt-cache-hit portion of ``prompt_tokens`` (OpenRouter
+    ``prompt_tokens_details.cached_tokens``) — surfaced so a run can show how much of the
+    repeated shared-context prefix was billed at the cheaper cached rate. ``cost`` is the actual
+    USD charged when the provider reports it; ``None`` when unknown (never fabricate 0 on the
+    glass-box event path — WP1 / #2763). Aggregate run totals still treat missing as 0 for
+    diagnostics counters only. ``call_id`` / ``attempt_id`` soft-stamp the WP1 ledger (067).
+    ``**_ignored`` keeps the observer forward-compatible with future digillm fields.
+
+    A request-scoped run bound by :func:`bind_run` takes precedence over the global
+    accumulator, so concurrent streams never share buffers (#3982)."""
+    scoped = _SCOPED_RUN.get()
+    if scoped is not None:
+        scoped.record(
+            kind=kind,
+            model=model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cached_tokens=cached_tokens,
+            cost=cost,
+            sources=sources,
+            ok=ok,
+            duration_ms=duration_ms,
+            retry_count=retry_count,
+            call_id=call_id,
+            attempt_id=attempt_id,
+            node_run_id=node_run_id,
+        )
+        return
     if not _ACTIVE:
         return
-    with _LOCK:
+    _record_call_into(
+        calls=_CALLS,
+        events=_EVENTS,
+        empty_retries=_EMPTY_RETRIES,
+        lock=_LOCK,
+        kind=kind,
+        model=model,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        cached_tokens=cached_tokens,
+        cost=cost,
+        sources=sources,
+        ok=ok,
+        duration_ms=duration_ms,
+        retry_count=retry_count,
+        call_id=call_id,
+        attempt_id=attempt_id,
+        node_run_id=node_run_id,
+    )
+
+
+def _observe_telemetry_into(
+    *,
+    provider_calls: list[ProviderCallRecord],
+    provider_attempts: list[ProviderAttemptRecord],
+    node_runs: list[NodeRunRecord],
+    lock: threading.Lock,
+    record: TelemetryRecord,
+) -> None:
+    with lock:
         if isinstance(record, ProviderCallRecord):
-            _PROVIDER_CALLS.append(record)
+            provider_calls.append(record)
         elif isinstance(record, ProviderAttemptRecord):
-            _PROVIDER_ATTEMPTS.append(record)
+            provider_attempts.append(record)
         elif isinstance(record, NodeRunRecord):
-            _NODE_RUNS.append(record)
+            node_runs.append(record)
+
+
+def observe_telemetry(record: TelemetryRecord) -> None:
+    """Collect strict logical/attempt records for the active run without persistence."""
+    scoped = _SCOPED_RUN.get()
+    if scoped is not None:
+        scoped.observe(record)
+        return
+    if not _ACTIVE:
+        return
+    _observe_telemetry_into(
+        provider_calls=_PROVIDER_CALLS,
+        provider_attempts=_PROVIDER_ATTEMPTS,
+        node_runs=_NODE_RUNS,
+        lock=_LOCK,
+        record=record,
+    )
 
 
 class DetailedUsageObserver:
@@ -525,15 +625,18 @@ def detailed_usage_projection() -> dict[str, int | float | None]:
         for call in aggregate_calls
         if call.call_id in attempts_by_call
     ]
-    search_purposes = {CallPurpose.WEB_GROUNDING, CallPurpose.X_GROUNDING}
-    llm_call_ids = {call.call_id for call in aggregate_calls if call.purpose not in search_purposes}
-    llm_attempts = [attempt for attempt in successful_attempts if attempt.call_id in llm_call_ids]
+    search_purposes = {CallPurpose.WEB_SEARCH, CallPurpose.X_SEARCH}
+    # Tool search counts toward llm tokens (#3859): the first-party web_search
+    # tool is the only grounding, so token totals fold search attempts in —
+    # matching snapshot(), which sums chat + search kinds together.
     prompt_tokens = (
-        _nullable_sum([attempt.prompt_tokens for attempt in llm_attempts]) if llm_call_ids else 0
+        _nullable_sum([attempt.prompt_tokens for attempt in successful_attempts])
+        if aggregate_calls
+        else 0
     )
     completion_tokens = (
-        _nullable_sum([attempt.completion_tokens for attempt in llm_attempts])
-        if llm_call_ids
+        _nullable_sum([attempt.completion_tokens for attempt in successful_attempts])
+        if aggregate_calls
         else 0
     )
     cost_usd = _nullable_sum(
@@ -615,26 +718,25 @@ def _tool_output_summary(result: Any, ok: bool) -> str:
     return f"Returned {type(result).__name__}"
 
 
-def record_tool_call(
+def _record_tool_call_into(
     *,
+    events: list[RunCallEvent],
+    lock: threading.Lock,
     name: str,
     arguments: Any,
-    result: Any = None,
-    duration_ms: int | None = None,
-    ok: bool = True,
-    retry_count: int = 0,
-    phase: str | None = None,
-    operation: str | None = None,
-    document_key: str | None = None,
+    result: Any,
+    duration_ms: int | None,
+    ok: bool,
+    retry_count: int,
+    phase: str | None,
+    operation: str | None,
+    document_key: str | None,
 ) -> None:
-    """Record one tool execution using shape summaries only, never argument/result values."""
-    if not _ACTIVE:
-        return
     context = _CALL_CONTEXT.get()
-    with _LOCK:
-        _EVENTS.append(
+    with lock:
+        events.append(
             RunCallEvent(
-                sequence=len(_EVENTS) + 1,
+                sequence=len(events) + 1,
                 kind="tool_call",
                 phase=_bounded(phase, _PHASE_MAX) if phase is not None else context.phase,
                 operation=(
@@ -658,28 +760,68 @@ def record_tool_call(
         )
 
 
+def record_tool_call(
+    *,
+    name: str,
+    arguments: Any,
+    result: Any = None,
+    duration_ms: int | None = None,
+    ok: bool = True,
+    retry_count: int = 0,
+    phase: str | None = None,
+    operation: str | None = None,
+    document_key: str | None = None,
+) -> None:
+    """Record one tool execution using shape summaries only, never argument/result values."""
+    scoped = _SCOPED_RUN.get()
+    if scoped is not None:
+        scoped.record_tool_call(
+            name=name,
+            arguments=arguments,
+            result=result,
+            duration_ms=duration_ms,
+            ok=ok,
+            retry_count=retry_count,
+            phase=phase,
+            operation=operation,
+            document_key=document_key,
+        )
+        return
+    if not _ACTIVE:
+        return
+    _record_tool_call_into(
+        events=_EVENTS,
+        lock=_LOCK,
+        name=name,
+        arguments=arguments,
+        result=result,
+        duration_ms=duration_ms,
+        ok=ok,
+        retry_count=retry_count,
+        phase=phase,
+        operation=operation,
+        document_key=document_key,
+    )
+
+
 def events_snapshot() -> list[dict[str, Any]]:
     """Return an ordered, body-free copy of the current run's call events."""
     with _LOCK:
         return [event.model_dump(mode="json") for event in _EVENTS]
 
 
-def _empty_retries_payload() -> dict[str, Any]:
-    with _LOCK:
-        by_model = dict(sorted(_EMPTY_RETRIES.items()))
-    total = sum(by_model.values())
-    return {"total": total, "by_model": by_model}
-
-
-def snapshot() -> dict[str, Any]:
-    """Aggregate the recorded calls into run-level totals + a per-kind breakdown."""
-    with _LOCK:
-        calls = list(_CALLS)
+def _aggregate_snapshot(
+    *,
+    calls: list[dict[str, Any]],
+    event_dumps: list[dict[str, Any]],
+    empty_retries: dict[str, int],
+) -> dict[str, Any]:
+    """Pure aggregation shared by the global and request-scoped runs."""
     chat = [c for c in calls if c["kind"] == "chat"]
     search = [c for c in calls if c["kind"] in _SEARCH_KINDS]
-    prompt = sum(c["prompt_tokens"] for c in chat)
-    completion = sum(c["completion_tokens"] for c in chat)
-    cached = sum(c.get("cached_tokens", 0) for c in chat)
+    prompt = sum(c["prompt_tokens"] for c in chat + search)
+    completion = sum(c["completion_tokens"] for c in chat + search)
+    cached = sum(c.get("cached_tokens", 0) for c in chat + search)
     cost = sum(c.get("cost", 0.0) for c in calls)
     by_kind: dict[str, dict[str, float]] = {}
     for c in calls:
@@ -715,6 +857,153 @@ def snapshot() -> dict[str, Any]:
         "grounding_failed": sum(1 for c in search if not c["ok"]),
         "models": sorted({c["model"] for c in calls}),
         "by_kind": by_kind,
-        "empty_retries": _empty_retries_payload(),
-        "events": events_snapshot(),
+        "empty_retries": {"total": sum(empty_retries.values()), "by_model": empty_retries},
+        "events": event_dumps,
     }
+
+
+def snapshot() -> dict[str, Any]:
+    """Aggregate the recorded calls into run-level totals + a per-kind breakdown."""
+    with _LOCK:
+        calls = list(_CALLS)
+        event_dumps = [event.model_dump(mode="json") for event in _EVENTS]
+        empty_retries = dict(sorted(_EMPTY_RETRIES.items()))
+    return _aggregate_snapshot(calls=calls, event_dumps=event_dumps, empty_retries=empty_retries)
+
+
+class UsageRun:
+    """Request-scoped accumulator that never touches the process-global buffers.
+
+    Bind one with :func:`bind_run` before a worker thread's
+    ``contextvars.copy_context()`` snapshot; every ``record`` / ``record_tool_call`` /
+    telemetry observation reached from that context lands here. Overlapping HTTP
+    streams therefore keep independent totals, and one response can neither read nor
+    clear another's (#3982). Mutation stays under a per-run lock because a bound run is
+    shared by every thread the worker's copied context reaches.
+    """
+
+    def __init__(self, *, run_id: str | None = None) -> None:
+        raw = str(run_id) if run_id is not None else ""
+        self._lock = threading.Lock()
+        self._run_id = raw if raw.strip() else None
+        self._calls: list[dict[str, Any]] = []
+        self._events: list[RunCallEvent] = []
+        self._provider_calls: list[ProviderCallRecord] = []
+        self._provider_attempts: list[ProviderAttemptRecord] = []
+        self._node_runs: list[NodeRunRecord] = []
+        self._empty_retries: dict[str, int] = {}
+
+    @property
+    def run_id(self) -> str | None:
+        return self._run_id
+
+    def record(
+        self,
+        *,
+        kind: str,
+        model: str,
+        prompt_tokens: int | None = None,
+        completion_tokens: int | None = None,
+        cached_tokens: int | None = None,
+        cost: float | None = None,
+        sources: int = 0,
+        ok: bool = True,
+        duration_ms: int | None = None,
+        retry_count: int = 0,
+        call_id: UUID | str | None = None,
+        attempt_id: UUID | str | None = None,
+        node_run_id: UUID | str | None = None,
+        **_ignored: Any,
+    ) -> None:
+        """Record one call into this run's buffers; always active."""
+        _record_call_into(
+            calls=self._calls,
+            events=self._events,
+            empty_retries=self._empty_retries,
+            lock=self._lock,
+            kind=kind,
+            model=model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cached_tokens=cached_tokens,
+            cost=cost,
+            sources=sources,
+            ok=ok,
+            duration_ms=duration_ms,
+            retry_count=retry_count,
+            call_id=call_id,
+            attempt_id=attempt_id,
+            node_run_id=node_run_id,
+        )
+
+    def record_tool_call(
+        self,
+        *,
+        name: str,
+        arguments: Any,
+        result: Any = None,
+        duration_ms: int | None = None,
+        ok: bool = True,
+        retry_count: int = 0,
+        phase: str | None = None,
+        operation: str | None = None,
+        document_key: str | None = None,
+    ) -> None:
+        _record_tool_call_into(
+            events=self._events,
+            lock=self._lock,
+            name=name,
+            arguments=arguments,
+            result=result,
+            duration_ms=duration_ms,
+            ok=ok,
+            retry_count=retry_count,
+            phase=phase,
+            operation=operation,
+            document_key=document_key,
+        )
+
+    def observe(self, record: TelemetryRecord) -> None:
+        """Strict-observer entry point for this run's logical/attempt telemetry."""
+        _observe_telemetry_into(
+            provider_calls=self._provider_calls,
+            provider_attempts=self._provider_attempts,
+            node_runs=self._node_runs,
+            lock=self._lock,
+            record=record,
+        )
+
+    def events_snapshot(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [event.model_dump(mode="json") for event in self._events]
+
+    def node_runs_snapshot(self) -> list[NodeRunRecord]:
+        with self._lock:
+            return list(self._node_runs)
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            calls = list(self._calls)
+            event_dumps = [event.model_dump(mode="json") for event in self._events]
+            empty_retries = dict(sorted(self._empty_retries.items()))
+        return _aggregate_snapshot(
+            calls=calls, event_dumps=event_dumps, empty_retries=empty_retries
+        )
+
+
+def bind_run(run: UsageRun | None) -> Token:
+    """Install ``run`` as the current context's accumulator, returning its reset token.
+
+    The streaming caller binds, takes ``contextvars.copy_context()``, then resets the
+    token in the same frame: the copy the worker thread starts with keeps ``run``,
+    while the caller's own context is restored (a plain ``list(stream)`` consumer in
+    tests shares that context and would otherwise leak the binding into later work).
+    Set and reset must stay in one frame -- a token cannot be reset from a different
+    Context.
+    """
+    return _SCOPED_RUN.set(run)
+
+
+def unbind_run(token: Token) -> None:
+    """Undo :func:`bind_run` in the context that minted ``token``."""
+    _SCOPED_RUN.reset(token)

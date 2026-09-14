@@ -1,4 +1,4 @@
-# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
+# Production clock: Cloudflare Worker digithings-cron (cloudflare/digithings-cron). Schedule removed #3579.
 name: "Smoke: site"
 
 # Post-deploy smoke check for the static sites. Both digithings.ai and
@@ -61,7 +61,7 @@ jobs:
                 fail=1 ;;
             esac
           }
-          # digithings.ai — Next.js static export (frontend/digithings-web).
+          # digithings.ai — Next.js static export (cloudflare/digithings-web).
           probe "https://digithings.ai/" "text/html"
           # A second prerendered route. /modules/* was removed in the design
           # epic (#1414) — module detail pages folded into the home-page terminal
@@ -78,7 +78,7 @@ jobs:
           # Brand OG cards live at the export root (not /design/assets/); the
           # old path 404'd and kept #800 open as a daily false alarm.
           probe "https://digithings.ai/og.png" "image/png"
-          # digiquant.io — Next.js static export (frontend/digiquant-web) +
+          # digiquant.io — Next.js static export (cloudflare/digiquant-web) +
           # dashboard at basePath /dashboard. /dashboard/ is retired (no 308).
           probe "https://digiquant.io/" "text/html"
           probe "https://digiquant.io/dashboard/" "text/html"

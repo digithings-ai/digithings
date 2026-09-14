@@ -71,7 +71,10 @@ rm -f "$PIDFILE"
 append_pid() { echo "$1" >> "$PIDFILE"; }
 
 export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-sqlite:///${ROOT}/.local_digikey.sqlite}"
+# dev only: host-native stack has no Redis blocklist and no stable PEM, so opt in
+# explicitly rather than relying on the (now prod-safe) Compose defaults.
 export DIGIKEY_ALLOW_EPHEMERAL_KEY="${DIGIKEY_ALLOW_EPHEMERAL_KEY:-1}"
+export DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-0}"
 export DIGIKEY_ALLOW_DEV_GLOBAL="${DIGIKEY_ALLOW_DEV_GLOBAL:-1}"
 echo "Starting digikey on http://127.0.0.1:${PORT_DK} ..."
 "$PYTHON" -m uvicorn digikey.server:app --host 127.0.0.1 --port "$PORT_DK" &

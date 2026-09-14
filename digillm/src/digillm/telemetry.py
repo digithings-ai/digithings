@@ -21,8 +21,6 @@ class CallPurpose(StrEnum):
     STRUCTURED_REPAIR = "structured_repair"
     TOOL_SELECTION = "tool_selection"
     TOOL_FOLLOW_UP = "tool_follow_up"
-    WEB_GROUNDING = "web_grounding"
-    X_GROUNDING = "x_grounding"
     TOOL_LOOP = "tool_loop"
     WEB_SEARCH = "web_search"
     X_SEARCH = "x_search"

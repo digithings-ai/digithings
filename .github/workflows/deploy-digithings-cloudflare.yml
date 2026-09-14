@@ -7,11 +7,11 @@ name: "Deploy: digithings.ai build check"
 on:
   pull_request:
     paths:
-      - "frontend/digithings-web/**"
+      - "cloudflare/digithings-web/**"
       # digithings-web imports @digithings/digichat-ui — <DigiChatMark> in DtNav.tsx,
       # <DigiChatSession> on the /chat route, and its stylesheets in globals.css — so it
       # is a build input to this site, and has been since #1384. PR #1490 edited
-      # frontend/digichat-ui/src/DigiChatSession.tsx alongside digichat-only files,
+      # cloudflare/digichat-ui/src/DigiChatSession.tsx alongside digichat-only files,
       # matched no glob here, and ran no deploy build check; #1859 repeated it. Judge that
       # by the PR's whole file set, not by a commit: a filter sees the union of the PR's
       # paths, so a digichat-ui commit that rides along with a digithings-web edit does
@@ -30,15 +30,15 @@ on:
       # dashboard + design + web, already complete, and neither app consumes digichat-ui
       # (scripts/ci_paths.yaml's `dashboard` filter records that half; the digiquant-web half
       # is verified by there being no import of it anywhere in that app). The same file's
-      # `web` filter already lists frontend/digichat-ui/** for the reason above — added in
+      # `web` filter already lists cloudflare/digichat-ui/** for the reason above — added in
       # #1948, for the lint/test lane only. Do not read this entry as "watch every
       # workspace": the root `npm install` resolves all eight, but gating both checks on
       # all eight fires them on every unrelated workspace, which is the trade #1956
       # declines for `**/package.json`. tests/scripts/test_deploy_build_inputs.py derives
       # both closures from the manifests and asserts each filter covers its own.
-      - "frontend/digichat-ui/**"
-      - "frontend/digiweb/web/**"
-      - "frontend/digiweb/design/**"
+      - "cloudflare/digichat-ui/**"
+      - "cloudflare/digiweb/web/**"
+      - "cloudflare/digiweb/design/**"
       - "scripts/build-digithings.sh"
       # The build script's callees. Watching the caller alone leaves the gap this
       # check exists to close, and the two files below fail in different places.
@@ -102,7 +102,7 @@ on:
       # contents have changed across that span — the very trap the paragraph above
       # warns about, so do not restate it as history. The one case verified against the
       # runs API is PR #1385: a one-file PR changing only
-      # frontend/digichat/package.json, on which neither deploy check ran.
+      # cloudflare/digichat/package.json, on which neither deploy check ran.
       # Do NOT cite 92ab99b6 for this, as an earlier draft did — it looks like
       # a tidy one-file commit, but it shipped inside PR #1505 alongside
       # package-lock.json and 15 other files, and that PR's digiquant check ran and
@@ -113,13 +113,13 @@ on:
       # through this hole. The one manifest with no lane of its own was
       # digiweb/reference, named at the end of this list. (An earlier draft counted
       # digichat-ui here too; that was wrong — ci.yml's `digichat` and `web` filters both
-      # list frontend/digichat-ui/**, and both lanes install at the root.) This closes a
+      # list cloudflare/digichat-ui/**, and both lanes install at the root.) This closes a
       # structural hole before it bites. It is not the fix for an incident.
       #
       # This site's build closure, read off the @digithings/* deps, is digithings-web →
       # design + digichat-ui + web, digichat-ui → web, web → design. All four are covered
       # by the directory globs at the top of this list — digichat-ui by the entry added
-      # there, which supersedes the `frontend/digichat-ui/package.json` line #1956 added
+      # there, which supersedes the `cloudflare/digichat-ui/package.json` line #1956 added
       # here: a manifest glob is a strict subset of the directory glob, so keeping both
       # would leave a dead entry. `**/package.json` is still not the fix: it would fire
       # both deploy checks on every unrelated workspace, digigraph's vendored echarts
@@ -130,19 +130,19 @@ on:
       # workspace manifests before either site compiles, so an unresolvable range in any
       # of them fails this build even though nothing here imports that workspace. Four of
       # the eight sit outside this site's closure; three are reached by a lane that
-      # installs at the root — frontend/digichat by ci.yml's `digichat`,
-      # frontend/digiquant-web by its `web`, frontend/dashboard by its `dashboard`. Two of
+      # installs at the root — cloudflare/digichat by ci.yml's `digichat`,
+      # cloudflare/digiquant-web by its `web`, cloudflare/dashboard by its `dashboard`. Two of
       # those lanes run `npm ci`, which catches a bad range by a different route than the
       # distinction drawn above: not by resolving it, but by refusing to run at all when
       # manifest and lock disagree. Cover either way. The fourth,
-      # frontend/digiweb/reference, was in no path filter in this repo at all — of the
+      # cloudflare/digiweb/reference, was in no path filter in this repo at all — of the
       # eight it was the one manifest watched by nothing — so a bad range there *would*
       # take both production sites down with no CI job running. Counterfactual, not
       # history: nothing has reached production through this hole. (#1956 reports
       # verifying the failure empirically — ETARGET out of the root install. Not re-run
       # here; the mechanism is just what `npm install` does with a workspaces root.)
       #
-      # Only the manifest, not `frontend/digiweb/reference/**`. Nothing anywhere in CI
+      # Only the manifest, not `cloudflare/digiweb/reference/**`. Nothing anywhere in CI
       # *builds* that app; since #1981 ci.yml's `web` lane does lint and type-check it,
       # gated on that directory, which is why this filter is the narrower of the two —
       # an install input here, a lint/typecheck input there, and no `next build` in
@@ -159,8 +159,8 @@ on:
       # digithings-stack-cloudflare is an install-input workspace (CF Profile A
       # Containers Worker). Pages does not build it; name the manifest so it is
       # not an orphan under tests/scripts/test_deploy_build_inputs.py.
-      - "frontend/digithings-stack-cloudflare/package.json"
-      - "frontend/digiweb/reference/package.json"
+      - "cloudflare/digithings-stack-cloudflare/package.json"
+      - "cloudflare/digiweb/reference/package.json"
   workflow_dispatch:
 
 concurrency:

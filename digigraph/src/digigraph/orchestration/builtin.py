@@ -53,6 +53,11 @@ from digigraph.orchestration.planning_tools import (
 )
 from digigraph.orchestration.plugins import load_entrypoint_tools
 from digigraph.orchestration.registry import register_skill, register_tool
+from digigraph.orchestration.session_prefs_tools import (
+    SESSION_TOOL_NAMES,
+    SESSION_TOOL_SCHEMAS,
+    _handle_session_tool,
+)
 from digigraph.orchestration.tool_common import (  # noqa: F401
     _LLM_SEARCH_PREVIEW_CHARS,
     _LLM_SEARCH_PREVIEW_ROWS,
@@ -174,6 +179,8 @@ def _register_tools() -> None:
         WEB_SEARCH_TOOL,
         _handle_web_search,
     )
+    for name, schema in SESSION_TOOL_SCHEMAS:
+        register_tool(name, schema, _handle_session_tool)
     if federated_hub_enabled():
         register_tool(
             "digisearch_research_delegate",
@@ -229,6 +236,10 @@ def _register_skills() -> None:
         "web",
         [WEB_SEARCH_TOOL_NAME],
         when=_web_search_available,
+    )
+    register_skill(
+        "session",
+        sorted(SESSION_TOOL_NAMES),
     )
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from datetime import date as dt_date
 from datetime import datetime, timedelta, timezone
@@ -32,7 +33,13 @@ def _ensure_importable() -> None:
 # Bootstrap before importing digiquant packages — this file is also a standalone script.
 _ensure_importable()
 from digiquant.dashboard.tenancy import house_workspace_id  # noqa: E402
+from digiquant.portfolio.models.portfolio_ledger import OrderRejectionReason  # noqa: E402
 from digiquant.portfolio.models.position_event import PositionEventKind  # noqa: E402
+from digiquant.research.data.queries import (  # noqa: E402
+    r2_backend_enabled,
+    r2_manifest_seal,
+    r2_ohlcv_rows,
+)
 from digiquant.research.supabase_io import (  # noqa: E402
     SupabaseConfig,
     SupabaseNotConfiguredError,
@@ -228,6 +235,22 @@ def _parse_pct(value: Any) -> Optional[float]:
 
 
 def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
+    day = str(d)[:10]
+    if r2_backend_enabled():
+        seal, _ = r2_manifest_seal()
+        if day <= seal.isoformat():
+            try:
+                rows = r2_ohlcv_rows(tickers=[ticker], since=day, until=day)
+            except LookupError:
+                return None
+            if not rows or rows[0].get("open") is None:
+                return None
+            try:
+                price = float(rows[0]["open"])
+            except (TypeError, ValueError):
+                return None
+            return price if math.isfinite(price) and price > 0 else None
+    # same-day (or unsealed) prices come from the intraday Supabase writer (#4013 D3)
     res = (
         sb.table("price_history")
         .select("open")
@@ -471,9 +494,40 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
     lot's cost basis, and the ledger's whole numeric contract is that money never passes
     through binary floating point. Every other path in this file returns floats because
     `position_events` is a display table; this one feeds the record of what was bought.
+
+    Sealed dates read the R2 generation; same-day opens stay on the Supabase table the
+    intraday writer keeps fresh (#4013 D3). The R2 seam fetches one generation per
+    ticker and raises ``LookupError`` for an unknown one, so that branch loops per
+    ticker and skips only the unknown symbol's mark instead of declining every
+    pending order in the batch (#4013 fix round).
     """
     if not tickers:
         return {}
+    if r2_backend_enabled():
+        seal, _ = r2_manifest_seal()
+        if str(d)[:10] <= seal.isoformat():
+            rows: List[dict] = []
+            for ticker in sorted(set(tickers)):
+                try:
+                    rows.extend(
+                        r2_ohlcv_rows(tickers=[ticker], since=str(d)[:10], until=str(d)[:10])
+                    )
+                except LookupError:
+                    continue
+            marks: Dict[str, Decimal] = {}
+            for row in rows:
+                ticker = row.get("ticker")
+                raw = row.get("open")
+                if not ticker or raw is None:
+                    continue
+                try:
+                    price = Decimal(str(raw))
+                except (TypeError, ValueError, InvalidOperation):
+                    continue
+                # Stricter than the Supabase twin: non-finite marks would break PaperExecution.
+                if price.is_finite() and price > 0:
+                    marks[str(ticker).upper()] = price
+            return marks
     res = (
         sb.table("price_history")
         .select("ticker,open")
@@ -571,13 +625,31 @@ def _load_trading_calendar_rows(sb, execution_date: dt_date) -> List[Dict[str, A
         return []
 
 
+def _pageable_rejection(result: Any, run_d: str) -> Optional[str]:
+    """Drift warning for an all-rejected run, or None when it is bookkeeping (#4017).
+
+    ``stale_target`` means the order belonged to a superseded commit chain — the ledger
+    never meant it to fill on this run, so a stale-only refusal is not a missed trade.
+    Every other reason (missing mark, risk limit, insufficient cash) leaves the executed
+    book short of the committed targets and is worth failing the run for.
+    """
+    reasons = sorted({str(getattr(rejection, "reason", "")) for rejection in result.rejections})
+    if reasons == [str(OrderRejectionReason.STALE_TARGET)]:
+        return None
+    return (
+        f"the ledger was authoritative for run_date={run_d} and rejected all "
+        f"{len(result.rejections)} order(s) ({', '.join(reasons)}); the executed book "
+        f"drifted from the committed book"
+    )
+
+
 def build_events_from_paper_fills(
     sb,
     run_d: str,
     execution_d: str,
     now: Optional[datetime] = None,
     calendar_rows: Optional[List[Dict[str, Any]]] = None,
-) -> Tuple[Optional[List[Dict[str, Any]]], str]:
+) -> Tuple[Optional[List[Dict[str, Any]]], str, Optional[str]]:
     """Book the ledger's pending orders and project the fills into `position_events`.
 
     `run_d` is the decision date (the date H9 committed a chain for) and `execution_d` the
@@ -588,16 +660,21 @@ def build_events_from_paper_fills(
     gate (#3612). When omitted, rows around ``execution_d`` are loaded from Supabase
     (fail closed: empty load still enables the gate so equity orders defer).
 
-    Two different "nothing" answers, and the caller must not conflate them:
+    Three different answers, and the caller must not conflate them:
 
-    * ``(None, reason)`` — **the ledger declined to speak.** The kill switch is off, no
-      commit exists for `run_d`, a ledger read raised (the tables are not there yet), or
+    * ``(None, reason, None)`` — **the ledger declined to speak.** The kill switch is off,
+      no commit exists for `run_d`, a ledger read raised (the tables are not there yet), or
       a date argument is not a calendar date. Falling back to a prose reconstruction is
       legitimate. `reason` names which one it was, because each implies a different
       operator action.
-    * ``([], "")`` — **the ledger spoke and nothing traded.** A quiet day. HOLD continuity
-      rows still belong on the book, but reconstructing events from prose would be
-      inventing activity the authority says did not happen.
+    * ``([], "", None)`` — **the ledger spoke and nothing traded.** A quiet day. HOLD
+      continuity rows still belong on the book, but reconstructing events from prose would
+      be inventing activity the authority says did not happen.
+    * ``(events, "", pageable)`` — **the ledger spoke and refused every order.** No fill was
+      booked; ``pageable`` is a non-empty drift warning when at least one rejection implies
+      the executed book fell short of the committed targets. A ``stale_target``-only
+      refusal is superseded-chain bookkeeping and stays quiet (#4017); `main` fails the run
+      when `pageable` is set.
 
     Only the read-only probe is guarded. The `execute_pending_orders` call below is
     deliberately left bare: it *writes*, and a half-written fill must fail loudly rather
@@ -625,10 +702,10 @@ def build_events_from_paper_fills(
             ensure_legacy_opening_snapshot,
         )
     except ImportError as exc:
-        return None, f"the digiquant package is not importable from this script ({exc})"
+        return None, f"the digiquant package is not importable from this script ({exc})", None
 
     if not ledger_enabled():
-        return None, "the DIGIQUANT_PORTFOLIO_LEDGER kill switch is off"
+        return None, "the DIGIQUANT_PORTFOLIO_LEDGER kill switch is off", None
 
     # Parsed here, inside the decline contract, rather than at the first use below. This
     # function's promise to its caller is `(None, reason)` on every way the ledger can
@@ -640,7 +717,7 @@ def build_events_from_paper_fills(
         run_date = dt_date.fromisoformat(run_d)
         execution_date = dt_date.fromisoformat(execution_d)
     except (TypeError, ValueError) as exc:
-        return None, f"a date argument is not an ISO-8601 calendar date ({exc})"
+        return None, f"a date argument is not an ISO-8601 calendar date ({exc})", None
     stamp = now or datetime.now(timezone.utc)
 
     try:
@@ -648,10 +725,14 @@ def build_events_from_paper_fills(
         symbols = pending_symbols(client=sb, run_date=run_date)
         approved = approved_weights(client=sb, run_date=run_date)
     except Exception as exc:  # a missing ledger table is the pre-cutover state, not a bug
-        return None, f"a portfolio-ledger read failed, so the tables are likely absent ({exc})"
+        return (
+            None,
+            f"a portfolio-ledger read failed, so the tables are likely absent ({exc})",
+            None,
+        )
 
     if not authoritative:
-        return None, f"no portfolio_ledger_commits row for run_date={run_d}"
+        return None, f"no portfolio_ledger_commits row for run_date={run_d}", None
 
     # Cold-start / opening snapshot (#2589): empty lots + non-empty prior book must not
     # reach execute_pending_orders (residuals would invent OPEN/EXIT). Auto-ensure once;
@@ -672,11 +753,11 @@ def build_events_from_paper_fills(
         ):
             ok, seed_reason = ensure_legacy_opening_snapshot(sb, prior_book_date, now=stamp)
             if not ok:
-                return None, seed_reason
+                return None, seed_reason, None
             if cold_start_requires_seed(client=sb, book_date=prior_book_date):
-                return None, COLD_START_DECLINE
+                return None, COLD_START_DECLINE, None
     except Exception as exc:
-        return None, f"a portfolio-ledger cold-start probe failed ({exc})"
+        return None, f"a portfolio-ledger cold-start probe failed ({exc})", None
 
     if calendar_rows is None:
         calendar_rows = _load_trading_calendar_rows(sb, execution_date)
@@ -692,7 +773,7 @@ def build_events_from_paper_fills(
     if not result.authoritative:
         # execute_pending_orders re-checks the switch and the commit row itself. Reaching
         # here means one of them changed between the probe and the call.
-        return None, "the ledger stopped being authoritative between the probe and the write"
+        return None, "the ledger stopped being authoritative between the probe and the write", None
 
     for deferred in result.deferred:
         nxt = deferred.next_open.isoformat() if deferred.next_open else "unknown"
@@ -717,6 +798,7 @@ def build_events_from_paper_fills(
             f"{len(result.deferred)} order(s) (venue session closed) — not a quiet day, "
             f"and not a terminal rejection."
         )
+    pageable: Optional[str] = None
     if result.rejections and not result.fills:
         # Without this line the run ends on `_record_ledger_events`' "booked no fills"
         # summary, which reads as a quiet day. The ledger had orders and refused every
@@ -725,6 +807,7 @@ def build_events_from_paper_fills(
             f"⚠️  the ledger was authoritative for run_date={run_d} and rejected all "
             f"{len(result.rejections)} order(s) — this was not a quiet day."
         )
+        pageable = _pageable_rejection(result, run_d)
 
     prior_weights = _book_weights(sb, prior_book_d)
 
@@ -764,7 +847,7 @@ def build_events_from_paper_fills(
             book_source=BOOK_SOURCE_AUTHORITATIVE,
         )
         events.append(row.to_postgrest_row())
-    return events, ""
+    return events, "", pageable
 
 
 def build_events_from_digest_snapshot(sb, execution_d: str) -> Optional[List[Dict[str, Any]]]:
@@ -1050,10 +1133,13 @@ def main() -> int:
 
     # Authoritative first. The prose paths below run only when the ledger declines.
     ledger_events: Optional[List[Dict[str, Any]]] = None
+    pageable_rejection: Optional[str] = None
     if args.no_ledger:
         declined = "--no-ledger was passed"
     else:
-        ledger_events, declined = build_events_from_paper_fills(sb, rebalance_d, d)
+        ledger_events, declined, pageable_rejection = build_events_from_paper_fills(
+            sb, rebalance_d, d
+        )
     if ledger_events is None:
         if args.require_ledger:
             print(
@@ -1064,7 +1150,13 @@ def main() -> int:
             return 3
         print(f"↪️  portfolio ledger not authoritative ({declined}); using prose fallback.")
     else:
-        return _record_ledger_events(sb, d, rebalance_d, ledger_events)
+        exit_code = _record_ledger_events(sb, d, rebalance_d, ledger_events)
+        if exit_code != 0 or not pageable_rejection:
+            return exit_code
+        # The fills (or the refusal) are on the record; failing the run is what pages an
+        # operator when the executed book has drifted from the committed one (#4017).
+        print(f"error: {pageable_rejection}", file=sys.stderr)
+        return 5
 
     payload = _rebalance_payload_for_date(sb, rebalance_d)
     if (

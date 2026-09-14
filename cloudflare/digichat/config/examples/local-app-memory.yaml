@@ -1,0 +1,47 @@
+version: 1
+# Local app with in-browser multi-thread memory (sessionStorage)
+deployment:
+  slug: local-app
+  chrome:
+    mode: app
+    theme: light
+    title: digichat
+    welcome: How can I help you today?
+    placeholder: Send a message...
+    suggestions:
+      - Summarize my last conversation
+      - What can you search?
+  persistence: memory
+  auth: anonymous
+  features:
+    attachments: true
+    dictation: true
+    speech: false
+    reasoning: true
+    toolCalls: true
+    sources: true
+    branchPicker: true
+    modelPicker: false
+  backend:
+    type: digigraph
+  tools:
+    allowUserToggle: true
+    catalog:
+      - id: digisearch
+        default: true
+        label: Search
+      - id: digivault
+        default: true
+        label: Vault
+      - id: web_search
+        default: true
+        label: Web search
+  mcp:
+    servers: []
+  gate:
+    mode: ungated
+    activityDetail: full
+    llmAccess: operator
+    showByok: true
+    showLanguageSelector: true
+    webSearch: true

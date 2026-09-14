@@ -61,6 +61,7 @@ from digiquant.dashboard.performance_returns import (
     calculate_performance_returns,
 )
 from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.research.data.queries import r2_backend_enabled, r2_close_rows
 
 _POSITION_INSERT_SKIP = frozenset({"id", "created_at", "updated_at"})
 _METRIC_CLEAR = (
@@ -115,6 +116,14 @@ def _fetch_closes(sb, ticker: str, dates: List[str]) -> Dict[str, float]:
     """
     if not dates:
         return {}
+    if r2_backend_enabled():
+        wanted = set(str(d)[:10] for d in dates)
+        rows = r2_close_rows(tickers=[ticker], since=min(wanted), until=max(wanted))
+        return {
+            str(r["date"])[:10]: float(r["close"])
+            for r in rows
+            if str(r["date"])[:10] in wanted and r.get("close") is not None
+        }
     res = (
         sb.table("price_history")
         .select("date, close")
@@ -235,6 +244,7 @@ def carry_forward_positions(sb, as_of: str) -> int:
 
 _MIN_HISTORY_ROWS = 20  # fewer rows → Sharpe / vol / max_dd / alpha are unreliable; write NULL
 _PERFORMANCE_BENCHMARK = "SPY"
+_PREV_TRADING_LOOKBACK_DAYS = 14
 
 
 def _performance_returns_from_history(
@@ -250,7 +260,17 @@ def _performance_returns_from_history(
         if row.get("date") and row.get("nav") is not None
     ]
     benchmark_closes: list[float] = []
-    if len(nav_rows) >= 2:
+    if len(nav_rows) >= 2 and r2_backend_enabled():
+        benchmark_closes = [
+            float(r["close"])
+            for r in r2_close_rows(
+                tickers=[benchmark_ticker],
+                since=str(nav_rows[0]["date"]),
+                until=str(nav_rows[-1]["date"]),
+            )
+            if r.get("close") is not None
+        ]
+    elif len(nav_rows) >= 2:
         benchmark_res = (
             sb.table("price_history")
             .select("date,close")
@@ -469,6 +489,13 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
 
 def _prev_trading_date(sb, ref_ticker: str, as_of: str) -> Optional[str]:
     """Latest price_history date strictly before as_of for ref_ticker."""
+    if r2_backend_enabled():
+        floor = (
+            date.fromisoformat(as_of) - timedelta(days=_PREV_TRADING_LOOKBACK_DAYS)
+        ).isoformat()
+        rows = r2_close_rows(tickers=[ref_ticker], since=floor, until=as_of)
+        dates = [str(r["date"])[:10] for r in rows if str(r["date"])[:10] < as_of]
+        return max(dates) if dates else None
     res = (
         sb.table("price_history")
         .select("date")

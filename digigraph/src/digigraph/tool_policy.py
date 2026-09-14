@@ -13,6 +13,43 @@ from digigraph.project_config import DigiProjectConfig
 # only unioned when the request explicitly enables it.
 WEB_SEARCH_TOOL_NAME = "web_search"
 
+# Catalog ids / slash aliases → orchestrator tools to strip (#3733).
+_DISABLE_TOOL_ALIASES: dict[str, frozenset[str]] = {
+    "digisearch": frozenset({"digisearch", "digisearch_fetch_all"}),
+    "search": frozenset({"digisearch", "digisearch_fetch_all"}),
+    "digivault": frozenset({"digivault_search_notes", "digivault_get_note"}),
+    "vault": frozenset({"digivault_search_notes", "digivault_get_note"}),
+    "docs": frozenset({"digivault_search_notes", "digivault_get_note"}),
+    "digivault_search_notes": frozenset({"digivault_search_notes", "digivault_get_note"}),
+}
+
+
+def expand_disabled_tool_tokens(tokens: list[str] | tuple[str, ...] | None) -> frozenset[str]:
+    """Map client catalog ids onto registered tool names. Unknown tokens ignored."""
+    if not tokens:
+        return frozenset()
+    out: set[str] = set()
+    for raw in tokens:
+        key = str(raw).strip().lower()
+        mapped = _DISABLE_TOOL_ALIASES.get(key)
+        if mapped:
+            out |= mapped
+    return frozenset(out)
+
+
+def apply_disabled_tools(
+    names: frozenset[str] | None,
+    disabled: frozenset[str],
+) -> frozenset[str] | None:
+    """Subtract *disabled* from an allowlist. Unrestricted (None) becomes the registry minus disabled."""
+    if not disabled:
+        return names
+    if names is None:
+        from digigraph.orchestration.registry import list_tool_names
+
+        names = frozenset(list_tool_names())
+    return frozenset(n for n in names if n not in disabled)
+
 
 def apply_web_search_opt_in(
     names: frozenset[str] | None,
@@ -66,7 +103,17 @@ def allowed_tool_names_for_workflow(
             else:
                 base = None
 
-    return apply_web_search_opt_in(base, enable_web_search=bool(req.enable_web_search))
+    with_web = apply_web_search_opt_in(base, enable_web_search=bool(req.enable_web_search))
+    disabled = expand_disabled_tool_tokens(req.disabled_tools)
+    result = apply_disabled_tools(with_web, disabled)
+    if req.force_tool:
+        from digigraph.retrieval import resolve_force_tool
+
+        forced_name = resolve_force_tool(req.force_tool)
+        if forced_name and result is not None:
+            # Re-add only the locate tool — not fetch_all / get_note siblings.
+            result = result | {forced_name}
+    return result
 
 
 def require_tool_calls_for_workflow(

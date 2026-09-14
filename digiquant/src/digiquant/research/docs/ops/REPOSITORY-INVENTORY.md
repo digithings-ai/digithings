@@ -19,7 +19,7 @@ git ls-files | awk -F/ '{print $1}' | sort | uniq -c | sort -rn
 
 | Path | Files (approx.) | Role | Ship to digithings Wave 1? |
 |------|-----------------|------|----------------------------|
-| `frontend/` | 107 | Next.js App Router UI, static export to Pages today | **Yes** — core app |
+| `cloudflare/` | 107 | Next.js App Router UI, static export to Pages today | **Yes** — core app |
 | `scripts/` | 80 | Python + shell operators, DB-first pipeline | **Yes** |
 | `skills/` | 51 | Canonical `SKILL.md` per pipeline segment | **Yes** |
 | `templates/` | 27 | JSON Schemas + digest/delta templates | **Yes** |
@@ -39,7 +39,7 @@ git ls-files | awk -F/ '{print $1}' | sort | uniq -c | sort -rn
 
 ## 2. Tracked subtree detail
 
-### `frontend/`
+### `cloudflare/`
 
 | Subpath | Role |
 |---------|------|
@@ -156,9 +156,9 @@ One folder per slug; each has **`SKILL.md`** (or `README.md` for orchestrator/po
 | `data/*` (except `data/README.md`) | Local scratch, fetch cache — **Supabase is canonical** |
 | `outputs/` | Deprecated path |
 | `knowledge/` | Personal Obsidian vault — **not the app** |
-| `config/supabase.env`, `config/local.env`, `frontend/.env.local` | Secrets |
-| `node_modules/`, `.next/`, `frontend/out/` | Build artifacts |
-| `frontend/public/dashboard-data.json` | Generated dashboard JSON |
+| `config/supabase.env`, `config/local.env`, `cloudflare/.env.local` | Secrets |
+| `node_modules/`, `.next/`, `cloudflare/out/` | Build artifacts |
+| `cloudflare/public/dashboard-data.json` | Generated dashboard JSON |
 
 ---
 
@@ -189,7 +189,7 @@ Use this after structural changes or before Wave 1 copy:
 ## 7. What is *not* in this repo (by design)
 
 - **Production secrets** — only `*.example` and docs
-- **Full `node_modules`** / **`.next`** — install per `frontend/package.json`
+- **Full `node_modules`** / **`.next`** — install per `cloudflare/package.json`
 - **digithings / digigraph code** — lives in sibling `../digithings`
 
 When this inventory drifts, update § 1 counts and the checklist in § 5.

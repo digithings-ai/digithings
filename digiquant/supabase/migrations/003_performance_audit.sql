@@ -8,7 +8,7 @@
 
 -- ============================================================================
 -- 1. COMPOSITE INDEXES for common query patterns
---    Derived from the actual Supabase queries in frontend/lib/queries.js.
+--    Derived from the actual Supabase queries in cloudflare/lib/queries.js.
 --    Each index targets a specific page filter + date sort combination.
 -- ============================================================================
 

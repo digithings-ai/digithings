@@ -1,8 +1,8 @@
 # Design evolution — issue backlog
 
 **Epic:** [#1200](https://github.com/digithings-ai/digithings/issues/1200)  
-**Strategy doc:** [`frontend/digiweb/design/EVOLUTION.md`](../../../frontend/digiweb/design/EVOLUTION.md)  
-**Reference scans:** [`frontend/digiweb/design/references/scans/`](../../../frontend/digiweb/design/references/scans/INDEX.md)
+**Strategy doc:** [`cloudflare/digiweb/design/EVOLUTION.md`](../../../cloudflare/digiweb/design/EVOLUTION.md)  
+**Reference scans:** [`cloudflare/digiweb/design/references/scans/`](../../../cloudflare/digiweb/design/references/scans/INDEX.md)
 
 ## Dependency graph
 

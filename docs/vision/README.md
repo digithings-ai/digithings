@@ -51,7 +51,7 @@ NautilusTrader-backed strategy engine with backtest and optimisation nodes wired
 Document ingestion, chunking, embedding, and hybrid vector/keyword search. Pluggable backends. Powers the client pilot's internal document search deployment.
 
 ### digichat — chat interface and BFF
-Next.js production chat UI (`frontend/digichat`) — BYOK (bring-your-own-key) flow, model selector, Auth.js authentication, Drizzle ORM, adaptive UI scoped by access level. Not deployed publicly yet; the digithings.ai demo still runs a separate bespoke widget pending the gateway cutover ([ADR-0018](../adr/0018-digichat-path-routing.md), epic [#1248](https://github.com/digithings-ai/digithings/issues/1248)).
+Next.js production chat UI (`cloudflare/digichat`) — BYOK (bring-your-own-key) flow, model selector, Auth.js authentication, Drizzle ORM, adaptive UI scoped by access level. Not deployed publicly yet; the digithings.ai demo still runs a separate bespoke widget pending the gateway cutover ([ADR-0018](../adr/0018-digichat-path-routing.md), epic [#1248](https://github.com/digithings-ai/digithings/issues/1248)).
 
 ### digikey — auth control plane
 JWT-based authentication with scoped API keys (RS256, JWKS endpoint), SSO federation groundwork, org and project membership model.
@@ -75,7 +75,7 @@ Shared headless-fetch engine: browser session lifecycle, composable retry/backof
 Drop-in kit that gives AI coding agents a structured task backlog, a 4-dimension scoring gate, PreToolUse guardrails, and generated MCP config for existing tools (Jira, Linear, Slack, Notion, Supabase, GitLab). Installs onto any repo; this monorepo dogfoods it.
 
 ### digiquant dashboard
-Human-facing operator surface (`frontend/dashboard`) for research, portfolio deliberation, and execution — with a "Morning Read" overview, risk-debate surfaces, and portfolio/NAV tracking. The locus of the human approval gate before execution. Public path is `/dashboard/` (ADR-0026). See [ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md).
+Human-facing operator surface (`cloudflare/dashboard`) for research, portfolio deliberation, and execution — with a "Morning Read" overview, risk-debate surfaces, and portfolio/NAV tracking. The locus of the human approval gate before execution. Public path is `/dashboard/` (ADR-0026). See [ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md).
 
 **Note — not yet shipped:** digistore (unified storage abstraction over Supabase, SQLite, S3/MinIO) and digilink (the protocol translation and connector layer) are designed and specced but not yet implemented as standalone modules. Their functions exist today within individual services. (By contrast, digillm and digifetch *have* shipped as standalone libraries.)
 

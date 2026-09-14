@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:751544562728279638c79b05102c9911564aa7a40ce5ec5735025c73ee03d762",
+  "pageVersion": "sha256:d555fadfeb7df0e464360dc302d40093b3ccc2f4e58b34affde3d820b15e6e52",
   "claims": [
     {
       "id": "claim_618875c28d944fe6bc1f61c287598052",
@@ -21,12 +21,16 @@
       "statement": "DigiAuthMiddleware with digigraph_path_scopes enforces per-route JWT scopes, and the per-IP sliding-window limiter gives /workflow and chat completions a dedicated budget.",
       "evidence": [
         {
-          "resource": "repo://digigraph/src/digigraph/server.py#L100-L102",
-          "version": "repo-lines-v1:sha256:be27119083b34187bdde7718c2ed096cc0a3d6fac265ebc1104a584da27c144e:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDY3MzBmNjQ5ODQyYjU4YTJlZTk1MGMzZjdhZmYzZDY5MDEzMjMzN2JjNzM4NTUzNGI2NjI3MmUyOTI3YzQ0OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTYwOWFkYjY0YzRiNjk3NTM3MWE4YTcwNzNkNjYzMTMzYjAzNmYyYWQyNGYyMWNiY2JiNmJmZjk5ODc1YzViNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzc5NWQ0NmNhODU1MDllN2M3ZThhMmJjNjhiMDYwMjRjYjVlMjk2OTI1YWViNTU4MzFlMWFhNDA5MGEwMzkxZSJ9"
+          "resource": "repo://digigraph/src/digigraph/server.py#L231-L241",
+          "version": "repo-lines-v1:sha256:b47ed92c9f9627ce561ca6764ec9baafd7167bb1eb2eebf1ea69da3afd05e9e1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwNDM2NjhmZjA4ZmM4N2U4MDQyNTk1NGE5MDg0ZDE5MTk3N2YxNjE0MDJmMWU0OGMwNjUwYTcwNzI3NWU3YWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0NWU4N2RkMGE1M2RiNTNiNTI1NWEwNjFkZTRiOWJlMjAyNDg0MTUxMjEwNTg1ZWM5ZmViZjNlOWFhYmVkZmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUyM2MxMjgwNjUyZTg5NDE2NjRiNjBhY2QzOWQyZDU1Mjg2YjczMmVhZThlMmVjZDIxYTRjY2MwOWNmNWIzZjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI3M2M2YmVhMjE3NzIzYTI0ZmFiYzY3Y2UzYmRkNWE4MmFlOGExODAwYjhkMTg4MjE5MzAwODk1NGJiNjgwYTUifQ"
         },
         {
-          "resource": "repo://digigraph/src/digigraph/server.py#L240-L242",
-          "version": "repo-lines-v1:sha256:ea03fad63cad3a84dbf90207cad4f383bf47fe1f5c157886f0ca33ae5cee2fe8:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDRhZjMyMTg3ZmE2NDg1N2Q3OTA1YmJlZjdkNDI2MGU0ZTU2ZjcxYTYzMmEwYzZhYjNhYzcxYmY4YTY0ZjNkNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzBhOGIyZjQxNmVlYTRjYjZjMThlOTQ2MWNiMmRlNzhmMTQ3ODk0MTEyOWEzMTkxOTZiMmM3NTk3NGIyMTczZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDk5ODljZjVkNjJhMDgyNzZlYTI1MDVhYWIzMjcyYTdmMTNjYzFmMTI5MzljYmE4MTY0ZWQ3MmZhY2E1YWFlMiJ9"
+          "resource": "repo://digigraph/src/digigraph/server.py#L297-L306",
+          "version": "repo-lines-v1:sha256:bafd9523a72d1ff897584822562335c7d1acf9b2c6582bc989875f7f998cd603:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE3YzBhNzhiYjZlMzQzNDljN2Y1NjlhNDRiYzk5NmFlNWIzZTQxOGNmNTIyNDNmNTllYTg3NTFhZDNmMjhiYTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhNzk2NWE0ZDljMzVkNjczNGIzNmQyYTFkMjkzNzk5MWY3MmQ1MWYwZjhmMWI0ZGM1ZWI3NDU5Y2M2MTBkOTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1ZDkzNGRmNjU4NGU3NGZhOTMxYmFhMjQ4OGQxOGExNGE5N2U1ZmUyYjlkMDEwMDg4MDIwMzBjNDMwOTMxNWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzYzM0NmFjMzBiNzVkY2M4MzQyYWNhNmRhZWU3OTk3OGViZTllNmY2ZDhiZDM2NjY5OWI0MjYwOGVkYWU3N2UifQ"
+        },
+        {
+          "resource": "repo://digigraph/src/digigraph/server.py#L96-L96",
+          "version": "repo-lines-v1:sha256:46730f649842b58a2ee950c3f7aff3d690132337bc7385534b66272e2927c449:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDY3MzBmNjQ5ODQyYjU4YTJlZTk1MGMzZjdhZmYzZDY5MDEzMjMzN2JjNzM4NTUzNGI2NjI3MmUyOTI3YzQ0OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDY3MzBmNjQ5ODQyYjU4YTJlZTk1MGMzZjdhZmYzZDY5MDEzMjMzN2JjNzM4NTUzNGI2NjI3MmUyOTI3YzQ0OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTYwOWFkYjY0YzRiNjk3NTM3MWE4YTcwNzNkNjYzMTMzYjAzNmYyYWQyNGYyMWNiY2JiNmJmZjk5ODc1YzViNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTI5MGIyZmI3MWUyOGEwYTIwYzU4ZWRlZTE1ZjZmNzVjNzI1NzMyMTgwMTBiNGNiYWEwYTg5MTE1Mjk5OWU5OCJ9"
         }
       ]
     },
@@ -53,6 +57,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-07T22:38:58.074Z"
+    "at": "2026-09-09T14:37:17.158Z"
   }
 }

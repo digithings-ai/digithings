@@ -37,7 +37,8 @@ def test_alt_phases_grounding_modes():
             continue
         assert spec.use_data_tools is False, spec.segment_slug
         assert spec.live_search or spec.ai_portfolios, spec.segment_slug
-    # alt-ai-portfolios uses OpenRouter web search; the rest use live_search grounding.
+    # alt-ai-portfolios uses the tool-only web_search grounding pre-pass;
+    # the rest use live_search grounding.
     assert by_slug["alt-ai-portfolios"].ai_portfolios is True
     assert by_slug["alt-ai-portfolios"].live_search is False
     assert by_slug["alt-sentiment-news"].live_search is True

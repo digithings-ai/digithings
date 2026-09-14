@@ -689,7 +689,11 @@ class TestMetricsCronRunsEveryDay:
         import re
 
         jobs_src = (
-            Path(__file__).resolve().parents[3] / "frontend" / "digithings-cron" / "src" / "jobs.ts"
+            Path(__file__).resolve().parents[3]
+            / "cloudflare"
+            / "digithings-cron"
+            / "src"
+            / "jobs.ts"
         )
         pairs = dict(
             re.findall(

@@ -24,6 +24,22 @@ def _ctx(**overrides: object) -> ToolContext:
     return ToolContext(**defaults)  # type: ignore[arg-type]
 
 
+def _tool_json(out: object) -> dict:
+    """Parse handler results that are either a JSON string or a dict with JSON `content`."""
+    if isinstance(out, dict):
+        content = out.get("content")
+        if isinstance(content, str) and content.lstrip().startswith("{"):
+            parsed = json.loads(content)
+            if isinstance(parsed, dict):
+                return parsed
+        return out
+    if isinstance(out, str):
+        parsed = json.loads(out)
+        if isinstance(parsed, dict):
+            return parsed
+    raise AssertionError(f"unexpected tool result: {out!r}")
+
+
 @pytest.mark.unit
 def test_digivault_search_notes_is_registered() -> None:
     from digigraph.orchestration import builtin  # noqa: F401 - triggers registration
@@ -336,14 +352,14 @@ def test_handle_digivault_search_not_ok_response() -> None:
         out = _handle_digivault_search(
             {"query": "anything"}, _ctx(vault_path_prefix="clients/digithings")
         )
-    assert json.loads(out)["error"] == "vault unavailable"
+    assert _tool_json(out)["error"] == "vault unavailable"
 
 
 @pytest.mark.unit
 def test_handle_digivault_search_no_context_prefix_error_is_actionable() -> None:
     """Important 2 (#2240 final-branch review): when there is no context prefix
     (unmapped tenant slug — e.g. `tenantSlug: "embed"` in
-    frontend/digichat/src/lib/embed-chat-tenant.ts, absent from
+    cloudflare/digichat/src/lib/embed-chat-tenant.ts, absent from
     DIGI_TENANT_CORPUS_MAP), relaying digivault's raw "path_prefix is required"
     sentence is unactionable: the model already supplied path_prefix (the schema
     marks it required) and this handler is the one that discarded it. Driving the
@@ -368,7 +384,7 @@ def test_handle_digivault_search_no_context_prefix_error_is_actionable() -> None
 
     call_args = mock_invoke.call_args
     assert call_args.args[2]["path_prefix"] is None
-    error = json.loads(out)["error"]
+    error = _tool_json(out)["error"]
     assert "path_prefix is required when the D1 backend is configured" not in error
     assert "no tenant corpus" in error.lower()
     assert "do not retry" in error.lower()
@@ -391,7 +407,7 @@ def test_handle_digivault_search_no_context_prefix_but_different_error_passes_th
     ):
         out = _handle_digivault_search({"query": "anything"}, ctx)
 
-    error = json.loads(out)["error"]
+    error = _tool_json(out)["error"]
     assert error == "d1 search failed (503): upstream timeout"
     assert "no tenant corpus" not in error.lower()
 
@@ -482,16 +498,13 @@ def test_handle_digivault_search_real_http_failure_reaches_handler_as_ok_false()
         digivault_hub._cb._failures = 0
         digivault_hub._cb._opened_at = None
 
-    # The merged contract: a real HTTP failure now surfaces as a json.dumps-shaped
-    # ok:False payload with an informative error, via the handler's generic
-    # passthrough branch -- NOT the old bare "digivault orchestrator invoke failed:
-    # ..." plain-string shape (that string is still produced elsewhere, but only
-    # when invoke_digivault_tool itself raises something outside HUB_CLIENT_ERRORS,
-    # which a real HTTP failure no longer does).
-    assert isinstance(out, str)
-    assert "digivault orchestrator invoke failed" not in out
-    payload = json.loads(out)
+    # Failed invokes are dict envelopes (`ok`/`error`/`content`) so workflow
+    # rag_sources can carry the error instead of a fake empty retrieve.
+    assert isinstance(out, dict)
+    assert "digivault orchestrator invoke failed" not in json.dumps(out)
+    payload = _tool_json(out)
     assert payload["ok"] is False
+    assert out["ok"] is False
     assert "digivault invoke failed" in payload["error"]
     assert "503" in payload["error"]
 
@@ -589,7 +602,7 @@ def test_handle_digivault_get_note_not_ok_response() -> None:
             {"vault_path": "digigraph/ARCHITECTURE.md"},
             _ctx(vault_path_prefix="clients/digithings"),
         )
-    assert json.loads(out)["error"] == "vault unavailable"
+    assert _tool_json(out)["error"] == "vault unavailable"
 
 
 @pytest.mark.unit
@@ -647,7 +660,7 @@ def test_handle_digivault_get_note_no_context_prefix_does_not_fall_back_unscoped
 
     call_args = mock_invoke.call_args
     assert call_args.args[2]["path_prefix"] is None
-    error = json.loads(out)["error"]
+    error = _tool_json(out)["error"]
     assert "path_prefix is required for digivault_get_note" not in error
     assert "no tenant corpus" in error.lower()
     assert "do not retry" in error.lower()
@@ -670,7 +683,7 @@ def test_handle_digivault_get_note_no_context_prefix_but_different_error_passes_
     ):
         out = _handle_digivault_get_note({"vault_path": "digigraph/ARCHITECTURE.md"}, ctx)
 
-    error = json.loads(out)["error"]
+    error = _tool_json(out)["error"]
     assert error == "d1 query failed (503): upstream timeout"
     assert "no tenant corpus" not in error.lower()
 

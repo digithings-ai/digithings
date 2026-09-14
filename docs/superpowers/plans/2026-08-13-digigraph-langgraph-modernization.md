@@ -216,7 +216,7 @@ point the forced tool-free completion already fires."
 - Consumes: `digigraph.models.ChatMessage` (`role: str`, `content: str`) — unchanged.
 - Produces: `messages_to_workflow_prompt(messages: list[ChatMessage]) -> str` — same signature, same return type. Behavior change: a history whose combined content exceeds `DIGI_CHAT_HISTORY_MAX_TOKENS` (env var, default 8000) is now trimmed to the most recent turns (starting on a user turn) before flattening, instead of growing the prompt unbounded.
 
-**Global-constraint note:** confirmed via `grep -rn '"role".*"tool"' frontend/digichat/src/lib/adapters/digithings/` that digichat's OpenAI-compat adapter never constructs a `role: "tool"` message — this justifies the docstring-only fix in Step 5 (option (a) from the modernization research) rather than adding full tool-turn field support.
+**Global-constraint note:** confirmed via `grep -rn '"role".*"tool"' cloudflare/digichat/src/lib/adapters/digithings/` that digichat's OpenAI-compat adapter never constructs a `role: "tool"` message — this justifies the docstring-only fix in Step 5 (option (a) from the modernization research) rather than adding full tool-turn field support.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -259,7 +259,7 @@ def test_tool_role_messages_are_silently_omitted_today() -> None:
     """Documents the current, deliberate simplification: role="tool" content is dropped
     by messages_to_workflow_prompt. This test only proves that direct-conversion behavior
     — it does NOT, and cannot, prove digichat never sends one: the adapter that would
-    construct such a message lives in frontend/digichat/src/lib/adapters/digithings/,
+    construct such a message lives in cloudflare/digichat/src/lib/adapters/digithings/,
     a TypeScript file this Python test has no way to exercise or import. The "digichat
     never constructs one" claim is a manually-verified grep, not something this test
     enforces — if that assumption ever stops holding, this test keeps passing right
@@ -437,7 +437,7 @@ Replace with:
     - System / empty-content turns are omitted (project system prompt is separate)
     - ``role="tool"`` turns are also omitted, today deliberately: digichat's OpenAI-compat
       adapter never constructs one (verified: no ``role: "tool"`` construction anywhere
-      under ``frontend/digichat/src/lib/adapters/digithings/``). If a caller ever DOES
+      under ``cloudflare/digichat/src/lib/adapters/digithings/``). If a caller ever DOES
       send tool-role history, this silent drop becomes real data loss — this function
       would then need explicit tool-turn support (e.g. a labeled "Tool result: ..." line),
       not a bigger message-list rewrite; see ``test_tool_role_messages_are_silently_omitted_today``.
