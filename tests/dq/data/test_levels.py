@@ -465,6 +465,21 @@ def test_snap_pool_dedupes_duplicate_price_keeping_first_src() -> None:
     assert _dedupe_snap_pool(pool) == [(102.0, "pivot"), (103.0, "pivot")]
 
 
+def test_snap_pool_keeps_entry_side_only() -> None:
+    """LOW2: rungs must never snap to a level on the wrong side of entry —
+    a same-name cluster just under entry must not pull a long target down."""
+    from digiquant.data.prices.levels import _entry_side_snap_pool
+
+    assert _entry_side_snap_pool("long", 100.0, [99.7, 100.5], [], 100.9, None) == [
+        (100.5, "pivot"),
+        (100.9, "donchian"),
+    ]
+    assert _entry_side_snap_pool("short", 100.0, [], [99.5, 100.3], None, 99.2) == [
+        (99.5, "pivot"),
+        (99.2, "donchian"),
+    ]
+
+
 def test_trail_policy_carries_multiple_and_activation() -> None:
     cfg = LevelsConfig(trail_atr=2.5, trail_activate_r=1.0)
     policy = trail_policy_str(cfg)
