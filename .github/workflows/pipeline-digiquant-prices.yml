@@ -3,10 +3,10 @@ name: "Pipeline: digiquant prices"
 
 # Writers-stop (#3780, Task 7b fix round): the Supabase market-table writers
 # below are PAUSED on the cron cadence and run only when manually dispatched
-# with `run_writers: true` — most readers are on the versioned R2 cache, but
-# the ops readers listed under Verification below still query the Supabase
-# tables directly, so migration 124's DROPs are DEFERRED (#3951) until those
-# readers have R2 seams with tests. Only the at-open job sets
+# with `run_writers: true` — most readers are on the versioned R2 cache, and
+# the ops readers now have R2 seams too (#4013), but migration 124's DROPs
+# stay DEFERRED (#3951) while same-day reads and rollback still need the
+# Supabase tables. Only the at-open job sets
 # `DIGIQUANT_MARKET_DATA_BACKEND=r2` (#4013, sealed dates — the Task 3 date
 # guard keeps same-day opens on Supabase); the paused `digiquant prices`
 # writer jobs below never see the flag, so the refusal gates cannot bite.
@@ -44,12 +44,16 @@ name: "Pipeline: digiquant prices"
 #   Verification (no other consumer depends on the paused writes): remaining
 #   `.table("price_history"|"price_technicals"|"macro_series_observations")`
 #   hits under `DIGIQUANT_MARKET_DATA_BACKEND=r2` are the `else` (supabase
-#   default) bodies, the two writer files, the gated recompute path, and the
-#   fedprob/bitview writes above; ops scripts that still read Supabase
-#   directly (execute_at_open, refresh_performance_metrics, verify_nav_replay,
-#   finalize_period_accounting, fill-entry-prices, export_sdca_macro) are NOT
-#   on R2 and would break if migration 124 dropped the tables — hence the
-#   deferral in #3951. They stay covered by the KEPT cadence writes until then.
+#   default) bodies, the two writer files, the gated recompute path, the
+#   fedprob/bitview writes above, and the execution-time same-day reads
+#   (execute_at_open / fill-entry-prices stay on Supabase for d > seal, D3).
+#   The five ops scripts (execute_at_open, refresh_performance_metrics,
+#   verify_nav_replay, finalize_period_accounting, fill-entry-prices) gained
+#   R2 seams in #4013, but migration 124's DROPs stay DEFERRED (#3951) while
+#   same-day reads and the documented rollback still need the Supabase
+#   bodies; `export_sdca_macro.py` has no R2 seam (FRED API / keyless
+#   fredgraph CSV). The tables stay current via the KEPT cadence writes
+#   until a real retirement.
 #
 # Re-enable: `gh workflow run pipeline-digiquant-prices.yml -f mode=<job>
 # -f run_writers=true`, or revert the `run_writers` gates to resume cadence.
@@ -294,6 +298,10 @@ jobs:
       # Sealed dates read the R2 generation; the Task 3 date guard in
       # execute_at_open.py keeps same-day opens on the Supabase table (#4013).
       DIGIQUANT_MARKET_DATA_BACKEND: r2
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
