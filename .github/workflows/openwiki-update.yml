@@ -42,10 +42,31 @@ jobs:
           # `openai-compatible` provider. OpenWiki's `openai` provider forces the
           # Responses API (`responsesApi: true`), which that gateway does not serve;
           # `gpt-5.6-terra` is also not on the house CI catalog.
+          #
+          # The model must satisfy two constraints:
+          #
+          # 1. Not `gpt-5.6-sol`. `@langchain/openai`'s `_modelPrefersResponsesAPI`
+          #    hardcodes that id (and *-pro / codex) to the Responses API even when
+          #    OpenWiki sets `useResponsesApi: false`, and LangChain does not send the
+          #    `store: false` the gateway's stateless `/responses` endpoint requires —
+          #    the run dies with `400 ... replay prior output items in input instead
+          #    of using previous_response_id`.
+          # 2. Not the GPT-5.6 family at all. Its OpenAI-compatible surface on this
+          #    gateway returns `500 Unexpected proxy error` once OpenWiki's planning
+          #    payload grows past ~300 KB (a captured failing payload failed
+          #    identically on gpt-5.6-luna / -terra / -sol, while deepseek-v4-pro,
+          #    deepseek-v4-flash, glm-5.3-flash, gpt-oss-120b and claude-sonnet-4.6
+          #    all returned 200).
+          #
+          # `deepseek-v4-pro` is a house CI-catalog model
+          # (`digillm/src/digillm/client.py:_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE`),
+          # stays on `/chat/completions`, and generated 22 of the 23 planned pages
+          # in a local update run (the last page was still generating when the
+          # verification run was stopped for the report).
           OPENWIKI_PROVIDER: openai-compatible
           OPENAI_COMPATIBLE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
           OPENAI_COMPATIBLE_BASE_URL: ${{ vars.CHEAPERINFERENCE_API_BASE || secrets.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
-          OPENWIKI_MODEL_ID: "gpt-5.6-sol"
+          OPENWIKI_MODEL_ID: "deepseek-v4-pro"
           # Required for the LangSmith connector's code-mode pull to authenticate.
           # For extra workspaces, add OPENWIKI_LANGSMITH_API_KEY_2, _3, ... as repo
           # secrets and env entries here.
