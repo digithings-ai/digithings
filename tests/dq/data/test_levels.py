@@ -377,7 +377,10 @@ def test_structural_stop_short_mirrors_long() -> None:
     assert result.sl > result.entry_ref
 
 
-def test_monotonic_trend_uses_donchian_branch() -> None:
+def test_monotonic_trend_accepts_donchian_stop_uncapped_without_opposite_structure() -> None:
+    # M4 rename: the old name claimed a plain donchian-branch take, but what
+    # this pins includes the uncapped accept (no opposite structure, no R:R
+    # check) documented on the structural-branch rule.
     df = _monotonic_fixture()
     result = compute_levels(df, "long", LevelsConfig(), pair="EUR/USD")
     assert result.pivot_count == 0
