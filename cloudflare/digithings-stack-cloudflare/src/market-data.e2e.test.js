@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parquetReadObjects } from "hyparquet";
 import { describe, expect, it } from "vitest";
 import { handleMarketData } from "./market-data";
 
@@ -14,9 +15,12 @@ import { handleMarketData } from "./market-data";
  * tsconfig (same reason as env-vars-pin.test.js). vitest still runs it via the
  * `.test.{ts,js}` glob.
  *
- * `fixtures/price-GLD.parquet` is a 403-byte generation written once with
- * hyparquet-writer (2 rows) and committed as a binary fixture, so no writer
- * dependency is added to package.json just to exercise the read path.
+ * `fixtures/price-GLD.parquet` is a 2-row generation written by Polars with the
+ * producer's real schema (scripts/backfill_market_data_r2.py's
+ * `to_parquet_bytes`: `date` as Parquet DATE/pl.Date, OHLCV Float64, snappy) --
+ * not hyparquet-writer, which cannot emit the DATE logical type. The DATE pin
+ * below is the regression guard: with a string-date fixture the Critical 1
+ * bug (`rows: []` for every real generation) would be invisible again.
  */
 
 const FIXTURE = readFileSync(
@@ -51,6 +55,11 @@ function fakeEnv() {
 }
 
 describe("handleMarketData end-to-end (real parquet fixture)", () => {
+  it("fixture carries a Parquet DATE logical type, not a string", async () => {
+    const rows = await parquetReadObjects({ file: FIXTURE_BYTES, columns: ["date"] });
+    expect(rows[0].date).toBeInstanceOf(Date);
+  });
+
   it("parses a generation, resolves the ticker case-insensitively, and sorts", async () => {
     const url = new URL(
       "https://graph.digithings.ai/v1/market/closes?tickers=gld&from=2026-09-10&to=2026-09-11",

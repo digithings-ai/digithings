@@ -44,6 +44,31 @@ describe("market-data helpers", () => {
     ]);
   });
 
+  it("normalizes Parquet DATE values (JS Date) to ISO days", () => {
+    // The producer writes `date` as a Parquet DATE (pl.Date), so hyparquet
+    // yields a JS Date here -- String(date).slice(0, 10) would say "Thu Sep 10".
+    expect(
+      shapeCloses([
+        { date: new Date("2026-09-11T00:00:00.000Z"), ticker: "GLD", close: 260 },
+        { date: new Date("2026-09-10T00:00:00.000Z"), ticker: "GLD", close: 250 },
+      ]),
+    ).toEqual([
+      { date: "2026-09-10", ticker: "GLD", close: 250 },
+      { date: "2026-09-11", ticker: "GLD", close: 260 },
+    ]);
+  });
+
+  it("normalizes every slash in a ticker, matching the Python writer", () => {
+    const manifest = {
+      version: 1,
+      as_of: "2026-09-11",
+      datasets: {
+        "A-B-C": { object: "market-data/price/A-B-C/2026-09-11.parquet", sha256: "d".repeat(64) },
+      },
+    };
+    expect(resolvePointer(manifest, "a/b/c")?.object).toBe("market-data/price/A-B-C/2026-09-11.parquet");
+  });
+
   it("emits CORS only for allow-listed origins", () => {
     expect(corsHeaders("https://digiquant.io", ["https://digiquant.io"])["Access-Control-Allow-Origin"]).toBe(
       "https://digiquant.io",
@@ -103,6 +128,18 @@ describe("handleMarketData", () => {
     );
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "tickers required" });
+  });
+
+  it("rejects more than 25 tickers instead of silently truncating", async () => {
+    const tickers = Array.from({ length: 26 }, (_, i) => `T${i}`).join(",");
+    const url = new URL(`https://graph.digithings.ai/v1/market/closes?tickers=${tickers}`);
+    const res = await handleMarketData(
+      new Request(url.toString()),
+      fakeEnv({ "market-data/manifest.json": MANIFEST_OBJECT }),
+      url,
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "too many tickers (max 25)" });
   });
 
   it("skips unknown tickers and returns an empty row set", async () => {

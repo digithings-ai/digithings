@@ -3,8 +3,19 @@ import { parquetReadObjects } from "hyparquet";
 
 const MANIFEST_KEY = "market-data/manifest.json";
 const DEFAULT_ORIGINS = "https://digiquant.io,https://digithings.ai,http://localhost:3005";
+const MAX_TICKERS = 25;
 
 export type Manifest = { version?: number; as_of?: string; datasets?: Record<string, any> };
+
+/**
+ * Parquet DATE columns decode to a JS Date (hyparquet: `new Date(days * 864e5)`,
+ * i.e. UTC midnight), while string dates pass through. `String(date).slice(0, 10)`
+ * would yield "Thu Sep 10" and silently empty every real response, so normalize
+ * once here for both the window filter and shapeCloses.
+ */
+function isoDate(value: unknown): string {
+  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+}
 
 export function manifestTickers(manifest: Manifest): string[] {
   return Object.entries(manifest.datasets ?? {})
@@ -13,7 +24,9 @@ export function manifestTickers(manifest: Manifest): string[] {
 }
 
 export function resolvePointer(manifest: Manifest, ticker: string): { object: string; sha256: string } | undefined {
-  const norm = ticker.trim().toUpperCase().replace("/", "-");
+  // replaceAll, not replace: parity with the Python writer's normalize_ticker
+  // (r2_history.py) — replace('/','-') only rewrites the first slash.
+  const norm = ticker.trim().toUpperCase().replaceAll("/", "-");
   const entry = (manifest.datasets ?? {})[norm] ?? (manifest.datasets ?? {})[ticker];
   if (!entry?.object || !entry?.sha256) return undefined;
   const object = String(entry.object);
@@ -25,7 +38,7 @@ export function resolvePointer(manifest: Manifest, ticker: string): { object: st
 
 export function shapeCloses(rows: Array<Record<string, unknown>>) {
   return rows
-    .map((r) => ({ date: String(r.date).slice(0, 10), ticker: String(r.ticker), close: Number(r.close) }))
+    .map((r) => ({ date: isoDate(r.date), ticker: String(r.ticker), close: Number(r.close) }))
     .filter((r) => Number.isFinite(r.close))
     .sort((a, b) => (a.date === b.date ? a.ticker.localeCompare(b.ticker) : a.date.localeCompare(b.date)));
 }
@@ -69,9 +82,17 @@ export async function handleMarketData(
   const from = url.searchParams.get("from") ?? "1970-01-01";
   const to = url.searchParams.get("to") ?? manifest.as_of ?? "9999-12-31";
   if (!tickers.length) return Response.json({ error: "tickers required" }, { status: 400, headers: cors });
+  // Fail loudly rather than silently truncating: a client asking for more than
+  // the cap would otherwise get a partial series that looks complete.
+  if (tickers.length > MAX_TICKERS) {
+    return Response.json(
+      { error: `too many tickers (max ${MAX_TICKERS})` },
+      { status: 400, headers: cors },
+    );
+  }
 
   const rows: Array<Record<string, unknown>> = [];
-  for (const ticker of tickers.slice(0, 25)) {
+  for (const ticker of tickers) {
     const pointer = resolvePointer(manifest, ticker);
     if (!pointer) continue;
     const object = await env.MARKET_DATA.get(pointer.object);
@@ -82,7 +103,7 @@ export async function handleMarketData(
     }
     const parsed = await parquetReadObjects({ file: bytes, columns: ["date", "ticker", "close"] });
     rows.push(...(parsed as Array<Record<string, unknown>>).filter((r) => {
-      const d = String(r.date).slice(0, 10);
+      const d = isoDate(r.date);
       return d >= from && d <= to;
     }));
   }
