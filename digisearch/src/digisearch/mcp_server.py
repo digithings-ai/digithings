@@ -201,11 +201,14 @@ def digisearch_web_search(
     search_type: str = "auto",
     num_results: int = 8,
     category: str | None = None,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
 ) -> str:
     """Live web search via EXA (alternative to the owned corpus).
 
     Dormant without EXA_API_KEY — returns a disabled message instead of failing.
     search_type: instant|fast|auto|deep-lite|deep|deep-reasoning.
+    include_domains/exclude_domains restrict or drop hits by domain.
     """
     from digisearch import web_exa
 
@@ -219,6 +222,8 @@ def digisearch_web_search(
             search_type=search_type,  # type: ignore[arg-type]
             num_results=max(1, min(int(num_results), 100)),
             category=category,
+            include_domains=include_domains,
+            exclude_domains=exclude_domains,
         )
     except (web_exa.ExaError, ValueError) as e:
         logger.error("digisearch web search failed: %s", e)

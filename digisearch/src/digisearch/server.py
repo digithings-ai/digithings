@@ -31,7 +31,7 @@ from digisearch.orchestrator_tools import (
     OpenAIToolDict,
 )
 from digisearch.pipeline.ingest import IngestError, ingest_source
-from digisearch.pipeline.url_ingest import UrlFetchError, UrlIngestResult, ingest_url
+from digisearch.pipeline.url_ingest import UrlIngestResult, ingest_url
 from digisearch.search._stub import query_index
 from digisearch.web_exa import WebSearchData
 from digisearch.web_search.models import WebSearchConfigError, WebSearchRequest, WebSearchResponse
@@ -900,7 +900,7 @@ class ExaWebSearchRequest(BaseModel):
 class WebContentsRequest(BaseModel):
     """Request for POST /v1/web_contents (EXA page fetch for known URLs)."""
 
-    urls: list[str] = Field(..., description="Known URLs to fetch.")
+    urls: list[str] = Field(..., min_length=1, max_length=50, description="Known URLs to fetch.")
     text: bool = True
     highlights: bool = False
     summary: bool = False
@@ -1018,7 +1018,7 @@ def api_ingest_url(req: IngestUrlRequest) -> UrlIngestResult:
     """Ingest a URL via :func:`digisearch.pipeline.url_ingest.ingest_url`."""
     try:
         return ingest_url(req.source_url, index_name=req.index_name, metadata=req.metadata)
-    except UrlFetchError as exc:
+    except IngestError as exc:
         raise HTTPException(status_code=exc.http_status, detail=exc.message) from exc
 
 

@@ -6,8 +6,13 @@ from digisearch.orchestrator_tools import (
     build_orchestrator_tool_manifest,
     build_web_search_tool,
 )
+from digisearch.server import app
+from fastapi.testclient import TestClient
 
 from digisearch import web_exa
+from tests.digi_test_jwt import auth_headers
+
+pytestmark = pytest.mark.unit
 
 
 def test_not_configured_without_key(monkeypatch):
@@ -77,3 +82,35 @@ def test_search_posts_expected_shape(monkeypatch):
 
 def test_format_empty_results():
     assert "No EXA results" in web_exa.format_web_results(web_exa.WebSearchData())
+
+
+def test_route_dormant_without_key(monkeypatch):
+    monkeypatch.delenv("EXA_API_KEY", raising=False)
+    client = TestClient(app, headers=auth_headers())
+    resp = client.post("/v1/digisearch_web_search", json={"query": "hello"})
+    assert resp.status_code == 503, resp.text
+
+
+def test_route_forwards_domains(monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    seen: dict = {}
+
+    def fake_exa_search(query, **kwargs):
+        seen["query"] = query
+        seen["kwargs"] = kwargs
+        return web_exa.WebSearchData(results=[])
+
+    monkeypatch.setattr(web_exa, "exa_search", fake_exa_search)
+    client = TestClient(app, headers=auth_headers())
+    resp = client.post(
+        "/v1/digisearch_web_search",
+        json={
+            "query": "hello",
+            "include_domains": ["example.com"],
+            "exclude_domains": ["bad.example"],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert seen["query"] == "hello"
+    assert seen["kwargs"]["include_domains"] == ["example.com"]
+    assert seen["kwargs"]["exclude_domains"] == ["bad.example"]

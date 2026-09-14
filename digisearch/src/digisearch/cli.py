@@ -52,11 +52,12 @@ def ingest_url_cmd(
     index: str = typer.Option("default", "--index", "-i", help="Index name"),
 ) -> None:
     """Fetch one URL and ingest it into an index (thin adapter over ingest_url)."""
-    from digisearch.pipeline.url_ingest import UrlFetchError, ingest_url
+    from digisearch.pipeline.ingest import IngestError
+    from digisearch.pipeline.url_ingest import ingest_url
 
     try:
         result = ingest_url(url, index_name=index)
-    except UrlFetchError as exc:
+    except IngestError as exc:
         typer.echo(f"URL ingest failed: {exc.message}", err=True)
         raise typer.Exit(code=1) from exc
     typer.echo(f"Ingested {result.doc_id}: {result.chunks_created} chunks")

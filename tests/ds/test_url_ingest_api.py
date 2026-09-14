@@ -6,6 +6,7 @@ import digisearch.pipeline.url_ingest as url_ingest_mod
 import httpx
 import pytest
 from digisearch.cli import app as cli_app
+from digisearch.pipeline.ingest import IngestError
 from digisearch.search._stub import get_stub_index
 from digisearch.server import app
 from fastapi.testclient import TestClient
@@ -86,6 +87,30 @@ def test_ingest_url_route_empty_url(client: TestClient) -> None:
     resp = client.post("/ingest/url", json={"source_url": ""})
     assert resp.status_code in (400, 422), resp.text
     assert resp.status_code != 500
+
+
+def test_ingest_url_route_ingest_error_maps_status(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    _mock_default_fetcher(monkeypatch)
+
+    def _raise(*args: object, **kwargs: object) -> None:
+        raise IngestError("index write failed", code="ingest_failed", http_status=503)
+
+    monkeypatch.setattr(url_ingest_mod, "ingest_source", _raise)
+    resp = client.post("/ingest/url", json={"source_url": f"https://{_PUBLIC}/article"})
+    assert resp.status_code == 503, resp.text
+
+
+def test_ingest_url_route_malformed_port(client: TestClient) -> None:
+    resp = client.post("/ingest/url", json={"source_url": f"http://{_PUBLIC}:99999999/"})
+    assert resp.status_code == 400, resp.text
+
+
+def test_ingest_url_cli_ssrf_exits_nonzero() -> None:
+    runner = CliRunner()
+    result = runner.invoke(cli_app, ["ingest-url", "http://169.254.169.254/latest/meta-data/"])
+    assert result.exit_code == 1, result.output
 
 
 def test_ingest_url_cli(monkeypatch: pytest.MonkeyPatch) -> None:

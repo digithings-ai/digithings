@@ -118,10 +118,10 @@ def ingest_url(
     """
     effective = _effective_allowed_hosts(allowed_hosts)
     try:
-        validate_fetch_url(url, allowed_hosts=effective)
-    except SsrfBlockedError as exc:
+        url = validate_fetch_url(url, allowed_hosts=effective)
+    except (SsrfBlockedError, ValueError) as exc:
         raise UrlFetchError(
-            f"blocked URL {url!r}: {exc}", code="url_blocked", http_status=400
+            f"invalid URL {url!r}: {exc}", code="url_invalid", http_status=400
         ) from exc
 
     owns_fetcher = fetcher is None
