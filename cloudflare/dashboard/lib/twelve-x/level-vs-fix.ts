@@ -22,6 +22,11 @@ export type FixComposeOp = 'direct' | 'invert' | 'multiply' | 'divide';
 export interface PairFixSpec {
   seriesIds: string[];
   op: FixComposeOp;
+  /**
+   * Invert the composed value (mirrors twelve-x `_compose_history`, which wraps
+   * the `JPY/CAD` / `JPY/CHF` / `CHF/CAD` divide in `_invert_series`).
+   */
+  invert?: boolean;
 }
 
 const DIRECT: Record<string, string> = {
@@ -37,8 +42,9 @@ const DIRECT: Record<string, string> = {
 /**
  * Explicit pair→series map, mirrored 1:1 from twelve-x `fx_rates._build_pair_specs`
  * (same universe, same op, same leg order — including the upstream
- * `JPY/CAD`/`CAD/JPY` shared divide orientation, so chart values stay
- * consistent with the eval job's own entry/exit fixes).
+ * `JPY/CAD`/`CAD/JPY` shared divide orientation and the `_invert_series` wrap
+ * applied to `JPY/CAD`/`JPY/CHF`/`CHF/CAD` at compose time, so chart values
+ * stay consistent with the eval job's own entry/exit fixes).
  */
 const SPECS: Record<string, PairFixSpec> = Object.fromEntries(
   Object.entries(DIRECT).map(([pair, series]) => [pair, { seriesIds: [series], op: 'direct' as const }]),
@@ -70,6 +76,12 @@ for (const [pair, a, b] of [
 ] as const) {
   SPECS[pair] = { seriesIds: [a, b], op: 'multiply' };
 }
+/**
+ * Pairs whose divide result is inverted at compose time to mirror twelve-x
+ * `_compose_history` (it wraps these legs in `_invert_series`).
+ */
+const INVERT_ON_DIVIDE = new Set(['JPY/CAD', 'JPY/CHF', 'CHF/CAD']);
+
 for (const [pair, a, b] of [
   ['EUR/GBP', 'FX/EUR', 'FX/GBP'],
   ['GBP/EUR', 'FX/GBP', 'FX/EUR'],
@@ -86,7 +98,11 @@ for (const [pair, a, b] of [
   ['CAD/CHF', 'FX/CHF', 'FX/CAD'],
   ['CHF/CAD', 'FX/CHF', 'FX/CAD'],
 ] as const) {
-  SPECS[pair] = { seriesIds: [a, b], op: 'divide' };
+  SPECS[pair] = {
+    seriesIds: [a, b],
+    op: 'divide',
+    ...(INVERT_ON_DIVIDE.has(pair) ? { invert: true } : {}),
+  };
 }
 
 /** Normalize `EURUSD` / `eur-usd` to `EUR/USD`; unparseable input passes through uppercased. */
@@ -152,6 +168,10 @@ export function composeFixSeries(
         if (values[1] === 0) continue;
         fix = values[0] / values[1];
         break;
+    }
+    if (spec.invert) {
+      if (fix === 0) continue;
+      fix = 1 / fix;
     }
     if (Number.isFinite(fix)) out.push({ date, fix });
   }
