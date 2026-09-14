@@ -3,8 +3,8 @@
  *
  * `fetchMarketCloses` / `fetchMarketTickers` are the only browser callers of
  * `/v1/market/*`; the three read sites (comparable history, position price fill,
- * holding marks) hand off to them when `NEXT_PUBLIC_MARKET_DATA_URL` is set and
- * keep their Supabase paths otherwise. Every test stubs `fetch` — no network.
+ * holding marks) hand off to them unconditionally (#4053, R2-only — no Supabase
+ * fallbacks). Every test stubs `fetch` — no network.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
@@ -100,6 +100,26 @@ describe('fetchMarketTickers', () => {
     vi.stubEnv('NEXT_PUBLIC_MARKET_DATA_URL', '');
     expect(await fetchMarketTickers()).toEqual([]);
   });
+
+  it('returns [] when the worker rejects the tickers call', async () => {
+    vi.stubEnv('NEXT_PUBLIC_MARKET_DATA_URL', MARKET_URL);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ error: 'bad' }, false, 500)));
+    expect(await fetchMarketTickers()).toEqual([]);
+    expect(errorSpy).toHaveBeenCalledWith('fetchMarketTickers:', 500);
+  });
+
+  it('returns [] when the tickers fetch throws', async () => {
+    vi.stubEnv('NEXT_PUBLIC_MARKET_DATA_URL', MARKET_URL);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('network disabled in tests');
+      })
+    );
+    expect(await fetchMarketTickers()).toEqual([]);
+  });
 });
 
 describe('fetchComparablePriceHistory market path', () => {
@@ -130,7 +150,7 @@ describe('fetchComparablePriceHistory market path', () => {
     expect(String(fetchMock.mock.calls[0][0])).toContain('tickers=GLD&from=2026-09-01&to=2026-09-11');
   });
 
-  it('keeps the Supabase-absent empty result when the market API is unconfigured', async () => {
+  it('returns {} when the market API is unconfigured', async () => {
     vi.stubEnv('NEXT_PUBLIC_MARKET_DATA_URL', '');
     const networkBlocked = vi.fn(async () => {
       throw new Error('network disabled in tests');
@@ -157,5 +177,17 @@ describe('dashboard market-data wiring', () => {
     const src = read('observability-queries.ts');
     expect(src).toContain("from './market-data'");
     expect(src).toContain('fetchMarketCloses(openTickers');
+  });
+
+  it('universe comes from the market tickers API, not the price_history_tickers view', () => {
+    const src = read('queries.ts');
+    expect(src).toContain('fetchMarketTickers(');
+    expect(src).not.toContain("from('price_history_tickers')");
+  });
+
+  it('market reads have no isMarketDataConfigured gate', () => {
+    for (const file of ['market-data.ts', 'queries.ts', 'observability-queries.ts']) {
+      expect(read(file)).not.toContain('isMarketDataConfigured');
+    }
   });
 });
