@@ -1854,7 +1854,12 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
     seek by keyset over a deterministic `(date, ticker)` order (never offsets), sized
     under the PostgREST `max_rows` cap (a full page means "more", only a short page
     ends the loop; asking above the cap raises), and refuse to verify or write from a
-    truncated/unstable page (#3803/#3948). A read-only
+    truncated/unstable page (#3803/#3948). Bars whose stored `open`/`close` fall
+    outside `[low, high]` (vendor/float64 noise; first prod row SPY 1993-02-12) are
+    reconciled by widening the envelope to contain the observed prices — the engine
+    marks and fills at `close`, so NAV is unaffected — instead of aborting the
+    replay (#3995); non-finite bounds (NaN/±Inf, storable in Postgres `numeric`)
+    are refused before any widening (#3994). A read-only
    `verify_nav_replay` (no `--write`) step runs after metrics so drift fails
    loudly.
   `refresh_performance_metrics.refresh_nav_point` only guards the engine row;
