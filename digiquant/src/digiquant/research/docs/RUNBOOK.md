@@ -45,6 +45,28 @@ metrics and lookback cannot alter daily `pnl_pct` semantics.
 
 **dashboard daily chain:** `python -m digiquant.portfolio.chain --cadence daily` (`.github/workflows/pipeline-digiquant.yml`). House clocks run every day with `refresh_scope=none` and edit-mode continuity (`skip`/`edit`/`full` per artifact). Operator full refresh is manual (`workflow_dispatch` / `--refresh-scope all`). Beliefs distillation: daily short fold on every house run; `--refresh-scope beliefs` (or unfolded `decision_log` backlog above `OLYMPUS_BELIEFS_BACKLOG`, default 20) selects the full rewrite.
 
+### digikey service key for web grounding (#4028)
+
+Web grounding is default-ON (#3870): the daily chain calls the first-party
+digisearch `web_search` tool, and `research/data/web_grounding.py`
+`_pipeline_bearer()` mints a digikey service JWT via
+`digibase.service_auth.get_service_jwt()` (exchange
+`POST {DIGIKEY_URL}/v1/oauth/token`, `grant_type=api_key`, scope
+`digisearch:query`). Without the credentials the whole book run fails with
+`ServiceAuthError: DIGIQUANT_DIGIKEY_API_KEY is not set`.
+
+`pipeline-digiquant.yml` exports both names at the `run` job level so every
+step inherits them:
+
+| Name | Kind | Value |
+|---|---|---|
+| `DIGIKEY_URL` | Actions **variable** (`vars.DIGIKEY_URL`, YAML default) | `https://key.digithings.ai` |
+| `DIGIQUANT_DIGIKEY_API_KEY` | Actions **secret** | digikey service API key scoped `digisearch:query` |
+
+Minting, provisioning, and rotation: [docs/ops/digiquant-digikey-service-key.md](../../../../../docs/ops/digiquant-digikey-service-key.md).
+Only this workflow runs the grounding code path — the deterministic pipelines
+(backfill, prices, research-metrics) never call it.
+
 ### Market-data R2 refresh (cutover #3780)
 
 The versioned R2 cache owns price/macro serving under
