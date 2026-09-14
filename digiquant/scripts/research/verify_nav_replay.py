@@ -35,6 +35,10 @@ import sys
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from typing import TYPE_CHECKING, Any  # score:allow untyped any — duck-typed Supabase client
+
+if TYPE_CHECKING:  # pragma: no cover - annotation-only import
+    from digiquant.research.supabase_io import SupabaseClient
 
 _MAX_ROWS = 1000  # PostgREST [api].max_rows (digiquant/supabase/config.toml); page cap.
 _MAX_PAGES = 10_000  # runaway-fetch guard: ~10M rows, far beyond any book table.
@@ -223,6 +227,38 @@ def _fetch_table(
             break
         last_key = keys[-1]
     return rows
+
+
+def _fetch_price_rows(
+    sb: SupabaseClient, house_id: str, book_tickers: list[str], inception: date | str
+) -> list[dict[str, Any]]:
+    """OHLCV rows for the replay: sealed R2 generations under the R2 backend, else Supabase.
+
+    ``inception`` is the ``--inception-date`` value — ``main`` passes the parsed
+    ISO string, callers may pass a ``date``; both clip through the same
+    :func:`_rows_from_inception` guard (#4005).
+    """
+    # Imported per call (cached in sys.modules afterwards) so the default path needs no
+    # digiquant import at module scope, matching fill-entry-prices.py.
+    from digiquant.research.data.queries import r2_backend_enabled, r2_ohlcv_rows
+
+    inception_date = inception.isoformat() if isinstance(inception, date) else str(inception)
+    if r2_backend_enabled():
+        # UTC, not local: the seal is a UTC date and `date.today()` tripped DTZ011.
+        today = datetime.now(timezone.utc).date().isoformat()
+        rows = r2_ohlcv_rows(tickers=book_tickers, since=inception_date, until=today)
+        return _rows_from_inception(rows, inception_date)
+    return _rows_from_inception(
+        _fetch_table(
+            sb,
+            "price_history",
+            house_id,
+            "date,ticker,open,high,low,close,volume",
+            workspace_scoped=False,
+            tickers=book_tickers,
+        ),
+        inception_date,
+    )
 
 
 def build_request(price_rows, position_rows, nav_rows):
@@ -508,17 +544,7 @@ def main() -> int:
         # The replay only trades the book (#4002): scan just those tickers, not
         # every row of the market table.
         price_rows = (
-            _rows_from_inception(
-                _fetch_table(
-                    sb,
-                    "price_history",
-                    house_id,
-                    "date,ticker,open,high,low,close,volume",
-                    workspace_scoped=False,
-                    tickers=book_tickers,
-                ),
-                args.inception_date,
-            )
+            _fetch_price_rows(sb, house_id, book_tickers, args.inception_date)
             if book_tickers
             else []
         )

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from datetime import date as dt_date
 from datetime import datetime, timedelta, timezone
@@ -34,6 +35,11 @@ _ensure_importable()
 from digiquant.dashboard.tenancy import house_workspace_id  # noqa: E402
 from digiquant.portfolio.models.portfolio_ledger import OrderRejectionReason  # noqa: E402
 from digiquant.portfolio.models.position_event import PositionEventKind  # noqa: E402
+from digiquant.research.data.queries import (  # noqa: E402
+    r2_backend_enabled,
+    r2_manifest_seal,
+    r2_ohlcv_rows,
+)
 from digiquant.research.supabase_io import (  # noqa: E402
     SupabaseConfig,
     SupabaseNotConfiguredError,
@@ -229,6 +235,22 @@ def _parse_pct(value: Any) -> Optional[float]:
 
 
 def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
+    day = str(d)[:10]
+    if r2_backend_enabled():
+        seal, _ = r2_manifest_seal()
+        if day <= seal.isoformat():
+            try:
+                rows = r2_ohlcv_rows(tickers=[ticker], since=day, until=day)
+            except LookupError:
+                return None
+            if not rows or rows[0].get("open") is None:
+                return None
+            try:
+                price = float(rows[0]["open"])
+            except (TypeError, ValueError):
+                return None
+            return price if math.isfinite(price) and price > 0 else None
+    # same-day (or unsealed) prices come from the intraday Supabase writer (#4013 D3)
     res = (
         sb.table("price_history")
         .select("open")
@@ -472,9 +494,40 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
     lot's cost basis, and the ledger's whole numeric contract is that money never passes
     through binary floating point. Every other path in this file returns floats because
     `position_events` is a display table; this one feeds the record of what was bought.
+
+    Sealed dates read the R2 generation; same-day opens stay on the Supabase table the
+    intraday writer keeps fresh (#4013 D3). The R2 seam fetches one generation per
+    ticker and raises ``LookupError`` for an unknown one, so that branch loops per
+    ticker and skips only the unknown symbol's mark instead of declining every
+    pending order in the batch (#4013 fix round).
     """
     if not tickers:
         return {}
+    if r2_backend_enabled():
+        seal, _ = r2_manifest_seal()
+        if str(d)[:10] <= seal.isoformat():
+            rows: List[dict] = []
+            for ticker in sorted(set(tickers)):
+                try:
+                    rows.extend(
+                        r2_ohlcv_rows(tickers=[ticker], since=str(d)[:10], until=str(d)[:10])
+                    )
+                except LookupError:
+                    continue
+            marks: Dict[str, Decimal] = {}
+            for row in rows:
+                ticker = row.get("ticker")
+                raw = row.get("open")
+                if not ticker or raw is None:
+                    continue
+                try:
+                    price = Decimal(str(raw))
+                except (TypeError, ValueError, InvalidOperation):
+                    continue
+                # Stricter than the Supabase twin: non-finite marks would break PaperExecution.
+                if price.is_finite() and price > 0:
+                    marks[str(ticker).upper()] = price
+            return marks
     res = (
         sb.table("price_history")
         .select("ticker,open")

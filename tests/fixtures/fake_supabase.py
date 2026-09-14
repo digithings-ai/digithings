@@ -105,6 +105,7 @@ class _FakeQuery:
     _or_raw: str | None = None
     _limit: int | None = None
     _range: tuple[int, int] | None = None
+    _single: bool = False
 
     def select(self, _cols: str) -> "_FakeQuery":
         return self
@@ -183,6 +184,12 @@ class _FakeQuery:
     def range(self, start: int, end: int) -> "_FakeQuery":
         # PostgREST ``.range`` is inclusive on both ends (0-indexed).
         self._range = (start, end)
+        return self
+
+    def single(self) -> "_FakeQuery":
+        # PostgREST ``.single()``: execute returns the matching object (or None),
+        # not a one-element list.
+        self._single = True
         return self
 
     def insert(self, row: dict[str, Any] | list[dict[str, Any]]) -> "_FakeQuery":
@@ -301,6 +308,8 @@ class _FakeQuery:
             rows = rows[start : end + 1]
         if self._limit is not None:
             rows = rows[: self._limit]
+        if self._single:
+            return _FakeResponse(data=rows[0] if rows else None)
         return _FakeResponse(data=rows)
 
 
