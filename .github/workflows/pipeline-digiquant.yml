@@ -217,6 +217,23 @@ jobs:
         run: |
           uv run --frozen --no-sync python digiquant/scripts/research/validate-providers.py --skip-dry-run
 
+      - name: Warm digikey container (cold-start mitigation)
+        # #4050: key.digithings.ai is a Cloudflare Container that scales to zero;
+        # its first response after idle can take tens of seconds. Non-fatal by
+        # design — digibase.service_auth now retries the token exchange itself,
+        # so this only spares the pipeline the first cold wait.
+        run: |
+          url="${DIGIKEY_URL:-https://key.digithings.ai}/healthz"
+          for attempt in 1 2 3; do
+            if curl -sf --max-time 10 "$url" >/dev/null; then
+              echo "digikey warm after attempt ${attempt}"
+              exit 0
+            fi
+            echo "::warning::digikey warm-up attempt ${attempt} failed; retrying in 5s"
+            sleep 5
+          done
+          echo "::warning::digikey warm-up did not succeed; pipeline will exchange for a token itself"
+
       - name: Run digiquant research pipeline
         id: run
         # 3×70m attempts + 20m backoff. Under the 240m job so the outcome step still runs.
