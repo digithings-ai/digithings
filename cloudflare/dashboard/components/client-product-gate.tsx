@@ -1,12 +1,13 @@
 'use client';
 
-import { useContext, useState, type FormEvent, type ReactNode } from 'react';
+import { useContext, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { Lock } from 'lucide-react';
 import { AuthContext } from '@/lib/auth-context';
 import { useCanAccessProduct, requestAccessRefresh } from '@/lib/use-entitlement';
 import { isDashboardAuthEnabled } from '@/lib/supabase';
 import { redeemInvite, SettingsHttpError } from '@/lib/settings-api';
+import { ensureTwelveXSession } from '@/lib/twelve-x/session';
 
 /**
  * Gate a custom dashboard client product (FX Hub now; future products reuse this).
@@ -33,6 +34,14 @@ export function ClientProductGate({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unlocked, setUnlocked] = useState(false);
+
+  // Once granted, bridge into a real twelve-x session (separate Supabase
+  // project — see lib/twelve-x/session.ts) so its RLS can identify the
+  // caller post-cutover. Best-effort/no-op pre-cutover and if unconfigured.
+  useEffect(() => {
+    if (!(allowed || unlocked)) return;
+    void ensureTwelveXSession(session?.access_token);
+  }, [allowed, unlocked, session?.access_token]);
 
   if (!isDashboardAuthEnabled() || allowed || unlocked) {
     return <>{children}</>;

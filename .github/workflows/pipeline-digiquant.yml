@@ -134,6 +134,15 @@ jobs:
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      # Web grounding is default-ON (#3870) and mints a digikey service JWT via
+      # digibase.service_auth.get_service_jwt() — read from
+      # digiquant/research/data/web_grounding.py `_pipeline_bearer()`. The key is
+      # issued from the deployed digikey with scope `digisearch:query`:
+      #   python -m digikey.cli issue-key --tenant <tenant> \
+      #     --label digiquant-pipeline --scopes digisearch:query --kind standard
+      # Operator provisioning + rotation: docs/ops/digiquant-digikey-service-key.md (#4028).
+      DIGIKEY_URL: ${{ vars.DIGIKEY_URL || 'https://key.digithings.ai' }}
+      DIGIQUANT_DIGIKEY_API_KEY: ${{ secrets.DIGIQUANT_DIGIKEY_API_KEY }}
     steps:
       - name: Check out digiquant source
         uses: actions/checkout@v4

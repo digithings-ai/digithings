@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildLevelFixSeries,
   composeFixSeries,
+  fixWindowDays,
   normalizeFixPair,
   pairFixSpec,
   type FxFixPoint,
@@ -62,6 +63,26 @@ describe('composeFixSeries', () => {
     expect(
       composeFixSeries({ seriesIds: ['FX/EUR', 'FX/GBP'], op: 'divide' }, bySeries)[0].fix,
     ).toBeCloseTo(0.8, 10);
+  });
+
+  it('inverts JPY/CAD, JPY/CHF, CHF/CAD at compose time (mirrors twelve-x)', () => {
+    const bySeries = {
+      'FX/JPY': pts(['2026-06-01'], [150]),
+      'FX/CAD': pts(['2026-06-01'], [1.5]),
+      'FX/CHF': pts(['2026-06-01'], [0.9]),
+    };
+    // twelve-x `_compose_history` special-cases these three as
+    // `_invert_series(_divide_cross(left, right))` — 1 / (left / right).
+    const jpyCad = composeFixSeries(pairFixSpec('JPY/CAD')!, bySeries);
+    const jpyChf = composeFixSeries(pairFixSpec('JPY/CHF')!, bySeries);
+    const chfCad = composeFixSeries(pairFixSpec('CHF/CAD')!, bySeries);
+    expect(jpyCad[0].fix).toBeCloseTo(1 / (150 / 1.5), 12);
+    expect(jpyChf[0].fix).toBeCloseTo(1 / (150 / 0.9), 12);
+    expect(chfCad[0].fix).toBeCloseTo(1 / (0.9 / 1.5), 12);
+    // Guard against the reciprocal bug: the raw divide result must not leak.
+    expect(jpyCad[0].fix).not.toBeCloseTo(150 / 1.5, 6);
+    expect(jpyChf[0].fix).not.toBeCloseTo(150 / 0.9, 6);
+    expect(chfCad[0].fix).not.toBeCloseTo(0.9 / 1.5, 6);
   });
 
   it('inner-joins on date and drops zero divisors', () => {
@@ -160,5 +181,20 @@ describe('buildLevelFixSeries', () => {
     expect(s.targets).toEqual([]);
     expect(s.points).toEqual([]);
     expect(s.anchorsOnly).toBe(false);
+  });
+});
+
+describe('fixWindowDays', () => {
+  it('covers the idea age plus margin for old ideas', () => {
+    // 2026-01-01 → 2026-06-12 is 162 days; window must cover it, not stop at 90.
+    expect(fixWindowDays('2026-01-01', '2026-06-12')).toBe(162 + 30);
+  });
+
+  it('keeps the 90d floor for recent ideas', () => {
+    expect(fixWindowDays('2026-06-01', '2026-06-12')).toBe(90);
+  });
+
+  it('clamps unparseable run dates to the floor', () => {
+    expect(fixWindowDays('not-a-date', '2026-06-12')).toBe(90);
   });
 });

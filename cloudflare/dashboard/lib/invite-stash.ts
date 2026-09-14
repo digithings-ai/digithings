@@ -69,6 +69,19 @@ export function stashInviteFromSearch(search: string, storage?: InviteStorage): 
   return stashInviteCode(code, storage);
 }
 
+/**
+ * True when this visit is carrying an invite — either still in the URL
+ * (`?invite=`, not yet stashed) or already stashed by `useInviteLink`'s
+ * effect. Used to default a signed-out visitor to the signup card instead
+ * of sign-in: an invite link is how someone WITHOUT an account arrives, so
+ * landing them on "sign in" first is one extra, confusing click.
+ */
+export function hasPendingInvite(storage?: InviteStorage): boolean {
+  if (peekStashedInvite(storage) !== null) return true;
+  if (typeof window === 'undefined') return false;
+  return parseInviteQuery(window.location.search) !== null;
+}
+
 /** Drop `invite` from a path+search+hash string; leave every other query param. */
 export function pathWithoutInviteParam(pathAndSearch: string): string {
   const hashIndex = pathAndSearch.indexOf('#');
