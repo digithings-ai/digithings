@@ -118,6 +118,17 @@ export function normalizeFixPair(pair: string | null | undefined): string {
 }
 
 /**
+ * PURE — fix-history window covering the idea's life plus a 30d margin
+ * (LOW4: the bare 90d fetch default truncates older idea windows). Floor 90;
+ * unparseable run dates clamp to the floor.
+ */
+export function fixWindowDays(runDate: string, today = new Date().toISOString().slice(0, 10)): number {
+  const age = Math.round((Date.parse(today) - Date.parse(runDate)) / 86_400_000);
+  if (!Number.isFinite(age) || age <= 0) return 90;
+  return Math.max(90, age + 30);
+}
+
+/**
  * PURE — the native-series spec composing a pair's fix history, or `null`
  * when the pair is outside the covered universe (same coverage as the
  * twelve-x eval job's pair specs).
