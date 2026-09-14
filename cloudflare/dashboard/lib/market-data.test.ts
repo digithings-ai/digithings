@@ -190,4 +190,11 @@ describe('dashboard market-data wiring', () => {
       expect(read(file)).not.toContain('isMarketDataConfigured');
     }
   });
+
+  it('dead price_history readers are gone (no fetchPositionPriceChart, no trading_calendar)', () => {
+    const src = read('queries.ts');
+    expect(src).not.toContain('fetchPositionPriceChart');
+    expect(src).not.toContain("from('price_history')");
+    expect(src).not.toContain('trading_calendar');
+  });
 });

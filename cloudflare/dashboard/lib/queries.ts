@@ -32,7 +32,6 @@ import type {
   PositionHistoryRow,
   PipelineObservabilityBundle,
   PipelineTickerDoc,
-  PositionPriceChartData,
   AnalystPayload,
   AnalystEvidence,
   TickerCoverage,
@@ -1594,188 +1593,13 @@ export async function fetchComparablePriceHistory(
   return out;
 }
 
-/** Page size for position chart queries (PostgREST caps single responses). */
-const POSITION_CHART_PAGE = 1000;
-/** Safety cap so a pathological range cannot fetch unbounded rows. */
-const POSITION_CHART_MAX_PRICE_ROWS = 25000;
-
-const positionPriceChartCache = new Map<string, PositionPriceChartData>();
-
-/**
- * Infer the trading venue from a ticker symbol.
- * Crypto tickers trade 24/7 (always a trading day); all others default to NYSE.
- */
-function venueForTicker(ticker: string): string {
-  const t = ticker.toUpperCase().trim();
-  // Common crypto patterns: BTC-USD, ETH-USD, BTC/USD, BTCUSD, etc.
-  const cryptoSuffixes = ['-USD', '/USD', 'USDT', 'USDC'];
-  const cryptoBases = ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'ADA', 'DOT', 'AVAX', 'MATIC', 'LTC'];
-  if (cryptoSuffixes.some((s) => t.includes(s))) return 'CRYPTO';
-  if (cryptoBases.some((b) => t.startsWith(b))) return 'CRYPTO';
-  return 'NYSE';
-}
-
-/**
- * Fetch trading_calendar rows for a date range and venue, returning a Set of
- * trading-day date strings. Falls back gracefully if the table is unavailable.
- */
-async function fetchTradingDays(
-  startDate: string,
-  endDate: string,
-  venue: string
-): Promise<Set<string>> {
-  if (!supabase) return new Set();
-  const tradingDays = new Set<string>();
-  const PAGE = 1000;
-  let offset = 0;
-  const MAX = 3000; // ~8 years of trading days; far beyond any chart window
-  while (offset < MAX) {
-    const { data, error } = await supabase
-      .from('trading_calendar')
-      .select('date, is_trading_day')
-      .eq('venue', venue)
-      .gte('date', startDate)
-      .lte('date', endDate)
-      .eq('is_trading_day', true)
-      .range(offset, offset + PAGE - 1);
-    if (error) {
-      console.warn('fetchTradingDays trading_calendar query:', error);
-      break;
-    }
-    const chunk = (data ?? []) as Array<{ date: string; is_trading_day: boolean }>;
-    for (const row of chunk) {
-      if (row.is_trading_day) tradingDays.add(row.date);
-    }
-    if (chunk.length < PAGE) break;
-    offset += PAGE;
-  }
-  return tradingDays;
-}
-
-/**
- * Load daily closes for one ticker from `fromDate` through `maxDate` (inclusive)
- * plus `position_events` in that window (for chart markers). Paginates so the
- * full window is returned — a plain `.limit(2000)` previously kept only the
- * oldest slice and cut off recent prices.
- * Results are memoized in-memory for the session (price + contribution charts).
- */
+/** Subtract calendar days from an ISO date string (chart lookback windows). */
 function subtractIsoDaysForChart(iso: string, days: number): string {
   const parts = iso.split('-').map(Number);
   if (parts.length < 3) return iso;
   const [y, m, d] = parts;
   const t = Date.UTC(y, m - 1, d);
   return new Date(t - days * 86400000).toISOString().slice(0, 10);
-}
-
-export async function fetchPositionPriceChart(
-  ticker: string,
-  fromDate: string,
-  maxDate?: string
-): Promise<PositionPriceChartData> {
-  const t = String(ticker).toUpperCase().trim();
-  if (!isSupabaseConfigured() || !supabase) {
-    throw new Error(
-      'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
-    );
-  }
-  if (!t || !fromDate?.trim()) {
-    return { priceHistory: [], events: [] };
-  }
-
-  const end = (maxDate && maxDate.trim()) || new Date().toISOString().slice(0, 10);
-  /** If `fromDate` is after `end` (e.g. future-dated OPEN events), widen lookback so the query is valid. */
-  let safeFrom = fromDate.trim();
-  if (safeFrom > end) {
-    safeFrom = subtractIsoDaysForChart(end, 730);
-  }
-  const cacheKey = `${t}|${safeFrom}|${end}`;
-  const hit = positionPriceChartCache.get(cacheKey);
-  if (hit) return hit;
-
-  type EvPick = Pick<
-    TableRow<'position_events'>,
-    'date' | 'event' | 'price' | 'reason' | 'weight_pct' | 'prev_weight_pct'
-  >;
-  type PhPick = Pick<TableRow<'price_history'>, 'date' | 'close'>;
-
-  const priceRows: PhPick[] = [];
-  let phOffset = 0;
-  while (phOffset < POSITION_CHART_MAX_PRICE_ROWS) {
-    const { data, error } = await supabase
-      .from('price_history')
-      .select('date, close')
-      .eq('ticker', t)
-      .gte('date', safeFrom)
-      .lte('date', end)
-      .order('date', { ascending: true })
-      .range(phOffset, phOffset + POSITION_CHART_PAGE - 1);
-
-    if (error) {
-      console.error('fetchPositionPriceChart price_history:', error);
-      break;
-    }
-    const chunk = (data ?? []) as PhPick[];
-    priceRows.push(...chunk);
-    if (chunk.length < POSITION_CHART_PAGE) break;
-    phOffset += POSITION_CHART_PAGE;
-  }
-
-  const evRows: EvPick[] = [];
-  let evOffset = 0;
-  const EVENT_MAX = 8000;
-  while (evOffset < EVENT_MAX) {
-    const { data, error } = await houseBook(
-      supabase,
-      'position_events',
-      'date, event, price, reason, weight_pct, prev_weight_pct',
-    )
-      .eq('ticker', t)
-      .gte('date', safeFrom)
-      .lte('date', end)
-      .order('date', { ascending: true })
-      .range(evOffset, evOffset + POSITION_CHART_PAGE - 1);
-
-    if (error) {
-      console.error('fetchPositionPriceChart position_events:', error);
-      break;
-    }
-    const chunk = (data ?? []) as EvPick[];
-    evRows.push(...chunk);
-    if (chunk.length < POSITION_CHART_PAGE) break;
-    evOffset += POSITION_CHART_PAGE;
-  }
-
-  // Fetch trading calendar in parallel with event fetch for this ticker's venue.
-  // If the table is unavailable or empty, we default all rows to is_trading_day=true
-  // so charts degrade gracefully without errors.
-  const venue = venueForTicker(t);
-  const tradingDays = await fetchTradingDays(safeFrom, end, venue);
-
-  const priceHistory = priceRows.map((row) => ({
-    date: row.date,
-    close: Number(row.close),
-    // When the trading_calendar table has no data (empty set), default to true
-    // so existing chart behaviour is preserved.
-    is_trading_day: tradingDays.size === 0 ? true : tradingDays.has(row.date),
-  }));
-
-  const events = evRows.map((row) => ({
-    date: row.date,
-    event: row.event,
-    price: row.price != null ? Number(row.price) : null,
-    reason: row.reason ?? null,
-    weight_pct: row.weight_pct != null ? Number(row.weight_pct) : null,
-    prev_weight_pct: row.prev_weight_pct != null ? Number(row.prev_weight_pct) : null,
-    // weight_change_pct column dropped (#714) — derive at read time.
-    weight_change_pct:
-      row.weight_pct != null && row.prev_weight_pct != null
-        ? Number(row.weight_pct) - Number(row.prev_weight_pct)
-        : null,
-  }));
-
-  const result = { priceHistory, events };
-  positionPriceChartCache.set(cacheKey, result);
-  return result;
 }
 
 /** Resolve markdown + structured view for the Research Library. */
