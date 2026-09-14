@@ -9,6 +9,13 @@
 # behind the `production` environment gate; pull requests run the `check` job
 # only and can never deploy.
 #
+# Deploy runs from the repo root (`-c cloudflare/digithings-stack-cloudflare/
+# wrangler.toml`) — the documented command, and it keeps the relative `-c` path
+# and npm workspace resolution unambiguous. The container Docker build context
+# itself is NOT the cwd: wrangler resolves it from the config file and defaults
+# it to the Dockerfile's directory, so both containers pin
+# `image_build_context = "../.."` in wrangler.toml (#4046).
+#
 # Requires repo secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID — NOT
 # guaranteed present. Until they are added (Settings -> Secrets and variables
 # -> Actions, or `gh secret set`), the deploy job fails closed with a wrangler
@@ -86,8 +93,12 @@ jobs:
         run: npm ci
 
       - name: Deploy stack container
-        working-directory: cloudflare/digithings-stack-cloudflare
+        # Root cwd + relative -c: wrangler resolves image / image_build_context
+        # relative to the config file, and both containers pin the build
+        # context to the repo root in wrangler.toml (image_build_context).
+        # Never add working-directory here — `npm ci` and the -c path assume
+        # the repo root (#4046).
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy
+        run: npx wrangler deploy -c cloudflare/digithings-stack-cloudflare/wrangler.toml
