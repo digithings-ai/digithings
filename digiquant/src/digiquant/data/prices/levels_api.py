@@ -116,9 +116,12 @@ def levels_for_ticker(
 
     Returns a JSON ``{"error": ...}`` envelope (never raises) when the ticker is
     not cached, so an agent can fall back to supplying ``ohlc_json`` itself.
+    Unsafe ticker slugs are rejected before touching the filesystem (M5/LOW7).
     """
-    from digiquant.data.prices.history_cache import load_cached
+    from digiquant.data.prices.history_cache import is_safe_ticker, load_cached
 
+    if not is_safe_ticker(ticker):
+        return json.dumps({"error": f"unsafe ticker slug {ticker!r}; pass ohlc_json instead"})
     df = load_cached(ticker, cache_dir) if cache_dir is not None else load_cached(ticker)
     if df is None:
         return json.dumps({"error": f"no cached OHLC for {ticker!r}; pass ohlc_json instead"})
