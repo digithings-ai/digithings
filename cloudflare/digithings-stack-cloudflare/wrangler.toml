@@ -16,6 +16,13 @@ compatibility_flags = ["nodejs_compat"]
 # through the custom-domain routes below.
 workers_dev = false
 
+# Read-only market data (#4013 Task 8): same digithings-archive bucket the
+# Python store writes (see the R2_BUCKET secret note below). The Worker serves
+# /v1/market/* from it directly — no container hop, no writes.
+[[r2_buckets]]
+binding = "MARKET_DATA"
+bucket_name = "digithings-archive"
+
 # Custom domains — the only ingress. Verify /healthz on each after deploy.
 # Human gate: public digigraph + digikey; JWT/BFF still required on APIs.
 [[routes]]
