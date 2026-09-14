@@ -67,6 +67,7 @@ import { ledgerEventEconomics } from './position-event-economics';
 import { thesisIdEquals } from './thesis-id';
 import type { ThesisVehicleRow } from './thesis-story';
 import { houseBook } from './house-workspace';
+import { fetchMarketCloses, isMarketDataConfigured } from './market-data';
 
 /** Coerce a jsonb column that should be a string[] into one, tolerating null/non-arrays. */
 function asStringArray(v: unknown): string[] {
@@ -1121,19 +1122,24 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       .filter(([, d]) => !!d)
   );
 
-  const priceRows = posTickers.length
-    ? await querySupabase<
-        Pick<TableRow<'price_history'>, 'date' | 'ticker' | 'close'>[]
-      >((sb) =>
-        sb
-          .from('price_history')
-          .select('date, ticker, close')
-          .in('ticker', posTickers)
-          // fetch a small recent window + any entry dates
-          .order('date', { ascending: false })
-          .limit(5000)
-      )
-    : [];
+  const priceRows: Pick<TableRow<'price_history'>, 'date' | 'ticker' | 'close'>[] =
+    posTickers.length
+      ? isMarketDataConfigured()
+        ? // Market API (#4013): a recent 90-day window; closeOnOrAfter uses it
+          // for live marks and entry dates that fall inside the window.
+          await fetchMarketCloses(posTickers, subtractIsoDaysForChart(todayUtc, 90), todayUtc)
+        : await querySupabase<
+            Pick<TableRow<'price_history'>, 'date' | 'ticker' | 'close'>[]
+          >((sb) =>
+            sb
+              .from('price_history')
+              .select('date, ticker, close')
+              .in('ticker', posTickers)
+              // fetch a small recent window + any entry dates
+              .order('date', { ascending: false })
+              .limit(5000)
+          )
+      : [];
 
   const closesByTicker = new Map<string, Array<{ date: string; close: number }>>();
   for (const r of priceRows) {
@@ -1577,17 +1583,37 @@ const COMPARABLE_PAGE = 1000;
 const COMPARABLE_MAX_ROWS = 80000;
 
 /**
- * Load close prices from price_history for NAV comparables (date window inclusive).
- * Paginates past PostgREST default row limits.
+ * Load close prices for NAV comparables (date window inclusive).
+ *
+ * Market API (#4013) when `NEXT_PUBLIC_MARKET_DATA_URL` is set, else
+ * `price_history` via Supabase — paginated past PostgREST default row limits.
  */
 export async function fetchComparablePriceHistory(
   tickers: string[],
   minDate: string,
   maxDate: string
 ): Promise<BenchmarkHistoryMap> {
-  if (!isSupabaseConfigured() || !supabase || tickers.length === 0) return {};
   const norm = [...new Set(tickers.map((t) => String(t).toUpperCase().trim()).filter(Boolean))];
   if (norm.length === 0) return {};
+
+  if (isMarketDataConfigured()) {
+    const rows = await fetchMarketCloses(norm, minDate, maxDate);
+    const out: BenchmarkHistoryMap = {};
+    for (const row of rows) {
+      const series = (out[row.ticker] ??= { current: null, history: [] });
+      series.history.push({ date: row.date, price: Number(row.close) });
+    }
+    for (const bData of Object.values(out)) {
+      // Batched per-25 requests are not globally ordered; charts expect ascending dates.
+      bData.history.sort((a, b) => a.date.localeCompare(b.date));
+      if (bData.history.length) {
+        bData.current = bData.history[bData.history.length - 1].price;
+      }
+    }
+    return out;
+  }
+
+  if (!isSupabaseConfigured() || !supabase) return {};
 
   type Ph = Pick<TableRow<'price_history'>, 'date' | 'ticker' | 'close'>;
   const all: Ph[] = [];
