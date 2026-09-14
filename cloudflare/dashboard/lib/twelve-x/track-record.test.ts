@@ -105,6 +105,20 @@ describe('summarizeIdeaOutcomes', () => {
     expect(summary.missingCount).toBe(1);
     expect(carriedIdeas(rows)).toHaveLength(1);
   });
+
+  it('keeps an honest carried count on RAW rows (same-axis boards un-netted)', () => {
+    // Two carried boards on the same axis must BOTH count: the track-record
+    // tab feeds getIdeaEval({ netCarried: false }) precisely so open exposure
+    // is never understated by per-axis netting.
+    const rows = [
+      idea({ run_date: '2026-06-19', rank: 1, status: 'carried', hit: null, directional_win: null, significant_hit: false }),
+      idea({ run_date: '2026-06-26', rank: 1, status: 'carried', hit: null, directional_win: null, significant_hit: false }),
+    ];
+    const summary = summarizeIdeaOutcomes(rows);
+    expect(summary.resolvedCount).toBe(0);
+    expect(summary.carriedCount).toBe(2);
+    expect(carriedIdeas(rows)).toHaveLength(2);
+  });
 });
 
 describe('consensus stability', () => {
