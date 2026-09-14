@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import sys
 from datetime import date as dt_date
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -72,7 +73,12 @@ def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
     # Never raises into the backfill: a failed fetch is None (row stays null).
     try:
         from digiquant.data.prices.live_opens import fetch_live_open
-    except Exception:
+    except Exception as exc:
+        # A broken/missing seam must not degrade to silent null prices — name it (#4053).
+        print(
+            f"⚠️  live-open seam unavailable ({exc}) — no same-day open for {ticker}",
+            file=sys.stderr,
+        )
         return None
     try:
         return fetch_live_open(ticker, day)

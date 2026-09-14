@@ -252,7 +252,12 @@ def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
     # Never raises into the morning job: a failed fetch is None (data_unavailable).
     try:
         from digiquant.data.prices.live_opens import fetch_live_open
-    except Exception:
+    except Exception as exc:
+        # A broken/missing seam must not degrade to silent data_unavailable — name it (#4053).
+        print(
+            f"⚠️  live-open seam unavailable ({exc}) — no same-day open for {ticker}",
+            file=sys.stderr,
+        )
         return None
     try:
         return fetch_live_open(ticker, day)
@@ -524,7 +529,12 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
     # Failures skip per symbol (data_unavailable); never raise into the morning job.
     try:
         from digiquant.data.prices.live_opens import fetch_live_opens
-    except Exception:
+    except Exception as exc:
+        # A broken/missing seam must not degrade to silent data_unavailable — name it (#4053).
+        print(
+            f"⚠️  live-open seam unavailable ({exc}) — same-day marks unavailable",
+            file=sys.stderr,
+        )
         return {}
     try:
         live = fetch_live_opens(list(tickers), str(d)[:10])

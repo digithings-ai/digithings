@@ -377,7 +377,7 @@ def assemble_period_input(
     period_date: date,
     policy: AccountingPolicy | None = None,
 ) -> PeriodAccountingInput:
-    """Build engine input from ledger fills/lots + price_history marks."""
+    """Build engine input from ledger fills/lots + sealed-R2 marks."""
     policy = policy or AccountingPolicy(policy_version_id=_DEFAULT_POLICY)
     opening_qty = _opening_quantities(client=client, period_date=period_date)
     fills = _fills_for_period(client=client, period_date=period_date)

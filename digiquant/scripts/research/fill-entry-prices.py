@@ -58,8 +58,11 @@ def lookup_close(ticker: str, entry_date: str) -> float | None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="fill-entry-prices.py — Back-fill entry_price_usd from Supabase price_history",
-        epilog="Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars."
+        description="fill-entry-prices.py — Back-fill entry_price_usd from sealed R2 closes",
+        epilog=(
+            "Requires R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID and "
+            "R2_SECRET_ACCESS_KEY env vars."
+        )
     )
     parser.add_argument(
         "--dry-run", action="store_true",

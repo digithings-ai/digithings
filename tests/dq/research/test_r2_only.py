@@ -1,11 +1,13 @@
-"""R2-only market reads: no Supabase market bodies remain (#4053 Task 4).
+"""R2-only market reads: no Supabase market references remain (#4053 Task 4).
 
-The nine script market readers + ``get_price_technicals`` no longer carry a
-``table("price_history")`` / ``table("price_technicals")`` body. The R2 seam in
-``digiquant.research.data.queries`` (``r2_close_rows`` / ``r2_ohlcv_rows`` /
-``r2_manifest_seal``) is the only market-data path; a reappearing string body
-means a Supabase fallback was added back, which is not the rollback strategy
-after #4053 (restore-from-generation + replay, not a flag flip).
+The nine script market readers + ``get_price_technicals`` contain no
+``price_history`` / ``price_technicals`` reference at all — not the retired
+``table(...)`` body, not ``_fetch_table(sb, "price_history", …)``, not raw SQL.
+The R2 seam in ``digiquant.research.data.queries`` (``r2_close_rows`` /
+``r2_ohlcv_rows`` / ``r2_manifest_seal``) is the only market-data path; a
+reappearing reference means a Supabase fallback was added back, which is not the
+rollback strategy after #4053 (restore-from-generation + replay, not a flag
+flip).
 """
 
 from __future__ import annotations
@@ -32,14 +34,26 @@ R2_ONLY_SCRIPTS: tuple[str, ...] = (
     "verify_nav_replay.py",
 )
 
-_SUPABASE_MARKET_BODIES = ('table("price_history")', 'table("price_technicals")')
+# Any mention of the retired tables is a Supabase market reference — the old
+# ``table("price_history")`` body, ``.from_("price_history")``,
+# ``_fetch_table(sb, "price_history", …)`` (the pre-#4013 verify_nav_replay
+# shape), or a raw SQL string. `get_price_technicals` is the reader's own name,
+# not a table reference, so it is scrubbed before matching.
+_RETIRED_MARKET_TABLES = ("price_history", "price_technicals")
+
+
+def _retired_market_refs(src: str) -> list[str]:
+    scrubbed = src.replace("get_price_technicals", "")
+    return [table for table in _RETIRED_MARKET_TABLES if table in scrubbed]
 
 
 @pytest.mark.parametrize("filename", R2_ONLY_SCRIPTS)
-def test_no_supabase_market_body_in_script(filename: str) -> None:
+def test_no_supabase_market_read_in_script(filename: str) -> None:
     src = (_SCRIPTS / filename).read_text(encoding="utf-8")
-    offenders = [body for body in _SUPABASE_MARKET_BODIES if body in src]
-    assert not offenders, f"{filename} still carries a retired Supabase market body: {offenders}"
+    offenders = _retired_market_refs(src)
+    assert not offenders, (
+        f"{filename} still references a retired Supabase market table: {offenders}"
+    )
 
 
 def test_no_backend_flag_gate_in_scripts() -> None:
