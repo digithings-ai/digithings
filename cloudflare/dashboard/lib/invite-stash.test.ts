@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FX_HUB_INVITE_STORAGE_KEY,
   clearStashedInvite,
+  hasPendingInvite,
   parseInviteQuery,
   pathWithoutInviteParam,
   peekStashedInvite,
@@ -64,6 +65,18 @@ describe('stashInviteFromSearch', () => {
     stashInviteFromSearch('?invite=fx-hub-desk-token', storage);
     clearStashedInvite(storage);
     expect(peekStashedInvite(storage)).toBeNull();
+  });
+});
+
+describe('hasPendingInvite', () => {
+  it('is true once a valid invite is stashed', () => {
+    const storage = memoryStorage();
+    stashInviteFromSearch('?invite=fx-hub-desk-token', storage);
+    expect(hasPendingInvite(storage)).toBe(true);
+  });
+
+  it('is false with nothing stashed and no window (this test runs node-only)', () => {
+    expect(hasPendingInvite(memoryStorage())).toBe(false);
   });
 });
 
