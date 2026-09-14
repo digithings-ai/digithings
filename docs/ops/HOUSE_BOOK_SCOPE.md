@@ -93,10 +93,26 @@ script is house-owned).
 | Booked positions, missing H9 ledger | Operator recovery: `python digiquant/scripts/research/recover_h9_ledger_commit.py --date YYYY-MM-DD` (then `--apply`). Reads house `positions` / `nav_history`; calls `append_commit_chain`. Do not re-run the LLM pipeline. Do not `workflow_dispatch`. |
 | `DIGIQUANT_OVERLAY_PERSIST=1` (alias `OLYMPUS_OVERLAY_PERSIST`) before 113 on target | Persist-on still cannot prove a private overlay book while legacy uniques collide |
 
+## nav_history write order (provisional window)
+
+`nav_history` is written twice on a daily run, in order:
+
+1. **H9 `commit_io.book_portfolio`** may upsert a **provisional** arithmetic-chain
+   NAV for the date. (Legacy `portfolio_materialize.py` has the same shape but is
+   not on the daily path — do not reintroduce it.)
+2. **`verify_nav_replay.py --write`** then overwrites it with the Nautilus engine
+   NAV — the sole source of truth (SSOT) for NAV.
+
+Between those steps a dashboard reader that queries `nav_history` can see the
+provisional value for hours (the book runs ~12:00–14:00 UTC; the engine writer
+~22:00–23:00 UTC). Treat a date's `nav_history` row as provisional until the
+engine writer for that date has completed; after the overwrite the engine NAV is
+authoritative. Do not publish or quote the arithmetic-chain value as a settled NAV.
+
 ## Related
 
 - Contracts: `digiquant/src/digiquant/dashboard/tenancy.py`
-- Dashboard helper: `frontend/dashboard/lib/house-workspace.ts`
+- Dashboard helper: `cloudflare/dashboard/lib/house-workspace.ts`
 - Schema / RLS notes: `digiquant/supabase/SCHEMA.md` (migrations 096–113)
 - Settings / APP_URL paths: `digiquant/supabase/functions/_shared/app-url.ts`
   (`APP_URL` = site origin only; paths append `/dashboard/...`)

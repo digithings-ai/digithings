@@ -208,62 +208,78 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 48 for #402 (RetrievalBackend protocol + pgvector /
     LightRAG docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
     unchanged.
-    Re-recorded at count 49 for #3883 (Azure workspace-isolation §6 + Query
-    workspace_id note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
-    unchanged.
+    Re-recorded at count 53 for #3853 (web_search section + searxng sidecar
+    docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 53) re-recorded for the cloudflare/ directory rename (#3854) plus web_search docs (#3856) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 54 for #3854 Phase 2 Track A (digisearch MCP backend-gate + supervisord docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 57 for #3859 (Task 9 web_search docs: recency buckets, rollout-ops rewrite) plus merged develop prose — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 57) re-recorded for #3871 (tool-only cost-win rewrite + searxng floats-on-latest owner decision in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 58 for #3909 (backend fail-loud + research workspace scoping + raw filter gate docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 59 for #3934 (SSRF fetch-guard paragraph in the web_search section + DIGISEARCH_FETCH_ALLOWED_HOSTS env-table row in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 59) re-recorded for the module/digisearch sync (#4059): Azure workspace-scoping fix merged with develop prose in ARCHITECTURE.md — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 49
+    assert len(chunks) == 59
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
-        "2a6c63aff18cb155",
-        "05ee1579bfb41def",
+        "de1607a6f3e430c1",
+        "a5e3d5fc972070ef",
         "7e6b7b2044358888",
         "cea76b9e90df056e",
         "6f61da3b9ed54d44",
         "5c87a98eae4b4c24",
         "5c44b3a1c81aaae0",
-        "4fe2b5f10b829673",
+        "5fc146dcd98ed469",
         "e446cea04444b3a8",
-        "214d58d9d1d9d220",
-        "90a5a2d345e53200",
-        "24d4f4910f267916",
-        "70d20d87c65f8b8e",
+        "d48e16a1b753dc3a",
+        "579e52606ce8ddf4",
+        "81769159eb5dd82e",
+        "a901093c569d8ad4",
+        "f5694c994b90e40c",
+        "2f102978f3f92316",
+        "d201d5cef8605cdf",
         "5c929ad2654944ce",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "bb49fa9bd8d8d792",
-        "674f45e22421aa20",
-        "f4a0993928428a57",
+        "20b66fa9abe4d235",
+        "28bb2eddea9813a5",
+        "58293316545c38e4",
+        "89a85863f85af2a2",
         "819ebadc3320ecc2",
-        "9febcd11d9848e18",
-        "8c403dc89d35fe82",
-        "d60ae7116f9e57ec",
+        "10832c167583db90",
+        "3442051d624d3623",
+        "06ba55aa13191afa",
+        "0b92159ce012cda6",
         "ec4e79e9d9714f36",
-        "e04f2c804b4baa0c",
+        "06466d8456cb4a74",
         "2ec8256cb4695f07",
         "16bea1bbfea529fc",
         "00bffb9020b848f5",
         "078cbca3f2c3b3e1",
-        "2298af8a3460f592",
-        "e15576236dd1ba07",
-        "f2687d4521d1e069",
-        "112fe01c18768a54",
-        "cdf4f0c7a56c56e7",
-        "8200c214c753f6dd",
-        "2c221fc487c50f69",
-        "a261a5a8ca75360c",
-        "2093dd287bc13660",
-        "05c34cda6e56fd63",
+        "67d86e18a970ef25",
+        "2df16a717e45cd20",
+        "c01731fed9b486f9",
+        "ae1e6da2f77138e0",
+        "c945e162a543358e",
+        "96c4e4c20cd1b0a1",
+        "79e1479908a647a2",
+        "5881d77c9811fa5d",
+        "a063d09664500f97",
+        "50b42145065d7d4e",
+        "5dbc6c5291de10ab",
+        "e8874754e8823dbd",
+        "472ca1370eb9ef1a",
+        "a3987db99f2b72c5",
         "9496728548f7cd2a",
-        "11a2313f67dd5137",
+        "225997a88a741b37",
+        "48822531a62ecd38",
         "a0c3eeac2a656b2f",
-        "44050a77e280c022",
+        "482754fb154988ce",
         "79ae674b8661ea64",
         "fc586dc7c2348d1e",
         "ac8dbe83a57bf4f4",

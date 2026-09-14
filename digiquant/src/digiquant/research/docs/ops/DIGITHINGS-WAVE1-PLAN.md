@@ -39,7 +39,7 @@ For a **first** integration, **subtree** or **monorepo-native copy** with a clea
 
 **Minimum tree to import:**
 
-- `frontend/` → becomes the Next app root under `apps/<name>/` (or merged layout).
+- `cloudflare/` → becomes the Next app root under `apps/<name>/` (or merged layout).
 - `supabase/migrations/`, `templates/`, `skills/`, `scripts/`, `config/` (non-secrets), `cowork/`, `docs/`, `.github/workflows` (adapt), `tests/` if present.
 
 Do **not** import gitignored `data/`, `outputs/`, or local env files.
@@ -48,7 +48,7 @@ Do **not** import gitignored `data/`, `outputs/`, or local env files.
 
 ## Next.js integration options
 
-digichat lives at `digichat/` (Next 16, App Router). research `frontend/` is Next 15 + static export to `out/` today (``deploy.yml``).
+digichat lives at `digichat/` (Next 16, App Router). research `cloudflare/` is Next 15 + static export to `out/` today (``deploy.yml``).
 
 | Option | Description |
 |--------|-------------|
@@ -57,7 +57,7 @@ digichat lives at `digichat/` (Next 16, App Router). research `frontend/` is Nex
 
 **Recommendation:** **Option A** for Wave 1 unless you need a single binary for demo week.
 
-**`basePath`:** If served under `/research`, set `basePath: '/research'` in `next.config.ts` and fix any hardcoded absolute URLs in research `frontend/`.
+**`basePath`:** If served under `/research`, set `basePath: '/research'` in `next.config.ts` and fix any hardcoded absolute URLs in research `cloudflare/`.
 
 **Version alignment:** Plan a **Next/React bump** to match digichat (16 / 19) in the same Wave or immediately after first green build — track as a sub-task to avoid dual maintenance.
 
@@ -79,7 +79,7 @@ Copy patterns from [`config/local.env.example`](../../config/local.env.example) 
 
 ## CI / build
 
-**Today:** research uses ``.github/workflows/deploy.yml`` (Node 20, `frontend/`, static export).
+**Today:** research uses ``.github/workflows/deploy.yml`` (Node 20, `cloudflare/`, static export).
 
 **Wave 1:**
 

@@ -3,9 +3,6 @@ type: api-operations-guide
 title: digisearch Query and Operations
 description: digisearch query behavior and operations — retrieval, filters, rerank, orchestrator tools, scopes, and container.
 tags: [digisearch, query, retrieval, operations]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-d16d9586117b95e03b7f1549
     resource: repo://digisearch/AGENTS.md
@@ -16,6 +13,9 @@ sources:
   - id: openwiki-source-8639f2733ed2c02f7d26be5f
     resource: repo://digisearch/src/digisearch/server.py
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digisearch Query and Operations

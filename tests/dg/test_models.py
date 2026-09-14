@@ -75,6 +75,20 @@ class TestChatCompletionRequest:
         req = ChatCompletionRequest(messages=[], force_tool="docs")
         assert req.force_tool == "docs"
 
+    def test_chat_completion_request_accepts_deprecated_research_system_prompt(self) -> None:
+        """Legacy clients must not get a 422: the field is accepted but ignored.
+
+        The effective prompt is derived server-side (project config / tenant corpus
+        map); see tests/dg/test_corpus_routing.py and tests/dg/test_api.py for the
+        ignore behaviour. Pin acceptance so the field is not dropped without a
+        migration for cloudflare/digichat and other callers.
+        """
+        req = ChatCompletionRequest(messages=[], research_system_prompt="baseline default")
+        assert req.research_system_prompt == "baseline default"
+
+    def test_chat_completion_request_research_system_prompt_is_deprecated(self) -> None:
+        assert ChatCompletionRequest.model_fields["research_system_prompt"].deprecated is True
+
 
 @pytest.mark.unit
 class TestWorkflowResult:

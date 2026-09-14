@@ -1,4 +1,4 @@
-"""OLYMPUS_MAX_TOOL_ROUNDS wiring: default 24, env override, thin wrapper (#3299)."""
+"""DIGIQUANT_MAX_TOOL_ROUNDS wiring: default 24, env override, thin wrapper (#3299)."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import types
 from typing import Any  # score:allow untyped any — captured mock kwargs dict
 
 import pytest
+from digiquant.dashboard.envcompat import TOOL_ROUNDS_MAX
 from digiquant.tool_rounds import (
-    OLYMPUS_MAX_TOOL_ROUNDS_ENV,
     olympus_max_tool_rounds,
     run_olympus_research_agent,
 )
@@ -22,20 +22,33 @@ class _Out(BaseModel):
 
 
 def test_default_is_24(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(OLYMPUS_MAX_TOOL_ROUNDS_ENV, raising=False)
+    monkeypatch.delenv(TOOL_ROUNDS_MAX, raising=False)
+    monkeypatch.delenv("OLYMPUS_MAX_TOOL_ROUNDS", raising=False)
     assert olympus_max_tool_rounds() == 24
 
 
 def test_env_override_and_floor(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(OLYMPUS_MAX_TOOL_ROUNDS_ENV, "8")
+    monkeypatch.setenv(TOOL_ROUNDS_MAX, "8")
     assert olympus_max_tool_rounds() == 8
-    monkeypatch.setenv(OLYMPUS_MAX_TOOL_ROUNDS_ENV, "0")
+    monkeypatch.setenv(TOOL_ROUNDS_MAX, "0")
     assert olympus_max_tool_rounds() == 1
 
 
 def test_invalid_env_falls_back_to_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(OLYMPUS_MAX_TOOL_ROUNDS_ENV, "lots")
+    monkeypatch.setenv(TOOL_ROUNDS_MAX, "lots")
     assert olympus_max_tool_rounds() == 24
+
+
+def test_canonical_wins_over_retired_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(TOOL_ROUNDS_MAX, "8")
+    monkeypatch.setenv("OLYMPUS_MAX_TOOL_ROUNDS", "24")
+    assert olympus_max_tool_rounds() == 8
+
+
+def test_retired_alias_still_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(TOOL_ROUNDS_MAX, raising=False)
+    monkeypatch.setenv("OLYMPUS_MAX_TOOL_ROUNDS", "8")
+    assert olympus_max_tool_rounds() == 8
 
 
 def _install_stub_agent(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:

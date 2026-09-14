@@ -43,7 +43,8 @@ THRESHOLDS = {
 #        notimplementederror stub, todo
 # Tokens are exact (comma-separated, case-sensitive). Put justification on the
 # next comment line — never after an em-dash on the pragma line (that suffix is
-# a silent no-op; inline ``untyped any`` uses a separate line-regex path).
+# a silent no-op). Inline ``untyped any`` and ``potential hardcoded secret`` use a
+# separate line-regex path that names the rule in the pragma.
 #
 # Legacy path-prefix suppressions — prefer file pragmas for new allowlists.
 SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
@@ -60,7 +61,7 @@ SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
     ("digiquant/scripts/research/preload-history.py", "pd."),
     ("digiquant/scripts/research/update_tearsheet.py", "pandas"),
     # RegExp.exec in terminal highlighter — not Python exec() (DESLOP-027)
-    ("frontend/digiweb/design/terminal/highlight-dom.js", "bare exec()"),
+    ("cloudflare/digiweb/design/terminal/highlight-dom.js", "bare exec()"),
     # projects/ are confidential standalone research scripts, not services
     ("projects/", "blocking sleep"),
     ("projects/", "requests import"),
@@ -81,7 +82,7 @@ SCORE_SKIP_PATH_FRAGMENTS: tuple[str, ...] = (
     # heuristics are Python-oriented and misfire on CSS/JS (eval/exec/TODO scans
     # hit all files). This is the source-of-truth design dir we iterate heavily;
     # secrets are still covered by gitleaks. See #1310.
-    "frontend/digiweb/design/",
+    "cloudflare/digiweb/design/",
     # Lockfile integrity hashes contain XXX substrings that trip TODO/FIXME scan.
     "package-lock.json",
 )
@@ -102,8 +103,13 @@ PATTERNS: list[tuple[re.Pattern, str, str, bool]] = [
         True,
     ),
     (
-        # Negative lookahead (?!\$) excludes env-var references like KEY="$VAR_NAME"
-        re.compile(r"(?i)(api_key|password|secret|token)\s*=\s*['\"](?!\$)[^'\"]{8,}['\"]"),
+        # Negative lookahead (?!\$) excludes env-var references like KEY="$VAR_NAME";
+        # the trailing lookahead lets an inline `# score:allow potential hardcoded
+        # secret` exempt a false positive (e.g. a constant holding an env-var *name*)
+        re.compile(
+            r"(?i)(api_key|password|secret|token)\s*=\s*['\"](?!\$)[^'\"]{8,}['\"]"
+            r"(?!.*score:allow\s+potential hardcoded secret)"
+        ),
         "potential hardcoded secret",
         "security",
         True,

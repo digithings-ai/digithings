@@ -115,7 +115,7 @@ Stage E ── Later (out of program MVP)
 
 | PR | Base | Head | Touches (avoid overlap) |
 |---|---|---|---|
-| Pick 1 | Prefer `module/digichat` if active; else `develop` (frontend one-hop) | `task/<N>-digichat-runtime-csp` | `frontend/digichat/**`, `publish-digichat-image.yml`, digichat INSTALL CSP section, profile env **CSP comments only** |
+| Pick 1 | Prefer `module/digichat` if active; else `develop` (frontend one-hop) | `task/<N>-digichat-runtime-csp` | `cloudflare/digichat/**`, `publish-digichat-image.yml`, digichat INSTALL CSP section, profile env **CSP comments only** |
 | Pick 2 glue | `develop` (root / digichat-release infra) | `task/<N>-profile-a-ghcr` | `infra/digichat-release/**`, Makefile Profile A targets, INSTALL Profile A **pull** copy, sketch §5 stack gap |
 | Pick 3 | Split OK: digivault PR into `module/digivault` or develop-routed digivault; scripts PR into `develop` | `task/<N>-digivault-local-search`, `task/<N>-docs-onboard` | `digivault/**` local search; `scripts/docs_onboard/**`; `docs/ops/`, `docs/digichat/CLIENT-DOCS-ONBOARD.md`; INSTALL **pointer only** |
 
@@ -154,7 +154,7 @@ Owners are **agent sessions** following each pick plan. Checkboxes are program-l
 
 ### Stage B — Pick 1 implement → PR → review → merge — owner: digichat agent
 
-- [ ] Read `frontend/digichat/AGENTS.md` + `ARCHITECTURE.md` + Next 16 `proxy.md`
+- [ ] Read `cloudflare/digichat/AGENTS.md` + `ARCHITECTURE.md` + Next 16 `proxy.md`
 - [ ] Open/link GitHub Issue; branch `task/<N>-digichat-runtime-csp`
 - [ ] Execute pick plan Tasks 1–6 (TDD host parsing → fail-closed bake → `proxy.ts` → stop baking hosts → docs → acceptance curl)
 - [ ] Open PR → CI green (`digichat` Vitest + docs) → `/review` or Bugbot when final → merge

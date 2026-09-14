@@ -1,0 +1,33 @@
+# digiquant-mcp — dedicated market-data MCP container (#3780, Task 8).
+# Build context: monorepo root (`docker build -f digiquant/Dockerfile.mcp .`).
+# Same per-package COPY convention as digiquant/Dockerfile: workspace deps
+# (digibase, digikey) are installed editable first so pip resolves them from
+# the local tree, then digiquant itself with the [research]+[mcp] extras —
+# never the [nautilus] backtest engine. (`uv sync --frozen` is deliberately
+# NOT used: it needs the workspace root + uv.lock in context, which a
+# service-image build must not drag in.)
+# Serves FastMCP streamable-http via digiquant.mcp_server:run_mcp on :8767
+# with the [research] + [mcp] extras. Non-loopback bind via the existing
+# DIGIQUANT_MCP_HOST / DIGIQUANT_MCP_PORT overrides (defaults 127.0.0.1:8767
+# in code; the ENV below binds 0.0.0.0 for the hosted path).
+FROM python:3.12-slim
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+RUN pip install --upgrade pip && pip install uv
+COPY digibase/pyproject.toml digibase/README.md ./digibase/
+COPY digibase/src ./digibase/src
+RUN uv pip install --system -e "./digibase"
+COPY digikey/pyproject.toml digikey/README.md ./digikey/
+COPY digikey/src ./digikey/src
+RUN uv pip install --system -e "./digikey"
+COPY digiquant/pyproject.toml ./digiquant/
+COPY digiquant/src ./digiquant/src
+RUN uv pip install --system -e "./digiquant[research,mcp]"
+ENV DIGIQUANT_MCP_HOST=0.0.0.0 DIGIQUANT_MCP_PORT=8767
+# Hosted default is read-only: `full` never leaves localhost. Local
+# `python -m digiquant.mcp_server` still defaults to `full` (see mcp_server.py).
+ENV DIGIQUANT_MCP_SCOPE=read
+EXPOSE 8767
+CMD ["python", "-m", "digiquant.mcp_server"]

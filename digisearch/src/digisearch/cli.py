@@ -116,12 +116,20 @@ def serve(
 @app.command()
 def mcp(
     config: Path | None = typer.Option(None, "--config", "-c"),
-    port: int = typer.Option(8765, "--port", "-p"),
+    port: int | None = typer.Option(None, "--port", "-p"),
 ) -> None:
-    """Start MCP server."""
-    from digisearch.mcp_server import run_mcp
+    """Start MCP server (real backend only; fails loud without one)."""
+    import os
 
-    run_mcp(port=port)
+    from digisearch.client import DigiSearch
+    from digisearch.core.config import DigiSearchConfig
+    from digisearch.mcp_server import create_mcp_with_indexes, run_mcp
+
+    resolved = port if port is not None else int(os.environ.get("DIGISEARCH_MCP_PORT", "8765"))
+    cfg = DigiSearchConfig.from_config(config) if config else DigiSearchConfig.from_env()
+    client: DigiSearch = DigiSearch(cfg)
+    create_mcp_with_indexes(client)
+    run_mcp(port=resolved)
 
 
 index_app = typer.Typer(help="Index operations")

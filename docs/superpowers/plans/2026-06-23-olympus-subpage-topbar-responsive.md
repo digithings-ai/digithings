@@ -4,7 +4,7 @@
 
 **Goal:** Make the shared Olympus subpage top-bar full-bleed on wide screens and collapse its tabs into a `☰ Sections` menu on mobile, with zero callsite changes.
 
-**Architecture:** Self-contained refactor of `frontend/olympus/components/subpage-tab-bar.tsx`. Split the single sticky div into a full-width outer wrapper (chrome) + a `SUBPAGE_MAX`-capped inner wrapper (content). Add a `md:hidden` menu trigger with local `open` state; tabs render once in a container that is an inline wrapping row at `≥ md` and an absolute dropdown panel below `md`. The mobile-nav idiom (lucide `Menu`/`X`, `aria-expanded`/`aria-controls`, `md:hidden` backdrop, close-on-route-change) is reused but state stays local.
+**Architecture:** Self-contained refactor of `cloudflare/olympus/components/subpage-tab-bar.tsx`. Split the single sticky div into a full-width outer wrapper (chrome) + a `SUBPAGE_MAX`-capped inner wrapper (content). Add a `md:hidden` menu trigger with local `open` state; tabs render once in a container that is an inline wrapping row at `≥ md` and an absolute dropdown panel below `md`. The mobile-nav idiom (lucide `Menu`/`X`, `aria-expanded`/`aria-controls`, `md:hidden` backdrop, close-on-route-change) is reused but state stays local.
 
 **Tech Stack:** Next.js 16 App Router, React 19 client component, Tailwind v4 (stock breakpoints), lucide-react, Vitest 4 (`node` environment + `react-dom/server` `renderToStaticMarkup`).
 
@@ -21,18 +21,18 @@
 
 ## File Structure
 
-- `frontend/olympus/components/subpage-tab-bar.tsx` (modify) — the only source file. Exports: `SUBPAGE_MAX` (unchanged), `subpageTabButtonClass` (unchanged), **new** `subpageTabsContainerClass(open)`, `SubpageStickyTabBar` (refactored).
-- `frontend/olympus/components/subpage-tab-bar.test.tsx` (create) — helper unit tests + `renderToStaticMarkup` structural tests.
+- `cloudflare/olympus/components/subpage-tab-bar.tsx` (modify) — the only source file. Exports: `SUBPAGE_MAX` (unchanged), `subpageTabButtonClass` (unchanged), **new** `subpageTabsContainerClass(open)`, `SubpageStickyTabBar` (refactored).
+- `cloudflare/olympus/components/subpage-tab-bar.test.tsx` (create) — helper unit tests + `renderToStaticMarkup` structural tests.
 
-All commands run from `frontend/olympus/` (the Next workspace). `node_modules` is symlinked there as in prior twelve-x work.
+All commands run from `cloudflare/olympus/` (the Next workspace). `node_modules` is symlinked there as in prior twelve-x work.
 
 ---
 
 ### Task 1: Pure helper `subpageTabsContainerClass(open)`
 
 **Files:**
-- Modify: `frontend/olympus/components/subpage-tab-bar.tsx` (add the exported helper after `subpageTabButtonClass`)
-- Test: `frontend/olympus/components/subpage-tab-bar.test.tsx` (create)
+- Modify: `cloudflare/olympus/components/subpage-tab-bar.tsx` (add the exported helper after `subpageTabButtonClass`)
+- Test: `cloudflare/olympus/components/subpage-tab-bar.test.tsx` (create)
 
 **Interfaces:**
 - Consumes: nothing.
@@ -40,7 +40,7 @@ All commands run from `frontend/olympus/` (the Next workspace). `node_modules` i
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `frontend/olympus/components/subpage-tab-bar.test.tsx`:
+Create `cloudflare/olympus/components/subpage-tab-bar.test.tsx`:
 
 ```tsx
 import { createElement } from 'react';
@@ -83,12 +83,12 @@ describe('subpageTabsContainerClass', () => {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cd frontend/olympus && npx vitest run components/subpage-tab-bar.test.tsx`
+Run: `cd cloudflare/olympus && npx vitest run components/subpage-tab-bar.test.tsx`
 Expected: FAIL — `subpageTabsContainerClass` is not exported (`SyntaxError`/`undefined is not a function`).
 
 - [ ] **Step 3: Implement the helper**
 
-In `frontend/olympus/components/subpage-tab-bar.tsx`, add after the `subpageTabButtonClass` function (before `SubpageStickyTabBar`):
+In `cloudflare/olympus/components/subpage-tab-bar.tsx`, add after the `subpageTabButtonClass` function (before `SubpageStickyTabBar`):
 
 ```tsx
 /**
@@ -104,13 +104,13 @@ export function subpageTabsContainerClass(open: boolean): string {
 
 - [ ] **Step 4: Run the helper tests to verify they pass**
 
-Run: `cd frontend/olympus && npx vitest run components/subpage-tab-bar.test.tsx -t subpageTabsContainerClass`
+Run: `cd cloudflare/olympus && npx vitest run components/subpage-tab-bar.test.tsx -t subpageTabsContainerClass`
 Expected: PASS (4 tests). The `SubpageStickyTabBar` describe block does not exist yet, so only the helper tests run under the `-t` filter.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/olympus/components/subpage-tab-bar.tsx frontend/olympus/components/subpage-tab-bar.test.tsx
+git add cloudflare/olympus/components/subpage-tab-bar.tsx cloudflare/olympus/components/subpage-tab-bar.test.tsx
 git commit -m "feat(olympus): add subpageTabsContainerClass responsive helper"
 ```
 
@@ -119,8 +119,8 @@ git commit -m "feat(olympus): add subpageTabsContainerClass responsive helper"
 ### Task 2: Refactor `SubpageStickyTabBar` (full-bleed + mobile menu)
 
 **Files:**
-- Modify: `frontend/olympus/components/subpage-tab-bar.tsx` (rewrite imports + `SubpageStickyTabBar`)
-- Test: `frontend/olympus/components/subpage-tab-bar.test.tsx` (append structural tests)
+- Modify: `cloudflare/olympus/components/subpage-tab-bar.tsx` (rewrite imports + `SubpageStickyTabBar`)
+- Test: `cloudflare/olympus/components/subpage-tab-bar.test.tsx` (append structural tests)
 
 **Interfaces:**
 - Consumes: `subpageTabsContainerClass(open)` and `SUBPAGE_MAX` from Task 1 / existing.
@@ -128,7 +128,7 @@ git commit -m "feat(olympus): add subpageTabsContainerClass responsive helper"
 
 - [ ] **Step 1: Write the failing structural tests**
 
-Append to `frontend/olympus/components/subpage-tab-bar.test.tsx`:
+Append to `cloudflare/olympus/components/subpage-tab-bar.test.tsx`:
 
 ```tsx
 function renderBar(): string {
@@ -179,12 +179,12 @@ describe('SubpageStickyTabBar', () => {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cd frontend/olympus && npx vitest run components/subpage-tab-bar.test.tsx -t SubpageStickyTabBar`
+Run: `cd cloudflare/olympus && npx vitest run components/subpage-tab-bar.test.tsx -t SubpageStickyTabBar`
 Expected: FAIL — current bar has no trigger (`aria-expanded` absent) and the outer wrapper still carries `max-w-[1600px]`.
 
 - [ ] **Step 3: Rewrite the component**
 
-In `frontend/olympus/components/subpage-tab-bar.tsx`, replace the top-of-file imports and the `SubpageStickyTabBar` function. The file's `'use client'`, `SUBPAGE_MAX`, `subpageTabButtonClass`, and `subpageTabsContainerClass` stay as they are.
+In `cloudflare/olympus/components/subpage-tab-bar.tsx`, replace the top-of-file imports and the `SubpageStickyTabBar` function. The file's `'use client'`, `SUBPAGE_MAX`, `subpageTabButtonClass`, and `subpageTabsContainerClass` stay as they are.
 
 Replace the import line:
 
@@ -270,18 +270,18 @@ export function SubpageStickyTabBar({
 
 - [ ] **Step 4: Run the full test file to verify it passes**
 
-Run: `cd frontend/olympus && npx vitest run components/subpage-tab-bar.test.tsx`
+Run: `cd cloudflare/olympus && npx vitest run components/subpage-tab-bar.test.tsx`
 Expected: PASS (all helper + structural tests, ~9 tests).
 
 - [ ] **Step 5: Typecheck and lint**
 
-Run: `cd frontend/olympus && npx tsc --noEmit -p tsconfig.json && npx eslint components/subpage-tab-bar.tsx components/subpage-tab-bar.test.tsx`
+Run: `cd cloudflare/olympus && npx tsc --noEmit -p tsconfig.json && npx eslint components/subpage-tab-bar.tsx components/subpage-tab-bar.test.tsx`
 Expected: tsc reports no NEW errors in these files (a pre-existing `lib/security-headers.test.ts` TS7016/7006 pair is known and unrelated); eslint exits 0.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/olympus/components/subpage-tab-bar.tsx frontend/olympus/components/subpage-tab-bar.test.tsx
+git add cloudflare/olympus/components/subpage-tab-bar.tsx cloudflare/olympus/components/subpage-tab-bar.test.tsx
 git commit -m "feat(olympus): full-bleed subpage top-bar + mobile menu collapse"
 ```
 
@@ -291,8 +291,8 @@ git commit -m "feat(olympus): full-bleed subpage top-bar + mobile menu collapse"
 
 After both tasks land, the controller verifies the whole branch:
 
-1. `cd frontend/olympus && npx vitest run` — full suite green (new + existing component tests).
-2. `cd frontend/olympus && npx next build` — green; `/twelve-x`, `/research`, `/observability`, `/portfolio` prerender without error.
+1. `cd cloudflare/olympus && npx vitest run` — full suite green (new + existing component tests).
+2. `cd cloudflare/olympus && npx next build` — green; `/twelve-x`, `/research`, `/observability`, `/portfolio` prerender without error.
 3. Dev-server render verification (browser) at three widths on a subpage with tabs (e.g. `/twelve-x`):
    - **~2000px wide:** the bar's glass background + bottom border reach both viewport edges; tabs centered, aligned to the 1600px content column.
    - **~1280px desktop:** tabs inline exactly as before; no trigger button.

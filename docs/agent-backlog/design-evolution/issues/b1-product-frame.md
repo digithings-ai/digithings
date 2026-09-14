@@ -1,20 +1,20 @@
 ## Goal
 
-Build a shared **`ProductFrame`** primitive — container-query-scaled ~800px UI embed for marketing pages — inspired by Graphite artboards and Cursor rounded product screenshots ([`components-catalog.md`](../../../../frontend/digiweb/design/references/scans/components-catalog.md)).
+Build a shared **`ProductFrame`** primitive — container-query-scaled ~800px UI embed for marketing pages — inspired by Graphite artboards and Cursor rounded product screenshots ([`components-catalog.md`](../../../../cloudflare/digiweb/design/references/scans/components-catalog.md)).
 
 ## Component
 
-- [x] cross-cutting (`frontend/digiweb/design/` + `frontend/digiweb/web/` if React wrapper needed)
+- [x] cross-cutting (`cloudflare/digiweb/design/` + `cloudflare/digiweb/web/` if React wrapper needed)
 
 ## Acceptance Criteria
 
-- [ ] CSS in `frontend/digiweb/design/site/site.css` (or `components.css`):
+- [ ] CSS in `cloudflare/digiweb/design/site/site.css` (or `components.css`):
   - `.product-frame` — max-width `var(--product-frame-w)`, `container-type: inline-size`
   - Inner `.product-frame__surface` — flat dark/light panel, 1px `--hair` border, `border-radius: var(--radius-lg)`, **no mesh gradient on UI**
   - CQ scale: UI content scales down below 800px using `cqw` or `clamp()` (document chosen approach)
-- [ ] Optional React component `ProductFrame` in `frontend/digiweb/web/` (or shared landing package) accepting `children` + `caption?`
-- [ ] Demo usage in `frontend/digiweb/design/smoke/index.html` or existing demo page
-- [ ] `frontend/digiweb/design/site/README.md` documents API (class names, props, atmosphere rule: *surgical inside*)
+- [ ] Optional React component `ProductFrame` in `cloudflare/digiweb/web/` (or shared landing package) accepting `children` + `caption?`
+- [ ] Demo usage in `cloudflare/digiweb/design/smoke/index.html` or existing demo page
+- [ ] `cloudflare/digiweb/design/site/README.md` documents API (class names, props, atmosphere rule: *surgical inside*)
 - [ ] Works in both `[data-theme="light"]` and `[data-theme="dark"]`
 - [ ] Referenced from `EVOLUTION.md` primitives table as implemented
 
@@ -23,18 +23,18 @@ Build a shared **`ProductFrame`** primitive — container-query-scaled ~800px UI
 **Visual smoke:**
 ```bash
 # Open smoke page; frame scales at 390px and 1280px viewports without horizontal scroll
-open frontend/digiweb/design/smoke/index.html
+open cloudflare/digiweb/design/smoke/index.html
 ```
 
 **Build:**
 ```bash
-cd frontend/digithings-web && npm run build
+cd cloudflare/digithings-web && npm run build
 ```
 
 ## Documentation to Update
 
-- [ ] `frontend/digiweb/design/site/README.md` — ProductFrame section
-- [ ] `frontend/digiweb/design/EVOLUTION.md` — Phase B checkbox
+- [ ] `cloudflare/digiweb/design/site/README.md` — ProductFrame section
+- [ ] `cloudflare/digiweb/design/EVOLUTION.md` — Phase B checkbox
 
 ## Scoring Targets
 

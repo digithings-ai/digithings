@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any  # score:allow untyped any — dynamically loaded module
@@ -161,7 +162,7 @@ def test_scan_exempts_hardcoded_secret_in_test_fixtures() -> None:
 def test_scan_skips_score_py_and_design_fragments() -> None:
     for path in (
         "scripts/score.py",
-        "frontend/digiweb/design/terminal/highlight-dom.js",
+        "cloudflare/digiweb/design/terminal/highlight-dom.js",
         "package-lock.json",
     ):
         # Concatenate so this source line does not contain a call-shaped token.
@@ -278,3 +279,83 @@ def test_scan_todo_requires_word_boundary() -> None:
     comment_hits = score.scan(comment)["accuracy"].findings
     assert not any("TODO/FIXME" in f.description for f in id_hits)
     assert any("TODO/FIXME" in f.description for f in comment_hits)
+
+
+def _run_git(repo: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(repo), *args],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout
+
+
+def test_score_workflow_excludes_non_source_surfaces(tmp_path: Path) -> None:
+    """``test-score.yml`` must behaviorally exclude non-source surfaces (#3798).
+
+    ``cloudflare/**`` set the precedent: scoring JS/CSS with a Python-oriented
+    rubric emits findings nobody can act on. Tests, config, prose and Dockerfiles
+    misfire the same way on a develop→main promotion — a test asserting a
+    ``0.0.0.0`` bind, an EXPOSE directive, an env-var *name* read as a secret — so
+    the check went red on a range with no actionable code change behind it.
+
+    Asserting the literal pathspecs would rubber-stamp a no-op pattern: git's
+    default (non-``glob``) pathspec needs the ``**/`` form for nested paths and the
+    bare form for repo-root files. Instead, extract the exclusions from the
+    workflow and prove they drop the surfaces while keeping real source.
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / "test-score.yml").read_text(encoding="utf-8")
+    pathspecs = [
+        token.strip("'")
+        for line in workflow.splitlines()
+        for token in line.split()
+        if token.startswith("':(exclude)")
+    ]
+    assert pathspecs, "test-score.yml must declare exclude pathspecs"
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _run_git(repo, "init", "-q")
+    _run_git(repo, "config", "user.email", "score@test")
+    _run_git(repo, "config", "user.name", "score test")
+    (repo / "base.txt").write_text("base\n", encoding="utf-8")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-qm", "base")
+
+    non_source = {
+        "README.md": "doc\n",
+        "Dockerfile.root": "FROM scratch\n",
+        "config/searxng/settings.yml": "host: 0.0.0.0\n",
+        "nested/app/config/model.yaml": "model: x\n",
+        "digiquant/Dockerfile.mcp": "FROM python\n",
+        "tests/dq/test_r2.py": "from typing import Any\n",
+    }
+    source = {"digiquant/src/digiquant/mcp_server.py": "from typing import Any\n"}
+    for rel, body in {**non_source, **source}.items():
+        path = repo / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-qm", "surfaces")
+
+    included = set(
+        _run_git(repo, "diff", "--name-only", "HEAD~1", "HEAD", "--", *pathspecs).split()
+    )
+    assert set(source) <= included, "real source must still be scored"
+    assert not set(non_source) & included, "non-source surfaces must be excluded"
+
+
+def test_scan_allows_hardcoded_secret_with_inline_pragma() -> None:
+    """An inline ``# score:allow`` exempts a hardcoded-secret false positive (#3798).
+
+    ``_ENV_TOKEN = "BGEOMETRICS_API_TOKEN"`` holds the *name* of an environment
+    variable, but the secret heuristic reads the ``TOKEN = "..."`` substring as a
+    value. The line-scoped pragma is the escape hatch, mirroring ``untyped any``.
+    """
+    diff = _unified(
+        "digiquant/src/digiquant/data/onchain/bgeometrics.py",
+        '+_ENV_TOKEN = "BGEOMETRICS_API_TOKEN"  # score:allow potential hardcoded secret\n',
+    )
+    findings = score.scan(diff)["security"].findings
+    assert not any("hardcoded secret" in f.description for f in findings)

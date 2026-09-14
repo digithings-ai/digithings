@@ -10,11 +10,11 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BRAND = REPO_ROOT / "frontend" / "digiweb" / "brand"
-PUBLIC_BRAND = REPO_ROOT / "frontend" / "digiweb" / "reference" / "public" / "brand"
-MARKETING_PUBLIC_BRAND = REPO_ROOT / "frontend" / "digithings-web" / "public" / "brand"
-MARKETING_BRAND_PAGE = REPO_ROOT / "frontend" / "digithings-web" / "app" / "brand"
-KIT_TS = REPO_ROOT / "frontend" / "digiweb" / "reference" / "lib" / "brandKit.ts"
+BRAND = REPO_ROOT / "cloudflare" / "digiweb" / "brand"
+PUBLIC_BRAND = REPO_ROOT / "cloudflare" / "digiweb" / "reference" / "public" / "brand"
+MARKETING_PUBLIC_BRAND = REPO_ROOT / "cloudflare" / "digithings-web" / "public" / "brand"
+MARKETING_BRAND_PAGE = REPO_ROOT / "cloudflare" / "digithings-web" / "app" / "brand"
+KIT_TS = REPO_ROOT / "cloudflare" / "digiweb" / "reference" / "lib" / "brandKit.ts"
 
 pytestmark = pytest.mark.unit
 
@@ -146,11 +146,11 @@ def test_kit_is_not_on_the_marketing_site() -> None:
     """digithings.ai must not ship /brand — the kit is design-reference only."""
     assert not (MARKETING_BRAND_PAGE / "page.tsx").exists()
     assert not MARKETING_PUBLIC_BRAND.exists() or not any(MARKETING_PUBLIC_BRAND.rglob("*"))
-    nav = (REPO_ROOT / "frontend" / "digithings-web" / "app" / "_nav.tsx").read_text(
+    nav = (REPO_ROOT / "cloudflare" / "digithings-web" / "app" / "_nav.tsx").read_text(
         encoding="utf-8"
     )
     assert 'href: "/brand"' not in nav
-    redirects = (REPO_ROOT / "frontend" / "digithings-web" / "public" / "_redirects").read_text(
+    redirects = (REPO_ROOT / "cloudflare" / "digithings-web" / "public" / "_redirects").read_text(
         encoding="utf-8"
     )
     assert "/brand" not in redirects
@@ -159,7 +159,7 @@ def test_kit_is_not_on_the_marketing_site() -> None:
 def test_design_reference_ships_the_kit_page() -> None:
     page = (
         REPO_ROOT
-        / "frontend"
+        / "cloudflare"
         / "digiweb"
         / "reference"
         / "app"
@@ -170,6 +170,6 @@ def test_design_reference_ships_the_kit_page() -> None:
     assert "{BRAND_TAGLINE}" in page
     assert "design-reference" in page
     nav_path = (
-        REPO_ROOT / "frontend" / "digiweb" / "reference" / "components" / "site-nav.tsx"
+        REPO_ROOT / "cloudflare" / "digiweb" / "reference" / "components" / "site-nav.tsx"
     )
     assert 'href: "/brand"' in nav_path.read_text(encoding="utf-8")

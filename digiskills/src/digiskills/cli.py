@@ -50,7 +50,7 @@ def compile_cmd(
     max_file_chars: int | None = typer.Option(
         None,
         "--max-file-chars",
-        help="Max chars per file before truncation (default 200000). Raise for large OpenAPI specs.",
+        help="Max chars per file before truncation (default 500000). Raise for large OpenAPI specs.",
     ),
     max_total_chars: int | None = typer.Option(
         None, "--max-total-chars", help="Max chars across the whole corpus (default 2000000)"

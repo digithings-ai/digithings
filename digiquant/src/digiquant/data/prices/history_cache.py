@@ -13,6 +13,7 @@ grace period. Writes are atomic (temp file + rename).
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -23,9 +24,24 @@ from digiquant.data.prices.fetchers import FetchResult, fetch_batch
 
 DEFAULT_CACHE_DIR = Path("data/price-history")
 
+# Cache slugs are flat filenames: leading alnum, then alnum/dot/underscore/hyphen.
+# No separators, so ``..``/absolute/``a/b`` tickers can never escape the cache dir
+# (M5/LOW7 — the MCP ticker path is caller-controlled but local-only).
+_TICKER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def is_safe_ticker(ticker: str) -> bool:
+    """True when ``ticker`` is a safe flat cache slug (no traversal)."""
+    return isinstance(ticker, str) and _TICKER_RE.fullmatch(ticker) is not None
+
 
 def cache_path(ticker: str, cache_dir: Path | str = DEFAULT_CACHE_DIR) -> Path:
-    return Path(cache_dir) / f"{ticker}.csv"
+    if not is_safe_ticker(ticker):
+        raise ValueError(f"unsafe ticker for cache path: {ticker!r}")
+    dest = Path(cache_dir) / f"{ticker}.csv"
+    if dest.resolve().parent != Path(cache_dir).resolve():
+        raise ValueError(f"unsafe ticker for cache path: {ticker!r}")
+    return dest
 
 
 def load_cached(ticker: str, cache_dir: Path | str = DEFAULT_CACHE_DIR) -> pl.DataFrame | None:

@@ -1,10 +1,10 @@
 ## Goal
 
-Wire **`PricingMatrix`** + **`FaqAccordion`** (E3) into digiquant.io `/#pricing` section with honest open-core tier copy ([COPY_GUIDE.md §10](../../../../frontend/digiweb/design/COPY_GUIDE.md)).
+Wire **`PricingMatrix`** + **`FaqAccordion`** (E3) into digiquant.io `/#pricing` section with honest open-core tier copy ([COPY_GUIDE.md §10](../../../../cloudflare/digiweb/design/COPY_GUIDE.md)).
 
 ## Component
 
-- [x] `frontend/digiquant-web/`
+- [x] `cloudflare/digiquant-web/`
 
 ## Acceptance Criteria
 
@@ -18,15 +18,15 @@ Wire **`PricingMatrix`** + **`FaqAccordion`** (E3) into digiquant.io `/#pricing`
 ## Test Requirements
 
 ```bash
-cd frontend/digiquant-web && npm run build
+cd cloudflare/digiquant-web && npm run build
 ```
 
 Manual: navigate to `/#pricing`; FAQ keyboard accessible.
 
 ## Documentation to Update
 
-- [ ] `frontend/digiweb/design/demos/digiquant-landing/DESIGN_DECISIONS.md`
-- [ ] `frontend/digiweb/design/COPY_GUIDE.md` if tier copy changes
+- [ ] `cloudflare/digiweb/design/demos/digiquant-landing/DESIGN_DECISIONS.md`
+- [ ] `cloudflare/digiweb/design/COPY_GUIDE.md` if tier copy changes
 
 ## Out of Scope
 

@@ -152,8 +152,9 @@ def build_digiquant_fetch_coinbase_ohlcv_tool() -> dict[str, Any]:
         "function": {
             "name": "digiquant_fetch_coinbase_ohlcv",
             "description": (
-                "Fetch daily OHLCV from Coinbase (CCXT) into the price-history "
-                "cache. Fail-soft per symbol."
+                "Fetch OHLCV from Coinbase (CCXT) into the price-history "
+                "cache. Any Coinbase spot pair, any supported timeframe. "
+                "Fail-soft per symbol."
             ),
             "parameters": {
                 "type": "object",
@@ -163,6 +164,18 @@ def build_digiquant_fetch_coinbase_ohlcv_tool() -> dict[str, Any]:
                         "description": 'JSON array of CCXT symbols, e.g. ["BTC/USD"]',
                     },
                     "start": {"type": "string"},
+                    "end": {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD); defaults to now",
+                    },
+                    "timeframe": {
+                        "type": "string",
+                        "description": "CCXT timeframe: 1m,5m,15m,30m,1h,2h,6h,1d (default 1d)",
+                    },
+                    "through_yesterday": {
+                        "type": "boolean",
+                        "description": "Drop today's incomplete UTC bar (only meaningful for timeframe=1d)",
+                    },
                     "cache_dir": {"type": "string"},
                 },
             },
@@ -234,8 +247,9 @@ def build_digiquant_fetch_bitview_series_tool() -> dict[str, Any]:
             "description": (
                 "Fetch Bitview/BRK on-chain day1 series (mvrv, asopr_24h, "
                 "puell_multiple, rhodl_ratio) into data/onchain/bitview. "
-                "JSON API only; nupl refused (dual-count). Fail-soft. "
-                "CM community CC BY-NC is not fetched. Refs #1086."
+                "JSON API only; nupl refused by default (dual-count of mvrv) "
+                "unless allow_derived=true. Fail-soft. CM community CC BY-NC "
+                "is not fetched. Refs #1086."
             ),
             "parameters": {
                 "type": "object",
@@ -248,6 +262,119 @@ def build_digiquant_fetch_bitview_series_tool() -> dict[str, Any]:
                     "timeout": {"type": "number", "default": 30},
                     "start": {"type": "integer"},
                     "end": {"type": "integer"},
+                    "allow_derived": {
+                        "type": "boolean",
+                        "description": "Fetch series normally refused as derived/dual-count (e.g. nupl)",
+                        "default": False,
+                    },
+                },
+            },
+        },
+    }
+
+
+def build_digiquant_fetch_bgeometrics_series_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digiquant_fetch_bgeometrics_series",
+            "description": (
+                "Fetch one Bitcoin valuation/on-chain metric from "
+                "bitcoin-data.com (BGeometrics): 700+ metrics (mvrv, "
+                "mvrv-zscore, nupl, sopr, realized-price, thermocap-multiple, "
+                "mayer-multiple, pi-cycle, rainbow-chart, power-law-model-price, "
+                "and more). API key now effectively required (bitcoin-data.com "
+                "markets registration as mandatory even for the free tier); "
+                "pass token or set BGEOMETRICS_API_TOKEN. Free tier: 10 "
+                "req/hour, 15/day shared across all metrics — fetch one "
+                "metric per call. History capped at ~4 years; for deeper "
+                "multi-cycle history use digiquant_fetch_coinmetrics_series "
+                "instead. Fail-soft."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "metric": {
+                        "type": "string",
+                        "description": "bitcoin-data.com metric slug, e.g. 'mvrv'",
+                        "default": "mvrv",
+                    },
+                    "startday": {"type": "string", "description": "YYYY-MM-DD"},
+                    "endday": {"type": "string", "description": "YYYY-MM-DD"},
+                    "last": {
+                        "type": "boolean",
+                        "description": "fetch only the most recent value",
+                        "default": False,
+                    },
+                    "cache_dir": {"type": "string"},
+                    "timeout": {"type": "number", "default": 30},
+                    "token": {"type": "string", "description": "bitcoin-data.com API token"},
+                },
+                "required": ["metric"],
+            },
+        },
+    }
+
+
+def build_digiquant_fetch_coinmetrics_series_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digiquant_fetch_coinmetrics_series",
+            "description": (
+                "Fetch one on-chain metric for one asset from the CoinMetrics "
+                "Community API (free, no API key required). One metric/asset "
+                "per call — use digiquant_list_coinmetrics_catalog to discover "
+                "what's available per-asset. BTC's CapMVRVCur (MVRV valuation "
+                "ratio) has full history back to 2010-07-18. CC BY-NC — "
+                "research-only, do not republish derived series commercially. "
+                "Fail-soft."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "metric": {
+                        "type": "string",
+                        "description": "CoinMetrics metric id, e.g. 'CapMVRVCur'",
+                        "default": "CapMVRVCur",
+                    },
+                    "asset": {"type": "string", "default": "btc"},
+                    "start_time": {"type": "string", "description": "ISO 8601 or YYYY-MM-DD"},
+                    "end_time": {"type": "string", "description": "ISO 8601 or YYYY-MM-DD"},
+                    "page_size": {"type": "integer", "default": 10000},
+                    "cache_dir": {"type": "string"},
+                    "timeout": {"type": "number", "default": 30},
+                    "api_key": {
+                        "type": "string",
+                        "description": "Registered CoinMetrics API key (optional)",
+                    },
+                },
+                "required": ["metric"],
+            },
+        },
+    }
+
+
+def build_digiquant_list_coinmetrics_catalog_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digiquant_list_coinmetrics_catalog",
+            "description": (
+                "List which CoinMetrics community metrics exist for an asset "
+                "(or all assets). Discovery tool — call before "
+                "digiquant_fetch_coinmetrics_series to find real metric names "
+                "instead of guessing. Fail-soft."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "asset": {"type": "string", "description": "Restrict to one asset, e.g. 'btc'"},
+                    "timeout": {"type": "number", "default": 30},
+                    "api_key": {
+                        "type": "string",
+                        "description": "Registered CoinMetrics API key (optional)",
+                    },
                 },
             },
         },
@@ -422,6 +549,59 @@ def build_digiquant_compile_research_portfolio_tool() -> dict[str, Any]:
     }
 
 
+def build_digiquant_get_trade_levels_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digiquant_get_trade_levels",
+            "description": (
+                "Compute causal trade levels (entry band, structural/ATR stop, "
+                "R-multiple take-profit ladder, trail policy) for a long or short "
+                "direction. Read-only — never sizes or places orders. Supply "
+                "ohlc_json (a JSON array of OHLC bars) as the primary data path, "
+                "or a locally cached ticker as a convenience."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "direction": {
+                        "type": "string",
+                        "enum": ["long", "short"],
+                        "description": "Trade direction the levels are computed for",
+                    },
+                    "ohlc_json": {
+                        "type": "string",
+                        "description": (
+                            "JSON array of bars: [{timestamp, open, high, low, "
+                            "close, volume}, ...] sorted ascending. Primary path."
+                        ),
+                    },
+                    "pair": {
+                        "type": "string",
+                        "description": "Instrument label echoed in the contract, e.g. 'EUR/USD'",
+                    },
+                    "ticker": {
+                        "type": "string",
+                        "description": (
+                            "Optional ticker with a local history-cache CSV "
+                            "(non-blocking convenience; no network fetch)"
+                        ),
+                    },
+                    "config_json": {
+                        "type": "string",
+                        "description": "Optional JSON object of LevelsConfig overrides",
+                    },
+                    "cache_dir": {
+                        "type": "string",
+                        "description": "Optional cache directory for the ticker convenience path",
+                    },
+                },
+                "required": ["direction"],
+            },
+        },
+    }
+
+
 def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
     """Return the full digiquant orchestrator tool surface."""
     return [
@@ -435,6 +615,10 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digiquant_fit_btc_power_law_tool(),
         build_digiquant_build_sdca_risk_index_tool(),
         build_digiquant_fetch_bitview_series_tool(),
+        build_digiquant_fetch_bgeometrics_series_tool(),
+        build_digiquant_fetch_coinmetrics_series_tool(),
+        build_digiquant_list_coinmetrics_catalog_tool(),
+        build_digiquant_get_trade_levels_tool(),
         build_digiquant_fit_sdca_weights_tool(),
         build_digiquant_compile_research_portfolio_tool(),
         build_dashboard_run_policy_replay_tool(),

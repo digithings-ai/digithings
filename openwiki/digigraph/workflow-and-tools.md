@@ -5,7 +5,7 @@ description: digigraph workflow behavior — graph nodes and routing, tool allow
 tags: [digigraph, workflow, langgraph, tools]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
+    at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-f7a337c6ddca8aa6af23ce93
     resource: repo://digigraph/src/digigraph/compaction.py

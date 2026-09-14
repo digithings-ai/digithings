@@ -1362,12 +1362,12 @@ describe for the Chroma path."
 ### Task 6: Cloudflare container wiring
 
 **Files:**
-- Modify: `frontend/digithings-stack-cloudflare/src/index.ts`
-- Modify: `frontend/digithings-stack-cloudflare/container/entrypoint.sh`
-- Modify: `frontend/digithings-stack-cloudflare/container/seed_chroma.sh`
-- Modify: `frontend/digithings-stack-cloudflare/container/start_digisearch.sh`
-- Modify: `frontend/digithings-stack-cloudflare/wrangler.toml`
-- Modify: `frontend/digithings-stack-cloudflare/README.md`
+- Modify: `cloudflare/digithings-stack-cloudflare/src/index.ts`
+- Modify: `cloudflare/digithings-stack-cloudflare/container/entrypoint.sh`
+- Modify: `cloudflare/digithings-stack-cloudflare/container/seed_chroma.sh`
+- Modify: `cloudflare/digithings-stack-cloudflare/container/start_digisearch.sh`
+- Modify: `cloudflare/digithings-stack-cloudflare/wrangler.toml`
+- Modify: `cloudflare/digithings-stack-cloudflare/README.md`
 
 **Interfaces:**
 - Consumes: the `VECTORIZE_ACCOUNT_ID` / `VECTORIZE_API_TOKEN` env contract from Task 4.
@@ -1377,7 +1377,7 @@ describe for the Chroma path."
 
 - [ ] **Step 1: Forward the new vars to the container**
 
-In `frontend/digithings-stack-cloudflare/src/index.ts`, add to the `envVars` object literal (alongside the existing `CHROMA_PATH` / `DIGISEARCH_INDEX` entries):
+In `cloudflare/digithings-stack-cloudflare/src/index.ts`, add to the `envVars` object literal (alongside the existing `CHROMA_PATH` / `DIGISEARCH_INDEX` entries):
 
 ```ts
       VECTORIZE_ACCOUNT_ID: env.VECTORIZE_ACCOUNT_ID ?? "",
@@ -1444,13 +1444,13 @@ In `README.md`, replace the boot-sequence bullet describing the chroma seed wait
 Run:
 
 ```bash
-sh -n frontend/digithings-stack-cloudflare/container/entrypoint.sh
-sh -n frontend/digithings-stack-cloudflare/container/seed_chroma.sh
-sh -n frontend/digithings-stack-cloudflare/container/start_digisearch.sh
+sh -n cloudflare/digithings-stack-cloudflare/container/entrypoint.sh
+sh -n cloudflare/digithings-stack-cloudflare/container/seed_chroma.sh
+sh -n cloudflare/digithings-stack-cloudflare/container/start_digisearch.sh
 ```
 Expected: no output from any of the three.
 
-Run: `cd frontend/digithings-stack-cloudflare && npx tsc --noEmit -p tsconfig.json`
+Run: `cd cloudflare/digithings-stack-cloudflare && npx tsc --noEmit -p tsconfig.json`
 Expected: no errors. (If the package has no `tsconfig.json`, run `npx wrangler deploy --dry-run` instead and expect it to complete without type errors.)
 
 Run: `make doc-check`
@@ -1459,7 +1459,7 @@ Expected: no broken internal links.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/digithings-stack-cloudflare/
+git add cloudflare/digithings-stack-cloudflare/
 git commit -m "feat(stack): wire Vectorize into the Cloudflare container
 
 Refs #2201

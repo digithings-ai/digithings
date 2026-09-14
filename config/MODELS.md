@@ -35,7 +35,7 @@ Set in `.env`:
 - **`medium`** – Balanced quality/speed.
 - **`best`** – Largest/best for hard tasks.
 
-digigraph reads `DIGI_LLM_MODE` and picks the default model from `config/model_modes.yaml`. If the file is missing or the mode is unset, it falls back to `test` and then to the env `OLLAMA_MODEL` or a built-in default.
+digigraph reads `DIGI_LLM_MODE` and picks the default model from `config/model_modes.yaml`. If the file is missing or the mode is unset, mode selection uses `test`, then env `OLLAMA_MODEL`, then a built-in default — that is **mode defaults only**, not a provider fallback chain. Provider errors still surface (see Router fallbacks / digillm ARCHITECTURE fail-fast).
 
 ## How agents should update the model list
 
@@ -55,6 +55,15 @@ digigraph reads `DIGI_LLM_MODE` and picks the default model from `config/model_m
 4. **After editing**  
    - Restart the stack (`docker compose up -d`) so LiteLLM and digigraph reload config.  
    - No code change is required for new models; only config and (if needed) this doc.
+
+## Grounding (tool-only web search)
+
+Grounding is tool-only (#3859): the first-party digisearch `web_search`
+tool (searxng sidecar with ddgs fallback, digifetch fetch + extract enrichment)
+runs in both the digigraph `web_search` handler and the digiquant research
+grounding pre-pass. There are no synthesis-model pins and no fallback: a
+requested search must succeed or raise. Monitor tool error rates alongside
+per-engine 403/CAPTCHA rates to see the cost win.
 
 ## Future: router (Claw-style)
 

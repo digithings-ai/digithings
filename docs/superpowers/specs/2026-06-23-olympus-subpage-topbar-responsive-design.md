@@ -2,7 +2,7 @@
 
 - **Date:** 2026-06-23
 - **Status:** Approved design / spec (pre-implementation)
-- **Surface:** Olympus shared subpage tab-bar (`frontend/olympus/components/subpage-tab-bar.tsx`)
+- **Surface:** Olympus shared subpage tab-bar (`cloudflare/olympus/components/subpage-tab-bar.tsx`)
 - **Relationship:** This is **Part B** of the twelve-x Today work. Part A (the Today snapshot redesign, PR #1002) is separate and already open. Part B is its own branch (`feat/olympus-subpage-topbar-responsive`) off `develop` and its own PR.
 
 ## 1. Goal

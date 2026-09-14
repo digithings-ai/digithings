@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:16dfc9f67e6fac0f4d1271c9bfcdf90fba094afac2aa57411b3201bf2a5d1ad9",
+  "pageVersion": "sha256:be8d2e5e70181b5a5ed42a59760cfe9cd224cf42f5df144a8f8da7c8a29c751d",
   "claims": [
     {
       "id": "claim_f376f1dc290f4bd6b1e8371bff4391fe",
@@ -73,8 +73,16 @@
       "statement": "OTel FastAPI instrumentation is wired at app construction but is a no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set, covering only the service's own HTTP spans.",
       "evidence": [
         {
-          "resource": "repo://digismith/src/digismith/server.py#L66-L67",
-          "version": "repo-lines-v1:sha256:456da4d50e02b23c24ad0af8fe99772c3a6e232619b1f308fb730815691a6698:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmIxMzlkZjg0YjU0ODg3ZmYyMTUzNDAxNjhjZjkwNzA1ODhiNDUwNzUwYTlhNDE5ZTBmOGJjNzhhN2M2ZDg2ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODVlMDVkNmI3YjAxYjdlOGUxZjgyYzM4NTZiZWMwYjY0NWZlYWJkZjIyYzZkYzViMjhhZmJiNmFmMWJjNTQ4MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNjNGE3ZDFjYzc5NmFiYTNlNDY3MjMzMjdmNTE3ZTlmODExOTgyZDI1MGYwNzAyOTg2ZTRiNTc2NGFkOTU4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+          "resource": "repo://digibase/src/digibase/otel.py#L39-L71",
+          "version": "repo-lines-v1:sha256:587a7c4151a98290452438c4c04d89c438c46f17aa53dab7e0d90ad9e8c3066d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJmN2U3Y2IwMTM4MzVjMzA3MmIxMTJlY2Y0YTQ2ODZjMzU2ZDhhOGE4ZGViMDkzZWJjZGJmN2JlNmI1MGM3NzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFiNWM4MjYzMmZjODJkNGIyYzM0MGY0MjU1OGJhM2RmYTMxYzc2NTVkZjZmY2MxNjhiNGZkY2U1N2ZhYzYwNDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAxYjBiZWRlNzQxYzY5ZWJhZjhiZjQxYTE1MjQyZjViNjY5ZDQ4Njg0YmExZjBkZjlhYzRkMzAxZTRlNjRlOTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc4ZmRlNDBjYzUwZTg5NjcyMTRkMjBiYjVmMDA3YzY2YjkyODNjOTNmMzUxMzZmMjk0YjMyMTRiZTU2OTZkZGMifQ"
+        },
+        {
+          "resource": "repo://digismith/src/digismith/server.py#L67-L67",
+          "version": "repo-lines-v1:sha256:64c0044d832ef4e4fb02828b89a0fafa5cb213c2302d0f7d52f608dc8b1436d1:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjRjMDA0NGQ4MzJlZjRlNGZiMDI4MjhiODlhMGZhZmE1Y2IyMTNjMjMwMmQwZjdkNTJmNjA4ZGM4YjE0MzZkMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjRjMDA0NGQ4MzJlZjRlNGZiMDI4MjhiODlhMGZhZmE1Y2IyMTNjMjMwMmQwZjdkNTJmNjA4ZGM4YjE0MzZkMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGU4ZDc2YjE0OWY3NzYyNDdjN2I2Nzg4MDBiYTQ5NmNiMzliOWViNTMwYTg3NTUwNDE1MTA0YzhkNmM1YTlhZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        },
+        {
+          "resource": "repo://digismith/src/digismith/server.py#L9-L9",
+          "version": "repo-lines-v1:sha256:7ee79e004860afc53274f20e6e5c8501e9d51bc8eb31ad4c7d578145af50a6b6:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2VlNzllMDA0ODYwYWZjNTMyNzRmMjBlNmU1Yzg1MDFlOWQ1MWJjOGViMzFhZDRjN2Q1NzgxNDVhZjUwYTZiNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2VlNzllMDA0ODYwYWZjNTMyNzRmMjBlNmU1Yzg1MDFlOWQ1MWJjOGViMzFhZDRjN2Q1NzgxNDVhZjUwYTZiNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjJmZGM5YzhmNjNjODY0OTJjMDE4NjViYjAwYmNmNGFmZTViMThkMDRkNDI4NjAyYmE5NmFkYWU3MzdkYmY1MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTA1MWYyNzZkZmFkZDY5ZDBhN2VmYzJmZjc3ODkxYTJmYzE1MmRiNWQ2MTFhYWQzMTM3ZmY1NjY5NmY3YTA0YiJ9"
         }
       ]
     },
@@ -91,6 +99,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-07T22:31:53.755Z"
+    "at": "2026-09-09T14:37:17.158Z"
   }
 }

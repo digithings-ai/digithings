@@ -44,30 +44,39 @@ class JtiIssuedRow(Base):
     """
     Durable record of every jti issued via token exchange.
 
-    Source of truth for "which JTIs were ever issued for this key", used by the
-    revoke endpoint to enumerate live tokens and push them to the Redis blocklist.
-    See ADR-0007.
+    Source of truth for "which JTIs were ever issued for this principal", used by
+    the revoke endpoints to enumerate live tokens and push them to the Redis
+    blocklist. ``api_key`` grants carry ``api_key_id``; ``bff_session`` grants
+    carry ``subject`` (no backing key row) and a NULL ``api_key_id``. See ADR-0007.
     """
 
     __tablename__ = "digikey_jti_issued"
 
     jti: Mapped[str] = mapped_column(String(36), primary_key=True)
-    api_key_id: Mapped[str] = mapped_column(
+    api_key_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("digikey_api_keys.id"),
-        nullable=False,
+        nullable=True,
     )
+    #: Bare BFF subject (no ``bff:`` prefix) for ``bff_session`` grants.
+    subject: Mapped[str | None] = mapped_column(String(256), nullable=True)
     exp: Mapped[int] = mapped_column(Integer, nullable=False)
     issued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
+    #: Set by the subject-scoped BFF revoke path. Durable marker so
+    #: ``rehydrate_blocklist_from_db`` can restore the entry after a Redis restart
+    #: (key-scoped revoke relies on ``ApiKeyRow.revoked_at`` instead).
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         # Revocation query filters on (api_key_id, exp > now()) — composite index
         # keeps that lookup from full-scanning as the table grows.
         Index("ix_digikey_jti_issued_key_exp", "api_key_id", "exp"),
+        # BFF revoke/rehydrate filter on (subject, exp > now()).
+        Index("ix_digikey_jti_issued_subject_exp", "subject", "exp"),
     )
 
 

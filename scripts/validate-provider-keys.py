@@ -49,7 +49,7 @@ PROVIDERS = {
 TEST_MESSAGES = [{"role": "user", "content": "Reply with exactly: OK"}]
 
 
-def test_provider(name: str, cfg: dict) -> bool:
+def test_provider(name: str, cfg: dict, *, strict: bool = False) -> bool:
     label = cfg["label"]
     api_key = os.environ.get(cfg["api_key_env"], "").strip()
     if not api_key:
@@ -57,7 +57,7 @@ def test_provider(name: str, cfg: dict) -> bool:
             print(f"  FAIL  {label}: {cfg['api_key_env']} not set (required)")
             return False
         print(f"  SKIP  {label}: {cfg['api_key_env']} not set (optional — keys not yet configured)")
-        return True
+        return False if strict else True
 
     model = os.environ.get(cfg.get("model_env", ""), "").strip() or cfg["model_default"]
     try:
@@ -76,14 +76,25 @@ def test_provider(name: str, cfg: dict) -> bool:
             print(f"  FAIL  {label} ({model}): {exc}")
             return False
         print(f"  WARN  {label} ({model}): {exc}")
-        return True
+        return False if strict else True
 
 
 def main() -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--strict",
+        "--fail-on-skip",
+        action="store_true",
+        dest="strict",
+        help="treat SKIP/WARN (optional providers) as failure (#3787)",
+    )
+    args = ap.parse_args()
     print("research provider validation\n")
     results = []
     for name, cfg in PROVIDERS.items():
-        results.append(test_provider(name, cfg))
+        results.append(test_provider(name, cfg, strict=args.strict))
 
     print()
     failures = results.count(False)

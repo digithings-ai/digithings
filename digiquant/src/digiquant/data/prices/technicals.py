@@ -32,6 +32,9 @@ import math
 import polars as pl
 
 from digiquant.data.prices import TECHNICAL_COLUMNS
+from digiquant.data.prices._primitives import atr as _atr
+from digiquant.data.prices._primitives import true_range as _true_range
+from digiquant.data.prices._primitives import wilder_ema as _wilder_ema
 from digiquant.data.prices._utils import filter_rows_by_trading_days
 
 MIN_BARS = 30
@@ -53,11 +56,6 @@ def _ema(col: str, length: int, adjust: bool = False) -> pl.Expr:
     return pl.col(col).ewm_mean(span=length, adjust=adjust, min_periods=length)
 
 
-def _wilder_ema(expr: pl.Expr, length: int) -> pl.Expr:
-    """Wilder (RMA) smoothing: alpha = 1/length, adjust=False."""
-    return expr.ewm_mean(alpha=1.0 / length, adjust=False, min_periods=length)
-
-
 def _rsi(col: str, length: int) -> pl.Expr:
     delta = pl.col(col).diff()
     gain = pl.when(delta > 0).then(delta).otherwise(0.0)
@@ -66,18 +64,6 @@ def _rsi(col: str, length: int) -> pl.Expr:
     avg_loss = _wilder_ema(loss, length)
     rs = avg_gain / avg_loss
     return (100.0 - (100.0 / (1.0 + rs))).alias(f"rsi_{length}")
-
-
-def _true_range() -> pl.Expr:
-    prev_close = pl.col("close").shift(1)
-    hl = pl.col("high") - pl.col("low")
-    hc = (pl.col("high") - prev_close).abs()
-    lc = (pl.col("low") - prev_close).abs()
-    return pl.max_horizontal(hl, hc, lc)
-
-
-def _atr(length: int) -> pl.Expr:
-    return _wilder_ema(_true_range(), length).alias(f"atr_{length}")
 
 
 def _rolling_std(col: str, length: int, ddof: int = 0) -> pl.Expr:

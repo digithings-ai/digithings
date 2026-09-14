@@ -128,7 +128,22 @@ def _stream_completions_progressive(
     wf_kw["force_tool"] = force_tool
     workflow_req = WorkflowRequest(**wf_kw)
 
+    from digigraph import usage
     from digigraph.llm_auth import clear_byok_bindings
+
+    # Usage totals are request-scoped (#3982). The module-global accumulator that
+    # ``usage.start()``/``reset()`` drives is one-run-per-process by design (the
+    # portfolio chain and the research diagnostics writer each pair start/reset once),
+    # so overlapping streams sharing it would sum each other's tokens and let whichever
+    # finishes first clear the other's snapshot window -- the barrier-synced two-stream
+    # repro reported 6+6 for one response and no usage chunk at all for the other.
+    # Bind a dedicated run only for the context copy below, then reset in this same
+    # frame: the copy -- and every ``record()`` the worker reaches through it -- keeps
+    # the run, while callers that consume this generator without a threadpool (tests)
+    # do not leak the binding into their own context. ``UsageRun`` itself is held by
+    # this frame until the response ends; the module-global state is never touched.
+    run_usage = usage.UsageRun()
+    usage_token = usage.bind_run(run_usage)
 
     # Run the worker inside a copy of *this* frame's context. A bare Thread starts
     # with an empty context, so every ContextVar bound per-request -- above all the
@@ -153,6 +168,7 @@ def _stream_completions_progressive(
     # wedge inside a node, never reach the ``finally``, and strand the key for the
     # lifetime of the process rather than for one more node.
     ctx = contextvars.copy_context()
+    usage.unbind_run(usage_token)
 
     def _run_worker() -> None:
         # Late-bind through digigraph.server so tests can patch
@@ -212,16 +228,19 @@ def _stream_completions_progressive(
                 elif pending_tool_calls:
                     pending_tool_calls.pop(0)
             elif event_type == "reasoning":
-                # digichat (and other non–Open WebUI clients) get activity via
-                # digigraph_trace; never inject Open WebUI <thinking> chrome.
-                if suppress_tool_stream:
-                    continue
+                # Open WebUI: buffer and flush as <thinking> before content.
+                # digichat (X-Suppress-Tool-Stream): forward reasoning_content so
+                # the BFF can render reasoning parts — do not drop the stream.
                 if isinstance(data, str):
                     raw = data
                 elif isinstance(data, dict):
                     raw = str((data.get("content") or data.get("delta") or ""))
                 else:
                     raw = str(data) if data else ""
+                if suppress_tool_stream:
+                    if raw:
+                        yield f"data: {_sse_chunk(cid, created, model, '', reasoning_content=raw)}\n\n"
+                    continue
                 if raw:
                     reasoning_buffer.append(raw)
                 # Emit only as content later (<thinking> block); skip reasoning_content in delta to avoid breaking clients
@@ -257,6 +276,31 @@ def _stream_completions_progressive(
         yield f"data: {_sse_chunk(cid, created, model, f'Error: {e!s}', None)}\n\n"
     finally:
         cancel_event.set()
+
+    # Emit this run's real provider-reported usage as a final OpenAI-style chunk
+    # (prompt/completion/total tokens) before the stop marker. Only emitted when
+    # the provider actually reported tokens -- usage.record never fabricates zeros.
+    # Read from the request-scoped accumulator, never the process-global one.
+    _usage_snapshot = run_usage.snapshot()
+    if _usage_snapshot.get("total_tokens"):
+        yield (
+            "data: "
+            + json.dumps(
+                {
+                    "id": cid,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": None}],
+                    "usage": {
+                        "prompt_tokens": _usage_snapshot.get("prompt_tokens", 0),
+                        "completion_tokens": _usage_snapshot.get("completion_tokens", 0),
+                        "total_tokens": _usage_snapshot.get("total_tokens", 0),
+                    },
+                }
+            )
+            + "\n\n"
+        )
 
     yield f"data: {_sse_chunk(cid, created, model, '', 'stop')}\n\n"
     yield "data: [DONE]\n\n"

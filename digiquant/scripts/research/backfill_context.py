@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -58,7 +59,73 @@ def _sb():
     return create_client(url, key)
 
 
+def _fetch_macro_series(sb, as_of_date: str) -> dict[str, Any]:
+    """Latest observation per ``source:series_id`` on or before ``as_of_date``."""
+    macro_series: dict[str, Any] = {}
+    res = (
+        sb.table("macro_series_observations")
+        .select("series_id,source,obs_date,value,unit,meta")
+        .lte("obs_date", as_of_date)
+        .order("obs_date", desc=True)
+        .limit(300)
+        .execute()
+    )
+    seen: set[str] = set()
+    for r in getattr(res, "data", None) or []:
+        key = f"{r['source']}:{r['series_id']}"
+        if key not in seen:
+            seen.add(key)
+            macro_series[key] = {
+                "series_id": r["series_id"],
+                "source": r["source"],
+                "obs_date": str(r["obs_date"])[:10],
+                "value": r["value"],
+                "unit": r.get("unit"),
+                "meta": r.get("meta"),
+            }
+    return macro_series
+
+
+def _fetch_prior_snapshot(sb, as_of_date: str) -> tuple[str | None, dict | None]:
+    """Most recent ``daily_snapshots`` row strictly before ``as_of_date``."""
+    res = (
+        sb.table("daily_snapshots")
+        .select("date,run_type,baseline_date,snapshot")
+        .lt("date", as_of_date)
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(res, "data", None) or []
+    if not rows:
+        return None, None
+    return str(rows[0]["date"])[:10], rows[0].get("snapshot")
+
+
+def _fetch_baseline_snapshot(sb, as_of_date: str) -> tuple[str | None, dict | None]:
+    """Most recent ``run_type='baseline'`` row on or before ``as_of_date``."""
+    res = (
+        sb.table("daily_snapshots")
+        .select("date,snapshot")
+        .eq("run_type", "baseline")
+        .lte("date", as_of_date)
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(res, "data", None) or []
+    if not rows:
+        return None, None
+    return str(rows[0]["date"])[:10], rows[0].get("snapshot")
+
+
 def fetch_context(as_of_date: str) -> dict[str, Any]:
+    # Imported per call (cached in sys.modules afterwards) so the default path needs no
+    # digiquant import at module scope, matching fill-entry-prices.py.
+    from digiquant.research.data.queries import r2_backend_enabled
+
+    if r2_backend_enabled():
+        return _fetch_context_r2(as_of_date)
     sb = _sb()
 
     # ── 1. Latest price_technicals on or before as_of_date ────────────────────
@@ -136,62 +203,96 @@ def fetch_context(as_of_date: str) -> dict[str, Any]:
     prices.sort(key=lambda x: x["ticker"])
 
     # ── 2. Macro series (FRED, Frankfurter, crypto F&G, Treasury) ─────────────
-    macro_series: dict[str, Any] = {}
-    res4 = (
-        sb.table("macro_series_observations")
-        .select("series_id,source,obs_date,value,unit,meta")
-        .lte("obs_date", as_of_date)
-        .order("obs_date", desc=True)
-        .limit(300)
-        .execute()
-    )
-    seen: set[str] = set()
-    for r in getattr(res4, "data", None) or []:
-        key = f"{r['source']}:{r['series_id']}"
-        if key not in seen:
-            seen.add(key)
-            macro_series[key] = {
-                "series_id": r["series_id"],
-                "source": r["source"],
-                "obs_date": str(r["obs_date"])[:10],
-                "value": r["value"],
-                "unit": r.get("unit"),
-                "meta": r.get("meta"),
-            }
+    macro_series = _fetch_macro_series(sb, as_of_date)
 
     # ── 3. Prior snapshot (for continuity / delta chaining) ───────────────────
-    prior_snapshot: dict | None = None
-    prior_date: str | None = None
-    res5 = (
-        sb.table("daily_snapshots")
-        .select("date,run_type,baseline_date,snapshot")
-        .lt("date", as_of_date)
-        .order("date", desc=True)
-        .limit(1)
-        .execute()
-    )
-    prior_rows = getattr(res5, "data", None) or []
-    if prior_rows:
-        prior_date = str(prior_rows[0]["date"])[:10]
-        prior_snapshot = prior_rows[0].get("snapshot")
+    prior_date, prior_snapshot = _fetch_prior_snapshot(sb, as_of_date)
 
     # ── 4. Latest baseline for the week ──────────────────────────────────────
-    baseline_snapshot: dict | None = None
-    baseline_date: str | None = None
-    res6 = (
-        sb.table("daily_snapshots")
-        .select("date,snapshot")
-        .eq("run_type", "baseline")
-        .lte("date", as_of_date)
-        .order("date", desc=True)
-        .limit(1)
-        .execute()
-    )
-    bl_rows = getattr(res6, "data", None) or []
-    if bl_rows:
-        baseline_date = str(bl_rows[0]["date"])[:10]
-        baseline_snapshot = bl_rows[0].get("snapshot")
+    baseline_date, baseline_snapshot = _fetch_baseline_snapshot(sb, as_of_date)
 
+    return {
+        "as_of_date": as_of_date,
+        "latest_price_date": latest_price_date,
+        "prior_snapshot_date": prior_date,
+        "baseline_date": baseline_date,
+        "prices": prices,
+        "macro_series": macro_series,
+        "prior_snapshot": prior_snapshot,
+        "baseline_snapshot": baseline_snapshot,
+    }
+
+
+# Indicator keys the prompt table indexes. The Supabase body joins them from
+# `price_technicals`; R2's envelope uses different windows for some names
+# (`macd_hist`/`zscore_200`/`pct_vs_sma*`), so those stay None — never a
+# different-window substitute.
+_PRICE_INDICATOR_KEYS: tuple[str, ...] = (
+    "sma_20",
+    "sma_50",
+    "sma_200",
+    "rsi_14",
+    "macd",
+    "macd_signal",
+    "roc_5",
+    "roc_21",
+    "bb_pct_b",
+    "zscore_50",
+    "atr_pct",
+    "hist_vol_21",
+)
+
+
+def _fetch_context_r2(as_of_date: str) -> dict[str, Any]:
+    """R2 branch of :func:`fetch_context` (#4013).
+
+    Prices come from the sealed R2 generations and technicals from
+    :func:`get_price_technicals` (backend-branched internally — no flag check
+    around it here). Each price row is rebuilt to the Supabase price-entry
+    shape (:data:`_PRICE_INDICATOR_KEYS`, None when R2 has no equivalent name)
+    so :func:`build_agent_prompt` renders it unchanged. Macro series and
+    snapshots have no R2 source (D2: only market/price data moves), so they are
+    read from Supabase through the same helpers as the default path — the
+    prompt's prior/baseline lines carry real research state, not a false
+    "first run".
+    """
+    # Imported per call (cached in sys.modules afterwards) so the default path needs no
+    # digiquant import at module scope, matching fill-entry-prices.py.
+    from digiquant.research.data.queries import (
+        get_price_technicals,
+        r2_close_rows,
+        r2_ohlcv_rows,
+    )
+
+    floor = (date.fromisoformat(as_of_date) - timedelta(days=7)).isoformat()
+    spy = r2_close_rows(tickers=["SPY"], since=floor, until=as_of_date)
+    latest_price_date = max((str(r["date"])[:10] for r in spy), default=None)
+    prices: list[dict] = []
+    technicals: dict[str, dict] = {}
+    if latest_price_date:
+        rows = r2_ohlcv_rows(
+            tickers=sorted(CORE_TICKERS), since=latest_price_date, until=latest_price_date
+        )
+        prices = [r for r in rows if r.get("ticker") in CORE_TICKERS]
+        for ticker in sorted(CORE_TICKERS):
+            res = get_price_technicals(
+                client=None,
+                ticker=ticker,
+                lookback=1,
+                as_of=date.fromisoformat(latest_price_date),
+            )
+            latest = res.get("latest") or {}
+            if latest:
+                technicals[ticker] = latest
+        for row in prices:
+            tech = technicals.get(str(row.get("ticker")), {})
+            for key in _PRICE_INDICATOR_KEYS:
+                row[key] = tech.get(key)
+
+    sb = _sb()
+    macro_series = _fetch_macro_series(sb, as_of_date)
+    prior_date, prior_snapshot = _fetch_prior_snapshot(sb, as_of_date)
+    baseline_date, baseline_snapshot = _fetch_baseline_snapshot(sb, as_of_date)
     return {
         "as_of_date": as_of_date,
         "latest_price_date": latest_price_date,
@@ -211,9 +312,10 @@ def _format_price_table(prices: list[dict]) -> str:
         def _f(v, fmt=".2f"):
             return f"{float(v):{fmt}}" if v is not None else "—"
         lines.append(
-            f"| {p['ticker']} | {_f(p['close'])} | {_f(p['rsi_14'])} | "
-            f"{_f(p['sma_20'])} | {_f(p['sma_50'])} | {_f(p['sma_200'])} | "
-            f"{_f(p['macd'])} | {_f(p['roc_5'])} | {_f(p['roc_21'])} | {_f(p['zscore_50'])} |"
+            f"| {p.get('ticker')} | {_f(p.get('close'))} | {_f(p.get('rsi_14'))} | "
+            f"{_f(p.get('sma_20'))} | {_f(p.get('sma_50'))} | {_f(p.get('sma_200'))} | "
+            f"{_f(p.get('macd'))} | {_f(p.get('roc_5'))} | {_f(p.get('roc_21'))} | "
+            f"{_f(p.get('zscore_50'))} |"
         )
     return "\n".join(lines)
 

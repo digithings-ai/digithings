@@ -8,7 +8,7 @@ on:
       - develop
       - main
     paths:
-      - "frontend/digithings-cron/**"
+      - "cloudflare/digithings-cron/**"
       - ".github/workflows/deploy-digithings-cron.yml"
   workflow_dispatch:
 
@@ -42,7 +42,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: frontend/digithings-cron
+          workingDirectory: cloudflare/digithings-cron
           command: deploy
           wranglerVersion: "4.28.0"
           secrets: |

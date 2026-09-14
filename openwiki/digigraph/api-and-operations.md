@@ -3,9 +3,6 @@ type: api-operations-guide
 title: digigraph API and Operations
 description: digigraph HTTP and MCP surface plus operations — endpoints, digikey path scopes, rate limits, streaming, policy flags, and container.
 tags: [digigraph, api, mcp, operations]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-480f9d807ff1b9a39c50e94a
     resource: repo://digigraph/src/digigraph/mcp_server.py
@@ -14,6 +11,9 @@ sources:
   - id: openwiki-source-3854646407c9bc7a61e346db
     resource: repo://digigraph/src/digigraph/server.py
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digigraph API and Operations

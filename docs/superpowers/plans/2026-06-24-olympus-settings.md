@@ -10,7 +10,7 @@
 - **Tailwind v4 tokens only.** Dark-first; cyan-phosphor `--accent` `#3DD6C4`; `--font-display` Instrument Serif; Geist sans/mono; `glass-card`, `bg-bg-primary/secondary/glass`, `border-border-subtle`, `text-text-primary/secondary/muted`, semantic `text-fin-green/red/amber`.
 - **F5 token rule (verbatim):** cyan `--accent` `#3DD6C4` for links/chrome/the single conviction encoding/the live-fresh dot only; `fin-green`/`fin-red` *strictly* for signed financial values; `fin-amber` for caution/stale/carried/mixed-regime; **no gradients** beyond the existing faint regime wash; **no decorative numbering** unless it encodes the system's own priority. Settings has **no financial values** → fin-green/red must not appear here; stale = `fin-amber` only. **Purge the `fin-blue` literals** currently in `settings-content.tsx` (the active Docs link `border-fin-blue/40 bg-fin-blue/10 text-fin-blue` and the three theme buttons `bg-fin-blue/20 text-fin-blue`) — re-tokenize to cyan `--accent`.
 - **Empty-state discipline.** Status card with no run renders the calm element-specific line **"No pipeline runs yet"** — never an em-dash, never a fabricated date. No time-series elements live on Settings, so no `≥2 points` gates apply here.
-- **Keep tests green.** 150+ plumbing + page tests must stay green; `settings-content.test.tsx` is updated as part of this work. Run `npx vitest run` from `frontend/olympus`. Follow existing eslint/prettier conventions (ruff is Python-only).
+- **Keep tests green.** 150+ plumbing + page tests must stay green; `settings-content.test.tsx` is updated as part of this work. Run `npx vitest run` from `cloudflare/olympus`. Follow existing eslint/prettier conventions (ruff is Python-only).
 - **F8 PM-voice copy.** Every string an investor/PM reads is product voice; operator detail (the raw host string is fine, but never the anon key) stays minimal. UTC is **explicitly labelled** everywhere a timestamp appears.
 - **Phase 0 is a hard dependency.** This plan **consumes** the canonical `components/shared/as-of-badge.tsx` (F7) and the `app-shell-context` palette controls (F2). It does **not** create them and does **not** touch the `/architecture → /system` Docs hotfix (already landed on this branch at `004ac495`; `settings-content.tsx` already links `/system`). Do not re-do the hotfix.
 - **Out of scope (do NOT add):** accounts/login, multi-user/roles, notification prefs, API-key management, CSV/JSON export. No auth exists (anon-key + RLS, single-owner self-hosted).
@@ -39,9 +39,9 @@ Already in-repo (verified): `lib/snapshot-staleness.ts` (`isStale`, `formatAge`,
 The Status card needs the **wall-clock UTC timestamp** of the latest run ("Jun 23, 16:13 UTC · 20h ago"), not just the run *date*. `daily_snapshots.created_at` is already selected by `getFullDashboardData` (`lib/queries.ts:461` — `select('id,date,run_type,baseline_date,snapshot,digest_markdown,created_at')`) but dropped before reaching any component: `PortfolioMeta.last_updated` is only `snapshot.date` (a `YYYY-MM-DD` string, set at `lib/queries.ts:1013`). Add `last_run_at` (the `created_at` ISO timestamp) so `AsOfBadge`'s `createdAt` true-age path can fire. This is the only data-layer change Settings needs; Theses/Holdings/System widening is owned by their own plans (F1).
 
 **Files:**
-- Modify: `frontend/olympus/lib/types.ts` (`PortfolioMeta`, lines 191–200)
-- Modify: `frontend/olympus/lib/queries.ts` (`lastRunAt` helper near meta assembly; meta object at lines ~1010–1015)
-- Test: `frontend/olympus/lib/queries.last-run-at.test.ts` (new)
+- Modify: `cloudflare/olympus/lib/types.ts` (`PortfolioMeta`, lines 191–200)
+- Modify: `cloudflare/olympus/lib/queries.ts` (`lastRunAt` helper near meta assembly; meta object at lines ~1010–1015)
+- Test: `cloudflare/olympus/lib/queries.last-run-at.test.ts` (new)
 
 **Interfaces:**
 - Consumes: `daily_snapshots.created_at` (`string | null`, already in the `select`); `snapshot: TableRow<'daily_snapshots'>` local in `getFullDashboardData`.
@@ -76,7 +76,7 @@ Steps:
     });
   });
   ```
-- [ ] Run `npx vitest run lib/queries.last-run-at.test.ts` (from `frontend/olympus`). Expect FAIL if the helper isn't added yet, PASS once it is — sequence so you see one real red (e.g. assert the wrong value first, or add the test before the helper).
+- [ ] Run `npx vitest run lib/queries.last-run-at.test.ts` (from `cloudflare/olympus`). Expect FAIL if the helper isn't added yet, PASS once it is — sequence so you see one real red (e.g. assert the wrong value first, or add the test before the helper).
 - [ ] Wire the helper into the returned meta in `getFullDashboardData` (`lib/queries.ts` ~line 1013), right after `last_updated`:
   ```ts
         last_updated: snapshot.date ?? latestPosDate,
@@ -93,8 +93,8 @@ Steps:
 `SettingsContent` is rendered in two live places (popover `sidebar-settings.tsx`, page `app/settings/page.tsx`) and in the test via `renderToStaticMarkup` with **no provider** (`settings-content.test.tsx` mocks only `next/navigation` + `theme-provider`). To add freshness (needs `useDashboard`) and a palette opener (needs `useAppShell`) without forcing the test to mock two more contexts — and to keep the component a clean unit — push all data in via props and let the two callers own the context reads.
 
 **Files:**
-- Modify: `frontend/olympus/components/settings-content.tsx`
-- Test: `frontend/olympus/components/settings-content.test.tsx` (update to the props API)
+- Modify: `cloudflare/olympus/components/settings-content.tsx`
+- Test: `cloudflare/olympus/components/settings-content.test.tsx` (update to the props API)
 
 **Interfaces:**
 - Consumes: nothing new yet (Task 3 fills the cards).
@@ -197,8 +197,8 @@ Steps:
 The two new cards. **Status** is the canonical "is this current / which build" audit block: `AsOfBadge` on the run date + true-age, an explicit UTC line, and the **"No pipeline runs yet"** empty state. **About** carries the build version, a friendly host label (never the anon key), the fixed `/system` Docs link (folded in from the old standalone Docs section), and the real ⌘K affordance replacing the decorative row.
 
 **Files:**
-- Modify: `frontend/olympus/components/settings-content.tsx` (card bodies + `formatRunStamp` helper)
-- Test: `frontend/olympus/components/settings-content.test.tsx` (Task 2 assertions go green)
+- Modify: `cloudflare/olympus/components/settings-content.tsx` (card bodies + `formatRunStamp` helper)
+- Test: `cloudflare/olympus/components/settings-content.test.tsx` (Task 2 assertions go green)
 
 **Interfaces:**
 - Consumes: `AsOfBadge({ date, createdAt })` (F7); `isStale`/`formatAge` indirectly via `AsOfBadge`; `SettingsContentProps` (Task 2).
@@ -293,7 +293,7 @@ Steps:
   ```
   (The "All settings" link keeps its existing behavior — visible only off `/settings` — so the test's first assertion still holds. Docs now lives in About with the fixed `/system` href and re-tokenized cyan active state. The decorative ⌘K row is gone; the only ⌘K is the live opener.)
 - [ ] Run `npx vitest run components/settings-content.test.tsx` — expect PASS (all six assertions). If the empty-state test fails, confirm `lastRunDate: null` selects the `No pipeline runs yet` branch.
-- [ ] `npx tsc --noEmit` (from `frontend/olympus`) — clean (all props consumed; `formatRunStamp` typed).
+- [ ] `npx tsc --noEmit` (from `cloudflare/olympus`) — clean (all props consumed; `formatRunStamp` typed).
 - [ ] `git add -A && git commit -m "refactor(olympus): rebuild Settings as a Status + Appearance + About panel"`.
 
 ---
@@ -303,8 +303,8 @@ Steps:
 `SidebarSettings` already renders `<SettingsContent onNavigate=…/>`. It must now read `useDashboard()` for freshness/host and the Phase 0 palette controls from `useAppShell()`, and pass them down. Popover keeps the tight `variant="popover"`.
 
 **Files:**
-- Modify: `frontend/olympus/components/sidebar-settings.tsx`
-- Create: `frontend/olympus/lib/data-source-host.ts`
+- Modify: `cloudflare/olympus/components/sidebar-settings.tsx`
+- Create: `cloudflare/olympus/lib/data-source-host.ts`
 
 **Interfaces:**
 - Consumes: `useDashboard()` → `data.portfolio.meta.{last_updated,last_run_at,latest_snapshot_run_type}` (Task 1); `useAppShell()` → `openCommandPalette` (Phase 0 F2); `process.env.NEXT_PUBLIC_OLYMPUS_VERSION`; `dataSourceHost()` (below).
@@ -351,7 +351,7 @@ Steps:
     }}
   />
   ```
-- [ ] `npx tsc --noEmit` (from `frontend/olympus`) — clean. If `openCommandPalette` is not on `AppShellContextValue`, Phase 0 (F2) has not merged — STOP and rebase on Phase 0 (this plan depends on it).
+- [ ] `npx tsc --noEmit` (from `cloudflare/olympus`) — clean. If `openCommandPalette` is not on `AppShellContextValue`, Phase 0 (F2) has not merged — STOP and rebase on Phase 0 (this plan depends on it).
 - [ ] `git add -A && git commit -m "feat(olympus): wire Settings popover to live freshness + command palette"`.
 
 ---
@@ -361,8 +361,8 @@ Steps:
 The page today is the popover stretched to `max-w-md`. Give it the `variant="page"` presentation: a wider card, the same `SettingsContent`, the same context-derived props. `SettingsContent` reads `variant` for spacing density only (popover `space-y-5` / page `space-y-6`) — no structural fork, honoring the slop guard against stamping one composition.
 
 **Files:**
-- Modify: `frontend/olympus/app/settings/page.tsx`
-- Modify: `frontend/olympus/components/settings-content.tsx` (consume `variant` for spacing only)
+- Modify: `cloudflare/olympus/app/settings/page.tsx`
+- Modify: `cloudflare/olympus/components/settings-content.tsx` (consume `variant` for spacing only)
 
 **Interfaces:**
 - Consumes: same as Task 4 (`useDashboard`, `dataSourceHost`, env version, `useAppShell().openCommandPalette`).
@@ -407,16 +407,16 @@ Steps:
   }
   ```
   (`max-w-md` → `max-w-lg` so the page reads as a fuller panel, not the popover stretched. No `onNavigate` — leaving `/settings` does not need to close a popover.)
-- [ ] `npx tsc --noEmit` (from `frontend/olympus`) — clean.
-- [ ] `npx vitest run` (from `frontend/olympus`) — full suite PASS (150+ plumbing + page tests stay green; `settings-content.test.tsx` green; `queries.last-run-at.test.ts` green).
-- [ ] `npm run build` (from `frontend/olympus`) — `output:export` succeeds and `/olympus/settings` is emitted (confirms the new `'use client'` page builds statically). Run any project lint script per existing conventions.
+- [ ] `npx tsc --noEmit` (from `cloudflare/olympus`) — clean.
+- [ ] `npx vitest run` (from `cloudflare/olympus`) — full suite PASS (150+ plumbing + page tests stay green; `settings-content.test.tsx` green; `queries.last-run-at.test.ts` green).
+- [ ] `npm run build` (from `cloudflare/olympus`) — `output:export` succeeds and `/olympus/settings` is emitted (confirms the new `'use client'` page builds statically). Run any project lint script per existing conventions.
 - [ ] `git add -A && git commit -m "feat(olympus): give /settings a fuller multi-card presentation"`.
 
 ---
 
 ## Verification (run before claiming done)
-- [ ] `npx vitest run` (from `frontend/olympus`) — all green, including the rewritten `settings-content.test.tsx` (six assertions: All-settings hide, theme aria-pressed, version+host, empty-state line, `/system` Docs href + no `/architecture`, no `fin-blue`) and `queries.last-run-at.test.ts`.
+- [ ] `npx vitest run` (from `cloudflare/olympus`) — all green, including the rewritten `settings-content.test.tsx` (six assertions: All-settings hide, theme aria-pressed, version+host, empty-state line, `/system` Docs href + no `/architecture`, no `fin-blue`) and `queries.last-run-at.test.ts`.
 - [ ] `npx tsc --noEmit` — clean.
 - [ ] `npm run build` — `output:export` succeeds; `/settings` renders.
-- [ ] Grep guard: `grep -rn "fin-blue\|/architecture\|text-fin-purple\|Keyboard" frontend/olympus/components/settings-content.tsx` returns nothing (F5 token rule + decorative-⌘K removal + dead Docs href all gone).
+- [ ] Grep guard: `grep -rn "fin-blue\|/architecture\|text-fin-purple\|Keyboard" cloudflare/olympus/components/settings-content.tsx` returns nothing (F5 token rule + decorative-⌘K removal + dead Docs href all gone).
 - [ ] Visual smoke (if local): popover shows Status (live or "No pipeline runs yet"), Appearance tri-toggle unchanged, About with build + host + ⌘K opening the palette + Docs → `/system`; `/settings` page shows the same cards in a wider layout.

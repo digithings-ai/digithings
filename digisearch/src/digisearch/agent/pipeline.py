@@ -61,7 +61,9 @@ def node_retrieve(state: ResearchTurnState) -> dict[str, Any]:
             filters=build_query_filters(
                 filter_raw=state.filter,
                 filters_struct=state.filters,
+                workspace_id=state.workspace_id,
             ),
+            workspace_id=(state.workspace_id or "").strip() or None,
         )
         idx = str(state.index_name or "default")
         response = query_index(q, index_name=idx)
@@ -136,6 +138,7 @@ def _state_from_initial(initial: dict[str, Any]) -> ResearchTurnState:
         filter=initial.get("filter"),
         filters=initial.get("filters"),
         session_id=initial.get("session_id"),
+        workspace_id=initial.get("workspace_id"),
         service="digisearch",
         trace=[],
     )

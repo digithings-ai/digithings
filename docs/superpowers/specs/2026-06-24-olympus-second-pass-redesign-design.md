@@ -8,10 +8,10 @@
 
 **Date:** 2026-06-24
 **Author:** design session (Chris Stefan + Claude)
-**Working context:** frontend `frontend/olympus` (Next.js 16 static export, `basePath /olympus`,
+**Working context:** frontend `cloudflare/olympus` (Next.js 16 static export, `basePath /olympus`,
 React 19, Tailwind v4, recharts, lucide, `@digithings/design`, Supabase). Backend pipeline in
 `digiquant/src/digiquant/olympus` (Atlas + Hermes LangGraph sub-graphs). Tear-sheet template in
-`frontend/digiquant-web/components/tearsheet`.
+`cloudflare/digiquant-web/components/tearsheet`.
 
 **Audit provenance:** an 8-agent parallel design-audit (workflow `olympus-redesign-audit`) read
 each surface's code and queried live Supabase. Every surface scored **2/5** against the bar
@@ -405,7 +405,7 @@ the digiquant template via a token bridge.** Two stacked, independently-degradin
 
 **Also absorbs from System:** the **Attribution diagnostics** relocate here.
 
-**Effort:** high. **Reuse:** `frontend/digiquant-web/components/tearsheet/*`,
+**Effort:** high. **Reuse:** `cloudflare/digiquant-web/components/tearsheet/*`,
 `tearsheet_data.py`, `olympus/atlas/backtest.py`, `lib/portfolio-risk-metrics.ts`,
 `lib/performance-series.ts`, the `.ts-*` print CSS.
 

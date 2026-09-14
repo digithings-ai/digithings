@@ -155,13 +155,26 @@ def _docker_available() -> str | None:
     docker = shutil.which("docker")
     if docker is None:
         return None
-    probe = subprocess.run(
-        [docker, "info"],
-        capture_output=True,
-        check=False,
-        timeout=20,
-    )
-    return docker if probe.returncode == 0 else None
+    # ``docker info`` can outrun a cold or briefly unresponsive daemon on CI,
+    # which used to escape as a TimeoutExpired during fixture setup and turn
+    # the five Docker-backed cases into setup ERRORs (#3781 / #3797). Retry
+    # once, then treat a timeout or non-zero probe as "daemon unavailable" —
+    # never an exception.
+    for attempt in range(2):
+        try:
+            probe = subprocess.run(
+                [docker, "info"],
+                capture_output=True,
+                check=False,
+                timeout=30,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            probe = None
+        if probe is not None and probe.returncode == 0:
+            return docker
+        if attempt == 0:
+            time.sleep(0.5)
+    return None
 
 
 def _require_docker() -> str:
@@ -448,3 +461,31 @@ def test_updated_at_trigger_fires_after_upgrade(pg_container: tuple[str, str]) -
         "FROM public.knowledge_notes WHERE vault_path='concepts/risk';",
     )
     assert after == "t"
+
+
+def test_docker_probe_timeout_is_unavailable_not_an_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A slow ``docker info`` must read as unavailable, not raise (#3781 / #3797)."""
+    monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/docker")
+    monkeypatch.setattr(time, "sleep", lambda _seconds: None)
+
+    def _timeout(*_args: object, **_kwargs: object) -> object:
+        raise subprocess.TimeoutExpired(["docker", "info"], 30)
+
+    monkeypatch.setattr(subprocess, "run", _timeout)
+
+    assert _docker_available() is None
+
+
+def test_docker_probe_returns_path_when_daemon_responds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/docker")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(["docker", "info"], 0),
+    )
+
+    assert _docker_available() == "/usr/bin/docker"

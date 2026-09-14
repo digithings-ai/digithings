@@ -45,6 +45,92 @@ metrics and lookback cannot alter daily `pnl_pct` semantics.
 
 **dashboard daily chain:** `python -m digiquant.portfolio.chain --cadence daily` (`.github/workflows/pipeline-digiquant.yml`). House clocks run every day with `refresh_scope=none` and edit-mode continuity (`skip`/`edit`/`full` per artifact). Operator full refresh is manual (`workflow_dispatch` / `--refresh-scope all`). Beliefs distillation: daily short fold on every house run; `--refresh-scope beliefs` (or unfolded `decision_log` backlog above `OLYMPUS_BELIEFS_BACKLOG`, default 20) selects the full rewrite.
 
+### digikey service key for web grounding (#4028)
+
+Web grounding is default-ON (#3870): the daily chain calls the first-party
+digisearch `web_search` tool, and `research/data/web_grounding.py`
+`_pipeline_bearer()` mints a digikey service JWT via
+`digibase.service_auth.get_service_jwt()` (exchange
+`POST {DIGIKEY_URL}/v1/oauth/token`, `grant_type=api_key`, scope
+`digisearch:query`). Without the credentials the whole book run fails with
+`ServiceAuthError: DIGIQUANT_DIGIKEY_API_KEY is not set`.
+
+`pipeline-digiquant.yml` exports both names at the `run` job level so every
+step inherits them:
+
+| Name | Kind | Value |
+|---|---|---|
+| `DIGIKEY_URL` | Actions **variable** (`vars.DIGIKEY_URL`, YAML default) | `https://key.digithings.ai` |
+| `DIGIQUANT_DIGIKEY_API_KEY` | Actions **secret** | digikey service API key scoped `digisearch:query` |
+
+Minting, provisioning, and rotation: [docs/ops/digiquant-digikey-service-key.md](../../../../../docs/ops/digiquant-digikey-service-key.md).
+Only this workflow runs the grounding code path — the deterministic pipelines
+(backfill, prices, research-metrics) never call it.
+
+### Market-data R2 refresh (cutover #3780)
+
+The versioned R2 cache owns price/macro serving under
+`DIGIQUANT_MARKET_DATA_BACKEND=r2` (set in `.github/digiquant-pipeline.yml`,
+loaded into `$GITHUB_ENV` by `pipeline-digiquant.yml`). Refresh is
+`.github/workflows/pipeline-market-data-refresh.yml`: cron **`0 13 * * *`**
+(morning; distinct from the checkpoint-archiver `30 13 * * *`) plus
+**`30 21 * * *`** (evening: settled US close before the 22:00
+research-metrics run, #4013 D4), running `scripts/refresh_market_data_r2.py`
+(yfinance/FRED/Yahoo-FX → new immutable generations + manifest). Supabase
+market-table writers are paused per the `pipeline-digiquant-prices.yml`
+header (compute-technicals retired (#4013 Task 11); fred/yahoo fetch paused;
+intraday fetch-quotes, calendar sync, at-open, fedprob/bitview kept) — do not
+resume them without a new issue.
+
+Dry-run (exit 0, no writes — the Task 10 live-fire check):
+`python scripts/refresh_market_data_r2.py --dry-run --as-of 2025-08-29`.
+
+Staleness gate runbook entry: the manifest seal may be at most 5 trading
+days behind the run date (`data/prices/refresh_gate.py`, shared by cron and
+readers). On breach the cron writes the manifest with `stale=true`, keeps
+the previous objects serving (fail-soft), and exits non-zero so the failure
+alerts. Operator response: read the `failed` list in the
+`market-data-refresh-manifest` artifact (`/tmp/market-data-refresh.json`,
+90d retention), fix the vendor/secret cause, re-run supervised. Do NOT flip
+the backend flag — readers already fail-soft (history-only rows + loud
+`stale:true` envelope).
+
+Reader-side, `digiquant.research.data.freshness.assert_market_data_fresh`
+(seal ≤ 1 day, ≥ 100 price tickers) is the loud universe-collapse check. It
+ships tested but is not yet called by any production path (deferred
+follow-up); the cron-side gate above is what runs today.
+
+Promotion runbook (supervised with the operator — write the commands, do
+NOT run them from an agent env; no cloud creds there):
+
+```bash
+# DEFERRED (#3951): do not run this gate/apply sequence until the on-cron
+# Supabase readers have R2 seams — migration 124 currently retains
+# price_history + price_technicals (DROPs commented out). Steps preserved for
+# the follow-up that un-defers them.
+# The real drop MUST be a NEW numbered migration (e.g. 126_drop_market_data_tables.sql),
+# never a re-edit of 124: db-migrate.yml ledgers every executed file by name, so a
+# re-edited 124 would be skipped as already applied.
+# 1. Live size gate on the core project, evaluated through the gate script
+#    (PASS <= 320MB per data/cutover_gate.py;
+#    ~172MB of price tables drop toward a ≈292MB target; macro_series_observations
+#    stays per the carve-out — the future drop migration drops
+#    price_history + price_technicals ONLY).
+psql "$CORE_PG_URI" -c "SELECT pg_size_pretty(pg_database_size(current_database()));"
+SIZE_BYTES=$(psql "$CORE_PG_URI" -tAX -c "SELECT pg_database_size(current_database());")
+python -c "import sys; from digiquant.data.cutover_gate import cutover_size_gate_passes; sys.exit(0 if cutover_size_gate_passes(int(sys.argv[1])) else 1)" "$SIZE_BYTES"  # pre-migration: expect exit 1 (>320MB); record the bytes
+# 2. Reclaim, then apply the new drop migration via db-migrate.yml (file + ledger in
+#    one transaction; do NOT edit the no-op digiquant/supabase/migrations/124_drop_market_data_tables.sql).
+psql "$CORE_PG_URI" -c "VACUUM (ANALYZE);"
+# 3. Re-run the gate-script invocation from step 1 post-migration — PASS = exit 0 (<= 320MB).
+```
+
+Owner actions before unsupervised operation: add `CORE_POSTGRES_URI`
+to GitHub secrets (`FRED_API_KEY` provisioned 2026-09-10; refresh/backfill
+need the URI). Prod gate: Worker-edge digikey JWT enforcement (scope
+`digiquant:backtest`) must land before production MCP use (human decision,
+new external network exposure).
+
 ## Two tracks (research vs portfolio)
 
 - **Track A — Generic research** (positioning-blind): macro, sectors, crypto, sentiment, etc. **Do not** load `config/preferences.md` or `config/investment-profile.md`. Each research run **ends** with the **`digest`** — `documents.digest` + materialized `daily_snapshots` for the date — as the **single overview** of all sub-segments (`python -m digiquant.portfolio.chain --cadence daily` through research A0–A4). Run [`run_db_first.py --skip-execute --validate-mode research`](scripts/run_db_first.py) after publish.
@@ -237,11 +323,9 @@ Per-document research deltas (`document_delta`, manifest) use the same **week an
 
 Target: **< $1/day** in xAI usage *without reducing capability* — trim
 redundancy and misallocated effort, never research breadth or freshness.
-Agentic searches dominate cost (built-in provider search on the tier's
-`web_search_models` pins — typically `perplexity/sonar` or `:online` variants,
-billed per that model's page; the `openrouter:web_search` Exa server tool is
-**$0.007**/request per [OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search)
-but unreachable from production pools), tokens are second.
+Agentic searches go through the first-party digisearch `web_search` tool
+(searxng sidecar with ddgs fallback); there are no provider-search pins and
+no synthesis fallback (#3859). Tokens are second.
 
 Capability-preserving reductions in place:
 
@@ -320,7 +404,7 @@ is blocked: CI-mapped tier pools only, no frontier pins, no auto-router.
 
 | Env | Values | Effect |
 |---|---|---|
-| `OLYMPUS_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/digiquant_models.yaml` |
+| `DIGIQUANT_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/digiquant_models.yaml` |
 | `CHEAPERINFERENCE_API_KEY` | GitHub secret | House default upstream — all LLM calls route here when set |
 | `OPENROUTER_API_KEY` | GitHub secret | Fallback upstream when house is forced to OpenRouter (`DIGI_HOUSE_UPSTREAM=openrouter`) |
 
@@ -352,12 +436,12 @@ pools in `config/digiquant_models.yaml`, not by request knobs.
 Phases pass **pinned** model slugs (not `openrouter/auto`). Fail-fast:
 provider errors surface instead of substituting another model.
 
-**Web grounding (dashboard)** resolves via `get_grounding_model()` from the tier's
-`web_search_models` pool. House pools are CI synthesis models (`gemini-3.1-flash-lite`,
-`deepseek-v4-flash`) over in-house digisearch retrieval — not sonar / `:online`
-(#3660). Grounding synthesizes via plain completion over the tier pins; dashboard
-call sites do **not** pass Exa `engine` / `max_results`. Fail-fast: there is no
-preflight web-search ping — provider errors surface from the real run.
+**Web grounding (dashboard)** goes through the first-party digisearch
+`web_search` tool with domain scoping from `config/search_domains.yaml`
+passed straight through as tool params (#3859). There is no synthesis
+fallback: a requested search must succeed or raise `DashboardWebSearchError`.
+Fail-fast: there is no preflight web-search ping — provider errors surface
+from the real run.
 **Structured JSON** phases use pinned open-weight models with `strict:true` json_schema.
 
 Per-phase override: `config/model_modes.yaml` → `phase_models` — **frontier models are
@@ -625,4 +709,34 @@ Dry-run prints weights/NAV from `positions`. `--apply` appends one house ledger
 commit and a `commit-run/{run_id}` document. Idempotent when a committed
 manifest already exists. Requires `CORE_SUPABASE_URL` /
 `CORE_SUPABASE_SERVICE_KEY` (same as the pipeline). Does not touch brokers.
+
+<!-- #3766 -->
+## Checkpoint/document archive offload (#3766)
+
+`.github/workflows/pipeline-checkpoint-archive.yml` runs
+`scripts/digiquant_archive_checkpoints.py` daily (R2 creds from the `R2_*`
+repo secrets). Operator contract:
+
+- **Ordering is archive → verify → delete.** The job uploads to R2, reads back
+  and SHA-256-verifies, writes the `archive_objects` pointer row, and only then
+  NULLs the Supabase cell. A pointer-write failure keeps the Supabase row — the
+  daily run is retry-safe and never orphans a payload without its pointer.
+- **The newest run per owner stays in Supabase.** Resume only ever touches the
+  current run id (`thread_base = resume_run_id or run_id`), so archiving
+  predecessors cannot break a retry. `--retain-days` / `--keep` narrow further.
+- **Eviction watermarks are 8.5GB high / 7GB low** on the ledger `size` sum
+  (compressed bytes). Eviction deletes oldest-first and never the latest run's
+  keys. If R2 approaches the 10GB free tier, retention shrinks automatically —
+  more owners → shorter history, no config change.
+- **Reconciliation:** `reconcile_ledger` drops ledger rows whose R2 object is
+  gone and reports orphan R2 keys; it never auto-deletes from R2. Orphans are
+  operator-deleted after confirming no pointer row references them.
+- **Read-back:** `resolve_payload(client, store, source_table, source_key)`
+  in `digiquant.ops.checkpoint_archive` — pointer lookup → R2 GET → sha256
+  verify → zstd decompress. `ArchiveNotFoundError` = no pointer row (payload
+  still live in Supabase or never archived); `ArchiveVerifyError` = checksum
+  mismatch, do not retry silently, escalate.
+- **First live archive of a new phase** (e.g. documents): dry-run first, then
+  archive one old thread/row, verify manifest + registry rows + a
+  `resolve_payload` round-trip, then proceed.
 

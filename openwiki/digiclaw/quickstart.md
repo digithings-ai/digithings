@@ -5,7 +5,7 @@ description: Run a digiclaw heartbeat cycle, inspect the audit log, and check sc
 tags: [digiclaw, quickstart, heartbeat]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
+    at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-72050835d3541ab62444987d
     resource: repo://digiclaw/AGENTS.md

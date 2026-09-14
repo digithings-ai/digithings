@@ -3,9 +3,6 @@ type: behavior-guide
 title: digiquant Strategies and Backtest
 description: digiquant strategy registry and backtest semantics — registration, aliases, backtest caching, optimize, export, and result models.
 tags: [digiquant, strategies, backtest, optimize]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-f049bd9504f8ed6c09ceb7ff
     resource: repo://digiquant/ARCHITECTURE.md
@@ -16,6 +13,9 @@ sources:
   - id: openwiki-source-03367345d67d7d6162b06fce
     resource: repo://digiquant/src/digiquant/strategy_aliases.py
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digiquant Strategies and Backtest

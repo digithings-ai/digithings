@@ -9,7 +9,7 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 OPENAPI = REPO / "docs" / "openapi" / "digichat.json"
-API_ROOT = REPO / "frontend" / "digichat" / "src" / "app" / "api"
+API_ROOT = REPO / "cloudflare" / "digichat" / "src" / "app" / "api"
 
 
 def _route_file_for(path: str) -> Path:

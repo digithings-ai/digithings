@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Protocol  # score:allow untyped any — Bitview SeriesData JSON payloads
@@ -26,9 +27,17 @@ import httpx
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.data.onchain._url_guard import is_allowed_base_url
+
 logger = logging.getLogger(__name__)
 
 BITVIEW_BASE_URL = "https://bitview.space"
+#: Hosts the client may talk to. A caller-nominated ``base_url`` is refused
+#: outright (#3944) — this is the code-only seam guard.
+ALLOWED_BASE_HOSTS: frozenset[str] = frozenset({"bitview.space"})
+#: Series ids are interpolated into the URL path, so a caller must not be able
+#: to smuggle ``/`` or ``?`` through a series id.
+_SERIES_ID_SEGMENT = re.compile(r"^[a-z0-9_-]+$")
 # BRK ``day1`` index 0 is Bitcoin genesis (same convention as ``btc_power_law``).
 DAY1_EPOCH: date = date(2009, 1, 3)
 DEFAULT_INDEX = "day1"
@@ -238,6 +247,8 @@ class BitviewClient:
         session: _HttpGet | None = None,
         cache_dir: Path | str | None = None,
     ) -> None:
+        if not is_allowed_base_url(base_url, ALLOWED_BASE_HOSTS):
+            raise ValueError(f"base_url host is not allowlisted: {base_url!r} (#3944)")
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = session
@@ -249,12 +260,25 @@ class BitviewClient:
         *,
         start: int | None = None,
         end: int | None = None,
+        allow_derived: bool = False,
     ) -> BitviewFetchResult:
+        """Fetch ``day1`` series. ``FORBIDDEN_SERIES`` (e.g. NUPL) are refused
+
+        by default — a strategy-methodology guard against dual-counting a
+        metric derived from another one already in the composite. Pass
+        ``allow_derived=True`` to fetch them anyway for callers outside the
+        SDCA valuation composite (research, a chatbot agent, ad-hoc lookup).
+        """
         ids = _normalize_ids(series_ids)
         results: dict[str, BitviewSeriesResult] = {}
         allowed: list[str] = []
         for series_id in ids:
-            if series_id.lower() in FORBIDDEN_SERIES:
+            if not _SERIES_ID_SEGMENT.fullmatch(series_id):
+                results[series_id] = BitviewSeriesResult(
+                    series_id=series_id,
+                    error="invalid series id (allowed: a-z0-9_-)",
+                )
+            elif series_id.lower() in FORBIDDEN_SERIES and not allow_derived:
                 results[series_id] = _forbidden_result(series_id)
             else:
                 allowed.append(series_id)
@@ -339,8 +363,16 @@ def fetch_bitview_series(
     start: int | None = None,
     end: int | None = None,
     base_url: str = BITVIEW_BASE_URL,
+    allow_derived: bool = False,
 ) -> BitviewFetchResult:
     """Fetch v1 series. Always fail-soft. Inject ``session`` in tests (no network)."""
+    if not is_allowed_base_url(base_url, ALLOWED_BASE_HOSTS):
+        ids = _normalize_ids(series_ids)
+        msg = f"refusing untrusted base_url {base_url!r} (allowed: {sorted(ALLOWED_BASE_HOSTS)})"
+        return BitviewFetchResult(
+            series={sid: BitviewSeriesResult(series_id=sid, error=msg) for sid in ids},
+            error=msg,
+        )
     if session is None and not _fetch_enabled():
         ids = _normalize_ids(series_ids)
         return BitviewFetchResult(
@@ -351,10 +383,11 @@ def fetch_bitview_series(
             error=f"{_ENV_FLAG} disabled",
         )
     client = BitviewClient(base_url=base_url, timeout=timeout, session=session, cache_dir=cache_dir)
-    return client.fetch(series_ids, start=start, end=end)
+    return client.fetch(series_ids, start=start, end=end, allow_derived=allow_derived)
 
 
 __all__ = [
+    "ALLOWED_BASE_HOSTS",
     "BITVIEW_BASE_URL",
     "DAY1_EPOCH",
     "DEFAULT_CACHE_DIR",

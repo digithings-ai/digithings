@@ -163,7 +163,7 @@ def _acquire_checkpointer() -> Any:
     """Return a checkpointer when ``DIGI_CHECKPOINTER`` is set, else ``None``.
 
     Best-effort: checkpointing is an optimization, never a hard dependency. A missing
-    package, bad ``DIGI_CHECKPOINTER_POSTGRES_URI``, or unreachable Postgres degrades to
+    package, bad ``CORE_POSTGRES_URI``, or unreachable Postgres degrades to
     ``None`` (a normal, uncheckpointed run) with a warning — it must not crash the run.
     """
     if not os.environ.get("DIGI_CHECKPOINTER", "").strip():
@@ -763,7 +763,7 @@ def _build_cli_parser():
         default=None,
         help=(
             "Resume a prior run's checkpoints (its GITHUB_RUN_ID). Requires "
-            "DIGI_CHECKPOINTER=postgres + DIGI_CHECKPOINTER_POSTGRES_URI. research/portfolio "
+            "DIGI_CHECKPOINTER=postgres + CORE_POSTGRES_URI. research/portfolio "
             "continue from the last completed node; completed work is not re-run."
         ),
     )
@@ -900,7 +900,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         diagnostics=DiagnosticsDeps(client=client, run_id=run_id, attempt=_outer_attempt()),
     )
     # Checkpoint/resume (#665): durable per-graph threads when DIGI_CHECKPOINTER is set
-    # (DIGI_CHECKPOINTER=postgres + DIGI_CHECKPOINTER_POSTGRES_URI in prod). thread_base is
+    # (DIGI_CHECKPOINTER=postgres + CORE_POSTGRES_URI in prod). thread_base is
     # the run to resume (--resume-run-id) or this run's id for a fresh start. Best-effort:
     # a bad URI / unreachable Postgres degrades to an uncheckpointed run (#667).
     _checkpointer = _acquire_checkpointer()

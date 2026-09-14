@@ -3,9 +3,9 @@
 Both static sites deploy through Cloudflare Pages running one build script, and each
 site's `Deploy: … build check` workflow re-runs that script on PRs matching its
 ``paths:`` filter. Those filters are maintained by hand against a moving import graph and
-fell behind it: `frontend/digithings-web` took a dependency on `@digithings/digichat-ui`
+fell behind it: `cloudflare/digithings-web` took a dependency on `@digithings/digichat-ui`
 in #1384, and the digithings.ai filter was never updated. PR #1490 then edited
-`frontend/digichat-ui/src/DigiChatSession.tsx` — a file that site renders — alongside
+`cloudflare/digichat-ui/src/DigiChatSession.tsx` — a file that site renders — alongside
 digichat-only changes, matched no glob in that filter, and ran no deploy build check at
 all. PR #1859 repeated it.
 
@@ -69,7 +69,7 @@ def _workspace_packages() -> dict[str, tuple[str, set[str]]]:
     """Map every workspace package name to its repo-relative dir and workspace deps.
 
     Globbed from the root manifest's own ``workspaces`` patterns rather than a hardcoded
-    list, so `frontend/digiweb/brand` and `frontend/digiweb/scripts` — directories with no
+    list, so `cloudflare/digiweb/brand` and `cloudflare/digiweb/scripts` — directories with no
     package.json, and therefore not workspaces — are excluded for the right reason.
     """
     root: dict[str, Any] = json.loads((REPO_ROOT / "package.json").read_text(encoding="utf-8"))
@@ -180,11 +180,11 @@ def test_every_workspace_manifest_is_watched_by_some_filter() -> None:
 
     The root ``npm install`` resolves all eight workspace manifests before either site
     compiles, so a bad range in any of them fails both production builds. Seven were
-    reached by some filter; ``frontend/digiweb/reference/package.json`` was in none at
+    reached by some filter; ``cloudflare/digiweb/reference/package.json`` was in none at
     all, and both deploy checks now name it.
 
     Naming it fixed the instance. This fixes the class: the set of workspaces moves —
-    ``frontend/digiweb/reference`` was itself scaffolded and then moved into place — and
+    ``cloudflare/digiweb/reference`` was itself scaffolded and then moved into place — and
     a ninth one lands unwatched by default, reopening the identical hole with no test
     failing. So assert the union, not a list.
 
@@ -192,7 +192,7 @@ def test_every_workspace_manifest_is_watched_by_some_filter() -> None:
     that runs a root install. The strong version would have to decide whether a lane's
     ``npm ci`` is equivalent cover to a build's ``npm install`` — they fail on different
     conditions — and that judgement does not belong in an assertion. This is a floor:
-    ``frontend/digichat``'s second cover is ``ruff_and_scripts``, which installs nothing.
+    ``cloudflare/digichat``'s second cover is ``ruff_and_scripts``, which installs nothing.
     A floor that fails on a new orphan is worth more than a ceiling nobody can state.
     """
     filters: dict[str, Any] = yaml.safe_load(
@@ -225,9 +225,9 @@ def test_digichat_ui_is_a_digithings_build_input_but_not_a_digiquant_one() -> No
     """
     digithings = _closure_for("digithings.ai")
     digiquant = _closure_for("digiquant.io")
-    assert "frontend/digichat-ui" in digithings
-    assert "frontend/digichat-ui" not in digiquant
+    assert "cloudflare/digichat-ui" in digithings
+    assert "cloudflare/digichat-ui" not in digiquant
     # The walk follows dependencies, not dependents: `digichat` consumes digichat-ui but is
     # built by neither site, so it must not be pulled in. Each check watches its own inputs,
     # never all eight workspaces.
-    assert "frontend/digichat" not in digithings | digiquant
+    assert "cloudflare/digichat" not in digithings | digiquant

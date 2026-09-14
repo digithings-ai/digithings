@@ -43,7 +43,7 @@ flowchart TB
 | Path | Command | digikey | Best for |
 |------|---------|---------|----------|
 | **A — Compose core** | `make up` | Container `:8005` | JWT parity with production-style compose; digisearch uses Chroma volume `digisearch_chroma`. |
-| **A′ — Profile A bundle** | `make digichat-profile-a-bundle-up` | Inside one stack image `:8005` | Website digichat / CF parity — one supervisord container instead of N services. See [`frontend/digithings-stack-cloudflare/README.md`](../frontend/digithings-stack-cloudflare/README.md). |
+| **A′ — Profile A bundle** | `make digichat-profile-a-bundle-up` | Inside one stack image `:8005` | Website digichat / CF parity — one supervisord container instead of N services. See [`cloudflare/digithings-stack-cloudflare/README.md`](../cloudflare/digithings-stack-cloudflare/README.md). |
 | **B — Host Python** | `make stack-local` | Process `:8005` ([scripts/run_stack_local.sh](../scripts/run_stack_local.sh)) | Fast backend iteration without Docker; same ports as Compose (4000, 8000–8005). |
 | **C — digichat in Docker** | `docker compose --profile digichat up -d` | `DIGIKEY_URL=http://digikey:8005` | Postgres + UI container; no local Node. |
 
@@ -53,7 +53,7 @@ flowchart TB
 
 1. **Root `.env`**
    - **digikey:** `DIGIKEY_ADMIN_TOKEN`, `DIGIKEY_BFF_TOKEN` (random); `DIGIKEY_ALLOW_EPHEMERAL_KEY=1` for local JWKS (rotates on restart).
-   - **LiteLLM:** [config/litellm.yaml](../config/litellm.yaml) → local Ollama at `http://ollama:11434` and/or **Ollama Cloud** via **`OLLAMA_API_KEY`**; **`LITELLM_MASTER_KEY`** + **`LITELLM_PROXY_API_KEY`** for digigraph → proxy Bearer.
+   - **LiteLLM:** [config/litellm.yaml](../config/litellm.yaml) → local Ollama at `http://ollama:11434` and/or **Ollama Cloud** via **`OLLAMA_API_KEY`**; **`LITELLM_MASTER_KEY`** + **`LITELLM_PROXY_API_KEY`** for digigraph → proxy Bearer. If neither proxy key nor `OPENAI_API_KEY` is set, a declared trusted local LiteLLM base (the `:4000` defaults) sends the dev sentinel `sk-no-key-required`, so a no-auth loopback stack still runs; a direct/vendor base fails fast (#3788 / #3939).
    - **Optional funnel:** **`DIGIKEY_LITELLM_PROXY_KEY`** same as **`LITELLM_MASTER_KEY`** (Compose defaults this when unset).
    - **Local Ollama models only:** **`DIGI_MODEL_MODES_FILE=model_modes.local.yaml`** + **`DIGI_CONFIG_PATH`** mounted at `/app/config` for digigraph (see [config/model_modes.local.yaml](../config/model_modes.local.yaml)).
 

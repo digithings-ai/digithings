@@ -83,7 +83,7 @@ def messages_to_workflow_prompt(messages: list[ChatMessage]) -> str:
     - System / empty-content turns are omitted (project system prompt is separate)
     - ``role="tool"`` turns are also omitted, today deliberately: digichat's OpenAI-compat
       adapter never constructs one (verified: no ``role: "tool"`` construction anywhere
-      under ``frontend/digichat/src/lib/adapters/digithings/``). If a caller ever DOES
+      under ``cloudflare/digichat/src/lib/adapters/digithings/``). If a caller ever DOES
       send tool-role history, this silent drop becomes real data loss — this function
       would then need explicit tool-turn support (e.g. a labeled "Tool result: ..." line),
       not a bigger message-list rewrite; see ``test_tool_role_messages_are_silently_omitted_today``.

@@ -18,20 +18,27 @@ Per-request auth (proxy key / BYOK) is wired separately by
 from __future__ import annotations
 
 import logging
-import re
 from collections.abc import Callable
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import (
     Any,  # score:allow untyped any — heterogeneous LLM tool/step payloads
     Iterator,
 )
+from uuid import uuid4
 
 from digillm import (  # telemetry + message types for the wrappers below
+    CacheStatus,
     CallPurpose,
     ChatCompletionMessage,
     JsonSchemaResponseFormat,
     NoArtifactReason,
+    ProviderAttemptOutcome,
+    ProviderAttemptRecord,
     ProviderCallContextHandle,
+    ProviderCallOutcome,
+    ProviderCallRecord,
+    RetryReason,
     ToolArguments,
     ToolDefinition,
 )
@@ -50,18 +57,14 @@ from digigraph.model_config import resolve_request_model
 
 logger = logging.getLogger(__name__)
 
-# Public surface. ``web_search`` / ``openrouter_web_search`` / ``x_search`` are
-# grounding pre-passes backed by a plain digillm ``completion`` — digillm itself
-# is a generic router with no vendor search tooling, so this module owns the
-# grounding prompt + citation extraction. Consumers import every LLM entry
-# point from this one module.
+# Public surface. ``digifetch_web_search`` is the single tool-only grounding
+# entry — the synthesis engine (plain-completion grounding + citation regexes)
+# was deleted (#3859). Consumers import every LLM entry point from this module.
 __all__ = [
     "completion",
     "completion_text",
     "run_tools",
-    "web_search",
-    "openrouter_web_search",
-    "x_search",
+    "digifetch_web_search",
 ]
 
 # Route digillm's usage telemetry into digigraph's per-run accumulator. No-op until
@@ -234,105 +237,90 @@ def run_tools(
         )
 
 
-# Inline ``(url)`` / ``[text](url)`` citations in grounding summaries.
-_INLINE_URL_RE = re.compile(r"\((https?://[^\s)]+)\)")
-_MD_LINK_URL_RE = re.compile(r"\[[^\]]*\]\((https?://[^\s)]+)\)")
-
-
-def _urls_from_grounding_text(text: str) -> list[str]:
-    urls: list[str] = []
-    for pat in (_MD_LINK_URL_RE, _INLINE_URL_RE):
-        for url in pat.findall(text):
-            if url not in urls:
-                urls.append(url)
-    return urls
-
-
-def _ground_via_completion(
+def digifetch_web_search(
     model: str,
     query: str,
     *,
-    usage_kind: str,
-) -> tuple[str, list[str]] | None:
-    """Run a grounding pre-pass as a plain digillm completion; fail soft (``None``).
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+    max_results: int = 8,
+    usage_kind: str = "web_search",
+    context: Any | None = None,
+) -> tuple[str, list[str]]:
+    """Tool-only web grounding. Raises on any failure — never synthesizes, never None.
 
-    digillm is a generic router with no vendor search tooling — grounding is a
-    cited-summary prompt over whatever model the house routes. Returns
-    ``(summary_text, source_urls)`` or ``None`` when the call fails or yields
-    no text, so callers degrade to ungrounded research rather than crash.
+    ``model`` is accepted for caller compat but unused — the tool path needs no
+    synthesis model. ``usage_kind`` is likewise retained for compat (telemetry
+    retires in a later task). The bearer threads via ``context`` (Task 2 seam:
+    ``ToolContext.state["digi_bearer"]``).
     """
-    messages: list[ChatCompletionMessage] = [
-        {
-            "role": "system",
-            "content": (
-                "You are a market-research assistant. Summarize the key findings "
-                "relevant to the user's query as concise bullet points. Include an "
-                "inline markdown citation linking a claim to its source URL only "
-                "when you can verify that source from the conversation — never "
-                "invent URLs, titles, or attributions. State unverifiable claims "
-                "without a citation."
-            ),
-        },
-        {"role": "user", "content": query},
-    ]
-    try:
-        resp = _digillm_completion(
-            resolve_request_model(model),
-            messages,
-            temperature=0.2,
-            usage_kind=usage_kind,
+    del model, usage_kind
+    from digigraph.orchestration.web_search_tools import call_digisearch_web_search
+
+    raw = call_digisearch_web_search(
+        query,
+        include_domains=include_domains,
+        exclude_domains=exclude_domains,
+        max_results=max_results,
+        context=context,
+    )
+    rows = (raw or {}).get("results", []) if isinstance(raw, dict) else []
+    if not rows:
+        raise RuntimeError(f"web_search tool returned no rows for query={query!r}")
+    summary = "\n".join(f"- {r.get('content', '')} ({r.get('doc_id', '')})" for r in rows)
+    sources = [r.get("doc_id", "") for r in rows]
+    _usage.record(kind="web_search", model="digisearch:web_search", sources=len(sources))
+    _emit_web_search_telemetry()
+    return summary, sources
+
+
+def _emit_web_search_telemetry() -> None:
+    """Emit the detailed provider-call records for one tool-only web_search call.
+
+    No-op unless a usage run is active. The tool path has no LLM attempt, so the
+    attempt carries zero tokens and no cost — the summary/counts still reconcile
+    with :func:`digigraph.usage.snapshot` while ``cost_usd`` stays unavailable
+    (never fabricated).
+    """
+    node_run_id, _metadata = _usage.provider_call_metadata()
+    if node_run_id is None:
+        node_run_id = uuid4()
+    now = datetime.now(tz=timezone.utc)
+    call_id = uuid4()
+    _usage.observe_telemetry(
+        ProviderCallRecord(
+            call_id=call_id,
+            node_run_id=node_run_id,
+            parent_call_id=None,
+            purpose=CallPurpose.WEB_SEARCH,
+            requested_model="digisearch:web_search",
+            cache_status=CacheStatus.BYPASSED,
+            outcome=ProviderCallOutcome.SUCCEEDED,
+            attempt_count=1,
+            artifacts=(),
+            no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+            started_at=now,
+            finished_at=now,
         )
-    except Exception as exc:  # grounding is best-effort; degrade gracefully
-        logger.warning("grounding completion failed (%s); continuing ungrounded", exc)
-        return None
-    if not resp.choices:
-        return None
-    text = (resp.choices[0].message.content or "").strip()
-    if not text:
-        return None
-    return text, _urls_from_grounding_text(text)
-
-
-def web_search(
-    model: str,
-    query: str,
-    *,
-    allowed_domains: list[str] | None = None,
-    max_results: int = 8,
-) -> tuple[str, list[str]] | None:
-    """Run web grounding with generic logical-call purpose metadata."""
-    del allowed_domains, max_results  # folded into the query by callers, not tool params
-    with _logical_call_scope(CallPurpose.WEB_GROUNDING, NoArtifactReason.CONSUMED_INLINE):
-        return _ground_via_completion(model, query, usage_kind="web_search")
-
-
-def openrouter_web_search(
-    model: str,
-    query: str,
-    *,
-    allowed_domains: list[str] | None = None,
-    max_results: int = 8,
-    engine: str = "exa",
-) -> tuple[str, list[str]] | None:
-    """Web grounding via plain completion (no vendor search tooling).
-
-    Dashboard call sites must not pass ``engine`` / ``max_results`` /
-    ``allowed_domains`` — domain hints belong in the query text (see
-    ``web_grounding.fetch_web_grounding``). Kept as separate names so existing
-    call sites and telemetry purposes keep working.
-    """
-    del allowed_domains, max_results, engine
-    with _logical_call_scope(CallPurpose.WEB_GROUNDING, NoArtifactReason.CONSUMED_INLINE):
-        return _ground_via_completion(model, query, usage_kind="web_search")
-
-
-def x_search(
-    model: str,
-    query: str,
-    *,
-    max_results: int = 12,
-) -> tuple[str, list[str]] | None:
-    """Run social grounding with generic logical-call purpose metadata."""
-    del max_results  # folded into the query by callers, not tool params
-    with _logical_call_scope(CallPurpose.X_GROUNDING, NoArtifactReason.CONSUMED_INLINE):
-        return _ground_via_completion(model, query, usage_kind="x_search")
+    )
+    _usage.observe_telemetry(
+        ProviderAttemptRecord(
+            attempt_id=uuid4(),
+            call_id=call_id,
+            attempt_number=1,
+            provider="digisearch",
+            requested_model="digisearch:web_search",
+            served_model=None,
+            outcome=ProviderAttemptOutcome.SUCCEEDED,
+            retry_reason=RetryReason.NOT_APPLICABLE,
+            prompt_tokens=0,
+            completion_tokens=0,
+            # None, not 0.0: detailed projections never fabricate cost
+            # evidence (WP1 / #2763) — the aggregate snapshot sums missing
+            # cost as 0.0 for diagnostics; both are pinned by
+            # test_detailed_tool_search_projection_matches_aggregate_token_semantics.
+            cost_usd=None,
+            started_at=now,
+            finished_at=now,
+        )
+    )

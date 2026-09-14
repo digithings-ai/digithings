@@ -35,6 +35,9 @@ name: "Test: digiquant"
 on:
   workflow_call:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

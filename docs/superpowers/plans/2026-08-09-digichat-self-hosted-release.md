@@ -38,9 +38,9 @@
 | `infra/digichat-release/compose.profile-b.yml` | digichat(+db)-only snippet for Foundry clients |
 | `infra/digichat-release/README.md` | Operator index for release overlays |
 | `Makefile` | `digichat-release-up VERSION=…` wrapping release overlay |
-| `frontend/digichat/OPERATIONS.md` | Link install guide; clarify GHCR vs local build |
+| `cloudflare/digichat/OPERATIONS.md` | Link install guide; clarify GHCR vs local build |
 | `docs/architecture/digichat-modular-frontend.md` §5 | Link to INSTALL.md |
-| `frontend/digichat/embed-hosts.txt` | Documented rebuild path; optional client host notes |
+| `cloudflare/digichat/embed-hosts.txt` | Documented rebuild path; optional client host notes |
 | `.github/workflows/publish-digichat-image.yml` | Unchanged core; optional smoke checklist doc only in v1 |
 | `docs/digichat/RELEASE-SMOKE.md` | Post-publish smoke checklist |
 
@@ -51,10 +51,10 @@
 **Files:**
 - Create: `docs/digichat/RELEASE-SMOKE.md`
 - Modify: `docs/architecture/digichat-self-hosted-release.md` (status line only if needed; already linked from plan)
-- Modify: `frontend/digichat/OPERATIONS.md` (add short “Release artifacts” subsection linking RELEASE-SMOKE + INSTALL)
+- Modify: `cloudflare/digichat/OPERATIONS.md` (add short “Release artifacts” subsection linking RELEASE-SMOKE + INSTALL)
 
 **Interfaces:**
-- Consumes: Existing workflows `release-please-digichat.yml` (tag `digichat-vX.Y.Z` on develop) and `publish-digichat-image.yml` (GHCR on main). Current app version `0.9.3` in `frontend/digichat/package.json`.
+- Consumes: Existing workflows `release-please-digichat.yml` (tag `digichat-vX.Y.Z` on develop) and `publish-digichat-image.yml` (GHCR on main). Current app version `0.9.3` in `cloudflare/digichat/package.json`.
 - Produces: Documented release identity + operator smoke steps (no workflow changes in this task).
 
 - [x] **Step 1: Confirm current release artifacts exist**
@@ -62,11 +62,11 @@
 Run:
 
 ```bash
-jq -r .version frontend/digichat/package.json
-jq -r .private frontend/digichat/package.json
+jq -r .version cloudflare/digichat/package.json
+jq -r .private cloudflare/digichat/package.json
 test -f .github/workflows/release-please-digichat.yml
 test -f .github/workflows/publish-digichat-image.yml
-head -20 frontend/digichat/CHANGELOG.md
+head -20 cloudflare/digichat/CHANGELOG.md
 ```
 
 Expected: version like `0.9.3`, `private` = `true`, both workflows present, CHANGELOG has `[0.9.3]` section.
@@ -87,7 +87,7 @@ After `digichat-vX.Y.Z` is tagged (release-please on develop) and
 |---|---|
 | Git tag | `digichat-vX.Y.Z` |
 | GHCR image | `ghcr.io/digithings-ai/digichat:vX.Y.Z` |
-| Changelog | `frontend/digichat/CHANGELOG.md` |
+| Changelog | `cloudflare/digichat/CHANGELOG.md` |
 | Install unit | **GHCR image** — not npm (`private: true`) |
 
 Prefer the version pin. Do not use `:latest` in production.
@@ -108,7 +108,7 @@ Prefer the version pin. Do not use `:latest` in production.
 
 - [x] **Step 3: Link from OPERATIONS.md**
 
-At the top of `frontend/digichat/OPERATIONS.md` (after the title / intro), add:
+At the top of `cloudflare/digichat/OPERATIONS.md` (after the title / intro), add:
 
 ```markdown
 ## Release artifacts
@@ -125,7 +125,7 @@ Run:
 ```bash
 test -f docs/digichat/RELEASE-SMOKE.md
 rg -n "ghcr.io/digithings-ai/digichat" docs/digichat/RELEASE-SMOKE.md
-rg -n "Release artifacts" frontend/digichat/OPERATIONS.md
+rg -n "Release artifacts" cloudflare/digichat/OPERATIONS.md
 ```
 
 Expected: files exist; GHCR pin mentioned; OPERATIONS subsection present.
@@ -133,7 +133,7 @@ Expected: files exist; GHCR pin mentioned; OPERATIONS subsection present.
 - [x] **Step 5: Commit**
 
 ```bash
-git add docs/digichat/RELEASE-SMOKE.md frontend/digichat/OPERATIONS.md
+git add docs/digichat/RELEASE-SMOKE.md cloudflare/digichat/OPERATIONS.md
 git commit -m "$(cat <<'EOF'
 docs(digichat): document release identity and smoke checklist
 
@@ -487,7 +487,7 @@ EOF
 **Files:**
 - Create: `docs/digichat/INSTALL.md`
 - Modify: `docs/architecture/digichat-modular-frontend.md` (§5 Near-term / End goal — link INSTALL)
-- Modify: `frontend/digichat/OPERATIONS.md` (replace stub link if Task 1 left a forward ref)
+- Modify: `cloudflare/digichat/OPERATIONS.md` (replace stub link if Task 1 left a forward ref)
 - Modify: `docs/architecture/digichat-self-hosted-release.md` (link INSTALL under See also)
 
 **Interfaces:**
@@ -503,7 +503,7 @@ Create `docs/digichat/INSTALL.md` covering:
 3. **Profile A** steps pointing at `infra/digichat-release/compose.profile-a.yml` + `.env.profile-a.example`.
 4. **Profile B** steps pointing at `compose.profile-b.yml` + Foundry tenant JSON.
 5. **Env checklist** (always / A-only / B-only) copied from sketch §3.
-6. **Embed CSP note:** stock GHCR uses `frontend/digichat/embed-hosts.txt`; new parent hosts need rebuild (Task 7) until runtime CSP exists.
+6. **Embed CSP note:** stock GHCR uses `cloudflare/digichat/embed-hosts.txt`; new parent hosts need rebuild (Task 7) until runtime CSP exists.
 7. **Smoke:** `/api/health`; embed with `host` + `token`; Profile A expects digigraph tool activity.
 8. **Out of scope:** corpus ingest → “see Follow-ups in the architecture sketch”.
 
@@ -534,7 +534,7 @@ Run:
 rg -n "docs/digichat/INSTALL.md|INSTALL.md" \
   docs/architecture/digichat-modular-frontend.md \
   docs/architecture/digichat-self-hosted-release.md \
-  frontend/digichat/OPERATIONS.md \
+  cloudflare/digichat/OPERATIONS.md \
   infra/digichat-release/README.md
 test -f docs/digichat/INSTALL.md
 ```
@@ -547,7 +547,7 @@ Expected: all four reference INSTALL; file exists.
 git add docs/digichat/INSTALL.md \
   docs/architecture/digichat-modular-frontend.md \
   docs/architecture/digichat-self-hosted-release.md \
-  frontend/digichat/OPERATIONS.md
+  cloudflare/digichat/OPERATIONS.md
 git commit -m "$(cat <<'EOF'
 docs(digichat): client self-hosted install guide
 
@@ -583,7 +583,7 @@ Replace the Phase 3 “native digichat-ui + Pages Function” bullets with:
 
 One public domain serves marketing + chat shell:
 
-- **Marketing shell:** `digithings.ai` — Cloudflare Pages (`frontend/digithings-web/`).
+- **Marketing shell:** `digithings.ai` — Cloudflare Pages (`cloudflare/digithings-web/`).
 - **Visitor chat:** `digithings.ai/chat` — Pages iframe → digichat Node `/embed`
   (`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`, e.g. Tunnel hostname `digichat.digithings.ai`).
   Backend: digichat → digigraph → digillm → LiteLLM (+ digivault tools).
@@ -623,12 +623,12 @@ EOF
 
 **Files:**
 - Modify: `docs/digichat/INSTALL.md` (CSP subsection — expand)
-- Modify: `frontend/digichat/ARCHITECTURE.md` (Environment variables / embed hosts — “client rebuild” note)
-- Modify: `frontend/digichat/embed-hosts.txt` (header comment: how clients add hosts)
+- Modify: `cloudflare/digichat/ARCHITECTURE.md` (Environment variables / embed hosts — “client rebuild” note)
+- Modify: `cloudflare/digichat/embed-hosts.txt` (header comment: how clients add hosts)
 - Optional doc-only: `docs/digichat/EMBED-HOSTS-REBUILD.md` if INSTALL would get too long
 
 **Interfaces:**
-- Consumes: Build-arg `DIGICHAT_EMBED_HOSTS` in `frontend/digichat/Dockerfile` and publish workflow reading `embed-hosts.txt`. CSP evaluated at `next build` via `next.config.ts` importing `security-headers.ts`.
+- Consumes: Build-arg `DIGICHAT_EMBED_HOSTS` in `cloudflare/digichat/Dockerfile` and publish workflow reading `embed-hosts.txt`. CSP evaluated at `next build` via `next.config.ts` importing `security-headers.ts`.
 - Produces: Documented rebuild path for new parent domains. **Do not** implement runtime `frame-ancestors` in v1 unless a separate issue explicitly expands scope (sketch lists evaluate-runtime as optional).
 
 - [x] **Step 1: Document rebuild commands in INSTALL.md**
@@ -639,14 +639,14 @@ Add section:
 ## Custom embed parent hosts (CSP)
 
 The published GHCR image bakes `frame-ancestors` from
-`frontend/digichat/embed-hosts.txt` at build time. If your parent site hostname
+`cloudflare/digichat/embed-hosts.txt` at build time. If your parent site hostname
 is not in that list, either:
 
 1. Open a digithings PR to add the hostname to `embed-hosts.txt` (no secrets), or
 2. Rebuild the image yourself:
 
 ```bash
-docker build -f frontend/digichat/Dockerfile \
+docker build -f cloudflare/digichat/Dockerfile \
   --build-arg DIGICHAT_EMBED_HOSTS=your.example.com,www.your.example.com \
   -t digichat:custom .
 ```
@@ -675,13 +675,13 @@ Run:
 
 ```bash
 rg -n "Custom embed parent hosts|rebuild" docs/digichat/INSTALL.md
-rg -n "DIGICHAT_EMBED_HOSTS" frontend/digichat/Dockerfile
+rg -n "DIGICHAT_EMBED_HOSTS" cloudflare/digichat/Dockerfile
 ```
 
 - [x] **Step 5: Commit**
 
 ```bash
-git add docs/digichat/INSTALL.md frontend/digichat/embed-hosts.txt frontend/digichat/ARCHITECTURE.md
+git add docs/digichat/INSTALL.md cloudflare/digichat/embed-hosts.txt cloudflare/digichat/ARCHITECTURE.md
 git commit -m "$(cat <<'EOF'
 docs(digichat): document embed-hosts CSP rebuild path for clients
 

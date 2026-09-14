@@ -2,7 +2,7 @@
 
 ## Hostname / hosting (locked — amended)
 
-- **Visitor chat:** `digithings.ai/chat` — Cloudflare Pages (`frontend/digithings-web`) native `DigiChatSession` + digivault **Pages Function** (`functions/api/chat.ts`).
+- **Visitor chat:** `digithings.ai/chat` — Cloudflare Pages (`cloudflare/digithings-web`) native `DigiChatSession` + digivault **Pages Function** (`functions/api/chat.ts`).
 - **No Containers / no iframe** for digithings marketing chat (Workers Free plan).
 - digithings has **no Azure**. Do **not** use DataTap’s digichat ACA. Do **not** use `chat.digithings.ai` as the marketing host.
 - Customer digichat embeds (DataTap) continue on digichat `/embed` — out of scope here.
@@ -17,15 +17,15 @@
    - `OPENROUTER_API_KEY`
    - `CORE_SUPABASE_URL`
    - `CORE_SUPABASE_ANON_KEY`
-2. Deploy digithings-web (build mirrors `frontend/digithings-web/functions` → repo-root `functions/`).
+2. Deploy digithings-web (build mirrors `cloudflare/digithings-web/functions` → repo-root `functions/`).
 3. No `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` required for `/chat`.
-4. Optional deferred: Workers Paid + `frontend/digichat-cloudflare/` if later promoting to Containers.
+4. Optional deferred: Workers Paid + `cloudflare/digichat-cloudflare/` if later promoting to Containers.
    *Superseded 2026-08-06 — that scaffold was deleted unused; see ADR-0018 historical note 4.*
 
 ### Local
 
 ```bash
-cp frontend/digithings-web/.dev.vars.example frontend/digithings-web/.dev.vars
+cp cloudflare/digithings-web/.dev.vars.example cloudflare/digithings-web/.dev.vars
 # fill OPENROUTER_API_KEY, CORE_SUPABASE_URL, CORE_SUPABASE_ANON_KEY
 ```
 

@@ -3,13 +3,13 @@ type: quickstart
 title: digisearch Quickstart
 description: Run digisearch stub ingest and query smokes via CLI, verify health, and run the unit suite.
 tags: [digisearch, quickstart]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-07T22:38:58.074Z
 sources:
   - id: openwiki-source-d16d9586117b95e03b7f1549
     resource: repo://digisearch/AGENTS.md
 generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-09T14:37:17.158Z
 ---
 
 # digisearch Quickstart

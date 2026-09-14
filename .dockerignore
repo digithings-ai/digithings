@@ -17,9 +17,12 @@ projects
 openspec
 tests
 scripts
+# Dockerfile.digithings-stack-cloudflare (Cloudflare Containers, root context)
+# needs this one file; re-include it without un-ignoring the rest of scripts/.
+!scripts/merge_litellm_cheaperinference.py
 agents
-frontend/digithings
-frontend/digiquant
+cloudflare/digithings
+cloudflare/digiquant
 **/*.log
 .env
 .env.*
