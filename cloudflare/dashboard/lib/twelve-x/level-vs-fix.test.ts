@@ -64,6 +64,26 @@ describe('composeFixSeries', () => {
     ).toBeCloseTo(0.8, 10);
   });
 
+  it('inverts JPY/CAD, JPY/CHF, CHF/CAD at compose time (mirrors twelve-x)', () => {
+    const bySeries = {
+      'FX/JPY': pts(['2026-06-01'], [150]),
+      'FX/CAD': pts(['2026-06-01'], [1.5]),
+      'FX/CHF': pts(['2026-06-01'], [0.9]),
+    };
+    // twelve-x `_compose_history` special-cases these three as
+    // `_invert_series(_divide_cross(left, right))` — 1 / (left / right).
+    const jpyCad = composeFixSeries(pairFixSpec('JPY/CAD')!, bySeries);
+    const jpyChf = composeFixSeries(pairFixSpec('JPY/CHF')!, bySeries);
+    const chfCad = composeFixSeries(pairFixSpec('CHF/CAD')!, bySeries);
+    expect(jpyCad[0].fix).toBeCloseTo(1 / (150 / 1.5), 12);
+    expect(jpyChf[0].fix).toBeCloseTo(1 / (150 / 0.9), 12);
+    expect(chfCad[0].fix).toBeCloseTo(1 / (0.9 / 1.5), 12);
+    // Guard against the reciprocal bug: the raw divide result must not leak.
+    expect(jpyCad[0].fix).not.toBeCloseTo(150 / 1.5, 6);
+    expect(jpyChf[0].fix).not.toBeCloseTo(150 / 0.9, 6);
+    expect(chfCad[0].fix).not.toBeCloseTo(0.9 / 1.5, 6);
+  });
+
   it('inner-joins on date and drops zero divisors', () => {
     const out = composeFixSeries(
       { seriesIds: ['FX/EUR', 'FX/GBP'], op: 'divide' },
