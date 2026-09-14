@@ -16,6 +16,14 @@ from digigraph.orchestration.registry import ToolContext
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True)
+def _configured_digisearch_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Handlers fail loud when the digisearch base is unconfigured; these tests
+    exercise handler logic past that choke (invoke itself is mocked), so point
+    the base at a dummy URL explicitly instead of relying on a default."""
+    monkeypatch.setenv("DIGISEARCH_URL", "http://digisearch-test:8002")
+
+
 def _ctx(**overrides: object) -> ToolContext:
     defaults: dict[str, object] = {
         "session_id": "sess-1",
