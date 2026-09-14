@@ -42,8 +42,13 @@ custom_domain = true
 
 [[containers]]
 class_name = "DigiStackContainer"
-# Build context is monorepo root (two levels up from this package).
+# `image` and `image_build_context` resolve relative to THIS config file's
+# directory. Wrangler defaults the container build context to the Dockerfile's
+# own directory (`dirname(image)`); pinned to the monorepo root explicitly so
+# the COPY digibase/ / digikey/ / ... lines can never drift to a narrower
+# context (#4046).
 image = "../../Dockerfile.digithings-stack-cloudflare"
+image_build_context = "../.."
 max_instances = 5
 # Multi-process Profile A needs real RAM/disk (lite = 256MiB is far too small).
 instance_type = "standard-2"
@@ -63,9 +68,13 @@ instance_type = "standard-2"
 # api.stlouisfed.org reachable (HTTP 301 to the API docs).
 [[containers]]
 class_name = "DigiQuantMcpContainer"
-# Build context is monorepo root (two levels up from this package), same
-# convention as digiquant/Dockerfile ("Build from repo root").
+# Build context MUST be the monorepo root. Wrangler's default is the
+# Dockerfile's directory (digiquant/), where `COPY digibase/...`,
+# `COPY digikey/...`, `COPY digiquant/...` fail with "failed to calculate
+# checksum ... not found" (CI run 34863926273, #4046). Resolved relative to
+# this config file: ../.. is the repo root.
 image = "../../digiquant/Dockerfile.mcp"
+image_build_context = "../.."
 max_instances = 1
 # p50 <50ms / p99 <200ms per 500-bar indicator window was budgeted on standard-2.
 instance_type = "standard-2"
