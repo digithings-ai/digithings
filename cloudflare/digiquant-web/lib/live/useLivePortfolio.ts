@@ -6,6 +6,9 @@
  * useLivePortfolio (#1461/#1462) — reads the public portfolio book +
  * NAV series once, then values it live via {@link useLivePrices}.
  *
+ * Benchmark history (`LANDING_BENCHMARK_TICKER`) reads the R2 market API when
+ * `NEXT_PUBLIC_MARKET_DATA_URL` is set, and Supabase `price_history` otherwise.
+ *
  *   - `public_portfolio_positions` — latest-date book (privacy-allowlisted:
  *     performance only, never rationale / PM notes / thesis).
  *   - `public_accounting_nav_history` — curated NAV (#2599): finalized accounting
@@ -27,6 +30,7 @@
  * for a live-traded fund.
  */
 import { useEffect, useMemo, useState } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "./supabaseClient";
 import { useLivePrices } from "./useLivePrices";
 import type { LivePortfolioResult, NavPoint, UseLivePortfolioOptions } from "./types";
@@ -45,11 +49,37 @@ import {
   AccountingNavContractError,
 } from "./accounting-nav-contract";
 import { currentNavRun } from "./nav-seam";
+import { fetchBenchmarkHistory, isMarketDataConfigured } from "./market-data";
 
 const POSITION_COLUMNS =
   "ticker, name, category, sector_bucket, weight_pct, entry_price, entry_date, current_price, day_change_pct, unrealized_pnl_pct, since_entry_return_pct, metrics_as_of";
 const NAV_COLUMNS = "date, nav, cash_pct, invested_pct, day_return_pct, source, contract, series_seam";
 const LANDING_BENCHMARK_TICKER = "SPY";
+
+/**
+ * Supabase fallback for the benchmark leg (#4013): closes on/after `fromDate`,
+ * ascending. Used until `NEXT_PUBLIC_MARKET_DATA_URL` is configured; read
+ * errors degrade to an empty series.
+ */
+async function fetchBenchmarkHistoryFromSupabase(
+  client: SupabaseClient,
+  fromDate: string,
+): Promise<{ date: string; price: number }[]> {
+  const benchRes = await client
+    .from("price_history")
+    .select("date, close")
+    .eq("ticker", LANDING_BENCHMARK_TICKER)
+    .gte("date", fromDate)
+    .order("date", { ascending: true });
+  if (benchRes.error || !Array.isArray(benchRes.data)) return [];
+  return benchRes.data
+    .map((r) => {
+      const date = typeof r.date === "string" ? r.date : null;
+      const price = typeof r.close === "number" ? r.close : Number(r.close);
+      return date && Number.isFinite(price) ? { date, price } : null;
+    })
+    .filter((p): p is { date: string; price: number } => p !== null);
+}
 
 export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePortfolioResult {
   const client = "client" in options ? options.client ?? null : supabase;
@@ -97,25 +127,10 @@ export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePor
 
           const firstDate = navPoints[0]?.date;
           if (firstDate) {
-            const benchRes = await client
-              .from("price_history")
-              .select("date, close")
-              .eq("ticker", LANDING_BENCHMARK_TICKER)
-              .gte("date", firstDate)
-              .order("date", { ascending: true });
-            if (!cancelled && !benchRes.error && Array.isArray(benchRes.data)) {
-              setBenchmarkHistory(
-                benchRes.data
-                  .map((r) => {
-                    const date = typeof r.date === "string" ? r.date : null;
-                    const price = typeof r.close === "number" ? r.close : Number(r.close);
-                    return date && Number.isFinite(price) ? { date, price } : null;
-                  })
-                  .filter((p): p is { date: string; price: number } => p !== null),
-              );
-            } else if (!cancelled) {
-              setBenchmarkHistory([]);
-            }
+            const history = isMarketDataConfigured()
+              ? await fetchBenchmarkHistory(LANDING_BENCHMARK_TICKER, firstDate)
+              : await fetchBenchmarkHistoryFromSupabase(client, firstDate);
+            if (!cancelled) setBenchmarkHistory(history);
           } else {
             setBenchmarkHistory([]);
           }
