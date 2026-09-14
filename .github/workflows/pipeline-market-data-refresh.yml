@@ -11,7 +11,8 @@
 name: market-data-refresh
 on:
   schedule:
-    - cron: "0 13 * * *"
+    - cron: "0 13 * * *"    # morning: crypto + previous-settled equity bars
+    - cron: "30 21 * * *"   # evening: settled US close before the 22:00 research-metrics run (#4013 D4)
   workflow_dispatch: {}
 permissions:
   contents: read

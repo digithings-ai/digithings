@@ -37,17 +37,28 @@ def _fetch_ds(*args, **kwargs):
 
 def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[str, Any]:
     try:
-        by_name = _fetch_ds(
-            _digisearch_service_base(),
-            ctx.index_config if isinstance(ctx.index_config, dict) else {},
-            _digi_bearer_from_context(ctx),
-            ctx.request_id,
-        )
-        t = by_name.get(tool_name)
-        if t:
-            return t
-    except _ORCHESTRATOR_CLIENT_ERRORS as exc:
-        logger.warning("digisearch manifest fetch failed for %s: %s", tool_name, exc)
+        base = _digisearch_service_base()
+    except RuntimeError as exc:
+        # Unconfigured base: schema building degrades to the static fallback
+        # below (same as an unreachable service); the choke still fails loud
+        # at invoke time. Catalog builds (e.g. project_rag, which bundles
+        # digisearch unconditionally) must not 500 on supported unconfigured
+        # deployments such as Profile A chat-only.
+        logger.debug("digisearch schema fallback without manifest: %s", exc)
+        base = ""
+    if base:
+        try:
+            by_name = _fetch_ds(
+                base,
+                ctx.index_config if isinstance(ctx.index_config, dict) else {},
+                _digi_bearer_from_context(ctx),
+                ctx.request_id,
+            )
+            t = by_name.get(tool_name)
+            if t:
+                return t
+        except _ORCHESTRATOR_CLIENT_ERRORS as exc:
+            logger.warning("digisearch manifest fetch failed for %s: %s", tool_name, exc)
     if tool_name == "digisearch_fetch_all":
         return {
             "type": "function",

@@ -127,9 +127,9 @@ jobs:
     env:
       REFRESH_SCOPE: ${{ needs.resolve.outputs.refresh_scope }}
       RUN_DATE: ${{ needs.resolve.outputs.run_date }}
-      # R2 market-data creds (#3780): wired now so the supervised post-merge
-      # flip of DIGIQUANT_MARKET_DATA_BACKEND to `r2` is safe. Mirrors
-      # pipeline-checkpoint-archive.yml (same four names, same secrets).
+      # R2 market-data creds (#3780): the market-data backend flip to `r2`
+      # landed 2026-09-14 (#4013). Mirrors pipeline-checkpoint-archive.yml
+      # (same four names, same secrets).
       R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -216,6 +216,23 @@ jobs:
           # via apply_digiquant_house_env() — same as portfolio chain startup (#2532).
         run: |
           uv run --frozen --no-sync python digiquant/scripts/research/validate-providers.py --skip-dry-run
+
+      - name: Warm digikey container (cold-start mitigation)
+        # #4050: key.digithings.ai is a Cloudflare Container that scales to zero;
+        # its first response after idle can take tens of seconds. Non-fatal by
+        # design — digibase.service_auth now retries the token exchange itself,
+        # so this only spares the pipeline the first cold wait.
+        run: |
+          url="${DIGIKEY_URL:-https://key.digithings.ai}/healthz"
+          for attempt in 1 2 3; do
+            if curl -sf --max-time 10 "$url" >/dev/null; then
+              echo "digikey warm after attempt ${attempt}"
+              exit 0
+            fi
+            echo "::warning::digikey warm-up attempt ${attempt} failed; retrying in 5s"
+            sleep 5
+          done
+          echo "::warning::digikey warm-up did not succeed; pipeline will exchange for a token itself"
 
       - name: Run digiquant research pipeline
         id: run
