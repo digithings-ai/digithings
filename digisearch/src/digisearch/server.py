@@ -31,6 +31,7 @@ from digisearch.orchestrator_tools import (
     OpenAIToolDict,
 )
 from digisearch.pipeline.ingest import IngestError, ingest_source
+from digisearch.pipeline.url_ingest import UrlFetchError, UrlIngestResult, ingest_url
 from digisearch.search._stub import query_index
 from digisearch.web_exa import WebSearchData
 from digisearch.web_search.models import WebSearchConfigError, WebSearchRequest, WebSearchResponse
@@ -979,6 +980,19 @@ def api_web_answer(req: WebAnswerRequest) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
+class IngestUrlRequest(BaseModel):
+    """Request body for POST /ingest/url."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_url: str = Field(..., min_length=1, description="URL to fetch and ingest")
+    index_name: str = Field(default="default")
+    metadata: dict[str, Any] | None = Field(
+        default=None,
+        description="Document metadata (evidence_tier, doi_or_arxiv, etc.). Merged after sidecar YAML.",
+    )
+
+
 @app.post("/ingest", response_model=IngestResponse)
 def api_ingest(req: IngestRequest) -> IngestResponse:
     """Ingest a document via :func:`digisearch.pipeline.ingest.ingest_source`."""
@@ -997,6 +1011,15 @@ def api_ingest(req: IngestRequest) -> IngestResponse:
         index_name=result.index_name,
         status=result.status,
     )
+
+
+@app.post("/ingest/url", response_model=UrlIngestResult)
+def api_ingest_url(req: IngestUrlRequest) -> UrlIngestResult:
+    """Ingest a URL via :func:`digisearch.pipeline.url_ingest.ingest_url`."""
+    try:
+        return ingest_url(req.source_url, index_name=req.index_name, metadata=req.metadata)
+    except UrlFetchError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.message) from exc
 
 
 @app.get("/indexes")
