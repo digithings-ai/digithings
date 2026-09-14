@@ -84,7 +84,7 @@ def _window_return(client: Any, ticker: str, start_iso: str, end_iso: str) -> fl
     """
     if r2_backend_enabled():
         rows = r2_close_rows(tickers=[ticker], since=start_iso, until=end_iso)
-        closes = [float(r["close"]) for r in rows if r.get("close") is not None]
+        closes = [c for c in (_opt_float(r.get("close")) for r in rows) if c is not None]
         if len(closes) < 2 or closes[0] <= 0 or closes[-1] <= 0:
             return None
         return closes[-1] / closes[0] - 1.0
