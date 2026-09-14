@@ -26,8 +26,6 @@ name: "Pipeline: digiquant prices"
 #     have no R2 home and the daily pipeline still reads them from Supabase.
 #
 #   PAUSED (`if: run_writers`, re-enable with a manual dispatch + the flag):
-#   * intraday compute-technicals → price_technicals (zero Supabase-side
-#     readers — every technicals reader rides the R2 helpers).
 #   * fx-refresh → Yahoo FX rows (no R2 read path serves them and no prod
 #     Supabase reader consumes them; the market-data-refresh cron keeps the
 #     `yahoo__FX/*` R2 generations fresh from vendors for when the read path
@@ -35,11 +33,15 @@ name: "Pipeline: digiquant prices"
 #   * eod-macro fetch-macro (fred,yahoo) → macro rows (FRED readers are R2;
 #     the R2 refresh cron fetches FRED directly; `export_sdca_macro.py`
 #     falls back to the FRED API / keyless fredgraph CSV).
-#   * eod-macro sector quotes+technicals → single-name rows (sector analyst
-#     reads are R2; metrics/verify/at-open mark book holdings from
-#     latest-available closes, so a single name held in the book freezes at
-#     its last close rather than failing — watchlist-ETF holdings stay fresh
-#     via the kept intraday fetch).
+#   * eod-macro sector quotes → single-name rows (sector analyst reads are
+#     R2; metrics/verify/at-open mark book holdings from latest-available
+#     closes, so a single name held in the book freezes at its last close
+#     rather than failing — watchlist-ETF holdings stay fresh via the kept
+#     intraday fetch).
+#
+#   RETIRED (#4013 Task 11, re-add only as a deliberate rollback):
+#   * intraday compute-technicals → price_technicals (zero Supabase-side
+#     readers — every technicals reader rides the R2 recompute-on-read).
 #
 #   Verification (no other consumer depends on the paused writes): remaining
 #   `.table("price_history"|"price_technicals"|"macro_series_observations")`
@@ -52,13 +54,15 @@ name: "Pipeline: digiquant prices"
 #   R2 seams in #4013, but migration 124's DROPs stay DEFERRED (#3951) while
 #   same-day reads and the documented rollback still need the Supabase
 #   bodies; `export_sdca_macro.py` has no R2 seam (FRED API / keyless
-#   fredgraph CSV). The tables stay current via the KEPT cadence writes
-#   until a real retirement.
+#   fredgraph CSV). On the KEPT cadence, only `price_history` (intraday
+#   fetch-quotes) and `trading_calendar` stay current; `price_technicals`
+#   receives no workflow writes since Task 11 retired its writer. The tables
+#   themselves stay until a real retirement.
 #
 # Re-enable: `gh workflow run pipeline-digiquant-prices.yml -f mode=<job>
 # -f run_writers=true`, or revert the `run_writers` gates to resume cadence.
 
-# Scheduled price + technicals ingest via the migrated digiquant.data.prices
+# Scheduled price ingest via the migrated digiquant.data.prices
 # package (issue #149, Wave 1 Unit E). Four separate jobs:
 #
 #   * intraday  — every 15 min across the US cash session (13:07–21:52 UTC; see DST note)
@@ -94,7 +98,7 @@ on:
         type: choice
         options: [intraday, eod-macro, at-open, fx-refresh]
       run_writers:
-        description: 'Run the paused Supabase market-table writers (fetch-macro fred/yahoo, compute-technicals, sector refresh). Default false = writes stay paused; KEPT steps (intraday fetch-quotes, calendar sync) always run.'
+        description: 'Run the paused Supabase market-table writers (fetch-macro fred/yahoo, sector refresh). Default false = writes stay paused; KEPT steps (intraday fetch-quotes, calendar sync) always run.'
         required: false
         default: false
         type: boolean
@@ -106,10 +110,10 @@ permissions:
 jobs:
 
   intraday:
-    name: Intraday quotes + technicals
+    name: Intraday quotes
     # Writers-stop (#3780): the dead `schedule` arm is removed (the Cloudflare
     # worker dispatches via workflow_dispatch; a re-added schedule must not
-    # silently resume writes). compute-technicals below is additionally gated.
+    # silently resume writes). The technicals writer is retired (#4013 Task 11).
     if: |
       github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'intraday'
     runs-on: ubuntu-latest
@@ -141,25 +145,16 @@ jobs:
       - name: Install from lockfile
         run: uv sync --frozen --package digiquant --extra prices
       - name: Fetch quotes -> update cache -> upsert price_history
-        # KEPT on cadence (#3780 writers-stop exception): the at-open
-        # execution job prices fills from price_history.open on the execution
-        # day, and the research-metrics cron marks from latest closes.
+        # KEPT on cadence (#3780 writers-stop exception): the same-day open
+        # source for `execute_at_open.py::_fetch_open` (D3 — fills on the
+        # execution day read price_history.open) and the research-metrics cron
+        # marks from latest closes.
         run: |
           uv run --frozen --no-sync python -m digiquant prices fetch-quotes \
             --watchlist digiquant/src/digiquant/research/config/watchlist.md \
             --cache-dir data/price-history \
             --period 1y \
             --instrument-metadata \
-            --supabase
-      - name: Compute technicals -> upsert price_technicals
-        # PAUSED on cadence (#3780 writers-stop): every technicals reader is
-        # R2-backed, so these Supabase upserts have no consumer. Runs only on
-        # a manual dispatch with run_writers=true.
-        if: inputs.run_writers == true
-        run: |
-          uv run --frozen --no-sync python -m digiquant prices compute-technicals \
-            --cache-dir data/price-history \
-            --days 365 \
             --supabase
       - name: Update persistent failure issue
         if: failure()
@@ -374,24 +369,21 @@ jobs:
           uv run --frozen --no-sync python -m digiquant prices fetch-macro \
             --manifest digiquant/src/digiquant/research/config/macro_series.yaml \
             --supabase
-      - name: Fetch sector single-name quotes + technicals (daily, #946)
+      - name: Fetch sector single-name quotes (daily, #946)
         # PAUSED on cadence (#3780 writers-stop): sector analyst reads are
         # R2-backed. Manual dispatch with run_writers=true re-enables.
         if: inputs.run_writers == true
         # The 15-min intraday job fetches only the watchlist ETFs (rate-limit / timeout
-        # risk), so sector single names + sub-segment ETFs never get technicals and every
-        # sector report degrades to a one-ETF read. Refresh the full sector universe once
-        # after the close so price_technicals carries single-name indicators.
+        # risk), so sector single names + sub-segment ETFs would otherwise never
+        # refresh. Refresh the full sector universe once after the close.
+        # The technicals half of this step is retired (#4013 Task 11) — every
+        # technicals reader rides the R2 recompute-on-read.
         run: |
           uv run --frozen --no-sync python -m digiquant prices fetch-quotes \
             --watchlist digiquant/src/digiquant/research/config/watchlist.md \
             --include-sectors \
             --cache-dir data/price-history \
             --period 1y \
-            --supabase
-          uv run --frozen --no-sync python -m digiquant prices compute-technicals \
-            --cache-dir data/price-history \
-            --days 365 \
             --supabase
       - name: Update persistent failure issue
         if: failure()

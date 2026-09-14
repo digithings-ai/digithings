@@ -332,6 +332,30 @@ printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_AC
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_SECRET_ACCESS_KEY
 ```
 
+#### Market-data reads: R2 (`DIGIQUANT_MARKET_DATA_BACKEND=r2`)
+
+R2 is the market-data **read path** (#4013). History reads go through the
+seam helpers in `research/data/queries.py` — `r2_backend_enabled()`,
+`r2_close_rows(*, tickers, since, until)`,
+`r2_ohlcv_rows(*, tickers, since, until)`, `r2_manifest_seal()` — consumed by
+the five ops scripts (`execute_at_open.py`, `fill-entry-prices.py`,
+`refresh_performance_metrics.py`, `verify_nav_replay.py`,
+`finalize_period_accounting.py`) plus the research/portfolio readers that
+previously hit the Supabase market tables. The flag lives in
+`.github/digiquant-pipeline.yml` (loaded into `$GITHUB_ENV` by
+`workflows/pipeline-digiquant.yml`) with per-step copies in the five
+research-metrics step envs and the at-open job env; unset/empty keeps the
+library default `supabase`, and both bodies coexist for rollback.
+
+Freshness: reader-side `research/data/freshness.py::assert_market_data_fresh`
+(seal ≤ 1 day, ≥ 100 price tickers; tested, no production caller yet) and
+cron-side `data/prices/refresh_gate.py::staleness_gate` (seal ≤ 5 trading
+days — breach keeps the prior objects serving, writes the manifest
+`stale=true`, exits non-zero). Two Supabase market reads remain by design:
+same-day execution (`d > seal` — `execute_at_open` / `fill-entry-prices`
+price opens and fills from `price_history`; D3) and `FEDPROB/*`
+prediction-market odds (`get_fed_rate_probabilities`; no R2 generation; D2).
+
 #### Market-data R2 read path (#3780 Task 10)
 
 `DIGIQUANT_MARKET_DATA_BACKEND=r2` routes the price/macro tools through
@@ -2472,6 +2496,10 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
    evidence reads `hist_vol_21`/`atr_pct` through the R2 seam when
    `DIGIQUANT_MARKET_DATA_BACKEND=r2`, else from `price_technicals`
   (second read joined onto the history row) — never from `price_history`.
+  The versioned R2 cache is the market-data **read path** (#4013; see
+  *Market-data reads: R2* above). Within the pipeline under the flag, the only
+  remaining Supabase market reads are same-day execution (`d > seal`, at-open
+  opens / entry fills; D3) and `FEDPROB/*` odds (D2).
   `conviction_delta` clamps to ±2 before validation; `DocumentPatch` drops ops
   missing `op`/`path` before validation; bias synonyms map hawkish→bearish,
   dovish→bullish (tightening→bearish).
