@@ -216,7 +216,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 57) re-recorded for #3871 (tool-only cost-win rewrite + searxng floats-on-latest owner decision in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 58 for #3909 (backend fail-loud + research workspace scoping + raw filter gate docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 59 for #3934 (SSRF fetch-guard paragraph in the web_search section + DIGISEARCH_FETCH_ALLOWED_HOSTS env-table row in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
-    Re-recorded at count 60 for #4055 (POST /ingest/url subsection + URL-ingest clause in the POST /ingest section of ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 60 for #4055 (POST /ingest/url subsection + URL-ingest clause in the POST /ingest section of ARCHITECTURE.md), re-recorded again over the union with the #4059 module/digisearch sync (Azure workspace-scoping fix prose) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -243,7 +243,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "627eddc58a6701a5",
         "f5694c994b90e40c",
         "2f102978f3f92316",
-        "16584e006bbec980",
+        "d201d5cef8605cdf",
         "5c929ad2654944ce",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
@@ -262,16 +262,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "16bea1bbfea529fc",
         "00bffb9020b848f5",
         "260688f97329bc43",
-        "148ff3553b0c7caa",
-        "222dabb58df09011",
-        "f2687d4521d1e069",
-        "112fe01c18768a54",
-        "cdf4f0c7a56c56e7",
-        "8200c214c753f6dd",
-        "2c221fc487c50f69",
-        "a261a5a8ca75360c",
-        "c237b6e35263d7db",
-        "9b73f4d75e4908dc",
+        "67d86e18a970ef25",
+        "2df16a717e45cd20",
+        "c01731fed9b486f9",
+        "ae1e6da2f77138e0",
+        "c945e162a543358e",
+        "96c4e4c20cd1b0a1",
+        "79e1479908a647a2",
+        "5881d77c9811fa5d",
+        "a063d09664500f97",
+        "50b42145065d7d4e",
         "5dbc6c5291de10ab",
         "e8874754e8823dbd",
         "472ca1370eb9ef1a",

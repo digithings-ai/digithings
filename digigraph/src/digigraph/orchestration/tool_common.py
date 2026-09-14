@@ -151,7 +151,17 @@ def _digi_bearer_from_context(context: ToolContext) -> str | None:
 
 
 def _digisearch_service_base() -> str:
-    return DigiProjectConfig.load().get_digisearch_url()
+    base = DigiProjectConfig.load().get_digisearch_url()
+    if not base or not str(base).strip():
+        # RuntimeError, not ValueError: corpus callers catch
+        # _ORCHESTRATOR_CLIENT_ERRORS (which includes ValueError) and would
+        # soften this into an "invoke failed" string. Missing config must fail loud.
+        raise RuntimeError(
+            "digisearch service URL is not configured "
+            "(no services.digisearch_url in project config and no DIGISEARCH_URL env); "
+            "refusing web_search"
+        )
+    return base
 
 
 def _digiquant_service_base() -> str:
