@@ -6,6 +6,7 @@ Earliest OPEN or ADD row with a non-null price on or before ``as_of`` (same rule
 
 from __future__ import annotations
 
+import math
 from datetime import date, timedelta
 from typing import Any, Dict, Optional, Tuple
 
@@ -56,11 +57,21 @@ def _close_on_or_after(sb: Any, ticker: str, iso: str) -> Optional[float]:
         return None
     if r2_backend_enabled():
         since = str(iso)[:10]
-        until = (date.fromisoformat(since) + timedelta(days=12)).isoformat()
+        try:
+            until = (date.fromisoformat(since) + timedelta(days=12)).isoformat()
+        except (TypeError, ValueError):
+            return None
         rows = r2_close_rows(tickers=[t], since=since, until=until)
         for row in rows:
-            if row.get("close") is not None:
-                return float(row["close"])
+            c = row.get("close")
+            if c is None:
+                continue
+            try:
+                x = float(c)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(x) and x > 0:
+                return x
         return None
     res = (
         sb.table("price_history")

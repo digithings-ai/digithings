@@ -13,6 +13,7 @@ Environment: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 from __future__ import annotations
 
 import argparse
+import math
 import os
 from datetime import date as dt_date
 from pathlib import Path
@@ -57,9 +58,13 @@ def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
         seal, _ = r2_manifest_seal()
         if day <= seal.isoformat():
             rows = r2_ohlcv_rows(tickers=[ticker], since=day, until=day)
-            if rows and rows[0].get("open") is not None:
-                return float(rows[0]["open"])
-            return None
+            if not rows or rows[0].get("open") is None:
+                return None
+            try:
+                price = float(rows[0]["open"])
+            except (TypeError, ValueError):
+                return None
+            return price if math.isfinite(price) and price > 0 else None
     # same-day (or unsealed) prices come from the intraday Supabase writer (#4013 D3)
     res = (
         sb.table("price_history")

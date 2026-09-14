@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from datetime import date as dt_date
 from datetime import datetime, timedelta, timezone
@@ -239,9 +240,13 @@ def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
         seal, _ = r2_manifest_seal()
         if day <= seal.isoformat():
             rows = r2_ohlcv_rows(tickers=[ticker], since=day, until=day)
-            if rows and rows[0].get("open") is not None:
-                return float(rows[0]["open"])
-            return None
+            if not rows or rows[0].get("open") is None:
+                return None
+            try:
+                price = float(rows[0]["open"])
+            except (TypeError, ValueError):
+                return None
+            return price if math.isfinite(price) and price > 0 else None
     # same-day (or unsealed) prices come from the intraday Supabase writer (#4013 D3)
     res = (
         sb.table("price_history")
@@ -496,9 +501,19 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
         seal, _ = r2_manifest_seal()
         if str(d)[:10] <= seal.isoformat():
             rows = r2_ohlcv_rows(tickers=sorted(set(tickers)), since=str(d)[:10], until=str(d)[:10])
-            return {
-                str(r["ticker"]): Decimal(str(r["open"])) for r in rows if r.get("open") is not None
-            }
+            marks: Dict[str, Decimal] = {}
+            for row in rows:
+                ticker = row.get("ticker")
+                raw = row.get("open")
+                if not ticker or raw is None:
+                    continue
+                try:
+                    price = Decimal(str(raw))
+                except (TypeError, ValueError, InvalidOperation):
+                    continue
+                if price.is_finite() and price > 0:
+                    marks[str(ticker).upper()] = price
+            return marks
     res = (
         sb.table("price_history")
         .select("ticker,open")

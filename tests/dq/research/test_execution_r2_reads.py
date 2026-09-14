@@ -151,3 +151,74 @@ def test_open_marks_batches_r2_for_sealed_dates(r2_market) -> None:
         "GLD": Decimal("250.5"),
         "XLV": Decimal("150.0"),
     }
+
+
+# ─── Guard parity: unusable R2 values are dropped, never returned (#4013 fix round) ───
+
+
+def test_open_marks_drops_non_finite_and_non_positive_r2_opens(r2_market) -> None:
+    r2_market(
+        {
+            "GLD": [{"date": "2026-09-10", "open": float("nan")}],
+            "XLV": [{"date": "2026-09-10", "open": float("inf")}],
+            "UUP": [{"date": "2026-09-10", "open": 0.0}],
+            "DBO": [{"date": "2026-09-10", "open": "n/a"}],
+            "SPY": [{"date": "2026-09-10", "open": 450.25}],
+        },
+        as_of="2026-09-10",
+    )
+    assert eao._open_marks(None, ["GLD", "XLV", "UUP", "DBO", "SPY"], "2026-09-10") == {
+        "SPY": Decimal("450.25")
+    }
+
+
+def test_fetch_open_drops_unusable_r2_opens(r2_market) -> None:
+    r2_market(
+        {
+            "GLD": [{"date": "2026-09-10", "open": float("nan")}],
+            "XLV": [{"date": "2026-09-10", "open": float("inf")}],
+            "UUP": [{"date": "2026-09-10", "open": 0.0}],
+            "DBO": [{"date": "2026-09-10", "open": "n/a"}],
+            "SPY": [{"date": "2026-09-10", "open": 450.25}],
+        },
+        as_of="2026-09-10",
+    )
+    for ticker in ("GLD", "XLV", "UUP", "DBO"):
+        assert eao._fetch_open(None, ticker, "2026-09-10") is None
+        assert bep._fetch_open(None, ticker, "2026-09-10") is None
+    assert eao._fetch_open(None, "SPY", "2026-09-10") == 450.25
+    assert bep._fetch_open(None, "SPY", "2026-09-10") == 450.25
+
+
+def test_lookup_close_drops_unusable_r2_closes(r2_market) -> None:
+    r2_market(
+        {
+            "XLV": [{"date": "2026-09-10", "close": float("inf")}],
+            "UUP": [{"date": "2026-09-10", "close": 0.0}],
+            "DBO": [{"date": "2026-09-10", "close": "n/a"}],
+            "SPY": [{"date": "2026-09-10", "close": 451.5}],
+        },
+        as_of="2026-09-10",
+    )
+    for ticker in ("XLV", "UUP", "DBO"):
+        assert fep.lookup_close(None, ticker, "2026-09-10") is None
+    assert fep.lookup_close(None, "SPY", "2026-09-10") == 451.5
+
+
+def test_close_on_or_after_skips_unusable_r2_closes(r2_market) -> None:
+    r2_market(
+        {
+            "EWZ": [
+                {"date": "2026-09-09", "close": float("nan")},
+                {"date": "2026-09-10", "close": 0.0},
+                {"date": "2026-09-11", "close": -1.0},
+                {"date": "2026-09-12", "close": 31.0},
+            ],
+            "UNP": [{"date": "2026-09-09", "close": "n/a"}],
+        },
+        as_of="2026-09-12",
+    )
+    assert pfe._close_on_or_after(None, "EWZ", "2026-09-09") == 31.0
+    assert pfe._close_on_or_after(None, "UNP", "2026-09-09") is None
+    # Unparseable `iso` returns None instead of raising out of the R2 branch.
+    assert pfe._close_on_or_after(None, "EWZ", "not-a-date") is None

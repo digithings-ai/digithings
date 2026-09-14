@@ -15,6 +15,7 @@ Requires:
 
 import argparse
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -55,7 +56,13 @@ def lookup_close(sb, ticker: str, entry_date: str) -> float | None:
     if r2_backend_enabled():
         day = str(entry_date)[:10]
         rows = r2_close_rows(tickers=[ticker], since=day, until=day)
-        return float(rows[0]["close"]) if rows and rows[0].get("close") is not None else None
+        if not rows or rows[0].get("close") is None:
+            return None
+        try:
+            price = float(rows[0]["close"])
+        except (TypeError, ValueError):
+            return None
+        return price if math.isfinite(price) and price > 0 else None
     resp = (
         sb.table("price_history")
         .select("close")
