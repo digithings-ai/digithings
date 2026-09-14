@@ -56,3 +56,48 @@ def test_latest_price_date_and_technicals_from_r2(r2_market, monkeypatch) -> Non
     ctx = bc.fetch_context("2026-09-10")
     assert ctx["latest_price_date"] == "2026-09-10"
     assert ctx["prices"] and ctx["prices"][0]["ticker"] == "SPY"
+
+
+def test_r2_price_rows_carry_supabase_indicator_keys_and_prompt_renders(
+    r2_market, monkeypatch
+) -> None:
+    rows = [
+        {
+            "date": f"2026-09-{day:02d}",
+            "open": 100.0 + day,
+            "high": 101.0 + day,
+            "low": 99.0 + day,
+            "close": 100.0 + day + 0.5,
+            "volume": 10,
+        }
+        for day in range(4, 11)
+    ]
+    r2_market({"SPY": rows, "QQQ": rows, "GLD": rows}, as_of="2026-09-10")
+    monkeypatch.setattr(bc, "CORE_TICKERS", ["SPY", "QQQ", "GLD"])
+    ctx = bc.fetch_context("2026-09-10")
+
+    indicator_keys = (
+        "sma_20",
+        "sma_50",
+        "sma_200",
+        "rsi_14",
+        "macd",
+        "macd_signal",
+        "roc_5",
+        "roc_21",
+        "bb_pct_b",
+        "zscore_50",
+        "atr_pct",
+        "hist_vol_21",
+    )
+    assert [row["ticker"] for row in ctx["prices"]] == ["GLD", "QQQ", "SPY"]
+    for row in ctx["prices"]:
+        assert all(key in row for key in indicator_keys), row
+        # No R2 equivalent for these names — absent stays None, never a
+        # different-window substitute (e.g. `macd_hist` into `macd`).
+        assert row["sma_20"] is None and row["macd"] is None and row["zscore_50"] is None
+
+    prompt = bc.build_agent_prompt(ctx)
+    assert "Price & Technical Indicators" in prompt
+    spy_line = next(line for line in prompt.splitlines() if line.startswith("| SPY |"))
+    assert "—" in spy_line

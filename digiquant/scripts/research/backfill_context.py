@@ -211,13 +211,35 @@ def fetch_context(as_of_date: str) -> dict[str, Any]:
     }
 
 
+# Indicator keys the prompt table indexes. The Supabase body joins them from
+# `price_technicals`; R2's envelope uses different windows for some names
+# (`macd_hist`/`zscore_200`/`pct_vs_sma*`), so those stay None — never a
+# different-window substitute.
+_PRICE_INDICATOR_KEYS: tuple[str, ...] = (
+    "sma_20",
+    "sma_50",
+    "sma_200",
+    "rsi_14",
+    "macd",
+    "macd_signal",
+    "roc_5",
+    "roc_21",
+    "bb_pct_b",
+    "zscore_50",
+    "atr_pct",
+    "hist_vol_21",
+)
+
+
 def _fetch_context_r2(as_of_date: str) -> dict[str, Any]:
     """R2 branch of :func:`fetch_context` (#4013).
 
     Prices come from the sealed R2 generations and technicals from
     :func:`get_price_technicals` (backend-branched internally — no flag check
-    around it here). Macro series and snapshots have no R2 source, so those
-    keys keep the empty body shape.
+    around it here). Each price row is rebuilt to the Supabase price-entry
+    shape (:data:`_PRICE_INDICATOR_KEYS`, None when R2 has no equivalent name)
+    so :func:`build_agent_prompt` renders it unchanged. Macro series and
+    snapshots have no R2 source, so those keys keep the empty body shape.
     """
     # Imported per call (cached in sys.modules afterwards) so the default path needs no
     # digiquant import at module scope, matching fill-entry-prices.py.
@@ -247,6 +269,10 @@ def _fetch_context_r2(as_of_date: str) -> dict[str, Any]:
             latest = res.get("latest") or {}
             if latest:
                 technicals[ticker] = latest
+        for row in prices:
+            tech = technicals.get(str(row.get("ticker")), {})
+            for key in _PRICE_INDICATOR_KEYS:
+                row[key] = tech.get(key)
     return {
         "as_of_date": as_of_date,
         "latest_price_date": latest_price_date,
@@ -267,9 +293,10 @@ def _format_price_table(prices: list[dict]) -> str:
         def _f(v, fmt=".2f"):
             return f"{float(v):{fmt}}" if v is not None else "—"
         lines.append(
-            f"| {p['ticker']} | {_f(p['close'])} | {_f(p['rsi_14'])} | "
-            f"{_f(p['sma_20'])} | {_f(p['sma_50'])} | {_f(p['sma_200'])} | "
-            f"{_f(p['macd'])} | {_f(p['roc_5'])} | {_f(p['roc_21'])} | {_f(p['zscore_50'])} |"
+            f"| {p.get('ticker')} | {_f(p.get('close'))} | {_f(p.get('rsi_14'))} | "
+            f"{_f(p.get('sma_20'))} | {_f(p.get('sma_50'))} | {_f(p.get('sma_200'))} | "
+            f"{_f(p.get('macd'))} | {_f(p.get('roc_5'))} | {_f(p.get('roc_21'))} | "
+            f"{_f(p.get('zscore_50'))} |"
         )
     return "\n".join(lines)
 
