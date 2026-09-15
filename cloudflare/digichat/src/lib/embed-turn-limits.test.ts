@@ -7,36 +7,20 @@ import {
 } from "@/lib/embed-turn-limits";
 
 describe("formatEmbedTurnCounter", () => {
-  it("counts down the free turns", () => {
-    expect(formatEmbedTurnCounter(0, EMBED_FREE_TURN_LIMIT)).toBe(
-      "3 of 3 free questions left",
-    );
-    expect(formatEmbedTurnCounter(1, EMBED_FREE_TURN_LIMIT)).toBe(
-      "2 of 3 free questions left",
-    );
-    expect(formatEmbedTurnCounter(2, EMBED_FREE_TURN_LIMIT)).toBe(
-      "1 of 3 free questions left",
-    );
-    expect(formatEmbedTurnCounter(3, EMBED_FREE_TURN_LIMIT)).toBe(
-      "0 of 3 free questions left",
-    );
+  it("counts down the free turns as a fraction", () => {
+    expect(formatEmbedTurnCounter(0, EMBED_FREE_TURN_LIMIT)).toBe("3/3");
+    expect(formatEmbedTurnCounter(1, EMBED_FREE_TURN_LIMIT)).toBe("2/3");
+    expect(formatEmbedTurnCounter(2, EMBED_FREE_TURN_LIMIT)).toBe("1/3");
+    expect(formatEmbedTurnCounter(3, EMBED_FREE_TURN_LIMIT)).toBe("0/3");
   });
 
-  it("labels the raised trial quota", () => {
-    expect(formatEmbedTurnCounter(0, EMBED_TRIAL_TURN_LIMIT)).toBe(
-      "100 of 100 trial questions left",
-    );
-    expect(formatEmbedTurnCounter(37, EMBED_TRIAL_TURN_LIMIT)).toBe(
-      "63 of 100 trial questions left",
-    );
+  it("uses the raised trial quota after unlock", () => {
+    expect(formatEmbedTurnCounter(0, EMBED_TRIAL_TURN_LIMIT)).toBe("100/100");
+    expect(formatEmbedTurnCounter(37, EMBED_TRIAL_TURN_LIMIT)).toBe("63/100");
   });
 
   it("never reports a negative remainder", () => {
-    expect(formatEmbedTurnCounter(5, EMBED_FREE_TURN_LIMIT)).toBe(
-      "0 of 3 free questions left",
-    );
-    expect(formatEmbedTurnCounter(140, EMBED_TRIAL_TURN_LIMIT)).toBe(
-      "0 of 100 trial questions left",
-    );
+    expect(formatEmbedTurnCounter(5, EMBED_FREE_TURN_LIMIT)).toBe("0/3");
+    expect(formatEmbedTurnCounter(140, EMBED_TRIAL_TURN_LIMIT)).toBe("0/100");
   });
 });

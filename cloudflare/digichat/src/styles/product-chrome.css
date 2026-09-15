@@ -30,15 +30,15 @@
 }
 
 .dc-attribution {
-  border-top: 1px solid var(--border);
-  padding: 0.5rem 0.75rem;
+  padding: 0.25rem 0.75rem 0.5rem;
   text-align: center;
   font-size: 0.68rem;
-  color: var(--muted-foreground);
+  color: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
+  background: transparent;
 }
 
 .dc-attribution a {
-  color: var(--primary);
+  color: color-mix(in oklch, var(--muted-foreground) 75%, transparent);
   text-decoration: underline;
 }
 

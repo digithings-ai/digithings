@@ -1146,7 +1146,7 @@ function EmbedChat({
 
   const turnCounterSlot = isTrialForm ? (
     <p
-      className="dc-turn-counter px-3 pt-2 pb-1 text-center text-xs text-muted-foreground"
+      className="dc-turn-counter select-none pb-1 pt-0.5 text-center text-[0.65rem] font-light tabular-nums tracking-wide text-muted-foreground/50"
       data-testid="embed-turn-counter"
     >
       {formatEmbedTurnCounter(gate.turns, gate.limit)}
