@@ -1656,6 +1656,7 @@ all = [
     { name = "chonkie", extra = ["semantic"] },
     { name = "chromadb" },
     { name = "ddgs" },
+    { name = "digiclaw" },
     { name = "digifetch" },
     { name = "digikey" },
     { name = "fastapi" },
@@ -1685,6 +1686,7 @@ dev = [
     { name = "beautifulsoup4" },
     { name = "chardet" },
     { name = "chonkie", extra = ["semantic"] },
+    { name = "digiclaw" },
     { name = "digikey" },
     { name = "fastapi" },
     { name = "langgraph" },
@@ -1722,6 +1724,7 @@ rerank = [
     { name = "sentence-transformers" },
 ]
 server = [
+    { name = "digiclaw" },
     { name = "digikey" },
     { name = "fastapi" },
     { name = "mcp" },
@@ -1756,6 +1759,7 @@ requires-dist = [
     { name = "ddgs", marker = "extra == 'web-search'", specifier = ">=9.0" },
     { name = "digibase", editable = "digibase" },
     { name = "digibase", extras = ["otel"], marker = "extra == 'otel'", editable = "digibase" },
+    { name = "digiclaw", marker = "extra == 'server'", editable = "digiclaw" },
     { name = "digifetch", marker = "extra == 'web-search'", editable = "digifetch" },
     { name = "digikey", marker = "extra == 'server'", editable = "digikey" },
     { name = "digisearch", extras = ["agent"], marker = "extra == 'all'", editable = "digisearch" },

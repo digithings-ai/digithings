@@ -283,11 +283,15 @@ Auth required (`digisearch:query` scope). Rate limited: 30 req/min.
 
 Returns OpenAI-style tool definitions for digigraph orchestration. Accepts optional `index_config` body to specialize tool schemas (filterable_fields, facetable_fields, result_metadata_fields).
 
-Returns 3 or 4 tools:
+Returns the tool manifest (the two Phase C monitor tools are unconditional — the
+OSS recall leg needs no key):
 - `digisearch` — standard search with pagination
 - `digisearch_fetch_all` — auto-paginating fetch of full result sets
 - `web_search` — public web search (searxng→ddgs, fetch + extract enriched; #3853)
+- `digisearch_monitors_trigger` — run one watch turn now (`watch_id`, optional `mode`; #4065)
+- `digisearch_monitors_runs` — page one watch's run history (`watch_id`, `limit`, `cursor`; #4065)
 - `digisearch_research_delegate` — composite research turn (only when `digisearch[agent]` is installed)
+- `digisearch_web_search` — EXA live web search (only when `EXA_API_KEY` is set)
 
 #### `POST /v1/orchestrator_invoke`
 
@@ -444,6 +448,90 @@ default:** every entry point fails closed without `EXA_API_KEY` (503 / disabled 
 
 Auth: same `digisearch:query` scope via `DigiAuthMiddleware` (default path rule; no digikey change).
 
+#### Phase C monitors (`/v1/monitors`, #4065)
+
+Scheduled web-search watches: create a watch (query + schedule + dedup rule +
+delivery config), let the runner recall and dedup results, then read the
+canonical run history or receive delivery. One store, one runner, one envelope —
+the recall leg is `digisearch.web_exa.exa_search` whenever `EXA_API_KEY` is
+configured and the OSS seam otherwise, and the `backend` a watch declares is
+recorded on each of its runs. Monitors are off end-to-end for the `datatap`
+workspace: create/update reject it and the tick skips it.
+
+##### Monitor HTTP routes
+
+All routes below are auth-gated through the local `_digisearch_path_scopes`
+wrapper, which delegates everything except the webhook back to the landed
+`digisearch_path_scopes` — the monitor paths hit its `digisearch:query`
+fallthrough, so CRUD is **not** `digisearch:ingest` (R1, no digikey change).
+Rate limits are per-IP (R10): CRUD and runs 30/min, trigger / tick / exa_webhook
+10/min.
+
+| Method + path | Success | Error codes | Notes |
+|----------------|---------|-------------|-------|
+| `POST /v1/monitors` | 201 `{"watch": …, "delivery_secret": …}` | config codes (422) | Validated before persistence; the one-time secret is in this response only (R8) |
+| `GET /v1/monitors` | 200 `{"watches": [...]}` | — | Optional `?workspace_id=` filter |
+| `GET /v1/monitors/{watch_id}` | 200 `Watch` | `watch_not_found` (404) | Never returns the secret |
+| `PATCH /v1/monitors/{watch_id}` | 200 `Watch`, or `{"watch": …, "delivery_secret": …}` when rotating | `watch_not_found` (404), `validation_error` / config codes (422) | Partial patch; merging is top-level (a nested object replaces the whole nested object) |
+| `DELETE /v1/monitors/{watch_id}` | 200 `{"deleted": watch_id}` | `watch_not_found` (404) | Runs are retained |
+| `POST /v1/monitors/{watch_id}/trigger` | 201 `MonitorRun` | `watch_not_found` (404) | Body `{"mode": "manual"\|"poll"}` (default `manual`); a failed turn still returns its persisted `status="failed"` run rather than a 5xx |
+| `GET /v1/monitors/{watch_id}/runs` | 200 `{"runs": [...], "next_cursor": …}` | `run_not_found` (404, unknown cursor) | `limit` 1–100 (default 20); `cursor` is the last `run_id` of the previous page |
+| `GET /v1/monitors/{watch_id}/runs/{run_id}` | 200 `MonitorRun` | `run_not_found` (404) | — |
+| `POST /v1/monitors/tick` | 200 `{"runs": [...]}` | — | Runs every due + enabled watch once (digiclaw wake-up clock, §4.8) |
+| `POST /v1/monitors/exa_webhook` | 200 `MonitorRun` | `exa_bad_signature` (401), `exa_payload_invalid` (400/422), `exa_monitor_id_missing` / `exa_run_status_unknown` (422), `watch_not_found` (404), `watch_backend_mismatch` (409) | Auth-exempt but secret-gated: `X-Exa-Signature` compared to `EXA_MONITOR_WEBHOOK_SECRET` with `hmac.compare_digest`; a valid signature translates the payload via the EXPERIMENTAL Task 8c EXA adapter and persists the canonical run (watch resolved by `monitorId` → `exa_monitor_id`, datatap excluded) |
+
+| Error code | HTTP | Raised by |
+|------------|------|-----------|
+| `datatap_monitors_disabled` | 422 | `workspace_id="datatap"` on create/update (tick also skips it) |
+| `timezone_unknown` | 422 | `schedule.timezone` does not resolve via `ZoneInfo` |
+| `invalid_cron` | 422 | `digiclaw.cron.parse_cron` rejects the 5-field expression |
+| `webhook_url_required` / `slack_url_required` | 422 | Non-`poll` delivery with no targets, or a webhook/slack target with no URL |
+| `webhook_url_private` / `slack_url_private` | 422 | Target URL is not https, carries userinfo, or resolves (or fails to resolve) to a non-global address |
+| `validation_error` | 422 | `PATCH` body fails `Watch` re-validation |
+| `watch_not_found` / `run_not_found` | 404 | Unknown watch, run, or pagination cursor |
+| `run_exists` | 409 | Duplicate `run_id` (store-level; internal) |
+| `exa_bad_signature` | 401 | Missing server secret, missing header, or signature mismatch — fail closed |
+| `exa_payload_invalid` | 400/422 | Webhook body is not valid JSON (400), not a JSON object (422), or carries a malformed `status`/result container (422) |
+| `exa_monitor_id_missing` | 422 | Webhook payload has no `monitorId` — the target watch cannot be resolved |
+| `exa_run_status_unknown` | 422 | Webhook payload status is not terminal (`completed`/`failed`/`error`) |
+| `watch_backend_mismatch` | 409 | The webhook-resolved watch is not `backend="exa"` (misconfiguration; nothing persisted) |
+| `exa_not_configured` | — (adapter) | EXA adapter create/delete: no explicit key and no `EXA_API_KEY` — the EXA monitor backend is disabled (never a silent OSS fallback) |
+| `exa_tier_gated` | — (adapter) | EXA adapter create/delete: EXA answered 401/403 (paywall / unauthorized key tier) — fail closed |
+
+Custom codes ride the shared digibase envelope — read `body["error"]["code"]`,
+never a top-level `body["code"]`. Validation messages are EXA-identical:
+`[webhook]: Required`, `[webhook.url]: Webhook URL cannot point to localhost or
+private IPs`.
+
+**Secret contract (R8).** Create returns the per-watch delivery secret once as
+`{"watch": …, "delivery_secret": …}` (`secrets.token_hex(32)`); `PATCH
+{"rotate_delivery_secret": true}` mints a fresh one in the same shape and
+rotates only on the literal `true` (truthy strings/numbers do not). The secret
+lives in a dedicated nullable `secret` column, never in the watch body, so
+`GET`/list reads and stored run bodies are secret-free.
+
+**Delivery (R13).** Fan-out happens only for `status="ok"` runs whose watch
+delivery mode is not `poll`. Webhook/slack targets receive the exact
+`MonitorRun` JSON body with `X-digi-signature: sha256=<hmac_sha256(secret,
+body)>`; retries are 2 attempts with linear backoff (`0.5s`) and only transport
+errors, 5xx, and 429 are retried — any other 4xx is definitive after one
+attempt. Email targets go over the `DIGISEARCH_SMTP_*` relay (STARTTLS verified;
+login never crosses a cleartext connection). Every target yields exactly one
+`DeliveryReceipt` (`{target_kind, ok, status_code?, error?}`); receipts are
+returned to the caller and **not** persisted — the run log is append-only, so
+stored runs keep `delivery=[]`. A delivery-enabled watch whose stored secret is
+`None` fails loudly (`error="delivery_secret_missing"`, `results_all=[]` so
+undelivered content never enters dedup memory) instead of skipping delivery.
+
+**Recall path.** The runner calls the Phase B shallow recall directly
+in-process (no loopback HTTP, no bearer token — R2): EXA when configured, else
+`search_web` with `recency_days=None` (R5 — no silent 7-day rolling window) and
+`max_results=min(num_results, 10)` (R6); the OSS leg is adapted to the canonical
+`WebSearchData` payload via `_oss_response_to_data`, and the run's
+`query_snapshot` records the effective `num_results` plus
+`num_results_clamped_from` when the clamp applied. Storage, dedup, and tick
+semantics are in §5.
+
 ### MCP Tools
 
 MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streamable HTTP.
@@ -454,6 +542,18 @@ MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streama
 | `web_search` | Search the public web; returns JSON `WebSearchResponse` (#3853) | Yes (`digisearch[web-search]`) |
 | `digisearch_research_turn` | Composite research turn (plan → retrieve → aggregate, or the #4064 web branch with `source=web\|auto`) with citations; `source`/`effort` passthrough (`output_schema` deferred, R7) | Yes (`digisearch[agent]`) |
 | `digisearch_web_search` | Live web search via EXA; disabled message without `EXA_API_KEY` | Yes (`EXA_API_KEY`) |
+| `monitors_create_watch` | Create a scheduled web-search watch (`schedule_cron` or `interval_seconds` ≥ 60; cron wins when both); returns `{watch, delivery_secret}` JSON — the secret appears here only | No |
+| `monitors_list_watches` | List watches newest-updated first as `{"watches": [...]}` JSON | No |
+| `monitors_trigger_watch` | Run one watch turn now (`mode` `manual`\|`poll`); returns the JSON `MonitorRun`, failed turns included | No |
+| `monitors_get_runs` | List stored runs newest-first as `{"runs", "next_cursor"}` JSON | No |
+
+The four monitor tools share the HTTP API's store/runner and its
+`watch_config_error` create gate (a watch whose cron could not parse would raise
+inside `is_due` at tick time, where per-watch failures are isolated and would
+otherwise vanish). Without a reachable monitor store they return the fail-closed
+`digisearch monitors are disabled (monitor store is unavailable).` string; the
+create tool maps the non-`poll` delivery modes it cannot configure targets for
+to the same validation string the HTTP API would return.
 
 Tool parameters for `digisearch_query`: `text`, `index_name`, `top_k`, `mode`.
 
@@ -746,6 +846,17 @@ digisearch/src/digisearch/
 │   ├── grounding_models.py    # WebResearchConfig / EFFORT_PRESETS / TurnUsage / TurnCost
 │   └── accounting.py          # pure stage-ms + advisory cost helpers
 │
+├── monitors/                  # Phase C scheduled web-search monitors (#4065)
+│   ├── models.py              # Watch / MonitorRun envelopes + schedule/dedup/delivery config
+│   ├── store.py               # SQLite watch/run persistence, dedup memory, delivery-secret column
+│   ├── dedup.py               # normalize_url-keyed fingerprint dedup (new/changed/unchanged)
+│   ├── runner.py              # one watch turn + due-tick + in-process recall seam
+│   ├── delivery.py            # validate_delivery gate + webhook/slack/email fan-out receipts
+│   ├── exa_adapter.py         # EXPERIMENTAL EXA monitor adapter: run translation
+│                              # (exa_run_to_monitor_run) + create_exa_monitor/delete_exa_monitor
+│                              # helpers; tier-gated fail-closed; live shapes pending pin (#4123)
+│   └── validation.py          # shared create/update config gate (datatap, timezone, cron, delivery)
+│
 └── dev/
     └── edgar_sample_export.py # EDGAR-CORPUS slice exporter (dev/test only)
 ```
@@ -966,6 +1077,88 @@ digigraph registers digisearch via `POST /v1/orchestrator_tools`. When an LLM ca
 - digigraph has no search logic — it is a pass-through hub
 - `digisearch_fetch_all` performs server-side pagination in a while loop (page size 500) and returns the full collected set in a single response, which can be very large
 
+### Phase C monitors (#4065)
+
+`digisearch/src/digisearch/monitors/` is an orchestration layer over the Phase B
+web-search seams — no provider, extractor, embedding, or ranking code is added.
+One-line responsibilities:
+
+| File | Responsibility |
+|------|----------------|
+| `monitors/models.py` | `Watch` / `MonitorRun` envelopes + `WatchSchedule` / `DedupRule` / `DeliveryConfig` / `DeliveryTarget` / `DeliveryReceipt`; `extra="forbid"`; EXA-bounded `num_results` (1–100); `interval_seconds ≥ 60` |
+| `monitors/store.py` | SQLite persistence (watches + runs), ULID ids, run pagination, the delivery-secret column, dedup-memory recomputation |
+| `monitors/dedup.py` | Huginn / changedetection.io-style memory: `normalize_url` keys + content fingerprints, reimplemented on stdlib (`hashlib` + `difflib`) — no embeddings, no network |
+| `monitors/runner.py` | One watch turn (`run_watch`), the scheduler entry (`tick_due_watches`), due evaluation (`is_due`), and the `deliver` seam |
+| `monitors/delivery.py` | `validate_delivery` create/update gate + webhook/slack/email fan-out with per-target receipts |
+| `monitors/validation.py` | The shared create/update decision (`watch_config_error`) used by both the HTTP and MCP surfaces |
+
+**Storage.** One SQLite file (`sqlite3` stdlib), resolved explicit path →
+`DIGISEARCH_MONITORS_DB` → `{DIGI_WORKSPACE}/.digisearch/monitors.sqlite3` →
+`./.digisearch/monitors.sqlite3` (cwd fallback for host/test runs). WAL journal
+mode plus a 5s busy timeout let the HTTP process and the digiclaw tick process
+share the file; connections are thread-bound, so `get_monitor_store()` opens one
+store per request thread (`server.py`) and the MCP tools open one per call.
+
+| Table | Columns | Notes |
+|-------|---------|-------|
+| `watches` | `watch_id` PK, `body` JSON, `updated_at`, `workspace_id`, `secret` | `body` is the full `Watch` document (model evolution without migrations); `secret` is the nullable per-watch delivery secret, never in `body` |
+| `runs` | `run_id` PK, `watch_id`, `status`, `trigger`, `started_at`, `finished_at`, `body` | Append-only; indexed `(watch_id, started_at DESC)` |
+
+Runs are retained after their watch is deleted: `append_run` does not require the
+watch row, so a turn that started before a delete still lands. Timestamps in the
+queryable columns are fixed-width UTC ISO strings (lexicographic order matches
+chronological order); `created_at`/`updated_at` are server-assigned and cannot be
+patched. Fresh databases get the `secret` column from the schema; pre-R8
+databases are upgraded in `__init__` with a guarded `ALTER TABLE`, and a failed
+upgrade propagates rather than leaving a half-migrated store.
+
+**Dedup.** Three rules over the `seen` map (`normalize_url(url) → fingerprint` —
+`normalize_url` is the landed Phase B citation identity, imported, never
+redefined):
+
+1. An unseen URL is `new`.
+2. A seen URL is `unchanged` under `match="url"` (content ignored); under
+   `match="url_content"` it is `unchanged` when its fingerprint equals the
+   memory and reported `changed` (a survivor, i.e. new content) when it does not.
+3. Under `match="url_content"`, an unseen URL whose title is a near-duplicate
+   (`difflib.SequenceMatcher` ratio ≥ `similarity_threshold`, default 0.9) of a
+   seen title collapses to `unchanged`.
+
+`dedup_stats` keys are exactly `seen`, `new`, `changed`, `unchanged` (`seen`
+counts current results whose normalized URL was already in memory; collapsed
+near-duplicates land in `unchanged`). A fingerprint is
+`"<normalized title>\x1f<sha256 hexdigest>"` — sha256 over
+`title.strip().lower()` + `"\n"` + whitespace-collapsed text, with the normalized
+title riding along so the near-duplicate leg can compare a new title against
+previously seen titles (otherwise the memory is opaque digests only). Seen-memory
+writers MUST recompute values with the public `result_fingerprint` (shared
+extraction order `text` → EXA `highlights` → `snippet`) or `highlights`-only /
+`snippet`-only results would compare unequal and report `changed` on every run.
+Fingerprints are not a stored column: `MonitorStore.seen_fingerprints` merges the
+raw `results_all` payloads of the newest 10 runs (newest-first, most recent
+observation of a URL wins) and recomputes them. A secret-missing failed run
+persists `results_all=[]`, so undelivered content never advances this memory and
+is re-detected (and fails loudly again) on the next run.
+
+**Tick semantics.** `tick_due_watches` evaluates every enabled watch with
+`is_due` and runs the due ones with `trigger="schedule"`, isolating per-watch
+failures: a recall failure contributes its persisted `status="failed"` run, an
+unexpected error is logged without aborting the tick. `is_due` owns all timezone
+conversion (naive `now` is UTC; wall clock evaluated in `schedule.timezone`) and
+imports the cron grammar from `digiclaw.cron` (`parse_cron` +
+`CronExpression.matches`) — never a copy. Cron fires once per matching minute (a
+previous start inside the same minute suppresses the second fire); interval fires
+when `last_run_at + interval_seconds <= now`, and a missing `last_run_at` means
+due. Failed runs count as a cadence tick, so a failing watch retries on its
+schedule rather than on every 60s wake-up. Datatap-scoped watches are skipped
+outright (datatap stays OFF end-to-end).
+
+**Fail-hard semantics.** A recall exception persists `status="failed"` with
+`error=str(exc)` and re-raises `MonitorRunError` carrying the persisted `run_id`;
+the HTTP trigger route returns that stored run (201) instead of masking it with a
+5xx, while the digiclaw helper counts it as `failed`. `no_change` runs persist
+and never deliver.
+
 ---
 
 ## 6. Security Analysis
@@ -982,11 +1175,43 @@ digisearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middlewa
 | `POST /v1/orchestrator_tools` | `digisearch:query` |
 | `POST /v1/orchestrator_invoke` | `digisearch:query` |
 | `POST /v1/research_turn` | `digisearch:query` |
+| `POST /v1/monitors`, `GET /v1/monitors`, `GET\|PATCH\|DELETE /v1/monitors/{watch_id}` | `digisearch:query` (landed fallthrough — CRUD is not `digisearch:ingest`) |
+| `POST /v1/monitors/{watch_id}/trigger`, `GET /v1/monitors/{watch_id}/runs[/{run_id}]` | `digisearch:query` |
+| `POST /v1/monitors/tick` | `digisearch:query` (digiclaw service JWT) |
+| `POST /v1/monitors/exa_webhook` | **Auth-exempt** (local `_digisearch_path_scopes` exemption); `EXA_MONITOR_WEBHOOK_SECRET` + `X-Exa-Signature` compared with `hmac.compare_digest` in the handler — 401 `exa_bad_signature` when missing/mismatched |
 | `GET /health` | Public |
 | `GET /azure_status` | `digisearch:query` |
 | `GET /indexes`, `GET /indexes/{name}` | (unclear — not in server auth logic) |
 
 **Gap:** `GET /azure_status` still returns reachability detail to any caller with `digisearch:query`; consider restricting to internal networks or a dedicated ops scope.
+
+### Monitor delivery egress and the EXA webhook exemption
+
+Monitors add digisearch's only **outbound** data path beyond search/embedding
+calls: a non-`poll` watch POSTs the run body (query text and result URLs) to
+operator-configured webhook/slack/email targets. Guardrails (R13/R8): targets are
+validated at create/update (`validate_delivery`) to be https, userinfo-free, and
+resolve to global addresses only — an unresolvable host is rejected because it
+cannot be proven public. At delivery time httpx resolves the target again,
+redirects are never followed, and the per-watch secret is stripped from receipt
+error text together with the target URL. The create-time check leaves a
+DNS-rebinding window acknowledged in `runner.py`; verified TLS plus the
+no-redirect rule bound it. Delivered bodies are signed with `X-digi-signature:
+sha256=<hmac_sha256(secret, body)>` so receivers can verify authenticity without
+this service reaching back out.
+
+`POST /v1/monitors/exa_webhook` is the one auth-exempt route in the service: EXA
+holds no digikey JWT, so it authenticates with the shared
+`EXA_MONITOR_WEBHOOK_SECRET` instead. The check is mandatory and fail-closed
+(missing server secret, missing header, or mismatch ⇒ 401), the presented value
+is never logged or echoed, and the body is not read until the gate has passed.
+A valid signature translates the payload through the EXPERIMENTAL Task 8c EXA
+adapter and persists the canonical `MonitorRun`: the payload's `monitorId`
+resolves the watch by `exa_monitor_id` (datatap excluded; `watch_not_found`
+otherwise, `watch_backend_mismatch` when the watch is not `backend="exa"`), and
+untranslatable payloads are rejected (`exa_payload_invalid` /
+`exa_monitor_id_missing` / `exa_run_status_unknown`) rather than accepted as
+empty.
 
 ### Multi-tenant isolation
 
@@ -1146,6 +1371,22 @@ digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` 
 
 MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is purely at network level (loopback binding).
 
+### digiclaw monitor tick (#4065)
+
+The heartbeat profile's `web-watch-tick` agent (`digiclaw/agents/web-watch-tick.yaml`,
+continuous 60s) drives scheduled watches through
+`digiclaw/src/digiclaw/monitors_tick.py::run_due_monitors`, which POSTs
+`{DIGISEARCH_URL}/v1/monitors/tick` (compose: `http://digisearch:8002`) with a
+digikey service JWT minted by the landed
+`digibase.service_auth.get_service_jwt(key_env="DIGICLAW_DIGIKEY_API_KEY",
+digikey_url_env="DIGIKEY_URL", scopes=("digisearch:query",))`. Transport and
+auth failures raise, so the scheduler records the agent's `last_error` (never a
+silent successful tick) and `digiclaw schedule tick` prints the failed outcome.
+The route calls `tick_due_watches` directly (the route itself is the tick);
+per-watch failures come back inside the `{"runs": [...]}` payload and are
+counted by the digiclaw helper as `failed`. Compose wiring and the
+poll-vs-public-webhook ops choice are in §10.
+
 ### digiflow integration
 
 digiflow (Langflow) connects at `http://digisearch:8002` (HTTP) or MCP. Standard `POST /query` with `format=table` for display-ready results. digiflow can also import the `digisearch` Python client directly if running in the same process.
@@ -1303,6 +1544,50 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGIKEY_JWKS_URL` | _(required)_ | digikey JWKS endpoint for JWT validation |
 | `DIGIKEY_ISSUER` | _(required)_ | JWT issuer |
 | `DIGIKEY_AUDIENCE` | _(required)_ | JWT audience |
+| `DIGI_WORKSPACE` | _(unset)_ | Workspace root; with no `DIGISEARCH_MONITORS_DB`, the monitor store resolves to `{DIGI_WORKSPACE}/.digisearch/monitors.sqlite3` (#4065) |
+| `DIGISEARCH_MONITORS_DB` | _(unset)_ | Explicit SQLite path for the Phase C monitor store; wins over the `DIGI_WORKSPACE` default and the cwd fallback (#4065) |
+| `DIGISEARCH_SMTP_HOST` | _(unset)_ | SMTP relay host for monitor email delivery; unset (or no usable from-address) ⇒ `smtp_not_configured` receipt |
+| `DIGISEARCH_SMTP_PORT` | `587` | SMTP relay port; a non-numeric value is treated as unconfigured |
+| `DIGISEARCH_SMTP_USER` | _(unset)_ | SMTP username; login happens only over STARTTLS, else `smtp_tls_unavailable` when credentials are set |
+| `DIGISEARCH_SMTP_PASS` | _(unset)_ | SMTP password; treat as sensitive — receipt redaction (`_redacted_error`) strips the per-watch delivery secret and target URL today, not this value |
+| `DIGISEARCH_SMTP_FROM` | falls back to `DIGISEARCH_SMTP_USER` | From address for monitor email delivery; host + from must both resolve or email is a failed receipt |
+| `EXA_MONITOR_WEBHOOK_SECRET` | _(unset)_ | Shared secret compared against `X-Exa-Signature` on `POST /v1/monitors/exa_webhook`; unset ⇒ every webhook fails closed with 401 (#4065) |
+
+### Phase C monitors ops record (#4065)
+
+Compose persistence: the digisearch service sets `DIGI_WORKSPACE=/data/monitors`
+and mounts the `digisearch_monitors` named volume at the same path, so the store
+lives at `/data/monitors/.digisearch/monitors.sqlite3` and monitor history plus
+dedup memory survive container recreate:
+
+```yaml
+    environment:
+      - DIGI_WORKSPACE=/data/monitors
+    volumes:
+      - digisearch_monitors:/data/monitors
+```
+
+The heartbeat service is the scheduler side: `DIGISEARCH_URL=http://digisearch:8002`,
+`DIGICLAW_AGENTS_DIR=/workspace/digiclaw/agents` (the read-only repo mount; the
+image ships no `agents/`), `DIGICLAW_SCHEDULER_STATE=/state/scheduler_state.json`
+on the `digiclaw_state` volume, and the bootstrap-then-loops command — `digiclaw
+schedule start web-watch-tick || exit 1` (idempotent when already running; `||
+exit 1` catches only real bootstrap failures), the preserved 1800s heartbeat in
+the background, and the 60s tick loop in the foreground. See
+`digiclaw/ARCHITECTURE.md` §3 for the tick caller.
+
+Tunnel-or-poll: local development uses delivery mode `poll` plus the manual
+`POST /v1/monitors/{watch_id}/trigger`, which needs no inbound path and is the
+portable loop that works on both the `oss` and `exa` backends. Public webhooks
+require digisearch to be reachable from the internet; expose it via Cloudflare
+Tunnel or Tailscale per `SECURITY.md` (never a public port), with webhook/slack
+targets validated as public https URLs at create/update and re-resolved at
+delivery time. The inbound EXA result webhook additionally needs
+`EXA_MONITOR_WEBHOOK_SECRET` set; a valid signature translates the payload via
+the EXPERIMENTAL Task 8c adapter and persists the run to the monitor store.
+Shape reconciliation is owned by the live-pin follow-up (#4123) — the adapter's
+remote shapes are not live-validated — so poll + manual trigger remains the
+portable route for EXA-backed watches until the pin lands.
 
 ### MCP server startup
 

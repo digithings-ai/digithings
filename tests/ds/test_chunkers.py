@@ -218,13 +218,17 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 59 for #3934 (SSRF fetch-guard paragraph in the web_search section + DIGISEARCH_FETCH_ALLOWED_HOSTS env-table row in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 60 for #4055 (POST /ingest/url subsection + URL-ingest clause in the POST /ingest section of ARCHITECTURE.md), re-recorded again over the union with the #4059 module/digisearch sync (Azure workspace-scoping fix prose) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 67 for #4064 (Phase B web-branch ARCH section in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 80 for #4065 (Phase C monitors ARCH section + ops record) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 80) re-recorded for #4065 (Phase C docs corrections) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 82 for #4065 (Task 8c EXA adapter + webhook translation docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 83 for #4065 (final-review docs touches: exa_adapter.py module-map row + #4123 pin citation in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 67
+    assert len(chunks) == 83
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -238,8 +242,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5fc146dcd98ed469",
         "6bb725ee96409565",
         "2496b0331a6908ca",
-        "e4075afa680748d8",
-        "71c75006a73bbb9b",
+        "a0e7b563bf9ec4f9",
+        "39a904210e4cc87a",
         "36e8025d96e584db",
         "a7fc35b75f9b5e09",
         "208b4fbb16a49071",
@@ -247,8 +251,15 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "c6a2f8fbd65825a6",
         "7e8464fe6a6cc067",
         "9ce2b59017d82c91",
-        "d15ebc87304fe14e",
-        "ab0a7f1cb0bbf383",
+        "ef0f58a96ed218c0",
+        "0e77d003d55f7ea9",
+        "f549b7a076a86393",
+        "c689e2f168577314",
+        "5509075d7fcabffe",
+        "2f7edd4395376f0c",
+        "ac7b29b4d7b97c64",
+        "998a1c6dea39b3bf",
+        "03f0c3868b10ba8c",
         "f5694c994b90e40c",
         "2f102978f3f92316",
         "d201d5cef8605cdf",
@@ -258,7 +269,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "20b66fa9abe4d235",
         "28bb2eddea9813a5",
         "0f38ad6f707a76af",
-        "c81719c58e194262",
+        "fee91aae6e29887e",
+        "2508b2392d081c6e",
         "819ebadc3320ecc2",
         "10832c167583db90",
         "3442051d624d3623",
@@ -269,8 +281,13 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "2ec8256cb4695f07",
         "16bea1bbfea529fc",
         "00bffb9020b848f5",
-        "260688f97329bc43",
-        "67d86e18a970ef25",
+        "f3195dfc3d6d0f6a",
+        "9d7b263a74bc8726",
+        "367d6f1945838ddd",
+        "20c027f468c04701",
+        "b8ffe03a9011fe85",
+        "5f8ed5c780e4f898",
+        "2c3b651039d4969c",
         "2df16a717e45cd20",
         "c01731fed9b486f9",
         "ae1e6da2f77138e0",
@@ -278,20 +295,23 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "96c4e4c20cd1b0a1",
         "79e1479908a647a2",
         "5881d77c9811fa5d",
-        "a063d09664500f97",
-        "50b42145065d7d4e",
+        "4e43fa537ada9659",
+        "f86cd7836b6e8e7e",
+        "81d310410772fb3e",
         "5e6a02ac4bf32f0f",
         "e8874754e8823dbd",
         "472ca1370eb9ef1a",
         "a3987db99f2b72c5",
         "9496728548f7cd2a",
         "6d57e6ff0ba47c28",
-        "f36bf18adeb33278",
-        "8fffdec25510f05f",
-        "482754fb154988ce",
-        "79ae674b8661ea64",
-        "fc586dc7c2348d1e",
-        "ac8dbe83a57bf4f4",
+        "44ecfabe5926f420",
+        "5191b4ec0bfecb12",
+        "b8cb5035323ab950",
+        "9820e49d040ba85a",
+        "634f3df55301a1f6",
+        "00825ad8b9d99bd3",
+        "6f9625d36ae831a9",
+        "098d38b802535342",
         "8b8c754092fe534f",
         "059d9ccf5c138f8c",
         "22f9d694bae83638",

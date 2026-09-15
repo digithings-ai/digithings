@@ -1,18 +1,27 @@
 """digisearch MCP server. Exposes document search as MCP tools for digigraph/digiflow."""
 
+# score:allow untyped any
+# MCP tool payloads carry heterogeneous JSON; Any is the honest annotation.
 from __future__ import annotations
 
+import json
 import logging
 import os
-from typing import Any
+import secrets
+import sqlite3
+from typing import Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
 from digisearch.core.models import Query
 from digisearch.logging import configure_logging
+from digisearch.monitors.models import DeliveryConfig, Watch, WatchSchedule
+from digisearch.monitors.store import MonitorStore, MonitorStoreError, get_store
+from digisearch.monitors.validation import watch_config_error
 from digisearch.research_search import search_strategies as _search_strategies_impl
 from digisearch.search._stub import query_index
+from digisearch.web_search.models import summarize_validation_error
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -237,6 +246,136 @@ def digisearch_web_search(
         logger.error("digisearch web search failed: %s", e)
         return f"[digisearch web search error: {e}]"
     return web_exa.format_web_results(data)
+
+
+# --- Phase C monitors (§4.7, #4065) -------------------------------------------------
+#
+# Four MCP tools over the same store/runner the HTTP routes use. Fail-closed
+# shape of `digisearch_web_search`: without a reachable store the tools return a
+# disabled message instead of raising. Create/update-time validation goes
+# through `watch_config_error` — the same gate the HTTP API applies — because a
+# watch with an unparseable cron would raise inside `is_due` at tick time, where
+# `tick_due_watches` swallows the failure per watch and it would silently never
+# run.
+
+_MONITORS_DISABLED = "digisearch monitors are disabled (monitor store is unavailable)."
+
+
+def _monitor_store_or_none() -> MonitorStore | None:
+    """Open the monitor store, or fail closed with ``None`` when unreachable."""
+    try:
+        return get_store()
+    except (OSError, sqlite3.Error) as e:
+        logger.error("digisearch monitor store unavailable: %s", e)
+        return None
+
+
+@mcp.tool()
+def monitors_create_watch(
+    query: str,
+    schedule_cron: str | None = None,
+    interval_seconds: int | None = None,
+    num_results: int = 8,
+    category: str | None = None,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+    delivery_mode: Literal["poll", "webhook", "fanout"] = "poll",
+) -> str:
+    """Create a scheduled web-search watch. Returns JSON {watch, delivery_secret}.
+
+    The one-time ``delivery_secret`` (used to verify delivery HMACs) appears in
+    this response only — never on list/read. Provide ``schedule_cron`` (5-field
+    digiclaw grammar) or ``interval_seconds`` (>= 60); cron wins when both are
+    given. The watch is named after the query. ``delivery_mode`` other than
+    ``poll`` needs targets, which this surface cannot set, so those are rejected.
+    """
+    store = _monitor_store_or_none()
+    if store is None:
+        return _MONITORS_DISABLED
+    text = query.strip()
+    if not text:
+        return "[monitors create error: query is required]"
+    if not schedule_cron and interval_seconds is None:
+        return "[monitors create error: schedule_cron or interval_seconds is required]"
+    try:
+        # Both WatchSchedule constructions stay inside this try: the interval
+        # floor (ge=60) and the cron-required validator raise pydantic
+        # ValidationError, which must flatten to the documented string, not escape.
+        if schedule_cron:
+            schedule = WatchSchedule(mode="cron", cron=schedule_cron)
+        else:
+            schedule = WatchSchedule(mode="interval", interval_seconds=interval_seconds)
+        watch = Watch(
+            name=text[:120],
+            query=text,
+            num_results=num_results,
+            category=category,
+            include_domains=include_domains or [],
+            exclude_domains=exclude_domains or [],
+            schedule=schedule,
+            delivery=DeliveryConfig(mode=delivery_mode),
+        )
+    except ValidationError as e:
+        return f"[monitors create error: {summarize_validation_error(e)}]"
+    failure = watch_config_error(watch)
+    if failure is not None:
+        _, code, message = failure
+        return f"[monitors create error: {code}: {message}]"
+    created = store.create_watch(watch)
+    secret = secrets.token_hex(32)
+    store.set_delivery_secret(created.watch_id, secret)
+    return json.dumps(
+        {"watch": created.model_dump(mode="json"), "delivery_secret": secret}, indent=2
+    )
+
+
+@mcp.tool()
+def monitors_list_watches() -> str:
+    """List scheduled watches newest-updated first as JSON {"watches": [...]}."""
+    store = _monitor_store_or_none()
+    if store is None:
+        return _MONITORS_DISABLED
+    watches = store.list_watches()
+    return json.dumps({"watches": [watch.model_dump(mode="json") for watch in watches]}, indent=2)
+
+
+@mcp.tool()
+def monitors_trigger_watch(watch_id: str, mode: Literal["manual", "poll"] = "manual") -> str:
+    """Run one watch turn now and return its JSON MonitorRun.
+
+    A failed turn is still persisted and returned with ``status="failed"``
+    (mirrors ``POST /v1/monitors/{watch_id}/trigger``).
+    """
+    store = _monitor_store_or_none()
+    if store is None:
+        return _MONITORS_DISABLED
+    try:
+        from digisearch.monitors.runner import MonitorRunError, run_watch
+    except ImportError as e:
+        return f"[monitors unavailable: install digisearch[web-search] for monitors: {e}]"
+    try:
+        run = run_watch(watch_id, trigger=mode, store=store)
+    except MonitorStoreError as e:
+        return f"[monitors trigger error: {e.code}: {e}]"
+    except MonitorRunError as e:
+        run = store.get_run(watch_id, e.run_id)
+    return json.dumps(run.model_dump(mode="json"), indent=2)
+
+
+@mcp.tool()
+def monitors_get_runs(watch_id: str, limit: int = 20) -> str:
+    """List stored runs for one watch, newest first, as JSON {"runs", "next_cursor"}."""
+    store = _monitor_store_or_none()
+    if store is None:
+        return _MONITORS_DISABLED
+    try:
+        runs, next_cursor = store.list_runs(watch_id, limit=limit)
+    except MonitorStoreError as e:
+        return f"[monitors runs error: {e.code}: {e}]"
+    return json.dumps(
+        {"runs": [run.model_dump(mode="json") for run in runs], "next_cursor": next_cursor},
+        indent=2,
+    )
 
 
 def run_mcp(
