@@ -16,9 +16,10 @@
  * (No /_stack/mcp/* forwarder — unauthenticated MCP forwarding must not ship.
  * mcp.digithings.ai answers only once its route is enabled behind the JWT gate.)
  *
- * digivault / LiteLLM are loopback-only inside the Container. digisearch stays
- * loopback for in-container callers (digigraph reads DIGISEARCH_URL, still
- * http://127.0.0.1:8002) and is additionally reachable via its public route.
+ * digivault / LiteLLM are loopback-only inside the Container. digisearch binds
+ * 0.0.0.0:8002 (container/start_digisearch.sh) so the Worker can reach it at the
+ * container network address for its public route; in-container callers keep
+ * using DIGISEARCH_URL=http://127.0.0.1:8002 (0.0.0.0 includes loopback).
  * digichat Container calls these public URLs via DIGIGRAPH_INTERNAL_URL / DIGIKEY_URL.
  */
 import { Container, getContainer, switchPort } from "@cloudflare/containers";
