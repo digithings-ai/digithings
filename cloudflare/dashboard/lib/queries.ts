@@ -66,7 +66,7 @@ import { ledgerEventEconomics } from './position-event-economics';
 import { thesisIdEquals } from './thesis-id';
 import type { ThesisVehicleRow } from './thesis-story';
 import { houseBook } from './house-workspace';
-import { fetchMarketCloses, fetchMarketTickers } from './market-data';
+import { fetchMarketCloses, type MarketClose } from './market-data';
 
 /** Coerce a jsonb column that should be a string[] into one, tolerating null/non-arrays. */
 function asStringArray(v: unknown): string[] {
@@ -978,11 +978,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     benchMax,
   );
 
-  // Ticker universe (#4053): the R2 archive via the market API, with a
-  // benchmark-keys fallback when it answers empty (see resolveTickerUniverse).
-  const universeTickers = await fetchMarketTickers();
-  const price_history_tickers: string[] = resolveTickerUniverse(universeTickers, benchmarks);
-
   const theses: Thesis[] = currentTheses.map(mapThesisRow);
 
   const docs: Doc[] = rawDocs.map((d) => ({
@@ -1126,7 +1121,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       .filter(([, d]) => !!d)
   );
 
-  const priceRows: Pick<TableRow<'price_history'>, 'date' | 'ticker' | 'close'>[] =
+  const priceRows: MarketClose[] =
     posTickers.length
       ? // A recent 90-day window; closeOnOrAfter uses it for live marks and
         // entry dates that fall inside the window.
@@ -1424,7 +1419,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     research_changelog_by_date,
     snapshot_run_type_by_date,
     benchmarks,
-    price_history_tickers,
     server_portfolio_metrics,
     calculated: {
       // Return null (not 0) when the portfolio_metrics row is absent so the UI

@@ -44,10 +44,9 @@ name: "Pipeline: digiquant prices"
 #   Verification (no other consumer depends on the paused writes): after
 #   #4053 the readers this workflow's jobs feed no longer touch the two market
 #   tables (the nine scripts + `get_price_technicals`); the remaining
-#   `.table("price_history"|"price_technicals")` hits are the two writer files,
-#   the gated recompute path, and the non-script readers still carrying Supabase
-#   bodies. macro_series_observations stays for the fedprob/bitview writes
-#   above. The tables themselves stay until a real retirement.
+#   direct-table bodies are retired with migration 127, which drops both
+#   tables — the R2 seam owns every market read. macro_series_observations
+#   stays for the fedprob/bitview writes above.
 #
 # Re-enable: `gh workflow run pipeline-digiquant-prices.yml -f mode=<job>
 # -f run_writers=true`, or revert the `run_writers` gates to resume cadence.

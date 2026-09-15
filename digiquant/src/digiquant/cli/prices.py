@@ -40,10 +40,11 @@ def _supabase_writes_disabled() -> bool:
 
     ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` stops the Supabase writers: the daily
     refresh lands in R2 generations via ``scripts/refresh_market_data_r2.py``
-    instead. Rollback = unset the flag (writers resume; readers fall back to
-    Supabase bodies). ``fetch-macro --sources fedprob`` is exempt (see
-    :func:`_macro_write_covered_by_r2`) — prediction-market odds have no R2
-    generation.
+    instead. Migration 127 has since dropped ``price_history`` /
+    ``price_technicals`` (#4053), so there is no Supabase rollback left —
+    unsetting the flag no longer re-enables these writes. ``fetch-macro
+    --sources fedprob`` is exempt (see :func:`_macro_write_covered_by_r2`) —
+    prediction-market odds have no R2 generation and the macro table stays.
 
     Thin alias over :func:`digiquant.research.data.queries.r2_backend_enabled`
     (the single canonical flag read); kept under this name for the writer
@@ -59,7 +60,8 @@ def _refuse_supabase_write(command: str) -> None:
     raise click.ClickException(
         f"{command}: Supabase market-data writes are stopped "
         "(DIGIQUANT_MARKET_DATA_BACKEND=r2); the R2 refresh owns this table now. "
-        "Unset the flag to roll back to Supabase writers."
+        "Migration 127 dropped price_history/price_technicals (#4053) — this "
+        "command is retired, and unsetting the flag does not restore it."
     )
 
 

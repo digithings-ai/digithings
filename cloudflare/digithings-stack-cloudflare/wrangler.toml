@@ -198,6 +198,8 @@ DIGISEARCH_URL = "http://127.0.0.1:8002"
 # Chat-only Profile A — digiquant / digismith HTTP are not in this Container.
 DIGIQUANT_URL = ""
 DIGISMITH_URL = ""
+# #4053: containers must read the R2 market seam — 127 drops the Supabase tables.
+DIGIQUANT_MARKET_DATA_BACKEND = "r2"
 OPENAI_API_BASE = "http://127.0.0.1:4000/v1"
 DIGI_CONFIG_PATH = "/app/config"
 DIGI_PROJECT_CONFIG = "/app/config/digiproject.yaml"
