@@ -31,6 +31,8 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
+import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -181,6 +183,60 @@ def test_retryable_failure_uses_three_attempts_with_5s_25s_backoff(
     assert rows[0].status_code == status
     assert rows[0].error == f"HTTP {status}"
     assert len(store.list_webhook_deliveries(webhook.webhook_id)) == 1
+
+
+@pytest.mark.unit
+def test_backoff_repeats_last_step_when_attempts_grow(monkeypatch, tmp_path, sleeps):
+    """Raising ``_WEBHOOK_ATTEMPTS`` must not index past the pinned sequence."""
+    monkeypatch.setattr(mod, "_WEBHOOK_ATTEMPTS", 4)
+    store = _store(tmp_path)
+    webset = _webset(store)
+    event = _event(store, webset.id)
+    _webhook(store, webset.id, _URL_GOOD)
+    attempts: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(1)
+        return httpx.Response(503)
+
+    _patch_transport(monkeypatch, handler)
+    rows = mod.deliver_webhook(store, event, now=_T0)
+
+    assert len(attempts) == 4
+    assert sleeps == [5.0, 25.0, 25.0]
+    assert rows[0].ok is False and rows[0].status_code == 503
+
+
+@pytest.mark.unit
+def test_real_client_factory_disables_redirects_and_bounds_timeout(monkeypatch):
+    """Pin the production httpx config, not just the ``_client_for`` seam.
+
+    A regression to redirect-following would let an approved public target 30x
+    the delivery to an internal address (SSRF); the seam monkeypatch in the
+    other tests would leave that green.
+    """
+    captured: dict[str, object] = {}
+    real_client = httpx.Client
+
+    def recording_client(**kwargs):
+        captured.update(kwargs)
+        return real_client(**kwargs)
+
+    monkeypatch.setattr(httpx, "Client", recording_client)
+    client = mod._client_for(7.5)
+    try:
+        assert captured == {"timeout": 7.5, "follow_redirects": False}
+        assert client.follow_redirects is False
+        assert client.timeout.connect == 7.5
+        assert client.timeout.read == 7.5
+    finally:
+        client.close()
+
+
+@pytest.mark.unit
+def test_redaction_helper_is_shared_with_phase_c():
+    """One security-relevant redaction implementation across both egresses."""
+    assert mod.redact_error is phase_c.redact_error
 
 
 @pytest.mark.unit
@@ -454,3 +510,96 @@ def test_delivery_never_mutates_event_rows(monkeypatch, tmp_path):
     after = [row.model_dump(mode="json") for row in store.list_events(webset.id)[0]]
     assert after == before
     assert store.list_events(webset.id)[0][0].model_dump()["payload"] == {}
+
+
+# ── store faults (contained, never abort the fan-out) ─────────────────────────
+
+
+@pytest.mark.unit
+def test_store_fault_on_ledger_write_does_not_abort_other_targets(monkeypatch, tmp_path, caplog):
+    store = _store(tmp_path)
+    webset = _webset(store)
+    event = _event(store, webset.id)
+    bad_hook = _webhook(store, webset.id, _URL_BAD)
+    good_hook = _webhook(store, webset.id, _URL_GOOD)
+    calls: list[str] = []
+    real_record = store.record_webhook_delivery
+
+    def flaky_record(webhook_id, event_id, *, ok, status_code=None, error=None):
+        if webhook_id == bad_hook.webhook_id:
+            # Hostile store fault text embeds both the secret and the URL.
+            raise sqlite3.OperationalError(f"database is locked at {_URL_BAD} with {_SECRET}")
+        return real_record(webhook_id, event_id, ok=ok, status_code=status_code, error=error)
+
+    monkeypatch.setattr(store, "record_webhook_delivery", flaky_record)
+    caplog.set_level(logging.WARNING)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(200)
+
+    _patch_transport(monkeypatch, handler)
+    rows = mod.deliver_webhook(store, event, now=_T0)  # must not raise
+
+    assert calls == [_URL_BAD, _URL_GOOD]
+    assert [row.webhook_id for row in rows] == [good_hook.webhook_id]
+    assert store.get_webhook_delivery(bad_hook.webhook_id, event.id) is None
+    assert store.get_webhook_delivery(good_hook.webhook_id, event.id).ok is True
+    messages = " ".join(record.getMessage() for record in caplog.records)
+    assert "OperationalError" in messages
+    assert _SECRET not in messages
+    assert _URL_BAD not in messages
+
+
+@pytest.mark.unit
+def test_store_fault_on_ledger_read_fails_closed_without_abort(monkeypatch, tmp_path, caplog):
+    store = _store(tmp_path)
+    webset = _webset(store)
+    event = _event(store, webset.id)
+    bad_hook = _webhook(store, webset.id, _URL_BAD)
+    good_hook = _webhook(store, webset.id, _URL_GOOD)
+    calls: list[str] = []
+    real_get = store.get_webhook_delivery
+
+    def flaky_get(webhook_id, event_id):
+        if webhook_id == bad_hook.webhook_id:
+            raise sqlite3.OperationalError("database is locked")
+        return real_get(webhook_id, event_id)
+
+    monkeypatch.setattr(store, "get_webhook_delivery", flaky_get)
+    caplog.set_level(logging.WARNING)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(200)
+
+    _patch_transport(monkeypatch, handler)
+    rows = mod.deliver_webhook(store, event, now=_T0)  # must not raise
+
+    # The bad target is skipped before any POST (no unrecorded egress risk).
+    assert calls == [_URL_GOOD]
+    assert [row.webhook_id for row in rows] == [good_hook.webhook_id]
+    assert store.get_webhook_delivery(good_hook.webhook_id, event.id).ok is True
+
+
+@pytest.mark.unit
+def test_store_fault_listing_webhooks_returns_no_rows(monkeypatch, tmp_path, caplog):
+    store = _store(tmp_path)
+    webset = _webset(store)
+    event = _event(store, webset.id)
+    _webhook(store, webset.id, _URL_GOOD)
+    calls: list[int] = []
+
+    def broken_list(webset_id):
+        raise sqlite3.OperationalError(f"database is locked with {_SECRET}")
+
+    monkeypatch.setattr(store, "list_webhooks", broken_list)
+    caplog.set_level(logging.WARNING)
+
+    _patch_transport(monkeypatch, lambda request: calls.append(1) or httpx.Response(200))
+    assert mod.deliver_webhook(store, event, now=_T0) == []  # must not raise
+    assert calls == []
+    # Only the exception class is safe to log before any target is known.
+    messages = " ".join(record.getMessage() for record in caplog.records)
+    assert "OperationalError" in messages
+    assert _SECRET not in messages

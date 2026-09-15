@@ -40,7 +40,7 @@ from typing import Any
 
 import httpx
 
-from digisearch.monitors.delivery import sign_webhook_body
+from digisearch.monitors.delivery import redact_error, sign_webhook_body
 from digisearch.websets.models import EventKind, WebhookConfig, WebsetEvent, WebsetItem
 from digisearch.websets.store import WebhookDelivery, WebsetStore
 
@@ -182,9 +182,11 @@ def _as_utc(value: datetime) -> datetime:
 def _active_secrets(webhook: WebhookConfig, *, now: datetime) -> tuple[str, ...]:
     """Secrets a delivery may be verified under at *now* (rotation overlap, R7).
 
-    Always the current secret; the previous secret only while its 24h overlap
-    window is still open. A previous secret with no expiry is ignored — rotation
-    must stay bounded (an unbounded old secret would defeat it).
+    Always the current secret; the previous secret only while its overlap
+    window is open — i.e. any ``previous_expires_at`` still in the future (the
+    24h value is a T6 caller convention, not enforced here). A previous secret
+    with no expiry is ignored — rotation must stay bounded (an unbounded old
+    secret would defeat it).
     """
     secrets = [webhook.secret] if webhook.secret else []
     expires = webhook.previous_expires_at
@@ -237,21 +239,14 @@ def _client_for(timeout_s: float) -> httpx.Client:
     return httpx.Client(timeout=timeout_s, follow_redirects=False)
 
 
-def _redacted_error(exc: BaseException, *, secret: str, target_url: str | None) -> str:
-    """Exception text safe for ledger rows and logs (R8; Phase C pattern).
+def _backoff_s(attempt: int) -> float:
+    """Sleep before *attempt* (1-based) from the pinned 5s/25s sequence.
 
-    httpx transport errors may embed the request URL (whose path can carry a
-    webhook token), so both the target URL and the webhook secret are stripped
-    before the text leaves this module.
+    The last pinned step repeats when ``_WEBHOOK_ATTEMPTS`` exceeds the number
+    of steps — clamping instead of indexing the tuple keeps a longer retry
+    schedule from raising ``IndexError`` mid-delivery.
     """
-    text = f"{type(exc).__name__}: {exc}"
-    if secret:
-        text = text.replace(secret, "<redacted>")
-    if target_url:
-        for needle in {target_url, target_url.rstrip("/")}:
-            if needle:
-                text = text.replace(needle, "<target>")
-    return text
+    return _WEBHOOK_BACKOFF_S[min(attempt - 2, len(_WEBHOOK_BACKOFF_S) - 1)]
 
 
 def _attempt_delivery(
@@ -273,12 +268,12 @@ def _attempt_delivery(
     with _client_for(timeout_s) as client:
         for attempt in range(1, _WEBHOOK_ATTEMPTS + 1):
             if attempt > 1:
-                _sleep(_WEBHOOK_BACKOFF_S[attempt - 2])
+                _sleep(_backoff_s(attempt))
             try:
                 response = client.post(webhook.url, content=payload, headers=headers)
             except Exception as exc:
                 status_code = None
-                error = _redacted_error(exc, secret=webhook.secret, target_url=webhook.url)
+                error = redact_error(exc, secret=webhook.secret, target_url=webhook.url)
                 continue
             if response.is_success:
                 return True, response.status_code, None
@@ -304,20 +299,49 @@ def deliver_webhook(
     double-record, and a recorded terminal failure is final). Every outcome —
     success, HTTP failure, transport exhaustion, missing secret — becomes a
     ledger row with a redacted error; per-target failures never raise out of
-    this path and never abort the remaining targets. Returns the terminal
-    ledger rows in webhook registration order. Never mutates the event row.
+    this path and never abort the remaining targets. Store faults are
+    contained the same way: a ledger read failure skips that target (fail
+    closed, no second POST), a ledger write failure is logged and the next
+    target is still attempted, and a failed webhook listing returns no rows.
+    Returns the terminal ledger rows in webhook registration order. Never
+    mutates the event row.
     """
     delivered_at = now or datetime.now(UTC)
-    payload = _delivery_body(event, delivered_at)
+    try:
+        webhooks = store.list_webhooks(event.webset_id)
+    except Exception as exc:  # containment boundary: nothing escapes delivery
+        # Only the exception class is logged: a stored webhook row can fail
+        # validation with its secret embedded in the input, and no target is
+        # known yet to redact against.
+        logger.warning(
+            "webset webhook fan-out aborted: listing webhooks failed "
+            "webset_id=%s event_id=%s error=%s",
+            event.webset_id,
+            event.id,
+            type(exc).__name__,
+        )
+        return []
     results: list[WebhookDelivery] = []
-    for webhook in store.list_webhooks(event.webset_id):
+    for webhook in webhooks:
         if not webhook.active or event.type not in webhook.events:
             continue
-        recorded = store.get_webhook_delivery(webhook.webhook_id, event.id)
+        try:
+            recorded = store.get_webhook_delivery(webhook.webhook_id, event.id)
+        except Exception as exc:  # containment boundary: nothing escapes delivery
+            # Fail closed: an unknown ledger state must not risk a second POST,
+            # and the fault must not abort the remaining targets.
+            logger.warning(
+                "webset webhook ledger read failed webhook_id=%s event_id=%s error=%s",
+                webhook.webhook_id,
+                event.id,
+                redact_error(exc, secret=webhook.secret, target_url=webhook.url),
+            )
+            continue
         if recorded is not None:
             results.append(recorded)
             continue
         try:
+            payload = _delivery_body(event, delivered_at)
             if not webhook.secret:
                 # Fail closed: a server-generated secret is missing, so nothing
                 # is POSTed (signing with "" would send an unverifiable request).
@@ -326,11 +350,22 @@ def deliver_webhook(
                 ok, status_code, error = _attempt_delivery(webhook, payload, timeout_s=timeout_s)
         except Exception as exc:  # containment boundary: nothing escapes delivery
             ok, status_code = False, None
-            error = _redacted_error(exc, secret=webhook.secret, target_url=webhook.url)
-        store.record_webhook_delivery(
-            webhook.webhook_id, event.id, ok=ok, status_code=status_code, error=error
-        )
-        row = store.get_webhook_delivery(webhook.webhook_id, event.id)
+            error = redact_error(exc, secret=webhook.secret, target_url=webhook.url)
+        try:
+            store.record_webhook_delivery(
+                webhook.webhook_id, event.id, ok=ok, status_code=status_code, error=error
+            )
+            row = store.get_webhook_delivery(webhook.webhook_id, event.id)
+        except Exception as exc:  # containment boundary: nothing escapes delivery
+            # Contained to this target; a later delivery re-reads whatever the
+            # ledger actually persisted, and the remaining targets still run.
+            logger.warning(
+                "webset webhook ledger write failed webhook_id=%s event_id=%s error=%s",
+                webhook.webhook_id,
+                event.id,
+                redact_error(exc, secret=webhook.secret, target_url=webhook.url),
+            )
+            continue
         if row is not None:
             results.append(row)
         if not ok:
