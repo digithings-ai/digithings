@@ -274,6 +274,32 @@ def test_build_grounding_live_search_without_data_tools(monkeypatch: pytest.Monk
     assert web_grounding == grounding
 
 
+@pytest.mark.unit
+def test_hub_failure_reaches_the_segment_error_unmasked(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A digisearch hub failure is surfaced with its own text (#4106).
+
+    Regression for 2026-09-15: a hosted-digisearch 429 was collapsed into
+    "web_search returned no rows", which hid the cause for a day of book-run
+    debugging. The bundled ``DigisearchHubError`` must reach
+    ``DashboardWebSearchError`` intact.
+    """
+    from digigraph.orchestration import web_search_tools
+    from digiquant.research.data import web_grounding as mod
+
+    def _boom(*_a: Any, **_k: Any) -> dict[str, Any]:
+        raise web_search_tools.DigisearchHubError(
+            "digisearch web_search failed: Client error '429 Too Many Requests'"
+        )
+
+    monkeypatch.setattr(mod, "call_web_search_tool", _boom)
+    with pytest.raises(mod.DashboardWebSearchError) as excinfo:
+        mod.fetch_web_grounding(segment="beliefs-distillation", run_date="2026-09-15")
+    message = str(excinfo.value)
+    assert "429" in message
+    assert "beliefs-distillation" in message
+    assert "returned no rows" not in message
+
+
 def _fake_hub_results(seen: dict[str, Any]):
     """Fake `_call_digisearch_web_search` capturing kwargs, returning one row."""
 
