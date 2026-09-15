@@ -15,10 +15,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from digisearch.monitors.models import MonitorRun, Watch
+from digisearch.monitors.models import DeliveryReceipt, MonitorRun, Watch
 from digisearch.monitors.store import MonitorStore, new_ulid
 from digisearch.web_exa import WebSearchData
-from digisearch.web_search.models import WebSearchResponse, WebSearchResult
+from digisearch.web_search.models import WebSearchRequest, WebSearchResponse, WebSearchResult
 
 pytestmark = pytest.mark.unit
 
@@ -241,6 +241,31 @@ def test_run_watch_snapshot_records_oss_clamp(monkeypatch, tmp_path):
 
 
 @pytest.mark.unit
+def test_oss_max_results_constant_ties_to_request_bound():
+    """The R6 constant must track WebSearchRequest's ``le`` bound (drift fails here)."""
+    from digisearch.monitors import runner as mod
+
+    bounds = [
+        constraint.le
+        for constraint in WebSearchRequest.model_fields["max_results"].metadata
+        if hasattr(constraint, "le")
+    ]
+    assert bounds == [mod._OSS_MAX_RESULTS]
+
+
+@pytest.mark.unit
+def test_run_watch_snapshot_at_oss_bound_records_no_clamp(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    w = _make_watch(store, num_results=10)
+    _stub_pipeline(monkeypatch)
+    run = mod.run_watch(w.watch_id, trigger="manual", store=store)
+    assert run.query_snapshot["num_results"] == 10
+    assert "num_results_clamped_from" not in run.query_snapshot
+
+
+@pytest.mark.unit
 def test_run_watch_snapshot_exa_keeps_num_results(monkeypatch, tmp_path):
     from digisearch.monitors import runner as mod
 
@@ -281,6 +306,22 @@ def test_run_watch_delivers_only_on_ok_non_poll(monkeypatch, tmp_path):
 
 
 @pytest.mark.unit
+def test_delivery_receipts_returned_but_not_persisted(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    w = _make_watch(store, delivery=_webhook_delivery())
+    store.set_delivery_secret(w.watch_id, "s3cr3t")
+    monkeypatch.setattr(mod, "_invoke_shallow_recall", lambda **k: _recall_data())
+    receipt = DeliveryReceipt(target_kind="webhook", ok=True, status_code=200)
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [receipt])
+    run = mod.run_watch(w.watch_id, trigger="manual", store=store)
+    assert run.delivery == [receipt]
+    stored, _ = store.list_runs(w.watch_id)
+    assert stored[0].delivery == []
+
+
+@pytest.mark.unit
 def test_run_watch_missing_delivery_secret_fails_loud(monkeypatch, tmp_path):
     from digisearch.monitors import runner as mod
 
@@ -293,6 +334,34 @@ def test_run_watch_missing_delivery_secret_fails_loud(monkeypatch, tmp_path):
     assert runs[0].status == "failed"
     assert runs[0].error == "delivery_secret_missing"
     assert delivered == []
+
+
+@pytest.mark.unit
+def test_missing_secret_failure_does_not_advance_dedup_memory(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    w = _make_watch(store, delivery=_webhook_delivery())
+    delivered = _stub_pipeline(monkeypatch)
+    with pytest.raises(mod.MonitorRunError):
+        mod.run_watch(w.watch_id, trigger="manual", store=store)
+    runs, _ = store.list_runs(w.watch_id)
+    assert runs[0].status == "failed"
+    assert runs[0].results_all == []
+    assert len(runs[0].results_new) == 2
+    # Until the operator provisions a secret, the same content is re-detected
+    # as new and the run fails loudly again (no silent no_change absorption).
+    with pytest.raises(mod.MonitorRunError):
+        mod.run_watch(w.watch_id, trigger="schedule", store=store)
+    runs, _ = store.list_runs(w.watch_id)
+    assert runs[0].status == "failed"
+    assert runs[0].error == "delivery_secret_missing"
+    assert delivered == []
+    # With a secret the re-detected content is new again and delivers.
+    store.set_delivery_secret(w.watch_id, "s3cr3t")
+    run = mod.run_watch(w.watch_id, trigger="schedule", store=store)
+    assert run.status == "ok"
+    assert delivered == [("ok", "s3cr3t")]
 
 
 @pytest.mark.unit

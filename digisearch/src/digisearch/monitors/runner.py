@@ -20,7 +20,8 @@ Fail-hard semantics: any recall exception persists a ``status="failed"`` run
 with ``error=str(exc)`` and re-raises ``MonitorRunError`` carrying the persisted
 ``run_id``. A delivery-enabled run whose stored secret is ``None`` (see
 :meth:`MonitorStore.get_delivery_secret`) fails just as loudly — the run is
-persisted ``failed`` with ``delivery_secret_missing`` and ``MonitorRunError`` is
+persisted ``failed`` with ``delivery_secret_missing`` (and ``results_all=[]`` so
+the dedup memory cannot absorb undelivered content) and ``MonitorRunError`` is
 raised — never a silent skip.
 
 ``tick_due_watches`` is the scheduler-facing entry point: it evaluates every
@@ -94,9 +95,11 @@ def run_watch(
     A missing watch raises :class:`MonitorStoreError` from the store. Any recall
     failure persists ``status="failed"`` and raises :class:`MonitorRunError`.
     A delivery-enabled run with no stored secret persists ``status="failed"``
-    (``error="delivery_secret_missing"``) and raises :class:`MonitorRunError`.
-    Delivery receipts are attached to the returned run; the append-only store
-    cannot rewrite the already-persisted body, so stored runs keep ``delivery=[]``.
+    (``error="delivery_secret_missing"``, ``results_all=[]`` so the dedup memory
+    does not absorb undelivered content, ``results_new`` kept as the factual
+    record) and raises :class:`MonitorRunError`. Delivery receipts are attached
+    to the returned run; the append-only store cannot rewrite the already-
+    persisted body, so stored runs keep ``delivery=[]``.
     """
     store = store if store is not None else get_store()
     watch = store.get_watch(watch_id)
@@ -149,6 +152,12 @@ def run_watch(
             status = "failed"
             error = _DELIVERY_SECRET_MISSING
             deliver_after_persist = False
+            # The store's seen memory merges results_all regardless of status, so
+            # persisting the found results would dedup them to unchanged once a
+            # secret exists — the content would never be delivered. Keep
+            # results_new as the factual record and leave the memory untouched:
+            # the next run re-detects the content and fails loudly again.
+            results_all = []
 
     run = MonitorRun(
         run_id=new_ulid(),
