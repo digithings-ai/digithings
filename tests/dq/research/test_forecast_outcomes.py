@@ -515,3 +515,87 @@ class TestReturnFractionQuantize:
         )
         outcome = ForecastOutcome(outcome_id=outcome_id, content_hash=content_hash, **draft)
         assert outcome.realized_return == realized
+
+
+class TestR2UnknownTickerIsAbsentClose:
+    """A ticker outside the sealed R2 universe is an absent close, not a crash (#4119).
+
+    ``r2_close_rows`` fails loud with ``LookupError`` for an unknown ticker, which is
+    right for its own callers. The forecast outcome resolver's contract is different:
+    no generation simply means "no reference close", which it already treats as
+    pending. So the tolerance belongs at this call site, not in ``queries.py``.
+    """
+
+    @staticmethod
+    def _unknown_ticker(monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_r2_close_rows(**_kwargs: Any) -> list[dict[str, Any]]:
+            raise LookupError("unknown ticker 'MSFT'")
+
+        monkeypatch.setattr(
+            "digiquant.research.data.queries.r2_close_rows",
+            fake_r2_close_rows,
+        )
+        monkeypatch.setattr(fo, "r2_backend_enabled", lambda: True)
+
+    def test_fetch_session_close_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._unknown_ticker(monkeypatch)
+        assert (
+            fo._fetch_session_close(client=OutcomesFake(), ticker="MSFT", session=date(2026, 8, 13))
+            is None
+        )
+
+    def test_outcome_stays_pending_instead_of_crashing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._unknown_ticker(monkeypatch)
+        client = OutcomesFake()
+        _seed_assessment(client, _assessment(ticker="MSFT", observed_anchor=False))
+
+        result = fo.resolve_matured_forecast_outcomes(
+            client=client,
+            run_date=RUN_DATE,
+            knowledge_cutoff_at=CUTOFF,
+            trading_sessions=SESSIONS,
+        )
+        assert result.resolved == 0
+        assert result.pending == 1
+        assert fo.OUTCOMES not in client.store
+
+    def test_known_ticker_still_resolves_via_r2(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Control: the catch must not swallow a real close."""
+        maturity = date(2026, 8, 13)
+
+        def fake_r2_close_rows(**_kwargs: Any) -> list[dict[str, Any]]:
+            return [{"ticker": "AAPL", "date": maturity.isoformat(), "close": "106"}]
+
+        monkeypatch.setattr(
+            "digiquant.research.data.queries.r2_close_rows",
+            fake_r2_close_rows,
+        )
+        monkeypatch.setattr(fo, "r2_backend_enabled", lambda: True)
+        client = OutcomesFake()
+        _seed_assessment(client, _assessment(ticker="AAPL"))
+
+        result = fo.resolve_matured_forecast_outcomes(
+            client=client,
+            run_date=RUN_DATE,
+            knowledge_cutoff_at=CUTOFF,
+            trading_sessions=SESSIONS,
+        )
+        assert result.resolved == 1
+        row = client.store[fo.OUTCOMES][0]
+        assert Decimal(row["maturity_snapshot"]["price"]) == Decimal("106")
+
+    def test_corrupt_manifest_still_fails_loud(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Control: only LookupError means absent; a bad manifest is a real fault."""
+
+        def fake_r2_close_rows(**_kwargs: Any) -> list[dict[str, Any]]:
+            raise ValueError("unsupported manifest version 2")
+
+        monkeypatch.setattr(
+            "digiquant.research.data.queries.r2_close_rows",
+            fake_r2_close_rows,
+        )
+        monkeypatch.setattr(fo, "r2_backend_enabled", lambda: True)
+        with pytest.raises(ValueError, match="unsupported manifest version 2"):
+            fo._fetch_session_close(client=OutcomesFake(), ticker="AAPL", session=date(2026, 8, 13))
