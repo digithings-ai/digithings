@@ -371,7 +371,60 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: requiredPlanTier must be "desk", "studio", or "enterprise"`);
   }
 
+  const rawMcp = (v as Record<string, unknown>).mcp;
+  let mcp: EmbedTenantConfig["mcp"];
+  if (rawMcp !== undefined) {
+    if (typeof rawMcp !== "object" || rawMcp === null || Array.isArray(rawMcp)) {
+      throw new Error(`embed tenant "${hostKey}": mcp must be an object`);
+    }
+    const rawServers = (rawMcp as Record<string, unknown>).servers;
+    if (!Array.isArray(rawServers)) {
+      throw new Error(`embed tenant "${hostKey}": mcp.servers must be an array`);
+    }
+    const servers = rawServers.map((entry, index) => {
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}] must be an object`);
+      }
+      const server = entry as Record<string, unknown>;
+      if (typeof server.id !== "string" || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(server.id)) {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].id must match /^[a-z0-9][a-z0-9_-]{0,63}$/`,
+        );
+      }
+      if (typeof server.url !== "string" || !server.url.trim()) {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].url must be a non-empty string`);
+      }
+      if (server.label !== undefined && typeof server.label !== "string") {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].label must be a string`);
+      }
+      if (server.default !== undefined && typeof server.default !== "boolean") {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].default must be a boolean`);
+      }
+      return {
+        id: server.id,
+        url: server.url,
+        ...(typeof server.label === "string" ? { label: server.label } : {}),
+        ...(typeof server.default === "boolean" ? { default: server.default } : {}),
+      };
+    });
+    const rawMcpRecord = rawMcp as Record<string, unknown>;
+    if (rawMcpRecord.allowUserServers !== undefined && typeof rawMcpRecord.allowUserServers !== "boolean") {
+      throw new Error(`embed tenant "${hostKey}": mcp.allowUserServers must be a boolean`);
+    }
+    if (rawMcpRecord.allowAddForm !== undefined && typeof rawMcpRecord.allowAddForm !== "boolean") {
+      throw new Error(`embed tenant "${hostKey}": mcp.allowAddForm must be a boolean`);
+    }
+    mcp = {
+      servers,
+      ...(typeof rawMcpRecord.allowUserServers === "boolean"
+        ? { allowUserServers: rawMcpRecord.allowUserServers }
+        : {}),
+      ...(typeof rawMcpRecord.allowAddForm === "boolean" ? { allowAddForm: rawMcpRecord.allowAddForm } : {}),
+    };
+  }
+
   return {
+    mcp,
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
     backend: backendCfg,
