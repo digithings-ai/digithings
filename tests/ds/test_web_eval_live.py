@@ -8,11 +8,12 @@ key while the real ``grounded_answer`` / ``structured_synthesis`` assembly,
 ``verify_grounding``, ``_numbered_sources``, and accounting code still run.
 
 Live mode is opt-in behind ``DIGISEARCH_WEB_SEARCH_LIVE=1`` (the landed gate):
-it runs one sampled case per category against the real SearXNG sidecar +
-digillm and prints p50 stage ms + citation coverage per effort. Those numbers
-are single-key, single-day SCAFFOLDING anchors — never SLO constants;
-re-measure per environment and record date/key tier in
-``digisearch/ARCHITECTURE.md`` before quoting them (Phase B spec, Goal).
+it runs one sampled case per category against the real search backends
+(searxng sidecar → ddgs failover) + digillm and prints p50 stage ms +
+citation coverage per effort. Those numbers are single-key, single-day
+SCAFFOLDING anchors — never SLO constants; re-measure per environment and
+record date/key tier in ``digisearch/ARCHITECTURE.md`` before quoting them
+(Phase B spec, Goal).
 """
 
 from __future__ import annotations
@@ -46,7 +47,8 @@ _CITATION_RE = re.compile(r"\[(\d+)\]")
 #: ``DIGISEARCH_SYNTHESIS_MODEL`` (set per case by ``_patch_offline``).
 _SYNTHESIS_MODEL = "test/web-research-eval"
 
-#: The one structured shape every research case exercises (two leaf fields).
+#: The one structured shape every research case exercises: ``summary`` plus
+#: one ``drivers[i]`` leaf per ``must_contain`` word.
 STRUCTURED_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
