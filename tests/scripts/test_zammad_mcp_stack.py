@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -36,6 +37,34 @@ def test_entrypoint_aliases_the_dotless_mcp_host():
     body = _code_lines(ENTRYPOINT)
     assert "zammad-mcp" in body
     assert "/etc/hosts" in body
+
+
+def test_entrypoint_guards_the_etc_hosts_write():
+    """The alias write must be best-effort (#4149).
+
+    It runs under `set -eu` immediately before `exec supervisord`, so an
+    unguarded redirect aborts PID 1: `:8000` never opens and the Worker 503s
+    every request.
+    """
+    writes = [
+        line
+        for line in _code_lines(ENTRYPOINT).replace("\\\n", " ").splitlines()
+        if "/etc/hosts" in line and ">>" in line
+    ]
+    assert writes, "expected the /etc/hosts alias write"
+    for line in writes:
+        assert "||" in line, f"/etc/hosts write is unguarded: {line.strip()}"
+
+
+def test_a_failing_redirect_aborts_set_e_unless_guarded(tmp_path):
+    """Pins the shell semantics the guard depends on, so the reasoning cannot rot."""
+    target = tmp_path / "no-such-dir" / "hosts"
+    guarded = f"set -eu\nprintf 'x\\n' >> {target} 2>/dev/null || echo WARN\necho REACHED\n"
+    unguarded = f"set -eu\nprintf 'x\\n' >> {target} 2>/dev/null\necho REACHED\n"
+    ok = subprocess.run(["sh", "-c", guarded], capture_output=True, text=True)
+    aborted = subprocess.run(["sh", "-c", unguarded], capture_output=True, text=True)
+    assert ok.returncode == 0 and "REACHED" in ok.stdout
+    assert aborted.returncode != 0 and "REACHED" not in aborted.stdout
 
 
 def test_stack_dockerfile_ships_the_mcp_package():

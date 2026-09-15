@@ -452,6 +452,8 @@ export interface FxIdeaEvalRow {
   stop_price?: number | null;
   target_prices?: number[] | null;
   level_outcome?: string | null;
+  /** Bookkeeper drop rationale frozen on the lifecycle row (migration 023). */
+  verdict_reason?: string | null;
   /**
    * Continuation badge from per-axis netting (not a DB column): earliest
    * board date / board count when ≥2 carried boards collapse into one row.

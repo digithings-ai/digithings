@@ -35,7 +35,11 @@ vi.mock('@/components/app-shell-context', () => ({
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => ({ session: { access_token: 'tok' }, user: { email: 'obs@example.com' } }),
 }));
-vi.mock('@/lib/use-entitlement', () => ({ usePlanTier: () => 'free' }));
+vi.mock('@/lib/use-entitlement', () => ({
+  usePlanTier: () => 'free',
+  useCanAccessProduct: () => false,
+  useAccessSnapshot: () => ({ effectivePlanTier: 'free' }),
+}));
 
 vi.mock('@/components/settings/profile-tab', () => ({ ProfileTab: TabBody }));
 vi.mock('@/components/settings/pipeline-tab', () => ({ PipelineTab: TabBody }));

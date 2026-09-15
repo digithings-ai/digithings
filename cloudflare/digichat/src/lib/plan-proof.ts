@@ -143,3 +143,57 @@ export function rawTierFromRequest(req: Request): PlanTier | null {
     null;
   return raw && isValidPlanTier(raw) ? raw : null;
 }
+
+/** Product key for the 12x FX Hub client grant (migration 108). */
+export const FX_HUB_PRODUCT_KEY = "fx_hub";
+
+/**
+ * FX Hub invitees carry a product grant, not a paid plan tier. For the
+ * digiquant.io embed they map to desk-equivalent, operator-funded chat
+ * access (#3662 follow-up).
+ */
+export const FX_HUB_PROOF_TIER: ProofEligibleTier = "desk";
+
+/**
+ * True when the dashboard access token resolves to an fx_hub product grant.
+ * Reads the caller's own `my_access` row (RLS-safe) — fail-soft false.
+ */
+export async function hasFxHubProductFromDashboardAccessToken(
+  accessToken: string,
+  opts?: {
+    supabaseUrl?: string;
+    anonKey?: string;
+    fetchImpl?: typeof fetch;
+  },
+): Promise<boolean> {
+  const supabaseUrl = (
+    opts?.supabaseUrl ?? process.env.DIGICHAT_DASHBOARD_SUPABASE_URL ?? ""
+  ).trim().replace(/\/$/, "");
+  const anonKey = (
+    opts?.anonKey ?? process.env.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? ""
+  ).trim();
+  const token = accessToken.trim();
+  if (!supabaseUrl || !anonKey || !token) return false;
+
+  const fetchImpl = opts?.fetchImpl ?? fetch;
+  try {
+    const res = await fetchImpl(`${supabaseUrl}/rest/v1/rpc/my_access`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: anonKey,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+    if (!res.ok) return false;
+    const body = (await res.json()) as { products?: unknown } | null;
+    const products = Array.isArray(body?.products) ? body.products : [];
+    return products.some(
+      (p): p is string =>
+        typeof p === "string" && p.trim().toLowerCase() === FX_HUB_PRODUCT_KEY,
+    );
+  } catch {
+    return false;
+  }
+}
