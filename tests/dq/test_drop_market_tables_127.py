@@ -78,6 +78,10 @@ ACCOUNTED: dict[str, tuple[int, str]] = {
         3,
         "writer status echoes; --supabase writes refuse under r2 and are retired by 127",
     ),
+    "digiquant/src/digiquant/data/gloomberb/agent_tools.py": (
+        1,
+        "dispatch-table client method name — not a table access",
+    ),
     "digiquant/src/digiquant/data/gloomberb/client.py": (
         1,
         "method/cache-key names only — not a table access",
