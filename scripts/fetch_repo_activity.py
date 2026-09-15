@@ -76,6 +76,7 @@ OUT = REPO_ROOT / "cloudflare" / "digithings-web" / "lib" / "repo-activity.json"
 MODULES_TS = REPO_ROOT / "cloudflare" / "digiweb" / "web" / "src" / "data" / "modules.ts"
 SLUG = "digithings-ai/digithings"
 WINDOW_DAYS = 30
+YEAR_DAYS = 371  # 53 weeks, matches RepoHeatmap's default
 BRANCH = "main"
 
 
@@ -199,6 +200,47 @@ def _commits_since(since: str) -> list[dict]:
             return out
 
 
+def _commits_between(start: str, until: str) -> list[dict]:
+    """Every commit in [start, until), paged. A month is far under the 3000-commit cap."""
+    out: list[dict] = []
+    page = 1
+    while True:
+        batch = _gh(
+            "api",
+            f"repos/{SLUG}/commits?sha={BRANCH}&since={start}&until={until}"
+            f"&per_page=100&page={page}",
+        )
+        if not isinstance(batch, list) or not batch:
+            return out
+        out.extend(batch)
+        if len(batch) < 100:
+            return out
+        page += 1
+
+
+def _year_commits(end: datetime, total: int = YEAR_DAYS) -> list[dict]:
+    """Commit rows for the whole heatmap window, fetched one month at a time.
+
+    A single year-long query hits GitHub's 3000-commit pagination cap and silently
+    became a *floor*: in 2026-09 that truncated the homepage heatmap to the last six
+    weeks, dropping four months of real activity from a figure that renders as
+    "contributions in the last year" (#4093). A month is far below the cap, so each
+    window is complete and the joins are exact.
+    """
+    out: list[dict] = []
+    cursor = end - timedelta(days=total - 1)
+    while cursor <= end:
+        nxt = min(cursor + timedelta(days=31), end + timedelta(days=1))
+        out.extend(
+            _commits_between(
+                cursor.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                nxt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            )
+        )
+        cursor = nxt
+    return out
+
+
 # `feat(scope): summary` with an OPTIONAL trailing `(#1930)`. Only `feat` counts as a
 # shipped feature; fix/chore/docs/test do not.
 #
@@ -216,10 +258,13 @@ _TRAILING_REF = re.compile(r"(?:\s*\(#\d+\))+$")
 
 
 def _pr_for_commit(sha: str) -> int | None:
-    """The PR a commit arrived in, for subjects that carry no `(#N)`.
+    """The PR a commit arrived in — authoritative, and resolved for every candidate row.
 
     One extra request, and only for commits actually in contention for a row, so the
-    cost is a handful of calls rather than one per commit in the window.
+    cost is a handful of calls rather than one per commit in the window. A trailing
+    `(#N)` in the subject is only a FALLBACK: on a merge-committed PR that number is
+    usually the ISSUE the branch referenced, and trusting it put issue links under
+    feature rows whose copy promises a pull request (#4093).
     """
     try:
         pulls = _gh("api", f"repos/{SLUG}/commits/{sha}/pulls")
@@ -247,7 +292,7 @@ def _features(commits: list[dict], limit: int = 6) -> list[dict]:
             continue
         scope, summary, pr_text = m.group(1), m.group(2), m.group(3)
         summary = _TRAILING_REF.sub("", summary).strip()
-        pr = int(pr_text) if pr_text else _pr_for_commit(c.get("sha") or "")
+        pr = _pr_for_commit(c.get("sha") or "") or (int(pr_text) if pr_text else None)
         if pr is None or pr in seen:
             continue
         seen.add(pr)
@@ -290,9 +335,6 @@ def _search_items(payload: object, limit: int) -> list[dict]:
         if len(out) >= limit:
             break
     return out
-
-
-YEAR_DAYS = 371  # 53 weeks, matches RepoHeatmap's default
 
 
 def _day_key(stamp: str | None) -> str | None:
@@ -384,7 +426,7 @@ def _search_dates(query: str) -> list[str]:
         if not m:
             raise
     kind = m.group(1)
-    start = datetime.strptime(m.group(2), "%Y-%m-%d").date()
+    start = date.fromisoformat(m.group(2))
     today = datetime.now(UTC).date()
     print(
         f"⚠️  search window exceeds 1000 results — re-running {kind} in smaller spans",
@@ -430,10 +472,19 @@ def collect() -> dict:
         "api",
         f"search/issues?q=repo:{SLUG}+is:issue+is:closed+closed:>={since[:10]}&per_page=1",
     )
-    year_since = (datetime.now(UTC) - timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    year_commits = _commits_since(year_since)
+    now = datetime.now(UTC)
+    year_since = (now - timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    year_commits = _year_commits(now)
     year_merged = _search_dates(f"repo:{SLUG}+is:pr+is:merged+merged:>={year_since[:10]}")
     year_closed = _search_dates(f"repo:{SLUG}+is:issue+is:closed+closed:>={year_since[:10]}")
+    if not year_merged or not year_closed:
+        # A transient GitHub failure here used to ship a heatmap with most months
+        # missing: the search helpers returned nothing, `_to_daily` filled zeros, and
+        # nothing downstream could tell that apart from a quiet year (#4093).
+        raise SystemExit(
+            "repo activity: the year-long merged/closed searches returned no rows — "
+            "refusing to write a heatmap with missing months (transient GitHub failure?)"
+        )
     # Deliberately UNBOUNDED, unlike the three above — the whole open backlog, not
     # what opened this month. Consumers must label it as current state; see the
     # module docstring.
@@ -465,7 +516,7 @@ def collect() -> dict:
         modules[mid] = {"path": path, "lastCommit": last, "files": files, "lines": lines}
 
     return {
-        "generatedAt": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generatedAt": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "windowDays": WINDOW_DAYS,
         "commits": len(commits),
         "features": _features(commits),
@@ -494,7 +545,7 @@ def collect() -> dict:
             for row in _search_items(open_issues, 6)
         ],
         "branch": BRANCH,
-        "dailyContributions": _to_daily(year_commits, year_merged, year_closed, datetime.now(UTC)),
+        "dailyContributions": _to_daily(year_commits, year_merged, year_closed, now),
         "latestRelease": (
             {
                 "tag": latest.get("tag_name"),
@@ -567,20 +618,32 @@ def check(max_age_days: int | None = None) -> int:
     if not isinstance(data["mergedPulls"], list) or not isinstance(data["openIssues"], list):
         print("❌  mergedPulls and openIssues must be lists", file=sys.stderr)
         return 1
+    if not data["mergedPulls"] or not data["openIssues"]:
+        print(
+            "❌  mergedPulls and openIssues must not be empty — the page renders both",
+            file=sys.stderr,
+        )
+        return 1
     # Composition, not just list-ness: a pull request in `openIssues` renders as an
     # issue and is a wrong figure, and the vitest mirror on the homepage
     # (cloudflare/digithings-web/lib/repoActivity.test.ts) rejects the link. It shipped
     # once, from a pre-`is:issue` generator — #4093. `mergedPulls` gets the mirror check.
+    #
+    # The match is `endswith`, not `in`: review of #4095 showed a substring test accepts
+    # rows whose number and url disagree (`number: 1` against `.../issues/159`), which is
+    # exactly the class of wrong link this guard exists for.
     for key, segment in (("mergedPulls", "pull"), ("openIssues", "issues")):
         for row in data[key]:
+            number = row.get("number") if isinstance(row, dict) else None
             if (
                 not isinstance(row, dict)
-                or not isinstance(row.get("number"), int)
-                or isinstance(row.get("number"), bool)
+                or not isinstance(number, int)
+                or isinstance(number, bool)
+                or number < 1
                 or not isinstance(row.get("title"), str)
-                or not row["title"]
+                or not row["title"].strip()
                 or not isinstance(row.get("url"), str)
-                or f"/{segment}/{row['number']}" not in row["url"]
+                or not row["url"].endswith(f"/{segment}/{number}")
             ):
                 print(
                     f"❌  {key} rows must be /{segment}/<number> links carrying a number and "
@@ -588,6 +651,23 @@ def check(max_age_days: int | None = None) -> int:
                     file=sys.stderr,
                 )
                 return 1
+    # The page states every feature row is a pull request you can open (#4093: a
+    # merge-committed subject's trailing `(#N)` is often the ISSUE, so the number alone
+    # does not prove a PR — but a zero or missing one is always a broken row).
+    for row in data["features"]:
+        if (
+            not isinstance(row, dict)
+            or not isinstance(row.get("pr"), int)
+            or isinstance(row.get("pr"), bool)
+            or row["pr"] < 1
+            or not isinstance(row.get("summary"), str)
+            or not row["summary"].strip()
+        ):
+            print(
+                f"❌  features rows must carry a positive PR number and a summary — got {row!r}",
+                file=sys.stderr,
+            )
+            return 1
     dc = data["dailyContributions"]
     if not isinstance(dc, list) or len(dc) != YEAR_DAYS:
         print(f"❌  dailyContributions must be a list of {YEAR_DAYS} days", file=sys.stderr)
