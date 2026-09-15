@@ -406,8 +406,9 @@ advancing when the market is quiet). `DELETE` events carry only the primary key 
 Migration `063`, the publisher and the subscriber are one change in three files, and the
 order they reach production is load-bearing. A browser subscribing to `postgres_changes` on
 a table the project does not yet carry simply receives **no events** — there is no error
-`useLivePrices` can surface, so the tape silently degrades to `public_price_latest` daily
-closes marked `stale`. A dark live feed with nothing logged anywhere.
+`useLivePrices` can surface, so the tape silently degrades to daily closes marked `stale`
+(pre-127 that was the `public_price_latest` view; since migration 127 the R2 market API
+serves the closes). A dark live feed with nothing logged anywhere.
 
 1. **Apply migration `063` and verify it.** Unlike the withdrawn `062`, this one applies as
    `postgres`: `public.prices_live` and the `supabase_realtime` publication are both owned

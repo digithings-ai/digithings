@@ -39,7 +39,7 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `test-digiclaw.yml` | Test: digiclaw | workflow_call | digiclaw unit tests | Working | `digiclaw/**`, `tests/dc/**` |
 | `test-digigraph.yml` | Test: digigraph | workflow_call | digigraph unit tests | Working | `digigraph/**`, `tests/dg/**` |
 | `test-digikey.yml` | Test: digikey | workflow_call | digikey unit tests | Working | `digikey/**`, `tests/dk/**` |
-| `pipeline-digiquant-prices.yml` | Pipeline: digiquant prices | schedule (intraday: */15 13-21 weekdays; at-open: 13:35 **and** 14:35, DST-gated to one; EOD: 21:25 weekdays), dispatch | Price + technicals ingest; guarded by `SUPABASE_URL`. Schedules are the UTC union of both ET offsets — see the DST note in the workflow header (#1775) | Working | none |
+| `pipeline-digiquant-prices.yml` | Pipeline: digiquant prices | dispatch only (Cloudflare Worker clock dispatches the at-open/EOD slots; schedules removed #3780/#4053) | Market-open `position_events` + calendar sync; macro writes gated behind `run_writers`; price/technicals ingest retired (#4053 — the R2 refresh owns it; Supabase tables dropped in 127) | Working | none |
 | `pipeline-digiquant-tearsheets.yml` | Pipeline: digiquant tearsheets | schedule (daily 00:00 UTC), dispatch | Daily Slapper + BTC-SDCA tearsheet regen: Coinbase + M2/DXY siblings, Nautilus generate, upsert `strategy_tearsheets` (#1068, #3453). Checkout pinned to `main`. | Working | none |
 | `test-digiquant.yml` | Test: digiquant | workflow_call | digiquant unit tests | Working | `digiquant/**`, `tests/dq/**` |
 | `test-digisearch.yml` | Test: digisearch | workflow_call | digisearch unit tests | Working | `digisearch/**`, `tests/ds/**` |
