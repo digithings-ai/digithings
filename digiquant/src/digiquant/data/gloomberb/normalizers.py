@@ -27,7 +27,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any  # score:allow untyped any — wire JSON
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .models import (

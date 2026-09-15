@@ -15,6 +15,8 @@ from typing import Any
 import httpx
 import pytest
 
+pytest.importorskip("mcp.server.fastmcp")
+
 pytestmark = pytest.mark.unit
 
 from digiquant.data.gloomberb import (  # noqa: E402

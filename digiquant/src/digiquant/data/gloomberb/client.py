@@ -23,7 +23,7 @@ import os
 import time
 from collections.abc import Callable, Mapping
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, NamedTuple, TypeVar, cast
+from typing import Any, NamedTuple, TypeVar, cast  # score:allow untyped any — wire JSON
 from urllib.parse import quote
 
 import httpx

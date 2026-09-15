@@ -25,7 +25,7 @@ dropped. Input models forbid unknown fields so a typo fails loudly.
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from typing import Annotated, Any, Generic, Literal, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar  # score:allow untyped any — wire JSON
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from pydantic.alias_generators import to_camel
