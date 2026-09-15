@@ -84,6 +84,9 @@ Beyond root `AGENTS.md`:
 - **Typed results.** Public surfaces return Pydantic models / dataclasses; the
   `page`/`context` typing seam uses the structural `Page`/`BrowserContext`
   Protocols, not bare `Any`.
+- **Cookies stay on their origin.** Per-call `cookies=` are host-agnostic, so
+  redirect handling forwards them only while a hop stays on the original
+  origin. Never weaken this to make a cross-origin flow work.
 - **Sync only (for now).** No async engine until a second, async consumer needs
   it (YAGNI) — then add `async_session` / `AsyncFetcher` alongside.
 
