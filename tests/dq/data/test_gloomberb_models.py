@@ -454,3 +454,19 @@ def test_package_exports_resolve() -> None:
 
     missing = [name for name in gloomberb_pkg.__all__ if not hasattr(gloomberb_pkg, name)]
     assert missing == []
+
+
+def test_error_code_vocabulary_includes_pro_required() -> None:
+    error = DigifetchError(code="pro_required", message="This endpoint requires a Pro plan")
+    assert error.code == "pro_required"
+    assert error.retryable is False
+    with pytest.raises(ValidationError):
+        DigifetchError(code="payment_required", message="nope")  # type: ignore[arg-type]
+
+
+def test_preview_access_warning_marker_is_exported() -> None:
+    from digiquant.data.gloomberb import PREVIEW_ACCESS_WARNING
+
+    assert (
+        PREVIEW_ACCESS_WARNING == "preview access: report is a free-tier preview (access=preview)"
+    )

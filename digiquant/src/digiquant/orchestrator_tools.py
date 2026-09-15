@@ -1478,9 +1478,33 @@ def build_digiquant_get_trade_levels_tool() -> dict[str, Any]:
     }
 
 
+def _with_entitlement(tool: dict[str, Any]) -> dict[str, Any]:
+    """Attach the declared entitlement to a digifetch tool schema (#4110 phase 5).
+
+    The vocabulary lives in :mod:`digiquant.data.gloomberb.entitlements`; the
+    MCP registration injects the same note into its description and tags the
+    registered function, so the two surfaces cannot drift.
+    """
+    from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS, with_entitlement_note
+
+    name = tool.get("function", {}).get("name")
+    entitlement = TOOL_ENTITLEMENTS.get(name)
+    if entitlement is None:
+        return tool
+    tool["entitlement"] = entitlement
+    function = tool["function"]
+    function["description"] = with_entitlement_note(name, function["description"])
+    return tool
+
+
 def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
-    """Return the full digiquant orchestrator tool surface."""
-    return [
+    """Return the full digiquant orchestrator tool surface.
+
+    Every digifetch tool carries a top-level ``entitlement`` declaration
+    (``free`` | ``session`` | ``preview`` | ``pro``) and an entitlement note in
+    its description; see :mod:`digiquant.data.gloomberb.entitlements`.
+    """
+    tools = [
         build_digiquant_list_strategies_tool(),
         build_digiquant_run_backtest_tool(),
         build_digiquant_run_optimize_tool(),
@@ -1536,3 +1560,4 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_dashboard_evaluate_policy_gate_tool(),
         build_dashboard_get_policy_gate_evaluation_tool(),
     ]
+    return [_with_entitlement(tool) for tool in tools]

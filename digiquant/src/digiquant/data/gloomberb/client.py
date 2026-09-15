@@ -41,6 +41,7 @@ from pydantic import BaseModel, ValidationError
 
 from . import normalizers as nz
 from .models import (
+    PREVIEW_ACCESS_WARNING,
     AnalystResearchEnvelope,
     AnalystResearchInput,
     CdsEnvelope,
@@ -259,8 +260,10 @@ def _parse_retry_after(value: str | None) -> float | None:
 # Plan-gated routes answer with a non-JSON text body ("Pro plan required",
 # `/cloud/transcripts`), sometimes with a non-auth HTTP status, or with a
 # 200 `status=unsupported` envelope whose reasonCode is `PRO_REQUIRED`
-# (`/market/screener`). These markers route either shape to a typed
-# `auth_required` instead of a generic upstream error or an empty success.
+# (`/market/screener`). These markers route either shape to the typed
+# `pro_required` error (distinct from `auth_required`: the caller has a
+# session, it just is not entitled) instead of a generic upstream error or an
+# empty success.
 _PRO_PLAN_MARKERS: tuple[str, ...] = (
     "pro plan",
     "plan required",
@@ -272,7 +275,7 @@ _PRO_PLAN_MARKERS: tuple[str, ...] = (
 
 
 def _plan_required_error(text: str) -> DigifetchError | None:
-    """Typed `auth_required` when *text* reads as an upstream plan gate."""
+    """Typed `pro_required` when *text* reads as an upstream plan gate."""
     normalized = " ".join((text or "").split())
     if not normalized:
         return None
@@ -280,9 +283,10 @@ def _plan_required_error(text: str) -> DigifetchError | None:
     if not any(marker in lowered for marker in _PRO_PLAN_MARKERS):
         return None
     return DigifetchError(
-        code="auth_required",
+        code="pro_required",
         message=(
-            f"This Gloomberb endpoint requires a Pro plan (upstream said: {normalized[:200]!r})"
+            "This Gloomberb endpoint requires a Pro plan (the session cookie is "
+            f"not entitled; upstream said: {normalized[:200]!r})"
         ),
         retryable=False,
     )
@@ -1875,7 +1879,11 @@ class GloomberbClient:
         ``partial`` / ``complete``) rather than the CloudMarketResponse
         envelope, so it is read with ``direct_payload``. A pending payload is
         **never cached client-side** (a warm 900s cache would mask the finished
-        generation); complete reports are cached normally.
+        generation); complete reports are cached normally. A report served with
+        ``access="preview"`` (free session) gets the envelope-level
+        :data:`PREVIEW_ACCESS_WARNING` marker in addition to the report's own
+        ``access`` field, so an agent can tell the free-tier preview apart from
+        a full PRO/enterprise report.
         """
         parsed = self._validate_input(EquityDiagnosticInput, request)
         if isinstance(parsed, DigifetchError):
@@ -1909,6 +1917,12 @@ class GloomberbClient:
             normalized = self._normalize(nz.normalize_equity_diagnostic, data)
             if isinstance(normalized, DigifetchError):
                 return self._error_envelope(EquityDiagnosticEnvelope, normalized)
+            if (
+                isinstance(normalized, EquityDiagnosticResult)
+                and normalized.report is not None
+                and normalized.report.access == "preview"
+            ):
+                warnings = [*warnings, PREVIEW_ACCESS_WARNING]
             fresh = self._freshness(raw, data)
             return EquityDiagnosticEnvelope(
                 data=normalized,

@@ -21,6 +21,7 @@ from digiquant.data.gloomberb import (  # noqa: E402
     DELAYED_NOTE,
     GLOOMBERB_ENABLED_ENV,
     GLOOMBERB_SESSION_COOKIE_ENV,
+    PREVIEW_ACCESS_WARNING,
     RETRYABLE_EXCEPTIONS,
     STALE_NOTE,
     EarningsEvent,
@@ -1147,12 +1148,12 @@ def test_transcripts_map_upstream_calls_rows_and_require_a_session_cookie() -> N
 
 
 @pytest.mark.parametrize("status", [200, 402, 403])
-def test_transcripts_plan_required_body_maps_to_auth_required(status: int) -> None:
+def test_transcripts_plan_required_body_maps_to_pro_required(status: int) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(status, text="Pro plan required")
 
     result = make_client(handler, session_cookie="token").transcripts({"ticker": "AAPL"})
-    assert result.data.code == "auth_required"  # type: ignore[union-attr]
+    assert result.data.code == "pro_required"  # type: ignore[union-attr]
     assert "Pro plan" in result.data.message  # type: ignore[union-attr]
     assert result.data.retryable is False  # type: ignore[union-attr]
 
@@ -1163,7 +1164,7 @@ def test_transcripts_json_plan_error_does_not_read_as_an_empty_success(status: i
         return httpx.Response(status, json={"error": "Pro plan required"})
 
     result = make_client(handler, session_cookie="token").transcripts({"ticker": "AAPL"})
-    assert result.data.code == "auth_required"  # type: ignore[union-attr]
+    assert result.data.code == "pro_required"  # type: ignore[union-attr]
 
 
 def test_transcripts_plan_required_does_not_open_the_breaker() -> None:
@@ -1177,7 +1178,7 @@ def test_transcripts_plan_required_does_not_open_the_breaker() -> None:
 
     client = make_client(handler, session_cookie="token", circuit_failure_threshold=2)
     for _ in range(3):
-        assert client.transcripts({"ticker": "AAPL"}).data.code == "auth_required"  # type: ignore[union-attr]
+        assert client.transcripts({"ticker": "AAPL"}).data.code == "pro_required"  # type: ignore[union-attr]
     # A plan gate is deterministic, not upstream degradation: the breaker stays closed.
     assert isinstance(client.quote({"symbol": "AAPL"}).data, QuoteResult)
     assert calls == ["/cloud/transcripts"] * 3 + ["/market/quote"]
@@ -1335,17 +1336,17 @@ def test_screener_maps_both_pro_gate_shapes_without_a_request_when_cookieless() 
     assert calls == []
 
     by_reason = make_client(handler, session_cookie="token").screener({"category": "gainers"})
-    assert by_reason.data.code == "auth_required"  # type: ignore[union-attr]
+    assert by_reason.data.code == "pro_required"  # type: ignore[union-attr]
     assert "Pro plan" in by_reason.data.message  # type: ignore[union-attr]
     assert "PRO_REQUIRED" in by_reason.data.message  # type: ignore[union-attr]
 
 
-def test_screener_402_text_body_maps_to_auth_required() -> None:
+def test_screener_402_text_body_maps_to_pro_required() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(402, text="Pro plan required")
 
     result = make_client(handler, session_cookie="token").screener({"category": "gainers"})
-    assert result.data.code == "auth_required"  # type: ignore[union-attr]
+    assert result.data.code == "pro_required"  # type: ignore[union-attr]
     assert result.data.retryable is False  # type: ignore[union-attr]
 
 
@@ -1363,7 +1364,7 @@ def test_screener_pro_gate_does_not_open_the_breaker() -> None:
 
     client = make_client(handler, session_cookie="token", circuit_failure_threshold=2)
     for _ in range(3):
-        assert client.screener({"category": "gainers"}).data.code == "auth_required"  # type: ignore[union-attr]
+        assert client.screener({"category": "gainers"}).data.code == "pro_required"  # type: ignore[union-attr]
     assert isinstance(client.quote({"symbol": "AAPL"}).data, QuoteResult)
     assert calls == ["/market/screener"] * 3 + ["/market/quote"]
 
@@ -1920,3 +1921,117 @@ def test_risk_reports_malformed_payload_is_upstream_error() -> None:
     result = make_client(handler).risk_reports({"ticker": "AAPL"})
     assert result.data.code == "upstream_error"  # type: ignore[union-attr]
     assert "reports list" in result.data.message  # type: ignore[union-attr]
+
+
+# ── entitlement infrastructure (#4110 phase 5) ──────────────────────────────
+
+
+def test_equity_diagnostic_marks_preview_reports() -> None:
+    def preview_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "schemaVersion": 1,
+                "access": "preview",
+                "symbol": "AAPL",
+                "status": "partial",
+                "verdict": "unclear",
+                "findings": [],
+                "coverage": [],
+                "evidence": [],
+            },
+        )
+
+    preview = make_client(preview_handler, session_cookie="token").equity_diagnostic(
+        {"symbol": "AAPL"}
+    )
+    assert preview.data.report.access == "preview"  # type: ignore[union-attr]
+    assert preview.warnings == [PREVIEW_ACCESS_WARNING]
+
+    def full_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "schemaVersion": 1,
+                "access": "full",
+                "symbol": "AAPL",
+                "status": "complete",
+                "verdict": "balanced",
+                "findings": [],
+                "coverage": [],
+                "evidence": [],
+            },
+        )
+
+    full = make_client(full_handler, session_cookie="token").equity_diagnostic({"symbol": "AAPL"})
+    assert full.data.report.access == "full"  # type: ignore[union-attr]
+    assert full.warnings == []
+
+
+def test_equity_diagnostic_pending_payload_has_no_preview_marker() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"status": "generating", "retryAfterMs": 2000})
+
+    pending = make_client(handler, session_cookie="token").equity_diagnostic({"symbol": "AAPL"})
+    assert pending.data.pending is not None  # type: ignore[union-attr]
+    assert pending.warnings == []
+
+
+def test_pro_gate_shapes_are_pro_required_not_auth_required() -> None:
+    """A valid free session is entitled-gated (pro_required), not session-gated."""
+
+    def transcripts_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="Pro plan required")
+
+    transcripts = make_client(transcripts_handler, session_cookie="token").transcripts(
+        {"ticker": "AAPL"}
+    )
+    assert transcripts.data.code == "pro_required"  # type: ignore[union-attr]
+    assert transcripts.data.code != "auth_required"  # type: ignore[union-attr]
+
+    def screener_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"status": "unsupported", "data": None, "reasonCode": "PRO_REQUIRED"},
+        )
+
+    screener = make_client(screener_handler, session_cookie="token").screener(
+        {"category": "gainers"}
+    )
+    assert screener.data.code == "pro_required"  # type: ignore[union-attr]
+    assert screener.data.code != "auth_required"  # type: ignore[union-attr]
+
+
+def test_pro_required_is_non_retryable_and_breaker_safe_for_both_shapes() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/cloud/transcripts":
+            return httpx.Response(200, text="Pro plan required")
+        if request.url.path == "/market/screener":
+            return httpx.Response(
+                200,
+                json={"status": "unsupported", "data": None, "reasonCode": "PRO_REQUIRED"},
+            )
+        return envelope(AAPL_QUOTE)
+
+    policy = RetryPolicy(attempts=3, base_delay=0.0, jitter=False, retry_on=RETRYABLE_EXCEPTIONS)
+    client = make_client(
+        handler,
+        session_cookie="token",
+        retry_policy=policy,
+        circuit_failure_threshold=2,
+    )
+    for _ in range(3):
+        transcripts = client.transcripts({"ticker": "AAPL"})
+        assert transcripts.data.code == "pro_required"  # type: ignore[union-attr]
+        assert transcripts.data.retryable is False  # type: ignore[union-attr]
+        screener = client.screener({"category": "gainers"})
+        assert screener.data.code == "pro_required"  # type: ignore[union-attr]
+        assert screener.data.retryable is False  # type: ignore[union-attr]
+    # Six deterministic plan gates: no retries (one call each) and the shared
+    # breaker stays closed for unrelated tools.
+    assert calls.count("/cloud/transcripts") == 3
+    assert calls.count("/market/screener") == 3
+    assert isinstance(client.quote({"symbol": "AAPL"}).data, QuoteResult)
