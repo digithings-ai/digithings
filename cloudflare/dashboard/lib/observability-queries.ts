@@ -564,6 +564,15 @@ function buildPositionContributionSeries(
 }
 
 /**
+ * A single ticker cannot contribute more than 100 percentage points in one day
+ * for an unlevered base-100 book. Larger rows mean the period's equity base could
+ * not anchor its P&L — the 2026-08-25 tip opened on $0.10 of cash and published
+ * ±1,723 pp as a final row (#4102) — so they are treated as missing instead of
+ * being accumulated into every later day's bar.
+ */
+const REALIZED_DAILY_CONTRIBUTION_LIMIT_PP = 100;
+
+/**
  * Cumulative per-asset contribution from finalized accounting (#3956).
  *
  * `daily_realized_attribution` publishes each ticker's daily contribution in
@@ -574,22 +583,30 @@ function buildPositionContributionSeries(
  * marks the nightly refresh may not have written yet. Day one is the base (0),
  * matching the weight-times-mark series. Days before the first finalized row
  * render flat at 0 — the view is final-only, consistent with the current
- * accounting run the NAV line already plots. Returns [] when no row lands in the
- * plotted run (#3983): rows from a prior finalized run must not render as an
- * all-zero series that suppresses the marks fallback.
+ * accounting run the NAV line already plots. Returns no points when no row lands
+ * in the plotted run (#3983): rows from a prior finalized run must not render as
+ * an all-zero series that suppresses the marks fallback.
+ *
+ * Rows beyond {@link REALIZED_DAILY_CONTRIBUTION_LIMIT_PP} in a single day are
+ * dropped as unanchored (#4102), so one degenerate period cannot inflate every
+ * later cumulative bar, and `startsOn` reports the first plotted contribution so
+ * the surface can say when finalized accounting begins.
  */
 function buildRealizedContributionSeries(
   navSeries: PortfolioReturnPoint[],
   realized: ViewRow<'public_daily_realized_attribution'>[],
   tickers: Set<string>
-): ContributionReturnPoint[] {
-  if (navSeries.length === 0 || realized.length === 0 || tickers.size === 0) return [];
+): { points: ContributionReturnPoint[]; startsOn: string | null } {
+  if (navSeries.length === 0 || realized.length === 0 || tickers.size === 0) {
+    return { points: [], startsOn: null };
+  }
   const byTicker = new Map<string, Map<string, number>>();
   for (const row of realized) {
     const ticker = row.ticker.toUpperCase();
     if (!tickers.has(ticker)) continue;
     const value = row.contribution_pct;
     if (value == null || !Number.isFinite(value)) continue;
+    if (Math.abs(value) > REALIZED_DAILY_CONTRIBUTION_LIMIT_PP) continue;
     let byDate = byTicker.get(ticker);
     if (!byDate) {
       byDate = new Map<string, number>();
@@ -597,9 +614,10 @@ function buildRealizedContributionSeries(
     }
     byDate.set(row.date, value);
   }
-  if (byTicker.size === 0) return [];
+  if (byTicker.size === 0) return { points: [], startsOn: null };
   const cumulativeByTicker = new Map<string, number[]>();
   let hasPlottedContribution = false;
+  let startsOn: string | null = null;
   for (const [ticker, byDate] of byTicker) {
     const cumulative: number[] = [];
     let running = 0;
@@ -609,6 +627,7 @@ function buildRealizedContributionSeries(
       if (contribution != null) {
         running += contribution;
         hasPlottedContribution = true;
+        if (startsOn === null || point.date < startsOn) startsOn = point.date;
       }
       cumulative.push(roundPct(running));
     });
@@ -618,16 +637,19 @@ function buildRealizedContributionSeries(
   // (e.g. across a trailing seam). All-zero cumulatives would then suppress the
   // marks accrual and present missing attribution as a flat zero — leave the
   // realized source unusable so the caller falls back.
-  if (!hasPlottedContribution) return [];
-  return navSeries.map((point, index) => ({
-    t: point.date,
-    returnPct: point.returnPct,
-    contributions: Object.fromEntries(
-      [...cumulativeByTicker.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([ticker, values]) => [ticker, values[index]])
-    ),
-  }));
+  if (!hasPlottedContribution) return { points: [], startsOn: null };
+  return {
+    points: navSeries.map((point, index) => ({
+      t: point.date,
+      returnPct: point.returnPct,
+      contributions: Object.fromEntries(
+        [...cumulativeByTicker.entries()]
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([ticker, values]) => [ticker, values[index]])
+      ),
+    })),
+    startsOn,
+  };
 }
 
 function latestPositionByTicker(
@@ -785,11 +807,12 @@ export function buildPerformanceTearsheet(args: {
     positions: args.positions,
     holdingsAsOf,
   });
-  const realizedSeries = buildRealizedContributionSeries(
+  const realized = buildRealizedContributionSeries(
     navSeries,
     args.realizedAttribution ?? [],
     currentTickers
   );
+  const realizedSeries = realized.points;
   const contributionSource: PerformanceContributionSource = realizedSeries.length
     ? args.realizedAttributionDegraded
       ? 'realized_truncated'
@@ -815,6 +838,7 @@ export function buildPerformanceTearsheet(args: {
       ? realizedSeries
       : buildPositionContributionSeries(navSeries, args.positions, currentTickers),
     contributionSource,
+    contributionStartsOn: realizedSeries.length ? realized.startsOn : null,
     currentHoldings,
     historicalHoldings,
     ...ssot,

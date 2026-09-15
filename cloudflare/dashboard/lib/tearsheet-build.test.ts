@@ -809,6 +809,55 @@ describe('buildPerformanceTearsheet', () => {
     expect(Object.keys(result.contributionSeries[1].contributions)).toEqual(['AAA']);
   });
 
+  it('drops an unanchored realized contribution instead of poisoning later bars', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-08-25', nav: 101.769942, cash_pct: 14.86, invested_pct: 85.14 },
+        { date: '2026-08-26', nav: 102.5, cash_pct: 14.9, invested_pct: 85.1 },
+        { date: '2026-08-27', nav: 102.477988, cash_pct: 14.9, invested_pct: 85.1 },
+      ],
+      positions: [position('2026-08-27', 'AAA', 60), position('2026-08-27', 'BBB', 40)],
+      metrics: null,
+      attribution: [],
+      events: [],
+      // The 2026-08-25 tip opened on $0.10 of cash and published ±1,700 pp as a
+      // final row (#4102). One degenerate period must not inflate every later bar.
+      realizedAttribution: [
+        realized('2026-08-25', 'AAA', 1723.62303),
+        realized('2026-08-25', 'BBB', 1242.04761),
+        realized('2026-08-26', 'AAA', 0.1),
+        realized('2026-08-27', 'AAA', -0.2),
+      ],
+    });
+
+    expect(result.contributionSource).toBe('realized');
+    expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([
+      0, 0.1, -0.1,
+    ]);
+    // The dropped ticker never registers, so it cannot render as a flat zero.
+    expect(Object.keys(result.contributionSeries[1].contributions)).toEqual(['AAA']);
+    expect(result.contributionStartsOn).toBe('2026-08-26');
+  });
+
+  it('reports the first finalized day when attribution starts inside the window', () => {
+    const result = buildPerformanceTearsheet({
+      nav: [
+        { date: '2026-08-24', nav: 101.327006, cash_pct: 15, invested_pct: 85 },
+        { date: '2026-08-25', nav: 101.769942, cash_pct: 14.86, invested_pct: 85.14 },
+        { date: '2026-08-27', nav: 102.477988, cash_pct: 14.9, invested_pct: 85.1 },
+      ],
+      positions: [position('2026-08-27', 'AAA', 100)],
+      metrics: null,
+      attribution: [],
+      events: [],
+      realizedAttribution: [realized('2026-08-27', 'AAA', 0.4)],
+    });
+
+    expect(result.contributionSource).toBe('realized');
+    expect(result.contributionStartsOn).toBe('2026-08-27');
+    expect(result.contributionSeries[0].t).toBe('2026-08-24');
+  });
+
   it('falls back to weight-times-price marks when realized attribution is empty', () => {
     const first = { ...position('2026-07-01', 'AAA', 20), current_price: 100 };
     const latest = { ...position('2026-07-17', 'AAA', 20), current_price: 110 };
