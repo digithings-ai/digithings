@@ -98,7 +98,7 @@ class TestAuthenticatedTraffic:
             _invoke(client, token=TOKEN)
         assert _invoke(client, token=TOKEN).status_code == 429
         # A different service must not inherit the exhausted token's window.
-        assert _invoke(client, token="service-token-b").status_code != 429
+        assert _invoke(client, token="service-token-b", ip="203.0.113.77").status_code != 429
 
     def test_env_multiplier_overrides_the_token_budget(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -108,13 +108,26 @@ class TestAuthenticatedTraffic:
             assert _invoke(client, token=TOKEN).status_code != 429
         assert _invoke(client, token=TOKEN).status_code == 429
 
-    def test_rotating_tokens_cannot_bypass_the_ip_ceiling(
+    def test_rotating_tokens_are_capped_at_the_per_ip_ceiling(self, client: TestClient) -> None:
+        """Rotating tokens cannot exceed the default ceiling: one token's budget per IP."""
+        ceiling = PATH_LIMIT * server._IP_CEILING_MULTIPLIER
+        for index in range(ceiling):
+            assert _invoke(client, token=f"rotating-{index}").status_code != 429
+        assert _invoke(client, token="rotating-fresh").status_code == 429
+
+    def test_rotating_tokens_cannot_bypass_a_raised_ip_ceiling(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("DIGISEARCH_IP_CEILING_MULTIPLIER", "1")
         for index in range(PATH_LIMIT):
             assert _invoke(client, token=f"rotating-{index}").status_code != 429
         assert _invoke(client, token="rotating-fresh").status_code == 429
+
+    def test_token_traffic_does_not_consume_the_anonymous_budget(self, client: TestClient) -> None:
+        for _ in range(PATH_LIMIT * server._AUTH_RATE_LIMIT_MULTIPLIER):
+            _invoke(client, token=TOKEN)
+        # The anonymous caller from the same IP has its own window.
+        assert _invoke(client).status_code != 429
 
 
 @pytest.mark.unit

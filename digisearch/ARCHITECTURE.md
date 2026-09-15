@@ -279,7 +279,7 @@ Returns 3 or 4 tools:
 
 #### `POST /v1/orchestrator_invoke`
 
-Auth required (`digisearch:query` scope). Rate limited: 10 req/min per IP; token-bearing callers get 6× on their own token with a 24× per-IP ceiling (`DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER` / `DIGISEARCH_IP_CEILING_MULTIPLIER`, #4106).
+Auth required (`digisearch:query` scope). Rate limited: 10 req/min per IP; token-bearing callers get 6× on their own token with a 6× per-IP ceiling (`DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER` / `DIGISEARCH_IP_CEILING_MULTIPLIER`, #4106).
 
 Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, `digisearch_research_delegate`, or `web_search`. The hub calls this to execute search without importing digisearch Python code directly.
 
@@ -865,7 +865,7 @@ CORS is installed via the shared `digibase.cors.install_cors(app, service="digis
 
 Limiting is implemented in-process (not via a proxy). The limiter uses `threading.Lock` and `collections.deque` — correct for sync workers but not robust under async or multi-process deployments. IP extraction respects `X-Forwarded-For` but does not validate the hop count, which means a caller can supply a fake IP in `X-Forwarded-For` to bypass per-IP limits.
 
-The limiter is the outermost middleware, so it runs **before** `DigiAuthMiddleware` and keys anonymous requests on the client IP. A caller presenting a bearer token is budgeted on that token instead (`tok:<sha256[:16]>`, never the raw credential), at `DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER`× the path budget, on top of a coarse per-IP ceiling of `DIGISEARCH_IP_CEILING_MULTIPLIER`× the path budget so rotating tokens cannot bypass the flood guard. This exists because the daily digiquant book run grounds every research segment from one GitHub-runner IP through `POST /v1/orchestrator_invoke`; the shared 10 req/60 s IP bucket 429'd mid-run and digigraph collapsed the 429 into "web_search returned no rows", failing the book three times (#4106).
+The limiter is registered so that it runs **before** `DigiAuthMiddleware` (the correlation-id middleware wraps both) and keys anonymous requests on the client IP. A caller presenting a bearer token is budgeted on that token instead (`tok:<sha256[:16]>`, never the raw credential), at `DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER`× the path budget, on top of a coarse per-IP ceiling of `DIGISEARCH_IP_CEILING_MULTIPLIER`× the path budget on its own `ipceil:` counter — so a client rotating tokens is capped at one token's budget per IP without consuming the anonymous budget. A header-bearing client is therefore admitted 6× as often as an anonymous one (10 → 60 req/60 s on `/v1/orchestrator_invoke`) before auth rejects it; those requests still fail auth, so this bounds work rather than granting access. This exists because the daily digiquant book run grounds every research segment from one GitHub-runner IP through `POST /v1/orchestrator_invoke`; the shared 10 req/60 s IP bucket 429'd mid-run and digigraph collapsed the 429 into "web_search returned no rows", failing the book three times (#4106).
 
 ---
 
@@ -1143,7 +1143,7 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGI_CORS_ORIGINS` / `DIGISEARCH_CORS_ORIGINS` | (empty) | Comma-separated CORS allowed origins; legacy `DIGI_ALLOWED_ORIGINS` still honored |
 | `DIGI_DISABLE_RATE_LIMIT` | `0` | Disable per-IP rate limiting (testing) |
 | `DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER` | `6` | Multiple of a path's budget granted to a caller presenting a bearer token, keyed on the token (#4106) |
-| `DIGISEARCH_IP_CEILING_MULTIPLIER` | `24` | Coarse per-IP ceiling for token-bearing traffic, as a multiple of the path budget (#4106) |
+| `DIGISEARCH_IP_CEILING_MULTIPLIER` | `6` | Coarse per-IP ceiling for token-bearing traffic, as a multiple of the path budget, on its own counter (#4106) |
 | `DIGIKEY_JWKS_URL` | _(required)_ | digikey JWKS endpoint for JWT validation |
 | `DIGIKEY_ISSUER` | _(required)_ | JWT issuer |
 | `DIGIKEY_AUDIENCE` | _(required)_ | JWT audience |

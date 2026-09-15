@@ -88,8 +88,16 @@ _UNLIMITED_PATHS = {"/health", "/healthz"}
 #: exhaust another service's allowance. #4106
 _AUTH_RATE_LIMIT_MULTIPLIER = 6
 #: Coarse per-IP ceiling for token-bearing traffic, as a multiple of the path
-#: budget, so rotating tokens cannot bypass the flood guard. #4106
-_IP_CEILING_MULTIPLIER = 24
+#: budget. It equals the token multiplier so a client rotating tokens is capped
+#: at one token's budget per IP — the pre-auth admit rate for a header-bearing
+#: client rises 6x (10 -> 60 req/60s on ``/v1/orchestrator_invoke``), not 24x,
+#: while the pipeline still gets the headroom it needs. #4106
+_IP_CEILING_MULTIPLIER = 6
+#: Guard against a nonsense env value silently disabling a ceiling. #4106
+_MAX_MULTIPLIER = 1000
+#: Windows are pruned once the table grows past this, so the new token key space
+#: cannot grow without bound. #4106
+_RL_MAX_KEYS = 4096
 _DISABLE_VALUES = ("1", "true", "yes")
 
 
@@ -103,8 +111,10 @@ def _env_multiplier(name: str, default: int) -> int:
     except ValueError:
         logger.warning("%s=%r is not an integer; using %d", name, raw, default)
         return default
-    if value < 1:
-        logger.warning("%s=%r must be >= 1; using %d", name, raw, default)
+    if value < 1 or value > _MAX_MULTIPLIER:
+        logger.warning(
+            "%s=%r must be between 1 and %d; using %d", name, raw, _MAX_MULTIPLIER, default
+        )
         return default
     return value
 
@@ -138,6 +148,9 @@ def _rl_exceeded(key: str, max_req: int, window: int) -> bool:
     now = _time.monotonic()
     cutoff = now - window
     with _rl_lock:
+        if len(_rl_windows) > _RL_MAX_KEYS:
+            for stale in [k for k, dq in _rl_windows.items() if not dq or dq[-1] < cutoff]:
+                _rl_windows.pop(stale, None)
         q = _rl_windows.setdefault(key, _deque())
         while q and q[0] < cutoff:
             q.popleft()
@@ -164,8 +177,9 @@ async def rate_limit(request: Request, call_next):
 
     Anonymous callers are limited per IP. Callers presenting a bearer token get a
     larger budget keyed on that token (``DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER``),
-    on top of a coarse per-IP ceiling (``DIGISEARCH_IP_CEILING_MULTIPLIER``) that
-    keeps the flood guard intact. #4106
+    on top of a coarse per-IP ceiling (``DIGISEARCH_IP_CEILING_MULTIPLIER``) on a
+    separate counter that bounds a client rotating tokens without consuming the
+    anonymous budget. #4106
     """
     path = request.url.path
     if path in _UNLIMITED_PATHS:
@@ -181,7 +195,7 @@ async def rate_limit(request: Request, call_next):
         ceiling = max_req * _env_multiplier(
             "DIGISEARCH_IP_CEILING_MULTIPLIER", _IP_CEILING_MULTIPLIER
         )
-        if _rl_exceeded(f"ip:{ip}", ceiling, window):
+        if _rl_exceeded(f"ipceil:{ip}", ceiling, window):
             return _rl_too_many(request, ceiling, window)
         budget = max_req * _env_multiplier(
             "DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER", _AUTH_RATE_LIMIT_MULTIPLIER
