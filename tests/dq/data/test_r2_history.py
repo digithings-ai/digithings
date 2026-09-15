@@ -1,7 +1,7 @@
 """Unit tests for digiquant.data.prices.r2_history (#3780, Task 2).
 
-Immutable versioned market-data generations in R2: put -> read-back SHA-256
-verify -> registry insert -> pointer swap. Never overwrites in place.
+Immutable versioned market-data generations in R2: registry pre-check -> put ->
+read-back SHA-256 verify -> registry insert -> pointer swap. Never overwrites in place.
 Also pins the Task 2 scoping invariant: checkpoint evict/reconcile never
 touch market-data/ rows.
 """

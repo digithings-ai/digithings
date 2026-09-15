@@ -1,7 +1,8 @@
 """Immutable versioned market-data generations in R2 (#3780).
 
-Mirrors the checkpoint archiver ordering verbatim: put -> get -> SHA-256
-compare -> registry -> swap pointer. Never overwrites a generation in place:
+Mirrors the checkpoint archiver ordering, with the registry conflict check
+ahead of the write: registry lookup -> put -> SHA-256 read-back verify ->
+registry insert -> swap pointer. Never overwrites a generation in place:
 each refresh writes a NEW object keyed by generation
 (``price/{TICKER}/{as_of}.parquet``); the prior generation stays readable
 until the next successful refresh swaps the ``latest`` pointer.
@@ -227,6 +228,7 @@ __all__ = [
     "Generation",
     "R2HistoryStore",
     "RegistryInsert",
+    "RegistryLookup",
     "build_manifest",
     "generation_key",
     "is_missing_object_error",
