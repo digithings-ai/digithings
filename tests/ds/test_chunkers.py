@@ -217,13 +217,14 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 58 for #3909 (backend fail-loud + research workspace scoping + raw filter gate docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 59 for #3934 (SSRF fetch-guard paragraph in the web_search section + DIGISEARCH_FETCH_ALLOWED_HOSTS env-table row in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 60 for #4055 (POST /ingest/url subsection + URL-ingest clause in the POST /ingest section of ARCHITECTURE.md), re-recorded again over the union with the #4059 module/digisearch sync (Azure workspace-scoping fix prose) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 67 for #4064 (Phase B web-branch ARCH section in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 60
+    assert len(chunks) == 67
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -237,10 +238,17 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5fc146dcd98ed469",
         "6bb725ee96409565",
         "2496b0331a6908ca",
-        "7a3f0b9ba1f7cf98",
-        "d41e6436eb99107f",
-        "32ded85d9a7531f0",
-        "627eddc58a6701a5",
+        "e4075afa680748d8",
+        "71c75006a73bbb9b",
+        "36e8025d96e584db",
+        "a7fc35b75f9b5e09",
+        "208b4fbb16a49071",
+        "07c7d410f2f9243a",
+        "c6a2f8fbd65825a6",
+        "7e8464fe6a6cc067",
+        "9ce2b59017d82c91",
+        "d15ebc87304fe14e",
+        "ab0a7f1cb0bbf383",
         "f5694c994b90e40c",
         "2f102978f3f92316",
         "d201d5cef8605cdf",
@@ -249,8 +257,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "1f9fe54a7f6c6f25",
         "20b66fa9abe4d235",
         "28bb2eddea9813a5",
-        "58293316545c38e4",
-        "89a85863f85af2a2",
+        "0f38ad6f707a76af",
+        "c81719c58e194262",
         "819ebadc3320ecc2",
         "10832c167583db90",
         "3442051d624d3623",
@@ -272,14 +280,14 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5881d77c9811fa5d",
         "a063d09664500f97",
         "50b42145065d7d4e",
-        "5dbc6c5291de10ab",
+        "5e6a02ac4bf32f0f",
         "e8874754e8823dbd",
         "472ca1370eb9ef1a",
         "a3987db99f2b72c5",
         "9496728548f7cd2a",
-        "225997a88a741b37",
-        "48822531a62ecd38",
-        "a0c3eeac2a656b2f",
+        "6d57e6ff0ba47c28",
+        "f36bf18adeb33278",
+        "8fffdec25510f05f",
         "482754fb154988ce",
         "79ae674b8661ea64",
         "fc586dc7c2348d1e",
