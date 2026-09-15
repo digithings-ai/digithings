@@ -48,12 +48,6 @@
   color: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
 }
 
-/* The digichat skin paints the credit strip with the chat canvas so the panel
-   reads as one surface; other skins keep the shell background. */
-.dc-embed-shell [data-thread-skin="digichat"] .dc-attribution {
-  background: var(--term-bg);
-}
-
 /* Only the digichat skin mirrors the chat canvas onto the strip: the credit
    sits below the thread, outside its palette scope, so the shell carries
    --term-bg (dark + light) and the strip paints it to read as one surface
