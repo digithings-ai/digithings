@@ -3200,7 +3200,11 @@ that metrics/attribution job order cannot alter meaning.
   `compute_period(...)` (no I/O, no pandas, no broker paths). Status is `final` only when
   marks are complete and fresh and residual is inside the versioned tolerance; missing marks
   → `incomplete`, stale marks / ignored corporate actions → `estimated`, residual /
-  negative quantity / benchmark boundary mismatch → `failed`. Exact same inputs reproduce
+  negative quantity / benchmark boundary mismatch → `failed`. A degenerate opening equity
+  base — exactly zero, or smaller than the period's own P&L (implied book return beyond
+  ±100%) — also yields `zero_opening_equity`/`incomplete` with no contributions, because
+  contributions are `pnl / opening_equity` and a near-zero base publishes exploded
+  percentages as if final (#4102). Exact same inputs reproduce
   the same period `id` (`uuid5` over a canonical digest).
 - **Persistence**: `digiquant/src/digiquant/dashboard/accounting/io.py` — service-role
   `INSERT` only into `dashboard_accounting_{periods,contributions,holdings}`. Deterministic

@@ -40,6 +40,21 @@ _PERIOD_ID_NAMESPACE = UUID("a3c91e7b-4d2f-5e8a-9b1c-6d0e7f8a9b2c")
 _ZERO = Decimal("0")
 
 
+def _cannot_anchor_contributions(opening_equity: Decimal, period_pnl: Decimal) -> bool:
+    """Whether an equity base is too degenerate to divide the period's P&L by (#4102).
+
+    Contributions are ``pnl / opening_equity``, so an equity base smaller than the
+    period's own P&L implies a single-day book return beyond ±100% — impossible for a
+    funded book, and a sign the opening state was never carried in. The 2026-08-25 tip
+    opened with $0.10 of cash against six ETF positions while holding them, so
+    ``net_pnl / opening_equity`` published contributions in the hundreds-to-thousands
+    of percentage points *as a final period with no quality reason*; every funded tip
+    opens at the base-100 NAV scale (~101-112) with a P&L two orders of magnitude
+    smaller. A non-positive or exactly-zero base is degenerate for the same reason.
+    """
+    return opening_equity == _ZERO or abs(period_pnl) > opening_equity
+
+
 def period_id_for_input(inp: PeriodAccountingInput) -> UUID:
     """Deterministic id so an exact same-input retry reproduces the same period row."""
     digest = hashlib.sha256(_canonical_input_bytes(inp)).hexdigest()
@@ -213,7 +228,9 @@ def compute_period(inp: PeriodAccountingInput) -> AccountingPeriod:
     closing_equity = cash + closing_mv
     residual = closing_equity - (opening_equity + net_total + cash_pnl)
 
-    if opening_equity == _ZERO:
+    period_pnl = net_total + cash_pnl
+    anchors = not _cannot_anchor_contributions(opening_equity, period_pnl)
+    if not anchors:
         reasons.append(QualityReason.ZERO_OPENING_EQUITY)
 
     tol = _effective_tolerance(opening_equity, policy)
@@ -226,7 +243,7 @@ def compute_period(inp: PeriodAccountingInput) -> AccountingPeriod:
 
     contributions: list[TickerPeriodResult] = []
     cash_contribution: Decimal | None
-    if opening_equity > _ZERO:
+    if anchors:
         cash_contribution = cash_pnl / opening_equity
         for row in ticker_results:
             contributions.append(

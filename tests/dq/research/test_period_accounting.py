@@ -363,6 +363,98 @@ def test_missing_closing_mark_is_incomplete() -> None:
     assert out.status is not PeriodStatus.FINAL
 
 
+def test_zero_opening_equity_is_incomplete() -> None:
+    """A book that opens with no equity cannot publish a contribution."""
+    inp = PeriodAccountingInput(
+        period_date=PERIOD,
+        policy=POLICY,
+        opening_cash=Decimal("0"),
+        opening_holdings=(),
+        opening_marks=(),
+        closing_marks=(_mark("XLF", "50"),),
+        fills=(
+            PeriodFill(
+                symbol="XLF",
+                side=FillSide.BUY,
+                quantity=Decimal("10"),
+                price=Decimal("50"),
+                executed_at=_ts(9, 30),
+            ),
+        ),
+    )
+    out = compute_period(inp)
+    assert out.opening_equity == Decimal("0")
+    assert out.status is PeriodStatus.INCOMPLETE
+    assert QualityReason.ZERO_OPENING_EQUITY in out.quality_reasons
+    assert out.cash_contribution is None
+    assert all(row.contribution is None for row in out.ticker_results)
+
+
+def test_degenerate_opening_equity_publishes_no_contributions() -> None:
+    """The 2026-08-25 tip: a $0.10 base must never anchor contributions (#4102).
+
+    That tip opened with $0.10 of cash against six ETF positions, so dividing its
+    P&L by the base published contributions in the hundreds-to-thousands of
+    percentage points as a ``final`` period with no quality reason, and the
+    dashboard's cumulative bars inherited the blow-up from that date onward.
+    """
+    inp = PeriodAccountingInput(
+        period_date=PERIOD,
+        policy=POLICY,
+        opening_cash=Decimal("0.10"),
+        opening_holdings=(),
+        opening_marks=(),
+        closing_marks=(_mark("XLF", "53.72"),),
+        fills=(
+            PeriodFill(
+                symbol="XLF",
+                side=FillSide.BUY,
+                quantity=Decimal("1"),
+                price=Decimal("50"),
+                executed_at=_ts(9, 30),
+            ),
+        ),
+    )
+    out = compute_period(inp)
+    assert out.opening_equity == Decimal("0.10")
+    assert out.net_pnl_total == Decimal("3.72")
+    assert out.status is PeriodStatus.INCOMPLETE
+    assert QualityReason.ZERO_OPENING_EQUITY in out.quality_reasons
+    assert out.cash_contribution is None
+    assert all(row.contribution is None for row in out.ticker_results)
+
+
+def test_equity_base_below_the_period_pnl_is_incomplete() -> None:
+    """The guard is not an absolute floor: the base must anchor its own P&L.
+
+    A base of 100 can anchor a normal day but not a 250 P&L — that would be a
+    +250% single-day book return, so the opening state was not carried in.
+    """
+    inp = PeriodAccountingInput(
+        period_date=PERIOD,
+        policy=POLICY,
+        opening_cash=Decimal("100"),
+        opening_holdings=(),
+        opening_marks=(),
+        closing_marks=(_mark("XLF", "100"),),
+        fills=(
+            PeriodFill(
+                symbol="XLF",
+                side=FillSide.BUY,
+                quantity=Decimal("5"),
+                price=Decimal("50"),
+                executed_at=_ts(9, 30),
+            ),
+        ),
+    )
+    out = compute_period(inp)
+    assert out.opening_equity == Decimal("100")
+    assert out.net_pnl_total == Decimal("250")
+    assert out.status is PeriodStatus.INCOMPLETE
+    assert QualityReason.ZERO_OPENING_EQUITY in out.quality_reasons
+    assert all(row.contribution is None for row in out.ticker_results)
+
+
 def test_stale_closing_mark_is_estimated() -> None:
     stale = _mark(
         "AAPL",
