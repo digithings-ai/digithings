@@ -8,9 +8,9 @@ create request shape (``search`` / ``trigger`` / ``webhook``), the run payload
 fields (``id`` / ``monitorId`` / ``status`` / ``createdAt`` / ``completedAt`` /
 ``results`` / ``newResults``), and the observed validation messages (``[webhook]:
 Required``, ``[webhook.url]: ...localhost...``) are therefore provisional. A
-live-pin follow-up issue tracks validation and reconciliation; there is
-deliberately no ``# PIN`` record in this docstring — the follow-up owns it, and
-nothing here may be treated as frozen.
+live-pin follow-up issue (#4123) tracks validation and reconciliation; there
+is deliberately no ``# PIN`` record in this docstring — the follow-up owns it,
+and nothing here may be treated as frozen.
 
 Fail-closed posture (never a silent OSS fallback): a missing API key, a
 tier-gated key (401/403), any other remote failure, or an untranslatable

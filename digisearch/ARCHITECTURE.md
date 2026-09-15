@@ -852,6 +852,9 @@ digisearch/src/digisearch/
 │   ├── dedup.py               # normalize_url-keyed fingerprint dedup (new/changed/unchanged)
 │   ├── runner.py              # one watch turn + due-tick + in-process recall seam
 │   ├── delivery.py            # validate_delivery gate + webhook/slack/email fan-out receipts
+│   ├── exa_adapter.py         # EXPERIMENTAL EXA monitor adapter: run translation
+│                              # (exa_run_to_monitor_run) + create_exa_monitor/delete_exa_monitor
+│                              # helpers; tier-gated fail-closed; live shapes pending pin (#4123)
 │   └── validation.py          # shared create/update config gate (datatap, timezone, cron, delivery)
 │
 └── dev/
@@ -1582,9 +1585,9 @@ targets validated as public https URLs at create/update and re-resolved at
 delivery time. The inbound EXA result webhook additionally needs
 `EXA_MONITOR_WEBHOOK_SECRET` set; a valid signature translates the payload via
 the EXPERIMENTAL Task 8c adapter and persists the run to the monitor store.
-Shape reconciliation is owned by the live-pin follow-up (the adapter's remote
-shapes are not live-validated), so poll + manual trigger remains the portable
-route for EXA-backed watches until the pin lands.
+Shape reconciliation is owned by the live-pin follow-up (#4123) — the adapter's
+remote shapes are not live-validated — so poll + manual trigger remains the
+portable route for EXA-backed watches until the pin lands.
 
 ### MCP server startup
 
