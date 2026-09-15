@@ -239,6 +239,10 @@ class WebsetStore:
     """SQLite-backed webset store (single connection, single thread)."""
 
     def __init__(self, db_path: str) -> None:
+        # The resolved path is kept for callers that need to bind the same file
+        # to their own thread's connection (the async runner constructs one
+        # store per worker thread — the connection itself stays thread-bound).
+        self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(db_path)
         self._conn.execute("PRAGMA journal_mode=WAL")
