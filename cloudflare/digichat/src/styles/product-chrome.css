@@ -36,8 +36,7 @@
   --term-bg: #08090b;
 }
 
-:root[data-theme="light"] .dc-embed-shell [data-thread-skin="digichat"],
-.light .dc-embed-shell [data-thread-skin="digichat"] {
+:root[data-theme="light"] .dc-embed-shell [data-thread-skin="digichat"] {
   --term-bg: #f1f0eb;
 }
 
