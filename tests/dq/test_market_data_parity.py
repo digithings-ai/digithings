@@ -655,7 +655,7 @@ def test_query_price_deltas_drops_a_ticker_with_no_r2_generation(monkeypatch, ca
     )
 
     assert got == pytest.approx(known)
-    assert "GDX" in caplog.text
+    assert "price deltas: no sealed R2 generation for GDX" in caplog.text
 
 
 def test_query_price_deltas_all_tickers_unknown_returns_empty(monkeypatch):
@@ -694,6 +694,52 @@ def test_interval_price_returns_r2_matches_supabase(monkeypatch):
     _use_r2(monkeypatch)
     got = _interval_price_returns(client=_ExplodingMarketClient(), **kwargs)
     assert got == pytest.approx(want)
+
+
+def test_interval_price_returns_drops_a_ticker_with_no_r2_generation(monkeypatch, caplog):
+    """#4139: this documents the same conservative-drop contract as
+    ``query_price_deltas``, so one unsealed held ticker must not abort the batch
+    and sink NAV/book materialization."""
+    _, _, _sup = _t7b_both(monkeypatch)
+    kwargs: dict = {
+        "tickers": tuple(_T7B_TICKERS),
+        "start_date": _T7B_RUN_DATE - _tdelta_mod(days=30),
+        "run_date": _T7B_RUN_DATE,
+    }
+    _use_r2(monkeypatch)
+    known = _interval_price_returns(client=_ExplodingMarketClient(), **kwargs)
+    assert known  # control: the tracked universe resolves
+
+    with caplog.at_level("WARNING"):
+        got = _interval_price_returns(
+            client=_ExplodingMarketClient(), **{**kwargs, "tickers": (*_T7B_TICKERS, "GDX")}
+        )
+
+    assert got == pytest.approx(known)
+    assert "commit_io NAV interval: no sealed R2 generation for GDX" in caplog.text
+
+
+def test_sector_relative_strength_drops_a_ticker_with_no_r2_generation(monkeypatch, caplog):
+    """#4139: an unsealed sector ETF must not abort the relative-strength batch."""
+    _, _, _sup = _t7b_both(monkeypatch)
+    kwargs: dict = {"etfs": ["QQQ"], "benchmark": "SPY", "lookback_days": 70}
+    _use_r2(monkeypatch)
+    known = q.get_sector_relative_strength(
+        client=_ExplodingMarketClient(), run_date=_T7B_RUN_DATE, **kwargs
+    )
+    assert known  # control: the requested sector ETF resolves
+
+    with caplog.at_level("WARNING"):
+        got = q.get_sector_relative_strength(
+            client=_ExplodingMarketClient(),
+            run_date=_T7B_RUN_DATE,
+            **{**kwargs, "etfs": ["QQQ", "GDX"]},
+        )
+
+    assert set(got) == set(known)
+    for etf, row in known.items():
+        assert got[etf] == pytest.approx(row, nan_ok=True)
+    assert "sector relative strength: no sealed R2 generation for GDX" in caplog.text
 
 
 def test_last_closes_r2_matches_supabase(monkeypatch):
