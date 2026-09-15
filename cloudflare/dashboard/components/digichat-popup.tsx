@@ -7,7 +7,9 @@
  *
  * Baseline (free/brief) sees the same launcher but an upgrade CTA panel with
  * chat disabled (#3662) — never an iframe, so non-entitled tiers never burn
- * turns and never meet the free-3 gate.
+ * turns and never meet the free-3 gate. FX Hub product grantees (the 12x
+ * invite path) are the exception: they open the chat, with a desk-equivalent
+ * plan proof minted server-side.
  */
 
 import { DigichatLauncher } from '@digithings/web';
@@ -22,7 +24,7 @@ import {
   type CSSProperties,
 } from 'react';
 import { AuthContext } from '@/lib/auth-context';
-import { usePlanTier } from '@/lib/use-entitlement';
+import { useCanAccessProduct, usePlanTier } from '@/lib/use-entitlement';
 import {
   buildDigichatEmbedSrc,
   buildPageContextMessage,
@@ -64,6 +66,7 @@ export default function DigichatPopup({
   config: configOverride,
 }: DigichatPopupProps) {
   const sessionTier = usePlanTier();
+  const canFxHub = useCanAccessProduct('fx_hub');
   const pathname = usePathname();
   const tier = tierOverride ?? sessionTier;
   const auth = useContext(AuthContext);
@@ -101,7 +104,9 @@ export default function DigichatPopup({
     };
   }, [baseConfig, configOverride]);
 
-  const entitled = canUseDigichatPopup(tier);
+  // Desk+ opens the iframe; FX Hub product grantees (the 12x invite path) get
+  // the same popup — the server mints a desk-equivalent plan proof for them.
+  const entitled = canUseDigichatPopup(tier) || canFxHub;
   const [open, setOpen] = useState(false);
   const [iframeSrc, setIframeSrc] = useState('');
   const iframeRef = useRef<HTMLIFrameElement>(null);

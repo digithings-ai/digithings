@@ -116,7 +116,7 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     placeholder: BASELINE_EMBED_PLACEHOLDER,
     suggestions: [...BASELINE_EMBED_SUGGESTIONS],
     accent: null,
-    attribution: false,
+    attribution: true,
     defaultLanguage: DEFAULT_LANGUAGE_CODE,
     transcript: { userAlign: "right" },
   },
@@ -191,7 +191,7 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       suggestions: dep.chrome.suggestions,
       placeholder: dep.chrome.placeholder,
       accent: dep.chrome.accent ?? null,
-      attribution: dep.chrome.attribution === true,
+      attribution: dep.chrome.attribution !== false,
       defaultLanguage: dep.chrome.defaultLanguage ?? DEFAULT_LANGUAGE_CODE,
       transcript: {
         userAlign: dep.chrome.transcript?.userAlign ?? "right",

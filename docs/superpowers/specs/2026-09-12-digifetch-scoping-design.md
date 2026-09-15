@@ -218,6 +218,7 @@ transport; failures return the same envelope with `data` set to a typed
 | Situation | code |
 |-----------|------|
 | Wire 401/403 (gated endpoint without cookie) | `auth_required` |
+| Pro-gated route with a valid free session: 402/plan-required text or JSON body, or envelope `status: "unsupported"` + `reasonCode: "PRO_REQUIRED"` (#4110 phase 5) | `pro_required` (non-retryable, breaker-safe) |
 | Wire 404 | `not_found` |
 | Wire 429 (honor `Retry-After`) | `rate_limited` |
 | Wire 5xx / timeout | `upstream_error` (retryable) |
@@ -225,6 +226,11 @@ transport; failures return the same envelope with `data` set to a typed
 | Envelope `status: "empty"` / `"unsupported"` (provider-miss upstream) | `not_found` |
 | Envelope `status: "retryable_error"` | `upstream_error` (retryable) |
 | Envelope `status: "fatal_error"` | `upstream_error` |
+
+`pro_required` is distinct from `auth_required`: the caller has a session, it
+just is not entitled (a missing/misconfigured session stays `auth_required`,
+with no HTTP request on cookie-gated routes). Both Pro-gate shapes are
+deterministic outcomes — never retried, never counted toward the breaker.
 
 Wire status vocabulary (`api-client/types.ts:1036-1042`): `success | partial |
 empty | unsupported | retryable_error | fatal_error`; `partial` is success with

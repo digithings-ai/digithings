@@ -36,6 +36,7 @@ from digiquant.dashboard.research_retrieval.evidence_bundle import (
 from digiquant.dashboard.research_retrieval.models import TickerEvidenceBundle, TypedProvenance
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 from digiquant.dashboard.temporal import require_knowledge_cutoff_at
+from digiquant.data.gloomberb.agent_tools import PM_TOOLS
 from digiquant.portfolio.candidates import holdings_from_prior_book
 from digiquant.portfolio.models.analyst import AnalystPayload
 from digiquant.portfolio.models.forecast import (
@@ -485,6 +486,17 @@ def _publish_base_bundle_before_provider(
 
 
 def _portfolio_grounding(state: PortfolioState, *, phase: RetrievalPhase, segment: str = ""):
+    """Grounding for H5 (asset analyst) + H7 (PM direction).
+
+    #4146: both equip ``PM_TOOLS`` — a PM-fit digifetch subset (quotes/news,
+    analyst views, earnings/corporate actions, macro/credit/valuation context);
+    it also fits the ticker-scoped H5 analyst, which is why the two phases
+    share it rather than taking two near-identical subsets. Session-gated names
+    drop out when no ``GLOOMBERB_SESSION_COOKIE`` is configured.
+
+    H6 deliberation deliberately stays digifetch-free: it is research-tools-only
+    by policy (#2908), and its evidence path is the bundle + amendment flow.
+    """
     return build_grounding(
         use_data_tools=True,
         live_search=True,
@@ -494,6 +506,7 @@ def _portfolio_grounding(state: PortfolioState, *, phase: RetrievalPhase, segmen
         use_research_tools=True,
         research_phase=phase,
         watchlist=tuple(state.config.watchlist),
+        digifetch_tools=PM_TOOLS,
     )
 
 

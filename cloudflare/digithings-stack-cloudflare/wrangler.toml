@@ -134,11 +134,18 @@ new_sqlite_classes = ["DigiQuantMcpContainer"]
 #   DIGIKEY_BFF_TOKEN
 #   DIGIKEY_PRIVATE_KEY_PEM   # stable RS256; do not use ephemeral in prod
 #   DIGIKEY_ADMIN_TOKEN       # optional; for key issue / ops
+#   DIGIKEY_DATABASE_URL      # REQUIRED. Durable Postgres/Supabase URL for API
+#                             # keys + revocation state. There is no fallback --
+#                             # the instance's /data is ephemeral, so digikey
+#                             # refuses to start rather than silently losing every
+#                             # issued key (#4080). A bare postgresql:// URL is
+#                             # accepted (routed to psycopg 3).
 #   GROQ_API_KEY / OPENROUTER_API_KEY / OPENAI_API_KEY  (as needed by LiteLLM)
 #   CHEAPERINFERENCE_API_KEY  # house default digillm upstream when set
 #   CHEAPERINFERENCE_API_BASE # optional; default https://api.cheaperinference.com/v1
 #   DIGI_HOUSE_UPSTREAM       # optional; set "openrouter" to force OpenRouter
 #   LITELLM_PROXY_API_KEY     # optional shared proxy key
+#   ZAMMAD_API_TOKEN          # read-only Zammad helpdesk MCP (zammad-mcp program, OCC tickets)
 #   FRED_API_KEY              # digiquant-mcp live macro overlap (#3780 Task 8)
 #   R2_ACCOUNT_ID             # digiquant-mcp market-data history reads
 #   R2_BUCKET                 # digiquant-mcp (same digithings-archive bucket)
@@ -213,7 +220,12 @@ DIGI_ALLOWED_TOOLS = "digisearch,digivault_search_notes,digivault_get_note"
 DIGI_LLM_MODE = "test"
 CHROMA_PATH = "/data/chroma"
 DIGIVAULT_ROOT = "/data/vault"
-DIGIKEY_DATABASE_URL = "sqlite:////data/digikey.db"
+# DIGIKEY_DATABASE_URL is deliberately NOT a var: a connection URL carries a
+# password, and the Container's /data is ephemeral -- a fallback would lose every
+# issued API key and the JWT revocation blocklist on the next instance replace
+# (#4080). It is required: set it with
+# `npx wrangler secret put DIGIKEY_DATABASE_URL` (see the secrets list above), or
+# digikey refuses to start.
 DIGISEARCH_INDEX = "digithings_docs"
 # Defense-in-depth corpus map (headers from digichat still win).
 DIGI_TENANT_CORPUS_MAP = "{\"digithings\":{\"digisearchIndex\":\"digithings_docs\",\"vaultPathPrefix\":\"clients/digithings\"},\"occ\":{\"digisearchIndex\":\"occ_help\",\"vaultPathPrefix\":\"clients/online-compliance-center\"}}"

@@ -173,6 +173,7 @@ def build_grounding(
     use_research_tools: bool = False,
     research_phase: Any | None = None,
     watchlist: tuple[str, ...] = (),
+    digifetch_tools: tuple[str, ...] | None = None,
 ) -> tuple[list[dict[str, Any]] | None, Callable[[str, dict[str, Any]], str] | None, dict | None]:
     """Resolve ``(tools, execute_tool, web_grounding)`` for one research call.
 
@@ -192,6 +193,15 @@ def build_grounding(
     stale/broken ingested layer still falls through to the paid tool call, so
     grounding is never silently dropped.
 
+    ``digifetch_tools`` adds a curated subset of the digifetch x Gloomberb
+    family (``digiquant.data.gloomberb.agent_tools``, #4146) to the call; the
+    schemas are generated from the orchestrator manifest and session-/pro-/
+    preview-gated names are dropped when no ``GLOOMBERB_SESSION_COOKIE`` is
+    configured. Gloomberb is enrichment-only — never a pipeline primary — so it
+    attaches only when a primary grounding executor (data / research tools)
+    actually built: a segment with no primary grounding stays tool-less rather
+    than arming a tool loop on delayed enrichment data alone.
+
     Honors the ``DIGIQUANT_RESEARCH_DATA_TOOLS`` kill-switch. Shared by ``build_segment_node``
     and the bespoke phase nodes (equity / sectors) so the gating + wiring live in
     one place.
@@ -199,20 +209,24 @@ def build_grounding(
     tools: list[dict[str, Any]] | None = None
     execute_tool: Callable[[str, dict[str, Any]], str] | None = None
     web_grounding: dict | None = None
+    # (tool names, executor) per configured family, composed into one dispatcher
+    # below. One family → its executor directly (the historical behavior); two or
+    # more → a name-routing combined executor.
+    executors: list[tuple[frozenset[str], Callable[[str, dict[str, Any]], str]]] = []
     if use_data_tools and _data_tools_enabled():
         try:
             from digiquant.research.data.tools import DATA_TOOLS, build_data_tool_dispatcher
 
             # Anchor "as of" reads to the run's logical date (not wall-clock) so tool
             # outputs are reproducible + look-ahead-safe for backfills/delta runs.
-            execute_tool = build_data_tool_dispatcher(
+            data_execute = build_data_tool_dispatcher(
                 _research_data_client(), run_date=run_date, allowed_tables=data_tool_tables
             )
             tools = DATA_TOOLS
+            executors.append((frozenset(t["function"]["name"] for t in DATA_TOOLS), data_execute))
         except Exception as exc:  # degrade to tool-less rather than crash the phase
             logger.warning("data tools unavailable (%s); proceeding without them", exc)
             tools = None
-            execute_tool = None
     if use_research_tools and research_phase is not None and _data_tools_enabled():
         try:
             from digiquant.dashboard.research_retrieval import (
@@ -232,22 +246,51 @@ def build_grounding(
                 phase=research_phase,
                 watchlist=watchlist,
             )
-            if tools is None:
-                tools = research_defs
-                execute_tool = research_execute
-            else:
-                existing = execute_tool
-
-                def _combined_execute(name: str, args: dict[str, Any]) -> str:
-                    data_names = {t["function"]["name"] for t in DATA_TOOLS}
-                    if name in data_names and existing is not None:
-                        return existing(name, args)
-                    return research_execute(name, args)
-
-                tools = list(tools) + research_defs
-                execute_tool = _combined_execute
+            tools = (tools or []) + research_defs
+            executors.append(
+                (
+                    frozenset(t["function"]["name"] for t in research_defs),
+                    research_execute,
+                )
+            )
         except Exception as exc:  # degrade to tool-less rather than crash the phase
             logger.warning("research tools unavailable (%s); proceeding without them", exc)
+    if digifetch_tools and _data_tools_enabled() and executors:
+        # Enrichment rides along a primary grounding executor (#4146): if the
+        # Supabase data / research-tools layer failed to build (missing creds,
+        # import failure) the segment degrades to its previous tool-less path
+        # rather than arming a tool loop on delayed enrichment data alone.
+        try:
+            from digiquant.data.gloomberb.agent_tools import (
+                available_digifetch_tools,
+                build_digifetch_tool_dispatcher,
+            )
+
+            digifetch_defs = available_digifetch_tools(digifetch_tools)
+            if digifetch_defs:
+                digifetch_execute = build_digifetch_tool_dispatcher()
+                tools = (tools or []) + digifetch_defs
+                executors.append(
+                    (
+                        frozenset(t["function"]["name"] for t in digifetch_defs),
+                        digifetch_execute,
+                    )
+                )
+        except Exception as exc:  # degrade to tool-less rather than crash the phase
+            logger.warning("digifetch tools unavailable (%s); proceeding without them", exc)
+
+    if executors:
+        if len(executors) == 1:
+            execute_tool = executors[0][1]
+        else:
+
+            def _combined_execute(name: str, args: dict[str, Any]) -> str:
+                for names, executor in executors:
+                    if name in names:
+                        return executor(name, args)
+                return f"Error: unknown tool {name!r}"
+
+            execute_tool = _combined_execute
     if ai_portfolios:
         from digiquant.research.data.ai_portfolios import fetch_ai_portfolio_grounding
 
@@ -348,6 +391,16 @@ class SegmentNodeSpec:
     equity) reason cross-asset over the whole market_context. Slimmer scopes are
     for the ticker-scoped analyst and portfolio-scoped PM nodes, which build
     their own ``_shared_context`` calls directly. See :data:`DataLayerScope`.
+    """
+
+    digifetch_tools: tuple[str, ...] | None = None
+    """Curated digifetch x Gloomberb subset to equip this segment with (#4146).
+
+    ``None`` (default) keeps the segment off the Gloomberb family. Use
+    ``agent_tools.EQUITY_TOOLS`` / ``MACRO_TOOLS`` / ``PM_TOOLS``. Session-/pro-/
+    preview-gated tools inside the subset are dropped at grounding time when
+    ``GLOOMBERB_SESSION_COOKIE`` is unset, so CI/dev runs without a cookie never
+    advertise a tool that would only return ``auth_required``. Enrichment only.
     """
 
 
@@ -906,6 +959,7 @@ def build_segment_node(
             segment=spec.segment_slug,
             ai_portfolios=spec.ai_portfolios,
             live_search_is_fallback=spec.live_search_is_fallback,
+            digifetch_tools=spec.digifetch_tools,
         )
         if web_grounding:
             inputs = {**inputs, "web_grounding": web_grounding}

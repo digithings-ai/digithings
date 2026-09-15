@@ -22,6 +22,8 @@ vi.mock('@/lib/auth-context', () => ({
 }));
 vi.mock('@/lib/use-entitlement', () => ({
   usePlanTier: () => entitlement.tier,
+  useCanAccessProduct: () => false,
+  useAccessSnapshot: () => ({ effectivePlanTier: 'free' }),
 }));
 vi.mock('@/components/settings/profile-tab', () => ({
   ProfileTab: () => createElement('div', { 'data-profile': '1' }, 'profile-body'),

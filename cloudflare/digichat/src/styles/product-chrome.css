@@ -29,12 +29,31 @@
   text-decoration: underline;
 }
 
+/* The credit sits below the thread, outside its palette scope: mirror the
+   chat canvas at the shell so the strip reads as one surface with the
+   transcript (no band edge, no hairline) and paint the attribution with it. */
+.dc-embed-shell [data-thread-skin="digichat"] {
+  --term-bg: #08090b;
+}
+
+:root[data-theme="light"] .dc-embed-shell [data-thread-skin="digichat"] {
+  --term-bg: #f1f0eb;
+}
+
 .dc-attribution {
   padding: 0.25rem 0.75rem 0.5rem;
   text-align: center;
   font-size: 0.68rem;
   color: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
-  background: transparent;
+}
+
+/* Only the digichat skin mirrors the chat canvas onto the strip: the credit
+   sits below the thread, outside its palette scope, so the shell carries
+   --term-bg (dark + light) and the strip paints it to read as one surface
+   with the transcript (no band edge, no hairline). Other skins keep the
+   transparent strip so a light embed never gets a near-black band. */
+.dc-embed-shell [data-thread-skin="digichat"] .dc-attribution {
+  background: var(--term-bg);
 }
 
 .dc-attribution a {
@@ -103,7 +122,7 @@
   width: 1ch;
   height: 1.375rem;
   left: calc(var(--caret-col, 0) * 1ch + var(--caret-pad-left));
-  top: calc(var(--caret-row, 0) * 1.375rem + 0.2rem);
+  top: calc(var(--caret-row, 0) * 1.375rem + var(--caret-pad-top, 0.2rem));
   background: var(--tenant-accent, var(--accent, var(--primary)));
   font-family: var(--font-mono);
   font-size: 0.88rem;
@@ -114,6 +133,11 @@
 .dc-embed-shell [data-thread-skin] .aui-composer-input:focus + .aui-block-caret,
 .dc-embed-shell [data-thread-skin] .aui-composer-input-wrap:focus-within .aui-block-caret {
   display: block;
+}
+
+.dc-embed-shell [data-thread-skin] [data-layout="expanded"] .aui-block-caret {
+  --caret-pad-left: 0.625rem;
+  --caret-pad-top: 0.2rem;
 }
 
 @media (prefers-reduced-motion: reduce) {

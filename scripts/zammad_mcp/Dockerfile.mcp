@@ -1,0 +1,16 @@
+# zammad-mcp — read-only Zammad helpdesk MCP for the OCC embed.
+# Build context: monorepo root (`docker build -f scripts/zammad_mcp/Dockerfile.mcp .`).
+# scripts/ is a namespace package (no pyproject): copy the module as-is and pin
+# its two runtime deps. mcp stays on its current major (root AGENTS.md).
+# Serves FastMCP streamable-http on :8770; the code default bind stays loopback,
+# the container sets ZAMMAD_MCP_HOST=0.0.0.0 at run time.
+FROM python:3.12-slim
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+RUN pip install "mcp>=1.26,<2" "httpx>=0.28,<1"
+COPY scripts/zammad_mcp ./scripts/zammad_mcp
+EXPOSE 8770
+ENV ZAMMAD_MCP_HOST=0.0.0.0
+CMD ["python", "-m", "scripts.zammad_mcp.server", "--port", "8770"]

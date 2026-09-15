@@ -196,4 +196,67 @@ describe("POST /api/plan-proof", () => {
       expect(verifyPlanProof(body.proof, PLAN_PROOF_SECRET)).toBe(tier);
     }
   });
+
+  it("mints a desk-equivalent proof for fx_hub product grantees (#3662)", async () => {
+    const jsonResponse = (payload: unknown, status = 200) =>
+      ({
+        ok: status >= 200 && status < 300,
+        status,
+        json: async () => payload,
+      }) as unknown as Response;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/auth/v1/user")) {
+        return jsonResponse({ app_metadata: { plan_tier: "free" } });
+      }
+      if (url.includes("/rest/v1/rpc/my_access")) {
+        return jsonResponse({ products: ["fx_hub"] });
+      }
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await POST(makeReq({ authorization: "Bearer sess-token" }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { proof: string; tier: string };
+    expect(body.tier).toBe("desk");
+
+    const { verifyPlanProof } = await import("@/lib/plan-proof");
+    expect(verifyPlanProof(body.proof, PLAN_PROOF_SECRET)).toBe("desk");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${SUPABASE_URL}/rest/v1/rpc/my_access`,
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer sess-token",
+          apikey: ANON_KEY,
+          "Content-Type": "application/json",
+        }),
+      }),
+    );
+  });
+
+  it("still returns 403 when free claims lack the fx_hub product grant", async () => {
+    const jsonResponse = (payload: unknown, status = 200) =>
+      ({
+        ok: status >= 200 && status < 300,
+        status,
+        json: async () => payload,
+      }) as unknown as Response;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/auth/v1/user")) {
+        return jsonResponse({ app_metadata: { plan_tier: "free" } });
+      }
+      if (url.includes("/rest/v1/rpc/my_access")) {
+        return jsonResponse({ products: [] });
+      }
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await POST(makeReq({ authorization: "Bearer sess-token" }));
+    expect(res.status).toBe(403);
+  });
 });
