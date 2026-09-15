@@ -4,10 +4,11 @@ Stdlib ``sqlite3`` only: this store is the single source of truth for monitor
 schedules, run history, and the dedup memory the runner reads. Tables mirror the
 spec's §3 storage note:
 
-- ``watches (watch_id PK, body JSON, updated_at, workspace_id)`` — ``body`` is
-  the full ``Watch`` document so the model can evolve without migrations;
-  ``updated_at`` orders listings and ``workspace_id`` backs the API's workspace
-  filter as a real column (queryable columns stay real columns).
+- ``watches (watch_id PK, body JSON, updated_at, workspace_id, secret)`` —
+  ``body`` is the full ``Watch`` document so the model can evolve without
+  migrations; ``updated_at`` orders listings and ``workspace_id`` backs the
+  API's workspace filter as a real column (queryable columns stay real columns);
+  ``secret`` is the nullable per-watch delivery secret (R8).
 - ``runs (run_id PK, watch_id, status, trigger, started_at, finished_at, body)``
   with an index on ``(watch_id, started_at DESC)``. Runs are an append-only log
   and are retained after their watch is deleted; the raw ``results_all`` in the
@@ -36,6 +37,16 @@ recomputes fingerprints with the public
 :func:`digisearch.monitors.dedup.result_fingerprint` (never ad-hoc field
 picking) and keys them with the landed Phase B ``normalize_url``, so the runner
 can hand the map straight to :func:`digisearch.monitors.dedup.dedup_results`.
+
+Delivery secrets (R8): the secret lives in the dedicated nullable ``secret``
+column, never in the watch body, so :meth:`MonitorStore.get_watch` and
+:meth:`MonitorStore.list_watches` (body-only selects) can never expose it.
+The HTTP create/rotate path writes it with
+:meth:`MonitorStore.set_delivery_secret`; the runner reads it with
+:meth:`MonitorStore.get_delivery_secret`, where ``None`` means the watch has no
+secret yet. Fresh databases get the column from the schema; databases created
+before it existed are upgraded in ``__init__`` with a guarded ``ALTER TABLE``,
+and a failed upgrade propagates rather than leaving a half-migrated store.
 
 Store home: :func:`get_store` resolves explicit path →
 ``DIGISEARCH_MONITORS_DB`` → ``{DIGI_WORKSPACE}/.digisearch/monitors.sqlite3`` →
@@ -78,7 +89,8 @@ CREATE TABLE IF NOT EXISTS watches (
     watch_id TEXT PRIMARY KEY,
     body TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    workspace_id TEXT
+    workspace_id TEXT,
+    secret TEXT
 );
 CREATE TABLE IF NOT EXISTS runs (
     run_id TEXT PRIMARY KEY,
@@ -126,6 +138,19 @@ def _encode_ulid(value: int) -> str:
     return "".join(chars)
 
 
+def _ensure_secret_column(conn: sqlite3.Connection) -> None:
+    """Add the ``secret`` column when a pre-existing DB predates it.
+
+    ``CREATE TABLE IF NOT EXISTS`` cannot add columns to an existing table, so
+    databases created before the R8 column are upgraded here. Any failure
+    (read-only file, lock) propagates out of ``__init__`` rather than leaving a
+    store whose schema is missing the column.
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(watches)")}
+    if "secret" not in columns:
+        conn.execute("ALTER TABLE watches ADD COLUMN secret TEXT")
+
+
 class MonitorStore:
     """SQLite-backed watch/run store (single connection, single thread)."""
 
@@ -136,6 +161,7 @@ class MonitorStore:
         self._conn.execute(f"PRAGMA busy_timeout={_BUSY_TIMEOUT_MS}")
         with self._conn:
             self._conn.executescript(_SCHEMA)
+            _ensure_secret_column(self._conn)
 
     def create_watch(self, watch: Watch) -> Watch:
         """Persist *watch* with a server-assigned ``watch_id`` and timestamps."""
@@ -173,8 +199,12 @@ class MonitorStore:
     def update_watch(self, watch_id: str, patch: dict[str, Any]) -> Watch:
         """Apply a partial *patch*, re-validating the merged watch document.
 
-        ``watch_id`` and ``created_at`` are server-owned and cannot be changed
-        by the patch; ``updated_at`` is bumped to the current UTC time.
+        Merging is top-level: a nested object supplied in the patch replaces
+        that whole nested object, so keys omitted from it fall back to their
+        model defaults (e.g. ``{"dedup": {"match": "url"}}`` resets
+        ``similarity_threshold`` to 0.9). ``watch_id`` and ``created_at`` are
+        server-owned and cannot be changed by the patch; ``updated_at`` is
+        bumped to the current UTC time.
         """
         current = self.get_watch(watch_id)
         merged = {**current.model_dump(mode="json"), **patch}
@@ -199,6 +229,34 @@ class MonitorStore:
             cursor = self._conn.execute("DELETE FROM watches WHERE watch_id = ?", (watch_id,))
         if cursor.rowcount == 0:
             raise MonitorStoreError(f"watch not found: {watch_id}", code="watch_not_found")
+
+    def set_delivery_secret(self, watch_id: str, secret: str) -> None:
+        """Store (or rotate) the per-watch delivery secret (R8).
+
+        The secret is written to its own column, never into the watch body, so
+        public watch payloads cannot expose it. A missing watch raises
+        ``watch_not_found``.
+        """
+        with self._conn:
+            cursor = self._conn.execute(
+                "UPDATE watches SET secret = ? WHERE watch_id = ?", (secret, watch_id)
+            )
+        if cursor.rowcount == 0:
+            raise MonitorStoreError(f"watch not found: {watch_id}", code="watch_not_found")
+
+    def get_delivery_secret(self, watch_id: str) -> str | None:
+        """Return the stored secret; ``None`` when the watch has none yet.
+
+        A missing watch raises ``watch_not_found``. ``None`` is a real state
+        (watch created without a secret) and callers must treat it loudly, not
+        as permission to skip delivery silently.
+        """
+        row = self._conn.execute(
+            "SELECT secret FROM watches WHERE watch_id = ?", (watch_id,)
+        ).fetchone()
+        if row is None:
+            raise MonitorStoreError(f"watch not found: {watch_id}", code="watch_not_found")
+        return row[0]
 
     def append_run(self, run: MonitorRun) -> MonitorRun:
         """Persist *run* and return it unchanged.

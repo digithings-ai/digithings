@@ -2,9 +2,10 @@
 
 Pins the real SQLite persistence layer: 26-char ULID watch ids assigned on
 create, watch CRUD with patch re-validation, runs retained after watch delete,
-newest-first run pagination with a run-id cursor, and the ``seen_fingerprints``
+newest-first run pagination with a run-id cursor, the ``seen_fingerprints``
 dedup memory that recomputes stored raw results with Task 3's public
-``result_fingerprint`` (R7 extraction) instead of ad-hoc hashing.
+``result_fingerprint`` (R7 extraction) instead of ad-hoc hashing, and the
+per-watch delivery secret (R8) that lives outside every public watch payload.
 
 No mocks: every test opens real sqlite files under ``tmp_path`` (never the real
 workspace dir). Offline and stdlib-only.
@@ -12,6 +13,7 @@ workspace dir). Offline and stdlib-only.
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from typing import Any
@@ -197,6 +199,16 @@ def test_update_watch_revalidates_the_merged_document(tmp_path):
     assert ei.value.code == "watch_not_found"
 
 
+def test_update_watch_nested_patch_replaces_whole_object(tmp_path):
+    """Top-level merge: a nested patch replaces the object, defaults return."""
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    w = store.create_watch(_watch(dedup={"match": "url_content", "similarity_threshold": 0.5}))
+    updated = store.update_watch(w.watch_id, {"dedup": {"match": "url"}})
+    assert updated.dedup.match == "url"
+    assert updated.dedup.similarity_threshold == 0.9
+    assert store.get_watch(w.watch_id).dedup.similarity_threshold == 0.9
+
+
 def test_delete_watch_retains_runs_and_is_fail_hard_when_missing(tmp_path):
     store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
     w = store.create_watch(_watch())
@@ -211,6 +223,70 @@ def test_delete_watch_retains_runs_and_is_fail_hard_when_missing(tmp_path):
     with pytest.raises(MonitorStoreError) as ei:
         store.delete_watch(w.watch_id)
     assert ei.value.code == "watch_not_found"
+
+
+def test_delivery_secret_roundtrip_and_rotation(tmp_path):
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    w = store.create_watch(_watch())
+    assert store.get_delivery_secret(w.watch_id) is None
+    store.set_delivery_secret(w.watch_id, "s3cr3t")
+    assert store.get_delivery_secret(w.watch_id) == "s3cr3t"
+    store.set_delivery_secret(w.watch_id, "rotated")
+    assert store.get_delivery_secret(w.watch_id) == "rotated"
+
+
+def test_delivery_secret_unknown_watch_raises_watch_not_found(tmp_path):
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    with pytest.raises(MonitorStoreError) as ei:
+        store.set_delivery_secret("missing", "s3cr3t")
+    assert ei.value.code == "watch_not_found"
+    with pytest.raises(MonitorStoreError) as ei:
+        store.get_delivery_secret("missing")
+    assert ei.value.code == "watch_not_found"
+
+
+def test_delivery_secret_deleted_with_watch_and_never_in_watch_payloads(tmp_path):
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    w = store.create_watch(_watch())
+    store.set_delivery_secret(w.watch_id, "s3cr3t")
+    assert "secret" not in Watch.model_fields
+    assert "delivery_secret" not in Watch.model_fields
+    payloads = [
+        store.get_watch(w.watch_id).model_dump(mode="json"),
+        *(item.model_dump(mode="json") for item in store.list_watches()),
+    ]
+    for payload in payloads:
+        assert "secret" not in payload and "delivery_secret" not in payload
+        assert "s3cr3t" not in json.dumps(payload)
+    store.delete_watch(w.watch_id)
+    with pytest.raises(MonitorStoreError) as ei:
+        store.get_delivery_secret(w.watch_id)
+    assert ei.value.code == "watch_not_found"
+
+
+def test_legacy_watch_table_gains_secret_column(tmp_path):
+    """Pre-existing DBs get the column via the guarded ALTER path."""
+    path = tmp_path / "legacy.sqlite3"
+    legacy = _watch().model_copy(update={"watch_id": "legacy-1"})
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE watches (watch_id TEXT PRIMARY KEY, body TEXT NOT NULL, "
+            "updated_at TEXT NOT NULL, workspace_id TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE runs (run_id TEXT PRIMARY KEY, watch_id TEXT NOT NULL, "
+            "status TEXT NOT NULL, trigger TEXT NOT NULL, started_at TEXT NOT NULL, "
+            "finished_at TEXT NOT NULL, body TEXT NOT NULL)"
+        )
+        conn.execute(
+            "INSERT INTO watches (watch_id, body, updated_at, workspace_id) VALUES (?, ?, ?, ?)",
+            ("legacy-1", legacy.model_dump_json(), "2026-09-14T00:00:00.000000+00:00", None),
+        )
+    store = MonitorStore(db_path=str(path))
+    assert store.get_watch("legacy-1").watch_id == "legacy-1"
+    assert store.get_delivery_secret("legacy-1") is None
+    store.set_delivery_secret("legacy-1", "s3cr3t")
+    assert store.get_delivery_secret("legacy-1") == "s3cr3t"
 
 
 def test_run_round_trip_preserves_envelope(tmp_path):
@@ -265,6 +341,20 @@ def test_list_runs_clamps_limit_and_rejects_unknown_cursor(tmp_path):
     with pytest.raises(MonitorStoreError) as ei:
         store.list_runs(w.watch_id, limit=2, cursor="missing")
     assert ei.value.code == "run_not_found"
+
+
+def test_list_runs_empty_watch_and_exact_remaining_page(tmp_path):
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    w = store.create_watch(_watch())
+    assert store.list_runs(w.watch_id) == ([], None)
+    for i in range(4):
+        store.append_run(_run(f"r{i}", w.watch_id))
+    first, cursor = store.list_runs(w.watch_id, limit=2)
+    assert [r.run_id for r in first] == ["r3", "r2"]
+    assert cursor == "r2"
+    second, cursor2 = store.list_runs(w.watch_id, limit=2, cursor=cursor)
+    assert [r.run_id for r in second] == ["r1", "r0"]
+    assert cursor2 is None
 
 
 def test_seen_fingerprints_merges_newest_run_first(tmp_path):
