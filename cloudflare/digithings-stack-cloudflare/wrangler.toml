@@ -1,12 +1,15 @@
 # digithings Profile A stack on Cloudflare Containers (Workers Paid).
 # One multi-process Container: digikey + digigraph + digisearch + digivault + LiteLLM.
 # Public hostnames (auth still required on APIs):
-#   graph.digithings.ai → digigraph :8000
-#   key.digithings.ai   → digikey   :8005
-# digisearch / digivault / LiteLLM stay loopback-only inside the Container.
+#   graph.digithings.ai  → digigraph   :8000
+#   key.digithings.ai    → digikey     :8005
+#   search.digithings.ai → digisearch  :8002  (digikey JWT `digisearch:query`)
+# digivault / LiteLLM stay loopback-only inside the Container.
 #
-# HUMAN GATE — infra/network: these hostnames expose digigraph + digikey to the
-# public internet (JWT/BFF still required). Secrets via `wrangler secret put` only.
+# HUMAN GATE — infra/network: these hostnames expose digigraph + digikey +
+# digisearch to the public internet (JWT/BFF still required). The search route
+# is a new external route, owner-approved for CI web grounding (#4063).
+# Secrets via `wrangler secret put` only.
 name = "digithings-stack"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
@@ -24,7 +27,11 @@ binding = "MARKET_DATA"
 bucket_name = "digithings-archive"
 
 # Custom domains — the only ingress. Verify /healthz on each after deploy.
-# Human gate: public digigraph + digikey; JWT/BFF still required on APIs.
+# Human gate: public digigraph + digikey + digisearch; JWT/BFF still required
+# on APIs. Auth-exempt on each host is only the shared service allowlist
+# (/health, /healthz, /metrics, /docs, /redoc, /openapi.json, OPTIONS
+# preflights) plus the Worker-served /_stack/meta and /v1/market/tickers|closes,
+# and /_stack/key/* which proxies to digikey.
 [[routes]]
 pattern = "graph.digithings.ai"
 zone_name = "digithings.ai"
@@ -32,6 +39,21 @@ custom_domain = true
 
 [[routes]]
 pattern = "key.digithings.ai"
+zone_name = "digithings.ai"
+custom_domain = true
+
+# Hosted digisearch (#4063 — new external route, owner-approved): the CI book
+# pipeline's web grounding calls digisearch's POST /v1/orchestrator_invoke with
+# a digikey JWT scoped `digisearch:query`, enforced per path by digisearch's
+# DigiAuthMiddleware (digisearch_path_scopes). Auth-exempt is only the shared
+# service allowlist — /health, /healthz, /metrics, /docs, /redoc,
+# /openapi.json — plus OPTIONS preflights (CORS is enforced separately);
+# everything else (/query, /ingest, /v1/*) needs a scoped JWT. The in-container
+# base stays http://127.0.0.1:8002 for digigraph — this route only adds the
+# external ingress. Declared here like graph/key; `wrangler deploy` provisions
+# the custom domain.
+[[routes]]
+pattern = "search.digithings.ai"
 zone_name = "digithings.ai"
 custom_domain = true
 
