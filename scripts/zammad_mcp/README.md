@@ -67,8 +67,21 @@ The compose service name `zammad-mcp` is dotless, so digigraph's remote-MCP
 guard treats it as container-internal DNS; loopback URLs are never dialable
 (`orchestration/mcp_client.py`, #3879).
 
-Production hosting (public hostname vs. dedicated container) is a later,
-owner-gated decision.
+### Production (digithings-stack container)
+
+In production the server is **not** a separate container: it runs as the
+`zammad-mcp` program inside the `digithings-stack` Cloudflare Container
+(`cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.conf`),
+bound to `0.0.0.0:8770`. The image ships the package (`COPY scripts/zammad_mcp`
+in `Dockerfile.digithings-stack-cloudflare`) and the entrypoint aliases the
+dotless name `zammad-mcp` to the container's own address in `/etc/hosts`, so
+digigraph's remote-MCP guard can dial `http://zammad-mcp:8770/mcp` (dotless
+names may resolve to private space; loopback is never dialable, #3879). Set the
+token on the stack worker only — `wrangler secret put ZAMMAD_API_TOKEN` — with
+the same `Token token=<x>` value. The MCP port stays inside the container (no
+public route), and the prod occ tenant entry in `DIGICHAT_EMBED_TENANTS` does
+not need `tokenEnv`: the server authenticates to Zammad with its own
+environment.
 
 ## Privacy & exposure
 

@@ -65,6 +65,9 @@ COPY infra/digichat-release/config /app/config
 # House Cheaper Inference overlay + merge script (boot-time merge when key set)
 COPY config/litellm.cheaperinference.yaml /app/config/litellm.cheaperinference.yaml
 COPY scripts/merge_litellm_cheaperinference.py /app/scripts/merge_litellm_cheaperinference.py
+# Read-only Zammad MCP for the OCC help chat (supervisord [program:zammad-mcp];
+# deps `mcp` + `httpx` already present via digigraph[mcp]).
+COPY scripts/zammad_mcp ./scripts/zammad_mcp
 COPY cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
      /etc/supervisor/conf.d/digithings.conf
 COPY cloudflare/digithings-stack-cloudflare/container/entrypoint.sh /entrypoint.sh
