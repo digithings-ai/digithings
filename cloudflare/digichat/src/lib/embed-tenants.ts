@@ -438,7 +438,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         aliases: v.aliases as string[] | undefined,
       }),
     accent,
-    attribution: v.attribution === true,
+    attribution: v.attribution !== false,
     token: v.token,
     title: typeof v.title === "string" ? v.title : undefined,
     welcome: typeof v.welcome === "string" ? v.welcome : undefined,

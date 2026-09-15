@@ -85,7 +85,7 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   theme: "dark",
   skin: BASELINE_EMBED_SKIN,
   accent: null,
-  attribution: false,
+  attribution: true,
   welcome: BASELINE_EMBED_WELCOME,
   welcomeBody: [...BASELINE_EMBED_WELCOME_BODY],
   placeholder: BASELINE_EMBED_PLACEHOLDER,

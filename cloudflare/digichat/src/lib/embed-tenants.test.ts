@@ -197,7 +197,7 @@ describe("parseEmbedTenants", () => {
     ).toThrow(/skin/);
   });
 
-  it("defaults theme to dark and attribution to false when omitted", () => {
+  it("defaults theme to dark and attribution to true when omitted", () => {
     const reg = parseEmbedTenants(
       JSON.stringify({
         "example.com": {
@@ -209,7 +209,7 @@ describe("parseEmbedTenants", () => {
       })
     );
     expect(reg.get("example.com")?.theme).toBe("dark");
-    expect(reg.get("example.com")?.attribution).toBe(false);
+    expect(reg.get("example.com")?.attribution).toBe(true);
   });
 
   it("parses digigraph corpus routing fields for OCC-style tenants", () => {
