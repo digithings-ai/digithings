@@ -1872,7 +1872,9 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   `preflight_reflect` (not inside `decision_log`), snapshots due typed forecasts into
   `olympus_forecast_outcomes` using the trading calendar + first observed closes,
   cutoff eligibility, same-run exclusion, and append-only idempotency. Missing
-  calendar/close stays pending (never zero-return). **Shadow calibrator (#2680 / WP5.3):**
+  calendar/close stays pending (never zero-return) — including a ticker with no
+  sealed R2 generation (`UnknownTickerError`), where a matured forecast that has left
+  the universe stays pending instead of crashing the research graph (#4120). **Shadow calibrator (#2680 / WP5.3):**
   `portfolio/forecast_calibration.py` shrinks cohort residual bias toward a declared
   zero-mean prior (`PRIOR_DEFINITION` / `METHOD_VERSION`), reports Brier/log scores via
   Polars aggregation, and emits observational `CalibratedForecast` subjects with

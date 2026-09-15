@@ -106,9 +106,10 @@ def test_reused_graph_times_each_run_separately(caplog: pytest.LogCaptureFixture
 
 
 def test_progress_narration_never_reaches_warning(caplog: pytest.LogCaptureFixture) -> None:
-    graph = build_pipeline(_State, [PipelinePhase(name="solo", nodes=[_node("solo", "a_out")])])
-
+    # Built inside the block: the compile-time line is INFO, so capturing it must
+    # not depend on whatever level an earlier test left on the root logger.
     with caplog.at_level(logging.WARNING, logger=LOGGER):
+        graph = build_pipeline(_State, [PipelinePhase(name="solo", nodes=[_node("solo", "a_out")])])
         graph.invoke(_State())
 
     assert _messages(caplog) == []
