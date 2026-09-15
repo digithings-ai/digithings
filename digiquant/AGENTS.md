@@ -508,8 +508,8 @@ stays a generic transport engine (no URLs, no env reads).
   source of record. Contract violations are **rejected** (`invalid_input`), never
   clamped. Do not rewire prices/history/technicals onto it.
 - **Envelope contract.** Every call returns `DigifetchEnvelope[T]` with `data`
-  either the payload or a typed `DigifetchError` (`auth_required` / `not_found` /
-  `rate_limited` / `upstream_error` / `invalid_input`); tools never raise. Keep the
+  either the payload or a typed `DigifetchError` (`auth_required` / `pro_required` /
+  `not_found` / `rate_limited` / `upstream_error` / `invalid_input`); tools never raise. Keep the
   two freshness signals distinct: wire `stale` → `"Upstream cache stale"`;
   `dataSource: "delayed"` / `delayMinutes > 0` → `"Free-tier data delayed up to
   15 minutes"` (not stale).
@@ -525,11 +525,11 @@ stays a generic transport engine (no URLs, no env reads).
   cookie-gated one).
 - **Plan and upstream caveats (#4110 phase 1).** `digifetch_transcripts` requires
   a **Gloomberb Pro** plan: a free (email-verified) session's non-JSON
-  `Pro plan required` body maps to a typed `auth_required` with the upstream
+  `Pro plan required` body maps to a typed `pro_required` with the upstream
   text — never an empty success and never a generic non-JSON error; the live
-  status is 402, which `_map_http_error` also maps to `auth_required` (payment
-  required is a plan gate, not a malformed request), and the plan-gate path must
-  not trip the circuit breaker. Read transcript rows from the upstream `calls`
+  status is 402 and the body-based plan detection runs before `_map_http_error`
+  (a bare 402 with no recognizable plan body keeps the generic `auth_required`
+  mapping), and the plan-gate path must not trip the circuit breaker. Read transcript rows from the upstream `calls`
   key (`companyName`/`callAt`/`webcastUrl`); `transcripts` is accepted only as a
   wrapped variant. `digifetch_congress_trades` is exposed but its upstream
   Mistral OCR dependency currently answers HTTP 500 (`402 Customer monthly
@@ -550,7 +550,7 @@ stays a generic transport engine (no URLs, no env reads).
   partly-probed routes without a live probe.
 - **Plan and upstream caveats (#4110 phase 2).** `digifetch_screener` is the
   second Pro-only tool and has **two plan-gate shapes** that must map to the
-  same non-retryable `auth_required`: the 402 text body
+  same non-retryable `pro_required`: the 402 text body
   (`Pro plan required`) and the live free-session HTTP 200 envelope
   `{"status":"unsupported","data":null,"reasonCode":"PRO_REQUIRED"}` (matched
   by `pro_gated` in `_request_json`, before `_status_error` can turn it into
@@ -613,6 +613,30 @@ stays a generic transport engine (no URLs, no env reads).
   auctions (fiscaldata), prediction markets (local model), scanner (websocket).
   See ARCHITECTURE §5 for the full list; the per-transcript detail route
   (`/cloud/transcripts/{id}`) remains a candidate extension.
+- **Entitlements (#4110 phase 5).** Every digifetch tool declares exactly one
+  entitlement in `data/gloomberb/entitlements.py` (`TOOL_ENTITLEMENTS`):
+  `free` (anonymous), `session` (`GLOOMBERB_SESSION_COOKIE` required; without
+  it the tool returns `auth_required` with no HTTP request), `preview`
+  (session required, but a free session still gets a labeled preview —
+  `digifetch_equity_diagnostic` only), or `pro` (session **and** a Gloomberb
+  Pro plan — `digifetch_transcripts`, `digifetch_screener`). The declaration is
+  surfaced in the MCP registration (`_maybe_tool` sets `fn.entitlement` and
+  appends the note to the description), as a top-level `entitlement` key on the
+  orchestrator manifest entry plus the same description note, and therefore in
+  every tool description. Keep MCP and manifest in sync by editing only
+  `TOOL_ENTITLEMENTS` — `test_entitlement_note_is_surfaced_in_mcp_and_manifest`
+  pins it. `pro_required` is deliberately distinct from `auth_required`: the
+  session is valid but not entitled (upgrade the account / supply a Pro
+  account's cookie), and it is always non-retryable and breaker-safe. A Pro
+  session is supplied by putting a **Gloomberb Pro account's** cookie in
+  `GLOOMBERB_SESSION_COOKIE` (bare token or `name=value`); there is no separate
+  Pro switch. Preview reports carry the envelope warning
+  `preview access: report is a free-tier preview (access=preview)`
+  (`PREVIEW_ACCESS_WARNING`) plus `data.report.access == "preview"`; full
+  reports carry neither. Note: DigiQuant's highest subscription tier may bundle
+  Gloomberb Pro in the future — a business/partnership follow-up only; the
+  `pro` declaration is the hook, and no billing/entitlement-upgrade code exists
+  in this phase.
 - **Attribution (spec §7).** Payloads carry "Sourced from Gloomberb" + the delay
   notice and a `term.gloom.sh/?ticker=` deep link where one listing is addressed.
   The Yahoo-backed earnings calendar must **not** claim Gloomberb attribution.

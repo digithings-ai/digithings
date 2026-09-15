@@ -31,10 +31,20 @@ from .client import (
     RETRYABLE_EXCEPTIONS,
     SESSION_COOKIE_NAMES,
     GloomberbClient,
+    session_cache_fingerprint,
     yfinance_earnings_events,
+)
+from .entitlements import (
+    ENTITLEMENT_DESCRIPTIONS,
+    TOOL_ENTITLEMENTS,
+    Entitlement,
+    entitlement_for,
+    entitlement_note,
+    with_entitlement_note,
 )
 from .models import (
     INTRADAY_RESOLUTIONS,
+    PREVIEW_ACCESS_WARNING,
     PROVIDER_ID,
     RANGE_ORDER,
     RESOLUTION_MAX_RANGE,
@@ -270,6 +280,7 @@ __all__ = [
     "GLOOMBERB_SESSION_COOKIE_ENV",
     "RETRYABLE_EXCEPTIONS",
     "SESSION_COOKIE_NAMES",
+    "session_cache_fingerprint",
     "ENDPOINTS",
     "DEFAULT_CACHE_TTL_SECONDS",
     "DEFAULT_MIN_INTERVAL_SECONDS",
@@ -279,6 +290,14 @@ __all__ = [
     # models
     "SOURCE",
     "PROVIDER_ID",
+    "PREVIEW_ACCESS_WARNING",
+    # entitlements (#4110 phase 5)
+    "Entitlement",
+    "TOOL_ENTITLEMENTS",
+    "ENTITLEMENT_DESCRIPTIONS",
+    "entitlement_for",
+    "entitlement_note",
+    "with_entitlement_note",
     "Resolution",
     "Range",
     "RANGE_ORDER",

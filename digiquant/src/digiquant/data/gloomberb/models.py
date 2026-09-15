@@ -42,6 +42,7 @@ from pydantic.alias_generators import to_camel
 __all__ = [
     "SOURCE",
     "PROVIDER_ID",
+    "PREVIEW_ACCESS_WARNING",
     "Resolution",
     "Range",
     "RANGE_ORDER",
@@ -285,11 +286,17 @@ CurrencyCode = Annotated[
 ]
 ErrorCode = Literal[
     "auth_required",
+    "pro_required",
     "not_found",
     "rate_limited",
     "upstream_error",
     "invalid_input",
 ]
+
+# Envelope warning appended when the equity diagnostic serves a preview report
+# (`access == "preview"`) to a free session. A stable, machine-matchable marker;
+# `data.report.access` stays the canonical passthrough field (#4110 phase 5).
+PREVIEW_ACCESS_WARNING = "preview access: report is a free-tier preview (access=preview)"
 
 
 class _CamelModel(BaseModel):

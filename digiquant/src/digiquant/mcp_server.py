@@ -614,11 +614,24 @@ def create_mcp_server(
     _require_mcp()
     mcp = FastMCP("digiquant", host=host, port=port)
     enabled = READ_SCOPE_TOOLS if scope == "read" else None
+    # Declared per-tool entitlements for the digifetch x Gloomberb family
+    # (#4110 phase 5). Attached to the registered function and appended to the
+    # description so MCP and the orchestrator manifest cannot drift.
+    from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS, with_entitlement_note
 
     def _maybe_tool(name: str):
-        """Register the tool unless a read scope excludes it."""
+        """Register the tool unless a read scope excludes it.
+
+        A digifetch tool with a declared entitlement gets
+        ``fn.entitlement`` and an entitlement sentence appended to the
+        registered description.
+        """
 
         def _register(fn):
+            entitlement = TOOL_ENTITLEMENTS.get(name)
+            if entitlement is not None:
+                fn.entitlement = entitlement
+                fn.__doc__ = with_entitlement_note(name, fn.__doc__ or "")
             if enabled is None or name in enabled:
                 return mcp.tool(name=name)(fn)
             return fn
@@ -1278,7 +1291,7 @@ def create_mcp_server(
 
         Requires GLOOMBERB_SESSION_COOKIE **and** a Gloomberb Pro plan. A free
         (email-verified) session answers a "Pro plan required" body, mapped to
-        a typed `auth_required` with the upstream text - never an empty
+        a typed `pro_required` with the upstream text - never an empty
         success. Carries a term.gloom.sh deep link for `ticker`.
         """
         try:
@@ -1376,7 +1389,7 @@ def create_mcp_server(
         Requires GLOOMBERB_SESSION_COOKIE **and** a Gloomberb Pro plan. A free
         session answers HTTP 200 `status=unsupported` + `reasonCode=PRO_REQUIRED`
         (or a 402 "Pro plan required" body), both mapped to a typed
-        `auth_required` - never `not_found` and never an empty success.
+        `pro_required` - never `not_found` and never an empty success.
         `count` is 1-50; `mode` is cache-first | refresh. Prices are delayed.
         """
         try:
