@@ -20,20 +20,26 @@ from digiquant.data.gloomberb.models import (  # noqa: E402
     EconCalendarEvent,
     EconCalendarInput,
     EconSeriesInput,
+    EquityDiagnosticInput,
     ExchangeRateInput,
+    FilingEventsInput,
     HoldersInput,
     NewsInput,
     OptionsChainInput,
     PriceHistoryInput,
+    ProxyStatementsInput,
     QuoteEnvelope,
     QuoteInput,
     QuoteResult,
     QuotesBatchInput,
     ResearchSearchInput,
+    RiskReportsInput,
     ScreenerInput,
     ScreenerRow,
     SearchInput,
     SecFilingsInput,
+    ShillerInput,
+    ShortInterestInput,
     StatementsInput,
     ThirteenFFundsInput,
     ThirteenFHoldingsInput,
@@ -386,3 +392,56 @@ def test_screener_row_follows_the_ts_item_shape() -> None:
         "last_updated",
         "data_source",
     } <= set(ScreenerRow.model_fields)
+
+
+# ── coverage-expansion input bounds (#4110 phase 3) ─────────────────────────
+
+
+def test_shiller_limit_is_bounded() -> None:
+    assert ShillerInput().limit == 240
+    assert ShillerInput(limit=2000).limit == 2000
+    with pytest.raises(ValidationError):
+        ShillerInput(limit=0)
+    with pytest.raises(ValidationError):
+        ShillerInput(limit=2001)
+
+
+def test_proxy_statements_what_and_year_rules() -> None:
+    assert ProxyStatementsInput(ticker="AAPL").what == "list"
+    with pytest.raises(ValidationError, match="requires year"):
+        ProxyStatementsInput(ticker="AAPL", what="statement")
+    statement = ProxyStatementsInput(ticker="AAPL", what="statement", year=2026)
+    assert statement.year == 2026
+    with pytest.raises(ValidationError):
+        ProxyStatementsInput(ticker="AAPL", what="filing")  # type: ignore[arg-type]
+
+
+def test_filing_events_limit_is_bounded() -> None:
+    assert FilingEventsInput(ticker="AAPL", limit=200).limit == 200
+    with pytest.raises(ValidationError):
+        FilingEventsInput(ticker="AAPL", limit=201)
+
+
+def test_risk_reports_what_and_year_rules() -> None:
+    assert RiskReportsInput(ticker="AAPL").what == "list"
+    with pytest.raises(ValidationError, match="requires year"):
+        RiskReportsInput(ticker="AAPL", what="report")
+    assert RiskReportsInput(ticker="AAPL", what="report", year=2025).year == 2025
+    with pytest.raises(ValidationError):
+        RiskReportsInput(ticker="AAPL", what="summary")  # type: ignore[arg-type]
+
+
+def test_short_interest_years_is_bounded() -> None:
+    assert ShortInterestInput(symbol="AAPL").years == 3
+    assert ShortInterestInput(symbol="AAPL", years=10).years == 10
+    with pytest.raises(ValidationError):
+        ShortInterestInput(symbol="AAPL", years=0)
+    with pytest.raises(ValidationError):
+        ShortInterestInput(symbol="AAPL", years=11)
+
+
+def test_equity_diagnostic_mode_vocabulary() -> None:
+    assert EquityDiagnosticInput(symbol="AAPL").mode == "cache-first"
+    assert EquityDiagnosticInput(symbol="AAPL", mode="refresh").mode == "refresh"
+    with pytest.raises(ValidationError):
+        EquityDiagnosticInput(symbol="AAPL", mode="force")  # type: ignore[arg-type]

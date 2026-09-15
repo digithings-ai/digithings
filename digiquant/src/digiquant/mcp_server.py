@@ -543,7 +543,7 @@ def _require_mcp() -> type:
 
 #: Tools safe for the dashboard-chat surface: latest/historical runs, published
 #: research reads, prices/technicals, macro, the house book, read-only gate
-#: evaluations, the coinmetrics catalog discovery tool, and the 27 digifetch x
+#: evaluations, the coinmetrics catalog discovery tool, and the 33 digifetch x
 #: Gloomberb enrichment reads (#4069, #4110, spec §12.3 scope=read). Everything
 #: else (backtest / optimize / pipeline / export / fetches / fits / tearsheets /
 #: policy-replay runs) is compute or mutate and stays on ``scope="full"`` only.
@@ -586,6 +586,12 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digifetch_screener",
         "digifetch_13f_funds",
         "digifetch_13f_holdings",
+        "digifetch_shiller",
+        "digifetch_proxy_statements",
+        "digifetch_filing_events",
+        "digifetch_risk_reports",
+        "digifetch_short_interest",
+        "digifetch_equity_diagnostic",
     }
 )
 
@@ -923,11 +929,13 @@ def create_mcp_server(
         return json.dumps(out, indent=2, default=str)
 
     # ── digifetch x Gloomberb market-data reads (#4069, #4110) ──────────────
-    # 27 enrichment tools over api.gloom.sh (plus a Yahoo-backed earnings
+    # 33 enrichment tools over api.gloom.sh (plus a Yahoo-backed earnings
     # calendar). Default-ON behind GLOOMBERB_ENABLED; anonymous unless
     # GLOOMBERB_SESSION_COOKIE is set for holders / analyst / corporate-actions
-    # / research-search / transcripts / statements / tweets (transcripts and
-    # screener additionally need a Pro plan). Read scope only. Cloud payloads
+    # / research-search / transcripts / statements / tweets / short-interest /
+    # equity-diagnostic (transcripts and screener additionally need a Pro
+    # plan; the equity diagnostic is an AI product endpoint that answers a
+    # pending payload while it generates). Read scope only. Cloud payloads
     # carry §7 attribution ("Sourced from Gloomberb" + delay notice) and a
     # term.gloom.sh deep link where a single listing is addressed; the Yahoo
     # earnings tool is explicitly NOT attributed to Gloomberb. Never a pipeline
@@ -1455,6 +1463,114 @@ def create_mcp_server(
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_shiller")
+    def digifetch_shiller(limit: int = 240) -> str:
+        """Robert Shiller's monthly valuation series (Gloomberb Cloud; anonymous).
+
+        Returns the most recent `limit` monthly rows (default 240 = 20 years;
+        the full series is ~1869 rows back to 1871) with price/dividend/
+        earnings/CPI/long-rate plus CAPE and Shiller's excess CAPE yield.
+        `total_available`/`truncated` report the tail slice. Long-run
+        reference data - update cadence is monthly, not intraday.
+        """
+        try:
+            envelope = _build_gloomberb_client().shiller({"limit": limit})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_proxy_statements")
+    def digifetch_proxy_statements(ticker: str, what: str = "list", year: int | None = None) -> str:
+        """Executive-compensation proxy statements (Gloomberb Cloud; anonymous).
+
+        Open public reads - no account or plan needed. `what=list` lists every
+        available proxy for `ticker`; `what=statement` returns one full proxy
+        and requires `year`, which is the **proxy** (filing) year, not the
+        fiscal year (AAPL's 2026 proxy reports fiscal 2025). Adds a
+        term.gloom.sh deep link for `ticker`.
+        """
+        try:
+            envelope = _build_gloomberb_client().proxy_statements(
+                {"what": what, "ticker": ticker, "year": year}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_filing_events")
+    def digifetch_filing_events(ticker: str, limit: int = 20) -> str:
+        """Classified 8-K filing events for one ticker (Gloomberb Cloud; anonymous).
+
+        Rows carry item codes/labels/kinds, materiality, the SEC document URL,
+        named people (officer changes and similar) and, when the filing carried
+        news, a model reading (`read=true`). Newest first; `limit` caps the
+        page. Adds a term.gloom.sh deep link. Filing data is cached/delayed -
+        cross-check against EDGAR for decisions.
+        """
+        try:
+            envelope = _build_gloomberb_client().filing_events({"ticker": ticker, "limit": limit})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_risk_reports")
+    def digifetch_risk_reports(ticker: str, what: str = "list", year: int | None = None) -> str:
+        """10-K risk-factor reports, diffed year-over-year (Gloomberb Cloud; anonymous).
+
+        `what=list` lists report years with counts and an overview;
+        `what=report` returns one year's extracted risk factors, groups, the
+        added/removed/reworded diff against the prior year, and notes
+        (requires `year`). Anonymous public reads. Adds a term.gloom.sh deep
+        link. Cached/delayed - cross-check against EDGAR for decisions.
+        """
+        try:
+            envelope = _build_gloomberb_client().risk_reports(
+                {"what": what, "ticker": ticker, "year": year}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_short_interest")
+    def digifetch_short_interest(symbol: str, years: int = 3) -> str:
+        """Biweekly short-interest settlements (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope is a typed
+        `auth_required` and no request is made. `years` is 1-10 (the upstream
+        silently falls back to a 3-year window outside that range; the contract
+        rejects it first). Points carry shares short, average daily volume,
+        days to cover, and change percent. Adds a term.gloom.sh deep link.
+        Exchange-reported data, delayed by reporting cadence.
+        """
+        try:
+            envelope = _build_gloomberb_client().short_interest({"symbol": symbol, "years": years})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_equity_diagnostic")
+    def digifetch_equity_diagnostic(
+        symbol: str, exchange: str | None = None, mode: str = "cache-first"
+    ) -> str:
+        """AI evidence review for one listing (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. The first request per symbol answers
+        a `pending` payload (`status=generating` + `retryAfterMs`); retry until
+        a report arrives (`complete`/`partial`/`insufficient_data`), whose
+        findings keep observation and interpretation separate. Free sessions
+        only receive `access=preview`; `mode=refresh` asks the server to
+        regenerate. This is Gloomberb's model-generated reading of its data -
+        not investment advice - and complete reports are cached, pending ones
+        are not. Adds a term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().equity_diagnostic(
+                {"symbol": symbol, "exchange": exchange, "mode": mode}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digiquant_fit_btc_power_law")
     def digiquant_fit_btc_power_law(

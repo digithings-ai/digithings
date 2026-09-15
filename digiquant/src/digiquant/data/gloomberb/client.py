@@ -63,8 +63,13 @@ from .models import (
     EconCalendarResult,
     EconSeriesEnvelope,
     EconSeriesInput,
+    EquityDiagnosticEnvelope,
+    EquityDiagnosticInput,
+    EquityDiagnosticResult,
     ExchangeRateEnvelope,
     ExchangeRateInput,
+    FilingEventsEnvelope,
+    FilingEventsInput,
     Funds13FEnvelope,
     HoldersEnvelope,
     HoldersInput,
@@ -80,6 +85,8 @@ from .models import (
     PriceHistoryInput,
     PriceHistoryMetadata,
     PriceHistoryResult,
+    ProxyStatementsEnvelope,
+    ProxyStatementsInput,
     QuoteEnvelope,
     QuoteInput,
     QuoteResult,
@@ -88,6 +95,8 @@ from .models import (
     QuotesBatchResult,
     ResearchSearchEnvelope,
     ResearchSearchInput,
+    RiskReportsEnvelope,
+    RiskReportsInput,
     ScreenerEnvelope,
     ScreenerInput,
     SearchEnvelope,
@@ -96,6 +105,10 @@ from .models import (
     SecFilingsEnvelope,
     SecFilingsInput,
     SecFilingsResult,
+    ShillerEnvelope,
+    ShillerInput,
+    ShortInterestEnvelope,
+    ShortInterestInput,
     StatementsEnvelope,
     StatementsInput,
     ThirteenFFundsInput,
@@ -196,6 +209,13 @@ ENDPOINTS: dict[str, str] = {
     "13f_filings": "/cloud/sec/13f/filings",
     "13f_forms": "/cloud/sec/13f/forms",
     "13f_form": "/cloud/sec/13f/form",
+    # coverage expansion (#4110 phase 3)
+    "shiller": "/cloud/econ/shiller",
+    "proxy_statements": "/public/proxies",
+    "filing_events": "/public/events",
+    "risk_reports": "/public/risks",
+    "short_interest": "/market/short-interest",
+    "equity_diagnostic": "/research/equity-diagnostic",
 }
 
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -1657,6 +1677,245 @@ class GloomberbClient:
 
         return self._cached("thirteen_f_holdings", parsed, produce)
 
+    # -- coverage expansion (#4110 phase 3) --------------------------------
+
+    def shiller(self, request: ShillerInput | Mapping[str, Any] | None = None) -> ShillerEnvelope:
+        """Robert Shiller's monthly valuation series (anonymous)."""
+        parsed = self._validate_input(ShillerInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ShillerEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ShillerEnvelope)
+
+        def produce() -> ShillerEnvelope:
+            raw = self._request_json("GET", ENDPOINTS["shiller"])
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(ShillerEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud Shiller data is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(ShillerEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "Shiller data")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(ShillerEnvelope, payload)
+            normalized = self._normalize(nz.normalize_shiller, payload, parsed.limit)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(ShillerEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return ShillerEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("shiller", parsed, produce)
+
+    def proxy_statements(
+        self, request: ProxyStatementsInput | Mapping[str, Any]
+    ) -> ProxyStatementsEnvelope:
+        """Executive compensation proxies (anonymous public reads)."""
+        parsed = self._validate_input(ProxyStatementsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ProxyStatementsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ProxyStatementsEnvelope)
+
+        def produce() -> ProxyStatementsEnvelope:
+            path = f"{ENDPOINTS['proxy_statements']}/{quote(parsed.ticker.upper(), safe='')}"
+            if parsed.what == "statement":
+                path = f"{path}/{parsed.year}"
+            raw = self._request_json("GET", path)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(ProxyStatementsEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Proxy statements are unavailable for {parsed.ticker}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(ProxyStatementsEnvelope, result)
+            data, warnings = result
+            normalized = self._normalize(nz.normalize_proxy_statements, data, parsed.what)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(ProxyStatementsEnvelope, normalized)
+            fresh = self._freshness(raw, data)
+            return ProxyStatementsEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("proxy_statements", parsed, produce)
+
+    def filing_events(self, request: FilingEventsInput | Mapping[str, Any]) -> FilingEventsEnvelope:
+        """Classified 8-K filing events for one ticker (anonymous)."""
+        parsed = self._validate_input(FilingEventsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(FilingEventsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(FilingEventsEnvelope)
+
+        def produce() -> FilingEventsEnvelope:
+            raw = self._request_json(
+                "GET",
+                f"{ENDPOINTS['filing_events']}/{quote(parsed.ticker.upper(), safe='')}",
+                params={"limit": str(parsed.limit)},
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(FilingEventsEnvelope, raw)
+            result = self._data_or_error(raw, f"Filing events are unavailable for {parsed.ticker}")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(FilingEventsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "filing events")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(FilingEventsEnvelope, payload)
+            normalized = self._normalize(nz.normalize_filing_events, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(FilingEventsEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return FilingEventsEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("filing_events", parsed, produce)
+
+    def risk_reports(self, request: RiskReportsInput | Mapping[str, Any]) -> RiskReportsEnvelope:
+        """10-K risk-factor reports with the year-over-year diff (anonymous)."""
+        parsed = self._validate_input(RiskReportsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(RiskReportsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(RiskReportsEnvelope)
+
+        def produce() -> RiskReportsEnvelope:
+            path = f"{ENDPOINTS['risk_reports']}/{quote(parsed.ticker.upper(), safe='')}"
+            if parsed.what == "report":
+                path = f"{path}/{parsed.year}"
+            raw = self._request_json("GET", path)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(RiskReportsEnvelope, raw)
+            result = self._data_or_error(raw, f"Risk reports are unavailable for {parsed.ticker}")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(RiskReportsEnvelope, result)
+            data, warnings = result
+            normalized = self._normalize(nz.normalize_risk_reports, data, parsed.what)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(RiskReportsEnvelope, normalized)
+            fresh = self._freshness(raw, data)
+            return RiskReportsEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("risk_reports", parsed, produce)
+
+    def short_interest(
+        self, request: ShortInterestInput | Mapping[str, Any]
+    ) -> ShortInterestEnvelope:
+        """Biweekly short-interest settlements (session-gated)."""
+        parsed = self._validate_input(ShortInterestInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ShortInterestEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ShortInterestEnvelope)
+
+        def produce() -> ShortInterestEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["short_interest"],
+                params={"symbol": parsed.symbol, "years": str(parsed.years)},
+                gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(ShortInterestEnvelope, raw)
+            result = self._data_or_error(raw, f"Short interest is unavailable for {parsed.symbol}")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(ShortInterestEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "short interest")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(ShortInterestEnvelope, payload)
+            normalized = self._normalize(nz.normalize_short_interest, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(ShortInterestEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return ShortInterestEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("short_interest", parsed, produce)
+
+    def equity_diagnostic(
+        self, request: EquityDiagnosticInput | Mapping[str, Any]
+    ) -> EquityDiagnosticEnvelope:
+        """On-demand AI evidence review (session-gated; may answer pending).
+
+        The route's payload carries its own ``status`` (``generating`` /
+        ``partial`` / ``complete``) rather than the CloudMarketResponse
+        envelope, so it is read with ``direct_payload``. A pending payload is
+        **never cached client-side** (a warm 900s cache would mask the finished
+        generation); complete reports are cached normally.
+        """
+        parsed = self._validate_input(EquityDiagnosticInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(EquityDiagnosticEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(EquityDiagnosticEnvelope)
+
+        def produce() -> EquityDiagnosticEnvelope:
+            body: dict[str, Any] = {
+                "symbol": parsed.symbol.upper(),
+                "mode": parsed.mode,
+            }
+            if parsed.exchange:
+                body["exchange"] = parsed.exchange
+            raw = self._request_json(
+                "POST",
+                ENDPOINTS["equity_diagnostic"],
+                body=body,
+                gated=True,
+                direct_payload=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(EquityDiagnosticEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Equity diagnostic is unavailable for {parsed.symbol}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(EquityDiagnosticEnvelope, result)
+            data, warnings = result
+            normalized = self._normalize(nz.normalize_equity_diagnostic, data)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(EquityDiagnosticEnvelope, normalized)
+            fresh = self._freshness(raw, data)
+            return EquityDiagnosticEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        def _cacheable(envelope: EquityDiagnosticEnvelope) -> bool:
+            result = envelope.data
+            return not isinstance(result, EquityDiagnosticResult) or result.pending is None
+
+        return self._cached("equity_diagnostic", parsed, produce, should_cache=_cacheable)
+
     # -- internals ---------------------------------------------------------
 
     def _validate_input(
@@ -1750,7 +2009,14 @@ class GloomberbClient:
         """Number of live cached envelopes (diagnostics/tests)."""
         return len(self._cache)
 
-    def _cached(self, name: str, request: BaseModel, produce: Callable[[], EnvT]) -> EnvT:
+    def _cached(
+        self,
+        name: str,
+        request: BaseModel,
+        produce: Callable[[], EnvT],
+        *,
+        should_cache: Callable[[EnvT], bool] | None = None,
+    ) -> EnvT:
         # Cache first: a warm enrichment read still serves during an upstream
         # outage, and the breaker only guards real requests.
         key = (name, request.model_dump_json())
@@ -1760,7 +2026,10 @@ class GloomberbClient:
         if entry is not None and entry[0] > now:
             return cast(EnvT, entry[1])
         envelope = produce()
-        if not isinstance(envelope.data, DigifetchError):
+        cacheable = not isinstance(envelope.data, DigifetchError) and (
+            should_cache is None or should_cache(envelope)
+        )
+        if cacheable:
             self._cache[key] = (now + self._cache_ttl, envelope)
             self._enforce_cache_bound()
         return envelope
@@ -1883,6 +2152,7 @@ class GloomberbClient:
         gated: bool = False,
         allow_array: bool = False,
         pro_gated: bool = False,
+        direct_payload: bool = False,
     ) -> _RawResponse | DigifetchError:
         if not self._enabled:
             return DigifetchError(
@@ -2011,6 +2281,19 @@ class GloomberbClient:
                     return plan_error
         meta = payload.get("providerMeta")
         provider_meta: Mapping[str, Any] = meta if isinstance(meta, Mapping) else {}
+        if direct_payload:
+            # The route's own `status` field is payload data (`generating` /
+            # `partial` / `complete`), not the CloudMarketResponse envelope
+            # discriminator (`/research/equity-diagnostic`).
+            return _RawResponse(
+                status="success",
+                data=payload,
+                reason_code=None,
+                stale=payload.get("stale") is True,
+                provider_meta=provider_meta,
+                as_of=None,
+                currency=None,
+            )
         if "status" not in payload:
             # /news and /cloud/sec/* answer direct payloads, not the shared
             # CloudMarketResponse envelope.

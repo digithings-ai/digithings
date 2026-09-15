@@ -37,14 +37,20 @@ from .models import (
     AnalystResearchResult,
     CdsTrade,
     CompanyProfile,
+    CompanyRef,
     CongressTrade,
     CorporateAction,
     EconCalendarEvent,
     EconSeriesInfo,
     EconSeriesObservation,
     EconSeriesResult,
+    EquityDiagnosticPending,
+    EquityDiagnosticReport,
+    EquityDiagnosticResult,
     ExchangeRateResult,
     Filing13F,
+    FilingEvent,
+    FilingEventsResult,
     FinancialStatement,
     Fund13F,
     Fundamentals,
@@ -58,15 +64,25 @@ from .models import (
     OptionContract,
     OptionsChain,
     PriceBar,
+    ProxyStatement,
+    ProxyStatementsResult,
+    ProxySummary,
     Quote,
     QuoteBatchItem,
     ResearchHit,
     ResearchSearchPagination,
     ResearchSearchResult,
+    RiskReport,
+    RiskReportsResult,
+    RiskSummary,
     ScreenerResult,
     ScreenerRow,
     SecFiling,
     SecFilingDocument,
+    ShillerObservation,
+    ShillerResult,
+    ShortInterestPoint,
+    ShortInterestResult,
     StatementHistory,
     StatementRow,
     StatementsResult,
@@ -130,6 +146,13 @@ __all__ = [
     "normalize_screener",
     "normalize_funds_13f",
     "normalize_holdings_13f",
+    # coverage expansion (#4110 phase 3)
+    "normalize_shiller",
+    "normalize_proxy_statements",
+    "normalize_filing_events",
+    "normalize_risk_reports",
+    "normalize_short_interest",
+    "normalize_equity_diagnostic",
 ]
 
 # ---------------------------------------------------------------------------
@@ -1163,3 +1186,115 @@ def normalize_holdings_13f(raw: Any, what: str, limit: int) -> Holdings13FResult
     if what == "forms":
         return Holdings13FResult(what="forms", forms=filings)
     return Holdings13FResult(what="filings", filings=filings)
+
+
+# ---------------------------------------------------------------------------
+# Coverage-expansion mappers (#4110 phase 3)
+# ---------------------------------------------------------------------------
+
+
+def _company_ref(payload: Any) -> CompanyRef | None:
+    """The nested ``company`` block shared by the public filing products."""
+    if not isinstance(payload, Mapping):
+        return None
+    company = payload.get("company")
+    return CompanyRef.model_validate(dict(company)) if isinstance(company, Mapping) else None
+
+
+def normalize_shiller(raw: Mapping[str, Any], limit: int) -> ShillerResult:
+    """Map the Shiller valuation series, keeping the most recent *limit* rows.
+
+    The upstream returns the full monthly series (~1869 rows from 1871,
+    ascending); the tail is sliced client-side and ``total_available`` /
+    ``truncated`` report the reduction.
+    """
+    observations = [
+        ShillerObservation.model_validate(dict(entry))
+        for entry in _rows(raw.get("observations"), "observations")
+    ]
+    total_available = len(observations)
+    tail = observations[-limit:] if limit < total_available else observations
+    return ShillerResult(
+        observations=tail,
+        source_url=_str_or_none(raw.get("sourceUrl")),
+        dataset_fetched_at=_str_or_none(raw.get("fetchedAt")),
+        total_available=total_available,
+        truncated=total_available > len(tail),
+    )
+
+
+def normalize_proxy_statements(raw: Any, what: str) -> ProxyStatementsResult:
+    """Map the public proxy-statement list or one full statement."""
+    if what == "statement":
+        statement = ProxyStatement.model_validate(dict(raw)) if isinstance(raw, Mapping) else None
+        return ProxyStatementsResult(
+            what="statement",
+            company=statement.company if statement is not None else None,
+            statement=statement,
+        )
+    payload = raw if isinstance(raw, Mapping) else {}
+    return ProxyStatementsResult(
+        what="list",
+        company=_company_ref(payload),
+        proxies=[
+            ProxySummary.model_validate(dict(entry))
+            for entry in _rows(payload.get("proxies"), "proxies")
+        ],
+    )
+
+
+def normalize_filing_events(raw: Mapping[str, Any]) -> FilingEventsResult:
+    """Map the public filing-events (classified 8-K) payload."""
+    return FilingEventsResult(
+        ticker=_str_or_none(raw.get("ticker")) or "",
+        events=[
+            FilingEvent.model_validate(dict(entry)) for entry in _rows(raw.get("events"), "events")
+        ],
+    )
+
+
+def normalize_risk_reports(raw: Any, what: str) -> RiskReportsResult:
+    """Map the public risk-report list or one full report."""
+    if what == "report":
+        report = RiskReport.model_validate(dict(raw)) if isinstance(raw, Mapping) else None
+        return RiskReportsResult(
+            what="report",
+            company=report.company if report is not None else None,
+            report=report,
+        )
+    payload = raw if isinstance(raw, Mapping) else {}
+    return RiskReportsResult(
+        what="list",
+        company=_company_ref(payload),
+        reports=[
+            RiskSummary.model_validate(dict(entry))
+            for entry in _rows(payload.get("reports"), "reports")
+        ],
+    )
+
+
+def normalize_short_interest(raw: Mapping[str, Any]) -> ShortInterestResult:
+    """Map the biweekly short-interest settlement series."""
+    return ShortInterestResult(
+        symbol=_str_or_none(raw.get("symbol")) or "",
+        issue_name=_str_or_none(raw.get("issueName")),
+        points=[
+            ShortInterestPoint.model_validate(dict(entry))
+            for entry in _rows(raw.get("points"), "points")
+        ],
+    )
+
+
+def normalize_equity_diagnostic(raw: Any) -> EquityDiagnosticResult:
+    """Map the pending-or-complete equity-diagnostic payload.
+
+    The route's own ``status`` field is payload data (``generating`` /
+    ``complete`` / ``partial``), not the CloudMarketResponse discriminator;
+    a non-object or unknown shape raises so the caller gets an
+    ``upstream_error``.
+    """
+    if not isinstance(raw, Mapping):
+        raise ValueError("equity-diagnostic payload is not an object")
+    if raw.get("status") == "generating":
+        return EquityDiagnosticResult(pending=EquityDiagnosticPending.model_validate(dict(raw)))
+    return EquityDiagnosticResult(report=EquityDiagnosticReport.model_validate(dict(raw)))

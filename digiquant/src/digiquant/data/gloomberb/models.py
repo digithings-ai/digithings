@@ -81,6 +81,13 @@ __all__ = [
     "ScreenerInput",
     "ThirteenFFundsInput",
     "ThirteenFHoldingsInput",
+    # coverage expansion (#4110 phase 3)
+    "ShillerInput",
+    "ProxyStatementsInput",
+    "FilingEventsInput",
+    "RiskReportsInput",
+    "ShortInterestInput",
+    "EquityDiagnosticInput",
     # wire/output payload models
     "Quote",
     "QuoteBatchItem",
@@ -155,6 +162,35 @@ __all__ = [
     "Filing13F",
     "Holding13F",
     "Holdings13FResult",
+    # coverage expansion (#4110 phase 3)
+    "CompanyRef",
+    "ShillerObservation",
+    "ShillerResult",
+    "ExecutivePay",
+    "ProxySummary",
+    "HighlightFigure",
+    "ProxyStatement",
+    "ProxyStatementsResult",
+    "FilingPerson",
+    "FilingEvent",
+    "FilingEventsResult",
+    "RiskFactor",
+    "RiskNote",
+    "RiskRemoved",
+    "RiskReworded",
+    "RiskDiff",
+    "RiskNotes",
+    "RiskSummary",
+    "RiskReport",
+    "RiskReportsResult",
+    "ShortInterestPoint",
+    "ShortInterestResult",
+    "EquityDiagnosticPending",
+    "EquityDiagnosticFinding",
+    "EquityDiagnosticCoverage",
+    "EquityDiagnosticEvidence",
+    "EquityDiagnosticReport",
+    "EquityDiagnosticResult",
     # concrete envelopes
     "QuoteEnvelope",
     "QuotesBatchEnvelope",
@@ -182,6 +218,12 @@ __all__ = [
     "ScreenerEnvelope",
     "Funds13FEnvelope",
     "Holdings13FEnvelope",
+    "ShillerEnvelope",
+    "ProxyStatementsEnvelope",
+    "FilingEventsEnvelope",
+    "RiskReportsEnvelope",
+    "ShortInterestEnvelope",
+    "EquityDiagnosticEnvelope",
 ]
 
 SOURCE: Literal["gloomberb"] = "gloomberb"
@@ -649,6 +691,75 @@ class ThirteenFHoldingsInput(_InputModel):
         if self.what == "form" and not self.accession_number:
             raise ValueError("what='form' requires accession_number")
         return self
+
+
+# ---------------------------------------------------------------------------
+# Coverage-expansion inputs (#4110 phase 3)
+# ---------------------------------------------------------------------------
+
+
+class ShillerInput(_InputModel):
+    # Return the most recent N monthly observations (the full series is ~1869
+    # rows back to 1871); the client slices the tail and flags truncation.
+    limit: int = Field(default=240, ge=1, le=2000)
+
+
+class ProxyStatementsInput(_InputModel):
+    """Gloom Cloud's open proxy-statement reads (executive compensation).
+
+    ``year`` is the **proxy** year (the filing year), not the fiscal year:
+    AAPL's 2026 proxy reports fiscal 2025, and asking for the fiscal year 404s
+    (live-verified).
+    """
+
+    what: Literal["list", "statement"] = "list"
+    ticker: Symbol
+    year: int | None = Field(default=None, ge=1990, le=2100)
+
+    @model_validator(mode="after")
+    def _statement_requires_year(self) -> ProxyStatementsInput:
+        if self.what == "statement" and self.year is None:
+            raise ValueError("what='statement' requires year (the proxy year)")
+        return self
+
+
+class FilingEventsInput(_InputModel):
+    ticker: Symbol
+    limit: int = Field(default=20, ge=1, le=200)
+
+
+class RiskReportsInput(_InputModel):
+    """Annual 10-K risk-factor extraction, diffed against the prior year."""
+
+    what: Literal["list", "report"] = "list"
+    ticker: Symbol
+    year: int | None = Field(default=None, ge=1990, le=2100)
+
+    @model_validator(mode="after")
+    def _report_requires_year(self) -> RiskReportsInput:
+        if self.what == "report" and self.year is None:
+            raise ValueError("what='report' requires year (the report year)")
+        return self
+
+
+class ShortInterestInput(_InputModel):
+    symbol: Symbol
+    # Live-verified upstream behavior: 1→24 points, 5→120, 10→209; 0/11/99
+    # silently fall back to the 3-year window, so the contract bounds it here.
+    years: int = Field(default=3, ge=1, le=10)
+
+
+class EquityDiagnosticInput(_InputModel):
+    """On-demand AI evidence review for one listing (cookie-gated).
+
+    ``refresh`` asks the server to regenerate; a free session only ever gets
+    ``access="preview"`` results. The first call for a symbol answers HTTP 202
+    with a ``generating`` pending payload and a retry hint.
+    """
+
+    symbol: Symbol
+    exchange: str | None = None
+    mode: Literal["cache-first", "refresh"] = "cache-first"
 
 
 # ---------------------------------------------------------------------------
@@ -1469,6 +1580,321 @@ class Holdings13FResult(_CamelModel):
 
 
 # ---------------------------------------------------------------------------
+# Coverage-expansion payloads (#4110 phase 3)
+# ---------------------------------------------------------------------------
+
+
+class CompanyRef(_CamelModel):
+    """The company block every public filing product nests in its payloads."""
+
+    ticker: str
+    cik: str | None = None
+    name: str = ""
+    short_name: str | None = None
+
+
+class ShillerObservation(_CamelModel):
+    """One month of Robert Shiller's dataset (live: ~1869 rows from 1871)."""
+
+    date: str
+    price: float | None = None
+    dividend: float | None = None
+    earnings: float | None = None
+    cpi: float | None = None
+    long_rate: float | None = None
+    cape: float | None = None
+    # CAPE earnings yield over the real 10-year rate (Shiller's ERP).
+    excess_cape_yield: float | None = None
+
+
+class ShillerResult(_CamelModel):
+    """The monthly valuation series, most-recent ``limit`` rows (ascending).
+
+    ``total_available`` is the full upstream row count and ``truncated`` flags
+    the client-side tail slice.
+    """
+
+    observations: list[ShillerObservation] = Field(default_factory=list)
+    source_url: str | None = None
+    dataset_fetched_at: str | None = None
+    total_available: int = 0
+    truncated: bool = False
+
+
+class ExecutivePay(_CamelModel):
+    """One named-executive compensation row (annual proxy).
+
+    ``prior_year_total`` is only present on the CEO row upstream; extras keep
+    anything the extractor adds later.
+    """
+
+    name: str
+    title: str | None = None
+    salary: float | None = None
+    bonus: float | None = None
+    stock_awards: float | None = None
+    option_awards: float | None = None
+    non_equity_incentive: float | None = None
+    pension_and_deferred: float | None = None
+    all_other: float | None = None
+    total: float | None = None
+    prior_year_total: float | None = None
+
+
+class ProxySummary(_CamelModel):
+    """One proxy filing summary (list row / ``otherYears`` row)."""
+
+    id: str
+    ticker: str
+    company: CompanyRef
+    proxy_year: int
+    fiscal_year: int | None = None
+    fiscal_year_label: str | None = None
+    filed_at: str | None = None
+    meeting_date: str | None = None
+    updated_at: str | None = None
+    ceo_name: str | None = None
+    ceo_title: str | None = None
+    ceo_total: float | None = None
+    ceo_prior_year_total: float | None = None
+    pay_ratio: float | None = None
+    median_employee_pay: float | None = None
+
+
+class HighlightFigure(_CamelModel):
+    """A key figure on a proxy statement (label/value/note triple)."""
+
+    label: str
+    value: str
+    note: str | None = None
+
+
+class ProxyStatement(ProxySummary):
+    """One full proxy statement (compensation tables + extracted highlights)."""
+
+    doc_url: str | None = None
+    ceo: ExecutivePay | None = None
+    named_executives: list[ExecutivePay] = Field(default_factory=list)
+    say_on_pay_prior_support: float | None = None
+    highlights: str | None = None
+    key_figures: list[HighlightFigure] = Field(default_factory=list)
+    other_years: list[ProxySummary] = Field(default_factory=list)
+
+
+class ProxyStatementsResult(_CamelModel):
+    what: Literal["list", "statement"]
+    company: CompanyRef | None = None
+    proxies: list[ProxySummary] | None = None
+    statement: ProxyStatement | None = None
+
+
+class FilingPerson(_CamelModel):
+    """A person named in a material 8-K event (officer change and similar)."""
+
+    name: str
+    role: str | None = None
+    action: str | None = None
+    effective: str | None = None
+
+
+class FilingEvent(_CamelModel):
+    """One 8-K, classified by item labels and, when it carried news, read."""
+
+    id: str
+    ticker: str
+    company: CompanyRef | None = None
+    filed_at: str | None = None
+    filing_date: str | None = None
+    doc_url: str | None = None
+    items: list[str] = Field(default_factory=list)
+    labels: list[str] = Field(default_factory=list)
+    kinds: list[str] = Field(default_factory=list)
+    material: bool = False
+    headline: str | None = None
+    summary: str | None = None
+    people: list[FilingPerson] = Field(default_factory=list)
+    read: bool = False
+
+
+class FilingEventsResult(_CamelModel):
+    ticker: str = ""
+    events: list[FilingEvent] = Field(default_factory=list)
+
+
+class RiskFactor(_CamelModel):
+    """One extracted 10-K risk factor (heading + excerpt)."""
+
+    heading: str
+    group: str | None = None
+    excerpt: str = ""
+    words: int | None = None
+
+
+class RiskNote(_CamelModel):
+    index: int
+    text: str
+
+
+class RiskRemoved(_CamelModel):
+    heading: str
+    group: str | None = None
+    excerpt: str = ""
+
+
+class RiskReworded(_CamelModel):
+    index: int
+    similarity: float | None = None
+    heading_changed: bool | None = None
+    prior_heading: str | None = None
+
+
+class RiskDiff(_CamelModel):
+    """Year-over-year risk-factor diff (present when a prior report exists)."""
+
+    added: list[int] = Field(default_factory=list)
+    removed: list[RiskRemoved] = Field(default_factory=list)
+    reworded: list[RiskReworded] = Field(default_factory=list)
+    matched: int | None = None
+    prior_risk_count: int | None = None
+
+
+class RiskNotes(_CamelModel):
+    added: list[RiskNote] = Field(default_factory=list)
+    removed: list[RiskNote] = Field(default_factory=list)
+    reworded: list[RiskNote] = Field(default_factory=list)
+    top: list[RiskNote] = Field(default_factory=list)
+
+
+class RiskSummary(_CamelModel):
+    """One risk-report summary (list row / ``otherYears`` row)."""
+
+    id: str
+    ticker: str
+    company: CompanyRef
+    report_year: int
+    filed_at: str | None = None
+    updated_at: str | None = None
+    risk_count: int = 0
+    group_count: int = 0
+    word_count: int = 0
+    added_count: int | None = None
+    removed_count: int | None = None
+    reworded_count: int | None = None
+    overview: str | None = None
+
+
+class RiskReport(RiskSummary):
+    """One full risk-factor report with groups, risks, diff, and notes."""
+
+    doc_url: str | None = None
+    groups: list[str] = Field(default_factory=list)
+    risks: list[RiskFactor] = Field(default_factory=list)
+    diff: RiskDiff | None = None
+    notes: RiskNotes | None = None
+    other_years: list[RiskSummary] = Field(default_factory=list)
+
+
+class RiskReportsResult(_CamelModel):
+    what: Literal["list", "report"]
+    company: CompanyRef | None = None
+    reports: list[RiskSummary] | None = None
+    report: RiskReport | None = None
+
+
+class ShortInterestPoint(_CamelModel):
+    """One biweekly exchange settlement row."""
+
+    settlement_date: str
+    shares_short: float
+    previous_shares_short: float | None = None
+    average_daily_volume: float | None = None
+    days_to_cover: float | None = None
+    change_percent: float | None = None
+    revised: bool = False
+
+
+class ShortInterestResult(_CamelModel):
+    symbol: str = ""
+    issue_name: str | None = None
+    points: list[ShortInterestPoint] = Field(default_factory=list)
+
+
+class EquityDiagnosticPending(_CamelModel):
+    """Generation has not finished; retry after ``retry_after_ms``."""
+
+    status: Literal["generating"]
+    retry_after_ms: int
+
+
+class EquityDiagnosticFinding(_CamelModel):
+    """One finding; observation and interpretation are deliberately separate."""
+
+    id: str
+    kind: Literal["red_flag", "green_flag", "anomaly"]
+    severity: int
+    confidence: float | None = None
+    title: str = ""
+    observation: str = ""
+    interpretation: str = ""
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
+class EquityDiagnosticCoverage(_CamelModel):
+    dataset: str
+    status: str
+    as_of: str | None = None
+    provider: str | None = None
+    note: str | None = None
+
+
+class EquityDiagnosticEvidence(_CamelModel):
+    """A citation; the server owns the URLs."""
+
+    id: str
+    dataset: str = ""
+    label: str = ""
+    as_of: str | None = None
+    provider: str | None = None
+    url: str | None = None
+
+
+class EquityDiagnosticReport(_CamelModel):
+    """A completed AI-generated evidence review.
+
+    Free (email-verified) sessions only receive ``access="preview"`` results;
+    the verdict/summary are the model's reading, not investment advice.
+    """
+
+    schema_version: int | None = None
+    access: Literal["preview", "full"] | None = None
+    symbol: str
+    exchange: str = ""
+    company_name: str | None = None
+    status: str
+    verdict: str
+    summary: str = ""
+    confidence: float | None = None
+    findings: list[EquityDiagnosticFinding] = Field(default_factory=list)
+    watch_items: list[str] = Field(default_factory=list)
+    coverage: list[EquityDiagnosticCoverage] = Field(default_factory=list)
+    evidence: list[EquityDiagnosticEvidence] = Field(default_factory=list)
+    generated_at: str | None = None
+    expires_at: str | None = None
+    refresh_allowed_at: str | None = None
+    cached: bool | None = None
+    stale: bool | None = None
+    prompt_version: int | None = None
+    model: str | None = None
+
+
+class EquityDiagnosticResult(_CamelModel):
+    """One tool, pending-or-report: the first call per symbol is a 202 pending."""
+
+    pending: EquityDiagnosticPending | None = None
+    report: EquityDiagnosticReport | None = None
+
+
+# ---------------------------------------------------------------------------
 # Concrete envelopes (one per tool)
 # ---------------------------------------------------------------------------
 
@@ -1498,6 +1924,12 @@ VenuesEnvelope = DigifetchEnvelope[VenuesResult]
 ScreenerEnvelope = DigifetchEnvelope[ScreenerResult]
 Funds13FEnvelope = DigifetchEnvelope[Funds13FResult]
 Holdings13FEnvelope = DigifetchEnvelope[Holdings13FResult]
+ShillerEnvelope = DigifetchEnvelope[ShillerResult]
+ProxyStatementsEnvelope = DigifetchEnvelope[ProxyStatementsResult]
+FilingEventsEnvelope = DigifetchEnvelope[FilingEventsResult]
+RiskReportsEnvelope = DigifetchEnvelope[RiskReportsResult]
+ShortInterestEnvelope = DigifetchEnvelope[ShortInterestResult]
+EquityDiagnosticEnvelope = DigifetchEnvelope[EquityDiagnosticResult]
 
 
 def envelope_error(envelope: DigifetchEnvelope[Any]) -> DigifetchError | None:

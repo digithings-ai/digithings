@@ -478,17 +478,20 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 It is the **only** place the `api.gloom.sh` URL/site logic lives — `digifetch`
 stays a generic transport engine (no URLs, no env reads).
 
-- **27 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
+- **33 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
   `digifetch_price_history`, `digifetch_ticker_financials`, `digifetch_options_chain`,
   `digifetch_sec_filings`, `digifetch_holders`, `digifetch_analyst_research`,
   `digifetch_corporate_actions`, `digifetch_earnings_calendar`,
   `digifetch_exchange_rate`, `digifetch_search`, `digifetch_news`, plus the #4110
   phase-1 cohort `digifetch_econ_calendar`, `digifetch_econ_series`,
   `digifetch_yield_curve`, `digifetch_cds`, `digifetch_research_search`,
-  `digifetch_congress_trades`, `digifetch_transcripts` and the #4110 phase-2
+  `digifetch_congress_trades`, `digifetch_transcripts`, the #4110 phase-2
   cohort `digifetch_statements`, `digifetch_ticker_tweets`,
   `digifetch_tweet_search`, `digifetch_venues`, `digifetch_screener`,
-  `digifetch_13f_funds`, `digifetch_13f_holdings` are registered in
+  `digifetch_13f_funds`, `digifetch_13f_holdings`, and the #4110 phase-3
+  cohort `digifetch_shiller`, `digifetch_proxy_statements`,
+  `digifetch_filing_events`, `digifetch_risk_reports`,
+  `digifetch_short_interest`, `digifetch_equity_diagnostic` are registered in
   `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed in
   `orchestrator_tools.py`. Keep them read-scope; the family is default-ON behind
   `GLOOMBERB_ENABLED` — only `1`/`true`/`yes`/`on` enable it, and any other value
@@ -511,13 +514,15 @@ stays a generic transport engine (no URLs, no env reads).
   `dataSource: "delayed"` / `delayMinutes > 0` → `"Free-tier data delayed up to
   15 minutes"` (not stale).
 - **Session cookie.** `GLOOMBERB_SESSION_COOKIE` (bare token or `name=value`) is
-  attached **only** to the eight gated endpoints: holders / analyst research /
+  attached **only** to the ten gated endpoints: holders / analyst research /
   corporate actions / research search / transcripts / statements / ticker
-  tweets / tweet search (screener is gated too, and Pro-only). Never log it,
-  never put it in a tool payload; without it those tools return `auth_required`
-  with no request. SEC filings, econ, credit, congress, news, venues, 13F, and
-  the anonymous `/market/search` listings lookup stay anonymous (the
-  `/cloud/search` research search is the cookie-gated one).
+  tweets / tweet search / short interest / equity diagnostic (screener is gated
+  too, and Pro-only). Never log it, never put it in a tool payload; without it
+  those tools return `auth_required` with no request. SEC filings, econ, credit,
+  congress, news, venues, 13F, the anonymous `/market/search` listings lookup,
+  and the open `/public/proxies/*` + `/public/risks/*` + `/public/events/*`
+  filing reads stay anonymous (the `/cloud/search` research search is the
+  cookie-gated one).
 - **Plan and upstream caveats (#4110 phase 1).** `digifetch_transcripts` requires
   a **Gloomberb Pro** plan: a free (email-verified) session's non-JSON
   `Pro plan required` body maps to a typed `auth_required` with the upstream
@@ -576,6 +581,33 @@ stays a generic transport engine (no URLs, no env reads).
   `period_of_report` format probed. The `what`-discriminated inputs validate
   required fields per branch **before** any request (dashed quarters like
   `2026-Q2` are rejected client-side, since the upstream answers 500).
+- **Plan and upstream caveats (#4110 phase 3).** `digifetch_shiller` returns
+  the **most recent** `limit` monthly rows (default 240, max 2000) — the
+  upstream sends the whole ~1869-row series from 1871, so keep the tail slice
+  and the `total_available`/`truncated` flags. `digifetch_proxy_statements` and
+  `digifetch_risk_reports` read the anonymous **`/public/proxies`** and
+  **`/public/risks`** open products (list + per-year detail); the `year` for a
+  proxy statement is the **proxy** (filing) year, not the fiscal year, and an
+  unknown ticker 404s to `not_found`. `digifetch_filing_events` is the
+  classified 8-K feed (newest first, `limit` ≤200). `digifetch_short_interest`
+  is session-gated with `years` bounded **1–10 client-side** (live: 1→24
+  points, 5→120, 10→209; 0/11/99 silently fall back to the 3-year window
+  upstream, so the contract must reject them first). `digifetch_equity_diagnostic`
+  is the one **POST** tool and the one **AI product endpoint**: its payload
+  carries its own `status` (`generating`/`partial`/`complete`) rather than the
+  CloudMarketResponse discriminator, so it is read with
+  `_request_json(direct_payload=True)`; the first call per symbol answers a
+  `pending` envelope (`status=generating` + `retryAfterMs`) and **pending
+  payloads are never client-cached** (`_cached(should_cache=...)`), while
+  completed reports use the normal 900s TTL; free sessions only ever get
+  `access="preview"`, and the verdict/summary are the model's reading — say so
+  in copy, never as advice. The remaining plugin panes are deliberately out of
+  scope: correlation/relationship (client math over history), dividend yield /
+  Yahoo fallback, world indices / FX / futures (quote composition), volatility /
+  credit conditions (FRED composition over `digifetch_econ_series`), treasury
+  auctions (fiscaldata), prediction markets (local model), scanner (websocket).
+  See ARCHITECTURE §5 for the full list; the per-transcript detail route
+  (`/cloud/transcripts/{id}`) remains a candidate extension.
 - **Attribution (spec §7).** Payloads carry "Sourced from Gloomberb" + the delay
   notice and a `term.gloom.sh/?ticker=` deep link where one listing is addressed.
   The Yahoo-backed earnings calendar must **not** claim Gloomberb attribution.

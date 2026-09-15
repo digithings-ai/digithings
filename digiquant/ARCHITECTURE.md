@@ -249,6 +249,12 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digifetch_screener` | Market screener (`/market/screener`, session-gated, **requires Gloomberb Pro**). `category` is gainers\|losers\|most-active, `count` 1–50, `mode` cache-first\|refresh. A free session answers HTTP 200 `status=unsupported` + `reasonCode=PRO_REQUIRED` (or a 402 `Pro plan required` body); both map to the same typed `auth_required` without tripping the breaker. The Pro success payload is unobservable, so rows are typed from the TS plugin's `CloudMarketScreenerItem` (`rank`/`currency`/`tradeCount`/`high52w`/`low52w`/`dayHigh`/`dayLow`/`lastUpdated`/`dataSource`; no `marketCap`) with the envelope's `providerId`/`category`/`asOf`/`stale`/`items`; every field optional and extras open |
 | `digifetch_13f_funds` | 13F fund lookup (`what`-discriminated, anonymous; live-verified for search/top/tickers). `search`→`/cloud/sec/13f/funds?name=` (rows `{name, CIK}`), `top`→`/cloud/sec/13f/topfunds?quarter=YYYYQn` (rows `{cik, name, period_of_report, pnl}`; a dashed quarter is a typed `invalid_input` before any request), `tickers`→`/cloud/sec/13f/tickers?tickers=A,B` (`{cusip, ticker, company_name}`), `holders`→`/cloud/sec/13f/holders?cusip=&period_of_report=` (`{cusip, periodOfReport, ciks[]}`; the upstream currently answers a proxied 4xx for every period format probed, mapped to non-retryable `invalid_input` without opening the breaker) |
 | `digifetch_13f_holdings` | 13F filings/forms/holdings (`what`-discriminated, anonymous; live-verified). `filings` (`from`/`to` required, ISO `YYYY-MM-DD` validated client-side) and `forms` (`cik`) return SEC index rows; `form` (`cik` + `accession_number`) returns holding rows mapped to `issuer`/`shares`/`share_type` plus the voting-authority columns. `cik` is zero-padded to the SEC's 10-digit form and `accession_number` is normalized to the dashed `XXXXXXXXXX-YY-ZZZZZZ` form client-side (an undashed value passed through would silently return an empty set); `has_more` is computed from a full page (bare array, no continuation token); the upstream caps one form at 20,000 rows (`MAX_FORM_ROWS`). Upstream 13F rejections proxied as a 5xx with a `Forms13F 4xx` body map to non-retryable `invalid_input` without recording a breaker failure |
+| `digifetch_shiller` | Robert Shiller's monthly valuation series (`/cloud/econ/shiller`, anonymous; live-verified ~1869 rows from 1871). Returns the most recent `limit` rows (default 240/20y, ≤2000) with `price`/`dividend`/`earnings`/`cpi`/`longRate` plus `cape` and `excessCapeYield` (Shiller's ERP); `total_available`/`truncated` report the client-side tail slice. Long-run reference data — monthly update cadence, not intraday |
+| `digifetch_proxy_statements` | Executive-compensation proxies (`/public/proxies/{ticker}` + `/{year}`, anonymous open reads with no account or plan; live-verified). `what=list` lists every proxy for the ticker; `what=statement` returns one full proxy (comp tables, named executives, say-on-pay support, key figures) and requires `year` — the **proxy** (filing) year, not the fiscal year (AAPL's 2026 proxy reports fiscal 2025). Adds a deep link |
+| `digifetch_filing_events` | Classified 8-K filing events (`/public/events/{ticker}?limit=`, anonymous; live-verified). Rows carry item codes/labels/kinds, materiality, the SEC document URL, named people (officer changes and similar), and a model reading (`read=true`) when the filing carried news; newest first. Adds a deep link. Cached/delayed — cross-check against EDGAR |
+| `digifetch_risk_reports` | 10-K risk-factor reports, diffed year-over-year (`/public/risks/{ticker}` + `/{year}`, anonymous; live-verified). `what=list` lists report years with risk/group/word counts and an overview; `what=report` returns one year's extracted risk factors, groups, the added/removed/reworded diff against the prior year, and notes (requires `year`). Adds a deep link. Cached/delayed — cross-check against EDGAR |
+| `digifetch_short_interest` | Biweekly short-interest settlements (`/market/short-interest?symbol=&years=`, session-gated; live-verified: 401 anon → 200 with cookie). `years` is 1–10 client-side (live: 1→24 points, 5→120, 10→209; 0/11/99 silently fall back to the 3-year window upstream). Points carry shares short, prior shares short, average daily volume, days to cover, change percent, and a revised flag. Adds a deep link. Exchange-reported data, delayed by reporting cadence |
+| `digifetch_equity_diagnostic` | On-demand AI evidence review for one listing (`POST /research/equity-diagnostic`, session-gated; live-verified). `symbol`/`exchange`/`mode` (cache-first\|refresh); the first request per symbol answers HTTP 202 with a `pending` payload (`status=generating` + `retryAfterMs`) and retries eventually yield a report whose findings keep `observation` and `interpretation` separate. Free sessions only receive `access=preview`. The payload's own `status` field is not the market-envelope discriminator (`direct_payload`), pending payloads are **never** client-cached, and complete reports are cached normally. Adds a deep link. Model-generated reading of Gloomberb's data — not investment advice |
 | `digiquant_fit_btc_power_law` | Fits the SDCA BTC power-law (RAQQR) valuation rails from cached daily price history (`data/prices/history_cache.py`, not a bespoke fetch) and persists the coefficients to `strategies/sdca/btc_power_law_coefficients.json` (#1082) |
 | `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` selector: `btc_power_law` / `generic_valuation` / `rolling_z` (`sdca/providers.py`). Oscillators are computed from **that ticker's** OHLCV. `indicator_weights` JSON `{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Macro extras need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
 | `digiquant_fetch_bitview_series` | Fetch Bitview/BRK on-chain `day1` series (`mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`) into `data/onchain/bitview/` parquet. JSON API only (no HTML scrape). `nupl` is refused by default (monotone of MVRV); `allow_derived=True` opts a caller who understands the caveat back in. Upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944); the code-only seam is an injected HTTP session / allowlisted host. Fail-soft + timeout. Hosted bitview.space is optional / no SLA — a vendor `mcp.bitview.space` MCP server already exists; prefer it for general Bitview access. Coin Metrics community CC BY-NC is **not** fetched and must not be republished commercially. Refs #1086 |
@@ -267,10 +273,10 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `dashboard_get_policy_gate_evaluation` | Fetch a gate-evaluation summary by `evaluation_id` |
 
 `create_mcp_server(scope=...)` gates registration: `scope="full"` (default)
-registers all 51 tools; `scope="read"` registers only the 37 dashboard-chat
+registers all 57 tools; `scope="read"` registers only the 43 dashboard-chat
 reads (strategy list, price/macro reads, causal trade levels, `query_data`,
 policy replay/comparison reads, gate reads + evaluations, the coinmetrics
-catalog, and the 27 `digifetch_*` Gloomberb enrichment reads).
+catalog, and the 33 `digifetch_*` Gloomberb enrichment reads).
 `--scope` / `DIGIQUANT_MCP_SCOPE` select the scope; `host`/`port` live on the
 `FastMCP(...)` constructor — `run()` takes transport only.
 
@@ -1112,7 +1118,7 @@ logic, no env reads) and the site logic lives here:
 
 | Module | Responsibility |
 |--------|----------------|
-| `data/gloomberb/models.py` | Pydantic v2 input/output models for the 27 tools, the shared `DigifetchEnvelope[T]`/`DigifetchError` contract, and the §5.2 resolution × range caps (reject, never clamp) |
+| `data/gloomberb/models.py` | Pydantic v2 input/output models for the 33 tools, the shared `DigifetchEnvelope[T]`/`DigifetchError` contract, and the §5.2 resolution × range caps (reject, never clamp) |
 | `data/gloomberb/normalizers.py` | Ported §5.4 normalizers: GBp/GBX→GBP divisor, interval tokens, exchange-timezone bar dates, malformed-intraday rejection, day-range reconciliation, and the §5.3 freshness union (wire `stale` vs `dataSource`/`delayMinutes`) |
 | `data/gloomberb/client.py` | `GloomberbClient` on `digifetch.HttpFetcher`/`RateLimiter`/`with_retry`: endpoint map, wire→error mapping, 900s TTL cache, circuit breaker (half-open probe), kill switch, optional session cookie, Yahoo/yfinance earnings path |
 | `data/gloomberb/attribution.py` | §7 attribution: "Sourced from Gloomberb", delay notice, `term.gloom.sh/?ticker=` deep links |
@@ -1145,17 +1151,19 @@ surfaced in the typed error, not slept on). Only upstream-health failures
 toward the circuit breaker — deterministic 4xx outcomes such as `auth_required`
 never open it. N consecutive failures open the breaker, which fails fast to a
 typed `upstream_error` with a half-open probe after the reset window.
-`GLOOMBERB_SESSION_COOKIE` is attached only to the eight gated endpoints
+`GLOOMBERB_SESSION_COOKIE` is attached only to the ten gated endpoints
 (holders, analyst research, corporate actions, research search, transcripts,
-statements, ticker tweets, tweet search — screener is also gated and Pro-only),
-is never logged, never appears in tool payloads, and is forwarded only to
-same-origin redirect hops. Plan-gated routes are detected from the response
+statements, ticker tweets, tweet search, short interest, equity diagnostic —
+screener is also gated and Pro-only), is never logged, never appears in tool
+payloads, and is forwarded only to same-origin redirect hops. The
+`/public/proxies/*`, `/public/risks/*`, and `/public/events/*` filing reads are
+open (no account, no cookie). Plan-gated routes are detected from the response
 body: a `Pro plan required` answer (JSON or text, any status) or a 200
 `status=unsupported` + `reasonCode=PRO_REQUIRED` envelope both map to a typed
 `auth_required` rather than a generic non-JSON `upstream_error`, a `not_found`,
 or an empty success — and neither shape trips the breaker.
 
-**Exposure.** All 27 tools are registered in `mcp_server.py` via the
+**Exposure.** All 33 tools are registered in `mcp_server.py` via the
 `_maybe_tool` pattern (read scope) and in the `orchestrator_tools.py` manifest.
 The lazily-cached `_build_gloomberb_client()` seam is keyed on the kill-switch +
 cookie env pair, so tests inject a `MockTransport`-backed client and an env
@@ -1208,6 +1216,36 @@ routes were probed live; `holders` currently answers a proxied 4xx for every
 period format probed, so it is exposed against the documented shape and noted
 here. The same `delay_note`-is-null caveat applies: state the platform-wide
 delay in descriptions, never promise `data.delay_note`.
+
+**Coverage expansion (#4110 phase 3).** Six more read tools joined, closing the
+plugin-only panes that had a real Cloud/API endpoint: `digifetch_shiller` (the
+monthly valuation series behind the market-valuation pane; a client-side tail
+slice with `total_available`/`truncated`), `digifetch_proxy_statements` and
+`digifetch_risk_reports` (the executives and risk-factors panes, served by the
+anonymous **`/public/proxies`** and **`/public/risks`** open reads — list +
+per-year detail, `what`-discriminated), `digifetch_filing_events` (the
+filing-events pane's classified 8-K feed), `digifetch_short_interest`
+(session-gated `/market/short-interest`, `years` 1–10 client-side), and
+`digifetch_equity_diagnostic` (the research pane's POST
+`/research/equity-diagnostic` AI review; pending-or-report union, no pending
+caching, `direct_payload` because its own `status` field collides with the
+market envelope, `access=preview` for free sessions). Live-probed 2026-09-15
+with the repo session cookie; the public filing routes need no cookie at all.
+
+**Deliberately out of scope (client-side or non-Cloud sources).** The remaining
+plugin panes compute from already-tooled routes or call third parties
+directly, so no new tool was added: correlation / relationship graph (client
+math over `/market/history`), dividend yield and the Yahoo short-interest
+fallback (`query1.finance.yahoo.com`), world indices / FX matrix / futures
+(quote + history composition; futures are Yahoo continuous symbols),
+volatility term structure and credit conditions (FRED series composition over
+`digifetch_econ_series`), treasury auctions (`api.fiscaldata.treasury.gov`),
+prediction markets (kelly-sizer is a local model with no data endpoint),
+market movers / scanner (already-tooled `/market/screener` plus Yahoo
+trending; the live scanner is a websocket stream), and short-interest coverage
+is the Cloud proxy above. The per-transcript detail route
+(`/cloud/transcripts/{id}`) exists and remains a candidate extension of the
+existing `digifetch_transcripts` family.
 
 **Not a pipeline primary.** The 15-minute free-tier delay, rate limits, and
 `1wk→5y` history cap disqualify the Cloud surface as a primary data source. It
@@ -1495,7 +1533,7 @@ The sandbox runs as UID `10001` (`sandbox`). It does not install digiquant itsel
 | `DIGIKEY_ISSUER` | `http://digikey:8005` | JWT issuer |
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | JWT audience |
 | `DIGIKEY_PUBLIC_KEY_PEM` | `""` | Inline PEM for offline JWT verification |
-| `GLOOMBERB_ENABLED` | unset (ON) | Kill switch for the 27 `digifetch_*` Gloomberb tools. Only `1`/`true`/`yes`/`on` enable the family; any other value (including a typo) disables it, and every call then returns a typed `upstream_error` without a request |
+| `GLOOMBERB_ENABLED` | unset (ON) | Kill switch for the 33 `digifetch_*` Gloomberb tools. Only `1`/`true`/`yes`/`on` enable the family; any other value (including a typo) disables it, and every call then returns a typed `upstream_error` without a request |
 | `GLOOMBERB_SESSION_COOKIE` | `""` | Optional Gloom session cookie for the session-gated endpoints (holders, analyst research, corporate actions, research search, transcripts, statements, ticker tweets, tweet search — transcripts and screener additionally need a Pro plan). Bare token or `name=value`; never logged, never echoed into payloads, forwarded only to same-origin redirect hops |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `""` | OpenTelemetry collector endpoint |
 | `LOG_LEVEL` | `"INFO"` | Logging level for MCP server |
@@ -1553,9 +1591,9 @@ Each `BacktestResult` has a `run_id` but no persistent store. The audit JSONL is
 
 ### Gloomberb Market-Data Integration (#3927, implemented in #4069; coverage expanded in #4110)
 
-Scoping spec: [`2026-09-12-digifetch-scoping-design.md`](../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md). The original 13 `digifetch_*` tools (12 over Gloomberb Cloud `api.gloom.sh`, including ungated news; 3 session-gated; one Yahoo-backed earnings calendar) landed in #4069. #4110 phase 1 added 7 more read tools on the same envelope/attribution semantics: `digifetch_econ_calendar`, `digifetch_econ_series`, `digifetch_yield_curve`, `digifetch_cds` (`days` 1–90 validated client-side), session-gated `digifetch_research_search`, `digifetch_congress_trades`, and `digifetch_transcripts` (**requires Gloomberb Pro** — the free-session `Pro plan required` body is a typed `auth_required`). `digifetch_congress_trades` is currently blocked upstream by the Mistral OCR spend cap (HTTP 500 → typed `upstream_error`); the route is exposed so coverage completes when upstream recovers. **#4110 phase 2** added the remaining 7: `digifetch_statements`, `digifetch_ticker_tweets`, `digifetch_tweet_search`, `digifetch_venues`, `digifetch_screener` (Pro-only; the 200 `PRO_REQUIRED` envelope and the 402 text body share one typed plan error), `digifetch_13f_funds`, and `digifetch_13f_holdings` (`cik` zero-padded to 10 digits; live-probed against the real API, with the 13F `holders` route still answering upstream 400 for every period format probed). The family is 27 read tools total. It remains an **enrichment** read path for agents, digichat, and a future same-origin dashboard market-data page — plus external deep links with "Sourced from Gloomberb" attribution. It is explicitly **not** a pipeline data-source replacement (15-minute free-tier delay, rate limits, 5Y history caps).
+Scoping spec: [`2026-09-12-digifetch-scoping-design.md`](../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md). The original 13 `digifetch_*` tools (12 over Gloomberb Cloud `api.gloom.sh`, including ungated news; 3 session-gated; one Yahoo-backed earnings calendar) landed in #4069. #4110 phase 1 added 7 more read tools on the same envelope/attribution semantics: `digifetch_econ_calendar`, `digifetch_econ_series`, `digifetch_yield_curve`, `digifetch_cds` (`days` 1–90 validated client-side), session-gated `digifetch_research_search`, `digifetch_congress_trades`, and `digifetch_transcripts` (**requires Gloomberb Pro** — the free-session `Pro plan required` body is a typed `auth_required`). `digifetch_congress_trades` is currently blocked upstream by the Mistral OCR spend cap (HTTP 500 → typed `upstream_error`); the route is exposed so coverage completes when upstream recovers. **#4110 phase 2** added the remaining 7: `digifetch_statements`, `digifetch_ticker_tweets`, `digifetch_tweet_search`, `digifetch_venues`, `digifetch_screener` (Pro-only; the 200 `PRO_REQUIRED` envelope and the 402 text body share one typed plan error), `digifetch_13f_funds`, and `digifetch_13f_holdings` (`cik` zero-padded to 10 digits; live-probed against the real API, with the 13F `holders` route still answering upstream 400 for every period format probed). **#4110 phase 3** closed the plugin-only panes that had a real endpoint with 6 more: `digifetch_shiller` (valuation), `digifetch_proxy_statements` and `digifetch_risk_reports` (executives / risk factors; anonymous `/public/*` open reads), `digifetch_filing_events`, `digifetch_short_interest` (session-gated), and `digifetch_equity_diagnostic` (POST AI review; pending-or-report). The family is 33 read tools total; the remaining panes are client-side compositions or non-Cloud third-party calls and are documented as out of scope in §5. It remains an **enrichment** read path for agents, digichat, and a future same-origin dashboard market-data page — plus external deep links with "Sourced from Gloomberb" attribution. It is explicitly **not** a pipeline data-source replacement (15-minute free-tier delay, rate limits, 5Y history caps).
 
-Phase 1 (the `data/gloomberb/` data layer + unit tests, `digifetch`/`httpx` declared) and Phase 2 (MCP registration + orchestrator manifest + attribution) landed in #4069; #4110 phases 1–2 (macro/credit/search/transcript, plus statements/tweets/venues/screener/13F) are on their task branches, and the remaining surface (short-interest is skipped — route not found; plugin-only panes and digiquant surface integration) stays open in that issue. The tools are **MCP-surface + manifest only** — `/v1/orchestrator_invoke` has no dispatch branch for them yet (same state as the coinbase/BGeometrics/CoinMetrics fetch tools). Remaining open items from #4069: the **human gate** (new external service dependency `api.gloom.sh` — the implementation PR may not self-merge per `agents.yml` `human_gates`), the `bunx gloomberb api list --json` diff, re-measuring the `1wk`/`ALL` truncation, container-egress verification including `Origin`/User-Agent, and the ToS/volume review (spec §12 item 5).
+Phase 1 (the `data/gloomberb/` data layer + unit tests, `digifetch`/`httpx` declared) and Phase 2 (MCP registration + orchestrator manifest + attribution) landed in #4069; #4110 phases 1–3 (macro/credit/search/transcript; statements/tweets/venues/screener/13F; valuation/executives/risk/filing-events/short-interest/equity-diagnostic) are on their task branches, and the remaining surface (plugin-only panes, digiquant surface integration) stays open in that issue. The tools are **MCP-surface + manifest only** — `/v1/orchestrator_invoke` has no dispatch branch for them yet (same state as the coinbase/BGeometrics/CoinMetrics fetch tools). Remaining open items from #4069: the **human gate** (new external service dependency `api.gloom.sh` — the implementation PR may not self-merge per `agents.yml` `human_gates`), the `bunx gloomberb api list --json` diff, re-measuring the `1wk`/`ALL` truncation, container-egress verification including `Origin`/User-Agent, and the ToS/volume review (spec §12 item 5).
 
 ---
 

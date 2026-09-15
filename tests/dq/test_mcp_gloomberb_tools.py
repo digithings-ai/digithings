@@ -61,6 +61,13 @@ DIGIFETCH_TOOLS = {
     "digifetch_screener",
     "digifetch_13f_funds",
     "digifetch_13f_holdings",
+    # coverage expansion (#4110 phase 3)
+    "digifetch_shiller",
+    "digifetch_proxy_statements",
+    "digifetch_filing_events",
+    "digifetch_risk_reports",
+    "digifetch_short_interest",
+    "digifetch_equity_diagnostic",
 }
 
 #: Tools whose payload carries a term.gloom.sh deep link (one listing).
@@ -76,6 +83,11 @@ LINKED_TOOLS = {
     "digifetch_transcripts",
     "digifetch_statements",
     "digifetch_ticker_tweets",
+    "digifetch_proxy_statements",
+    "digifetch_filing_events",
+    "digifetch_risk_reports",
+    "digifetch_short_interest",
+    "digifetch_equity_diagnostic",
 }
 
 AAPL_QUOTE = {
@@ -326,11 +338,118 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
                 }
             ],
         )
+    if path == "/cloud/econ/shiller":
+        return httpx.Response(
+            200,
+            json={
+                "observations": [{"date": "2026-08-01", "price": 6000.0, "cape": 35.0}],
+                "sourceUrl": "https://example.test/shiller.csv",
+                "fetchedAt": "2026-09-15T06:20:06.110Z",
+            },
+        )
+    if path == "/public/proxies/AAPL":
+        company = {
+            "ticker": "AAPL",
+            "cik": "0000320193",
+            "name": "Apple Inc.",
+            "shortName": "Apple",
+        }
+        return httpx.Response(
+            200,
+            json={
+                "company": company,
+                "proxies": [
+                    {
+                        "id": "p1",
+                        "ticker": "AAPL",
+                        "company": company,
+                        "proxyYear": 2026,
+                        "ceoName": "Tim Cook",
+                    }
+                ],
+            },
+        )
+    if path == "/public/proxies/AAPL/2026":
+        return httpx.Response(
+            200,
+            json={
+                "id": "p1",
+                "ticker": "AAPL",
+                "company": {"ticker": "AAPL", "name": "Apple Inc."},
+                "proxyYear": 2026,
+                "docUrl": "https://sec.test/p",
+                "namedExecutives": [],
+                "keyFigures": [],
+                "otherYears": [],
+            },
+        )
+    if path == "/public/events/AAPL":
+        return httpx.Response(
+            200,
+            json={
+                "ticker": "AAPL",
+                "events": [{"id": "e1", "ticker": "AAPL", "headline": "Results of operations"}],
+            },
+        )
+    if path == "/public/risks/AAPL":
+        return httpx.Response(
+            200,
+            json={
+                "company": {"ticker": "AAPL", "name": "Apple Inc."},
+                "reports": [
+                    {
+                        "id": "r1",
+                        "ticker": "AAPL",
+                        "company": {"ticker": "AAPL", "name": "Apple Inc."},
+                        "reportYear": 2025,
+                    }
+                ],
+            },
+        )
+    if path == "/public/risks/AAPL/2025":
+        return httpx.Response(
+            200,
+            json={
+                "id": "r1",
+                "ticker": "AAPL",
+                "company": {"ticker": "AAPL", "name": "Apple Inc."},
+                "reportYear": 2025,
+                "risks": [{"heading": "H", "excerpt": "E"}],
+                "groups": ["Macro"],
+                "otherYears": [],
+            },
+        )
+    if path == "/market/short-interest":
+        return httpx.Response(
+            200,
+            json={
+                "status": "success",
+                "data": {
+                    "symbol": "AAPL",
+                    "issueName": "Apple Inc.",
+                    "points": [{"settlementDate": "2026-08-31", "sharesShort": 1.0}],
+                },
+            },
+        )
+    if path == "/research/equity-diagnostic":
+        return httpx.Response(
+            200,
+            json={
+                "schemaVersion": 1,
+                "access": "preview",
+                "symbol": "AAPL",
+                "status": "partial",
+                "verdict": "unclear",
+                "findings": [],
+                "coverage": [],
+                "evidence": [],
+            },
+        )
     raise AssertionError(f"unexpected Gloomberb path {path!r}")
 
 
-def test_all_27_tools_registered_in_full_and_read_scope() -> None:
-    assert len(DIGIFETCH_TOOLS) == 27
+def test_all_33_tools_registered_in_full_and_read_scope() -> None:
+    assert len(DIGIFETCH_TOOLS) == 33
     assert DIGIFETCH_TOOLS <= _names()
     assert DIGIFETCH_TOOLS <= _names(scope="read")
 
@@ -497,6 +616,12 @@ TOOL_CALLS: dict[str, tuple[Any, ...]] = {
     "digifetch_screener": ("gainers",),
     "digifetch_13f_funds": ("search", "berkshire"),
     "digifetch_13f_holdings": ("forms", "1067983"),
+    "digifetch_shiller": (),
+    "digifetch_proxy_statements": ("AAPL",),
+    "digifetch_filing_events": ("AAPL",),
+    "digifetch_risk_reports": ("AAPL",),
+    "digifetch_short_interest": ("AAPL",),
+    "digifetch_equity_diagnostic": ("AAPL",),
 }
 
 
@@ -929,3 +1054,252 @@ def test_ticker_tweets_wrapper_applies_the_hours_window(
     assert [tweet["id"] for tweet in data["tweets"]] == ["recent"]
     assert data["total_available"] == 2
     assert data["truncated"] is True
+
+
+# ── coverage expansion (#4110 phase 3) ──────────────────────────────────────
+
+
+def test_shiller_wrapper_slices_the_series(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "observations": [
+                    {"date": f"2026-0{i}-01", "price": 100.0 + i, "cape": 30.0 + i}
+                    for i in range(1, 6)
+                ],
+                "sourceUrl": "https://example.test/shiller.csv",
+                "fetchedAt": "2026-09-15T06:20:06.110Z",
+            },
+        )
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(_mcp("digifetch_shiller")(2))
+    data = payload["data"]
+    assert [row["date"] for row in data["observations"]] == ["2026-04-01", "2026-05-01"]
+    assert data["total_available"] == 5
+    assert data["truncated"] is True
+    assert data["source_url"] == "https://example.test/shiller.csv"
+
+
+def test_proxy_statements_wrapper_lists_and_fetches_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        if request.url.path.endswith("/2026"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "p1",
+                    "ticker": "AAPL",
+                    "company": {"ticker": "AAPL", "name": "Apple Inc."},
+                    "proxyYear": 2026,
+                    "ceo": {"name": "Tim Cook", "total": 1.0},
+                    "docUrl": "https://sec.test/p",
+                    "namedExecutives": [],
+                    "keyFigures": [],
+                    "otherYears": [],
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "company": {"ticker": "AAPL", "name": "Apple Inc."},
+                "proxies": [
+                    {
+                        "id": "p1",
+                        "ticker": "AAPL",
+                        "company": {"ticker": "AAPL", "name": "Apple Inc."},
+                        "proxyYear": 2026,
+                    }
+                ],
+            },
+        )
+
+    _patch_client(monkeypatch, handler)
+    listed = json.loads(_mcp("digifetch_proxy_statements")("AAPL"))
+    assert listed["data"]["proxies"][0]["proxy_year"] == 2026
+    assert listed["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
+
+    one = json.loads(_mcp("digifetch_proxy_statements")("AAPL", "statement", 2026))
+    assert one["data"]["statement"]["ceo"]["name"] == "Tim Cook"
+    assert "/public/proxies/AAPL/2026" in seen["url"]
+
+
+def test_proxy_statement_without_year_is_invalid_input_without_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, json={})
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(_mcp("digifetch_proxy_statements")("AAPL", "statement"))
+    assert payload["data"]["code"] == "invalid_input"
+    assert calls == []
+
+
+def test_risk_report_without_year_is_invalid_input_without_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, json={})
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(_mcp("digifetch_risk_reports")("AAPL", "report"))
+    assert payload["data"]["code"] == "invalid_input"
+    assert calls == []
+
+
+def test_filing_events_wrapper_maps_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "ticker": "AAPL",
+                "events": [
+                    {
+                        "id": "e1",
+                        "ticker": "AAPL",
+                        "items": ["2.02"],
+                        "labels": ["Results of operations"],
+                        "material": False,
+                        "read": False,
+                    }
+                ],
+            },
+        )
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(_mcp("digifetch_filing_events")("AAPL", 5))
+    event = payload["data"]["events"][0]
+    assert event["items"] == ["2.02"]
+    assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
+
+
+def test_short_interest_without_cookie_is_auth_required_without_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return _envelope({"symbol": "AAPL", "points": []})
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(_mcp("digifetch_short_interest")("AAPL"))
+    assert payload["data"]["code"] == "auth_required"
+    assert calls == []
+
+
+def test_short_interest_out_of_range_years_is_invalid_input_without_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return _envelope({"symbol": "AAPL", "points": []})
+
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    payload = json.loads(_mcp("digifetch_short_interest")("AAPL", 11))
+    assert payload["data"]["code"] == "invalid_input"
+    assert calls == []
+
+
+def test_short_interest_wrapper_maps_points(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _envelope(
+            {
+                "symbol": "AAPL",
+                "issueName": "Apple Inc.",
+                "points": [{"settlementDate": "2026-08-31", "sharesShort": 1.0, "revised": False}],
+            }
+        )
+
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    payload = json.loads(_mcp("digifetch_short_interest")("AAPL", 1))
+    point = payload["data"]["points"][0]
+    assert point["settlement_date"] == "2026-08-31"
+    assert point["shares_short"] == 1.0
+    assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
+
+
+def test_equity_diagnostic_pending_is_mapped_and_not_client_cached(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(202, json={"status": "generating", "retryAfterMs": 2000})
+
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    first = json.loads(_mcp("digifetch_equity_diagnostic")("AAPL"))
+    assert first["data"]["pending"]["retry_after_ms"] == 2000
+    assert first["data"]["report"] is None
+    # A pending payload must not enter the 900s client cache: the retry hits
+    # the wire again.
+    second = json.loads(_mcp("digifetch_equity_diagnostic")("AAPL"))
+    assert second["data"]["pending"]["status"] == "generating"
+    assert calls == [1, 1]
+
+
+def test_equity_diagnostic_report_is_mapped(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "schemaVersion": 1,
+                "access": "preview",
+                "symbol": "AAPL",
+                "status": "partial",
+                "verdict": "risk_skewed",
+                "summary": "Two flags found",
+                "findings": [
+                    {
+                        "id": "F1",
+                        "kind": "red_flag",
+                        "severity": 3,
+                        "title": "Margin compression",
+                        "observation": "Gross margin fell",
+                        "interpretation": "Pricing pressure",
+                        "evidenceIds": ["E1"],
+                    }
+                ],
+                "coverage": [{"dataset": "statements", "status": "available"}],
+                "evidence": [{"id": "E1", "dataset": "statements", "label": "10-K"}],
+            },
+        )
+
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    payload = json.loads(_mcp("digifetch_equity_diagnostic")("AAPL"))
+    report = payload["data"]["report"]
+    assert report["access"] == "preview"
+    assert report["verdict"] == "risk_skewed"
+    assert report["findings"][0]["kind"] == "red_flag"
+    assert report["findings"][0]["evidence_ids"] == ["E1"]
+    assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
+
+
+def test_equity_diagnostic_without_cookie_is_auth_required_without_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, json={"status": "generating", "retryAfterMs": 1})
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(_mcp("digifetch_equity_diagnostic")("AAPL"))
+    assert payload["data"]["code"] == "auth_required"
+    assert calls == []

@@ -898,6 +898,167 @@ def build_digifetch_13f_holdings_tool() -> dict[str, Any]:
     }
 
 
+def build_digifetch_shiller_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_shiller",
+            "description": (
+                "Robert Shiller's monthly valuation series (Gloomberb Cloud, "
+                "anonymous). Returns the most recent limit rows (default 240; "
+                "the full series is ~1869 rows from 1871) with price/dividend/"
+                "earnings/CPI/long-rate plus CAPE and excess CAPE yield; "
+                "total_available/truncated report the tail slice. Long-run "
+                "reference data (monthly cadence), not intraday."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "default": 240, "minimum": 1, "maximum": 2000},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_proxy_statements_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_proxy_statements",
+            "description": (
+                "Executive-compensation proxy statements (Gloomberb Cloud, "
+                "anonymous open reads). what=list lists every proxy for the "
+                "ticker; what=statement returns one full proxy (comp tables, "
+                "say-on-pay, key figures) and requires year — the PROXY "
+                "(filing) year, not the fiscal year. Adds a term.gloom.sh "
+                "deep link."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string"},
+                    "what": {"type": "string", "enum": ["list", "statement"], "default": "list"},
+                    "year": {"type": "integer", "description": "what=statement proxy year"},
+                },
+                "required": ["ticker"],
+            },
+        },
+    }
+
+
+def build_digifetch_filing_events_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_filing_events",
+            "description": (
+                "Classified 8-K filing events for one ticker (Gloomberb Cloud, "
+                "anonymous). Rows carry item codes/labels/kinds, materiality, "
+                "the SEC document URL, named people, and a model reading "
+                "(read=true) when the filing carried news. Newest first; limit "
+                "caps the page. Adds a term.gloom.sh deep link. Cached/delayed "
+                "— cross-check against EDGAR."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string"},
+                    "limit": {"type": "integer", "default": 20, "minimum": 1, "maximum": 200},
+                },
+                "required": ["ticker"],
+            },
+        },
+    }
+
+
+def build_digifetch_risk_reports_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_risk_reports",
+            "description": (
+                "10-K risk-factor reports, diffed year-over-year (Gloomberb "
+                "Cloud, anonymous). what=list lists report years with counts "
+                "and an overview; what=report returns one year's extracted "
+                "risk factors, groups, the added/removed/reworded diff, and "
+                "notes (requires year). Adds a term.gloom.sh deep link. "
+                "Cached/delayed — cross-check against EDGAR."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string"},
+                    "what": {"type": "string", "enum": ["list", "report"], "default": "list"},
+                    "year": {"type": "integer", "description": "what=report report year"},
+                },
+                "required": ["ticker"],
+            },
+        },
+    }
+
+
+def build_digifetch_short_interest_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_short_interest",
+            "description": (
+                "Biweekly short-interest settlements (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE — without it "
+                "the call is a typed auth_required with no request. years is "
+                "1-10 (the upstream silently falls back to a 3-year window "
+                "outside that range; the contract rejects it first). Points "
+                "carry shares short, average daily volume, days to cover, and "
+                "change percent. Adds a term.gloom.sh deep link. "
+                "Exchange-reported, delayed by reporting cadence."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "years": {"type": "integer", "default": 3, "minimum": 1, "maximum": 10},
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_equity_diagnostic_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_equity_diagnostic",
+            "description": (
+                "AI evidence review for one listing (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE. The first "
+                "request per symbol answers a pending payload "
+                "(status=generating + retryAfterMs); retry until a report "
+                "arrives (complete/partial/insufficient_data) whose findings "
+                "keep observation and interpretation separate. Free sessions "
+                "only receive access=preview; mode=refresh asks the server to "
+                "regenerate. Gloomberb's model-generated reading — not "
+                "investment advice. Complete reports are cached, pending ones "
+                "are not. Adds a term.gloom.sh deep link."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "exchange": {"type": "string"},
+                    "mode": {
+                        "type": "string",
+                        "enum": ["cache-first", "refresh"],
+                        "default": "cache-first",
+                    },
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
 def build_digiquant_fit_btc_power_law_tool() -> dict[str, Any]:
     return {
         "type": "function",
@@ -1354,6 +1515,12 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digifetch_screener_tool(),
         build_digifetch_13f_funds_tool(),
         build_digifetch_13f_holdings_tool(),
+        build_digifetch_shiller_tool(),
+        build_digifetch_proxy_statements_tool(),
+        build_digifetch_filing_events_tool(),
+        build_digifetch_risk_reports_tool(),
+        build_digifetch_short_interest_tool(),
+        build_digifetch_equity_diagnostic_tool(),
         build_digiquant_fit_btc_power_law_tool(),
         build_digiquant_build_sdca_risk_index_tool(),
         build_digiquant_fetch_bitview_series_tool(),
