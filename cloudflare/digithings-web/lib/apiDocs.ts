@@ -438,7 +438,7 @@ for hit in r.json()["results"]:
       standalone: "uvicorn digikey.server:app",
     },
     env: [
-      { name: "DIGIKEY_DATABASE_URL", required: true, description: "SQLite or Postgres URL for key storage." },
+      { name: "DIGIKEY_DATABASE_URL", required: true, description: "Postgres or SQLite URL for key storage. Required with no fallback — the service refuses to start if unset (#4080)." },
       { name: "DIGIKEY_PRIVATE_KEY_PEM", description: "RSA 2048 PEM for RS256 signing (prod)." },
       { name: "DIGIKEY_ADMIN_TOKEN", required: true, description: "Bearer for POST /v1/admin/keys." },
       { name: "DIGIKEY_BFF_TOKEN", description: "Bearer for grant_type=bff_session (digichat)." },

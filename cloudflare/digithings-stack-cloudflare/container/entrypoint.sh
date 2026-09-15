@@ -119,7 +119,9 @@ export VECTORIZE_API_TOKEN="${VECTORIZE_API_TOKEN:-}"
 export D1_ACCOUNT_ID="${D1_ACCOUNT_ID:-}"
 export D1_API_TOKEN="${D1_API_TOKEN:-}"
 export D1_DATABASE_MAP="${D1_DATABASE_MAP:-}"
-export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}"
+# Required, with no fallback: a synthesized SQLite path here would live on this
+# instance's ephemeral /data and lose every issued API key (#4080).
+export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-}"
 export DIGIKEY_BLOCKLIST_REDIS_URL="${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://127.0.0.1:6379/0}"
 export DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-0}"
 export PYTHONPATH="/app/digikey/src:/app/digigraph/src:/app/digisearch/src:/app/digivault/src:/app/digibase/src:/app/digillm/src:/app/digismith/src${PYTHONPATH:+:$PYTHONPATH}"
