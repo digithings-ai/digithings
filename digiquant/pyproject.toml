@@ -26,6 +26,15 @@ dependencies = [
     "cryptography>=42",
     # K5 email templates (notify/dispatch).
     "jinja2>=3.1",
+    # digifetch x Gloomberb data layer (#4069): digiquant.data.gloomberb builds
+    # on the digifetch transport engine (HttpFetcher/RateLimiter/with_retry)
+    # against api.gloom.sh. Declared directly (like digibase) even though the
+    # dev workspace provides it, so the package install is self-contained.
+    "digifetch>=0.1.0",
+    # httpx is digifetch's transport; pinned here too because the Gloomberb
+    # client catches httpx.HTTPStatusError/TransportError in its own error
+    # mapping (spec §5.5). Unbounded per CLAUDE.md (runtime dep).
+    "httpx>=0.27",
 ]
 [project.optional-dependencies]
 nautilus = ["nautilus_trader>=1.190,<2", "requests>=2.28", "statsmodels>=0.14"]
@@ -83,7 +92,10 @@ all = ["digiquant[nautilus]"]
 dev = ["digiquant[research]", "digiquant[indicators]", "digiquant[m2]"]
 # Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp`, which both MCP servers
 # import (see #1705). Lift the bound only together with a migration to the 2.x API.
-mcp = ["mcp>=1.2,<2"]
+# yfinance backs digifetch_earnings_calendar (the one Yahoo-backed tool in the
+# digifetch family, #4069). Declared on this extra so the MCP image
+# ([research,mcp]) serves all 13 tools instead of 12 + a typed upstream_error.
+mcp = ["mcp>=1.2,<2", "yfinance>=0.2"]
 otel = ["digibase[otel]"]
 # Alpaca paper Trading API adapter (K1). Cap to the current 0.x major — a broker
 # SDK is a behavior-critical boundary (auth kwargs, order request shapes, status

@@ -471,6 +471,56 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 
 ---
 
+## Gloomberb market-data client (#4069)
+
+`src/digiquant/data/gloomberb/` is the digifetch x Gloomberb enrichment layer
+(spec: [`../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`](../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md)).
+It is the **only** place the `api.gloom.sh` URL/site logic lives — `digifetch`
+stays a generic transport engine (no URLs, no env reads).
+
+- **13 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
+  `digifetch_price_history`, `digifetch_ticker_financials`, `digifetch_options_chain`,
+  `digifetch_sec_filings`, `digifetch_holders`, `digifetch_analyst_research`,
+  `digifetch_corporate_actions`, `digifetch_earnings_calendar`,
+  `digifetch_exchange_rate`, `digifetch_search`, `digifetch_news` are registered in
+  `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed in
+  `orchestrator_tools.py`. Keep them read-scope; the family is default-ON behind
+  `GLOOMBERB_ENABLED` — only `1`/`true`/`yes`/`on` enable it, and any other value
+  (a typo included) disables the family, returning a typed `upstream_error`
+  without a request.
+- **Pacing.** 900s TTL cache whose expired entries are evicted on access (and
+  which is size-bounded); retries narrowed to timeouts/5xx; a 429 `Retry-After`
+  is honored with a bounded injectable sleep; the circuit breaker counts only
+  upstream-health failures, so repeated `auth_required`/`not_found` never block
+  unrelated tools; per-call session cookies are forwarded only to same-origin
+  redirect hops.
+- **Enrichment only, never a pipeline primary.** 15-minute free-tier delay, rate
+  limits, and the §5.2 caps (5m→1wk … 1wk→5y, 1mo→all-time) disqualify Cloud as a
+  source of record. Contract violations are **rejected** (`invalid_input`), never
+  clamped. Do not rewire prices/history/technicals onto it.
+- **Envelope contract.** Every call returns `DigifetchEnvelope[T]` with `data`
+  either the payload or a typed `DigifetchError` (`auth_required` / `not_found` /
+  `rate_limited` / `upstream_error` / `invalid_input`); tools never raise. Keep the
+  two freshness signals distinct: wire `stale` → `"Upstream cache stale"`;
+  `dataSource: "delayed"` / `delayMinutes > 0` → `"Free-tier data delayed up to
+  15 minutes"` (not stale).
+- **Session cookie.** `GLOOMBERB_SESSION_COOKIE` (bare token or `name=value`) is
+  attached **only** to holders / analyst research / corporate actions. Never log
+  it, never put it in a tool payload; without it those tools return
+  `auth_required` with no request. SEC filings stay anonymous.
+- **Attribution (spec §7).** Payloads carry "Sourced from Gloomberb" + the delay
+  notice and a `term.gloom.sh/?ticker=` deep link where one listing is addressed.
+  The Yahoo-backed earnings calendar must **not** claim Gloomberb attribution.
+- **Human gate.** `api.gloom.sh` is a new external service dependency — the
+  implementation PR cannot self-merge (`agents.yml` `human_gates`), and the
+  container-egress / ToS spike items (spec §12 item 5) stay open.
+- **Tests are offline.** `httpx.MockTransport` on the injected
+  `digifetch.HttpFetcher`, or a patched `_build_gloomberb_client`; never hit the
+  live API. Run `pytest tests/dq/test_mcp_gloomberb_tools.py tests/dq/data/test_gloomberb_*.py`
+  plus `pytest tests/dq/test_mcp_server_scope.py`.
+
+---
+
 ## research sandbox image (#396)
 
 `digiquant/Dockerfile.sandbox` is a **separate** image from the digiquant HTTP
