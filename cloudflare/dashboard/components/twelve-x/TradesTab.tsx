@@ -11,8 +11,11 @@ import {
 } from '@digithings/web';
 import type { FxIdeaEvalRow, FxTradeIdeaRow } from '@/lib/twelve-x/types';
 import {
+  annotateLevelUpdates,
   assembleTradeHistory,
   biasLabel,
+  closeCounts,
+  closeReason,
   displayableTradeHistory,
   filterTradeHistory,
   formatHoldPct,
@@ -171,7 +174,8 @@ export default function TradesTab({
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const history = useMemo(
-    () => displayableTradeHistory(assembleTradeHistory(ideas, ideaEval)),
+    () =>
+      displayableTradeHistory(annotateLevelUpdates(assembleTradeHistory(ideas, ideaEval))),
     [ideas, ideaEval],
   );
 
@@ -195,6 +199,7 @@ export default function TradesTab({
     [filtered, sortKey, sortDir],
   );
   const summary = useMemo(() => summarizeFilteredTrades(filtered), [filtered]);
+  const closeTally = useMemo(() => closeCounts(filtered), [filtered]);
 
   const scrollKey = `${resultFilter}|${pairFilter}|${boardFrom}|${boardTo}|${impactMinPct}|${sortKey}|${sortDir}`;
   const visibleCount = scroll.key === scrollKey ? scroll.count : PAGE_SIZE;
@@ -323,6 +328,10 @@ export default function TradesTab({
               label="Avg return (wrongs)"
               value={formatHoldPct(summary.avgReturnWrongs)}
             />
+            <Metric label="Target hits" value={String(closeTally.targets)} />
+            <Metric label="Stops" value={String(closeTally.stops)} />
+            <Metric label="Superseded" value={String(closeTally.superseded)} />
+            <Metric label="Dropped" value={String(closeTally.dropped)} />
             <span className="self-end font-mono text-[10px] text-ink-mute">
               {filtered.length} matching
               {visible.length < filtered.length ? ` · showing ${visible.length}` : ''}
@@ -362,6 +371,7 @@ export default function TradesTab({
                       align="right"
                     />
                     <SortHeader label="Result" sortKey="result" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    <th className="px-3 py-2 text-left font-medium">Close</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-hair">
@@ -409,12 +419,18 @@ function Metric({
 
 function TradeRow({ row }: { row: TradeHistoryRow }) {
   const result = tradeResult(row);
+  const close = closeReason(row);
   if (result === null) return null;
   return (
     <tr>
       <td className="whitespace-nowrap px-3 py-2 font-mono text-ink-mute">
         {row.runDate}
         {row.continuedFrom ? <span className="ml-1">· cont. since {row.continuedFrom}</span> : null}
+        {row.levelsUpdated ? (
+          <span className="ml-1 text-accent" title={`levels updated vs ${row.levelsUpdatedFrom}`}>
+            · updated
+          </span>
+        ) : null}
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-ink">{row.pair}</td>
       <td className="whitespace-nowrap px-3 py-2 text-ink">{biasLabel(row.direction)}</td>
@@ -439,6 +455,9 @@ function TradeRow({ row }: { row: TradeHistoryRow }) {
       </td>
       <td className="whitespace-nowrap px-3 py-2">
         <ResultPill result={result} />
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 text-ink-mute">
+        <span title={close.detail}>{close.label}</span>
       </td>
     </tr>
   );

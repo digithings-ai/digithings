@@ -120,9 +120,9 @@ describe('TwelveXClient deep-link hydration', () => {
     expect(activeTabs(open.container)).toEqual(['Trades']);
   });
 
-  it('lands ?tab=track-record on the Track record tab (no longer a legacy redirect)', async () => {
+  it('keeps ?tab=track-record resolvable with no tab chrome (hidden scoreboard)', async () => {
     open = await hydrateAt('?tab=track-record');
-    expect(activeTabs(open.container)).toEqual(['Track record']);
+    expect(activeTabs(open.container)).toEqual([]);
   });
 
   it('stays on Today with no tab param', async () => {

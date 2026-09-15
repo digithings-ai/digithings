@@ -6,7 +6,6 @@ import {
   CalendarDays,
   ClipboardList,
   Grid3x3,
-  History,
   LineChart as LineChartIcon,
   Workflow,
 } from 'lucide-react';
@@ -70,7 +69,6 @@ export const TWELVE_X_TABS: ReadonlyArray<{ id: TwelveXTab; Icon: typeof Calenda
   { id: 'today', Icon: CalendarClock, label: 'Today' },
   { id: 'consensus', Icon: LineChartIcon, label: 'Consensus' },
   { id: 'trades', Icon: ClipboardList, label: 'Trades' },
-  { id: 'track-record', Icon: History, label: 'Track record' },
   { id: 'matrix', Icon: Grid3x3, label: 'Matrix' },
   { id: 'events', Icon: CalendarDays, label: 'Events' },
   { id: 'how-it-works', Icon: Workflow, label: 'How it works' },

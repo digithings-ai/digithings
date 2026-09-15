@@ -37,6 +37,18 @@ export interface TradeHistoryRow {
   continuedFrom?: string;
   /** Distinct carried board count backing this row; set only when ≥2. */
   nBoards?: number;
+  /** Raw fx_idea_eval lifecycle status (carried | dropped | resolved | missing_rates). */
+  evalStatus?: string | null;
+  /** Bookkeeper drop rationale (fx_idea_eval.verdict_reason). */
+  verdictReason?: string | null;
+  /** Level-touch verdict (target | stop | both | neither | no_entry). */
+  levelOutcome?: string | null;
+  /** 0.5σ excursion verdict while live (right | wrong | inconclusive). */
+  biasVerdict?: string | null;
+  /** True when a later board on this axis moved this row's stop or target. */
+  levelsUpdated?: boolean;
+  /** Previous board date when levelsUpdated is set. */
+  levelsUpdatedFrom?: string;
 }
 
 export type ResultFilter = 'all' | 'wins' | 'losses' | 'live';
@@ -223,6 +235,10 @@ export function assembleTradeHistory(
           directionalWin: ev?.directional_win ?? ev?.hit ?? null,
           continuedFrom: ev?.continued_from ?? undefined,
           nBoards: ev?.n_boards ?? undefined,
+          evalStatus: ev?.status ?? null,
+          verdictReason: ev?.verdict_reason ?? null,
+          levelOutcome: ev?.level_outcome ?? null,
+          biasVerdict: ev?.bias_verdict ?? null,
         } satisfies TradeHistoryRow;
     })
     .sort((a, b) => b.runDate.localeCompare(a.runDate) || a.rank - b.rank);
@@ -372,4 +388,143 @@ export function uniquePairs(rows: TradeHistoryRow[]): string[] {
 
 export function uniqueBoards(rows: TradeHistoryRow[]): string[] {
   return [...new Set(rows.map((r) => r.runDate))].sort((a, b) => b.localeCompare(a));
+}
+
+export type TradeCloseKind =
+  | 'live'
+  | 'target'
+  | 'stop'
+  | 'both'
+  | 'superseded'
+  | 'dropped'
+  | 'no-data';
+
+export interface TradeCloseReason {
+  kind: TradeCloseKind;
+  label: string;
+  detail?: string;
+}
+
+const LEVEL_OUTCOME_LABELS: Record<string, string> = {
+  target: 'Target hit',
+  stop: 'Stop hit',
+  both: 'Target + stop hit',
+};
+
+/**
+ * Why a trade left the live book: the observed level-touch verdict when one
+ * exists, the successor clock for resolutions, the bookkeeper rationale for
+ * drops, and a no-data fallback for missing rates (12x desk ask).
+ */
+export function closeReason(row: TradeHistoryRow): TradeCloseReason {
+  if (row.lifecycle === 'live') return { kind: 'live', label: 'Live' };
+  if (row.evalStatus === 'missing_rates' || row.lifecycle === 'no_data') {
+    return { kind: 'no-data', label: 'No data — missing rates' };
+  }
+  if (row.lifecycle === 'unscored') return { kind: 'no-data', label: 'Unscored' };
+
+  const level = row.levelOutcome ?? null;
+  if (level === 'target' || level === 'stop' || level === 'both') {
+    return {
+      kind: level,
+      label: LEVEL_OUTCOME_LABELS[level],
+      detail: row.exitDate ? `Superseded ${row.exitDate}` : 'Superseded by the next board',
+    };
+  }
+  if (row.evalStatus === 'dropped') {
+    return {
+      kind: 'dropped',
+      label: row.verdictReason ? `Dropped — ${row.verdictReason}` : 'Dropped by bookkeeper',
+    };
+  }
+  return {
+    kind: 'superseded',
+    label: 'Superseded by next board',
+    detail: row.exitDate ? `Superseded ${row.exitDate}` : undefined,
+  };
+}
+
+/**
+ * Flag a live row when the previous board on the same currency axis and
+ * direction published different stop / target levels (12x desk ask: "this
+ * trade just got an update, but it's still active").
+ */
+export function annotateLevelUpdates(rows: TradeHistoryRow[]): TradeHistoryRow[] {
+  const byAxisDirection = new Map<string, TradeHistoryRow[]>();
+  for (const row of rows) {
+    const key = `${axisKey(row.pair)}:${row.direction.trim().toLowerCase()}`;
+    const group = byAxisDirection.get(key);
+    if (group) group.push(row);
+    else byAxisDirection.set(key, [row]);
+  }
+
+  const updates = new Map<string, string>();
+  for (const group of byAxisDirection.values()) {
+    group.sort((a, b) => a.runDate.localeCompare(b.runDate) || a.rank - b.rank);
+    let prev: TradeHistoryRow | null = null;
+    for (const row of group) {
+      if (
+        row.lifecycle === 'live' &&
+        prev !== null &&
+        (prev.stop !== row.stop || prev.target !== row.target)
+      ) {
+        updates.set(evalKey(row.runDate, row.rank), prev.runDate);
+      }
+      prev = row;
+    }
+  }
+
+  if (updates.size === 0) return rows;
+  return rows.map((row) => {
+    const from = updates.get(evalKey(row.runDate, row.rank));
+    return from ? { ...row, levelsUpdated: true, levelsUpdatedFrom: from } : row;
+  });
+}
+
+export interface TradeCloseCounts {
+  live: number;
+  targets: number;
+  stops: number;
+  both: number;
+  superseded: number;
+  dropped: number;
+  noData: number;
+}
+
+/** Close-reason tally for the Trades summary strip. */
+export function closeCounts(rows: TradeHistoryRow[]): TradeCloseCounts {
+  const counts: TradeCloseCounts = {
+    live: 0,
+    targets: 0,
+    stops: 0,
+    both: 0,
+    superseded: 0,
+    dropped: 0,
+    noData: 0,
+  };
+  for (const row of rows) {
+    switch (closeReason(row).kind) {
+      case 'live':
+        counts.live += 1;
+        break;
+      case 'target':
+        counts.targets += 1;
+        break;
+      case 'stop':
+        counts.stops += 1;
+        break;
+      case 'both':
+        counts.both += 1;
+        break;
+      case 'dropped':
+        counts.dropped += 1;
+        break;
+      case 'no-data':
+        counts.noData += 1;
+        break;
+      default:
+        counts.superseded += 1;
+    }
+  }
+  return counts;
 }
