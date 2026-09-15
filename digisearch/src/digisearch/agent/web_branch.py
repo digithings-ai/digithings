@@ -8,6 +8,9 @@ any :class:`WebResearchError` becomes ``state.error`` plus a failed trace step,
 never a citation-free answer.
 """
 
+# score:allow untyped any
+# Web-branch state and trace payloads are heterogeneous JSON; Any is the honest annotation.
+
 from __future__ import annotations
 
 import logging

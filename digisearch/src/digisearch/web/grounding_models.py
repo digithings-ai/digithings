@@ -4,6 +4,9 @@
 ``digisearch.web_search.citation.Citation`` (single shape, never a fork).
 """
 
+# score:allow untyped any
+# JSON-schema payload containers at the model boundary are dynamic; Any is the honest annotation.
+
 from __future__ import annotations
 
 from enum import Enum

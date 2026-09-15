@@ -1,5 +1,8 @@
 """Phase B web research branch (#4064): grounding models + retrieve seam."""
 
+# score:allow untyped any
+# PEP 562 lazy exports resolve dynamically typed module attributes; Any is the honest annotation.
+
 from importlib import import_module
 from typing import Any
 

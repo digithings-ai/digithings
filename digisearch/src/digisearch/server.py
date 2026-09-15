@@ -1,5 +1,8 @@
 """digisearch HTTP API for digigraph and digiflow (query, ingest, Azure/Chroma backends)."""
 
+# score:allow untyped any
+# HTTP request/response payloads carry schema-dynamic metadata dicts; Any is the honest annotation.
+
 from __future__ import annotations
 
 import logging

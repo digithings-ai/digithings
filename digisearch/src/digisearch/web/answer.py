@@ -15,6 +15,9 @@ pre-guard — that fail-open fallback is unreachable from this path.
 and the rerank still runs.
 """
 
+# score:allow untyped any
+# digillm chat payloads and parsed model replies are dynamic JSON; Any is the honest annotation.
+
 from __future__ import annotations
 
 import importlib.util

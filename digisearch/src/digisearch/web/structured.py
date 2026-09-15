@@ -21,6 +21,9 @@ stays inside the synthesis seam so ``import digisearch.web.structured`` works
 on a base install, and fetched pages are never indexed (R3).
 """
 
+# score:allow untyped any
+# Caller-supplied output_schema and parsed wrapper JSON are dynamic; Any is the honest annotation.
+
 from __future__ import annotations
 
 import json
