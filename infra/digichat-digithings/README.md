@@ -106,6 +106,14 @@ Production `DIGICHAT_EMBED_TENANTS` must include OCC:
 digichat forwards `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix`; digigraph
 `corpus_routing` applies them to digisearch / digivault tools.
 
+The OCC tenant also gets the read-only Zammad ticket MCP (`search_tickets` /
+`get_ticket` / `ticket_report`) via the `mcp.servers` entry in the live tenant
+JSON below. `zammad-mcp` is not a separate Cloudflare container — it runs as a
+program inside the `digithings-stack` container (see
+[`scripts/zammad_mcp/README.md`](../../scripts/zammad_mcp/README.md), §
+Production); set the read-only token once on the stack worker with
+`wrangler secret put ZAMMAD_API_TOKEN`.
+
 Stack oneshot seeds **`digithings_docs` + `occ_help`** FAQ/showcase notes into Chroma
 (and refreshes vault `seed-*.md` under both client prefixes) so digithings.ai/chat
 and `/chat/occ` have grounded retrieval before a full docs_onboard apply.
@@ -182,7 +190,7 @@ digichat runtime embed registry (never a Docker build-arg — tokens leak in lay
 ```bash
 export DIGICHAT_REQUIRE_ROOT_AUTH=0
 export DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai,occ.digithings.ai
-export DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","llmAccess":"free_then_byok","activityDetail":"full","attribution":false,"token":"<unused-for-first-party>","backend":{"type":"digigraph"}},"occ.digithings.ai":{"slug":"occ","gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","title":"OCC help assistant","welcome":"Ask about Online Compliance Center policies, procedures, and help articles.","attribution":false,"token":"<unused-for-first-party>","backend":{"type":"digigraph","digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center"}}}'
+export DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","llmAccess":"free_then_byok","activityDetail":"full","attribution":false,"token":"<unused-for-first-party>","backend":{"type":"digigraph"}},"occ.digithings.ai":{"slug":"occ","gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","title":"OCC help assistant","welcome":"Ask about Online Compliance Center policies, procedures, and help articles.","attribution":false,"token":"<unused-for-first-party>","mcp":{"servers":[{"id":"zammad","url":"http://zammad-mcp:8770/mcp","label":"Zammad tickets","default":true}]},"backend":{"type":"digigraph","digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center"}}}'
 ```
 
 OCC uses virtual host `occ.digithings.ai` (no DNS) for `/chat/occ` — see

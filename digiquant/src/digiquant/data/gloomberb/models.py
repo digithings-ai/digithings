@@ -1,7 +1,9 @@
-"""Pydantic v2 models for the digifetch x Gloomberb data layer (#4069).
+"""Pydantic v2 models for the digifetch x Gloomberb data layer (#4069, #4110).
 
-This package is the data layer for the 13 `digifetch_*` tools described in
-``docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`` §5. It is
+This package is the data layer for the `digifetch_*` tools described in
+``docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`` §5, expanded
+past the original 13-tool contract by #4110 phase 1 (econ calendar/series,
+yield curve, CDS, research search, congress trades, transcripts). It is
 approach (c): a Python HTTP client over ``https://api.gloom.sh`` built on the
 digifetch transport engine.
 
@@ -27,12 +29,20 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Annotated, Any, Generic, Literal, TypeVar  # score:allow untyped any — wire JSON
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 __all__ = [
     "SOURCE",
     "PROVIDER_ID",
+    "PREVIEW_ACCESS_WARNING",
     "Resolution",
     "Range",
     "RANGE_ORDER",
@@ -57,6 +67,28 @@ __all__ = [
     "ExchangeRateInput",
     "SearchInput",
     "NewsInput",
+    "EconCalendarInput",
+    "EconSeriesInput",
+    "YieldCurveInput",
+    "CdsInput",
+    "ResearchSearchInput",
+    "CongressTradesInput",
+    "TranscriptsInput",
+    # coverage expansion (#4110 phase 2)
+    "StatementsInput",
+    "TickerTweetsInput",
+    "TweetSearchInput",
+    "VenuesInput",
+    "ScreenerInput",
+    "ThirteenFFundsInput",
+    "ThirteenFHoldingsInput",
+    # coverage expansion (#4110 phase 3)
+    "ShillerInput",
+    "ProxyStatementsInput",
+    "FilingEventsInput",
+    "RiskReportsInput",
+    "ShortInterestInput",
+    "EquityDiagnosticInput",
     # wire/output payload models
     "Quote",
     "QuoteBatchItem",
@@ -95,6 +127,71 @@ __all__ = [
     "NewsStoryItem",
     "NewsItem",
     "NewsResult",
+    # coverage expansion (#4110 phase 1)
+    "EconCalendarEvent",
+    "EconCalendarResult",
+    "EconSeriesObservation",
+    "EconSeriesInfo",
+    "EconSeriesResult",
+    "YieldCurvePoint",
+    "YieldCurveResult",
+    "CdsTrade",
+    "CdsResult",
+    "ResearchHit",
+    "ResearchSearchPagination",
+    "ResearchSearchResult",
+    "CongressTrade",
+    "CongressTradesResult",
+    "Transcript",
+    "TranscriptsResult",
+    # coverage expansion (#4110 phase 2)
+    "StatementRow",
+    "StatementsResult",
+    "TweetAuthor",
+    "TweetMetrics",
+    "Tweet",
+    "TweetsResult",
+    "Venue",
+    "VenuesResult",
+    "ScreenerRow",
+    "ScreenerResult",
+    "Fund13F",
+    "TopFund13F",
+    "TickerInfo13F",
+    "FundHolders13F",
+    "Funds13FResult",
+    "Filing13F",
+    "Holding13F",
+    "Holdings13FResult",
+    # coverage expansion (#4110 phase 3)
+    "CompanyRef",
+    "ShillerObservation",
+    "ShillerResult",
+    "ExecutivePay",
+    "ProxySummary",
+    "HighlightFigure",
+    "ProxyStatement",
+    "ProxyStatementsResult",
+    "FilingPerson",
+    "FilingEvent",
+    "FilingEventsResult",
+    "RiskFactor",
+    "RiskNote",
+    "RiskRemoved",
+    "RiskReworded",
+    "RiskDiff",
+    "RiskNotes",
+    "RiskSummary",
+    "RiskReport",
+    "RiskReportsResult",
+    "ShortInterestPoint",
+    "ShortInterestResult",
+    "EquityDiagnosticPending",
+    "EquityDiagnosticFinding",
+    "EquityDiagnosticCoverage",
+    "EquityDiagnosticEvidence",
+    "EquityDiagnosticReport",
+    "EquityDiagnosticResult",
     # concrete envelopes
     "QuoteEnvelope",
     "QuotesBatchEnvelope",
@@ -109,6 +206,25 @@ __all__ = [
     "ExchangeRateEnvelope",
     "SearchEnvelope",
     "NewsEnvelope",
+    "EconCalendarEnvelope",
+    "EconSeriesEnvelope",
+    "YieldCurveEnvelope",
+    "CdsEnvelope",
+    "ResearchSearchEnvelope",
+    "CongressTradesEnvelope",
+    "TranscriptsEnvelope",
+    "StatementsEnvelope",
+    "TweetsEnvelope",
+    "VenuesEnvelope",
+    "ScreenerEnvelope",
+    "Funds13FEnvelope",
+    "Holdings13FEnvelope",
+    "ShillerEnvelope",
+    "ProxyStatementsEnvelope",
+    "FilingEventsEnvelope",
+    "RiskReportsEnvelope",
+    "ShortInterestEnvelope",
+    "EquityDiagnosticEnvelope",
 ]
 
 SOURCE: Literal["gloomberb"] = "gloomberb"
@@ -170,11 +286,17 @@ CurrencyCode = Annotated[
 ]
 ErrorCode = Literal[
     "auth_required",
+    "pro_required",
     "not_found",
     "rate_limited",
     "upstream_error",
     "invalid_input",
 ]
+
+# Envelope warning appended when the equity diagnostic serves a preview report
+# (`access == "preview"`) to a free session. A stable, machine-matchable marker;
+# `data.report.access` stays the canonical passthrough field (#4110 phase 5).
+PREVIEW_ACCESS_WARNING = "preview access: report is a free-tier preview (access=preview)"
 
 
 class _CamelModel(BaseModel):
@@ -375,6 +497,276 @@ class NewsInput(_InputModel):
     story_id: str | None = None
     # Bounded so one enrichment read cannot fan out unboundedly.
     limit: int = Field(default=20, ge=1, le=100)
+
+
+# ---------------------------------------------------------------------------
+# Coverage-expansion inputs (#4110 phase 1)
+# ---------------------------------------------------------------------------
+
+
+class EconCalendarInput(_InputModel):
+    """The Cloud econ-calendar route takes no parameters.
+
+    The upstream ignores ``limit`` (live probe: a fixed ~105-row window), so
+    the contract deliberately exposes no page-size knob.
+    """
+
+
+class EconSeriesInput(_InputModel):
+    series_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+    # FRED-style observation pages can be long; bounded at one page worth.
+    limit: int = Field(default=100, ge=1, le=1000)
+    sort_order: Literal["asc", "desc"] = "desc"
+
+
+class YieldCurveInput(_InputModel):
+    """The Cloud yield-curve route takes no parameters (maturities are fixed)."""
+
+
+class CdsInput(_InputModel):
+    issuer: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+        | None
+    ) = None
+    # The Cloud route answers HTTP 400 outside 1..90; the input model rejects it
+    # first so the caller gets a typed invalid_input without a request.
+    days: int = Field(default=30, ge=1, le=90)
+    limit: int = Field(default=100, ge=1, le=200)
+
+
+class ResearchSearchInput(_InputModel):
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    limit: int = Field(default=10, ge=1, le=100)
+    # First page by default; bounded so one read cannot walk an unbounded cursor.
+    offset: int = Field(default=0, ge=0, le=10_000)
+
+
+class CongressTradesInput(_InputModel):
+    year: int | None = Field(default=None, ge=1970, le=2100)
+    limit: int = Field(default=50, ge=1, le=200)
+
+
+class TranscriptsInput(_InputModel):
+    ticker: Symbol
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+# ---------------------------------------------------------------------------
+# Coverage-expansion inputs (#4110 phase 2)
+# ---------------------------------------------------------------------------
+
+
+class StatementsInput(_InputModel):
+    symbol: Symbol
+    period: Literal["annual", "quarterly", "both"] = "annual"
+    exchange: str | None = None
+
+
+class TickerTweetsInput(_InputModel):
+    ticker: Symbol
+    # The upstream answers its cached window and echoes `limit` without
+    # shrinking the list (live-verified); the client slices to this bound and
+    # flags `truncated`.
+    limit: int = Field(default=50, ge=1, le=200)
+    hours: int | None = Field(default=None, ge=1, le=720)
+    include_replies: bool = False
+
+
+class TweetSearchInput(_InputModel):
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    query_type: Literal["Latest", "Top"] = "Latest"
+    limit: int = Field(default=50, ge=1, le=200)
+    hours: int | None = Field(default=None, ge=1, le=720)
+
+
+class VenuesInput(_InputModel):
+    """The Cloud venues route takes no parameters."""
+
+
+class ScreenerInput(_InputModel):
+    category: Literal["gainers", "losers", "most-active"]
+    count: int = Field(default=25, ge=1, le=50)
+    mode: Literal["cache-first", "refresh"] = "cache-first"
+
+
+Cusip = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=12)]
+# ISO date only; the upstream answers 500/400 for malformed values such as
+# 2026-6-1, so the contract rejects them before any request.
+DateIso = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{4}-\d{2}-\d{2}$")]
+# Live-verified 13F quarter token: 2026Q2 (a dashed 2026-Q2 is rejected upstream).
+Quarter13F = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=6,
+        max_length=6,
+        pattern=r"^\d{4}[Qq][1-4]$",
+    ),
+]
+
+
+class ThirteenFFundsInput(_InputModel):
+    """The 13F funds surface, discriminated by ``what``.
+
+    search -> ``name`` (query); top -> ``quarter``; tickers -> ``tickers``;
+    holders -> ``cusip`` + ``period_of_report``. The route family is anonymous
+    (live-verified for search/top/tickers).
+    """
+
+    what: Literal["search", "top", "tickers", "holders"]
+    query: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+        | None
+    ) = None
+    quarter: Quarter13F | None = None
+    tickers: list[Symbol] = Field(default_factory=list, max_length=50)
+    cusip: Cusip | None = None
+    period_of_report: str | None = None
+    limit: int = Field(default=25, ge=1, le=200)
+    offset: int = Field(default=0, ge=0, le=10_000)
+
+    @model_validator(mode="after")
+    def _require_fields_for_what(self) -> ThirteenFFundsInput:
+        if self.what == "search" and not self.query:
+            raise ValueError("what='search' requires query")
+        if self.what == "top" and not self.quarter:
+            raise ValueError("what='top' requires quarter (YYYYQn, e.g. 2026Q2)")
+        if self.what == "tickers" and not self.tickers:
+            raise ValueError("what='tickers' requires 1-50 tickers")
+        if self.what == "holders" and not (self.cusip and self.period_of_report):
+            raise ValueError("what='holders' requires both cusip and period_of_report")
+        return self
+
+
+class ThirteenFHoldingsInput(_InputModel):
+    """The 13F filings/forms/holdings surface, discriminated by ``what``.
+
+    filings -> ``from_date`` + ``to_date`` (ISO ``YYYY-MM-DD``); forms ->
+    ``cik``; form -> ``cik`` + ``accession_number`` (dashed or undashed 18
+    digits — the client normalizes to the SEC's ``XXXXXXXXXX-YY-ZZZZZZ``
+    form). Anonymous (live-verified).
+    """
+
+    what: Literal["filings", "forms", "form"]
+    cik: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10)] | None
+    ) = None
+    accession_number: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20)] | None
+    ) = None
+    from_date: DateIso | None = None
+    to_date: DateIso | None = None
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0, le=10_000)
+
+    @field_validator("cik")
+    @classmethod
+    def _normalize_cik(cls, value: str | None) -> str | None:
+        """Zero-pad a bare CIK to the SEC's 10-digit form (live-verified)."""
+        if value is None:
+            return None
+        digits = value.strip()
+        if not digits.isdigit():
+            raise ValueError("cik must be digits only")
+        return digits.zfill(10)
+
+    @field_validator("accession_number")
+    @classmethod
+    def _normalize_accession_number(cls, value: str | None) -> str | None:
+        """Normalize an 18-digit accession to the SEC's dashed form.
+
+        The upstream accepts the undashed form but the dashed form is the
+        canonical wire value; an undashed value passed through unchanged
+        silently returns an empty result set (live-verified), so it is
+        normalized here and anything else is rejected.
+        """
+        if value is None:
+            return None
+        digits = value.replace("-", "")
+        if len(digits) != 18 or not digits.isdigit():
+            raise ValueError(
+                f"accession_number must be 18 digits (dashed or undashed), got {value!r}"
+            )
+        return f"{digits[:10]}-{digits[10:12]}-{digits[12:]}"
+
+    @model_validator(mode="after")
+    def _require_fields_for_what(self) -> ThirteenFHoldingsInput:
+        if self.what == "filings" and not (self.from_date and self.to_date):
+            raise ValueError("what='filings' requires both from_date and to_date")
+        if self.what in ("forms", "form") and not self.cik:
+            raise ValueError(f"what={self.what!r} requires cik")
+        if self.what == "form" and not self.accession_number:
+            raise ValueError("what='form' requires accession_number")
+        return self
+
+
+# ---------------------------------------------------------------------------
+# Coverage-expansion inputs (#4110 phase 3)
+# ---------------------------------------------------------------------------
+
+
+class ShillerInput(_InputModel):
+    # Return the most recent N monthly observations (the full series is ~1869
+    # rows back to 1871); the client slices the tail and flags truncation.
+    limit: int = Field(default=240, ge=1, le=2000)
+
+
+class ProxyStatementsInput(_InputModel):
+    """Gloom Cloud's open proxy-statement reads (executive compensation).
+
+    ``year`` is the **proxy** year (the filing year), not the fiscal year:
+    AAPL's 2026 proxy reports fiscal 2025, and asking for the fiscal year 404s
+    (live-verified).
+    """
+
+    what: Literal["list", "statement"] = "list"
+    ticker: Symbol
+    year: int | None = Field(default=None, ge=1990, le=2100)
+
+    @model_validator(mode="after")
+    def _statement_requires_year(self) -> ProxyStatementsInput:
+        if self.what == "statement" and self.year is None:
+            raise ValueError("what='statement' requires year (the proxy year)")
+        return self
+
+
+class FilingEventsInput(_InputModel):
+    ticker: Symbol
+    limit: int = Field(default=20, ge=1, le=200)
+
+
+class RiskReportsInput(_InputModel):
+    """Annual 10-K risk-factor extraction, diffed against the prior year."""
+
+    what: Literal["list", "report"] = "list"
+    ticker: Symbol
+    year: int | None = Field(default=None, ge=1990, le=2100)
+
+    @model_validator(mode="after")
+    def _report_requires_year(self) -> RiskReportsInput:
+        if self.what == "report" and self.year is None:
+            raise ValueError("what='report' requires year (the report year)")
+        return self
+
+
+class ShortInterestInput(_InputModel):
+    symbol: Symbol
+    # Live-verified upstream behavior: 1→24 points, 5→120, 10→209; 0/11/99
+    # silently fall back to the 3-year window, so the contract bounds it here.
+    years: int = Field(default=3, ge=1, le=10)
+
+
+class EquityDiagnosticInput(_InputModel):
+    """On-demand AI evidence review for one listing (cookie-gated).
+
+    ``refresh`` asks the server to regenerate; a free session only ever gets
+    ``access="preview"`` results. The first call for a symbol answers HTTP 202
+    with a ``generating`` pending payload and a retry hint.
+    """
+
+    symbol: Symbol
+    exchange: str | None = None
+    mode: Literal["cache-first", "refresh"] = "cache-first"
 
 
 # ---------------------------------------------------------------------------
@@ -778,6 +1170,738 @@ class NewsResult(_CamelModel):
 
 
 # ---------------------------------------------------------------------------
+# Coverage-expansion payloads (#4110 phase 1)
+# ---------------------------------------------------------------------------
+
+
+class EconCalendarEvent(_CamelModel):
+    """One macro calendar row.
+
+    The wire types are unprobed for this route: ``actual``/``forecast``/``prior``
+    may be numbers or text prints (e.g. ``"3.2%"``), so both are accepted and
+    preserved. Unknown fields stay as extras.
+    """
+
+    id: str | int | None = None
+    date: str
+    time: str | None = None
+    country: str = ""
+    event: str
+    actual: float | str | None = None
+    forecast: float | str | None = None
+    prior: float | str | None = None
+    impact: str | None = None
+
+
+class EconCalendarResult(_CamelModel):
+    events: list[EconCalendarEvent] = Field(default_factory=list)
+
+
+class EconSeriesObservation(_CamelModel):
+    date: str
+    # FRED-style sparse series answer "." for a missing print; the normalizer
+    # maps that to null. Unknown fields stay as extras.
+    value: float | None = None
+
+
+class EconSeriesInfo(_CamelModel):
+    """Series metadata; the long tail (frequency/source/notes/...) stays extras."""
+
+    id: str | int | None = None
+    title: str | None = None
+    units: str | None = None
+    frequency: str | None = None
+    source: str | None = None
+    last_updated: str | None = None
+
+
+class EconSeriesResult(_CamelModel):
+    observations: list[EconSeriesObservation] = Field(default_factory=list)
+    info: EconSeriesInfo | None = None
+
+
+class YieldCurvePoint(_CamelModel):
+    """One curve tenor.
+
+    ``yield`` is a Python keyword, so the attribute is ``yield_`` with an
+    explicit wire alias (the alias generator alone produces ``yield_``).
+    """
+
+    maturity: str
+    maturity_years: float | None = None
+    yield_: float | None = Field(default=None, alias="yield")
+    as_of: str | None = None
+    fetched_at: str | None = None
+    stale: bool | None = None
+
+
+class YieldCurveResult(_CamelModel):
+    points: list[YieldCurvePoint] = Field(default_factory=list)
+
+
+class CdsTrade(_CamelModel):
+    """One DTCC PPD CDS trade record; sparse by nature, so all fields optional."""
+
+    dissemination_id: str | int | None = None
+    action_type: str | None = None
+    event_timestamp: str | None = None
+    execution_timestamp: str | None = None
+    effective_date: str | None = None
+    expiration_date: str | None = None
+    maturity_date: str | None = None
+    issuer_name: str | None = None
+    underlier_id: str | int | None = None
+    underlier_id_source: str | None = None
+    upi: str | None = None
+    upi_fisn: str | None = None
+    upi_underlier_name: str | None = None
+    notional_amount: float | None = None
+    notional_capped: bool | None = None
+    notional_currency: str | None = None
+    fixed_rate: float | None = None
+    reported_spread: float | None = None
+
+
+class CdsResult(_CamelModel):
+    source: str | None = None
+    as_of: str | None = None
+    trades: list[CdsTrade] = Field(default_factory=list)
+
+
+class ResearchHit(_CamelModel):
+    id: str | int
+    doc_type: str | None = None
+    source_id: str | int | None = None
+    chunk_index: int | None = None
+    ticker: str | None = None
+    published_at: str | None = None
+    title: str | None = None
+    url: str | None = None
+    snippet: str | None = None
+
+
+class ResearchSearchPagination(_CamelModel):
+    """Pagination metadata from the ``/cloud/search`` payload (live-verified)."""
+
+    total: int | None = None
+    has_more: bool | None = None
+    next_offset: int | None = None
+    count_capped: bool | None = None
+
+
+class ResearchSearchResult(_CamelModel):
+    hits: list[ResearchHit] = Field(default_factory=list)
+    pagination: ResearchSearchPagination | None = None
+
+
+class CongressTrade(_CamelModel):
+    """One House disclosure row.
+
+    The upstream OCR path is currently failing (HTTP 500) and its row schema is
+    only partly known; the typed subset follows the live field names
+    (``memberName``/``assetName``/``sourceUrl``/``filingDate``/
+    ``notificationDate``) and everything else is preserved as extras.
+    """
+
+    id: str | int | None = None
+    member_name: str | None = None
+    ticker: str | None = None
+    transaction_date: str | None = None
+    filing_date: str | None = None
+    notification_date: str | None = None
+    transaction_type: str | None = None
+    amount: str | None = None
+    asset_name: str | None = None
+    source_url: str | None = None
+
+
+class CongressTradesResult(_CamelModel):
+    trades: list[CongressTrade] = Field(default_factory=list)
+
+
+class Transcript(_CamelModel):
+    """One earnings-call row from the upstream ``calls`` list (Gloomberb Pro).
+
+    The live list payload is ``CloudEarningsCallListPayload`` whose rows carry
+    ``companyName``/``callAt``/``webcastUrl``; unknown fields stay extras.
+    """
+
+    id: str | int
+    ticker: str | None = None
+    company_name: str | None = None
+    call_at: str | None = None
+    webcast_url: str | None = None
+
+
+class TranscriptsResult(_CamelModel):
+    transcripts: list[Transcript] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Coverage-expansion payloads (#4110 phase 2)
+# ---------------------------------------------------------------------------
+
+
+class StatementRow(_CamelModel):
+    """One statement row.
+
+    The upstream rows are sparse annual/quarterly fundamentals: ``date`` and
+    ``currency`` are stable, a handful of common fields are typed, and the long
+    tail (hundreds of line items) is preserved as extras.
+    """
+
+    date: str
+    currency: str | None = None
+    date_source: str | None = None
+    net_income_continuous_operations: float | None = None
+    cash_and_cash_equivalents: float | None = None
+    issuance_of_debt: float | None = None
+    purchase_of_business: float | None = None
+    total_equity: float | None = None
+    basic_shares: float | None = None
+
+
+class StatementsResult(_CamelModel):
+    annual_statements: list[StatementRow] = Field(default_factory=list)
+    quarterly_statements: list[StatementRow] = Field(default_factory=list)
+
+
+class TweetAuthor(_CamelModel):
+    id: str | int | None = None
+    user_name: str | None = None
+    name: str | None = None
+
+
+class TweetMetrics(_CamelModel):
+    retweets: int | None = None
+    replies: int | None = None
+    likes: int | None = None
+    quotes: int | None = None
+    views: int | None = None
+    bookmarks: int | None = None
+
+
+class Tweet(_CamelModel):
+    """One X/Twitter post row; unknown fields stay extras."""
+
+    id: str | int
+    url: str | None = None
+    text: str = ""
+    created_at: str | None = None
+    lang: str | None = None
+    is_reply: bool | None = None
+    author: TweetAuthor | None = None
+    metrics: TweetMetrics | None = None
+
+
+class TweetsResult(_CamelModel):
+    """The tweets payload's own metadata plus the client-reduced rows.
+
+    The upstream echoes ``limit``/``hours`` without applying either (live
+    probes: 375 rows for limit=1; ~394 rows spanning ~13 days for hours=1), so
+    the client applies both: rows older than ``now - hours`` are dropped when
+    ``hours`` was requested (an unparseable ``createdAt`` is dropped while a
+    window is active), then the remainder is sliced to ``limit``.
+    ``total_available`` is the upstream row count before either reduction, and
+    ``truncated`` says whether either reduction dropped rows.
+    """
+
+    query: str = ""
+    query_type: str | None = None
+    since: str | None = None
+    until: str | None = None
+    as_of: str | None = None
+    cached: bool | None = None
+    hours: int | None = None
+    ticker: str | None = None
+    cashtag: str | None = None
+    include_replies: bool | None = None
+    tweets: list[Tweet] = Field(default_factory=list)
+    total_available: int = 0
+    truncated: bool = False
+
+
+class Venue(_CamelModel):
+    """One exchange venue row; ``mic`` is the identity, the rest is optional."""
+
+    mic: str
+    name: str = ""
+    title: str | None = None
+    country: str | None = None
+    country_code: str | None = None
+    city: str | None = None
+    timezone: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    is_open: bool | None = None
+    time_after_open_seconds: int | None = None
+    time_to_open_seconds: int | None = None
+    time_to_close_seconds: int | None = None
+
+
+class VenuesResult(_CamelModel):
+    provider_id: str | None = None
+    checked_at: int | None = None
+    refresh_at: int | None = None
+    venues: list[Venue] = Field(default_factory=list)
+
+
+class ScreenerRow(_CamelModel):
+    """One screener row.
+
+    Shape source: the gloomberb TS plugin's ``CloudMarketScreenerItem`` (the
+    Pro success payload cannot be observed from a free session — the route
+    answers PRO_REQUIRED). Every field is optional and unknown keys stay
+    extras; ``market_cap`` is not part of the upstream item type and was
+    dropped.
+    """
+
+    symbol: str | None = None
+    name: str | None = None
+    exchange: str | None = None
+    price: float | None = None
+    change: float | None = None
+    change_percent: float | None = None
+    volume: float | None = None
+    rank: int | None = None
+    currency: str | None = None
+    trade_count: int | None = None
+    # Explicit aliases: `to_camel("high52w")` would produce "high52W" (digit
+    # followed by a lowercase letter defeats pydantic's identity shortcut).
+    high52w: float | None = Field(default=None, alias="high52w")
+    low52w: float | None = Field(default=None, alias="low52w")
+    day_high: float | None = None
+    day_low: float | None = None
+    last_updated: float | None = None
+    data_source: str | None = None
+
+
+class ScreenerResult(_CamelModel):
+    """The screener payload envelope (``CloudMarketScreenerItem`` list).
+
+    Payload-level fields follow the TS type's envelope
+    (``providerId``/``category``/``asOf``/``stale``/``items``); rows are
+    exposed as ``rows``.
+    """
+
+    provider_id: str | None = None
+    category: str | None = None
+    as_of: str | None = None
+    stale: bool | None = None
+    rows: list[ScreenerRow] = Field(default_factory=list)
+
+
+class Fund13F(_CamelModel):
+    """One ``/cloud/sec/13f/funds`` search row; the wire key is ``CIK``."""
+
+    name: str = ""
+    cik: str | None = Field(default=None, alias="CIK")
+
+
+class TopFund13F(_CamelModel):
+    cik: str | None = None
+    name: str | None = None
+    period_of_report: str | None = None
+    pnl: float | None = None
+
+
+class TickerInfo13F(_CamelModel):
+    cusip: str
+    ticker: str | None = None
+    company_name: str | None = None
+
+
+class FundHolders13F(_CamelModel):
+    """Holders of one CUSIP for a period; the wire period key is camelCase."""
+
+    cusip: str | None = None
+    period_of_report: str | None = Field(default=None, alias="periodOfReport")
+    ciks: list[str] = Field(default_factory=list)
+
+
+class Funds13FResult(_CamelModel):
+    """One tool, ``what`` discriminator: exactly one slot is populated."""
+
+    what: Literal["search", "top", "tickers", "holders"]
+    funds: list[Fund13F] | None = None
+    top_funds: list[TopFund13F] | None = None
+    tickers: list[TickerInfo13F] | None = None
+    holders: FundHolders13F | None = None
+
+
+class Filing13F(_CamelModel):
+    """One 13F filing/forms row (SEC index metadata); extras keep the rest."""
+
+    accession_number: str
+    cik: str | None = None
+    company_name: str | None = None
+    form_type: str | None = None
+    submission_type: str | None = None
+    period_of_report: str | None = None
+    filed_as_of_date: str | None = None
+    effectiveness_date: str | None = None
+    table_value_total: float | None = None
+    table_entry_total: int | None = None
+    url: str | None = None
+    is_amendment: bool | None = None
+    amendment_type: str | None = None
+    state_of_incorporation: str | None = None
+    film_number: str | None = None
+
+
+class Holding13F(_CamelModel):
+    """One 13F holding row, mapped to the TS plugin's semantic names.
+
+    Wire names are snake_case (``name_of_issuer``/``ssh_prnamt``/
+    ``ssh_prnamt_type``); the attributes expose ``issuer``/``shares``/
+    ``share_type`` and the remaining columns stay typed as wire.
+    """
+
+    accession_number: str | None = None
+    cik: str | None = None
+    issuer: str | None = Field(default=None, alias="name_of_issuer")
+    title_of_class: str | None = Field(default=None, alias="title_of_class")
+    cusip: str | None = None
+    ticker: str | None = None
+    value: float | None = None
+    shares: float | None = Field(default=None, alias="ssh_prnamt")
+    share_type: str | None = Field(default=None, alias="ssh_prnamt_type")
+    investment_discretion: str | None = None
+    voting_authority_sole: float | None = None
+    voting_authority_shared: float | None = None
+    voting_authority_none: float | None = None
+    put_call: str | None = None
+    pnl: float | None = None
+
+
+class Holdings13FResult(_CamelModel):
+    """One tool, ``what`` discriminator: exactly one slot is populated."""
+
+    what: Literal["filings", "forms", "form"]
+    filings: list[Filing13F] | None = None
+    forms: list[Filing13F] | None = None
+    holdings: list[Holding13F] | None = None
+    # Computed as ``len(rows) >= limit``: the upstream returns a bare array
+    # with no continuation token (live-verified).
+    has_more: bool | None = None
+
+
+# ---------------------------------------------------------------------------
+# Coverage-expansion payloads (#4110 phase 3)
+# ---------------------------------------------------------------------------
+
+
+class CompanyRef(_CamelModel):
+    """The company block every public filing product nests in its payloads."""
+
+    ticker: str
+    cik: str | None = None
+    name: str = ""
+    short_name: str | None = None
+
+
+class ShillerObservation(_CamelModel):
+    """One month of Robert Shiller's dataset (live: ~1869 rows from 1871)."""
+
+    date: str
+    price: float | None = None
+    dividend: float | None = None
+    earnings: float | None = None
+    cpi: float | None = None
+    long_rate: float | None = None
+    cape: float | None = None
+    # CAPE earnings yield over the real 10-year rate (Shiller's ERP).
+    excess_cape_yield: float | None = None
+
+
+class ShillerResult(_CamelModel):
+    """The monthly valuation series, most-recent ``limit`` rows (ascending).
+
+    ``total_available`` is the full upstream row count and ``truncated`` flags
+    the client-side tail slice.
+    """
+
+    observations: list[ShillerObservation] = Field(default_factory=list)
+    source_url: str | None = None
+    dataset_fetched_at: str | None = None
+    total_available: int = 0
+    truncated: bool = False
+
+
+class ExecutivePay(_CamelModel):
+    """One named-executive compensation row (annual proxy).
+
+    ``prior_year_total`` is only present on the CEO row upstream; extras keep
+    anything the extractor adds later.
+    """
+
+    name: str
+    title: str | None = None
+    salary: float | None = None
+    bonus: float | None = None
+    stock_awards: float | None = None
+    option_awards: float | None = None
+    non_equity_incentive: float | None = None
+    pension_and_deferred: float | None = None
+    all_other: float | None = None
+    total: float | None = None
+    prior_year_total: float | None = None
+
+
+class ProxySummary(_CamelModel):
+    """One proxy filing summary (list row / ``otherYears`` row)."""
+
+    id: str
+    ticker: str
+    company: CompanyRef
+    proxy_year: int
+    fiscal_year: int | None = None
+    fiscal_year_label: str | None = None
+    filed_at: str | None = None
+    meeting_date: str | None = None
+    updated_at: str | None = None
+    ceo_name: str | None = None
+    ceo_title: str | None = None
+    ceo_total: float | None = None
+    ceo_prior_year_total: float | None = None
+    pay_ratio: float | None = None
+    median_employee_pay: float | None = None
+
+
+class HighlightFigure(_CamelModel):
+    """A key figure on a proxy statement (label/value/note triple)."""
+
+    label: str
+    value: str
+    note: str | None = None
+
+
+class ProxyStatement(ProxySummary):
+    """One full proxy statement (compensation tables + extracted highlights)."""
+
+    doc_url: str | None = None
+    ceo: ExecutivePay | None = None
+    named_executives: list[ExecutivePay] = Field(default_factory=list)
+    say_on_pay_prior_support: float | None = None
+    highlights: str | None = None
+    key_figures: list[HighlightFigure] = Field(default_factory=list)
+    other_years: list[ProxySummary] = Field(default_factory=list)
+
+
+class ProxyStatementsResult(_CamelModel):
+    what: Literal["list", "statement"]
+    company: CompanyRef | None = None
+    proxies: list[ProxySummary] | None = None
+    statement: ProxyStatement | None = None
+
+
+class FilingPerson(_CamelModel):
+    """A person named in a material 8-K event (officer change and similar)."""
+
+    name: str
+    role: str | None = None
+    action: str | None = None
+    effective: str | None = None
+
+
+class FilingEvent(_CamelModel):
+    """One 8-K, classified by item labels and, when it carried news, read."""
+
+    id: str
+    ticker: str
+    company: CompanyRef | None = None
+    filed_at: str | None = None
+    filing_date: str | None = None
+    doc_url: str | None = None
+    items: list[str] = Field(default_factory=list)
+    labels: list[str] = Field(default_factory=list)
+    kinds: list[str] = Field(default_factory=list)
+    material: bool = False
+    headline: str | None = None
+    summary: str | None = None
+    people: list[FilingPerson] = Field(default_factory=list)
+    read: bool = False
+
+
+class FilingEventsResult(_CamelModel):
+    ticker: str = ""
+    events: list[FilingEvent] = Field(default_factory=list)
+
+
+class RiskFactor(_CamelModel):
+    """One extracted 10-K risk factor (heading + excerpt)."""
+
+    heading: str
+    group: str | None = None
+    excerpt: str = ""
+    words: int | None = None
+
+
+class RiskNote(_CamelModel):
+    index: int
+    text: str
+
+
+class RiskRemoved(_CamelModel):
+    heading: str
+    group: str | None = None
+    excerpt: str = ""
+
+
+class RiskReworded(_CamelModel):
+    index: int
+    similarity: float | None = None
+    heading_changed: bool | None = None
+    prior_heading: str | None = None
+
+
+class RiskDiff(_CamelModel):
+    """Year-over-year risk-factor diff (present when a prior report exists)."""
+
+    added: list[int] = Field(default_factory=list)
+    removed: list[RiskRemoved] = Field(default_factory=list)
+    reworded: list[RiskReworded] = Field(default_factory=list)
+    matched: int | None = None
+    prior_risk_count: int | None = None
+
+
+class RiskNotes(_CamelModel):
+    added: list[RiskNote] = Field(default_factory=list)
+    removed: list[RiskNote] = Field(default_factory=list)
+    reworded: list[RiskNote] = Field(default_factory=list)
+    top: list[RiskNote] = Field(default_factory=list)
+
+
+class RiskSummary(_CamelModel):
+    """One risk-report summary (list row / ``otherYears`` row)."""
+
+    id: str
+    ticker: str
+    company: CompanyRef
+    report_year: int
+    filed_at: str | None = None
+    updated_at: str | None = None
+    risk_count: int = 0
+    group_count: int = 0
+    word_count: int = 0
+    added_count: int | None = None
+    removed_count: int | None = None
+    reworded_count: int | None = None
+    overview: str | None = None
+
+
+class RiskReport(RiskSummary):
+    """One full risk-factor report with groups, risks, diff, and notes."""
+
+    doc_url: str | None = None
+    groups: list[str] = Field(default_factory=list)
+    risks: list[RiskFactor] = Field(default_factory=list)
+    diff: RiskDiff | None = None
+    notes: RiskNotes | None = None
+    other_years: list[RiskSummary] = Field(default_factory=list)
+
+
+class RiskReportsResult(_CamelModel):
+    what: Literal["list", "report"]
+    company: CompanyRef | None = None
+    reports: list[RiskSummary] | None = None
+    report: RiskReport | None = None
+
+
+class ShortInterestPoint(_CamelModel):
+    """One biweekly exchange settlement row."""
+
+    settlement_date: str
+    shares_short: float
+    previous_shares_short: float | None = None
+    average_daily_volume: float | None = None
+    days_to_cover: float | None = None
+    change_percent: float | None = None
+    revised: bool = False
+
+
+class ShortInterestResult(_CamelModel):
+    symbol: str = ""
+    issue_name: str | None = None
+    points: list[ShortInterestPoint] = Field(default_factory=list)
+
+
+class EquityDiagnosticPending(_CamelModel):
+    """Generation has not finished; retry after ``retry_after_ms``."""
+
+    status: Literal["generating"]
+    retry_after_ms: int
+
+
+class EquityDiagnosticFinding(_CamelModel):
+    """One finding; observation and interpretation are deliberately separate."""
+
+    id: str
+    kind: Literal["red_flag", "green_flag", "anomaly"]
+    severity: int
+    confidence: float | None = None
+    title: str = ""
+    observation: str = ""
+    interpretation: str = ""
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
+class EquityDiagnosticCoverage(_CamelModel):
+    dataset: str
+    status: str
+    as_of: str | None = None
+    provider: str | None = None
+    note: str | None = None
+
+
+class EquityDiagnosticEvidence(_CamelModel):
+    """A citation; the server owns the URLs."""
+
+    id: str
+    dataset: str = ""
+    label: str = ""
+    as_of: str | None = None
+    provider: str | None = None
+    url: str | None = None
+
+
+class EquityDiagnosticReport(_CamelModel):
+    """A completed AI-generated evidence review.
+
+    Free (email-verified) sessions only receive ``access="preview"`` results;
+    the verdict/summary are the model's reading, not investment advice.
+    """
+
+    schema_version: int | None = None
+    access: Literal["preview", "full"] | None = None
+    symbol: str
+    exchange: str = ""
+    company_name: str | None = None
+    status: str
+    verdict: str
+    summary: str = ""
+    confidence: float | None = None
+    findings: list[EquityDiagnosticFinding] = Field(default_factory=list)
+    watch_items: list[str] = Field(default_factory=list)
+    coverage: list[EquityDiagnosticCoverage] = Field(default_factory=list)
+    evidence: list[EquityDiagnosticEvidence] = Field(default_factory=list)
+    generated_at: str | None = None
+    expires_at: str | None = None
+    refresh_allowed_at: str | None = None
+    cached: bool | None = None
+    stale: bool | None = None
+    prompt_version: int | None = None
+    model: str | None = None
+
+
+class EquityDiagnosticResult(_CamelModel):
+    """One tool, pending-or-report: the first call per symbol is a 202 pending."""
+
+    pending: EquityDiagnosticPending | None = None
+    report: EquityDiagnosticReport | None = None
+
+
+# ---------------------------------------------------------------------------
 # Concrete envelopes (one per tool)
 # ---------------------------------------------------------------------------
 
@@ -794,6 +1918,25 @@ EarningsCalendarEnvelope = DigifetchEnvelope[EarningsCalendarResult]
 ExchangeRateEnvelope = DigifetchEnvelope[ExchangeRateResult]
 SearchEnvelope = DigifetchEnvelope[SearchResult]
 NewsEnvelope = DigifetchEnvelope[NewsResult]
+EconCalendarEnvelope = DigifetchEnvelope[EconCalendarResult]
+EconSeriesEnvelope = DigifetchEnvelope[EconSeriesResult]
+YieldCurveEnvelope = DigifetchEnvelope[YieldCurveResult]
+CdsEnvelope = DigifetchEnvelope[CdsResult]
+ResearchSearchEnvelope = DigifetchEnvelope[ResearchSearchResult]
+CongressTradesEnvelope = DigifetchEnvelope[CongressTradesResult]
+TranscriptsEnvelope = DigifetchEnvelope[TranscriptsResult]
+StatementsEnvelope = DigifetchEnvelope[StatementsResult]
+TweetsEnvelope = DigifetchEnvelope[TweetsResult]
+VenuesEnvelope = DigifetchEnvelope[VenuesResult]
+ScreenerEnvelope = DigifetchEnvelope[ScreenerResult]
+Funds13FEnvelope = DigifetchEnvelope[Funds13FResult]
+Holdings13FEnvelope = DigifetchEnvelope[Holdings13FResult]
+ShillerEnvelope = DigifetchEnvelope[ShillerResult]
+ProxyStatementsEnvelope = DigifetchEnvelope[ProxyStatementsResult]
+FilingEventsEnvelope = DigifetchEnvelope[FilingEventsResult]
+RiskReportsEnvelope = DigifetchEnvelope[RiskReportsResult]
+ShortInterestEnvelope = DigifetchEnvelope[ShortInterestResult]
+EquityDiagnosticEnvelope = DigifetchEnvelope[EquityDiagnosticResult]
 
 
 def envelope_error(envelope: DigifetchEnvelope[Any]) -> DigifetchError | None:
