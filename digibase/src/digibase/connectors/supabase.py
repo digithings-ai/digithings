@@ -154,7 +154,7 @@ class SupabaseConnector:
 
         # Only pass on_conflict when set, so a no-conflict upsert is byte-identical
         # to the bare ``client.table(t).upsert(rows)`` form used in production
-        # (e.g. digiquant price_history writes) rather than relying on the
+        # (e.g. digiquant ledger writes) rather than relying on the
         # client's handling of an explicit ``on_conflict=None``.
         extra = {"on_conflict": on_conflict} if on_conflict else {}
         step = max(1, chunk)  # normalize once; a non-positive chunk must not empty every slice

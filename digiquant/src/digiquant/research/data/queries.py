@@ -387,6 +387,7 @@ def get_market_context(
             # first) — no bulk first-seen pass needed on this path.
         else:
             since = (run_date - timedelta(days=price_window_days)).isoformat()
+            # Retired: migration 127 drops price_technicals (#4053) — R2 only above.
             resp = (
                 client.table("price_technicals")
                 .select(",".join(("ticker", *TECHNICAL_COLUMNS)))
@@ -463,6 +464,7 @@ def get_market_breadth(
     rows: list[dict[str, Any]] = []
     start = 0
     while True:
+        # Retired: migration 127 drops price_technicals (#4053) — R2 only above.
         resp = (
             client.table("price_technicals")
             .select("ticker,date,pct_vs_sma50,pct_vs_sma200")
@@ -543,6 +545,7 @@ def get_sector_relative_strength(
     rows: list[dict[str, Any]] = []
     start = 0
     while True:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         resp = (
             client.table("price_history")
             .select("date,ticker,close")
@@ -619,6 +622,7 @@ def get_etf_flows_proxy(
     rows: list[dict[str, Any]] = []
     start = 0
     while True:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         resp = (
             client.table("price_history")
             .select("date,ticker,close,volume")
@@ -762,6 +766,7 @@ def get_return_correlations(
         frame = pairwise_return_correlations(pl.DataFrame(rows))
         return frame if not frame.is_empty() else None
     try:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         resp = (
             client.table("price_history")
             .select("date,ticker,close")

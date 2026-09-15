@@ -187,6 +187,7 @@ def _price_for_symbol(
         closes = [c for c in closes if c is not None and c > 0]
         return closes[0] if closes else None
     resp = (
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         client.table("price_history")
         .select("close")
         .eq("ticker", symbol)

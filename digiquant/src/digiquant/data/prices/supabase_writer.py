@@ -1,5 +1,9 @@
 """Supabase upsert helpers for price_history / price_technicals / macro_series_observations.
 
+Migration 127 drops ``price_history`` / ``price_technicals`` (#4053): the two
+price helpers below are retained only as the flag-off body and cannot succeed
+against the post-drop schema. ``macro_series_observations`` stays.
+
 Preserves the column contracts research still reads:
 
 * ``price_history`` — ``{date, ticker, open, high, low, close, volume}``

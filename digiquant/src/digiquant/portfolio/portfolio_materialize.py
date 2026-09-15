@@ -337,6 +337,7 @@ def _upsert_portfolio_metrics(
                     if row.get("close") is not None
                 ]
             else:
+                # Retired: migration 127 drops price_history (#4053) — R2 only above.
                 benchmark_resp = (
                     client.table("price_history")
                     .select("date,close")
@@ -456,6 +457,11 @@ def _latest_values(
     lookback_days: int = 14,
 ) -> dict[str, float]:
     """``{ticker: value_col}`` from the latest row ≤ run_date per ticker (look-ahead-guarded).
+
+    Legacy twin of ``commit_io._latest_values`` — this path is off the daily
+    pipeline (the H9 terminal books via ``commit_io``), so its Supabase body was
+    not migrated to R2: migration 127 drops both tables (#4053), and a caller
+    must not run this branch after the drop.
 
     We only need each ticker's *most recent* value, so the query is bounded to a short
     ``lookback_days`` window — enough to clear weekends/holidays and find the latest daily

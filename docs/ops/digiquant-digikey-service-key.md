@@ -89,6 +89,6 @@ only).
 
 Only `pipeline-digiquant.yml` runs the grounding code path (the research graph
 and beliefs distillation inside `digiquant.portfolio.chain`). The deterministic
-pipelines — `pipeline-digiquant-backfill.yml`, `pipeline-digiquant-prices.yml`,
+pipelines — `pipeline-digiquant-prices.yml`,
 `pipeline-research-metrics.yml` — never call `get_service_jwt()` and do not
 need these variables.
