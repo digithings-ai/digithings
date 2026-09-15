@@ -447,8 +447,6 @@ export interface DashboardData {
   /** Fallback for calendar baseline vs delta when document rows omit `run_type`. */
   snapshot_run_type_by_date: Record<string, 'baseline' | 'delta'>;
   benchmarks: BenchmarkHistoryMap;
-  /** Ticker universe from GET /v1/market/tickers (#4053); name retained. */
-  price_history_tickers: string[];
   calculated: CalculatedMetrics;
   /** Short context bullets derived from the snapshot JSONB digest. */
   snapshot_context_bullets: string[];
