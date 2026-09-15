@@ -22,7 +22,7 @@ import sys
 import types
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -170,42 +170,19 @@ class _FakeResponse:
     data: list[dict[str, Any]]
 
 
-# ─── Fake live-fetch registry ─────────────────────────────────────────────
+# ─── R2 seal + live-open seams (#4053) ──────────────────────────────────────
 #
-# Same-day opens come from a live fetch (#4053), so the canned `price_history`
-# rows below double as fake Yahoo responses: every `_FakeClient` registers its
-# rows keyed `(TICKER, date)`, and the autouse `_live_fetch_stub` serves them
-# through a stub `yfinance` module. A ticker/date with no row raises inside the
-# stub, which the production code turns into None (data_unavailable) — the same
-# answer the old Supabase read gave for a missing row. No test in this module
-# may touch the real network.
+# `_fetch_open` / `_open_marks` read the R2 seal first: dates at or before it
+# read the sealed generation, same-day dates come from the live-fetch seam
+# (`digiquant.data.prices.live_opens`). A unit test has neither, so every test
+# in this module runs behind a fixed PAST seal (all fixture dates take the live
+# branch) and a stub live seam that serves each `_FakeClient`'s canned
+# `price_history` rows — the same values the retired Supabase read returned.
+# No test touches R2 credentials, Yahoo, or the network.
 
 _LIVE_OPENS: dict[tuple[str, str], Any] = {}
 _LIVE_CALLS: list[tuple[str, str]] = []
-
-
-class _LiveIloc:
-    def __init__(self, values: list) -> None:
-        self._values = values
-
-    def __getitem__(self, idx: int):
-        return self._values[idx]
-
-
-class _LiveSer:
-    def __init__(self, v) -> None:
-        self.iloc = _LiveIloc([v])
-
-
-class _LiveFrame:
-    """Minimal ``yfinance.download`` stand-in: ``frame["Open"].iloc[0]``."""
-
-    def __init__(self, v) -> None:
-        self._v = v
-
-    def __getitem__(self, key: str) -> _LiveSer:
-        assert key == "Open"
-        return _LiveSer(self._v)
+_PAST_SEAL = date(2020, 1, 1)
 
 
 def _register_live_rows(tables: dict[str, list[dict[str, Any]]]) -> None:
@@ -219,23 +196,32 @@ def _register_live_rows(tables: dict[str, list[dict[str, Any]]]) -> None:
             _LIVE_OPENS[key] = row.get("open")
 
 
+def _live_fetch_open(ticker: str, d: str) -> Any:
+    key = (str(ticker).upper(), str(d)[:10])
+    _LIVE_CALLS.append(key)
+    return _LIVE_OPENS.get(key)
+
+
+def _live_fetch_opens(tickers: list[str], d: str) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for ticker in tickers:
+        key = (str(ticker).upper(), str(d)[:10])
+        _LIVE_CALLS.append(key)
+        if key in _LIVE_OPENS:
+            out[key[0]] = _LIVE_OPENS[key]
+    return out
+
+
 @pytest.fixture(autouse=True)
-def _live_fetch_stub(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Serve same-day opens from the fixture tables; never the real network."""
+def _market_seams(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serve the same-day open seam from the fixture tables; never the network."""
     _LIVE_OPENS.clear()
     _LIVE_CALLS.clear()
-
-    def _download(ticker: str, *args: Any, **kwargs: Any) -> _LiveFrame:
-        start = str(kwargs.get("start", ""))[:10]
-        _LIVE_CALLS.append((str(ticker).upper(), start))
-        key = (str(ticker).upper(), start)
-        if key not in _LIVE_OPENS:
-            raise RuntimeError(f"no live open for {key}")
-        return _LiveFrame(_LIVE_OPENS[key])
-
-    stub = types.ModuleType("yfinance")
-    stub.download = _download  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "yfinance", stub)
+    stub = types.ModuleType("digiquant.data.prices.live_opens")
+    stub.fetch_live_open = _live_fetch_open  # type: ignore[attr-defined]
+    stub.fetch_live_opens = _live_fetch_opens  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "digiquant.data.prices.live_opens", stub)
+    monkeypatch.setattr(_mod, "r2_manifest_seal", lambda: (_PAST_SEAL, 0))
 
 
 @dataclass

@@ -26,6 +26,18 @@ pytestmark = pytest.mark.unit
 REPO = Path(__file__).resolve().parents[3]
 
 
+@pytest.fixture(autouse=True)
+def _empty_r2_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    """R2-only market reads (#4053): empty sealed store, never the developer's .env.
+
+    These tests assert the pnl authority chain, not market values — an unknown
+    ticker must fail soft (empty), and the real R2 backend must never be built.
+    """
+    from tests.fixtures.r2_market import MemoryR2
+
+    monkeypatch.setattr("digiquant.mcp_server._get_r2_store", lambda: MemoryR2())
+
+
 def _load_metrics_mod():
     stub = types.ModuleType("position_entry_from_events")
     stub.resolve_entry_price = lambda *a, **k: None  # type: ignore[attr-defined]

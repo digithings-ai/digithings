@@ -2,8 +2,9 @@
 """
 refresh_performance_metrics.py
 
-Run after price_history (and optionally price_technicals) are updated for the day.
-Uses Supabase price_history closes + positions snapshot rows to populate:
+Run after the day's R2 generation has sealed (evening market-data refresh).
+Uses sealed-R2 closes (#4053; no Supabase market read) + positions snapshot rows
+to populate:
 
   - positions: unrealized_pnl_pct, day_change_pct, since_entry_return_pct, metrics_as_of
   - position_events: cumulative_return_since_event_pct (where price exists)
@@ -61,7 +62,7 @@ from digiquant.dashboard.performance_returns import (
     calculate_performance_returns,
 )
 from digiquant.dashboard.tenancy import house_workspace_id
-from digiquant.research.data.queries import r2_backend_enabled, r2_close_rows
+from digiquant.research.data.queries import r2_close_rows
 
 _POSITION_INSERT_SKIP = frozenset({"id", "created_at", "updated_at"})
 _METRIC_CLEAR = (
@@ -108,36 +109,23 @@ def _sb():
 
 
 def _fetch_closes(sb, ticker: str, dates: List[str]) -> Dict[str, float]:
-    """date -> close for ticker for given ISO dates (best effort).
+    """date -> close for ticker for given ISO dates (best effort) from sealed R2.
 
-    Unscoped by workspace_id by design: market-data rows are null-workspace
-    (HOUSE_BOOK_SCOPE.md convention), and the read must see whatever the
-    ingest wrote — the same rows the engine replay consumes.
+    A ticker without a generation returns ``{}`` (an unpriced holding is not an
+    outage — parity with the retired Supabase row-miss).
     """
     if not dates:
         return {}
-    if r2_backend_enabled():
-        wanted = set(str(d)[:10] for d in dates)
+    wanted = set(str(d)[:10] for d in dates)
+    try:
         rows = r2_close_rows(tickers=[ticker], since=min(wanted), until=max(wanted))
-        return {
-            str(r["date"])[:10]: float(r["close"])
-            for r in rows
-            if str(r["date"])[:10] in wanted and r.get("close") is not None
-        }
-    res = (
-        sb.table("price_history")
-        .select("date, close")
-        .eq("ticker", ticker)
-        .in_("date", dates)
-        .execute()
-    )
-    out: Dict[str, float] = {}
-    for row in getattr(res, "data", None) or []:
-        d = row.get("date")
-        c = row.get("close")
-        if d and c is not None:
-            out[str(d)[:10]] = float(c)
-    return out
+    except LookupError:
+        return {}
+    return {
+        str(r["date"])[:10]: float(r["close"])
+        for r in rows
+        if str(r["date"])[:10] in wanted and r.get("close") is not None
+    }
 
 
 def _max_positions_date(sb) -> Optional[date]:
@@ -260,31 +248,19 @@ def _performance_returns_from_history(
         if row.get("date") and row.get("nav") is not None
     ]
     benchmark_closes: list[float] = []
-    if len(nav_rows) >= 2 and r2_backend_enabled():
-        benchmark_closes = [
-            float(r["close"])
-            for r in r2_close_rows(
-                tickers=[benchmark_ticker],
-                since=str(nav_rows[0]["date"]),
-                until=str(nav_rows[-1]["date"]),
-            )
-            if r.get("close") is not None
-        ]
-    elif len(nav_rows) >= 2:
-        benchmark_res = (
-            sb.table("price_history")
-            .select("date,close")
-            .eq("ticker", benchmark_ticker)
-            .gte("date", str(nav_rows[0]["date"]))
-            .lte("date", str(nav_rows[-1]["date"]))
-            .order("date")
-            .execute()
-        )
-        benchmark_closes = [
-            float(row["close"])
-            for row in (getattr(benchmark_res, "data", None) or [])
-            if row.get("close") is not None
-        ]
+    if len(nav_rows) >= 2:
+        try:
+            benchmark_closes = [
+                float(r["close"])
+                for r in r2_close_rows(
+                    tickers=[benchmark_ticker],
+                    since=str(nav_rows[0]["date"]),
+                    until=str(nav_rows[-1]["date"]),
+                )
+                if r.get("close") is not None
+            ]
+        except LookupError:
+            benchmark_closes = []
     return calculate_performance_returns(
         nav_values=[float(row["nav"]) for row in nav_rows],
         benchmark_closes=benchmark_closes,
@@ -488,27 +464,16 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
 
 
 def _prev_trading_date(sb, ref_ticker: str, as_of: str) -> Optional[str]:
-    """Latest price_history date strictly before as_of for ref_ticker."""
-    if r2_backend_enabled():
-        floor = (
-            date.fromisoformat(as_of) - timedelta(days=_PREV_TRADING_LOOKBACK_DAYS)
-        ).isoformat()
+    """Latest sealed-R2 date strictly before as_of for ref_ticker."""
+    floor = (
+        date.fromisoformat(as_of) - timedelta(days=_PREV_TRADING_LOOKBACK_DAYS)
+    ).isoformat()
+    try:
         rows = r2_close_rows(tickers=[ref_ticker], since=floor, until=as_of)
-        dates = [str(r["date"])[:10] for r in rows if str(r["date"])[:10] < as_of]
-        return max(dates) if dates else None
-    res = (
-        sb.table("price_history")
-        .select("date")
-        .eq("ticker", ref_ticker)
-        .lt("date", as_of)
-        .order("date", desc=True)
-        .limit(1)
-        .execute()
-    )
-    data = getattr(res, "data", None) or []
-    if not data:
+    except LookupError:
         return None
-    return str(data[0]["date"])[:10]
+    dates = [str(r["date"])[:10] for r in rows if str(r["date"])[:10] < as_of]
+    return max(dates) if dates else None
 
 
 _ENTRY_PRICE_SANITY_THRESHOLD = 0.10  # warn when |entry/close - 1| > 10%
@@ -517,7 +482,7 @@ _ENTRY_PRICE_SANITY_THRESHOLD = 0.10  # warn when |entry/close - 1| > 10%
 def refresh_positions_metrics(sb, metrics_date: str) -> int:
     """Update positions for date == metrics_date. Returns rows updated.
 
-    current_price is always written from the latest price_history close for the
+    current_price is always written from the latest sealed-R2 close for the
     date — it is never left NULL when price data exists (#814). An entry_price
     sanity check warns to stderr when the stored entry_price deviates from the
     current close by more than 10% (catches data-entry errors like SPY@750 #814).
@@ -529,7 +494,7 @@ def refresh_positions_metrics(sb, metrics_date: str) -> int:
     rows: List[Dict[str, Any]] = getattr(res, "data", None) or []
     prev_d = _prev_trading_date(sb, "SPY", metrics_date)
     if not prev_d:
-        print("⚠️  No prior trading day in price_history — skip day_change_pct")
+        print("⚠️  No prior trading day in the R2 window — skip day_change_pct")
     updated = 0
     for r in rows:
         t = r.get("ticker")
@@ -593,7 +558,7 @@ def refresh_positions_metrics(sb, metrics_date: str) -> int:
                 since = (c_now - c_entry) / c_entry * 100.0
         if c_now is None:
             # No close resolved for EITHER candidate date — a genuinely unmarkable row (real
-            # case: XRT's price_history lagged a day behind its peers). Previously the stale
+            # case: XRT's R2 close lagged a day behind its peers). Previously the stale
             # stored `current_price` was retained while `metrics_as_of` was stamped with the
             # book date anyway, producing the worst of the three states: an old price under a
             # fresh provenance label with NULL percentages beside it. Clear all of them

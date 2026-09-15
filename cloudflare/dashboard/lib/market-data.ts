@@ -4,8 +4,9 @@
  * Serves `GET /v1/market/tickers` → `{as_of, tickers}` and
  * `GET /v1/market/closes?tickers=A,B&from&to` → `{as_of, rows}`. The dashboard
  * is a static export, so `NEXT_PUBLIC_MARKET_DATA_URL` is inlined at build time
- * and the calls run client-side; when the var is unset every function returns
- * empty and callers keep their Supabase read paths.
+ * and the calls run client-side. The env var is required (#4053): when it is
+ * unset every function returns empty. There are no Supabase fallbacks —
+ * dashboard market reads are R2-API-only.
  */
 
 /** One close row exactly as `/v1/market/closes` shapes it. */
@@ -22,11 +23,6 @@ function marketDataBaseUrl(): string {
   // Read per call, not at module scope: the export is inlined at build time, and
   // tests stub the env between imports.
   return (process.env.NEXT_PUBLIC_MARKET_DATA_URL ?? '').trim().replace(/\/+$/, '');
-}
-
-/** True when the dashboard should read prices from the market API. */
-export function isMarketDataConfigured(): boolean {
-  return marketDataBaseUrl().length > 0;
 }
 
 /** Ticker universe in the R2 archive; empty when unconfigured or on failure. */

@@ -1,151 +1,121 @@
 {
-  "generatedAt": "2026-09-08T14:52:37Z",
+  "generatedAt": "2026-09-14T06:20:58Z",
   "windowDays": 30,
-  "commits": 2214,
+  "commits": 2285,
   "features": [
     {
-      "scope": "digiweb",
-      "summary": "add merge heat graph to detailed repo activity",
-      "pr": 3724,
-      "date": "2026-09-08T10:25:35Z"
+      "scope": "digichat",
+      "summary": "unify duration formatting across message timing and tool rows",
+      "pr": 3978,
+      "date": "2026-09-13T15:30:22Z"
     },
     {
-      "scope": "website",
-      "summary": "host openwiki visualizer at /openwiki",
-      "pr": 3698,
-      "date": "2026-09-08T00:07:14Z"
+      "scope": null,
+      "summary": "web-search hardening batch (dead param, rename, fail-hard pin)",
+      "pr": 3873,
+      "date": "2026-09-11T12:11:39Z"
+    },
+    {
+      "scope": null,
+      "summary": "web-search follow-ups batch",
+      "pr": 3870,
+      "date": "2026-09-11T02:20:54Z"
     },
     {
       "scope": "digichat",
-      "summary": "cut published package to 2.0.0",
-      "pr": 3629,
-      "date": "2026-09-07T22:54:46Z"
+      "summary": "render foundry agent MCP tool calls and results",
+      "pr": 3861,
+      "date": "2026-09-11T00:27:56Z"
     },
     {
-      "scope": "digillm",
-      "summary": "generic provider router, fail-fast house, MCP server",
-      "pr": 3692,
-      "date": "2026-09-07T21:19:23Z"
+      "scope": null,
+      "summary": "ship web-search extra in stack image so hosted web_search uses ddgs fallback",
+      "pr": 3865,
+      "date": "2026-09-11T00:20:32Z"
     },
     {
-      "scope": "dashboard",
-      "summary": "polish Notifications Settings empty/error/soft-503 UX",
-      "pr": 3684,
-      "date": "2026-09-07T13:43:14Z"
-    },
-    {
-      "scope": "digithings-web",
-      "summary": "add Cheaper Inference and Assistant UI stack chips",
-      "pr": 3649,
-      "date": "2026-09-05T21:38:04Z"
+      "scope": "digiquant",
+      "summary": "gate mcp tools behind full/read scope with constructor bind",
+      "pr": 3857,
+      "date": "2026-09-10T19:26:43Z"
     }
   ],
-  "pullsMerged": 1188,
-  "issuesClosed": 468,
-  "pullsOpen": 2,
-  "issuesOpen": 145,
+  "pullsMerged": 1110,
+  "issuesClosed": 1145,
+  "pullsOpen": 5,
+  "issuesOpen": 5,
   "mergedPulls": [
     {
-      "number": 3716,
-      "title": "Nautilus engine as single source of truth for NAV (#3695)",
-      "url": "https://github.com/digithings-ai/digithings/pull/3716",
-      "mergedAt": "2026-09-08T13:24:48Z"
+      "number": 4000,
+      "title": "fix(ci): fail openwiki-update at the OpenWiki step, not the propagate step",
+      "url": "https://github.com/digithings-ai/digithings/pull/4000",
+      "mergedAt": "2026-09-13T23:36:44Z"
     },
     {
-      "number": 3728,
-      "title": "docs: add package-root re-export to review regression lens",
-      "url": "https://github.com/digithings-ai/digithings/pull/3728",
-      "mergedAt": "2026-09-08T11:01:00Z"
+      "number": 4020,
+      "title": "chore(promote): develop -> main (#4017 at-open ledger drift failure)",
+      "url": "https://github.com/digithings-ai/digithings/pull/4020",
+      "mergedAt": "2026-09-13T23:34:26Z"
     },
     {
-      "number": 3727,
-      "title": "promote: develop \u2192 main (gallery Thread as first-party skin)",
-      "url": "https://github.com/digithings-ai/digithings/pull/3727",
-      "mergedAt": "2026-09-08T10:59:15Z"
+      "number": 4018,
+      "title": "fix(digiquant): fail the at-open run when the ledger rejects every order (#4017)",
+      "url": "https://github.com/digithings-ai/digithings/pull/4018",
+      "mergedAt": "2026-09-13T23:31:47Z"
     },
     {
-      "number": 3726,
-      "title": "fix(digichat): render gallery Thread as the first-party skin",
-      "url": "https://github.com/digithings-ai/digithings/pull/3726",
-      "mergedAt": "2026-09-08T10:54:22Z"
+      "number": 4016,
+      "title": "chore(promote): develop -> main (#4014 tearsheet NAV continuity, #4009/#4012 market-data refresh)",
+      "url": "https://github.com/digithings-ai/digithings/pull/4016",
+      "mergedAt": "2026-09-13T22:51:04Z"
     },
     {
-      "number": 3724,
-      "title": "feat(digiweb): merge heat graph for detailed repo activity",
-      "url": "https://github.com/digithings-ai/digithings/pull/3724",
-      "mergedAt": "2026-09-08T10:39:09Z"
+      "number": 4015,
+      "title": "fix(dashboard): show chained NAV history with forward-filled gaps (#4014)",
+      "url": "https://github.com/digithings-ai/digithings/pull/4015",
+      "mergedAt": "2026-09-13T22:46:44Z"
     },
     {
-      "number": 3722,
-      "title": "promote: develop \u2192 main (restore wrangler deploy --message)",
-      "url": "https://github.com/digithings-ai/digithings/pull/3722",
-      "mergedAt": "2026-09-08T10:18:16Z"
+      "number": 4012,
+      "title": "fix(ci): install the prices extra in market-data-refresh for yfinance (#4011)",
+      "url": "https://github.com/digithings-ai/digithings/pull/4012",
+      "mergedAt": "2026-09-13T22:10:19Z"
     }
   ],
   "openIssues": [
     {
-      "number": 3729,
-      "title": "[agent] Port approved /chatbot theme onto product gallery Thread",
-      "url": "https://github.com/digithings-ai/digithings/issues/3729",
-      "updatedAt": "2026-09-08T14:07:35Z"
+      "number": 4022,
+      "title": "chore(docs): refresh agent backlog snapshot",
+      "url": "https://github.com/digithings-ai/digithings/pull/4022",
+      "updatedAt": "2026-09-14T06:14:12Z"
     },
     {
-      "number": 3078,
-      "title": "digiquant-daily-failure",
-      "url": "https://github.com/digithings-ai/digithings/issues/3078",
-      "updatedAt": "2026-09-08T14:02:57Z"
+      "number": 4021,
+      "title": "Phase 1: dashboard track-record + digi-quant ATR levels engine",
+      "url": "https://github.com/digithings-ai/digithings/pull/4021",
+      "updatedAt": "2026-09-13T23:42:07Z"
     },
     {
-      "number": 3694,
-      "title": "research: BlockHorizon charts API for valuation time series (later pipeline)",
-      "url": "https://github.com/digithings-ai/digithings/issues/3694",
-      "updatedAt": "2026-09-08T09:24:45Z"
+      "number": 3997,
+      "title": "fix(digiquant): widen incoherent OHLC envelopes in NAV replay request (#3994)",
+      "url": "https://github.com/digithings-ai/digithings/pull/3997",
+      "updatedAt": "2026-09-13T23:35:46Z"
     },
     {
-      "number": 3712,
-      "title": "[site-smoke] production design assets failing",
-      "url": "https://github.com/digithings-ai/digithings/issues/3712",
-      "updatedAt": "2026-09-08T09:24:43Z"
+      "number": 4019,
+      "title": "fix(ci): use deepseek-v4-pro for openwiki-update (#4001)",
+      "url": "https://github.com/digithings-ai/digithings/pull/4019",
+      "updatedAt": "2026-09-13T23:26:42Z"
     },
     {
-      "number": 3676,
-      "title": "docs(dashboard): Settings UX pass \u2014 page-by-page user-facing readiness",
-      "url": "https://github.com/digithings-ai/digithings/issues/3676",
-      "updatedAt": "2026-09-07T09:42:49Z"
-    },
-    {
-      "number": 3673,
-      "title": "[cleanup] 21 stale merged branches \u2014 2026-09-07",
-      "url": "https://github.com/digithings-ai/digithings/issues/3673",
-      "updatedAt": "2026-09-07T08:09:33Z"
+      "number": 3677,
+      "title": "chore(develop): release digichat 2.1.0",
+      "url": "https://github.com/digithings-ai/digithings/pull/3677",
+      "updatedAt": "2026-09-13T18:24:54Z"
     }
   ],
   "branch": "main",
   "dailyContributions": [
-    {
-      "date": "2025-09-03",
-      "count": 0
-    },
-    {
-      "date": "2025-09-04",
-      "count": 0
-    },
-    {
-      "date": "2025-09-05",
-      "count": 0
-    },
-    {
-      "date": "2025-09-06",
-      "count": 0
-    },
-    {
-      "date": "2025-09-07",
-      "count": 0
-    },
-    {
-      "date": "2025-09-08",
-      "count": 0
-    },
     {
       "date": "2025-09-09",
       "count": 0
@@ -1000,7 +970,7 @@
     },
     {
       "date": "2026-04-10",
-      "count": 1
+      "count": 2
     },
     {
       "date": "2026-04-11",
@@ -1036,31 +1006,31 @@
     },
     {
       "date": "2026-04-19",
-      "count": 141
+      "count": 157
     },
     {
       "date": "2026-04-20",
-      "count": 43
+      "count": 46
     },
     {
       "date": "2026-04-21",
-      "count": 21
+      "count": 25
     },
     {
       "date": "2026-04-22",
-      "count": 8
+      "count": 12
     },
     {
       "date": "2026-04-23",
-      "count": 39
+      "count": 24
     },
     {
       "date": "2026-04-24",
-      "count": 18
+      "count": 16
     },
     {
       "date": "2026-04-25",
-      "count": 1
+      "count": 2
     },
     {
       "date": "2026-04-26",
@@ -1068,15 +1038,15 @@
     },
     {
       "date": "2026-04-27",
-      "count": 63
+      "count": 50
     },
     {
       "date": "2026-04-28",
-      "count": 28
+      "count": 26
     },
     {
       "date": "2026-04-29",
-      "count": 8
+      "count": 10
     },
     {
       "date": "2026-04-30",
@@ -1084,7 +1054,7 @@
     },
     {
       "date": "2026-05-01",
-      "count": 38
+      "count": 37
     },
     {
       "date": "2026-05-02",
@@ -1092,7 +1062,7 @@
     },
     {
       "date": "2026-05-03",
-      "count": 12
+      "count": 9
     },
     {
       "date": "2026-05-04",
@@ -1108,11 +1078,11 @@
     },
     {
       "date": "2026-05-07",
-      "count": 12
+      "count": 16
     },
     {
       "date": "2026-05-08",
-      "count": 7
+      "count": 4
     },
     {
       "date": "2026-05-09",
@@ -1220,71 +1190,71 @@
     },
     {
       "date": "2026-06-04",
-      "count": 4
+      "count": 6
     },
     {
       "date": "2026-06-05",
-      "count": 20
+      "count": 14
     },
     {
       "date": "2026-06-06",
-      "count": 23
+      "count": 26
     },
     {
       "date": "2026-06-07",
-      "count": 7
+      "count": 8
     },
     {
       "date": "2026-06-08",
-      "count": 16
+      "count": 22
     },
     {
       "date": "2026-06-09",
-      "count": 11
+      "count": 14
     },
     {
       "date": "2026-06-10",
-      "count": 8
+      "count": 10
     },
     {
       "date": "2026-06-11",
-      "count": 1
+      "count": 2
     },
     {
       "date": "2026-06-12",
-      "count": 29
-    },
-    {
-      "date": "2026-06-13",
-      "count": 15
-    },
-    {
-      "date": "2026-06-14",
-      "count": 8
-    },
-    {
-      "date": "2026-06-15",
-      "count": 36
-    },
-    {
-      "date": "2026-06-16",
-      "count": 20
-    },
-    {
-      "date": "2026-06-17",
       "count": 30
     },
     {
+      "date": "2026-06-13",
+      "count": 16
+    },
+    {
+      "date": "2026-06-14",
+      "count": 10
+    },
+    {
+      "date": "2026-06-15",
+      "count": 54
+    },
+    {
+      "date": "2026-06-16",
+      "count": 28
+    },
+    {
+      "date": "2026-06-17",
+      "count": 45
+    },
+    {
       "date": "2026-06-18",
-      "count": 35
+      "count": 66
     },
     {
       "date": "2026-06-19",
-      "count": 51
+      "count": 8
     },
     {
       "date": "2026-06-20",
-      "count": 21
+      "count": 0
     },
     {
       "date": "2026-06-21",
@@ -1292,107 +1262,107 @@
     },
     {
       "date": "2026-06-22",
-      "count": 63
+      "count": 70
     },
     {
       "date": "2026-06-23",
-      "count": 17
+      "count": 24
     },
     {
       "date": "2026-06-24",
-      "count": 29
+      "count": 37
     },
     {
       "date": "2026-06-25",
-      "count": 35
+      "count": 26
     },
     {
       "date": "2026-06-26",
-      "count": 34
+      "count": 42
     },
     {
       "date": "2026-06-27",
-      "count": 13
-    },
-    {
-      "date": "2026-06-28",
-      "count": 10
-    },
-    {
-      "date": "2026-06-29",
       "count": 18
     },
     {
+      "date": "2026-06-28",
+      "count": 14
+    },
+    {
+      "date": "2026-06-29",
+      "count": 22
+    },
+    {
       "date": "2026-06-30",
-      "count": 9
+      "count": 11
     },
     {
       "date": "2026-07-01",
-      "count": 66
+      "count": 74
     },
     {
       "date": "2026-07-02",
-      "count": 34
+      "count": 36
     },
     {
       "date": "2026-07-03",
-      "count": 21
+      "count": 22
     },
     {
       "date": "2026-07-04",
-      "count": 10
+      "count": 14
     },
     {
       "date": "2026-07-05",
-      "count": 20
+      "count": 31
     },
     {
       "date": "2026-07-06",
-      "count": 16
+      "count": 24
     },
     {
       "date": "2026-07-07",
-      "count": 5
+      "count": 8
     },
     {
       "date": "2026-07-08",
-      "count": 72
-    },
-    {
-      "date": "2026-07-09",
-      "count": 110
-    },
-    {
-      "date": "2026-07-10",
-      "count": 122
-    },
-    {
-      "date": "2026-07-11",
-      "count": 3
-    },
-    {
-      "date": "2026-07-12",
-      "count": 80
-    },
-    {
-      "date": "2026-07-13",
-      "count": 5
-    },
-    {
-      "date": "2026-07-14",
-      "count": 3
-    },
-    {
-      "date": "2026-07-15",
-      "count": 48
-    },
-    {
-      "date": "2026-07-16",
       "count": 28
     },
     {
+      "date": "2026-07-09",
+      "count": 43
+    },
+    {
+      "date": "2026-07-10",
+      "count": 43
+    },
+    {
+      "date": "2026-07-11",
+      "count": 2
+    },
+    {
+      "date": "2026-07-12",
+      "count": 33
+    },
+    {
+      "date": "2026-07-13",
+      "count": 4
+    },
+    {
+      "date": "2026-07-14",
+      "count": 2
+    },
+    {
+      "date": "2026-07-15",
+      "count": 37
+    },
+    {
+      "date": "2026-07-16",
+      "count": 18
+    },
+    {
       "date": "2026-07-17",
-      "count": 59
+      "count": 34
     },
     {
       "date": "2026-07-18",
@@ -1400,27 +1370,27 @@
     },
     {
       "date": "2026-07-19",
-      "count": 26
+      "count": 21
     },
     {
       "date": "2026-07-20",
-      "count": 33
+      "count": 24
     },
     {
       "date": "2026-07-21",
-      "count": 16
+      "count": 9
     },
     {
       "date": "2026-07-22",
-      "count": 47
+      "count": 50
     },
     {
       "date": "2026-07-23",
-      "count": 71
+      "count": 47
     },
     {
       "date": "2026-07-24",
-      "count": 4
+      "count": 2
     },
     {
       "date": "2026-07-25",
@@ -1432,7 +1402,7 @@
     },
     {
       "date": "2026-07-27",
-      "count": 6
+      "count": 4
     },
     {
       "date": "2026-07-28",
@@ -1440,103 +1410,103 @@
     },
     {
       "date": "2026-07-29",
-      "count": 19
+      "count": 10
     },
     {
       "date": "2026-07-30",
-      "count": 23
+      "count": 18
     },
     {
       "date": "2026-07-31",
-      "count": 17
+      "count": 14
     },
     {
       "date": "2026-08-01",
-      "count": 162
+      "count": 127
     },
     {
       "date": "2026-08-02",
-      "count": 7
+      "count": 10
     },
     {
       "date": "2026-08-03",
-      "count": 20
-    },
-    {
-      "date": "2026-08-04",
-      "count": 37
-    },
-    {
-      "date": "2026-08-05",
-      "count": 141
-    },
-    {
-      "date": "2026-08-06",
-      "count": 93
-    },
-    {
-      "date": "2026-08-07",
-      "count": 50
-    },
-    {
-      "date": "2026-08-08",
       "count": 21
     },
     {
+      "date": "2026-08-04",
+      "count": 39
+    },
+    {
+      "date": "2026-08-05",
+      "count": 183
+    },
+    {
+      "date": "2026-08-06",
+      "count": 118
+    },
+    {
+      "date": "2026-08-07",
+      "count": 59
+    },
+    {
+      "date": "2026-08-08",
+      "count": 27
+    },
+    {
       "date": "2026-08-09",
-      "count": 44
-    },
-    {
-      "date": "2026-08-10",
-      "count": 191
-    },
-    {
-      "date": "2026-08-11",
-      "count": 207
-    },
-    {
-      "date": "2026-08-12",
-      "count": 146
-    },
-    {
-      "date": "2026-08-13",
-      "count": 166
-    },
-    {
-      "date": "2026-08-14",
-      "count": 17
-    },
-    {
-      "date": "2026-08-15",
-      "count": 78
-    },
-    {
-      "date": "2026-08-16",
-      "count": 19
-    },
-    {
-      "date": "2026-08-17",
-      "count": 47
-    },
-    {
-      "date": "2026-08-18",
-      "count": 5
-    },
-    {
-      "date": "2026-08-19",
       "count": 50
     },
     {
+      "date": "2026-08-10",
+      "count": 250
+    },
+    {
+      "date": "2026-08-11",
+      "count": 278
+    },
+    {
+      "date": "2026-08-12",
+      "count": 168
+    },
+    {
+      "date": "2026-08-13",
+      "count": 195
+    },
+    {
+      "date": "2026-08-14",
+      "count": 18
+    },
+    {
+      "date": "2026-08-15",
+      "count": 103
+    },
+    {
+      "date": "2026-08-16",
+      "count": 26
+    },
+    {
+      "date": "2026-08-17",
+      "count": 66
+    },
+    {
+      "date": "2026-08-18",
+      "count": 6
+    },
+    {
+      "date": "2026-08-19",
+      "count": 62
+    },
+    {
       "date": "2026-08-20",
-      "count": 71
+      "count": 82
     },
     {
       "date": "2026-08-21",
-      "count": 47
+      "count": 76
     },
     {
       "date": "2026-08-22",
-      "count": 12
+      "count": 18
     },
     {
       "date": "2026-08-23",
@@ -1544,55 +1514,55 @@
     },
     {
       "date": "2026-08-24",
-      "count": 2
+      "count": 3
     },
     {
       "date": "2026-08-25",
-      "count": 289
+      "count": 346
     },
     {
       "date": "2026-08-26",
-      "count": 535
+      "count": 667
     },
     {
       "date": "2026-08-27",
-      "count": 112
+      "count": 143
     },
     {
       "date": "2026-08-28",
-      "count": 26
+      "count": 28
     },
     {
       "date": "2026-08-29",
-      "count": 164
+      "count": 181
     },
     {
       "date": "2026-08-30",
-      "count": 449
+      "count": 503
     },
     {
       "date": "2026-08-31",
-      "count": 296
+      "count": 370
     },
     {
       "date": "2026-09-01",
-      "count": 117
+      "count": 171
     },
     {
       "date": "2026-09-02",
-      "count": 86
+      "count": 106
     },
     {
       "date": "2026-09-03",
-      "count": 161
+      "count": 144
     },
     {
       "date": "2026-09-04",
-      "count": 240
+      "count": 259
     },
     {
       "date": "2026-09-05",
-      "count": 161
+      "count": 190
     },
     {
       "date": "2026-09-06",
@@ -1600,11 +1570,35 @@
     },
     {
       "date": "2026-09-07",
-      "count": 64
+      "count": 80
     },
     {
       "date": "2026-09-08",
-      "count": 63
+      "count": 165
+    },
+    {
+      "date": "2026-09-09",
+      "count": 109
+    },
+    {
+      "date": "2026-09-10",
+      "count": 176
+    },
+    {
+      "date": "2026-09-11",
+      "count": 186
+    },
+    {
+      "date": "2026-09-12",
+      "count": 95
+    },
+    {
+      "date": "2026-09-13",
+      "count": 170
+    },
+    {
+      "date": "2026-09-14",
+      "count": 0
     }
   ],
   "latestRelease": {
@@ -1616,37 +1610,37 @@
   "modules": {
     "digigraph": {
       "path": "digigraph",
-      "lastCommit": "2026-09-07T21:52:24Z",
-      "files": 149,
-      "lines": 20515
+      "lastCommit": "2026-09-13T19:16:20Z",
+      "files": 153,
+      "lines": 22804
     },
     "digiquant": {
       "path": "digiquant",
-      "lastCommit": "2026-09-07T21:52:24Z",
-      "files": 788,
-      "lines": 170420
+      "lastCommit": "2026-09-13T23:27:12Z",
+      "files": 808,
+      "lines": 176685
     },
     "digisearch": {
       "path": "digisearch",
-      "lastCommit": "2026-09-04T11:51:21Z",
-      "files": 106,
-      "lines": 11028
+      "lastCommit": "2026-09-12T21:52:25Z",
+      "files": 122,
+      "lines": 12692
     },
     "digichat": {
       "path": "cloudflare/digichat",
-      "lastCommit": "2026-09-08T10:43:43Z",
-      "files": 645,
-      "lines": 80230
+      "lastCommit": "2026-09-13T17:59:17Z",
+      "files": 692,
+      "lines": 92940
     },
     "digikey": {
       "path": "digikey",
-      "lastCommit": "2026-09-02T14:56:28Z",
-      "files": 25,
-      "lines": 2636
+      "lastCommit": "2026-09-11T21:57:22Z",
+      "files": 26,
+      "lines": 2922
     },
     "digismith": {
       "path": "digismith",
-      "lastCommit": "2026-09-04T11:28:16Z",
+      "lastCommit": "2026-09-11T21:57:22Z",
       "files": 10,
       "lines": 951
     },
@@ -1658,15 +1652,15 @@
     },
     "digibase": {
       "path": "digibase",
-      "lastCommit": "2026-09-04T11:28:16Z",
+      "lastCommit": "2026-09-11T20:55:01Z",
       "files": 16,
-      "lines": 2157
+      "lines": 2273
     },
     "digivault": {
       "path": "digivault",
-      "lastCommit": "2026-09-05T13:27:26Z",
-      "files": 23,
-      "lines": 4871
+      "lastCommit": "2026-09-11T21:41:25Z",
+      "files": 24,
+      "lines": 5003
     }
   }
 }

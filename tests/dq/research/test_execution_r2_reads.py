@@ -1,12 +1,12 @@
-"""R2 market-data reads for the execution/backfill cluster (#4013, Phase A Task 3).
+"""R2-only market-data reads for the execution/backfill cluster (#4053 Task 4).
 
-Each helper keeps its Supabase body for the default backend and gains a
-date-conditional R2 branch (``r2_backend_enabled`` / ``r2_manifest_seal`` /
+Every helper reads the sealed R2 generations (``r2_manifest_seal`` /
 ``r2_ohlcv_rows`` / ``r2_close_rows``): dates at or before the R2 manifest seal
-read R2, while ``execute_at_open`` same-day opens come from a live fetch
-(#4053 — the retired intraday writer's Supabase table is gone as a source).
-Loaded via ``importlib.util`` like the other script-level tests
-(``digiquant/scripts/`` is not an installed package).
+read the generation, while same-day opens come from the live fetch seam
+(``digiquant.data.prices.live_opens``, stubbed here — no network). No helper
+carries a Supabase market body or the retired backend flag. Loaded via
+``importlib.util`` like the other script-level tests (``digiquant/scripts/`` is
+not an installed package).
 """
 
 from __future__ import annotations
@@ -19,8 +19,6 @@ from pathlib import Path
 from typing import Any  # score:allow untyped any — script modules loaded by path
 
 import pytest
-
-from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 # Registers Task 1's `r2_market` builder fixture for this module; pytest requires
 # plugin modules to be named here rather than imported (an imported fixture would
@@ -46,6 +44,21 @@ fep = _load("fill_entry_prices_r2", "fill-entry-prices.py")
 pfe = _load("position_entry_from_events_r2", "position_entry_from_events.py")
 
 
+def _stub_live_opens(monkeypatch: pytest.MonkeyPatch, opens: dict[str, float]) -> None:
+    """Register a stub live-open seam so same-day reads never touch Yahoo (#4053 D1)."""
+    module = types.ModuleType("digiquant.data.prices.live_opens")
+
+    def fetch_live_open(ticker: str, d: str) -> float | None:
+        return opens.get(str(ticker).upper())
+
+    def fetch_live_opens(tickers: list[str], d: str) -> dict[str, float]:
+        return {t.upper(): opens[t.upper()] for t in tickers if t.upper() in opens}
+
+    module.fetch_live_open = fetch_live_open  # type: ignore[attr-defined]
+    module.fetch_live_opens = fetch_live_opens  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "digiquant.data.prices.live_opens", module)
+
+
 def test_fetch_open_uses_r2_for_sealed_dates(r2_market) -> None:
     r2_market(
         {
@@ -65,39 +78,8 @@ def test_fetch_open_uses_r2_for_sealed_dates(r2_market) -> None:
     assert eao._fetch_open(None, "GLD", "2026-09-10") == 250.0
 
 
-class _LiveIloc:
-    def __init__(self, values: list) -> None:
-        self._values = values
-
-    def __getitem__(self, idx: int):
-        return self._values[idx]
-
-
-class _LiveSer:
-    def __init__(self, v) -> None:
-        self.iloc = _LiveIloc([v])
-
-
-class _LiveFrame:
-    """Minimal ``yfinance.download`` stand-in: ``frame["Open"].iloc[0]``."""
-
-    def __init__(self, v) -> None:
-        self._v = v
-
-    def __getitem__(self, key: str) -> _LiveSer:
-        assert key == "Open"
-        return _LiveSer(self._v)
-
-
-def _stub_yf(monkeypatch: pytest.MonkeyPatch, download: Any) -> None:
-    """Register a stub ``yfinance`` so tests never need the real package or network."""
-    stub = types.ModuleType("yfinance")
-    stub.download = download  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "yfinance", stub)
-
-
 def test_fetch_open_live_fetches_unsealed_dates(r2_market, monkeypatch) -> None:
-    """Past the seal there is no R2 bar yet — the open comes from a live fetch (#4053)."""
+    """Past the seal there is no R2 bar yet — the open comes from the live fetch (#4053)."""
     r2_market(
         {
             "GLD": [
@@ -113,35 +95,23 @@ def test_fetch_open_live_fetches_unsealed_dates(r2_market, monkeypatch) -> None:
         },
         as_of="2026-09-09",
     )
-    _stub_yf(monkeypatch, lambda *a, **k: _LiveFrame(999.0))
-    # No Supabase client at all — the same-day path must not read price_history.
+    _stub_live_opens(monkeypatch, {"GLD": 999.0})
     assert eao._fetch_open(None, "GLD", "2026-09-10") == 999.0
 
 
 def test_fetch_open_returns_none_when_live_fetch_fails(r2_market, monkeypatch) -> None:
-    """A failed live fetch is None (data_unavailable), never a raise into the job (#4053)."""
-
-    def _boom(*a: Any, **k: Any) -> Any:
-        raise RuntimeError("boom")
-
-    r2_market(
-        {
-            "GLD": [
-                {
-                    "date": "2026-09-09",
-                    "open": 240.0,
-                    "high": 241.0,
-                    "low": 239.0,
-                    "close": 250.0,
-                    "volume": 1000,
-                }
-            ]
-        },
-        as_of="2026-09-09",
-    )
-    _stub_yf(monkeypatch, _boom)
+    """A missing/failed live open is None (data_unavailable), never a raise (#4053)."""
+    r2_market({"GLD": [{"date": "2026-09-09", "open": 240.0}]}, as_of="2026-09-09")
+    _stub_live_opens(monkeypatch, {})
     assert eao._fetch_open(None, "GLD", "2026-09-10") is None
     assert eao._open_marks(None, ["GLD"], "2026-09-10") == {}
+
+
+def test_backfill_open_live_fetches_unsealed_dates(r2_market, monkeypatch) -> None:
+    """The backfill reader follows the same seal/live split as execute_at_open (#4053)."""
+    r2_market({"XLV": [{"date": "2026-09-09", "open": 149.0}]}, as_of="2026-09-09")
+    _stub_live_opens(monkeypatch, {"XLV": 155.0})
+    assert bep._fetch_open(None, "XLV", "2026-09-10") == 155.0
 
 
 def test_backfill_and_fill_helpers_use_r2(r2_market) -> None:
@@ -161,7 +131,7 @@ def test_backfill_and_fill_helpers_use_r2(r2_market) -> None:
         as_of="2026-09-10",
     )
     assert bep._fetch_open(None, "XLV", "2026-09-10") == 150.0
-    assert fep.lookup_close(None, "XLV", "2026-09-10") == 152.0
+    assert fep.lookup_close("XLV", "2026-09-10") == 152.0
 
 
 def test_close_on_or_after_walks_forward_in_r2(r2_market) -> None:
@@ -259,8 +229,8 @@ def test_lookup_close_drops_unusable_r2_closes(r2_market) -> None:
         as_of="2026-09-10",
     )
     for ticker in ("XLV", "UUP", "DBO"):
-        assert fep.lookup_close(None, ticker, "2026-09-10") is None
-    assert fep.lookup_close(None, "SPY", "2026-09-10") == 451.5
+        assert fep.lookup_close(ticker, "2026-09-10") is None
+    assert fep.lookup_close("SPY", "2026-09-10") == 451.5
 
 
 def test_close_on_or_after_skips_unusable_r2_closes(r2_market) -> None:
@@ -283,35 +253,25 @@ def test_close_on_or_after_skips_unusable_r2_closes(r2_market) -> None:
     assert pfe._close_on_or_after(None, "EWZ", "2026-09-0") is None
 
 
-# ─── D3 deferral: unsealed dates fall through to the Supabase body (#4013 fix round 2) ───
+# ─── Unsealed dates: no Supabase fallback; opens live-fetch, closes stay empty (#4053) ───
 
 
-def test_close_on_or_after_defers_unsealed_dates_to_supabase(r2_market) -> None:
+def test_close_on_or_after_has_nothing_unsealed(r2_market) -> None:
+    """No live close source: an unsealed window yields no rows → None (#4053)."""
     r2_market({"EWZ": [{"date": "2026-09-09", "close": 30.0}]}, as_of="2026-09-09")
-    supabase = FakeSupabaseClient(
-        canned_reads={"price_history": [{"ticker": "EWZ", "date": "2026-09-10", "close": 999.0}]}
-    )
-    assert pfe._close_on_or_after(supabase, "EWZ", "2026-09-10") == 999.0  # today -> Supabase
+    assert pfe._close_on_or_after(None, "EWZ", "2026-09-10") is None
 
 
-def test_lookup_close_defers_unsealed_dates_to_supabase(r2_market) -> None:
+def test_lookup_close_has_nothing_unsealed(r2_market) -> None:
+    """No live close source: an unsealed entry date yields no rows → None (#4053)."""
     r2_market({"XLV": [{"date": "2026-09-09", "close": 150.0}]}, as_of="2026-09-09")
-    supabase = FakeSupabaseClient(
-        canned_reads={"price_history": [{"ticker": "XLV", "date": "2026-09-10", "close": 999.0}]}
-    )
-    assert fep.lookup_close(supabase, "XLV", "2026-09-10") == 999.0  # today -> Supabase
+    assert fep.lookup_close("XLV", "2026-09-10") is None
 
 
 def test_open_marks_live_fetches_unsealed_dates(r2_market, monkeypatch) -> None:
     """Past the seal, marks come from the live fetch as Decimal — no Supabase read (#4053)."""
     r2_market({"GLD": [{"date": "2026-09-09", "open": 240.0}]}, as_of="2026-09-09")
-
-    def _fake(ticker: str, *a: Any, **k: Any) -> _LiveFrame:
-        if ticker != "GLD":
-            raise RuntimeError("boom")
-        return _LiveFrame(999.0)
-
-    _stub_yf(monkeypatch, _fake)
+    _stub_live_opens(monkeypatch, {"GLD": 999.0})
     assert eao._open_marks(None, ["GLD", "ZZZ"], "2026-09-10") == {"GLD": Decimal("999.0")}
 
 
@@ -323,7 +283,7 @@ def test_unknown_r2_ticker_declines_instead_of_raising(r2_market) -> None:
     assert eao._fetch_open(None, "ZZZ", "2026-09-10") is None
     assert eao._open_marks(None, ["ZZZ"], "2026-09-10") == {}
     assert bep._fetch_open(None, "ZZZ", "2026-09-10") is None
-    assert fep.lookup_close(None, "ZZZ", "2026-09-10") is None
+    assert fep.lookup_close("ZZZ", "2026-09-10") is None
     assert pfe._close_on_or_after(None, "ZZZ", "2026-09-10") is None
 
 

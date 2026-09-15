@@ -1,8 +1,9 @@
-"""Current-book lookback refresh runner (#2598).
+"""Current-book lookback refresh runner (#2598; R2-only market reads, #4053).
 
-The script reads positions + price_history window returns, runs the pure lookback core,
-and upserts ``current_book_lookback``. Loaded from its file path (lives under scripts/) and
-exercised with a FakeSupabaseClient — no live Supabase.
+The script reads positions + sealed R2 window returns, runs the pure lookback core,
+and upserts ``current_book_lookback``. Market data comes from the in-memory R2
+fixture (no Supabase market body, no network); positions/writes use a
+FakeSupabaseClient. Loaded from its file path (lives under scripts/).
 """
 
 from __future__ import annotations
@@ -14,6 +15,11 @@ from pathlib import Path
 import pytest
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
+
+# Registers Task 1's `r2_market` builder fixture for this module; pytest requires
+# plugin modules to be named here rather than imported (an imported fixture would
+# collide with the fixture-name parameters below under ruff F811).
+pytest_plugins = ["tests.fixtures.r2_market"]
 
 pytestmark = pytest.mark.unit
 
@@ -37,20 +43,21 @@ refresh_attribution_mod = _load_script()
 AS_OF = date(2026, 6, 12)
 START = "2026-05-22"  # AS_OF − 21 days
 
-
-def _prices() -> list[dict]:
-    # Two closes per ticker bracketing the 21-day window: AAPL +10%, TLT flat, SPY +5%.
-    return [
-        {"date": START, "ticker": "AAPL", "close": 100.0},
-        {"date": "2026-06-12", "ticker": "AAPL", "close": 110.0},
-        {"date": START, "ticker": "TLT", "close": 100.0},
-        {"date": "2026-06-12", "ticker": "TLT", "close": 100.0},
-        {"date": START, "ticker": "SPY", "close": 100.0},
-        {"date": "2026-06-12", "ticker": "SPY", "close": 105.0},
-    ]
+# Two closes per ticker bracketing the 21-day window: AAPL +10%, TLT flat, SPY +5%.
+_MARKET_ROWS: dict[str, list[dict]] = {
+    "AAPL": [{"date": START, "close": 100.0}, {"date": "2026-06-12", "close": 110.0}],
+    "TLT": [{"date": START, "close": 100.0}, {"date": "2026-06-12", "close": 100.0}],
+    "SPY": [{"date": START, "close": 100.0}, {"date": "2026-06-12", "close": 105.0}],
+}
 
 
-def test_writes_reconciling_lookback_with_explicit_labels() -> None:
+def _arm_market(r2_market, tickers: tuple[str, ...] = ("AAPL", "TLT", "SPY")) -> None:
+    """Seal one R2 generation per requested ticker; an absent ticker is unknown."""
+    r2_market({ticker: _MARKET_ROWS[ticker] for ticker in tickers}, as_of="2026-06-12")
+
+
+def test_writes_reconciling_lookback_with_explicit_labels(r2_market) -> None:
+    _arm_market(r2_market)
     client = FakeSupabaseClient(
         canned_reads={
             "positions": [
@@ -67,7 +74,6 @@ def test_writes_reconciling_lookback_with_explicit_labels() -> None:
                     "sector_bucket": "fixed-income",
                 },
             ],
-            "price_history": _prices(),
         }
     )
     written, reconciles = refresh_attribution_mod.refresh_attribution(client=client, as_of=AS_OF)
@@ -84,7 +90,8 @@ def test_writes_reconciling_lookback_with_explicit_labels() -> None:
     assert rows["AAPL"]["window_end_date"] == "2026-06-12"
 
 
-def test_rerun_is_idempotent_upsert() -> None:
+def test_rerun_is_idempotent_upsert(r2_market) -> None:
+    _arm_market(r2_market)
     client = FakeSupabaseClient(
         canned_reads={
             "positions": [
@@ -95,7 +102,6 @@ def test_rerun_is_idempotent_upsert() -> None:
                     "sector_bucket": "sector-technology",
                 },
             ],
-            "price_history": _prices(),
         }
     )
     w1, _ = refresh_attribution_mod.refresh_attribution(client=client, as_of=AS_OF)
@@ -105,15 +111,12 @@ def test_rerun_is_idempotent_upsert() -> None:
     assert all(r["_on_conflict"] == "date,ticker" for r in client.store["current_book_lookback"])
 
 
-def test_missing_benchmark_skips() -> None:
-    # No SPY price rows → benchmark return unknown → skip (retry next run), write nothing.
+def test_missing_benchmark_skips(r2_market) -> None:
+    # No SPY generation → benchmark return unknown → skip (retry next run), write nothing.
+    _arm_market(r2_market, tickers=("AAPL",))
     client = FakeSupabaseClient(
         canned_reads={
             "positions": [{"date": "2026-06-12", "ticker": "AAPL", "weight_pct": 100}],
-            "price_history": [
-                {"date": START, "ticker": "AAPL", "close": 100.0},
-                {"date": "2026-06-12", "ticker": "AAPL", "close": 110.0},
-            ],
         }
     )
     written, reconciles = refresh_attribution_mod.refresh_attribution(client=client, as_of=AS_OF)
@@ -122,25 +125,23 @@ def test_missing_benchmark_skips() -> None:
     assert "current_book_lookback" not in client.store
 
 
-def test_no_positions_is_noop() -> None:
+def test_no_positions_is_noop(r2_market) -> None:
     # The date was never materialized (no positions rows at all) → genuine no-op.
-    client = FakeSupabaseClient(canned_reads={"positions": [], "price_history": _prices()})
+    _arm_market(r2_market)
+    client = FakeSupabaseClient(canned_reads={"positions": []})
     written, reconciles = refresh_attribution_mod.refresh_attribution(client=client, as_of=AS_OF)
     assert written == 0
     assert reconciles is True
     assert "current_book_lookback" not in client.store
 
 
-def test_all_cash_day_writes_cash_row() -> None:
+def test_all_cash_day_writes_cash_row(r2_market) -> None:
     # A fully-in-cash day (only a CASH position row) still produces a CASH lookback row
     # with the cash-drag allocation effect (−1.0 × benchmark return).
+    _arm_market(r2_market, tickers=("SPY",))
     client = FakeSupabaseClient(
         canned_reads={
             "positions": [{"date": "2026-06-12", "ticker": "CASH", "weight_pct": 100}],
-            "price_history": [
-                {"date": START, "ticker": "SPY", "close": 100.0},
-                {"date": "2026-06-12", "ticker": "SPY", "close": 105.0},
-            ],
         }
     )
     written, reconciles = refresh_attribution_mod.refresh_attribution(client=client, as_of=AS_OF)
@@ -152,9 +153,10 @@ def test_all_cash_day_writes_cash_row() -> None:
     assert cash["contract"] == "current_book_lookback"
 
 
-def test_house_book_ignores_same_date_overlay_positions() -> None:
+def test_house_book_ignores_same_date_overlay_positions(r2_market) -> None:
     from digiquant.dashboard.tenancy import house_workspace_id
 
+    _arm_market(r2_market)
     overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
     house = str(house_workspace_id())
     client = FakeSupabaseClient(
@@ -175,7 +177,6 @@ def test_house_book_ignores_same_date_overlay_positions() -> None:
                     "workspace_id": overlay,
                 },
             ],
-            "price_history": _prices(),
         }
     )
     written, reconciles = refresh_attribution_mod.refresh_attribution(client=client, as_of=AS_OF)
@@ -186,7 +187,8 @@ def test_house_book_ignores_same_date_overlay_positions() -> None:
     assert "OVERLAY" not in rows
 
 
-def test_overlay_only_positions_are_noop_for_house_lookback() -> None:
+def test_overlay_only_positions_are_noop_for_house_lookback(r2_market) -> None:
+    _arm_market(r2_market)
     overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
     client = FakeSupabaseClient(
         canned_reads={
@@ -198,13 +200,28 @@ def test_overlay_only_positions_are_noop_for_house_lookback() -> None:
                     "workspace_id": overlay,
                 },
             ],
-            "price_history": _prices(),
         }
     )
     written, reconciles = refresh_attribution_mod.refresh_attribution(client=client, as_of=AS_OF)
     assert written == 0
     assert reconciles is True
     assert "current_book_lookback" not in client.store
+
+
+def test_unknown_ticker_is_an_unpriced_holding_not_an_outage(r2_market) -> None:
+    """A holding with no R2 generation renders PARTIAL (None return), not a crash (#4053)."""
+    _arm_market(r2_market, tickers=("AAPL", "SPY"))
+    client = FakeSupabaseClient(
+        canned_reads={
+            "positions": [
+                {"date": "2026-06-12", "ticker": "AAPL", "weight_pct": 60},
+                {"date": "2026-06-12", "ticker": "MISSING", "weight_pct": 40},
+            ],
+        }
+    )
+    written, reconciles = refresh_attribution_mod.refresh_attribution(client=client, as_of=AS_OF)
+    assert written == 2
+    assert reconciles is False  # MISSING has no return window
 
 
 def test_bad_date_returns_2(capsys) -> None:

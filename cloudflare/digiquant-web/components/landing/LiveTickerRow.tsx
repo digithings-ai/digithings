@@ -4,8 +4,8 @@
  * client island that feeds live quotes into ONE shared @digithings/web
  * <StockTicker/> tape (finance-composites, tk-*): a single scrolling row
  * carrying crypto (Coinbase's keyless public WS, streams client-side regardless
- * of Supabase config) followed by the equity/ETF majors (seeded from the
- * daily-close view with its real prior-session change, live intraday during US
+ * of Supabase config) followed by the equity/ETF majors (seeded from the R2
+ * daily closes with their real prior-session change, live intraday during US
  * hours via Realtime postgres_changes on public.prices_live — #1807 moved that
  * lane off the anon-forgeable "prices:live" broadcast topic). One band, both
  * asset classes — the crypto ticks 24/7; the majors show their last daily move
@@ -47,7 +47,7 @@ const CRYPTO_PRODUCTS: string[] = [
 ];
 
 // Curated liquid majors spanning the macro book's lenses — broad cap, rates,
-// the dollar, developed + EM, credit, gold. Seeded from public_price_latest;
+// the dollar, developed + EM, credit, gold. Seeded from the R2 market API;
 // live during US market hours via postgres_changes on public.prices_live.
 const EQUITY_MAJORS: string[] = [
   "SPY",
