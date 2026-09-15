@@ -61,6 +61,66 @@ describe("parseEmbedTenants", () => {
     expect(reg.get("datatapstream.com")?.skin).toBe("base");
   });
 
+  it("keeps operator MCP servers from the env registry", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: {
+            type: "digigraph",
+            digisearchIndex: "occ_help",
+            vaultPathPrefix: "clients/online-compliance-center",
+          },
+          gateMode: "ungated",
+          token: "first-party-unused",
+          mcp: {
+            servers: [
+              {
+                id: "zammad",
+                url: "http://zammad-mcp:8770/mcp",
+                label: "Zammad tickets",
+                default: true,
+              },
+            ],
+            allowUserServers: false,
+            allowAddForm: false,
+          },
+        },
+      }),
+    );
+    expect(reg.get("occ.digithings.ai")?.mcp).toEqual({
+      servers: [
+        {
+          id: "zammad",
+          url: "http://zammad-mcp:8770/mcp",
+          label: "Zammad tickets",
+          default: true,
+        },
+      ],
+      allowUserServers: false,
+      allowAddForm: false,
+    });
+  });
+
+  it("rejects malformed MCP server entries", () => {
+    const withMcp = (mcp: unknown) =>
+      JSON.stringify({
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          mcp,
+        },
+      });
+    expect(() =>
+      parseEmbedTenants(withMcp({ servers: [{ id: "BAD ID", url: "http://x.test/mcp" }] })),
+    ).toThrow(/mcp\.servers\[0\]\.id/);
+    expect(() => parseEmbedTenants(withMcp({ servers: [{ id: "zammad", url: "  " }] }))).toThrow(
+      /mcp\.servers\[0\]\.url/,
+    );
+  });
+
   it("defaults unset skin to digichat for first-party hosts, base otherwise", () => {
     const reg = parseEmbedTenants(
       JSON.stringify({
