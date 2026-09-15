@@ -84,34 +84,40 @@
   ],
   "openIssues": [
     {
-      "number": 4022,
-      "title": "chore(docs): refresh agent backlog snapshot",
-      "url": "https://github.com/digithings-ai/digithings/pull/4022",
-      "updatedAt": "2026-09-14T06:14:12Z"
+      "number": 4091,
+      "title": "fix(website): repo-activity openIssues holds PRs; web/lint red on develop",
+      "url": "https://github.com/digithings-ai/digithings/issues/4091",
+      "updatedAt": "2026-09-15T14:55:28Z"
     },
     {
-      "number": 4021,
-      "title": "Phase 1: dashboard track-record + digi-quant ATR levels engine",
-      "url": "https://github.com/digithings-ai/digithings/pull/4021",
-      "updatedAt": "2026-09-13T23:42:07Z"
+      "number": 4028,
+      "title": "digiquant-daily-failure",
+      "url": "https://github.com/digithings-ai/digithings/issues/4028",
+      "updatedAt": "2026-09-15T14:19:26Z"
     },
     {
-      "number": 3997,
-      "title": "fix(digiquant): widen incoherent OHLC envelopes in NAV replay request (#3994)",
-      "url": "https://github.com/digithings-ai/digithings/pull/3997",
-      "updatedAt": "2026-09-13T23:35:46Z"
+      "number": 4084,
+      "title": "chore(digisearch): close web-turn double retrieval (second round uncounted) \u2014 Phase B follow-up",
+      "url": "https://github.com/digithings-ai/digithings/issues/4084",
+      "updatedAt": "2026-09-15T13:30:20Z"
     },
     {
-      "number": 4019,
-      "title": "fix(ci): use deepseek-v4-pro for openwiki-update (#4001)",
-      "url": "https://github.com/digithings-ai/digithings/pull/4019",
-      "updatedAt": "2026-09-13T23:26:42Z"
+      "number": 4081,
+      "title": "bug(ci): OpenWiki nightly run ends interrupted with zero pages regenerated",
+      "url": "https://github.com/digithings-ai/digithings/issues/4081",
+      "updatedAt": "2026-09-15T13:26:47Z"
     },
     {
-      "number": 3677,
-      "title": "chore(develop): release digichat 2.1.0",
-      "url": "https://github.com/digithings-ai/digithings/pull/3677",
-      "updatedAt": "2026-09-13T18:24:54Z"
+      "number": 4080,
+      "title": "bug(stack): digikey API keys are lost on container instance replacement (SQLite on ephemeral /data)",
+      "url": "https://github.com/digithings-ai/digithings/issues/4080",
+      "updatedAt": "2026-09-15T13:26:46Z"
+    },
+    {
+      "number": 4066,
+      "title": "feat(digisearch): OSS web search Phase D \u2014 verify + enrich (Websets-like)",
+      "url": "https://github.com/digithings-ai/digithings/issues/4066",
+      "updatedAt": "2026-09-15T10:37:38Z"
     }
   ],
   "branch": "main",
