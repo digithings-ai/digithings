@@ -965,33 +965,18 @@ def query_price_deltas(
 
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
     if r2_backend_enabled():
-        from digiquant.research.data.queries import UnknownTickerError, r2_close_rows
+        from digiquant.research.data.queries import r2_close_rows_tolerant
 
         # Strictly-before-run_date mirrors the Supabase ``.lt("date", run_date)``
-        # (the seam's ``until`` is inclusive).
-        until = run_date - timedelta(days=1)
-        try:
-            rows: list[PriceHistoryRow] = list(
-                r2_close_rows(tickers=list(tickers), since=floor, until=until)
-            )
-        except UnknownTickerError:
-            # ``r2_close_rows`` is all-or-nothing: one ticker without a sealed
-            # generation aborts the whole batch, but this function's contract is
-            # to drop missing tickers and let a missing key read as "no signal".
-            # Re-ask per ticker so one coverage gap cannot fail the research
-            # graph, and name what was dropped so the gap stays visible (#4136).
-            rows = []
-            dropped: list[str] = []
-            for ticker in tickers:
-                try:
-                    rows.extend(r2_close_rows(tickers=[ticker], since=floor, until=until))
-                except UnknownTickerError:
-                    dropped.append(ticker)
-            if dropped:
-                logger.warning(
-                    "price deltas: no sealed R2 generation for %s; treating as no signal",
-                    ", ".join(sorted(dropped)),
-                )
+        # (the seam's ``until`` is inclusive). Tolerant read: this function's
+        # contract is to drop missing tickers so a missing key reads as "no
+        # signal" rather than failing the research graph (#4136).
+        rows: list[PriceHistoryRow] = r2_close_rows_tolerant(
+            tickers=list(tickers),
+            since=floor,
+            until=run_date - timedelta(days=1),
+            context="price deltas",
+        )
     else:
         # Retired: migration 127 drops price_history (#4053) — R2 rows above.
         ordered = sorted(tickers)
