@@ -26,11 +26,14 @@ from digisearch.orchestrator_tools import (
     TOOL_DIGISEARCH,
     TOOL_DIGISEARCH_FETCH_ALL,
     TOOL_DIGISEARCH_RESEARCH_DELEGATE,
+    TOOL_DIGISEARCH_WEB_SEARCH,
     TOOL_WEB_SEARCH,
     OpenAIToolDict,
 )
 from digisearch.pipeline.ingest import IngestError, ingest_source
+from digisearch.pipeline.url_ingest import UrlIngestResult, ingest_url
 from digisearch.search._stub import query_index
+from digisearch.web_exa import WebSearchData
 from digisearch.web_search.models import WebSearchConfigError, WebSearchRequest, WebSearchResponse
 
 configure_logging()
@@ -461,7 +464,7 @@ class OrchestratorInvokeRequest(BaseModel):
 
     tool: str = Field(
         ...,
-        description="digisearch | digisearch_fetch_all | digisearch_research_delegate | web_search",
+        description="digisearch | digisearch_fetch_all | digisearch_research_delegate | web_search | digisearch_web_search",
     )
     arguments: dict[str, Any] = Field(default_factory=dict)
     default_index_name: str | None = Field(
@@ -502,7 +505,12 @@ class OrchestratorInvokeResponse(BaseModel):
     service: str | None = None
     tool: str | None = None
     data: (
-        QueryResponse | OrchestratorFetchAllData | ResearchTurnOutput | WebSearchResponse | None
+        QueryResponse
+        | OrchestratorFetchAllData
+        | ResearchTurnOutput
+        | WebSearchResponse
+        | WebSearchData
+        | None
     ) = None
     error: str | None = None
 
@@ -520,10 +528,12 @@ def _research_turn_available() -> bool:
 def api_orchestrator_tools(req: OrchestratorToolsRequest) -> OrchestratorToolsResponse:
     """Return OpenAI-style tool definitions owned by digisearch (for digigraph orchestration)."""
     from digisearch.orchestrator_tools import build_orchestrator_tool_manifest
+    from digisearch.web_exa import is_exa_configured
 
     tools = build_orchestrator_tool_manifest(
         req.index_config,
         include_research_delegate=_research_turn_available(),
+        include_web_search=is_exa_configured(),
     )
     return OrchestratorToolsResponse(tools=tools)
 
@@ -804,6 +814,37 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             data=resp,
         )
 
+    if tool == TOOL_DIGISEARCH_WEB_SEARCH:
+        from digisearch import web_exa
+
+        if not web_exa.is_exa_configured():
+            return OrchestratorInvokeResponse(ok=False, error="EXA_API_KEY is not set")
+        qtext = str(args.get("query") or "").strip()
+        if not qtext:
+            return OrchestratorInvokeResponse(ok=False, error="query is required")
+        stype = str(args.get("search_type") or "auto")
+        if stype not in web_exa.VALID_SEARCH_TYPES:
+            return OrchestratorInvokeResponse(ok=False, error=f"invalid search_type: {stype!r}")
+        n_raw = args.get("num_results", 8)
+        inc = args.get("include_domains")
+        exc = args.get("exclude_domains")
+        try:
+            data = web_exa.exa_search(
+                qtext,
+                search_type=stype,  # type: ignore[arg-type]
+                num_results=int(n_raw) if isinstance(n_raw, int) else 8,
+                category=args.get("category"),
+                contents_text=bool(args.get("contents_text", False)),
+                output_schema=args.get("output_schema")
+                if isinstance(args.get("output_schema"), dict)
+                else None,
+                include_domains=inc if isinstance(inc, list) else None,
+                exclude_domains=exc if isinstance(exc, list) else None,
+            )
+        except (web_exa.ExaError, ValueError) as e:
+            return OrchestratorInvokeResponse(ok=False, error=str(e))
+        return OrchestratorInvokeResponse(ok=True, service="digisearch", tool=tool, data=data)
+
     raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
 
 
@@ -840,6 +881,118 @@ def v1_web_search(req: WebSearchRequest) -> WebSearchResponse:
         ) from e
 
 
+class ExaWebSearchRequest(BaseModel):
+    """Request for POST /v1/digisearch_web_search (EXA live web search, optional provider)."""
+
+    query: str = Field(..., description="Natural-language web query.")
+    search_type: str = Field(
+        default="auto", description="instant|fast|auto|deep-lite|deep|deep-reasoning."
+    )
+    num_results: int = Field(default=8, ge=1, le=100)
+    category: str | None = None
+    contents_text: bool = False
+    output_schema: dict[str, Any] | None = None
+    system_prompt: str | None = None
+    include_domains: list[str] | None = None
+    exclude_domains: list[str] | None = None
+
+
+class WebContentsRequest(BaseModel):
+    """Request for POST /v1/web_contents (EXA page fetch for known URLs)."""
+
+    urls: list[str] = Field(..., min_length=1, max_length=50, description="Known URLs to fetch.")
+    text: bool = True
+    highlights: bool = False
+    summary: bool = False
+    highlight_query: str | None = None
+
+
+class WebAnswerRequest(BaseModel):
+    """Request for POST /v1/web_answer (EXA grounded answer)."""
+
+    question: str = Field(..., description="Question to answer from the live web.")
+
+
+@app.post("/v1/digisearch_web_search", response_model=WebSearchData)
+def api_web_search(req: ExaWebSearchRequest) -> WebSearchData:
+    """Live web search via EXA (dormant without EXA_API_KEY; not the owned corpus).
+
+    Mounted at ``/v1/digisearch_web_search`` (not ``/v1/web_search``): the first-party
+    searxng→ddgs web search owns ``/v1/web_search`` on develop.
+    """
+    from digisearch import web_exa
+
+    if not web_exa.is_exa_configured():
+        raise HTTPException(status_code=503, detail="EXA_API_KEY is not set")
+    if req.search_type not in web_exa.VALID_SEARCH_TYPES:
+        raise HTTPException(status_code=400, detail=f"invalid search_type: {req.search_type!r}")
+    try:
+        return web_exa.exa_search(
+            req.query,
+            search_type=req.search_type,  # type: ignore[arg-type]
+            num_results=req.num_results,
+            category=req.category,
+            contents_text=req.contents_text,
+            output_schema=req.output_schema,
+            system_prompt=req.system_prompt,
+            include_domains=req.include_domains,
+            exclude_domains=req.exclude_domains,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except web_exa.ExaError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.post("/v1/web_contents")
+def api_web_contents(req: WebContentsRequest) -> dict[str, Any]:
+    """Fetch known URLs via EXA contents (dormant without EXA_API_KEY)."""
+    from digisearch import web_exa
+
+    if not web_exa.is_exa_configured():
+        raise HTTPException(status_code=503, detail="EXA_API_KEY is not set")
+    try:
+        return web_exa.exa_contents(
+            req.urls,
+            text=req.text,
+            highlights=req.highlights,
+            summary=req.summary,
+            highlight_query=req.highlight_query,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except web_exa.ExaError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.post("/v1/web_answer")
+def api_web_answer(req: WebAnswerRequest) -> dict[str, Any]:
+    """Grounded answer from the live web via EXA (dormant without EXA_API_KEY)."""
+    from digisearch import web_exa
+
+    if not web_exa.is_exa_configured():
+        raise HTTPException(status_code=503, detail="EXA_API_KEY is not set")
+    try:
+        return web_exa.exa_answer(req.question)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except web_exa.ExaError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+class IngestUrlRequest(BaseModel):
+    """Request body for POST /ingest/url."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_url: str = Field(..., min_length=1, description="URL to fetch and ingest")
+    index_name: str = Field(default="default")
+    metadata: dict[str, Any] | None = Field(
+        default=None,
+        description="Document metadata (evidence_tier, doi_or_arxiv, etc.). Merged after sidecar YAML.",
+    )
+
+
 @app.post("/ingest", response_model=IngestResponse)
 def api_ingest(req: IngestRequest) -> IngestResponse:
     """Ingest a document via :func:`digisearch.pipeline.ingest.ingest_source`."""
@@ -858,6 +1011,20 @@ def api_ingest(req: IngestRequest) -> IngestResponse:
         index_name=result.index_name,
         status=result.status,
     )
+
+
+@app.post("/ingest/url", response_model=UrlIngestResult)
+def api_ingest_url(req: IngestUrlRequest) -> UrlIngestResult:
+    """Ingest a URL via :func:`digisearch.pipeline.url_ingest.ingest_url`."""
+    try:
+        return ingest_url(req.source_url, index_name=req.index_name, metadata=req.metadata)
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Install digisearch[web-search] for /ingest/url: {exc}",
+        ) from exc
+    except IngestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.message) from exc
 
 
 @app.get("/indexes")

@@ -34,6 +34,7 @@ TOOL_DIGISEARCH = "digisearch"
 TOOL_DIGISEARCH_FETCH_ALL = "digisearch_fetch_all"
 TOOL_DIGISEARCH_RESEARCH_DELEGATE = "digisearch_research_delegate"
 TOOL_WEB_SEARCH = "web_search"
+TOOL_DIGISEARCH_WEB_SEARCH = "digisearch_web_search"
 
 ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
     {
@@ -41,6 +42,7 @@ ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_DIGISEARCH_FETCH_ALL,
         TOOL_DIGISEARCH_RESEARCH_DELEGATE,
         TOOL_WEB_SEARCH,
+        TOOL_DIGISEARCH_WEB_SEARCH,
     }
 )
 
@@ -322,7 +324,7 @@ def build_digisearch_research_delegate_tool() -> OpenAIToolDict:
     }
 
 
-def build_web_search_tool() -> OpenAIToolDict:
+def build_first_party_web_search_tool() -> OpenAIToolDict:
     """Hub connector: public web search (maps to ``POST /v1/web_search``)."""
     return {
         "type": "function",
@@ -358,18 +360,75 @@ def build_web_search_tool() -> OpenAIToolDict:
     }
 
 
+def build_web_search_tool() -> OpenAIToolDict:
+    """EXA-backed live web search (optional; requires EXA_API_KEY at invoke time)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": TOOL_DIGISEARCH_WEB_SEARCH,
+            "description": (
+                "Live web search via EXA (alternative to the owned corpus). "
+                "Use for current events, competitors, companies/people, papers, "
+                "or anything outside ingested documents. Dormant without EXA_API_KEY. "
+                "Supports search_type instant|fast|auto|deep-lite|deep|deep-reasoning, "
+                "category/company|people|publication|news, and outputSchema synthesis."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Natural-language web query."},
+                    "search_type": {
+                        "type": "string",
+                        "enum": ["instant", "fast", "auto", "deep-lite", "deep", "deep-reasoning"],
+                        "description": "Latency/quality tradeoff (default auto).",
+                    },
+                    "num_results": {
+                        "type": "integer",
+                        "description": "Results to return (1-100, default 8).",
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Optional: company | people | publication | news | personal site | financial report.",
+                    },
+                    "contents_text": {
+                        "type": "boolean",
+                        "description": "Also return full page text.",
+                    },
+                    "include_domains": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional: only return results from these domains.",
+                    },
+                    "exclude_domains": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional: exclude results from these domains.",
+                    },
+                    "output_schema": {
+                        "description": "Optional JSON schema for structured synthesis."
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+
 def build_orchestrator_tool_manifest(
     index_config: dict[str, Any] | None = None,
     *,
     include_research_delegate: bool = False,
+    include_web_search: bool = False,
 ) -> list[OpenAIToolDict]:
     """Return OpenAI tool dicts for the orchestrator surface."""
     ic = index_config or {}
     tools: list[OpenAIToolDict] = [
         build_search_tool(ic),
         build_fetch_all_tool(ic),
-        build_web_search_tool(),
+        build_first_party_web_search_tool(),
     ]
     if include_research_delegate:
         tools.append(build_digisearch_research_delegate_tool())
+    if include_web_search:
+        tools.append(build_web_search_tool())
     return tools
