@@ -69,7 +69,10 @@ import {
   PARENT_GATE_TIMEOUT_MS,
   resolveGateFallbackCard,
 } from "@/lib/embed-trial-messages";
-import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
+import {
+  EMBED_TRIAL_TURN_LIMIT,
+  formatEmbedTurnCounter,
+} from "@/lib/embed-turn-limits";
 import { buildEmbedAccentStyle } from "@/lib/embed-accent-style";
 import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
 import type { EmbedUiParams } from "@/lib/embed-ui-params";
@@ -1141,6 +1144,15 @@ function EmbedChat({
     </p>
   ) : null;
 
+  const turnCounterSlot = isTrialForm ? (
+    <p
+      className="dc-turn-counter px-3 pt-2 pb-1 text-center text-xs text-muted-foreground"
+      data-testid="embed-turn-counter"
+    >
+      {formatEmbedTurnCounter(gate.turns, gate.limit)}
+    </p>
+  ) : null;
+
   // turn_limited: only raise paywall when the visitor asks past the free
   // limit (gateRequest.requested). Showing it on gate.locked alone replaced
   // the Thread after the third answer — so they could never type the fourth
@@ -1171,6 +1183,7 @@ function EmbedChat({
       <div className="flex h-dvh flex-col" data-chrome-mode="embed" data-thread-skin={stockClient.chrome.skin}>
         {headerSlot}
         <div className="flex flex-1 items-center justify-center p-4">{gateForm}</div>
+        {turnCounterSlot}
         {footerSlot}
       </div>
     );
@@ -1218,6 +1231,7 @@ function EmbedChat({
                 {handshakeError}
               </div>
             ) : null}
+            {turnCounterSlot}
             {footerSlot}
           </>
         }

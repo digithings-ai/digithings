@@ -6,3 +6,9 @@
  */
 export const EMBED_FREE_TURN_LIMIT = 3;
 export const EMBED_TRIAL_TURN_LIMIT = 100;
+
+export function formatEmbedTurnCounter(turns: number, limit: number): string {
+  const remaining = Math.max(0, limit - turns);
+  const unit = limit >= EMBED_TRIAL_TURN_LIMIT ? "trial" : "free";
+  return `${remaining} of ${limit} ${unit} questions left`;
+}
