@@ -281,6 +281,10 @@ def _latest_values_r2(
 
     The Supabase ``price_history`` / ``price_technicals`` bodies this helper
     replaces are dropped in migration 127; under the flag R2 is the only path.
+
+    A manifest-missing ticker makes ``r2_close_rows`` raise and the caller's
+    fail-soft guard degrades the *whole* advisory set to ``{}``, not just that
+    ticker — fine while every book ticker is manifest-served.
     """
     from digiquant.research.data.queries import get_price_technicals
 

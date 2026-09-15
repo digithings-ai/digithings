@@ -118,6 +118,11 @@ NOT run them from an agent env; no cloud creds there):
 # (push or manual dispatch; one transaction per file, ledgered in
 # olympus_schema_migrations). Never re-edit 124 — it is a ledgered no-op; 127 is
 # the drop. Rollback after apply = restore-from-generation + replay.
+# 0. PRECONDITION (apply gate) — the stack Worker is redeployed with
+#    DIGIQUANT_MARKET_DATA_BACKEND="r2" in [vars] (83640e28c; the value reaches
+#    the digiquant-mcp container via src/index.ts's envVars forwarding, which
+#    otherwise forwards ""). Verify in the container before applying (and
+#    re-check after the stack deploy): printenv DIGIQUANT_MARKET_DATA_BACKEND → r2.
 # 1. Live size gate on the core project, evaluated through the gate script
 #    (PASS <= 320MB per data/cutover_gate.py;
 #    ~172MB of price tables drop toward a ≈292MB target; macro_series_observations
@@ -175,7 +180,7 @@ python3 scripts/backfill_context.py --date YYYY-MM-DD --print-prompt
 python3 scripts/backfill_simulated_runs.py --validate-all
 ```
 
-**As-of date constraints:** all web research must use `before:DATE` query constraints; prices/macro come from Supabase filtered to `<= DATE` (see `backfill_context.py`). The `cowork/tasks/backfill-historical-day.md` recipe is the canonical task definition for each historical day.
+**As-of date constraints:** all web research must use `before:DATE` query constraints; prices come from the R2 seam and macro from Supabase, both filtered to `<= DATE` (see `backfill_context.py`). The `cowork/tasks/backfill-historical-day.md` recipe is the canonical task definition for each historical day.
 
 **Pre-executed:** Apr 5–14, 2026 backfill completed 2026-04-14 (468 documents, all days OK).
 

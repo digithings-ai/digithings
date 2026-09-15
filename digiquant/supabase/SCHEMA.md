@@ -47,6 +47,11 @@ erDiagram
 > strings — not enforced by FK because `documents` is partitioned and the
 > pointer target may be in any partition).
 
+> `price_history`, `price_technicals`, `price_history_tickers`, and
+> `public_price_latest` were dropped in migration 127 (#4053) — the ERD keeps
+> the pre-drop shape for lineage only. `macro_series_observations` and
+> `trading_calendar` are not dropped.
+
 ## Per-table inventory
 
 ### Portfolio core (migration 001, partitioned since 011)
@@ -61,16 +66,16 @@ erDiagram
 | `nav_history` | PK `(date)` kept; T0 also adds UNIQUE `(workspace_id, date)` | Daily portfolio NAV. |
 | `portfolio_metrics` | `(date)` unique kept; T0 also adds `(workspace_id, date)` | Pre-computed Sharpe, vol, drawdown, exposure metrics. |
 
-> `benchmark_history` was dropped in migration 010 — benchmark close series (SPY / QQQ / IWM …) now live as rows in `price_history`.
+> `benchmark_history` was dropped in migration 010 — benchmark close series (SPY / QQQ / IWM …) were rows in `price_history` (dropped in migration 127, #4053).
 
 ### Market data (migrations 005 / 007 / 015 / 018)
 
 | Table | PK | Purpose |
 |-------|----|---------|
-| `price_history` | `(date, ticker)` | OHLCV history for all watchlist tickers. |
-| `price_technicals` | `(date, ticker)` | 35+ pre-computed TA indicators per (date, ticker). |
-| `macro_series_observations` | `(source, series_id, obs_date)` | FRED / Frankfurter / crypto FNG time series. |
-| `price_history_tickers` | _(view)_ | Distinct tickers currently in `price_history`. |
+| `price_history` | `(date, ticker)` | *(dropped in migration 127, #4053)* — was OHLCV history; readers now use the R2 market data seam. |
+| `price_technicals` | `(date, ticker)` | *(dropped in migration 127, #4053)* — was 35+ pre-computed TA indicators per (date, ticker); R2/live now. |
+| `macro_series_observations` | `(source, series_id, obs_date)` | FRED / Frankfurter / crypto FNG time series. **Not dropped** — fedprob/bitview still write it. |
+| `price_history_tickers` | _(view)_ | *(dropped in migration 127, #4053)* — was the distinct-ticker view; R2 manifests serve the universe now. |
 
 ### portfolio deliberation — new in migration 024
 
@@ -108,7 +113,7 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
 |------|-----------|---------|
 | `public_portfolio_positions` | `positions` | Latest-date position book, performance columns only. **Excludes** `rationale`, `pm_notes`, `thesis_id`, `conviction`, `stop_loss_pct`, `target_pct_gain`, `horizon_days`. |
 | `public_nav_history` | `nav_history` | Legacy NAV series + cash/invested % + derived `day_return_pct` (rollback target). |
-| `public_price_latest` | `price_history` | Latest daily close per ticker — valuation fallback outside market hours (`prices-live` is live, not dormant, since 2026-07-13). |
+| `public_price_latest` | `price_history` | *(dropped in migration 127, #4053)* — was latest daily close per ticker; browsers read the R2 market API now (intraday `prices-live` edge function unchanged). |
 
 ### Public accounting surface — migration 074 (#2599 / Task 3.4) + 084/085
 
