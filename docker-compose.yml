@@ -207,12 +207,16 @@ services:
       - DIGISEARCH_INDEX=${DIGISEARCH_INDEX:-default}
       - DIGISEARCH_SEARXNG_URL=${DIGISEARCH_SEARXNG_URL:-http://searxng:8080}
       - CHROMA_PATH=/data/chroma
+      # Monitor store home (Phase C, #4065): {DIGI_WORKSPACE}/.digisearch/monitors.sqlite3
+      # — persisted by the digisearch_monitors volume below.
+      - DIGI_WORKSPACE=/data/monitors
       - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
       - DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE:-digi-ecosystem}
       - DIGIKEY_PUBLIC_KEY_PEM=${DIGIKEY_PUBLIC_KEY_PEM:-}
     volumes:
       - digisearch_chroma:/data/chroma
+      - digisearch_monitors:/data/monitors
       - ./digisearch/devdata/edgar_sample:/data/edgar_dev_corpus:ro
     depends_on:
       digikey:
@@ -443,17 +447,26 @@ services:
     environment:
       - DIGIGRAPH_URL=http://digigraph:8000
       - DIGIQUANT_URL=http://digiquant:8001
+      - DIGISEARCH_URL=http://digisearch:8002
       - DIGIKEY_URL=${DIGIKEY_URL:-http://digikey:8005}
       - DIGICLAW_DIGIKEY_API_KEY=${DIGICLAW_DIGIKEY_API_KEY:-}
       - DIGIQUANT_DATA_DIR=/app/data
       - AUDIT_LOG_PATH=/audit/events.jsonl
       - DIGI_WORKSPACE=/workspace
+      # Phase C tick (#4065): agents come from the mounted repo, scheduler state
+      # from the digiclaw_state volume (DIGI_WORKSPACE itself is read-only).
+      - DIGICLAW_AGENTS_DIR=/workspace/digiclaw/agents
+      - DIGICLAW_SCHEDULER_STATE=/state/scheduler_state.json
     volumes:
       - ./digiquant/results/audit:/audit
       - ./:/workspace:ro
+      - digiclaw_state:/state
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - "while true; do python -m digiclaw; sleep 1800; done"
+      - |
+        digiclaw schedule start web-watch-tick
+        while true; do python -m digiclaw; sleep 1800; done &
+        while true; do digiclaw schedule tick; sleep 60; done
     depends_on:
       digigraph:
         condition: service_healthy
@@ -609,6 +622,8 @@ volumes:
   digichat_pg:
   digikey_data:
   digisearch_chroma:
+  digisearch_monitors:
   digivault_data:
+  digiclaw_state:
   prometheus_data:
   grafana_data:
