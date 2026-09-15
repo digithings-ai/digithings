@@ -899,6 +899,7 @@ def query_price_technicals_freshness(
         return r2_manifest_seal()
     from datetime import timedelta
 
+    # Retired: migration 127 drops price_technicals (#4053) — R2 seal above.
     latest_resp = (
         client.table("price_technicals").select("date").order("date", desc=True).limit(1).execute()
     )
@@ -976,6 +977,7 @@ def query_price_deltas(
             )
         )
     else:
+        # Retired: migration 127 drops price_history (#4053) — R2 rows above.
         ordered = sorted(tickers)
         batch = _price_delta_ticker_batch(lookback_days)
         rows = []
@@ -1136,7 +1138,7 @@ def query_returns_window(
             until=_parse_date(end_floor) - timedelta(days=1),
         )
     else:
-
+        # Retired: migration 127 drops price_history (#4053) — R2 rows above.
         def _fetch_window() -> list[dict[str, Any]]:
             window_resp = (
                 client.table("price_history")

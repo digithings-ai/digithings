@@ -770,3 +770,28 @@ def test_the_web_lane_runs_the_site_test_suite() -> None:
     # step's comment says "no --max-age-days" in prose.
     assert "fetch_repo_activity.py --check" in commands
     assert "--max-age-days" not in commands, "freshness belongs to the refresh job alone"
+
+
+@pytest.mark.unit
+def test_the_committed_open_issues_are_real_issues_not_pull_requests() -> None:
+    """The homepage test asserts /issues/ links; a /pull/ row shipped once (#4091)."""
+    data = json.loads(fra.OUT.read_text(encoding="utf-8"))
+    assert data["openIssues"], "the snapshot must carry open issues"
+    for row in data["openIssues"]:
+        assert "/issues/" in row["url"], row
+    for row in data["mergedPulls"]:
+        assert "/pull/" in row["url"], row
+
+
+@pytest.mark.unit
+def test_search_items_can_restrict_rows_to_a_url_kind() -> None:
+    """A search payload can mix rows; callers pin the URL kind they asked for (#4091)."""
+    payload = {
+        "items": [
+            {"number": 1, "title": "a pr", "html_url": "https://github.com/o/r/pull/1"},
+            {"number": 2, "title": "an issue", "html_url": "https://github.com/o/r/issues/2"},
+        ]
+    }
+    assert [row["number"] for row in fra._search_items(payload, 6, "/issues/")] == [2]
+    assert [row["number"] for row in fra._search_items(payload, 6, "/pull/")] == [1]
+    assert [row["number"] for row in fra._search_items(payload, 6)] == [1, 2]

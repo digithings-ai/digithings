@@ -32,8 +32,10 @@ env:
   # the MCP price/macro tools + pipeline reads through the versioned R2 cache
   # sealed at as_of, and stops the Supabase writers (`digiquant prices`
   # refuses covered writes under this flag). Set to r2 2026-09-14 (#4013);
-  # supersedes the Supabase market-data writer path. Rollback = flip back to
-  # "supabase" (readers fall back to the Supabase bodies, writers resume).
+  # supersedes the Supabase market-data writer path. 127 (#4053) then dropped
+  # the tables: this flag is no longer a rollback lever — rollback =
+  # restore-from-generation + replay. macro_series_observations and
+  # trading_calendar are NOT dropped and stay Supabase-backed.
   # Standing exception: `fetch-macro --sources fedprob` keeps writing
   # macro_series_observations under "r2" (prediction-market odds have no R2
   # generation; get_fed_rate_probabilities stays Supabase-backed).

@@ -22,6 +22,9 @@ RUN uv pip install --system -e "./digibase"
 COPY digikey/pyproject.toml digikey/README.md ./digikey/
 COPY digikey/src ./digikey/src
 RUN uv pip install --system -e "./digikey"
+COPY digifetch/pyproject.toml digifetch/ARCHITECTURE.md ./digifetch/
+COPY digifetch/src ./digifetch/src
+RUN uv pip install --system -e "./digifetch"
 COPY digiquant/pyproject.toml ./digiquant/
 COPY digiquant/src ./digiquant/src
 RUN uv pip install --system -e "./digiquant[research,mcp]"

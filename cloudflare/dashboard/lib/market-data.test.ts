@@ -181,10 +181,10 @@ describe('dashboard market-data wiring', () => {
     expect(src).toContain('fetchMarketCloses(openTickers');
   });
 
-  it('universe comes from the market tickers API, not the price_history_tickers view', () => {
+  it('no price_history_tickers view reader remains (#4053)', () => {
     const src = read('queries.ts');
-    expect(src).toContain('fetchMarketTickers(');
     expect(src).not.toContain("from('price_history_tickers')");
+    expect(src).not.toContain('price_history_tickers');
   });
 
   it('market reads have no isMarketDataConfigured gate', () => {

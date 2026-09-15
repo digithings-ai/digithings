@@ -1,5 +1,9 @@
 """Record pre-cutover Supabase answers as parity goldens. One-time use.
 
+Spent and retired: migration 127 drops the Supabase market tables it reads
+(#4053). The recorded fixtures under ``tests/fixtures/supabase-answers/``
+stay as historical parity evidence.
+
 Snapshots the live Supabase market tables (``price_technicals``,
 ``macro_series_observations``) for the three pinned golden dates and writes
 one JSON fixture per date plus ``docs/perf/baseline.json`` (per-tool latency

@@ -1,7 +1,8 @@
 /**
  * ETFs used for Performance page comparison charts. Must stay in sync with
- * `BENCHMARKS` in scripts/update_tearsheet.py and populated in price_history
- * (e.g. scripts/preload-history.py --supabase).
+ * `BENCHMARKS` in scripts/update_tearsheet.py; closes come from the R2 market
+ * API (`fetchMarketCloses`) — the Supabase `price_history` table this list was
+ * once populated into was dropped in migration 127 (#4053).
  *
  * IBIT: BTC spot ETF proxy. EEM: emerging markets. IWM: small-cap.
  */

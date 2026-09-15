@@ -363,6 +363,7 @@ def _load_ticker_risk(
                             "atr_pct": row.get("atr_pct"),
                         }
             else:
+                # Retired: migration 127 drops price_technicals (#4053) — R2 only above.
                 since = (run_date - timedelta(days=_VOL_LOOKBACK_DAYS)).isoformat()
                 resp = (
                     client.table("price_technicals")

@@ -25,7 +25,7 @@ from collections.abc import Iterable, Mapping
 from typing import (
     Any,  # score:allow untyped any — Playwright cookie dicts are untyped (browser optional)
 )
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from pydantic import BaseModel, ConfigDict
@@ -48,6 +48,12 @@ DEFAULT_MAX_BYTES = 32 * 1024 * 1024
 MAX_REDIRECTS = 5
 
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+
+
+def _url_origin(url: str) -> tuple[str, str, int | None]:
+    """(scheme, host, port) identity used for same-origin redirect decisions."""
+    parsed = urlparse(url)
+    return (parsed.scheme.lower(), (parsed.hostname or "").lower(), parsed.port)
 
 
 class FetchResult(BaseModel):
@@ -122,6 +128,11 @@ class HttpFetcher:
     link-local, RFC1918, CGNAT, ``0.0.0.0`` and metadata addresses refused)
     before a request is sent, and hops are capped at :data:`MAX_REDIRECTS`. Pass
     ``allowed_hosts`` for operator-trusted internal hosts.
+
+    **Redirect cookies.** Per-call ``cookies`` (the Playwright hand-off seam)
+    are host-agnostic, so they are forwarded only while the hop stays on the
+    original origin; a cross-origin redirect drops them instead of leaking a
+    session credential.
     """
 
     def __init__(
@@ -210,11 +221,17 @@ class HttpFetcher:
 
         Redirects are followed manually (bounded by :data:`MAX_REDIRECTS`) and
         each hop is re-validated by the SSRF guard before it is requested.
+        Per-call ``cookies`` are forwarded **only to same-origin hops**; a hop
+        to another origin drops them (session cookies must not leak across
+        hosts). The client-level cookie jar, if any, follows httpx's own
+        domain-scoped rules.
         """
+        origin = _url_origin(url)
         current_url = url
         current_method = method
         for _ in range(MAX_REDIRECTS + 1):
             self._validate(current_url)
+            hop_cookies = cookies if _url_origin(current_url) == origin else None
             response = self._client.request(
                 current_method,
                 current_url,
@@ -222,7 +239,7 @@ class HttpFetcher:
                 data=dict(data) if data else None,
                 json=json,
                 headers=dict(headers) if headers else None,
-                cookies=dict(cookies) if cookies else None,
+                cookies=dict(hop_cookies) if hop_cookies else None,
                 follow_redirects=False,
             )
             if response.status_code in _REDIRECT_STATUSES:
@@ -260,21 +277,25 @@ class HttpFetcher:
 
         Redirects are followed manually (bounded by :data:`MAX_REDIRECTS`) and
         each hop is re-validated by the SSRF guard before it is requested.
+        Per-call ``cookies`` are forwarded only to same-origin hops, exactly as
+        in :meth:`fetch`.
 
         Raises:
             DownloadTooLargeError: if the body exceeds ``max_bytes``.
             httpx.HTTPStatusError: on a 4xx/5xx response.
             SsrfBlockedError: if a URL or redirect hop is refused by the guard.
         """
+        origin = _url_origin(url)
         current_url = url
         current_method = method
         for _ in range(MAX_REDIRECTS + 1):
             self._validate(current_url)
+            hop_cookies = cookies if _url_origin(current_url) == origin else None
             with self._client.stream(
                 current_method,
                 current_url,
                 headers=dict(headers) if headers else None,
-                cookies=dict(cookies) if cookies else None,
+                cookies=dict(hop_cookies) if hop_cookies else None,
                 follow_redirects=False,
             ) as response:
                 if response.status_code in _REDIRECT_STATUSES:

@@ -29,6 +29,24 @@ def _tool_names(server) -> set[str]:
 
 READ_TOOLS_EXTRA = {"digiquant_list_coinmetrics_catalog"}
 
+#: The 13 digifetch x Gloomberb enrichment reads (#4069) are read-scope only,
+#: default-ON behind GLOOMBERB_ENABLED.
+DIGIFETCH_TOOLS = {
+    "digifetch_quote",
+    "digifetch_quotes_batch",
+    "digifetch_price_history",
+    "digifetch_ticker_financials",
+    "digifetch_options_chain",
+    "digifetch_sec_filings",
+    "digifetch_holders",
+    "digifetch_analyst_research",
+    "digifetch_corporate_actions",
+    "digifetch_earnings_calendar",
+    "digifetch_exchange_rate",
+    "digifetch_search",
+    "digifetch_news",
+}
+
 COMPUTE_TOOLS = {
     "digiquant_run_backtest",
     "digiquant_run_optimize",
@@ -116,7 +134,13 @@ def test_read_scope_includes_trade_levels():
 
 
 @pytest.mark.unit
+def test_read_scope_includes_digifetch_family():
+    assert DIGIFETCH_TOOLS <= set(READ_SCOPE_TOOLS)
+    assert not (DIGIFETCH_TOOLS & COMPUTE_TOOLS)
+
+
+@pytest.mark.unit
 def test_tool_counts_pin_post_3855_surface():
-    assert len(READ_SCOPE_TOOLS) == 10
+    assert len(READ_SCOPE_TOOLS) == 23
     assert len(COMPUTE_TOOLS) == 14
-    assert len(_tool_names(create_mcp_server())) == 24
+    assert len(_tool_names(create_mcp_server())) == 37

@@ -309,8 +309,13 @@ def _features(commits: list[dict], limit: int = 6) -> list[dict]:
     return feats
 
 
-def _search_items(payload: object, limit: int) -> list[dict]:
-    """Number / title / url rows from a Search issues payload."""
+def _search_items(payload: object, limit: int, url_marker: str | None = None) -> list[dict]:
+    """Number / title / url rows from a Search issues payload.
+
+    ``url_marker`` restricts rows to URLs containing that substring — the live
+    search API has handed back a PR where a plain issue was expected (#4091),
+    so callers that want issues ask for ``/issues/`` and PRs for ``/pull/``.
+    """
     items = payload.get("items") if isinstance(payload, dict) else None
     if not isinstance(items, list):
         return []
@@ -322,6 +327,8 @@ def _search_items(payload: object, limit: int) -> list[dict]:
         title = it.get("title")
         url = it.get("html_url")
         if not isinstance(number, int) or not title or not url:
+            continue
+        if url_marker is not None and url_marker not in url:
             continue
         out.append(
             {
@@ -533,7 +540,7 @@ def collect() -> dict:
                 "url": row["url"],
                 "mergedAt": row["closedAt"],
             }
-            for row in _search_items(merged, 6)
+            for row in _search_items(merged, 6, "/pull/")
         ],
         "openIssues": [
             {
@@ -542,7 +549,7 @@ def collect() -> dict:
                 "url": row["url"],
                 "updatedAt": row["updatedAt"],
             }
-            for row in _search_items(open_issues, 6)
+            for row in _search_items(open_issues, 6, "/issues/")
         ],
         "branch": BRANCH,
         "dailyContributions": _to_daily(year_commits, year_merged, year_closed, now),
