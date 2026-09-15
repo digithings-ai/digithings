@@ -32,7 +32,7 @@ function renderTab(): string {
 }
 
 describe('HowItWorksTab', () => {
-  it('renders the full six-stage pipeline story with its store names, without data', () => {
+  it('renders the full seven-stage pipeline story with its store names, without data', () => {
     const html = renderTab();
     expect(html).toContain('data-testid="twelvex-how-it-works"');
     for (const title of [
@@ -42,6 +42,7 @@ describe('HowItWorksTab', () => {
       'Find confluence',
       'Write the digest',
       'Rank trade ideas',
+      'Keep score',
     ]) {
       expect(html).toContain(title);
     }
@@ -52,6 +53,8 @@ describe('HowItWorksTab', () => {
       'fx_confluence_snapshot',
       'fx_daily_digest',
       'fx_trade_ideas_snapshot',
+      'fx_idea_eval',
+      'fx_consensus_eval',
       'economic_calendar',
     ]) {
       expect(html).toContain(store);

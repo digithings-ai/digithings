@@ -54,6 +54,7 @@ import {
   soldWeightPct,
 } from './position-event-economics';
 import { houseBook } from './house-workspace';
+import { fetchMarketCloses } from './market-data';
 import { isCashTicker } from './book-reconciliation';
 import { committedBookDate } from './dashboard-ssot';
 import {
@@ -322,7 +323,8 @@ function latestCloseByTicker(
 
 /**
  * When the nightly metrics refresh did not stamp `current_price` /
- * `unrealized_pnl_pct` (sync-only book rows), fill the mark from `price_history`
+ * `unrealized_pnl_pct` (sync-only book rows), fill the mark from the market API
+ * (fetchMarketCloses)
  * so open-book unrealized can derive from entry vs close. Never invent a mark.
  */
 function applyHoldingMarks(
@@ -970,25 +972,23 @@ export async function getPerformanceBundle(
         .map((row) => row.ticker.toUpperCase())
     ),
   ];
+  // Marks share the plotted NAV window: the market API answers a date window
+  // (#4053, R2-only — no Supabase fallback).
+  const markWindowFloor = navWindow[0]?.date ?? '';
+  const markWindowCeiling = navWindow.at(-1)?.date ?? '';
   const [benchmarkMap, holdingMarksRes] = await Promise.all([
     navWindow.length >= 2
       ? fetchComparablePriceHistory(
           [...DASHBOARD_BENCHMARK_TICKERS],
-          navWindow[0].date,
-          navWindow.at(-1)!.date
+          markWindowFloor,
+          markWindowCeiling
         )
       : Promise.resolve({} as BenchmarkHistoryMap),
     openTickers.length
-      ? safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
-          'holding mark price_history',
-          (sb) =>
-            sb
-              .from('price_history')
-              .select('ticker,date,close')
-              .in('ticker', openTickers)
-              .order('date', { ascending: false })
-              .limit(Math.max(openTickers.length * 40, 200))
-        )
+      ? fetchMarketCloses(openTickers, markWindowFloor, markWindowCeiling).then((rows) => ({
+          rows,
+          ok: true as const,
+        }))
       : Promise.resolve({ rows: [], ok: true as const }),
   ]);
   const benchmarkPrices = Object.entries(benchmarkMap).flatMap(([ticker, series]) =>

@@ -2,10 +2,12 @@
  * digithings Profile A stack — Worker fronting one Cloudflare Container.
  *
  * Hostnames:
- *   graph.digithings.ai → digigraph :8000
- *   key.digithings.ai   → digikey   :8005
- *   mcp.digithings.ai   → digiquant-mcp :8767 (reserved; see HUMAN GATE in
- *                         wrangler.toml — route enabled only with edge auth)
+ *   graph.digithings.ai  → digigraph  :8000
+ *   key.digithings.ai    → digikey    :8005
+ *   search.digithings.ai → digisearch :8002 (digikey JWT `digisearch:query`;
+ *                          new external route #4063, owner-approved)
+ *   mcp.digithings.ai    → digiquant-mcp :8767 (reserved; see HUMAN GATE in
+ *                          wrangler.toml — route enabled only with edge auth)
  *
  * workers.dev fallbacks:
  *   /healthz            → digigraph
@@ -14,14 +16,19 @@
  * (No /_stack/mcp/* forwarder — unauthenticated MCP forwarding must not ship.
  * mcp.digithings.ai answers only once its route is enabled behind the JWT gate.)
  *
- * digisearch / digivault / LiteLLM are loopback-only inside the Container.
+ * digivault / LiteLLM are loopback-only inside the Container. digisearch binds
+ * 0.0.0.0:8002 (container/start_digisearch.sh) so the Worker can reach it at the
+ * container network address for its public route; in-container callers keep
+ * using DIGISEARCH_URL=http://127.0.0.1:8002 (0.0.0.0 includes loopback).
  * digichat Container calls these public URLs via DIGIGRAPH_INTERNAL_URL / DIGIKEY_URL.
  */
 import { Container, getContainer, switchPort } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
+import { handleMarketData } from "./market-data";
 import {
   DIGIGRAPH_PORT,
   DIGIKEY_PORT,
+  DIGISEARCH_PORT,
   DIGIQUANT_MCP_HOSTNAME,
   DIGIQUANT_MCP_PORT,
   MCP_CONTAINER_ID,
@@ -35,8 +42,9 @@ const env = workerEnvBinding as unknown as Env;
 export class DigiStackContainer extends Container {
   defaultPort = DIGIGRAPH_PORT;
   /**
-   * digigraph is required for Worker readiness. digikey is also waited on in
-   * fetch() once Redis-wait + early priority make bind reliable under Firecracker.
+   * digigraph is required for Worker readiness. digikey (once Redis-wait + early
+   * priority make bind reliable under Firecracker) and digisearch (which starts
+   * behind the Chroma seed wait) are waited on per-request in fetch() instead.
    */
   requiredPorts = [DIGIGRAPH_PORT];
   /** Keep warm — multi-process cold start is expensive. */
@@ -98,7 +106,7 @@ export class DigiStackContainer extends Container {
 
   /**
    * Wait longer than the default ~20s portReadyTimeout while supervisord
-   * brings up digigraph (and digikey) under Firecracker.
+   * brings up digigraph (and the requested service) under Firecracker.
    */
   override async fetch(request: Request): Promise<Response> {
     // switchPort sets cf-container-target-port; containerFetch(request) alone
@@ -107,7 +115,15 @@ export class DigiStackContainer extends Container {
     const targetPort = targetPortFromRequest(request);
     try {
       await this.startAndWaitForPorts({
-        ports: [DIGIGRAPH_PORT, ...(targetPort === DIGIKEY_PORT ? [DIGIKEY_PORT] : [])],
+        // Per-target only: a search.digithings.ai request must not fail on a
+        // :8002 that has not bound yet (digisearch starts behind the seed wait),
+        // just as a key request must not race :8005. digigraph binds first for
+        // every request, so it is unconditional.
+        ports: [
+          DIGIGRAPH_PORT,
+          ...(targetPort === DIGIKEY_PORT ? [DIGIKEY_PORT] : []),
+          ...(targetPort === DIGISEARCH_PORT ? [DIGISEARCH_PORT] : []),
+        ],
         cancellationOptions: {
           portReadyTimeoutMS: 180_000,
           instanceGetTimeoutMS: 60_000,
@@ -234,6 +250,12 @@ export interface Env {
   R2_BUCKET?: string;
   R2_ACCESS_KEY_ID?: string;
   R2_SECRET_ACCESS_KEY?: string;
+  // Read-only market data (#4013 Task 8). Both are consumed by the Worker's
+  // /v1/market/* handler (src/market-data.ts): MARKET_DATA is the R2 binding
+  // declared in wrangler.toml, MARKET_DATA_ALLOWED_ORIGINS the CORS allowlist.
+  // Neither is container runtime env -- do not add them to an envVars block.
+  MARKET_DATA: R2Bucket;
+  MARKET_DATA_ALLOWED_ORIGINS?: string;
 }
 
 function rewriteKeyStackPath(request: Request): Request {
@@ -265,6 +287,14 @@ export default {
       return container.fetch(switchPort(rewriteKeyStackPath(request), DIGIKEY_PORT));
     }
 
+    // Read-only R2 market data (#4013 Task 8): public JSON for browser surfaces
+    // (decision D1), served by the Worker itself — not proxied to the container.
+    // Public read-only is at parity with Supabase's anon-readable price_history;
+    // no writes, no auth, CORS limited to MARKET_DATA_ALLOWED_ORIGINS.
+    if (url.pathname === "/v1/market/tickers" || url.pathname === "/v1/market/closes") {
+      return handleMarketData(request, workerEnv, url);
+    }
+
     // Dedicated digiquant-mcp container (#3780 Task 8): reachable only via the
     // reserved mcp.digithings.ai hostname once its route is enabled (HUMAN GATE
     // in wrangler.toml — needs Worker-edge digikey JWT enforcement first; the
@@ -279,7 +309,7 @@ export default {
     if (port === null) {
       return new Response(
         "digithings-stack: unknown host. Use graph.digithings.ai, " +
-          "key.digithings.ai, or /_stack/key/* on workers.dev. " +
+          "key.digithings.ai, search.digithings.ai, or /_stack/key/* on workers.dev. " +
           "(mcp.digithings.ai is reserved; its route is not yet enabled.)",
         { status: 404 },
       );

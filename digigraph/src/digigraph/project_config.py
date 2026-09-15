@@ -360,9 +360,7 @@ class DigiProjectConfig:
 
     def get_digisearch_url(self) -> str:
         """digisearch service URL."""
-        return self.services.get(
-            "digisearch_url", os.environ.get("DIGISEARCH_URL", "http://digisearch:8002")
-        )
+        return self.services.get("digisearch_url", os.environ.get("DIGISEARCH_URL", ""))
 
     def get_digiquant_url(self) -> str:
         """digiquant service URL."""

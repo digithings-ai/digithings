@@ -57,6 +57,14 @@ const MCP_SCOPED_VARS = new Set([
   "R2_SECRET_ACCESS_KEY",
 ]);
 
+// Worker-scoped vars: read by the Worker's own request handling and
+// deliberately NOT forwarded into any Container. `MARKET_DATA_ALLOWED_ORIGINS`
+// gates CORS in src/market-data.ts's /v1/market/* handler (#4013 Task 8); no
+// container process reads it, so keying it into an envVars block would repeat
+// the dead-config duplication review finding 6 removed. Two-way pinned below:
+// exempt from the forward-everything check, and refused if forwarded anyway.
+const WORKER_SCOPED_VARS = new Set(["MARKET_DATA_ALLOWED_ORIGINS"]);
+
 // Deliberately throws rather than returning an empty match -- a re-indented
 // `envVars = { ... };` (or `Env { ... }`) block must fail loudly, not silently
 // pass every assertion below with zero entries extracted.
@@ -140,10 +148,24 @@ describe("Env / envVars parity", () => {
     // block only (see the duplication check below).
     const envMembers = extractEnvInterfaceStringMembers(indexSource);
     const forwarded = new Set(extractEnvVarsKeys(indexSource));
-    const missing = envMembers.filter((name) => !forwarded.has(name));
+    const missing = envMembers.filter(
+      (name) => !forwarded.has(name) && !WORKER_SCOPED_VARS.has(name),
+    );
     expect(missing, `Env member(s) declared but never keyed in envVars: ${missing}`).toEqual(
       [],
     );
+  });
+
+  it("keeps worker-scoped vars out of every container's envVars", () => {
+    // The exemption above must stay one-way: a var the Worker consumes is not
+    // container runtime env, and forwarding it is the typo/duplication class
+    // this file exists to catch, just in the opposite direction.
+    const forwarded = new Set(extractEnvVarsKeys(indexSource));
+    const leaked = [...WORKER_SCOPED_VARS].filter((name) => forwarded.has(name));
+    expect(
+      leaked,
+      `worker-scoped var(s) forwarded into a container envVars block: ${leaked}`,
+    ).toEqual([]);
   });
 
   it("keeps MCP-scoped vars on the MCP container block only", () => {

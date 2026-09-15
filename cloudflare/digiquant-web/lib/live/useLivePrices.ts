@@ -9,13 +9,15 @@
  *       (subscribe with the anon client, unsubscribe on unmount). A TABLE, not a
  *       broadcast channel, and that is the security boundary — see lane 2 and
  *       #1807 before touching it.
- *   + a one-shot SEED from `public_price_latest` so values exist before the
- *     first tick and when a lane is dark (marked `stale`).
+ *   + a one-shot SEED from the R2 market API (#4053, replaces the dropped
+ *     public price-latest view) so values exist before the first tick and when
+ *     a lane is dark (marked `stale`).
  *
  * SSR/static-export safe: no `window`/`WebSocket` access during render; every
- * connection lives in a client effect. Null-client safe: the equity+seed lanes
- * simply stay dark (no crash). Crypto streams regardless of Supabase config —
- * Coinbase is keyless and never touches the Supabase client.
+ * connection lives in a client effect. Null-client safe: the equity lane simply
+ * stays dark (no crash); the seed is a client-side fetch and needs no client.
+ * Crypto streams regardless of Supabase config — Coinbase is keyless and never
+ * touches the Supabase client.
  *
  * Returns a {@link LivePriceMap} keyed by uppercase symbol. Live ticks flip
  * `stale` to `false`; seeds keep it `true`. Consumers that value or badge
@@ -29,9 +31,9 @@ import {
   coinbaseTickerToLive,
   normalizeSymbols,
   priceRowToLive,
-  seedRowToLive,
   type CoinbaseTicker,
 } from "./quote-transforms";
+import { seedFromWorker, seedWindowStart } from "./market-data";
 
 const COINBASE_WS_URL = "wss://ws-feed.exchange.coinbase.com";
 /**
@@ -78,30 +80,26 @@ export function useLivePrices(options: UseLivePricesOptions = {}): LivePriceMap 
 
   const [quotes, setQuotes] = useState<LivePriceMap>({});
 
-  // Lane 1 — one-shot daily-close seed from public_price_latest. Seeds the UNION
-  // of equities + crypto product_ids: `public_price_latest` carries the `-USD`
-  // closes too, so crypto still shows a (stale) value before Coinbase connects
-  // and when that lane is dark — consumers keep the two lists disjoint.
+  // Lane 1 — one-shot daily-close seed from the R2 market API (#4053). Seeds
+  // the UNION of equities + crypto product_ids: the R2 archive carries the
+  // `-USD` closes too, so crypto still shows a (stale) value before Coinbase
+  // connects and when that lane is dark — consumers keep the two lists
+  // disjoint. A plain public fetch: no Supabase client, and an unset
+  // NEXT_PUBLIC_MARKET_DATA_URL leaves the map empty rather than falling back.
   useEffect(() => {
     const seedSymbols = [...new Set<string>([...symbols, ...cryptoProductIds])];
-    if (!client || seedSymbols.length === 0) return;
+    if (seedSymbols.length === 0) return;
     let cancelled = false;
     void (async () => {
-      const { data, error } = await client
-        .from("public_price_latest")
-        .select("ticker, close, change_pct")
-        .in("ticker", seedSymbols);
-      if (cancelled || error || !Array.isArray(data)) return;
-      const seeds = data
-        .map((r) => seedRowToLive(r as { ticker?: unknown; close?: unknown; change_pct?: unknown }))
-        .filter((q): q is LiveQuote => q !== null);
-      if (seeds.length) setQuotes((prev) => applyQuotes(prev, seeds));
+      const seeds = await seedFromWorker(seedSymbols, seedWindowStart());
+      if (cancelled || seeds.length === 0) return;
+      setQuotes((prev) => applyQuotes(prev, seeds));
     })();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keys track array content
-  }, [client, symbolsKey, cryptoKey]);
+  }, [symbolsKey, cryptoKey]);
 
   // Lane 2 — equity quotes as `postgres_changes` on `public.prices_live` (#1807).
   //

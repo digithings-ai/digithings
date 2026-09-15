@@ -4,10 +4,7 @@ import { X } from 'lucide-react';
 import { Sheet, SheetClose, SheetContent, SheetTitle } from '@digithings/web';
 import type { FxConsensusDivergence } from '@/lib/twelve-x/types';
 import { DEFAULT_DIVERGENCE_THRESHOLD } from '@/lib/twelve-x/divergence';
-
-function fmtSigned(v: number): string {
-  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}`;
-}
+import { fmtSigned } from '@/lib/twelve-x/format';
 
 /**
  * Drill panel for a divergent currency — both reads, both as_of timestamps, raw snapshot.

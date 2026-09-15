@@ -605,6 +605,23 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             return {"ok": False, "error": str(payload["error"]), "data": payload}
         return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
 
+    if tool == "digiquant_get_trade_levels":
+        from digiquant.mcp_server import digiquant_get_trade_levels
+
+        payload = json.loads(
+            digiquant_get_trade_levels(
+                direction=str(args.get("direction") or ""),
+                ohlc_json=args.get("ohlc_json"),
+                pair=args.get("pair"),
+                ticker=args.get("ticker"),
+                config_json=args.get("config_json"),
+                cache_dir=args.get("cache_dir"),
+            )
+        )
+        if payload.get("error"):
+            return {"ok": False, "error": str(payload["error"]), "data": payload}
+        return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
+
     if tool == "digiquant_fit_sdca_weights":
         from digiquant.sdca_mcp import run_fit_sdca_weights
 

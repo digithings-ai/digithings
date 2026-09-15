@@ -2,6 +2,7 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   FX_HUB_PRODUCT,
   INVITE_MAX_ATTEMPTS,
+  planFloorOutranks,
   redeemProductInvite,
   sha256Hex,
   timingSafeEqualHex,
@@ -16,20 +17,24 @@ const PLAIN = "12x-desk-invite-alpha";
 type Mem = {
   attempts: Array<{ user_id: string; ok: boolean; attempted_at: string }>;
   grants: Map<string, string[]>;
+  planFloors: Map<string, string>;
   redemptions: Array<Record<string, unknown>>;
   codes: InviteCodeRow[];
   audits: Array<Record<string, unknown>>;
   increments: string[];
+  externalSyncs: Array<{ email: string; productKey: string }>;
 };
 
 function memStore(init?: Partial<Mem>): { mem: Mem; store: InviteStore } {
   const mem: Mem = {
     attempts: [],
     grants: new Map(),
+    planFloors: new Map(),
     redemptions: [],
     codes: [],
     audits: [],
     increments: [],
+    externalSyncs: [],
     ...init,
   };
   const store: InviteStore = {
@@ -45,6 +50,15 @@ function memStore(init?: Partial<Mem>): { mem: Mem; store: InviteStore } {
     insertGrant: async (email, productKey) => {
       const prev = mem.grants.get(email) ?? [];
       mem.grants.set(email, [...prev, productKey]);
+    },
+    upsertPlanFloor: async (email, planFloor) => {
+      const current = mem.planFloors.get(email) ?? null;
+      if (planFloorOutranks(planFloor, current)) {
+        mem.planFloors.set(email, planFloor);
+      }
+    },
+    syncExternalGrant: async (email, productKey) => {
+      mem.externalSyncs.push({ email, productKey });
     },
     recordRedemption: async (row) => {
       mem.redemptions.push(row);
@@ -81,12 +95,13 @@ Deno.test("env hash grants fx_hub and writes admin audit", async () => {
     workspaceId: "ws-1",
     store,
   });
-  assertEquals(result, { ok: true, alreadyGranted: false, productKey: "fx_hub" });
+  assertEquals(result, { ok: true, alreadyGranted: false, productKey: "fx_hub", planFloor: null });
   assertEquals(mem.grants.get(EMAIL), ["fx_hub"]);
   assertEquals(mem.redemptions.length, 1);
   assertEquals(mem.redemptions[0]?.source, "env");
   assertEquals(mem.audits.length, 1);
   assertEquals(mem.audits[0]?.event_key, "fx_hub_invite_redeemed");
+  assertEquals(mem.externalSyncs, [{ email: EMAIL, productKey: "fx_hub" }]);
 });
 
 Deno.test("table hash grants when env hash is unset", async () => {
@@ -98,6 +113,7 @@ Deno.test("table hash grants when env hash is unset", async () => {
       max_redemptions: 50,
       redemption_count: 0,
       revoked_at: null,
+      plan_floor: null,
     }],
   });
   const result = await redeemProductInvite({
@@ -140,8 +156,61 @@ Deno.test("already granted returns ok without a second insert", async () => {
     envHash: await sha256Hex(PLAIN),
     store,
   });
-  assertEquals(result, { ok: true, alreadyGranted: true, productKey: "fx_hub" });
+  assertEquals(result, { ok: true, alreadyGranted: true, productKey: "fx_hub", planFloor: null });
   assertEquals(mem.redemptions.length, 0);
+});
+
+Deno.test("tiered code grants fx_hub and raises plan_floor", async () => {
+  const hash = await sha256Hex(PLAIN);
+  const { mem, store } = memStore({
+    codes: [{
+      id: "code-tiered",
+      code_hash: hash,
+      max_redemptions: null,
+      redemption_count: 0,
+      revoked_at: null,
+      plan_floor: "desk",
+    }],
+  });
+  const result = await redeemProductInvite({
+    userId: USER,
+    email: EMAIL,
+    productKey: "fx_hub",
+    code: PLAIN,
+    store,
+  });
+  assertEquals(result, { ok: true, alreadyGranted: false, productKey: "fx_hub", planFloor: "desk" });
+  assertEquals(mem.planFloors.get(EMAIL), "desk");
+});
+
+Deno.test("tiered redemption never downgrades an existing higher tier", async () => {
+  const hash = await sha256Hex(PLAIN);
+  const { mem, store } = memStore({
+    codes: [{
+      id: "code-tiered",
+      code_hash: hash,
+      max_redemptions: null,
+      redemption_count: 0,
+      revoked_at: null,
+      plan_floor: "brief",
+    }],
+    planFloors: new Map([[EMAIL, "studio"]]),
+    grants: new Map([[EMAIL, ["fx_hub"]]]),
+  });
+  await redeemProductInvite({
+    userId: USER,
+    email: EMAIL,
+    productKey: "fx_hub",
+    code: PLAIN,
+    store,
+  });
+  assertEquals(mem.planFloors.get(EMAIL), "studio");
+});
+
+Deno.test("planFloorOutranks ranks brief < desk < studio < enterprise", () => {
+  assertEquals(planFloorOutranks("desk", "brief"), true);
+  assertEquals(planFloorOutranks("brief", "desk"), false);
+  assertEquals(planFloorOutranks("brief", null), true);
 });
 
 Deno.test("short codes and missing email fail closed", async () => {
@@ -198,6 +267,7 @@ Deno.test("revoked or exhausted table codes do not match", async () => {
         max_redemptions: null,
         redemption_count: 0,
         revoked_at: "2026-08-01T00:00:00Z",
+        plan_floor: null,
       },
       {
         id: "full",
@@ -205,6 +275,7 @@ Deno.test("revoked or exhausted table codes do not match", async () => {
         max_redemptions: 1,
         redemption_count: 1,
         revoked_at: null,
+        plan_floor: null,
       },
     ],
   });

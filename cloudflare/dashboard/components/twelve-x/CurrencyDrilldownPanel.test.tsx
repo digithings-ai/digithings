@@ -170,7 +170,7 @@ describe('CurrencyDrilldownPanelBody', () => {
     expect(html).toContain('0.8'); // consensus_strength component
   });
 
-  it('lists desk opinions in scrollable section', () => {
+  it('lists desk opinions from ALL ledger classes (superseded stays visible)', () => {
     const html = renderToStaticMarkup(
       createElement(CurrencyDrilldownPanelBody, {
         currency: 'JPY',
@@ -191,9 +191,28 @@ describe('CurrencyDrilldownPanelBody', () => {
     expect(html).toContain('capitalize text-accent');
     expect(html).toContain('border-warn/30 bg-warn/[0.05]');
     expect(html).toContain('capitalize text-warn');
-    expect(html).not.toContain('Superseded Broker');
-    expect(html).not.toContain('Superseded by a newer opinion.');
+    // Superseded reads are opposition evidence, not clutter — they stay visible.
+    expect(html).toContain('Superseded Broker');
+    expect(html).toContain('Superseded by a newer opinion.');
+    expect(html).toContain('Superseded · 1');
     expect(html).not.toContain('class="rounded border border-hair');
+  });
+
+  it('shows Confidence and Effective-n rows from the consensus decomposition', () => {
+    const html = renderToStaticMarkup(
+      createElement(CurrencyDrilldownPanelBody, {
+        currency: 'USD',
+        consensusRow: mockConsensusRow('USD'),
+        intelligenceItem: mockIntelligenceItem('USD'),
+        relevantBriefs: [],
+        onOpenBrief: () => {},
+      }),
+    );
+
+    expect(html).toContain('Confidence');
+    expect(html).toContain('75%');
+    expect(html).toContain('Effective n');
+    expect(html).toContain('8.5');
   });
 
   it('lists relevant briefs with open action', () => {
