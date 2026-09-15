@@ -7,8 +7,6 @@ Run: ``python -m scripts.zammad_mcp.server`` (streamable HTTP, default
 cross-container access); every tool is GET-only.
 """
 
-from __future__ import annotations
-
 import argparse
 import logging
 import os
