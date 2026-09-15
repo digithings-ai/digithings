@@ -252,9 +252,9 @@ class AsyncioRunner:
             return state.webset
         try:
             await self._drive(state)
+            return await self._finalize(state)
         except Exception as exc:  # per-pass containment -> webset.failed
             return await self._fail(state, exc)
-        return await self._finalize(state)
 
     async def list_incomplete_websets(self) -> list[Webset]:
         """The startup-resume union selector (store-owned query)."""
@@ -618,6 +618,16 @@ class AsyncioRunner:
                 # allowed; the duplicate-schedule guard means it has no task of its
                 # own) refuses the idle flip until it is driven: drive it, retry.
                 if not await self._drive_newcomers(state):
+                    # A cancel may land between the cancelled re-check above and
+                    # ``_drive_newcomers``'s own read, which reports the cancelled
+                    # webset as "nothing to drive": re-check so the cancelled path
+                    # wins instead of emitting ``webset.failed`` on a cancelled webset.
+                    current = await self._store.call(
+                        lambda store: store.get_webset(state.webset_id)
+                    )
+                    if current.status == "cancelled":
+                        await self._settle_missing_fields(state, "skipped", _CANCELLED_FIELD_REASON)
+                        return current
                     return await self._fail(state, exc)
                 await self._settle_enrichment_defs(state, "idle")
         if not settled:

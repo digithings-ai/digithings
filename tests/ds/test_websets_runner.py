@@ -478,6 +478,122 @@ def test_new_search_added_mid_pass_is_driven_before_idle(tmp_path, monkeypatch, 
 
 
 @pytest.mark.unit
+def test_newcomer_recall_failure_settles_failed_without_escaping(tmp_path, monkeypatch, llm_env):
+    store = _store(tmp_path)
+    webset = _webset(store)
+    first = _search(store, webset.id, count=1)
+
+    def _by_query(query: str) -> list[str]:
+        if "refresh" in query:
+            raise RuntimeError("newcomer backend down")
+        return [_URL_A]
+
+    _install_seams(monkeypatch, _RecallStub(by_query=_by_query), _FetchStub(_MARKDOWN))
+
+    async def _run() -> tuple[Any, list[WebsetSearch]]:
+        loop = asyncio.get_running_loop()
+        created: list[WebsetSearch] = []
+
+        def _add_search() -> None:
+            created.append(
+                store.add_search(
+                    WebsetSearch(
+                        webset_id=webset.id,
+                        query="photonics refresh",
+                        count=1,
+                        criteria=[_CRITERION],
+                    )
+                )
+            )
+
+        def _on_verify(url: str) -> None:
+            if not created:
+                loop.call_soon_threadsafe(_add_search)
+
+        llm = _StubLLM(on_verify=_on_verify)
+        return await run_webset_async(webset.id, store=store, llm_client=llm), created
+
+    result, created = asyncio.run(_run())
+
+    # The newcomer is driven from `_finalize`; its recall failing outright must
+    # settle the webset `failed` with a `webset.failed` event instead of leaking
+    # `WebsetRecallError` to the caller (run() contract: only WebsetNotFoundError
+    # escapes).
+    assert len(created) == 1
+    newcomer = created[0]
+    assert result.status == "failed"
+    assert store.get_webset(webset.id).status == "failed"
+    assert store.get_search(webset.id, first.id).status == "idle"
+    assert store.get_search(webset.id, newcomer.id).status == "failed"
+
+    events, _ = list_events(store, webset.id)
+    assert Counter(event.type for event in events) == Counter(
+        {"item.created": 1, "webset.failed": 1}
+    )
+    failed_event = next(event for event in events if event.type == "webset.failed")
+    assert failed_event.search_id == newcomer.id
+    assert "newcomer backend down" in failed_event.payload["reason"]
+
+
+@pytest.mark.unit
+def test_cancel_racing_newcomer_drive_routes_to_cancelled(tmp_path, monkeypatch, llm_env):
+    store = _store(tmp_path)
+    webset = _webset(store)
+    first = _search(store, webset.id, count=1)
+    _install_seams(monkeypatch, _RecallStub([_URL_A]), _FetchStub(_MARKDOWN))
+    cancelled = {"done": False}
+
+    async def _run() -> tuple[Any, list[WebsetSearch]]:
+        loop = asyncio.get_running_loop()
+        created: list[WebsetSearch] = []
+
+        def _add_search() -> None:
+            created.append(
+                store.add_search(
+                    WebsetSearch(
+                        webset_id=webset.id,
+                        query="photonics refresh",
+                        count=1,
+                        criteria=[_CRITERION],
+                    )
+                )
+            )
+
+        def _on_verify(url: str) -> None:
+            if not created:
+                loop.call_soon_threadsafe(_add_search)
+
+        original = runner_module.AsyncioRunner._drive_newcomers
+
+        async def _cancel_then_drive(runner: Any, state: Any) -> bool:
+            # The cancel lands in the second window: after `_finalize`'s explicit
+            # re-check, before `_drive_newcomers`'s own webset read.
+            if not cancelled["done"]:
+                cancelled["done"] = True
+                store.cancel_webset(webset.id)
+            return await original(runner, state)
+
+        monkeypatch.setattr(runner_module.AsyncioRunner, "_drive_newcomers", _cancel_then_drive)
+        llm = _StubLLM(on_verify=_on_verify)
+        return await run_webset_async(webset.id, store=store, llm_client=llm), created
+
+    result, created = asyncio.run(_run())
+
+    # `_drive_newcomers` reports the cancelled webset as "nothing to drive"; the
+    # failed path would emit `webset.failed` and settle defs `failed` on a
+    # cancelled webset, so the race must route to the cancelled path instead.
+    assert cancelled["done"]
+    assert len(created) == 1
+    newcomer = created[0]
+    assert result.status == "cancelled"
+    assert store.get_webset(webset.id).status == "cancelled"
+    assert store.get_search(webset.id, first.id).status == "idle"
+    assert store.get_search(webset.id, newcomer.id).status == "cancelled"
+    events, _ = list_events(store, webset.id)
+    assert Counter(event.type for event in events) == Counter({"item.created": 1})
+
+
+@pytest.mark.unit
 def test_new_search_added_mid_pass_on_idle_webset_is_driven(tmp_path, monkeypatch, llm_env):
     store = _store(tmp_path)
     webset = _webset(store, enrichments=(_DEF_BLURB,))
