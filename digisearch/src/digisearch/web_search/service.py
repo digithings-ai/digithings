@@ -91,6 +91,17 @@ def _search_only(req: WebSearchRequest, config: WebSearchConfig) -> WebSearchRes
     raise RuntimeError(f"all web-search backends failed: {last}")
 
 
+def search_web(req: WebSearchRequest, config: WebSearchConfig | None = None) -> WebSearchResponse:
+    """Public retrieval wrapper: search only, no fetch enrichment.
+
+    Resolves env config when *config* is None and returns the landed
+    ``_search_only`` failover (``auto|searxng|ddgs``). Fetch enrichment
+    stays with ``run_web_search``.
+    """
+    config = config or WebSearchConfig.from_env()
+    return _search_only(req, config)
+
+
 def run_web_search(
     req: WebSearchRequest, config: WebSearchConfig | None = None
 ) -> WebSearchResponse:

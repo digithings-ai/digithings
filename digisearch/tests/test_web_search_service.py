@@ -184,3 +184,18 @@ def test_run_web_search_lets_config_error_propagate(monkeypatch):
     monkeypatch.setenv("DIGISEARCH_WEB_SEARCH_BACKEND", "bogus")
     with pytest.raises(WebSearchConfigError):
         run_web_search(WebSearchRequest(query="etf"))
+
+
+def test_search_web_delegates_to_search_only(monkeypatch):
+    from digisearch.web_search import service as mod
+    from digisearch.web_search.models import WebSearchRequest, WebSearchResponse
+
+    seen: dict[str, object] = {}
+
+    def fake_search_only(req, config):
+        seen["query"] = req.query
+        return WebSearchResponse(query=req.query, provider="searxng")
+
+    monkeypatch.setattr(mod, "_search_only", fake_search_only)
+    resp = mod.search_web(WebSearchRequest(query="q"))
+    assert resp.provider == "searxng" and seen["query"] == "q"
