@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 import time
 from collections.abc import Callable, Mapping
 from datetime import date, datetime, timedelta, timezone
@@ -492,6 +493,11 @@ class GloomberbClient:
         self._cache: dict[tuple[str, str], tuple[float, DigifetchEnvelope[Any]]] = {}
         self._consecutive_failures = 0
         self._opened_at: float | None = None
+        # One shared client is used by parallel LangGraph nodes (#4146): the
+        # cache dict and the breaker counters need their own locks. Never hold
+        # both at once (``_cached`` and ``_record_*`` never nest).
+        self._cache_lock = threading.Lock()
+        self._breaker_lock = threading.Lock()
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -2034,11 +2040,13 @@ class GloomberbClient:
         )
 
     def _evict_expired(self, now: float) -> None:
+        """Drop expired entries; caller must hold ``_cache_lock``."""
         expired = [key for key, (expiry, _) in self._cache.items() if expiry <= now]
         for key in expired:
             del self._cache[key]
 
     def _enforce_cache_bound(self) -> None:
+        """Trim to ``cache_max_entries``; caller must hold ``_cache_lock``."""
         while len(self._cache) > self._cache_max_entries:
             oldest = min(self._cache, key=lambda key: self._cache[key][0])
             del self._cache[oldest]
@@ -2046,7 +2054,8 @@ class GloomberbClient:
     @property
     def cache_size(self) -> int:
         """Number of live cached envelopes (diagnostics/tests)."""
-        return len(self._cache)
+        with self._cache_lock:
+            return len(self._cache)
 
     def _cached(
         self,
@@ -2062,40 +2071,49 @@ class GloomberbClient:
         # cached preview/full report must never be served across sessions.
         key = (name, session_cache_fingerprint(self._session_cookie), request.model_dump_json())
         now = self._monotonic()
-        self._evict_expired(now)
-        entry = self._cache.get(key)
-        if entry is not None and entry[0] > now:
-            return cast(EnvT, entry[1])
+        with self._cache_lock:
+            self._evict_expired(now)
+            entry = self._cache.get(key)
+            if entry is not None and entry[0] > now:
+                return cast(EnvT, entry[1])
+        # Produce outside the lock: the rate limiter paces upstream calls, and
+        # holding the cache lock across a network request would serialize every
+        # parallel node behind the slowest call.
         envelope = produce()
         cacheable = not isinstance(envelope.data, DigifetchError) and (
             should_cache is None or should_cache(envelope)
         )
         if cacheable:
-            self._cache[key] = (now + self._cache_ttl, envelope)
-            self._enforce_cache_bound()
+            with self._cache_lock:
+                self._cache[key] = (now + self._cache_ttl, envelope)
+                self._enforce_cache_bound()
         return envelope
 
     def _breaker_error(self) -> DigifetchError | None:
-        if self._opened_at is None:
+        with self._breaker_lock:
+            opened_at = self._opened_at
+            failures = self._consecutive_failures
+        if opened_at is None:
             return None
-        if self._monotonic() - self._opened_at >= self._circuit_reset_seconds:
+        if self._monotonic() - opened_at >= self._circuit_reset_seconds:
             # Half-open: let one probe through.
             return None
         return DigifetchError(
             code="upstream_error",
-            message=f"Gloomberb circuit breaker open after {self._consecutive_failures} "
-            "consecutive failures",
+            message=f"Gloomberb circuit breaker open after {failures} consecutive failures",
             retryable=False,
         )
 
     def _record_failure(self) -> None:
-        self._consecutive_failures += 1
-        if self._consecutive_failures >= self._circuit_failure_threshold:
-            self._opened_at = self._monotonic()
+        with self._breaker_lock:
+            self._consecutive_failures += 1
+            if self._consecutive_failures >= self._circuit_failure_threshold:
+                self._opened_at = self._monotonic()
 
     def _record_success(self) -> None:
-        self._consecutive_failures = 0
-        self._opened_at = None
+        with self._breaker_lock:
+            self._consecutive_failures = 0
+            self._opened_at = None
 
     def _session_cookies(self) -> dict[str, str] | None:
         raw = self._session_cookie

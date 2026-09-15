@@ -284,6 +284,37 @@ Human decision write (`record_policy_governance_decision`) is **not** an MCP too
 only the DigiAuth HTTP boundary may record decisions. There is no
 promote/activate/set-live/rollback-live tool on any surface.
 
+#### In-process agent tool surface — `digifetch_*` (#4146)
+
+Pipeline LLM agents (research analysts, portfolio manager) call the digifetch x
+Gloomberb family in-process through
+`src/digiquant/data/gloomberb/agent_tools.py` — no MCP hop:
+
+| Surface | What |
+|---|---|
+| `DIGIFETCH_TOOLS` | The OpenAI function schemas, **generated** from `orchestrator_tools.build_orchestrator_tool_manifest()` (filtered to the names declared in `TOOL_ENTITLEMENTS`) so the MCP, manifest, and in-process surfaces cannot drift; each carries the entitlement note + top-level `entitlement` key |
+| `EQUITY_TOOLS` / `MACRO_TOOLS` / `PM_TOOLS` | Curated per-phase subsets (`<= 16` names each — prompt budget, not capability). Equity/sector research phases get company facts + analyst views (`EQUITY_TOOLS`); macro gets rates/credit/long-run valuation (`MACRO_TOOLS`); H5 analyst + H7 PM direction share `PM_TOOLS` (quotes/news/analyst views + macro context) |
+| `available_digifetch_tools(subset)` | Subset → schemas, dropping `session`/`preview`/`pro` tools when `GLOOMBERB_SESSION_COOKIE` is unset (the same zero-HTTP gate as MCP; #4099) |
+| `build_digifetch_tool_dispatcher(client=None)` | `(name, args) -> json_str`; validates args through each tool's Pydantic input model, calls the `GloomberbClient` method, and returns the §7 attribution envelope (deep link from the tool's symbol/ticker arg; the Yahoo-backed earnings calendar is not attributed) |
+| `build_gloomberb_client()` / `gloomberb_envelope_json()` | The shared env-keyed client factory (one pacing/cache/circuit-breaker client per `(GLOOMBERB_ENABLED, GLOOMBERB_SESSION_COOKIE)` pair, lock-guarded for parallel LangGraph nodes) and the envelope serializer; `mcp_server` imports both (moved here in #4146) |
+
+Wiring: `research/phases/_node_factory.build_grounding(digifetch_tools=...)`
+composes the subset with the Supabase `DATA_TOOLS` / `RESEARCH_TOOLS` executors
+into one name-routing dispatcher; `SegmentNodeSpec.digifetch_tools` carries the
+flag for the equity/sector (`EQUITY_TOOLS`) and macro (`MACRO_TOOLS`) phases, and
+`portfolio/phases/portfolio_common._portfolio_grounding` (H5 + H7) passes
+`PM_TOOLS`. H6 deliberation stays digifetch-free (research-tools-only by policy
+#2908; its evidence path is the bundle + amendment flow) and the legacy Phase 7D
+path is unwired.
+
+Gating: the family is default-ON behind `GLOOMBERB_ENABLED`; the
+`DIGIQUANT_RESEARCH_DATA_TOOLS` kill-switch removes it with the other grounding
+tools; and because Gloomberb is **enrichment only** (delayed, rate-limited), the
+subset attaches **only when a primary grounding executor actually built** — a
+segment with no data/research tools degrades to tool-less rather than arming a
+tool loop on delayed enrichment data alone. The client cache/breaker mutations
+are lock-guarded (`threading.Lock`) for parallel nodes.
+
 #### MCP vs HTTP-only (#1185)
 
 MCP tools above are the discoverable agent surface. They wrap `service.py` (and

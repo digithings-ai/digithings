@@ -7,11 +7,28 @@ envelope/error/freshness contract.
 
 This package plus its tests landed in phase 1; the `digifetch_*` MCP tools
 (spec §12.3, expanded by #4110 phase 1) are registered in ``mcp_server.py``
-and listed in ``orchestrator_tools.py``.
+and listed in ``orchestrator_tools.py``. The in-process agent surface for the
+pipeline (#4146) lives in :mod:`digiquant.data.gloomberb.agent_tools` — the
+manifest-generated schemas, the curated per-phase subsets, and the dispatcher
+the research analysts + portfolio manager call; the shared client factory and
+envelope serializer also live there and ``mcp_server`` imports them.
 """
 
 from __future__ import annotations
 
+from .agent_tools import (
+    DIGIFETCH_DISPATCH,
+    DIGIFETCH_TOOLS,
+    EQUITY_TOOLS,
+    MACRO_TOOLS,
+    PM_TOOLS,
+    DigifetchDispatch,
+    available_digifetch_tools,
+    build_digifetch_tool_dispatcher,
+    build_gloomberb_client,
+    close_gloomberb_client,
+    gloomberb_envelope_json,
+)
 from .attribution import (
     GLOOMBERB_ATTRIBUTION,
     GLOOMBERB_DELAY_NOTICE,
@@ -267,6 +284,18 @@ from .normalizers import (
 )
 
 __all__ = [
+    # in-process agent tool surface (#4146)
+    "DIGIFETCH_TOOLS",
+    "DIGIFETCH_DISPATCH",
+    "DigifetchDispatch",
+    "EQUITY_TOOLS",
+    "MACRO_TOOLS",
+    "PM_TOOLS",
+    "available_digifetch_tools",
+    "build_digifetch_tool_dispatcher",
+    "build_gloomberb_client",
+    "close_gloomberb_client",
+    "gloomberb_envelope_json",
     # attribution (§7)
     "GLOOMBERB_ATTRIBUTION",
     "GLOOMBERB_DELAY_NOTICE",
