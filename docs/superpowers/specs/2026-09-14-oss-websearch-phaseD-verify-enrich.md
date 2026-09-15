@@ -597,10 +597,13 @@ def list_events(
     `WebsetStoreError(code="cursor_not_found")`."""
 
 def cancel_webset(webset_id: str, *, store: WebsetStore | None = None) -> Webset:
-    """Set webset status=cancelled; the runner stops scheduling new items (in-flight
-    item finishes its current field, then yields — no mid-LLM task.cancel);
-    unattempted fields become `skipped`; every search not already `idle`/`failed`
-    is settled `cancelled` (flag I6). Terminal: no further transitions."""
+    """Cancel a `running` webset: status=cancelled; the runner stops scheduling new
+    items (in-flight item finishes its current field, then yields — no mid-LLM
+    task.cancel); unattempted fields become `skipped`; every search not already
+    `idle`/`failed` is settled `cancelled` (flag I6). An already-terminal webset
+    keeps its status — cancel on an `idle` webset leaves it `idle` (T2 sticky rule)
+    while still settling any running refresh search. Terminal: no further
+    transitions."""
 
 async def run_webset_async(webset_id: str, *, store: WebsetStore | None = None) -> Webset:
     """Drive one webset to idle: candidates -> verify -> enrich -> events. Never raises
@@ -645,7 +648,7 @@ GET /v1/websets/{webset_id}/events?after=&limit=        # 30/min
 POST /v1/websets/{webset_id}/webhooks                   # 10/min
   body: {url https, events[item.created,item.enriched,webset.idle,webset.failed]} -> 201 {webhook, secret-once}
 POST /v1/websets/{webset_id}/webhooks/{webhook_id}/rotate  # 10/min -> 200 {webhook, secret-once}
-POST /v1/websets/{webset_id}/cancel                     # 10/min -> 200 {webset} (status=cancelled)
+POST /v1/websets/{webset_id}/cancel                     # 10/min -> 200 {webset} (running → cancelled; an already-`idle` webset stays `idle`)
 GET /v1/websets/{webset_id}/export?format=csv|json      # 10/min (export is a DoS surface)
   -> file (verified items only)
 ```
@@ -772,9 +775,10 @@ implementers follow it verbatim:
   above. `Webset.status` never goes backwards: after its first completion a
   webset stays `idle` while a refresh pass runs, and callers observe the refresh
   through the new search's status + events, never through a webset status flip.
-- **Cancellation under the semaphore:** `cancel_webset` flips the row to
-  `cancelled` and settles every search not already `idle`/`failed` as
-  `cancelled` (flag I6). The runner checks the flag before each semaphore
+- **Cancellation under the semaphore:** `cancel_webset` flips a `running` row to
+  `cancelled` (an already-terminal webset keeps its status — `idle` is sticky per
+  the T2 transition rule) and settles every search not already `idle`/`failed`
+  as `cancelled` (flag I6). The runner checks the flag before each semaphore
   acquisition and between items; an in-flight item finishes its current
   field extraction, then yields without scheduling further work;
   unattempted fields are marked `skipped`. No `task.cancel()` mid-LLM call

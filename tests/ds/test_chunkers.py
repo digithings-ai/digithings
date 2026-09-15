@@ -223,13 +223,14 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 82 for #4065 (Task 8c EXA adapter + webhook translation docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 83 for #4065 (final-review docs touches: exa_adapter.py module-map row + #4123 pin citation in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 93 for #4066 (Phase D websets ARCH section + orchestrator/MCP tool docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 96 for #4066 (Phase D live-record block + EXA-shim human-precondition / MCP-driver (#4170) deferral notes + webset env-table rows in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 93
+    assert len(chunks) == 96
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -264,8 +265,11 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "8bdd60cf647ead52",
         "f72fb524bae160b6",
         "cf42a261cf532b41",
-        "2010e94e33e3ee94",
-        "40aa418d048386c5",
+        "a73404f288469603",
+        "5b442a8e6f3d05d4",
+        "c5974f6905e9e355",
+        "073d7fac336e6ad1",
+        "3aed1b59bbde9920",
         "cd75df0bdf136bd3",
         "8073886ccefe0be6",
         "06560323c42c4962",
@@ -314,9 +318,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "472ca1370eb9ef1a",
         "a3987db99f2b72c5",
         "9496728548f7cd2a",
-        "6d57e6ff0ba47c28",
-        "44ecfabe5926f420",
-        "5191b4ec0bfecb12",
+        "3a05c94596483aed",
+        "0f567a2b684efdf4",
+        "b9b4365399d7da8c",
         "b8cb5035323ab950",
         "9820e49d040ba85a",
         "634f3df55301a1f6",

@@ -628,17 +628,53 @@ translates create/read/refresh into `POST /websets`, `GET /websets/{id}`,
 EXA's Pro-plan 401 to `ExaWebsetsProRequiredError(ExaError)`. Request/response
 shapes are recorded in the module docstring; live Pro-key validation and
 end-to-end wiring remain deferred (the vendored free-tier 401 fixture keeps
-key-less CI green).
+key-less CI green). Re-validating the translation against a Pro-tier key is a
+**human precondition**: it requires a Pro key, has **not** been performed, and
+the Phase D live record does not claim it (tracked by the #4123 live-pin
+precedent).
 
 **Deferred (explicitly out of v1).** The scheduled webset tick driver
 (poll-only v1: monitor interval is metadata; refreshes are manual
-`trigger_monitor` calls), recall paging (count is reached by query
-diversification, `max_results ≤ 10` per call), automated webhook re-delivery
-after a failed delivery, EXA-websets live validation + wiring (Pro key;
-tracked by the #4123 live-pin precedent), and driving a webset created through
-the standalone MCP process — MCP tools share the service facade, but the run
-scheduler is installed by the HTTP lifespan, so an MCP-only process leaves the
-webset `running` until an HTTP process resumes it.
+`trigger_monitor` calls — still deferred, no tracking issue yet), recall paging
+(count is reached by query diversification, `max_results ≤ 10` per call),
+automated webhook re-delivery after a failed delivery, EXA-websets live
+validation + wiring (Pro key; tracked by the #4123 live-pin precedent), and
+driving a webset created through the standalone MCP process (#4170) — MCP tools
+share the service facade, but the run scheduler is installed by the HTTP
+lifespan, so an MCP-only process leaves the webset `running` until an HTTP
+process resumes it.
+
+**Phase D live verification record (2026-09-15, #4066 Task 8 — not measured,
+live stack absent in this env):**
+
+- Live leg: **not measurable here.** `DIGISEARCH_WEBSETS_LIVE=1 pytest
+  tests/ds/test_websets_live.py -m unit -k live -x` fails at the harness's own
+  prerequisite gate: `DIGISEARCH_VERIFY_MODEL` / `DIGISEARCH_ENRICH_MODEL`
+  unset, no digillm provider key, no searxng sidecar (`127.0.0.1:8080`
+  connection refused), and no digisearch HTTP process (`:8002`). With the model
+  ids unset, verification settles every item `rejected` and enrichment settles
+  every field `unresolved` (fail-closed), so a gated run here would measure
+  nothing — the harness refuses it rather than recording a vacuous pass.
+- How to measure: provision a search backend + `DIGISEARCH_VERIFY_MODEL` /
+  `DIGISEARCH_ENRICH_MODEL` + a provider key, then run the gated command above.
+  It drives the brief's 5-count company webset
+  (`query="agtech robotics startups Series A 2024-2026"`, 2 criteria, 3
+  enrichments incl. `company_profile`), asserts the event multiset +
+  `webset.idle`-last (never an exact sequence), records the live-vs-s5 funding
+  deltas, and writes the CSV export into the pytest tmp dir. Append the printed
+  JSON + date/key tier here before quoting any number — single-day scaffolding
+  anchors, never SLOs.
+- Measured in this env: the ECB daily feed was re-fetched (2026-09-15) and
+  still served `reference_date 2026-09-15` with all 29 rates identical, so
+  `tests/ds/fixtures/websets/fx_ecb_snapshot.json` is unchanged (provenance
+  note updated in the fixture README). The vendored s5 company sample and the
+  Pro-tier 401 fixture were NOT re-validated against live EXA (no key; the
+  Pro-key re-validation is a human precondition, § EXA shim above).
+- Offline evidence on this branch: `pytest tests/ds/test_websets_live.py -m unit
+  -v` → 5 passed, 1 skipped (the gated live leg), zero `Traceback`; the wider
+  `pytest tests/ds -m unit` → 897 passed, 6 skipped, 13 failed — all 13 the
+  pre-existing `chonkie` env failures (`test_chonkie_chunking.py`,
+  `test_research_ingest.py`), unrelated to this record.
 
 ### MCP Tools
 
@@ -1688,6 +1724,10 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGISEARCH_SEARXNG_URL` | `http://127.0.0.1:8080` | searxng sidecar base URL (compose sets `http://searxng:8080` in-container; #3853) |
 | `DIGISEARCH_FETCH_ALLOWED_HOSTS` | _(unset)_ | Comma-separated operator-trusted hostnames exempted from the digifetch SSRF address refusal (e.g. an egress proxy). Also accepted per-call via `WebSearchConfig.fetch_allowed_hosts`; passed to `HttpFetcher(allowed_hosts=…)` (#3934) |
 | `DIGISEARCH_WEB_SEARCH_LIVE` | _(unset)_ | Set `1` to run the live-sampled legs of `digisearch/tests/test_web_search_eval.py` (provider suite, real backends, p50 fetch+extract < 5s) and `tests/ds/test_web_eval_live.py` (Phase B research-turn cases, p50 stage ms + citation coverage scaffolding, never SLOs); default runs fully mocked offline (#3853, #4064) |
+| `DIGISEARCH_WEBSETS_LIVE` | _(unset)_ | Set `1` to run the live leg of `tests/ds/test_websets_live.py` (real searxng/ddgs recall + digillm verify/enrich; prints the Phase D record — timings, event multiset, s5 funding deltas, CSV shape — never SLOs); also needs `DIGISEARCH_VERIFY_MODEL`/`DIGISEARCH_ENRICH_MODEL` + a provider key; default runs fully offline (#4066) |
+| `DIGISEARCH_WEBSETS_DB` | _(unset)_ | Explicit SQLite path for the Phase D webset store; wins over the `DIGI_WORKSPACE` default and the cwd fallback (#4066) |
+| `DIGISEARCH_VERIFY_MODEL` | _(unset)_ | digillm model id for `llm`-mode webset verification; unset ⇒ verification settles `rejected` (fail closed, never admitted) (#4066) |
+| `DIGISEARCH_ENRICH_MODEL` | _(unset)_ | digillm model id for webset enrichment; unset ⇒ every field settles `unresolved` (fail closed, never guessed) (#4066) |
 | `DIGISEARCH_SYNTHESIS_MODEL` | _(unset)_ | digillm model id for Phase B web-research synthesis (`source=web\|auto` turns only). Unset ⇒ every web turn fails hard with `WebResearchError`, never an uncited answer; no new port/service (#4064) |
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
 | `DIGISEARCH_EMBED` | `1` (on when unset) | Set `0` to skip pipeline-level embed on ingest |
