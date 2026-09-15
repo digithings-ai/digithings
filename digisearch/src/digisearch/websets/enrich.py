@@ -285,7 +285,10 @@ def _distinct_url_count(citations: Sequence[Citation]) -> int:
 
 def _host(url: str) -> str:
     """Lowercased hostname without a leading ``www.`` (empty when unparseable)."""
-    host = (urlsplit(url).hostname or "").lower()
+    try:
+        host = (urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return ""
     return host[4:] if host.startswith("www.") else host
 
 
@@ -476,7 +479,10 @@ def reconcile_funding_history(
     *company_domain* (``None`` disables the own-domain arm). ``funding_total`` is
     the sum of the admitted rounds; if at least one page claims an explicit total,
     the **median** claim must be within 1% of the sum or the total is
-    ``None``/unresolved with reasoning; if no page claims a total, the sum stands
+    ``None``/unresolved with reasoning. A claimed total stays binding even when
+    its amount cannot be converted: with claims but no convertible claim the
+    total is unresolved, never the bare sum (an unverifiable claim is not
+    evidence *for* the sum). Only when no page claims a total does the sum stand
     (provenance = union of the admitted round citations). All decisions — quorum
     failures, unparseable dates, missing rates, failed reconciliation — accumulate
     in ``reasoning``; nothing is guessed and a single page never vetoes a
@@ -498,9 +504,11 @@ def reconcile_funding_history(
     admitted, unresolved = _group_admitted(groups, company_domain=company_domain, notes=notes)
 
     claimed: list[tuple[float, list[Citation]]] = []
+    claims_seen = False
     for observation in observations:
         if observation.claimed_total is None:
             continue
+        claims_seen = True
         total_usd, reason = _normalize_amount(
             observation.claimed_total, observation.claim_currency, rates
         )
@@ -528,6 +536,11 @@ def reconcile_funding_history(
                 f"differs from the {summed:,.2f} sum of admitted rounds by more than "
                 f"{RECONCILIATION_TOLERANCE:.0%}"
             )
+    elif claims_seen:
+        notes.append(
+            "funding total is unresolved: page(s) claimed an explicit total but none "
+            "could be converted to USD; the admitted-round sum is not substituted"
+        )
     elif admitted:
         total = summed
         total_citations = round_citations
@@ -623,7 +636,12 @@ def _merge_group(
     company_domain: str | None,
     rates: Mapping[str, float] | None,
 ) -> CompanyEntity:
-    """One merged entity: scalar winner/alternatives + reconciled funding."""
+    """One merged entity: scalar winner/alternatives + reconciled funding.
+
+    Provenance entries exist only for scalars that carried a value: an empty
+    value's ``provenance[field]`` is cleared, so a candidate's stale citation
+    never attaches to a scalar the merge dropped.
+    """
     notes: list[str] = []
     provenance: dict[str, list[Citation]] = {field: [] for field in PROVENANCE_SCALARS}
     alternatives: list[FieldAlternative] = []
@@ -658,6 +676,9 @@ def _merge_group(
     )
     scalars["funding_total"] = funding.total
     provenance["funding_total"] = funding.total_citations
+    for field in PROVENANCE_SCALARS:
+        if _is_empty_value(scalars.get(field)):
+            provenance[field] = []
     if funding.reasoning:
         notes.append(funding.reasoning)
 
@@ -1036,7 +1057,8 @@ def _build_company_entity(
     citations is kept but flagged — the entity's ``reasoning`` records it
     (spec § Company/people enrichment item 3). A scalar with a wrong JSON type,
     or a round whose date/currency cannot be normalized, is dropped with
-    reasoning rather than coerced or guessed.
+    reasoning rather than coerced or guessed; a dropped scalar's provenance
+    entry is cleared with it (a citation never outlives its value).
     """
     name = payload.get("name")
     if not isinstance(name, str) or not name.strip():
@@ -1115,6 +1137,10 @@ def _build_company_entity(
                     notes.append(reason)
                     continue
                 rounds.append(normalized)
+
+    for field in PROVENANCE_SCALARS:
+        if _is_empty_value(scalars.get(field)):
+            provenance[field] = []
 
     for field in PROVENANCE_SCALARS:
         if not _is_empty_value(scalars.get(field)) and not provenance[field]:

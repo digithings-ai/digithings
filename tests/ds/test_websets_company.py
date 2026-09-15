@@ -391,6 +391,81 @@ def test_currency_without_a_snapshot_rate_is_unresolved_never_guessed(
     assert "XTS" in result.reasoning
 
 
+def test_malformed_citation_url_settles_without_raising(fx_rates: dict[str, float]) -> None:
+    malformed = "https://[not-ipv6]/press"
+    observation = FundingObservation(
+        url=malformed,
+        rounds=[
+            RawFundingRound(
+                name="Series A",
+                date="2025-07-01",
+                amount=11_500_000.0,
+                citations=[Citation(url=malformed)],
+            )
+        ],
+    )
+
+    result = reconcile_funding_history(
+        [observation], company_domain="nucicer.com", fx_rates=fx_rates
+    )
+
+    assert result.rounds == []
+    assert result.total is None
+    assert len(result.unresolved_rounds) == 1
+    assert "quorum" in result.reasoning.lower()
+
+
+def test_unconvertible_claimed_total_leaves_the_total_unresolved(
+    nucicer_rounds: list[RawFundingRound],
+    nucicer_properties: dict[str, Any],
+    nucicer_url: str,
+    fx_rates: dict[str, float],
+) -> None:
+    own = _own_page_observation(nucicer_rounds, nucicer_properties, nucicer_url).model_copy(
+        update={"claim_currency": "XTS"}
+    )
+    press = _press_observation().model_copy(update={"claim_currency": "XTS"})
+
+    result = reconcile_funding_history(
+        [own, press], company_domain="nucicer.com", fx_rates=fx_rates
+    )
+
+    assert len(result.rounds) == 3  # the rounds themselves still admit
+    assert result.total is None
+    assert result.total_citations == []
+    assert "claimed" in result.reasoning.lower()
+    assert "XTS" in result.reasoning
+
+
+def test_sum_stands_only_when_no_page_claimed_a_total(
+    nucicer_rounds: list[RawFundingRound],
+    nucicer_properties: dict[str, Any],
+    nucicer_url: str,
+    fx_rates: dict[str, float],
+) -> None:
+    claimed_but_unconvertible = reconcile_funding_history(
+        [
+            _own_page_observation(nucicer_rounds, nucicer_properties, nucicer_url).model_copy(
+                update={"claim_currency": "XTS"}
+            ),
+            _press_observation().model_copy(update={"claim_currency": "XTS"}),
+        ],
+        company_domain="nucicer.com",
+        fx_rates=fx_rates,
+    )
+    unclaimed = reconcile_funding_history(
+        [
+            _own_page_observation(nucicer_rounds, nucicer_properties, nucicer_url, claimed=False),
+            _press_observation(claimed_total=None),
+        ],
+        company_domain="nucicer.com",
+        fx_rates=fx_rates,
+    )
+
+    assert claimed_but_unconvertible.total is None
+    assert unclaimed.total == 16_000_000.0
+
+
 # ── entity merge ──────────────────────────────────────────────────────────────
 
 
@@ -509,6 +584,37 @@ def test_merge_reconciles_funding_across_candidate_pages(
     assert entity.provenance["funding_total"]
 
 
+def test_malformed_candidate_urls_settle_without_raising() -> None:
+    malformed = "https://[not-ipv6]/about"
+    candidate = CompanyCandidate(
+        url=malformed,
+        entity=CompanyEntity(name="NuCicer", provenance={"name": [Citation(url=malformed)]}),
+        funding=FundingObservation(
+            url=malformed,
+            rounds=[
+                RawFundingRound(
+                    name="Seed",
+                    date="2022-03-01",
+                    amount=4_500_000.0,
+                    citations=[Citation(url=malformed)],
+                )
+            ],
+        ),
+    )
+    other = CompanyCandidate(
+        url="https://[not-ipv6]/press",
+        entity=CompanyEntity(
+            name="NuCicer Inc.",
+            provenance={"name": [Citation(url="https://[not-ipv6]/press")]},
+        ),
+    )
+
+    merged = merge_company_entities([candidate, other], company_domain="nucicer.com")
+
+    assert [entity.name for entity in merged] == ["NuCicer", "NuCicer Inc."]
+    assert merged[0].funding_total is None
+
+
 def test_every_scalar_has_a_provenance_entry_after_merge() -> None:
     name_citation = Citation(url="https://nucicer.com/about")
     candidate = CompanyCandidate(
@@ -528,6 +634,24 @@ def test_every_scalar_has_a_provenance_entry_after_merge() -> None:
     assert entity.provenance["founded_year"] == []
     assert "founded_year" in entity.reasoning
     assert entity.provenance["funding_total"] == []
+
+
+def test_merged_entity_clears_provenance_for_a_dropped_scalar() -> None:
+    name_citation = Citation(url="https://nucicer.com/about")
+    stale = Citation(url="https://nucicer.com/stale-founding")
+    candidate = CompanyCandidate(
+        url="https://nucicer.com/about",
+        entity=CompanyEntity(
+            name="NuCicer",
+            provenance={"name": [name_citation], "founded_year": [stale]},
+        ),
+    )
+
+    (entity,) = merge_company_entities([candidate])
+
+    assert entity.founded_year is None
+    assert entity.provenance["founded_year"] == []
+    assert entity.provenance["name"] == [name_citation]
 
 
 # ── company_profile_field (flag I8) ───────────────────────────────────────────

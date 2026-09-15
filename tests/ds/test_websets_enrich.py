@@ -411,6 +411,25 @@ def test_company_scalar_type_violations_are_not_coerced(enrich_model_env: str) -
     assert "founded_year" in entity.reasoning
 
 
+def test_company_scalar_dropped_for_a_type_violation_loses_its_provenance(
+    enrich_model_env: str,
+) -> None:
+    payload = _company_payload()
+    payload["founded_year"] = "2019"
+    dropped = _citation(url="https://nucicer.com/team")
+    payload["provenance"]["founded_year"] = [dropped]
+    stub = _StubLLM(payload)
+    field = enrich_item(
+        _URL, _TITLE, _MARKDOWN, _def("profile", "company_profile"), llm_client=stub
+    )
+
+    entity = field.value
+    assert isinstance(entity, CompanyEntity)
+    assert entity.founded_year is None
+    assert entity.provenance["founded_year"] == []
+    assert dropped["url"] not in {citation.url for citation in field.citations}
+
+
 def test_company_uncited_scalar_is_recorded_and_flagged(enrich_model_env: str) -> None:
     payload = _company_payload()
     del payload["provenance"]["workforce_total"]
