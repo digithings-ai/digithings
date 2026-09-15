@@ -2,10 +2,11 @@
 
 Approach (c) from the scoping spec: a Python HTTP client against
 ``https://api.gloom.sh``, anonymous cookie-less by default, with an optional
-``GLOOMBERB_SESSION_COOKIE`` for the three session-gated endpoints (holders,
-analyst research, corporate actions). The client owns endpoint constants,
-error mapping (§5.3), the 900s TTL cache, a circuit breaker, and the kill
-switch; ``digifetch`` stays the generic transport engine.
+``GLOOMBERB_SESSION_COOKIE`` for the session-gated endpoints (holders, analyst
+research, corporate actions, research search, transcripts; transcripts
+additionally require a Pro plan). The client owns endpoint constants, error
+mapping (§5.3), the 900s TTL cache, a circuit breaker, and the kill switch;
+``digifetch`` stays the generic transport engine.
 
 The kill switch is ``GLOOMBERB_ENABLED`` (default ON): tools are default-ON per
 the author decision, and setting the flag to ``0``/``false``/``no``/``off``
@@ -18,8 +19,10 @@ No environment variables are read at import time; the flags are resolved in
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import time
 from collections.abc import Callable, Mapping
 from datetime import date, datetime, timedelta, timezone
@@ -39,8 +42,15 @@ from pydantic import BaseModel, ValidationError
 
 from . import normalizers as nz
 from .models import (
+    PREVIEW_ACCESS_WARNING,
     AnalystResearchEnvelope,
     AnalystResearchInput,
+    CdsEnvelope,
+    CdsInput,
+    CdsResult,
+    CongressTradesEnvelope,
+    CongressTradesInput,
+    CongressTradesResult,
     CorporateActionsEnvelope,
     CorporateActionsInput,
     CorporateActionsResult,
@@ -50,11 +60,23 @@ from .models import (
     EarningsCalendarInput,
     EarningsCalendarResult,
     EarningsEvent,
+    EconCalendarEnvelope,
+    EconCalendarInput,
+    EconCalendarResult,
+    EconSeriesEnvelope,
+    EconSeriesInput,
+    EquityDiagnosticEnvelope,
+    EquityDiagnosticInput,
+    EquityDiagnosticResult,
     ExchangeRateEnvelope,
     ExchangeRateInput,
+    FilingEventsEnvelope,
+    FilingEventsInput,
+    Funds13FEnvelope,
     HoldersEnvelope,
     HoldersInput,
     HoldersResult,
+    Holdings13FEnvelope,
     NewsEnvelope,
     NewsInput,
     NewsResult,
@@ -65,21 +87,48 @@ from .models import (
     PriceHistoryInput,
     PriceHistoryMetadata,
     PriceHistoryResult,
+    ProxyStatementsEnvelope,
+    ProxyStatementsInput,
     QuoteEnvelope,
     QuoteInput,
     QuoteResult,
     QuotesBatchEnvelope,
     QuotesBatchInput,
     QuotesBatchResult,
+    ResearchSearchEnvelope,
+    ResearchSearchInput,
+    RiskReportsEnvelope,
+    RiskReportsInput,
+    ScreenerEnvelope,
+    ScreenerInput,
     SearchEnvelope,
     SearchInput,
     SearchResult,
     SecFilingsEnvelope,
     SecFilingsInput,
     SecFilingsResult,
+    ShillerEnvelope,
+    ShillerInput,
+    ShortInterestEnvelope,
+    ShortInterestInput,
+    StatementsEnvelope,
+    StatementsInput,
+    ThirteenFFundsInput,
+    ThirteenFHoldingsInput,
     TickerFinancialsEnvelope,
     TickerFinancialsInput,
     TickerFinancialsResult,
+    TickerTweetsInput,
+    TranscriptsEnvelope,
+    TranscriptsInput,
+    TranscriptsResult,
+    TweetSearchInput,
+    TweetsEnvelope,
+    VenuesEnvelope,
+    VenuesInput,
+    YieldCurveEnvelope,
+    YieldCurveInput,
+    YieldCurveResult,
 )
 
 __all__ = [
@@ -87,6 +136,7 @@ __all__ = [
     "GLOOMBERB_ENABLED_ENV",
     "GLOOMBERB_SESSION_COOKIE_ENV",
     "SESSION_COOKIE_NAMES",
+    "session_cache_fingerprint",
     "DEFAULT_CACHE_TTL_SECONDS",
     "DEFAULT_MIN_INTERVAL_SECONDS",
     "DEFAULT_CIRCUIT_FAILURE_THRESHOLD",
@@ -117,11 +167,33 @@ DEFAULT_CACHE_MAX_ENTRIES = 256
 # Spec §5.1: the Cloud client wrapper caps search at 10 and flags the clamp.
 SEARCH_LIMIT_CAP = 10
 
+# The equity-diagnostic POST triggers server-side generation and carries no
+# idempotency key, so it must not be retried: a timed-out attempt would silently
+# re-request a generation. The server's `refreshAllowedAt` hints that it
+# de-dupes concurrent requests, but that is unverified, so pin one attempt.
+# (The shared policy still retries everything else.)
+_SINGLE_ATTEMPT_POLICY = RetryPolicy(attempts=1)
+
 # Upstream session cookie names (api-client/request.ts SESSION_COOKIE_NAMES).
 SESSION_COOKIE_NAMES: tuple[str, ...] = (
     "__Secure-gloomberb.session_token",
     "gloomberb.session_token",
 )
+
+
+def session_cache_fingerprint(cookie: str | None) -> str:
+    """Non-reversible cache discriminator for a session cookie (#4110 phase 5).
+
+    Responses are entitlement-sensitive: a preview (or full) report cached by
+    one session must not be served to a different session. The cache key
+    therefore includes this fingerprint instead of the raw cookie — a
+    truncated SHA-256 separates sessions without storing the secret. Anonymous
+    clients share the ``"anon"`` fingerprint, exactly as before.
+    """
+    if not cookie:
+        return "anon"
+    return hashlib.sha256(cookie.encode("utf-8")).hexdigest()[:16]
+
 
 DEFAULT_HEADERS: dict[str, str] = {"Accept": "application/json"}
 
@@ -141,6 +213,34 @@ ENDPOINTS: dict[str, str] = {
     "sec_filings": "/cloud/sec/filings",
     "sec_filing_documents": "/cloud/sec/filing/documents",
     "sec_filing_content": "/cloud/sec/filing/content",
+    # coverage expansion (#4110 phase 1)
+    "econ_calendar": "/cloud/econ/calendar",
+    "econ_series": "/cloud/econ/series",
+    "yield_curve": "/cloud/econ/yield-curve",
+    "cds": "/cloud/credit/cds",
+    "research_search": "/cloud/search",
+    "congress_trades": "/cloud/congress/house",
+    "transcripts": "/cloud/transcripts",
+    # coverage expansion (#4110 phase 2)
+    "statements": "/market/statements",
+    "tweets": "/news/tweets",
+    "tweet_search": "/news/tweets/search",
+    "venues": "/market/venues",
+    "screener": "/market/screener",
+    "13f_funds": "/cloud/sec/13f/funds",
+    "13f_topfunds": "/cloud/sec/13f/topfunds",
+    "13f_tickers": "/cloud/sec/13f/tickers",
+    "13f_holders": "/cloud/sec/13f/holders",
+    "13f_filings": "/cloud/sec/13f/filings",
+    "13f_forms": "/cloud/sec/13f/forms",
+    "13f_form": "/cloud/sec/13f/form",
+    # coverage expansion (#4110 phase 3)
+    "shiller": "/cloud/econ/shiller",
+    "proxy_statements": "/public/proxies",
+    "filing_events": "/public/events",
+    "risk_reports": "/public/risks",
+    "short_interest": "/market/short-interest",
+    "equity_diagnostic": "/research/equity-diagnostic",
 }
 
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -174,8 +274,68 @@ def _parse_retry_after(value: str | None) -> float | None:
     return seconds if seconds >= 0 else None
 
 
+# Plan-gated routes answer with a non-JSON text body ("Pro plan required",
+# `/cloud/transcripts`), sometimes with a non-auth HTTP status, or with a
+# 200 `status=unsupported` envelope whose reasonCode is `PRO_REQUIRED`
+# (`/market/screener`). These markers route either shape to the typed
+# `pro_required` error (distinct from `auth_required`: the caller has a
+# session, it just is not entitled) instead of a generic upstream error or an
+# empty success.
+_PRO_PLAN_MARKERS: tuple[str, ...] = (
+    "pro plan",
+    "plan required",
+    "upgrade",
+    "subscription",
+    "pro_required",
+    "pro required",
+)
+
+
+def _plan_required_error(text: str) -> DigifetchError | None:
+    """Typed `pro_required` when *text* reads as an upstream plan gate."""
+    normalized = " ".join((text or "").split())
+    if not normalized:
+        return None
+    lowered = normalized.lower()
+    if not any(marker in lowered for marker in _PRO_PLAN_MARKERS):
+        return None
+    return DigifetchError(
+        code="pro_required",
+        message=(
+            "This Gloomberb endpoint requires a Pro plan (the session cookie is "
+            f"not entitled; upstream said: {normalized[:200]!r})"
+        ),
+        retryable=False,
+    )
+
+
 class _UpstreamServerError(RuntimeError):
     """A wire 5xx, wrapped so ``with_retry`` retries it without retrying 4xx."""
+
+
+# The 13F routes proxy their service's 4xx as a wire 5xx whose text body names
+# the real outcome (`Forms13F 400 for /holders`, live-verified). The inner
+# status is the deterministic one: a proxied 4xx is bad input, not degradation.
+_PROXY_STATUS_RE = re.compile(r"^Forms13F\s+(\d{3})\s+for\s+/")
+
+
+def _parse_proxy_status(text: str) -> int | None:
+    """Site-specific upstream status from a proxied 13F failure body, or None."""
+    match = _PROXY_STATUS_RE.match((text or "").strip())
+    return int(match[1]) if match else None
+
+
+class _ProxyStatusError(RuntimeError):
+    """A site-specific upstream 4xx proxied as a wire 5xx.
+
+    Deliberately outside ``RETRYABLE_EXCEPTIONS`` so ``with_retry`` surfaces it
+    immediately, and the caller maps it to a non-retryable ``invalid_input``
+    without recording a breaker failure.
+    """
+
+    def __init__(self, status: int) -> None:
+        super().__init__(f"Forms13F {status}")
+        self.status = status
 
 
 # Narrow retry classes: timeouts/connection faults and wire 5xx only. 401/404
@@ -934,6 +1094,867 @@ class GloomberbClient:
 
         return self._cached("news", parsed, produce)
 
+    # -- coverage expansion (#4110 phase 1) --------------------------------
+
+    def econ_calendar(
+        self, request: EconCalendarInput | Mapping[str, Any] | None = None
+    ) -> EconCalendarEnvelope:
+        """Structured economic calendar (anonymous; direct array payload)."""
+        parsed = self._validate_input(EconCalendarInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(EconCalendarEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(EconCalendarEnvelope)
+
+        def produce() -> EconCalendarEnvelope:
+            raw = self._request_json("GET", ENDPOINTS["econ_calendar"], allow_array=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(EconCalendarEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud econ calendar is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(EconCalendarEnvelope, result)
+            data, warnings = result
+            events = self._normalize(nz.normalize_econ_calendar, data)
+            if isinstance(events, DigifetchError):
+                return self._error_envelope(EconCalendarEnvelope, events)
+            fresh = self._freshness(raw, extra_stale=self._rows_stale(data))
+            return EconCalendarEnvelope(
+                data=EconCalendarResult(events=events),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("econ_calendar", parsed, produce)
+
+    def econ_series(self, request: EconSeriesInput | Mapping[str, Any]) -> EconSeriesEnvelope:
+        """FRED-style macro series observations + metadata (anonymous)."""
+        parsed = self._validate_input(EconSeriesInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(EconSeriesEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(EconSeriesEnvelope)
+
+        def produce() -> EconSeriesEnvelope:
+            path = f"{ENDPOINTS['econ_series']}/{quote(parsed.series_id, safe='')}"
+            raw = self._request_json(
+                "GET",
+                path,
+                params={"limit": str(parsed.limit), "sortOrder": parsed.sort_order},
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(EconSeriesEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Cloud econ series is unavailable for {parsed.series_id}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(EconSeriesEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "econ series")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(EconSeriesEnvelope, payload)
+            normalized = self._normalize(nz.normalize_econ_series, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(EconSeriesEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return EconSeriesEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("econ_series", parsed, produce)
+
+    def yield_curve(
+        self, request: YieldCurveInput | Mapping[str, Any] | None = None
+    ) -> YieldCurveEnvelope:
+        """Treasury yield curve (anonymous; direct array payload)."""
+        parsed = self._validate_input(YieldCurveInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(YieldCurveEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(YieldCurveEnvelope)
+
+        def produce() -> YieldCurveEnvelope:
+            raw = self._request_json("GET", ENDPOINTS["yield_curve"], allow_array=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(YieldCurveEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud yield curve is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(YieldCurveEnvelope, result)
+            data, warnings = result
+            points = self._normalize(nz.normalize_yield_curve, data)
+            if isinstance(points, DigifetchError):
+                return self._error_envelope(YieldCurveEnvelope, points)
+            fresh = self._freshness(raw, extra_stale=self._rows_stale(data))
+            return YieldCurveEnvelope(
+                data=YieldCurveResult(points=points),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("yield_curve", parsed, produce)
+
+    def cds(self, request: CdsInput | Mapping[str, Any]) -> CdsEnvelope:
+        """DTCC PPD CDS trade tape (anonymous; `days` validated client-side)."""
+        parsed = self._validate_input(CdsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CdsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CdsEnvelope)
+
+        def produce() -> CdsEnvelope:
+            params: dict[str, Any] = {"days": str(parsed.days), "limit": str(parsed.limit)}
+            if parsed.issuer:
+                params["issuer"] = parsed.issuer
+            raw = self._request_json("GET", ENDPOINTS["cds"], params=params)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(CdsEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud CDS trades are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(CdsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "CDS trades")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(CdsEnvelope, payload)
+            trades = self._normalize(nz.normalize_cds_trades, payload)
+            if isinstance(trades, DigifetchError):
+                return self._error_envelope(CdsEnvelope, trades)
+            fresh = self._freshness(raw, payload)
+            return CdsEnvelope(
+                data=CdsResult(
+                    source=payload.get("source")
+                    if isinstance(payload.get("source"), str)
+                    else None,
+                    as_of=raw.as_of
+                    or (payload.get("asOf") if isinstance(payload.get("asOf"), str) else None),
+                    trades=trades,
+                ),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("cds", parsed, produce)
+
+    def research_search(
+        self, request: ResearchSearchInput | Mapping[str, Any]
+    ) -> ResearchSearchEnvelope:
+        """Full-text research search (session-gated; 401 → auth_required)."""
+        parsed = self._validate_input(ResearchSearchInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ResearchSearchEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ResearchSearchEnvelope)
+
+        def produce() -> ResearchSearchEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["research_search"],
+                params={
+                    "q": parsed.query,
+                    "limit": str(parsed.limit),
+                    "offset": str(parsed.offset),
+                },
+                gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(ResearchSearchEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud research search is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(ResearchSearchEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "research search")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(ResearchSearchEnvelope, payload)
+            normalized = self._normalize(nz.normalize_research_search, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(ResearchSearchEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return ResearchSearchEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("research_search", parsed, produce)
+
+    def congress_trades(
+        self, request: CongressTradesInput | Mapping[str, Any] | None = None
+    ) -> CongressTradesEnvelope:
+        """US House disclosure trades (anonymous; upstream OCR path may 500)."""
+        parsed = self._validate_input(CongressTradesInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CongressTradesEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CongressTradesEnvelope)
+
+        def produce() -> CongressTradesEnvelope:
+            params: dict[str, Any] = {"limit": str(parsed.limit)}
+            if parsed.year is not None:
+                params["year"] = str(parsed.year)
+            raw = self._request_json(
+                "GET", ENDPOINTS["congress_trades"], params=params, allow_array=True
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(CongressTradesEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud congress trades are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(CongressTradesEnvelope, result)
+            data, warnings = result
+            trades = self._normalize(nz.normalize_congress_trades, data)
+            if isinstance(trades, DigifetchError):
+                return self._error_envelope(CongressTradesEnvelope, trades)
+            fresh = self._freshness(
+                raw,
+                data,
+                extra_stale=self._rows_stale(
+                    data.get("trades") if isinstance(data, Mapping) else data
+                ),
+            )
+            return CongressTradesEnvelope(
+                data=CongressTradesResult(trades=trades),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("congress_trades", parsed, produce)
+
+    def transcripts(self, request: TranscriptsInput | Mapping[str, Any]) -> TranscriptsEnvelope:
+        """Earnings-call transcripts (session-gated; requires Gloomberb Pro).
+
+        A free (email-verified) session answers a non-JSON "Pro plan required"
+        body; the client maps that to a typed ``pro_required`` instead of an
+        empty success or a generic upstream error.
+        """
+        parsed = self._validate_input(TranscriptsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(TranscriptsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(TranscriptsEnvelope)
+
+        def produce() -> TranscriptsEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["transcripts"],
+                params={"ticker": parsed.ticker, "limit": str(parsed.limit)},
+                gated=True,
+                pro_gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(TranscriptsEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud transcripts are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(TranscriptsEnvelope, result)
+            data, warnings = result
+            rows = self._normalize(nz.normalize_transcripts, data)
+            if isinstance(rows, DigifetchError):
+                return self._error_envelope(TranscriptsEnvelope, rows)
+            # The live list payload wraps its rows under `calls`; `transcripts`
+            # is accepted for a wrapped variant.
+            list_rows = (
+                (data.get("calls") or data.get("transcripts"))
+                if isinstance(data, Mapping)
+                else data
+            )
+            fresh = self._freshness(
+                raw,
+                data,
+                extra_stale=self._rows_stale(list_rows),
+            )
+            return TranscriptsEnvelope(
+                data=TranscriptsResult(transcripts=rows),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("transcripts", parsed, produce)
+
+    # -- coverage expansion (#4110 phase 2) --------------------------------
+
+    def statements(self, request: StatementsInput | Mapping[str, Any]) -> StatementsEnvelope:
+        """Annual/quarterly statement rows (session-gated; direct envelope)."""
+        parsed = self._validate_input(StatementsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(StatementsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(StatementsEnvelope)
+
+        def produce() -> StatementsEnvelope:
+            params: dict[str, Any] = {
+                "symbol": parsed.symbol,
+                "period": parsed.period,
+            }
+            if parsed.exchange:
+                params["exchange"] = parsed.exchange
+            raw = self._request_json("GET", ENDPOINTS["statements"], params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(StatementsEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Cloud statements are unavailable for {parsed.symbol}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(StatementsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "statements")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(StatementsEnvelope, payload)
+            normalized = self._normalize(nz.normalize_statements, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(StatementsEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return StatementsEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("statements", parsed, produce)
+
+    def ticker_tweets(self, request: TickerTweetsInput | Mapping[str, Any]) -> TweetsEnvelope:
+        """Recent X/Twitter posts for one ticker (session-gated; direct payload)."""
+        parsed = self._validate_input(TickerTweetsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(TweetsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(TweetsEnvelope)
+
+        def produce() -> TweetsEnvelope:
+            params: dict[str, Any] = {
+                "ticker": parsed.ticker,
+                "limit": str(parsed.limit),
+                "includeReplies": "true" if parsed.include_replies else "false",
+            }
+            if parsed.hours is not None:
+                params["hours"] = str(parsed.hours)
+            raw = self._request_json("GET", ENDPOINTS["tweets"], params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud tweets are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "tweets")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, payload)
+            cutoff = (
+                self._now() - timedelta(hours=parsed.hours) if parsed.hours is not None else None
+            )
+            normalized = self._normalize(
+                nz.normalize_tweets, payload, parsed.limit, min_created_at=cutoff
+            )
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return TweetsEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("ticker_tweets", parsed, produce)
+
+    def tweet_search(self, request: TweetSearchInput | Mapping[str, Any]) -> TweetsEnvelope:
+        """Search X/Twitter posts by query (session-gated; direct payload)."""
+        parsed = self._validate_input(TweetSearchInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(TweetsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(TweetsEnvelope)
+
+        def produce() -> TweetsEnvelope:
+            params: dict[str, Any] = {
+                "query": parsed.query,
+                "queryType": parsed.query_type,
+                "limit": str(parsed.limit),
+            }
+            if parsed.hours is not None:
+                params["hours"] = str(parsed.hours)
+            raw = self._request_json("GET", ENDPOINTS["tweet_search"], params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud tweet search is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "tweet search")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, payload)
+            cutoff = (
+                self._now() - timedelta(hours=parsed.hours) if parsed.hours is not None else None
+            )
+            normalized = self._normalize(
+                nz.normalize_tweets, payload, parsed.limit, min_created_at=cutoff
+            )
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return TweetsEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("tweet_search", parsed, produce)
+
+    def venues(self, request: VenuesInput | Mapping[str, Any] | None = None) -> VenuesEnvelope:
+        """Exchange venue metadata (anonymous; enveloped payload)."""
+        parsed = self._validate_input(VenuesInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(VenuesEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(VenuesEnvelope)
+
+        def produce() -> VenuesEnvelope:
+            raw = self._request_json("GET", ENDPOINTS["venues"])
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(VenuesEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud venues are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(VenuesEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "venues")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(VenuesEnvelope, payload)
+            normalized = self._normalize(nz.normalize_venues, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(VenuesEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return VenuesEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("venues", parsed, produce)
+
+    def screener(self, request: ScreenerInput | Mapping[str, Any]) -> ScreenerEnvelope:
+        """Market screener (session-gated; **requires Gloomberb Pro**).
+
+        A free session answers ``{"status": "unsupported", "reasonCode":
+        "PRO_REQUIRED"}`` with HTTP 200; ``pro_gated`` maps that (like the 402
+        text body) to a typed ``pro_required`` instead of ``not_found``.
+        """
+        parsed = self._validate_input(ScreenerInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ScreenerEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ScreenerEnvelope)
+
+        def produce() -> ScreenerEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["screener"],
+                params={
+                    "category": parsed.category,
+                    "count": str(parsed.count),
+                    "mode": parsed.mode,
+                },
+                gated=True,
+                pro_gated=True,
+                allow_array=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(ScreenerEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud screener is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(ScreenerEnvelope, result)
+            data, warnings = result
+            normalized = self._normalize(nz.normalize_screener, data, parsed.category)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(ScreenerEnvelope, normalized)
+            fresh = self._freshness(raw, data, extra_stale=self._rows_stale(data))
+            return ScreenerEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("screener", parsed, produce)
+
+    def thirteen_f_funds(
+        self, request: ThirteenFFundsInput | Mapping[str, Any]
+    ) -> Funds13FEnvelope:
+        """13F funds: search / top funds / ticker map / CUSIP holders (anonymous)."""
+        parsed = self._validate_input(ThirteenFFundsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(Funds13FEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(Funds13FEnvelope)
+
+        def produce() -> Funds13FEnvelope:
+            if parsed.what == "search":
+                path = ENDPOINTS["13f_funds"]
+                params: dict[str, Any] = {
+                    "name": parsed.query,
+                    "limit": str(parsed.limit),
+                    "offset": str(parsed.offset),
+                }
+            elif parsed.what == "top":
+                path = ENDPOINTS["13f_topfunds"]
+                params = {
+                    "quarter": parsed.quarter,
+                    "limit": str(parsed.limit),
+                    "offset": str(parsed.offset),
+                }
+            elif parsed.what == "tickers":
+                path = ENDPOINTS["13f_tickers"]
+                params = {"tickers": ",".join(parsed.tickers)}
+            else:
+                path = ENDPOINTS["13f_holders"]
+                params = {"cusip": parsed.cusip, "period_of_report": parsed.period_of_report}
+            raw = self._request_json("GET", path, params=params, allow_array=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(Funds13FEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud 13F funds are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(Funds13FEnvelope, result)
+            data, warnings = result
+            normalized = self._normalize(nz.normalize_funds_13f, data, parsed.what)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(Funds13FEnvelope, normalized)
+            fresh = self._freshness(raw, data, extra_stale=self._rows_stale(data))
+            return Funds13FEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("thirteen_f_funds", parsed, produce)
+
+    def thirteen_f_holdings(
+        self, request: ThirteenFHoldingsInput | Mapping[str, Any]
+    ) -> Holdings13FEnvelope:
+        """13F filings / fund forms / one form's holdings (anonymous)."""
+        parsed = self._validate_input(ThirteenFHoldingsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(Holdings13FEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(Holdings13FEnvelope)
+
+        def produce() -> Holdings13FEnvelope:
+            if parsed.what == "filings":
+                path = ENDPOINTS["13f_filings"]
+                params: dict[str, Any] = {
+                    "from": parsed.from_date,
+                    "to": parsed.to_date,
+                    "limit": str(parsed.limit),
+                    "offset": str(parsed.offset),
+                }
+            elif parsed.what == "forms":
+                path = ENDPOINTS["13f_forms"]
+                params = {
+                    "cik": parsed.cik,
+                    "limit": str(parsed.limit),
+                    "offset": str(parsed.offset),
+                }
+                if parsed.from_date:
+                    params["from"] = parsed.from_date
+                if parsed.to_date:
+                    params["to"] = parsed.to_date
+            else:
+                path = ENDPOINTS["13f_form"]
+                params = {
+                    "cik": parsed.cik,
+                    "accession_number": parsed.accession_number,
+                    "limit": str(parsed.limit),
+                    "offset": str(parsed.offset),
+                }
+            raw = self._request_json("GET", path, params=params, allow_array=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(Holdings13FEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud 13F holdings are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(Holdings13FEnvelope, result)
+            data, warnings = result
+            normalized = self._normalize(nz.normalize_holdings_13f, data, parsed.what, parsed.limit)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(Holdings13FEnvelope, normalized)
+            fresh = self._freshness(raw, data, extra_stale=self._rows_stale(data))
+            return Holdings13FEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("thirteen_f_holdings", parsed, produce)
+
+    # -- coverage expansion (#4110 phase 3) --------------------------------
+
+    def shiller(self, request: ShillerInput | Mapping[str, Any] | None = None) -> ShillerEnvelope:
+        """Robert Shiller's monthly valuation series (anonymous)."""
+        parsed = self._validate_input(ShillerInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ShillerEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ShillerEnvelope)
+
+        def produce() -> ShillerEnvelope:
+            raw = self._request_json("GET", ENDPOINTS["shiller"])
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(ShillerEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud Shiller data is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(ShillerEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "Shiller data")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(ShillerEnvelope, payload)
+            normalized = self._normalize(nz.normalize_shiller, payload, parsed.limit)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(ShillerEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return ShillerEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("shiller", parsed, produce)
+
+    def proxy_statements(
+        self, request: ProxyStatementsInput | Mapping[str, Any]
+    ) -> ProxyStatementsEnvelope:
+        """Executive compensation proxies (anonymous public reads)."""
+        parsed = self._validate_input(ProxyStatementsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ProxyStatementsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ProxyStatementsEnvelope)
+
+        def produce() -> ProxyStatementsEnvelope:
+            path = f"{ENDPOINTS['proxy_statements']}/{quote(parsed.ticker.upper(), safe='')}"
+            if parsed.what == "statement":
+                path = f"{path}/{parsed.year}"
+            raw = self._request_json("GET", path)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(ProxyStatementsEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Proxy statements are unavailable for {parsed.ticker}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(ProxyStatementsEnvelope, result)
+            data, warnings = result
+            normalized = self._normalize(nz.normalize_proxy_statements, data, parsed.what)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(ProxyStatementsEnvelope, normalized)
+            fresh = self._freshness(raw, data)
+            return ProxyStatementsEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("proxy_statements", parsed, produce)
+
+    def filing_events(self, request: FilingEventsInput | Mapping[str, Any]) -> FilingEventsEnvelope:
+        """Classified 8-K filing events for one ticker (anonymous)."""
+        parsed = self._validate_input(FilingEventsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(FilingEventsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(FilingEventsEnvelope)
+
+        def produce() -> FilingEventsEnvelope:
+            raw = self._request_json(
+                "GET",
+                f"{ENDPOINTS['filing_events']}/{quote(parsed.ticker.upper(), safe='')}",
+                params={"limit": str(parsed.limit)},
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(FilingEventsEnvelope, raw)
+            result = self._data_or_error(raw, f"Filing events are unavailable for {parsed.ticker}")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(FilingEventsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "filing events")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(FilingEventsEnvelope, payload)
+            normalized = self._normalize(nz.normalize_filing_events, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(FilingEventsEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return FilingEventsEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("filing_events", parsed, produce)
+
+    def risk_reports(self, request: RiskReportsInput | Mapping[str, Any]) -> RiskReportsEnvelope:
+        """10-K risk-factor reports with the year-over-year diff (anonymous)."""
+        parsed = self._validate_input(RiskReportsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(RiskReportsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(RiskReportsEnvelope)
+
+        def produce() -> RiskReportsEnvelope:
+            path = f"{ENDPOINTS['risk_reports']}/{quote(parsed.ticker.upper(), safe='')}"
+            if parsed.what == "report":
+                path = f"{path}/{parsed.year}"
+            raw = self._request_json("GET", path)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(RiskReportsEnvelope, raw)
+            result = self._data_or_error(raw, f"Risk reports are unavailable for {parsed.ticker}")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(RiskReportsEnvelope, result)
+            data, warnings = result
+            normalized = self._normalize(nz.normalize_risk_reports, data, parsed.what)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(RiskReportsEnvelope, normalized)
+            fresh = self._freshness(raw, data)
+            return RiskReportsEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("risk_reports", parsed, produce)
+
+    def short_interest(
+        self, request: ShortInterestInput | Mapping[str, Any]
+    ) -> ShortInterestEnvelope:
+        """Biweekly short-interest settlements (session-gated)."""
+        parsed = self._validate_input(ShortInterestInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ShortInterestEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ShortInterestEnvelope)
+
+        def produce() -> ShortInterestEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["short_interest"],
+                params={"symbol": parsed.symbol, "years": str(parsed.years)},
+                gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(ShortInterestEnvelope, raw)
+            result = self._data_or_error(raw, f"Short interest is unavailable for {parsed.symbol}")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(ShortInterestEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "short interest")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(ShortInterestEnvelope, payload)
+            normalized = self._normalize(nz.normalize_short_interest, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(ShortInterestEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return ShortInterestEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("short_interest", parsed, produce)
+
+    def equity_diagnostic(
+        self, request: EquityDiagnosticInput | Mapping[str, Any]
+    ) -> EquityDiagnosticEnvelope:
+        """On-demand AI evidence review (session-gated; may answer pending).
+
+        The route's payload carries its own ``status`` (``generating`` /
+        ``partial`` / ``complete``) rather than the CloudMarketResponse
+        envelope, so it is read with ``direct_payload``. A pending payload is
+        **never cached client-side** (a warm 900s cache would mask the finished
+        generation); complete reports are cached normally. A report served with
+        ``access="preview"`` (free session) gets the envelope-level
+        :data:`PREVIEW_ACCESS_WARNING` marker in addition to the report's own
+        ``access`` field, so an agent can tell the free-tier preview apart from
+        a full PRO/enterprise report.
+        """
+        parsed = self._validate_input(EquityDiagnosticInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(EquityDiagnosticEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(EquityDiagnosticEnvelope)
+
+        def produce() -> EquityDiagnosticEnvelope:
+            body: dict[str, Any] = {
+                "symbol": parsed.symbol.upper(),
+                "mode": parsed.mode,
+            }
+            if parsed.exchange:
+                body["exchange"] = parsed.exchange
+            raw = self._request_json(
+                "POST",
+                ENDPOINTS["equity_diagnostic"],
+                body=body,
+                gated=True,
+                direct_payload=True,
+                retry_policy=_SINGLE_ATTEMPT_POLICY,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(EquityDiagnosticEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Equity diagnostic is unavailable for {parsed.symbol}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(EquityDiagnosticEnvelope, result)
+            data, warnings = result
+            normalized = self._normalize(nz.normalize_equity_diagnostic, data)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(EquityDiagnosticEnvelope, normalized)
+            if (
+                isinstance(normalized, EquityDiagnosticResult)
+                and normalized.report is not None
+                and normalized.report.access == "preview"
+            ):
+                warnings = [*warnings, PREVIEW_ACCESS_WARNING]
+            fresh = self._freshness(raw, data)
+            return EquityDiagnosticEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        def _cacheable(envelope: EquityDiagnosticEnvelope) -> bool:
+            result = envelope.data
+            return not isinstance(result, EquityDiagnosticResult) or result.pending is None
+
+        return self._cached("equity_diagnostic", parsed, produce, should_cache=_cacheable)
+
     # -- internals ---------------------------------------------------------
 
     def _validate_input(
@@ -1005,6 +2026,13 @@ class GloomberbClient:
             delay_minutes=nz.finite_number(source.get("delayMinutes")),
         )
 
+    @staticmethod
+    def _rows_stale(rows: Any) -> bool:
+        """True when any row of a bare-array payload carries ``stale: true``."""
+        return isinstance(rows, list) and any(
+            isinstance(row, Mapping) and row.get("stale") is True for row in rows
+        )
+
     def _evict_expired(self, now: float) -> None:
         expired = [key for key, (expiry, _) in self._cache.items() if expiry <= now]
         for key in expired:
@@ -1020,17 +2048,29 @@ class GloomberbClient:
         """Number of live cached envelopes (diagnostics/tests)."""
         return len(self._cache)
 
-    def _cached(self, name: str, request: BaseModel, produce: Callable[[], EnvT]) -> EnvT:
+    def _cached(
+        self,
+        name: str,
+        request: BaseModel,
+        produce: Callable[[], EnvT],
+        *,
+        should_cache: Callable[[EnvT], bool] | None = None,
+    ) -> EnvT:
         # Cache first: a warm enrichment read still serves during an upstream
-        # outage, and the breaker only guards real requests.
-        key = (name, request.model_dump_json())
+        # outage, and the breaker only guards real requests. The key includes
+        # the session fingerprint: responses are entitlement-sensitive, so a
+        # cached preview/full report must never be served across sessions.
+        key = (name, session_cache_fingerprint(self._session_cookie), request.model_dump_json())
         now = self._monotonic()
         self._evict_expired(now)
         entry = self._cache.get(key)
         if entry is not None and entry[0] > now:
             return cast(EnvT, entry[1])
         envelope = produce()
-        if not isinstance(envelope.data, DigifetchError):
+        cacheable = not isinstance(envelope.data, DigifetchError) and (
+            should_cache is None or should_cache(envelope)
+        )
+        if cacheable:
             self._cache[key] = (now + self._cache_ttl, envelope)
             self._enforce_cache_bound()
         return envelope
@@ -1072,6 +2112,15 @@ class GloomberbClient:
 
     def _map_http_error(self, exc: httpx.HTTPStatusError) -> DigifetchError:
         status = exc.response.status_code
+        if status == 402:
+            # Payment required: a plan gate, not a malformed request. Kept
+            # non-retryable and distinct from the generic 4xx mapping.
+            return DigifetchError(
+                code="auth_required",
+                message="Gloomberb returned HTTP 402 (payment required); this endpoint "
+                "needs a paid plan or a valid session",
+                retryable=False,
+            )
         if status in (401, 403):
             return DigifetchError(
                 code="auth_required",
@@ -1142,6 +2191,10 @@ class GloomberbClient:
         params: Mapping[str, Any] | None = None,
         body: Mapping[str, Any] | None = None,
         gated: bool = False,
+        allow_array: bool = False,
+        pro_gated: bool = False,
+        direct_payload: bool = False,
+        retry_policy: RetryPolicy | None = None,
     ) -> _RawResponse | DigifetchError:
         if not self._enabled:
             return DigifetchError(
@@ -1174,14 +2227,33 @@ class GloomberbClient:
                 )
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code >= 500:
+                    proxy_status = _parse_proxy_status(exc.response.text)
+                    if proxy_status is not None and 400 <= proxy_status < 500:
+                        raise _ProxyStatusError(proxy_status) from exc
                     raise _UpstreamServerError(str(exc)) from exc
                 raise
 
         try:
             result = with_retry(
-                attempt, self._retry_policy, description=f"gloomberb {method} {path}"
+                attempt,
+                retry_policy or self._retry_policy,
+                description=f"gloomberb {method} {path}",
+            )
+        except _ProxyStatusError as exc:
+            # A proxied upstream 4xx is deterministic (bad input), so it is not
+            # retried and must not trip the shared circuit breaker.
+            return DigifetchError(
+                code="invalid_input",
+                message=(f"Gloomberb 13F rejected the request upstream (Forms13F {exc.status})"),
+                retryable=False,
             )
         except httpx.HTTPStatusError as exc:
+            # Plan-gated routes answer their gate with a body, not an auth code
+            # (`/cloud/transcripts` says "Pro plan required"), so check the body
+            # before the generic status mapping.
+            plan_error = _plan_required_error(exc.response.text) if pro_gated else None
+            if plan_error is not None:
+                return plan_error
             error = self._map_http_error(exc)
             # Only upstream-health failures trip the breaker: a 401/404 (or any
             # other deterministic 4xx) is a caller/auth outcome, not service
@@ -1215,6 +2287,9 @@ class GloomberbClient:
         try:
             payload = json.loads(result.text) if result.text else None
         except json.JSONDecodeError:
+            plan_error = _plan_required_error(result.text) if pro_gated else None
+            if plan_error is not None:
+                return plan_error
             self._record_failure()
             return DigifetchError(
                 code="upstream_error",
@@ -1223,13 +2298,46 @@ class GloomberbClient:
             )
         self._record_success()
         if not isinstance(payload, Mapping):
+            if allow_array and isinstance(payload, list):
+                return _RawResponse(
+                    status="success",
+                    data=payload,
+                    reason_code=None,
+                    stale=False,
+                    provider_meta={},
+                    as_of=None,
+                    currency=None,
+                )
             return DigifetchError(
                 code="upstream_error",
                 message=f"Gloomberb returned an unexpected non-object payload for {path}",
                 retryable=False,
             )
+        if pro_gated:
+            # A JSON error body for a plan-gated route must not read as an
+            # empty success: `{"error": "Pro plan required"}` and the screener's
+            # `{"status": "unsupported", "reasonCode": "PRO_REQUIRED"}` both
+            # need the typed plan error before the status mapping runs.
+            for key in ("error", "message", "detail", "reasonCode"):
+                value = payload.get(key)
+                plan_error = _plan_required_error(value) if isinstance(value, str) else None
+                if plan_error is not None:
+                    return plan_error
         meta = payload.get("providerMeta")
         provider_meta: Mapping[str, Any] = meta if isinstance(meta, Mapping) else {}
+        if direct_payload:
+            # The route's own `status` field is payload data (`generating` /
+            # `partial` / `complete`), not the CloudMarketResponse envelope
+            # discriminator (`/research/equity-diagnostic`).
+            return _RawResponse(
+                status="success",
+                data=payload,
+                reason_code=None,
+                stale=payload.get("stale") is True,
+                provider_meta=provider_meta,
+                as_of=None,
+                currency=None,
+            )
         if "status" not in payload:
             # /news and /cloud/sec/* answer direct payloads, not the shared
             # CloudMarketResponse envelope.
