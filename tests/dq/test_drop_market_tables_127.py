@@ -24,6 +24,7 @@ not a table reference) — same convention as ``tests/dq/research/test_r2_only``
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = REPO_ROOT / "digiquant" / "supabase" / "migrations" / "127_drop_market_data_tables.sql"
+WRANGLER = REPO_ROOT / "cloudflare" / "digithings-stack-cloudflare" / "wrangler.toml"
 
 # Runtime tree only: tests, docs, historical migrations, openwiki and worktrees
 # are out of scope (tests legitimately seed the retired shapes; migrations are
@@ -223,6 +225,19 @@ def test_migration_127_file_content() -> None:
     for kept in ("macro_series_observations", "trading_calendar", "prices_live"):
         assert f"DROP TABLE IF EXISTS {kept}" not in sql
         assert f"DROP VIEW IF EXISTS public.{kept}" not in sql
+
+
+def test_stack_wrangler_pins_r2_market_data_backend() -> None:
+    """The hosted MCP container must receive the R2 flag from the stack `[vars]`.
+
+    `src/index.ts` forwards `DIGIQUANT_MARKET_DATA_BACKEND` verbatim
+    (`?? ""`), so the stack Worker's `[vars]` is what keeps the drop-relevant
+    host off the Supabase legs 127 removes. An edit that removes or changes
+    this pin restores the flag-off behavior on the hosted container.
+    """
+    assert WRANGLER.is_file(), f"missing {WRANGLER.relative_to(REPO_ROOT)}"
+    config = tomllib.loads(WRANGLER.read_text(encoding="utf-8"))
+    assert config.get("vars", {}).get("DIGIQUANT_MARKET_DATA_BACKEND") == "r2"
 
 
 def test_no_unaccounted_runtime_references() -> None:
