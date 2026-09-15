@@ -39,7 +39,6 @@ def _invoke_with(monkeypatch: pytest.MonkeyPatch, response: Any) -> dict[str, An
     return web_search_tools.call_digisearch_web_search("news", context=_context())
 
 
-@pytest.mark.unit
 class TestHubFailuresRaise:
     def test_rate_limit_message_reaches_the_caller(self, monkeypatch: pytest.MonkeyPatch) -> None:
         error = "digisearch invoke failed: Client error '429 Too Many Requests' for url 'https://search.digithings.ai/v1/orchestrator_invoke'"
@@ -71,7 +70,6 @@ class TestHubFailuresRaise:
         assert issubclass(web_search_tools.DigisearchHubError, RuntimeError)
 
 
-@pytest.mark.unit
 class TestGenuineEmptyStillReturnsEmpty:
     def test_empty_results_do_not_raise(self, monkeypatch: pytest.MonkeyPatch) -> None:
         assert _invoke_with(monkeypatch, {"ok": True, "data": {"results": []}}) == {}
