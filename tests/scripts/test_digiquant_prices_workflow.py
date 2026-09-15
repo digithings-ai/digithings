@@ -19,6 +19,29 @@ def test_technicals_writer_is_gone() -> None:
     assert not [s for s in _steps() if "compute-technicals" in str(s.get("run", ""))]
 
 
-def test_intraday_quotes_writer_stays_for_same_day_opens() -> None:
-    quote_steps = [s for s in _steps() if "fetch-quotes" in str(s.get("run", ""))]
-    assert quote_steps, "fetch-quotes --supabase is the documented same-day open source (#4013 D3)"
+def test_intraday_supabase_writer_is_retired() -> None:
+    """Same-day opens now live-fetch (#4053) — the intraday writer is gone."""
+    spec = yaml.safe_load(
+        (REPO_ROOT / ".github" / "workflows" / "pipeline-digiquant-prices.yml").read_text()
+    )
+    intraday_steps = spec["jobs"]["intraday"].get("steps", [])
+    assert not [
+        s
+        for s in intraday_steps
+        if "fetch-quotes" in str(s.get("run", "")) and "--supabase" in str(s.get("run", ""))
+    ], "intraday fetch-quotes --supabase writer is retired (#4053)"
+
+
+def test_any_remaining_quotes_supabase_write_is_run_writers_gated() -> None:
+    """The only fetch-quotes --supabase left is the paused eod-macro sector refresh."""
+    spec = yaml.safe_load(
+        (REPO_ROOT / ".github" / "workflows" / "pipeline-digiquant-prices.yml").read_text()
+    )
+    for job_name, job in spec["jobs"].items():
+        for step in job.get("steps", []) or []:
+            run = str(step.get("run", ""))
+            if "fetch-quotes" in run and "--supabase" in run:
+                assert "run_writers" in str(step.get("if", "")), (
+                    f"{job_name}/{step.get('name')}: ungated fetch-quotes --supabase "
+                    "write on cadence (#4053)"
+                )

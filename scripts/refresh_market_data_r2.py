@@ -840,7 +840,11 @@ def build_store(postgres_uri: str) -> tuple[RefreshStore, dict[str, Any]]:
         access_key=access,
         secret_key=secret,
     )
-    store = R2HistoryStore(backend, _backfill._pg_registry_insert(postgres_uri))
+    store = R2HistoryStore(
+        backend,
+        _backfill._pg_registry_insert(postgres_uri),
+        _backfill._pg_registry_lookup(postgres_uri),
+    )
     try:
         manifest = store.read_manifest()
     except Exception as exc:
