@@ -177,6 +177,7 @@ def _fetch_session_close(
         raws = [r.get("close") for r in rows if r.get("ticker") == sym]
         raw = raws[0] if raws else None
     else:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         resp = (
             client.table("price_history")
             .select("date, close")

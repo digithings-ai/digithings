@@ -289,8 +289,9 @@ export default {
 
     // Read-only R2 market data (#4013 Task 8): public JSON for browser surfaces
     // (decision D1), served by the Worker itself — not proxied to the container.
-    // Public read-only is at parity with Supabase's anon-readable price_history;
-    // no writes, no auth, CORS limited to MARKET_DATA_ALLOWED_ORIGINS.
+    // Replaces the retired anon-readable Supabase market tables/views (dropped
+    // in migration 127, #4053); no writes, no auth, CORS limited to
+    // MARKET_DATA_ALLOWED_ORIGINS.
     if (url.pathname === "/v1/market/tickers" || url.pathname === "/v1/market/closes") {
       return handleMarketData(request, workerEnv, url);
     }

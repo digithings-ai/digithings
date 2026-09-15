@@ -94,6 +94,7 @@ def _load_symbol_history(
         return frame
 
     def _fetch_history() -> list[dict[str, Any]]:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         history_resp = (
             client.table(_PRICE_HISTORY)
             .select("date, ticker, close, high, low, volume")
@@ -155,6 +156,7 @@ def _fetch_technicals_row(
             "atr_pct": row.get("atr_pct"),
         }
     try:
+        # Retired: migration 127 drops price_technicals (#4053) — R2 only above.
         resp = (
             client.table(_PRICE_TECHNICALS)
             .select("ticker, date, hist_vol_21, atr_pct")
@@ -201,6 +203,7 @@ def _fetch_price_row(
         return row
 
     def _fetch_history_row() -> list[dict[str, Any]]:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         history_resp = (
             client.table(_PRICE_HISTORY)
             .select("date, close, high, low, volume")
