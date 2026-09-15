@@ -299,9 +299,124 @@ Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, `digisearch_res
 
 Auth required. Rate limited: 10 req/min.
 
-Directly invokes the internal LangGraph pipeline (`plan → retrieve → aggregate`). Requires `digisearch[agent]` install. Returns `{service, error, trace, query, index_name, total, backend, results, rag_sources, formatted_context}`.
+Directly invokes the internal LangGraph pipeline (`plan → retrieve → aggregate`, or the web branch `plan → web_retrieve → web_aggregate` when `source` is `web`/`auto`). Requires `digisearch[agent]` install. Returns `{service, error, trace, query, index_name, total, backend, results, rag_sources, formatted_context, web_output, cost_dollars, usage}` — the three web fields are `null` on the corpus path.
 
-Request: `ResearchTurnRequest {user_message, index_name, top_k, mode, filter?, filters?, session_id?, workspace_id?}`. Raw `filter` is rejected (HTTP 400) unless the index config sets `allow_raw_filter: true`. When `workspace_id` is set it is injected as a mandatory `workspace_id eq …` structured filter into the retrieve step, identical to `POST /query` (#3909).
+Request: `ResearchTurnRequest {user_message, index_name, top_k, mode, filter?, filters?, session_id?, workspace_id?, source ("corpus"|"web"|"auto", default "corpus"), effort ("fast"|"thorough", default "fast"), output_schema?, cited_top_n?}`. Raw `filter` is rejected (HTTP 400) unless the index config sets `allow_raw_filter: true`. When `workspace_id` is set it is injected as a mandatory `workspace_id eq …` structured filter into the retrieve step, identical to `POST /query` (#3909).
+
+##### Web research branch (OSS synthesis, #4064 Phase B)
+
+`source="web"|"auto"` is an explicit opt-in: only those turns run the web
+branch, and `source` defaults to `"corpus"`. The corpus path is untouched and
+keeps its tool-only posture, so the #3859 "grounding is tool-only — no
+synthesis-model traffic on web-grounded segments" policy remains in force for
+every existing caller (including the digigraph delegate default); it is
+**superseded only for explicitly requested web turns** (R5). No new port and
+no new service: the branch rides `POST /v1/research_turn`, MCP
+`digisearch_research_turn` (`source`/`effort` only — `output_schema` is
+deferred, R7) and the orchestrator `digisearch_research_delegate` manifest
+(`source`/`effort`/`output_schema`).
+
+```
+web_retrieve    search_web (landed searxng→ddgs failover) → fetch_markdown
+                (never ingest_url: fetched pages are never indexed, R3) →
+                chunk (get_document_chunker) → BM25 filter (optional) →
+                BGE rerank → cited hits [{url,title,snippet,score,engine}]
+web_aggregate   digillm synthesis over numbered sources
+                  markdown path    grounded_answer → answer with inline [n]
+                  structured path  structured_synthesis → json_schema wrapper
+                                   {content:<output_schema>, grounding:[…]}
+                                   → verify_grounding
+                → WebSearchData envelope + TurnUsage
+```
+
+- **Envelope split (R1):** retrieval rows stay the landed
+  `WebSearchResponse`/`WebSearchResult` (`{url,title,snippet,score,engine}`);
+  the synthesis envelope is the landed `web_exa.WebSearchData`
+  (`{results, output, search_type, cost_dollars}`). Synthesis returns
+  `(WebSearchData, TurnUsage)` tuples — usage never rides `model_extra`.
+- **`WebSearchData` interchange (EXA stays a drop-in paid alternative):**
+
+| `WebSearchData` field | EXA (`/v1/digisearch_web_search`) | OSS web branch (#4064) |
+|-----------------------|-----------------------------------|------------------------|
+| `results` | EXA hits (`{title,url,highlights[]/text,…}`) | cited web hits `{title,url,snippet,score,engine}` (`snippet`, never `highlights`) |
+| `output` | `{text, structured, grounding}` | markdown: `{text}`; structured: `{content, grounding[{field,citations[{url,title,excerpt}],confidence}], text}` |
+| `search_type` | `instant`\|`fast`\|`auto`\|`deep-lite`\|`deep`\|`deep-reasoning` | `web-fast` \| `web-thorough` |
+| `cost_dollars` | metered dollars (e.g. `{total: 0.012}`) | `{total: 0.0, provider: "web-oss", breakdown, note}` — advisory-only |
+
+  `format_web_results` renders EXA `highlights`/`text`; OSS `snippet` rows
+  therefore degrade to Title/URL-only lines (never a crash), which is why the
+  turn's `formatted_context` is built directly from the hits instead.
+- **Turn output:** `backend="web-oss"`; `results` are the normalized cited
+  hits with `metadata.evidence_tier="External"`; `rag_sources` are built
+  through `_web_hit_to_rag_row()` so the corpus citation shape stays intact;
+  `formatted_context` is numbered `[n] url — title — snippet` lines built
+  directly — NOT via `format_web_results`, which renders Title/URL-only for
+  OSS `snippet` keys (no `highlights`/`text` keys). The new response fields
+  `web_output`, `cost_dollars`, `usage` are declared on `ResearchTurnOutput`
+  and are `null` on the corpus path (R10).
+- **Insufficient sources:** when synthesis returns no usable `[n]` citation,
+  `grounded_answer` answers with the literal `insufficient sources` plus the
+  numbered source list; `verify_grounding` keeps an entry whose citations do
+  not point at the retrieved set, flagged `confidence="unverified"`.
+- **Effort presets** (`WebResearchConfig`; R9 — an explicit request
+  `cited_top_n` wins over the preset, and `live_top_n` is search intent
+  clamped to the landed `max_results` bound of 10):
+
+| Effort | `live_top_n` | `fetch_top_n` | `cited_top_n` |
+|--------|--------------|---------------|---------------|
+| `fast` (default) | 8 | 5 | 5 |
+| `thorough` | 20 | 10 | 8 |
+
+- **Accounting keys (advisory-only, T2/T5):** `usage` is
+  `TurnUsage{searches, pages_fetched, pages_cited, llm_calls, search_ms,
+  fetch_ms, rerank_ms, synthesis_ms, total_ms}`; `cost_dollars` is
+  `{total: 0.0, provider: "web-oss", breakdown{searches, pages_fetched,
+  llm_calls}, note}` and `WebSearchData.search_type` is `"web-<effort>"`.
+  **`total` MUST NOT drive budget/routing gates alone** — OSS synthesis has
+  no metered per-call dollar cost and LLM spend is metered in digillm
+  telemetry, never folded in (the `note` says exactly that).
+- **Ops notes:** `DIGISEARCH_SYNTHESIS_MODEL` must be set to a digillm model
+  id or every web turn fails hard with `WebResearchError` (never an uncited
+  answer). The branch requires the `[rerank]` extra (sentence-transformers
+  BGE); the default `get_document_chunker()` semantic path additionally
+  requires `[ingestion]` (`chonkie[semantic]`). Either missing raises
+  `WebResearchError`. `DIGISEARCH_RERANK_ENABLED` does **not** gate the web
+  branch — it gates `query_index()`'s rerank only (#2441) — and the branch
+  hardcodes `Reranker(provider="bge", strict=True)`, so
+  `DIGISEARCH_RERANK_PROVIDER` does not change it.
+- **Known limitation (Task 5 ruling):** a web turn currently runs the
+  retrieval chain twice — `node_web_retrieve` does search+fetch+rank, then
+  the synthesis monoliths re-run search+fetch internally because they take no
+  injected pages. The second round is **not** counted in
+  `usage`/`cost_dollars`. A scoped follow-up closes this before Phase C/D.
+- **Eval:** `tests/ds/test_web_eval_live.py` runs `grounded_answer` plus one
+  `structured_synthesis` per `RESEARCH_CASES` case (extended landed module
+  `digisearch/tests/web_search_eval_cases.py`), mocked offline by default;
+  the shared `DIGISEARCH_WEB_SEARCH_LIVE=1` gate runs the live-sampled leg
+  and prints p50 stage ms + citation coverage. Live dollar/latency numbers
+  are single-key, single-day scaffolding anchors — never SLO constants.
+
+Phase B live verification record (2026-09-15, #4064 Task 6 — not measured,
+prerequisites absent in this env):
+
+- Live legs: **not measurable here.** `DIGISEARCH_WEB_SEARCH_LIVE=1 pytest
+  tests/ds/test_web_eval_live.py -k live -x` reached the real network on the
+  ddgs fallback (no searxng sidecar: `127.0.0.1:8080` connection refused)
+  and fetched/extracted live pages (trafilatura), then failed hard —
+  correctly — at `_rank`: `WebResearchError: web chunking is unavailable:
+  chonkie[semantic] is required`. `sentence-transformers` (`[rerank]`) and
+  `DIGISEARCH_SYNTHESIS_MODEL` (+ any digillm provider key) are also absent
+  in this env. Prerequisites cannot be installed into the shared venv, so
+  fast/thorough p50 and citation coverage remain unmeasured; re-run the gate
+  in a provisioned env and record date/key tier before writing any SLO from
+  the numbers.
+- Offline evidence on this branch: `pytest tests/ds/test_web_eval_live.py -v`
+  → 4 passed, 2 skipped (live legs), zero `Traceback`. All 12 research cases
+  produce line-cited answers, cited structured fields, and full
+  `usage`/`cost_dollars` envelopes.
+- EXA-paid path untouched: `POST /v1/digisearch_web_search` stays EXA-gated
+  (no `EXA_API_KEY` ⇒ 503 / disabled string); `tests/ds/test_web_exa.py`
+  passes on this branch.
 
 #### `POST /v1/web_search`
 
@@ -334,7 +449,7 @@ MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streama
 |------|-------------|----------|
 | `digisearch_query` | Search documents; returns formatted string of hits with score and content preview | No |
 | `web_search` | Search the public web; returns JSON `WebSearchResponse` (#3853) | Yes (`digisearch[web-search]`) |
-| `digisearch_research_turn` | Composite research turn (plan → retrieve → aggregate) with citations | Yes (`digisearch[agent]`) |
+| `digisearch_research_turn` | Composite research turn (plan → retrieve → aggregate, or the #4064 web branch with `source=web\|auto`) with citations; `source`/`effort` passthrough (`output_schema` deferred, R7) | Yes (`digisearch[agent]`) |
 | `digisearch_web_search` | Live web search via EXA; disabled message without `EXA_API_KEY` | Yes (`EXA_API_KEY`) |
 
 Tool parameters for `digisearch_query`: `text`, `index_name`, `top_k`, `mode`.
@@ -605,7 +720,8 @@ digisearch/src/digisearch/
 │                              # + segment_aware wrapper used by POST /ingest
 │
 ├── agent/
-│   ├── pipeline.py            # LangGraph: plan → retrieve → aggregate
+│   ├── pipeline.py            # LangGraph: plan → retrieve → aggregate | web_retrieve → web_aggregate
+│   ├── web_branch.py          # web-branch nodes + resolve_web_config() (#4064)
 │   └── citations.py           # rag_sources_from_hits()
 │
 ├── discovery/
@@ -616,7 +732,16 @@ digisearch/src/digisearch/
 │   ├── searxng_provider.py    # Primary: loopback searxng sidecar (/search?format=json)
 │   ├── ddgs_provider.py       # Fallback: embedded ddgs scrape (zero infra)
 │   ├── extractor.py           # fetch HTML → markdown (trafilatura, readability fallback)
-│   └── service.py             # run_web_search: searxng→ddgs failover + digifetch enrich
+│   ├── citation.py            # Citation{url,title,excerpt} + normalize_url() (#4064 Task 0)
+│   ├── fetch.py               # fetch_markdown(): digifetch + extractor, never indexes (#4064 Task 0)
+│   └── service.py             # run_web_search / search_web: searxng→ddgs failover + enrich
+│
+├── web/                       # Phase B web research branch (#4064; [agent] + [rerank])
+│   ├── retrieve.py            # sole web_search adaptation seam (never ingest_url)
+│   ├── answer.py              # grounded_answer: Perplexica loop + inline [n] citations
+│   ├── structured.py          # structured_synthesis + verify_grounding
+│   ├── grounding_models.py    # WebResearchConfig / EFFORT_PRESETS / TurnUsage / TurnCost
+│   └── accounting.py          # pure stage-ms + advisory cost helpers
 │
 └── dev/
     └── edgar_sample_export.py # EDGAR-CORPUS slice exporter (dev/test only)
@@ -1077,7 +1202,7 @@ docker compose --profile digisearch-mcp up
 
 The `searxng` service (`searxng/searxng`) is loopback-only on the host (`127.0.0.1:8080`) with config at `config/searxng/settings.yml` (`search.formats: [html, json]`, engine allowlist). `valkey` backs its limiter. digisearch reaches it in-container via `DIGISEARCH_SEARXNG_URL=http://searxng:8080`. No new digisearch port: `POST /v1/web_search`, MCP `web_search`, and orchestrator `web_search` all ride the existing apps.
 
-Rollout ops: single flag `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (default `auto`); a down sidecar or a ddgs 403/CAPTCHA fails over to the next backend, and the digigraph `web` skill stays corpus-only unless the session opts in (#3420) — fail-closed to corpus-only at every layer. Engine allowlist is `wikipedia, duckduckgo, bing, mojeek`; `search.formats` must keep `json` (the provider calls `/search?format=json`). `server.secret_key` ships as a dev-only placeholder — rotate before exposing beyond loopback. Upstream scrapers break without notice: `compose pull searxng` weekly, and watch per-engine 403/CAPTCHA rates as the early signal; grounding is tool-only (#3859) — no synthesis-model traffic runs on web-grounded segments. Eval: `digisearch/tests/test_web_search_eval.py` (20 queries across news/macro/docs/earnings, mocked offline; live sampling behind `DIGISEARCH_WEB_SEARCH_LIVE=1` with p50 fetch+extract < 5s). Known limitation: digiquant→hub calls carry the Task-1 service JWT (bearer threads via `ToolContext.state["digi_bearer"]`); legs without a token fail closed with `DashboardWebSearchError`, never silently ungrounded.
+Rollout ops: single flag `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (default `auto`); a down sidecar or a ddgs 403/CAPTCHA fails over to the next backend, and the digigraph `web` skill stays corpus-only unless the session opts in (#3420) — fail-closed to corpus-only at every layer. Engine allowlist is `wikipedia, duckduckgo, bing, mojeek`; `search.formats` must keep `json` (the provider calls `/search?format=json`). `server.secret_key` ships as a dev-only placeholder — rotate before exposing beyond loopback. Upstream scrapers break without notice: `compose pull searxng` weekly, and watch per-engine 403/CAPTCHA rates as the early signal; grounding stays tool-only for the default corpus path (#3859), with the Phase B exception that an explicitly requested `source=web|auto` research turn runs OSS synthesis (see §3 `POST /v1/research_turn` web branch, #4064). Eval: `digisearch/tests/test_web_search_eval.py` (20 queries across news/macro/docs/earnings, mocked offline; live sampling behind `DIGISEARCH_WEB_SEARCH_LIVE=1` with p50 fetch+extract < 5s) plus `tests/ds/test_web_eval_live.py` (Phase B research-turn cases, mocked offline; same live gate). Known limitation: digiquant→hub calls carry the Task-1 service JWT (bearer threads via `ToolContext.state["digi_bearer"]`); legs without a token fail closed with `DashboardWebSearchError`, never silently ungrounded.
 
 Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + what remains):
 
@@ -1153,12 +1278,13 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGISEARCH_PGVECTOR_URL` | _(unset)_ | Optional alias; wins over `DIGISEARCH_DATABASE_URL` |
 | `DIGISEARCH_LIGHTRAG_EMBEDDING` | `ollama` | `ollama` (nomic-embed-text) \| `minilm` (local ONNX) |
 | `DIGISEARCH_LIGHTRAG_WORKING_DIR` | `.lightrag` | LightRAG working directory |
-| `DIGISEARCH_RERANK_ENABLED` | `0` | When truthy, `query_index()` runs `Reranker` over results (`top_n=query.top_k`); off by default (#2441) |
+| `DIGISEARCH_RERANK_ENABLED` | `0` | When truthy, `query_index()` runs `Reranker` over results (`top_n=query.top_k`); off by default (#2441). Does **not** gate the Phase B web branch, which always requires the `[rerank]` extra (#4064) |
 | `DIGISEARCH_RERANK_PROVIDER` | `bge` | `bge` (`BAAI/bge-reranker-v2-m3`) or `cohere` (`rerank-multilingual-v3.0`) when rerank is enabled |
 | `DIGISEARCH_WEB_SEARCH_BACKEND` | `auto` | `auto` (searxng→ddgs failover) \| `searxng` \| `ddgs` (#3853) |
 | `DIGISEARCH_SEARXNG_URL` | `http://127.0.0.1:8080` | searxng sidecar base URL (compose sets `http://searxng:8080` in-container; #3853) |
 | `DIGISEARCH_FETCH_ALLOWED_HOSTS` | _(unset)_ | Comma-separated operator-trusted hostnames exempted from the digifetch SSRF address refusal (e.g. an egress proxy). Also accepted per-call via `WebSearchConfig.fetch_allowed_hosts`; passed to `HttpFetcher(allowed_hosts=…)` (#3934) |
-| `DIGISEARCH_WEB_SEARCH_LIVE` | _(unset)_ | Set `1` to run the live-sampled leg of `digisearch/tests/test_web_search_eval.py` (real backends, p50 fetch+extract < 5s); default runs fully mocked offline (#3853) |
+| `DIGISEARCH_WEB_SEARCH_LIVE` | _(unset)_ | Set `1` to run the live-sampled legs of `digisearch/tests/test_web_search_eval.py` (provider suite, real backends, p50 fetch+extract < 5s) and `tests/ds/test_web_eval_live.py` (Phase B research-turn cases, p50 stage ms + citation coverage scaffolding, never SLOs); default runs fully mocked offline (#3853, #4064) |
+| `DIGISEARCH_SYNTHESIS_MODEL` | _(unset)_ | digillm model id for Phase B web-research synthesis (`source=web\|auto` turns only). Unset ⇒ every web turn fails hard with `WebResearchError`, never an uncited answer; no new port/service (#4064) |
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
 | `DIGISEARCH_EMBED` | `1` (on when unset) | Set `0` to skip pipeline-level embed on ingest |
 | `DIGISEARCH_EMBEDDING_PROVIDER` | _(unset)_ | `minilm` \| `openai` — explicit provider (fails loud if unloadable) |
@@ -1192,9 +1318,9 @@ The `digisearch[agent]` optional extra installs `langgraph` and enables:
 - `digisearch_research_turn` MCP tool
 - `digisearch_research_delegate` orchestrator tool
 - `POST /v1/research_turn` REST endpoint
-- The `agent/pipeline.py` LangGraph: `plan → retrieve → aggregate`
+- The `agent/pipeline.py` LangGraph: `plan → retrieve → aggregate` (corpus) and `plan → web_retrieve → web_aggregate` (Phase B web branch, `source=web|auto`; #4064)
 
-The current graph is minimal: `node_plan` validates input, `node_retrieve` calls `query_index`, `node_aggregate` formats results and extracts citations. There is no query reformulation, no multi-step retrieval, and no LLM calls within the graph. The `[agent]` label oversells the current capability.
+The corpus graph is still minimal: `node_plan` validates input, `node_retrieve` calls `query_index`, `node_aggregate` formats results and extracts citations. There is no query reformulation, no multi-step retrieval, and no LLM calls on the corpus path. The Phase B web branch (`source=web|auto` → `web_retrieve → web_aggregate`) adds live OSS retrieval plus digillm synthesis with inline citations — see §3 `POST /v1/research_turn` (#4064). The `[agent]` label is justified by that web path; the corpus path remains the minimal chain above.
 
 **Roadmap:** A full research-turn graph would include LLM-based query decomposition, sub-query expansion, result deduplication, evidence gap detection, and iterative retrieval.
 
