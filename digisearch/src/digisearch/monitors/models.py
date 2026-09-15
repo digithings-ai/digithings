@@ -5,6 +5,8 @@ model layer only; Tasks 2–8 (store, dedup, runner, delivery, HTTP, MCP, EXA
 adapter) build on these shapes.
 """
 
+# score:allow untyped any
+# model-boundary payload containers are dynamic JSON; Any is the honest annotation.
 from __future__ import annotations
 
 from datetime import datetime

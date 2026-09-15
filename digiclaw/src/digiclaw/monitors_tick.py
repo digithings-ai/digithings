@@ -15,6 +15,8 @@ Transport and auth failures raise: the scheduler persists them as the agent's
 tick`` CLI prints the failed outcome.
 """
 
+# score:allow untyped any
+# digisearch tick responses are dynamic JSON payloads; Any is the honest annotation.
 from __future__ import annotations
 
 import os

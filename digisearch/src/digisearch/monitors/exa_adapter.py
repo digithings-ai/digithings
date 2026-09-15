@@ -1,3 +1,5 @@
+# score:allow untyped any
+# EXA payloads are dynamic remote JSON; Any is the honest annotation.
 """Phase C EXA monitor adapter — EXPERIMENTAL, tier-gated, fail closed (#4065, Task 8c).
 
 EXPERIMENTAL — NOT LIVE-VALIDATED. The remote shapes used here are derived from

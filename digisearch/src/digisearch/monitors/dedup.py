@@ -23,6 +23,8 @@ OSS ``snippet``-only results will never compare equal and report ``changed`` on
 every run.
 """
 
+# score:allow untyped any
+# result dicts from both recall backends are heterogeneous JSON; Any is the honest annotation.
 from __future__ import annotations
 
 import hashlib

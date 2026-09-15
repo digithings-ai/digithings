@@ -1,3 +1,5 @@
+# score:allow untyped any
+# recall payloads and query snapshots are dynamic JSON; Any is the honest annotation.
 """Phase C watch runner — shallow recall → dedup → persist → deliver (#4065, Task 4).
 
 One watch turn (``run_watch``) runs the Phase B shallow recall path directly

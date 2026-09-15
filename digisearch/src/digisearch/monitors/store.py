@@ -1,3 +1,5 @@
+# score:allow untyped any
+# stored run/watch bodies are dynamic JSON; Any is the honest annotation.
 """Phase C monitor store — SQLite persistence for watches and runs (#4065, Task 2).
 
 Stdlib ``sqlite3`` only: this store is the single source of truth for monitor

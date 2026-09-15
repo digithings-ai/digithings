@@ -1,5 +1,7 @@
 """digisearch MCP server. Exposes document search as MCP tools for digigraph/digiflow."""
 
+# score:allow untyped any
+# MCP tool payloads carry heterogeneous JSON; Any is the honest annotation.
 from __future__ import annotations
 
 import json
