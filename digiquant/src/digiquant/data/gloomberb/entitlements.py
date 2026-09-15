@@ -1,13 +1,14 @@
 """Per-tool entitlement declarations for the digifetch x Gloomberb family (#4110).
 
-One vocabulary, declared once per tool and surfaced in three places:
+One vocabulary, declared once per tool and rendered on two surfaces:
 
 * the MCP registration (``mcp_server`` attaches ``fn.entitlement`` and appends
-  the note to the registered description),
+  the note to the registered description), and
 * the orchestrator manifest (``orchestrator_tools`` sets a top-level
-  ``entitlement`` key and appends the same note), and
-* the tool descriptions themselves (so an agent sees the requirement before
-  calling).
+  ``entitlement`` key and appends the same note).
+
+Because both surfaces append the same note, every tool description an agent
+reads also states its entitlement before the call.
 
 Vocabulary:
 
@@ -119,7 +120,7 @@ def entitlement_for(name: str) -> Entitlement | None:
 
 def entitlement_note(name: str) -> str | None:
     """The description sentence for a declared tool, or None."""
-    entitlement = TOOL_ENTITLEMENTS.get(name)
+    entitlement = entitlement_for(name)
     if entitlement is None:
         return None
     return ENTITLEMENT_DESCRIPTIONS[entitlement]

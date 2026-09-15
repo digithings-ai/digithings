@@ -28,6 +28,7 @@ from digiquant.data.gloomberb import (  # noqa: E402
     GloomberbClient,
     QuoteInput,
     QuoteResult,
+    session_cache_fingerprint,
 )
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy, SsrfBlockedError  # noqa: E402
@@ -2035,3 +2036,62 @@ def test_pro_required_is_non_retryable_and_breaker_safe_for_both_shapes() -> Non
     assert calls.count("/cloud/transcripts") == 3
     assert calls.count("/market/screener") == 3
     assert isinstance(client.quote({"symbol": "AAPL"}).data, QuoteResult)
+
+
+def test_session_cache_fingerprint_separates_sessions_without_storing_the_cookie() -> None:
+    assert session_cache_fingerprint(None) == "anon"
+    assert session_cache_fingerprint("") == "anon"
+    first = session_cache_fingerprint("gloomberb.session_token=aaa")
+    assert first == session_cache_fingerprint("gloomberb.session_token=aaa")
+    assert first != session_cache_fingerprint("gloomberb.session_token=bbb")
+    assert len(first) == 16
+    assert "aaa" not in first  # the raw cookie never enters the cache key
+
+
+def test_cache_key_follows_the_session_cookie(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A cached entitlement-sensitive response never crosses sessions."""
+
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return envelope({"symbol": "AAPL", "issueName": "Apple Inc.", "points": []})
+
+    client = make_client(handler, session_cookie="session-a")
+    client.short_interest({"symbol": "AAPL"})
+    client.short_interest({"symbol": "AAPL"})
+    assert len(calls) == 1  # same session: cache hit
+
+    monkeypatch.setattr(client, "_session_cookie", "session-b")
+    client.short_interest({"symbol": "AAPL"})
+    assert len(calls) == 2  # a session switch never serves the other entry
+
+    monkeypatch.setattr(client, "_session_cookie", "session-a")
+    client.short_interest({"symbol": "AAPL"})
+    assert len(calls) == 2  # the original session's entry is still live
+
+
+def test_cache_bounds_and_eviction_still_hold_with_the_session_key() -> None:
+    now = {"t": 0.0}
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, json={"status": "success", "data": AAPL_QUOTE})
+
+    client = make_client(
+        handler,
+        session_cookie="session-a",
+        monotonic=lambda: now["t"],
+        cache_ttl=900.0,
+        cache_max_entries=2,
+    )
+    for symbol in ("AAPL", "MSFT", "NVDA"):
+        client.quote({"symbol": symbol})
+    assert client.cache_size == 2  # size bound intact
+    assert len(calls) == 3
+
+    now["t"] += 901.0
+    client.quote({"symbol": "AAPL"})
+    assert len(calls) == 4  # the expired entry did not serve
+    assert client.cache_size == 1  # expired entries evicted on access

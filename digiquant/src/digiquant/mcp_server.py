@@ -1291,7 +1291,7 @@ def create_mcp_server(
 
         Requires GLOOMBERB_SESSION_COOKIE **and** a Gloomberb Pro plan. A free
         (email-verified) session answers a "Pro plan required" body, mapped to
-        a typed `auth_required` with the upstream text - never an empty
+        a typed `pro_required` with the upstream text - never an empty
         success. Carries a term.gloom.sh deep link for `ticker`.
         """
         try:
@@ -1389,7 +1389,7 @@ def create_mcp_server(
         Requires GLOOMBERB_SESSION_COOKIE **and** a Gloomberb Pro plan. A free
         session answers HTTP 200 `status=unsupported` + `reasonCode=PRO_REQUIRED`
         (or a 402 "Pro plan required" body), both mapped to a typed
-        `auth_required` - never `not_found` and never an empty success.
+        `pro_required` - never `not_found` and never an empty success.
         `count` is 1-50; `mode` is cache-first | refresh. Prices are delayed.
         """
         try:

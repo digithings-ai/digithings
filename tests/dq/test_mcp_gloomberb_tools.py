@@ -1364,6 +1364,93 @@ def test_declared_entitlements_match_the_gate_behavior() -> None:
     }
 
 
+@pytest.mark.parametrize(("name", "args"), sorted(TOOL_CALLS.items()))
+def test_entitlement_zero_http_gating_matches_the_declaration(
+    monkeypatch: pytest.MonkeyPatch, name: str, args: tuple[Any, ...]
+) -> None:
+    """Without a cookie: gated tools short-circuit, free tools reach the wire."""
+
+    from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS
+
+    entitlement = TOOL_ENTITLEMENTS[name]
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return _sweep_handler(request)
+
+    _patch_client(monkeypatch, handler, earnings_provider=lambda symbol: [])
+    payload = json.loads(_mcp(name)(*args))
+    # The Yahoo-backed earnings calendar never touches the Cloud transport.
+    expected_calls = [] if name == "digifetch_earnings_calendar" else [1]
+    if entitlement == "free":
+        # Anonymous tools are never gated: the request goes out and succeeds.
+        assert calls == expected_calls, name
+        assert payload["data"] is not None, name
+    else:
+        # session / preview / pro: auth_required with zero HTTP when cookieless.
+        assert calls == [], name
+        assert payload["data"]["code"] == "auth_required", name
+
+
+@pytest.mark.parametrize(("name", "args"), sorted(TOOL_CALLS.items()))
+def test_entitlement_wire_access_with_a_session_cookie(
+    monkeypatch: pytest.MonkeyPatch, name: str, args: tuple[Any, ...]
+) -> None:
+    """With a cookie every declared tool reaches the wire (no other pre-gate)."""
+
+    from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS
+
+    assert name in TOOL_ENTITLEMENTS  # every digifetch tool declares one
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return _sweep_handler(request)
+
+    _patch_client(
+        monkeypatch,
+        handler,
+        session_cookie="gloomberb.session_token=test",
+        earnings_provider=lambda symbol: [],
+    )
+    payload = json.loads(_mcp(name)(*args))
+    expected_calls = [] if name == "digifetch_earnings_calendar" else [1]
+    assert calls == expected_calls, name
+    assert "code" not in payload["data"], name
+
+
+def test_pro_route_plan_gates_and_bare_402_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Both Pro shapes map to pro_required; an unrecognized 402 keeps auth_required."""
+
+    def transcripts_plan(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="Pro plan required")
+
+    _patch_client(monkeypatch, transcripts_plan, session_cookie="gloomberb.session_token=test")
+    transcripts = json.loads(_mcp("digifetch_transcripts")("AAPL"))
+    assert transcripts["data"]["code"] == "pro_required"
+    assert transcripts["data"]["retryable"] is False
+
+    def screener_envelope(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"status": "unsupported", "data": None, "reasonCode": "PRO_REQUIRED"},
+        )
+
+    _patch_client(monkeypatch, screener_envelope, session_cookie="gloomberb.session_token=test")
+    screener = json.loads(_mcp("digifetch_screener")("gainers"))
+    assert screener["data"]["code"] == "pro_required"
+
+    def bare_402(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(402, text="payment required, no plan wording")
+
+    _patch_client(monkeypatch, bare_402, session_cookie="gloomberb.session_token=test")
+    fallback = json.loads(_mcp("digifetch_transcripts")("AAPL"))
+    # A bare 402 with no recognizable plan body keeps the generic mapping.
+    assert fallback["data"]["code"] == "auth_required"
+    assert fallback["data"]["retryable"] is False
+
+
 def test_entitlement_note_is_surfaced_in_mcp_and_manifest() -> None:
     from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS, entitlement_note
 

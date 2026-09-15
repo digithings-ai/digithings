@@ -1144,8 +1144,12 @@ stay distinct.
 `1`/`true`/`yes`/`on` enable it, and any other value (a typo included) fails
 closed to disabled (see Environment Variables). A 900s TTL cache matches the R2
 market-data-cache convention; expired entries are evicted on access and the
-cache is size-bounded, so a long-lived process cannot grow without limit. A
-`RateLimiter` min-interval gate paces requests; the retry policy is narrowed to
+cache is size-bounded, so a long-lived process cannot grow without limit. The
+cache key includes a **non-reversible session fingerprint** (a truncated
+SHA-256 of the cookie, or `"anon"`) because responses are
+entitlement-sensitive — a preview or Pro report cached by one session is never
+served to a different session, and the raw cookie never enters the key (#4110
+phase 5). A `RateLimiter` min-interval gate paces requests; the retry policy is narrowed to
 timeouts/connection faults and wire 5xx so 401/404/429 are never retried; a 429
 `Retry-After` is honored with a bounded injectable sleep (a larger value is
 surfaced in the typed error, not slept on). Only upstream-health failures

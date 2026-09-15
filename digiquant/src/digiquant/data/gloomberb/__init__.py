@@ -31,6 +31,7 @@ from .client import (
     RETRYABLE_EXCEPTIONS,
     SESSION_COOKIE_NAMES,
     GloomberbClient,
+    session_cache_fingerprint,
     yfinance_earnings_events,
 )
 from .entitlements import (
@@ -279,6 +280,7 @@ __all__ = [
     "GLOOMBERB_SESSION_COOKIE_ENV",
     "RETRYABLE_EXCEPTIONS",
     "SESSION_COOKIE_NAMES",
+    "session_cache_fingerprint",
     "ENDPOINTS",
     "DEFAULT_CACHE_TTL_SECONDS",
     "DEFAULT_MIN_INTERVAL_SECONDS",

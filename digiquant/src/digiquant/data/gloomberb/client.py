@@ -19,6 +19,7 @@ No environment variables are read at import time; the flags are resolved in
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -135,6 +136,7 @@ __all__ = [
     "GLOOMBERB_ENABLED_ENV",
     "GLOOMBERB_SESSION_COOKIE_ENV",
     "SESSION_COOKIE_NAMES",
+    "session_cache_fingerprint",
     "DEFAULT_CACHE_TTL_SECONDS",
     "DEFAULT_MIN_INTERVAL_SECONDS",
     "DEFAULT_CIRCUIT_FAILURE_THRESHOLD",
@@ -177,6 +179,21 @@ SESSION_COOKIE_NAMES: tuple[str, ...] = (
     "__Secure-gloomberb.session_token",
     "gloomberb.session_token",
 )
+
+
+def session_cache_fingerprint(cookie: str | None) -> str:
+    """Non-reversible cache discriminator for a session cookie (#4110 phase 5).
+
+    Responses are entitlement-sensitive: a preview (or full) report cached by
+    one session must not be served to a different session. The cache key
+    therefore includes this fingerprint instead of the raw cookie — a
+    truncated SHA-256 separates sessions without storing the secret. Anonymous
+    clients share the ``"anon"`` fingerprint, exactly as before.
+    """
+    if not cookie:
+        return "anon"
+    return hashlib.sha256(cookie.encode("utf-8")).hexdigest()[:16]
+
 
 DEFAULT_HEADERS: dict[str, str] = {"Accept": "application/json"}
 
@@ -1317,7 +1334,7 @@ class GloomberbClient:
         """Earnings-call transcripts (session-gated; requires Gloomberb Pro).
 
         A free (email-verified) session answers a non-JSON "Pro plan required"
-        body; the client maps that to a typed ``auth_required`` instead of an
+        body; the client maps that to a typed ``pro_required`` instead of an
         empty success or a generic upstream error.
         """
         parsed = self._validate_input(TranscriptsInput, request)
@@ -1536,7 +1553,7 @@ class GloomberbClient:
 
         A free session answers ``{"status": "unsupported", "reasonCode":
         "PRO_REQUIRED"}`` with HTTP 200; ``pro_gated`` maps that (like the 402
-        text body) to a typed ``auth_required`` instead of ``not_found``.
+        text body) to a typed ``pro_required`` instead of ``not_found``.
         """
         parsed = self._validate_input(ScreenerInput, request)
         if isinstance(parsed, DigifetchError):
@@ -2040,8 +2057,10 @@ class GloomberbClient:
         should_cache: Callable[[EnvT], bool] | None = None,
     ) -> EnvT:
         # Cache first: a warm enrichment read still serves during an upstream
-        # outage, and the breaker only guards real requests.
-        key = (name, request.model_dump_json())
+        # outage, and the breaker only guards real requests. The key includes
+        # the session fingerprint: responses are entitlement-sensitive, so a
+        # cached preview/full report must never be served across sessions.
+        key = (name, session_cache_fingerprint(self._session_cookie), request.model_dump_json())
         now = self._monotonic()
         self._evict_expired(now)
         entry = self._cache.get(key)

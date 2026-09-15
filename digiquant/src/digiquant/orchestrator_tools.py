@@ -656,7 +656,7 @@ def build_digifetch_transcripts_tool() -> dict[str, Any]:
                 "Earnings-call transcripts (Gloomberb Cloud; session-gated, "
                 "requires Gloomberb Pro). Requires GLOOMBERB_SESSION_COOKIE and "
                 "a Pro plan — a free session's 'Pro plan required' body maps to "
-                "typed auth_required, never an empty success. Adds a "
+                "typed pro_required, never an empty success. Adds a "
                 "term.gloom.sh deep link for ticker."
             ),
             "parameters": {
@@ -790,7 +790,7 @@ def build_digifetch_screener_tool() -> dict[str, Any]:
                 "Cloud; **requires Gloomberb Pro**). Requires "
                 "GLOOMBERB_SESSION_COOKIE and a Pro plan — a free session's "
                 "HTTP 200 status=unsupported + reasonCode=PRO_REQUIRED (or a "
-                "402 'Pro plan required' body) maps to typed auth_required, "
+                "402 'Pro plan required' body) maps to typed pro_required, "
                 "never not_found. count is 1-50; mode is cache-first|refresh. "
                 "Prices are delayed."
             ),
