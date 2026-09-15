@@ -3,6 +3,8 @@ import {
   annotateLevelUpdates,
   closeCounts,
   closeReason,
+  displayableTradeHistory,
+  tradeResult,
   type TradeHistoryRow,
 } from './trade-history';
 
@@ -36,7 +38,7 @@ describe('closeReason (Trades close column)', () => {
       closeReason(
         row({ lifecycle: 'closed', levelOutcome: 'target', exitDate: '2026-09-05' }),
       ),
-    ).toEqual({ kind: 'target', label: 'Target hit', detail: 'Superseded 2026-09-05' });
+    ).toEqual({ kind: 'target', label: 'Target hit', detail: 'Closed 2026-09-05' });
     expect(closeReason(row({ lifecycle: 'closed', levelOutcome: 'stop' }))).toMatchObject({
       kind: 'stop',
       label: 'Stop hit',
@@ -73,6 +75,28 @@ describe('closeReason (Trades close column)', () => {
     expect(closeReason(row({ lifecycle: 'no_data' })).kind).toBe('no-data');
     expect(closeReason(row({ lifecycle: 'no_data' })).label).toBe('No data — missing rates');
     expect(closeReason(row({ lifecycle: 'unscored' })).label).toBe('Unscored');
+  });
+
+  it('calls a level band that never filled out as never filled', () => {
+    expect(
+      closeReason(
+        row({ lifecycle: 'closed', levelOutcome: 'no_entry', exitDate: '2026-09-05' }),
+      ),
+    ).toEqual({
+      kind: 'superseded',
+      label: 'Never filled — superseded',
+      detail: 'Superseded 2026-09-05',
+    });
+  });
+
+  it('keeps a dropped row in the table as a closed result', () => {
+    const dropped = row({
+      lifecycle: 'closed',
+      evalStatus: 'dropped',
+      verdictReason: 'thesis dead',
+    });
+    expect(tradeResult(dropped)).toBe('closed');
+    expect(displayableTradeHistory([dropped])).toHaveLength(1);
   });
 });
 
@@ -117,6 +141,26 @@ describe('annotateLevelUpdates (updated while active)', () => {
     expect(
       annotateLevelUpdates([shortOlder, longNewer]).every((r) => r.levelsUpdated === undefined),
     ).toBe(true);
+  });
+
+  it('treats the reversed orientation of the same axis as the same position', () => {
+    const older = row({
+      runDate: '2026-09-01',
+      pair: 'EUR/USD',
+      direction: 'short',
+      lifecycle: 'live',
+      stop: '1.1700',
+    });
+    const newer = row({
+      runDate: '2026-09-05',
+      pair: 'USD/EUR',
+      direction: 'long',
+      lifecycle: 'live',
+      stop: '1.1650',
+    });
+    const out = annotateLevelUpdates([older, newer]);
+    expect(out.find((r) => r.runDate === '2026-09-05')?.levelsUpdated).toBe(true);
+    expect(out.find((r) => r.runDate === '2026-09-05')?.levelsUpdatedFrom).toBe('2026-09-01');
   });
 });
 

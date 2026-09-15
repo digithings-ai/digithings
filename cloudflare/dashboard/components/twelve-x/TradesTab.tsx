@@ -62,8 +62,17 @@ function ResultPill({ result }: { result: TradeResult }) {
       ? 'border-accent text-accent'
       : result === 'wrong'
         ? 'border-warn text-warn'
-        : 'border-ink text-ink';
-  const label = result === 'right' ? 'RIGHT' : result === 'wrong' ? 'WRONG' : 'LIVE';
+        : result === 'closed'
+          ? 'border-ink/40 text-ink-mute'
+          : 'border-ink text-ink';
+  const label =
+    result === 'right'
+      ? 'RIGHT'
+      : result === 'wrong'
+        ? 'WRONG'
+        : result === 'closed'
+          ? 'CLOSED'
+          : 'LIVE';
   return (
     <span className={`inline-block border px-1.5 font-mono text-[10px] ${toneClass}`}>
       {label}
@@ -332,6 +341,8 @@ export default function TradesTab({
             <Metric label="Stops" value={String(closeTally.stops)} />
             <Metric label="Superseded" value={String(closeTally.superseded)} />
             <Metric label="Dropped" value={String(closeTally.dropped)} />
+            <Metric label="Both" value={String(closeTally.both)} />
+            <Metric label="No data" value={String(closeTally.noData)} />
             <span className="self-end font-mono text-[10px] text-ink-mute">
               {filtered.length} matching
               {visible.length < filtered.length ? ` · showing ${visible.length}` : ''}

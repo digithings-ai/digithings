@@ -9,7 +9,7 @@ import { formatLevelValue, hasTradeLevels, parseTradeLevels } from './trade-leve
 export type TradeLifecycle = 'live' | 'closed' | 'no_data' | 'unscored';
 
 /** Displayable result labels — no-data / unscored rows are dropped before render. */
-export type TradeResult = 'right' | 'wrong' | 'live';
+export type TradeResult = 'right' | 'wrong' | 'live' | 'closed';
 
 export interface TradeHistoryRow {
   runDate: string;
@@ -44,7 +44,6 @@ export interface TradeHistoryRow {
   /** Level-touch verdict (target | stop | both | neither | no_entry). */
   levelOutcome?: string | null;
   /** 0.5σ excursion verdict while live (right | wrong | inconclusive). */
-  biasVerdict?: string | null;
   /** True when a later board on this axis moved this row's stop or target. */
   levelsUpdated?: boolean;
   /** Previous board date when levelsUpdated is set. */
@@ -186,10 +185,15 @@ export function tradeResult(row: TradeHistoryRow): TradeResult | null {
   if (row.lifecycle === 'live') return 'live';
   if (row.directionalWin === true) return 'right';
   if (row.directionalWin === false) return 'wrong';
+  // Dropped / superseded closes keep a Close reason even without a verdict —
+  // they stay visible so the page can be transparent about takedowns.
+  if (row.lifecycle === 'closed') {
+    return closeReason(row).kind === 'no-data' ? null : 'closed';
+  }
   return null;
 }
 
-/** Drop rows that cannot show Right / Wrong / Live. */
+/** Drop rows with no verdict at all (unscored / missing rates). */
 export function displayableTradeHistory(rows: TradeHistoryRow[]): TradeHistoryRow[] {
   return rows.filter((r) => tradeResult(r) !== null);
 }
@@ -238,8 +242,7 @@ export function assembleTradeHistory(
           evalStatus: ev?.status ?? null,
           verdictReason: ev?.verdict_reason ?? null,
           levelOutcome: ev?.level_outcome ?? null,
-          biasVerdict: ev?.bias_verdict ?? null,
-        } satisfies TradeHistoryRow;
+          } satisfies TradeHistoryRow;
     })
     .sort((a, b) => b.runDate.localeCompare(a.runDate) || a.rank - b.rank);
 }
@@ -341,7 +344,7 @@ export function levelSortKey(value: string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-const RESULT_ORDER: Record<TradeResult, number> = { right: 0, wrong: 1, live: 2 };
+const RESULT_ORDER: Record<TradeResult, number> = { right: 0, wrong: 1, live: 2, closed: 3 };
 
 export function sortTradeHistory(
   rows: TradeHistoryRow[],
@@ -428,13 +431,20 @@ export function closeReason(row: TradeHistoryRow): TradeCloseReason {
     return {
       kind: level,
       label: LEVEL_OUTCOME_LABELS[level],
-      detail: row.exitDate ? `Superseded ${row.exitDate}` : 'Superseded by the next board',
+      detail: row.exitDate ? `Closed ${row.exitDate}` : undefined,
     };
   }
   if (row.evalStatus === 'dropped') {
     return {
       kind: 'dropped',
       label: row.verdictReason ? `Dropped — ${row.verdictReason}` : 'Dropped by bookkeeper',
+    };
+  }
+  if (level === 'no_entry') {
+    return {
+      kind: 'superseded',
+      label: 'Never filled — superseded',
+      detail: row.exitDate ? `Superseded ${row.exitDate}` : undefined,
     };
   }
   return {
@@ -452,7 +462,7 @@ export function closeReason(row: TradeHistoryRow): TradeCloseReason {
 export function annotateLevelUpdates(rows: TradeHistoryRow[]): TradeHistoryRow[] {
   const byAxisDirection = new Map<string, TradeHistoryRow[]>();
   for (const row of rows) {
-    const key = `${axisKey(row.pair)}:${row.direction.trim().toLowerCase()}`;
+      const key = canonicalAxisDirection(row.pair, row.direction);
     const group = byAxisDirection.get(key);
     if (group) group.push(row);
     else byAxisDirection.set(key, [row]);
@@ -463,14 +473,16 @@ export function annotateLevelUpdates(rows: TradeHistoryRow[]): TradeHistoryRow[]
     group.sort((a, b) => a.runDate.localeCompare(b.runDate) || a.rank - b.rank);
     let prev: TradeHistoryRow | null = null;
     for (const row of group) {
+      const leveled = row.stop !== null || row.target !== null;
       if (
         row.lifecycle === 'live' &&
+        leveled &&
         prev !== null &&
         (prev.stop !== row.stop || prev.target !== row.target)
       ) {
         updates.set(evalKey(row.runDate, row.rank), prev.runDate);
       }
-      prev = row;
+      if (leveled) prev = row;
     }
   }
 
@@ -527,4 +539,18 @@ export function closeCounts(rows: TradeHistoryRow[]): TradeCloseCounts {
     }
   }
   return counts;
+}
+
+/**
+ * Orientation-independent key for level-update comparison: sorts the pair legs
+ * and flips the direction when the quoted orientation is reversed, so
+ * `EUR/USD short` and `USD/EUR long` compare as the same position.
+ */
+function canonicalAxisDirection(pair: string, direction: string): string {
+  const [left, right] = pair.split('/').map((leg) => leg.trim().toUpperCase());
+  const d = direction.trim().toLowerCase();
+  if (!left || !right) return `${axisKey(pair)}:${d}`;
+  if (left <= right) return `${left}/${right}:${d}`;
+  const flipped = d === 'long' ? 'short' : d === 'short' ? 'long' : d;
+  return `${right}/${left}:${flipped}`;
 }
