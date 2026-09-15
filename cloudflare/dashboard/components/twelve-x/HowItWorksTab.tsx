@@ -6,7 +6,6 @@ import {
   Cpu,
   FileText,
   GitMerge,
-  History,
   Landmark,
   ListOrdered,
   Newspaper,
@@ -105,17 +104,6 @@ const STAGES: Stage[] = [
     read: 'Today leads with the focal #1 idea; the rest stack beneath it, each opening its full detail.',
     tab: 'today',
     tabLabel: 'Today',
-  },
-  {
-    n: 7,
-    id: 'track-record',
-    icon: History,
-    title: 'Keep score',
-    store: 'fx_idea_eval · fx_consensus_eval',
-    what: 'Every idea is scored against successor-clock closes and every consensus read against its 5-day window, with hit-rates reported as Wilson 95% intervals — so small samples show wide uncertainty instead of false precision. Carried boards count raw, superseded desk reads stay in the ledger, and each idea keeps its published levels plotted against the moving fix.',
-    read: 'The Track record tab is the scoreboard: calibration, bank-vs-quant corroboration, and levels-vs-fix per idea.',
-    tab: 'track-record',
-    tabLabel: 'Track record',
   },
 ];
 
