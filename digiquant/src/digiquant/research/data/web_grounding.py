@@ -98,7 +98,8 @@ def call_web_search_tool(
     Domain scoping (``include_domains`` / ``exclude_domains``) and
     ``max_results`` pass straight through to the tool — never folded into the
     query text. Returns ``{"summary", "sources"}`` in the digigraph-compatible
-    shape. Raises ``RuntimeError`` when the service errors or when both the
+    shape, plus ``relaxed_domains: True`` when the allowlist had to be relaxed.
+    Raises ``RuntimeError`` when the service errors or when both the
     scoped search and its unscoped retry yield no rows (#4086).
     Never imports digisearch directly — the call goes over HTTP
     (``POST /v1/orchestrator_invoke``).
@@ -182,8 +183,10 @@ def fetch_web_grounding(
     Tool-only: a requested search must succeed or raise
     :exc:`DashboardWebSearchError` — never ``None``. Domain scoping and the
     result count default to ``search_domains.yaml`` and pass straight through
-    to the ``web_search`` tool. ``model`` is accepted for caller compatibility
-    and ignored: grounding comes from the tool, not a synthesis model.
+    to the ``web_search`` tool. Propagates ``relaxed_domains: True`` when a
+    scoped search had to be relaxed to keep real grounding flowing (#4086).
+    ``model`` is accepted for caller compatibility and ignored: grounding
+    comes from the tool, not a synthesis model.
     """
     cfg = _config()
     domains = (
@@ -220,4 +223,7 @@ def fetch_web_grounding(
         raise DashboardWebSearchError(
             f"web_search tool returned empty summary for segment={segment!r}"
         )
-    return {"summary": summary, "sources": sources, "as_of": as_of}
+    out: dict[str, Any] = {"summary": summary, "sources": sources, "as_of": as_of}
+    if tool_out.get("relaxed_domains"):
+        out["relaxed_domains"] = True
+    return out

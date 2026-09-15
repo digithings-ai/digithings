@@ -382,13 +382,42 @@ def test_scoped_empty_retries_unscoped(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", fake_call)
     out = _real_call_web_search_tool(
-        query="etf flows", include_domains=["reuters.com"], max_results=4
+        query="etf flows",
+        include_domains=["reuters.com"],
+        exclude_domains=["spam.example"],
+        max_results=4,
     )
     assert out["sources"] == ["https://b.com/1"]
     assert out["relaxed_domains"] is True
     assert len(calls) == 2
     assert calls[0]["include_domains"] == ["reuters.com"]
     assert calls[1]["include_domains"] == []
+    assert calls[1]["exclude_domains"] == ["spam.example"]
+    assert calls[1]["max_results"] == 4
+
+
+@pytest.mark.unit
+def test_fetch_web_grounding_propagates_relaxed_domains(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The relaxed-allowlist signal reaches callers; absent when not relaxed."""
+    from digiquant.research.data import web_grounding as mod
+
+    monkeypatch.setattr(
+        mod,
+        "call_web_search_tool",
+        lambda **k: {"summary": "s", "sources": ["https://a.com/1"], "relaxed_domains": True},
+    )
+    relaxed = mod.fetch_web_grounding(segment="macro", run_date="2026-09-15")
+    assert relaxed["relaxed_domains"] is True
+
+    monkeypatch.setattr(
+        mod,
+        "call_web_search_tool",
+        lambda **k: {"summary": "s", "sources": ["https://a.com/1"]},
+    )
+    plain = mod.fetch_web_grounding(segment="macro", run_date="2026-09-15")
+    assert "relaxed_domains" not in plain
 
 
 @pytest.mark.unit
