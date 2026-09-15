@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 from sqlalchemy import create_engine
@@ -9,6 +10,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from digikey.db_migrate import upgrade_jti_issued_table
 from digikey.db_schema import Base
+
+logger = logging.getLogger(__name__)
 
 _engine = None
 _session_factory: sessionmaker[Session] | None = None
@@ -21,6 +24,27 @@ def database_url() -> str:
     if url.startswith("sqlite"):
         return url
     return url
+
+
+def require_durable_store(url: str) -> None:
+    """Refuse/flag an ephemeral key store before it silently loses every key.
+
+    SQLite here is instance-local: a Cloudflare Container disk is ephemeral, so
+    any deploy that replaces the instance wipes issued API keys and JWT
+    revocation state (#4080). Warn by default — a deploy must not become an
+    auth outage on the strength of an env var — and fail closed when the
+    operator sets ``DIGIKEY_REQUIRE_DURABLE_DB=1``.
+    """
+    if not url.startswith("sqlite"):
+        return
+    message = (
+        "DIGIKEY_DATABASE_URL is SQLite (ephemeral storage): issued API keys and "
+        "JWT revocation state are lost whenever the container instance is replaced. "
+        "Set it to a durable Postgres URL in production (#4080)."
+    )
+    if (os.environ.get("DIGIKEY_REQUIRE_DURABLE_DB") or "").strip() == "1":
+        raise RuntimeError(message)
+    logger.warning(message)
 
 
 def get_engine():
@@ -42,6 +66,8 @@ def session_factory() -> sessionmaker[Session]:
 
 
 def init_db() -> None:
+    # Checked before the engine exists so a refused store creates no tables.
+    require_durable_store(database_url())
     engine = get_engine()
     # Upgrade existing tables *before* ``create_all``. ``create_all`` never
     # alters an existing table, and worse, it would recreate an empty

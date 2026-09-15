@@ -54,6 +54,10 @@ R2 binding (`digithings-archive`); browser CORS is allowlisted via the
 - `npx wrangler login`
 - Provider keys for LiteLLM (e.g. `GROQ_API_KEY`)
 - Stable `DIGIKEY_PRIVATE_KEY_PEM` (do **not** use ephemeral keys in prod)
+- A durable Postgres database for digikey's API keys + JWT revocation state
+  (`DIGIKEY_DATABASE_URL`). The SQLite fallback lives on the Container's
+  ephemeral `/data`, so any deploy that replaces the instance wipes every issued
+  key — that is what 401'd the daily digiquant book run (#4080).
 
 ## Deploy
 
@@ -68,6 +72,12 @@ npm install
 npx wrangler secret put DIGIKEY_PRIVATE_KEY_PEM
 npx wrangler secret put DIGIKEY_BFF_TOKEN
 npx wrangler secret put DIGIKEY_ADMIN_TOKEN   # optional
+# Durable key store (#4080) — required in prod, not optional: the SQLite
+# fallback stores keys on ephemeral /data and loses them on instance
+# replacement. Once set, re-issue the digiquant service key, because keys
+# minted into the old SQLite store do not exist in the new database:
+#   see docs/ops/digiquant-digikey-service-key.md
+npx wrangler secret put DIGIKEY_DATABASE_URL
 npx wrangler secret put GROQ_API_KEY
 # optional: OPENROUTER_API_KEY OPENAI_API_KEY LITELLM_PROXY_API_KEY
 # house Cheaper Inference (default when set): CHEAPERINFERENCE_API_KEY

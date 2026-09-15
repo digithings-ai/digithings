@@ -582,7 +582,7 @@ graph TD
 | LangGraph checkpointer | `MemorySaver` (in-process) | Postgres (`DIGI_CHECKPOINTER=postgres`) | Set `CORE_POSTGRES_URI`; install `langgraph-checkpoint-postgres` |
 | digigraph rate limiting | Per-process dict | Redis-backed (`digibase` rate limiter) | Wire `REDIS_URL` to digigraph; implement distributed rate limiter (Phase 2) |
 | digisearch vector store | Chroma local volume | Azure AI Search or Qdrant Cloud | Set `AZURE_SEARCH_*` env vars; Chroma is dev/test only |
-| digikey storage | SQLite default | Postgres (required for multi-replica) | Set `DIGIKEY_DATABASE_URL=postgresql://...` |
+| digikey storage | SQLite default | Postgres (required for multi-replica) | Set `DIGIKEY_DATABASE_URL=postgresql://...`; the SQLite default is instance-local, so a Cloudflare Container deploy that replaces the instance wipes issued keys (#4080) |
 | LiteLLM cache | Local disk | Redis (`type: redis` in litellm.yaml) | Set `REDIS_URL`; use `litellm-cache` profile → K8s Redis StatefulSet |
 | Secrets | `.env` file | K8s Secrets → env injection | Migrate all `*_KEY`, `*_TOKEN`, `*_PASSWORD` vars to K8s Secrets |
 | digibase credential broker | Not shipped | Central K8s service | Phase 1 digibase service: manages Postgres/Redis connection grants per tenant |
