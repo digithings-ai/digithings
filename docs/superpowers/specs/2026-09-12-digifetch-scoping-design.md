@@ -88,7 +88,7 @@ id `gloomberb-cloud`, name "Gloom Cloud", priority 100.
 | `getHolders` | **yes** | index.ts | `digifetch_holders` |
 | `getAnalystResearch` | **yes** | index.ts | `digifetch_analyst_research` |
 | `getCorporateActions` | **yes** | index.ts | `digifetch_corporate_actions` |
-| `getEarningsCalendar` | no (not in the gated list) | index.ts | `digifetch_earnings_calendar` |
+| `getEarningsCalendar` | n/a — not implemented on Cloud | Yahoo provider (`src/sources/yahoo-finance.ts`), routed by `provider-router/supplemental.ts` | `digifetch_earnings_calendar` (Yahoo-backed) |
 | `getExchangeRate` / `getExchangeRateSnapshot` | no | index.ts | `digifetch_exchange_rate` |
 | `search` | no (results capped at 10, `apiClient.searchInstruments(query, 10)`) | index.ts | `digifetch_search` |
 
@@ -117,8 +117,11 @@ Discrepancies vs the paraphrased summary in #3927 that the spec corrects:
    follow-up widening knob — widening needs no client change.
 2. **No credentials is only true for the ungated subset.** SEC filings,
    holders, analyst research, and corporate actions require a signed-up,
-   email-verified Cloud session. Options chains and the earnings calendar are
-   *not* gated (good news for the "replace current sources" question).
+   email-verified Cloud session. Options chains are *not* gated (good news for
+   the "replace current sources" question). The earnings calendar is not a
+   Cloud capability at all — it is served by the Yahoo fallback provider, so
+   its tool is out of scope for the Cloud HTTP client until a Cloud route
+   exists (see §3 table, §5.1, §6).
 3. **Twelve tools, not fourteen.** The issue lists 14 method names but its own
    count test expects 12 rows; the SEC filings family (filings → documents →
    content) is one tool with a `what` discriminator.
@@ -165,7 +168,8 @@ Placement (respects both components' rules):
   env reads (its `ARCHITECTURE.md` "Deliberately NOT extracted" boundary).
 - The Gloomberb client lives in the consumer: a new
   `digiquant/src/digiquant/data/gloomberb/` package (client + Pydantic models +
-  normalizers), mirroring the twelve-x-as-consumer precedent.
+  normalizers) — the consumer owns URLs, parsing, and models, following
+  digifetch's "Deliberately NOT extracted" boundary (as with twelve-x).
 - The 12 tools register in the **existing digiquant MCP server**
   (`digiquant/src/digiquant/mcp_server.py`, FastMCP streamable-http, default
   `127.0.0.1:8767`), following the `digiquant_fetch_coinbase_ohlcv` pattern.
@@ -187,20 +191,26 @@ MCP server pattern wraps errors as `{"error": …}`).
 |------|-------|---------------------------|--------------|------|-------|
 | `digifetch_quote` | `getQuote` | `QuoteInput{symbol: str, exchange: str \| None}` | `QuoteResult{target, quote: Quote \| None, error: DigifetchError \| None}` | anon | Single-symbol; `Quote` carries price, change, currency, provider, `updated_at`, `stale` |
 | `digifetch_quotes_batch` | `getQuotesBatch` | `QuotesBatchInput{symbols: list[str] (1–20), exchange: str \| None}` | `QuotesBatchResult{quotes: list[QuoteResult], partial: bool}` | anon | Per-target error isolation, never all-or-nothing |
-| `digifetch_price_history` | `getPriceHistory` | `PriceHistoryInput{symbol, exchange?, resolution, range}` | `PriceHistoryResult{symbol, resolution, range, points: list[PricePoint], source}` | anon | Resolution × range validated against §5.2 caps; `PricePoint{date, open, high, low, close, volume}` |
+| `digifetch_price_history` | `getPriceHistory` | `PriceHistoryInput{symbol, exchange?, resolution, range}` | `PriceHistoryResult{symbol, resolution, range, points: list[PricePoint], source}` | anon | Resolution × range validated against §5.2 caps; `PricePoint{date, open, high, low, close, volume}` (`open/high/low/volume` optional upstream) |
 | `digifetch_ticker_financials` | `getTickerFinancials` | `TickerFinancialsInput{symbol, exchange?, statement_history?: "annual"\|"quarterly"\|"both"}` | `TickerFinancialsResult{fundamentals: Fundamentals \| None, profile: CompanyProfile \| None, annual_statements: list[FinancialStatement], quarterly_statements: list[FinancialStatement]}` | anon | Mirrors `src/types/financials.ts` lines 475–478 |
-| `digifetch_options_chain` | `getOptionsChain` | `OptionsChainInput{symbol, exchange?, expiration?: date}` | `OptionsChainResult{expiration_dates: list[date], contracts: list[OptionsContract]}` | anon | `OptionsContract{side, contract_symbol, strike, last, bid, ask, volume, open_interest, implied_volatility, expiration}` |
+| `digifetch_options_chain` | `getOptionsChain` | `OptionsChainInput{symbol, exchange?, expiration?: date}` | `OptionsChainResult{expiration_dates: list[date], contracts: list[OptionsContract]}` | anon | `OptionsContract{side, contract_symbol, strike, last, bid, ask, volume, open_interest, implied_volatility, expiration}` (`side` normalizes upstream `calls`/`puts`) |
 | `digifetch_sec_filings` | `getSecFilings` + `getSecFilingDocuments` + `getSecFilingContent` | `SecFilingsInput{symbol, exchange?, count: int = 15 (1–40), what: "filings"\|"documents"\|"content" = "filings", accession_number: str \| None}` | `SecFilingsResult{filings: list[SecFilingItem] \| None, documents: list[SecFilingDocument] \| None, content: SecFilingContent \| None}` | **session** | One tool for the filings family (`what` discriminator); `documents`/`content` require `accession_number`; preserves `accepted_at_raw` (SEC acceptance timestamp, no TZ inference) |
 | `digifetch_holders` | `getHolders` | `HoldersInput{symbol, owner_type: "all"\|"insider"\|"institution" = "all"}` | `HoldersResult{holders: list[Holder], summary: HoldersSummary \| None}` | **session** | `owner_type` replaces the CLI's `insider`/`13f` variants |
 | `digifetch_analyst_research` | `getAnalystResearch` | `AnalystResearchInput{symbol, limit: int = 20}` | `AnalystResearchResult{ratings: list[AnalystRating], recommendation: RecommendationSummary \| None}` | **session** | `AnalystRating{date, firm, action, current, prior, price_target}` |
 | `digifetch_corporate_actions` | `getCorporateActions` | `CorporateActionsInput{symbol, kinds?: list["earnings"\|"dividend"\|"split"]}` | `CorporateActionsResult{actions: list[CorporateAction]}` | **session** | `CorporateAction{kind, date, detail}` |
-| `digifetch_earnings_calendar` | `getEarningsCalendar` | `EarningsCalendarInput{symbols: list[str], horizon_days: int = 90}` | `EarningsCalendarResult{events: list[EarningsEvent]}` | anon | `EarningsEvent{symbol, name, date, timing, eps_estimate, eps_actual, revenue_estimate, revenue_actual}` |
+| `digifetch_earnings_calendar` | Yahoo provider (not Cloud) | `EarningsCalendarInput{symbols: list[str], horizon_days: int = 90}` | `EarningsCalendarResult{events: list[EarningsEvent]}` | anon (Yahoo path) | `EarningsEvent{symbol, name, date, timing, eps_estimate, eps_actual, revenue_estimate, revenue_actual}`; no Cloud endpoint exists (§5.1 exception) |
 | `digifetch_exchange_rate` | `getExchangeRate` / `getExchangeRateSnapshot` | `ExchangeRateInput{from_currency: str, to_currency: str = "USD"}` | `ExchangeRateResult{from_currency, to_currency, rate, as_of}` | anon | Snapshot variant drives `as_of` |
 | `digifetch_search` | `search` | `SearchInput{query: str, limit: int = 10 (1–10)}` | `SearchResult{results: list[InstrumentSearchResult]}` | anon | Provider caps results at 10 — a caller asking for more gets a `limit_clamped` warning field, not more rows |
 
 Names, counts, and the tool-per-method mapping above satisfy the #3927 count
 test (12 rows) while covering all 14 provider method names via the filings
 family and the batch/history variants.
+
+Exception: `digifetch_earnings_calendar` wraps `getEarningsCalendar`, which has
+**no Cloud endpoint** — it is served by the Yahoo fallback provider
+(`yahoo-finance.ts` via `provider-router/supplemental.ts`). It is specified here
+for completeness of the method census, but the Cloud HTTP client does not own
+it until a Cloud route exists.
 
 ### 5.2 Resolution × range caps
 
@@ -215,11 +225,13 @@ on unsupported pairs) so an invalid request never leaves the process:
 | `30m` | not offered | 6M | Keep unoffered until a consumer needs it |
 | `1h` | 3M | 1Y | |
 | `1d` | 5Y (default range `1Y` per request) | 5Y | Default resolution |
-| `1wk` | all-time | 5Y | |
+| `1wk` | all-time | 5Y (Cloud) — all-time falls back to Yahoo | |
 | `1mo` | all-time | ALL | |
 
-The contract matches the acceptance criteria exactly; §3.1 records where Cloud
-can serve more. Widening later is a one-line table edit.
+The contract matches the acceptance criteria exactly; §3 (Validation item 1)
+records the full Cloud table. `1wk` is the one row where the contract is *wider*
+than Cloud (all-time vs 5Y) — that range relies on the Yahoo fallback. Every
+other widening is a one-line table edit.
 
 ### 5.3 Shared envelope, errors, and freshness
 
@@ -244,10 +256,10 @@ and what the digifetch path is for each. From the outbound-host census and
 | Source | Endpoint(s) | Free / auth | digifetch path | Replacement verdict for pipeline |
 |--------|-------------|-------------|----------------|----------------------------------|
 | Gloom Cloud (primary) | `api.gloom.sh/cloud/*` | free tier rate-limited, 15-min delayed; signup for gated methods | Chosen path (c) — direct Python client | **Enrichment only** — delay + rate limits disqualify realtime/live |
-| Yahoo Finance (fallback) | `query1/query2.finance.yahoo.com`, `finance.yahoo.com` | free, unofficial, delayed | Already used directly by digiquant (`data/prices/fetchers.py`) — no change | Same upstream as Cloud; keep direct fetchers |
+| Yahoo Finance (fallback) | `query1/query2.finance.yahoo.com`, `finance.yahoo.com` | free, unofficial, delayed | Already used by digiquant via the `yfinance` library (`data/prices/fetchers.py`) — same underlying endpoints; no change | Same upstream as Cloud; keep direct fetchers |
 | SEC EDGAR | `www.sec.gov`, `data.sec.gov` | free, public | Cloud client (session) or direct EDGAR later via (d) | Enrichment (filings text, holders) |
 | FRED / Treasury | `fred.stlouisfed.org`, `api.fiscaldata.treasury.gov` | free, public | Direct (no Cloud dependency worth it) | Existing digiquant macro ingest already covers this |
-| News wires | Dow Jones/WSJ feeds, BBC, CNBC search, HN, Substack via Cloud aggregator | free via Cloud | `digifetch` news tools (news story via Cloud; gated only for chat) | **Strongest pull** — aggregated headlines + topic/tickers/importance metadata is new capability |
+| News wires | Dow Jones/WSJ feeds, BBC, CNBC search, HN, Substack via Cloud aggregator | free via Cloud | **Deferred** — not in this spec's 12-tool contract; the Cloud news provider is ungated, so a `digifetch_news` tool is a small follow-up addition (§12 item 7) | **Strongest pull** — aggregated headlines + topic/tickers/importance metadata is new capability |
 | NasdaqTrader symbol files | `www.nasdaqtrader.com` | free, public | Deferred (supplemental listing data) | Not needed now |
 | Issuer IR pages (ICE, SSGA), 13F aggregators | various | free | Deferred | Not needed now |
 
@@ -366,6 +378,7 @@ at this spec.
 5. Run `bunx gloomberb api list --json` on a Bun machine; diff against §5 and
    amend this spec's Validation section.
 6. Human sign-off for the new outbound dependency before merge (§9).
+7. **News** — add `digifetch_news` (the Cloud news provider is ungated); deferred from the 12-tool contract above.
 
 ---
 
