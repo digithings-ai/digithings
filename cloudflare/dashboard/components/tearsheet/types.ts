@@ -122,18 +122,6 @@ export interface PerformanceTearsheet {
    */
   contributionSource?: PerformanceContributionSource;
   /**
-   * First plotted date carrying finalized per-position contribution (#4102).
-   * Null when the bars are not the realized series. The chart says so explicitly
-   * instead of starting mid-history without explanation.
-   */
-  contributionStartsOn?: string | null;
-  /**
-   * First date carrying finalized per-position attribution (#4102). When this is
-   * later than the plotted window's first day the chart says so instead of
-   * implying the book contributed nothing before then.
-   */
-  contributionStartsOn?: string | null;
-  /**
    * First date the realized contribution series actually carries a point (#4102).
    * Finalized accounting starts mid-history, so the bars begin here rather than at
    * the plotted window's first date; the chart says so instead of implying the

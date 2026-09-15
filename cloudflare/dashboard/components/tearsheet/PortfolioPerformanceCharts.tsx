@@ -33,10 +33,11 @@ export function PortfolioContributionChart({
   );
   const sourceNote = source ? (CONTRIBUTION_SOURCE_NOTES[source] ?? null) : null;
   // The realized series is final-only, so the bars genuinely begin mid-history
-  // (#4102). Say when, instead of letting the axis start unexplained.
+  // (#4102). Say when — but only once there is a chart to annotate; the empty
+  // state below already explains why nothing is drawn yet.
   const startNote =
-    startsOn && points.length > 0 && startsOn > points[0].t
-      ? `Finalized accounting starts ${startsOn} — earlier days carry no realized attribution.`
+    startsOn && points.length >= 2 && startsOn > points[0].t
+      ? `Finalized per-position attribution starts ${startsOn} — earlier days carry no realized attribution.`
       : null;
 
   return (

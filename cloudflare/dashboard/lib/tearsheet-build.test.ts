@@ -812,6 +812,7 @@ describe('buildPerformanceTearsheet', () => {
   it('drops an unanchored realized contribution instead of poisoning later bars', () => {
     const result = buildPerformanceTearsheet({
       nav: [
+        { date: '2026-08-24', nav: 101.327006, cash_pct: 15, invested_pct: 85 },
         { date: '2026-08-25', nav: 101.769942, cash_pct: 14.86, invested_pct: 85.14 },
         { date: '2026-08-26', nav: 102.5, cash_pct: 14.9, invested_pct: 85.1 },
         { date: '2026-08-27', nav: 102.477988, cash_pct: 14.9, invested_pct: 85.1 },
@@ -831,11 +832,12 @@ describe('buildPerformanceTearsheet', () => {
     });
 
     expect(result.contributionSource).toBe('realized');
+    // Without the limit the poisoned day would carry 1723.62303 into the run.
     expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([
-      0, 0.1, -0.1,
+      0, 0, 0.1, -0.1,
     ]);
     // The dropped ticker never registers, so it cannot render as a flat zero.
-    expect(Object.keys(result.contributionSeries[1].contributions)).toEqual(['AAA']);
+    expect(Object.keys(result.contributionSeries[2].contributions)).toEqual(['AAA']);
     expect(result.contributionStartsOn).toBe('2026-08-26');
   });
 
@@ -844,17 +846,17 @@ describe('buildPerformanceTearsheet', () => {
       nav: [
         { date: '2026-08-24', nav: 101.327006, cash_pct: 15, invested_pct: 85 },
         { date: '2026-08-25', nav: 101.769942, cash_pct: 14.86, invested_pct: 85.14 },
-        { date: '2026-08-27', nav: 102.477988, cash_pct: 14.9, invested_pct: 85.1 },
+        { date: '2026-08-26', nav: 102.477988, cash_pct: 14.9, invested_pct: 85.1 },
       ],
-      positions: [position('2026-08-27', 'AAA', 100)],
+      positions: [position('2026-08-26', 'AAA', 100)],
       metrics: null,
       attribution: [],
       events: [],
-      realizedAttribution: [realized('2026-08-27', 'AAA', 0.4)],
+      realizedAttribution: [realized('2026-08-26', 'AAA', 0.4)],
     });
 
     expect(result.contributionSource).toBe('realized');
-    expect(result.contributionStartsOn).toBe('2026-08-27');
+    expect(result.contributionStartsOn).toBe('2026-08-26');
     expect(result.contributionSeries[0].t).toBe('2026-08-24');
   });
 

@@ -564,11 +564,13 @@ function buildPositionContributionSeries(
 }
 
 /**
- * A single ticker cannot contribute more than 100 percentage points in one day
- * for an unlevered base-100 book. Larger rows mean the period's equity base could
- * not anchor its P&L — the 2026-08-25 tip opened on $0.10 of cash and published
- * ±1,723 pp as a final row (#4102) — so they are treated as missing instead of
- * being accumulated into every later day's bar.
+ * Upper bound on a believable single-day per-ticker contribution, in percentage
+ * points (#4102). An unlevered base-100 book can in principle exceed 100 pp on a
+ * >100% single-day move, so this is a sanity bound rather than an invariant:
+ * rows beyond it mean the period's equity base could not anchor its P&L — the
+ * 2026-08-25 tip opened on $0.10 of cash and published ±1,723 pp as a final row —
+ * so they are treated as missing instead of being accumulated into every later
+ * day's bar.
  */
 const REALIZED_DAILY_CONTRIBUTION_LIMIT_PP = 100;
 
