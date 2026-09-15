@@ -137,9 +137,11 @@ new_sqlite_classes = ["DigiQuantMcpContainer"]
 #   DIGIKEY_DATABASE_URL      # durable Postgres/Supabase URL for API keys +
 #                             # revocation state. Without it digikey falls back to
 #                             # SQLite on the instance's ephemeral /data, so every
-#                             # issued key dies with the instance (#4080). Set
-#                             # DIGIKEY_REQUIRE_DURABLE_DB=1 to make a missing
-#                             # value fail closed instead of warning.
+#                             # issued key dies with the instance (#4080). A bare
+#                             # postgresql:// URL is accepted (routed to psycopg 3).
+#                             # Set DIGIKEY_REQUIRE_DURABLE_DB=1 as a secret to
+#                             # override the committed var default and fail closed
+#                             # instead of warning.
 #   GROQ_API_KEY / OPENROUTER_API_KEY / OPENAI_API_KEY  (as needed by LiteLLM)
 #   CHEAPERINFERENCE_API_KEY  # house default digillm upstream when set
 #   CHEAPERINFERENCE_API_BASE # optional; default https://api.cheaperinference.com/v1
@@ -225,7 +227,8 @@ DIGIVAULT_ROOT = "/data/vault"
 # key and the JWT revocation blocklist (#4080). Set it with
 # `npx wrangler secret put DIGIKEY_DATABASE_URL` (see the secrets list above).
 # Unset falls back to the entrypoint's SQLite default, which digikey warns
-# about at startup.
+# about at startup. Committed default only: a same-named secret overrides this
+# to fail closed once the durable URL above is verified.
 DIGIKEY_REQUIRE_DURABLE_DB = "0"
 DIGISEARCH_INDEX = "digithings_docs"
 # Defense-in-depth corpus map (headers from digichat still win).
