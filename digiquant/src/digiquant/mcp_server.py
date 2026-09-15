@@ -543,7 +543,7 @@ def _require_mcp() -> type:
 
 #: Tools safe for the dashboard-chat surface: latest/historical runs, published
 #: research reads, prices/technicals, macro, the house book, read-only gate
-#: evaluations, the coinmetrics catalog discovery tool, and the 20 digifetch x
+#: evaluations, the coinmetrics catalog discovery tool, and the 27 digifetch x
 #: Gloomberb enrichment reads (#4069, #4110, spec §12.3 scope=read). Everything
 #: else (backtest / optimize / pipeline / export / fetches / fits / tearsheets /
 #: policy-replay runs) is compute or mutate and stays on ``scope="full"`` only.
@@ -579,6 +579,13 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digifetch_research_search",
         "digifetch_congress_trades",
         "digifetch_transcripts",
+        "digifetch_statements",
+        "digifetch_ticker_tweets",
+        "digifetch_tweet_search",
+        "digifetch_venues",
+        "digifetch_screener",
+        "digifetch_13f_funds",
+        "digifetch_13f_holdings",
     }
 )
 
@@ -916,15 +923,15 @@ def create_mcp_server(
         return json.dumps(out, indent=2, default=str)
 
     # ── digifetch x Gloomberb market-data reads (#4069, #4110) ──────────────
-    # 20 enrichment tools over api.gloom.sh (plus a Yahoo-backed earnings
+    # 27 enrichment tools over api.gloom.sh (plus a Yahoo-backed earnings
     # calendar). Default-ON behind GLOOMBERB_ENABLED; anonymous unless
     # GLOOMBERB_SESSION_COOKIE is set for holders / analyst / corporate-actions
-    # / research-search / transcripts (transcripts additionally need a Pro
-    # plan). Read scope only. Cloud payloads carry §7 attribution ("Sourced
-    # from Gloomberb" + delay notice) and a term.gloom.sh deep link where a
-    # single listing is addressed; the Yahoo earnings tool is explicitly NOT
-    # attributed to Gloomberb. Never a pipeline primary (15-minute delay /
-    # caps).
+    # / research-search / transcripts / statements / tweets (transcripts and
+    # screener additionally need a Pro plan). Read scope only. Cloud payloads
+    # carry §7 attribution ("Sourced from Gloomberb" + delay notice) and a
+    # term.gloom.sh deep link where a single listing is addressed; the Yahoo
+    # earnings tool is explicitly NOT attributed to Gloomberb. Never a pipeline
+    # primary (15-minute delay / caps).
 
     @_maybe_tool("digifetch_quote")
     def digifetch_quote(symbol: str, exchange: str | None = None) -> str:
@@ -1271,6 +1278,183 @@ def create_mcp_server(
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_statements")
+    def digifetch_statements(
+        symbol: str, period: str = "annual", exchange: str | None = None
+    ) -> str:
+        """Annual/quarterly financial statement rows (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope is a typed
+        `auth_required` and no request is made. `period` selects annual |
+        quarterly | both. Rows are sparse line items: `date`/`currency` plus
+        common typed fields, everything else preserved as extras. Enrichment
+        only: the platform's data is delayed and is never a pipeline primary.
+        """
+        try:
+            envelope = _build_gloomberb_client().statements(
+                {"symbol": symbol, "period": period, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_ticker_tweets")
+    def digifetch_ticker_tweets(
+        ticker: str,
+        limit: int = 50,
+        hours: int | None = None,
+        include_replies: bool = False,
+    ) -> str:
+        """Recent X/Twitter posts mentioning one ticker (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. The upstream echoes `limit`/`hours`
+        but applies neither (it answers its cached window), so the client
+        drops rows older than `now - hours` when `hours` is given, slices to
+        `limit`, and reports `total_available`/`truncated`. Social posts are
+        delayed and best-effort - not a real-time feed. Carries a term.gloom.sh
+        deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().ticker_tweets(
+                {
+                    "ticker": ticker,
+                    "limit": limit,
+                    "hours": hours,
+                    "include_replies": include_replies,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_tweet_search")
+    def digifetch_tweet_search(
+        query: str, query_type: str = "Latest", limit: int = 50, hours: int | None = None
+    ) -> str:
+        """Search X/Twitter posts by query (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. `query_type` is Latest | Top; the
+        upstream applies neither `limit` nor `hours`, so the client drops rows
+        older than `now - hours` when `hours` is given, slices to `limit`, and
+        reports `total_available`/`truncated`. Social search is delayed and
+        best-effort - pair it with a live web search when recency matters.
+        """
+        try:
+            envelope = _build_gloomberb_client().tweet_search(
+                {"query": query, "query_type": query_type, "limit": limit, "hours": hours}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_venues")
+    def digifetch_venues() -> str:
+        """Exchange venue metadata (Gloomberb Cloud; anonymous).
+
+        No parameters. Rows carry mic/name/title/country/timezone and session
+        clock fields (isOpen, timeToOpenSeconds, ...). Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().venues()
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_screener")
+    def digifetch_screener(category: str, count: int = 25, mode: str = "cache-first") -> str:
+        """Market screener for gainers/losers/most-active (Gloomberb Cloud; **requires Pro**).
+
+        Requires GLOOMBERB_SESSION_COOKIE **and** a Gloomberb Pro plan. A free
+        session answers HTTP 200 `status=unsupported` + `reasonCode=PRO_REQUIRED`
+        (or a 402 "Pro plan required" body), both mapped to a typed
+        `auth_required` - never `not_found` and never an empty success.
+        `count` is 1-50; `mode` is cache-first | refresh. Prices are delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().screener(
+                {"category": category, "count": count, "mode": mode}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_13f_funds")
+    def digifetch_13f_funds(
+        what: str,
+        query: str | None = None,
+        quarter: str | None = None,
+        tickers: list[str] | None = None,
+        cusip: str | None = None,
+        period_of_report: str | None = None,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> str:
+        """13F fund lookup: search / top funds / ticker map / CUSIP holders (anonymous).
+
+        `what` selects the route: `search` (query -> `name`), `top` (quarter in
+        the live `2026Q2` form), `tickers` (list -> `tickers=A,B`), `holders`
+        (`cusip` + `period_of_report`). Live-verified for search/top/tickers;
+        the holders route currently answers an upstream 400 for every period
+        format probed. Returns SEC filing data, delayed/cached - cross-check
+        against EDGAR for decisions.
+        """
+        try:
+            envelope = _build_gloomberb_client().thirteen_f_funds(
+                {
+                    "what": what,
+                    "query": query,
+                    "quarter": quarter,
+                    "tickers": tickers or [],
+                    "cusip": cusip,
+                    "period_of_report": period_of_report,
+                    "limit": limit,
+                    "offset": offset,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_13f_holdings")
+    def digifetch_13f_holdings(
+        what: str,
+        cik: str | None = None,
+        accession_number: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> str:
+        """13F filings / fund forms / one form's holdings (Gloomberb Cloud; anonymous).
+
+        `what` selects the route: `filings` (from_date/to_date, ISO
+        YYYY-MM-DD), `forms` (cik), `form` (cik + accession_number). `cik` is
+        zero-padded to the SEC's 10-digit form and `accession_number` is
+        normalized to the dashed form client-side; malformed dates/accessions
+        are typed `invalid_input` with no request. An upstream 13F rejection
+        proxied as a 5xx (`Forms13F 4xx` body) maps to non-retryable
+        `invalid_input` without opening the circuit breaker. Holding rows map
+        to issuer/shares/share_type plus the voting-authority columns; `form`
+        computes `has_more` from a full page (bare array, no continuation
+        token; the upstream caps one form at 20,000 rows — MAX_FORM_ROWS).
+        SEC filing data is cached/delayed - cross-check against EDGAR.
+        """
+        try:
+            envelope = _build_gloomberb_client().thirteen_f_holdings(
+                {
+                    "what": what,
+                    "cik": cik,
+                    "accession_number": accession_number,
+                    "from_date": from_date,
+                    "to_date": to_date,
+                    "limit": limit,
+                    "offset": offset,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digiquant_fit_btc_power_law")
     def digiquant_fit_btc_power_law(

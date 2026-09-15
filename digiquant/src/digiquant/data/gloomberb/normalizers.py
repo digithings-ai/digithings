@@ -44,9 +44,15 @@ from .models import (
     EconSeriesObservation,
     EconSeriesResult,
     ExchangeRateResult,
+    Filing13F,
     FinancialStatement,
+    Fund13F,
     Fundamentals,
+    FundHolders13F,
+    Funds13FResult,
     Holder,
+    Holding13F,
+    Holdings13FResult,
     InstrumentSearchResult,
     NewsItem,
     OptionContract,
@@ -57,11 +63,21 @@ from .models import (
     ResearchHit,
     ResearchSearchPagination,
     ResearchSearchResult,
+    ScreenerResult,
+    ScreenerRow,
     SecFiling,
     SecFilingDocument,
     StatementHistory,
+    StatementRow,
+    StatementsResult,
     TickerFinancials,
+    TickerInfo13F,
+    TopFund13F,
     Transcript,
+    Tweet,
+    TweetsResult,
+    Venue,
+    VenuesResult,
     YieldCurvePoint,
 )
 
@@ -107,6 +123,13 @@ __all__ = [
     "normalize_research_search",
     "normalize_congress_trades",
     "normalize_transcripts",
+    # coverage expansion (#4110 phase 2)
+    "normalize_statements",
+    "normalize_tweets",
+    "normalize_venues",
+    "normalize_screener",
+    "normalize_funds_13f",
+    "normalize_holdings_13f",
 ]
 
 # ---------------------------------------------------------------------------
@@ -975,3 +998,168 @@ def normalize_transcripts(raw: Any) -> list[Transcript]:
     if isinstance(raw, Mapping):
         raw = raw.get("calls") or raw.get("transcripts")
     return [Transcript.model_validate(dict(entry)) for entry in _rows(raw, "calls")]
+
+
+# ---------------------------------------------------------------------------
+# Coverage-expansion mappers (#4110 phase 2)
+# ---------------------------------------------------------------------------
+
+
+def _str_or_none(value: Any) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _int_or_none(value: Any) -> int | None:
+    number = finite_number(value)
+    return int(number) if number is not None else None
+
+
+def normalize_statements(raw: Mapping[str, Any]) -> StatementsResult:
+    """Map the ``/market/statements`` payload (annual + quarterly rows)."""
+    return StatementsResult(
+        annual_statements=[
+            StatementRow.model_validate(dict(entry))
+            for entry in _rows(raw.get("annualStatements"), "annualStatements")
+        ],
+        quarterly_statements=[
+            StatementRow.model_validate(dict(entry))
+            for entry in _rows(raw.get("quarterlyStatements"), "quarterlyStatements")
+        ],
+    )
+
+
+def _tweet_created_at(tweet: Tweet) -> datetime | None:
+    """Aware UTC ``createdAt`` for a tweet row, or None when unparseable."""
+    if not tweet.created_at:
+        return None
+    try:
+        parsed = datetime.fromisoformat(tweet.created_at.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def normalize_tweets(
+    raw: Mapping[str, Any],
+    limit: int,
+    *,
+    min_created_at: datetime | None = None,
+) -> TweetsResult:
+    """Map a tweets payload, drop rows older than *min_created_at*, slice to *limit*.
+
+    The upstream echoes ``limit``/``hours`` without applying either
+    (live-verified: 375 rows for limit=1; ~394 rows spanning ~13 days for
+    hours=1), so the client does both: the hours window is applied first (an
+    unparseable ``createdAt`` is dropped while a window is active, since it
+    cannot be verified), then the remainder is sliced to ``limit``.
+    ``total_available`` reports the upstream count before either reduction and
+    ``truncated`` says whether either reduction dropped rows.
+    """
+    tweets = [Tweet.model_validate(dict(entry)) for entry in _rows(raw.get("tweets"), "tweets")]
+    total_available = len(tweets)
+    if min_created_at is not None:
+        tweets = [
+            tweet
+            for tweet in tweets
+            if (created := _tweet_created_at(tweet)) is not None and created >= min_created_at
+        ]
+    sliced = tweets[:limit]
+    return TweetsResult(
+        query=_str_or_none(raw.get("query")) or "",
+        query_type=_str_or_none(raw.get("queryType")),
+        since=_str_or_none(raw.get("since")),
+        until=_str_or_none(raw.get("until")),
+        as_of=_str_or_none(raw.get("asOf")),
+        cached=raw.get("cached") if isinstance(raw.get("cached"), bool) else None,
+        hours=_int_or_none(raw.get("hours")),
+        ticker=_str_or_none(raw.get("ticker")),
+        cashtag=_str_or_none(raw.get("cashtag")),
+        include_replies=raw.get("includeReplies")
+        if isinstance(raw.get("includeReplies"), bool)
+        else None,
+        tweets=sliced,
+        total_available=total_available,
+        truncated=len(sliced) < total_available,
+    )
+
+
+def normalize_venues(raw: Mapping[str, Any]) -> VenuesResult:
+    """Map the ``/market/venues`` payload (137 venues, live-verified)."""
+    return VenuesResult(
+        provider_id=_str_or_none(raw.get("providerId")),
+        checked_at=_int_or_none(raw.get("checkedAt")),
+        refresh_at=_int_or_none(raw.get("refreshAt")),
+        venues=[Venue.model_validate(dict(entry)) for entry in _rows(raw.get("venues"), "venues")],
+    )
+
+
+def normalize_screener(raw: Any, category: str) -> ScreenerResult:
+    """Map a screener payload.
+
+    Shape source: the TS plugin's ``CloudMarketScreenerItem`` envelope
+    (``providerId``/``category``/``asOf``/``stale``/``items``); the Pro success
+    payload is unobservable from a free session (PRO_REQUIRED), so a bare row
+    array and the common wrapper keys (``items``/``results``/``rows``/category)
+    are all accepted.
+    """
+    source = raw if isinstance(raw, Mapping) else {}
+    rows = next(
+        (
+            source[key]
+            for key in ("items", "results", "rows", category)
+            if isinstance(source.get(key), list)
+        ),
+        raw if not isinstance(raw, Mapping) else None,
+    )
+    return ScreenerResult(
+        provider_id=_str_or_none(source.get("providerId")),
+        category=_str_or_none(source.get("category")) or category,
+        as_of=_str_or_none(source.get("asOf")),
+        stale=source.get("stale") if isinstance(source.get("stale"), bool) else None,
+        rows=[ScreenerRow.model_validate(dict(entry)) for entry in _rows(rows, "rows")],
+    )
+
+
+def normalize_funds_13f(raw: Any, what: str) -> Funds13FResult:
+    """Map a 13F funds payload by ``what`` (search/top/tickers/holders)."""
+    if what == "search":
+        return Funds13FResult(
+            what="search",
+            funds=[Fund13F.model_validate(dict(entry)) for entry in _rows(raw, "funds")],
+        )
+    if what == "top":
+        return Funds13FResult(
+            what="top",
+            top_funds=[TopFund13F.model_validate(dict(entry)) for entry in _rows(raw, "topfunds")],
+        )
+    if what == "tickers":
+        return Funds13FResult(
+            what="tickers",
+            tickers=[TickerInfo13F.model_validate(dict(entry)) for entry in _rows(raw, "tickers")],
+        )
+    holders = raw if isinstance(raw, Mapping) else {}
+    return Funds13FResult(
+        what="holders",
+        holders=FundHolders13F.model_validate(dict(holders)),
+    )
+
+
+def normalize_holdings_13f(raw: Any, what: str, limit: int) -> Holdings13FResult:
+    """Map a 13F filings/forms/form payload by ``what``.
+
+    ``has_more`` is computed from the row count (``len(rows) >= limit``): the
+    upstream answers a bare array with no continuation token (live-verified),
+    so an exactly-full page is the only signal that more rows may exist.
+    Note the upstream TS plugin caps one 13F form at 20,000 rows
+    (``MAX_FORM_ROWS``), so a form near the cap is truncated upstream; this
+    client does not change that and only reports ``has_more``.
+    """
+    if what == "form":
+        holdings = [Holding13F.model_validate(dict(entry)) for entry in _rows(raw, "holdings")]
+        return Holdings13FResult(what="form", holdings=holdings, has_more=len(holdings) >= limit)
+    filings = [Filing13F.model_validate(dict(entry)) for entry in _rows(raw, "filings")]
+    if what == "forms":
+        return Holdings13FResult(what="forms", forms=filings)
+    return Holdings13FResult(what="filings", filings=filings)

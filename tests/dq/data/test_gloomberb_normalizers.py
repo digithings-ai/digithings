@@ -8,6 +8,7 @@ union. No network.
 from __future__ import annotations
 
 import math
+from datetime import datetime, timezone
 
 import pytest
 
@@ -29,7 +30,9 @@ from digiquant.data.gloomberb.normalizers import (  # noqa: E402
     normalize_econ_calendar,
     normalize_econ_series,
     normalize_exchange_rate,
+    normalize_funds_13f,
     normalize_holders,
+    normalize_holdings_13f,
     normalize_news_list,
     normalize_options_chain,
     normalize_price_value_by_divisor,
@@ -37,10 +40,14 @@ from digiquant.data.gloomberb.normalizers import (  # noqa: E402
     normalize_quotes_batch_items,
     normalize_research_hits,
     normalize_research_search,
+    normalize_screener,
     normalize_search_results,
     normalize_sec_documents,
     normalize_sec_filings,
+    normalize_statements,
     normalize_transcripts,
+    normalize_tweets,
+    normalize_venues,
     normalize_yield_curve,
     parse_cloud_price_point_date,
     resolve_currency_unit,
@@ -639,3 +646,202 @@ def test_normalize_congress_trades_and_transcripts_accept_both_shapes() -> None:
     assert bare[0].company_name == "Apple Inc."
     assert bare[0].call_at == "2026-08-01T16:30:00Z"
     assert bare[0].webcast_url == "https://example.test/call/t1"
+
+
+# ── coverage-expansion mappers (#4110 phase 2) ──────────────────────────────
+
+
+def test_normalize_statements_maps_annual_and_quarterly_rows() -> None:
+    result = normalize_statements(
+        {
+            "annualStatements": [
+                {"date": "2021-09-30", "currency": "USD", "purchaseOfBusiness": -33_000_000}
+            ],
+            "quarterlyStatements": [
+                {"date": "2025-03-31", "currency": "USD", "shortTermDebtPayments": 1}
+            ],
+        }
+    )
+    assert result.annual_statements[0].purchase_of_business == pytest.approx(-33_000_000.0)
+    assert result.quarterly_statements[0].date == "2025-03-31"
+    # The long tail is preserved as extras.
+    assert result.quarterly_statements[0].model_extra["shortTermDebtPayments"] == 1
+
+
+def test_normalize_tweets_slices_and_flags_truncation() -> None:
+    result = normalize_tweets(
+        {
+            "query": "$AAPL -filter:replies",
+            "queryType": "Latest",
+            "hours": 336,
+            "cached": False,
+            "asOf": "2026-09-15T17:49:13.531Z",
+            "ticker": "AAPL",
+            "cashtag": "$AAPL",
+            "includeReplies": False,
+            "tweets": [
+                {
+                    "id": str(i),
+                    "url": f"https://x.test/{i}",
+                    "text": f"t{i}",
+                    "author": {"id": "a", "name": "N", "userName": "u"},
+                    "metrics": {"likes": i, "views": i * 10},
+                }
+                for i in range(5)
+            ],
+        },
+        limit=2,
+    )
+    assert result.query_type == "Latest"
+    assert result.hours == 336
+    assert result.cached is False
+    assert result.include_replies is False
+    assert len(result.tweets) == 2
+    assert result.total_available == 5
+    assert result.truncated is True
+    assert result.tweets[0].author is not None and result.tweets[0].author.user_name == "u"
+    assert result.tweets[1].metrics is not None and result.tweets[1].metrics.likes == 1
+
+
+def test_normalize_tweets_without_truncation() -> None:
+    result = normalize_tweets({"query": "q", "tweets": [{"id": "1"}]}, limit=50)
+    assert result.total_available == 1
+    assert result.truncated is False
+    assert result.tweets[0].text == ""
+
+
+def test_normalize_tweets_applies_the_hours_window() -> None:
+    result = normalize_tweets(
+        {
+            "query": "q",
+            "tweets": [
+                {"id": "recent", "createdAt": "2026-09-15T16:00:00.000Z"},
+                {"id": "old", "createdAt": "2026-09-01T00:00:00.000Z"},
+                {"id": "unparseable", "createdAt": "not-a-date"},
+                {"id": "missing"},
+            ],
+        },
+        limit=50,
+        min_created_at=datetime(2026, 9, 15, 0, 0, tzinfo=timezone.utc),
+    )
+    assert [tweet.id for tweet in result.tweets] == ["recent"]
+    assert result.total_available == 4
+    assert result.truncated is True
+
+
+def test_normalize_venues_maps_the_list_and_clocks() -> None:
+    result = normalize_venues(
+        {
+            "providerId": "gloomberb-cloud",
+            "checkedAt": 1789494522591,
+            "refreshAt": 1789494582591,
+            "venues": [{"mic": "XADS", "name": "ADX", "timeToOpenSeconds": 43816}],
+        }
+    )
+    assert result.provider_id == "gloomberb-cloud"
+    assert result.checked_at == 1789494522591
+    assert result.venues[0].name == "ADX"
+    assert result.venues[0].time_to_open_seconds == 43816
+
+
+def test_normalize_screener_accepts_list_and_wrapped_shapes() -> None:
+    rows = [{"symbol": "AAPL", "price": 200.0}]
+    bare = normalize_screener(rows, "gainers")
+    wrapped = normalize_screener({"results": rows}, "gainers")
+    assert bare.rows == wrapped.rows
+    assert bare.category == "gainers"
+    assert bare.rows[0].symbol == "AAPL"
+    assert normalize_screener(None, "losers").rows == []
+
+
+def test_normalize_screener_maps_the_ts_payload_envelope() -> None:
+    result = normalize_screener(
+        {
+            "providerId": "gloomberb-cloud",
+            "category": "gainers",
+            "asOf": "2026-09-15T00:00:00Z",
+            "stale": False,
+            "items": [
+                {
+                    "symbol": "AAPL",
+                    "rank": 1,
+                    "tradeCount": 1000,
+                    "high52w": 260.0,
+                    "low52w": 160.0,
+                    "dayHigh": 205.0,
+                    "dayLow": 199.0,
+                    "lastUpdated": 1,
+                    "dataSource": "delayed",
+                }
+            ],
+        },
+        "gainers",
+    )
+    assert result.provider_id == "gloomberb-cloud"
+    assert result.category == "gainers"
+    assert result.as_of == "2026-09-15T00:00:00Z"
+    assert result.stale is False
+    row = result.rows[0]
+    assert row.rank == 1
+    assert row.trade_count == 1000
+    assert row.high52w == pytest.approx(260.0)
+    assert row.low52w == pytest.approx(160.0)
+    assert row.day_high == pytest.approx(205.0)
+    assert row.day_low == pytest.approx(199.0)
+    assert row.data_source == "delayed"
+
+
+def test_normalize_funds_13f_maps_each_what() -> None:
+    funds = normalize_funds_13f([{"name": "BERKSHIRE", "CIK": "0000949012"}], "search")
+    assert funds.what == "search"
+    assert funds.funds is not None and funds.funds[0].cik == "0000949012"
+    top = normalize_funds_13f(
+        [{"cik": "0001907544", "name": "Magma", "period_of_report": "2026-06-30", "pnl": 624.41}],
+        "top",
+    )
+    assert top.top_funds is not None and top.top_funds[0].period_of_report == "2026-06-30"
+    tickers = normalize_funds_13f(
+        [{"cusip": "037833100", "ticker": "AAPL", "company_name": "Apple"}], "tickers"
+    )
+    assert tickers.tickers is not None and tickers.tickers[0].company_name == "Apple"
+    holders = normalize_funds_13f(
+        {"cusip": "037833100", "periodOfReport": "2026-06-30", "ciks": ["1"]}, "holders"
+    )
+    assert holders.holders is not None
+    assert holders.holders.period_of_report == "2026-06-30"
+    assert holders.holders.ciks == ["1"]
+
+
+def test_normalize_holdings_13f_maps_filings_and_forms() -> None:
+    rows = [{"accession_number": "a1", "cik": "0001022837", "table_value_total": 5}]
+    filings = normalize_holdings_13f(rows, "filings", 50)
+    assert filings.what == "filings"
+    assert filings.filings is not None and filings.filings[0].table_value_total == pytest.approx(
+        5.0
+    )
+    forms = normalize_holdings_13f(rows, "forms", 50)
+    assert forms.what == "forms"
+    assert forms.forms is not None and forms.forms[0].accession_number == "a1"
+
+
+def test_normalize_holdings_13f_form_maps_aliases_and_computes_has_more() -> None:
+    rows = [
+        {
+            "accession_number": "a1",
+            "name_of_issuer": "ALLY FINL INC",
+            "title_of_class": "COM",
+            "ssh_prnamt": 12_561_737,
+            "ssh_prnamt_type": "SH",
+            "voting_authority_sole": 12_561_737,
+        }
+    ]
+    result = normalize_holdings_13f(rows, "form", 1)
+    assert result.what == "form"
+    assert result.has_more is True
+    holding = result.holdings[0]  # type: ignore[index]
+    assert holding.issuer == "ALLY FINL INC"
+    assert holding.title_of_class == "COM"
+    assert holding.shares == pytest.approx(12_561_737.0)
+    assert holding.share_type == "SH"
+    assert holding.voting_authority_sole == pytest.approx(12_561_737.0)
+    assert normalize_holdings_13f(rows, "form", 50).has_more is False

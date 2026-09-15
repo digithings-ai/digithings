@@ -29,7 +29,14 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Annotated, Any, Generic, Literal, TypeVar  # score:allow untyped any — wire JSON
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 __all__ = [
@@ -66,6 +73,14 @@ __all__ = [
     "ResearchSearchInput",
     "CongressTradesInput",
     "TranscriptsInput",
+    # coverage expansion (#4110 phase 2)
+    "StatementsInput",
+    "TickerTweetsInput",
+    "TweetSearchInput",
+    "VenuesInput",
+    "ScreenerInput",
+    "ThirteenFFundsInput",
+    "ThirteenFHoldingsInput",
     # wire/output payload models
     "Quote",
     "QuoteBatchItem",
@@ -121,6 +136,25 @@ __all__ = [
     "CongressTradesResult",
     "Transcript",
     "TranscriptsResult",
+    # coverage expansion (#4110 phase 2)
+    "StatementRow",
+    "StatementsResult",
+    "TweetAuthor",
+    "TweetMetrics",
+    "Tweet",
+    "TweetsResult",
+    "Venue",
+    "VenuesResult",
+    "ScreenerRow",
+    "ScreenerResult",
+    "Fund13F",
+    "TopFund13F",
+    "TickerInfo13F",
+    "FundHolders13F",
+    "Funds13FResult",
+    "Filing13F",
+    "Holding13F",
+    "Holdings13FResult",
     # concrete envelopes
     "QuoteEnvelope",
     "QuotesBatchEnvelope",
@@ -142,6 +176,12 @@ __all__ = [
     "ResearchSearchEnvelope",
     "CongressTradesEnvelope",
     "TranscriptsEnvelope",
+    "StatementsEnvelope",
+    "TweetsEnvelope",
+    "VenuesEnvelope",
+    "ScreenerEnvelope",
+    "Funds13FEnvelope",
+    "Holdings13FEnvelope",
 ]
 
 SOURCE: Literal["gloomberb"] = "gloomberb"
@@ -460,6 +500,155 @@ class CongressTradesInput(_InputModel):
 class TranscriptsInput(_InputModel):
     ticker: Symbol
     limit: int = Field(default=20, ge=1, le=100)
+
+
+# ---------------------------------------------------------------------------
+# Coverage-expansion inputs (#4110 phase 2)
+# ---------------------------------------------------------------------------
+
+
+class StatementsInput(_InputModel):
+    symbol: Symbol
+    period: Literal["annual", "quarterly", "both"] = "annual"
+    exchange: str | None = None
+
+
+class TickerTweetsInput(_InputModel):
+    ticker: Symbol
+    # The upstream answers its cached window and echoes `limit` without
+    # shrinking the list (live-verified); the client slices to this bound and
+    # flags `truncated`.
+    limit: int = Field(default=50, ge=1, le=200)
+    hours: int | None = Field(default=None, ge=1, le=720)
+    include_replies: bool = False
+
+
+class TweetSearchInput(_InputModel):
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    query_type: Literal["Latest", "Top"] = "Latest"
+    limit: int = Field(default=50, ge=1, le=200)
+    hours: int | None = Field(default=None, ge=1, le=720)
+
+
+class VenuesInput(_InputModel):
+    """The Cloud venues route takes no parameters."""
+
+
+class ScreenerInput(_InputModel):
+    category: Literal["gainers", "losers", "most-active"]
+    count: int = Field(default=25, ge=1, le=50)
+    mode: Literal["cache-first", "refresh"] = "cache-first"
+
+
+Cusip = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=12)]
+# ISO date only; the upstream answers 500/400 for malformed values such as
+# 2026-6-1, so the contract rejects them before any request.
+DateIso = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{4}-\d{2}-\d{2}$")]
+# Live-verified 13F quarter token: 2026Q2 (a dashed 2026-Q2 is rejected upstream).
+Quarter13F = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=6,
+        max_length=6,
+        pattern=r"^\d{4}[Qq][1-4]$",
+    ),
+]
+
+
+class ThirteenFFundsInput(_InputModel):
+    """The 13F funds surface, discriminated by ``what``.
+
+    search -> ``name`` (query); top -> ``quarter``; tickers -> ``tickers``;
+    holders -> ``cusip`` + ``period_of_report``. The route family is anonymous
+    (live-verified for search/top/tickers).
+    """
+
+    what: Literal["search", "top", "tickers", "holders"]
+    query: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+        | None
+    ) = None
+    quarter: Quarter13F | None = None
+    tickers: list[Symbol] = Field(default_factory=list, max_length=50)
+    cusip: Cusip | None = None
+    period_of_report: str | None = None
+    limit: int = Field(default=25, ge=1, le=200)
+    offset: int = Field(default=0, ge=0, le=10_000)
+
+    @model_validator(mode="after")
+    def _require_fields_for_what(self) -> ThirteenFFundsInput:
+        if self.what == "search" and not self.query:
+            raise ValueError("what='search' requires query")
+        if self.what == "top" and not self.quarter:
+            raise ValueError("what='top' requires quarter (YYYYQn, e.g. 2026Q2)")
+        if self.what == "tickers" and not self.tickers:
+            raise ValueError("what='tickers' requires 1-50 tickers")
+        if self.what == "holders" and not (self.cusip and self.period_of_report):
+            raise ValueError("what='holders' requires both cusip and period_of_report")
+        return self
+
+
+class ThirteenFHoldingsInput(_InputModel):
+    """The 13F filings/forms/holdings surface, discriminated by ``what``.
+
+    filings -> ``from_date`` + ``to_date`` (ISO ``YYYY-MM-DD``); forms ->
+    ``cik``; form -> ``cik`` + ``accession_number`` (dashed or undashed 18
+    digits — the client normalizes to the SEC's ``XXXXXXXXXX-YY-ZZZZZZ``
+    form). Anonymous (live-verified).
+    """
+
+    what: Literal["filings", "forms", "form"]
+    cik: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10)] | None
+    ) = None
+    accession_number: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20)] | None
+    ) = None
+    from_date: DateIso | None = None
+    to_date: DateIso | None = None
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0, le=10_000)
+
+    @field_validator("cik")
+    @classmethod
+    def _normalize_cik(cls, value: str | None) -> str | None:
+        """Zero-pad a bare CIK to the SEC's 10-digit form (live-verified)."""
+        if value is None:
+            return None
+        digits = value.strip()
+        if not digits.isdigit():
+            raise ValueError("cik must be digits only")
+        return digits.zfill(10)
+
+    @field_validator("accession_number")
+    @classmethod
+    def _normalize_accession_number(cls, value: str | None) -> str | None:
+        """Normalize an 18-digit accession to the SEC's dashed form.
+
+        The upstream accepts the undashed form but the dashed form is the
+        canonical wire value; an undashed value passed through unchanged
+        silently returns an empty result set (live-verified), so it is
+        normalized here and anything else is rejected.
+        """
+        if value is None:
+            return None
+        digits = value.replace("-", "")
+        if len(digits) != 18 or not digits.isdigit():
+            raise ValueError(
+                f"accession_number must be 18 digits (dashed or undashed), got {value!r}"
+            )
+        return f"{digits[:10]}-{digits[10:12]}-{digits[12:]}"
+
+    @model_validator(mode="after")
+    def _require_fields_for_what(self) -> ThirteenFHoldingsInput:
+        if self.what == "filings" and not (self.from_date and self.to_date):
+            raise ValueError("what='filings' requires both from_date and to_date")
+        if self.what in ("forms", "form") and not self.cik:
+            raise ValueError(f"what={self.what!r} requires cik")
+        if self.what == "form" and not self.accession_number:
+            raise ValueError("what='form' requires accession_number")
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -1031,6 +1220,255 @@ class TranscriptsResult(_CamelModel):
 
 
 # ---------------------------------------------------------------------------
+# Coverage-expansion payloads (#4110 phase 2)
+# ---------------------------------------------------------------------------
+
+
+class StatementRow(_CamelModel):
+    """One statement row.
+
+    The upstream rows are sparse annual/quarterly fundamentals: ``date`` and
+    ``currency`` are stable, a handful of common fields are typed, and the long
+    tail (hundreds of line items) is preserved as extras.
+    """
+
+    date: str
+    currency: str | None = None
+    date_source: str | None = None
+    net_income_continuous_operations: float | None = None
+    cash_and_cash_equivalents: float | None = None
+    issuance_of_debt: float | None = None
+    purchase_of_business: float | None = None
+    total_equity: float | None = None
+    basic_shares: float | None = None
+
+
+class StatementsResult(_CamelModel):
+    annual_statements: list[StatementRow] = Field(default_factory=list)
+    quarterly_statements: list[StatementRow] = Field(default_factory=list)
+
+
+class TweetAuthor(_CamelModel):
+    id: str | int | None = None
+    user_name: str | None = None
+    name: str | None = None
+
+
+class TweetMetrics(_CamelModel):
+    retweets: int | None = None
+    replies: int | None = None
+    likes: int | None = None
+    quotes: int | None = None
+    views: int | None = None
+    bookmarks: int | None = None
+
+
+class Tweet(_CamelModel):
+    """One X/Twitter post row; unknown fields stay extras."""
+
+    id: str | int
+    url: str | None = None
+    text: str = ""
+    created_at: str | None = None
+    lang: str | None = None
+    is_reply: bool | None = None
+    author: TweetAuthor | None = None
+    metrics: TweetMetrics | None = None
+
+
+class TweetsResult(_CamelModel):
+    """The tweets payload's own metadata plus the client-reduced rows.
+
+    The upstream echoes ``limit``/``hours`` without applying either (live
+    probes: 375 rows for limit=1; ~394 rows spanning ~13 days for hours=1), so
+    the client applies both: rows older than ``now - hours`` are dropped when
+    ``hours`` was requested (an unparseable ``createdAt`` is dropped while a
+    window is active), then the remainder is sliced to ``limit``.
+    ``total_available`` is the upstream row count before either reduction, and
+    ``truncated`` says whether either reduction dropped rows.
+    """
+
+    query: str = ""
+    query_type: str | None = None
+    since: str | None = None
+    until: str | None = None
+    as_of: str | None = None
+    cached: bool | None = None
+    hours: int | None = None
+    ticker: str | None = None
+    cashtag: str | None = None
+    include_replies: bool | None = None
+    tweets: list[Tweet] = Field(default_factory=list)
+    total_available: int = 0
+    truncated: bool = False
+
+
+class Venue(_CamelModel):
+    """One exchange venue row; ``mic`` is the identity, the rest is optional."""
+
+    mic: str
+    name: str = ""
+    title: str | None = None
+    country: str | None = None
+    country_code: str | None = None
+    city: str | None = None
+    timezone: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    is_open: bool | None = None
+    time_after_open_seconds: int | None = None
+    time_to_open_seconds: int | None = None
+    time_to_close_seconds: int | None = None
+
+
+class VenuesResult(_CamelModel):
+    provider_id: str | None = None
+    checked_at: int | None = None
+    refresh_at: int | None = None
+    venues: list[Venue] = Field(default_factory=list)
+
+
+class ScreenerRow(_CamelModel):
+    """One screener row.
+
+    Shape source: the gloomberb TS plugin's ``CloudMarketScreenerItem`` (the
+    Pro success payload cannot be observed from a free session — the route
+    answers PRO_REQUIRED). Every field is optional and unknown keys stay
+    extras; ``market_cap`` is not part of the upstream item type and was
+    dropped.
+    """
+
+    symbol: str | None = None
+    name: str | None = None
+    exchange: str | None = None
+    price: float | None = None
+    change: float | None = None
+    change_percent: float | None = None
+    volume: float | None = None
+    rank: int | None = None
+    currency: str | None = None
+    trade_count: int | None = None
+    # Explicit aliases: `to_camel("high52w")` would produce "high52W" (digit
+    # followed by a lowercase letter defeats pydantic's identity shortcut).
+    high52w: float | None = Field(default=None, alias="high52w")
+    low52w: float | None = Field(default=None, alias="low52w")
+    day_high: float | None = None
+    day_low: float | None = None
+    last_updated: float | None = None
+    data_source: str | None = None
+
+
+class ScreenerResult(_CamelModel):
+    """The screener payload envelope (``CloudMarketScreenerItem`` list).
+
+    Payload-level fields follow the TS type's envelope
+    (``providerId``/``category``/``asOf``/``stale``/``items``); rows are
+    exposed as ``rows``.
+    """
+
+    provider_id: str | None = None
+    category: str | None = None
+    as_of: str | None = None
+    stale: bool | None = None
+    rows: list[ScreenerRow] = Field(default_factory=list)
+
+
+class Fund13F(_CamelModel):
+    """One ``/cloud/sec/13f/funds`` search row; the wire key is ``CIK``."""
+
+    name: str = ""
+    cik: str | None = Field(default=None, alias="CIK")
+
+
+class TopFund13F(_CamelModel):
+    cik: str | None = None
+    name: str | None = None
+    period_of_report: str | None = None
+    pnl: float | None = None
+
+
+class TickerInfo13F(_CamelModel):
+    cusip: str
+    ticker: str | None = None
+    company_name: str | None = None
+
+
+class FundHolders13F(_CamelModel):
+    """Holders of one CUSIP for a period; the wire period key is camelCase."""
+
+    cusip: str | None = None
+    period_of_report: str | None = Field(default=None, alias="periodOfReport")
+    ciks: list[str] = Field(default_factory=list)
+
+
+class Funds13FResult(_CamelModel):
+    """One tool, ``what`` discriminator: exactly one slot is populated."""
+
+    what: Literal["search", "top", "tickers", "holders"]
+    funds: list[Fund13F] | None = None
+    top_funds: list[TopFund13F] | None = None
+    tickers: list[TickerInfo13F] | None = None
+    holders: FundHolders13F | None = None
+
+
+class Filing13F(_CamelModel):
+    """One 13F filing/forms row (SEC index metadata); extras keep the rest."""
+
+    accession_number: str
+    cik: str | None = None
+    company_name: str | None = None
+    form_type: str | None = None
+    submission_type: str | None = None
+    period_of_report: str | None = None
+    filed_as_of_date: str | None = None
+    effectiveness_date: str | None = None
+    table_value_total: float | None = None
+    table_entry_total: int | None = None
+    url: str | None = None
+    is_amendment: bool | None = None
+    amendment_type: str | None = None
+    state_of_incorporation: str | None = None
+    film_number: str | None = None
+
+
+class Holding13F(_CamelModel):
+    """One 13F holding row, mapped to the TS plugin's semantic names.
+
+    Wire names are snake_case (``name_of_issuer``/``ssh_prnamt``/
+    ``ssh_prnamt_type``); the attributes expose ``issuer``/``shares``/
+    ``share_type`` and the remaining columns stay typed as wire.
+    """
+
+    accession_number: str | None = None
+    cik: str | None = None
+    issuer: str | None = Field(default=None, alias="name_of_issuer")
+    title_of_class: str | None = Field(default=None, alias="title_of_class")
+    cusip: str | None = None
+    ticker: str | None = None
+    value: float | None = None
+    shares: float | None = Field(default=None, alias="ssh_prnamt")
+    share_type: str | None = Field(default=None, alias="ssh_prnamt_type")
+    investment_discretion: str | None = None
+    voting_authority_sole: float | None = None
+    voting_authority_shared: float | None = None
+    voting_authority_none: float | None = None
+    put_call: str | None = None
+    pnl: float | None = None
+
+
+class Holdings13FResult(_CamelModel):
+    """One tool, ``what`` discriminator: exactly one slot is populated."""
+
+    what: Literal["filings", "forms", "form"]
+    filings: list[Filing13F] | None = None
+    forms: list[Filing13F] | None = None
+    holdings: list[Holding13F] | None = None
+    # Computed as ``len(rows) >= limit``: the upstream returns a bare array
+    # with no continuation token (live-verified).
+    has_more: bool | None = None
+
+
+# ---------------------------------------------------------------------------
 # Concrete envelopes (one per tool)
 # ---------------------------------------------------------------------------
 
@@ -1054,6 +1492,12 @@ CdsEnvelope = DigifetchEnvelope[CdsResult]
 ResearchSearchEnvelope = DigifetchEnvelope[ResearchSearchResult]
 CongressTradesEnvelope = DigifetchEnvelope[CongressTradesResult]
 TranscriptsEnvelope = DigifetchEnvelope[TranscriptsResult]
+StatementsEnvelope = DigifetchEnvelope[StatementsResult]
+TweetsEnvelope = DigifetchEnvelope[TweetsResult]
+VenuesEnvelope = DigifetchEnvelope[VenuesResult]
+ScreenerEnvelope = DigifetchEnvelope[ScreenerResult]
+Funds13FEnvelope = DigifetchEnvelope[Funds13FResult]
+Holdings13FEnvelope = DigifetchEnvelope[Holdings13FResult]
 
 
 def envelope_error(envelope: DigifetchEnvelope[Any]) -> DigifetchError | None:

@@ -30,9 +30,17 @@ from digiquant.data.gloomberb.models import (  # noqa: E402
     QuoteResult,
     QuotesBatchInput,
     ResearchSearchInput,
+    ScreenerInput,
+    ScreenerRow,
     SearchInput,
     SecFilingsInput,
+    StatementsInput,
+    ThirteenFFundsInput,
+    ThirteenFHoldingsInput,
+    TickerTweetsInput,
     TranscriptsInput,
+    TweetSearchInput,
+    VenuesInput,
     YieldCurveInput,
     envelope_error,
 )
@@ -259,3 +267,122 @@ def test_econ_calendar_event_keeps_textual_prints() -> None:
     assert event.actual == "3.2%"
     assert event.forecast == pytest.approx(3.1)
     assert event.prior is None
+
+
+# ── coverage-expansion input bounds (#4110 phase 2) ─────────────────────────
+
+
+def test_statements_and_screener_vocabularies() -> None:
+    assert StatementsInput(symbol="AAPL", period="both").period == "both"
+    with pytest.raises(ValidationError):
+        StatementsInput(symbol="AAPL", period="ttm")  # type: ignore[arg-type]
+    assert ScreenerInput(category="most-active", count=50).count == 50
+    with pytest.raises(ValidationError):
+        ScreenerInput(category="movers")  # type: ignore[arg-type]
+    with pytest.raises(ValidationError):
+        ScreenerInput(category="gainers", count=51)
+    with pytest.raises(ValidationError):
+        ScreenerInput(category="gainers", mode="fast")  # type: ignore[arg-type]
+
+
+def test_tweet_inputs_bound_limits_and_query_type() -> None:
+    assert TickerTweetsInput(ticker="AAPL", limit=200, hours=720).limit == 200
+    with pytest.raises(ValidationError):
+        TickerTweetsInput(ticker="AAPL", limit=201)
+    with pytest.raises(ValidationError):
+        TickerTweetsInput(ticker="AAPL", hours=0)
+    assert TweetSearchInput(query="tariffs", query_type="Top").query_type == "Top"
+    with pytest.raises(ValidationError):
+        TweetSearchInput(query="tariffs", query_type="LATEST")  # type: ignore[arg-type]
+
+
+def test_venues_input_takes_no_parameters_and_forbids_unknown_fields() -> None:
+    assert VenuesInput().model_dump() == {}
+    with pytest.raises(ValidationError):
+        VenuesInput(mic="XADS")  # type: ignore[call-arg]
+
+
+def test_13f_funds_requires_fields_per_what() -> None:
+    with pytest.raises(ValidationError, match="requires query"):
+        ThirteenFFundsInput(what="search")
+    with pytest.raises(ValidationError, match="requires quarter"):
+        ThirteenFFundsInput(what="top")
+    with pytest.raises(ValidationError, match="requires 1-50 tickers"):
+        ThirteenFFundsInput(what="tickers")
+    with pytest.raises(ValidationError, match="cusip and period_of_report"):
+        ThirteenFFundsInput(what="holders")
+    assert ThirteenFFundsInput(what="search", query="berkshire").query == "berkshire"
+    assert ThirteenFFundsInput(what="top", quarter="2026Q2").quarter == "2026Q2"
+    assert ThirteenFFundsInput(what="tickers", tickers=["AAPL"]).tickers == ["AAPL"]
+    assert (
+        ThirteenFFundsInput(what="holders", cusip="037833100", period_of_report="2026-06-30").cusip
+        == "037833100"
+    )
+
+
+def test_13f_funds_rejects_dashed_quarters_and_oversized_ticker_lists() -> None:
+    # The upstream answers 400 for 2026-Q2; the contract rejects it first.
+    with pytest.raises(ValidationError):
+        ThirteenFFundsInput(what="top", quarter="2026-Q2")
+    with pytest.raises(ValidationError):
+        ThirteenFFundsInput(what="tickers", tickers=[f"S{i}" for i in range(51)])
+
+
+def test_13f_holdings_requires_fields_per_what_and_normalizes_cik() -> None:
+    with pytest.raises(ValidationError, match="from_date and to_date"):
+        ThirteenFHoldingsInput(what="filings")
+    with pytest.raises(ValidationError, match="requires cik"):
+        ThirteenFHoldingsInput(what="forms")
+    with pytest.raises(ValidationError, match="requires accession_number"):
+        ThirteenFHoldingsInput(what="form", cik="1067983")
+    assert ThirteenFHoldingsInput(what="forms", cik="1067983").cik == "0001067983"
+    assert ThirteenFHoldingsInput(what="forms", cik="0001067983").cik == "0001067983"
+    with pytest.raises(ValidationError, match="digits only"):
+        ThirteenFHoldingsInput(what="forms", cik="abc")
+    request = ThirteenFHoldingsInput(
+        what="filings", from_date="2026-07-01", to_date="2026-08-31", limit=2
+    )
+    assert request.from_date == "2026-07-01"
+
+
+def test_tweet_search_hours_bounds_are_validated() -> None:
+    assert TweetSearchInput(query="tariffs", hours=1).hours == 1
+    assert TweetSearchInput(query="tariffs", hours=720).hours == 720
+    with pytest.raises(ValidationError):
+        TweetSearchInput(query="tariffs", hours=0)
+    with pytest.raises(ValidationError):
+        TweetSearchInput(query="tariffs", hours=721)
+
+
+def test_13f_holdings_normalizes_accession_and_validates_dates() -> None:
+    undashed = ThirteenFHoldingsInput(
+        what="form", cik="1067983", accession_number="000119312526352200"
+    )
+    assert undashed.accession_number == "0001193125-26-352200"
+    dashed = ThirteenFHoldingsInput(
+        what="form", cik="1067983", accession_number="0001193125-26-352200"
+    )
+    assert dashed.accession_number == "0001193125-26-352200"
+    with pytest.raises(ValidationError, match="18 digits"):
+        ThirteenFHoldingsInput(what="form", cik="1067983", accession_number="0001")
+    with pytest.raises(ValidationError):
+        ThirteenFHoldingsInput(what="filings", from_date="2026-6-1", to_date="2026-08-31")
+    with pytest.raises(ValidationError):
+        ThirteenFHoldingsInput(what="filings", from_date="2026-07-01", to_date="01/08/2026")
+
+
+def test_screener_row_follows_the_ts_item_shape() -> None:
+    # Shape source: CloudMarketScreenerItem; marketCap is not part of it.
+    assert "market_cap" not in ScreenerRow.model_fields
+    assert {
+        "symbol",
+        "rank",
+        "currency",
+        "trade_count",
+        "high52w",
+        "low52w",
+        "day_high",
+        "day_low",
+        "last_updated",
+        "data_source",
+    } <= set(ScreenerRow.model_fields)
