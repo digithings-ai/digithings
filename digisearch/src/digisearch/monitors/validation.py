@@ -1,11 +1,11 @@
 """Watch create/update validation shared by the HTTP API and MCP surfaces (#4065).
 
-Task 6 gates every HTTP create/patch through this module; the Task 7 MCP
-``monitors_create_watch`` tool calls it too. The gate must run before
-persistence on every surface: a watch whose cron does not parse, or whose
-timezone is unknown, makes ``is_due`` raise at tick time — and
-``tick_due_watches`` deliberately isolates and swallows per-watch failures
-(``runner.py``), so such a watch would silently never run.
+Extracted from the Task 6 HTTP gate so both surfaces share one decision: the
+HTTP create/patch routes and the Task 7 MCP ``monitors_create_watch`` tool call
+this module. The gate must run before persistence on every surface: a watch
+whose cron does not parse, or whose timezone is unknown, makes ``is_due`` raise
+at tick time — and ``tick_due_watches`` deliberately isolates and swallows
+per-watch failures (``runner.py``), so such a watch would silently never run.
 """
 
 from __future__ import annotations

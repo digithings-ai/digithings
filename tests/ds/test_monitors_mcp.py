@@ -116,6 +116,21 @@ def test_create_accepts_cron_and_rejects_bad_cron_without_persisting(_store):
 
 
 @pytest.mark.unit
+def test_create_rejects_interval_below_floor_without_raising(_store):
+    """An out-of-range interval is the documented error string, not a raise.
+
+    ``WatchSchedule.interval_seconds`` has ``ge=60``; the MCP surface must catch
+    that pydantic ``ValidationError`` (HTTP returns 422 for the same input) and
+    flatten it into the ``[monitors create error: ...]`` convention.
+    """
+    from digisearch import mcp_server
+
+    out = mcp_server.monitors_create_watch(query="etf flows", interval_seconds=30)
+    assert out.startswith("[monitors create error:") and out.endswith("]")
+    assert json.loads(mcp_server.monitors_list_watches())["watches"] == []
+
+
+@pytest.mark.unit
 def test_create_requires_a_schedule(_store):
     from digisearch import mcp_server
 

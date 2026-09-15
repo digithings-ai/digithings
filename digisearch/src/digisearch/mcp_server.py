@@ -293,13 +293,16 @@ def monitors_create_watch(
     text = query.strip()
     if not text:
         return "[monitors create error: query is required]"
-    if schedule_cron:
-        schedule = WatchSchedule(mode="cron", cron=schedule_cron)
-    elif interval_seconds is not None:
-        schedule = WatchSchedule(mode="interval", interval_seconds=interval_seconds)
-    else:
+    if not schedule_cron and interval_seconds is None:
         return "[monitors create error: schedule_cron or interval_seconds is required]"
     try:
+        # Both WatchSchedule constructions stay inside this try: the interval
+        # floor (ge=60) and the cron-required validator raise pydantic
+        # ValidationError, which must flatten to the documented string, not escape.
+        if schedule_cron:
+            schedule = WatchSchedule(mode="cron", cron=schedule_cron)
+        else:
+            schedule = WatchSchedule(mode="interval", interval_seconds=interval_seconds)
         watch = Watch(
             name=text[:120],
             query=text,

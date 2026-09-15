@@ -50,6 +50,7 @@ from digiclaw.cron import parse_cron
 from digisearch.monitors.dedup import dedup_results
 from digisearch.monitors.models import DeliveryReceipt, MonitorRun, Watch
 from digisearch.monitors.store import MonitorStore, get_store, new_ulid
+from digisearch.monitors.validation import DATATAP_WORKSPACE_ID
 from digisearch.web_exa import ExaSearchType, WebSearchData, exa_search, is_exa_configured
 from digisearch.web_search.models import WebSearchRequest, WebSearchResponse
 from digisearch.web_search.service import search_web
@@ -63,9 +64,6 @@ _Trigger = Literal["schedule", "manual", "poll"]
 
 # Landed WebSearchRequest.max_results bound (R6): the OSS seam clamps to it.
 _OSS_MAX_RESULTS = 10
-
-# §5: DataTap stays OFF end-to-end — the tick never runs a datatap-scoped watch.
-_DATATAP_WORKSPACE_ID = "datatap"
 
 # Stable error code recorded on a delivery-enabled run with no stored secret.
 _DELIVERY_SECRET_MISSING = "delivery_secret_missing"
@@ -214,7 +212,8 @@ def tick_due_watches(
     current = _ensure_aware(now) if now is not None else datetime.now(UTC)
     runs: list[MonitorRun] = []
     for watch in store.list_watches():
-        if not watch.schedule.enabled or watch.workspace_id == _DATATAP_WORKSPACE_ID:
+        # §5: DataTap stays OFF end-to-end — the tick never runs a datatap watch.
+        if not watch.schedule.enabled or watch.workspace_id == DATATAP_WORKSPACE_ID:
             continue
         try:
             if not is_due(watch, current, _last_run_at(store, watch.watch_id)):

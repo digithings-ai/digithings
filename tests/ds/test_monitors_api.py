@@ -484,6 +484,38 @@ def test_orchestrator_monitor_tools_fail_hard(monkeypatch, tmp_path):
 
 
 @pytest.mark.unit
+def test_orchestrator_trigger_recall_failure_returns_ok_false(monkeypatch, tmp_path):
+    """A persisted failed turn surfaces as ok:false with the run error (T7 arm).
+
+    ``MonitorRunError`` from ``run_watch`` must not escape the orchestrator
+    invoke route as a 5xx: the hub gets the fail-hard shape while the failed run
+    stays readable through ``GET /v1/monitors/{watch_id}/runs``.
+    """
+    _patch_monitor_store(monkeypatch, tmp_path)
+    c = _monitor_client()
+    wid = _create_watch(c)["watch"]["watch_id"]
+
+    from digisearch.monitors import runner as runner_mod
+
+    def _boom(**kwargs):
+        raise RuntimeError("recall exploded")
+
+    monkeypatch.setattr(runner_mod, "_invoke_shallow_recall", _boom)
+    r = c.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "digisearch_monitors_trigger", "arguments": {"watch_id": wid}},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["ok"] is False
+    assert "recall exploded" in r.json()["error"]
+
+    runs = c.get(f"/v1/monitors/{wid}/runs")
+    assert runs.status_code == 200, runs.text
+    assert runs.json()["runs"][0]["status"] == "failed"
+    assert runs.json()["runs"][0]["error"] == "recall exploded"
+
+
+@pytest.mark.unit
 def test_orchestrator_manifest_lists_monitor_tools():
     from digisearch.orchestrator_tools import build_orchestrator_tool_manifest
 
