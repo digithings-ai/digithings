@@ -1,7 +1,9 @@
-"""Pydantic v2 models for the digifetch x Gloomberb data layer (#4069).
+"""Pydantic v2 models for the digifetch x Gloomberb data layer (#4069, #4110).
 
-This package is the data layer for the 13 `digifetch_*` tools described in
-``docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`` §5. It is
+This package is the data layer for the `digifetch_*` tools described in
+``docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`` §5, expanded
+past the original 13-tool contract by #4110 phase 1 (econ calendar/series,
+yield curve, CDS, research search, congress trades, transcripts). It is
 approach (c): a Python HTTP client over ``https://api.gloom.sh`` built on the
 digifetch transport engine.
 
@@ -57,6 +59,13 @@ __all__ = [
     "ExchangeRateInput",
     "SearchInput",
     "NewsInput",
+    "EconCalendarInput",
+    "EconSeriesInput",
+    "YieldCurveInput",
+    "CdsInput",
+    "ResearchSearchInput",
+    "CongressTradesInput",
+    "TranscriptsInput",
     # wire/output payload models
     "Quote",
     "QuoteBatchItem",
@@ -95,6 +104,22 @@ __all__ = [
     "NewsStoryItem",
     "NewsItem",
     "NewsResult",
+    # coverage expansion (#4110 phase 1)
+    "EconCalendarEvent",
+    "EconCalendarResult",
+    "EconSeriesObservation",
+    "EconSeriesInfo",
+    "EconSeriesResult",
+    "YieldCurvePoint",
+    "YieldCurveResult",
+    "CdsTrade",
+    "CdsResult",
+    "ResearchHit",
+    "ResearchSearchResult",
+    "CongressTrade",
+    "CongressTradesResult",
+    "Transcript",
+    "TranscriptsResult",
     # concrete envelopes
     "QuoteEnvelope",
     "QuotesBatchEnvelope",
@@ -109,6 +134,13 @@ __all__ = [
     "ExchangeRateEnvelope",
     "SearchEnvelope",
     "NewsEnvelope",
+    "EconCalendarEnvelope",
+    "EconSeriesEnvelope",
+    "YieldCurveEnvelope",
+    "CdsEnvelope",
+    "ResearchSearchEnvelope",
+    "CongressTradesEnvelope",
+    "TranscriptsEnvelope",
 ]
 
 SOURCE: Literal["gloomberb"] = "gloomberb"
@@ -374,6 +406,50 @@ class NewsInput(_InputModel):
     ticker: Symbol | None = None
     story_id: str | None = None
     # Bounded so one enrichment read cannot fan out unboundedly.
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+# ---------------------------------------------------------------------------
+# Coverage-expansion inputs (#4110 phase 1)
+# ---------------------------------------------------------------------------
+
+
+class EconCalendarInput(_InputModel):
+    # Bounded so one macro read cannot fan out unboundedly.
+    limit: int = Field(default=50, ge=1, le=200)
+
+
+class EconSeriesInput(_InputModel):
+    series_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+    # FRED-style observation pages can be long; bounded at one page worth.
+    limit: int = Field(default=100, ge=1, le=1000)
+    sort_order: Literal["asc", "desc"] = "desc"
+
+
+class YieldCurveInput(_InputModel):
+    """The Cloud yield-curve route takes no parameters (maturities are fixed)."""
+
+
+class CdsInput(_InputModel):
+    issuer: str | None = None
+    # The Cloud route answers HTTP 400 outside 1..90; the input model rejects it
+    # first so the caller gets a typed invalid_input without a request.
+    days: int = Field(default=30, ge=1, le=90)
+    limit: int = Field(default=100, ge=1, le=200)
+
+
+class ResearchSearchInput(_InputModel):
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    limit: int = Field(default=10, ge=1, le=100)
+
+
+class CongressTradesInput(_InputModel):
+    year: int | None = Field(default=None, ge=1970, le=2100)
+    limit: int = Field(default=50, ge=1, le=200)
+
+
+class TranscriptsInput(_InputModel):
+    ticker: Symbol
     limit: int = Field(default=20, ge=1, le=100)
 
 
@@ -778,6 +854,158 @@ class NewsResult(_CamelModel):
 
 
 # ---------------------------------------------------------------------------
+# Coverage-expansion payloads (#4110 phase 1)
+# ---------------------------------------------------------------------------
+
+
+class EconCalendarEvent(_CamelModel):
+    """One macro calendar row.
+
+    The wire types are unprobed for this route: ``actual``/``forecast``/``prior``
+    may be numbers or text prints (e.g. ``"3.2%"``), so both are accepted and
+    preserved. Unknown fields stay as extras.
+    """
+
+    id: str | int | None = None
+    date: str
+    time: str | None = None
+    country: str = ""
+    event: str
+    actual: float | str | None = None
+    forecast: float | str | None = None
+    prior: float | str | None = None
+    impact: str | None = None
+
+
+class EconCalendarResult(_CamelModel):
+    events: list[EconCalendarEvent] = Field(default_factory=list)
+
+
+class EconSeriesObservation(_CamelModel):
+    date: str
+    # FRED-style sparse series answer "." for a missing print; the normalizer
+    # maps that to null. Unknown fields stay as extras.
+    value: float | None = None
+
+
+class EconSeriesInfo(_CamelModel):
+    """Series metadata; the long tail (frequency/source/notes/...) stays extras."""
+
+    id: str | int | None = None
+    title: str | None = None
+    units: str | None = None
+    frequency: str | None = None
+    source: str | None = None
+    last_updated: str | None = None
+
+
+class EconSeriesResult(_CamelModel):
+    observations: list[EconSeriesObservation] = Field(default_factory=list)
+    info: EconSeriesInfo | None = None
+
+
+class YieldCurvePoint(_CamelModel):
+    """One curve tenor.
+
+    ``yield`` is a Python keyword, so the attribute is ``yield_`` with an
+    explicit wire alias (the alias generator alone produces ``yield_``).
+    """
+
+    maturity: str
+    maturity_years: float | None = None
+    yield_: float | None = Field(default=None, alias="yield")
+    as_of: str | None = None
+    fetched_at: str | None = None
+    stale: bool | None = None
+
+
+class YieldCurveResult(_CamelModel):
+    points: list[YieldCurvePoint] = Field(default_factory=list)
+
+
+class CdsTrade(_CamelModel):
+    """One DTCC PPD CDS trade record; sparse by nature, so all fields optional."""
+
+    dissemination_id: str | int | None = None
+    action_type: str | None = None
+    event_timestamp: str | None = None
+    execution_timestamp: str | None = None
+    effective_date: str | None = None
+    expiration_date: str | None = None
+    maturity_date: str | None = None
+    issuer_name: str | None = None
+    underlier_id: str | int | None = None
+    underlier_id_source: str | None = None
+    upi: str | None = None
+    upi_fisn: str | None = None
+    upi_underlier_name: str | None = None
+    notional_amount: float | None = None
+    notional_capped: bool | None = None
+    notional_currency: str | None = None
+    fixed_rate: float | None = None
+    reported_spread: float | None = None
+
+
+class CdsResult(_CamelModel):
+    source: str | None = None
+    as_of: str | None = None
+    trades: list[CdsTrade] = Field(default_factory=list)
+
+
+class ResearchHit(_CamelModel):
+    id: str | int
+    doc_type: str | None = None
+    source_id: str | int | None = None
+    chunk_index: int | None = None
+    ticker: str | None = None
+    published_at: str | None = None
+    title: str | None = None
+    url: str | None = None
+    snippet: str | None = None
+
+
+class ResearchSearchResult(_CamelModel):
+    hits: list[ResearchHit] = Field(default_factory=list)
+
+
+class CongressTrade(_CamelModel):
+    """One House disclosure row.
+
+    The upstream OCR path is currently failing and the row schema beyond the
+    route name is unprobed, so only identity/date fields are typed and the rest
+    of the record is preserved as extras.
+    """
+
+    id: str | int | None = None
+    representative: str | None = None
+    ticker: str | None = None
+    transaction_date: str | None = None
+    disclosure_date: str | None = None
+    transaction_type: str | None = None
+    amount: str | None = None
+    asset: str | None = None
+    filing_url: str | None = None
+
+
+class CongressTradesResult(_CamelModel):
+    trades: list[CongressTrade] = Field(default_factory=list)
+
+
+class Transcript(_CamelModel):
+    """One earnings-call transcript row (Gloomberb Pro)."""
+
+    id: str | int
+    ticker: str | None = None
+    title: str | None = None
+    published_at: str | None = None
+    url: str | None = None
+
+
+class TranscriptsResult(_CamelModel):
+    transcripts: list[Transcript] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # Concrete envelopes (one per tool)
 # ---------------------------------------------------------------------------
 
@@ -794,6 +1022,13 @@ EarningsCalendarEnvelope = DigifetchEnvelope[EarningsCalendarResult]
 ExchangeRateEnvelope = DigifetchEnvelope[ExchangeRateResult]
 SearchEnvelope = DigifetchEnvelope[SearchResult]
 NewsEnvelope = DigifetchEnvelope[NewsResult]
+EconCalendarEnvelope = DigifetchEnvelope[EconCalendarResult]
+EconSeriesEnvelope = DigifetchEnvelope[EconSeriesResult]
+YieldCurveEnvelope = DigifetchEnvelope[YieldCurveResult]
+CdsEnvelope = DigifetchEnvelope[CdsResult]
+ResearchSearchEnvelope = DigifetchEnvelope[ResearchSearchResult]
+CongressTradesEnvelope = DigifetchEnvelope[CongressTradesResult]
+TranscriptsEnvelope = DigifetchEnvelope[TranscriptsResult]
 
 
 def envelope_error(envelope: DigifetchEnvelope[Any]) -> DigifetchError | None:

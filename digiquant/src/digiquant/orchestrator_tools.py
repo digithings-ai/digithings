@@ -515,6 +515,162 @@ def build_digifetch_news_tool() -> dict[str, Any]:
     }
 
 
+def build_digifetch_econ_calendar_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_econ_calendar",
+            "description": (
+                "Structured economic calendar (Gloomberb Cloud, anonymous). "
+                "limit (1-200) caps the page; rows carry date/time/country/"
+                "event/actual/forecast/prior/impact. Wire prints may be numeric "
+                "or text (e.g. '3.2%'). Enrichment only (free-tier delay in "
+                "data.delay_note)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "default": 50, "minimum": 1, "maximum": 200},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_econ_series_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_econ_series",
+            "description": (
+                "FRED-style macro series observations + metadata (Gloomberb "
+                "Cloud, anonymous). series_id is the FRED id (e.g. CPIAUCSL); "
+                "sort_order is asc/desc. Missing prints (FRED '.') map to null."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "series_id": {
+                        "type": "string",
+                        "description": "FRED series id, e.g. 'CPIAUCSL'",
+                    },
+                    "limit": {"type": "integer", "default": 100},
+                    "sort_order": {"type": "string", "enum": ["asc", "desc"], "default": "desc"},
+                },
+                "required": ["series_id"],
+            },
+        },
+    }
+
+
+def build_digifetch_yield_curve_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_yield_curve",
+            "description": (
+                "Treasury yield-curve tenors (Gloomberb Cloud, anonymous). "
+                "Each point carries maturity/maturityYears/yield/asOf/stale; "
+                "any stale tenor folds into the envelope stale flag."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+
+
+def build_digifetch_cds_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_cds",
+            "description": (
+                "DTCC PPD CDS trade tape (Gloomberb Cloud, anonymous). days is "
+                "bounded 1-90 and validated client-side (out-of-range is typed "
+                "invalid_input, no request). issuer/limit filter the tape; "
+                "trade rows preserve unknown fields."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "issuer": {"type": "string", "description": "Optional issuer name filter"},
+                    "days": {"type": "integer", "default": 30, "minimum": 1, "maximum": 90},
+                    "limit": {"type": "integer", "default": 100},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_research_search_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_research_search",
+            "description": (
+                "Full-text research search across transcripts/news/filings "
+                "(Gloomberb Cloud; session-gated). Requires "
+                "GLOOMBERB_SESSION_COOKIE — 401 without it maps to typed "
+                "auth_required. Hits carry docType/ticker/title/url/snippet."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer", "default": 10},
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+
+def build_digifetch_congress_trades_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_congress_trades",
+            "description": (
+                "US House disclosure trades (Gloomberb Cloud, anonymous). The "
+                "upstream OCR dependency is currently failing (HTTP 500, "
+                "Mistral monthly spend cap) and surfaces as typed "
+                "upstream_error; exposed so coverage completes when upstream "
+                "recovers. year/limit filter the tape."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "year": {"type": "integer", "description": "Optional disclosure year filter"},
+                    "limit": {"type": "integer", "default": 50},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_transcripts_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_transcripts",
+            "description": (
+                "Earnings-call transcripts (Gloomberb Cloud; session-gated, "
+                "requires Gloomberb Pro). Requires GLOOMBERB_SESSION_COOKIE and "
+                "a Pro plan — a free session's 'Pro plan required' body maps to "
+                "typed auth_required, never an empty success. Adds a "
+                "term.gloom.sh deep link for ticker."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string"},
+                    "limit": {"type": "integer", "default": 20},
+                },
+                "required": ["ticker"],
+            },
+        },
+    }
+
+
 def build_digiquant_fit_btc_power_law_tool() -> dict[str, Any]:
     return {
         "type": "function",
@@ -957,6 +1113,13 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digifetch_exchange_rate_tool(),
         build_digifetch_search_tool(),
         build_digifetch_news_tool(),
+        build_digifetch_econ_calendar_tool(),
+        build_digifetch_econ_series_tool(),
+        build_digifetch_yield_curve_tool(),
+        build_digifetch_cds_tool(),
+        build_digifetch_research_search_tool(),
+        build_digifetch_congress_trades_tool(),
+        build_digifetch_transcripts_tool(),
         build_digiquant_fit_btc_power_law_tool(),
         build_digiquant_build_sdca_risk_index_tool(),
         build_digiquant_fetch_bitview_series_tool(),

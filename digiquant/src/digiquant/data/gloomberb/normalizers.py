@@ -35,8 +35,14 @@ from .models import (
     AnalystAction,
     AnalystPriceTarget,
     AnalystResearchResult,
+    CdsTrade,
     CompanyProfile,
+    CongressTrade,
     CorporateAction,
+    EconCalendarEvent,
+    EconSeriesInfo,
+    EconSeriesObservation,
+    EconSeriesResult,
     ExchangeRateResult,
     FinancialStatement,
     Fundamentals,
@@ -48,10 +54,13 @@ from .models import (
     PriceBar,
     Quote,
     QuoteBatchItem,
+    ResearchHit,
     SecFiling,
     SecFilingDocument,
     StatementHistory,
     TickerFinancials,
+    Transcript,
+    YieldCurvePoint,
 )
 
 __all__ = [
@@ -87,6 +96,14 @@ __all__ = [
     "normalize_exchange_rate",
     "normalize_sec_filings",
     "normalize_sec_documents",
+    # coverage expansion (#4110 phase 1)
+    "normalize_econ_calendar",
+    "normalize_econ_series",
+    "normalize_yield_curve",
+    "normalize_cds_trades",
+    "normalize_research_hits",
+    "normalize_congress_trades",
+    "normalize_transcripts",
 ]
 
 # ---------------------------------------------------------------------------
@@ -858,3 +875,78 @@ def normalize_sec_documents(raw: Mapping[str, Any]) -> list[SecFilingDocument]:
         for entry in raw.get("documents") or []
         if isinstance(entry, Mapping)
     ]
+
+
+# ---------------------------------------------------------------------------
+# Coverage-expansion mappers (#4110 phase 1)
+# ---------------------------------------------------------------------------
+
+
+def _rows(raw: Any, key: str) -> list[Mapping[str, Any]]:
+    """Mapping rows from a bare array or a ``{key: [...]}`` direct payload."""
+    if isinstance(raw, Mapping):
+        raw = raw.get(key)
+    if not isinstance(raw, list):
+        return []
+    return [entry for entry in raw if isinstance(entry, Mapping)]
+
+
+def _numeric_or_none(value: Any) -> float | None:
+    """Finite float from a wire number or numeric string; ``"."`` maps to None."""
+    number = finite_number(value)
+    if number is not None:
+        return number
+    if isinstance(value, str):
+        try:
+            parsed = float(value.strip())
+        except ValueError:
+            return None
+        return parsed if math.isfinite(parsed) else None
+    return None
+
+
+def normalize_econ_calendar(raw: Any) -> list[EconCalendarEvent]:
+    """Map the ``/cloud/econ/calendar`` array (bare or ``{events: [...]}``)."""
+    return [EconCalendarEvent.model_validate(dict(entry)) for entry in _rows(raw, "events")]
+
+
+def normalize_econ_series(raw: Mapping[str, Any]) -> EconSeriesResult:
+    """Map an econ-series payload; a missing ``info`` block is malformed."""
+    info_raw = raw.get("info")
+    if not isinstance(info_raw, Mapping):
+        raise ValueError("econ-series payload has no info block")
+    return EconSeriesResult(
+        observations=[
+            EconSeriesObservation(
+                date=str(entry.get("date") or ""),
+                value=_numeric_or_none(entry.get("value")),
+            )
+            for entry in _rows(raw.get("observations"), "observations")
+        ],
+        info=EconSeriesInfo.model_validate(dict(info_raw)),
+    )
+
+
+def normalize_yield_curve(raw: Any) -> list[YieldCurvePoint]:
+    """Map the ``/cloud/econ/yield-curve`` array (bare or ``{points: [...]}``)."""
+    return [YieldCurvePoint.model_validate(dict(entry)) for entry in _rows(raw, "points")]
+
+
+def normalize_cds_trades(raw: Mapping[str, Any]) -> list[CdsTrade]:
+    """Map the ``/cloud/credit/cds`` trade tape."""
+    return [CdsTrade.model_validate(dict(entry)) for entry in _rows(raw.get("trades"), "trades")]
+
+
+def normalize_research_hits(raw: Mapping[str, Any]) -> list[ResearchHit]:
+    """Map the ``/cloud/search`` hit list."""
+    return [ResearchHit.model_validate(dict(entry)) for entry in _rows(raw.get("hits"), "hits")]
+
+
+def normalize_congress_trades(raw: Any) -> list[CongressTrade]:
+    """Map ``/cloud/congress/house`` rows (bare or ``{trades: [...]}``)."""
+    return [CongressTrade.model_validate(dict(entry)) for entry in _rows(raw, "trades")]
+
+
+def normalize_transcripts(raw: Any) -> list[Transcript]:
+    """Map ``/cloud/transcripts`` rows (bare or ``{transcripts: [...]}``)."""
+    return [Transcript.model_validate(dict(entry)) for entry in _rows(raw, "transcripts")]

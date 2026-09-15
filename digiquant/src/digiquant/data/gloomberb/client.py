@@ -2,10 +2,11 @@
 
 Approach (c) from the scoping spec: a Python HTTP client against
 ``https://api.gloom.sh``, anonymous cookie-less by default, with an optional
-``GLOOMBERB_SESSION_COOKIE`` for the three session-gated endpoints (holders,
-analyst research, corporate actions). The client owns endpoint constants,
-error mapping (§5.3), the 900s TTL cache, a circuit breaker, and the kill
-switch; ``digifetch`` stays the generic transport engine.
+``GLOOMBERB_SESSION_COOKIE`` for the session-gated endpoints (holders, analyst
+research, corporate actions, research search, transcripts; transcripts
+additionally require a Pro plan). The client owns endpoint constants, error
+mapping (§5.3), the 900s TTL cache, a circuit breaker, and the kill switch;
+``digifetch`` stays the generic transport engine.
 
 The kill switch is ``GLOOMBERB_ENABLED`` (default ON): tools are default-ON per
 the author decision, and setting the flag to ``0``/``false``/``no``/``off``
@@ -41,6 +42,12 @@ from . import normalizers as nz
 from .models import (
     AnalystResearchEnvelope,
     AnalystResearchInput,
+    CdsEnvelope,
+    CdsInput,
+    CdsResult,
+    CongressTradesEnvelope,
+    CongressTradesInput,
+    CongressTradesResult,
     CorporateActionsEnvelope,
     CorporateActionsInput,
     CorporateActionsResult,
@@ -50,6 +57,11 @@ from .models import (
     EarningsCalendarInput,
     EarningsCalendarResult,
     EarningsEvent,
+    EconCalendarEnvelope,
+    EconCalendarInput,
+    EconCalendarResult,
+    EconSeriesEnvelope,
+    EconSeriesInput,
     ExchangeRateEnvelope,
     ExchangeRateInput,
     HoldersEnvelope,
@@ -71,6 +83,9 @@ from .models import (
     QuotesBatchEnvelope,
     QuotesBatchInput,
     QuotesBatchResult,
+    ResearchSearchEnvelope,
+    ResearchSearchInput,
+    ResearchSearchResult,
     SearchEnvelope,
     SearchInput,
     SearchResult,
@@ -80,6 +95,12 @@ from .models import (
     TickerFinancialsEnvelope,
     TickerFinancialsInput,
     TickerFinancialsResult,
+    TranscriptsEnvelope,
+    TranscriptsInput,
+    TranscriptsResult,
+    YieldCurveEnvelope,
+    YieldCurveInput,
+    YieldCurveResult,
 )
 
 __all__ = [
@@ -141,6 +162,14 @@ ENDPOINTS: dict[str, str] = {
     "sec_filings": "/cloud/sec/filings",
     "sec_filing_documents": "/cloud/sec/filing/documents",
     "sec_filing_content": "/cloud/sec/filing/content",
+    # coverage expansion (#4110 phase 1)
+    "econ_calendar": "/cloud/econ/calendar",
+    "econ_series": "/cloud/econ/series",
+    "yield_curve": "/cloud/econ/yield-curve",
+    "cds": "/cloud/credit/cds",
+    "research_search": "/cloud/search",
+    "congress_trades": "/cloud/congress/house",
+    "transcripts": "/cloud/transcripts",
 }
 
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -172,6 +201,30 @@ def _parse_retry_after(value: str | None) -> float | None:
     except ValueError:
         return None
     return seconds if seconds >= 0 else None
+
+
+# Plan-gated routes (`/cloud/transcripts`) answer a non-JSON text body such as
+# "Pro plan required" for a free (email-verified) session, sometimes with a
+# non-auth HTTP status. These markers route it to a typed `auth_required`
+# instead of a generic upstream error or an empty success.
+_PRO_PLAN_MARKERS: tuple[str, ...] = ("pro plan", "plan required", "upgrade", "subscription")
+
+
+def _plan_required_error(text: str) -> DigifetchError | None:
+    """Typed `auth_required` when *text* reads as an upstream plan gate."""
+    normalized = " ".join((text or "").split())
+    if not normalized:
+        return None
+    lowered = normalized.lower()
+    if not any(marker in lowered for marker in _PRO_PLAN_MARKERS):
+        return None
+    return DigifetchError(
+        code="auth_required",
+        message=(
+            f"This Gloomberb endpoint requires a Pro plan (upstream said: {normalized[:200]!r})"
+        ),
+        retryable=False,
+    )
 
 
 class _UpstreamServerError(RuntimeError):
@@ -934,6 +987,290 @@ class GloomberbClient:
 
         return self._cached("news", parsed, produce)
 
+    # -- coverage expansion (#4110 phase 1) --------------------------------
+
+    def econ_calendar(
+        self, request: EconCalendarInput | Mapping[str, Any] | None = None
+    ) -> EconCalendarEnvelope:
+        """Structured economic calendar (anonymous; direct array payload)."""
+        parsed = self._validate_input(EconCalendarInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(EconCalendarEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(EconCalendarEnvelope)
+
+        def produce() -> EconCalendarEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["econ_calendar"],
+                params={"limit": str(parsed.limit)},
+                allow_array=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(EconCalendarEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud econ calendar is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(EconCalendarEnvelope, result)
+            data, warnings = result
+            events = self._normalize(nz.normalize_econ_calendar, data)
+            if isinstance(events, DigifetchError):
+                return self._error_envelope(EconCalendarEnvelope, events)
+            fresh = self._freshness(raw, extra_stale=self._rows_stale(data))
+            return EconCalendarEnvelope(
+                data=EconCalendarResult(events=events),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("econ_calendar", parsed, produce)
+
+    def econ_series(self, request: EconSeriesInput | Mapping[str, Any]) -> EconSeriesEnvelope:
+        """FRED-style macro series observations + metadata (anonymous)."""
+        parsed = self._validate_input(EconSeriesInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(EconSeriesEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(EconSeriesEnvelope)
+
+        def produce() -> EconSeriesEnvelope:
+            path = f"{ENDPOINTS['econ_series']}/{quote(parsed.series_id, safe='')}"
+            raw = self._request_json(
+                "GET",
+                path,
+                params={"limit": str(parsed.limit), "sortOrder": parsed.sort_order},
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(EconSeriesEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Cloud econ series is unavailable for {parsed.series_id}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(EconSeriesEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "econ series")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(EconSeriesEnvelope, payload)
+            normalized = self._normalize(nz.normalize_econ_series, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(EconSeriesEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return EconSeriesEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("econ_series", parsed, produce)
+
+    def yield_curve(
+        self, request: YieldCurveInput | Mapping[str, Any] | None = None
+    ) -> YieldCurveEnvelope:
+        """Treasury yield curve (anonymous; direct array payload)."""
+        parsed = self._validate_input(YieldCurveInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(YieldCurveEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(YieldCurveEnvelope)
+
+        def produce() -> YieldCurveEnvelope:
+            raw = self._request_json("GET", ENDPOINTS["yield_curve"], allow_array=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(YieldCurveEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud yield curve is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(YieldCurveEnvelope, result)
+            data, warnings = result
+            points = self._normalize(nz.normalize_yield_curve, data)
+            if isinstance(points, DigifetchError):
+                return self._error_envelope(YieldCurveEnvelope, points)
+            fresh = self._freshness(raw, extra_stale=self._rows_stale(data))
+            return YieldCurveEnvelope(
+                data=YieldCurveResult(points=points),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("yield_curve", parsed, produce)
+
+    def cds(self, request: CdsInput | Mapping[str, Any]) -> CdsEnvelope:
+        """DTCC PPD CDS trade tape (anonymous; `days` validated client-side)."""
+        parsed = self._validate_input(CdsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CdsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CdsEnvelope)
+
+        def produce() -> CdsEnvelope:
+            params: dict[str, Any] = {"days": str(parsed.days), "limit": str(parsed.limit)}
+            if parsed.issuer:
+                params["issuer"] = parsed.issuer
+            raw = self._request_json("GET", ENDPOINTS["cds"], params=params)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(CdsEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud CDS trades are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(CdsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "CDS trades")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(CdsEnvelope, payload)
+            trades = self._normalize(nz.normalize_cds_trades, payload)
+            if isinstance(trades, DigifetchError):
+                return self._error_envelope(CdsEnvelope, trades)
+            fresh = self._freshness(raw, payload)
+            return CdsEnvelope(
+                data=CdsResult(
+                    source=payload.get("source")
+                    if isinstance(payload.get("source"), str)
+                    else None,
+                    as_of=raw.as_of
+                    or (payload.get("asOf") if isinstance(payload.get("asOf"), str) else None),
+                    trades=trades,
+                ),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("cds", parsed, produce)
+
+    def research_search(
+        self, request: ResearchSearchInput | Mapping[str, Any]
+    ) -> ResearchSearchEnvelope:
+        """Full-text research search (session-gated; 401 → auth_required)."""
+        parsed = self._validate_input(ResearchSearchInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ResearchSearchEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ResearchSearchEnvelope)
+
+        def produce() -> ResearchSearchEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["research_search"],
+                params={"q": parsed.query, "limit": str(parsed.limit)},
+                gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(ResearchSearchEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud research search is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(ResearchSearchEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "research search")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(ResearchSearchEnvelope, payload)
+            hits = self._normalize(nz.normalize_research_hits, payload)
+            if isinstance(hits, DigifetchError):
+                return self._error_envelope(ResearchSearchEnvelope, hits)
+            fresh = self._freshness(raw, payload)
+            return ResearchSearchEnvelope(
+                data=ResearchSearchResult(hits=hits),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("research_search", parsed, produce)
+
+    def congress_trades(
+        self, request: CongressTradesInput | Mapping[str, Any] | None = None
+    ) -> CongressTradesEnvelope:
+        """US House disclosure trades (anonymous; upstream OCR path may 500)."""
+        parsed = self._validate_input(CongressTradesInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CongressTradesEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CongressTradesEnvelope)
+
+        def produce() -> CongressTradesEnvelope:
+            params: dict[str, Any] = {"limit": str(parsed.limit)}
+            if parsed.year is not None:
+                params["year"] = str(parsed.year)
+            raw = self._request_json(
+                "GET", ENDPOINTS["congress_trades"], params=params, allow_array=True
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(CongressTradesEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud congress trades are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(CongressTradesEnvelope, result)
+            data, warnings = result
+            trades = self._normalize(nz.normalize_congress_trades, data)
+            if isinstance(trades, DigifetchError):
+                return self._error_envelope(CongressTradesEnvelope, trades)
+            fresh = self._freshness(
+                raw,
+                data,
+                extra_stale=self._rows_stale(
+                    data.get("trades") if isinstance(data, Mapping) else data
+                ),
+            )
+            return CongressTradesEnvelope(
+                data=CongressTradesResult(trades=trades),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("congress_trades", parsed, produce)
+
+    def transcripts(self, request: TranscriptsInput | Mapping[str, Any]) -> TranscriptsEnvelope:
+        """Earnings-call transcripts (session-gated; requires Gloomberb Pro).
+
+        A free (email-verified) session answers a non-JSON "Pro plan required"
+        body; the client maps that to a typed ``auth_required`` instead of an
+        empty success or a generic upstream error.
+        """
+        parsed = self._validate_input(TranscriptsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(TranscriptsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(TranscriptsEnvelope)
+
+        def produce() -> TranscriptsEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["transcripts"],
+                params={"ticker": parsed.ticker, "limit": str(parsed.limit)},
+                gated=True,
+                pro_gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(TranscriptsEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud transcripts are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(TranscriptsEnvelope, result)
+            data, warnings = result
+            rows = self._normalize(nz.normalize_transcripts, data)
+            if isinstance(rows, DigifetchError):
+                return self._error_envelope(TranscriptsEnvelope, rows)
+            fresh = self._freshness(
+                raw,
+                data,
+                extra_stale=self._rows_stale(
+                    data.get("transcripts") if isinstance(data, Mapping) else data
+                ),
+            )
+            return TranscriptsEnvelope(
+                data=TranscriptsResult(transcripts=rows),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("transcripts", parsed, produce)
+
     # -- internals ---------------------------------------------------------
 
     def _validate_input(
@@ -1003,6 +1340,13 @@ class GloomberbClient:
             if isinstance(source.get("dataSource"), str)
             else None,
             delay_minutes=nz.finite_number(source.get("delayMinutes")),
+        )
+
+    @staticmethod
+    def _rows_stale(rows: Any) -> bool:
+        """True when any row of a bare-array payload carries ``stale: true``."""
+        return isinstance(rows, list) and any(
+            isinstance(row, Mapping) and row.get("stale") is True for row in rows
         )
 
     def _evict_expired(self, now: float) -> None:
@@ -1142,6 +1486,8 @@ class GloomberbClient:
         params: Mapping[str, Any] | None = None,
         body: Mapping[str, Any] | None = None,
         gated: bool = False,
+        allow_array: bool = False,
+        pro_gated: bool = False,
     ) -> _RawResponse | DigifetchError:
         if not self._enabled:
             return DigifetchError(
@@ -1182,6 +1528,12 @@ class GloomberbClient:
                 attempt, self._retry_policy, description=f"gloomberb {method} {path}"
             )
         except httpx.HTTPStatusError as exc:
+            # Plan-gated routes answer their gate with a body, not an auth code
+            # (`/cloud/transcripts` says "Pro plan required"), so check the body
+            # before the generic status mapping.
+            plan_error = _plan_required_error(exc.response.text) if pro_gated else None
+            if plan_error is not None:
+                return plan_error
             error = self._map_http_error(exc)
             # Only upstream-health failures trip the breaker: a 401/404 (or any
             # other deterministic 4xx) is a caller/auth outcome, not service
@@ -1215,6 +1567,9 @@ class GloomberbClient:
         try:
             payload = json.loads(result.text) if result.text else None
         except json.JSONDecodeError:
+            plan_error = _plan_required_error(result.text) if pro_gated else None
+            if plan_error is not None:
+                return plan_error
             self._record_failure()
             return DigifetchError(
                 code="upstream_error",
@@ -1223,11 +1578,29 @@ class GloomberbClient:
             )
         self._record_success()
         if not isinstance(payload, Mapping):
+            if allow_array and isinstance(payload, list):
+                return _RawResponse(
+                    status="success",
+                    data=payload,
+                    reason_code=None,
+                    stale=False,
+                    provider_meta={},
+                    as_of=None,
+                    currency=None,
+                )
             return DigifetchError(
                 code="upstream_error",
                 message=f"Gloomberb returned an unexpected non-object payload for {path}",
                 retryable=False,
             )
+        if pro_gated:
+            # A JSON error body for a plan-gated route must not read as an
+            # empty success (e.g. {"error": "Pro plan required"}).
+            for key in ("error", "message", "detail"):
+                value = payload.get(key)
+                plan_error = _plan_required_error(value) if isinstance(value, str) else None
+                if plan_error is not None:
+                    return plan_error
         meta = payload.get("providerMeta")
         provider_meta: Mapping[str, Any] = meta if isinstance(meta, Mapping) else {}
         if "status" not in payload:

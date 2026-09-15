@@ -23,7 +23,11 @@ from digiquant.data.gloomberb.normalizers import (  # noqa: E402
     is_malformed_intraday_history,
     normalize_analyst_research,
     normalize_bars,
+    normalize_cds_trades,
+    normalize_congress_trades,
     normalize_corporate_actions,
+    normalize_econ_calendar,
+    normalize_econ_series,
     normalize_exchange_rate,
     normalize_holders,
     normalize_news_list,
@@ -31,9 +35,12 @@ from digiquant.data.gloomberb.normalizers import (  # noqa: E402
     normalize_price_value_by_divisor,
     normalize_quote,
     normalize_quotes_batch_items,
+    normalize_research_hits,
     normalize_search_results,
     normalize_sec_documents,
     normalize_sec_filings,
+    normalize_transcripts,
+    normalize_yield_curve,
     parse_cloud_price_point_date,
     resolve_currency_unit,
     resolve_exchange_timezone,
@@ -501,3 +508,90 @@ def test_normalize_sec_filings_and_documents() -> None:
         }
     )
     assert documents[0].is_primary is True
+
+
+# ── coverage-expansion mappers (#4110 phase 1) ──────────────────────────────
+
+
+def test_normalize_econ_calendar_accepts_bare_and_wrapped_rows() -> None:
+    rows = [
+        {
+            "id": "e1",
+            "date": "2026-09-15",
+            "time": "08:30",
+            "country": "US",
+            "event": "CPI YoY",
+            "actual": 3.2,
+            "forecast": "3.1",
+            "prior": None,
+            "impact": "high",
+        }
+    ]
+    bare = normalize_econ_calendar(rows)
+    wrapped = normalize_econ_calendar({"events": rows})
+    assert bare == wrapped
+    assert bare[0].actual == pytest.approx(3.2)
+    assert bare[0].forecast == "3.1"
+    assert normalize_econ_calendar("not-a-list") == []
+
+
+def test_normalize_econ_series_maps_fred_missing_values() -> None:
+    result = normalize_econ_series(
+        {
+            "observations": [
+                {"date": "2026-07-01", "value": "2.9"},
+                {"date": "2026-08-01", "value": "."},
+                {"date": "2026-09-01", "value": None},
+                {"date": "2026-10-01", "value": math.nan},
+            ],
+            "info": {"id": "CPIAUCSL", "title": "CPI", "units": "Percent", "frequency": "Monthly"},
+        }
+    )
+    assert [row.value for row in result.observations] == [pytest.approx(2.9), None, None, None]
+    assert result.info is not None and result.info.frequency == "Monthly"
+
+
+def test_normalize_econ_series_without_info_raises() -> None:
+    with pytest.raises(ValueError, match="info block"):
+        normalize_econ_series({"observations": []})
+
+
+def test_normalize_yield_curve_reads_the_yield_alias() -> None:
+    points = normalize_yield_curve(
+        [{"maturity": "10Y", "maturityYears": 10, "yield": 4.2, "stale": False}]
+    )
+    assert points[0].yield_ == pytest.approx(4.2)
+    assert points[0].maturity_years == pytest.approx(10.0)
+
+
+def test_normalize_cds_and_research_hits() -> None:
+    trades = normalize_cds_trades(
+        {
+            "trades": [
+                {
+                    "disseminationId": 1,
+                    "issuerName": "Acme",
+                    "notionalAmount": 1_000_000,
+                    "notionalCapped": True,
+                }
+            ]
+        }
+    )
+    assert trades[0].dissemination_id == 1
+    assert trades[0].notional_capped is True
+    hits = normalize_research_hits(
+        {"hits": [{"id": "h1", "docType": "filing", "chunkIndex": 3, "ticker": "MSFT"}]}
+    )
+    assert hits[0].doc_type == "filing"
+    assert hits[0].chunk_index == 3
+
+
+def test_normalize_congress_trades_and_transcripts_accept_both_shapes() -> None:
+    trade_rows = [{"id": "c1", "representative": "Jane", "transactionDate": "2026-08-01"}]
+    assert normalize_congress_trades(trade_rows) == normalize_congress_trades(
+        {"trades": trade_rows}
+    )
+    transcript_rows = [{"id": "t1", "ticker": "AAPL", "title": "Q3 call"}]
+    assert normalize_transcripts(transcript_rows) == normalize_transcripts(
+        {"transcripts": transcript_rows}
+    )
