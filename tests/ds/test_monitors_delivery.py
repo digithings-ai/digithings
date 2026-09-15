@@ -16,6 +16,7 @@ import hashlib
 import hmac
 import json
 import smtplib
+import ssl
 from email import message_from_string
 
 import httpx
@@ -267,19 +268,24 @@ def _clear_smtp_env(monkeypatch):
 class _FakeSMTP:
     """Records the smtplib calls the email leg makes; never touches a socket."""
 
-    def __init__(self, *, fail_with: Exception | None = None) -> None:
+    def __init__(
+        self, *, fail_with: Exception | None = None, starttls_available: bool = True
+    ) -> None:
         self.fail_with = fail_with
+        self.starttls_available = starttls_available
         self.calls: list[object] = []
         self.sent: list[tuple[str, list[str], str]] = []
+        self.starttls_context: ssl.SSLContext | None = None
 
     def ehlo(self) -> None:
         self.calls.append("ehlo")
 
     def has_extn(self, name: str) -> bool:
-        return name == "starttls"
+        return name == "starttls" and self.starttls_available
 
-    def starttls(self) -> None:
+    def starttls(self, *, context: ssl.SSLContext | None = None) -> None:
         self.calls.append("starttls")
+        self.starttls_context = context
 
     def login(self, user: str, password: str) -> None:
         self.calls.append(("login", user, password))
@@ -381,6 +387,21 @@ def test_webhook_retries_transport_error_then_succeeds(monkeypatch, sleeps):
 
 
 @pytest.mark.unit
+def test_webhook_failure_receipt_redacts_url_without_trailing_slash(monkeypatch, sleeps):
+    target_url = "https://hooks.example.com/x/"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # Transport errors may echo the URL without the trailing slash.
+        raise httpx.ConnectError("cannot reach https://hooks.example.com/x", request=request)
+
+    _patch_transport(monkeypatch, handler)
+    receipts = mod.deliver(_ok_run(), _webhook_watch(target_url), delivery_secret="s3")
+
+    assert receipts[0].ok is False
+    assert "hooks.example.com" not in (receipts[0].error or "")
+
+
+@pytest.mark.unit
 def test_webhook_failure_receipt_redacts_secret_and_url(monkeypatch, sleeps):
     attempts: list[int] = []
 
@@ -402,8 +423,8 @@ def test_webhook_failure_receipt_redacts_secret_and_url(monkeypatch, sleeps):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("status", [404, 500])
-def test_webhook_non_2xx_retries_then_records_status(monkeypatch, sleeps, status):
+@pytest.mark.parametrize("status", [429, 500])
+def test_webhook_retryable_status_retries_then_records_status(monkeypatch, sleeps, status):
     attempts: list[int] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -417,6 +438,24 @@ def test_webhook_non_2xx_retries_then_records_status(monkeypatch, sleeps, status
     assert sleeps == [mod._WEBHOOK_BACKOFF_S]
     assert receipts == [
         DeliveryReceipt(target_kind="webhook", ok=False, status_code=status, error=f"HTTP {status}")
+    ]
+
+
+@pytest.mark.unit
+def test_webhook_non_retryable_4xx_fails_fast(monkeypatch, sleeps):
+    attempts: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(1)
+        return httpx.Response(404)
+
+    _patch_transport(monkeypatch, handler)
+    receipts = mod.deliver(_ok_run(), _webhook_watch(_WEBHOOK_URL), delivery_secret="s3")
+
+    assert len(attempts) == 1
+    assert sleeps == []
+    assert receipts == [
+        DeliveryReceipt(target_kind="webhook", ok=False, status_code=404, error="HTTP 404")
     ]
 
 
@@ -532,6 +571,10 @@ def test_email_sends_run_summary_via_smtp(monkeypatch):
     assert receipts == [DeliveryReceipt(target_kind="email", ok=True)]
     assert connections == [("smtp.example.com", 2525, 10.0)]
     assert "starttls" in fake.calls
+    # STARTTLS must use a verified context, never smtplib's CERT_NONE default.
+    assert isinstance(fake.starttls_context, ssl.SSLContext)
+    assert fake.starttls_context.verify_mode == ssl.CERT_REQUIRED
+    assert fake.starttls_context.check_hostname is True
     assert ("login", "apikey", "hunter2") in fake.calls
     assert fake.calls[-1] == "quit"
     sender, recipients, raw = fake.sent[0]
@@ -542,6 +585,55 @@ def test_email_sends_run_summary_via_smtp(monkeypatch):
     body = parsed.get_payload(decode=True).decode("utf-8")
     assert "https://a.com/1" in body
     assert "s3cr3t" not in raw
+
+
+@pytest.mark.unit
+def test_email_without_starttls_refuses_credentials(monkeypatch):
+    fake = _FakeSMTP(starttls_available=False)
+    monkeypatch.setattr(mod, "_smtp_client", lambda host, port, timeout_s: fake)
+    monkeypatch.setenv("DIGISEARCH_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("DIGISEARCH_SMTP_USER", "apikey")
+    monkeypatch.setenv("DIGISEARCH_SMTP_PASS", "hunter2")
+    monkeypatch.setenv("DIGISEARCH_SMTP_FROM", "monitors@example.com")
+
+    receipts = mod.deliver(_ok_run(), _email_watch("alerts@example.com"), delivery_secret="s3")
+
+    assert receipts == [
+        DeliveryReceipt(target_kind="email", ok=False, error="smtp_tls_unavailable")
+    ]
+    assert "starttls" not in fake.calls
+    assert not any(isinstance(call, tuple) and call[0] == "login" for call in fake.calls)
+    assert "sendmail" not in fake.calls
+    assert fake.calls[-1] == "quit"
+
+
+@pytest.mark.unit
+def test_email_without_starttls_and_without_credentials_sends_in_clear(monkeypatch):
+    fake = _FakeSMTP(starttls_available=False)
+    monkeypatch.setattr(mod, "_smtp_client", lambda host, port, timeout_s: fake)
+    monkeypatch.setenv("DIGISEARCH_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("DIGISEARCH_SMTP_FROM", "monitors@example.com")
+
+    receipts = mod.deliver(_ok_run(), _email_watch("alerts@example.com"), delivery_secret="s3")
+
+    assert receipts == [DeliveryReceipt(target_kind="email", ok=True)]
+    assert "starttls" not in fake.calls
+    assert "sendmail" in fake.calls
+
+
+@pytest.mark.unit
+def test_email_malformed_port_is_a_failed_receipt(monkeypatch):
+    def no_client(host, port, timeout_s):
+        raise AssertionError("SMTP must not be constructed with a malformed port")
+
+    monkeypatch.setattr(mod, "_smtp_client", no_client)
+    monkeypatch.setenv("DIGISEARCH_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("DIGISEARCH_SMTP_PORT", "not-a-port")
+    monkeypatch.setenv("DIGISEARCH_SMTP_FROM", "monitors@example.com")
+
+    receipts = mod.deliver(_ok_run(), _email_watch("alerts@example.com"), delivery_secret="s3")
+
+    assert receipts == [DeliveryReceipt(target_kind="email", ok=False, error="smtp_not_configured")]
 
 
 @pytest.mark.unit

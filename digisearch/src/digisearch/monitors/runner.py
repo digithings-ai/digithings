@@ -184,6 +184,7 @@ def run_watch(
 
     if deliver_after_persist:
         assert delivery_secret is not None
+        # Create-time check leaves a DNS-rebinding window; verified TLS + no redirects mitigate.
         receipts = deliver(run, watch, delivery_secret=delivery_secret)
         run = run.model_copy(update={"delivery": receipts})
 

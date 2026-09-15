@@ -14,12 +14,15 @@ would resolve it again anyway.
 targets receive ``run.model_dump(mode="json")`` as the exact POST body with
 ``X-digi-signature: sha256=<hmac_sha256(secret, body)>`` (R7h) over httpx, 2
 attempts with linear backoff (``_WEBHOOK_ATTEMPTS`` / ``_WEBHOOK_BACKOFF_S``).
-A non-2xx response is retried like a transport error — "2 attempts" is read as
-"try the delivery twice" — and the last response's status is recorded. Email
+Transport errors, 5xx, and 429 are retried; any other 4xx is definitive and
+fails fast after one attempt, and the last response's status is recorded. Email
 targets receive a text summary over stdlib ``smtplib`` configured from
 ``DIGISEARCH_SMTP_HOST`` / ``_PORT`` / ``_USER`` / ``_PASS`` / ``_FROM`` (port
-defaults to 587, opportunistic STARTTLS when the relay advertises it, login
-only when ``_USER`` is set); a missing or unusable relay config is a failed
+defaults to 587; STARTTLS uses ``ssl.create_default_context()`` so the
+certificate chain and hostname are verified). Login only happens over
+STARTTLS: a relay that does not advertise it gets a ``smtp_tls_unavailable``
+receipt whenever credentials are configured, because credentials must never
+cross a cleartext connection. A missing or unusable relay config is a failed
 receipt, never a raise.
 
 Every target yields exactly one ``DeliveryReceipt``: the per-target boundary
@@ -44,6 +47,7 @@ import logging
 import os
 import smtplib
 import socket
+import ssl
 import time
 from email.message import EmailMessage
 from urllib.parse import urlsplit
@@ -74,6 +78,7 @@ _DEFAULT_SMTP_PORT = 587
 # Stable receipt errors for the email leg (free-form field, but keep them fixed).
 _SMTP_NOT_CONFIGURED = "smtp_not_configured"
 _EMAIL_RECIPIENTS_MISSING = "email_recipients_missing"
+_SMTP_TLS_UNAVAILABLE = "smtp_tls_unavailable"
 
 
 class DeliveryConfigError(ValueError):
@@ -233,6 +238,8 @@ def _post_json(
                     target_kind=target.kind, ok=True, status_code=response.status_code
                 )
             last_response = response
+            if not _retryable_status(response.status_code):
+                break
     assert last_response is not None
     return DeliveryReceipt(
         target_kind=target.kind,
@@ -240,6 +247,11 @@ def _post_json(
         status_code=last_response.status_code,
         error=f"HTTP {last_response.status_code}",
     )
+
+
+def _retryable_status(status_code: int) -> bool:
+    """Server errors and rate limiting are worth a second attempt; 4xx is final."""
+    return status_code == 429 or status_code >= 500
 
 
 def _client_for(timeout_s: float) -> httpx.Client:
@@ -267,8 +279,11 @@ def _send_email(
     try:
         client.ehlo()
         if client.has_extn("starttls"):
-            client.starttls()
+            client.starttls(context=ssl.create_default_context())
             client.ehlo()
+        elif user:
+            # Fail closed: credentials must never cross a cleartext connection.
+            return DeliveryReceipt(target_kind="email", ok=False, error=_SMTP_TLS_UNAVAILABLE)
         if user:
             client.login(user, password)
         client.sendmail(from_addr, recipients, message.as_string())
@@ -338,8 +353,11 @@ def _redacted_error(exc: BaseException, *, secret: str, target_url: str | None) 
     stripped before the text leaves this module.
     """
     text = f"{type(exc).__name__}: {exc}"
-    if target_url:
-        text = text.replace(target_url, "<target>")
     if secret:
         text = text.replace(secret, "<redacted>")
+    if target_url:
+        # Errors can echo the URL either raw or with its trailing slash trimmed.
+        for needle in {target_url, target_url.rstrip("/")}:
+            if needle:
+                text = text.replace(needle, "<target>")
     return text
