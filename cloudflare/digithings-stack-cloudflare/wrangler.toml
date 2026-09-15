@@ -49,9 +49,10 @@ custom_domain = true
 # service allowlist — /health, /healthz, /metrics, /docs, /redoc,
 # /openapi.json — plus OPTIONS preflights (CORS is enforced separately);
 # everything else (/query, /ingest, /v1/*) needs a scoped JWT. The in-container
-# base stays http://127.0.0.1:8002 for digigraph — this route only adds the
-# external ingress. Declared here like graph/key; `wrangler deploy` provisions
-# the custom domain.
+# base stays http://127.0.0.1:8002 for digigraph, and digisearch binds
+# 0.0.0.0:8002 (container/start_digisearch.sh) so the Worker can proxy to the
+# container network address — a loopback-only bind is unreachable (#4071).
+# Declared here like graph/key; `wrangler deploy` provisions the custom domain.
 [[routes]]
 pattern = "search.digithings.ai"
 zone_name = "digithings.ai"
