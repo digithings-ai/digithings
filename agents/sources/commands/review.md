@@ -103,10 +103,14 @@ labelled as one.
    *disprove* it, defaulting to refuted when unsure. Drop what does not survive —
    a plausible-but-wrong finding costs more than silence.
 
-   Never lower a finding's severity because you could not reproduce it. Say what
-   you could not exercise, and keep the grade the mechanism supports — an
-   unverified finding with whole-service blast radius is still at least Medium
-   ([CODE_REVIEW_POLICY.md § Severity is blast radius](docs/agents/CODE_REVIEW_POLICY.md)).
+   Never lower a finding's severity because you could not reproduce it — and never
+   drop it for that reason either. If the *mechanism* is verified, keep the finding
+   and label it unverified; "defaulting to refuted when unsure" applies to the claim,
+   not to whether it happened to be reproducible. Say in the findings comment what
+   you could not exercise, and keep the grade the blast radius implies: a boot-path
+   defect (an unguarded command under `set -e` before `exec`) stays **blocking**, and
+   for ordinary service-scope findings whole-service blast radius means Medium is the
+   floor ([CODE_REVIEW_POLICY.md § Severity is blast radius](docs/agents/CODE_REVIEW_POLICY.md)).
 
 4. **Post the findings**, even when there are none. The comment MUST open with this
    exact marker or the gate will refuse the label:
