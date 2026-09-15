@@ -1,11 +1,14 @@
-"""Unit tests for refresh_performance_metrics.py (#814 / #2598).
+"""Unit tests for refresh_performance_metrics.py (#814 / #2598; R2-only market reads, #4053).
 
 Tests the fixes for:
 - Fix 3: pnl_pct from finalized accounting, else nav day return — never
           current_book_lookback / legacy position_attribution SUM (#2598);
           sharpe/vol/max_dd/alpha written as NULL when insufficient history (< 20 rows).
-- Fix 4: current_price always written from latest price_history close;
+- Fix 4: current_price always written from the latest sealed-R2 close;
           sanity check warning for implausible entry_price (> 10% deviation).
+
+Market rows come from the in-memory R2 fixture (no Supabase market body, no
+network); every test runs behind an empty sealed store unless it arms its own.
 
 Loaded via importlib.util like the other script-level tests (scripts/ are not
 installed packages).
@@ -25,6 +28,11 @@ import pytest
 from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
+
+# Registers Task 1's `r2_market` builder fixture for this module; pytest requires
+# plugin modules to be named here rather than imported (an imported fixture would
+# collide with the fixture-name parameters below under ruff F811).
+pytest_plugins = ["tests.fixtures.r2_market"]
 
 pytestmark = pytest.mark.unit
 
@@ -70,6 +78,33 @@ _MIN_HISTORY_ROWS = _mod._MIN_HISTORY_ROWS
 
 def _fake_with(tables: dict[str, list[dict[str, Any]]]) -> FakeSupabaseClient:
     return FakeSupabaseClient(canned_reads=tables)
+
+
+@pytest.fixture(autouse=True)
+def _never_build_a_real_r2_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Market reads are R2-only (#4053): default to an empty sealed store.
+
+    Without this, a market read in a test without R2 credentials raises, and a
+    developer machine with R2 creds in ``.env`` would silently reach the
+    network. Tests that assert market values call ``r2_market`` themselves,
+    which replaces this store with their rows.
+    """
+    from tests.fixtures.r2_market import MemoryR2
+
+    monkeypatch.setattr("digiquant.mcp_server._get_r2_store", lambda: MemoryR2())
+
+
+def _seal_market(r2_market, rows: list[dict[str, Any]], *, as_of: str = "2026-06-12") -> None:
+    """Convert Supabase-shaped ``price_history`` rows into sealed R2 generations."""
+    by_ticker: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        ticker = str(row.get("ticker") or "").upper()
+        if not ticker or not row.get("date"):
+            continue
+        by_ticker.setdefault(ticker, []).append(
+            {"date": str(row["date"])[:10], "close": row.get("close")}
+        )
+    r2_market(by_ticker, as_of=as_of)
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +221,14 @@ class TestUpsertPortfolioMetricsDaily:
         row = sb.store["portfolio_metrics"][0]
         assert row["pnl_pct"] == pytest.approx(1.0, abs=1e-3)
 
-    def test_persists_cumulative_portfolio_and_benchmark_returns(self) -> None:
+    def test_persists_cumulative_portfolio_and_benchmark_returns(self, r2_market) -> None:
+        _seal_market(
+            r2_market,
+            [
+                {"date": "2026-06-10", "ticker": "SPY", "close": 400.0},
+                {"date": "2026-06-12", "ticker": "SPY", "close": 420.0},
+            ],
+        )
         sb = _fake_with(
             {
                 "portfolio_metrics": [],
@@ -196,10 +238,6 @@ class TestUpsertPortfolioMetricsDaily:
                     {"date": "2026-06-10", "nav": 100.0},
                     {"date": "2026-06-11", "nav": 105.0},
                     {"date": "2026-06-12", "nav": 110.0},
-                ],
-                "price_history": [
-                    {"date": "2026-06-10", "ticker": "SPY", "close": 400.0},
-                    {"date": "2026-06-12", "ticker": "SPY", "close": 420.0},
                 ],
             }
         )
@@ -355,7 +393,14 @@ class TestUpsertPortfolioMetricsDaily:
         assert row["max_drawdown"] != -0.05
         assert row["alpha"] == 0.02
 
-    def test_backfills_returns_without_replacing_tearsheet_metrics(self) -> None:
+    def test_backfills_returns_without_replacing_tearsheet_metrics(self, r2_market) -> None:
+        _seal_market(
+            r2_market,
+            [
+                {"date": "2026-06-10", "ticker": "SPY", "close": 400.0},
+                {"date": "2026-06-12", "ticker": "SPY", "close": 420.0},
+            ],
+        )
         existing = {
             "date": "2026-06-12",
             "computed_from": "tearsheet",
@@ -368,10 +413,6 @@ class TestUpsertPortfolioMetricsDaily:
                 "nav_history": [
                     {"date": "2026-06-10", "nav": 100.0},
                     {"date": "2026-06-12", "nav": 110.0},
-                ],
-                "price_history": [
-                    {"date": "2026-06-10", "ticker": "SPY", "close": 400.0},
-                    {"date": "2026-06-12", "ticker": "SPY", "close": 420.0},
                 ],
             },
         )
@@ -416,16 +457,18 @@ class TestRefreshPositionsMetrics:
             "current_price": None,
         }
 
-    def _sb_with_position(self, pos: dict, price_rows: list[dict]) -> FakeSupabaseClient:
-        sb = FakeSupabaseClient(canned_reads={"positions": [pos], "price_history": price_rows})
+    def _sb_with_position(self, r2_market, pos: dict, price_rows: list[dict]) -> FakeSupabaseClient:
+        _seal_market(r2_market, price_rows)
+        sb = FakeSupabaseClient(canned_reads={"positions": [pos]})
         # Pre-seed store so FakeQuery.update() can find and mutate the row.
         sb.store["positions"] = [dict(pos)]
         return sb
 
-    def test_current_price_written_from_latest_close(self) -> None:
-        # current_price must be populated from price_history when it exists (#814).
+    def test_current_price_written_from_latest_close(self, r2_market) -> None:
+        # current_price must be populated from the sealed R2 close when it exists (#814).
         pos = self._make_position("SPY", entry_price=530.0)
         sb = self._sb_with_position(
+            r2_market,
             pos,
             [
                 {"ticker": "SPY", "date": "2026-06-12", "close": 535.0},
@@ -437,10 +480,11 @@ class TestRefreshPositionsMetrics:
         assert len(updated) == 1
         assert updated[0]["current_price"] == 535.0
 
-    def test_current_price_falls_back_to_prev_when_no_today_close(self) -> None:
+    def test_current_price_falls_back_to_prev_when_no_today_close(self, r2_market) -> None:
         # On a non-trading day the exact date may not exist; fall back to prev close (#814).
         pos = self._make_position("SPY", entry_price=530.0)
         sb = self._sb_with_position(
+            r2_market,
             pos,
             [
                 {"ticker": "SPY", "date": "2026-06-11", "close": 533.0},
@@ -453,11 +497,12 @@ class TestRefreshPositionsMetrics:
         assert updated[0]["current_price"] == 533.0
 
     def test_entry_price_sanity_warning_on_large_deviation(
-        self, capsys: pytest.CaptureFixture
+        self, r2_market, capsys: pytest.CaptureFixture
     ) -> None:
         # SPY entry_price=750 vs close=535 is ~40% deviation → warning to stderr (#814).
         pos = self._make_position("SPY", entry_price=750.33)
         sb = self._sb_with_position(
+            r2_market,
             pos,
             [
                 {"ticker": "SPY", "date": "2026-06-12", "close": 535.0},
@@ -469,10 +514,13 @@ class TestRefreshPositionsMetrics:
         assert "entry_price sanity" in captured.err
         assert "SPY" in captured.err
 
-    def test_no_sanity_warning_on_small_deviation(self, capsys: pytest.CaptureFixture) -> None:
+    def test_no_sanity_warning_on_small_deviation(
+        self, r2_market, capsys: pytest.CaptureFixture
+    ) -> None:
         # entry_price close to current_price → no warning.
         pos = self._make_position("SPY", entry_price=530.0)
         sb = self._sb_with_position(
+            r2_market,
             pos,
             [
                 {"ticker": "SPY", "date": "2026-06-12", "close": 535.0},
@@ -483,10 +531,11 @@ class TestRefreshPositionsMetrics:
         captured = capsys.readouterr()
         assert "entry_price sanity" not in captured.err
 
-    def test_unrealized_pnl_pct_computed_from_entry_and_close(self) -> None:
+    def test_unrealized_pnl_pct_computed_from_entry_and_close(self, r2_market) -> None:
         # unrealized_pnl_pct = (close - entry) / entry * 100
         pos = self._make_position("SPY", entry_price=500.0)
         sb = self._sb_with_position(
+            r2_market,
             pos,
             [
                 {"ticker": "SPY", "date": "2026-06-12", "close": 550.0},
@@ -507,7 +556,7 @@ class TestRefreshPositionsMetrics:
             "entry_date": None,
             "current_price": None,
         }
-        sb = FakeSupabaseClient(canned_reads={"positions": [cash_pos], "price_history": []})
+        sb = FakeSupabaseClient(canned_reads={"positions": [cash_pos]})
         sb.store["positions"] = [dict(cash_pos)]
         n = refresh_positions_metrics(sb, "2026-06-12")
         assert n == 0
@@ -547,8 +596,9 @@ class TestCarriedPriceProvenance:
             "current_price": None,
         }
 
-    def _sb(self, pos: dict, price_rows: list[dict]) -> FakeSupabaseClient:
-        sb = FakeSupabaseClient(canned_reads={"positions": [pos], "price_history": price_rows})
+    def _sb(self, r2_market, pos: dict, price_rows: list[dict]) -> FakeSupabaseClient:
+        _seal_market(r2_market, price_rows)
+        sb = FakeSupabaseClient(canned_reads={"positions": [pos]})
         sb.store["positions"] = [dict(pos)]
         return sb
 
@@ -560,9 +610,10 @@ class TestCarriedPriceProvenance:
     # separate defect (XRT lagged its peers by a day in prod) and a separate PR.
     _SPY_PRIOR = {"ticker": "SPY", "date": "2026-06-12", "close": 535.0}
 
-    def test_a_same_day_close_stamps_the_book_date(self) -> None:
+    def test_a_same_day_close_stamps_the_book_date(self, r2_market) -> None:
         """The unchanged case: a real trading day marks itself."""
         sb = self._sb(
+            r2_market,
             self._make_position("SPY", entry_price=530.0),
             [
                 {"ticker": "SPY", "date": "2026-06-13", "close": 540.0},
@@ -574,9 +625,10 @@ class TestCarriedPriceProvenance:
         assert row["current_price"] == 540.0
         assert row["metrics_as_of"] == "2026-06-13"
 
-    def test_a_carried_close_stamps_the_source_date_not_the_book_date(self) -> None:
+    def test_a_carried_close_stamps_the_source_date_not_the_book_date(self, r2_market) -> None:
         """The Saturday/Sunday case, and the whole point of #1833."""
         sb = self._sb(
+            r2_market,
             self._make_position("XLV", entry_price=150.0),
             [self._SPY_PRIOR, {"ticker": "XLV", "date": "2026-06-12", "close": 162.55}],
         )
@@ -588,12 +640,15 @@ class TestCarriedPriceProvenance:
             "the market never opened"
         )
 
-    def test_a_carried_close_reports_no_day_change_rather_than_a_fabricated_zero(self) -> None:
+    def test_a_carried_close_reports_no_day_change_rather_than_a_fabricated_zero(
+        self, r2_market
+    ) -> None:
         """``c_now`` and ``c_prev`` are the SAME close on a carried day, so the old arithmetic
         produced exactly 0.0% — a measured-looking number for a session that never happened.
         All 11 non-CASH rows on 2026-08-01 carried it. NULL is the honest value; the frontend
         already falls back to a client-side derivation when the column is null."""
         sb = self._sb(
+            r2_market,
             self._make_position("XLE", entry_price=55.0),
             [self._SPY_PRIOR, {"ticker": "XLE", "date": "2026-06-12", "close": 59.55}],
         )
@@ -603,9 +658,10 @@ class TestCarriedPriceProvenance:
         # The other two percentages are still real — they are entry-relative, not session-relative.
         assert row["unrealized_pnl_pct"] is not None
 
-    def test_a_real_session_still_reports_a_day_change(self) -> None:
+    def test_a_real_session_still_reports_a_day_change(self, r2_market) -> None:
         """Guard against over-correcting: the NULL applies only to carried days."""
         sb = self._sb(
+            r2_market,
             self._make_position("SPY", entry_price=530.0),
             [
                 {"ticker": "SPY", "date": "2026-06-13", "close": 540.0},
@@ -617,8 +673,8 @@ class TestCarriedPriceProvenance:
             (540.0 - 535.0) / 535.0 * 100.0
         )
 
-    def test_an_unmarkable_row_clears_every_metric_together(self) -> None:
-        """No close for either candidate date — real case: XRT's price_history lagged its peers
+    def test_an_unmarkable_row_clears_every_metric_together(self, r2_market) -> None:
+        """No close for either candidate date — real case: XRT's R2 close lagged its peers
         by a day. Previously the stale stored price was RETAINED while ``metrics_as_of`` was
         stamped anyway: an old price under a fresh provenance label. All four must go null
         together, because ``valuePosition`` needs both ``current_price`` and ``metrics_as_of``
@@ -626,7 +682,7 @@ class TestCarriedPriceProvenance:
         stale = self._make_position("XRT", entry_price=70.0)
         stale["current_price"] = 71.11  # left over from an earlier run
         stale["metrics_as_of"] = "2026-06-01"
-        sb = self._sb(stale, [])  # price_history has nothing for this ticker
+        sb = self._sb(r2_market, stale, [])  # no generation for this ticker
         refresh_positions_metrics(sb, "2026-06-13")
         row = sb.store["positions"][0]
         assert row["current_price"] is None, "a stale price must not survive under a fresh stamp"
@@ -635,9 +691,9 @@ class TestCarriedPriceProvenance:
         assert row["day_change_pct"] is None
         assert row["since_entry_return_pct"] is None
 
-    def test_cash_is_still_skipped(self) -> None:
+    def test_cash_is_still_skipped(self, r2_market) -> None:
         cash = self._make_position("CASH")
-        sb = self._sb(cash, [])
+        sb = self._sb(r2_market, cash, [])
         refresh_positions_metrics(sb, "2026-06-13")
         assert sb.store["positions"][0]["metrics_as_of"] is None
 
@@ -645,7 +701,7 @@ class TestCarriedPriceProvenance:
 class TestRefreshEventCumulativeHouseScope:
     """House cron must not patch overlay (or leaked) ``position_events`` by bare ``id``."""
 
-    def test_skips_overlay_workspace_events(self) -> None:
+    def test_skips_overlay_workspace_events(self, r2_market) -> None:
         house = str(house_workspace_id())
         overlay = str(uuid4())
         house_ev = {
@@ -662,14 +718,16 @@ class TestRefreshEventCumulativeHouseScope:
             "workspace_id": overlay,
             "cumulative_return_since_event_pct": None,
         }
-        prices = [
-            {"ticker": "SPY", "date": "2026-06-01", "close": 500.0},
-            {"ticker": "SPY", "date": "2026-06-12", "close": 550.0},
-        ]
+        _seal_market(
+            r2_market,
+            [
+                {"ticker": "SPY", "date": "2026-06-01", "close": 500.0},
+                {"ticker": "SPY", "date": "2026-06-12", "close": 550.0},
+            ],
+        )
         sb = FakeSupabaseClient(
             canned_reads={
                 "position_events": [house_ev, overlay_ev],
-                "price_history": prices,
             }
         )
         sb.store["position_events"] = [dict(house_ev), dict(overlay_ev)]

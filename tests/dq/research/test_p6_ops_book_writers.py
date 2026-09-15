@@ -12,6 +12,11 @@ from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.fixtures.fake_supabase import FakeSupabaseClient
 
+# Registers Task 1's `r2_market` builder fixture for this module; pytest requires
+# plugin modules to be named here rather than imported (an imported fixture would
+# collide with the fixture-name parameters below under ruff F811).
+pytest_plugins = ["tests.fixtures.r2_market"]
+
 pytestmark = pytest.mark.unit
 
 _SCRIPTS = Path(__file__).resolve().parents[3] / "digiquant" / "scripts" / "research"
@@ -179,9 +184,25 @@ class TestMaterializeSnapshotPositions:
 
 
 class TestBackfillExecutionPrices:
-    def test_upserts_house_workspace_conflict(self) -> None:
+    def test_upserts_house_workspace_conflict(self, r2_market) -> None:
         mod = _load("backfill_execution_prices")
         d = "2026-08-31"
+        # The execution-day open comes from the sealed R2 generation (#4053).
+        r2_market(
+            {
+                "IAU": [
+                    {
+                        "date": d,
+                        "open": 42.5,
+                        "high": 43.0,
+                        "low": 42.0,
+                        "close": 42.8,
+                        "volume": 1000,
+                    }
+                ]
+            },
+            as_of=d,
+        )
         sb = FakeSupabaseClient(
             canned_reads={
                 "position_events": [
@@ -194,7 +215,6 @@ class TestBackfillExecutionPrices:
                         "weight_pct": 10,
                     }
                 ],
-                "price_history": [{"ticker": "IAU", "date": d, "open": 42.5}],
             }
         )
         n = mod.backfill_prices_for_date(sb, d)

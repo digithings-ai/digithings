@@ -500,23 +500,23 @@ def _use_r2(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
 
 
-def test_get_price_technicals_helper_r2_matches_supabase(monkeypatch):
-    _, _, sup = _t7b_both(monkeypatch)
-    _use_supabase(monkeypatch)
-    want = q.get_price_technicals(client=sup, ticker="SPY", lookback=20, as_of=_T7B_RUN_DATE)
-    _use_r2(monkeypatch)
+def test_get_price_technicals_helper_reads_r2_only(monkeypatch):
+    """The retired Supabase body is gone: the helper serves the sealed generation (#4053).
+
+    Even with the backend flag forced to ``supabase`` the read goes to R2 (the
+    exploding client proves no Supabase market read), and the window matches the
+    independently computed technicals (``compute_indicators``) over the same
+    generation.
+    """
+    dates, closes_by_ticker, _ = _t7b_both(monkeypatch)
+    _use_supabase(monkeypatch)  # the retired flag no longer diverts the read
     got = q.get_price_technicals(
         client=_ExplodingMarketClient(), ticker="SPY", lookback=20, as_of=_T7B_RUN_DATE
     )
-    assert [r["date"] for r in got["window"]] == [r["date"] for r in want["window"]]
-    # The shared fake ignores select() projections, so project the Supabase
-    # side through the helper's real TECHNICAL_COLUMNS select (production
-    # PostgREST returns exactly these keys).
-    want_window = [{k: r.get(k) for k in q.TECHNICAL_COLUMNS} for r in want["window"]]
+    want_rows = _t7b_indicator_rows("SPY", dates, closes_by_ticker["SPY"])[-20:][::-1]
+    want_window = [{k: r.get(k) for k in q.TECHNICAL_COLUMNS} for r in want_rows]
     assert got["window"] == pytest.approx(want_window, nan_ok=True)
-    assert got["latest"] == pytest.approx(
-        {k: want["latest"].get(k) for k in q.TECHNICAL_COLUMNS}, nan_ok=True
-    )
+    assert got["latest"] == pytest.approx(want_window[0], nan_ok=True)
 
 
 def test_get_macro_series_helper_r2_matches_supabase(monkeypatch):
