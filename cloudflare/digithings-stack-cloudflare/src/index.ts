@@ -104,6 +104,8 @@ export class DigiStackContainer extends Container {
     DIGI_HOUSE_UPSTREAM: env.DIGI_HOUSE_UPSTREAM ?? "",
     LITELLM_PROXY_API_KEY: env.LITELLM_PROXY_API_KEY ?? "",
     LITELLM_MASTER_KEY: env.LITELLM_MASTER_KEY ?? "",
+    // Read-only Zammad helpdesk MCP (supervisord [program:zammad-mcp], OCC demo)
+    ZAMMAD_API_TOKEN: env.ZAMMAD_API_TOKEN ?? "",
   };
 
   /**
@@ -245,6 +247,7 @@ export interface Env {
   DIGI_HOUSE_UPSTREAM?: string;
   LITELLM_PROXY_API_KEY?: string;
   LITELLM_MASTER_KEY?: string;
+  ZAMMAD_API_TOKEN?: string;
   DIGIQUANT_MCP_SCOPE?: string;
   DIGIQUANT_MARKET_DATA_BACKEND?: string;
   FRED_API_KEY?: string;
