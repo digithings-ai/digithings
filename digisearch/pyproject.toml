@@ -38,6 +38,9 @@ server = [
     "mcp>=1.0,<2",
     "typer>=0.12",
     "digikey>=0.1.0",
+    # Monitor schedules reuse the digiclaw 5-field cron grammar by import
+    # (parse_cron/CronExpression.matches) — copying it is forbidden (R4).
+    "digiclaw>=0.1.0",
     "python-json-logger>=2.0",
 ]
 chroma = ["chromadb>=0.4"]
