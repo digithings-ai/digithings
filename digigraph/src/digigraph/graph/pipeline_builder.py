@@ -154,6 +154,8 @@ class _Narration:
 def _phase_complete(label: str, phase_start: list[float]) -> None:
     if phase_start:
         logger.info("pipeline: %s complete in %.1fs", label, time.monotonic() - phase_start[0])
+        # Clear so a reused compiled graph times each run, not the first one (#4116).
+        phase_start.clear()
 
 
 def _instrumented(

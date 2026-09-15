@@ -81,6 +81,30 @@ def test_fanout_items_are_narrated_and_the_phase_reports_completion(
     assert any("[2/2 grounding]" in message and "complete in" in message for message in messages)
 
 
+def test_reused_graph_times_each_run_separately(caplog: pytest.LogCaptureFixture) -> None:
+    fan_out = FanOutPhase(
+        name="second",
+        worker=NodeSpec(name="worker", run=lambda state: {"notes": [state.topic]}),
+        items=lambda state: ["done"],
+        with_item=lambda state, item: state.model_copy(update={"topic": item}),
+        item_key=lambda state: state.topic,
+    )
+    graph = build_pipeline(
+        _State,
+        [PipelinePhase(name="first", nodes=[_node("a", "a_out")]), fan_out],
+    )
+
+    with caplog.at_level(logging.INFO, logger=LOGGER):
+        graph.invoke(_State())
+        caplog.clear()
+        graph.invoke(_State())
+
+    completes = [message for message in _messages(caplog) if "complete in" in message]
+    assert len(completes) == 1
+    elapsed = float(completes[0].split("complete in ")[1].removesuffix("s"))
+    assert elapsed < 1.0
+
+
 def test_progress_narration_never_reaches_warning(caplog: pytest.LogCaptureFixture) -> None:
     graph = build_pipeline(_State, [PipelinePhase(name="solo", nodes=[_node("solo", "a_out")])])
 

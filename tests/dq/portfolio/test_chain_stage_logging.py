@@ -8,6 +8,7 @@ the stage markers that make ``artifacts/run.log`` readable while the run proceed
 from __future__ import annotations
 
 import logging
+import sys
 
 import pytest
 from digiquant.portfolio import chain as chain_mod
@@ -40,6 +41,7 @@ def test_cli_logging_is_configured_once_on_stdout(
 
     chain_mod._configure_cli_logging()
     assert len(clean_root_logger.handlers) == 1
+    assert clean_root_logger.handlers[0].stream is sys.stdout
 
     chain_mod._configure_cli_logging()
 
@@ -76,3 +78,13 @@ def test_stage_markers_report_position_and_elapsed(caplog: pytest.LogCaptureFixt
     messages = [record.getMessage() for record in caplog.records]
     assert any("[2/5] research" in message for message in messages)
     assert any("done in" in message for message in messages)
+
+
+def test_stage_note_is_rendered(caplog: pytest.LogCaptureFixture) -> None:
+    started = chain_mod._stage_start(3, 5, "portfolio")
+
+    with caplog.at_level(logging.INFO, logger="digiquant.portfolio.chain"):
+        chain_mod._stage_done(3, 5, "portfolio", started, note="skipped")
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("[3/5] portfolio (skipped) done in" in message for message in messages)
