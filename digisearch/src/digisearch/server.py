@@ -28,10 +28,15 @@ from digisearch.backend_require import require_real_search_backend
 from digisearch.core.models import Query
 from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TOP_K
 from digisearch.logging import configure_logging
+from digisearch.monitors.exa_adapter import (
+    ExaAdapterError,
+    exa_monitor_id_from_payload,
+    exa_run_to_monitor_run,
+)
 from digisearch.monitors.models import MonitorRun, Watch
 from digisearch.monitors.runner import MonitorRunError, run_watch, tick_due_watches
 from digisearch.monitors.store import MonitorStore, MonitorStoreError, get_store
-from digisearch.monitors.validation import watch_config_error
+from digisearch.monitors.validation import DATATAP_WORKSPACE_ID, watch_config_error
 from digisearch.orchestrator_tools import (
     TOOL_DIGISEARCH,
     TOOL_DIGISEARCH_FETCH_ALL,
@@ -1376,19 +1381,23 @@ def api_tick_monitors(request: Request) -> dict[str, Any]:
     return {"runs": [run.model_dump(mode="json") for run in runs]}
 
 
-@app.post("/v1/monitors/exa_webhook")
-def api_exa_webhook(request: Request) -> JSONResponse:
+@app.post("/v1/monitors/exa_webhook", response_model=None)
+async def api_exa_webhook(request: Request) -> dict[str, Any] | JSONResponse:
     """Auth-exempt but secret-gated EXA result webhook (R1, §4.6).
 
     EXA cannot present a digikey JWT, so the route is exempted in
     :func:`_digisearch_path_scopes` and authenticates with the shared
     ``EXA_MONITOR_WEBHOOK_SECRET`` compared by ``hmac.compare_digest``. A
     missing server secret or a mismatched header fails closed with 401
-    ``exa_bad_signature``; the presented value is never logged or echoed.
+    ``exa_bad_signature``; the presented value is never logged or echoed, and
+    the body is not read until the signature gate has passed.
 
-    Payload translation + persistence land with the EXA adapter (Task 8), so a
-    valid signature currently fails closed with 503 ``exa_not_configured``
-    rather than accepting a payload it cannot translate.
+    The target watch is resolved by matching the payload's ``monitorId``
+    against stored ``Watch.exa_monitor_id`` values — the minimal derivation
+    that needs no new store API; datatap-scoped watches never match (§5). The
+    translated run (Task 8c adapter) is persisted through the monitor store and
+    returned as the canonical ``MonitorRun`` envelope; translation and store
+    failures use the shared fail-closed error envelope.
     """
     presented = request.headers.get("X-Exa-Signature") or ""
     configured = os.environ.get("EXA_MONITOR_WEBHOOK_SECRET", "")
@@ -1398,12 +1407,47 @@ def api_exa_webhook(request: Request) -> JSONResponse:
         or not hmac.compare_digest(presented.encode("utf-8"), configured.encode("utf-8"))
     ):
         return _monitor_error(request, 401, "exa_bad_signature", "Invalid EXA webhook signature.")
-    return _monitor_error(
-        request,
-        503,
-        "exa_not_configured",
-        "EXA monitor webhook translation is not available in this build.",
+    try:
+        payload = await request.json()
+    except ValueError:
+        return _monitor_error(
+            request, 400, "exa_payload_invalid", "EXA webhook body is not valid JSON."
+        )
+    if not isinstance(payload, dict):
+        return _monitor_error(
+            request, 422, "exa_payload_invalid", "EXA webhook payload must be a JSON object."
+        )
+    try:
+        exa_monitor_id = exa_monitor_id_from_payload(payload)
+    except ExaAdapterError as exc:
+        return _monitor_error(request, 422, exc.code, str(exc))
+
+    store = get_monitor_store()
+    watch = next(
+        (
+            candidate
+            for candidate in store.list_watches()
+            if candidate.exa_monitor_id == exa_monitor_id
+            and candidate.workspace_id != DATATAP_WORKSPACE_ID
+        ),
+        None,
     )
+    if watch is None:
+        return _monitor_error(
+            request,
+            404,
+            "watch_not_found",
+            f"No watch is linked to EXA monitor {exa_monitor_id!r}.",
+        )
+    try:
+        run = exa_run_to_monitor_run(watch_id=watch.watch_id, exa_payload=payload)
+    except ExaAdapterError as exc:
+        return _monitor_error(request, 422, exc.code, str(exc))
+    try:
+        store.append_run(run)
+    except MonitorStoreError as exc:
+        return _store_error(request, exc)
+    return run.model_dump(mode="json")
 
 
 register_fastapi_error_handlers(app, service="digisearch")

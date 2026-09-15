@@ -396,8 +396,13 @@ def test_trigger_route_holds_ten_per_minute_through_middleware(monkeypatch, tmp_
 
 
 @pytest.mark.unit
-def test_exa_webhook_valid_secret_fails_closed_until_adapter(monkeypatch):
+def test_exa_webhook_valid_secret_translates_and_persists(monkeypatch, tmp_path):
+    """Task 8c: a valid signature now translates + persists (never 503 again)."""
+    _patch_monitor_store(monkeypatch, tmp_path)
     import digisearch.server as srv
+
+    c = _monitor_client()
+    wid = _create_watch(c, backend="exa", exa_monitor_id="exa_mon_1")["watch"]["watch_id"]
 
     anon = TestClient(srv.app)
     monkeypatch.delenv("EXA_MONITOR_WEBHOOK_SECRET", raising=False)
@@ -413,11 +418,58 @@ def test_exa_webhook_valid_secret_fails_closed_until_adapter(monkeypatch):
     )
     assert non_ascii.status_code == 401  # never a 500 from compare_digest
 
-    # Translation lands with the Task 8 EXA adapter; a valid signature must not
-    # be treated as accepted content until then.
-    matched = anon.post("/v1/monitors/exa_webhook", headers={"X-Exa-Signature": "shh"}, json={})
-    assert matched.status_code == 503
-    assert matched.json()["error"]["code"] == "exa_not_configured"
+    # The signature gate passes only now: EXA payload → canonical MonitorRun.
+    matched = anon.post(
+        "/v1/monitors/exa_webhook",
+        headers={"X-Exa-Signature": "shh"},
+        json={
+            "id": "exa_run_9",
+            "monitorId": "exa_mon_1",
+            "status": "completed",
+            "trigger": "schedule",
+            "createdAt": "2026-09-14T00:00:00Z",
+            "completedAt": "2026-09-14T00:01:00Z",
+            "query": "etf flows",
+            "results": [{"url": "https://a.com/1", "title": "A"}],
+            "newResults": [{"url": "https://a.com/1", "title": "A"}],
+        },
+    )
+    assert matched.status_code == 200, matched.text
+    body = matched.json()
+    assert body["backend"] == "exa"
+    assert body["watch_id"] == wid
+    assert body["status"] == "ok"
+    assert body["trigger"] == "exa_webhook"
+    assert body["results_new"] == [{"url": "https://a.com/1", "title": "A"}]
+
+    runs = c.get(f"/v1/monitors/{wid}/runs").json()["runs"]
+    assert [run["run_id"] for run in runs] == [body["run_id"]]
+
+
+@pytest.mark.unit
+def test_exa_webhook_bad_payload_or_unknown_monitor_fails_closed(monkeypatch, tmp_path):
+    _patch_monitor_store(monkeypatch, tmp_path)
+    import digisearch.server as srv
+
+    monkeypatch.setenv("EXA_MONITOR_WEBHOOK_SECRET", "shh")
+    anon = TestClient(srv.app)
+    headers = {"X-Exa-Signature": "shh"}
+
+    unknown = anon.post(
+        "/v1/monitors/exa_webhook",
+        headers=headers,
+        json={"monitorId": "nope", "status": "completed"},
+    )
+    assert unknown.status_code == 404
+    assert unknown.json()["error"]["code"] == "watch_not_found"
+
+    missing = anon.post("/v1/monitors/exa_webhook", headers=headers, json={"status": "completed"})
+    assert missing.status_code == 422
+    assert missing.json()["error"]["code"] == "exa_monitor_id_missing"
+
+    malformed = anon.post("/v1/monitors/exa_webhook", headers=headers, content=b"{not json")
+    assert malformed.status_code == 400
+    assert malformed.json()["error"]["code"] == "exa_payload_invalid"
 
 
 @pytest.mark.unit
