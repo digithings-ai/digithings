@@ -350,3 +350,81 @@ def test_pipeline_bearer_auth_error_propagates(
     monkeypatch.setattr(sa_mod, "get_service_jwt", _raise)
     with pytest.raises(sa_mod.ServiceAuthError):
         _real_call_web_search_tool(query="etf flows", include_domains=[], max_results=4)
+
+
+@pytest.mark.unit
+def test_scoped_empty_retries_unscoped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A zero-row scoped search retries without the allowlist (#4086).
+
+    The hosted ddgs provider post-filters by domain (it cannot bias), so a
+    narrow allowlist can empty the result set; the retry keeps real grounding
+    flowing instead of aborting the pipeline.
+    """
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    calls: list[dict[str, Any]] = []
+
+    def fake_call(query: str, **kw: Any) -> dict[str, Any]:
+        calls.append({"query": query, **kw})
+        if kw.get("include_domains"):
+            return {"results": []}
+        return {
+            "results": [
+                {
+                    "doc_id": "https://b.com/1",
+                    "content": "s",
+                    "metadata": {"title": "t"},
+                }
+            ]
+        }
+
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", fake_call)
+    out = _real_call_web_search_tool(
+        query="etf flows", include_domains=["reuters.com"], max_results=4
+    )
+    assert out["sources"] == ["https://b.com/1"]
+    assert out["relaxed_domains"] is True
+    assert len(calls) == 2
+    assert calls[0]["include_domains"] == ["reuters.com"]
+    assert calls[1]["include_domains"] == []
+
+
+@pytest.mark.unit
+def test_unscoped_empty_does_not_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no allowlist there is nothing to relax: one call, then raise."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    calls: list[dict[str, Any]] = []
+
+    def fake_call(query: str, **kw: Any) -> dict[str, Any]:
+        calls.append({"query": query, **kw})
+        return {"results": []}
+
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", fake_call)
+    with pytest.raises(RuntimeError, match="no rows"):
+        _real_call_web_search_tool(query="etf flows", include_domains=[], max_results=4)
+    assert len(calls) == 1
+
+
+@pytest.mark.unit
+def test_scoped_and_unscoped_empty_raises_with_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When even the unscoped retry is empty the error names the scoped domains."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+
+    def fake_call(query: str, **kw: Any) -> dict[str, Any]:
+        return {"results": []}
+
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", fake_call)
+    with pytest.raises(RuntimeError, match=r"scoped_domains.*also returned no rows"):
+        _real_call_web_search_tool(
+            query="etf flows", include_domains=["reuters.com"], max_results=4
+        )
