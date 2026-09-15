@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import time as _time
@@ -81,47 +82,115 @@ _RATE_LIMITS: dict[str, tuple[int, int]] = {
 }
 _DEFAULT_RATE_LIMIT = (30, 60)
 _UNLIMITED_PATHS = {"/health", "/healthz"}
+#: Multiple of a path's budget granted to a caller presenting a bearer token.
+#: The budget is keyed on the token, not the IP, so one runner (every digiquant
+#: book-run grounding call arrives from a single GitHub-runner IP) cannot
+#: exhaust another service's allowance. #4106
+_AUTH_RATE_LIMIT_MULTIPLIER = 6
+#: Coarse per-IP ceiling for token-bearing traffic, as a multiple of the path
+#: budget, so rotating tokens cannot bypass the flood guard. #4106
+_IP_CEILING_MULTIPLIER = 24
+_DISABLE_VALUES = ("1", "true", "yes")
 
 
-def _rl_check(request: Request, max_req: int, window: int) -> JSONResponse | None:
-    if os.environ.get("DIGI_DISABLE_RATE_LIMIT", "").lower() in ("1", "true", "yes"):
-        return None
+def _env_multiplier(name: str, default: int) -> int:
+    """Read a positive integer multiplier from ``name``, falling back to ``default``."""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("%s=%r is not an integer; using %d", name, raw, default)
+        return default
+    if value < 1:
+        logger.warning("%s=%r must be >= 1; using %d", name, raw, default)
+        return default
+    return value
+
+
+def _client_ip(request: Request) -> str:
+    """First ``X-Forwarded-For`` hop, else the socket peer (``unknown`` if neither)."""
     xff = request.headers.get("X-Forwarded-For")
-    ip = (
-        xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
-    )
-    if ip == "testclient":
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _bearer_bucket(request: Request) -> str | None:
+    """Opaque window key for the presented bearer token, or None when absent.
+
+    The limiter runs before ``DigiAuthMiddleware`` (middleware added last runs
+    outermost), so the token is not verified here — only hashed, so a raw
+    credential never becomes an in-memory key. An unverifiable token still meets
+    the auth 401 and the per-IP ceiling below.
+    """
+    header = request.headers.get("Authorization", "")
+    scheme, _, token = header.partition(" ")
+    token = token.strip()
+    if scheme.lower() != "bearer" or not token:
         return None
+    return f"tok:{hashlib.sha256(token.encode('utf-8')).hexdigest()[:16]}"
+
+
+def _rl_exceeded(key: str, max_req: int, window: int) -> bool:
+    """Record one hit for ``key``; True when the window is already full."""
     now = _time.monotonic()
     cutoff = now - window
     with _rl_lock:
-        if ip not in _rl_windows:
-            _rl_windows[ip] = _deque()
-        q = _rl_windows[ip]
+        q = _rl_windows.setdefault(key, _deque())
         while q and q[0] < cutoff:
             q.popleft()
         if len(q) >= max_req:
-            return json_error_response(
-                status_code=429,
-                code="rate_limit_exceeded",
-                message=f"Rate limit exceeded: {max_req} requests per {window}s.",
-                request=request,
-                service="digisearch",
-                headers={"Retry-After": str(window)},
-            )
+            return True
         q.append(now)
-    return None
+    return False
+
+
+def _rl_too_many(request: Request, max_req: int, window: int) -> JSONResponse:
+    return json_error_response(
+        status_code=429,
+        code="rate_limit_exceeded",
+        message=f"Rate limit exceeded: {max_req} requests per {window}s.",
+        request=request,
+        service="digisearch",
+        headers={"Retry-After": str(window)},
+    )
 
 
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
-    """Per-IP rate limiting. /query: 10/min; /ingest: 30/min; others: 30/min."""
+    """Identity-aware rate limiting. /query: 10/min; /ingest: 30/min; others: 30/min.
+
+    Anonymous callers are limited per IP. Callers presenting a bearer token get a
+    larger budget keyed on that token (``DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER``),
+    on top of a coarse per-IP ceiling (``DIGISEARCH_IP_CEILING_MULTIPLIER``) that
+    keeps the flood guard intact. #4106
+    """
     path = request.url.path
-    if path not in _UNLIMITED_PATHS:
-        max_req, window = _RATE_LIMITS.get(path, _DEFAULT_RATE_LIMIT)
-        result = _rl_check(request, max_req, window)
-        if result is not None:
-            return result
+    if path in _UNLIMITED_PATHS:
+        return await call_next(request)
+    if os.environ.get("DIGI_DISABLE_RATE_LIMIT", "").lower() in _DISABLE_VALUES:
+        return await call_next(request)
+    ip = _client_ip(request)
+    if ip == "testclient":
+        return await call_next(request)
+    max_req, window = _RATE_LIMITS.get(path, _DEFAULT_RATE_LIMIT)
+    bucket = _bearer_bucket(request)
+    if bucket is not None:
+        ceiling = max_req * _env_multiplier(
+            "DIGISEARCH_IP_CEILING_MULTIPLIER", _IP_CEILING_MULTIPLIER
+        )
+        if _rl_exceeded(f"ip:{ip}", ceiling, window):
+            return _rl_too_many(request, ceiling, window)
+        budget = max_req * _env_multiplier(
+            "DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER", _AUTH_RATE_LIMIT_MULTIPLIER
+        )
+        if _rl_exceeded(bucket, budget, window):
+            return _rl_too_many(request, budget, window)
+        return await call_next(request)
+    if _rl_exceeded(f"ip:{ip}", max_req, window):
+        return _rl_too_many(request, max_req, window)
     return await call_next(request)
 
 
