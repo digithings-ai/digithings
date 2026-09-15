@@ -24,10 +24,10 @@ is banned, § Async lifecycle — the server lifespan owns the TaskGroup and the
   attached with status ``running`` and the worker drains the verified items
   lacking the field through ``runner.backfill_enrichment``, same semaphore and
   per-item containment as the main pass).
-- ``verification_mode`` is a run parameter with no persisted home (T1's
-  ``Webset``/``WebsetSearch`` carry no mode field), so only the initial, in-flight
-  ``create_webset`` schedule carries it; refresh schedules (``add_search`` /
-  ``trigger_monitor``) run the default ``llm`` mode.
+- ``verification_mode`` is persisted on the created ``Webset`` and its initial
+  ``WebsetSearch`` (T6 review carry); refresh schedules (``add_search`` /
+  ``trigger_monitor``) inherit the webset's / latest generation's mode, so a
+  ``rules`` webset never silently switches to ``llm``.
 - Webhook delivery is deliberately **not** wired here: T5b's delivery path is
   only reachable once ``add_webhook`` enforces the Phase C SSRF/private-IP
   rejection below (the R13 human gate).
@@ -52,6 +52,13 @@ siblings T2/T5b documented): ``webset_not_found`` (as
 mapping but never raised by the facade: ``webhook_secret_missing`` (a T5b
 delivery-ledger receipt error, surfaced only as delivery state, never as a
 route failure).
+
+Terminal-state gate (T6 review carry): ``add_search`` / ``trigger_monitor`` /
+``add_enrichment`` reject a webset in a terminal ``cancelled``/``failed`` state
+with ``webset_terminal`` — a running search appended to a terminal webset can
+never settle and would be re-selected by startup resume forever. ``idle`` is a
+success-terminal that explicitly remains refreshable (that is the refresh
+path).
 
 Store-internal invariants — ``webset_not_settled``, ``transition_invalid``,
 ``invalid_event_kind``, ``invalid_webhook_delivery``, ``event_not_stored``,
@@ -110,6 +117,7 @@ __all__ = [
     "add_search",
     "add_webhook",
     "cancel_webset",
+    "count_items",
     "create_monitor",
     "create_webset",
     "export_webset",
@@ -150,6 +158,7 @@ SPEC_ERROR_CODES = (
     "datatap_websets_disabled",
     "webhook_url_required",
     "webhook_url_private",
+    "webset_terminal",
     "rate_limit_exceeded",
 )
 
@@ -164,6 +173,9 @@ CARRIED_ERROR_CODES = (
 
 #: Mapping target for store-internal invariant violations (never a caller input).
 INTERNAL_ERROR_CODE = "internal_error"
+
+#: Terminal webset statuses that refuse new work (``idle`` is refreshable).
+_TERMINAL_REFRESH_BLOCKED = frozenset({"cancelled", "failed"})
 
 #: Store codes surfaced unchanged; everything else maps to ``INTERNAL_ERROR_CODE``.
 _PASSTHROUGH_CODES = frozenset(
@@ -280,11 +292,14 @@ def create_webset(
     definitions = _enrichments(enrichments or [])
     # Validate query/count/criteria before any write: the store rewrites the
     # provisional parent id when it persists the nested search (T2 contract).
+    # The mode is persisted on both the webset (the default future searches
+    # inherit) and this initial generation (the mode the pass actually runs).
     initial_search = WebsetSearch(
         webset_id=_PROVISIONAL_WEBSET_ID,
         query=query,
         count=count,
         criteria=rules,
+        verification_mode=mode,
     )
     store = _store_or_default(store)
     created = _call(
@@ -293,6 +308,7 @@ def create_webset(
             criteria=rules,
             enrichments=definitions,
             workspace_id=workspace_id,
+            verification_mode=mode,
             searches=[initial_search],
         ),
     )
@@ -325,6 +341,17 @@ def list_items(
     )
 
 
+def count_items(webset_id: str, *, store: WebsetStore | None = None) -> dict[str, int]:
+    """Item counts per verification state (``verified``/``pending``/``rejected``).
+
+    The MCP/orchestrator ``websets_get`` op reports status + counts; the store
+    owns the aggregate so no caller pages every item to count them.
+    """
+    store = _store_or_default(store)
+    _require_webset(store, webset_id)
+    return _call(store.count_items, webset_id)
+
+
 def add_search(
     webset_id: str,
     *,
@@ -333,15 +360,28 @@ def add_search(
     criteria: list[VerificationCriterion] | list[dict[str, str]] | None = None,
     store: WebsetStore | None = None,
 ) -> WebsetSearch:
-    """Attach a follow-up search and schedule its run; missing criteria inherits."""
+    """Attach a follow-up search and schedule its run; missing criteria inherits.
+
+    The refresh inherits the webset's persisted ``verification_mode`` and
+    rejects a terminal (``cancelled``/``failed``) webset with
+    ``webset_terminal``.
+    """
     store = _store_or_default(store)
     webset = _require_webset(store, webset_id)
+    _require_refreshable(webset)
     rules = webset.criteria if criteria is None else _criteria(criteria)
+    mode = webset.verification_mode
     created = _call(
         store.add_search,
-        WebsetSearch(webset_id=webset_id, query=query, count=count, criteria=rules),
+        WebsetSearch(
+            webset_id=webset_id,
+            query=query,
+            count=count,
+            criteria=rules,
+            verification_mode=mode,
+        ),
     )
-    _schedule_run(webset_id)
+    _schedule_run(webset_id, verification_mode=mode)
     return created
 
 
@@ -360,9 +400,14 @@ def add_enrichment(
     *,
     store: WebsetStore | None = None,
 ) -> EnrichmentDef:
-    """Attach an enrichment (max 10 active, status ``running``) and schedule its backfill."""
+    """Attach an enrichment (max 10 active, status ``running``) and schedule its backfill.
+
+    Rejects a terminal (``cancelled``/``failed``) webset with
+    ``webset_terminal`` (T6 review carry).
+    """
     store = _store_or_default(store)
-    _require_webset(store, webset_id)
+    webset = _require_webset(store, webset_id)
+    _require_refreshable(webset)
     definition = (
         enrichment
         if isinstance(enrichment, EnrichmentDef)
@@ -419,9 +464,15 @@ def list_monitors(webset_id: str, *, store: WebsetStore | None = None) -> list[W
 
 
 def trigger_monitor(webset_id: str, monitor_id: str, *, store: WebsetStore | None = None) -> Webset:
-    """Manually refresh: open a new search generation (the v1 tick-driver substitute)."""
+    """Manually refresh: open a new search generation (the v1 tick-driver substitute).
+
+    The new generation inherits the latest search's persisted
+    ``verification_mode``; a terminal (``cancelled``/``failed``) webset is
+    rejected with ``webset_terminal``.
+    """
     store = _store_or_default(store)
     webset = _require_webset(store, webset_id)
+    _require_refreshable(webset)
     _call(store.get_monitor, webset_id, monitor_id)
     if not webset.searches:
         raise WebsetServiceError(
@@ -429,6 +480,7 @@ def trigger_monitor(webset_id: str, monitor_id: str, *, store: WebsetStore | Non
             code="search_not_found",
         )
     latest = webset.searches[-1]
+    mode = latest.verification_mode or webset.verification_mode
     _call(
         store.add_search,
         WebsetSearch(
@@ -436,9 +488,10 @@ def trigger_monitor(webset_id: str, monitor_id: str, *, store: WebsetStore | Non
             query=latest.query,
             count=latest.count,
             criteria=latest.criteria,
+            verification_mode=mode,
         ),
     )
-    _schedule_run(webset_id)
+    _schedule_run(webset_id, verification_mode=mode)
     return _call(store.get_webset, webset_id)
 
 
@@ -470,6 +523,7 @@ def rotate_webhook_secret(
 ) -> WebhookConfig:
     """Rotate to a new secret with a 24h overlap; returns the NEW secret once."""
     store = _store_or_default(store)
+    _require_webset(store, webset_id)
     webhook = _call(store.get_webhook, webset_id, webhook_id)
     rotated = webhook.model_copy(
         update={
@@ -526,6 +580,21 @@ def _store_or_default(store: WebsetStore | None) -> WebsetStore:
 
 def _require_webset(store: WebsetStore, webset_id: str) -> Webset:
     return _call(store.get_webset, webset_id)
+
+
+def _require_refreshable(webset: Webset) -> None:
+    """Reject new work on a terminal ``cancelled``/``failed`` webset.
+
+    ``idle`` is the success terminal and stays refreshable (the refresh path);
+    appending a running search to a ``cancelled``/``failed`` webset could never
+    settle and would be re-selected by startup resume forever (T6 review
+    carry).
+    """
+    if webset.status in _TERMINAL_REFRESH_BLOCKED:
+        raise WebsetServiceError(
+            f"webset {webset.id} is {webset.status} and cannot accept new work",
+            code="webset_terminal",
+        )
 
 
 def _verified_items(store: WebsetStore, webset_id: str) -> list[WebsetItem]:

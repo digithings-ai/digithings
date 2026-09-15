@@ -754,6 +754,7 @@ def test_documented_error_code_mapping():
         "datatap_websets_disabled",
         "webhook_url_required",
         "webhook_url_private",
+        "webset_terminal",
         "rate_limit_exceeded",
     }
     assert {"enrichment_not_found", "webhook_secret_missing"} <= set(service.CARRIED_ERROR_CODES)

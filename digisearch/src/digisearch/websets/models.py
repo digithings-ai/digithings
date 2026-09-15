@@ -30,6 +30,12 @@ Conventions recorded here so later tasks need not re-derive them:
   foreign id.
 - There is no ``provider``/``auto`` field anywhere (R4): the OSS path always
   recalls via ``search_web``; ``backend`` is a label recording which leg answered.
+- ``verification_mode`` (``llm`` default | ``rules``) is persisted on both
+  ``Webset`` and ``WebsetSearch``. The webset-level value is the default new
+  searches inherit; the search-level value is the generation's actual mode, so
+  a ``rules`` webset refreshed via ``add_search`` / ``trigger_monitor`` never
+  silently falls back to ``llm`` (T6 review carry; previously the mode lived
+  only in the in-flight schedule call).
 """
 
 # score:allow untyped any
@@ -48,6 +54,7 @@ from digisearch.web_search.citation import Citation
 BackendLabel = Literal["oss", "exa"]
 WebsetStatus = Literal["running", "idle", "failed", "cancelled"]
 SearchStatus = Literal["running", "idle", "failed", "cancelled"]
+VerificationMode = Literal["llm", "rules"]
 VerificationState = Literal["pending", "verified", "rejected"]
 EnrichmentType = Literal[
     "text", "number", "date", "url", "email", "phone", "options", "company_profile"
@@ -235,7 +242,9 @@ class WebsetSearch(BaseModel):
     clamp from (audit D25). ``status`` includes ``cancelled``: ``cancel_webset``
     settles every non-terminal search as ``cancelled`` (flag I6).
     ``criteria`` is the 1-5 rule set (``add_search`` inherits the webset's
-    initial criteria when none are given).
+    initial criteria when none are given). ``verification_mode`` is the mode
+    this generation runs under (persisted, so a ``rules`` webset never silently
+    switches to ``llm`` on a refresh — T6 review carry).
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -246,6 +255,7 @@ class WebsetSearch(BaseModel):
     count: int = Field(default=10, ge=1, le=100)
     status: SearchStatus = "running"
     criteria: list[VerificationCriterion] = Field(min_length=1, max_length=5)
+    verification_mode: VerificationMode = "llm"
     backend: BackendLabel = "oss"
 
 
@@ -258,6 +268,10 @@ class Webset(BaseModel):
     ``failed``/``cancelled``. ``criteria`` is the initial rule set later
     searches inherit; ``enrichments`` holds at most 10 active defs. ``backend``
     is the R4 label (there is no caller-facing provider parameter).
+    ``verification_mode`` is the webset-level default persisted with the row:
+    searches created later (``add_search`` / ``trigger_monitor`` refreshes)
+    inherit it, so a ``rules`` webset never silently switches to ``llm``
+    (T6 review carry; the runner receives the mode per scheduled pass).
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -270,6 +284,7 @@ class Webset(BaseModel):
     enrichments: list[EnrichmentDef] = Field(default_factory=list, max_length=10)
     workspace_id: str | None = None
     backend: BackendLabel = "oss"
+    verification_mode: VerificationMode = "llm"
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

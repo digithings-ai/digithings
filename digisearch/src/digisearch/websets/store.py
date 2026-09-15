@@ -14,7 +14,9 @@ mirrors the spec's object tables:
   no webset-body rewrite.
 - ``searches (search_id PK, webset_id, status, created_at, body)`` — one row
   per settling-pass generation; ``status`` backs the resume selector's
-  non-terminal union arm.
+  non-terminal union arm, and the persisted ``body`` carries the generation's
+  ``verification_mode`` (T6 review carry) so a resumed or refreshed ``rules``
+  webset never silently falls back to ``llm``.
 - ``items (item_id PK, webset_id, verification, created_at, body)`` — the
   ``verification`` column backs filtered listing; ordering is
   ``created_at DESC, item_id DESC`` (R11 newest-first) so the item-id cursor is

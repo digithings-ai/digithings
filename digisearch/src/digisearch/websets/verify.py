@@ -46,26 +46,30 @@ import os
 import re
 from collections.abc import Sequence
 from datetime import date, datetime, timezone
-from typing import Any, Literal
+from typing import Any
 from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 
 from digisearch.web_search.citation import Citation
-from digisearch.websets.models import CriterionResult, VerificationCriterion, WebsetItem
+from digisearch.websets.models import (
+    CriterionResult,
+    VerificationCriterion,
+    VerificationMode,
+    WebsetItem,
+)
 
 __all__ = [
     "MARKDOWN_TRUNCATION_CHARS",
     "MAX_CRITERIA",
     "RULE_KINDS",
     "VERIFY_MODEL_ENV",
+    "VerificationMode",
     "VerificationUnavailableError",
     "settle_pending_item",
     "settlement_results",
     "verify_item",
 ]
-
-VerificationMode = Literal["llm", "rules"]
 
 #: Candidate page markdown budget handed to a verification LLM call
 #: (spec § Verification gate: full-page verification, not a synthesis snippet).

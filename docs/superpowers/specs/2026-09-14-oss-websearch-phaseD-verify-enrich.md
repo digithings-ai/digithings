@@ -176,8 +176,8 @@ conventions — lowercase, no `Digi` prefix):
 
 | Concept | OSS object | Key fields |
 |---|---|---|
-| webset | `Webset` | `id` (`ws_` + uuid4-hex, no new dep — `uuid.uuid4().hex` per `digibase.http` precedent), `object="webset"`, `status`: `running` \| `idle` \| `failed` \| `cancelled`, `workspace_id: str \| None = None` (tenant isolation, § Cross-phase alignment), `backend: "oss" \| "exa" = "oss"` (R4 label, § Cross-phase alignment), `searches`, `enrichments`, `created_at`, `updated_at` |
-| search | `WebsetSearch` | `id` (`wss_` + uuid4-hex), `webset_id`, `query`, `count` (1–100, default 10 — target **verified** items for this search, NOT a result-page size; see `max_results` note below), `status`: `running` \| `idle` \| `failed` \| `cancelled` (flag I6 resolved: `cancel_webset` settles every non-terminal search as `cancelled`), `criteria` (1–5 rules), `backend: "oss" \| "exa" = "oss"` (R4 label) |
+| webset | `Webset` | `id` (`ws_` + uuid4-hex, no new dep — `uuid.uuid4().hex` per `digibase.http` precedent), `object="webset"`, `status`: `running` \| `idle` \| `failed` \| `cancelled`, `workspace_id: str \| None = None` (tenant isolation, § Cross-phase alignment), `backend: "oss" \| "exa" = "oss"` (R4 label, § Cross-phase alignment), `verification_mode: "llm" \| "rules" = "llm"` (persisted webset-level default searches inherit — T7 carry), `searches`, `enrichments`, `created_at`, `updated_at` |
+| search | `WebsetSearch` | `id` (`wss_` + uuid4-hex), `webset_id`, `query`, `count` (1–100, default 10 — target **verified** items for this search, NOT a result-page size; see `max_results` note below), `status`: `running` \| `idle` \| `failed` \| `cancelled` (flag I6 resolved: `cancel_webset` settles every non-terminal search as `cancelled`), `criteria` (1–5 rules), `verification_mode: "llm" \| "rules" = "llm"` (the generation's mode — T7 carry: refresh generations inherit it so a `rules` webset never silently switches to `llm`), `backend: "oss" \| "exa" = "oss"` (R4 label) |
 | item | `WebsetItem` | `id` (`wsi_` + uuid4-hex), `webset_id`, `url`, `title`, `verification`: `pending` \| `verified` \| `rejected` (`pending` is in-flight/queued only — settled at candidate-pass end, § Verification gate), `criteria_results[]` (verdict + reasoning + references per rule), `enrichments{field: EnrichedField}` (per-field value + citations + terminal status), `created_at` |
 | enrichment | `EnrichmentDef` | `id` (`wse_` + uuid4-hex), `name`, `type`: `text` \| `number` \| `date` \| `url` \| `email` \| `phone` \| `options` \| `company_profile`, `description`, `options[]` (only for `options`), `status` |
 | webset monitor | `WebsetMonitor` | `id` (`wsm_…`, prefix kept), `object="webset_monitor"`, `webset_id`, `interval_seconds >= 60` (aligned with Phase C `WatchSchedule.interval_seconds`; `cadence_s` struck), `webhook_url`, `created_at`. POLL-ONLY v1 (R8): the interval is recorded schedule metadata for the deferred driver, never executed on a tick; v1 monitor ops are create/list/trigger-manually. There is deliberately **no `status`/`paused` field** — with no scheduled driver a pause state has no observable effect (flag I4 resolved); the `active\|paused` lifecycle belongs to the deferred driver follow-up (§ Tasks, re-scoped sequence note). A webset monitor is explicitly NOT a Phase C `Watch` (R7e; bare `Monitor` is banned — it collides with the Phase C `Watch`/`MonitorRun` family) |
@@ -499,7 +499,9 @@ def add_search(
     store: WebsetStore | None = None,
 ) -> WebsetSearch:
     """Attach a follow-up search to a running/idle webset and schedule its
-    run. Missing criteria inherits the webset's initial criteria."""
+    run. Missing criteria inherits the webset's initial criteria. A terminal
+    `cancelled`/`failed` webset raises `webset_terminal` (T7 carry); the new
+    generation inherits the webset's `verification_mode`."""
 
 def add_enrichment(
     webset_id: str,
@@ -508,7 +510,8 @@ def add_enrichment(
     store: WebsetStore | None = None,
 ) -> EnrichmentDef:
     """Attach an enrichment (max 10 active) and backfill it onto verified
-    items. Backfill execution path: the call itself only attaches the def
+    items. A terminal `cancelled`/`failed` webset raises `webset_terminal`
+    (T7 carry). Backfill execution path: the call itself only attaches the def
     (status running) and enqueues item ids lacking the field; the lifespan
     worker drains the queue via `runner.backfill_enrichment(webset_id,
     enrichment_id)` (same semaphore + per-item containment as the main
@@ -553,7 +556,9 @@ def trigger_monitor(
     set (the v1 substitute for the deferred tick driver). Webset status never
     goes backwards — after first completion it stays `idle`, and the refresh is
     observed via the new search's status + events, not via a webset status
-    flip. Returns the webset. Unknown ids raise `WebsetStoreError` with code
+    flip. The new generation inherits the latest search's `verification_mode`
+    (T7 carry); a terminal `cancelled`/`failed` webset raises `webset_terminal`.
+    Returns the webset. Unknown ids raise `WebsetStoreError` with code
     `webset_not_found` / `monitor_not_found`."""
 
 def add_webhook(
@@ -652,7 +657,11 @@ mirrors Phase C's `run_not_found` behavior at `monitors/store.py:310`),
 `invalid_criteria` (0 or >5 rules), `invalid_verification_mode`,
 `datatap_websets_disabled`, `webhook_url_required`,
 `webhook_url_private` (same message text as Phase C so one client handler
-covers both), `rate_limit_exceeded` (existing).
+covers both), `webset_terminal` (T7 carry: `add_search` / `trigger_monitor` /
+`add_enrichment` reject a webset in a terminal `cancelled`/`failed` state with
+HTTP 409 — a running search appended to a terminal webset can never settle and
+would be re-selected by startup resume forever; `idle` stays refreshable),
+`rate_limit_exceeded` (existing).
 
 MCP tools (`mcp_server.py`, loopback-only unchanged). Names follow the landed
 Phase C MCP convention — **unprefixed** (`monitors_create_watch`…,
