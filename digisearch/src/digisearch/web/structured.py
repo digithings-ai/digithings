@@ -205,7 +205,7 @@ def _synthesize_structured(
             "structured web synthesis requires the digillm client, which is not importable"
         ) from exc
 
-    sources, _ = _numbered_sources(pages, config.max_synthesis_chars)
+    sources, rendered = _numbered_sources(pages, config.max_synthesis_chars)
     messages = [
         {"role": "system", "content": _STRUCTURED_SYSTEM_PROMPT},
         {
@@ -229,7 +229,9 @@ def _synthesize_structured(
     verified = verify_grounding(
         synthesis.content,
         synthesis.grounding,
-        cited_urls={page.url for page in pages},
+        # Only sources rendered into the prompt are citable: a page truncated
+        # out by ``max_synthesis_chars`` was never seen by the model.
+        cited_urls={page.url for page in pages[:rendered]},
     )
     return synthesis.content, verified, raw
 

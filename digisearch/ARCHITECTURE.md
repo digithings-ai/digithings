@@ -388,7 +388,10 @@ web_aggregate   digillm synthesis over numbered sources
   retrieval chain twice — `node_web_retrieve` does search+fetch+rank, then
   the synthesis monoliths re-run search+fetch internally because they take no
   injected pages. The second round is **not** counted in
-  `usage`/`cost_dollars`. A scoped follow-up closes this before Phase C/D.
+  `usage`/`cost_dollars`. The answer's `[n]` numbering comes from the
+  synthesis round and can diverge from the returned
+  `results`/`formatted_context` ordering. A scoped follow-up closes this
+  before Phase C/D.
 - **Eval:** `tests/ds/test_web_eval_live.py` runs `grounded_answer` plus one
   `structured_synthesis` per `RESEARCH_CASES` case (extended landed module
   `digisearch/tests/web_search_eval_cases.py`), mocked offline by default;

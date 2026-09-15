@@ -386,6 +386,46 @@ def test_synthesize_structured_rejects_payload_without_citation_url(monkeypatch)
         )
 
 
+def test_synthesize_structured_truncated_source_is_not_verified(monkeypatch):
+    """A source truncated out of the prompt is not citable (fail-safe direction)."""
+    import digillm.client as digillm_client
+    from digisearch.web import structured as mod
+    from digisearch.web.grounding_models import WebResearchConfig
+
+    payload = {
+        "content": {"round": "Series A"},
+        "grounding": [
+            {
+                "field": "round",
+                "citations": [{"url": "https://b.com/2", "title": "B"}],
+                "confidence": "high",
+            }
+        ],
+    }
+    calls: dict[str, Any] = {}
+
+    def fake_completion(model: str, messages: list[dict[str, str]], **kwargs: Any) -> Any:
+        calls["messages"] = messages
+        return _synthesis(payload)
+
+    monkeypatch.setenv("DIGISEARCH_SYNTHESIS_MODEL", "openai/gpt-4o-mini")
+    monkeypatch.setattr(digillm_client, "completion", fake_completion)
+    pages = [
+        _page("https://a.com/1", "A", markdown="x" * 3000),
+        _page("https://b.com/2", "B", markdown="y" * 3000),
+    ]
+
+    content, grounding, _text = mod._synthesize_structured(
+        "q", pages, {"required": ["round"]}, WebResearchConfig(max_synthesis_chars=1500)
+    )
+
+    user = calls["messages"][1]["content"]
+    assert "https://b.com/2" not in user  # budget-truncated out of the numbered sources
+    assert content == {"round": "Series A"}
+    assert grounding[0].citations[0].url == "https://b.com/2"
+    assert grounding[0].confidence.value == "unverified"  # never seen by the model
+
+
 # ── structured_synthesis: EXA-shaped envelope (s4 echo + g2 multi-field) ──────
 
 
