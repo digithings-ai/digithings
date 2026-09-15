@@ -40,8 +40,8 @@ _PERIOD_ID_NAMESPACE = UUID("a3c91e7b-4d2f-5e8a-9b1c-6d0e7f8a9b2c")
 _ZERO = Decimal("0")
 
 
-def _cannot_anchor_contributions(opening_equity: Decimal, period_pnl: Decimal) -> bool:
-    """Whether an equity base is too degenerate to divide the period's P&L by (#4102).
+def _degenerate_equity_reason(opening_equity: Decimal, period_pnl: Decimal) -> QualityReason | None:
+    """Why an equity base cannot anchor this period's P&L, if it cannot (#4102).
 
     Contributions are ``pnl / opening_equity``, so an equity base smaller than the
     period's own P&L implies a single-day book return beyond ±100% — impossible for a
@@ -50,9 +50,17 @@ def _cannot_anchor_contributions(opening_equity: Decimal, period_pnl: Decimal) -
     ``net_pnl / opening_equity`` published contributions in the hundreds-to-thousands
     of percentage points *as a final period with no quality reason*; every funded tip
     opens at the base-100 NAV scale (~101-112) with a P&L two orders of magnitude
-    smaller. A non-positive or exactly-zero base is degenerate for the same reason.
+    smaller.
+
+    An exactly-zero base keeps the historical ``zero_opening_equity`` code; a non-zero
+    base smaller than its own P&L is reported as ``degenerate_opening_equity`` so the
+    two are distinguishable in the stored quality reasons.
     """
-    return opening_equity == _ZERO or abs(period_pnl) > opening_equity
+    if opening_equity == _ZERO:
+        return QualityReason.ZERO_OPENING_EQUITY
+    if abs(period_pnl) > opening_equity:
+        return QualityReason.DEGENERATE_OPENING_EQUITY
+    return None
 
 
 def period_id_for_input(inp: PeriodAccountingInput) -> UUID:
@@ -229,9 +237,10 @@ def compute_period(inp: PeriodAccountingInput) -> AccountingPeriod:
     residual = closing_equity - (opening_equity + net_total + cash_pnl)
 
     period_pnl = net_total + cash_pnl
-    anchors = not _cannot_anchor_contributions(opening_equity, period_pnl)
-    if not anchors:
-        reasons.append(QualityReason.ZERO_OPENING_EQUITY)
+    degenerate = _degenerate_equity_reason(opening_equity, period_pnl)
+    anchors = degenerate is None
+    if degenerate is not None:
+        reasons.append(degenerate)
 
     tol = _effective_tolerance(opening_equity, policy)
     if abs(residual) > tol:
@@ -330,6 +339,7 @@ def _resolve_status(reasons: list[QualityReason], residual: Decimal, tol: Decima
         QualityReason.MISSING_OPENING_MARK,
         QualityReason.MISSING_CLOSING_MARK,
         QualityReason.ZERO_OPENING_EQUITY,
+        QualityReason.DEGENERATE_OPENING_EQUITY,
     }
     if any(r in incomplete for r in reasons):
         return PeriodStatus.INCOMPLETE

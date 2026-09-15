@@ -419,7 +419,7 @@ def test_degenerate_opening_equity_publishes_no_contributions() -> None:
     assert out.opening_equity == Decimal("0.10")
     assert out.net_pnl_total == Decimal("3.72")
     assert out.status is PeriodStatus.INCOMPLETE
-    assert QualityReason.ZERO_OPENING_EQUITY in out.quality_reasons
+    assert QualityReason.DEGENERATE_OPENING_EQUITY in out.quality_reasons
     assert out.cash_contribution is None
     assert all(row.contribution is None for row in out.ticker_results)
 
@@ -451,7 +451,37 @@ def test_equity_base_below_the_period_pnl_is_incomplete() -> None:
     assert out.opening_equity == Decimal("100")
     assert out.net_pnl_total == Decimal("250")
     assert out.status is PeriodStatus.INCOMPLETE
-    assert QualityReason.ZERO_OPENING_EQUITY in out.quality_reasons
+    assert QualityReason.DEGENERATE_OPENING_EQUITY in out.quality_reasons
+    assert all(row.contribution is None for row in out.ticker_results)
+
+
+def test_degenerate_equity_outranks_a_stale_mark() -> None:
+    """A degenerate base is incomplete even when the other reason is only estimated.
+
+    ``_resolve_status`` ranks ``incomplete`` above ``estimated``, so a stale closing
+    mark must not downgrade a period the equity base cannot anchor (#4102).
+    """
+    inp = PeriodAccountingInput(
+        period_date=PERIOD,
+        policy=POLICY,
+        opening_cash=Decimal("0.10"),
+        opening_holdings=(),
+        opening_marks=(),
+        closing_marks=(_mark("XLF", "53.72", observed_at=_ts(21, 0, day=date(2026, 8, 20))),),
+        fills=(
+            PeriodFill(
+                symbol="XLF",
+                side=FillSide.BUY,
+                quantity=Decimal("1"),
+                price=Decimal("50"),
+                executed_at=_ts(9, 30),
+            ),
+        ),
+    )
+    out = compute_period(inp)
+    assert out.status is PeriodStatus.INCOMPLETE
+    assert QualityReason.DEGENERATE_OPENING_EQUITY in out.quality_reasons
+    assert QualityReason.STALE_CLOSING_MARK in out.quality_reasons
     assert all(row.contribution is None for row in out.ticker_results)
 
 

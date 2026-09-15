@@ -3202,7 +3202,9 @@ that metrics/attribution job order cannot alter meaning.
   → `incomplete`, stale marks / ignored corporate actions → `estimated`, residual /
   negative quantity / benchmark boundary mismatch → `failed`. A degenerate opening equity
   base — exactly zero, or smaller than the period's own P&L (implied book return beyond
-  ±100%) — also yields `zero_opening_equity`/`incomplete` with no contributions, because
+  ±100%) — also yields `zero_opening_equity` (exactly zero) or
+  `degenerate_opening_equity` (non-zero but smaller than its own P&L) and `incomplete`
+  with no contributions — unless a hard reason is also present, which still wins — because
   contributions are `pnl / opening_equity` and a near-zero base publishes exploded
   percentages as if final (#4102). Exact same inputs reproduce
   the same period `id` (`uuid5` over a canonical digest).
