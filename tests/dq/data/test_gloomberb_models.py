@@ -207,10 +207,13 @@ def test_cds_days_bounds_are_validated_in_the_input_model() -> None:
         CdsInput(days=91)
 
 
-def test_new_tool_limits_are_bounded() -> None:
-    assert EconCalendarInput(limit=200).limit == 200
+def test_cds_issuer_is_bounded() -> None:
+    assert CdsInput(issuer="  Acme  ").issuer == "Acme"
     with pytest.raises(ValidationError):
-        EconCalendarInput(limit=201)
+        CdsInput(issuer="x" * 201)
+
+
+def test_new_tool_limits_are_bounded() -> None:
     assert EconSeriesInput(series_id="CPIAUCSL", limit=1000).limit == 1000
     with pytest.raises(ValidationError):
         EconSeriesInput(series_id="CPIAUCSL", limit=1001)
@@ -225,16 +228,28 @@ def test_new_tool_limits_are_bounded() -> None:
         TranscriptsInput(ticker="aapl", limit=101)
 
 
+def test_research_search_offset_is_bounded() -> None:
+    assert ResearchSearchInput(query="inflation").offset == 0
+    assert ResearchSearchInput(query="inflation", offset=10_000).offset == 10_000
+    with pytest.raises(ValidationError):
+        ResearchSearchInput(query="inflation", offset=-1)
+    with pytest.raises(ValidationError):
+        ResearchSearchInput(query="inflation", offset=10_001)
+
+
 def test_econ_series_sort_order_vocabulary() -> None:
     assert EconSeriesInput(series_id="CPIAUCSL", sort_order="asc").sort_order == "asc"
     with pytest.raises(ValidationError):
         EconSeriesInput(series_id="CPIAUCSL", sort_order="sideways")  # type: ignore[arg-type]
 
 
-def test_yield_curve_input_takes_no_parameters_and_forbids_unknown_fields() -> None:
+def test_parameterless_inputs_forbid_unknown_fields() -> None:
     assert YieldCurveInput().model_dump() == {}
+    assert EconCalendarInput().model_dump() == {}
     with pytest.raises(ValidationError):
         YieldCurveInput(maturities="all")  # type: ignore[call-arg]
+    with pytest.raises(ValidationError):
+        EconCalendarInput(limit=2)  # type: ignore[call-arg]
 
 
 def test_econ_calendar_event_keeps_textual_prints() -> None:

@@ -85,7 +85,6 @@ from .models import (
     QuotesBatchResult,
     ResearchSearchEnvelope,
     ResearchSearchInput,
-    ResearchSearchResult,
     SearchEnvelope,
     SearchInput,
     SearchResult,
@@ -1000,12 +999,7 @@ class GloomberbClient:
             return self._disabled(EconCalendarEnvelope)
 
         def produce() -> EconCalendarEnvelope:
-            raw = self._request_json(
-                "GET",
-                ENDPOINTS["econ_calendar"],
-                params={"limit": str(parsed.limit)},
-                allow_array=True,
-            )
+            raw = self._request_json("GET", ENDPOINTS["econ_calendar"], allow_array=True)
             if isinstance(raw, DigifetchError):
                 return self._error_envelope(EconCalendarEnvelope, raw)
             result = self._data_or_error(raw, "Cloud econ calendar is unavailable")
@@ -1155,7 +1149,11 @@ class GloomberbClient:
             raw = self._request_json(
                 "GET",
                 ENDPOINTS["research_search"],
-                params={"q": parsed.query, "limit": str(parsed.limit)},
+                params={
+                    "q": parsed.query,
+                    "limit": str(parsed.limit),
+                    "offset": str(parsed.offset),
+                },
                 gated=True,
             )
             if isinstance(raw, DigifetchError):
@@ -1167,12 +1165,12 @@ class GloomberbClient:
             payload = self._as_mapping(data, "research search")
             if isinstance(payload, DigifetchError):
                 return self._error_envelope(ResearchSearchEnvelope, payload)
-            hits = self._normalize(nz.normalize_research_hits, payload)
-            if isinstance(hits, DigifetchError):
-                return self._error_envelope(ResearchSearchEnvelope, hits)
+            normalized = self._normalize(nz.normalize_research_search, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(ResearchSearchEnvelope, normalized)
             fresh = self._freshness(raw, payload)
             return ResearchSearchEnvelope(
-                data=ResearchSearchResult(hits=hits),
+                data=normalized,
                 fetched_at=self._now(),
                 stale=fresh.stale,
                 delay_note=fresh.delay_note,
@@ -1254,12 +1252,17 @@ class GloomberbClient:
             rows = self._normalize(nz.normalize_transcripts, data)
             if isinstance(rows, DigifetchError):
                 return self._error_envelope(TranscriptsEnvelope, rows)
+            # The live list payload wraps its rows under `calls`; `transcripts`
+            # is accepted for a wrapped variant.
+            list_rows = (
+                (data.get("calls") or data.get("transcripts"))
+                if isinstance(data, Mapping)
+                else data
+            )
             fresh = self._freshness(
                 raw,
                 data,
-                extra_stale=self._rows_stale(
-                    data.get("transcripts") if isinstance(data, Mapping) else data
-                ),
+                extra_stale=self._rows_stale(list_rows),
             )
             return TranscriptsEnvelope(
                 data=TranscriptsResult(transcripts=rows),
@@ -1416,6 +1419,15 @@ class GloomberbClient:
 
     def _map_http_error(self, exc: httpx.HTTPStatusError) -> DigifetchError:
         status = exc.response.status_code
+        if status == 402:
+            # Payment required: a plan gate, not a malformed request. Kept
+            # non-retryable and distinct from the generic 4xx mapping.
+            return DigifetchError(
+                code="auth_required",
+                message="Gloomberb returned HTTP 402 (payment required); this endpoint "
+                "needs a paid plan or a valid session",
+                retryable=False,
+            )
         if status in (401, 403):
             return DigifetchError(
                 code="auth_required",

@@ -115,6 +115,7 @@ __all__ = [
     "CdsTrade",
     "CdsResult",
     "ResearchHit",
+    "ResearchSearchPagination",
     "ResearchSearchResult",
     "CongressTrade",
     "CongressTradesResult",
@@ -415,8 +416,11 @@ class NewsInput(_InputModel):
 
 
 class EconCalendarInput(_InputModel):
-    # Bounded so one macro read cannot fan out unboundedly.
-    limit: int = Field(default=50, ge=1, le=200)
+    """The Cloud econ-calendar route takes no parameters.
+
+    The upstream ignores ``limit`` (live probe: a fixed ~105-row window), so
+    the contract deliberately exposes no page-size knob.
+    """
 
 
 class EconSeriesInput(_InputModel):
@@ -431,7 +435,10 @@ class YieldCurveInput(_InputModel):
 
 
 class CdsInput(_InputModel):
-    issuer: str | None = None
+    issuer: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+        | None
+    ) = None
     # The Cloud route answers HTTP 400 outside 1..90; the input model rejects it
     # first so the caller gets a typed invalid_input without a request.
     days: int = Field(default=30, ge=1, le=90)
@@ -441,6 +448,8 @@ class CdsInput(_InputModel):
 class ResearchSearchInput(_InputModel):
     query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
     limit: int = Field(default=10, ge=1, le=100)
+    # First page by default; bounded so one read cannot walk an unbounded cursor.
+    offset: int = Field(default=0, ge=0, le=10_000)
 
 
 class CongressTradesInput(_InputModel):
@@ -964,27 +973,39 @@ class ResearchHit(_CamelModel):
     snippet: str | None = None
 
 
+class ResearchSearchPagination(_CamelModel):
+    """Pagination metadata from the ``/cloud/search`` payload (live-verified)."""
+
+    total: int | None = None
+    has_more: bool | None = None
+    next_offset: int | None = None
+    count_capped: bool | None = None
+
+
 class ResearchSearchResult(_CamelModel):
     hits: list[ResearchHit] = Field(default_factory=list)
+    pagination: ResearchSearchPagination | None = None
 
 
 class CongressTrade(_CamelModel):
     """One House disclosure row.
 
-    The upstream OCR path is currently failing and the row schema beyond the
-    route name is unprobed, so only identity/date fields are typed and the rest
-    of the record is preserved as extras.
+    The upstream OCR path is currently failing (HTTP 500) and its row schema is
+    only partly known; the typed subset follows the live field names
+    (``memberName``/``assetName``/``sourceUrl``/``filingDate``/
+    ``notificationDate``) and everything else is preserved as extras.
     """
 
     id: str | int | None = None
-    representative: str | None = None
+    member_name: str | None = None
     ticker: str | None = None
     transaction_date: str | None = None
-    disclosure_date: str | None = None
+    filing_date: str | None = None
+    notification_date: str | None = None
     transaction_type: str | None = None
     amount: str | None = None
-    asset: str | None = None
-    filing_url: str | None = None
+    asset_name: str | None = None
+    source_url: str | None = None
 
 
 class CongressTradesResult(_CamelModel):
@@ -992,13 +1013,17 @@ class CongressTradesResult(_CamelModel):
 
 
 class Transcript(_CamelModel):
-    """One earnings-call transcript row (Gloomberb Pro)."""
+    """One earnings-call row from the upstream ``calls`` list (Gloomberb Pro).
+
+    The live list payload is ``CloudEarningsCallListPayload`` whose rows carry
+    ``companyName``/``callAt``/``webcastUrl``; unknown fields stay extras.
+    """
 
     id: str | int
     ticker: str | None = None
-    title: str | None = None
-    published_at: str | None = None
-    url: str | None = None
+    company_name: str | None = None
+    call_at: str | None = None
+    webcast_url: str | None = None
 
 
 class TranscriptsResult(_CamelModel):

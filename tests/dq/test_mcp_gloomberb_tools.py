@@ -203,16 +203,33 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
     if path == "/cloud/search":
         return httpx.Response(
             200,
-            json={"hits": [{"id": "h1", "docType": "transcript", "ticker": "AAPL"}]},
+            json={
+                "hits": [{"id": "h1", "docType": "transcript", "ticker": "AAPL"}],
+                "total": 120,
+                "hasMore": True,
+                "nextOffset": 10,
+                "countCapped": False,
+            },
         )
     if path == "/cloud/congress/house":
         return httpx.Response(
             200,
-            json={"trades": [{"id": "c1", "representative": "Jane", "ticker": "AAPL"}]},
+            json={"trades": [{"id": "c1", "memberName": "Jane", "ticker": "AAPL"}]},
         )
     if path == "/cloud/transcripts":
         return httpx.Response(
-            200, json={"transcripts": [{"id": "t1", "ticker": "AAPL", "title": "Q3 call"}]}
+            200,
+            json={
+                "calls": [
+                    {
+                        "id": "t1",
+                        "ticker": "AAPL",
+                        "companyName": "Apple Inc.",
+                        "callAt": "2026-08-01T16:30:00Z",
+                        "webcastUrl": "https://example.test/call/t1",
+                    }
+                ]
+            },
         )
     raise AssertionError(f"unexpected Gloomberb path {path!r}")
 
@@ -371,7 +388,7 @@ TOOL_CALLS: dict[str, tuple[Any, ...]] = {
     "digifetch_exchange_rate": ("EUR",),
     "digifetch_search": ("apple",),
     "digifetch_news": ("latest",),
-    "digifetch_econ_calendar": (50,),
+    "digifetch_econ_calendar": (),
     "digifetch_econ_series": ("CPIAUCSL",),
     "digifetch_yield_curve": (),
     "digifetch_cds": (),
@@ -508,6 +525,57 @@ def test_transcripts_plan_required_maps_to_auth_required(
     assert "Pro plan" in payload["data"]["message"]
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
     assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
+
+
+@pytest.mark.parametrize("status", [200, 402])
+def test_transcripts_402_plan_required_maps_to_auth_required(
+    monkeypatch: pytest.MonkeyPatch, status: int
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status, text="Pro plan required")
+
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    payload = json.loads(_mcp("digifetch_transcripts")("AAPL"))
+    assert payload["data"]["code"] == "auth_required"
+    assert "Pro plan" in payload["data"]["message"]
+
+
+def test_research_search_402_maps_to_auth_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(402, json={"message": "Payment Required"})
+
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    payload = json.loads(_mcp("digifetch_research_search")("inflation"))
+    assert payload["data"]["code"] == "auth_required"
+
+
+def test_transcripts_wrapper_maps_the_upstream_calls_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "calls": [
+                    {
+                        "id": "t1",
+                        "ticker": "AAPL",
+                        "companyName": "Apple Inc.",
+                        "callAt": "2026-08-01T16:30:00Z",
+                        "webcastUrl": "https://example.test/call/t1",
+                    }
+                ]
+            },
+        )
+
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    payload = json.loads(_mcp("digifetch_transcripts")("AAPL"))
+    row = payload["data"]["transcripts"][0]
+    assert row["company_name"] == "Apple Inc."
+    assert row["call_at"] == "2026-08-01T16:30:00Z"
+    assert row["webcast_url"] == "https://example.test/call/t1"
 
 
 def test_congress_trades_upstream_500_maps_to_upstream_error(

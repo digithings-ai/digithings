@@ -1165,16 +1165,17 @@ def create_mcp_server(
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
     @_maybe_tool("digifetch_econ_calendar")
-    def digifetch_econ_calendar(limit: int = 50) -> str:
+    def digifetch_econ_calendar() -> str:
         """Structured economic calendar (Gloomberb Cloud; anonymous).
 
-        `limit` (1-200) caps the page; rows carry date/time/country/event/
-        actual/forecast/prior/impact and preserve unknown fields. Wire prints
-        may be numeric or text (e.g. "3.2%"). Enrichment only; the free-tier
-        delay is in the envelope's `delay_note`.
+        The route returns a fixed-size window (~105 rows; the upstream ignores
+        `limit`), so the tool takes no parameters. Rows carry date/time/country/
+        event/actual/forecast/prior/impact and preserve unknown fields. Wire
+        prints may be numeric or text (e.g. "3.2%"). Enrichment only: the
+        platform's data is delayed and is never a pipeline primary.
         """
         try:
-            envelope = _build_gloomberb_client().econ_calendar({"limit": limit})
+            envelope = _build_gloomberb_client().econ_calendar()
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
@@ -1224,15 +1225,19 @@ def create_mcp_server(
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_research_search")
-    def digifetch_research_search(query: str, limit: int = 10) -> str:
+    def digifetch_research_search(query: str, limit: int = 10, offset: int = 0) -> str:
         """Full-text research search across transcripts/news/filings (session-gated).
 
-        Requires GLOOMBERB_SESSION_COOKIE; HTTP 401 without it (or a missing
-        cookie) is a typed `auth_required` and no request is made. Hits carry
-        docType/ticker/title/url/snippet.
+        Requires GLOOMBERB_SESSION_COOKIE; HTTP 401 (or a missing cookie) is a
+        typed `auth_required` and no request is made. Hits carry
+        docType/ticker/title/url/snippet; `offset`/`limit` page the result and
+        `data.pagination` returns total/hasMore/nextOffset/countCapped.
+        Enrichment only: the platform's data is delayed.
         """
         try:
-            envelope = _build_gloomberb_client().research_search({"query": query, "limit": limit})
+            envelope = _build_gloomberb_client().research_search(
+                {"query": query, "limit": limit, "offset": offset}
+            )
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)

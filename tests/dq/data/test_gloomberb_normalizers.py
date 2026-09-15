@@ -36,6 +36,7 @@ from digiquant.data.gloomberb.normalizers import (  # noqa: E402
     normalize_quote,
     normalize_quotes_batch_items,
     normalize_research_hits,
+    normalize_research_search,
     normalize_search_results,
     normalize_sec_documents,
     normalize_sec_filings,
@@ -551,9 +552,11 @@ def test_normalize_econ_series_maps_fred_missing_values() -> None:
     assert result.info is not None and result.info.frequency == "Monthly"
 
 
-def test_normalize_econ_series_without_info_raises() -> None:
-    with pytest.raises(ValueError, match="info block"):
-        normalize_econ_series({"observations": []})
+def test_normalize_econ_series_without_info_maps_to_none() -> None:
+    result = normalize_econ_series({"observations": [{"date": "2026-07-01", "value": 2.9}]})
+    assert result.info is None
+    assert result.observations[0].value == pytest.approx(2.9)
+    assert normalize_econ_series({"observations": [], "info": None}).info is None
 
 
 def test_normalize_yield_curve_reads_the_yield_alias() -> None:
@@ -586,12 +589,53 @@ def test_normalize_cds_and_research_hits() -> None:
     assert hits[0].chunk_index == 3
 
 
+def test_normalize_research_search_maps_the_pagination_block() -> None:
+    result = normalize_research_search(
+        {
+            "hits": [{"id": "h1"}],
+            "total": 120,
+            "hasMore": True,
+            "nextOffset": 10,
+            "countCapped": False,
+        }
+    )
+    assert result.hits[0].id == "h1"
+    assert result.pagination is not None
+    assert result.pagination.total == 120
+    assert result.pagination.has_more is True
+    assert result.pagination.next_offset == 10
+    assert result.pagination.count_capped is False
+    assert normalize_research_search({"hits": []}).pagination is None
+
+
 def test_normalize_congress_trades_and_transcripts_accept_both_shapes() -> None:
-    trade_rows = [{"id": "c1", "representative": "Jane", "transactionDate": "2026-08-01"}]
-    assert normalize_congress_trades(trade_rows) == normalize_congress_trades(
-        {"trades": trade_rows}
-    )
-    transcript_rows = [{"id": "t1", "ticker": "AAPL", "title": "Q3 call"}]
-    assert normalize_transcripts(transcript_rows) == normalize_transcripts(
-        {"transcripts": transcript_rows}
-    )
+    trade_rows = [
+        {
+            "id": "c1",
+            "memberName": "Jane",
+            "assetName": "Apple Inc.",
+            "sourceUrl": "https://disclosures.test/c1",
+            "transactionDate": "2026-08-01",
+        }
+    ]
+    bare_trades = normalize_congress_trades(trade_rows)
+    assert bare_trades == normalize_congress_trades({"trades": trade_rows})
+    assert bare_trades[0].member_name == "Jane"
+    assert bare_trades[0].asset_name == "Apple Inc."
+    assert bare_trades[0].source_url == "https://disclosures.test/c1"
+
+    transcript_rows = [
+        {
+            "id": "t1",
+            "ticker": "AAPL",
+            "companyName": "Apple Inc.",
+            "callAt": "2026-08-01T16:30:00Z",
+            "webcastUrl": "https://example.test/call/t1",
+        }
+    ]
+    bare = normalize_transcripts(transcript_rows)
+    assert bare == normalize_transcripts({"calls": transcript_rows})
+    assert bare == normalize_transcripts({"transcripts": transcript_rows})
+    assert bare[0].company_name == "Apple Inc."
+    assert bare[0].call_at == "2026-08-01T16:30:00Z"
+    assert bare[0].webcast_url == "https://example.test/call/t1"

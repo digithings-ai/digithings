@@ -521,18 +521,14 @@ def build_digifetch_econ_calendar_tool() -> dict[str, Any]:
         "function": {
             "name": "digifetch_econ_calendar",
             "description": (
-                "Structured economic calendar (Gloomberb Cloud, anonymous). "
-                "limit (1-200) caps the page; rows carry date/time/country/"
-                "event/actual/forecast/prior/impact. Wire prints may be numeric "
-                "or text (e.g. '3.2%'). Enrichment only (free-tier delay in "
-                "data.delay_note)."
+                "Structured economic calendar (Gloomberb Cloud, anonymous). The "
+                "route returns a fixed-size window (~105 rows; upstream ignores "
+                "limit), so the tool takes no parameters. Rows carry "
+                "date/time/country/event/actual/forecast/prior/impact; wire "
+                "prints may be numeric or text (e.g. '3.2%'). Enrichment only: "
+                "the platform's data is delayed and is never a pipeline primary."
             ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "limit": {"type": "integer", "default": 50, "minimum": 1, "maximum": 200},
-                },
-            },
+            "parameters": {"type": "object", "properties": {}},
         },
     }
 
@@ -610,13 +606,17 @@ def build_digifetch_research_search_tool() -> dict[str, Any]:
                 "Full-text research search across transcripts/news/filings "
                 "(Gloomberb Cloud; session-gated). Requires "
                 "GLOOMBERB_SESSION_COOKIE — 401 without it maps to typed "
-                "auth_required. Hits carry docType/ticker/title/url/snippet."
+                "auth_required. Hits carry docType/ticker/title/url/snippet; "
+                "offset/limit page the result and data.pagination returns "
+                "total/hasMore/nextOffset/countCapped. Enrichment only: the "
+                "platform's data is delayed."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {"type": "string"},
                     "limit": {"type": "integer", "default": 10},
+                    "offset": {"type": "integer", "default": 0, "minimum": 0},
                 },
                 "required": ["query"],
             },

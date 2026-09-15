@@ -235,13 +235,13 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digifetch_exchange_rate` | USD exchange rate for an ISO-4217 `from_currency` (the Cloud route is USD-based). The 15-minute delay is `data.delay_note`, kept distinct from `stale` |
 | `digifetch_search` | Search listings across venues (anonymous). `limit` ≥1 is clamped to 10 client-side and flagged via `data.limit_clamped`; rows keep symbol/exchange so a caller can pick a listing before quote/history |
 | `digifetch_news` | Aggregated market news headlines (anonymous). `feed` selects latest/top/breaking/ticker/sector/topic; `ticker` filters the ticker feed and adds a deep link; `story_id` fetches one story |
-| `digifetch_econ_calendar` | Structured economic calendar (`/cloud/econ/calendar`, anonymous; #4110 phase 1). `limit` (1–200) caps the page; rows carry `date`/`time`/`country`/`event`/`actual`/`forecast`/`prior`/`impact`. Wire prints may be numeric or text (e.g. `"3.2%"`) and unknown fields are preserved as extras |
-| `digifetch_econ_series` | FRED-style macro series observations + metadata (`/cloud/econ/series/{seriesId}`, anonymous). `limit`/`sort_order` (desc default) page the observations; a missing print (FRED `"."`) maps to null. `info` types id/title/units; unknown metadata stays extras |
+| `digifetch_econ_calendar` | Structured economic calendar (`/cloud/econ/calendar`, anonymous; #4110 phase 1). The route ignores `limit` (live probe: a fixed ~105-row window), so the tool takes **no parameters**; rows carry `date`/`time`/`country`/`event`/`actual`/`forecast`/`prior`/`impact`. Wire prints may be numeric or text (e.g. `"3.2%"`) and unknown fields are preserved as extras |
+| `digifetch_econ_series` | FRED-style macro series observations + metadata (`/cloud/econ/series/{seriesId}`, anonymous). `limit`/`sort_order` (desc default) page the observations; a missing print (FRED `"."`) maps to null. `info` types id/title/units (null when absent); unknown metadata stays extras |
 | `digifetch_yield_curve` | Treasury yield-curve tenors (`/cloud/econ/yield-curve`, anonymous). Points carry `maturity`/`maturityYears`/`yield`/`asOf`/`stale` (`yield` is a Python keyword, so the attribute is `yield_`); any stale tenor folds into the envelope `stale` flag |
-| `digifetch_cds` | DTCC PPD CDS trade tape (`/cloud/credit/cds`, anonymous). `issuer`/`days`/`limit` filter the tape; `days` is bounded 1–90 **client-side** — an out-of-range value is a typed `invalid_input` and no request is made (the route would answer 400). Trade rows type the dissemination/notional/rate fields and preserve the rest |
-| `digifetch_research_search` | Full-text research search across transcripts/news/filings (`/cloud/search`, session-gated). Requires `GLOOMBERB_SESSION_COOKIE`; HTTP 401 (or a missing cookie) is a typed `auth_required` with no request. Hits carry `docType`/`ticker`/`title`/`url`/`snippet` |
-| `digifetch_congress_trades` | US House disclosure trades (`/cloud/congress/house`, anonymous). `year`/`limit` filter the tape. **Upstream is currently failing** — the Mistral OCR dependency returns HTTP 500 (`Mistral OCR failed: 402 Customer monthly spending limit reached`), surfaced as a typed `upstream_error`; the tool stays exposed so coverage completes when upstream recovers. The row schema is unprobed beyond identity/date fields, so unknown fields are preserved as extras |
-| `digifetch_transcripts` | Earnings-call transcripts (`/cloud/transcripts`, session-gated, **requires Gloomberb Pro**). Requires `GLOOMBERB_SESSION_COOKIE`; a free (email-verified) session answers a non-JSON `Pro plan required` body, mapped to a typed `auth_required` carrying the upstream text — never an empty success. Adds a `term.gloom.sh/?ticker=` deep link |
+| `digifetch_cds` | DTCC PPD CDS trade tape (`/cloud/credit/cds`, anonymous). `issuer` (≤200 chars)/`days`/`limit` filter the tape; `days` is bounded 1–90 **client-side** — an out-of-range value is a typed `invalid_input` and no request is made (the route would answer 400). Trade rows type the dissemination/notional/rate fields and preserve the rest |
+| `digifetch_research_search` | Full-text research search across transcripts/news/filings (`/cloud/search`, session-gated). Requires `GLOOMBERB_SESSION_COOKIE`; HTTP 401/402 (or a missing cookie) is a typed `auth_required` with no request. `query`/`limit`/`offset` page the result; hits carry `docType`/`ticker`/`title`/`url`/`snippet`, and `data.pagination` types `total`/`hasMore`/`nextOffset`/`countCapped` (live-verified) |
+| `digifetch_congress_trades` | US House disclosure trades (`/cloud/congress/house`, anonymous). `year`/`limit` filter the tape. **Upstream is currently failing** — the Mistral OCR dependency returns HTTP 500 (`Mistral OCR failed: 402 Customer monthly spending limit reached`), surfaced as a typed `upstream_error`; the tool stays exposed so coverage completes when upstream recovers. The typed subset follows the known live field names (`memberName`/`assetName`/`sourceUrl`/`filingDate`/`notificationDate`); everything else is preserved as extras |
+| `digifetch_transcripts` | Earnings-call transcripts (`/cloud/transcripts`, session-gated, **requires Gloomberb Pro**). Requires `GLOOMBERB_SESSION_COOKIE`; a free (email-verified) session answers a non-JSON `Pro plan required` body (HTTP 402 is the live status), mapped to a typed `auth_required` carrying the upstream text — never an empty success. Rows come from the upstream `calls` list (`companyName`/`callAt`/`webcastUrl`; the `transcripts` key is also accepted). Adds a `term.gloom.sh/?ticker=` deep link |
 | `digiquant_fit_btc_power_law` | Fits the SDCA BTC power-law (RAQQR) valuation rails from cached daily price history (`data/prices/history_cache.py`, not a bespoke fetch) and persists the coefficients to `strategies/sdca/btc_power_law_coefficients.json` (#1082) |
 | `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` selector: `btc_power_law` / `generic_valuation` / `rolling_z` (`sdca/providers.py`). Oscillators are computed from **that ticker's** OHLCV. `indicator_weights` JSON `{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Macro extras need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
 | `digiquant_fetch_bitview_series` | Fetch Bitview/BRK on-chain `day1` series (`mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`) into `data/onchain/bitview/` parquet. JSON API only (no HTML scrape). `nupl` is refused by default (monotone of MVRV); `allow_derived=True` opts a caller who understands the caveat back in. Upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944); the code-only seam is an injected HTTP session / allowlisted host. Fail-soft + timeout. Hosted bitview.space is optional / no SLA — a vendor `mcp.bitview.space` MCP server already exists; prefer it for general Bitview access. Coin Metrics community CC BY-NC is **not** fetched and must not be republished commercially. Refs #1086 |
@@ -1154,20 +1154,26 @@ change gets a fresh client. Attribution/deep links are appended by
 `_gloomberb_envelope_json`; the Yahoo earnings tool opts out explicitly.
 
 **Coverage expansion (#4110 phase 1).** Seven read tools joined the family on
-the same envelope/attribution/pacing semantics: `digifetch_econ_calendar`,
-`digifetch_econ_series` (FRED-style observations), `digifetch_yield_curve`,
-`digifetch_cds` (DTCC PPD; `days` validated 1–90 client-side), and the
-session-gated `digifetch_research_search` (401 → `auth_required`) and
-`digifetch_transcripts` (requires Gloomberb Pro; `Pro plan required` →
-`auth_required`). `digifetch_congress_trades` is exposed but its upstream OCR
-path currently answers HTTP 500 (Mistral monthly spend cap), which surfaces as
-a typed `upstream_error`; its row schema is unprobed, so only identity/date
-fields are typed and unknown fields are preserved. These routes answer direct
-payloads (bare arrays included) rather than the `/market/*` envelope, so
-`_request_json` takes `allow_array` for them; array rows' `stale` flags fold
-into the envelope via the existing freshness helper. Wire types for the
-unprobed routes are deliberately permissive (`float | str`, `str | int`) so a
-textual print does not fail validation.
+the same envelope/attribution/pacing semantics: `digifetch_econ_calendar`
+(parameterless — the route returns a fixed ~105-row window and ignores
+`limit`), `digifetch_econ_series` (FRED-style observations; a missing `info`
+maps to null), `digifetch_yield_curve`, `digifetch_cds` (DTCC PPD; `days`
+validated 1–90 client-side), and the session-gated
+`digifetch_research_search` (401/402 → `auth_required`; `offset` + a typed
+pagination block) and `digifetch_transcripts` (requires Gloomberb Pro; the
+live 402 `Pro plan required` body → `auth_required`; rows live under the
+upstream `calls` key). `digifetch_congress_trades` is exposed but its upstream
+OCR path currently answers HTTP 500 (Mistral monthly spend cap), which surfaces
+as a typed `upstream_error`; its typed subset follows the known live field
+names (`memberName`/`assetName`/`sourceUrl`/`filingDate`/`notificationDate`)
+and the rest is preserved. These routes answer direct payloads (bare arrays
+included) rather than the `/market/*` envelope, so `_request_json` takes
+`allow_array` for them; array rows' `stale` flags fold into the envelope via
+the existing freshness helper. Wire types for the partly-probed routes are
+deliberately permissive (`float | str`, `str | int`) so a textual print does
+not fail validation. Because these `/cloud/*` payloads carry no
+`dataSource`/`delayMinutes`, `delay_note` stays null for them — the
+platform-wide delay is stated in the tool descriptions instead.
 
 **Not a pipeline primary.** The 15-minute free-tier delay, rate limits, and
 `1wk→5y` history cap disqualify the Cloud surface as a primary data source. It
