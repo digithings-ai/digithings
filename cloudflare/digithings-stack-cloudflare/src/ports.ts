@@ -5,6 +5,13 @@ export const DIGIGRAPH_PORT = 8000;
 export const DIGIKEY_PORT = 8005;
 
 /**
+ * digisearch edge port inside the Profile A stack Container. Hosted on
+ * search.digithings.ai (#4063) for CI web grounding, behind a digikey JWT
+ * scoped `digisearch:query` — never anonymous.
+ */
+export const DIGISEARCH_PORT = 8002;
+
+/**
  * digiquant-mcp market-data edge port (dedicated Container, #3780 Task 8).
  * Matches DIGIQUANT_MCP_PORT in digiquant/Dockerfile.mcp and the
  * streamable-http default in digiquant/src/digiquant/mcp_server.py.
@@ -40,6 +47,9 @@ export function portForHostname(hostname: string): number | null {
   }
   if (host === "key.digithings.ai" || host.startsWith("key.")) {
     return DIGIKEY_PORT;
+  }
+  if (host === "search.digithings.ai" || host.startsWith("search.")) {
+    return DIGISEARCH_PORT;
   }
   // wrangler.dev / workers.dev fallback: path-prefix routing not used;
   // default to digigraph so /healthz works on the workers.dev URL.
