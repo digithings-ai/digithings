@@ -9,7 +9,7 @@
 - **Status:** draft — revised after four fresh-context reviews (see §3.2, §11)
 - **Issue:** [#3927](https://github.com/digithings-ai/digithings/issues/3927)
 - **Validated against:** `gloom-sh/gloomberb` `0.13.3` (shallow clone, MIT) and
-  five anonymous live probes of `https://api.gloom.sh` (2026-09-15)
+  eight anonymous live probes of `https://api.gloom.sh` (2026-09-15)
 
 Author decisions (2026-09-15, verbatim): add **news as a 13th tool**; support a
 **session cookie from day 1** so the gated tools work once a free Gloom Cloud
@@ -40,7 +40,7 @@ embedding `term.gloom.sh`, and any change to `digiquant/AGENTS.md`.
 | Version / runtime | `0.13.3`; Bun `1.3.11` (`package.json`); CLI shebang `#!/usr/bin/env bun` |
 | Surfaces | TUI/desktop app, hosted terminal `term.gloom.sh`, JSON CLI, plugin system |
 | Data stack | Gloom Cloud (`api.gloom.sh`, priority 100) → Yahoo fallback (in-process) → SEC EDGAR → FRED/Treasury; Cloud upstream is mostly Yahoo (`source: "yahoo"` observed live) |
-| Auth model | Anonymous cookie-less access to `/market/*` and `/news`; client-side `requireVerifiedSession()` gates filings/holders/analyst/actions (six call sites, `index.ts:405-461`); **live probes show SEC routes are not server-enforced** (§3.2) |
+| Auth model | Anonymous cookie-less access to the **ungated** routes (`/market/quote`, history, financials, options, search, FX; `/news`); holders/analyst/corporate-actions under `/market/*` answer **401** anonymously; client-side `requireVerifiedSession()` gates filings/holders/analyst/actions (six call sites, `index.ts:405-461`), but **SEC routes are not server-enforced** (§3.2) |
 | Free tier | Rate-limited, market data delayed up to 15 minutes (`dataSource: "delayed"`, `delayMinutes: 15`); Pro realtime |
 | Framing | `X-Frame-Options: DENY` + CSP `frame-ancestors 'none'` on `term.gloom.sh` — embedding impossible (§8) |
 
@@ -54,16 +54,16 @@ The 14 issue-named methods, validated field-for-field against
 |--------|---------------|-----------|---------------|------|
 | `getQuote` | yes (`index.ts:315`) | 200 | `GET /market/quote?symbol=&exchange=` | `digifetch_quote` |
 | `getQuotesBatch` | yes (`:341`) | 200 | `POST /market/quotes/batch` | `digifetch_quotes_batch` |
-| `getPriceHistory` | yes (`:520`) | 200 | `GET /market/history?symbol=&interval=&rangeKey=` | `digifetch_price_history` |
+| `getPriceHistory` | yes (`:472`) | 200 | `GET /market/history?symbol=&interval=&rangeKey=` | `digifetch_price_history` |
 | `getTickerFinancials` (+Batch) | yes (`:261`) | 200 | `GET /market/financials`, `POST /market/financials/batch` | `digifetch_ticker_financials` |
 | `getOptionsChain` | yes (`:530`) | 200 | `GET /market/options?symbol=` | `digifetch_options_chain` |
-| `getSecFilings` / `…Documents` / `…Content` | yes (`:339+`) | **200 anon** | `GET /cloud/sec/filings`, `/cloud/sec/filing/documents`, `/cloud/sec/filing/content` | `digifetch_sec_filings` (one tool, `what` discriminator) |
+| `getSecFilings` / `…Documents` / `…Content` | yes (`:404`) | **200 anon** | `GET /cloud/sec/filings`, `/cloud/sec/filing/documents`, `/cloud/sec/filing/content` | `digifetch_sec_filings` (one tool, `what` discriminator) |
 | `getHolders` | yes, client-gated (`:443`) | **401** | `GET /market/holders` | `digifetch_holders` |
 | `getAnalystResearch` | yes, client-gated (`:452`) | **401** | `GET /market/analyst` | `digifetch_analyst_research` |
 | `getCorporateActions` | yes, client-gated (`:461`) | **401** | `GET /market/corporate-actions` | `digifetch_corporate_actions` |
 | `getEarningsCalendar` | **no** — Yahoo-only (`yahoo-finance.ts:402`) | n/a | no Cloud route; use digiquant's `yfinance` stack | `digifetch_earnings_calendar` (Yahoo-backed) |
-| `getExchangeRate` (+Snapshot) | yes (`:364`) | 200 | `GET /market/exchange-rate?fromCurrency=` | `digifetch_exchange_rate` |
-| `search` | yes (`:394`) | 200 | `GET /market/search?q=&limit=` | `digifetch_search` |
+| `getExchangeRate` (+Snapshot) | yes (`:381`) | 200 | `GET /market/exchange-rate?fromCurrency=` | `digifetch_exchange_rate` |
+| `search` | yes (`:397`) | 200 | `GET /market/search?q=&limit=` | `digifetch_search` |
 | news provider (`:586-624`) | yes, ungated | 200 | `GET /news?feed=…`, `GET /news/{id}` | `digifetch_news` |
 
 ### Validation
@@ -149,7 +149,7 @@ are the test-visible contract (13 rows).
 | `digifetch_quote` | `getQuote` | `GET /market/quote` | `QuoteInput{symbol: str, exchange: str \| None}` | `QuoteResult(quote: Quote \| None)` | anon |
 | `digifetch_quotes_batch` | `getQuotesBatch` | `POST /market/quotes/batch` | `QuotesBatchInput{symbols: list[str] (1–20)}` | `QuotesBatchResult(quotes: list[QuoteBatchItem])` | anon |
 | `digifetch_price_history` | `getPriceHistory` | `GET /market/history` | `PriceHistoryInput{symbol, resolution: Resolution, range: Range, exchange?}` | `PriceHistoryResult(bars: list[PriceBar], metadata)` | anon |
-| `digifetch_ticker_financials` | `getTickerFinancials` (+Batch) | `GET /market/financials`, `/market/statements`, `POST /market/financials/batch` | `TickerFinancialsInput{symbol, exchange?, extended_statements: bool = False}` | `TickerFinancialsResult(financials: TickerFinancials)` | anon |
+| `digifetch_ticker_financials` | `getTickerFinancials` (+Batch) | `GET /market/financials` (+`statementHistory=extended`), `POST /market/financials/batch` | `TickerFinancialsInput{symbol, exchange?, extended_statements: bool = False}` | `TickerFinancialsResult(financials: TickerFinancials)` | anon |
 | `digifetch_options_chain` | `getOptionsChain` | `GET /market/options` | `OptionsChainInput{symbol, exchange?, expiration: int \| None (epoch s)}` | `OptionsChainResult(chain: OptionsChain)` | anon |
 | `digifetch_sec_filings` | `getSecFilings` / `…Documents` / `…Content` | `GET /cloud/sec/filings`, `/cloud/sec/filing/documents`, `/cloud/sec/filing/content` | `SecFilingsInput{ticker, what: Literal["filings","documents","content"], count: int = 15, cik?, accession?, form?}` | `SecFilingsResult(filings \| documents \| content)` | anon (live-verified) |
 | `digifetch_holders` | `getHolders` | `GET /market/holders` | `HoldersInput{symbol, owner_type: Literal["all","insider","institution","fund","direct"] = "all"}` | `HoldersResult(holders: list[Holder])` | session cookie |
@@ -187,7 +187,7 @@ deviation (see below). Validation is a Pydantic v2 `model_validator` on
 |------------|--------------------|-------|
 | `1m` | 1 week | Cloud also 1W |
 | `5m` | 1 week | Cloud can serve 1M — one-line widening knob |
-| `15m` | 1 month | matches Cloud |
+| `15m` | 1 month | Cloud can serve 3M — one-line widening knob |
 | `30m` | 6 months | Cloud-served; kept in contract |
 | `1h` | 3 months | Cloud can serve 1Y |
 | `1d` | 5 years (default) | matches Cloud |
@@ -206,32 +206,45 @@ One shared envelope, generic over the tool payload:
 DigifetchEnvelope[T] {
   source: Literal["gloomberb"], provider_id: str,
   fetched_at: datetime, stale: bool, delay_note: str | None,
-  warnings: list[str], data: T
+  warnings: list[str], data: T | DigifetchError
 }
 ```
 
-Each `*Result` model in §5.1 is the `T`. Tools never raise to the transport;
-failures return an envelope whose `data` is a typed `DigifetchError{code,
-message, retryable}`:
+Each `*Result` model in §5.1 is the success-case `T`. Tools never raise to the
+transport; failures return the same envelope with `data` set to a typed
+`DigifetchError{code, message, retryable}` (the error-bearing type is
+`DigifetchEnvelope[T | DigifetchError]`):
 
 | Situation | code |
 |-----------|------|
 | Wire 401/403 (gated endpoint without cookie) | `auth_required` |
-| Wire 404 or envelope `status` not-found | `not_found` |
+| Wire 404 | `not_found` |
 | Wire 429 (honor `Retry-After`) | `rate_limited` |
 | Wire 5xx / timeout | `upstream_error` (retryable) |
 | Pydantic validation failure on input | `invalid_input` |
-| Envelope `status` outside success family | `upstream_error` / `not_found` per mapping table |
+| Envelope `status: "empty"` / `"unsupported"` (provider-miss upstream) | `not_found` |
+| Envelope `status: "retryable_error"` | `upstream_error` (retryable) |
+| Envelope `status: "fatal_error"` | `upstream_error` |
 
-**Freshness.** Wire `stale: true` means *expired cache being served*; upstream
-TS converts that to `ProviderMiss` and falls back. This client has no fallback,
-so `stale: true` maps to `DigifetchEnvelope.stale = true` plus a
-`delay_note`. The 15-minute free-tier delay is **not** `stale` — it is signalled
-by `dataSource: "delayed"` (`live|delayed|snapshot`) and/or `delayMinutes: 15`
-(options, financials, exchange-rate). Freshness derivation is the union:
-`stale` OR `dataSource == "delayed"` OR `delayMinutes` present →
-`delay_note = "Free-tier data delayed up to 15 minutes"`. This precedence is
-pinned by tests.
+Wire status vocabulary (`api-client/types.ts:1036-1042`): `success | partial |
+empty | unsupported | retryable_error | fatal_error`; `partial` is success with
+`warnings` populated.
+
+**Freshness.** Two distinct signals, kept distinct in the envelope:
+
+- Wire `stale: true` means *expired cache being served*; upstream TS converts
+  that to `ProviderMiss` and falls back. This client has no fallback, so it
+  maps to `DigifetchEnvelope.stale = true` with
+  `delay_note = "Upstream cache stale"`.
+- The 15-minute free-tier delay is **not** `stale` — it is signalled by
+  `dataSource: "delayed"` (`live|delayed|snapshot`) and/or `delayMinutes > 0`
+  (carried by options chains and exchange-rate snapshots; quote payloads carry
+  `dataSource` only). Both map to
+  `delay_note = "Free-tier data delayed up to 15 minutes"`.
+
+Freshness derivation is the union — `stale == true` OR
+`dataSource == "delayed"` OR `delayMinutes > 0` — with the two notes kept
+distinct. This precedence is pinned by tests.
 
 ### 5.4 Normalizers to port (fixtures required)
 
