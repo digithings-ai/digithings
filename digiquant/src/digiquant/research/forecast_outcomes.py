@@ -171,11 +171,11 @@ def _fetch_session_close(
     sym = ticker.strip().upper()
     if r2_backend_enabled():
         # Sealed R2 generation; single-date window (#3780 Task 7b).
-        from digiquant.research.data.queries import r2_close_rows
+        from digiquant.research.data.queries import UnknownTickerError, r2_close_rows
 
         try:
             rows = r2_close_rows(tickers=[sym], since=session, until=session)
-        except LookupError:
+        except UnknownTickerError:
             # No sealed generation for this ticker: an absent close, not a fault.
             # A matured forecast can outlive a ticker's R2 universe membership,
             # and every caller already treats a None close as pending (#4119).

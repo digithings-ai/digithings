@@ -20,6 +20,7 @@ from digiquant.portfolio.models.forecast import (
 from digiquant.portfolio.models.forecast_calibration import OutcomeStatus
 from digiquant.research import forecast_outcomes as fo
 from digiquant.research import forecast_registry as fr
+from digiquant.research.data.queries import UnknownTickerError
 from digiquant.research.phases.preflight import (
     PreflightReflectDeps,
     build_preflight_reflect_node,
@@ -529,7 +530,7 @@ class TestR2UnknownTickerIsAbsentClose:
     @staticmethod
     def _unknown_ticker(monkeypatch: pytest.MonkeyPatch) -> None:
         def fake_r2_close_rows(**_kwargs: Any) -> list[dict[str, Any]]:
-            raise LookupError("unknown ticker 'MSFT'")
+            raise UnknownTickerError("unknown ticker 'MSFT'")
 
         monkeypatch.setattr(
             "digiquant.research.data.queries.r2_close_rows",
@@ -586,8 +587,29 @@ class TestR2UnknownTickerIsAbsentClose:
         row = client.store[fo.OUTCOMES][0]
         assert Decimal(row["maturity_snapshot"]["price"]) == Decimal("106")
 
+    def test_malformed_manifest_entry_still_fails_loud(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Control: ``KeyError`` is a ``LookupError``, so catch the signal, not the base.
+
+        A v1 manifest entry missing ``object``/``sha256`` is a broken manifest, and
+        used to crash the graph. It must keep crashing rather than become a forecast
+        that stays pending forever (#4120 review).
+        """
+
+        def fake_r2_close_rows(**_kwargs: Any) -> list[dict[str, Any]]:
+            raise KeyError("sha256")
+
+        monkeypatch.setattr(
+            "digiquant.research.data.queries.r2_close_rows",
+            fake_r2_close_rows,
+        )
+        monkeypatch.setattr(fo, "r2_backend_enabled", lambda: True)
+        with pytest.raises(KeyError, match="sha256"):
+            fo._fetch_session_close(client=OutcomesFake(), ticker="AAPL", session=date(2026, 8, 13))
+
     def test_corrupt_manifest_still_fails_loud(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Control: only LookupError means absent; a bad manifest is a real fault."""
+        """Control: only an absent ticker means absent; a bad manifest is a real fault."""
 
         def fake_r2_close_rows(**_kwargs: Any) -> list[dict[str, Any]]:
             raise ValueError("unsupported manifest version 2")
