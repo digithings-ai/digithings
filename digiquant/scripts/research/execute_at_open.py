@@ -250,20 +250,16 @@ def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
             except (TypeError, ValueError):
                 return None
             return price if math.isfinite(price) and price > 0 else None
-    # same-day (or unsealed) prices come from the intraday Supabase writer (#4013 D3)
-    res = (
-        sb.table("price_history")
-        .select("open")
-        .eq("ticker", ticker)
-        .eq("date", d)
-        .limit(1)
-        .execute()
-    )
-    rows = getattr(res, "data", None) or []
-    if not rows:
+    # Same-day (unsealed) opens have no sealed R2 bar yet — fetch live (#4053).
+    # Never raises into the morning job: a failed fetch is None (data_unavailable).
+    try:
+        from digiquant.data.prices.live_opens import fetch_live_open
+    except Exception:
         return None
-    o = rows[0].get("open")
-    return float(o) if o is not None else None
+    try:
+        return fetch_live_open(ticker, day)
+    except Exception:
+        return None
 
 
 def _rebalance_payload_for_date(sb, rebalance_date: str) -> Optional[Dict[str, Any]]:
@@ -480,23 +476,21 @@ def _hold_events_for_positions_not_in_rebalance(
 
 
 def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
-    """Declared opens for `tickers` on `d`, in one batched read, as `Decimal`.
+    """Declared opens for `tickers` on `d`, as `Decimal`.
 
     The executor needs a mark per symbol before it will fill anything, and the symbol list
-    comes from the ledger itself (`pending_symbols`). One `in_` read rather than the
-    per-ticker `_fetch_open` loop the legacy paths use: the set is bounded by the day's
-    pending orders (~30), and a row-per-symbol round trip is the shape #2484 exists to
-    stop adding to. Tickers with no row, a null open, or a non-finite one are simply
-    absent — the executor rejects those orders `data_unavailable` rather than filling at
-    a guessed price.
+    comes from the ledger itself (`pending_symbols`). The set is bounded by the day's
+    pending orders (~30). Tickers with no mark, a null open, or a non-finite one are
+    simply absent — the executor rejects those orders `data_unavailable` rather than
+    filling at a guessed price.
 
     `Decimal(str(raw))`, never `float(raw)`: this mark becomes a fill price and then a
     lot's cost basis, and the ledger's whole numeric contract is that money never passes
     through binary floating point. Every other path in this file returns floats because
     `position_events` is a display table; this one feeds the record of what was bought.
 
-    Sealed dates read the R2 generation; same-day opens stay on the Supabase table the
-    intraday writer keeps fresh (#4013 D3). The R2 seam fetches one generation per
+    Sealed dates read the R2 generation; same-day opens come from a live fetch —
+    no sealed R2 bar exists yet (#4053). The R2 seam fetches one generation per
     ticker and raises ``LookupError`` for an unknown one, so that branch loops per
     ticker and skips only the unknown symbol's mark instead of declining every
     pending order in the batch (#4013 fix round).
@@ -528,19 +522,18 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
                 if price.is_finite() and price > 0:
                     marks[str(ticker).upper()] = price
             return marks
-    res = (
-        sb.table("price_history")
-        .select("ticker,open")
-        .in_("ticker", sorted(set(tickers)))
-        .eq("date", d)
-        .execute()
-    )
+    # Same-day (unsealed) opens have no sealed R2 bar yet — fetch live (#4053).
+    # Failures skip per symbol (data_unavailable); never raise into the morning job.
+    try:
+        from digiquant.data.prices.live_opens import fetch_live_opens
+    except Exception:
+        return {}
+    try:
+        live = fetch_live_opens(list(tickers), str(d)[:10])
+    except Exception:
+        return {}
     marks: Dict[str, Decimal] = {}
-    for row in getattr(res, "data", None) or []:
-        if not isinstance(row, dict):
-            continue
-        ticker = row.get("ticker")
-        raw = row.get("open")
+    for ticker, raw in live.items():
         if not ticker or raw is None:
             continue
         try:

@@ -2,10 +2,12 @@
  * digithings Profile A stack — Worker fronting one Cloudflare Container.
  *
  * Hostnames:
- *   graph.digithings.ai → digigraph :8000
- *   key.digithings.ai   → digikey   :8005
- *   mcp.digithings.ai   → digiquant-mcp :8767 (reserved; see HUMAN GATE in
- *                         wrangler.toml — route enabled only with edge auth)
+ *   graph.digithings.ai  → digigraph  :8000
+ *   key.digithings.ai    → digikey    :8005
+ *   search.digithings.ai → digisearch :8002 (digikey JWT `digisearch:query`;
+ *                          new external route #4063, owner-approved)
+ *   mcp.digithings.ai    → digiquant-mcp :8767 (reserved; see HUMAN GATE in
+ *                          wrangler.toml — route enabled only with edge auth)
  *
  * workers.dev fallbacks:
  *   /healthz            → digigraph
@@ -14,7 +16,10 @@
  * (No /_stack/mcp/* forwarder — unauthenticated MCP forwarding must not ship.
  * mcp.digithings.ai answers only once its route is enabled behind the JWT gate.)
  *
- * digisearch / digivault / LiteLLM are loopback-only inside the Container.
+ * digivault / LiteLLM are loopback-only inside the Container. digisearch binds
+ * 0.0.0.0:8002 (container/start_digisearch.sh) so the Worker can reach it at the
+ * container network address for its public route; in-container callers keep
+ * using DIGISEARCH_URL=http://127.0.0.1:8002 (0.0.0.0 includes loopback).
  * digichat Container calls these public URLs via DIGIGRAPH_INTERNAL_URL / DIGIKEY_URL.
  */
 import { Container, getContainer, switchPort } from "@cloudflare/containers";
@@ -23,6 +28,7 @@ import { handleMarketData } from "./market-data";
 import {
   DIGIGRAPH_PORT,
   DIGIKEY_PORT,
+  DIGISEARCH_PORT,
   DIGIQUANT_MCP_HOSTNAME,
   DIGIQUANT_MCP_PORT,
   MCP_CONTAINER_ID,
@@ -36,8 +42,9 @@ const env = workerEnvBinding as unknown as Env;
 export class DigiStackContainer extends Container {
   defaultPort = DIGIGRAPH_PORT;
   /**
-   * digigraph is required for Worker readiness. digikey is also waited on in
-   * fetch() once Redis-wait + early priority make bind reliable under Firecracker.
+   * digigraph is required for Worker readiness. digikey (once Redis-wait + early
+   * priority make bind reliable under Firecracker) and digisearch (which starts
+   * behind the Chroma seed wait) are waited on per-request in fetch() instead.
    */
   requiredPorts = [DIGIGRAPH_PORT];
   /** Keep warm — multi-process cold start is expensive. */
@@ -99,7 +106,7 @@ export class DigiStackContainer extends Container {
 
   /**
    * Wait longer than the default ~20s portReadyTimeout while supervisord
-   * brings up digigraph (and digikey) under Firecracker.
+   * brings up digigraph (and the requested service) under Firecracker.
    */
   override async fetch(request: Request): Promise<Response> {
     // switchPort sets cf-container-target-port; containerFetch(request) alone
@@ -108,7 +115,15 @@ export class DigiStackContainer extends Container {
     const targetPort = targetPortFromRequest(request);
     try {
       await this.startAndWaitForPorts({
-        ports: [DIGIGRAPH_PORT, ...(targetPort === DIGIKEY_PORT ? [DIGIKEY_PORT] : [])],
+        // Per-target only: a search.digithings.ai request must not fail on a
+        // :8002 that has not bound yet (digisearch starts behind the seed wait),
+        // just as a key request must not race :8005. digigraph binds first for
+        // every request, so it is unconditional.
+        ports: [
+          DIGIGRAPH_PORT,
+          ...(targetPort === DIGIKEY_PORT ? [DIGIKEY_PORT] : []),
+          ...(targetPort === DIGISEARCH_PORT ? [DIGISEARCH_PORT] : []),
+        ],
         cancellationOptions: {
           portReadyTimeoutMS: 180_000,
           instanceGetTimeoutMS: 60_000,
@@ -294,7 +309,7 @@ export default {
     if (port === null) {
       return new Response(
         "digithings-stack: unknown host. Use graph.digithings.ai, " +
-          "key.digithings.ai, or /_stack/key/* on workers.dev. " +
+          "key.digithings.ai, search.digithings.ai, or /_stack/key/* on workers.dev. " +
           "(mcp.digithings.ai is reserved; its route is not yet enabled.)",
         { status: 404 },
       );

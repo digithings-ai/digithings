@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import types
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -169,6 +170,74 @@ class _FakeResponse:
     data: list[dict[str, Any]]
 
 
+# ─── Fake live-fetch registry ─────────────────────────────────────────────
+#
+# Same-day opens come from a live fetch (#4053), so the canned `price_history`
+# rows below double as fake Yahoo responses: every `_FakeClient` registers its
+# rows keyed `(TICKER, date)`, and the autouse `_live_fetch_stub` serves them
+# through a stub `yfinance` module. A ticker/date with no row raises inside the
+# stub, which the production code turns into None (data_unavailable) — the same
+# answer the old Supabase read gave for a missing row. No test in this module
+# may touch the real network.
+
+_LIVE_OPENS: dict[tuple[str, str], Any] = {}
+_LIVE_CALLS: list[tuple[str, str]] = []
+
+
+class _LiveIloc:
+    def __init__(self, values: list) -> None:
+        self._values = values
+
+    def __getitem__(self, idx: int):
+        return self._values[idx]
+
+
+class _LiveSer:
+    def __init__(self, v) -> None:
+        self.iloc = _LiveIloc([v])
+
+
+class _LiveFrame:
+    """Minimal ``yfinance.download`` stand-in: ``frame["Open"].iloc[0]``."""
+
+    def __init__(self, v) -> None:
+        self._v = v
+
+    def __getitem__(self, key: str) -> _LiveSer:
+        assert key == "Open"
+        return _LiveSer(self._v)
+
+
+def _register_live_rows(tables: dict[str, list[dict[str, Any]]]) -> None:
+    for row in tables.get("price_history", []) or []:
+        if not isinstance(row, dict) or not row.get("ticker") or not row.get("date"):
+            continue
+        key = (str(row["ticker"]).upper(), str(row["date"])[:10])
+        # First-non-null-open wins: the ledger fixture appends open-less seed-close
+        # rows after the mark rows, and the old `.limit(1)` read served the mark.
+        if key not in _LIVE_OPENS or (_LIVE_OPENS[key] is None and row.get("open") is not None):
+            _LIVE_OPENS[key] = row.get("open")
+
+
+@pytest.fixture(autouse=True)
+def _live_fetch_stub(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serve same-day opens from the fixture tables; never the real network."""
+    _LIVE_OPENS.clear()
+    _LIVE_CALLS.clear()
+
+    def _download(ticker: str, *args: Any, **kwargs: Any) -> _LiveFrame:
+        start = str(kwargs.get("start", ""))[:10]
+        _LIVE_CALLS.append((str(ticker).upper(), start))
+        key = (str(ticker).upper(), start)
+        if key not in _LIVE_OPENS:
+            raise RuntimeError(f"no live open for {key}")
+        return _LiveFrame(_LIVE_OPENS[key])
+
+    stub = types.ModuleType("yfinance")
+    stub.download = _download  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "yfinance", stub)
+
+
 @dataclass
 class _FakeClient:
     """Per-table canned reads plus a captured upsert log."""
@@ -176,6 +245,9 @@ class _FakeClient:
     tables: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     upserts: list[dict[str, Any]] = field(default_factory=list)
     inserts: list[dict[str, Any]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        _register_live_rows(self.tables)
 
     def table(self, name: str) -> _FakeQuery:
         self.tables.setdefault(name, [])
@@ -812,13 +884,13 @@ class TestOpenMarksAreDecimal:
         )
         assert got == {"UUP": Decimal("27.40")}
 
-    def test_the_marks_are_one_batched_read(self) -> None:
-        """One `in_` over the day's pending symbols — the shape #2484 exists to stop.
+    def test_the_marks_live_fetch_once_per_ticker_and_skip_supabase(self) -> None:
+        """One live fetch per pending symbol, and no Supabase read at all (#4053).
 
-        The legacy `_fetch_open` loop issues a round trip per ticker. The symbol list here
-        is bounded by the day's pending orders, so it fits in one read, and the count is
-        asserted rather than the filter because a per-ticker loop would still produce the
-        right marks and pass every value assertion above.
+        The retired path did one `in_` over the day's pending symbols (the shape
+        #2484 exists to stop adding row-per-symbol round trips to). Same-day opens
+        have no sealed R2 bar, so each symbol gets exactly one live call instead —
+        and the Supabase table is not consulted even though the client carries rows.
         """
         reads: list[str] = []
 
@@ -835,7 +907,8 @@ class TestOpenMarksAreDecimal:
             }
         )
         assert len(_mod._open_marks(client, ["FXI", "UUP", "XLF"], _EXEC_D)) == 3
-        assert reads == ["price_history"]
+        assert reads == []
+        assert sorted(_LIVE_CALLS) == [("FXI", _EXEC_D), ("UUP", _EXEC_D), ("XLF", _EXEC_D)]
 
     def test_no_pending_symbols_means_no_read_at_all(self) -> None:
         """A quiet day must not turn into an unfiltered scan of `price_history`."""
