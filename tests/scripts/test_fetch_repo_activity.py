@@ -225,6 +225,91 @@ def test_check_refuses_a_missing_list(tmp_path: Path, monkeypatch: pytest.Monkey
 
 
 @pytest.mark.unit
+def test_check_refuses_a_pull_request_in_open_issues(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A PR row in ``openIssues`` is a wrong figure, not a cosmetic slip (#4093).
+
+    The list is built from an `is:issue+is:open` search, so a PR can only arrive from
+    a snapshot written by an older generator — which is exactly how #4093 shipped, and
+    the homepage vitest mirror (`cloudflare/digithings-web/lib/repoActivity.test.ts`)
+    requires every row to link ``/issues/{number}``.
+    """
+    data = _snapshot()
+    data["openIssues"][0]["url"] = "https://github.com/digithings-ai/digithings/pull/2"
+    assert _check(data, tmp_path, monkeypatch) == 1
+
+
+@pytest.mark.unit
+def test_check_refuses_an_issue_in_merged_pulls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The mirror of the openIssues rule: mergedPulls rows must be /pull/ links."""
+    data = _snapshot()
+    data["mergedPulls"][0]["url"] = "https://github.com/digithings-ai/digithings/issues/1"
+    assert _check(data, tmp_path, monkeypatch) == 1
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("field", ["number", "title", "url"])
+def test_check_refuses_a_row_missing_a_rendered_field(
+    field: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`number`, `title` and `url` are the three fields the page renders per row."""
+    data = _snapshot()
+    del data["openIssues"][0][field]
+    assert _check(data, tmp_path, monkeypatch) == 1
+
+
+@pytest.mark.unit
+def test_check_refuses_a_row_whose_number_and_url_disagree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`endswith`, not `in`: a substring test accepted both of these (review of #4095)."""
+    for number, url in (
+        (1, "https://github.com/digithings-ai/digithings/issues/159"),
+        (12, "https://github.com/digithings-ai/digithings/pull/123"),
+    ):
+        data = _snapshot()
+        data["mergedPulls"][0]["number"] = number
+        data["mergedPulls"][0]["url"] = url
+        assert _check(data, tmp_path, monkeypatch) == 1
+
+
+@pytest.mark.unit
+def test_check_refuses_a_zero_number_or_a_blank_title(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    zero = _snapshot()
+    zero["openIssues"][0]["number"] = 0
+    zero["openIssues"][0]["url"] = "https://github.com/digithings-ai/digithings/issues/0"
+    assert _check(zero, tmp_path, monkeypatch) == 1
+    blank = _snapshot()
+    blank["openIssues"][0]["title"] = "   "
+    assert _check(blank, tmp_path, monkeypatch) == 1
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("key", ["mergedPulls", "openIssues"])
+def test_check_refuses_an_empty_recent_list(
+    key: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The page renders both lists; an empty one is a section with nothing in it."""
+    assert _check(_snapshot(**{key: []}), tmp_path, monkeypatch) == 1
+
+
+@pytest.mark.unit
+def test_check_refuses_a_feature_row_without_a_pull_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The page promises every feature row is a pull request you can open."""
+    no_pr = _snapshot(features=[{"scope": "ci", "summary": "a thing", "pr": 0}])
+    assert _check(no_pr, tmp_path, monkeypatch) == 1
+    no_summary = _snapshot(features=[{"scope": "ci", "summary": "   ", "pr": 3}])
+    assert _check(no_summary, tmp_path, monkeypatch) == 1
+
+
+@pytest.mark.unit
 def test_check_refuses_an_empty_module_map(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert _check(_snapshot(modules={}), tmp_path, monkeypatch) == 1
 
@@ -281,7 +366,10 @@ def test_check_refuses_a_malformed_timestamp(
 
 
 @pytest.mark.unit
-def test_features_reads_scope_summary_and_pr_from_a_squash_subject() -> None:
+def test_features_reads_scope_summary_and_pr_from_a_squash_subject(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fra, "_pr_for_commit", lambda sha: None)
     feats = fra._features(
         [_commit("feat(design-system): put digivault in the module registry (#1930)")]
     )
@@ -296,7 +384,10 @@ def test_features_reads_scope_summary_and_pr_from_a_squash_subject() -> None:
 
 
 @pytest.mark.unit
-def test_features_strips_a_stale_ref_left_by_a_referenced_subject() -> None:
+def test_features_strips_a_stale_ref_left_by_a_referenced_subject(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fra, "_pr_for_commit", lambda sha: None)
     feats = fra._features(
         [
             _commit(
@@ -309,7 +400,8 @@ def test_features_strips_a_stale_ref_left_by_a_referenced_subject() -> None:
 
 
 @pytest.mark.unit
-def test_features_keeps_unscoped_and_breaking_feats() -> None:
+def test_features_keeps_unscoped_and_breaking_feats(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(fra, "_pr_for_commit", lambda sha: None)
     feats = fra._features(
         [_commit("feat: a bare feature (#12)"), _commit("feat(api)!: broke it (#13)")]
     )
@@ -353,6 +445,20 @@ def test_features_resolves_the_pr_for_a_merge_committed_feat(
 
 
 @pytest.mark.unit
+def test_features_prefers_the_resolved_pr_over_a_subject_ref(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A merge-committed subject's `(#N)` is often the referenced ISSUE, not the PR.
+
+    Review of #4095 measured four of six live rows linking `/issues/N` under copy that
+    promises pull requests. The resolution is authoritative; the ref is the fallback.
+    """
+    monkeypatch.setattr(fra, "_pr_for_commit", lambda sha: 4067)
+    feats = fra._features([_commit("feat(ci): pin the snapshot check (#4063)")])
+    assert [(f["summary"], f["pr"]) for f in feats] == [("pin the snapshot check", 4067)]
+
+
+@pytest.mark.unit
 def test_features_drops_a_feat_whose_pr_cannot_be_resolved(monkeypatch: pytest.MonkeyPatch) -> None:
     """The page states every row is a PR you can open, so a row without one is a lie.
 
@@ -373,7 +479,8 @@ def test_features_dedupes_one_row_per_pr_across_a_merge(monkeypatch: pytest.Monk
 
 
 @pytest.mark.unit
-def test_features_dedupes_by_pr_and_honours_the_limit() -> None:
+def test_features_dedupes_by_pr_and_honours_the_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(fra, "_pr_for_commit", lambda sha: None)
     commits = [_commit(f"feat(x): thing {n} (#{n})") for n in range(100, 110)]
     commits.append(_commit("feat(x): thing 100 again (#100)"))
     feats = fra._features(commits, limit=4)
@@ -688,21 +795,3 @@ def test_search_items_can_restrict_rows_to_a_url_kind() -> None:
     assert [row["number"] for row in fra._search_items(payload, 6, "/issues/")] == [2]
     assert [row["number"] for row in fra._search_items(payload, 6, "/pull/")] == [1]
     assert [row["number"] for row in fra._search_items(payload, 6)] == [1, 2]
-
-
-@pytest.mark.unit
-def test_check_refuses_a_pull_request_in_open_issues(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The guard that would have caught the shipped snapshot before web/lint did (#4091)."""
-    bad = _snapshot(
-        openIssues=[
-            {
-                "number": 1,
-                "title": "a pr",
-                "url": "https://github.com/digithings-ai/digithings/pull/1",
-                "updatedAt": "2026-09-14T00:00:00Z",
-            }
-        ]
-    )
-    assert _check(bad, tmp_path, monkeypatch) == 1

@@ -1,131 +1,127 @@
 {
-  "generatedAt": "2026-09-14T06:20:58Z",
+  "generatedAt": "2026-09-15T15:32:35Z",
   "windowDays": 30,
-  "commits": 2285,
+  "commits": 2388,
   "features": [
     {
-      "scope": "digichat",
-      "summary": "unify duration formatting across message timing and tool rows",
-      "pr": 3978,
-      "date": "2026-09-13T15:30:22Z"
-    },
-    {
-      "scope": null,
-      "summary": "web-search hardening batch (dead param, rename, fail-hard pin)",
-      "pr": 3873,
-      "date": "2026-09-11T12:11:39Z"
-    },
-    {
-      "scope": null,
-      "summary": "web-search follow-ups batch",
-      "pr": 3870,
-      "date": "2026-09-11T02:20:54Z"
-    },
-    {
-      "scope": "digichat",
-      "summary": "render foundry agent MCP tool calls and results",
-      "pr": 3861,
-      "date": "2026-09-11T00:27:56Z"
-    },
-    {
-      "scope": null,
-      "summary": "ship web-search extra in stack image so hosted web_search uses ddgs fallback",
-      "pr": 3865,
-      "date": "2026-09-11T00:20:32Z"
+      "scope": "stack",
+      "summary": "expose hosted digisearch route (search.digithings.ai) for CI web grounding",
+      "pr": 4067,
+      "date": "2026-09-15T10:47:03Z"
     },
     {
       "scope": "digiquant",
-      "summary": "gate mcp tools behind full/read scope with constructor bind",
-      "pr": 3857,
-      "date": "2026-09-10T19:26:43Z"
+      "summary": "market reads R2-only; remove Supabase bodies",
+      "pr": 4082,
+      "date": "2026-09-14T22:52:37Z"
+    },
+    {
+      "scope": "digiquant-web",
+      "summary": "live prices seeded from the R2 market API",
+      "pr": 4079,
+      "date": "2026-09-14T22:00:40Z"
+    },
+    {
+      "scope": "dashboard",
+      "summary": "market reads R2-API-only; universe from /v1/market/tickers",
+      "pr": 4078,
+      "date": "2026-09-14T21:26:11Z"
+    },
+    {
+      "scope": "digiquant",
+      "summary": "same-day opens from a live fetch; retire intraday Supabase writer",
+      "pr": 4062,
+      "date": "2026-09-14T21:20:09Z"
+    },
+    {
+      "scope": "digiquant-web",
+      "summary": "benchmark history from the R2 market API",
+      "pr": 4049,
+      "date": "2026-09-14T17:21:48Z"
     }
   ],
-  "pullsMerged": 1110,
-  "issuesClosed": 1145,
-  "pullsOpen": 5,
-  "issuesOpen": 5,
+  "pullsMerged": 1126,
+  "issuesClosed": 532,
+  "pullsOpen": 2,
+  "issuesOpen": 163,
   "mergedPulls": [
     {
-      "number": 4000,
-      "title": "fix(ci): fail openwiki-update at the OpenWiki step, not the propagate step",
-      "url": "https://github.com/digithings-ai/digithings/pull/4000",
-      "mergedAt": "2026-09-13T23:36:44Z"
+      "number": 4094,
+      "title": "fix(website): keep repo-activity openIssues to real issues (#4091)",
+      "url": "https://github.com/digithings-ai/digithings/pull/4094",
+      "mergedAt": "2026-09-15T15:23:07Z"
     },
     {
-      "number": 4020,
-      "title": "chore(promote): develop -> main (#4017 at-open ledger drift failure)",
-      "url": "https://github.com/digithings-ai/digithings/pull/4020",
-      "mergedAt": "2026-09-13T23:34:26Z"
+      "number": 4090,
+      "title": "chore(promote): module/digiquant -> develop (#4069)",
+      "url": "https://github.com/digithings-ai/digithings/pull/4090",
+      "mergedAt": "2026-09-15T15:10:04Z"
     },
     {
-      "number": 4018,
-      "title": "fix(digiquant): fail the at-open run when the ledger rejects every order (#4017)",
-      "url": "https://github.com/digithings-ai/digithings/pull/4018",
-      "mergedAt": "2026-09-13T23:31:47Z"
+      "number": 4092,
+      "title": "chore(sync): module/digiquant <- develop",
+      "url": "https://github.com/digithings-ai/digithings/pull/4092",
+      "mergedAt": "2026-09-15T14:56:21Z"
     },
     {
-      "number": 4016,
-      "title": "chore(promote): develop -> main (#4014 tearsheet NAV continuity, #4009/#4012 market-data refresh)",
-      "url": "https://github.com/digithings-ai/digithings/pull/4016",
-      "mergedAt": "2026-09-13T22:51:04Z"
+      "number": 4088,
+      "title": "chore(release): promote develop to main \u2014 web-grounding retry + R2-only market reads",
+      "url": "https://github.com/digithings-ai/digithings/pull/4088",
+      "mergedAt": "2026-09-15T14:54:29Z"
     },
     {
-      "number": 4015,
-      "title": "fix(dashboard): show chained NAV history with forward-filled gaps (#4014)",
-      "url": "https://github.com/digithings-ai/digithings/pull/4015",
-      "mergedAt": "2026-09-13T22:46:44Z"
+      "number": 4085,
+      "title": "feat(digiquant): digifetch x Gloomberb market-data tools (#4069)",
+      "url": "https://github.com/digithings-ai/digithings/pull/4085",
+      "mergedAt": "2026-09-15T14:50:56Z"
     },
     {
-      "number": 4012,
-      "title": "fix(ci): install the prices extra in market-data-refresh for yfinance (#4011)",
-      "url": "https://github.com/digithings-ai/digithings/pull/4012",
-      "mergedAt": "2026-09-13T22:10:19Z"
+      "number": 4087,
+      "title": "fix(digiquant): retry web grounding unscoped when a scoped search is empty (#4086)",
+      "url": "https://github.com/digithings-ai/digithings/pull/4087",
+      "mergedAt": "2026-09-15T14:39:55Z"
     }
   ],
   "openIssues": [
     {
-      "number": 4091,
-      "title": "fix(website): repo-activity openIssues holds PRs; web/lint red on develop",
-      "url": "https://github.com/digithings-ai/digithings/issues/4091",
-      "updatedAt": "2026-09-15T14:55:28Z"
+      "number": 4101,
+      "title": "ops(digiquant): post-deploy verification of digifetch_* tools + upstream drift checks",
+      "url": "https://github.com/digithings-ai/digithings/issues/4101",
+      "updatedAt": "2026-09-15T15:42:30Z"
     },
     {
-      "number": 4028,
-      "title": "digiquant-daily-failure",
-      "url": "https://github.com/digithings-ai/digithings/issues/4028",
-      "updatedAt": "2026-09-15T14:19:26Z"
+      "number": 4100,
+      "title": "feat(digiquant): widen 1wk history range via startDate (upstream serves >5Y)",
+      "url": "https://github.com/digithings-ai/digithings/issues/4100",
+      "updatedAt": "2026-09-15T15:42:29Z"
     },
     {
-      "number": 4084,
-      "title": "chore(digisearch): close web-turn double retrieval (second round uncounted) \u2014 Phase B follow-up",
-      "url": "https://github.com/digithings-ai/digithings/issues/4084",
-      "updatedAt": "2026-09-15T13:30:20Z"
+      "number": 4099,
+      "title": "docs(digiquant): runbook for GLOOMBERB_SESSION_COOKIE (free account + per-deployment env)",
+      "url": "https://github.com/digithings-ai/digithings/issues/4099",
+      "updatedAt": "2026-09-15T15:42:28Z"
     },
     {
-      "number": 4081,
-      "title": "bug(ci): OpenWiki nightly run ends interrupted with zero pages regenerated",
-      "url": "https://github.com/digithings-ai/digithings/issues/4081",
-      "updatedAt": "2026-09-15T13:26:47Z"
+      "number": 4098,
+      "title": "feat(digiquant): surface Gloomberb deep links + attribution in digiquant pages and digichat",
+      "url": "https://github.com/digithings-ai/digithings/issues/4098",
+      "updatedAt": "2026-09-15T15:42:27Z"
     },
     {
-      "number": 4080,
-      "title": "bug(stack): digikey API keys are lost on container instance replacement (SQLite on ephemeral /data)",
-      "url": "https://github.com/digithings-ai/digithings/issues/4080",
-      "updatedAt": "2026-09-15T13:26:46Z"
+      "number": 4097,
+      "title": "feat(digiquant): wire /v1/orchestrator_invoke dispatch for the digifetch_* tool family",
+      "url": "https://github.com/digithings-ai/digithings/issues/4097",
+      "updatedAt": "2026-09-15T15:42:26Z"
     },
     {
-      "number": 4066,
-      "title": "feat(digisearch): OSS web search Phase D \u2014 verify + enrich (Websets-like)",
-      "url": "https://github.com/digithings-ai/digithings/issues/4066",
-      "updatedAt": "2026-09-15T10:37:38Z"
+      "number": 4096,
+      "title": "ops(digiquant): verify Gloomberb MCP image builds + in-container egress (last #4069 spike)",
+      "url": "https://github.com/digithings-ai/digithings/issues/4096",
+      "updatedAt": "2026-09-15T15:42:25Z"
     }
   ],
   "branch": "main",
   "dailyContributions": [
-    {
-      "date": "2025-09-09",
-      "count": 0
-    },
     {
       "date": "2025-09-10",
       "count": 0
@@ -976,7 +972,7 @@
     },
     {
       "date": "2026-04-10",
-      "count": 2
+      "count": 1
     },
     {
       "date": "2026-04-11",
@@ -1008,31 +1004,31 @@
     },
     {
       "date": "2026-04-18",
-      "count": 12
+      "count": 21
     },
     {
       "date": "2026-04-19",
-      "count": 157
+      "count": 222
     },
     {
       "date": "2026-04-20",
-      "count": 46
+      "count": 91
     },
     {
       "date": "2026-04-21",
-      "count": 25
+      "count": 61
     },
     {
       "date": "2026-04-22",
-      "count": 12
+      "count": 20
     },
     {
       "date": "2026-04-23",
-      "count": 24
+      "count": 55
     },
     {
       "date": "2026-04-24",
-      "count": 16
+      "count": 26
     },
     {
       "date": "2026-04-25",
@@ -1044,15 +1040,15 @@
     },
     {
       "date": "2026-04-27",
-      "count": 50
+      "count": 87
     },
     {
       "date": "2026-04-28",
-      "count": 26
+      "count": 41
     },
     {
       "date": "2026-04-29",
-      "count": 10
+      "count": 13
     },
     {
       "date": "2026-04-30",
@@ -1060,7 +1056,7 @@
     },
     {
       "date": "2026-05-01",
-      "count": 37
+      "count": 56
     },
     {
       "date": "2026-05-02",
@@ -1068,11 +1064,11 @@
     },
     {
       "date": "2026-05-03",
-      "count": 9
+      "count": 16
     },
     {
       "date": "2026-05-04",
-      "count": 4
+      "count": 6
     },
     {
       "date": "2026-05-05",
@@ -1084,11 +1080,11 @@
     },
     {
       "date": "2026-05-07",
-      "count": 16
+      "count": 19
     },
     {
       "date": "2026-05-08",
-      "count": 4
+      "count": 9
     },
     {
       "date": "2026-05-09",
@@ -1104,7 +1100,7 @@
     },
     {
       "date": "2026-05-12",
-      "count": 2
+      "count": 3
     },
     {
       "date": "2026-05-13",
@@ -1196,31 +1192,31 @@
     },
     {
       "date": "2026-06-04",
-      "count": 6
+      "count": 11
     },
     {
       "date": "2026-06-05",
-      "count": 14
+      "count": 129
     },
     {
       "date": "2026-06-06",
-      "count": 26
+      "count": 36
     },
     {
       "date": "2026-06-07",
-      "count": 8
+      "count": 11
     },
     {
       "date": "2026-06-08",
-      "count": 22
+      "count": 27
     },
     {
       "date": "2026-06-09",
-      "count": 14
+      "count": 17
     },
     {
       "date": "2026-06-10",
-      "count": 10
+      "count": 13
     },
     {
       "date": "2026-06-11",
@@ -1228,147 +1224,147 @@
     },
     {
       "date": "2026-06-12",
-      "count": 30
+      "count": 44
     },
     {
       "date": "2026-06-13",
-      "count": 16
+      "count": 23
     },
     {
       "date": "2026-06-14",
-      "count": 10
+      "count": 13
     },
     {
       "date": "2026-06-15",
-      "count": 54
+      "count": 62
     },
     {
       "date": "2026-06-16",
-      "count": 28
+      "count": 34
     },
     {
       "date": "2026-06-17",
-      "count": 45
+      "count": 64
     },
     {
       "date": "2026-06-18",
-      "count": 66
+      "count": 87
     },
     {
       "date": "2026-06-19",
-      "count": 8
+      "count": 58
     },
     {
       "date": "2026-06-20",
-      "count": 0
-    },
-    {
-      "date": "2026-06-21",
-      "count": 0
-    },
-    {
-      "date": "2026-06-22",
-      "count": 70
-    },
-    {
-      "date": "2026-06-23",
-      "count": 24
-    },
-    {
-      "date": "2026-06-24",
-      "count": 37
-    },
-    {
-      "date": "2026-06-25",
-      "count": 26
-    },
-    {
-      "date": "2026-06-26",
       "count": 42
     },
     {
-      "date": "2026-06-27",
-      "count": 18
-    },
-    {
-      "date": "2026-06-28",
-      "count": 14
-    },
-    {
-      "date": "2026-06-29",
-      "count": 22
-    },
-    {
-      "date": "2026-06-30",
+      "date": "2026-06-21",
       "count": 11
     },
     {
-      "date": "2026-07-01",
-      "count": 74
+      "date": "2026-06-22",
+      "count": 108
     },
     {
-      "date": "2026-07-02",
-      "count": 36
+      "date": "2026-06-23",
+      "count": 51
     },
     {
-      "date": "2026-07-03",
-      "count": 22
+      "date": "2026-06-24",
+      "count": 154
     },
     {
-      "date": "2026-07-04",
-      "count": 14
+      "date": "2026-06-25",
+      "count": 61
     },
     {
-      "date": "2026-07-05",
+      "date": "2026-06-26",
+      "count": 68
+    },
+    {
+      "date": "2026-06-27",
+      "count": 43
+    },
+    {
+      "date": "2026-06-28",
+      "count": 25
+    },
+    {
+      "date": "2026-06-29",
       "count": 31
     },
     {
-      "date": "2026-07-06",
+      "date": "2026-06-30",
+      "count": 23
+    },
+    {
+      "date": "2026-07-01",
+      "count": 140
+    },
+    {
+      "date": "2026-07-02",
+      "count": 98
+    },
+    {
+      "date": "2026-07-03",
+      "count": 86
+    },
+    {
+      "date": "2026-07-04",
       "count": 24
     },
     {
+      "date": "2026-07-05",
+      "count": 40
+    },
+    {
+      "date": "2026-07-06",
+      "count": 60
+    },
+    {
       "date": "2026-07-07",
-      "count": 8
+      "count": 67
     },
     {
       "date": "2026-07-08",
-      "count": 28
+      "count": 90
     },
     {
       "date": "2026-07-09",
-      "count": 43
+      "count": 110
     },
     {
       "date": "2026-07-10",
-      "count": 43
+      "count": 122
     },
     {
       "date": "2026-07-11",
-      "count": 2
+      "count": 3
     },
     {
       "date": "2026-07-12",
-      "count": 33
+      "count": 80
     },
     {
       "date": "2026-07-13",
-      "count": 4
+      "count": 5
     },
     {
       "date": "2026-07-14",
-      "count": 2
+      "count": 3
     },
     {
       "date": "2026-07-15",
-      "count": 37
+      "count": 48
     },
     {
       "date": "2026-07-16",
-      "count": 18
+      "count": 28
     },
     {
       "date": "2026-07-17",
-      "count": 34
+      "count": 59
     },
     {
       "date": "2026-07-18",
@@ -1376,27 +1372,27 @@
     },
     {
       "date": "2026-07-19",
-      "count": 21
+      "count": 26
     },
     {
       "date": "2026-07-20",
-      "count": 24
+      "count": 33
     },
     {
       "date": "2026-07-21",
-      "count": 9
+      "count": 16
     },
     {
       "date": "2026-07-22",
-      "count": 50
-    },
-    {
-      "date": "2026-07-23",
       "count": 47
     },
     {
+      "date": "2026-07-23",
+      "count": 71
+    },
+    {
       "date": "2026-07-24",
-      "count": 2
+      "count": 4
     },
     {
       "date": "2026-07-25",
@@ -1408,7 +1404,7 @@
     },
     {
       "date": "2026-07-27",
-      "count": 4
+      "count": 6
     },
     {
       "date": "2026-07-28",
@@ -1416,103 +1412,103 @@
     },
     {
       "date": "2026-07-29",
-      "count": 10
+      "count": 19
     },
     {
       "date": "2026-07-30",
-      "count": 18
+      "count": 23
     },
     {
       "date": "2026-07-31",
-      "count": 14
+      "count": 17
     },
     {
       "date": "2026-08-01",
-      "count": 127
+      "count": 162
     },
     {
       "date": "2026-08-02",
-      "count": 10
+      "count": 7
     },
     {
       "date": "2026-08-03",
-      "count": 21
+      "count": 20
     },
     {
       "date": "2026-08-04",
-      "count": 39
+      "count": 37
     },
     {
       "date": "2026-08-05",
-      "count": 183
+      "count": 141
     },
     {
       "date": "2026-08-06",
-      "count": 118
+      "count": 93
     },
     {
       "date": "2026-08-07",
-      "count": 59
-    },
-    {
-      "date": "2026-08-08",
-      "count": 27
-    },
-    {
-      "date": "2026-08-09",
       "count": 50
     },
     {
+      "date": "2026-08-08",
+      "count": 21
+    },
+    {
+      "date": "2026-08-09",
+      "count": 44
+    },
+    {
       "date": "2026-08-10",
-      "count": 250
+      "count": 191
     },
     {
       "date": "2026-08-11",
-      "count": 278
+      "count": 207
     },
     {
       "date": "2026-08-12",
-      "count": 168
+      "count": 146
     },
     {
       "date": "2026-08-13",
-      "count": 195
+      "count": 166
     },
     {
       "date": "2026-08-14",
-      "count": 18
+      "count": 17
     },
     {
       "date": "2026-08-15",
-      "count": 103
+      "count": 78
     },
     {
       "date": "2026-08-16",
-      "count": 26
+      "count": 19
     },
     {
       "date": "2026-08-17",
-      "count": 66
+      "count": 47
     },
     {
       "date": "2026-08-18",
-      "count": 6
+      "count": 5
     },
     {
       "date": "2026-08-19",
-      "count": 62
+      "count": 50
     },
     {
       "date": "2026-08-20",
-      "count": 82
+      "count": 71
     },
     {
       "date": "2026-08-21",
-      "count": 76
+      "count": 47
     },
     {
       "date": "2026-08-22",
-      "count": 18
+      "count": 12
     },
     {
       "date": "2026-08-23",
@@ -1520,55 +1516,55 @@
     },
     {
       "date": "2026-08-24",
-      "count": 3
+      "count": 2
     },
     {
       "date": "2026-08-25",
-      "count": 346
+      "count": 289
     },
     {
       "date": "2026-08-26",
-      "count": 667
+      "count": 535
     },
     {
       "date": "2026-08-27",
-      "count": 143
+      "count": 112
     },
     {
       "date": "2026-08-28",
-      "count": 28
+      "count": 26
     },
     {
       "date": "2026-08-29",
-      "count": 181
+      "count": 164
     },
     {
       "date": "2026-08-30",
-      "count": 503
+      "count": 449
     },
     {
       "date": "2026-08-31",
-      "count": 370
+      "count": 296
     },
     {
       "date": "2026-09-01",
-      "count": 171
+      "count": 117
     },
     {
       "date": "2026-09-02",
-      "count": 106
+      "count": 86
     },
     {
       "date": "2026-09-03",
-      "count": 144
+      "count": 161
     },
     {
       "date": "2026-09-04",
-      "count": 259
+      "count": 243
     },
     {
       "date": "2026-09-05",
-      "count": 190
+      "count": 164
     },
     {
       "date": "2026-09-06",
@@ -1576,35 +1572,39 @@
     },
     {
       "date": "2026-09-07",
-      "count": 80
+      "count": 70
     },
     {
       "date": "2026-09-08",
-      "count": 165
+      "count": 147
     },
     {
       "date": "2026-09-09",
-      "count": 109
+      "count": 105
     },
     {
       "date": "2026-09-10",
-      "count": 176
+      "count": 179
     },
     {
       "date": "2026-09-11",
-      "count": 186
+      "count": 183
     },
     {
       "date": "2026-09-12",
-      "count": 95
+      "count": 93
     },
     {
       "date": "2026-09-13",
-      "count": 170
+      "count": 182
     },
     {
       "date": "2026-09-14",
-      "count": 0
+      "count": 133
+    },
+    {
+      "date": "2026-09-15",
+      "count": 60
     }
   ],
   "latestRelease": {
@@ -1616,21 +1616,21 @@
   "modules": {
     "digigraph": {
       "path": "digigraph",
-      "lastCommit": "2026-09-13T19:16:20Z",
+      "lastCommit": "2026-09-14T21:29:51Z",
       "files": 153,
-      "lines": 22804
+      "lines": 22823
     },
     "digiquant": {
       "path": "digiquant",
-      "lastCommit": "2026-09-13T23:27:12Z",
-      "files": 808,
-      "lines": 176685
+      "lastCommit": "2026-09-15T14:27:04Z",
+      "files": 816,
+      "lines": 178909
     },
     "digisearch": {
       "path": "digisearch",
-      "lastCommit": "2026-09-12T21:52:25Z",
+      "lastCommit": "2026-09-15T11:22:07Z",
       "files": 122,
-      "lines": 12692
+      "lines": 12699
     },
     "digichat": {
       "path": "cloudflare/digichat",
@@ -1658,9 +1658,9 @@
     },
     "digibase": {
       "path": "digibase",
-      "lastCommit": "2026-09-11T20:55:01Z",
+      "lastCommit": "2026-09-14T18:27:33Z",
       "files": 16,
-      "lines": 2273
+      "lines": 2326
     },
     "digivault": {
       "path": "digivault",
