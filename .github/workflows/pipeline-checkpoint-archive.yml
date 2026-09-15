@@ -47,7 +47,9 @@ jobs:
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI }}
+      # transition (#3979): fall back to the pre-#3860 secret names until the
+      # repo secret is renamed; drop the fallback once CORE_POSTGRES_URI exists.
+      CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI || secrets.DIGI_CHECKPOINTER_POSTGRES_URI || secrets.MARKET_DATA_POSTGRES_URI }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -59,6 +61,15 @@ jobs:
 
       - name: Install from lockfile
         run: uv sync --frozen --package digiquant --extra research
+
+      # Baseline for the post-VACUUM relief gate (#3968). Read-only and
+      # advisory: the relief comparison is operator-run ~16h later, after the
+      # 05:50 pg_cron vacuum, so it never runs in this same workflow.
+      - name: Capture pre-archive size snapshot (advisory)
+        continue-on-error: true
+        run: |
+          uv run --frozen --no-sync python scripts/digiquant_checkpoint_size_gate.py \
+            --snapshot-out /tmp/checkpoint-size-pre.json
 
       - name: Archive checkpoint payloads older than 1 day
         run: |
@@ -73,3 +84,11 @@ jobs:
           name: checkpoint-archive-manifests
           path: /tmp/checkpoint-archive-manifests.json
           retention-days: 90
+
+      - name: Upload pre-archive size snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkpoint-size-pre-snapshot
+          path: /tmp/checkpoint-size-pre.json
+          retention-days: 90
+          if-no-files-found: ignore

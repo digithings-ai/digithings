@@ -8,6 +8,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "hyparquet": "^1"
+  },
   "devDependencies": {
     "@cloudflare/containers": "^0.0.30",
     "@cloudflare/workers-types": "^4.20250801.0",

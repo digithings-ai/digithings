@@ -20,6 +20,7 @@ import { selectBriefLedgerDayEvents } from '@/lib/brief-book-event';
 import { buildDisplayRationaleByTicker } from '@/lib/pm-rationale';
 import { committedBookDate } from '@/lib/dashboard-ssot';
 import { isCashTicker } from '@/lib/book-reconciliation';
+import { chainNavContinuity } from '@/lib/accounting-views';
 import {
   buildPerformanceSsotMeta,
   isLiveMarksOverlay,
@@ -43,9 +44,14 @@ function inceptionVsBenchmark(
   if (!ticker || snaps.length < 2) return null;
   const hist = benchmarks[ticker]?.history;
   if (!hist?.length) return null;
+  // #3767 / #4014: chain the source runs (same continuity index as the
+  // since-inception tile) so the legacy→finalized seam never enters the
+  // vs-benchmark window and the window spans the tracked history.
+  const run = chainNavContinuity(snaps);
+  if (run.length < 2) return null;
   const sortedBench = [...hist].sort((a, b) => a.date.localeCompare(b.date));
-  const first = snaps[0];
-  const last = snaps[snaps.length - 1];
+  const first = run[0];
+  const last = run[run.length - 1];
   const startBench = sortedBench.find((p) => p.date >= first.date);
   const endBench = [...sortedBench].reverse().find((p) => p.date <= last.date);
   if (!startBench || !endBench || startBench.date > endBench.date) return null;
@@ -194,6 +200,7 @@ export default function OverviewPage() {
       day_return_pct: row.day_return_pct ?? null,
       source: row.source ?? 'legacy_nav_history',
       contract: row.contract ?? 'legacy_estimate',
+      series_seam: row.series_seam === true,
     })),
     metricsAsOf:
       data.server_portfolio_metrics?.as_of_date ?? data.server_portfolio_metrics?.date ?? null,

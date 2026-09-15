@@ -23,7 +23,41 @@ const STANCES: readonly FxMarketEvidence['stance'][] = ['supports', 'contradicts
 
 const MONTH_ABBREV = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const COMPUTED_REF_RE = /^computed:vol(\d+)@(\d{4}-\d{2}-\d{2})\|k=([^|]+)\|rr=/;
+// `computed:vol20@2026-07-31|k=1.5|rr=1.5` (legacy sigma)
+// `computed:atr14@<asof>|k=..|reg=..|br=..|piv=..|rr=..|src=..` (digiquant engine)
+const COMPUTED_REF_RE = /^computed:(vol|atr)(\d+)@([^|]*)(.*)$/;
+
+type ComputedBasis = 'vol' | 'atr';
+type ComputedBranch = 'atr' | 'pivot' | 'donchian';
+
+interface ParsedComputedRef {
+  basis: ComputedBasis;
+  windowDays: string;
+  asof: string;
+  k: string;
+  branch: ComputedBranch | null;
+}
+
+/** Parse both the legacy `vol` and the digiquant engine `atr` computed refs. */
+function parseComputedRef(sourceRef: string): ParsedComputedRef | null {
+  const match = COMPUTED_REF_RE.exec(sourceRef);
+  if (!match) return null;
+  const [, basis, windowDays, asof, tail] = match;
+  let k: string | null = null;
+  let branch: ComputedBranch | null = null;
+  for (const segment of tail.split('|')) {
+    const eq = segment.indexOf('=');
+    if (eq < 0) continue;
+    const key = segment.slice(0, eq);
+    const value = segment.slice(eq + 1);
+    if (key === 'k' && value) k = value;
+    if (key === 'br' && (value === 'atr' || value === 'pivot' || value === 'donchian')) {
+      branch = value;
+    }
+  }
+  if (!k) return null;
+  return { basis: basis as ComputedBasis, windowDays, asof, k, branch };
+}
 
 /** Provenances that keep broker-presented precision (trim zeros only). */
 const PRESENTED_PRECISION: ReadonlySet<FxLevelProvenance> = new Set([
@@ -169,12 +203,15 @@ export function provenanceChipLabel(level: FxTradeLevel): string {
       return stem ? `${stem} target` : 'broker target';
     }
     case 'computed': {
-      const match = COMPUTED_REF_RE.exec(level.source_ref);
-      if (!match) return 'computed';
-      const [, volDays, isoDate, k] = match;
-      const fixDate = formatComputedFixDate(isoDate);
-      if (!fixDate) return 'computed';
-      return `computed, ${k}×${volDays}d vol off ${fixDate} fix`;
+      const ref = parseComputedRef(level.source_ref);
+      if (!ref) return 'computed';
+      if (ref.basis === 'vol') {
+        const fixDate = formatComputedFixDate(ref.asof);
+        if (!fixDate) return 'computed';
+        return `computed, ${ref.k}×${ref.windowDays}d vol off ${fixDate} fix`;
+      }
+      const suffix = ref.branch && ref.branch !== 'atr' ? ` ${ref.branch}` : '';
+      return `computed, ${ref.k}×${ref.windowDays}d atr${suffix}`;
     }
     case 'pmt_bank_trade':
       return 'bank trade';

@@ -43,7 +43,8 @@ hand-off — from twelve-x's site-specific scrapers.
 |--------|----------------|
 | `digifetch/retry.py` | `RetryPolicy` (exponential backoff + full jitter, selective `retry_on`, **injectable** `sleep`/`rand`) and `with_retry(func, policy)` — a *composable* retry wrapper, not baked into any fetch primitive. |
 | `digifetch/ratelimit.py` | `RateLimiter` — single-process minimum-interval gate (injectable `clock`/`sleep`). Polite-scraping throttle; **not** a token bucket, **not** Redis-backed (that is future digibase work). |
-| `digifetch/http.py` | `HttpFetcher` over `httpx` (`fetch` → `FetchResult`, `download` → `DownloadResult` with a byte cap), `cookies_from_playwright`, `DEFAULT_TIMEOUT`, `DownloadTooLargeError`. The non-browser fetch/download seam. |
+| `digifetch/http.py` | `HttpFetcher` over `httpx` (`fetch` → `FetchResult`, `download` → `DownloadResult` with a byte cap), `cookies_from_playwright`, `DEFAULT_TIMEOUT`, `DownloadTooLargeError`, `MAX_REDIRECTS`. Redirects are followed manually with per-hop SSRF re-validation. The non-browser fetch/download seam. |
+| `digifetch/ssrf.py` | `validate_fetch_url` / `is_blocked_ip` / `SsrfBlockedError` — the SSRF guard for the fetch path: http/https only, and loopback / link-local / RFC1918 / CGNAT (`100.64.0.0/10`) / `0.0.0.0` / metadata (`169.254.169.254`, `100.100.100.200`) addresses refused. Caller-supplied `allowed_hosts` is the operator escape hatch. |
 | `digifetch/browser.py` | `browser_session(...)` context manager yielding the live `(page, context)`; `BrowserConfig`; `Page`/`BrowserContext` structural Protocols; `BrowserNotAvailableError`. The headless-browser lifecycle seam (requires `digifetch[browser]`). |
 | `digifetch/__init__.py` | Public API surface. Eager re-exports of the light seams; lazy `__getattr__` re-exports of the browser seam. |
 
@@ -57,7 +58,7 @@ from digifetch import (
     RateLimiter,
     # HTTP fetch/download seam
     HttpFetcher, FetchResult, DownloadResult, DownloadTooLargeError,
-    cookies_from_playwright, DEFAULT_TIMEOUT,
+    SsrfBlockedError, cookies_from_playwright, DEFAULT_TIMEOUT,
     # headless-browser seam (needs digifetch[browser])
     browser_session, BrowserConfig, Page, BrowserContext, BrowserNotAvailableError,
 )
@@ -123,7 +124,7 @@ throttling. Clock and sleep are injected for deterministic tests.
 
 ```python
 HttpFetcher(*, timeout=DEFAULT_TIMEOUT, headers=None, cookies=None,
-            max_bytes=32*1024*1024, transport=None, client=None)
+            max_bytes=32*1024*1024, allowed_hosts=None, transport=None, client=None)
 fetcher.fetch(url, *, method="GET", params=None, data=None, json=None,
               headers=None, cookies=None) -> FetchResult
 fetcher.download(url, *, method="GET", headers=None, cookies=None) -> DownloadResult
@@ -137,6 +138,22 @@ hard `max_bytes` cap (raises `DownloadTooLargeError` *before* buffering the whol
 body) and returns `DownloadResult` (raw `content` bytes + `content_type` +
 `size`) for hand-off to a site-specific parser. `DEFAULT_TIMEOUT` mirrors
 `digibase.http_client.DEFAULT_TIMEOUT` (connect 5 / read 30 / write 10 / pool 5).
+
+**SSRF guard (#3934).** The fetch path is reachable from user-influenced URLs
+(search results, scraped links), so neither `fetch` nor `download` auto-follows
+redirects. Every URL — the original and each redirect hop — passes through
+`digifetch.ssrf.validate_fetch_url` *before* a request is sent, and hops are
+capped at `MAX_REDIRECTS` (5). The guard accepts only `http`/`https`, resolves
+the host, and refuses any address that is loopback, link-local, private, CGNAT
+(`100.64.0.0/10`), unspecified, reserved, multicast, or one of the known
+metadata IPs (`169.254.169.254`, `100.100.100.200`); a refused URL raises
+`SsrfBlockedError`. `allowed_hosts=` is the operator's explicit escape hatch for
+a trusted internal host. Residual limitation: DNS is resolved for validation and
+again by `httpx` at connect time, so a hostile resolver racing the two lookups
+is not pinned out — the guard closes the practical literal/hostname/redirect
+vectors without pinning sockets. `digifetch` still reads no environment
+variables; a consumer (`digisearch`) sources the allowlist from
+`DIGISEARCH_FETCH_ALLOWED_HOSTS` and passes it in.
 
 `cookies_from_playwright(context.cookies())` flattens Playwright's list of cookie
 dicts to the `{name: value}` dict an HTTP client sends — the exact hand-off
@@ -220,10 +237,13 @@ transport*; the consumer owns *what to do on the page* and *how to read it*.
 ## Environment variables
 
 `digifetch` reads **no** environment variables. Credentials, URLs, user-agents,
-timeouts, and rate limits are passed in by the caller (config objects / function
-arguments). This keeps the engine deployment-agnostic and side-effect-free on
-import — site config (`PRIMEMARKET_*`, `TE_CALENDAR_URL`, credentials) lives in
-the consumer (twelve-x `config.py`).
+timeouts, rate limits, and the SSRF `allowed_hosts` allowlist are passed in by
+the caller (config objects / function arguments). This keeps the engine
+deployment-agnostic and side-effect-free on import — site config
+(`PRIMEMARKET_*`, `TE_CALENDAR_URL`, credentials) lives in the consumer
+(twelve-x `config.py`). A consumer that wants an operator env var (e.g.
+`digisearch`'s `DIGISEARCH_FETCH_ALLOWED_HOSTS`) reads it and passes
+`allowed_hosts=` in.
 
 ## Testing
 
@@ -234,6 +254,10 @@ browser or hit a live site (and pass without `digifetch[browser]` installed):
   the exact backoff/cadence schedule.
 - `http`: `httpx.MockTransport` drives the real `httpx.Client` request/stream
   machinery in-process (closer to production than a fully fake client).
+- `ssrf`: internal literals / metadata hosts are refused, a public URL that
+  redirects to an internal address is refused without ever dialling the hop, a
+  legitimate public redirect is followed, and the hop cap breaks a redirect loop
+  (`test_ssrf.py`).
 - `browser`: inject a fake `sync_playwright` factory (mirrors twelve-x's
   `_make_mock_playwright`); assert lifecycle, UA/timeout wiring, and that
   teardown runs on the exception path.

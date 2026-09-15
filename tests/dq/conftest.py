@@ -50,6 +50,8 @@ if importlib.util.find_spec("nautilus_trader") is None:
         # Spawned tearsheet workers import digiquant.strategies (→ nautilus).
         "test_tearsheet_isolation.py",
         "test_v1_jobs.py",
+        # Levels engine Nautilus harness (Track E, #137).
+        "data/test_levels_nautilus.py",
     ]
 
 

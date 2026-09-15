@@ -126,6 +126,9 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `brokers/stubs.py` | IB, Alpaca, QuantConnect stubs (all `NotImplementedError`) |
 | `tradingview.py` | PyneCore stubs (not implemented) |
 | `data/loader.py` | Polars OHLCV CSV loading and synthetic data generation |
+| `data/prices/_primitives.py` | Shared Wilder/true-range/ATR `pl.Expr` primitives (promoted from `technicals.py`, #137) |
+| `data/prices/levels.py` | Causal ATR / swing-pivot / Donchian levels engine (config, causal derivations, trail stop) (#137) |
+| `data/prices/levels_api.py` | Levels JSON contract + caller-frame parsing + non-blocking ticker-cache convenience (#137) |
 | `tearsheet.py` | Plotly HTML tearsheet orchestration (`create_tearsheet`); helpers split in #1185 |
 | `tearsheet_extract.py` | Equity/fill/drawdown extraction from Nautilus reports (#1185) |
 | `tearsheet_stats.py` | Categorized / full / risk HTML stats tables (#1185) |
@@ -218,13 +221,14 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_run_optimize` | Runs parameter optimization (grid/bayesian/random). `strategy_name=sdca` is Stage B walk-forward (vs-flat-DCA). Freeze Stage A weights via `strategy_params` `*_weight` keys |
 | `digiquant_export` | Exports strategy config to a target artifact |
 | `digiquant_run_pipeline` | Runs the full LangGraph pipeline |
-| `digiquant_fetch_coinbase_ohlcv` | Fetches OHLCV from Coinbase (CCXT) into the price-history cache. Default `start` is Coinbase BTC listing `2015-07-20` (ETH/SOL return from the first available Coinbase daily bar). Do not prefix-clip to 900 days. `timeframe`/`end`/`through_yesterday` widen beyond the daily-only default (a vendor `ccxt-mcp` server already covers full CCXT generality; prefer it for anything beyond this). |
+| `digiquant_fetch_coinbase_ohlcv` | Fetches OHLCV from Coinbase (CCXT) into the price-history cache. Default `start` is Coinbase BTC listing `2015-07-20` (ETH/SOL return from the first available Coinbase daily bar). Do not prefix-clip to 900 days. `timeframe`/`end`/`through_yesterday` widen beyond the daily-only default (a vendor `ccxt-mcp` server already covers full CCXT generality; prefer it for anything beyond this). Intraday timeframes write under `price-history/{timeframe}/` so ISO timestamps never overwrite the daily `{ticker}.csv` cache (#3944). |
 | `digiquant_fit_btc_power_law` | Fits the SDCA BTC power-law (RAQQR) valuation rails from cached daily price history (`data/prices/history_cache.py`, not a bespoke fetch) and persists the coefficients to `strategies/sdca/btc_power_law_coefficients.json` (#1082) |
 | `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` selector: `btc_power_law` / `generic_valuation` / `rolling_z` (`sdca/providers.py`). Oscillators are computed from **that ticker's** OHLCV. `indicator_weights` JSON `{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Macro extras need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
-| `digiquant_fetch_bitview_series` | Fetch Bitview/BRK on-chain `day1` series (`mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`) into `data/onchain/bitview/` parquet. JSON API only (no HTML scrape). `nupl` is refused by default (monotone of MVRV); `allow_derived=True` opts a caller who understands the caveat back in. `base_url` override for testing/mirrors. Fail-soft + timeout. Hosted bitview.space is optional / no SLA — a vendor `mcp.bitview.space` MCP server already exists; prefer it for general Bitview access. Coin Metrics community CC BY-NC is **not** fetched and must not be republished commercially. Refs #1086 |
-| `digiquant_fetch_bgeometrics_series` | Fetch a single bitcoin-data.com (BGeometrics) metric by `startday`/`endday` into `data/onchain/bgeometrics/` parquet. Free tier is rate-limited; `token` (or `BGEOMETRICS_API_TOKEN`) is sent as both `Authorization: Bearer` and `X-Bgapi-Token` (exact header name unconfirmed). `base_url` override for testing/mirrors. Fail-soft. A vendor `mcp.bitcoin-data.com/mcp` server already exists; prefer it for general BGeometrics access. |
-| `digiquant_fetch_coinmetrics_series` | Fetch a single CoinMetrics Community API metric for one asset (`asset`/`metric` must each be a single value, not comma-separated) by `start_time`/`end_time` into `data/onchain/coinmetrics/` parquet. `page_size`/`base_url`/`api_key` widen beyond SDCA's default free-tier keyless usage. Fail-soft. No vendor MCP server exists for CoinMetrics, unlike Coinbase/BGeometrics/Bitview — hence this tool and the catalog tool below carry more of the general-purpose surface in-house. CC BY-NC, research-only. |
-| `digiquant_list_coinmetrics_catalog` | Discovery tool: lists available CoinMetrics assets/metrics from `/catalog-v2/asset-metrics` (optionally filtered by `asset`), so a caller can find a metric name before calling `digiquant_fetch_coinmetrics_series`. Returns the raw catalog payload. Fail-soft. |
+| `digiquant_fetch_bitview_series` | Fetch Bitview/BRK on-chain `day1` series (`mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`) into `data/onchain/bitview/` parquet. JSON API only (no HTML scrape). `nupl` is refused by default (monotone of MVRV); `allow_derived=True` opts a caller who understands the caveat back in. Upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944); the code-only seam is an injected HTTP session / allowlisted host. Fail-soft + timeout. Hosted bitview.space is optional / no SLA — a vendor `mcp.bitview.space` MCP server already exists; prefer it for general Bitview access. Coin Metrics community CC BY-NC is **not** fetched and must not be republished commercially. Refs #1086 |
+| `digiquant_fetch_bgeometrics_series` | Fetch a single bitcoin-data.com (BGeometrics) metric by `startday`/`endday` into `data/onchain/bgeometrics/` parquet. Free tier is rate-limited; `token` (or `BGEOMETRICS_API_TOKEN`, sent only to the fixed bitcoin-data.com host) is sent as both `Authorization: Bearer` and `X-Bgapi-Token` (exact header name unconfirmed). `metric` is validated against `^[a-z0-9-]+$` (no path/query injection). No caller `base_url` (SSRF / env-token exfiltration guard #3944). Fail-soft. A vendor `mcp.bitcoin-data.com/mcp` server already exists; prefer it for general BGeometrics access. |
+| `digiquant_fetch_coinmetrics_series` | Fetch a single CoinMetrics Community API metric for one asset (`asset`/`metric` must each be a single value, not comma-separated, and a safe slug matching `^[A-Za-z0-9_-]+$` — cache-path traversal guard #3947) by `start_time`/`end_time` into `data/onchain/coinmetrics/` parquet. `page_size`/`api_key` widen beyond SDCA's default free-tier keyless usage; upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944). Fail-soft. No vendor MCP server exists for CoinMetrics, unlike Coinbase/BGeometrics/Bitview — hence this tool and the catalog tool below carry more of the general-purpose surface in-house. CC BY-NC, research-only. |
+| `digiquant_list_coinmetrics_catalog` | Discovery tool: lists available CoinMetrics assets/metrics from `/catalog-v2/asset-metrics` (optionally filtered by `asset`), so a caller can find a metric name before calling `digiquant_fetch_coinmetrics_series`. Returns the raw catalog payload. Upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944). Fail-soft. |
+| `digiquant_get_trade_levels` | Causal ATR / swing-pivot / Donchian trade levels for a direction (READ scope, read-only — never sizes or places orders). Primary path is a caller-supplied `ohlc_json` array of OHLC bars; `ticker` is a non-blocking local-cache convenience. Returns `{pair, direction, entry{low,high,ref}, sl, tp_ladder[{r,price,src}], trail_policy, source_ref, computed_at}`. `source_ref` grammar: `computed:atr14@<asof>\|k=<k_eff>\|reg=<regime>\|br=atr\|pivot\|donchian\|piv=<width>\|rr=<floor>\|src=base`. Full-precision floats (never 4dp-rounded). Refs #137 |
 | `digiquant_fit_sdca_weights` | Stage A cycle-window weight fit for an `SdcaAssetProfile` (`btc_v1` / `eth_research_v1` / `profile_json`), then `regularize_weights`. Not a second optimizer: Stage B is `digiquant_run_optimize` with `strategy_name=sdca` and frozen `*_weight` keys in `strategy_params`. Returns `{weights, regularized_weights, regularized_weight_params, score, ...}` or `{"error": ...}` |
 | `digiquant_compile_research_portfolio` | digigraph product-graph dry path (#3415): compile research + portfolio LangGraphs with no LLM / no book write. Returns `{dry_run, graphs[], idempotency_key, ...}` via orchestrator_invoke |
 | `digiquant_generate_slapper_tearsheet` | Runs the NautilusTrader backtest for the Slapper family and writes TV-style tearsheet JSON to the digiquant.io frontend. Delegates each strategy to `generate_tearsheets.run_strategy_isolated` (spawn-per-strategy, #1389 — a second in-process engine would SIGABRT the long-lived server); resolves calibrations file → Supabase (example only via `allow_example_calibrations`), accepts `signal_delay_days` (#1462), and returns `{"entries", "failures"}` with per-strategy errors as data. Does **not** write `index.json` (the CLI `main()` owns that) |
@@ -236,9 +240,10 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `dashboard_get_policy_gate_evaluation` | Fetch a gate-evaluation summary by `evaluation_id` |
 
 `create_mcp_server(scope=...)` gates registration: `scope="full"` (default)
-registers all 23 tools; `scope="read"` registers only the 9 dashboard-chat
-reads (strategy list, price/macro reads, `query_data`, policy
-replay/comparison reads, gate reads + evaluations, coinmetrics catalog).
+registers all 24 tools; `scope="read"` registers only the 10 dashboard-chat
+reads (strategy list, price/macro reads, causal trade levels, `query_data`,
+policy replay/comparison reads, gate reads + evaluations, coinmetrics
+catalog).
 `--scope` / `DIGIQUANT_MCP_SCOPE` select the scope; `host`/`port` live on the
 `FastMCP(...)` constructor — `run()` takes transport only.
 
@@ -327,6 +332,30 @@ printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_AC
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_SECRET_ACCESS_KEY
 ```
 
+#### Market-data reads: R2 (`DIGIQUANT_MARKET_DATA_BACKEND=r2`)
+
+R2 is the market-data **read path** (#4013). History reads go through the
+seam helpers in `research/data/queries.py` — `r2_backend_enabled()`,
+`r2_close_rows(*, tickers, since, until)`,
+`r2_ohlcv_rows(*, tickers, since, until)`, `r2_manifest_seal()` — consumed by
+the five ops scripts (`execute_at_open.py`, `fill-entry-prices.py`,
+`refresh_performance_metrics.py`, `verify_nav_replay.py`,
+`finalize_period_accounting.py`) plus the research/portfolio readers that
+previously hit the Supabase market tables. The flag lives in
+`.github/digiquant-pipeline.yml` (loaded into `$GITHUB_ENV` by
+`workflows/pipeline-digiquant.yml`) with per-step copies in the five
+research-metrics step envs and the at-open job env; unset/empty keeps the
+library default `supabase`, and both bodies coexist for rollback.
+
+Freshness: reader-side `research/data/freshness.py::assert_market_data_fresh`
+(seal ≤ 1 day, ≥ 100 price tickers; tested, no production caller yet) and
+cron-side `data/prices/refresh_gate.py::staleness_gate` (seal ≤ 5 trading
+days — breach keeps the prior objects serving, writes the manifest
+`stale=true`, exits non-zero). Two Supabase market reads remain by design:
+same-day execution (`d > seal` — `execute_at_open` / `fill-entry-prices`
+price opens and fills from `price_history`; D3) and `FEDPROB/*`
+prediction-market odds (`get_fed_rate_probabilities`; no R2 generation; D2).
+
 #### Market-data R2 read path (#3780 Task 10)
 
 `DIGIQUANT_MARKET_DATA_BACKEND=r2` routes the price/macro tools through
@@ -360,12 +389,19 @@ plus an exact round-trip vs `compute_indicators` on the same history
 record goldens WITH a `close` column, then promote the premise guard to a
 real golden-value comparison.
 
-Macro carve-out: migration `124_drop_market_data_tables.sql` drops
-`price_history` + `price_technicals` ONLY — `macro_series_observations`
-stays (fedprob/bitview have no R2 homes; future work). Post-cutover size
-gate (`data/cutover_gate.py`, `POST_CUTOVER_SIZE_GATE_MB=320`) reads the
-`pg_database_size` total only: ~172MB of price tables dropped, revised
-saving ≈292MB target.
+Macro carve-out: migration `124_drop_market_data_tables.sql` is **deferred**
+(#3951) and is now a **no-op**: the `price_history` + `price_technicals` DROPs
+are commented out because the on-cron Supabase readers (`execute_at_open.py`,
+NAV replay, period accounting, entry-price backfill, metrics refresh,
+freshness probes) were not yet migrated to the R2 helpers — so both tables are
+**retained**. The real drop must land as a **new numbered migration** (e.g.
+`126_drop_market_data_tables.sql`), never by re-editing 124: `db-migrate.yml`
+records every executed file in `olympus_schema_migrations` by name, so once this
+no-op is ledgered a re-edited 124 is silently skipped. `macro_series_observations`
+likewise stays (fedprob/bitview have no R2 homes; future work). Post-cutover
+size gate (`data/cutover_gate.py`, `POST_CUTOVER_SIZE_GATE_MB=320`) reads the
+`pg_database_size` total only: the ~172MB price-table saving is not realized
+until the future drop migration lands toward the ≈292MB target.
 
 H9 seal coverage: H9 (`h9_cost_evidence.py`) reads the run-date session
 bar but R2 seals through the manifest `as_of`; seal < run_date fail-softs
@@ -936,6 +972,60 @@ The drawdown pair is therefore **not** interchangeable with
 which is a negative percent — check each field's own docstring before comparing them. Also
 `buy_days`/`sell_days`/`no_trade_days`, and `avg_risk`/`avg_rate` (means over
 non-null days only).
+
+### Causal trade-levels engine (Track E, #137)
+
+`data/prices/levels.py` computes deterministic entry/stop/target candidates
+from an OHLC frame and a direction. It is **pure Polars, no I/O**, and every
+derivation is causal — the value at bar *i* is a function of bars ``≤ i`` only,
+which `tests/dq/data/test_levels.py::test_augment_is_causal_at_every_row`
+asserts by recomputing over truncated prefixes:
+
+- **Wilder ATR / true range** live in `data/prices/_primitives.py` and are
+  shared with `technicals.py` (one implementation, not two).
+- **Regime scaling** — `regime = atr / SMA(atr, regime_len)` clamped to
+  `k_regime_bounds` (default `(0.75, 1.5)`); `k_eff = k_base * regime`, so a
+  high-volatility regime widens the ATR stop and a quiet one tightens it.
+- **Fractal pivots** — a bar is a strict `fractal_width`-bar fractal high/low;
+  detection looks forward but the exposed `piv_high` / `piv_low` columns are
+  `shift(fractal_width)`, i.e. visible only once the pivot was confirmable.
+- **Donchian** — `don_high_prev` / `don_low_prev` are `rolling_max/min(len)`
+  `.shift(1)`, so the channel never includes the current bar.
+- **S/R clustering** — confirmed pivots within `cluster_atr * ATR` merge into
+  support (low edge) / resistance (high edge) zones.
+
+**Branch preference:** pivot structure → Donchian channel → ATR. A structural
+stop is only used when it sits on the correct side of the reference price and
+the nearest opposite structure clears `rr_floor`; otherwise the engine falls
+back to the `k_eff * ATR` stop. Take-profit rungs are the `tp_rmultiples`
+(default `1R/2R/3R`); a rung within `snap_tol_atr * ATR` of a structural level
+is snapped onto it and its `src` records the structure (`pivot` / `donchian`),
+otherwise `src="atr"`. `trail_stop()` is the ratchet-only ATR trail
+(`trail_atr`, activation at `trail_activate_r`).
+
+`LevelsConfig` defaults mirror the Phase 1 brief: `atr_len=14`,
+`fractal_width=2`, `cluster_atr=0.5`, `donchian_len=20`, `k_base=1.5`,
+`k_regime_bounds=(0.75, 1.5)`, `rr_floor=1.5`, `tp_rmultiples=(1, 2, 3)`,
+`trail_atr=2.0`.
+
+**JSON contract** (`levels_api.py`): `{pair, direction, entry{low,high,ref},
+sl, tp_ladder[{r,price,src}], trail_policy, source_ref, computed_at}` plus the
+diagnostic scalars `atr`, `k_eff`, `regime`, `branch`, `pivot_count`, `asof`
+and `reward_uncapped` (`true` = no opposite structure, so the structural stop
+was accepted without a bounded R:R check — uncapped upside by design).
+Values are the raw engine floats — deliberately **not** passed through
+`_utils.safe_float`, which would round to 4dp.
+
+**`source_ref` grammar:** `computed:atr14@<asof>|k=<k_eff>|reg=<regime>|br=atr|pivot|donchian|piv=<fractal_width>|rr=<rr_floor>|src=base`.
+The `computed:` prefix is shared with the twelve-x dashboard label, which is
+extended to parse `atr` in the Track E follow-on (the engine does not rename
+the prefix). No writes, sizing or order placement anywhere in this path — the
+existing twelve-x `apply_guard` remains the final authority on published levels.
+
+`digiquant_get_trade_levels` exposes the engine on both the MCP (READ scope)
+and orchestrator manifest surfaces; see the MCP tools table above. The
+NautilusTrader parity harness is described in
+[docs/NAUTILUS_NAVIGATION.md](docs/NAUTILUS_NAVIGATION.md).
 
 ### Macro-liquidity regime gauge (#1085)
 
@@ -1843,9 +1933,16 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
    `commit_io.book_portfolio`) still writes provisional house rows at book time,
    but an existing row for the same `(workspace_id, date)` now keeps the stored
    NAV (refreshing only H9-owned `cash_pct`/`invested_pct`) — a book re-dispatch
-   after the engine step keeps the engine NAV instead of clobbering it (#3804). Fetches page by last-seen-key
-   cursor over a deterministic `(date, ticker)` order (never offsets) and refuse
-   to verify or write from a truncated/unstable page (#3803). A read-only
+    after the engine step keeps the engine NAV instead of clobbering it (#3804). Fetches
+    seek by keyset over a deterministic `(date, ticker)` order (never offsets), sized
+    under the PostgREST `max_rows` cap (a full page means "more", only a short page
+    ends the loop; asking above the cap raises), and refuse to verify or write from a
+    truncated/unstable page (#3803/#3948). Bars whose stored `open`/`close` fall
+    outside `[low, high]` (vendor/float64 noise; first prod row SPY 1993-02-12) are
+    reconciled by widening the envelope to contain the observed prices — the engine
+    marks and fills at `close`, so NAV is unaffected — instead of aborting the
+    replay (#3995); non-finite bounds (NaN/±Inf, storable in Postgres `numeric`)
+    are refused before any widening (#3994). A read-only
    `verify_nav_replay` (no `--write`) step runs after metrics so drift fails
    loudly.
   `refresh_performance_metrics.refresh_nav_point` only guards the engine row;
@@ -2386,11 +2483,23 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
    REJECTED/base-preserved outcome (#3078) — a structurally invalid amendment is
    a model-output error that must surface, not be absorbed; the H6 node catches it
    and degrades that ticker to carried + PhaseError, never killing the chain (#3738). `query_data`
-   enforces per-table column allowlists for `price_history` / `price_technicals` (#3771;
-   covers MCP `digiquant_query_data` too): OHLCV/`close` on technicals redirects to
-   `price_history`; `sma_*`/technicals on history redirect to `price_technicals`. H9 cost
-   evidence reads `hist_vol_21`/`atr_pct` from `price_technicals`
-  (second read joined onto the history row), never from `price_history`.
+   no longer serves market history at all (#3780): its table allowlist refuses
+   `price_history` / `price_technicals` / `macro_series_observations`, so those
+   tables are simply not readable here; dedicated R2-backed tools
+   (`digiquant_get_price_technicals`, `get_macro_series`) own those reads, and MCP
+   `digiquant_query_data` shares the same refusal. The #3771 per-table column
+   allowlist that once guarded the two price tables was deleted with the cutover
+   (it could never run once the tables left the reader, #3959). For the tables
+   still readable here, explicit columns/order/filter keys are shape-checked to
+   bare column names (`_BARE_COLUMN_RE`) so no argument can smuggle PostgREST
+   relationship syntax. H9 cost
+   evidence reads `hist_vol_21`/`atr_pct` through the R2 seam when
+   `DIGIQUANT_MARKET_DATA_BACKEND=r2`, else from `price_technicals`
+  (second read joined onto the history row) — never from `price_history`.
+  The versioned R2 cache is the market-data **read path** (#4013; see
+  *Market-data reads: R2* above). Within the pipeline under the flag, the only
+  remaining Supabase market reads are same-day execution (`d > seal`, at-open
+  opens / entry fills; D3) and `FEDPROB/*` odds (D2).
   `conviction_delta` clamps to ±2 before validation; `DocumentPatch` drops ops
   missing `op`/`path` before validation; bias synonyms map hawkish→bearish,
   dovish→bullish (tightening→bearish).
@@ -2845,11 +2954,13 @@ a dark schema needs opting into, a live writer needs an escape hatch.
 
 H9 records what the portfolio *decided*; this is what it *did*.
 `digiquant/src/digiquant/portfolio/writers/execution_io.py` is the only writer into
-`portfolio_ledger_paper_executions` and `portfolio_ledger_holding_lots`, and
+`portfolio_ledger_paper_executions` and `portfolio_ledger_holding_lots` on the daily path, and
 `execute_pending_orders(...)` has exactly one caller: `digiquant/scripts/research/execute_at_open.py`,
-the job the prices pipeline runs at 09:35 ET. Two structural tests hold both halves of that
-(`tests/dq/portfolio/test_execution_io.py::TestSoleAuthority`) — a second writer would give one
-position two irreconcilable records, and the append-only trigger cannot tell a rogue insert
+the job the prices pipeline runs at 09:35 ET. Two labeled writers are allowed beside it — the
+`opening_snapshot` seed and the `ledger_reconvergence` reconvergence chain (#4010) — because both
+mirror the executor's deterministic-id writing contract. Structural tests hold both halves
+(`tests/dq/portfolio/test_execution_io.py::TestSoleAuthority`) — a second *daily* writer would give
+one position two irreconcilable records, and the append-only trigger cannot tell a rogue insert
 from a legitimate one.
 
 The executor reads the day's pending `OrderIntent` heads, resolves each one's direction from
@@ -2906,12 +3017,16 @@ the grants would refuse anyway.
   `data_layer_scope`). Live-venue refusals in `execution/policy.py` are untouched.
 
 `execute_at_open.py` tries the ledger first and reaches the prose builders only when it
-declines. `build_events_from_paper_fills` returns `(None, reason)` for "the ledger has no
-opinion" — no `portfolio_ledger_commits` row for the run date, the kill switch off, or the
-read raising — and `([], "")` for "authoritatively a quiet day", which the caller must not
-conflate. The read probe is wrapped; `execute_pending_orders` is deliberately **outside** the
+declines. `build_events_from_paper_fills` returns `(None, reason, None)` for "the ledger
+has no opinion" — no `portfolio_ledger_commits` row for the run date, the kill switch off,
+or the read raising — and `([], "", None)` for "authoritatively a quiet day", which the
+caller must not conflate. An all-rejected run returns `(events, "", pageable)`, where
+`pageable` carries the drift warning minus a `stale_target`-only refusal (#4017). The read probe is wrapped; `execute_pending_orders` is deliberately **outside** the
 guard so a partial write stays loud. Exit codes: `2` for conflicting flags or an unresolvable
-prior trading date, `3` for `--require-ledger` when the ledger declined, `0` otherwise.
+prior trading date, `3` for `--require-ledger` when the ledger declined, `5` when the
+ledger rejected every order for a drift-implying reason — the executed book fell short of
+the committed targets (#4017; a `stale_target`-only refusal is superseded-chain
+bookkeeping and stays `0`) — and `0` otherwise.
 
 Two projection details are easy to get wrong. `approved_weight` is a 0..1 fraction while
 `position_events.weight_pct` is a percent, so the ×100 happens in `Decimal` and only then
@@ -2941,7 +3056,7 @@ switch defaults *on*. After #2589 the morning job and backfill run the ledger pa
    quantity targets → executed order → paper fill (fee=0, slippage=0) → open lot. It does
    not invent pre-cutover fill history beyond that single snapshot.
 2. If lots are still empty while the prior book has holdings,
-   `cold_start_requires_seed` / `build_events_from_paper_fills` returns `(None, reason)` and
+   `cold_start_requires_seed` / `build_events_from_paper_fills` returns `(None, reason, None)` and
    `--require-ledger` exits 3 — it will not book OPEN/EXIT mislabels into append-only 069
    rows, and prose cannot hide the handover.
 
@@ -3118,11 +3233,19 @@ oldest-first down from the 8.5GB high watermark to the 7GB low watermark (ledger
 `size` sum), never touching the latest run's keys; `reconcile_ledger` drops dead
 ledger rows and reports orphan R2 keys without auto-deleting them. Every key and
 ledger scan pages explicitly past the PostgREST 1000-row cap (`_scan_all` over
-`DOC_SCAN_PAGE_SIZE`); `evict_to_watermark` keeps a local running total instead of
-re-querying per row, and `reconcile_ledger` lists both `checkpoints/` and
-`documents/` prefixes. `resolve_payload`
+`DOC_SCAN_PAGE_SIZE`), and every page carries a unique ORDER BY tiebreak so
+offset paging is stable on an unordered table: `STABLE_ORDER_BY_TABLE` maps each
+table to its total-order key (`archive_objects` → `archived_at,r2_key`;
+`checkpoints` → `thread_id,checkpoint_ns,checkpoint_id`; `documents` and the blob
+tables → their key columns) and `_scan_all` appends it after any caller order
+(skipping columns the caller already ordered by). `evict_to_watermark` keeps a
+local running total instead of re-querying per row, and `reconcile_ledger` lists
+both `checkpoints/` and `documents/` prefixes. `resolve_payload`
 is the read-through contract: pointer lookup → R2 GET → sha256 verify
-(`ArchiveVerifyError`) → decompress (`ArchiveNotFoundError` when no pointer row).
+(`ArchiveVerifyError`) → decompress; `ArchiveNotFoundError` when no pointer row
+exists **or** when the pointed-to object is missing/evicted from the bucket
+(normalized via `r2_history.is_missing_object_error`, so a reader cannot
+distinguish "never archived" from "archived then evicted").
 Documents phase (migration 120): pointer-per-row for non-latest
 `(workspace_id, document_key, date)` versions under
 `documents/<ws>/<date>/<key>.zst`, newest date per key stays live. Creds are
@@ -3130,10 +3253,14 @@ Documents phase (migration 120): pointer-per-row for non-latest
 built as `https://<account>.r2.cloudflarestorage.com`.
 `.github/workflows/pipeline-checkpoint-archive.yml` runs it daily. The live
 checkpointer path is untouched. Read-through consumers (#3792):
-`read_archived_document` wraps `resolve_payload` + JSON decode (``None`` on
-pointer-miss / corrupt bytes, never raises on a read path); document readers
-take an optional `store` (tests inject a fake, production resolves the R2
-backend from `R2_*` env, absent creds disable read-through). Wired into the
+`read_archived_document` wraps `resolve_payload` + JSON decode and honors a
+"never raises" contract on the read path — ``None`` on pointer/object miss,
+corrupt bytes, undecodable JSON, **or** any storage/registry fault (logged at
+WARNING with the traceback, so a broken read-through is visible-but-soft).
+Document readers take an optional `store` (tests inject a fake, production
+resolves the R2 backend from `R2_*` env); when creds are absent the hydration
+point logs a WARNING ("archive read-through disabled (no R2 backend)") instead
+of silently degrading every archived row to missing. Wired into the
 dashboard fallback (`research_retrieval/queries.py::_query_documents_row` via
 `query_research`) and the research priors (`research/supabase_io.py`:
 `load_prior_context`, analyst/deliberation summaries, `load_latest_beliefs_document`).

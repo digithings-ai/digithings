@@ -599,6 +599,48 @@ describe("parseEmbedTenants", () => {
     expect(registry.get("example.com")?.showLanguageSelector).toBeUndefined();
   });
 
+  it("accepts pageContext off/silent/visible and leaves it undefined when unset", () => {
+    const registry = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          pageContext: "silent",
+        },
+      }),
+    );
+    expect(registry.get("example.com")?.pageContext).toBe("silent");
+    const unset = parseEmbedTenants(
+      JSON.stringify({
+        "example.org": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+        },
+      }),
+    );
+    expect(unset.get("example.org")?.pageContext).toBeUndefined();
+  });
+
+  it("rejects an unknown pageContext", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+            token: "t",
+            pageContext: "hidden",
+          },
+        }),
+      ),
+    ).toThrow(/pageContext must be "off", "silent", or "visible"/);
+  });
+
   it("accepts a gate block with an https consumeUrl", () => {
     const reg = parseEmbedTenants(
       JSON.stringify({

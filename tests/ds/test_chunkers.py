@@ -215,13 +215,14 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 57 for #3859 (Task 9 web_search docs: recency buckets, rollout-ops rewrite) plus merged develop prose — fixture prose only; RecursiveChunker unchanged.
     Hashes only (count still 57) re-recorded for #3871 (tool-only cost-win rewrite + searxng floats-on-latest owner decision in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 58 for #3909 (backend fail-loud + research workspace scoping + raw filter gate docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 59 for #3934 (SSRF fetch-guard paragraph in the web_search section + DIGISEARCH_FETCH_ALLOWED_HOSTS env-table row in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 58
+    assert len(chunks) == 59
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -235,8 +236,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5fc146dcd98ed469",
         "e446cea04444b3a8",
         "d48e16a1b753dc3a",
-        "4e256fae99ddc3e2",
-        "dace1a11e10bae3d",
+        "579e52606ce8ddf4",
+        "81769159eb5dd82e",
+        "a901093c569d8ad4",
         "f5694c994b90e40c",
         "2f102978f3f92316",
         "16584e006bbec980",
@@ -273,8 +275,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "472ca1370eb9ef1a",
         "a3987db99f2b72c5",
         "9496728548f7cd2a",
-        "3132efab1e5ed61e",
-        "aef71ba4fa072289",
+        "225997a88a741b37",
+        "48822531a62ecd38",
         "a0c3eeac2a656b2f",
         "482754fb154988ce",
         "79ae674b8661ea64",

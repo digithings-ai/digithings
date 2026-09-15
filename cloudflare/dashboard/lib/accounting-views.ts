@@ -118,6 +118,84 @@ export function findNavSeriesSeams(
 }
 
 /**
+ * Rows of the most recent source run (#3767 / #3935). A stitched NAV series can
+ * hold several runs (legacy → finalized → …); returns must be rebased on the
+ * current run, never computed across a seam (the false Sep-8 jump). Sorted
+ * ascending; falls back to the full series when a seam date is absent. Empty in
+ * → empty out. Uses the explicit `series_seam` flag or a detected source flip.
+ */
+export function currentNavRun<
+  T extends { date: string; source?: string | null; series_seam?: boolean | null },
+>(rows: ReadonlyArray<T>): T[] {
+  if (rows.length === 0) return [];
+  const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+  const seams = findNavSeriesSeams(sorted);
+  if (seams.length === 0) return sorted;
+  const current = sorted.filter((row) => row.date >= seams[seams.length - 1]);
+  return current.length ? current : sorted;
+}
+
+/** A daily step beyond this is a basis/funding artifact, not a return (#4014). */
+export const CONTINUITY_MAX_STEP_PCT = 25;
+
+/** NAV row shape for the stitched-series continuity chain (#4014). */
+export type NavContinuityRow = {
+  date: string;
+  nav: number;
+  source?: string | null;
+  series_seam?: boolean | null;
+  day_return_pct?: number | null;
+};
+
+/**
+ * Continuity step for one row, in percent (#4014). The stitched view splices
+ * finalized periods onto legacy estimates, so row-to-row levels are not
+ * comparable across a `series_seam` (#3767):
+ *
+ * - prefer the row's own `day_return_pct` — each source's daily return;
+ * - else derive from levels only when the row continues its run;
+ * - a seam row with no day return carries flat — the basis change is dropped,
+ *   never drawn;
+ * - implausible steps (accounting restatements, funding events) carry flat.
+ */
+export function navContinuityStepPct(row: NavContinuityRow, previous: NavContinuityRow): number {
+  const daily = row.day_return_pct;
+  if (daily != null && Number.isFinite(daily)) {
+    return Math.abs(daily) <= CONTINUITY_MAX_STEP_PCT ? daily : 0;
+  }
+  if (!isNavSeriesSeam(row, previous.source ?? null) && previous.nav > 0) {
+    const level = (row.nav / previous.nav - 1) * 100;
+    if (Number.isFinite(level) && Math.abs(level) <= CONTINUITY_MAX_STEP_PCT) {
+      return level;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Base-100 continuity chain over a stitched NAV series (#4014): compounds each
+ * row's own step so every tracked day shares one basis without bridging runs
+ * (the false Sep-8 ~+10% jump, #3767) and without the old current-run
+ * truncation that hid the tracked history. Sorted ascending; empty in → empty
+ * out. Consumers may forward-fill calendar gaps on top of the returned dates.
+ */
+export function chainNavContinuity(
+  rows: ReadonlyArray<NavContinuityRow>
+): Array<{ date: string; nav: number }> {
+  const sorted = [...rows]
+    .filter((row) => Number.isFinite(row.nav) && row.nav > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (sorted.length === 0) return [];
+  const chained = [{ date: sorted[0].date, nav: 100 }];
+  let index = 100;
+  for (let position = 1; position < sorted.length; position += 1) {
+    index *= 1 + navContinuityStepPct(sorted[position], sorted[position - 1]) / 100;
+    chained.push({ date: sorted[position].date, nav: index });
+  }
+  return chained;
+}
+
+/**
  * Red-test helper: contribution fractions (as pct points) must sum to the shown
  * day return within a small absolute tolerance when both are present.
  */

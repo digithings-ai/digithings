@@ -19,6 +19,7 @@
  */
 import { Container, getContainer, switchPort } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
+import { handleMarketData } from "./market-data";
 import {
   DIGIGRAPH_PORT,
   DIGIKEY_PORT,
@@ -234,6 +235,12 @@ export interface Env {
   R2_BUCKET?: string;
   R2_ACCESS_KEY_ID?: string;
   R2_SECRET_ACCESS_KEY?: string;
+  // Read-only market data (#4013 Task 8). Both are consumed by the Worker's
+  // /v1/market/* handler (src/market-data.ts): MARKET_DATA is the R2 binding
+  // declared in wrangler.toml, MARKET_DATA_ALLOWED_ORIGINS the CORS allowlist.
+  // Neither is container runtime env -- do not add them to an envVars block.
+  MARKET_DATA: R2Bucket;
+  MARKET_DATA_ALLOWED_ORIGINS?: string;
 }
 
 function rewriteKeyStackPath(request: Request): Request {
@@ -263,6 +270,14 @@ export default {
     if (url.pathname === "/_stack/key" || url.pathname.startsWith("/_stack/key/")) {
       const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
       return container.fetch(switchPort(rewriteKeyStackPath(request), DIGIKEY_PORT));
+    }
+
+    // Read-only R2 market data (#4013 Task 8): public JSON for browser surfaces
+    // (decision D1), served by the Worker itself — not proxied to the container.
+    // Public read-only is at parity with Supabase's anon-readable price_history;
+    // no writes, no auth, CORS limited to MARKET_DATA_ALLOWED_ORIGINS.
+    if (url.pathname === "/v1/market/tickers" || url.pathname === "/v1/market/closes") {
+      return handleMarketData(request, workerEnv, url);
     }
 
     // Dedicated digiquant-mcp container (#3780 Task 8): reachable only via the

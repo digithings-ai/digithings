@@ -24,6 +24,8 @@ import {
   BASELINE_EMBED_WELCOME,
 } from "@/lib/baseline-embed";
 import { useComposerCopy, useSkinChrome } from "@/components/stock/skin-chrome";
+import { useDisclosureUi } from "@/components/stock/deploy-ui-context";
+import { PAGE_CONTEXT_ATTACHMENT_NAME } from "@/lib/embed-page-context-messages";
 import { useStockComposerGateSubmit, useStockSendGate } from "@/components/stock/stock-send-gate";
 import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
 import {
@@ -55,7 +57,9 @@ export function DigichatSkin({
     BASELINE_EMBED_WELCOME,
     BASELINE_EMBED_PLACEHOLDER,
   );
-  const { mode } = useSkinChrome();
+  const { mode, pageContext } = useSkinChrome();
+  const reasoningUi = useDisclosureUi("reasoning");
+  const toolCallsUi = useDisclosureUi("toolCalls");
   const gateSubmit = useStockComposerGateSubmit();
   const gate = useStockSendGate();
   const prefs = useEmbedChatPrefsOptional();
@@ -291,6 +295,11 @@ export function DigichatSkin({
       composerLayout={composerLayout ?? (mode === "app" ? "expanded" : "compact")}
       slash={enableSlash ? slashTrigger : undefined}
       mention={enableSlash ? mentionTrigger : undefined}
+      hiddenAttachmentNames={
+        pageContext === "silent" ? [PAGE_CONTEXT_ATTACHMENT_NAME] : undefined
+      }
+            reasoningMode={prefs?.prefs.thinking === false ? "off" : reasoningUi.mode}
+      toolCallsMode={toolCallsUi.mode}
     />
   );
 }

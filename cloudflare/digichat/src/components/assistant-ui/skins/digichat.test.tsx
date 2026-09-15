@@ -30,10 +30,17 @@ vi.mock("@assistant-ui/react", async () => {
 });
 
 vi.mock("@digithings/web/chat/thread", () => ({
-  DigichatThread: ({ composerLayout }: { composerLayout?: string }) => (
+  DigichatThread: ({
+    composerLayout,
+    hiddenAttachmentNames,
+  }: {
+    composerLayout?: string;
+    hiddenAttachmentNames?: string[];
+  }) => (
     <div
       data-testid="digichat-thread"
       data-composer-layout={composerLayout ?? ""}
+      data-hidden-attachments={(hiddenAttachmentNames ?? []).join(",")}
     />
   ),
 }));
@@ -80,5 +87,30 @@ describe("DigichatSkin composerLayout", () => {
 
   it("derives compact from embed mode by default", () => {
     expect(renderSkin("embed")).toBe("compact");
+  });
+});
+
+function renderSkinPageContext(pageContext: "visible" | "silent" | "off") {
+  render(
+    <SkinChromeProvider
+      value={{ ...DEFAULT_SKIN_CHROME, mode: "embed", pageContext }}
+    >
+      <DigichatSkin />
+    </SkinChromeProvider>,
+  );
+  return screen.getByTestId("digichat-thread");
+}
+
+describe("DigichatSkin pageContext", () => {
+  it("hides the page-context chip attachment when the deploy mode is silent", () => {
+    const thread = renderSkinPageContext("silent");
+    expect(thread.getAttribute("data-hidden-attachments")).toBe(
+      "page-context.html",
+    );
+  });
+
+  it("shows the page-context chip attachment when the deploy mode is visible", () => {
+    const thread = renderSkinPageContext("visible");
+    expect(thread.getAttribute("data-hidden-attachments")).toBe("");
   });
 });

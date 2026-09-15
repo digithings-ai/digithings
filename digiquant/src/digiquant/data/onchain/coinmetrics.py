@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Protocol  # score:allow untyped any — CoinMetrics JSON rows
@@ -40,12 +41,23 @@ import httpx
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.data.onchain._url_guard import is_allowed_base_url
+
 logger = logging.getLogger(__name__)
 
 COINMETRICS_BASE_URL = "https://community-api.coinmetrics.io/v4"
+#: Hosts the client may talk to. A caller-nominated ``base_url`` is refused
+#: outright (#3944) — this is the code-only seam guard.
+ALLOWED_BASE_HOSTS: frozenset[str] = frozenset({"community-api.coinmetrics.io"})
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_PAGE_SIZE = 10_000
 DEFAULT_CACHE_DIR = Path("data/onchain/coinmetrics")
+#: ``asset`` and ``metric`` are interpolated into the cache filename
+#: (``{asset}_{metric}.parquet``), so neither may smuggle a path separator,
+#: ``..`` or an absolute path into it (#3947). Metric names are mixed-case on
+#: the API (``CapMVRVCur``, ``PriceUSD``), hence ``[A-Za-z0-9_-]``; dots are
+#: excluded outright, which also rules out ``.``/``..`` without a second check.
+_SERIES_SLUG = re.compile(r"^[A-Za-z0-9_-]+$")
 _USER_AGENT = "digiquant-research/1.0 (+https://digiquant.io)"
 _ENV_FLAG = "DIGIQUANT_COINMETRICS_FETCH"
 
@@ -164,6 +176,32 @@ def write_series_parquet(frame: pl.DataFrame, path: Path | str) -> Path:
     return dest
 
 
+def _guard_series_slug(kind: str, value: str) -> str | None:
+    """Return an error string when ``value`` is not a safe cache-path segment (#3947)."""
+    if not _SERIES_SLUG.fullmatch(value):
+        return f"{kind} must match ^[A-Za-z0-9_-]+$ (path separators and '..' are not allowed)"
+    return None
+
+
+def _series_parquet_path(cache_dir: Path | str, asset: str, metric: str) -> Path:
+    """Build the cache path for one series, refusing anything but a safe slug (#3947).
+
+    Second layer behind ``CoinMetricsClient.fetch``'s boundary check: even if a
+    future caller reaches the filename builder directly, the resolved
+    destination must stay under ``cache_dir`` before anything is written.
+    Raises ``ValueError`` on an unsafe ``asset``/``metric``.
+    """
+    for kind, value in (("asset", asset), ("metric", metric)):
+        guard_error = _guard_series_slug(kind, value)
+        if guard_error is not None:
+            raise ValueError(guard_error)
+    root = Path(cache_dir).resolve()
+    dest = (root / f"{asset}_{metric}.parquet").resolve()
+    if not dest.is_relative_to(root):
+        raise ValueError(f"refusing cache path outside {root}: {dest}")
+    return dest
+
+
 def _result_from_frame(
     asset: str,
     metric: str,
@@ -174,7 +212,12 @@ def _result_from_frame(
 ) -> CoinMetricsSeriesResult:
     path: str | None = None
     if error is None and cache_dir is not None and frame.height > 0:
-        path = str(write_series_parquet(frame, Path(cache_dir) / f"{asset}_{metric}.parquet"))
+        try:
+            dest = _series_parquet_path(cache_dir, asset, metric)
+        except ValueError as exc:
+            error = str(exc)
+        else:
+            path = str(write_series_parquet(frame, dest))
     return CoinMetricsSeriesResult(
         asset=asset,
         metric=metric,
@@ -223,6 +266,8 @@ class CoinMetricsClient:
         session: _HttpGet | None = None,
         cache_dir: Path | str | None = None,
     ) -> None:
+        if not is_allowed_base_url(base_url, ALLOWED_BASE_HOSTS):
+            raise ValueError(f"base_url host is not allowlisted: {base_url!r} (#3944)")
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = session
@@ -254,6 +299,11 @@ class CoinMetricsClient:
                     "`metric` is unambiguous) — call once per asset/metric pair"
                 ),
             )
+        guard_error = _guard_series_slug("metric", metric) or _guard_series_slug("asset", asset)
+        if guard_error is not None:
+            # Refuse before any network call — these values become a cache
+            # filename (and an API query param), never a path (#3947).
+            return CoinMetricsSeriesResult(asset=asset, metric=metric, error=guard_error)
         url = f"{self.base_url}/timeseries/asset-metrics"
         params: dict[str, str | int] = {
             "assets": asset,
@@ -304,6 +354,12 @@ def fetch_coinmetrics_series(
     api_key: str | None = None,
 ) -> CoinMetricsSeriesResult:
     """Fetch one CoinMetrics community metric. Always fail-soft. Inject ``session`` in tests (no network)."""
+    if not is_allowed_base_url(base_url, ALLOWED_BASE_HOSTS):
+        return CoinMetricsSeriesResult(
+            asset=asset,
+            metric=metric,
+            error=f"refusing untrusted base_url {base_url!r} (allowed: {sorted(ALLOWED_BASE_HOSTS)})",
+        )
     if session is None and not _fetch_enabled():
         return CoinMetricsSeriesResult(
             asset=asset, metric=metric, error=f"{_ENV_FLAG} disabled (no network)"
@@ -349,6 +405,10 @@ def fetch_coinmetrics_catalog(
     tuple above is a BTC-only snapshot from 2026-09-10, not a general answer.
     Pass ``asset=None`` for the full catalog across all assets.
     """
+    if not is_allowed_base_url(base_url, ALLOWED_BASE_HOSTS):
+        return CoinMetricsCatalogResult(
+            error=f"refusing untrusted base_url {base_url!r} (allowed: {sorted(ALLOWED_BASE_HOSTS)})"
+        )
     if session is None and not _fetch_enabled():
         return CoinMetricsCatalogResult(error=f"{_ENV_FLAG} disabled (no network)")
     url = f"{base_url.rstrip('/')}/catalog-v2/asset-metrics"
@@ -366,6 +426,7 @@ def fetch_coinmetrics_catalog(
 
 
 __all__ = [
+    "ALLOWED_BASE_HOSTS",
     "COINMETRICS_BASE_URL",
     "DEFAULT_CACHE_DIR",
     "DEFAULT_PAGE_SIZE",

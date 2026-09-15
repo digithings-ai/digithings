@@ -7,6 +7,7 @@ export {
   PersistenceSchema,
   AuthModeSchema,
   DisclosureModeSchema,
+  PageContextModeSchema,
   disclosureIsVisible,
   disclosureDefaultOpen,
   disclosureIsLocked,
@@ -23,6 +24,7 @@ export {
   type AuthMode,
   type DisclosureMode,
   type UserAlign,
+  type PageContextMode,
   type ToolCatalogEntry,
 } from "./schema";
 

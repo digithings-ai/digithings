@@ -95,13 +95,15 @@ function ToolGroupRoot({
 function ToolGroupTrigger({
   count,
   active = false,
+  label,
   className,
   ...props
 }: React.ComponentProps<typeof CollapsibleTrigger> & {
   count: number;
   active?: boolean;
+  label?: string;
 }) {
-  const label = `${count} tool ${count === 1 ? "call" : "calls"}`;
+  const text = label ?? `${count} tool ${count === 1 ? "call" : "calls"}`;
 
   return (
     <CollapsibleTrigger
@@ -130,7 +132,7 @@ function ToolGroupTrigger({
           active && "shimmer motion-reduce:animate-none",
         )}
       >
-        {label}
+        {text}
       </span>
       <span
         data-slot="tool-group-trigger-chevron"

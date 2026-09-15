@@ -35,6 +35,8 @@ deployment:
     sources: true
     branchPicker: true
     modelPicker: true
+    # Page snapshot is injected into the model but renders no attachment chip.
+    pageContext: silent
   models:
     # Same CI-cheap default as digithings.ai (#3829). Not OpenRouter `:free`.
     default: deepseek/deepseek-v4-flash

@@ -45,17 +45,42 @@ metrics and lookback cannot alter daily `pnl_pct` semantics.
 
 **dashboard daily chain:** `python -m digiquant.portfolio.chain --cadence daily` (`.github/workflows/pipeline-digiquant.yml`). House clocks run every day with `refresh_scope=none` and edit-mode continuity (`skip`/`edit`/`full` per artifact). Operator full refresh is manual (`workflow_dispatch` / `--refresh-scope all`). Beliefs distillation: daily short fold on every house run; `--refresh-scope beliefs` (or unfolded `decision_log` backlog above `OLYMPUS_BELIEFS_BACKLOG`, default 20) selects the full rewrite.
 
+### digikey service key for web grounding (#4028)
+
+Web grounding is default-ON (#3870): the daily chain calls the first-party
+digisearch `web_search` tool, and `research/data/web_grounding.py`
+`_pipeline_bearer()` mints a digikey service JWT via
+`digibase.service_auth.get_service_jwt()` (exchange
+`POST {DIGIKEY_URL}/v1/oauth/token`, `grant_type=api_key`, scope
+`digisearch:query`). Without the credentials the whole book run fails with
+`ServiceAuthError: DIGIQUANT_DIGIKEY_API_KEY is not set`.
+
+`pipeline-digiquant.yml` exports both names at the `run` job level so every
+step inherits them:
+
+| Name | Kind | Value |
+|---|---|---|
+| `DIGIKEY_URL` | Actions **variable** (`vars.DIGIKEY_URL`, YAML default) | `https://key.digithings.ai` |
+| `DIGIQUANT_DIGIKEY_API_KEY` | Actions **secret** | digikey service API key scoped `digisearch:query` |
+
+Minting, provisioning, and rotation: [docs/ops/digiquant-digikey-service-key.md](../../../../../docs/ops/digiquant-digikey-service-key.md).
+Only this workflow runs the grounding code path — the deterministic pipelines
+(backfill, prices, research-metrics) never call it.
+
 ### Market-data R2 refresh (cutover #3780)
 
 The versioned R2 cache owns price/macro serving under
-`DIGIQUANT_MARKET_DATA_BACKEND=r2`. Daily refresh is
-`.github/workflows/pipeline-market-data-refresh.yml`, cron **`0 13 * * *`**
-(distinct from the checkpoint-archiver `30 13 * * *`), running
-`scripts/refresh_market_data_r2.py` (yfinance/FRED/Yahoo-FX → new immutable
-generations + manifest). Supabase market-table writers are paused per the
-`pipeline-digiquant-prices.yml` header (compute-technicals + fred/yahoo
-fetch paused; intraday fetch-quotes, calendar sync, at-open, fedprob/bitview
-kept) — do not resume them without a new issue.
+`DIGIQUANT_MARKET_DATA_BACKEND=r2` (set in `.github/digiquant-pipeline.yml`,
+loaded into `$GITHUB_ENV` by `pipeline-digiquant.yml`). Refresh is
+`.github/workflows/pipeline-market-data-refresh.yml`: cron **`0 13 * * *`**
+(morning; distinct from the checkpoint-archiver `30 13 * * *`) plus
+**`30 21 * * *`** (evening: settled US close before the 22:00
+research-metrics run, #4013 D4), running `scripts/refresh_market_data_r2.py`
+(yfinance/FRED/Yahoo-FX → new immutable generations + manifest). Supabase
+market-table writers are paused per the `pipeline-digiquant-prices.yml`
+header (compute-technicals retired (#4013 Task 11); fred/yahoo fetch paused;
+intraday fetch-quotes, calendar sync, at-open, fedprob/bitview kept) — do not
+resume them without a new issue.
 
 Dry-run (exit 0, no writes — the Task 10 live-fire check):
 `python scripts/refresh_market_data_r2.py --dry-run --as-of 2025-08-29`.
@@ -70,19 +95,32 @@ alerts. Operator response: read the `failed` list in the
 the backend flag — readers already fail-soft (history-only rows + loud
 `stale:true` envelope).
 
+Reader-side, `digiquant.research.data.freshness.assert_market_data_fresh`
+(seal ≤ 1 day, ≥ 100 price tickers) is the loud universe-collapse check. It
+ships tested but is not yet called by any production path (deferred
+follow-up); the cron-side gate above is what runs today.
+
 Promotion runbook (supervised with the operator — write the commands, do
 NOT run them from an agent env; no cloud creds there):
 
 ```bash
+# DEFERRED (#3951): do not run this gate/apply sequence until the on-cron
+# Supabase readers have R2 seams — migration 124 currently retains
+# price_history + price_technicals (DROPs commented out). Steps preserved for
+# the follow-up that un-defers them.
+# The real drop MUST be a NEW numbered migration (e.g. 126_drop_market_data_tables.sql),
+# never a re-edit of 124: db-migrate.yml ledgers every executed file by name, so a
+# re-edited 124 would be skipped as already applied.
 # 1. Live size gate on the core project, evaluated through the gate script
 #    (PASS <= 320MB per data/cutover_gate.py;
 #    ~172MB of price tables drop toward a ≈292MB target; macro_series_observations
-#    stays per the carve-out — migration 124 drops price_history + price_technicals ONLY).
+#    stays per the carve-out — the future drop migration drops
+#    price_history + price_technicals ONLY).
 psql "$CORE_PG_URI" -c "SELECT pg_size_pretty(pg_database_size(current_database()));"
 SIZE_BYTES=$(psql "$CORE_PG_URI" -tAX -c "SELECT pg_database_size(current_database());")
 python -c "import sys; from digiquant.data.cutover_gate import cutover_size_gate_passes; sys.exit(0 if cutover_size_gate_passes(int(sys.argv[1])) else 1)" "$SIZE_BYTES"  # pre-migration: expect exit 1 (>320MB); record the bytes
-# 2. Reclaim, then apply migration 124 via db-migrate.yml (file + ledger in one
-#    transaction; see digiquant/supabase/migrations/124_drop_market_data_tables.sql).
+# 2. Reclaim, then apply the new drop migration via db-migrate.yml (file + ledger in
+#    one transaction; do NOT edit the no-op digiquant/supabase/migrations/124_drop_market_data_tables.sql).
 psql "$CORE_PG_URI" -c "VACUUM (ANALYZE);"
 # 3. Re-run the gate-script invocation from step 1 post-migration — PASS = exit 0 (<= 320MB).
 ```

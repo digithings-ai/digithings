@@ -262,7 +262,6 @@ def build_digiquant_fetch_bitview_series_tool() -> dict[str, Any]:
                     "timeout": {"type": "number", "default": 30},
                     "start": {"type": "integer"},
                     "end": {"type": "integer"},
-                    "base_url": {"type": "string", "description": "Override API base URL"},
                     "allow_derived": {
                         "type": "boolean",
                         "description": "Fetch series normally refused as derived/dual-count (e.g. nupl)",
@@ -310,7 +309,6 @@ def build_digiquant_fetch_bgeometrics_series_tool() -> dict[str, Any]:
                     "cache_dir": {"type": "string"},
                     "timeout": {"type": "number", "default": 30},
                     "token": {"type": "string", "description": "bitcoin-data.com API token"},
-                    "base_url": {"type": "string", "description": "Override API base URL"},
                 },
                 "required": ["metric"],
             },
@@ -346,7 +344,6 @@ def build_digiquant_fetch_coinmetrics_series_tool() -> dict[str, Any]:
                     "page_size": {"type": "integer", "default": 10000},
                     "cache_dir": {"type": "string"},
                     "timeout": {"type": "number", "default": 30},
-                    "base_url": {"type": "string", "description": "Override API base URL"},
                     "api_key": {
                         "type": "string",
                         "description": "Registered CoinMetrics API key (optional)",
@@ -374,7 +371,6 @@ def build_digiquant_list_coinmetrics_catalog_tool() -> dict[str, Any]:
                 "properties": {
                     "asset": {"type": "string", "description": "Restrict to one asset, e.g. 'btc'"},
                     "timeout": {"type": "number", "default": 30},
-                    "base_url": {"type": "string", "description": "Override API base URL"},
                     "api_key": {
                         "type": "string",
                         "description": "Registered CoinMetrics API key (optional)",
@@ -553,6 +549,59 @@ def build_digiquant_compile_research_portfolio_tool() -> dict[str, Any]:
     }
 
 
+def build_digiquant_get_trade_levels_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digiquant_get_trade_levels",
+            "description": (
+                "Compute causal trade levels (entry band, structural/ATR stop, "
+                "R-multiple take-profit ladder, trail policy) for a long or short "
+                "direction. Read-only — never sizes or places orders. Supply "
+                "ohlc_json (a JSON array of OHLC bars) as the primary data path, "
+                "or a locally cached ticker as a convenience."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "direction": {
+                        "type": "string",
+                        "enum": ["long", "short"],
+                        "description": "Trade direction the levels are computed for",
+                    },
+                    "ohlc_json": {
+                        "type": "string",
+                        "description": (
+                            "JSON array of bars: [{timestamp, open, high, low, "
+                            "close, volume}, ...] sorted ascending. Primary path."
+                        ),
+                    },
+                    "pair": {
+                        "type": "string",
+                        "description": "Instrument label echoed in the contract, e.g. 'EUR/USD'",
+                    },
+                    "ticker": {
+                        "type": "string",
+                        "description": (
+                            "Optional ticker with a local history-cache CSV "
+                            "(non-blocking convenience; no network fetch)"
+                        ),
+                    },
+                    "config_json": {
+                        "type": "string",
+                        "description": "Optional JSON object of LevelsConfig overrides",
+                    },
+                    "cache_dir": {
+                        "type": "string",
+                        "description": "Optional cache directory for the ticker convenience path",
+                    },
+                },
+                "required": ["direction"],
+            },
+        },
+    }
+
+
 def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
     """Return the full digiquant orchestrator tool surface."""
     return [
@@ -569,6 +618,7 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digiquant_fetch_bgeometrics_series_tool(),
         build_digiquant_fetch_coinmetrics_series_tool(),
         build_digiquant_list_coinmetrics_catalog_tool(),
+        build_digiquant_get_trade_levels_tool(),
         build_digiquant_fit_sdca_weights_tool(),
         build_digiquant_compile_research_portfolio_tool(),
         build_dashboard_run_policy_replay_tool(),

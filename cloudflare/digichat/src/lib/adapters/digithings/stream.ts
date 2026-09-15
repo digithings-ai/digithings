@@ -22,22 +22,6 @@ import {
 import { BYOK_MODEL_REMEDIABLE_CODES } from "@/lib/embed-chat-error";
 import { CredentialRedirectError, fetchGuarded } from "@/lib/fetch-guarded";
 
-/**
- * Feature-focused research prompt for the unconfigured baseline embed only.
- * Guides digigraph document RAG mode toward digichat / digigraph / digisearch /
- * digivault capabilities. Owner-replaceable copy. Never sent for a matched host
- * deployment — see the route gate. When web search is on, its first-party
- * web-search results arrive as External cites: cite their real URLs inline and never
- * present them as corpus knowledge.
- */
-export const DEFAULT_BASELINE_RESEARCH_SYSTEM_PROMPT =
-  "Answer questions about what digichat, digigraph, digisearch, and digivault can do. " +
-  "Help the visitor explore the available tools and capabilities. " +
-  "Use the tools you are given when they help answer. " +
-  "When web search is on, its first-party web-search results are External cites: " +
-  "cite their real URLs inline and never present them as corpus knowledge. " +
-  "Keep answers short.";
-
 export type DigigraphTracePayload = {
   v?: number;
   type: string;
@@ -136,7 +120,8 @@ class DigigraphStreamContractError extends Error {
 }
 
 async function* iterateOpenAiSse(
-  body: ReadableStream<Uint8Array>
+  body: ReadableStream<Uint8Array>,
+  onUsage?: (usage: Record<string, unknown>) => void
 ): AsyncGenerator<Record<string, unknown>> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -156,7 +141,11 @@ async function* iterateOpenAiSse(
         try {
           const json = JSON.parse(raw) as {
             choices?: Array<{ delta?: Record<string, unknown> }>;
+            usage?: Record<string, unknown>;
           };
+          if (json.usage && typeof json.usage === "object") {
+            onUsage?.(json.usage);
+          }
           const delta = json.choices?.[0]?.delta;
           if (delta && Object.keys(delta).length) yield delta;
         } catch {
@@ -176,12 +165,6 @@ export async function createDigigraphTraceStreamResponse(opts: {
   activityDetail: ActivityDetail;
   /** AbortSignal from the inbound request — Stop must cancel the digigraph fetch (#3475). */
   signal?: AbortSignal;
-  /**
-   * Baseline-only research prompt. Sent as digigraph `research_system_prompt`
-   * (document RAG mode) for the unconfigured embed only — never for a matched
-   * host deployment, whose operator config owns the prompt surface.
-   */
-  researchSystemPrompt?: string;
 }) {
   const stripped = uiMessagesForUpstream(opts.messages).map((m) => {
     const { id: _omit, ...rest } = m;
@@ -220,9 +203,6 @@ export async function createDigigraphTraceStreamResponse(opts: {
         model,
         messages: coreMessagesToDigigraphOpenAi(coreMessages),
         stream: true,
-        ...(opts.researchSystemPrompt
-          ? { research_system_prompt: opts.researchSystemPrompt }
-          : {}),
       };
       // #2572: never follow cross-origin redirects while carrying BYOK /
       // LiteLLM / digikey credentials (Node forwards X-* across origins).
@@ -290,7 +270,29 @@ export async function createDigigraphTraceStreamResponse(opts: {
         closeText();
         throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
-      for await (const delta of iterateOpenAiSse(res.body)) {
+      let usageMetadata:
+        | { inputTokens: number; outputTokens: number; totalTokens: number }
+        | undefined;
+      for await (const delta of iterateOpenAiSse(res.body, (usage) => {
+        const inputTokens = usage.prompt_tokens;
+        const outputTokens = usage.completion_tokens;
+        const totalTokens = usage.total_tokens;
+        if (
+          typeof inputTokens === "number" &&
+          Number.isFinite(inputTokens) &&
+          typeof outputTokens === "number" &&
+          Number.isFinite(outputTokens)
+        ) {
+          usageMetadata = {
+            inputTokens,
+            outputTokens,
+            totalTokens:
+              typeof totalTokens === "number" && Number.isFinite(totalTokens)
+                ? totalTokens
+                : inputTokens + outputTokens,
+          };
+        }
+      })) {
         const dgErr = delta.digigraph_error;
         if (dgErr && typeof dgErr === "object") {
           closeText();
@@ -353,6 +355,16 @@ export async function createDigigraphTraceStreamResponse(opts: {
             writeStandardActivity(writer, span, activityCtx);
           }
         }
+      }
+      if (usageMetadata) {
+        // Real provider-reported token usage: digigraph appends a final SSE
+        // chunk carrying top-level `usage` whose prompt/completion tokens came
+        // from the LiteLLM stream. Surface it as message metadata so the client
+        // folds it into `metadata.custom.usage` (never fabricate zeros).
+        writer.write({
+          type: "message-metadata",
+          messageMetadata: { usage: usageMetadata },
+        });
       }
       // #3910: a real 200 always has a non-null body even when the upstream
       // sends no bytes, so `!res.body` only catches 204/205/HEAD. Without this,

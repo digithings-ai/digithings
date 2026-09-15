@@ -134,8 +134,10 @@ def _read_r2_window(
     skips the live fetch entirely, and the merged frame is additionally bounded
     to ``date <= as_of`` so historical reads (``as_of`` behind the seal — the
     cutover's backfill use case) cannot leak newer history (#3780 Task 7).
-    A missing ``latest`` pointer (KeyError)
-    maps to an unknown-ticker ``LookupError`` for the MCP error envelope.
+    A missing ``latest`` pointer (``KeyError`` from a dict-like store, or the
+    boto3 ``ClientError`` ``NoSuchKey``/404 the real R2 backend raises) maps to
+    an unknown-ticker ``LookupError`` for the MCP error envelope — other
+    backend faults (auth/transient) still propagate.
     A live-fetch failure raises (surfaced as the ``{"error"}`` envelope by
     the caller) — it is never swallowed into a valid-looking window.
     A per-ticker fetch *error entry* (``FetchResult.errors`` with no raised
@@ -153,7 +155,11 @@ def _read_r2_window(
     import polars as pl
 
     from digiquant.data.prices.merge import merge_history_live
-    from digiquant.data.prices.r2_history import latest_pointer_key, normalize_ticker
+    from digiquant.data.prices.r2_history import (
+        is_missing_object_error,
+        latest_pointer_key,
+        normalize_ticker,
+    )
     from digiquant.data.prices.technicals import compute_indicators
 
     manifest = manifest if manifest is not None else _read_manifest()
@@ -169,7 +175,9 @@ def _read_r2_window(
     else:
         try:
             gen_key = store.read_latest(latest_pointer_key(ticker))
-        except KeyError:
+        except Exception as exc:
+            if not is_missing_object_error(exc):
+                raise
             raise LookupError(f"unknown ticker {ticker!r}") from None
         sha: str | None = None
         for cand in datasets.values():
@@ -259,15 +267,22 @@ def _read_r2_macro_window(
     """Per-series ``{latest, window}`` macro observations sealed at *as_of*.
 
     A series whose generation is missing from the manifest (unknown sha) or
-    whose ``latest`` pointer is absent raises ``LookupError`` — surfaced as
+    whose ``latest`` pointer is absent (``KeyError`` or the boto3
+    ``ClientError`` ``NoSuchKey``/404) raises ``LookupError`` — surfaced as
     the ``{"error"}`` envelope by the caller — so backfill key mismatches
-    fail loud instead of serving empty windows.
+    fail loud instead of serving empty windows. Only the pointer read is
+    classified; a fault in parquet/row handling propagates as itself rather
+    than masquerading as an unknown series. Other backend faults
+    (auth/transient) propagate unchanged.
     """
     import io
 
     import polars as pl
 
-    from digiquant.data.prices.r2_history import macro_latest_pointer_key
+    from digiquant.data.prices.r2_history import (
+        is_missing_object_error,
+        macro_latest_pointer_key,
+    )
 
     manifest = manifest if manifest is not None else _read_manifest()
     datasets = manifest.get("datasets") or {}
@@ -276,24 +291,26 @@ def _read_r2_macro_window(
     for sid in series_ids:
         try:
             gen_key = store.read_latest(macro_latest_pointer_key("fred", sid))
-            sha = None
-            for cand in datasets.values():
-                if isinstance(cand, dict) and cand.get("object") == gen_key:
-                    sha = cand.get("sha256")
-                    break
-            if sha is None:
-                raise LookupError(f"unknown macro series {sid!r}")
-            frame = pl.read_parquet(io.BytesIO(store.get_generation(gen_key, str(sha))))
-            date_col = "obs_date" if "obs_date" in frame.columns else "date"
-            rows = (
-                frame.with_columns(pl.col(date_col).cast(pl.Date))
-                .filter(pl.col(date_col) <= pl.lit(as_of).cast(pl.Date))
-                .sort(date_col)
-                .to_dicts()
-            )
-            out[sid] = {"latest": rows[-1] if rows else {}, "window": rows}
-        except KeyError:
+        except Exception as exc:
+            if not is_missing_object_error(exc):
+                raise
             raise LookupError(f"unknown macro series {sid!r}") from None
+        sha = None
+        for cand in datasets.values():
+            if isinstance(cand, dict) and cand.get("object") == gen_key:
+                sha = cand.get("sha256")
+                break
+        if sha is None:
+            raise LookupError(f"unknown macro series {sid!r}")
+        frame = pl.read_parquet(io.BytesIO(store.get_generation(gen_key, str(sha))))
+        date_col = "obs_date" if "obs_date" in frame.columns else "date"
+        rows = (
+            frame.with_columns(pl.col(date_col).cast(pl.Date))
+            .filter(pl.col(date_col) <= pl.lit(as_of).cast(pl.Date))
+            .sort(date_col)
+            .to_dicts()
+        )
+        out[sid] = {"latest": rows[-1] if rows else {}, "window": rows}
     return out
 
 
@@ -399,6 +416,47 @@ def digiquant_get_macro_series(
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
 
+def digiquant_get_trade_levels(
+    direction: str,
+    ohlc_json: str | None = None,
+    pair: str | None = None,
+    ticker: str | None = None,
+    config_json: str | None = None,
+    cache_dir: str | None = None,
+) -> str:
+    """Causal ATR / swing-pivot / Donchian trade levels for one direction (JSON).
+
+    READ-scope and read-only: computes candidate entry band, stop, R-multiple
+    ladder and trail policy; it never sizes or places orders. The caller-
+    supplied OHLC frame (``ohlc_json``: JSON array of
+    ``{timestamp, open, high, low, close, volume}`` bars) is the primary path.
+    ``ticker`` is a non-blocking convenience over the local history cache.
+
+    Returns the contract ``{pair, direction, entry{low,high,ref}, sl,
+    tp_ladder[], trail_policy, source_ref, computed_at}`` or ``{"error": ...}``.
+    The contract also carries the ``reward_uncapped`` diagnostic (``true`` when
+    no opposite structure bounded the reward, so the stop was accepted without
+    an R:R check).
+    """
+    try:
+        from digiquant.data.prices.levels_api import (
+            config_from_json,
+            levels_for_ticker,
+            levels_json,
+            parse_ohlc,
+        )
+
+        cfg = config_from_json(config_json)
+        if ohlc_json:
+            df = parse_ohlc(ohlc_json)
+            return levels_json(df, direction, pair=pair or "UNKNOWN", cfg=cfg)
+        if ticker:
+            return levels_for_ticker(ticker, direction, cache_dir=cache_dir, cfg=cfg, pair=pair)
+        return json.dumps({"error": "either ohlc_json or ticker is required"})
+    except Exception as exc:  # surface as JSON to the caller, never crash
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+
 try:
     from mcp.server.fastmcp import FastMCP
 
@@ -424,6 +482,7 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digiquant_list_strategies",
         "digiquant_get_price_technicals",
         "digiquant_get_macro_series",
+        "digiquant_get_trade_levels",
         "digiquant_query_data",
         "dashboard_get_policy_replay",
         "dashboard_get_policy_comparison",
@@ -610,6 +669,29 @@ def create_mcp_server(
         """
         return digiquant_get_macro_series(series_ids, lookback=lookback, as_of=as_of)
 
+    @_maybe_tool("digiquant_get_trade_levels")
+    def digiquant_get_trade_levels_tool(
+        direction: str,
+        ohlc_json: str | None = None,
+        pair: str | None = None,
+        ticker: str | None = None,
+        config_json: str | None = None,
+        cache_dir: str | None = None,
+    ) -> str:
+        """Causal entry/stop/target levels for a direction (JSON, read-only).
+
+        Pass ``ohlc_json`` (a JSON array of OHLC bars) or a cached ``ticker``.
+        Never places orders; returns candidate levels with full precision.
+        """
+        return digiquant_get_trade_levels(
+            direction,
+            ohlc_json=ohlc_json,
+            pair=pair,
+            ticker=ticker,
+            config_json=config_json,
+            cache_dir=cache_dir,
+        )
+
     @_maybe_tool("digiquant_query_data")
     def digiquant_query_data(
         table: str,
@@ -701,7 +783,13 @@ def create_mcp_server(
         try:
             import ccxt
             import polars as pl
-            from fetch_coinbase import DEFAULT_CACHE, SYMBOLS, bars_to_polars, fetch_all_daily
+            from fetch_coinbase import (
+                DEFAULT_CACHE,
+                SYMBOLS,
+                bars_to_polars,
+                cache_path_for,
+                fetch_all_daily,
+            )
         except ImportError as exc:
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
@@ -724,7 +812,8 @@ def create_mcp_server(
                 if through_yesterday:
                     today = datetime.now(UTC).date().isoformat()
                     df = df.filter(pl.col("timestamp") < today)
-                path = cache / f"{ticker}.csv"
+                path = cache_path_for(cache, ticker, timeframe)
+                path.parent.mkdir(parents=True, exist_ok=True)
                 df.write_csv(path)
                 out[ticker] = {
                     "bars": len(df),
@@ -867,7 +956,6 @@ def create_mcp_server(
         timeout: float = 30.0,
         start: int | None = None,
         end: int | None = None,
-        base_url: str | None = None,
         allow_derived: bool = False,
     ) -> str:
         """Fetch Bitview/BRK on-chain ``day1`` series into ``data/onchain/bitview/``.
@@ -877,9 +965,9 @@ def create_mcp_server(
         avoids dual-counting it alongside MVRV); pass ``allow_derived=True``
         to fetch it anyway for uses outside that composite. Fail-soft +
         timeout. Coin Metrics community CC BY-NC series are not fetched.
-        Network is the operator opt-in of invoking this tool.
+        Network is the operator opt-in of invoking this tool. The upstream
+        base URL is fixed (SSRF guard, #3944) — it is not a caller parameter.
         """
-        from digiquant.data.onchain.bitview import BITVIEW_BASE_URL
         from digiquant.sdca_mcp import run_fetch_bitview_series
 
         return run_fetch_bitview_series(
@@ -888,7 +976,6 @@ def create_mcp_server(
             timeout=timeout,
             start=start,
             end=end,
-            base_url=base_url or BITVIEW_BASE_URL,
             allow_derived=allow_derived,
         )
 
@@ -901,7 +988,6 @@ def create_mcp_server(
         cache_dir: str | None = None,
         timeout: float = 30.0,
         token: str | None = None,
-        base_url: str | None = None,
     ) -> str:
         """Fetch one Bitcoin valuation/on-chain metric from bitcoin-data.com (BGeometrics).
 
@@ -910,16 +996,17 @@ def create_mcp_server(
         and more — see ``KNOWN_METRICS`` for a curated subset; any other
         bitcoin-data.com slug also works). Treat ``token`` as required —
         bitcoin-data.com now markets registration as mandatory even for the
-        free tier (pass it, or set ``BGEOMETRICS_API_TOKEN``).
+        free tier (pass it, or set ``BGEOMETRICS_API_TOKEN``; the env token is
+        only ever sent to the fixed bitcoin-data.com host).
 
         Free-tier limits (enforced by the API, not just documented): 10
         requests/hour, 15/day, shared across every metric — fetch **one
         metric per call**. History is capped at roughly the last 4 years;
         for deeper multi-cycle history use
         ``digiquant_fetch_coinmetrics_series`` instead (MVRV back to 2010,
-        no rate-limit concern). Fail-soft + timeout.
+        no rate-limit concern). Fail-soft + timeout. The upstream base URL is
+        fixed (SSRF guard, #3944) — it is not a caller parameter.
         """
-        from digiquant.data.onchain.bgeometrics import BGEOMETRICS_BASE_URL
         from digiquant.sdca_mcp import run_fetch_bgeometrics_series
 
         return run_fetch_bgeometrics_series(
@@ -930,7 +1017,6 @@ def create_mcp_server(
             cache_dir=cache_dir,
             timeout=timeout,
             token=token,
-            base_url=base_url or BGEOMETRICS_BASE_URL,
         )
 
     @_maybe_tool("digiquant_fetch_coinmetrics_series")
@@ -942,7 +1028,6 @@ def create_mcp_server(
         page_size: int = 10_000,
         cache_dir: str | None = None,
         timeout: float = 30.0,
-        base_url: str | None = None,
         api_key: str | None = None,
     ) -> str:
         """Fetch one on-chain metric for one asset from the CoinMetrics Community API.
@@ -955,9 +1040,9 @@ def create_mcp_server(
         the free tier (generous rate limit); pass ``api_key`` if you have a
         registered CoinMetrics key for a higher limit. CC BY-NC —
         research-only, do not republish derived series commercially.
-        Fail-soft + timeout.
+        Fail-soft + timeout. The upstream base URL is fixed (SSRF guard,
+        #3944) — it is not a caller parameter.
         """
-        from digiquant.data.onchain.coinmetrics import COINMETRICS_BASE_URL
         from digiquant.sdca_mcp import run_fetch_coinmetrics_series
 
         return run_fetch_coinmetrics_series(
@@ -968,7 +1053,6 @@ def create_mcp_server(
             page_size=page_size,
             cache_dir=cache_dir,
             timeout=timeout,
-            base_url=base_url or COINMETRICS_BASE_URL,
             api_key=api_key,
         )
 
@@ -976,7 +1060,6 @@ def create_mcp_server(
     def digiquant_list_coinmetrics_catalog(
         asset: str | None = None,
         timeout: float = 30.0,
-        base_url: str | None = None,
         api_key: str | None = None,
     ) -> str:
         """List which CoinMetrics community metrics exist for ``asset`` (or all assets).
@@ -984,14 +1067,12 @@ def create_mcp_server(
         Discovery tool — call before ``digiquant_fetch_coinmetrics_series``
         to find real metric names instead of guessing from the BTC-only
         ``KNOWN_COMMUNITY_METRICS`` snapshot. Returns the raw
-        ``catalog-v2/asset-metrics`` JSON. Fail-soft + timeout.
+        ``catalog-v2/asset-metrics`` JSON. Fail-soft + timeout. The upstream
+        base URL is fixed (SSRF guard, #3944) — it is not a caller parameter.
         """
-        from digiquant.data.onchain.coinmetrics import COINMETRICS_BASE_URL
         from digiquant.sdca_mcp import run_list_coinmetrics_catalog
 
-        return run_list_coinmetrics_catalog(
-            asset=asset, timeout=timeout, base_url=base_url or COINMETRICS_BASE_URL, api_key=api_key
-        )
+        return run_list_coinmetrics_catalog(asset=asset, timeout=timeout, api_key=api_key)
 
     @_maybe_tool("digiquant_fit_sdca_weights")
     def digiquant_fit_sdca_weights(
