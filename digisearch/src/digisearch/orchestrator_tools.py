@@ -35,6 +35,8 @@ TOOL_DIGISEARCH_FETCH_ALL = "digisearch_fetch_all"
 TOOL_DIGISEARCH_RESEARCH_DELEGATE = "digisearch_research_delegate"
 TOOL_WEB_SEARCH = "web_search"
 TOOL_DIGISEARCH_WEB_SEARCH = "digisearch_web_search"
+TOOL_DIGISEARCH_MONITORS_TRIGGER = "digisearch_monitors_trigger"
+TOOL_DIGISEARCH_MONITORS_RUNS = "digisearch_monitors_runs"
 
 ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
     {
@@ -43,6 +45,8 @@ ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_DIGISEARCH_RESEARCH_DELEGATE,
         TOOL_WEB_SEARCH,
         TOOL_DIGISEARCH_WEB_SEARCH,
+        TOOL_DIGISEARCH_MONITORS_TRIGGER,
+        TOOL_DIGISEARCH_MONITORS_RUNS,
     }
 )
 
@@ -434,6 +438,66 @@ def build_web_search_tool() -> OpenAIToolDict:
     }
 
 
+def build_monitors_trigger_tool() -> OpenAIToolDict:
+    """Hub connector: run one watch turn now (maps to ``POST /v1/monitors/{watch_id}/trigger``)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": TOOL_DIGISEARCH_MONITORS_TRIGGER,
+            "description": (
+                "Run one scheduled web-monitor watch immediately and return its run "
+                "record (status, new results, dedup stats). A turn that fails still "
+                "persists a status='failed' run; check the run status before "
+                "reporting success."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "watch_id": {
+                        "type": "string",
+                        "description": "Watch to run (from the monitor API/MCP create surface).",
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["manual", "poll"],
+                        "description": "Trigger label recorded on the run (default manual).",
+                    },
+                },
+                "required": ["watch_id"],
+            },
+        },
+    }
+
+
+def build_monitors_runs_tool() -> OpenAIToolDict:
+    """Hub connector: run history for one watch (maps to ``GET /v1/monitors/{watch_id}/runs``)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": TOOL_DIGISEARCH_MONITORS_RUNS,
+            "description": (
+                "List stored run history for one scheduled web-monitor watch, newest "
+                "first, with an optional pagination cursor."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "watch_id": {"type": "string", "description": "Watch whose runs to list."},
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max runs to return (1-100, default 20).",
+                    },
+                    "cursor": {
+                        "type": "string",
+                        "description": "Pagination cursor: the last run_id of the previous page.",
+                    },
+                },
+                "required": ["watch_id"],
+            },
+        },
+    }
+
+
 def build_orchestrator_tool_manifest(
     index_config: dict[str, Any] | None = None,
     *,
@@ -451,4 +515,7 @@ def build_orchestrator_tool_manifest(
         tools.append(build_digisearch_research_delegate_tool())
     if include_web_search:
         tools.append(build_web_search_tool())
+    # Phase C monitors (#4065): unconditional — the OSS recall leg needs no key.
+    tools.append(build_monitors_trigger_tool())
+    tools.append(build_monitors_runs_tool())
     return tools

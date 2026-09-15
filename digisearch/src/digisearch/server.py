@@ -14,14 +14,12 @@ import time as _time
 from collections import deque as _deque
 from threading import Lock as _Lock
 from typing import Any, Literal
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
-from digiclaw.cron import parse_cron
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digisearch_path_scopes
 
 from digisearch import __version__
@@ -30,13 +28,15 @@ from digisearch.backend_require import require_real_search_backend
 from digisearch.core.models import Query
 from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TOP_K
 from digisearch.logging import configure_logging
-from digisearch.monitors.delivery import DeliveryConfigError, validate_delivery
-from digisearch.monitors.models import Watch
+from digisearch.monitors.models import MonitorRun, Watch
 from digisearch.monitors.runner import MonitorRunError, run_watch, tick_due_watches
 from digisearch.monitors.store import MonitorStore, MonitorStoreError, get_store
+from digisearch.monitors.validation import watch_config_error
 from digisearch.orchestrator_tools import (
     TOOL_DIGISEARCH,
     TOOL_DIGISEARCH_FETCH_ALL,
+    TOOL_DIGISEARCH_MONITORS_RUNS,
+    TOOL_DIGISEARCH_MONITORS_TRIGGER,
     TOOL_DIGISEARCH_RESEARCH_DELEGATE,
     TOOL_DIGISEARCH_WEB_SEARCH,
     TOOL_WEB_SEARCH,
@@ -588,6 +588,13 @@ class OrchestratorFetchAllData(BaseModel):
     )
 
 
+class MonitorRunsData(BaseModel):
+    """Payload for the ``digisearch_monitors_runs`` orchestrator tool (Task 7)."""
+
+    runs: list[MonitorRun]
+    next_cursor: str | None = None
+
+
 class OrchestratorInvokeResponse(BaseModel):
     """Response for POST /v1/orchestrator_invoke (SIMP-020)."""
 
@@ -600,6 +607,8 @@ class OrchestratorInvokeResponse(BaseModel):
         | ResearchTurnOutput
         | WebSearchResponse
         | WebSearchData
+        | MonitorRun
+        | MonitorRunsData
         | None
     ) = None
     error: str | None = None
@@ -941,6 +950,43 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             return OrchestratorInvokeResponse(ok=False, error=str(e))
         return OrchestratorInvokeResponse(ok=True, service="digisearch", tool=tool, data=data)
 
+    if tool == TOOL_DIGISEARCH_MONITORS_TRIGGER:
+        watch_id = str(args.get("watch_id") or "").strip()
+        if not watch_id:
+            return OrchestratorInvokeResponse(ok=False, error="watch_id is required")
+        raw_mode = str(args.get("mode") or "manual")
+        if raw_mode not in ("manual", "poll"):
+            return OrchestratorInvokeResponse(ok=False, error=f"invalid mode: {raw_mode!r}")
+        mode: Literal["manual", "poll"] = "poll" if raw_mode == "poll" else "manual"
+        try:
+            run = run_watch(watch_id, trigger=mode, store=get_monitor_store())
+        except MonitorStoreError as exc:
+            return OrchestratorInvokeResponse(ok=False, error=f"{exc.code}: {exc}")
+        except MonitorRunError as exc:
+            # The failed turn is already persisted; the hub gets the fail-hard
+            # shape instead of a body (POST /v1/monitors/{id}/trigger returns it).
+            return OrchestratorInvokeResponse(ok=False, error=str(exc))
+        return OrchestratorInvokeResponse(ok=True, service="digisearch", tool=tool, data=run)
+
+    if tool == TOOL_DIGISEARCH_MONITORS_RUNS:
+        watch_id = str(args.get("watch_id") or "").strip()
+        if not watch_id:
+            return OrchestratorInvokeResponse(ok=False, error="watch_id is required")
+        limit_raw = args.get("limit", 20)
+        limit = limit_raw if isinstance(limit_raw, int) and not isinstance(limit_raw, bool) else 20
+        cursor_raw = args.get("cursor")
+        cursor = str(cursor_raw).strip() if cursor_raw else None
+        try:
+            runs, next_cursor = get_monitor_store().list_runs(watch_id, limit=limit, cursor=cursor)
+        except MonitorStoreError as exc:
+            return OrchestratorInvokeResponse(ok=False, error=f"{exc.code}: {exc}")
+        return OrchestratorInvokeResponse(
+            ok=True,
+            service="digisearch",
+            tool=tool,
+            data=MonitorRunsData(runs=runs, next_cursor=next_cursor),
+        )
+
     raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
 
 
@@ -1158,8 +1204,6 @@ def delete_document(name: str, doc_id: str) -> dict:
 # are thread-bound (``check_same_thread`` stays default), so ``get_monitor_store()``
 # is invoked inside the handler and never bound via ``Depends``.
 
-_MONITORS_DATATAP_WORKSPACE = "datatap"
-
 
 def _monitor_error(request: Request, status_code: int, code: str, message: str) -> JSONResponse:
     """Build the shared digibase error envelope for a monitor route."""
@@ -1181,42 +1225,16 @@ def _store_error(request: Request, exc: MonitorStoreError) -> JSONResponse:
 def _validate_watch_config(watch: Watch, request: Request) -> JSONResponse | None:
     """Create/update gate: datatap off, known timezone, parseable cron, deliverable.
 
+    Delegates the decision to :func:`digisearch.monitors.validation.watch_config_error`
+    (shared with the Task 7 MCP create tool) and renders it in the §4.6 envelope.
     Runs before persistence so an invalid schedule or delivery config can never
     reach the store (and therefore never the tick).
     """
-    if watch.workspace_id == _MONITORS_DATATAP_WORKSPACE:
-        return _monitor_error(
-            request,
-            422,
-            "datatap_monitors_disabled",
-            "Monitors are disabled for the datatap workspace.",
-        )
-    try:
-        ZoneInfo(watch.schedule.timezone)
-    except (ZoneInfoNotFoundError, ValueError):
-        return _monitor_error(
-            request,
-            422,
-            "timezone_unknown",
-            f"Unknown timezone: {watch.schedule.timezone!r}",
-        )
-    if watch.schedule.mode == "cron" and watch.schedule.cron:
-        try:
-            parse_cron(watch.schedule.cron)
-        except ValueError:
-            # CronParseError subclasses ValueError; the parser also raises a bare
-            # ValueError on non-numeric step tokens. Both map to the same 422.
-            return _monitor_error(
-                request,
-                422,
-                "invalid_cron",
-                f"Invalid cron expression: {watch.schedule.cron!r}",
-            )
-    try:
-        validate_delivery(watch.delivery)
-    except DeliveryConfigError as exc:
-        return _monitor_error(request, 422, exc.code, str(exc))
-    return None
+    failure = watch_config_error(watch)
+    if failure is None:
+        return None
+    status_code, code, message = failure
+    return _monitor_error(request, status_code, code, message)
 
 
 class MonitorTriggerRequest(BaseModel):

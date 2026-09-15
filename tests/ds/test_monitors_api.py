@@ -421,6 +421,82 @@ def test_exa_webhook_valid_secret_fails_closed_until_adapter(monkeypatch):
 
 
 @pytest.mark.unit
+def test_orchestrator_trigger_round_trip(monkeypatch, tmp_path):
+    """Hub path (T7): create → trigger → runs through POST /v1/orchestrator_invoke."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    c = _monitor_client()
+    wid = _create_watch(c)["watch"]["watch_id"]
+
+    trigger = c.post(
+        "/v1/orchestrator_invoke",
+        json={
+            "tool": "digisearch_monitors_trigger",
+            "arguments": {"watch_id": wid, "mode": "poll"},
+        },
+    )
+    assert trigger.status_code == 200, trigger.text
+    assert trigger.json()["ok"] is True
+    assert trigger.json()["data"]["watch_id"] == wid
+    assert trigger.json()["data"]["trigger"] == "poll"
+
+    runs = c.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "digisearch_monitors_runs", "arguments": {"watch_id": wid, "limit": 5}},
+    )
+    assert runs.status_code == 200, runs.text
+    assert runs.json()["ok"] is True
+    assert [r["run_id"] for r in runs.json()["data"]["runs"]] == [trigger.json()["data"]["run_id"]]
+
+
+@pytest.mark.unit
+def test_orchestrator_monitor_tools_fail_hard(monkeypatch, tmp_path):
+    """Missing watch / missing watch_id / bad mode are ok:false, never 5xx."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    c = _monitor_client()
+
+    missing = c.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "digisearch_monitors_trigger", "arguments": {"watch_id": "nope"}},
+    )
+    assert missing.status_code == 200, missing.text
+    assert missing.json()["ok"] is False
+    assert "watch_not_found" in missing.json()["error"]
+
+    no_id = c.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "digisearch_monitors_runs", "arguments": {}},
+    )
+    assert no_id.status_code == 200, no_id.text
+    assert no_id.json()["ok"] is False
+    assert "watch_id" in no_id.json()["error"]
+
+    wid = _create_watch(c)["watch"]["watch_id"]
+    bad_mode = c.post(
+        "/v1/orchestrator_invoke",
+        json={
+            "tool": "digisearch_monitors_trigger",
+            "arguments": {"watch_id": wid, "mode": "bogus"},
+        },
+    )
+    assert bad_mode.status_code == 200, bad_mode.text
+    assert bad_mode.json()["ok"] is False
+    assert "mode" in bad_mode.json()["error"]
+
+
+@pytest.mark.unit
+def test_orchestrator_manifest_lists_monitor_tools():
+    from digisearch.orchestrator_tools import build_orchestrator_tool_manifest
+
+    tools = {t["function"]["name"]: t for t in build_orchestrator_tool_manifest()}
+    assert "digisearch_monitors_trigger" in tools
+    assert "digisearch_monitors_runs" in tools
+    assert tools["digisearch_monitors_trigger"]["function"]["parameters"]["required"] == [
+        "watch_id"
+    ]
+    assert tools["digisearch_monitors_runs"]["function"]["parameters"]["required"] == ["watch_id"]
+
+
+@pytest.mark.unit
 def test_rate_limit_budgets_key_monitor_routes():
     import digisearch.server as srv
 
