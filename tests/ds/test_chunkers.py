@@ -220,13 +220,14 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 67 for #4064 (Phase B web-branch ARCH section in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 80 for #4065 (Phase C monitors ARCH section + ops record) — fixture prose only; RecursiveChunker unchanged.
     Hashes only (count still 80) re-recorded for #4065 (Phase C docs corrections) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 82 for #4065 (Task 8c EXA adapter + webhook translation docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 80
+    assert len(chunks) == 82
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -251,9 +252,11 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "9ce2b59017d82c91",
         "ef0f58a96ed218c0",
         "0e77d003d55f7ea9",
-        "923b15634d704cae",
-        "d6a6ad096c98de71",
-        "d2b8e783e3662cee",
+        "f549b7a076a86393",
+        "c689e2f168577314",
+        "5509075d7fcabffe",
+        "2f7edd4395376f0c",
+        "ac7b29b4d7b97c64",
         "998a1c6dea39b3bf",
         "03f0c3868b10ba8c",
         "f5694c994b90e40c",
@@ -281,8 +284,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "367d6f1945838ddd",
         "20c027f468c04701",
         "b8ffe03a9011fe85",
-        "c89b47605511cc86",
-        "2eb19ccc1b3c6f15",
+        "5f8ed5c780e4f898",
+        "2c3b651039d4969c",
         "2df16a717e45cd20",
         "c01731fed9b486f9",
         "ae1e6da2f77138e0",
@@ -301,8 +304,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "6d57e6ff0ba47c28",
         "44ecfabe5926f420",
         "5191b4ec0bfecb12",
-        "b12779e15e8ed950",
-        "f91da07e81e00e0a",
+        "916c634954ccbab6",
+        "ebb34ee8c1be4bde",
         "634f3df55301a1f6",
         "00825ad8b9d99bd3",
         "6f9625d36ae831a9",

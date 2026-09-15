@@ -473,6 +473,28 @@ def test_exa_webhook_bad_payload_or_unknown_monitor_fails_closed(monkeypatch, tm
 
 
 @pytest.mark.unit
+def test_exa_webhook_non_exa_backend_watch_fails_closed(monkeypatch, tmp_path):
+    """A watch linked to a remote EXA monitor must be backend="exa" (Task 8c)."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    import digisearch.server as srv
+
+    c = _monitor_client()
+    # backend defaults to "oss" while carrying an exa_monitor_id: misconfigured.
+    wid = _create_watch(c, exa_monitor_id="exa_mon_oss")["watch"]["watch_id"]
+
+    monkeypatch.setenv("EXA_MONITOR_WEBHOOK_SECRET", "shh")
+    anon = TestClient(srv.app)
+    r = anon.post(
+        "/v1/monitors/exa_webhook",
+        headers={"X-Exa-Signature": "shh"},
+        json={"monitorId": "exa_mon_oss", "status": "completed", "newResults": []},
+    )
+    assert r.status_code == 409
+    assert r.json()["error"]["code"] == "watch_backend_mismatch"
+    assert c.get(f"/v1/monitors/{wid}/runs").json()["runs"] == []  # nothing persisted
+
+
+@pytest.mark.unit
 def test_orchestrator_trigger_round_trip(monkeypatch, tmp_path):
     """Hub path (T7): create → trigger → runs through POST /v1/orchestrator_invoke."""
     _patch_monitor_store(monkeypatch, tmp_path)

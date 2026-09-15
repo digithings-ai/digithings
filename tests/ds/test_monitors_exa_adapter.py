@@ -137,6 +137,23 @@ def test_exa_run_missing_result_lists_yields_empty_statistics():
 
 
 @pytest.mark.unit
+def test_exa_run_malformed_result_container_fails_closed():
+    """Present-but-malformed results must not read as no_change (fail closed)."""
+    for field, value in (
+        ("results", "not-a-list"),
+        ("results", [{"url": "https://a.com/1"}, "oops"]),
+        ("newResults", {"url": "https://a.com/1"}),
+        ("newResults", [1, 2]),
+        # A present null is shape drift too: coercing it to [] would skip delivery.
+        ("newResults", None),
+    ):
+        with pytest.raises(ExaAdapterError) as ei:
+            exa_run_to_monitor_run(watch_id="w1", exa_payload=_payload(**{field: value}))
+        assert ei.value.code == "exa_payload_invalid"
+        assert field in str(ei.value)
+
+
+@pytest.mark.unit
 def test_exa_run_cost_is_advisory_passthrough():
     with_cost = exa_run_to_monitor_run(
         watch_id="w1", exa_payload=_payload(costDollars={"total": 0.01})

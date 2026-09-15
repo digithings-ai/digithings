@@ -1395,9 +1395,11 @@ async def api_exa_webhook(request: Request) -> dict[str, Any] | JSONResponse:
     The target watch is resolved by matching the payload's ``monitorId``
     against stored ``Watch.exa_monitor_id`` values — the minimal derivation
     that needs no new store API; datatap-scoped watches never match (§5). The
-    translated run (Task 8c adapter) is persisted through the monitor store and
-    returned as the canonical ``MonitorRun`` envelope; translation and store
-    failures use the shared fail-closed error envelope.
+    resolved watch must be ``backend="exa"`` (a mismatch is a misconfiguration:
+    409 ``watch_backend_mismatch``, nothing persisted). The translated run
+    (Task 8c adapter) is persisted through the monitor store and returned as
+    the canonical ``MonitorRun`` envelope; translation and store failures use
+    the shared fail-closed error envelope.
     """
     presented = request.headers.get("X-Exa-Signature") or ""
     configured = os.environ.get("EXA_MONITOR_WEBHOOK_SECRET", "")
@@ -1438,6 +1440,13 @@ async def api_exa_webhook(request: Request) -> dict[str, Any] | JSONResponse:
             404,
             "watch_not_found",
             f"No watch is linked to EXA monitor {exa_monitor_id!r}.",
+        )
+    if watch.backend != "exa":
+        return _monitor_error(
+            request,
+            409,
+            "watch_backend_mismatch",
+            f"Watch {watch.watch_id!r} is not an exa-backend watch.",
         )
     try:
         run = exa_run_to_monitor_run(watch_id=watch.watch_id, exa_payload=payload)

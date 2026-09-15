@@ -23,7 +23,9 @@ payload raises :class:`ExaAdapterError` carrying a stable ``code``:
 - ``exa_api_error`` — any other remote/transport failure.
 - ``exa_monitor_not_found`` — delete against a missing remote monitor.
 - ``exa_request_invalid`` — local caller input (blank query/schedule/id).
-- ``exa_payload_invalid`` / ``exa_run_status_unknown`` — webhook translation.
+- ``exa_payload_invalid`` — untranslatable webhook payload (missing/blank
+  ``status``, or a malformed ``results``/``newResults`` container);
+  ``exa_run_status_unknown`` — a non-terminal remote status.
 - ``exa_monitor_id_missing`` — webhook payload without a ``monitorId``.
 
 One integration gap is deliberately not papered over: EXA returns a one-time
@@ -36,7 +38,10 @@ guess here.
 Translation (``exa_run_to_monitor_run``): a ``completed`` payload with a
 non-empty ``newResults`` list is ``ok``; ``completed`` with empty/absent
 ``newResults`` is ``no_change``; ``failed``/``error`` is ``failed`` with the
-payload ``error`` passed through. ``dedup_stats`` reflects EXA's remote dedup
+payload ``error`` passed through. Result containers must be lists of objects
+when present: a present-but-malformed container (or a present ``null``) is
+``exa_payload_invalid``, never silently coerced to empty — coercing would read
+as ``no_change`` and skip delivery. ``dedup_stats`` reflects EXA's remote dedup
 over ``len(results)`` vs ``len(newResults)``: ``new`` counts ``newResults`` and
 ``seen``/``unchanged`` count the remote-filtered remainder (clamped at 0),
 while ``changed`` stays 0 — EXA reports only new-vs-already-seen, never a
@@ -119,8 +124,8 @@ def exa_run_to_monitor_run(*, watch_id: str, exa_payload: dict[str, Any]) -> Mon
         raise ExaAdapterError("exa_payload_invalid", "EXA run payload has no status.")
     normalized = status.strip().lower()
 
-    results_all = _result_dicts(exa_payload.get("results"))
-    results_new = _result_dicts(exa_payload.get("newResults"))
+    results_all = _result_dicts(exa_payload, "results")
+    results_new = _result_dicts(exa_payload, "newResults")
 
     if normalized == _COMPLETED:
         run_status: _RunStatus = "ok" if results_new else "no_change"
@@ -256,11 +261,23 @@ def delete_exa_monitor(*, exa_monitor_id: str, api_key: str | None = None) -> No
 # --- internals ---------------------------------------------------------------------
 
 
-def _result_dicts(value: Any) -> list[dict[str, Any]]:
-    """Keep only mapping entries of a result list (missing/non-list → empty)."""
-    if not isinstance(value, list):
+def _result_dicts(exa_payload: dict[str, Any], field: str) -> list[dict[str, Any]]:
+    """Read a result container: absent → empty, present-but-malformed → error.
+
+    An absent key is the brief-pinned "no results" case. A present container
+    that is not a list of objects is shape drift and must fail closed:
+    coercing it to ``[]`` would read as ``no_change`` and silently skip
+    delivery, contradicting the module's fail-closed posture.
+    """
+    if field not in exa_payload:
         return []
-    return [item for item in value if isinstance(item, dict)]
+    value = exa_payload[field]
+    if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+        raise ExaAdapterError(
+            "exa_payload_invalid",
+            f"EXA run payload field {field!r} must be a list of objects.",
+        )
+    return list(value)
 
 
 def _parse_timestamp(value: Any) -> datetime | None:

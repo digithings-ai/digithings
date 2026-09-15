@@ -478,7 +478,7 @@ Rate limits are per-IP (R10): CRUD and runs 30/min, trigger / tick / exa_webhook
 | `GET /v1/monitors/{watch_id}/runs` | 200 `{"runs": [...], "next_cursor": …}` | `run_not_found` (404, unknown cursor) | `limit` 1–100 (default 20); `cursor` is the last `run_id` of the previous page |
 | `GET /v1/monitors/{watch_id}/runs/{run_id}` | 200 `MonitorRun` | `run_not_found` (404) | — |
 | `POST /v1/monitors/tick` | 200 `{"runs": [...]}` | — | Runs every due + enabled watch once (digiclaw wake-up clock, §4.8) |
-| `POST /v1/monitors/exa_webhook` | — (translation not in this build) | `exa_bad_signature` (401), `exa_not_configured` (503) | Auth-exempt but secret-gated: `X-Exa-Signature` compared to `EXA_MONITOR_WEBHOOK_SECRET` with `hmac.compare_digest`; a valid signature returns 503 until the EXA adapter translation lands |
+| `POST /v1/monitors/exa_webhook` | 200 `MonitorRun` | `exa_bad_signature` (401), `exa_payload_invalid` (400/422), `exa_monitor_id_missing` / `exa_run_status_unknown` (422), `watch_not_found` (404), `watch_backend_mismatch` (409) | Auth-exempt but secret-gated: `X-Exa-Signature` compared to `EXA_MONITOR_WEBHOOK_SECRET` with `hmac.compare_digest`; a valid signature translates the payload via the EXPERIMENTAL Task 8c EXA adapter and persists the canonical run (watch resolved by `monitorId` → `exa_monitor_id`, datatap excluded) |
 
 | Error code | HTTP | Raised by |
 |------------|------|-----------|
@@ -491,7 +491,12 @@ Rate limits are per-IP (R10): CRUD and runs 30/min, trigger / tick / exa_webhook
 | `watch_not_found` / `run_not_found` | 404 | Unknown watch, run, or pagination cursor |
 | `run_exists` | 409 | Duplicate `run_id` (store-level; internal) |
 | `exa_bad_signature` | 401 | Missing server secret, missing header, or signature mismatch — fail closed |
-| `exa_not_configured` | 503 | Valid signature but EXA payload translation is not available in this build |
+| `exa_payload_invalid` | 400/422 | Webhook body is not valid JSON (400), not a JSON object (422), or carries a malformed `status`/result container (422) |
+| `exa_monitor_id_missing` | 422 | Webhook payload has no `monitorId` — the target watch cannot be resolved |
+| `exa_run_status_unknown` | 422 | Webhook payload status is not terminal (`completed`/`failed`/`error`) |
+| `watch_backend_mismatch` | 409 | The webhook-resolved watch is not `backend="exa"` (misconfiguration; nothing persisted) |
+| `exa_not_configured` | — (adapter) | EXA adapter create/delete: no explicit key and no `EXA_API_KEY` — the EXA monitor backend is disabled (never a silent OSS fallback) |
+| `exa_tier_gated` | — (adapter) | EXA adapter create/delete: EXA answered 401/403 (paywall / unauthorized key tier) — fail closed |
 
 Custom codes ride the shared digibase envelope — read `body["error"]["code"]`,
 never a top-level `body["code"]`. Validation messages are EXA-identical:
@@ -1196,9 +1201,14 @@ this service reaching back out.
 holds no digikey JWT, so it authenticates with the shared
 `EXA_MONITOR_WEBHOOK_SECRET` instead. The check is mandatory and fail-closed
 (missing server secret, missing header, or mismatch ⇒ 401), the presented value
-is never logged or echoed, and with a valid signature but no translation adapter
-deployed the route still refuses the payload (503 `exa_not_configured`) rather
-than accepting something it cannot process.
+is never logged or echoed, and the body is not read until the gate has passed.
+A valid signature translates the payload through the EXPERIMENTAL Task 8c EXA
+adapter and persists the canonical `MonitorRun`: the payload's `monitorId`
+resolves the watch by `exa_monitor_id` (datatap excluded; `watch_not_found`
+otherwise, `watch_backend_mismatch` when the watch is not `backend="exa"`), and
+untranslatable payloads are rejected (`exa_payload_invalid` /
+`exa_monitor_id_missing` / `exa_run_status_unknown`) rather than accepted as
+empty.
 
 ### Multi-tenant isolation
 
@@ -1570,10 +1580,11 @@ require digisearch to be reachable from the internet; expose it via Cloudflare
 Tunnel or Tailscale per `SECURITY.md` (never a public port), with webhook/slack
 targets validated as public https URLs at create/update and re-resolved at
 delivery time. The inbound EXA result webhook additionally needs
-`EXA_MONITOR_WEBHOOK_SECRET` set, and — in this build — still answers 503
-`exa_not_configured` after a valid signature because the payload translation is
-not deployed yet; until then the poll + manual-trigger path is the supported
-route for EXA-backed watches too.
+`EXA_MONITOR_WEBHOOK_SECRET` set; a valid signature translates the payload via
+the EXPERIMENTAL Task 8c adapter and persists the run to the monitor store.
+Shape reconciliation is owned by the live-pin follow-up (the adapter's remote
+shapes are not live-validated), so poll + manual trigger remains the portable
+route for EXA-backed watches until the pin lands.
 
 ### MCP server startup
 
