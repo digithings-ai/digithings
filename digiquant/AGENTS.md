@@ -485,8 +485,15 @@ stays a generic transport engine (no URLs, no env reads).
   `digifetch_exchange_rate`, `digifetch_search`, `digifetch_news` are registered in
   `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed in
   `orchestrator_tools.py`. Keep them read-scope; the family is default-ON behind
-  `GLOOMBERB_ENABLED` (falsy `0`/`false`/`no`/`off` disables the family and returns
-  a typed `upstream_error` without a request).
+  `GLOOMBERB_ENABLED` — only `1`/`true`/`yes`/`on` enable it, and any other value
+  (a typo included) disables the family, returning a typed `upstream_error`
+  without a request.
+- **Pacing.** 900s TTL cache whose expired entries are evicted on access (and
+  which is size-bounded); retries narrowed to timeouts/5xx; a 429 `Retry-After`
+  is honored with a bounded injectable sleep; the circuit breaker counts only
+  upstream-health failures, so repeated `auth_required`/`not_found` never block
+  unrelated tools; per-call session cookies are forwarded only to same-origin
+  redirect hops.
 - **Enrichment only, never a pipeline primary.** 15-minute free-tier delay, rate
   limits, and the §5.2 caps (5m→1wk … 1wk→5y, 1mo→all-time) disqualify Cloud as a
   source of record. Contract violations are **rejected** (`invalid_input`), never

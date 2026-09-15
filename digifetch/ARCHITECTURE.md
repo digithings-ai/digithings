@@ -159,6 +159,12 @@ variables; a consumer (`digisearch`) sources the allowlist from
 dicts to the `{name: value}` dict an HTTP client sends — the exact hand-off
 twelve-x's `scrape_research` performs inline before its AJAX call.
 
+Per-call `cookies=` are host-agnostic, so redirect handling forwards them only
+while the hop stays on the **original origin**; a hop to another origin drops
+them rather than leaking a session credential across hosts. (A client-level
+cookie jar passed via `cookies=`/Playwright keeps httpx's own domain-scoped
+rules.)
+
 **Injection seams for tests:** pass `transport=httpx.MockTransport(...)` to
 exercise the real client (headers/cookies/timeout wiring) without a socket, or
 `client=<prebuilt httpx.Client>` to supply a fully-configured client (it then

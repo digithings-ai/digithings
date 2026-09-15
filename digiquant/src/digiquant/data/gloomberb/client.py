@@ -19,7 +19,6 @@ No environment variables are read at import time; the flags are resolved in
 from __future__ import annotations
 
 import json
-import logging
 import os
 import time
 from collections.abc import Callable, Mapping
@@ -28,7 +27,14 @@ from typing import Any, NamedTuple, TypeVar, cast
 from urllib.parse import quote
 
 import httpx
-from digifetch import FetchResult, HttpFetcher, RateLimiter, RetryPolicy, with_retry
+from digifetch import (
+    FetchResult,
+    HttpFetcher,
+    RateLimiter,
+    RetryPolicy,
+    SsrfBlockedError,
+    with_retry,
+)
 from pydantic import BaseModel, ValidationError
 
 from . import normalizers as nz
@@ -91,8 +97,6 @@ __all__ = [
     "yfinance_earnings_events",
 ]
 
-LOGGER = logging.getLogger(__name__)
-
 GLOOMBERB_BASE_URL = "https://api.gloom.sh"
 GLOOMBERB_ENABLED_ENV = "GLOOMBERB_ENABLED"
 GLOOMBERB_SESSION_COOKIE_ENV = "GLOOMBERB_SESSION_COOKIE"
@@ -105,6 +109,13 @@ DEFAULT_MIN_INTERVAL_SECONDS = 0.5
 DEFAULT_CACHE_TTL_SECONDS = 900.0
 DEFAULT_CIRCUIT_FAILURE_THRESHOLD = 3
 DEFAULT_CIRCUIT_RESET_SECONDS = 60.0
+# Bounded sleep for a 429 Retry-After (a hostile/large value must not pin the
+# caller); the client surfaces the header in the typed error either way.
+DEFAULT_MAX_RETRY_AFTER_SECONDS = 5.0
+# Cache is TTL'd and size-bounded; expired entries are evicted on access.
+DEFAULT_CACHE_MAX_ENTRIES = 256
+# Spec §5.1: the Cloud client wrapper caps search at 10 and flags the clamp.
+SEARCH_LIMIT_CAP = 10
 
 # Upstream session cookie names (api-client/request.ts SESSION_COOKIE_NAMES).
 SESSION_COOKIE_NAMES: tuple[str, ...] = (
@@ -120,7 +131,6 @@ ENDPOINTS: dict[str, str] = {
     "quotes_batch": "/market/quotes/batch",
     "history": "/market/history",
     "financials": "/market/financials",
-    "financials_batch": "/market/financials/batch",
     "options": "/market/options",
     "exchange_rate": "/market/exchange-rate",
     "search": "/market/search",
@@ -133,14 +143,35 @@ ENDPOINTS: dict[str, str] = {
     "sec_filing_content": "/cloud/sec/filing/content",
 }
 
-_FALSY_ENV_VALUES = frozenset({"0", "false", "no", "off"})
+_TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
 
 def _env_flag(name: str, *, default: bool) -> bool:
+    """Resolve an env kill switch, failing closed for unrecognized values.
+
+    Only ``1``/``true``/``yes``/``on`` (case-insensitive) enable the family. Any
+    other non-empty value - including a typo like ``ture`` - leaves it disabled
+    rather than silently ON.
+    """
     raw = os.environ.get(name)
     if raw is None:
         return default
-    return raw.strip().lower() not in _FALSY_ENV_VALUES
+    return raw.strip().lower() in _TRUTHY_ENV_VALUES
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    """Seconds from a ``Retry-After`` header, or None when absent/unparseable.
+
+    Only the delta-seconds form is honored; an HTTP-date form is ignored (the
+    header is still surfaced in the typed error message).
+    """
+    if not value:
+        return None
+    try:
+        seconds = float(value.strip())
+    except ValueError:
+        return None
+    return seconds if seconds >= 0 else None
 
 
 class _UpstreamServerError(RuntimeError):
@@ -236,10 +267,15 @@ class GloomberbClient:
         rate_limiter:     Minimum-interval gate (default 0.5s).
         retry_policy:     Composable retry policy; narrowed to timeouts/5xx.
         cache_ttl:        Seconds an envelope stays fresh (900s default).
+        cache_max_entries: Upper bound on cached envelopes (oldest evicted first).
         circuit_failure_threshold: Consecutive failures that open the breaker.
         circuit_reset_seconds:     Seconds before a half-open probe is allowed.
+        max_retry_after_seconds:   Upper bound on the 429 Retry-After wait; a
+                                   larger value is surfaced but not slept.
         monotonic:        Monotonic clock for cache/breaker (injected for tests).
         now:              Wall clock for ``fetched_at`` (injected for tests).
+        sleep:            Blocking sleep used for a bounded Retry-After wait
+                          (injected for tests; never called with a literal).
         earnings_provider: Yahoo-backed earnings callable (injected for tests).
     """
 
@@ -253,10 +289,13 @@ class GloomberbClient:
         rate_limiter: RateLimiter | None = None,
         retry_policy: RetryPolicy | None = None,
         cache_ttl: float = DEFAULT_CACHE_TTL_SECONDS,
+        cache_max_entries: int = DEFAULT_CACHE_MAX_ENTRIES,
         circuit_failure_threshold: int = DEFAULT_CIRCUIT_FAILURE_THRESHOLD,
         circuit_reset_seconds: float = DEFAULT_CIRCUIT_RESET_SECONDS,
+        max_retry_after_seconds: float = DEFAULT_MAX_RETRY_AFTER_SECONDS,
         monotonic: Callable[[], float] = time.monotonic,
         now: Callable[[], datetime] | None = None,
+        sleep: Callable[[float], None] = time.sleep,
         earnings_provider: Callable[[str], list[EarningsEvent]] | None = None,
     ) -> None:
         if fetcher is not None:
@@ -282,10 +321,13 @@ class GloomberbClient:
             retry_on=RETRYABLE_EXCEPTIONS,
         )
         self._cache_ttl = cache_ttl
+        self._cache_max_entries = max(1, cache_max_entries)
         self._circuit_failure_threshold = max(1, circuit_failure_threshold)
         self._circuit_reset_seconds = circuit_reset_seconds
+        self._max_retry_after_seconds = max_retry_after_seconds
         self._monotonic = monotonic
         self._now = now or (lambda: datetime.now(timezone.utc))
+        self._sleep = sleep
         self._earnings_provider = earnings_provider or yfinance_earnings_events
         self._cache: dict[tuple[str, str], tuple[float, DigifetchEnvelope[Any]]] = {}
         self._consecutive_failures = 0
@@ -418,15 +460,15 @@ class GloomberbClient:
                     ),
                 )
             exchange = str(parsed.exchange or raw.provider_meta.get("normalizedExchange") or "")
-            divisor = nz.resolve_currency_unit(
+            currency_unit = nz.resolve_currency_unit(
                 raw.currency if raw.currency is not None else raw.provider_meta.get("currency")  # type: ignore[arg-type]
-            ).divisor
+            )
             timezone_name = raw.provider_meta.get("timezone")
             bars = nz.normalize_bars(
                 data,
                 resolution=parsed.resolution,
                 exchange=exchange,
-                divisor=divisor,
+                divisor=currency_unit.divisor,
                 timezone_name=str(timezone_name) if timezone_name else None,
             )
             upstream = (
@@ -452,7 +494,9 @@ class GloomberbClient:
                 range=parsed.range or "",
                 bar_count=len(bars),
                 timezone=str(timezone_name) if timezone_name else None,
-                currency=raw.currency or raw.provider_meta.get("currency"),
+                # Canonical unit: bars were divided by the subunit divisor
+                # above, so metadata must not keep "GBp" while bars are GBP.
+                currency=currency_unit.currency or None,
                 upstream_provider=upstream or None,
             )
             return PriceHistoryEnvelope(
@@ -815,10 +859,12 @@ class GloomberbClient:
             return self._disabled(SearchEnvelope)
 
         def produce() -> SearchEnvelope:
+            # Spec §5.1: clamp above the wrapper cap and flag it in the result.
+            limit = min(parsed.limit, SEARCH_LIMIT_CAP)
             raw = self._request_json(
                 "GET",
                 ENDPOINTS["search"],
-                params={"q": parsed.query, "limit": str(parsed.limit)},
+                params={"q": parsed.query, "limit": str(limit)},
             )
             if isinstance(raw, DigifetchError):
                 return self._error_envelope(SearchEnvelope, raw)
@@ -831,7 +877,7 @@ class GloomberbClient:
                 return self._error_envelope(SearchEnvelope, results)
             fresh = self._freshness(raw)
             return SearchEnvelope(
-                data=SearchResult(results=results, limit_clamped=False),
+                data=SearchResult(results=results, limit_clamped=parsed.limit > SEARCH_LIMIT_CAP),
                 fetched_at=self._now(),
                 stale=fresh.stale,
                 delay_note=fresh.delay_note,
@@ -911,6 +957,14 @@ class GloomberbClient:
                 message=f"unexpected Gloomberb payload shape: {_format_validation_error(exc)}",
                 retryable=False,
             )
+        except ValueError as exc:
+            # Normalizers also raise plain ValueError for malformed values
+            # (e.g. an exchange-rate payload with no finite rate).
+            return DigifetchError(
+                code="upstream_error",
+                message=f"unexpected Gloomberb payload: {exc}",
+                retryable=False,
+            )
 
     def _as_mapping(self, data: Any, what: str) -> Mapping[str, Any] | DigifetchError:
         if isinstance(data, Mapping):
@@ -940,25 +994,45 @@ class GloomberbClient:
         extra_stale: bool = False,
     ) -> nz.Freshness:
         source = payload if isinstance(payload, Mapping) else {}
+        # Payload-level `stale` is part of the §5.3 union: the quote/options/
+        # exchange-rate payloads can carry it even when the response envelope
+        # and providerMeta do not (spec §3.2).
         return nz.derive_freshness(
-            stale=raw.stale or extra_stale,
+            stale=raw.stale or extra_stale or source.get("stale") is True,
             data_source=source.get("dataSource")
             if isinstance(source.get("dataSource"), str)
             else None,
             delay_minutes=nz.finite_number(source.get("delayMinutes")),
         )
 
+    def _evict_expired(self, now: float) -> None:
+        expired = [key for key, (expiry, _) in self._cache.items() if expiry <= now]
+        for key in expired:
+            del self._cache[key]
+
+    def _enforce_cache_bound(self) -> None:
+        while len(self._cache) > self._cache_max_entries:
+            oldest = min(self._cache, key=lambda key: self._cache[key][0])
+            del self._cache[oldest]
+
+    @property
+    def cache_size(self) -> int:
+        """Number of live cached envelopes (diagnostics/tests)."""
+        return len(self._cache)
+
     def _cached(self, name: str, request: BaseModel, produce: Callable[[], EnvT]) -> EnvT:
         # Cache first: a warm enrichment read still serves during an upstream
         # outage, and the breaker only guards real requests.
         key = (name, request.model_dump_json())
         now = self._monotonic()
+        self._evict_expired(now)
         entry = self._cache.get(key)
         if entry is not None and entry[0] > now:
             return cast(EnvT, entry[1])
         envelope = produce()
         if not isinstance(envelope.data, DigifetchError):
             self._cache[key] = (now + self._cache_ttl, envelope)
+            self._enforce_cache_bound()
         return envelope
 
     def _breaker_error(self) -> DigifetchError | None:
@@ -1010,11 +1084,20 @@ class GloomberbClient:
                 code="not_found", message="Gloomberb returned HTTP 404", retryable=False
             )
         if status == 429:
-            retry_after = exc.response.headers.get("retry-after")
-            suffix = f"; Retry-After: {retry_after}" if retry_after else ""
+            retry_after = _parse_retry_after(exc.response.headers.get("retry-after"))
+            suffix = f"; Retry-After: {retry_after:g}s" if retry_after is not None else ""
+            note = ""
+            if retry_after is not None:
+                # Bounded wait (spec §5.3: honor Retry-After); a larger value is
+                # surfaced in the message but not slept on.
+                if 0 < retry_after <= self._max_retry_after_seconds:
+                    self._sleep(retry_after)
+                    note = f"; waited {retry_after:g}s"
+                elif retry_after > self._max_retry_after_seconds:
+                    note = "; over the bounded wait, not slept"
             return DigifetchError(
                 code="rate_limited",
-                message=f"Gloomberb rate limit reached (HTTP 429){suffix}",
+                message=f"Gloomberb rate limit reached (HTTP 429){suffix}{note}",
                 retryable=False,
             )
         if status >= 500:
@@ -1099,14 +1182,35 @@ class GloomberbClient:
                 attempt, self._retry_policy, description=f"gloomberb {method} {path}"
             )
         except httpx.HTTPStatusError as exc:
-            self._record_failure()
-            return self._map_http_error(exc)
+            error = self._map_http_error(exc)
+            # Only upstream-health failures trip the breaker: a 401/404 (or any
+            # other deterministic 4xx) is a caller/auth outcome, not service
+            # degradation. A 429 counts (upstream overload).
+            if error.retryable or error.code == "rate_limited":
+                self._record_failure()
+            return error
         except (httpx.TransportError, _UpstreamServerError) as exc:
             self._record_failure()
             return DigifetchError(
                 code="upstream_error",
                 message=f"Gloomberb request failed: {exc}",
                 retryable=True,
+            )
+        except SsrfBlockedError as exc:
+            # Deterministic URL refusal; do not open the breaker on it.
+            return DigifetchError(
+                code="upstream_error",
+                message=f"Gloomberb request blocked by the SSRF guard: {exc}",
+                retryable=False,
+            )
+        except httpx.HTTPError as exc:
+            # e.g. httpx.TooManyRedirects, which is a RequestError but not a
+            # TransportError, so it is not retried and would otherwise escape.
+            self._record_failure()
+            return DigifetchError(
+                code="upstream_error",
+                message=f"Gloomberb request failed: {exc}",
+                retryable=False,
             )
         try:
             payload = json.loads(result.text) if result.text else None

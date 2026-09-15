@@ -29,7 +29,7 @@ from digiquant.data.gloomberb import (  # noqa: E402
     QuoteResult,
 )
 
-from digifetch import HttpFetcher, RateLimiter, RetryPolicy  # noqa: E402
+from digifetch import HttpFetcher, RateLimiter, RetryPolicy, SsrfBlockedError  # noqa: E402
 
 GBP_QUOTE = {
     "symbol": "VOD.L",
@@ -69,9 +69,10 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def make_client(handler: Any, **kwargs: Any) -> GloomberbClient:
+    allowed_hosts = kwargs.pop("allowed_hosts", ["api.gloom.sh"])
     fetcher = HttpFetcher(
         transport=httpx.MockTransport(handler),
-        allowed_hosts=["api.gloom.sh"],
+        allowed_hosts=allowed_hosts,
     )
     kwargs.setdefault("rate_limiter", RateLimiter(0))
     kwargs.setdefault("retry_policy", RetryPolicy(attempts=1))
@@ -441,7 +442,8 @@ def test_price_history_metadata_carries_bar_count_and_upstream() -> None:
     )
     metadata = result.data.metadata  # type: ignore[union-attr]
     assert metadata.bar_count == 1
-    assert metadata.currency == "GBp"
+    # Canonical unit: bars are divided to GBP, so metadata must not keep "GBp".
+    assert metadata.currency == "GBP"
     assert metadata.upstream_provider == "yahoo"
     assert metadata.timezone == "Europe/London"
 
@@ -523,6 +525,18 @@ def test_search_maps_listings_and_sends_limit() -> None:
     assert "limit=5" in seen["url"]
     assert result.data.results[0].symbol == "VOD.L"  # type: ignore[union-attr]
     assert result.data.limit_clamped is False  # type: ignore[union-attr]
+
+
+def test_search_clamps_above_cap_and_flags_the_clamp() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return envelope([])
+
+    result = make_client(handler).search({"query": "vodafone", "limit": 25})
+    assert "limit=10" in seen["url"]
+    assert result.data.limit_clamped is True  # type: ignore[union-attr]
 
 
 def test_news_list_payload_is_direct_not_enveloped() -> None:
@@ -617,3 +631,230 @@ def test_earnings_calendar_fails_soft_per_symbol() -> None:
     result = client.earnings_calendar({"symbols": ["BAD", "AAPL"]})
     assert [event.symbol for event in result.data.events] == ["AAPL"]  # type: ignore[union-attr]
     assert result.warnings and "yahoo throttled" in result.warnings[0]
+
+
+# ── review-fix regressions (#4069 follow-up) ─────────────────────────────────
+
+
+def test_quote_payload_stale_folds_into_the_envelope() -> None:
+    """Spec §3.2/§5.3: payload-level `stale` is part of the freshness union."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return envelope({**AAPL_QUOTE, "stale": True, "dataSource": "live"})
+
+    result = make_client(handler).quote({"symbol": "AAPL"})
+    assert result.stale is True
+    assert result.delay_note == STALE_NOTE
+
+
+def test_exchange_rate_payload_stale_folds_into_the_envelope() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return envelope({"rate": 0.85, "stale": True, "dataSource": "live"})
+
+    result = make_client(handler).exchange_rate({"from_currency": "EUR"})
+    assert result.stale is True
+    assert result.data.stale is True  # type: ignore[union-attr]
+    assert result.delay_note == STALE_NOTE
+
+
+def test_repeated_auth_required_does_not_open_the_breaker() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/market/holders":
+            return httpx.Response(401, json={"message": "Unauthorized"})
+        return envelope(AAPL_QUOTE)
+
+    client = make_client(handler, session_cookie="token-value", circuit_failure_threshold=2)
+    for _ in range(3):
+        assert client.holders({"symbol": "AAPL"}).data.code == "auth_required"  # type: ignore[union-attr]
+
+    # Deterministic 4xx outcomes must not trip the breaker for other tools.
+    assert isinstance(client.quote({"symbol": "AAPL"}).data, QuoteResult)
+    assert calls == ["/market/holders"] * 3 + ["/market/quote"]
+
+
+def test_malformed_exchange_rate_payload_maps_to_upstream_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return envelope({"source": "yahoo"})  # no finite rate
+
+    result = make_client(handler).exchange_rate({"from_currency": "EUR"})
+    assert result.data.code == "upstream_error"  # type: ignore[union-attr]
+    assert "no finite rate" in result.data.message  # type: ignore[union-attr]
+
+
+def test_too_many_redirects_maps_to_typed_upstream_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.TooManyRedirects("exceeded redirects")
+
+    result = make_client(handler).quote({"symbol": "AAPL"})
+    assert result.data.code == "upstream_error"  # type: ignore[union-attr]
+    assert "exceeded redirects" in result.data.message  # type: ignore[union-attr]
+
+
+def test_ssrf_blocked_maps_to_typed_upstream_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise SsrfBlockedError("host is blocked")
+
+    result = make_client(handler).quote({"symbol": "AAPL"})
+    assert result.data.code == "upstream_error"  # type: ignore[union-attr]
+    assert "SSRF" in result.data.message  # type: ignore[union-attr]
+
+
+def test_gated_cookie_is_not_forwarded_to_a_cross_origin_redirect() -> None:
+    seen: list[tuple[str, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((str(request.url), request.headers.get("cookie")))
+        if request.url.host == "api.gloom.sh":
+            return httpx.Response(302, headers={"location": "https://cdn.other.example/steal"})
+        return envelope({"symbol": "AAPL", "holders": []})
+
+    result = make_client(
+        handler,
+        allowed_hosts=["api.gloom.sh", "cdn.other.example"],
+        session_cookie="gloomberb.session_token=secret",
+    ).holders({"symbol": "AAPL"})
+    assert result.data.holders == []  # type: ignore[union-attr]
+    assert seen[0][1] == "gloomberb.session_token=secret"
+    assert seen[1][0] == "https://cdn.other.example/steal"
+    assert seen[1][1] is None
+
+
+def test_cookie_is_not_attached_to_ungated_endpoints() -> None:
+    seen: dict[str, str | None] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["cookie"] = request.headers.get("cookie")
+        return envelope(AAPL_QUOTE)
+
+    result = make_client(handler, session_cookie="gloomberb.session_token=secret").quote(
+        {"symbol": "AAPL"}
+    )
+    assert isinstance(result.data, QuoteResult)
+    assert seen["cookie"] is None
+
+
+def test_cache_evicts_expired_entries_on_access() -> None:
+    now = {"t": 0.0}
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return envelope(AAPL_QUOTE)
+
+    client = make_client(handler, monotonic=lambda: now["t"], cache_ttl=900.0)
+    client.quote({"symbol": "AAPL"})
+    assert client.cache_size == 1
+
+    now["t"] += 901.0
+    client.quote({"symbol": "MSFT"})
+    # The expired AAPL entry is evicted before the new put (no unbounded growth).
+    assert client.cache_size == 1
+    assert len(calls) == 2
+
+
+def test_cache_is_size_bounded() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return envelope(AAPL_QUOTE)
+
+    client = make_client(handler, monotonic=lambda: 0.0, cache_max_entries=2)
+    for symbol in ("AAPL", "MSFT", "NVDA"):
+        client.quote({"symbol": symbol})
+    assert client.cache_size == 2
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("1", True),
+        ("true", True),
+        ("on", True),
+        ("yes", True),
+        ("0", False),
+        ("false", False),
+        ("ture", False),
+        ("", False),
+    ],
+)
+def test_kill_switch_env_allowlist_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, value: str, expected: bool
+) -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return envelope(AAPL_QUOTE)
+
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, value)
+    client = make_client(handler)
+    assert client.enabled is expected
+    if not expected:
+        result = client.quote({"symbol": "AAPL"})
+        assert result.data.code == "upstream_error"  # type: ignore[union-attr]
+        assert calls == []
+
+
+def test_429_retry_after_within_bound_is_slept() -> None:
+    slept: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, headers={"Retry-After": "2"}, json={"message": "slow down"})
+
+    result = make_client(handler, sleep=slept.append).quote({"symbol": "AAPL"})
+    assert result.data.code == "rate_limited"  # type: ignore[union-attr]
+    assert slept == [2.0]
+    assert "waited 2s" in result.data.message  # type: ignore[union-attr]
+
+
+def test_429_retry_after_above_bound_is_not_slept() -> None:
+    slept: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, headers={"Retry-After": "999"}, json={"message": "slow down"})
+
+    result = make_client(handler, sleep=slept.append).quote({"symbol": "AAPL"})
+    assert result.data.code == "rate_limited"  # type: ignore[union-attr]
+    assert slept == []
+    assert "999" in result.data.message  # type: ignore[union-attr]
+    assert "not slept" in result.data.message  # type: ignore[union-attr]
+
+
+def test_sec_filing_documents_requests_the_documents_path() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(
+            200,
+            json={
+                "documents": [
+                    {
+                        "type": "10-Q",
+                        "document": "a.htm",
+                        "url": "https://sec.example/a",
+                        "isPrimary": True,
+                    }
+                ]
+            },
+        )
+
+    result = make_client(handler).sec_filings(
+        {"ticker": "MSFT", "what": "documents", "cik": "789019", "accession": "0001-26-1"}
+    )
+    assert "/cloud/sec/filing/documents" in seen["url"]
+    assert "cik=789019" in seen["url"]
+    assert "accession=0001-26-1" in seen["url"]
+    assert result.data.documents[0].type == "10-Q"  # type: ignore[union-attr]
+    assert result.data.filings is None  # type: ignore[union-attr]
+
+
+def test_sec_filing_content_returns_the_content_string() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"content": "<html>10-Q</html>", "form4": None})
+
+    result = make_client(handler).sec_filings(
+        {"ticker": "MSFT", "what": "content", "cik": "789019", "accession": "0001-26-1"}
+    )
+    assert result.data.content == "<html>10-Q</html>"  # type: ignore[union-attr]

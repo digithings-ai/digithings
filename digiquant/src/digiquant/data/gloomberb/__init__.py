@@ -5,8 +5,9 @@ a Python HTTP client over ``https://api.gloom.sh`` built on the digifetch
 transport engine, with Pydantic v2 models, the §5.4 normalizers, and the §5.3
 envelope/error/freshness contract.
 
-Phase 1 scope: this package plus its tests. MCP tool registration (spec §12.3)
-is a later phase and lives in ``mcp_server.py``/``orchestrator_tools.py``.
+This package plus its tests landed in phase 1; the 13 `digifetch_*` MCP tools
+(spec §12.3) are registered in ``mcp_server.py`` and listed in
+``orchestrator_tools.py`` on this branch.
 """
 
 from __future__ import annotations

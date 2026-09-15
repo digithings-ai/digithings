@@ -323,3 +323,62 @@ def test_every_tool_returns_attributed_json(
         # Yahoo-backed: must not claim Gloomberb attribution.
         assert "attribution" not in payload
         assert "source_url" not in payload
+
+
+def test_env_seam_builder_closes_the_replaced_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeClient:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    import digiquant.data.gloomberb as gloomberb_pkg
+
+    monkeypatch.setattr(mcp_server, "_gloomberb_clients", {})
+    monkeypatch.setattr(gloomberb_pkg, "GloomberbClient", _FakeClient)
+    first = mcp_server._build_gloomberb_client()
+    assert mcp_server._build_gloomberb_client() is first
+
+    monkeypatch.setenv("GLOOMBERB_SESSION_COOKIE", "token-value")
+    second = mcp_server._build_gloomberb_client()
+    assert second is not first
+    assert first.closed is True
+
+
+def test_sec_filings_documents_via_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(
+            200,
+            json={
+                "documents": [
+                    {
+                        "type": "10-Q",
+                        "document": "a.htm",
+                        "url": "https://sec.example/a",
+                        "isPrimary": True,
+                    }
+                ]
+            },
+        )
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(
+        _mcp("digifetch_sec_filings")("MSFT", "documents", 15, "789019", "0001-26-1")
+    )
+    assert "/cloud/sec/filing/documents" in seen["url"]
+    assert payload["data"]["documents"][0]["type"] == "10-Q"
+
+
+def test_sec_filings_content_via_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"content": "<html/>", "form4": None})
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(
+        _mcp("digifetch_sec_filings")("MSFT", "content", 15, "789019", "0001-26-1")
+    )
+    assert payload["data"]["content"] == "<html/>"

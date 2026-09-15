@@ -39,6 +39,7 @@ __all__ = [
     "RESOLUTION_MAX_RANGE",
     "INTRADAY_RESOLUTIONS",
     "RESOLUTION_MAX_RANGE_LABELS",
+    "EPOCH_SECONDS_CEILING",
     "Symbol",
     "DigifetchError",
     "DigifetchEnvelope",
@@ -151,6 +152,10 @@ INTRADAY_RESOLUTIONS: frozenset[str] = frozenset({"1m", "5m", "15m", "30m", "45m
 # §5.2: the contract default range is 5 years for 1d. Any other resolution
 # must state its range explicitly - the validator never clamps silently.
 DEFAULT_RANGE: Range = "5Y"
+
+# Any epoch value at/above this ceiling is milliseconds, not seconds (10**11
+# seconds is year ~5138; today's millisecond timestamps are ~10**12+).
+EPOCH_SECONDS_CEILING = 100_000_000_000
 
 Symbol = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
 CurrencyCode = Annotated[
@@ -287,14 +292,27 @@ class TickerFinancialsInput(_InputModel):
 class OptionsChainInput(_InputModel):
     symbol: Symbol
     exchange: str | None = None
-    # Upstream is epoch seconds (`expirationDate`), not milliseconds.
+    # Upstream is epoch seconds (`expirationDate`), not milliseconds. Values at
+    # or above the seconds ceiling are millisecond timestamps and are rejected
+    # with invalid_input rather than silently reinterpreted.
     expiration: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _reject_millisecond_expiration(self) -> OptionsChainInput:
+        if self.expiration is not None and self.expiration >= EPOCH_SECONDS_CEILING:
+            raise ValueError(
+                "expiration must be epoch seconds, not milliseconds "
+                f"(got {self.expiration}); multiply seconds by 1000 only if you "
+                "meant milliseconds"
+            )
+        return self
 
 
 class SecFilingsInput(_InputModel):
     ticker: Symbol
     what: Literal["filings", "documents", "content"] = "filings"
-    count: int = Field(default=15, ge=1)
+    # One filings page; 1-40 bounds a single enrichment read (default 15).
+    count: int = Field(default=15, ge=1, le=40)
     cik: str | None = None
     accession: str | None = None
     form: str | None = None
@@ -316,7 +334,8 @@ class HoldersInput(_InputModel):
 
 class AnalystResearchInput(_InputModel):
     symbol: Symbol
-    limit: int = Field(default=20, ge=1)
+    # Bounded so one enrichment read cannot fan out unboundedly.
+    limit: int = Field(default=20, ge=1, le=100)
 
 
 class CorporateActionsInput(_InputModel):
@@ -344,16 +363,18 @@ class ExchangeRateInput(_InputModel):
 
 class SearchInput(_InputModel):
     query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
-    # The Cloud client wrapper caps search at 10; requests above the cap are
-    # rejected here as invalid_input rather than clamped.
-    limit: int = Field(default=10, ge=1, le=10)
+    # Spec §5.1: the Cloud client wrapper caps at 10. Values above the cap are
+    # accepted, clamped to 10 client-side, and flagged with `limit_clamped` in
+    # the result (never rejected).
+    limit: int = Field(default=10, ge=1)
 
 
 class NewsInput(_InputModel):
     feed: Literal["latest", "top", "breaking", "ticker", "sector", "topic"] = "latest"
     ticker: Symbol | None = None
     story_id: str | None = None
-    limit: int = Field(default=20, ge=1)
+    # Bounded so one enrichment read cannot fan out unboundedly.
+    limit: int = Field(default=20, ge=1, le=100)
 
 
 # ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@ from pydantic import ValidationError
 pytestmark = pytest.mark.unit
 
 from digiquant.data.gloomberb.models import (  # noqa: E402
+    AnalystResearchInput,
     DigifetchEnvelope,
     DigifetchError,
     ExchangeRateInput,
@@ -90,12 +91,33 @@ def test_quotes_batch_bounds() -> None:
         QuotesBatchInput(symbols=[f"S{i}" for i in range(21)])
 
 
-def test_search_limit_is_bounded_by_the_wrapper_cap() -> None:
+def test_search_limit_accepts_above_cap_for_client_side_clamping() -> None:
     assert SearchInput(query="apple", limit=10).limit == 10
-    with pytest.raises(ValidationError):
-        SearchInput(query="apple", limit=11)
+    # Spec §5.1: >10 is accepted, clamped client-side, and flagged.
+    assert SearchInput(query="apple", limit=25).limit == 25
     with pytest.raises(ValidationError):
         SearchInput(query="apple", limit=0)
+
+
+def test_sec_filings_count_is_bounded() -> None:
+    assert SecFilingsInput(ticker="MSFT", count=40).count == 40
+    with pytest.raises(ValidationError):
+        SecFilingsInput(ticker="MSFT", count=41)
+
+
+def test_analyst_and_news_limits_are_bounded() -> None:
+    assert AnalystResearchInput(symbol="AAPL", limit=100).limit == 100
+    with pytest.raises(ValidationError):
+        AnalystResearchInput(symbol="AAPL", limit=101)
+    assert NewsInput(limit=100).limit == 100
+    with pytest.raises(ValidationError):
+        NewsInput(limit=101)
+
+
+def test_options_expiration_rejects_milliseconds() -> None:
+    assert OptionsChainInput(symbol="AAPL", expiration=1_780_000_000).expiration == 1_780_000_000
+    with pytest.raises(ValidationError, match="milliseconds"):
+        OptionsChainInput(symbol="AAPL", expiration=1_780_000_000_000)
 
 
 def test_exchange_rate_uppercases_and_rejects_non_usd_target() -> None:

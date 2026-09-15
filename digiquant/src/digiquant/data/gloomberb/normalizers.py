@@ -307,7 +307,7 @@ def normalize_bars(
     divisor: int = 1,
     timezone_name: str | None = None,
 ) -> list[PriceBar]:
-    """Map raw wire price points to :class:`PriceBar` (sorted, deduped).
+    """Map raw wire price points to :class:`PriceBar` (sorted; invalid points dropped).
 
     Ports upstream ``normalizePriceHistory``: unparseable dates and non-finite
     closes are dropped, out-of-order bars are sorted, and a series whose points

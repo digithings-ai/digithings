@@ -466,14 +466,21 @@ def build_digifetch_search_tool() -> dict[str, Any]:
             "name": "digifetch_search",
             "description": (
                 "Search listings across venues (Gloomberb Cloud, anonymous). "
-                "limit is 1-10; results keep symbol/exchange per row so the "
-                "caller can pick a listing before quote/history."
+                "limit is >=1; values above the wrapper cap of 10 are clamped "
+                "to 10 and flagged via data.limit_clamped. Results keep "
+                "symbol/exchange per row so the caller can pick a listing "
+                "before quote/history."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {"type": "string"},
-                    "limit": {"type": "integer", "default": 10, "minimum": 1, "maximum": 10},
+                    "limit": {
+                        "type": "integer",
+                        "default": 10,
+                        "minimum": 1,
+                        "description": "Clamped to 10 (with data.limit_clamped=true) when larger",
+                    },
                 },
                 "required": ["query"],
             },

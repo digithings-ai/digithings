@@ -233,7 +233,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digifetch_corporate_actions` | Dividends, splits, and earnings history for one symbol (session-gated; typed `auth_required` without the cookie), flattened to one `kind`-discriminated list |
 | `digifetch_earnings_calendar` | Upcoming earnings dates for 1–20 symbols. **Yahoo-backed via `yfinance` — no Cloud route and deliberately NOT attributed to Gloomberb.** `horizon_days` bounds the window from today; fail-soft per symbol (throttled symbols land in `warnings`) |
 | `digifetch_exchange_rate` | USD exchange rate for an ISO-4217 `from_currency` (the Cloud route is USD-based). The 15-minute delay is `data.delay_note`, kept distinct from `stale` |
-| `digifetch_search` | Search listings across venues (anonymous); `limit` 1–10. Rows keep symbol/exchange so a caller can pick a listing before quote/history |
+| `digifetch_search` | Search listings across venues (anonymous). `limit` ≥1 is clamped to 10 client-side and flagged via `data.limit_clamped`; rows keep symbol/exchange so a caller can pick a listing before quote/history |
 | `digifetch_news` | Aggregated market news headlines (anonymous). `feed` selects latest/top/breaking/ticker/sector/topic; `ticker` filters the ticker feed and adds a deep link; `story_id` fetches one story |
 | `digiquant_fit_btc_power_law` | Fits the SDCA BTC power-law (RAQQR) valuation rails from cached daily price history (`data/prices/history_cache.py`, not a bespoke fetch) and persists the coefficients to `strategies/sdca/btc_power_law_coefficients.json` (#1082) |
 | `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` selector: `btc_power_law` / `generic_valuation` / `rolling_z` (`sdca/providers.py`). Oscillators are computed from **that ticker's** OHLCV. `indicator_weights` JSON `{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Macro extras need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
@@ -1111,21 +1111,29 @@ retryable}`. Codes: `auth_required` (401/403), `not_found` (404, envelope
 `upstream_error` (5xx/timeout/`retryable_error`/`fatal_error`), `invalid_input`
 (Pydantic input failure). Tools never raise to the transport.
 
-**Freshness.** Wire `stale: true` (an expired cache being served) maps to
+**Freshness.** Wire `stale: true` — on the response envelope, `providerMeta`, or
+the payload itself (e.g. a quote's `data.stale`, spec §3.2) — maps to
 `stale=true` + `"Upstream cache stale"`; the free-tier delay
 (`dataSource: "delayed"` or `delayMinutes > 0`) maps to
 `"Free-tier data delayed up to 15 minutes"` with `stale=false`. Both signals
 stay distinct.
 
-**Pacing and safety.** The client is default-ON behind `GLOOMBERB_ENABLED`
-(see Environment Variables); a 900s TTL cache matches the R2 market-data-cache
-convention; a `RateLimiter` min-interval gate paces requests; the retry policy
-is narrowed to timeouts/connection faults and wire 5xx so 401/404/429 are never
-retried; N consecutive failures open a circuit breaker that fails fast to a
+**Pacing and safety.** The client is default-ON behind `GLOOMBERB_ENABLED`; only
+`1`/`true`/`yes`/`on` enable it, and any other value (a typo included) fails
+closed to disabled (see Environment Variables). A 900s TTL cache matches the R2
+market-data-cache convention; expired entries are evicted on access and the
+cache is size-bounded, so a long-lived process cannot grow without limit. A
+`RateLimiter` min-interval gate paces requests; the retry policy is narrowed to
+timeouts/connection faults and wire 5xx so 401/404/429 are never retried; a 429
+`Retry-After` is honored with a bounded injectable sleep (a larger value is
+surfaced in the typed error, not slept on). Only upstream-health failures
+(transport errors, 5xx, 429, envelope `retryable_error`/`fatal_error`) count
+toward the circuit breaker — deterministic 4xx outcomes such as `auth_required`
+never open it. N consecutive failures open the breaker, which fails fast to a
 typed `upstream_error` with a half-open probe after the reset window.
 `GLOOMBERB_SESSION_COOKIE` is attached only to the three gated endpoints
-(holders, analyst research, corporate actions), is never logged, and never
-appears in tool payloads.
+(holders, analyst research, corporate actions), is never logged, never appears
+in tool payloads, and is forwarded only to same-origin redirect hops.
 
 **Exposure.** All 13 tools are registered in `mcp_server.py` via the
 `_maybe_tool` pattern (read scope) and in the `orchestrator_tools.py` manifest.
@@ -1420,8 +1428,8 @@ The sandbox runs as UID `10001` (`sandbox`). It does not install digiquant itsel
 | `DIGIKEY_ISSUER` | `http://digikey:8005` | JWT issuer |
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | JWT audience |
 | `DIGIKEY_PUBLIC_KEY_PEM` | `""` | Inline PEM for offline JWT verification |
-| `GLOOMBERB_ENABLED` | unset (ON) | Kill switch for the 13 `digifetch_*` Gloomberb tools. Set `0`/`false`/`no`/`off` to disable the family; every call then returns a typed `upstream_error` without a request |
-| `GLOOMBERB_SESSION_COOKIE` | `""` | Optional Gloom session cookie for the session-gated endpoints (holders, analyst research, corporate actions). Bare token or `name=value`; never logged or echoed into payloads |
+| `GLOOMBERB_ENABLED` | unset (ON) | Kill switch for the 13 `digifetch_*` Gloomberb tools. Only `1`/`true`/`yes`/`on` enable the family; any other value (including a typo) disables it, and every call then returns a typed `upstream_error` without a request |
+| `GLOOMBERB_SESSION_COOKIE` | `""` | Optional Gloom session cookie for the session-gated endpoints (holders, analyst research, corporate actions). Bare token or `name=value`; never logged, never echoed into payloads, forwarded only to same-origin redirect hops |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `""` | OpenTelemetry collector endpoint |
 | `LOG_LEVEL` | `"INFO"` | Logging level for MCP server |
 

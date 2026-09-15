@@ -123,13 +123,25 @@ def _r2_is_stale(manifest_as_of: str, resolved_as_of: str) -> bool:
 _gloomberb_clients: dict[tuple[str, str], Any] = {}
 
 
+def _close_gloomberb_client(client: Any) -> None:
+    """Best-effort close for a client being replaced (never mask the new one)."""
+    close = getattr(client, "close", None)
+    if not callable(close):
+        return
+    try:
+        close()
+    except Exception:  # closing is cleanup; an error must not break a tool call
+        pass
+
+
 def _build_gloomberb_client() -> Any:
     """Build/cache the Gloomberb client from env (patchable seam for tests).
 
     Keyed by the raw ``GLOOMBERB_ENABLED`` / ``GLOOMBERB_SESSION_COOKIE`` env
     values so an operator or test env change gets a fresh client without a
     process restart; the default (unset) pair is the anonymous, default-ON
-    client.
+    client. Only one client is kept alive: when the env pair changes, the
+    replaced client is closed so its transport is not leaked.
     """
     from digiquant.data.gloomberb import GloomberbClient
     from digiquant.data.gloomberb.client import (
@@ -142,9 +154,13 @@ def _build_gloomberb_client() -> Any:
         os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV, ""),
     )
     client = _gloomberb_clients.get(key)
-    if client is None:
-        client = GloomberbClient()
-        _gloomberb_clients[key] = client
+    if client is not None:
+        return client
+    client = GloomberbClient()
+    for stale in _gloomberb_clients.values():
+        _close_gloomberb_client(stale)
+    _gloomberb_clients.clear()
+    _gloomberb_clients[key] = client
     return client
 
 
