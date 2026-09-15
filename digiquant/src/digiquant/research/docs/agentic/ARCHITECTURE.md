@@ -793,5 +793,5 @@ is a separate follow-up ([#924](https://github.com/digithings-ai/digithings/issu
 
 Persistence lands in both `documents` (full payload) and the first-class
 tables introduced by migration 024: `theses`, `thesis_vehicles`,
-`deliberation_sessions`, `deliberation_rounds`, `analyst_coverage`,
-`deep_dive_triggers`.
+`analyst_coverage`, and — until migration 128 dropped them (#4053) —
+`deliberation_sessions`, `deliberation_rounds`, `deep_dive_triggers`.

@@ -3303,6 +3303,8 @@ reside in `core` (no migration needed; `price_history`/`price_technicals` were d
 in migration 127, #4053). `#1065`'s
 cross-project price copy is therefore **superseded**. `#1066` adds a shared
 `economic_calendar` (migration `047`, mirroring twelve-x's `fx_economic_calendar`
+— since retired: core is the single source, and core's own vestigial
+`fx_economic_calendar` was dropped in migration 128, #4053;
 incl. `event_datetime_utc` + the impact CHECK + unique `external_id`; additive
 `economic_calendar_authenticated_select` in `114` so signed-in JWT users can
 SELECT the same public calendar as anon — do not number this `113`, which is
