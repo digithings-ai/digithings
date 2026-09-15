@@ -112,6 +112,9 @@ RECALL_PAGE_SIZE = 10
 #: Suffixes appended to the base query; the base itself is always tried first.
 _QUERY_VARIANT_SUFFIXES: tuple[str, ...] = ("latest news", "industry analysis", "market report")
 
+#: Idle-flip retries after driving searches that arrived mid-pass (``add_search``).
+_FINALIZE_ATTEMPTS = 2
+
 _VERIFICATION_MODES = get_args(VerificationMode)
 
 _CANCELLED_FIELD_REASON = "webset was cancelled before this field was attempted"
@@ -587,19 +590,72 @@ class AsyncioRunner:
         if webset.status not in ("running", "idle"):
             return webset
         await self._settle_enrichment_defs(state, "idle")
-        try:
-            webset = await self._store.call(lambda store: store.set_webset_idle(state.webset_id))
-        except WebsetStoreError as exc:
-            if exc.code == "webset_not_settled":
-                return await self._fail(state, exc)
-            if exc.code == "transition_invalid":  # cancelled between read and write
-                return await self._store.call(lambda store: store.get_webset(state.webset_id))
-            raise
-        for search in state.driven:
-            await self._store.call(
-                lambda store: events.emit_webset_idle(store, state.webset_id, search.id)
+        if webset.status == "idle":
+            # A sticky-idle webset's flip short-circuits the store's settlement
+            # blockers (idle is sticky), so a mid-pass `add_search` newcomer would
+            # otherwise stay undriven; the running-webset case is caught by the
+            # `webset_not_settled` retry below.
+            await self._drive_newcomers(state)
+        settled = False
+        for _ in range(_FINALIZE_ATTEMPTS):
+            try:
+                webset = await self._store.call(
+                    lambda store: store.set_webset_idle(state.webset_id)
+                )
+                settled = True
+                break
+            except WebsetStoreError as exc:
+                if exc.code == "transition_invalid":  # cancelled between read and write
+                    await self._settle_missing_fields(state, "skipped", _CANCELLED_FIELD_REASON)
+                    return await self._store.call(lambda store: store.get_webset(state.webset_id))
+                if exc.code != "webset_not_settled":
+                    return await self._fail(state, exc)
+                current = await self._store.call(lambda store: store.get_webset(state.webset_id))
+                if current.status == "cancelled":
+                    await self._settle_missing_fields(state, "skipped", _CANCELLED_FIELD_REASON)
+                    return current
+                # A search added mid-pass (``add_search`` on a running/idle webset is
+                # allowed; the duplicate-schedule guard means it has no task of its
+                # own) refuses the idle flip until it is driven: drive it, retry.
+                if not await self._drive_newcomers(state):
+                    return await self._fail(state, exc)
+                await self._settle_enrichment_defs(state, "idle")
+        if not settled:
+            return await self._fail(
+                state, WebsetStoreError("webset still not settled", code="webset_not_settled")
             )
+        # Terminal events carry the generation that settled the pass. Emitting for
+        # every idle search — not only this pass's drives — recovers an idle event
+        # lost to a crash between the search settle and the webset flip/emit; the
+        # store's INSERT-or-ignore dedup keeps the re-emission idempotent.
+        current = await self._store.call(lambda store: store.get_webset(state.webset_id))
+        for search in current.searches:
+            if search.status == "idle":
+                await self._store.call(
+                    lambda store: events.emit_webset_idle(store, state.webset_id, search.id)
+                )
         return webset
+
+    async def _drive_newcomers(self, state: _PassState) -> bool:
+        """Drive running searches that arrived after this pass loaded (``add_search`` race).
+
+        Returns ``True`` when at least one such generation was driven (the caller
+        retries the idle flip), ``False`` when there is nothing new to drive or the
+        webset was cancelled meanwhile.
+        """
+        webset = await self._store.call(lambda store: store.get_webset(state.webset_id))
+        if webset.status == "cancelled":
+            return False
+        driven_ids = {search.id for search in state.driven}
+        newcomers = [
+            search
+            for search in webset.searches
+            if search.status == "running" and search.id not in driven_ids
+        ]
+        for search in newcomers:
+            state.driven.append(search)
+            await self._drive_search(state, search)
+        return bool(newcomers)
 
     async def _fail(self, state: _PassState, exc: Exception) -> Webset:
         """Best-effort webset-level failure settlement (spec § Async lifecycle)."""
@@ -609,15 +665,22 @@ class AsyncioRunner:
         try:
             webset = await self._store.call(lambda store: store.get_webset(state.webset_id))
             reference = next((s for s in webset.searches if s.status == "running"), None)
+            failed_generations: list[str] = []
             for search in webset.searches:
                 if search.status != "running":
                     continue
                 await self._store.call(
                     lambda store: store.settle_search(state.webset_id, search.id, "failed")
                 )
+                failed_generations.append(search.id)
+            if not failed_generations and webset.searches:
+                # No search was running (crash between a failed settle and its
+                # event): the latest generation carries the terminal event.
+                failed_generations.append(webset.searches[-1].id)
+            for generation in failed_generations:
                 await self._store.call(
                     lambda store: events.emit_webset_failed(
-                        store, state.webset_id, search.id, reason
+                        store, state.webset_id, generation, reason
                     )
                 )
             if reference is None and webset.searches:
@@ -790,8 +853,14 @@ def schedule_webset_task(
 
 
 def _log_task_done(webset_id: str, task: asyncio.Task[Webset]) -> None:
-    """Log ``(webset_id, ok|error)`` and drop the registry entry (ids only)."""
-    WEBSET_TASKS.pop(webset_id, None)
+    """Log ``(webset_id, ok|error)`` and drop only this task's registry entry.
+
+    A reschedule may have replaced the entry after this task finished but before
+    this callback ran; popping unconditionally would evict the newer task and
+    re-open the double-drive window the schedule guard closes.
+    """
+    if WEBSET_TASKS.get(webset_id) is task:
+        WEBSET_TASKS.pop(webset_id, None)
     if task.cancelled():
         logger.info("webset task done (%s, cancelled)", webset_id)
         return

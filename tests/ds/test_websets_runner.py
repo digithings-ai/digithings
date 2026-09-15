@@ -425,9 +425,115 @@ def test_cancel_webset_mid_run_skips_unattempted_fields(tmp_path, monkeypatch, l
     assert [event.type for event in events] == ["item.created"]
 
 
+@pytest.mark.unit
+def test_new_search_added_mid_pass_is_driven_before_idle(tmp_path, monkeypatch, llm_env):
+    store = _store(tmp_path)
+    webset = _webset(store, enrichments=(_DEF_BLURB,))
+    first = _search(store, webset.id, count=1)
+    _install_seams(monkeypatch, _RecallStub([_URL_A]), _FetchStub(_MARKDOWN))
+
+    async def _run() -> tuple[Any, list[WebsetSearch]]:
+        loop = asyncio.get_running_loop()
+        created: list[WebsetSearch] = []
+
+        def _add_search() -> None:
+            created.append(
+                store.add_search(
+                    WebsetSearch(
+                        webset_id=webset.id,
+                        query="photonics refresh",
+                        count=1,
+                        criteria=[_CRITERION],
+                    )
+                )
+            )
+
+        def _on_verify(url: str) -> None:
+            if not created:
+                loop.call_soon_threadsafe(_add_search)
+
+        llm = _StubLLM(on_verify=_on_verify)
+        return await run_webset_async(webset.id, store=store, llm_client=llm), created
+
+    result, created = asyncio.run(_run())
+
+    # add_search on a running webset is legal and has no task of its own (the
+    # duplicate-schedule guard); the in-flight pass must drive the newcomer
+    # instead of failing the webset on the idle-flip blocker.
+    assert len(created) == 1
+    second = created[0]
+    assert result.status == "idle"
+    assert store.get_webset(webset.id).status == "idle"
+    assert store.get_search(webset.id, first.id).status == "idle"
+    assert store.get_search(webset.id, second.id).status == "idle"
+    events, _ = list_events(store, webset.id)
+    assert Counter(event.type for event in events) == Counter(
+        {"item.created": 1, "item.enriched": 1, "webset.idle": 2}
+    )
+    assert [event.type for event in events[-2:]] == ["webset.idle", "webset.idle"]
+    assert {event.search_id for event in events if event.type == "webset.idle"} == {
+        first.id,
+        second.id,
+    }
+
+
+@pytest.mark.unit
+def test_new_search_added_mid_pass_on_idle_webset_is_driven(tmp_path, monkeypatch, llm_env):
+    store = _store(tmp_path)
+    webset = _webset(store, enrichments=(_DEF_BLURB,))
+    _search(store, webset.id, count=1)
+    recall = _RecallStub([_URL_A])
+    _install_seams(monkeypatch, recall, _FetchStub(_MARKDOWN))
+    asyncio.run(run_webset_async(webset.id, store=store, llm_client=_StubLLM()))
+    assert store.get_webset(webset.id).status == "idle"
+    baseline = _event_ids(store, webset.id)
+
+    second = _search(store, webset.id, count=1, query="photonics refresh")
+
+    async def _run() -> tuple[Any, list[WebsetSearch]]:
+        loop = asyncio.get_running_loop()
+        created: list[WebsetSearch] = []
+
+        def _add_search() -> None:
+            created.append(
+                store.add_search(
+                    WebsetSearch(
+                        webset_id=webset.id,
+                        query="photonics second refresh",
+                        count=1,
+                        criteria=[_CRITERION],
+                    )
+                )
+            )
+
+        def _on_verify(url: str) -> None:
+            if not created:
+                loop.call_soon_threadsafe(_add_search)
+
+        recall.urls = [_URL_B]
+        llm = _StubLLM(on_verify=_on_verify)
+        return await run_webset_async(webset.id, store=store, llm_client=llm), created
+
+    result, created = asyncio.run(_run())
+
+    # The refresh pass returns the webset to sticky idle, which short-circuits the
+    # store's settlement blockers: the newcomer must still be driven by this pass.
+    assert len(created) == 1
+    third = created[0]
+    assert result.status == "idle"
+    assert store.get_search(webset.id, second.id).status == "idle"
+    assert store.get_search(webset.id, third.id).status == "idle"
+    new_events = [event for event in list_events(store, webset.id)[0] if event.id not in baseline]
+    assert Counter(event.type for event in new_events) == Counter(
+        {"item.created": 1, "item.enriched": 1, "webset.idle": 2}
+    )
+    assert {event.search_id for event in new_events if event.type == "webset.idle"} == {
+        second.id,
+        third.id,
+    }
+
+
 # ── startup resume (both union arms) ─────────────────────────────────────────
-
-
 @pytest.mark.unit
 def test_resume_incomplete_websets_drives_both_union_arms(tmp_path, monkeypatch, llm_env):
     store = _store(tmp_path)
@@ -454,11 +560,15 @@ def test_resume_incomplete_websets_drives_both_union_arms(tmp_path, monkeypatch,
     )
     store.save_item(WebsetItem(webset_id=crashed.id, url=_URL_B, title="B"))
 
-    # Arm 2: a sticky-`idle` webset holding a crashed refresh generation.
+    # Arm 2: a sticky-`idle` webset holding a crashed refresh generation; its
+    # first generation completed normally, idle event included.
     sticky = _webset(store, enrichments=(_DEF_BLURB,))
     first = _search(store, sticky.id, count=1, query="photonics startups")
     store.settle_search(sticky.id, first.id, "idle")
     store.set_webset_idle(sticky.id)
+    seeded = store.append_event(
+        WebsetEvent(webset_id=sticky.id, type="webset.idle", search_id=first.id)
+    )
     refresh = _search(store, sticky.id, count=1, query="photonics refresh")
 
     _install_seams(monkeypatch, _RecallStub([_URL_A, _URL_B, _URL_C]), _FetchStub(_MARKDOWN))
@@ -479,12 +589,12 @@ def test_resume_incomplete_websets_drives_both_union_arms(tmp_path, monkeypatch,
     assert store.get_webset(crashed.id).status == "idle"
     assert store.get_search(crashed.id, search.id).status == "idle"
 
-    sticky_events, _ = list_events(store, sticky.id)
-    assert {event.search_id for event in sticky_events} == {refresh.id}
-    assert Counter(event.type for event in sticky_events) == Counter(
+    sticky_new = [event for event in list_events(store, sticky.id)[0] if event.id != seeded.id]
+    assert {event.search_id for event in sticky_new} == {refresh.id}
+    assert Counter(event.type for event in sticky_new) == Counter(
         {"item.created": 3, "item.enriched": 3, "webset.idle": 1}
     )
-    assert sticky_events[-1].type == "webset.idle"
+    assert sticky_new[-1].type == "webset.idle"
     assert store.get_webset(sticky.id).status == "idle"
     assert store.get_search(sticky.id, refresh.id).status == "idle"
 
@@ -519,6 +629,25 @@ def test_resume_skips_already_verified_items_without_rebilling(tmp_path, monkeyp
     assert store.get_search(webset.id, search.id).status == "idle"
     events, _ = list_events(store, webset.id)
     assert [event.type for event in events] == ["webset.idle"]
+
+
+@pytest.mark.unit
+def test_resume_recovers_lost_idle_event_after_crash(tmp_path, monkeypatch, llm_env):
+    store = _store(tmp_path)
+    webset = _webset(store)
+    search = _search(store, webset.id, count=1)
+    # Crashed pass: the search settled idle but the webset flip / idle event
+    # never happened, so the resuming pass has no running search to drive.
+    store.settle_search(webset.id, search.id, "idle")
+    _install_seams(monkeypatch, _RecallStub([_URL_A]), _FetchStub(_MARKDOWN))
+
+    driven = asyncio.run(resume_incomplete_websets(store=store, llm_client=_StubLLM()))
+
+    assert driven == [webset.id]
+    assert store.get_webset(webset.id).status == "idle"
+    events, _ = list_events(store, webset.id)
+    assert [event.type for event in events] == ["webset.idle"]
+    assert events[0].search_id == search.id
 
 
 # ── refresh generation ────────────────────────────────────────────────────────
@@ -615,3 +744,24 @@ def test_schedule_webset_task_tracks_registry_and_removes_on_completion(
     assert task.exception() is None
     assert webset.id not in WEBSET_TASKS
     assert store.get_webset(webset.id).status == "idle"
+
+
+@pytest.mark.unit
+def test_stale_done_callback_keeps_newer_registry_entry():
+    async def _run() -> None:
+        webset_id = "ws_" + "a" * 32
+        loop = asyncio.get_running_loop()
+        stale = loop.create_task(asyncio.sleep(0))
+        current = loop.create_task(asyncio.sleep(0))
+        await asyncio.gather(stale, current)
+
+        # A reschedule registered a newer task before the stale task's callback ran.
+        WEBSET_TASKS[webset_id] = current
+        runner_module._log_task_done(webset_id, stale)
+        assert WEBSET_TASKS[webset_id] is current
+
+        WEBSET_TASKS[webset_id] = stale
+        runner_module._log_task_done(webset_id, stale)
+        assert webset_id not in WEBSET_TASKS
+
+    asyncio.run(_run())
