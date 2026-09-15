@@ -1,0 +1,1152 @@
+"""Gloomberb Cloud HTTP client built on digifetch transport primitives (§5.5).
+
+Approach (c) from the scoping spec: a Python HTTP client against
+``https://api.gloom.sh``, anonymous cookie-less by default, with an optional
+``GLOOMBERB_SESSION_COOKIE`` for the three session-gated endpoints (holders,
+analyst research, corporate actions). The client owns endpoint constants,
+error mapping (§5.3), the 900s TTL cache, a circuit breaker, and the kill
+switch; ``digifetch`` stays the generic transport engine.
+
+The kill switch is ``GLOOMBERB_ENABLED`` (default ON): tools are default-ON per
+the author decision, and setting the flag to ``0``/``false``/``no``/``off``
+disables the whole family. The session cookie is read from
+``GLOOMBERB_SESSION_COOKIE`` - never logged, never part of tool input.
+
+No environment variables are read at import time; the flags are resolved in
+``__init__`` (explicit arguments win over the environment).
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import time
+from collections.abc import Callable, Mapping
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, NamedTuple, TypeVar, cast
+from urllib.parse import quote
+
+import httpx
+from digifetch import FetchResult, HttpFetcher, RateLimiter, RetryPolicy, with_retry
+from pydantic import BaseModel, ValidationError
+
+from . import normalizers as nz
+from .models import (
+    AnalystResearchEnvelope,
+    AnalystResearchInput,
+    CorporateActionsEnvelope,
+    CorporateActionsInput,
+    CorporateActionsResult,
+    DigifetchEnvelope,
+    DigifetchError,
+    EarningsCalendarEnvelope,
+    EarningsCalendarInput,
+    EarningsCalendarResult,
+    EarningsEvent,
+    ExchangeRateEnvelope,
+    ExchangeRateInput,
+    HoldersEnvelope,
+    HoldersInput,
+    HoldersResult,
+    NewsEnvelope,
+    NewsInput,
+    NewsResult,
+    OptionsChainEnvelope,
+    OptionsChainInput,
+    OptionsChainResult,
+    PriceHistoryEnvelope,
+    PriceHistoryInput,
+    PriceHistoryMetadata,
+    PriceHistoryResult,
+    QuoteEnvelope,
+    QuoteInput,
+    QuoteResult,
+    QuotesBatchEnvelope,
+    QuotesBatchInput,
+    QuotesBatchResult,
+    SearchEnvelope,
+    SearchInput,
+    SearchResult,
+    SecFilingsEnvelope,
+    SecFilingsInput,
+    SecFilingsResult,
+    TickerFinancialsEnvelope,
+    TickerFinancialsInput,
+    TickerFinancialsResult,
+)
+
+__all__ = [
+    "GLOOMBERB_BASE_URL",
+    "GLOOMBERB_ENABLED_ENV",
+    "GLOOMBERB_SESSION_COOKIE_ENV",
+    "SESSION_COOKIE_NAMES",
+    "DEFAULT_CACHE_TTL_SECONDS",
+    "DEFAULT_MIN_INTERVAL_SECONDS",
+    "DEFAULT_CIRCUIT_FAILURE_THRESHOLD",
+    "DEFAULT_CIRCUIT_RESET_SECONDS",
+    "RETRYABLE_EXCEPTIONS",
+    "ENDPOINTS",
+    "GloomberbClient",
+    "yfinance_earnings_events",
+]
+
+LOGGER = logging.getLogger(__name__)
+
+GLOOMBERB_BASE_URL = "https://api.gloom.sh"
+GLOOMBERB_ENABLED_ENV = "GLOOMBERB_ENABLED"
+GLOOMBERB_SESSION_COOKIE_ENV = "GLOOMBERB_SESSION_COOKIE"
+
+# The free tier is rate-limited; one client-wide minimum-interval gate. Pinned
+# here per §5.5 ("the RateLimiter interval is a client constant").
+DEFAULT_MIN_INTERVAL_SECONDS = 0.5
+# 900s TTL cache for enrichment reads, matching the R2 market-data-cache
+# convention (§5.5).
+DEFAULT_CACHE_TTL_SECONDS = 900.0
+DEFAULT_CIRCUIT_FAILURE_THRESHOLD = 3
+DEFAULT_CIRCUIT_RESET_SECONDS = 60.0
+
+# Upstream session cookie names (api-client/request.ts SESSION_COOKIE_NAMES).
+SESSION_COOKIE_NAMES: tuple[str, ...] = (
+    "__Secure-gloomberb.session_token",
+    "gloomberb.session_token",
+)
+
+DEFAULT_HEADERS: dict[str, str] = {"Accept": "application/json"}
+
+# Real endpoint family map (§3, validation item 6): /market/*, /news, /cloud/*.
+ENDPOINTS: dict[str, str] = {
+    "quote": "/market/quote",
+    "quotes_batch": "/market/quotes/batch",
+    "history": "/market/history",
+    "financials": "/market/financials",
+    "financials_batch": "/market/financials/batch",
+    "options": "/market/options",
+    "exchange_rate": "/market/exchange-rate",
+    "search": "/market/search",
+    "holders": "/market/holders",
+    "analyst": "/market/analyst",
+    "corporate_actions": "/market/corporate-actions",
+    "news": "/news",
+    "sec_filings": "/cloud/sec/filings",
+    "sec_filing_documents": "/cloud/sec/filing/documents",
+    "sec_filing_content": "/cloud/sec/filing/content",
+}
+
+_FALSY_ENV_VALUES = frozenset({"0", "false", "no", "off"})
+
+
+def _env_flag(name: str, *, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in _FALSY_ENV_VALUES
+
+
+class _UpstreamServerError(RuntimeError):
+    """A wire 5xx, wrapped so ``with_retry`` retries it without retrying 4xx."""
+
+
+# Narrow retry classes: timeouts/connection faults and wire 5xx only. 401/404
+# and every other 4xx propagate untouched (§5.5).
+RETRYABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    httpx.TransportError,
+    _UpstreamServerError,
+)
+
+
+class _RawResponse(NamedTuple):
+    """The parts of a wire response the client needs after status mapping."""
+
+    status: str
+    data: Any
+    reason_code: str | None
+    stale: bool
+    provider_meta: Mapping[str, Any]
+    as_of: str | None
+    currency: str | None
+
+
+EnvT = TypeVar("EnvT", bound=DigifetchEnvelope[Any])
+InputT = TypeVar("InputT", bound=BaseModel)
+
+
+def _format_validation_error(exc: ValidationError, limit: int = 3) -> str:
+    parts: list[str] = []
+    errors = exc.errors()
+    for error in errors[:limit]:
+        location = ".".join(str(part) for part in error.get("loc", ()))
+        parts.append(f"{location}: {error.get('msg')}")
+    text = "; ".join(parts) or str(exc)
+    if len(errors) > limit:
+        text += f" (+{len(errors) - limit} more)"
+    return text
+
+
+def _coerce_earnings_date(value: Any) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def yfinance_earnings_events(symbol: str) -> list[EarningsEvent]:
+    """Default Yahoo earnings provider for ``digifetch_earnings_calendar``.
+
+    Uses ``yfinance``'s calendar dict (no pandas frame on this path). The import
+    is lazy: yfinance is an existing digiquant extra, not a hard dependency of
+    this package's import path.
+    """
+    import yfinance as yf  # type: ignore[import-not-found]
+
+    calendar_data = yf.Ticker(symbol).calendar or {}
+    raw_dates = calendar_data.get("Earnings Date") or []
+    eps_estimate = nz.finite_number(calendar_data.get("Earnings Average"))
+    events: list[EarningsEvent] = []
+    for value in raw_dates:
+        earnings_date = _coerce_earnings_date(value)
+        if earnings_date is None:
+            continue
+        events.append(
+            EarningsEvent(symbol=symbol, earnings_date=earnings_date, eps_estimate=eps_estimate)
+        )
+    return events
+
+
+class GloomberbClient:
+    """Synchronous Gloomberb Cloud client returning typed envelopes.
+
+    Args:
+        fetcher:          Transport (tests inject a MockTransport-backed
+                          :class:`digifetch.HttpFetcher`). A default fetcher is
+                          created and owned by the client when omitted.
+        base_url:         API root; defaults to ``https://api.gloom.sh``.
+        enabled:          Kill switch; ``None`` reads ``GLOOMBERB_ENABLED``
+                          (default ON). ``False`` makes every call return a
+                          typed ``upstream_error`` envelope without any request.
+        session_cookie:   Optional Gloom session cookie; ``None`` reads
+                          ``GLOOMBERB_SESSION_COOKIE``. Accepts either a bare
+                          token or ``name=value``. Never logged.
+        rate_limiter:     Minimum-interval gate (default 0.5s).
+        retry_policy:     Composable retry policy; narrowed to timeouts/5xx.
+        cache_ttl:        Seconds an envelope stays fresh (900s default).
+        circuit_failure_threshold: Consecutive failures that open the breaker.
+        circuit_reset_seconds:     Seconds before a half-open probe is allowed.
+        monotonic:        Monotonic clock for cache/breaker (injected for tests).
+        now:              Wall clock for ``fetched_at`` (injected for tests).
+        earnings_provider: Yahoo-backed earnings callable (injected for tests).
+    """
+
+    def __init__(
+        self,
+        *,
+        fetcher: HttpFetcher | None = None,
+        base_url: str = GLOOMBERB_BASE_URL,
+        enabled: bool | None = None,
+        session_cookie: str | None = None,
+        rate_limiter: RateLimiter | None = None,
+        retry_policy: RetryPolicy | None = None,
+        cache_ttl: float = DEFAULT_CACHE_TTL_SECONDS,
+        circuit_failure_threshold: int = DEFAULT_CIRCUIT_FAILURE_THRESHOLD,
+        circuit_reset_seconds: float = DEFAULT_CIRCUIT_RESET_SECONDS,
+        monotonic: Callable[[], float] = time.monotonic,
+        now: Callable[[], datetime] | None = None,
+        earnings_provider: Callable[[str], list[EarningsEvent]] | None = None,
+    ) -> None:
+        if fetcher is not None:
+            self._fetcher = fetcher
+            self._owns_fetcher = False
+        else:
+            self._fetcher = HttpFetcher(headers=DEFAULT_HEADERS)
+            self._owns_fetcher = True
+        self._base_url = base_url.rstrip("/")
+        self._enabled = (
+            enabled if enabled is not None else _env_flag(GLOOMBERB_ENABLED_ENV, default=True)
+        )
+        if session_cookie is None:
+            env_cookie = os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV, "").strip()
+            self._session_cookie: str | None = env_cookie or None
+        else:
+            self._session_cookie = session_cookie.strip() or None
+        self._rate_limiter = rate_limiter or RateLimiter(DEFAULT_MIN_INTERVAL_SECONDS)
+        self._retry_policy = retry_policy or RetryPolicy(
+            attempts=3,
+            base_delay=0.5,
+            max_delay=5.0,
+            retry_on=RETRYABLE_EXCEPTIONS,
+        )
+        self._cache_ttl = cache_ttl
+        self._circuit_failure_threshold = max(1, circuit_failure_threshold)
+        self._circuit_reset_seconds = circuit_reset_seconds
+        self._monotonic = monotonic
+        self._now = now or (lambda: datetime.now(timezone.utc))
+        self._earnings_provider = earnings_provider or yfinance_earnings_events
+        self._cache: dict[tuple[str, str], tuple[float, DigifetchEnvelope[Any]]] = {}
+        self._consecutive_failures = 0
+        self._opened_at: float | None = None
+
+    # -- lifecycle ---------------------------------------------------------
+
+    @property
+    def enabled(self) -> bool:
+        """Kill-switch state (default ON)."""
+        return self._enabled
+
+    def close(self) -> None:
+        """Close the transport, but only when this client created it."""
+        if self._owns_fetcher:
+            self._fetcher.close()
+
+    def __enter__(self) -> GloomberbClient:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
+    # -- public tools (§5.1) ----------------------------------------------
+
+    def quote(self, request: QuoteInput | Mapping[str, Any]) -> QuoteEnvelope:
+        parsed = self._validate_input(QuoteInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(QuoteEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(QuoteEnvelope)
+
+        def produce() -> QuoteEnvelope:
+            params: dict[str, Any] = {"symbol": parsed.symbol}
+            if parsed.exchange:
+                params["exchange"] = parsed.exchange
+            raw = self._request_json("GET", ENDPOINTS["quote"], params=params)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(QuoteEnvelope, raw)
+            result = self._data_or_error(raw, f"Cloud quotes are unavailable for {parsed.symbol}")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(QuoteEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "quote")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(QuoteEnvelope, payload)
+            normalized = self._normalize(nz.normalize_quote, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(QuoteEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return QuoteEnvelope(
+                data=QuoteResult(quote=normalized),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("quote", parsed, produce)
+
+    def quotes_batch(self, request: QuotesBatchInput | Mapping[str, Any]) -> QuotesBatchEnvelope:
+        parsed = self._validate_input(QuotesBatchInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(QuotesBatchEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(QuotesBatchEnvelope)
+
+        def produce() -> QuotesBatchEnvelope:
+            body = {
+                "targets": [{"symbol": symbol} for symbol in parsed.symbols],
+                "mode": "cache-first",
+            }
+            raw = self._request_json("POST", ENDPOINTS["quotes_batch"], body=body)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(QuotesBatchEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud quotes are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(QuotesBatchEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "quotes batch")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(QuotesBatchEnvelope, payload)
+            items = payload.get("items")
+            quotes = nz.normalize_quotes_batch_items(items if isinstance(items, list) else [])
+            any_item_stale = any(
+                isinstance(item, Mapping) and item.get("stale") is True
+                for item in (items if isinstance(items, list) else [])
+            )
+            fresh = self._freshness(raw, payload, extra_stale=any_item_stale)
+            return QuotesBatchEnvelope(
+                data=QuotesBatchResult(quotes=quotes),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("quotes_batch", parsed, produce)
+
+    def price_history(self, request: PriceHistoryInput | Mapping[str, Any]) -> PriceHistoryEnvelope:
+        parsed = self._validate_input(PriceHistoryInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(PriceHistoryEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(PriceHistoryEnvelope)
+
+        def produce() -> PriceHistoryEnvelope:
+            params: dict[str, Any] = {
+                "symbol": parsed.symbol,
+                "interval": nz.to_cloud_interval(parsed.resolution),
+                "rangeKey": parsed.range,
+            }
+            if parsed.exchange:
+                params["exchange"] = parsed.exchange
+            raw = self._request_json("GET", ENDPOINTS["history"], params=params)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(PriceHistoryEnvelope, raw)
+            message = f"Cloud chart data is unavailable for {parsed.symbol}"
+            result = self._data_or_error(raw, message)
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(PriceHistoryEnvelope, result)
+            data, warnings = result
+            if not isinstance(data, list):
+                return self._error_envelope(
+                    PriceHistoryEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="history returned an unexpected payload",
+                        retryable=False,
+                    ),
+                )
+            exchange = str(parsed.exchange or raw.provider_meta.get("normalizedExchange") or "")
+            divisor = nz.resolve_currency_unit(
+                raw.currency if raw.currency is not None else raw.provider_meta.get("currency")  # type: ignore[arg-type]
+            ).divisor
+            timezone_name = raw.provider_meta.get("timezone")
+            bars = nz.normalize_bars(
+                data,
+                resolution=parsed.resolution,
+                exchange=exchange,
+                divisor=divisor,
+                timezone_name=str(timezone_name) if timezone_name else None,
+            )
+            upstream = (
+                str(raw.provider_meta.get("provider") or raw.provider_meta.get("upstream") or "")
+                .strip()
+                .lower()
+            )
+            if nz.is_intraday_resolution(parsed.resolution) and upstream != "yahoo":
+                if nz.is_malformed_intraday_history(bars):
+                    return self._error_envelope(
+                        PriceHistoryEnvelope,
+                        DigifetchError(
+                            code="upstream_error",
+                            message=f"Cloud chart data failed OHLC validation for {parsed.symbol}",
+                            retryable=False,
+                        ),
+                    )
+            fresh = self._freshness(raw)
+            metadata = PriceHistoryMetadata(
+                symbol=parsed.symbol,
+                exchange=exchange,
+                resolution=parsed.resolution,
+                range=parsed.range or "",
+                bar_count=len(bars),
+                timezone=str(timezone_name) if timezone_name else None,
+                currency=raw.currency or raw.provider_meta.get("currency"),
+                upstream_provider=upstream or None,
+            )
+            return PriceHistoryEnvelope(
+                data=PriceHistoryResult(bars=bars, metadata=metadata),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("price_history", parsed, produce)
+
+    def ticker_financials(
+        self, request: TickerFinancialsInput | Mapping[str, Any]
+    ) -> TickerFinancialsEnvelope:
+        parsed = self._validate_input(TickerFinancialsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(TickerFinancialsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(TickerFinancialsEnvelope)
+
+        def produce() -> TickerFinancialsEnvelope:
+            params: dict[str, Any] = {"symbol": parsed.symbol}
+            if parsed.exchange:
+                params["exchange"] = parsed.exchange
+            if parsed.extended_statements:
+                params["statementHistory"] = "extended"
+            raw = self._request_json("GET", ENDPOINTS["financials"], params=params)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(TickerFinancialsEnvelope, raw)
+            message = f"Cloud financials are unavailable for {parsed.symbol}"
+            result = self._data_or_error(raw, message)
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(TickerFinancialsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "financials")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(TickerFinancialsEnvelope, payload)
+            normalized = self._normalize(nz.normalize_financials, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(TickerFinancialsEnvelope, normalized)
+            quote_payload = payload.get("quote")
+            fresh = self._freshness(
+                raw,
+                quote_payload if isinstance(quote_payload, Mapping) else None,
+            )
+            return TickerFinancialsEnvelope(
+                data=TickerFinancialsResult(financials=normalized),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("ticker_financials", parsed, produce)
+
+    def options_chain(self, request: OptionsChainInput | Mapping[str, Any]) -> OptionsChainEnvelope:
+        parsed = self._validate_input(OptionsChainInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(OptionsChainEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(OptionsChainEnvelope)
+
+        def produce() -> OptionsChainEnvelope:
+            params: dict[str, Any] = {"symbol": parsed.symbol}
+            if parsed.exchange:
+                params["exchange"] = parsed.exchange
+            if parsed.expiration is not None:
+                params["expirationDate"] = str(parsed.expiration)
+            raw = self._request_json("GET", ENDPOINTS["options"], params=params)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(OptionsChainEnvelope, raw)
+            message = f"Cloud options chains are unavailable for {parsed.symbol}"
+            result = self._data_or_error(raw, message)
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(OptionsChainEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "options chain")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(OptionsChainEnvelope, payload)
+            normalized = self._normalize(nz.normalize_options_chain, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(OptionsChainEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return OptionsChainEnvelope(
+                data=OptionsChainResult(chain=normalized),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("options_chain", parsed, produce)
+
+    def sec_filings(self, request: SecFilingsInput | Mapping[str, Any]) -> SecFilingsEnvelope:
+        parsed = self._validate_input(SecFilingsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(SecFilingsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(SecFilingsEnvelope)
+
+        def produce() -> SecFilingsEnvelope:
+            if parsed.what == "filings":
+                message = f"Cloud SEC filings are unavailable for {parsed.ticker}"
+                raw = self._request_json(
+                    "GET",
+                    ENDPOINTS["sec_filings"],
+                    params={"ticker": parsed.ticker, "limit": str(parsed.count), "offset": "0"},
+                )
+            else:
+                message = "Cloud SEC filing documents are unavailable"
+                path = (
+                    ENDPOINTS["sec_filing_documents"]
+                    if parsed.what == "documents"
+                    else ENDPOINTS["sec_filing_content"]
+                )
+                params: dict[str, Any] = {}
+                if parsed.cik:
+                    params["cik"] = parsed.cik
+                if parsed.accession:
+                    params["accession"] = parsed.accession
+                if parsed.form:
+                    params["form"] = parsed.form
+                raw = self._request_json("GET", path, params=params)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(SecFilingsEnvelope, raw)
+            result = self._data_or_error(raw, message)
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(SecFilingsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, f"SEC {parsed.what}")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(SecFilingsEnvelope, payload)
+            if parsed.what == "filings":
+                filings = self._normalize(nz.normalize_sec_filings, payload)
+                if isinstance(filings, DigifetchError):
+                    return self._error_envelope(SecFilingsEnvelope, filings)
+                content = SecFilingsResult(filings=filings)
+            elif parsed.what == "documents":
+                documents = self._normalize(nz.normalize_sec_documents, payload)
+                if isinstance(documents, DigifetchError):
+                    return self._error_envelope(SecFilingsEnvelope, documents)
+                content = SecFilingsResult(documents=documents)
+            else:
+                raw_content = payload.get("content")
+                content = SecFilingsResult(
+                    content=raw_content if isinstance(raw_content, str) else None
+                )
+            fresh = self._freshness(raw)
+            return SecFilingsEnvelope(
+                data=content,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("sec_filings", parsed, produce)
+
+    def holders(self, request: HoldersInput | Mapping[str, Any]) -> HoldersEnvelope:
+        parsed = self._validate_input(HoldersInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(HoldersEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(HoldersEnvelope)
+
+        def produce() -> HoldersEnvelope:
+            raw = self._request_json(
+                "GET", ENDPOINTS["holders"], params={"symbol": parsed.symbol}, gated=True
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(HoldersEnvelope, raw)
+            message = f"Cloud holders are unavailable for {parsed.symbol}"
+            result = self._data_or_error(raw, message)
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(HoldersEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "holders")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(HoldersEnvelope, payload)
+            holders = self._normalize(nz.normalize_holders, payload, parsed.owner_type)
+            if isinstance(holders, DigifetchError):
+                return self._error_envelope(HoldersEnvelope, holders)
+            fresh = self._freshness(raw)
+            return HoldersEnvelope(
+                data=HoldersResult(holders=holders),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("holders", parsed, produce)
+
+    def analyst_research(
+        self, request: AnalystResearchInput | Mapping[str, Any]
+    ) -> AnalystResearchEnvelope:
+        parsed = self._validate_input(AnalystResearchInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(AnalystResearchEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(AnalystResearchEnvelope)
+
+        def produce() -> AnalystResearchEnvelope:
+            raw = self._request_json(
+                "GET", ENDPOINTS["analyst"], params={"symbol": parsed.symbol}, gated=True
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(AnalystResearchEnvelope, raw)
+            message = f"Cloud analyst research is unavailable for {parsed.symbol}"
+            result = self._data_or_error(raw, message)
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(AnalystResearchEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "analyst research")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(AnalystResearchEnvelope, payload)
+            normalized = self._normalize(nz.normalize_analyst_research, payload, parsed.limit)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(AnalystResearchEnvelope, normalized)
+            fresh = self._freshness(raw)
+            return AnalystResearchEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("analyst_research", parsed, produce)
+
+    def corporate_actions(
+        self, request: CorporateActionsInput | Mapping[str, Any]
+    ) -> CorporateActionsEnvelope:
+        parsed = self._validate_input(CorporateActionsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CorporateActionsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CorporateActionsEnvelope)
+
+        def produce() -> CorporateActionsEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["corporate_actions"],
+                params={"symbol": parsed.symbol},
+                gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(CorporateActionsEnvelope, raw)
+            message = f"Cloud corporate actions are unavailable for {parsed.symbol}"
+            result = self._data_or_error(raw, message)
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(CorporateActionsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "corporate actions")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(CorporateActionsEnvelope, payload)
+            actions = self._normalize(nz.normalize_corporate_actions, payload)
+            if isinstance(actions, DigifetchError):
+                return self._error_envelope(CorporateActionsEnvelope, actions)
+            fresh = self._freshness(raw)
+            return CorporateActionsEnvelope(
+                data=CorporateActionsResult(actions=actions),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("corporate_actions", parsed, produce)
+
+    def earnings_calendar(
+        self, request: EarningsCalendarInput | Mapping[str, Any]
+    ) -> EarningsCalendarEnvelope:
+        """Yahoo-backed earnings calendar (no Cloud route; §5.1)."""
+        parsed = self._validate_input(EarningsCalendarInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(EarningsCalendarEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(EarningsCalendarEnvelope)
+
+        def produce() -> EarningsCalendarEnvelope:
+            today = self._now().date()
+            horizon = today + timedelta(days=parsed.horizon_days)
+            events: list[EarningsEvent] = []
+            warnings: list[str] = []
+            for symbol in parsed.symbols:
+                try:
+                    symbol_events = self._earnings_provider(symbol)
+                except ImportError as exc:
+                    return self._error_envelope(
+                        EarningsCalendarEnvelope,
+                        DigifetchError(
+                            code="upstream_error",
+                            message=f"yfinance is unavailable for the Yahoo earnings path: {exc}",
+                            retryable=False,
+                        ),
+                    )
+                except Exception as exc:  # Yahoo is brittle; fail soft per symbol
+                    warnings.append(f"{symbol}: {exc}")
+                    continue
+                events.extend(
+                    event for event in symbol_events if today <= event.earnings_date <= horizon
+                )
+            return EarningsCalendarEnvelope(
+                data=EarningsCalendarResult(events=events),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("earnings_calendar", parsed, produce)
+
+    def exchange_rate(self, request: ExchangeRateInput | Mapping[str, Any]) -> ExchangeRateEnvelope:
+        parsed = self._validate_input(ExchangeRateInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ExchangeRateEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ExchangeRateEnvelope)
+
+        def produce() -> ExchangeRateEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["exchange_rate"],
+                params={"fromCurrency": parsed.from_currency},
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(ExchangeRateEnvelope, raw)
+            message = f"Cloud exchange rate is unavailable for {parsed.from_currency}"
+            result = self._data_or_error(raw, message)
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(ExchangeRateEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "exchange rate")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(ExchangeRateEnvelope, payload)
+            fresh = self._freshness(raw, payload)
+            normalized = self._normalize(
+                nz.normalize_exchange_rate,
+                payload,
+                response_as_of=raw.as_of,
+                freshness=fresh,
+            )
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(ExchangeRateEnvelope, normalized)
+            return ExchangeRateEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("exchange_rate", parsed, produce)
+
+    def search(self, request: SearchInput | Mapping[str, Any]) -> SearchEnvelope:
+        parsed = self._validate_input(SearchInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(SearchEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(SearchEnvelope)
+
+        def produce() -> SearchEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["search"],
+                params={"q": parsed.query, "limit": str(parsed.limit)},
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(SearchEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud search is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(SearchEnvelope, result)
+            data, warnings = result
+            results = self._normalize(nz.normalize_search_results, data)
+            if isinstance(results, DigifetchError):
+                return self._error_envelope(SearchEnvelope, results)
+            fresh = self._freshness(raw)
+            return SearchEnvelope(
+                data=SearchResult(results=results, limit_clamped=False),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("search", parsed, produce)
+
+    def news(self, request: NewsInput | Mapping[str, Any]) -> NewsEnvelope:
+        parsed = self._validate_input(NewsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(NewsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(NewsEnvelope)
+
+        def produce() -> NewsEnvelope:
+            if parsed.story_id:
+                path = f"{ENDPOINTS['news']}/{quote(parsed.story_id, safe='')}"
+                raw = self._request_json("GET", path)
+            else:
+                params: dict[str, Any] = {"feed": parsed.feed, "limit": str(parsed.limit)}
+                if parsed.ticker:
+                    params["tickers"] = parsed.ticker
+                raw = self._request_json("GET", ENDPOINTS["news"], params=params)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(NewsEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud news is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(NewsEnvelope, result)
+            data, warnings = result
+            if parsed.story_id:
+                payload = self._as_mapping(data, "news story")
+                if isinstance(payload, DigifetchError):
+                    return self._error_envelope(NewsEnvelope, payload)
+                item = self._normalize(nz.normalize_news_item, payload)
+                if isinstance(item, DigifetchError):
+                    return self._error_envelope(NewsEnvelope, item)
+                items = [item]
+            else:
+                payload = self._as_mapping(data, "news")
+                if isinstance(payload, DigifetchError):
+                    return self._error_envelope(NewsEnvelope, payload)
+                items = self._normalize(nz.normalize_news_list, payload)
+                if isinstance(items, DigifetchError):
+                    return self._error_envelope(NewsEnvelope, items)
+            fresh = self._freshness(raw)
+            return NewsEnvelope(
+                data=NewsResult(items=items),
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("news", parsed, produce)
+
+    # -- internals ---------------------------------------------------------
+
+    def _validate_input(
+        self, model: type[InputT], request: InputT | Mapping[str, Any]
+    ) -> InputT | DigifetchError:
+        if isinstance(request, model):
+            return request
+        try:
+            return model.model_validate(request)
+        except ValidationError as exc:
+            return DigifetchError(
+                code="invalid_input", message=_format_validation_error(exc), retryable=False
+            )
+
+    def _normalize(self, mapper: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        try:
+            return mapper(*args, **kwargs)
+        except ValidationError as exc:
+            return DigifetchError(
+                code="upstream_error",
+                message=f"unexpected Gloomberb payload shape: {_format_validation_error(exc)}",
+                retryable=False,
+            )
+
+    def _as_mapping(self, data: Any, what: str) -> Mapping[str, Any] | DigifetchError:
+        if isinstance(data, Mapping):
+            return data
+        return DigifetchError(
+            code="upstream_error", message=f"{what} returned an unexpected payload", retryable=False
+        )
+
+    def _disabled(self, envelope: type[EnvT]) -> EnvT:
+        return self._error_envelope(
+            envelope,
+            DigifetchError(
+                code="upstream_error",
+                message=f"Gloomberb data family disabled by kill switch ({GLOOMBERB_ENABLED_ENV})",
+                retryable=False,
+            ),
+        )
+
+    def _error_envelope(self, envelope: type[EnvT], error: DigifetchError) -> EnvT:
+        return envelope(data=error, fetched_at=self._now())
+
+    def _freshness(
+        self,
+        raw: _RawResponse,
+        payload: Mapping[str, Any] | None = None,
+        *,
+        extra_stale: bool = False,
+    ) -> nz.Freshness:
+        source = payload if isinstance(payload, Mapping) else {}
+        return nz.derive_freshness(
+            stale=raw.stale or extra_stale,
+            data_source=source.get("dataSource")
+            if isinstance(source.get("dataSource"), str)
+            else None,
+            delay_minutes=nz.finite_number(source.get("delayMinutes")),
+        )
+
+    def _cached(self, name: str, request: BaseModel, produce: Callable[[], EnvT]) -> EnvT:
+        # Cache first: a warm enrichment read still serves during an upstream
+        # outage, and the breaker only guards real requests.
+        key = (name, request.model_dump_json())
+        now = self._monotonic()
+        entry = self._cache.get(key)
+        if entry is not None and entry[0] > now:
+            return cast(EnvT, entry[1])
+        envelope = produce()
+        if not isinstance(envelope.data, DigifetchError):
+            self._cache[key] = (now + self._cache_ttl, envelope)
+        return envelope
+
+    def _breaker_error(self) -> DigifetchError | None:
+        if self._opened_at is None:
+            return None
+        if self._monotonic() - self._opened_at >= self._circuit_reset_seconds:
+            # Half-open: let one probe through.
+            return None
+        return DigifetchError(
+            code="upstream_error",
+            message=f"Gloomberb circuit breaker open after {self._consecutive_failures} "
+            "consecutive failures",
+            retryable=False,
+        )
+
+    def _record_failure(self) -> None:
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= self._circuit_failure_threshold:
+            self._opened_at = self._monotonic()
+
+    def _record_success(self) -> None:
+        self._consecutive_failures = 0
+        self._opened_at = None
+
+    def _session_cookies(self) -> dict[str, str] | None:
+        raw = self._session_cookie
+        if not raw:
+            return None
+        if "=" in raw:
+            name, _, value = raw.partition("=")
+            name, value = name.strip(), value.strip()
+            if name and value:
+                return {name: value}
+        # A bare token is sent under every upstream session cookie name, the
+        # same fallback the TS client uses when it has not observed a name.
+        return {name: raw for name in SESSION_COOKIE_NAMES}
+
+    def _map_http_error(self, exc: httpx.HTTPStatusError) -> DigifetchError:
+        status = exc.response.status_code
+        if status in (401, 403):
+            return DigifetchError(
+                code="auth_required",
+                message=f"Gloomberb returned HTTP {status}; this endpoint needs "
+                f"{GLOOMBERB_SESSION_COOKIE_ENV}",
+                retryable=False,
+            )
+        if status == 404:
+            return DigifetchError(
+                code="not_found", message="Gloomberb returned HTTP 404", retryable=False
+            )
+        if status == 429:
+            retry_after = exc.response.headers.get("retry-after")
+            suffix = f"; Retry-After: {retry_after}" if retry_after else ""
+            return DigifetchError(
+                code="rate_limited",
+                message=f"Gloomberb rate limit reached (HTTP 429){suffix}",
+                retryable=False,
+            )
+        if status >= 500:
+            return DigifetchError(
+                code="upstream_error", message=f"Gloomberb returned HTTP {status}", retryable=True
+            )
+        return DigifetchError(
+            code="invalid_input",
+            message=f"Gloomberb rejected the request with HTTP {status}",
+            retryable=False,
+        )
+
+    def _status_error(self, raw: _RawResponse, message: str) -> DigifetchError:
+        reason = raw.reason_code or message
+        if raw.status in ("empty", "unsupported"):
+            return DigifetchError(code="not_found", message=reason, retryable=False)
+        if raw.status == "retryable_error":
+            self._record_failure()
+            return DigifetchError(code="upstream_error", message=reason, retryable=True)
+        self._record_failure()
+        return DigifetchError(
+            code="upstream_error",
+            message=reason if raw.status == "fatal_error" else f"{reason} (status={raw.status!r})",
+            retryable=False,
+        )
+
+    def _data_or_error(
+        self, raw: _RawResponse, message: str
+    ) -> tuple[Any, list[str]] | DigifetchError:
+        if raw.status in ("success", "partial"):
+            if raw.data is None:
+                return DigifetchError(code="upstream_error", message=raw.reason_code or message)
+            warnings = [raw.reason_code] if raw.status == "partial" and raw.reason_code else []
+            return raw.data, warnings
+        return self._status_error(raw, message)
+
+    def _request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        body: Mapping[str, Any] | None = None,
+        gated: bool = False,
+    ) -> _RawResponse | DigifetchError:
+        if not self._enabled:
+            return DigifetchError(
+                code="upstream_error",
+                message=f"Gloomberb data family disabled by kill switch ({GLOOMBERB_ENABLED_ENV})",
+                retryable=False,
+            )
+        if gated and self._session_cookie is None:
+            return DigifetchError(
+                code="auth_required",
+                message=f"{path} requires a verified Gloom session; "
+                f"{GLOOMBERB_SESSION_COOKIE_ENV} is not set",
+                retryable=False,
+            )
+        breaker = self._breaker_error()
+        if breaker is not None:
+            return breaker
+        url = f"{self._base_url}{path}"
+        cookies = self._session_cookies() if gated else None
+
+        def attempt() -> FetchResult:
+            self._rate_limiter.acquire()
+            try:
+                return self._fetcher.fetch(
+                    url,
+                    method=method,
+                    params=params,
+                    json=body,
+                    cookies=cookies,
+                )
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code >= 500:
+                    raise _UpstreamServerError(str(exc)) from exc
+                raise
+
+        try:
+            result = with_retry(
+                attempt, self._retry_policy, description=f"gloomberb {method} {path}"
+            )
+        except httpx.HTTPStatusError as exc:
+            self._record_failure()
+            return self._map_http_error(exc)
+        except (httpx.TransportError, _UpstreamServerError) as exc:
+            self._record_failure()
+            return DigifetchError(
+                code="upstream_error",
+                message=f"Gloomberb request failed: {exc}",
+                retryable=True,
+            )
+        try:
+            payload = json.loads(result.text) if result.text else None
+        except json.JSONDecodeError:
+            self._record_failure()
+            return DigifetchError(
+                code="upstream_error",
+                message=f"Gloomberb returned a non-JSON body for {path}",
+                retryable=False,
+            )
+        self._record_success()
+        if not isinstance(payload, Mapping):
+            return DigifetchError(
+                code="upstream_error",
+                message=f"Gloomberb returned an unexpected non-object payload for {path}",
+                retryable=False,
+            )
+        meta = payload.get("providerMeta")
+        provider_meta: Mapping[str, Any] = meta if isinstance(meta, Mapping) else {}
+        if "status" not in payload:
+            # /news and /cloud/sec/* answer direct payloads, not the shared
+            # CloudMarketResponse envelope.
+            return _RawResponse(
+                status="success",
+                data=payload,
+                reason_code=None,
+                stale=payload.get("stale") is True,
+                provider_meta=provider_meta,
+                as_of=None,
+                currency=None,
+            )
+        status = str(payload.get("status") or "success")
+        reason = payload.get("reasonCode")
+        currency = payload.get("currency")
+        return _RawResponse(
+            status=status,
+            data=payload.get("data"),
+            reason_code=str(reason) if reason is not None else None,
+            stale=payload.get("stale") is True or provider_meta.get("stale") is True,
+            provider_meta=provider_meta,
+            as_of=str(payload["asOf"]) if payload.get("asOf") is not None else None,
+            currency=str(currency) if currency is not None else None,
+        )
