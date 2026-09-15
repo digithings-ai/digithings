@@ -96,9 +96,12 @@ def _recording_reranker(seen: dict[str, Any], order: list[int] | None = None) ->
     """Reranker factory: records candidates/top_n, returns them in *order*."""
 
     class _RecordingReranker:
-        def __init__(self, provider: str = "cohere", top_n: int | None = None) -> None:
+        def __init__(
+            self, provider: str = "cohere", top_n: int | None = None, strict: bool = False
+        ) -> None:
             seen["provider"] = provider
             seen["ctor_top_n"] = top_n
+            seen["strict"] = strict
 
         def rerank(
             self, query: str, results: list[Result], top_n: int | None = None
@@ -288,6 +291,38 @@ def test_rank_requires_rerank_extra_before_touching_reranker(monkeypatch):
     assert "digisearch[rerank]" in str(excinfo.value)
 
 
+def test_rank_surfaces_bge_rerank_failure_as_web_research_error(monkeypatch):
+    from digisearch.chunking import factory as factory_mod
+    from digisearch.search import reranker as reranker_mod
+    from digisearch.web import answer as mod
+    from digisearch.web.grounding_models import WebResearchError
+
+    monkeypatch.setattr(factory_mod, "get_document_chunker", lambda: _FakeChunker())
+    _fake_sentence_transformers(monkeypatch)
+    seen: dict[str, Any] = {}
+
+    class _ExplodingReranker:
+        def __init__(
+            self, provider: str = "cohere", top_n: int | None = None, strict: bool = False
+        ) -> None:
+            seen["provider"] = provider
+            seen["strict"] = strict
+
+        def rerank(
+            self, query: str, results: list[Result], top_n: int | None = None
+        ) -> list[Result]:
+            raise RuntimeError("cross-encoder load failed")
+
+    monkeypatch.setattr(reranker_mod, "Reranker", _ExplodingReranker)
+    with pytest.raises(WebResearchError) as excinfo:
+        mod._rank("q", [_page("https://a.com/1", "A", markdown="body")], 5)
+
+    assert seen == {"provider": "bge", "strict": True}
+    assert "BGE rerank failed" in str(excinfo.value)
+    assert "digisearch[rerank]" in str(excinfo.value)
+    assert isinstance(excinfo.value.__cause__, RuntimeError)
+
+
 def test_rank_skips_bm25_when_rank_bm25_missing(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ):
@@ -308,6 +343,7 @@ def test_rank_skips_bm25_when_rank_bm25_missing(
 
     assert cited == [page]
     assert seen["provider"] == "bge"
+    assert seen["strict"] is True
     assert seen["top_n"] == 5
     warnings = [record for record in caplog.records if "rank_bm25" in record.getMessage()]
     assert len(warnings) == 1
@@ -423,7 +459,7 @@ def test_synthesize_calls_digillm_with_numbered_sources(monkeypatch):
     assert calls["messages"][0]["role"] == "system"
     assert calls["messages"][1]["role"] == "user"
     assert "ONLY" in system  # answer only from the numbered sources
-    assert "Insufficient sources." in system  # exact refusal wording taught to the model
+    assert "insufficient sources" in system  # exact refusal wording taught to the model
     assert "[1] https://a.com/1" in user and "[2] https://b.com/2" in user
     assert "Series A?" in user
 
@@ -454,6 +490,34 @@ def test_synthesize_caps_snippet_and_total_source_chars(monkeypatch):
     assert user.count("y") + user.count("z") <= 2500  # total source budget
 
 
+@pytest.mark.parametrize(
+    ("answer", "expected_first_line"),
+    [
+        ("Answer [2].", "insufficient sources"),  # [2] never rendered under the budget
+        ("Answer [1].", "Answer [1]."),
+    ],
+)
+def test_synthesize_citation_guard_counts_only_rendered_sources(
+    monkeypatch, answer, expected_first_line
+):
+    import digillm.client as digillm_client
+    from digisearch.web import answer as mod
+    from digisearch.web.grounding_models import WebResearchConfig
+
+    monkeypatch.setenv("DIGISEARCH_SYNTHESIS_MODEL", "openai/gpt-4o-mini")
+    monkeypatch.setattr(digillm_client, "completion", lambda *a, **k: _completion(answer))
+    pages = [
+        _page("https://a.com/1", "A", markdown="x" * 3000),
+        _page("https://b.com/2", "B", markdown="y" * 3000),
+    ]
+
+    text, _ = mod._synthesize("q", pages, WebResearchConfig(max_synthesis_chars=1500))
+
+    assert text.splitlines()[0] == expected_first_line
+    if expected_first_line == "insufficient sources":
+        assert "https://b.com/2" not in text  # omitted source is not listed either
+
+
 @pytest.mark.parametrize("answer", ["I cannot answer that.", "Answer [0].", "Answer [9]."])
 def test_synthesize_replaces_uncited_answer_with_insufficient_sentence(monkeypatch, answer):
     import digillm.client as digillm_client
@@ -466,7 +530,7 @@ def test_synthesize_replaces_uncited_answer_with_insufficient_sentence(monkeypat
 
     text, counts = mod._synthesize("q", pages, WebResearchConfig())
 
-    assert text.splitlines()[0] == "Insufficient sources."
+    assert text.splitlines()[0] == "insufficient sources"
     assert "[1] https://a.com/1" in text and "[2] https://b.com/2" in text
     assert counts == {"llm_calls": 1}
 
@@ -484,7 +548,7 @@ def test_grounded_answer_insufficient_path_keeps_cited_sources(monkeypatch):
     data, usage = mod.grounded_answer("q")
 
     assert data.output is not None
-    assert data.output["text"].startswith("Insufficient sources.")
+    assert data.output["text"].startswith("insufficient sources")
     assert data.results[0]["url"] == "https://a.com/1"  # still cited, still WebSearchData
     assert usage.llm_calls == 1
 

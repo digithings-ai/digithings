@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 SYNTHESIS_MODEL_ENV = "DIGISEARCH_SYNTHESIS_MODEL"
 
 #: Literal answer text when the cited set cannot support one (M8 trigger split).
-INSUFFICIENT_SOURCES = "Insufficient sources."
+INSUFFICIENT_SOURCES = "insufficient sources"
 
 #: Per-source prompt snippet budget; the whole source block stays within
 #: ``WebResearchConfig.max_synthesis_chars``.
@@ -151,12 +151,18 @@ def _rank(question: str, pages: list[FetchedPage], top_n: int) -> list[FetchedPa
         )
     from digisearch.search.reranker import Reranker
 
-    ranked = Reranker(provider="bge").rerank(question, candidates, top_n=top_n)
+    try:
+        reranked = Reranker(provider="bge", strict=True).rerank(question, candidates, top_n=top_n)
+    except Exception as exc:
+        raise WebResearchError(
+            f"BGE rerank failed ({exc}); install or repair digisearch[rerank] — "
+            "refusing to return an unranked cited set"
+        ) from exc
 
     by_url = {page.url: page for page in pages}
     cited: list[FetchedPage] = []
     seen: set[str] = set()
-    for hit in ranked:
+    for hit in reranked:
         url = str(hit.chunk.metadata.get("source_url") or "")
         page = by_url.get(url)
         if page is not None and url not in seen:
@@ -170,8 +176,12 @@ def _source_line(index: int, page: FetchedPage) -> str:
     return f"{label} — {page.title}" if page.title else label
 
 
-def _numbered_sources(pages: list[FetchedPage], max_chars: int) -> str:
-    """Numbered sources with per-source and total snippet budgets."""
+def _numbered_sources(pages: list[FetchedPage], max_chars: int) -> tuple[str, int]:
+    """Numbered sources with per-source and total snippet budgets.
+
+    Returns the rendered text and how many sources actually rendered — sources
+    dropped once the budget is exhausted are not citable.
+    """
     blocks: list[str] = []
     used = 0
     for index, page in enumerate(pages, 1):
@@ -183,7 +193,7 @@ def _numbered_sources(pages: list[FetchedPage], max_chars: int) -> str:
             snippet = snippet[:remaining]
         used += len(snippet)
         blocks.append(f"{_source_line(index, page)}\n{snippet}")
-    return "SOURCES:\n" + "\n\n".join(blocks)
+    return "SOURCES:\n" + "\n\n".join(blocks), len(blocks)
 
 
 def _insufficient_text(pages: list[FetchedPage]) -> str:
@@ -221,12 +231,10 @@ def _synthesize(
             "grounded web synthesis requires the digillm client, which is not importable"
         ) from exc
 
+    sources, rendered = _numbered_sources(pages, cfg.max_synthesis_chars)
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": f"{_numbered_sources(pages, cfg.max_synthesis_chars)}\n\nQuestion: {question}",
-        },
+        {"role": "user", "content": f"{sources}\n\nQuestion: {question}"},
     ]
     try:
         response = completion(model, messages, usage_kind="web_search")
@@ -234,13 +242,13 @@ def _synthesize(
         raise WebResearchError(f"web synthesis failed: {exc}") from exc
 
     answer = _message_text(response)
-    if not _is_cited(answer, len(pages)):
+    if not _is_cited(answer, rendered):
         logger.warning(
             "synthesis returned no valid [n] citation; answering with the literal "
             "insufficient-sources sentence plus the source list",
             extra={"operation": "web_synthesize", "outcome": "insufficient_sources"},
         )
-        answer = _insufficient_text(pages)
+        answer = _insufficient_text(pages[:rendered])
     return answer, {"llm_calls": 1}
 
 
