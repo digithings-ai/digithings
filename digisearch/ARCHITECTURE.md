@@ -168,9 +168,11 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 All paths under the FastAPI app in `server.py`. Base URL: `http://digisearch:8002`.
 Hosted: the same server is reachable publicly as `https://search.digithings.ai`
 via the `cloudflare/digithings-stack-cloudflare` Worker (#4063 — new external
-route, owner-approved for CI web grounding). Auth is unchanged: `POST /v1/*`
-requires a digikey JWT scoped `digisearch:query` via `DigiAuthMiddleware`; only
-`GET /health` / `GET /healthz` are public.
+route, owner-approved for CI web grounding). Auth is unchanged: every route
+outside the shared `_PUBLIC_PATHS` allowlist — `/health`, `/healthz`, `/metrics`,
+`/docs`, `/redoc`, `/openapi.json` — requires a digikey JWT via `DigiAuthMiddleware`
+(`digisearch:query`, or `digisearch:ingest` for `/ingest`); OPTIONS preflights are
+auth-exempt (CORS is enforced separately).
 
 #### `GET /health` and `GET /healthz`
 

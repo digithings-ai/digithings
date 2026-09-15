@@ -3,10 +3,14 @@
 **Human gate — infra/network:** this Worker publishes `graph.digithings.ai`
 (digigraph), `key.digithings.ai` (digikey), and `search.digithings.ai`
 (digisearch, new external route #4063 — owner-approved for CI web grounding) on
-the public internet. APIs still require auth: digikey JWT / BFF token exchange,
-and the search route only serves callers holding a digikey JWT scoped
-`digisearch:query` (`POST /v1/orchestrator_invoke`); `GET /health` stays public.
-Secrets only via `npx wrangler secret put` — never commit values.
+the public internet. APIs still require auth: digikey JWT / BFF token exchange;
+on the search route, APIs need a digikey JWT (`digisearch:query`, or
+`digisearch:ingest` for `/ingest`), e.g. `POST /v1/orchestrator_invoke` for the
+CI pipeline. Auth-exempt on every host is only the shared service allowlist —
+`/health`, `/healthz`, `/metrics`, `/docs`, `/redoc`, `/openapi.json`, plus
+OPTIONS preflights (CORS is enforced separately) — and the Worker-served paths
+`/_stack/meta`, `/v1/market/tickers|closes`, and `/_stack/key/*` (proxied to
+digikey). Secrets only via `npx wrangler secret put` — never commit values.
 
 One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 `*.trycloudflare.com` quick tunnels for production digichat.
@@ -172,8 +176,8 @@ Do **not** point digichat at `*.trycloudflare.com` tunnels.
 1. Confirm the stack is healthy on the custom domains (`workers_dev = false`):
    - `https://graph.digithings.ai/healthz` → digigraph
    - `https://key.digithings.ai/healthz` → digikey
-   - `https://search.digithings.ai/health` → digisearch (public; API calls need
-     a digikey JWT scoped `digisearch:query`)
+   - `https://search.digithings.ai/health` → digisearch (auth-exempt allowlist
+     path; every API call needs a digikey JWT scoped `digisearch:query`)
 2. Custom domains `graph.digithings.ai` / `key.digithings.ai` /
    `search.digithings.ai` are already declared as `[[routes]]` in
    `wrangler.toml` (human gate — public backends). Redeploy if you change routes.
@@ -188,7 +192,7 @@ Until step 3, leave existing digichat secrets; Mac tunnels may still be required
 # custom domains (declared in wrangler.toml; the only ingress)
 curl -sf https://graph.digithings.ai/healthz
 curl -sf https://key.digithings.ai/healthz
-curl -sf https://search.digithings.ai/health   # public; /v1/* needs a JWT
+curl -sf https://search.digithings.ai/health   # auth-exempt allowlist path; APIs need a scoped JWT
 ```
 
 Do **not** treat `/chat` UI E2E as done here — leave for a smoke agent.

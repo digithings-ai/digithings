@@ -216,7 +216,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 57) re-recorded for #3871 (tool-only cost-win rewrite + searxng floats-on-latest owner decision in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 58 for #3909 (backend fail-loud + research workspace scoping + raw filter gate docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 59 for #3934 (SSRF fetch-guard paragraph in the web_search section + DIGISEARCH_FETCH_ALLOWED_HOSTS env-table row in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
-    Hashes only (count still 59) re-recorded for #4063 (hosted search.digithings.ai route note in the REST Endpoints section) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 59) re-recorded for #4063 (hosted search.digithings.ai route note in the REST Endpoints section, including its auth-exempt-allowlist wording fix) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -233,7 +233,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "cea76b9e90df056e",
         "6f61da3b9ed54d44",
         "5c87a98eae4b4c24",
-        "b0e1f204c9952e77",
+        "c2e2b64819e95c57",
         "5fc146dcd98ed469",
         "e446cea04444b3a8",
         "d48e16a1b753dc3a",

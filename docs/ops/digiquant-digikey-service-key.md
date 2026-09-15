@@ -26,8 +26,11 @@ custom-domain `[[routes]]` entry in
 `cloudflare/digithings-stack-cloudflare/wrangler.toml` (#4063 — new external
 route, owner-approved). `http://digisearch:8002` is compose-only and does not
 resolve from CI. The route is not anonymous: digisearch's `DigiAuthMiddleware`
-requires the `digisearch:query` JWT for `POST /v1/orchestrator_invoke`; only
-`GET /health` is public.
+requires the `digisearch:query` JWT for `POST /v1/orchestrator_invoke`. The
+auth-exempt set is the shared service allowlist — `/health`, `/healthz`,
+`/metrics`, `/docs`, `/redoc`, `/openapi.json`, plus OPTIONS preflights (CORS
+enforced separately) — and, host-agnostically at the Worker edge, `/_stack/meta`,
+`/v1/market/tickers|closes`, and `/_stack/key/*` (proxied to digikey).
 
 ## Required GitHub configuration
 

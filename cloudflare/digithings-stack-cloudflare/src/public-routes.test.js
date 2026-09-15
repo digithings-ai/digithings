@@ -4,12 +4,21 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * Pins the public custom-domain routes declared in wrangler.toml against the
- * hostnames src/ports.ts routes. A host the Worker maps in code is unreachable
- * without an enabled `[[routes]]` entry: the deploy comes up green and every
- * request to that host 404s at the edge (unknown host → portForHostname null).
- * Commented-out blocks (e.g. the mcp.digithings.ai HUMAN GATE route) are not
- * enabled ingress and are filtered out before parsing.
+ * Pins the public custom-domain routes declared in wrangler.toml — both
+ * directions:
+ *
+ *  - every host src/ports.ts routes must have an enabled `[[routes]]` entry
+ *    (a host mapped in code but not routed 404s at the edge while the deploy
+ *    still comes up green), and
+ *  - the enabled set must be exactly the three approved public backends.
+ *
+ * The exclusivity half is a deliberate tripwire on public exposure: routes are
+ * how this Worker reaches the internet, so enabling one is a human-gated
+ * decision (see the HUMAN GATE comments in wrangler.toml). Re-enabling the
+ * parked `mcp.digithings.ai` route — whose MCP tools are unauthenticated
+ * localhost today — must fail this test rather than silently ship ingress.
+ * Commented-out blocks are filtered out before parsing; when a new public route
+ * is genuinely approved, update the expected set in the same PR.
  *
  * Deliberately plain `.js`, same reason as env-vars-pin.test.js: tsconfig.json
  * scopes `types` to @cloudflare/workers-types only, so node:fs / node:path /
@@ -34,14 +43,11 @@ function enabledCustomDomainPatterns(source) {
 }
 
 describe("wrangler.toml public routes", () => {
-  it("declares an enabled custom domain for every public stack host", () => {
-    const patterns = enabledCustomDomainPatterns(config);
-    for (const host of [
+  it("enables exactly the approved custom domains and nothing else", () => {
+    expect(enabledCustomDomainPatterns(config).sort()).toEqual([
       "graph.digithings.ai",
       "key.digithings.ai",
       "search.digithings.ai",
-    ]) {
-      expect(patterns, `missing enabled custom-domain route for ${host}`).toContain(host);
-    }
+    ]);
   });
 });
