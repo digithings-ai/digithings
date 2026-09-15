@@ -531,6 +531,8 @@ def check(max_age_days: int | None = None) -> int:
     """Validate the committed snapshot.
 
     Shape is always checked, and test-web.yml runs this bare form on every website PR.
+    Rows are checked for composition too, not just list-ness: an `openIssues` row that
+    links a pull request is a wrong figure that renders as an issue (#4093).
     Freshness is checked only when *max_age_days* is given, and that asymmetry is
     deliberate: a hard staleness gate on that lane would turn "the refresh cron did not
     run" into a red build on unrelated work, which is exactly the kind of unrelated-red
@@ -565,6 +567,27 @@ def check(max_age_days: int | None = None) -> int:
     if not isinstance(data["mergedPulls"], list) or not isinstance(data["openIssues"], list):
         print("❌  mergedPulls and openIssues must be lists", file=sys.stderr)
         return 1
+    # Composition, not just list-ness: a pull request in `openIssues` renders as an
+    # issue and is a wrong figure, and the vitest mirror on the homepage
+    # (cloudflare/digithings-web/lib/repoActivity.test.ts) rejects the link. It shipped
+    # once, from a pre-`is:issue` generator — #4093. `mergedPulls` gets the mirror check.
+    for key, segment in (("mergedPulls", "pull"), ("openIssues", "issues")):
+        for row in data[key]:
+            if (
+                not isinstance(row, dict)
+                or not isinstance(row.get("number"), int)
+                or isinstance(row.get("number"), bool)
+                or not isinstance(row.get("title"), str)
+                or not row["title"]
+                or not isinstance(row.get("url"), str)
+                or f"/{segment}/{row['number']}" not in row["url"]
+            ):
+                print(
+                    f"❌  {key} rows must be /{segment}/<number> links carrying a number and "
+                    f"a title — got {row!r}",
+                    file=sys.stderr,
+                )
+                return 1
     dc = data["dailyContributions"]
     if not isinstance(dc, list) or len(dc) != YEAR_DAYS:
         print(f"❌  dailyContributions must be a list of {YEAR_DAYS} days", file=sys.stderr)

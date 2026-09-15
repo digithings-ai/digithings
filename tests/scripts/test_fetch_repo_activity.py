@@ -225,6 +225,43 @@ def test_check_refuses_a_missing_list(tmp_path: Path, monkeypatch: pytest.Monkey
 
 
 @pytest.mark.unit
+def test_check_refuses_a_pull_request_in_open_issues(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A PR row in ``openIssues`` is a wrong figure, not a cosmetic slip (#4093).
+
+    The list is built from an `is:issue+is:open` search, so a PR can only arrive from
+    a snapshot written by an older generator — which is exactly how #4093 shipped, and
+    the homepage vitest mirror (`cloudflare/digithings-web/lib/repoActivity.test.ts`)
+    requires every row to link ``/issues/{number}``.
+    """
+    data = _snapshot()
+    data["openIssues"][0]["url"] = "https://github.com/digithings-ai/digithings/pull/2"
+    assert _check(data, tmp_path, monkeypatch) == 1
+
+
+@pytest.mark.unit
+def test_check_refuses_an_issue_in_merged_pulls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The mirror of the openIssues rule: mergedPulls rows must be /pull/ links."""
+    data = _snapshot()
+    data["mergedPulls"][0]["url"] = "https://github.com/digithings-ai/digithings/issues/1"
+    assert _check(data, tmp_path, monkeypatch) == 1
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("field", ["number", "title", "url"])
+def test_check_refuses_a_row_missing_a_rendered_field(
+    field: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`number`, `title` and `url` are the three fields the page renders per row."""
+    data = _snapshot()
+    del data["openIssues"][0][field]
+    assert _check(data, tmp_path, monkeypatch) == 1
+
+
+@pytest.mark.unit
 def test_check_refuses_an_empty_module_map(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert _check(_snapshot(modules={}), tmp_path, monkeypatch) == 1
 
