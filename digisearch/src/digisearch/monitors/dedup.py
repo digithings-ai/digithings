@@ -15,19 +15,25 @@ A fingerprint is ``"<normalized title>\\x1f<sha256>"``. The digest is sha256
 over ``title.strip().lower()`` + ``"\\n"`` + whitespace-collapsed text; the
 normalized title component rides along so the near-duplicate leg can compare a
 new title against previously seen titles — the memory handed to
-:func:`dedup_results` is otherwise opaque fingerprints only.
+:func:`dedup_results` is otherwise opaque fingerprints only. That wire format is
+the cross-task contract: memory writers (the store's ``seen_fingerprints``)
+MUST recompute seen values with :func:`result_fingerprint` rather than calling
+:func:`fingerprint` directly with ad-hoc fields, or EXA ``highlights``-only /
+OSS ``snippet``-only results will never compare equal and report ``changed`` on
+every run.
 """
 
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from difflib import SequenceMatcher
 from typing import Any
 
 from digisearch.monitors.models import DedupRule
 from digisearch.web_search.citation import normalize_url
 
-__all__ = ["dedup_results", "fingerprint"]
+__all__ = ["dedup_results", "fingerprint", "result_fingerprint"]
 
 _COMPONENT_SEPARATOR = "\x1f"
 
@@ -36,10 +42,12 @@ def fingerprint(title: str, text: str) -> str:
     """Deterministic content fingerprint over a normalized title + text.
 
     The digest is sha256 over ``title.strip().lower()`` + ``"\\n"`` + the
-    whitespace-collapsed ``text``. ``text`` extraction (result ``text`` → EXA
-    ``highlights`` → OSS ``snippet``, R7) happens in :func:`dedup_results`
-    before this is called.
+    whitespace-collapsed ``text``. Callers holding a raw result dict should use
+    :func:`result_fingerprint` instead of picking fields themselves.
     """
+    # The digest input normalizes with strip().lower() (pinned by spec); the
+    # near-dup title comparison additionally collapses internal whitespace via
+    # _normalize_title. Intentional divergence — don't "fix" it.
     normalized_title = title.strip().lower()
     collapsed_text = " ".join(text.split())
     digest = hashlib.sha256(f"{normalized_title}\n{collapsed_text}".encode("utf-8")).hexdigest()
@@ -55,11 +63,11 @@ def _seen_title(stored_fingerprint: str) -> str:
     return _normalize_title(stored_fingerprint.split(_COMPONENT_SEPARATOR, 1)[0])
 
 
-def _result_title(result: dict[str, Any]) -> str:
+def _result_title(result: Mapping[str, Any]) -> str:
     return str(result.get("title") or "")
 
 
-def _result_text(result: dict[str, Any]) -> str:
+def _result_text(result: Mapping[str, Any]) -> str:
     """R7 multi-key text extraction: ``text`` → EXA ``highlights`` → ``snippet``."""
     text = result.get("text")
     if isinstance(text, str) and text.strip():
@@ -75,7 +83,14 @@ def _result_text(result: dict[str, Any]) -> str:
     return ""
 
 
-def _result_fingerprint(result: dict[str, Any]) -> str:
+def result_fingerprint(result: Mapping[str, Any]) -> str:
+    """Fingerprint a raw result dict with the shared R7 extraction.
+
+    Public because seen-memory writers (the store's ``seen_fingerprints``)
+    recompute fingerprints from stored raw result dicts and MUST produce the
+    exact values :func:`dedup_results` compares against — same extraction
+    order, same digest. Do not reimplement field picking at call sites.
+    """
     return fingerprint(_result_title(result), _result_text(result))
 
 
@@ -107,6 +122,10 @@ def dedup_results(
     Stats keys are exactly ``seen``, ``new``, ``changed`` and ``unchanged``;
     ``seen`` counts current results whose normalized URL was already in the
     memory, and collapsed near-duplicates land in ``unchanged``.
+
+    Fingerprints are computed with :func:`result_fingerprint` (shared R7
+    extraction), so they match values memory writers recompute from stored raw
+    result dicts.
     """
     stats = {"seen": 0, "new": 0, "changed": 0, "unchanged": 0}
     survivors: list[dict[str, Any]] = []
@@ -116,7 +135,7 @@ def dedup_results(
         stored = seen.get(key)
         if stored is not None:
             stats["seen"] += 1
-            if rule.match == "url" or _result_fingerprint(result) == stored:
+            if rule.match == "url" or result_fingerprint(result) == stored:
                 stats["unchanged"] += 1
                 continue
             stats["changed"] += 1

@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 
 import pytest
-from digisearch.monitors.dedup import dedup_results, fingerprint
+from digisearch.monitors.dedup import dedup_results, fingerprint, result_fingerprint
 from digisearch.monitors.models import DedupRule
 from digisearch.web_search.citation import normalize_url
 
@@ -123,6 +123,14 @@ def test_oss_snippet_falls_back_when_text_and_highlights_absent():
     changed = [{"url": "https://a.com/1", "title": "T1", "snippet": "gamma"}]
     new2, stats2 = dedup_results(changed, seen, rule)
     assert [r["url"] for r in new2] == ["https://a.com/1"] and stats2["changed"] == 1
+
+
+def test_result_fingerprint_matches_seen_memory_path_for_highlights_only_result():
+    result = {"url": "https://a.com/1", "title": "T1", "highlights": ["alpha", "beta"]}
+    assert result_fingerprint(result) == fingerprint("T1", "alpha beta")
+    seen = {"https://a.com/1": result_fingerprint(result)}
+    new, stats = dedup_results([result], seen, DedupRule(match="url_content"))
+    assert new == [] and stats["unchanged"] == 1
 
 
 def test_empty_text_falls_through_to_highlights():
