@@ -863,6 +863,52 @@ def test_schedule_webset_task_tracks_registry_and_removes_on_completion(
 
 
 @pytest.mark.unit
+def test_escaping_run_failure_does_not_cancel_concurrent_healthy_run(
+    tmp_path, monkeypatch, llm_env
+):
+    """A pre-try escape (store fault) is contained, never cancels TaskGroup siblings.
+
+    ``run_webset_async`` contains pass failures only after ``_load_state``; a
+    load escape inside the lifespan ``TaskGroup`` would cancel every concurrent
+    run. ``schedule_webset_task`` runs behind ``guard_webset_task``, so the
+    escape is logged and swallowed while the healthy run still reaches ``idle``.
+    """
+    store = _store(tmp_path)
+    healthy = _webset(store, enrichments=(_DEF_BLURB,))
+    _search(store, healthy.id, count=1)
+    doomed = _webset(store)
+    _search(store, doomed.id, count=1)
+    _install_seams(monkeypatch, _RecallStub([_URL_A]), _FetchStub(_MARKDOWN))
+    original_load = runner_module.AsyncioRunner._load_state
+
+    async def _flaky_load(self: Any, webset_id: str) -> Any:
+        if webset_id == doomed.id:
+            # Fail after an await so the healthy run is demonstrably in flight.
+            await asyncio.sleep(0.01)
+            raise runner_module.WebsetStoreError("store unavailable", code="store_error")
+        return await original_load(self, webset_id)
+
+    monkeypatch.setattr(runner_module.AsyncioRunner, "_load_state", _flaky_load)
+
+    async def _run() -> tuple[Any, Any]:
+        async with asyncio.TaskGroup() as group:
+            broken = schedule_webset_task(group, doomed.id, store=store)
+            healthy_task = schedule_webset_task(
+                group, healthy.id, store=store, llm_client=_StubLLM()
+            )
+        return broken, healthy_task
+
+    broken, healthy_task = asyncio.run(_run())
+
+    assert broken.exception() is None  # contained: nothing escaped the task
+    assert healthy_task.exception() is None
+    assert store.get_webset(healthy.id).status == "idle"
+    # The doomed row is untouched; the next startup/schedule resumes it.
+    assert store.get_webset(doomed.id).status == "running"
+    assert WEBSET_TASKS == {}
+
+
+@pytest.mark.unit
 def test_stale_done_callback_keeps_newer_registry_entry():
     async def _run() -> None:
         webset_id = "ws_" + "a" * 32

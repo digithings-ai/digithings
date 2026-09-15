@@ -427,6 +427,8 @@ def websets_create(
     poll ``websets_get`` / ``websets_events`` until ``idle``, then
     ``websets_export``. ``criteria_json`` is a JSON array of ``{name, rule}``
     (1-5 rules); ``enrichments_json`` is a JSON array of ``{name, type, ...}``.
+    Runs are driven by the HTTP service's scheduler, so in an MCP-only process
+    the created webset stays ``running`` until an HTTP process resumes it.
     """
     store = _webset_store_or_none()
     if store is None:
@@ -481,7 +483,9 @@ def websets_add_search(webset_id: str, query: str, count: int = 10) -> str:
     """Attach a follow-up search generation to a running/idle webset (async).
 
     Returns JSON ``{"id", "object", "status"}`` for the new search; the refresh
-    is observed through the webset's new search row + events.
+    is observed through the webset's new search row + events. The refresh is
+    driven by the HTTP service's scheduler, so in an MCP-only process it stays
+    ``running`` until an HTTP process resumes it.
     """
     store = _webset_store_or_none()
     if store is None:

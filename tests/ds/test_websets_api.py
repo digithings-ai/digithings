@@ -323,7 +323,7 @@ def test_add_search_and_trigger_are_202(api):
         f"/v1/websets/{created['id']}/searches", json={"query": "more photonics", "count": 1}
     )
     assert search.status_code == 202, search.text
-    assert search.json()["object"] if "object" in search.json() else True
+    assert search.json()["id"].startswith("wss_")
     assert search.json()["status"] == "running"
     assert search.json()["query"] == "more photonics"
 
@@ -650,6 +650,23 @@ def test_lifespan_scheduler_drives_to_idle(monkeypatch, tmp_path):
             _time.sleep(0.02)
         assert status == "idle"
     assert runner_module.WEBSET_TASKS == {}
+
+
+@pytest.mark.unit
+def test_startup_resume_tolerates_store_error(monkeypatch):
+    """A store fault in the resume selector must not block startup (§ docstring)."""
+    import digisearch.server as srv
+
+    def _boom() -> Any:
+        raise WebsetStoreError("ledger locked", code="store_locked")
+
+    monkeypatch.setattr(srv, "get_webset_store", _boom)
+
+    async def _run() -> None:
+        async with asyncio.TaskGroup() as group:
+            await srv._resume_incomplete_websets(group)
+
+    asyncio.run(_run())  # no raise: startup resume only logs and returns
 
 
 # ── MCP tools ────────────────────────────────────────────────────────────────

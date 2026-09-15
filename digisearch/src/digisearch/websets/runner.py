@@ -50,7 +50,9 @@ Lifecycle (spec § Async lifecycle, implemented verbatim):
 - **Ownership**: :func:`schedule_webset_task` registers every background run in
   ``WEBSET_TASKS`` with a done-callback logging ``(webset_id, ok|error)`` and
   removal on completion; bare ``asyncio.create_task`` without a handle is not
-  used here.
+  used here. Every scheduled coroutine runs behind :func:`guard_webset_task`, so
+  a pre-try escape (store fault, unknown mode) is logged and swallowed instead
+  of cancelling the other in-flight runs in the lifespan ``TaskGroup``.
 """
 
 from __future__ import annotations
@@ -58,7 +60,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Protocol, TypeVar, get_args
@@ -96,6 +98,7 @@ __all__ = [
     "WebsetNotFoundError",
     "WebsetRecallError",
     "backfill_enrichment",
+    "guard_webset_task",
     "resume_incomplete_websets",
     "run_webset_async",
     "schedule_webset_task",
@@ -201,7 +204,8 @@ class _PassState:
 
 
 #: ``webset_id -> task`` registry owned by the server lifespan (spec § Async lifecycle).
-WEBSET_TASKS: dict[str, asyncio.Task[Webset]] = {}
+#: ``None`` result == :func:`guard_webset_task` contained an escape (already logged).
+WEBSET_TASKS: dict[str, asyncio.Task[Webset | None]] = {}
 
 
 class AsyncioRunner:
@@ -828,6 +832,23 @@ async def backfill_enrichment(
         return await runner.backfill_enrichment(webset_id, enrichment_id, search_id=search_id)
 
 
+async def guard_webset_task(coro: Awaitable[T], *, webset_id: str, kind: str = "run") -> T | None:
+    """Contain an escaped background failure inside its own task.
+
+    ``run_webset_async`` / ``backfill_enrichment`` contain their pass failures,
+    but their pre-try load (unknown mode, store fault) can still raise. A raise
+    inside the lifespan ``TaskGroup`` would cancel every concurrent webset task
+    and fail the serving window, so the escape is logged here (the done-callback
+    would otherwise record it as ``ok``) and swallowed; the stored row keeps its
+    status and the next schedule/startup resumes it.
+    """
+    try:
+        return await coro
+    except Exception:
+        logger.exception("webset %s task done (%s, error: escaped containment)", kind, webset_id)
+        return None
+
+
 def schedule_webset_task(
     task_group: asyncio.TaskGroup,
     webset_id: str,
@@ -836,25 +857,30 @@ def schedule_webset_task(
     verification_mode: str = "llm",
     llm_client: Any = None,
     concurrency: int = SEMAPHORE_SIZE,
-) -> asyncio.Task[Webset]:
+) -> asyncio.Task[Webset | None]:
     """Create a registry-tracked run task inside the lifespan ``TaskGroup``.
 
     Every task carries a ``WEBSET_TASKS`` entry, a done-callback logging
     ``(webset_id, ok|error)`` and removal on completion (spec § Async
-    lifecycle). Scheduling a webset whose task is still running returns the
-    existing task instead of double-driving it — a duplicated pass would repeat
-    billable verification/enrichment calls.
+    lifecycle). The run is created behind :func:`guard_webset_task` so a
+    pre-containment escape never cancels sibling runs. Scheduling a webset
+    whose task is still running returns the existing task instead of
+    double-driving it — a duplicated pass would repeat billable
+    verification/enrichment calls.
     """
     running = WEBSET_TASKS.get(webset_id)
     if running is not None and not running.done():
         return running
     task = task_group.create_task(
-        run_webset_async(
-            webset_id,
-            store=store,
-            verification_mode=verification_mode,
-            llm_client=llm_client,
-            concurrency=concurrency,
+        guard_webset_task(
+            run_webset_async(
+                webset_id,
+                store=store,
+                verification_mode=verification_mode,
+                llm_client=llm_client,
+                concurrency=concurrency,
+            ),
+            webset_id=webset_id,
         )
     )
     WEBSET_TASKS[webset_id] = task
@@ -862,12 +888,13 @@ def schedule_webset_task(
     return task
 
 
-def _log_task_done(webset_id: str, task: asyncio.Task[Webset]) -> None:
+def _log_task_done(webset_id: str, task: asyncio.Task[Webset | None]) -> None:
     """Log ``(webset_id, ok|error)`` and drop only this task's registry entry.
 
     A reschedule may have replaced the entry after this task finished but before
     this callback ran; popping unconditionally would evict the newer task and
-    re-open the double-drive window the schedule guard closes.
+    re-open the double-drive window the schedule guard closes. A ``None`` result
+    means :func:`guard_webset_task` already logged a contained escape.
     """
     if WEBSET_TASKS.get(webset_id) is task:
         WEBSET_TASKS.pop(webset_id, None)
@@ -876,6 +903,8 @@ def _log_task_done(webset_id: str, task: asyncio.Task[Webset]) -> None:
         return
     error = task.exception()
     if error is None:
+        if task.result() is None:
+            return
         logger.info("webset task done (%s, ok)", webset_id)
     else:
         logger.error("webset task done (%s, error: %s)", webset_id, error)

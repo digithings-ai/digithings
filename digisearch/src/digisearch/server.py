@@ -70,8 +70,14 @@ from digisearch.websets.models import (
     WebsetItem,
     WebsetSearch,
 )
-from digisearch.websets.runner import WEBSET_TASKS, backfill_enrichment, schedule_webset_task
+from digisearch.websets.runner import (
+    WEBSET_TASKS,
+    backfill_enrichment,
+    guard_webset_task,
+    schedule_webset_task,
+)
 from digisearch.websets.service import WebsetServiceError
+from digisearch.websets.store import WebsetStoreError
 from digisearch.websets.store import get_store as get_webset_store
 
 configure_logging()
@@ -139,13 +145,19 @@ class _WebsetTaskScheduler:
 
     def __init__(self, task_group: asyncio.TaskGroup) -> None:
         self._task_group = task_group
-        self._backfills: set[asyncio.Task[list[WebsetItem]]] = set()
+        self._backfills: set[asyncio.Task[list[WebsetItem] | None]] = set()
 
     def schedule_run(self, webset_id: str, *, verification_mode: str = "llm") -> None:
         schedule_webset_task(self._task_group, webset_id, verification_mode=verification_mode)
 
     def schedule_backfill(self, webset_id: str, enrichment_id: str) -> None:
-        task = self._task_group.create_task(backfill_enrichment(webset_id, enrichment_id))
+        task = self._task_group.create_task(
+            guard_webset_task(
+                backfill_enrichment(webset_id, enrichment_id),
+                webset_id=webset_id,
+                kind="backfill",
+            )
+        )
         self._backfills.add(task)
         task.add_done_callback(self._backfills.discard)
 
@@ -178,7 +190,7 @@ async def _resume_incomplete_websets(task_group: asyncio.TaskGroup) -> None:
     """
     try:
         incomplete = await asyncio.to_thread(_load_incomplete_websets)
-    except (OSError, sqlite3.Error) as exc:
+    except (OSError, sqlite3.Error, WebsetStoreError) as exc:
         logger.warning("webset startup resume skipped; store unavailable: %s", exc)
         return
     for webset in incomplete:
