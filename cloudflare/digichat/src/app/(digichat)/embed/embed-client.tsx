@@ -295,14 +295,15 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
   // [data-theme] sync above, just targeting an ancestor instead of <html>).
   useEffect(() => {
     document.querySelector(".dc-embed-shell")?.setAttribute("data-wide", urlColors.wide ? "1" : "0");
-  }, [urlColors.wide]);
+    document.querySelector(".dc-embed-shell")?.setAttribute("data-skin-canvas", tenantCfg.skin === "digichat" ? "1" : "0");
+  }, [urlColors.wide, tenantCfg.skin]);
 
   return (
     <>
       <style>{ACCENT_CSS}</style>
       {urlColors.wide ? null : <div className="dc-grain" aria-hidden />}
       <div
-        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide ? "" : "bg-background"} text-foreground`}
+        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide || tenantCfg.skin === "digichat" ? "" : "bg-background"} text-foreground`}
         style={accentStyle}
       >
         <EmbedChat
@@ -1146,7 +1147,7 @@ function EmbedChat({
 
   const turnCounterSlot = isTrialForm ? (
     <p
-      className="dc-turn-counter select-none pb-1 pt-0.5 text-center text-[0.65rem] font-light tabular-nums tracking-wide text-muted-foreground/50"
+      className="dc-turn-counter relative z-10 mx-auto w-full max-w-2xl select-none pb-1 pt-1.5 pr-3 text-right text-xs font-normal leading-none tabular-nums tracking-wide text-muted-foreground"
       data-testid="embed-turn-counter"
     >
       {formatEmbedTurnCounter(gate.turns, gate.limit)}
