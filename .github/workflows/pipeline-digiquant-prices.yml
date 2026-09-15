@@ -32,11 +32,6 @@ name: "Pipeline: digiquant prices"
 #   * eod-macro fetch-macro (fred,yahoo) → macro rows (FRED readers are R2;
 #     the R2 refresh cron fetches FRED directly; `export_sdca_macro.py`
 #     falls back to the FRED API / keyless fredgraph CSV).
-#   * eod-macro sector quotes → single-name rows (sector analyst reads are
-#     R2-backed; the metrics/verify readers mark from sealed generations, so a
-#     single name held in the book freezes at its last close rather than
-#     failing; same-day opens come from the live fetch — no cadence writer
-#     keeps these rows fresh, #4053).
 #
 #   RETIRED (re-add only as a deliberate rollback):
 #   * intraday compute-technicals → price_technicals (#4013 Task 11; zero
@@ -95,7 +90,7 @@ on:
         type: choice
         options: [intraday, eod-macro, at-open, fx-refresh]
       run_writers:
-        description: 'Run the paused Supabase market-table writers (fetch-macro fred/yahoo, sector refresh). Default false = writes stay paused; KEPT steps (calendar sync) always run.'
+        description: 'Run the paused Supabase market-table writers (fetch-macro fred/yahoo). Default false = writes stay paused; KEPT steps (calendar sync) always run.'
         required: false
         default: false
         type: boolean
@@ -292,23 +287,6 @@ jobs:
         run: |
           uv run --frozen --no-sync python -m digiquant prices fetch-macro \
             --manifest digiquant/src/digiquant/research/config/macro_series.yaml \
-            --supabase
-      - name: Fetch sector single-name quotes (daily, #946)
-        # PAUSED on cadence (#3780 writers-stop): sector analyst reads are
-        # R2-backed. Manual dispatch with run_writers=true re-enables.
-        if: inputs.run_writers == true
-        # The (retired, #4053) intraday job used to fetch only the watchlist ETFs
-        # (rate-limit / timeout risk), so sector single names + sub-segment ETFs
-        # would otherwise never refresh. Refresh the full sector universe once
-        # after the close.
-        # The technicals half of this step is retired (#4013 Task 11) — every
-        # technicals reader rides the R2 recompute-on-read.
-        run: |
-          uv run --frozen --no-sync python -m digiquant prices fetch-quotes \
-            --watchlist digiquant/src/digiquant/research/config/watchlist.md \
-            --include-sectors \
-            --cache-dir data/price-history \
-            --period 1y \
             --supabase
       - name: Update persistent failure issue
         if: failure()

@@ -43,8 +43,8 @@ def test_any_remaining_supabase_market_write_is_run_writers_gated() -> None:
     """No Supabase market write runs on cadence (#4053).
 
     The intraday fetch-quotes writer retired with the stripped job; the market
-    writers that remain (fx-refresh, eod-macro fetch-macro and the sector
-    refresh) are the run_writers-gated paused remainder and must stay gated.
+    writers that remain (fx-refresh and the eod-macro fetch-macro step) are the
+    run_writers-gated paused remainder and must stay gated.
 
     ``sync-calendar --supabase`` writes ``trading_calendar`` (not a market table)
     and stays on cadence — it is deliberately not matched here.
