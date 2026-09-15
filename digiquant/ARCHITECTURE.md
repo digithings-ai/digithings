@@ -1411,7 +1411,7 @@ Each `BacktestResult` has a `run_id` but no persistent store. The audit JSONL is
 
 ### Gloomberb Market-Data Integration (Scoping, #3927)
 
-Scoping spec: [`2026-09-12-digifetch-scoping-design.md`](../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md). Proposed follow-up: 12 `digifetch_*` MCP tools (quotes, history, financials, options, and analytics) over Gloomberb Cloud (`api.gloom.sh`) as an **enrichment** read path for agents, digichat, and a future same-origin dashboard market-data page — plus external deep links with "sourced from Gloomberb" attribution. It is explicitly **not** a pipeline data-source replacement (15-minute free-tier delay, rate limits, 5Y daily-history cap). Implementation is parked behind the human gate for new external service dependencies; nothing is wired by the scoping task.
+Scoping spec: [`2026-09-12-digifetch-scoping-design.md`](../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md). Proposed follow-up: 13 `digifetch_*` MCP tools — 12 over Gloomberb Cloud (`api.gloom.sh`, including ungated news; 3 require an optional session cookie) and one Yahoo-backed earnings calendar — as an **enrichment** read path for agents, digichat, and a future same-origin dashboard market-data page — plus external deep links with "Sourced from Gloomberb" attribution. It is explicitly **not** a pipeline data-source replacement (15-minute free-tier delay, rate limits, 5Y history caps). Implementation is parked behind the human gate for new external service dependencies; nothing is wired by the scoping task.
 
 ---
 

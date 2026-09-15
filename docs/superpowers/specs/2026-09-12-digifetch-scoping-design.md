@@ -1,396 +1,382 @@
-# digifetch × Gloomberb — AssetDataProvider MCP Scoping — Design Spec
+# digifetch × Gloomberb — scoping and design
 
-> **For agentic workers:** This is a DESIGN SPEC, not an implementation plan.
-> Do not implement from this file. The implementation plan (writing-plans skill)
-> is written only after the user approves this spec.
+> **For agentic workers:** this is a scoping/design spec, not an implementation
+> plan. It ships no implementation code and merges no new dependency. Read the
+> whole document before acting on it. The acceptance criteria for the follow-up
+> implementation live in issue [#4069](https://github.com/digithings-ai/digithings/issues/4069).
 
-**Date:** 2026-09-12 (issue) · 2026-09-15 (source validation)
-**Status:** draft — awaiting user review
-**Issue:** [#3927](https://github.com/digithings-ai/digithings/issues/3927) — `[agent] Scope digifetch: MCP wrapper for Gloomberb's AssetDataProvider + dashboard-page evaluation`
-**Validated against:** `gloom-sh/gloomberb` v0.13.3 (`package.json`), shallow clone
-of `main` @ 2026-09-15. File/line cites below are from that revision.
+- **Date:** 2026-09-12 (issue) · 2026-09-15 (source + live-wire validation)
+- **Status:** draft — revised after four fresh-context reviews (see §3.2, §11)
+- **Issue:** [#3927](https://github.com/digithings-ai/digithings/issues/3927)
+- **Validated against:** `gloom-sh/gloomberb` `0.13.3` (shallow clone, MIT) and
+  five anonymous live probes of `https://api.gloom.sh` (2026-09-15)
 
-**Author decision (verbatim, from the live review session):** use Gloomberb as an
-**external-link integration** first — link digiquant tearsheets / stock pages to
-Gloomberb pages for a third-party-integration feel — and fetch a few things
-(headlines, quotes) via the digifetch path, clearly attributed as "sourced from
-Gloomberb". If quotes, options, news, and financials can all come from this one
-free source with history, evaluate replacing the current pipeline sources.
-This spec answers both halves: the MCP tool surface for the digifetch path, and
-a source-by-source verdict on replacement.
-
----
-
-## 1. Goal
-
-Produce a scoping/design spec (no implementation code) for consuming
-Gloomberb's `AssetDataProvider` surface as a `digifetch` MCP tool family for
-Python agents and digichat, plus an evaluation of a same-origin digiquant
-dashboard market-data page instead of iframing `term.gloom.sh`.
-
-In scope:
-
-- Field-for-field validation of the capability surface against the real
-  Gloomberb source and its capability JSON.
-- A clear recommendation among the candidate integration approaches.
-- The 12 `digifetch_*` MCP tools with Pydantic v2 input/output models and
-  resolution × range validation.
-- A data-source inventory with the digifetch path for each source.
-- External-link + attribution design (the "third-party integration feel").
-- Dashboard-page evaluation (same-origin page; iframe ruled out).
-- Human-gate and licensing statements for the follow-up implementation.
-
-Out of scope (explicitly not done here): any implementation code, any change to
-digiquant pipeline data sources, vendoring Gloomberb modules, self-hosting the
-Gloomberb web build, and `digiquant/AGENTS.md` updates (those come with the
-implementation issue).
+Author decisions (2026-09-15, verbatim): add **news as a 13th tool**; support a
+**session cookie from day 1** so the gated tools work once a free Gloom Cloud
+account is signed in; **default the tools ON** behind a kill switch. The
+requester's original goal was an external integration — link digiquant tearsheets
+and stock pages to Gloomberb pages, and fetch headlines and quotes through
+digifetch, clearly attributed as sourced from Gloomberb.
 
 ---
 
-## 2. Background — Gloomberb at a glance
+## 1. Goal and scope
+
+Evaluate consuming Gloomberb's `AssetDataProvider` surface from digithings and
+decide the integration shape. **In scope:** validated capability table (§3), a
+decision with trade-offs (§4, heading kept as `## Decision`), a 13-tool MCP
+contract (§5), a data-source inventory with per-source paths (§6), attribution
+and external-link behavior (§7), the dashboard-page evaluation (§8), the human
+gate (§9), licensing (§10), risks (§11), and the follow-up outline (§12).
+**Out of scope:** implementation (tracked in #4069), pipeline rewiring,
+embedding `term.gloom.sh`, and any change to `digiquant/AGENTS.md`.
+
+## 2. Background
 
 | Fact | Value |
 |------|-------|
-| Project | `gloom-sh/gloomberb` — "Finance terminal, in your terminal." |
-| License | MIT (`LICENSE`: "MIT License, Copyright (c) 2026 Gloomberb Contributors") — GitHub API reports `NOASSERTION` because the file header is plain MIT without an SPDX tag |
-| Version / stack | 0.13.3 · TypeScript + Bun (`packageManager: bun@1.3.11`; CLI shebang `#!/usr/bin/env bun`) |
-| Surfaces | TUI (default), desktop (Electrobun), browser app `term.gloom.sh`, and a JSON-capable CLI — all share one data layer and plugin system |
-| Data layer | Plugin/provider stack: **Gloom Cloud** (`api.gloom.sh`, priority 100, featured primary) → **Yahoo** fallback (always-on, non-toggleable) → supplemental sources (SEC EDGAR, FRED, Treasury, news wires, NasdaqTrader) |
-| Auth model | Anonymous cookie-less HTTP works for quotes, history, financials, options, news, search, FX. Signup + email verification gates SEC filings, holders, analyst research, corporate actions |
-| Free tier | Rate-limited and **15-minute delayed** (`README.md` line 30, `docs/browser.md`); Pro = realtime |
-| Hosted terminal framing | `x-frame-options: DENY` + CSP `frame-ancestors 'none'` (verified live on `term.gloom.sh`, 2026-09-15) |
+| Upstream | `gloom-sh/gloomberb` — "Finance terminal, in your terminal." |
+| License | MIT, `Copyright (c) 2026 Gloomberb Contributors` (LICENSE:15-17 adds an attribution-appreciation paragraph — see §10) |
+| Version / runtime | `0.13.3`; Bun `1.3.11` (`package.json`); CLI shebang `#!/usr/bin/env bun` |
+| Surfaces | TUI/desktop app, hosted terminal `term.gloom.sh`, JSON CLI, plugin system |
+| Data stack | Gloom Cloud (`api.gloom.sh`, priority 100) → Yahoo fallback (in-process) → SEC EDGAR → FRED/Treasury; Cloud upstream is mostly Yahoo (`source: "yahoo"` observed live) |
+| Auth model | Anonymous cookie-less access to `/market/*` and `/news`; client-side `requireVerifiedSession()` gates filings/holders/analyst/actions (six call sites, `index.ts:405-461`); **live probes show SEC routes are not server-enforced** (§3.2) |
+| Free tier | Rate-limited, market data delayed up to 15 minutes (`dataSource: "delayed"`, `delayMinutes: 15`); Pro realtime |
+| Framing | `X-Frame-Options: DENY` + CSP `frame-ancestors 'none'` on `term.gloom.sh` — embedding impossible (§8) |
 
-The upstream data behind Gloom Cloud is largely the **same Yahoo Finance**
-endpoints digiquant already uses directly (`query1.finance.yahoo.com`,
-`query2.finance.yahoo.com`), plus SEC/FRED/Treasury for the public sources.
-Gloomberb's value-add is aggregation, normalization, ranking/importance
-metadata on news, and a uniform provider contract — not a unique data feed.
+## 3. Capability validation
 
----
+The 14 issue-named methods, validated field-for-field against
+`src/types/data-provider.ts`, `src/types/financials.ts`,
+`src/sources/gloomberb-cloud/index.ts`, and live wire probes:
 
-## 3. Capability validation against real source
-
-`AssetDataProvider` (`src/types/data-provider.ts`, 219 lines) is the contract
-consumed by the plugin router. The provider implementation of interest is
-`GloomberbCloudProvider` (`src/sources/gloomberb-cloud/index.ts`, 625 lines),
-id `gloomberb-cloud`, name "Gloom Cloud", priority 100.
-
-| Provider method | Cloud-gated? | Verified in source | digifetch tool |
-|-----------------|--------------|--------------------|----------------|
-| `getQuote` | no | index.ts (`withCloudFallback` path) | `digifetch_quote` |
-| `getQuotesBatch` | no | index.ts | `digifetch_quotes_batch` |
-| `getPriceHistory` / `getPriceHistoryForResolution` / `getDetailedPriceHistory` | no | index.ts; caps `CLOUD_RESOLUTION_SUPPORT` lines 60–69 | `digifetch_price_history` |
-| `getTickerFinancials` / `getTickerFinancialsBatch` | no | index.ts; fields in `src/types/financials.ts` lines 475–478 (`fundamentals`, `profile`, `annualStatements`, `quarterlyStatements`) | `digifetch_ticker_financials` |
-| `getOptionsChain` | **no** | index.ts (`getCloudOptionsChain`) | `digifetch_options_chain` |
-| `getSecFilings` | **yes** — `requireVerifiedSession()` | index.ts; `SecFilingItem` preserves raw `acceptanceDateTime` (`acceptedAtRaw`) | `digifetch_sec_filings` |
-| `getSecFilingDocuments` | **yes** | index.ts | `digifetch_sec_filings` (`what="documents"`) |
-| `getSecFilingContent` | **yes** | index.ts | `digifetch_sec_filings` (`what="content"`) |
-| `getHolders` | **yes** | index.ts | `digifetch_holders` |
-| `getAnalystResearch` | **yes** | index.ts | `digifetch_analyst_research` |
-| `getCorporateActions` | **yes** | index.ts | `digifetch_corporate_actions` |
-| `getEarningsCalendar` | n/a — not implemented on Cloud | Yahoo provider (`src/sources/yahoo-finance.ts`), routed by `provider-router/supplemental.ts` | `digifetch_earnings_calendar` (Yahoo-backed) |
-| `getExchangeRate` / `getExchangeRateSnapshot` | no | index.ts | `digifetch_exchange_rate` |
-| `search` | no (results capped at 10, `apiClient.searchInstruments(query, 10)`) | index.ts | `digifetch_search` |
-
-Methods deliberately **not exposed** as tools: `getCachedQuery` /
-`getCachedFinancialsForTargets` (cache handles, not agent-facing),
-`subscribeQuotes` (streaming), `getQuoteMetadata` (listing facts folded into
-`digifetch_quote` output), `getArticleSummary` (throws `ProviderMiss` on Cloud —
-lazy on-selection only).
+| Method | Cloud-backed? | Live anon? | Wire endpoint | Tool |
+|--------|---------------|-----------|---------------|------|
+| `getQuote` | yes (`index.ts:315`) | 200 | `GET /market/quote?symbol=&exchange=` | `digifetch_quote` |
+| `getQuotesBatch` | yes (`:341`) | 200 | `POST /market/quotes/batch` | `digifetch_quotes_batch` |
+| `getPriceHistory` | yes (`:520`) | 200 | `GET /market/history?symbol=&interval=&rangeKey=` | `digifetch_price_history` |
+| `getTickerFinancials` (+Batch) | yes (`:261`) | 200 | `GET /market/financials`, `POST /market/financials/batch` | `digifetch_ticker_financials` |
+| `getOptionsChain` | yes (`:530`) | 200 | `GET /market/options?symbol=` | `digifetch_options_chain` |
+| `getSecFilings` / `…Documents` / `…Content` | yes (`:339+`) | **200 anon** | `GET /cloud/sec/filings`, `/cloud/sec/filing/documents`, `/cloud/sec/filing/content` | `digifetch_sec_filings` (one tool, `what` discriminator) |
+| `getHolders` | yes, client-gated (`:443`) | **401** | `GET /market/holders` | `digifetch_holders` |
+| `getAnalystResearch` | yes, client-gated (`:452`) | **401** | `GET /market/analyst` | `digifetch_analyst_research` |
+| `getCorporateActions` | yes, client-gated (`:461`) | **401** | `GET /market/corporate-actions` | `digifetch_corporate_actions` |
+| `getEarningsCalendar` | **no** — Yahoo-only (`yahoo-finance.ts:402`) | n/a | no Cloud route; use digiquant's `yfinance` stack | `digifetch_earnings_calendar` (Yahoo-backed) |
+| `getExchangeRate` (+Snapshot) | yes (`:364`) | 200 | `GET /market/exchange-rate?fromCurrency=` | `digifetch_exchange_rate` |
+| `search` | yes (`:394`) | 200 | `GET /market/search?q=&limit=` | `digifetch_search` |
+| news provider (`:586-624`) | yes, ungated | 200 | `GET /news?feed=…`, `GET /news/{id}` | `digifetch_news` |
 
 ### Validation
 
-Source-verified in the local clone (2026-09-15): provider contract, auth gating,
-resolution caps, CLI record shapes (`src/cli/commands/market.ts`, 484 lines),
-and request semantics (`src/api-client/request.ts`: cookie-session auth,
-10 s `/market/` timeout, `Retry-After` parsing).
+Discrepancies vs the paraphrased summary in #3927 that this spec corrects:
 
-Discrepancies vs the paraphrased summary in #3927 that the spec corrects:
+1. **Caps.** The issue's contract caps (`5m→1wk`, `15m→1mo`, `1h→3mo`,
+   `1d→5y` default) match the *base* defaults in `src/time-series/resolution.ts`
+   (162-167). The Cloud provider declares wider support
+   (`CLOUD_RESOLUTION_SUPPORT`, `index.ts:60-69`: 1m→1W, 5m→1M, 15m→3M, 30m→6M,
+   1h→1Y, 1d→5Y, 1wk→5Y, 1mo→ALL), but that table is a **client-side
+   declaration**, not a wire guarantee — validate against live responses (§3.2).
+2. **Gating.** The six `requireVerifiedSession()` call sites are client-side
+   checks. Server behavior differs: SEC filings answered **200 anonymously**
+   live, while holders/analyst/corporate-actions answered **401** (§3.2). Note
+   also that earnings is not on Cloud at all.
+3. **Tool count.** The issue's AC3 test greps for 12 tool rows; the revised
+   contract has **13** (news added by author decision 2026-09-15; the filings
+   triad collapses to one tool with a `what` discriminator). Every one of the 14
+   issue-named methods still maps to a named tool — see §5.1 — so the count test
+   is superseded, not the coverage.
+4. **Not a unique source.** Cloud's quote/history upstream is Yahoo — the same
+   endpoints digiquant already reaches via `yfinance`. Cloud adds shaping,
+   aggregation, and news enrichment, not new raw coverage.
+5. **`bunx gloomberb api list --json` diff not run.** Bun is absent from the
+   authoring and review environments; this step is carried as an open item in
+   §12 (spike) before freezing tool models. It does not change the decision.
+6. **Endpoint map.** The issue's summary implies a single `/cloud/*` surface;
+   the real map is three families — `/market/*` (quotes, history, financials,
+   options, search, FX, holders, analyst, actions), `/news`, and `/cloud/*`
+   (SEC, econ, transcripts, search, 13F).
+7. **1wk range.** The issue's cap table promises all-time for `1wk`; a live
+   anonymous probe returned 29 weekly bars (2026-02-23 → 2026-09-07) for
+   `rangeKey=ALL` — the server truncates. A direct HTTP client has **no Yahoo
+   fallback**, so the contract caps `1wk` at **5 years** (§5.2) and records the
+   truncation as a spike item.
 
-1. **Caps differ from the issue's list.** The Cloud provider can serve more
-   than the conservative caps named in the acceptance criteria
-   (`CLOUD_RESOLUTION_SUPPORT`, lines 60–69): 1m→1W, 5m→1M, 15m→3M, 30m→6M,
-   1h→1Y, 1d→5Y, 1wk→5Y, 1mo→ALL. The base library default
-   (`src/time-series/resolution.ts` lines 162–167) is 5m→1W, 15m→1M, 1h→3M,
-   1d→5Y, 1wk→ALL, 1mo→ALL. **This spec adopts the issue's conservative caps as
-   the initial tool contract** (§5.2) and records the wider Cloud caps as a
-   follow-up widening knob — widening needs no client change.
-2. **No credentials is only true for the ungated subset.** SEC filings,
-   holders, analyst research, and corporate actions require a signed-up,
-   email-verified Cloud session. Options chains are *not* gated (good news for
-   the "replace current sources" question). The earnings calendar is not a
-   Cloud capability at all — it is served by the Yahoo fallback provider, so
-   its tool is out of scope for the Cloud HTTP client until a Cloud route
-   exists (see §3 table, §5.1, §6).
-3. **Twelve tools, not fourteen.** The issue lists 14 method names but its own
-   count test expects 12 rows; the SEC filings family (filings → documents →
-   content) is one tool with a `what` discriminator.
-4. **Not a unique data source.** Cloud's upstream is Yahoo (same source as
-   digiquant's current fetchers) plus SEC/FRED/Treasury. Aggregation and news
-   prioritization are the differentiators, not wholesale replacement of feeds.
-5. **CLI JSON cannot be validated in CI or locally.** `bun` is not installed
-   in the agent environment; `bunx gloomberb api list --json` requires a Bun
-   runtime. The follow-up implementation must run
-   `bunx gloomberb api list --json > /tmp/gloomberb-capabilities.json` once on
-   a machine with Bun and diff the capability keys against §5's tool table;
-   `src/cli/commands/market.ts` record shapes in §5 are the source-verified
-   stand-in.
+### 3.2 Live wire verification (2026-09-15, anonymous, no cookies)
 
----
+| Probe | Result |
+|-------|--------|
+| `GET /market/quote?symbol=AAPL` | 200; envelope `{status, data, asOf}`; `dataSource: "delayed"`, `providerId: "gloomberb-cloud"`, `stale: false`, bid/ask, pre-market fields |
+| `GET /market/history?symbol=AAPL&interval=1week&rangeKey=ALL` | 200; 29 bars (2026-02-23T00:00:00.000Z → 2026-09-07T00:00:00.000Z); bar dates are ISO datetimes, not date-only |
+| `GET /market/options?symbol=AAPL` | 200; `calls`/`puts` arrays; `expiration` in epoch **seconds**; 23 expiration dates |
+| `GET /market/holders?symbol=AAPL` | **401** `{"message":"Unauthorized"}` |
+| `GET /cloud/sec/filings?ticker=MSFT&limit=1` | **200 anon**; `{filings:[…], hasMore, nextOffset}` with `acceptedAtRaw`, `primaryDocumentUrl` |
+| `GET /news?limit=1` | 200; item keys include `headline`, `summary`, `primarySource`, `primaryUrl`, `sentiment`, `sectors`, `scores`, `tickerLinks`, `topic`, `firstSeenAt` — no `publishedAt`/`url`/`tickers` |
+| `GET /market/search?q=apple&limit=10` | 200; multi-venue listings; server honors `limit` |
+| `GET /market/exchange-rate?fromCurrency=EUR` | 200; `data.source: "yahoo"`, `delayMinutes: 15`, `stale: false` |
 
 ## Decision
 
-**Recommended approach: (c) — a Python HTTP client against the same JSON
-endpoints the Gloomberb CLI uses (`api.gloom.sh`), with `digifetch` providing
-transport (httpx fetch, rate limiting, retry) and the Gloomberb-specific URLs,
-models, and parsing living in the digiquant consumer.** Neither issue candidate
-is chosen: (a) CLI shell-out and (b) TS vendoring are both rejected below.
-"Chosen approach" is (c) with (d) as the documented fallback.
+**Recommended approach: (c) — a Python HTTP client against `api.gloom.sh`,
+built on `digifetch` transport primitives.** "Chosen approach" is (c) with (d)
+as the documented fallback.
 
-| # | Approach | Verdict | Why |
-|---|----------|---------|-----|
-| (a) | CLI shell-out (`bunx gloomberb … --json`) | **Rejected** | Adds a Bun runtime + subprocess to a Python service; couples tool contracts to a CLI arg surface that can change without semver notice; per-call process spawn costs ~100–300 ms before any network; no reuse from the dashboard (a browser cannot spawn the CLI). Recommended only as a debugging/diff harness. |
-| (b) | Vendor the MIT TS provider modules | **Rejected** | Still ships a JS runtime (Bun or Node) for Python to consume, so the runtime dependency problem is unchanged; vendored code forks immediately (upstream moves fast — pushed the day of validation); parsing/HTTP logic is small enough that a Python client is the smaller maintenance burden. |
-| (c) | **Python HTTP client against `api.gloom.sh`** | **Chosen** | No Bun, no subprocess; full Pydantic v2 control over inputs/outputs; identical data because it is the same API the CLI calls (cookie-less anonymous where allowed, session cookie where gated); reuses `digifetch.HttpFetcher` / `RateLimiter` / `with_retry`; the dashboard and digichat share the same client; the API client contract is pinned by §3's source validation. |
-| (d) | Direct-to-source (Yahoo/SEC/FRED) with no Gloomberb | Documented fallback | Zero third-party contract risk, but re-implements the aggregation/normalization Gloomberb already did — and Cloud's Yahoo upstream is the same data. Use as fallback if `api.gloom.sh` access breaks; keep the tool schemas identical so consumers do not change. |
+| Approach | Verdict | Trade-offs |
+|----------|---------|------------|
+| (a) CLI shell-out (`bunx gloomberb …`) | **Rejected** | Requires a Bun runtime in the service image; subprocess per call; couples us to the CLI's argument surface and output modes; no cookie/session control from Python |
+| (b) Vendor the MIT TypeScript provider modules | **Rejected** | Still ships a JS runtime; a Python package cannot call them without a bridge; porting the normalizers to Python is required either way, and the source stays canonical upstream |
+| (c) Python HTTP client over `api.gloom.sh` + digifetch | **Chosen** | Cookie-less anonymous access works (verified); no Bun; full Pydantic v2 control; `digifetch` already owns transport, rate limiting, and retry; effort shifts to porting the client-side normalizers (§5.4) |
+| (d) Direct-to-Yahoo/SEC/FRED in Python | **Documented fallback, not built** | Same upstream data; loses Cloud's normalization, news aggregation, and cookie-gated endpoints; would need its own Yahoo crumb handling |
 
-Trade-offs compared as the acceptance criteria require: **(a)** lowest initial
-code, highest runtime and coupling cost; **(b)** low transport code, but a
-permanent fork and still a JS runtime; **(c)** moderate initial client code,
-lowest runtime cost, best dashboard-reuse potential (the dashboard's future
-market-data page and digichat consume the same Python client), and testable
-without a network (mocked `httpx.MockTransport`, the existing digifetch test
-seam). Subprocess overhead: (a) high per call (spawn), (c) none.
-
-Placement (respects both components' rules):
-
-- `digifetch` stays the generic transport engine — no URLs, no site logic, no
-  env reads (its `ARCHITECTURE.md` "Deliberately NOT extracted" boundary).
-- The Gloomberb client lives in the consumer: a new
-  `digiquant/src/digiquant/data/gloomberb/` package (client + Pydantic models +
-  normalizers) — the consumer owns URLs, parsing, and models, following
-  digifetch's "Deliberately NOT extracted" boundary (as with twelve-x).
-- The 12 tools register in the **existing digiquant MCP server**
-  (`digiquant/src/digiquant/mcp_server.py`, FastMCP streamable-http, default
-  `127.0.0.1:8767`), following the `digiquant_fetch_coinbase_ohlcv` pattern.
-  A standalone `digifetch-mcp` server is deferred (YAGNI): it would add a new
-  port/service surface for no consumer that the digiquant server does not
-  already serve.
-
----
+Placement: `digifetch` stays the generic transport engine — no URLs, no site
+logic, no env reads (its "Deliberately NOT extracted" boundary). The Gloomberb
+client, endpoint constants, Pydantic models, and normalizers live in
+`digiquant/src/digiquant/data/gloomberb/`. Tools register in the existing
+digiquant MCP server (`mcp_server.py`), following the
+`digiquant_fetch_coinbase_ohlcv` precedent — a standalone `digifetch-mcp`
+server is deferred (YAGNI). Note: tools are named `digifetch_*` while deployed
+inside digiquant's server; that is a deliberate naming/ownership split to keep
+discovery aligned with the data-fetch family.
 
 ## 5. MCP tool surface
 
-All tools live under the `digifetch_` namespace (fixed by #3927), are read-only,
-and return a single JSON envelope (never raise to the transport — the existing
-MCP server pattern wraps errors as `{"error": …}`).
+### 5.1 Tools
 
-### 5.1 The twelve tools
+All rows use Pydantic v2 input and output models. Rows starting `| \`digifetch_`
+are the test-visible contract (13 rows).
 
-| Tool | Wraps | Input model (Pydantic v2) | Output model | Auth | Notes |
-|------|-------|---------------------------|--------------|------|-------|
-| `digifetch_quote` | `getQuote` | `QuoteInput{symbol: str, exchange: str \| None}` | `QuoteResult{target, quote: Quote \| None, error: DigifetchError \| None}` | anon | Single-symbol; `Quote` carries price, change, currency, provider, `updated_at`, `stale` |
-| `digifetch_quotes_batch` | `getQuotesBatch` | `QuotesBatchInput{symbols: list[str] (1–20), exchange: str \| None}` | `QuotesBatchResult{quotes: list[QuoteResult], partial: bool}` | anon | Per-target error isolation, never all-or-nothing |
-| `digifetch_price_history` | `getPriceHistory` | `PriceHistoryInput{symbol, exchange?, resolution, range}` | `PriceHistoryResult{symbol, resolution, range, points: list[PricePoint], source}` | anon | Resolution × range validated against §5.2 caps; `PricePoint{date, open, high, low, close, volume}` (`open/high/low/volume` optional upstream) |
-| `digifetch_ticker_financials` | `getTickerFinancials` | `TickerFinancialsInput{symbol, exchange?, statement_history?: "annual"\|"quarterly"\|"both"}` | `TickerFinancialsResult{fundamentals: Fundamentals \| None, profile: CompanyProfile \| None, annual_statements: list[FinancialStatement], quarterly_statements: list[FinancialStatement]}` | anon | Mirrors `src/types/financials.ts` lines 475–478 |
-| `digifetch_options_chain` | `getOptionsChain` | `OptionsChainInput{symbol, exchange?, expiration?: date}` | `OptionsChainResult{expiration_dates: list[date], contracts: list[OptionsContract]}` | anon | `OptionsContract{side, contract_symbol, strike, last, bid, ask, volume, open_interest, implied_volatility, expiration}` (`side` normalizes upstream `calls`/`puts`) |
-| `digifetch_sec_filings` | `getSecFilings` + `getSecFilingDocuments` + `getSecFilingContent` | `SecFilingsInput{symbol, exchange?, count: int = 15 (1–40), what: "filings"\|"documents"\|"content" = "filings", accession_number: str \| None}` | `SecFilingsResult{filings: list[SecFilingItem] \| None, documents: list[SecFilingDocument] \| None, content: SecFilingContent \| None}` | **session** | One tool for the filings family (`what` discriminator); `documents`/`content` require `accession_number`; preserves `accepted_at_raw` (SEC acceptance timestamp, no TZ inference) |
-| `digifetch_holders` | `getHolders` | `HoldersInput{symbol, owner_type: "all"\|"insider"\|"institution" = "all"}` | `HoldersResult{holders: list[Holder], summary: HoldersSummary \| None}` | **session** | `owner_type` replaces the CLI's `insider`/`13f` variants |
-| `digifetch_analyst_research` | `getAnalystResearch` | `AnalystResearchInput{symbol, limit: int = 20}` | `AnalystResearchResult{ratings: list[AnalystRating], recommendation: RecommendationSummary \| None}` | **session** | `AnalystRating{date, firm, action, current, prior, price_target}` |
-| `digifetch_corporate_actions` | `getCorporateActions` | `CorporateActionsInput{symbol, kinds?: list["earnings"\|"dividend"\|"split"]}` | `CorporateActionsResult{actions: list[CorporateAction]}` | **session** | `CorporateAction{kind, date, detail}` |
-| `digifetch_earnings_calendar` | Yahoo provider (not Cloud) | `EarningsCalendarInput{symbols: list[str], horizon_days: int = 90}` | `EarningsCalendarResult{events: list[EarningsEvent]}` | anon (Yahoo path) | `EarningsEvent{symbol, name, date, timing, eps_estimate, eps_actual, revenue_estimate, revenue_actual}`; no Cloud endpoint exists (§5.1 exception) |
-| `digifetch_exchange_rate` | `getExchangeRate` / `getExchangeRateSnapshot` | `ExchangeRateInput{from_currency: str, to_currency: str = "USD"}` | `ExchangeRateResult{from_currency, to_currency, rate, as_of}` | anon | Snapshot variant drives `as_of` |
-| `digifetch_search` | `search` | `SearchInput{query: str, limit: int = 10 (1–10)}` | `SearchResult{results: list[InstrumentSearchResult]}` | anon | Provider caps results at 10 — a caller asking for more gets a `limit_clamped` warning field, not more rows |
+| Tool | Wraps | Endpoint | Input model | Output model | Auth |
+|------|-------|----------|-------------|--------------|------|
+| `digifetch_quote` | `getQuote` | `GET /market/quote` | `QuoteInput{symbol: str, exchange: str \| None}` | `QuoteResult(quote: Quote \| None)` | anon |
+| `digifetch_quotes_batch` | `getQuotesBatch` | `POST /market/quotes/batch` | `QuotesBatchInput{symbols: list[str] (1–20)}` | `QuotesBatchResult(quotes: list[QuoteBatchItem])` | anon |
+| `digifetch_price_history` | `getPriceHistory` | `GET /market/history` | `PriceHistoryInput{symbol, resolution: Resolution, range: Range, exchange?}` | `PriceHistoryResult(bars: list[PriceBar], metadata)` | anon |
+| `digifetch_ticker_financials` | `getTickerFinancials` (+Batch) | `GET /market/financials`, `/market/statements`, `POST /market/financials/batch` | `TickerFinancialsInput{symbol, exchange?, extended_statements: bool = False}` | `TickerFinancialsResult(financials: TickerFinancials)` | anon |
+| `digifetch_options_chain` | `getOptionsChain` | `GET /market/options` | `OptionsChainInput{symbol, exchange?, expiration: int \| None (epoch s)}` | `OptionsChainResult(chain: OptionsChain)` | anon |
+| `digifetch_sec_filings` | `getSecFilings` / `…Documents` / `…Content` | `GET /cloud/sec/filings`, `/cloud/sec/filing/documents`, `/cloud/sec/filing/content` | `SecFilingsInput{ticker, what: Literal["filings","documents","content"], count: int = 15, cik?, accession?, form?}` | `SecFilingsResult(filings \| documents \| content)` | anon (live-verified) |
+| `digifetch_holders` | `getHolders` | `GET /market/holders` | `HoldersInput{symbol, owner_type: Literal["all","insider","institution","fund","direct"] = "all"}` | `HoldersResult(holders: list[Holder])` | session cookie |
+| `digifetch_analyst_research` | `getAnalystResearch` | `GET /market/analyst` | `AnalystResearchInput{symbol, limit: int = 20}` | `AnalystResearchResult(recommendation, price_target, actions: list[AnalystAction])` | session cookie |
+| `digifetch_corporate_actions` | `getCorporateActions` | `GET /market/corporate-actions` | `CorporateActionsInput{symbol}` | `CorporateActionsResult(actions: list[CorporateAction])` | session cookie |
+| `digifetch_earnings_calendar` | `getEarningsCalendar` | **Yahoo via `yfinance` (no Cloud route)** | `EarningsCalendarInput{symbols: list[str], horizon_days: int = 90}` | `EarningsCalendarResult(events: list[EarningsEvent])` | anon (Yahoo path) |
+| `digifetch_exchange_rate` | `getExchangeRate` (+Snapshot) | `GET /market/exchange-rate` | `ExchangeRateInput{from_currency: str (ISO-4217, len 3), to_currency: str = "USD"}` | `ExchangeRateResult(rate, as_of, stale, delay_note)` | anon |
+| `digifetch_search` | `search` | `GET /market/search` | `SearchInput{query, limit: int = 10 (1–10)}` | `SearchResult(results: list[InstrumentSearchResult], limit_clamped: bool)` | anon |
+| `digifetch_news` | news `fetchNews` / `fetchNewsStory` | `GET /news`, `GET /news/{id}` | `NewsInput{feed: Literal["latest","top","breaking","ticker","sector","topic"] = "latest", ticker?, story_id?, limit: int = 20}` | `NewsResult(items: list[NewsItem])` | anon |
 
-Names, counts, and the tool-per-method mapping above satisfy the #3927 count
-test (12 rows) while covering all 14 provider method names via the filings
-family and the batch/history variants.
+Notes:
 
-Exception: `digifetch_earnings_calendar` wraps `getEarningsCalendar`, which has
-**no Cloud endpoint** — it is served by the Yahoo fallback provider
-(`yahoo-finance.ts` via `provider-router/supplemental.ts`). It is specified here
-for completeness of the method census, but the Cloud HTTP client does not own
-it until a Cloud route exists.
+- `digifetch_earnings_calendar` is the one non-Cloud tool: it follows
+  digiquant's existing `yfinance` dependency (same upstream Yahoo exposes), and
+  the Cloud client does not own it unless a Cloud route appears.
+- `digifetch_holders.owner_type` exposes the upstream four owner types
+  (`financials.ts:138`) plus the CLI's `insider`/`direct` and
+  `institution`/`fund` variants; filtering beyond the endpoint's grouping is
+  client-side.
+- `digifetch_search.limit_clamped` is a result field (not only an envelope
+  warning) because the server accepts a `limit` but the Cloud client wrapper
+  caps at 10.
+- Endpoint names/paths are the real family map: `/market/*`, `/news`,
+  `/cloud/*` (§3, Validation item 6).
+- `PriceBar.open/high/low/volume` are optional upstream (`financials.ts:449-457`);
+  `OptionsContract.side` normalizes upstream `calls`/`puts`.
 
 ### 5.2 Resolution × range caps
 
-Validation is enforced in the Pydantic input model (a `model_validator` raising
-on unsupported pairs) so an invalid request never leaves the process:
+The contract matches the issue's acceptance criteria, with one recorded
+deviation (see below). Validation is a Pydantic v2 `model_validator` on
+`PriceHistoryInput`.
 
-| Resolution | Max range (contract) | Cloud-served max (source) | Notes |
-|------------|----------------------|---------------------------|-------|
-| `1m` | not offered | 1W | Keep unoffered until a consumer needs it |
-| `5m` | 1W | 1M | |
-| `15m` | 1M | 3M | |
-| `30m` | not offered | 6M | Keep unoffered until a consumer needs it |
-| `1h` | 3M | 1Y | |
-| `1d` | 5Y (default range `1Y` per request) | 5Y | Default resolution |
-| `1wk` | all-time | 5Y (Cloud) — all-time falls back to Yahoo | |
-| `1mo` | all-time | ALL | |
+| Resolution | Contract max range | Notes |
+|------------|--------------------|-------|
+| `1m` | 1 week | Cloud also 1W |
+| `5m` | 1 week | Cloud can serve 1M — one-line widening knob |
+| `15m` | 1 month | matches Cloud |
+| `30m` | 6 months | Cloud-served; kept in contract |
+| `1h` | 3 months | Cloud can serve 1Y |
+| `1d` | 5 years (default) | matches Cloud |
+| `1wk` | **5 years** — *deviation from the issue's all-time* | live probe: 29 bars for `ALL`; a direct client has no Yahoo fallback; spike item to re-measure |
+| `1mo` | all-time | matches Cloud |
 
-The contract matches the acceptance criteria exactly; §3 (Validation item 1)
-records the full Cloud table. `1wk` is the one row where the contract is *wider*
-than Cloud (all-time vs 5Y) — that range relies on the Yahoo fallback. Every
-other widening is a one-line table edit.
+Range vocabulary is the `TimeRange` enum (`1D…5Y, ALL`); resolution is the
+chart-resolution enum (`1m…1mo`). A request outside the contract raises
+`invalid_input` (never silently clamps), matching the envelope policy in §5.3.
 
-### 5.3 Shared envelope, errors, and freshness
+### 5.3 Envelope, errors, freshness
 
-Every tool returns `DigifetchEnvelope{source="gloomberb", provider_id,
-fetched_at, stale: bool, delay_note: str | None, data, warnings: list[str]}`.
-`stale=true` and `delay_note="free tier: data delayed up to 15 minutes"` are set
-when the response indicates stale/partial provider metadata. Errors are typed:
-`DigifetchError{code: "auth_required" | "rate_limited" | "provider_miss" |
-"network" | "invalid_input" | "upstream_error", message, retry_after_ms: int |
-None}` — `rate_limited` maps from HTTP 429 + `Retry-After`; `auth_required`
-maps from the `requireVerifiedSession()` failure path. No tool treats a
-`provider_miss` (symbol not found / unsupported data) as a hard error.
+One shared envelope, generic over the tool payload:
 
----
+```text
+DigifetchEnvelope[T] {
+  source: Literal["gloomberb"], provider_id: str,
+  fetched_at: datetime, stale: bool, delay_note: str | None,
+  warnings: list[str], data: T
+}
+```
 
-## 6. Data-source inventory and digifetch path per source
+Each `*Result` model in §5.1 is the `T`. Tools never raise to the transport;
+failures return an envelope whose `data` is a typed `DigifetchError{code,
+message, retryable}`:
 
-Exploration round requested in the live session: exactly which sources exist
-and what the digifetch path is for each. From the outbound-host census and
-`src/sources/` layout:
+| Situation | code |
+|-----------|------|
+| Wire 401/403 (gated endpoint without cookie) | `auth_required` |
+| Wire 404 or envelope `status` not-found | `not_found` |
+| Wire 429 (honor `Retry-After`) | `rate_limited` |
+| Wire 5xx / timeout | `upstream_error` (retryable) |
+| Pydantic validation failure on input | `invalid_input` |
+| Envelope `status` outside success family | `upstream_error` / `not_found` per mapping table |
 
-| Source | Endpoint(s) | Free / auth | digifetch path | Replacement verdict for pipeline |
-|--------|-------------|-------------|----------------|----------------------------------|
-| Gloom Cloud (primary) | `api.gloom.sh/cloud/*` | free tier rate-limited, 15-min delayed; signup for gated methods | Chosen path (c) — direct Python client | **Enrichment only** — delay + rate limits disqualify realtime/live |
-| Yahoo Finance (fallback) | `query1/query2.finance.yahoo.com`, `finance.yahoo.com` | free, unofficial, delayed | Already used by digiquant via the `yfinance` library (`data/prices/fetchers.py`) — same underlying endpoints; no change | Same upstream as Cloud; keep direct fetchers |
-| SEC EDGAR | `www.sec.gov`, `data.sec.gov` | free, public | Cloud client (session) or direct EDGAR later via (d) | Enrichment (filings text, holders) |
-| FRED / Treasury | `fred.stlouisfed.org`, `api.fiscaldata.treasury.gov` | free, public | Direct (no Cloud dependency worth it) | Existing digiquant macro ingest already covers this |
-| News wires | Dow Jones/WSJ feeds, BBC, CNBC search, HN, Substack via Cloud aggregator | free via Cloud | **Deferred** — not in this spec's 12-tool contract; the Cloud news provider is ungated, so a `digifetch_news` tool is a small follow-up addition (§12 item 7) | **Strongest pull** — aggregated headlines + topic/tickers/importance metadata is new capability |
-| NasdaqTrader symbol files | `www.nasdaqtrader.com` | free, public | Deferred (supplemental listing data) | Not needed now |
-| Issuer IR pages (ICE, SSGA), 13F aggregators | various | free | Deferred | Not needed now |
+**Freshness.** Wire `stale: true` means *expired cache being served*; upstream
+TS converts that to `ProviderMiss` and falls back. This client has no fallback,
+so `stale: true` maps to `DigifetchEnvelope.stale = true` plus a
+`delay_note`. The 15-minute free-tier delay is **not** `stale` — it is signalled
+by `dataSource: "delayed"` (`live|delayed|snapshot`) and/or `delayMinutes: 15`
+(options, financials, exchange-rate). Freshness derivation is the union:
+`stale` OR `dataSource == "delayed"` OR `delayMinutes` present →
+`delay_note = "Free-tier data delayed up to 15 minutes"`. This precedence is
+pinned by tests.
 
-Bottom line: Gloomberb **does not replace** the pipeline's price/history
-sources (15-minute delay, rate limits, 5Y daily-history cap vs digiquant's
-needs), but it **does add** news/sentiment headlines, fundamentals cross-checks,
-options snapshots, and dashboard enrichment from one contract.
+### 5.4 Normalizers to port (fixtures required)
 
----
+The TS client normalizes before display; a raw-JSON Python client must port or
+consciously drop each rule, with golden fixtures (at least one GBp/LSE listing
+and one intraday series):
 
-## 7. Attribution and external-link integration
+- currency units: GBp→GBP divisor handling (`resolveCurrencyUnit`);
+- interval tokens: `5m→5min`, `1d→1day`, `1wk→1week` (`normalizers.ts:253-274`);
+- exchange-timezone date parsing for bar dates (ISO datetimes on the wire);
+- malformed-intraday rejection for non-Yahoo upstreams;
+- day-range reconciliation (quote low/high vs session data) — drop only with a
+  recorded decision.
 
-The external-link half of the author decision, with no data dependency:
+### 5.5 Transport plumbing (digifetch specifics)
 
-- Digiquant tearsheet / stock pages deep-link out to the matching Gloomberb
-  page (`term.gloom.sh/<symbol>`; public share pages need no account,
-  `docs/browser.md`). Link out with `target="_blank" rel="noopener"`; no
-  embedding (see §8).
-- Any data rendered from the digifetch path carries visible attribution:
-  **"Sourced from Gloomberb"** (plus "data delayed up to 15 minutes" when
-  `stale=true`). This is honest even before Pro credentials exist.
-- Tool envelopes carry the same attribution string so agent answers and
-  digichat citations are consistent.
-- MIT attribution (see §10) applies to any vendored code — none is planned
-  under the chosen approach, but the notice text is recorded here so a future
-  re-decision does not have to re-derive it.
+`digifetch.HttpFetcher.fetch` raises on non-2xx and returns a `FetchResult`
+without headers, so the client catches `httpx.HTTPStatusError` for
+429/`Retry-After` extraction. `RetryPolicy.retry_on` must be narrowed to
+retryable classes (not the default `(Exception,)`) so 401/404 are not retried.
+The `RateLimiter` interval is a client constant (pin in implementation; the
+free tier is rate-limited). Cache: a 900s TTL cache for enrichment reads
+(matching the R2 market-data-cache convention) with the kill switch bypassing
+it for diagnostics.
 
----
+## 6. Data-source inventory and per-source digifetch path
+
+| Source | What it provides | digifetch path | Replacement verdict |
+|--------|------------------|----------------|---------------------|
+| Gloom Cloud `/market/*` | quotes, history, financials, options, search, FX | `digifetch_*` tools (chosen approach (c)) | Enrichment only — 15-min delay + rate limits disqualify it as a pipeline primary |
+| Gloom Cloud `/news` | aggregated wires (Reuters, CNBC, WSJ/Dow Jones, BBC, MarketWatch observed live), sentiment, sectors, importance scores | `digifetch_news` | New capability for digichat/dashboard enrichment |
+| Gloom Cloud `/cloud/sec/*` | filings, documents, content | `digifetch_sec_filings` | Cross-check vs direct EDGAR |
+| Yahoo (via Cloud and via `yfinance`) | quotes, history, financials | Cloud tools; Yahoo-direct only via existing `yfinance` (`data/prices/fetchers.py`) — **same underlying endpoints; no change** | Already used by digiquant |
+| SEC EDGAR (direct) | filings | Fallback path (d) only | Already public |
+| FRED + Treasury fiscaldata | macro | Not in this contract | Out of scope |
+| Substack | newsletters | Separate Gloomberb plugin (`gloom-substack`), **not** part of the Cloud aggregator | Out of scope |
+| Nasdaq/NasdaqTrader | **holiday calendars only** (Sharpe session qualification) — no symbol-file source exists in the repo | n/a | Drop from inventory |
+
+The four user-priority feeds verdict: quotes, options, news, and financials are
+all reachable anonymously today; filings are live-anon; holders/analyst/actions
+need the optional session cookie. None of them replaces the pipeline's current
+sources (delay, rate limits, history caps); they enrich dashboard and chat.
+
+## 7. Attribution and external links
+
+- Canonical attribution: **"Sourced from Gloomberb"** plus
+  "data delayed up to 15 minutes" wherever a value is rendered outside the
+  terminal, per the author decision.
+- Deep links: `https://term.gloom.sh/?ticker=<SYMBOL>` (optionally
+  `&exchange=<EX>`); published share pages are `https://term.gloom.sh/s/<id>`.
+  There is no bare-path symbol route — `?ticker=` is the real form
+  (`research-entry.ts`).
+- No embedding: `term.gloom.sh` sends `X-Frame-Options: DENY` and
+  `frame-ancestors 'none'` (§8).
 
 ## 8. Dashboard page evaluation
 
 **Iframe embedding of `term.gloom.sh` is ruled out — it is not viable and not
-recommended.** Three named reasons, verified live (2026-09-15):
+recommended.** Three reasons:
 
-1. **Sandbox egress proxy blocked it.** The agent/desktop sandbox egress proxy
-   already refused the hosted terminal in practice, and no configuration
-   change makes a cross-origin frame load where egress is denied.
-2. **`agents.yml` human-gate.** Embedding a third-party hosted surface is a
-   "new external service dependency or network exposure change" — it trips the
-   human gate and would need explicit sign-off for something the page itself
-   may later remove (headers or hosting).
-3. **Cross-origin iframes block digichat page-awareness.** digichat's
-   page-awareness cannot read the embedded DOM of a cross-origin frame
-   (`term.gloom.sh` sends `frame-ancestors 'none'` + `X-Frame-Options: DENY`,
-   so the frame would not even render; and even if it did, the same-origin
-   policy blocks reading it). This defeats the originating idea of digichat
-   answering questions about what the user sees.
+1. The agent sandbox's egress proxy blocked `term.gloom.sh` at the time of the
+   original investigation (observed at the time; not reproducible from a normal
+   workstation — a caveat, not a load-bearing claim; the other reasons stand
+   alone).
+2. New external service dependency / network exposure change — trips the
+   `agents.yml` human gate (§9).
+3. Cross-origin iframes block digichat's popup/page-awareness from reading the
+   embedded DOM, so the integration would be opaque to the agent layer.
 
-**Evaluated alternative (not committed, not built here):** a same-origin
-digiquant dashboard market-data page backed by the §5 digifetch data layer —
-quotes, a compact chart, news headlines, fundamentals summary — rendered in
-digiquant's own DOM. This keeps digichat page-awareness possible (same-origin
-DOM the page-awareness layer can read), needs no new hosting, and reuses the
-same client as the MCP tools. The self-hosting route (Gloomberb ships
-`wrangler.jsonc` / `wrangler.production.jsonc` for its own Cloudflare web
-build) is parked: it is the only way to embed their UI, it is a new external
-service, and the same-origin page is the cheaper 80%.
-
----
+Evaluated alternative (not committed, not built here): a same-origin digiquant
+dashboard market-data page backed by the §5 data layer — quotes, history,
+options snapshot, and news headlines — keeping digichat page-awareness possible
+and attribution explicit. Self-hosting Gloomberb's MIT web build on Cloudflare
+is parked: it is a new external service with real deployment weight.
 
 ## 9. Human gate
 
-The follow-up **implementation** issue must carry the `new external service
-dependency` flag per `agents.yml` `human_gates`: the 12 tools introduce new
-outbound HTTP calls to `api.gloom.sh` (and, on the (d) fallback path, to Yahoo
-Finance and SEC EDGAR — public, credential-free, but still new outbound
-dependencies). That requires **explicit human sign-off before merge**; the
-implementation PR may not self-merge.
-
-This scoping issue does **not** merge any dependency: it changes two
-documentation files only, touches no runtime path, and no data flow changes
-until a follow-up is approved. The human gate applies at implementation, not
-at this spec.
-
----
+The chosen approach introduces **new outbound HTTP calls to
+`api.gloom.sh`** (and, on the fallback path, SEC EDGAR directly). Per
+`agents.yml` `human_gates` ("New external service dependency or infrastructure
+change"), the follow-up implementation (issue #4069) must carry this flag and
+get **explicit human sign-off before merge** — the implementation PR may not
+self-merge. This scoping issue merges no dependency and no runtime call. Before
+implementing, verify egress from the actual deployment runtime (digiquant MCP
+container → `api.gloom.sh`) and record required headers (the TS client sends
+`Origin` and `credentials: "include"`; our cookie-less path must be proven from
+the container, not just the workstation). Yahoo direct remains pre-existing
+(`yfinance`); the new gates are `api.gloom.sh` and optional EDGAR.
 
 ## 10. Licensing
 
-- Gloomberb is **MIT** ("Copyright (c) 2026 Gloomberb Contributors"). The
-  chosen approach (c) talks to their API over HTTP and ships no Gloomberb
-  code, so no notice obligation attaches today.
-- If a future decision re-opens vendoring approach (b), any vendored file must
-  retain the gloom-sh/gloomberb **copyright notice** and the MIT text in the
-  vendored source; the upstream README also asks for **textual attribution** —
-  appreciated, not legally required.
-- Data-level terms differ from code licensing: `api.gloom.sh` is an
-  unofficial, rate-limited free tier; the client must respect `Retry-After`
-  and must not be used for realtime or redistribution claims.
+`gloomberb` is MIT (`Copyright (c) 2026 Gloomberb Contributors`). The LICENSE
+text adds an attribution-appreciation paragraph (LICENSE:15-17) — that extra
+paragraph is why GitHub's license API returns `NOASSERTION`/`other` rather than
+`MIT`; the code license itself is MIT. Vendoring (approach b, rejected) would
+have to retain the copyright notice and MIT text in any copied file. Textual
+attribution is **appreciated, not legally required**. Data Terms-of-Service for
+production-scale use of `api.gloom.sh` are an open item tied to the human gate
+(§9): no published ToS review has been done; volume estimates and a
+User-Agent/identification policy belong to the implementation spike.
 
----
+## 11. Risks
 
-## 11. Risks and open questions
+| Risk | Mitigation |
+|------|------------|
+| `api.gloom.sh` is undocumented and can change | Wire-validate at implementation (§12 spike); MIT source is vendorable as a last resort; typed `upstream_error` surface |
+| Rate limits / 15-min delay on free tier | 900s TTL cache; `RateLimiter`; honor `Retry-After`; enrichment-only positioning |
+| Upstream breakage degrades the agent layer | Tools default ON per author decision, but a kill-switch flag disables the family instantly; a circuit breaker (N consecutive failures → typed error) prevents retry storms; "api.gloom.sh unavailable → enrichment degraded, pipeline unaffected" is the documented behavior |
+| Normalizer porting introduces silent unit/interval bugs | §5.4 fixtures (GBp, intraday) as tests before registration |
+| Session cookie used for gated tools leaks | Cookie supplied via env secret (`GLOOMBERB_SESSION_COOKIE`), never logged, never in tool input; clear error `auth_required` when absent |
+| `digifetch` interface changes (provisional, 0.1.0, one consumer) | Any needed engine change lands with its own review in `digifetch/`; digiquant adds the dep explicitly (§12) |
+| Unvalidated CI (bun) and truncated history | Open spike items (§12): run `bunx gloomberb api list --json` diff; re-measure the 1wk truncation |
+| ToS/legal at production scale | Open item under the human gate (§9/§10) |
 
-| Risk / question | Mitigation |
-|-----------------|------------|
-| `api.gloom.sh` is undocumented and can change without notice | Contract pinned by §3 validation; typed `provider_miss`/`upstream_error`; (d) fallback keeps tool schemas stable |
-| Free-tier 15-minute delay misread as live data | `stale`/`delay_note` in every envelope + visible attribution; never used in pipeline execution paths |
-| Rate limits under digichat fan-out | Client-side `RateLimiter` + `Retry-After` backoff; batch tools preferred over per-symbol loops |
-| Gated methods need a Cloud account | Tools return `auth_required`; ungated 8 tools ship first; session cookie storage is a follow-up decision (must not put credentials in digiquant's Postgres without a review) |
-| Bun not installed — `api list --json` diff unrun | Recorded as the one open AC-1 step; run on a Bun machine during implementation |
-| `src/types/financials.ts` field-level diff beyond the four top-level keys | Top-level confirmed (lines 475–478); statement row fields are mapped from CLI shapes (`market.ts`) — implementation issue re-checks against `financials.ts` before freezing models |
+## 12. Follow-up implementation outline (issue #4069)
 
----
-
-## 12. Follow-up implementation outline (not this task)
-
-1. `digiquant/src/digiquant/data/gloomberb/` — client + Pydantic models + envelope,
-   built on `digifetch.HttpFetcher` / `RateLimiter` / `with_retry`;
-   `httpx.MockTransport` tests (CI never hits the network).
-2. Register the 12 tools in `digiquant/src/digiquant/mcp_server.py`
-   (`_maybe_tool`-style wrapper, JSON envelopes, error isolation).
-3. External links + "Sourced from Gloomberb" on the digiquant stock/tearsheet
-   pages; no embedding.
-4. Dashboard same-origin market-data page (evaluated in §8) — separate issue
-   if wanted.
-5. Run `bunx gloomberb api list --json` on a Bun machine; diff against §5 and
-   amend this spec's Validation section.
-6. Human sign-off for the new outbound dependency before merge (§9).
-7. **News** — add `digifetch_news` (the Cloud news provider is ungated); deferred from the 12-tool contract above.
-
----
+1. Declare `digifetch` (and `httpx`, `yfinance`) in `digiquant/pyproject.toml`
+   (the dev workspace already provides them, so CI alone will not catch the
+   omission).
+2. Build `digiquant/src/digiquant/data/gloomberb/`: endpoint constants, Pydantic
+   v2 models (§5.1), `DigifetchEnvelope[T]`, normalizers (§5.4) with fixtures,
+   freshness union (§5.3), transport via `digifetch` (§5.5).
+3. Register the 13 tools in `mcp_server.py` via the `_maybe_tool` pattern and
+   add the orchestrator manifest entries (`orchestrator_tools.py`), scope
+   `read`; decide family exposure behind the kill switch.
+4. Tests: golden fixtures (GBp + intraday), envelope/error mapping, freshness
+   precedence, caps validator; live smoke behind an opt-in marker.
+5. Spike (before freezing models): run `bunx gloomberb api list --json` diff on
+   a Bun machine and amend §3; re-measure the 1wk/`ALL` truncation; verify
+   container egress to `api.gloom.sh` incl. `Origin`/User-Agent; ToS/volume
+   check.
+6. Rollout: tools default ON (author decision) with kill switch, 900s TTL
+   cache, circuit breaker; document the degraded-mode behavior; update
+   `digiquant/AGENTS.md` (not touched by this scoping task).
+7. Attribution wiring: tearsheet/stock-page deep links
+   (`?ticker=`), "Sourced from Gloomberb" strings, delay notice.
 
 ## 13. References
 
-- Issue: [#3927](https://github.com/digithings-ai/digithings/issues/3927)
-- Prior art: [`2026-09-09-r2-market-data-cache-design.md`](2026-09-09-r2-market-data-cache-design.md)
-  — live-fetch MCP precedent (`digiquant_fetch_coinbase_ohlcv`,
-  `digiquant.data.prices.history_cache`) and the single-read-path MCP pattern
-  this spec follows.
-- Upstream: [gloom-sh/gloomberb](https://github.com/gloom-sh/gloomberb) —
-  `src/types/data-provider.ts`, `src/types/financials.ts`,
-  `src/sources/gloomberb-cloud/index.ts`, `src/cli/commands/market.ts`,
-  `src/api-client/request.ts`, `src/time-series/resolution.ts`, `docs/usage.md`,
-  `docs/browser.md`.
+- Scoping issue: [#3927](https://github.com/digithings-ai/digithings/issues/3927)
+- Implementation follow-up: [#4069](https://github.com/digithings-ai/digithings/issues/4069)
+- Prior art: [2026-09-09-r2-market-data-cache-design.md](2026-09-09-r2-market-data-cache-design.md)
+  (live-fetch precedent in the digiquant MCP server —
+  `digiquant_fetch_coinbase_ohlcv`, `digiquant.data.prices.history_cache`; 900s
+  TTL convention reused here)
+- Upstream: `gloom-sh/gloomberb` (MIT), `src/types/data-provider.ts`,
+  `src/sources/gloomberb-cloud/index.ts`, `src/api-client/paths.ts`
+- digifetch boundary: [digifetch/ARCHITECTURE.md](../../../digifetch/ARCHITECTURE.md)
