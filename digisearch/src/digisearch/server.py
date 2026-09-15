@@ -5,18 +5,23 @@
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
+import re
+import secrets
 import time as _time
 from collections import deque as _deque
 from threading import Lock as _Lock
 from typing import Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
+from digiclaw.cron import CronParseError, parse_cron
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digisearch_path_scopes
 
 from digisearch import __version__
@@ -25,7 +30,10 @@ from digisearch.backend_require import require_real_search_backend
 from digisearch.core.models import Query
 from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TOP_K
 from digisearch.logging import configure_logging
-from digisearch.monitors.store import MonitorStore, get_store
+from digisearch.monitors.delivery import DeliveryConfigError, validate_delivery
+from digisearch.monitors.models import Watch
+from digisearch.monitors.runner import MonitorRunError, run_watch, tick_due_watches
+from digisearch.monitors.store import MonitorStore, MonitorStoreError, get_store
 from digisearch.orchestrator_tools import (
     TOOL_DIGISEARCH,
     TOOL_DIGISEARCH_FETCH_ALL,
@@ -68,6 +76,20 @@ def get_monitor_store() -> MonitorStore:
     return get_store()
 
 
+def _digisearch_path_scopes(method: str, path: str) -> list[str] | None:
+    """Local scope resolver for the digikey auth middleware (R1).
+
+    ``POST /v1/monitors/exa_webhook`` is the one auth-exempt digisearch route:
+    EXA holds no digikey JWT, so it authenticates with the shared
+    ``EXA_MONITOR_WEBHOOK_SECRET`` checked inside the handler (missing or
+    mismatched secret → 401 ``exa_bad_signature``, fail closed). Every other
+    path keeps the landed ``digisearch_path_scopes`` rules — no digikey change.
+    """
+    if method.upper() == "POST" and path == "/v1/monitors/exa_webhook":
+        return None
+    return digisearch_path_scopes(method, path)
+
+
 app = FastAPI(
     title="digisearch",
     description=(
@@ -79,7 +101,7 @@ app = FastAPI(
 )
 install_metrics(app, service="digisearch", version=__version__)
 install_cors(app, service="digisearch")
-app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=digisearch_path_scopes)
+app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=_digisearch_path_scopes)
 
 
 @app.on_event("startup")
@@ -96,9 +118,38 @@ _RATE_LIMITS: dict[str, tuple[int, int]] = {
     "/v1/research_turn": (10, 60),
     "/v1/orchestrator_tools": (30, 60),
     "/v1/orchestrator_invoke": (10, 60),
+    # §4.6 monitor statics; the per-watch routes are parameterized below.
+    "/v1/monitors": (30, 60),
+    "/v1/monitors/tick": (10, 60),
+    "/v1/monitors/exa_webhook": (10, 60),
 }
 _DEFAULT_RATE_LIMIT = (30, 60)
 _UNLIMITED_PATHS = {"/health", "/healthz"}
+
+# R10: the §4.6 per-watch routes cannot be keyed by exact path. Ordered
+# patterns; the exact table above is consulted first so the static monitor
+# paths keep their own budgets.
+_RATE_LIMIT_PATTERNS: tuple[tuple[re.Pattern[str], tuple[int, int]], ...] = (
+    (re.compile(r"^/v1/monitors/[^/]+/trigger$"), (10, 60)),
+    (re.compile(r"^/v1/monitors/[^/]+/runs$"), (30, 60)),
+    (re.compile(r"^/v1/monitors/[^/]+/runs/[^/]+$"), (30, 60)),
+    (re.compile(r"^/v1/monitors/[^/]+$"), (30, 60)),
+)
+
+
+def _rate_limit_for(path: str) -> tuple[int, int]:
+    """Resolve the ``(max_requests, window_seconds)`` budget for *path* (R10).
+
+    Exact static paths win first so ``/v1/monitors/tick`` and
+    ``/v1/monitors/exa_webhook`` cannot fall into the parameterized
+    ``/v1/monitors/{watch_id}`` pattern; unknown paths use the default.
+    """
+    if path in _RATE_LIMITS:
+        return _RATE_LIMITS[path]
+    for pattern, limit in _RATE_LIMIT_PATTERNS:
+        if pattern.match(path):
+            return limit
+    return _DEFAULT_RATE_LIMIT
 
 
 def _rl_check(request: Request, max_req: int, window: int) -> JSONResponse | None:
@@ -133,10 +184,14 @@ def _rl_check(request: Request, max_req: int, window: int) -> JSONResponse | Non
 
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
-    """Per-IP rate limiting. /query: 10/min; /ingest: 30/min; others: 30/min."""
+    """Per-IP rate limiting. /query: 10/min; /ingest: 30/min; others: 30/min.
+
+    Monitor routes follow §4.6 (trigger/tick/exa_webhook 10/min, CRUD and
+    runs 30/min) via :func:`_rate_limit_for` (R10).
+    """
     path = request.url.path
     if path not in _UNLIMITED_PATHS:
-        max_req, window = _RATE_LIMITS.get(path, _DEFAULT_RATE_LIMIT)
+        max_req, window = _rate_limit_for(path)
         result = _rl_check(request, max_req, window)
         if result is not None:
             return result
@@ -1093,6 +1148,241 @@ def delete_document(name: str, doc_id: str) -> dict:
     raise HTTPException(
         status_code=501,
         detail="Per-document delete is not implemented for this digisearch deployment",
+    )
+
+
+# --- Phase C monitors (§4.6, #4065) -------------------------------------------------
+#
+# Thin handlers only: validate → build the store in this request's thread →
+# call the Task 4 runner / Task 5 delivery → return. Monitor store connections
+# are thread-bound (``check_same_thread`` stays default), so ``get_monitor_store()``
+# is invoked inside the handler and never bound via ``Depends``.
+
+_MONITORS_DATATAP_WORKSPACE = "datatap"
+
+
+def _monitor_error(request: Request, status_code: int, code: str, message: str) -> JSONResponse:
+    """Build the shared digibase error envelope for a monitor route."""
+    return json_error_response(
+        status_code=status_code,
+        code=code,
+        message=message,
+        request=request,
+        service="digisearch",
+    )
+
+
+def _store_error(request: Request, exc: MonitorStoreError) -> JSONResponse:
+    """Map a store failure to the §4.6 envelope (missing → 404, else 409)."""
+    status_code = 404 if exc.code in ("watch_not_found", "run_not_found") else 409
+    return _monitor_error(request, status_code, exc.code, str(exc))
+
+
+def _validate_watch_config(watch: Watch, request: Request) -> JSONResponse | None:
+    """Create/update gate: datatap off, known timezone, parseable cron, deliverable.
+
+    Runs before persistence so an invalid schedule or delivery config can never
+    reach the store (and therefore never the tick).
+    """
+    if watch.workspace_id == _MONITORS_DATATAP_WORKSPACE:
+        return _monitor_error(
+            request,
+            422,
+            "datatap_monitors_disabled",
+            "Monitors are disabled for the datatap workspace.",
+        )
+    try:
+        ZoneInfo(watch.schedule.timezone)
+    except (ZoneInfoNotFoundError, ValueError):
+        return _monitor_error(
+            request,
+            422,
+            "timezone_unknown",
+            f"Unknown timezone: {watch.schedule.timezone!r}",
+        )
+    if watch.schedule.mode == "cron" and watch.schedule.cron:
+        try:
+            parse_cron(watch.schedule.cron)
+        except CronParseError:
+            return _monitor_error(
+                request,
+                422,
+                "invalid_cron",
+                f"Invalid cron expression: {watch.schedule.cron!r}",
+            )
+    try:
+        validate_delivery(watch.delivery)
+    except DeliveryConfigError as exc:
+        return _monitor_error(request, 422, exc.code, str(exc))
+    return None
+
+
+class MonitorTriggerRequest(BaseModel):
+    """Request body for POST /v1/monitors/{watch_id}/trigger."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["manual", "poll"] = "manual"
+
+
+@app.post("/v1/monitors", status_code=201, response_model=None)
+def api_create_monitor(watch: Watch, request: Request) -> dict[str, Any] | JSONResponse:
+    """Create a watch. The response carries the one-time delivery secret (R8)."""
+    invalid = _validate_watch_config(watch, request)
+    if invalid is not None:
+        return invalid
+    store = get_monitor_store()
+    created = store.create_watch(watch)
+    secret = secrets.token_hex(32)
+    store.set_delivery_secret(created.watch_id, secret)
+    return {"watch": created.model_dump(mode="json"), "delivery_secret": secret}
+
+
+@app.get("/v1/monitors")
+def api_list_monitors(request: Request, workspace_id: str | None = None) -> dict[str, Any]:
+    """List watches newest-updated first, optionally scoped by workspace."""
+    store = get_monitor_store()
+    watches = store.list_watches(workspace_id=workspace_id or None)
+    return {"watches": [watch.model_dump(mode="json") for watch in watches]}
+
+
+@app.get("/v1/monitors/{watch_id}", response_model=None)
+def api_get_monitor(watch_id: str, request: Request) -> dict[str, Any] | JSONResponse:
+    """Load one watch. The delivery secret is never part of a watch body (R8)."""
+    store = get_monitor_store()
+    try:
+        watch = store.get_watch(watch_id)
+    except MonitorStoreError as exc:
+        return _store_error(request, exc)
+    return watch.model_dump(mode="json")
+
+
+@app.patch("/v1/monitors/{watch_id}", response_model=None)
+def api_update_monitor(
+    watch_id: str, patch: dict[str, Any], request: Request
+) -> dict[str, Any] | JSONResponse:
+    """Apply a partial patch; ``{"rotate_delivery_secret": true}`` mints a new secret (R8)."""
+    store = get_monitor_store()
+    rotate = bool(patch.pop("rotate_delivery_secret", False))
+    try:
+        current = store.get_watch(watch_id)
+    except MonitorStoreError as exc:
+        return _store_error(request, exc)
+    if patch:
+        try:
+            candidate = Watch.model_validate({**current.model_dump(mode="json"), **patch})
+        except ValidationError as exc:
+            return _monitor_error(request, 422, "validation_error", str(exc))
+        invalid = _validate_watch_config(candidate, request)
+        if invalid is not None:
+            return invalid
+        try:
+            watch = store.update_watch(watch_id, patch)
+        except MonitorStoreError as exc:
+            return _store_error(request, exc)
+    else:
+        watch = current
+    if rotate:
+        secret = secrets.token_hex(32)
+        store.set_delivery_secret(watch_id, secret)
+        return {"watch": watch.model_dump(mode="json"), "delivery_secret": secret}
+    return watch.model_dump(mode="json")
+
+
+@app.delete("/v1/monitors/{watch_id}", response_model=None)
+def api_delete_monitor(watch_id: str, request: Request) -> dict[str, Any] | JSONResponse:
+    """Delete a watch; its run history is retained."""
+    store = get_monitor_store()
+    try:
+        store.delete_watch(watch_id)
+    except MonitorStoreError as exc:
+        return _store_error(request, exc)
+    return {"deleted": watch_id}
+
+
+@app.post("/v1/monitors/{watch_id}/trigger", status_code=201, response_model=None)
+def api_trigger_monitor(
+    watch_id: str, req: MonitorTriggerRequest, request: Request
+) -> dict[str, Any] | JSONResponse:
+    """Run one watch turn now (the portable create → trigger → runs path).
+
+    A failed turn already persisted its ``status="failed"`` run, so the stored
+    record is returned with 201 rather than masked by a 5xx.
+    """
+    store = get_monitor_store()
+    try:
+        run = run_watch(watch_id, trigger=req.mode, store=store)
+    except MonitorStoreError as exc:
+        return _store_error(request, exc)
+    except MonitorRunError as exc:
+        run = store.get_run(watch_id, exc.run_id)
+    return run.model_dump(mode="json")
+
+
+@app.get("/v1/monitors/{watch_id}/runs", response_model=None)
+def api_list_monitor_runs(
+    watch_id: str, request: Request, limit: int = 20, cursor: str | None = None
+) -> dict[str, Any] | JSONResponse:
+    """Page run history newest-first; *cursor* is the last run id of a page."""
+    store = get_monitor_store()
+    try:
+        runs, next_cursor = store.list_runs(watch_id, limit=limit, cursor=cursor)
+    except MonitorStoreError as exc:
+        return _store_error(request, exc)
+    return {
+        "runs": [run.model_dump(mode="json") for run in runs],
+        "next_cursor": next_cursor,
+    }
+
+
+@app.get("/v1/monitors/{watch_id}/runs/{run_id}", response_model=None)
+def api_get_monitor_run(
+    watch_id: str, run_id: str, request: Request
+) -> dict[str, Any] | JSONResponse:
+    """Load one stored run."""
+    store = get_monitor_store()
+    try:
+        run = store.get_run(watch_id, run_id)
+    except MonitorStoreError as exc:
+        return _store_error(request, exc)
+    return run.model_dump(mode="json")
+
+
+@app.post("/v1/monitors/tick")
+def api_tick_monitors(request: Request) -> dict[str, Any]:
+    """Run every due + enabled watch once (digiclaw wake-up clock, §4.8)."""
+    store = get_monitor_store()
+    runs = tick_due_watches(store=store)
+    return {"runs": [run.model_dump(mode="json") for run in runs]}
+
+
+@app.post("/v1/monitors/exa_webhook")
+def api_exa_webhook(request: Request) -> JSONResponse:
+    """Auth-exempt but secret-gated EXA result webhook (R1, §4.6).
+
+    EXA cannot present a digikey JWT, so the route is exempted in
+    :func:`_digisearch_path_scopes` and authenticates with the shared
+    ``EXA_MONITOR_WEBHOOK_SECRET`` compared by ``hmac.compare_digest``. A
+    missing server secret or a mismatched header fails closed with 401
+    ``exa_bad_signature``; the presented value is never logged or echoed.
+
+    Payload translation + persistence land with the EXA adapter (Task 8), so a
+    valid signature currently fails closed with 503 ``exa_not_configured``
+    rather than accepting a payload it cannot translate.
+    """
+    presented = request.headers.get("X-Exa-Signature") or ""
+    configured = os.environ.get("EXA_MONITOR_WEBHOOK_SECRET", "")
+    if (
+        not configured
+        or not presented
+        or not hmac.compare_digest(presented.encode("utf-8"), configured.encode("utf-8"))
+    ):
+        return _monitor_error(request, 401, "exa_bad_signature", "Invalid EXA webhook signature.")
+    return _monitor_error(
+        request,
+        503,
+        "exa_not_configured",
+        "EXA monitor webhook translation is not available in this build.",
     )
 
 
