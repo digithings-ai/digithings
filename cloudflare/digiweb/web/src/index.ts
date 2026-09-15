@@ -472,6 +472,14 @@ export {
 
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";
 export { subsystems, subsystemById, type Subsystem } from "./data/subsystems";
+export {
+  GLOOMBERB_ATTRIBUTION,
+  GLOOMBERB_DELAY_NOTICE,
+  GLOOMBERB_TERMINAL_URL,
+  gloomberbTickerUrl,
+  readGloomberbAttribution,
+  type GloomberbAttribution,
+} from "./lib/gloomberb";
 
 // chrome (command palette) + symbols (brand marks) promotions (#1548)
 export {
