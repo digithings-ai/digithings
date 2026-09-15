@@ -871,11 +871,12 @@ class TestOpenMarksAreDecimal:
         assert got == {"UUP": Decimal("27.40")}
 
     def test_the_marks_live_fetch_once_per_ticker_and_skip_supabase(self) -> None:
-        """One live fetch per pending symbol, no Supabase read at all (#4053).
+        """One live fetch per pending symbol, and no Supabase read at all (#4053).
 
-        Same-day opens have no sealed R2 bar, so each symbol gets exactly one
-        live call — and the retired Supabase table is not consulted even though
-        the client carries rows.
+        The retired path did one `in_` over the day's pending symbols (the shape
+        #2484 exists to stop adding row-per-symbol round trips to). Same-day opens
+        have no sealed R2 bar, so each symbol gets exactly one live call instead —
+        and the Supabase table is not consulted even though the client carries rows.
         """
         reads: list[str] = []
 

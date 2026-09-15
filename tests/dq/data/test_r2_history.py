@@ -1,7 +1,7 @@
 """Unit tests for digiquant.data.prices.r2_history (#3780, Task 2).
 
-Immutable versioned market-data generations in R2: put -> read-back SHA-256
-verify -> registry insert -> pointer swap. Never overwrites in place.
+Immutable versioned market-data generations in R2: registry pre-check -> put ->
+read-back SHA-256 verify -> registry insert -> pointer swap. Never overwrites in place.
 Also pins the Task 2 scoping invariant: checkpoint evict/reconcile never
 touch market-data/ rows.
 """
@@ -83,6 +83,12 @@ class FakeRegistry:
             }
         )
 
+    def lookup(self, r2_key: str) -> str | None:
+        for row in self.rows:
+            if row["r2_key"] == r2_key:
+                return str(row["sha256"])
+        return None
+
 
 @pytest.fixture
 def fakes() -> tuple[Any, FakeR2, FakeRegistry]:
@@ -90,7 +96,7 @@ def fakes() -> tuple[Any, FakeR2, FakeRegistry]:
 
     r2 = FakeR2()
     registry = FakeRegistry()
-    return R2HistoryStore(r2, registry), r2, registry
+    return R2HistoryStore(r2, registry, registry.lookup), r2, registry
 
 
 def test_put_generation_verifies_before_pointer(fakes: Any) -> None:
@@ -128,11 +134,15 @@ def test_put_generation_registers_pointer_on_success(fakes: Any) -> None:
 
 
 def test_put_generation_conflict_raises_for_different_bytes(fakes: Any) -> None:
-    store, _, _ = fakes
+    store, r2, _ = fakes
     key = "market-data/price/SPY/2026-09-08.parquet"
     store.put_generation(key, b"v1", "market-data/price", {"ticker": "SPY"})
     with pytest.raises(ArchiveVerifyError):
         store.put_generation(key, b"v2-different", "market-data/price", {"ticker": "SPY"})
+    # Generations are immutable: the conflict must be detected BEFORE the
+    # object write, so the existing bytes survive and only the first put runs.
+    assert r2.objects[key] == b"v1"
+    assert r2.puts == [key]
 
 
 def test_get_generation_rejects_corruption(fakes: Any) -> None:

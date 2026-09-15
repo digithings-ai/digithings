@@ -1,6 +1,11 @@
 #!/bin/sh
 # Wait until Chroma seed oneshot finishes (or times out), then start digisearch.
 # Avoids opening Chroma PersistentClient while CLI ingest holds the SQLite lock.
+#
+# Binds 0.0.0.0, not loopback: the Worker proxies to the container network
+# address (e.g. 10.0.0.1:8002), so a 127.0.0.1 bind is unreachable — #4071.
+# In-container callers keep using DIGISEARCH_URL=http://127.0.0.1:8002
+# (0.0.0.0 includes loopback).
 set -eu
 
 DATA_CHROMA="${CHROMA_PATH:-/data/chroma}"
@@ -12,7 +17,7 @@ DATA_CHROMA="${CHROMA_PATH:-/data/chroma}"
 # reproduces today's behaviour of waiting for the marker.
 if [ "${DIGI_VECTORIZE_ACTIVE:-0}" = "1" ]; then
   echo "digithings-stack: Vectorize configured; starting digisearch without seed wait"
-  exec uvicorn digisearch.server:app --host 127.0.0.1 --port 8002
+  exec uvicorn digisearch.server:app --host 0.0.0.0 --port 8002
 fi
 
 SEED_VER="v4"
@@ -39,4 +44,4 @@ while [ ! -f "$SEED_MARKER" ]; do
   sleep 1
 done
 
-exec uvicorn digisearch.server:app --host 127.0.0.1 --port 8002
+exec uvicorn digisearch.server:app --host 0.0.0.0 --port 8002

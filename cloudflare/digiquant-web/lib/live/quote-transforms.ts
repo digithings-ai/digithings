@@ -137,11 +137,12 @@ export function coinbaseTickerToLive(
 }
 
 /**
- * A `public_price_latest` row → a STALE seed {@link LiveQuote}. `change_pct` is
- * the prior-session daily move (migration 052) so a seeded equity shows its real
- * last close instead of a flat 0% — a missing/absent change reads as 0. Kept
- * `stale` so it never counts as a live tick (a prices_live/Coinbase quote
- * always overwrites it, and the live book valuation ignores it).
+ * An R2 close row → a STALE seed {@link LiveQuote}. `change_pct` is the
+ * prior-session daily move (`seedFromWorker` computes it from the previous
+ * close in the window, #4053) so a seeded equity shows its real last close
+ * instead of a flat 0% — a missing/absent change reads as 0. Kept `stale` so it
+ * never counts as a live tick (a prices_live/Coinbase quote always overwrites
+ * it, and the live book valuation ignores it).
  */
 export function seedRowToLive(
   row: { ticker?: unknown; close?: unknown; change_pct?: unknown },
@@ -202,9 +203,9 @@ const asStr = (v: unknown): string | null => (typeof v === "string" && v ? v : n
 /**
  * Enrich a raw position row with its live mark.
  *
- * `isLive` is true ONLY for a non-stale quote (a real tick). A stale
- * `public_price_latest` seed is still the contracted after-hours / pre-metrics
- * fallback (migration 050): when the book has not stamped `current_price` yet,
+ * `isLive` is true ONLY for a non-stale quote (a real tick). A stale R2 closes
+ * seed is still the contracted after-hours / pre-metrics fallback (#3447):
+ * when the book has not stamped `current_price` yet,
  * the seed fills mark, day, and since-entry so the blotter is not an em-dash
  * wall. CASH stays priceless. No quote + no stamp → fail closed to null.
  */

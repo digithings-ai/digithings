@@ -28,8 +28,9 @@ tab. Its command band uses the same compact as-of stamp as Holdings and shows on
 benchmark-relative headline (**Excess return** = Rp − Rb); Relative gain was a
 duplicate alias and was removed. Open-book **Unrealized** prefers stored `unrealized_pnl_pct` /
 `since_entry_return_pct`, else derives from `entry_price` vs `current_price`, and
-when the nightly metrics stamp is missing fills the mark from `price_history`
-(AS OF = that close date). Fail closed to `—` without basis or mark — never invent
+when the nightly metrics stamp is missing fills the mark from the market API
+(`GET /v1/market/closes`, AS OF = that close date; empty when
+`NEXT_PUBLIC_MARKET_DATA_URL` is unset — #4053, R2-API-only, no Supabase fallback). Fail closed to `—` without basis or mark — never invent
 P&L. Ledger lists every `OPEN` / `ADD` / `EXIT` / `TRIM` fill with avg entry, fill
 price, and realized % vs average entry for sells (sold weight from
 `prev_weight_pct − weight_pct`). Fail closed without fill price or cost basis —
@@ -45,7 +46,9 @@ evidence" until at least two buckets each have 10 independent decisions. Audit
 preserves every raw row and raw alpha while rendering 25 rows per page. CASH remains outside holding
 counts and position charts, but its allocation effect is included in headline active return
 so the decomposition reconciles to portfolio return minus benchmark return.
-Performance fetches the populated approved benchmark universe from `price_history`,
+Performance fetches the benchmark universe from the market API
+(`GET /v1/market/tickers`, R2-backed; an empty answer falls back to the
+benchmark keys — #4053, R2-API-only, no Supabase fallback),
 aligns each series to the NAV dates, defaults to SPY, and recomputes benchmark and
 excess return when the comparison changes.
 The dashboard keeps its finance-tearsheet variants and shell print rules app-side at the

@@ -104,6 +104,7 @@ def test_fetch_open_returns_none_when_live_fetch_fails(r2_market, monkeypatch) -
     r2_market({"GLD": [{"date": "2026-09-09", "open": 240.0}]}, as_of="2026-09-09")
     _stub_live_opens(monkeypatch, {})
     assert eao._fetch_open(None, "GLD", "2026-09-10") is None
+    assert eao._open_marks(None, ["GLD"], "2026-09-10") == {}
 
 
 def test_backfill_open_live_fetches_unsealed_dates(r2_market, monkeypatch) -> None:
