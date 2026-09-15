@@ -180,14 +180,22 @@ try:
         top_k: int = 10,
         mode: str = "hybrid",
         workspace_id: str | None = None,
+        source: str = "corpus",
+        effort: str = "fast",
     ) -> str:
-        """Composite research turn (plan → retrieve → aggregate) with citations for hub/trace parity."""
+        """Composite research turn (plan → retrieve → aggregate) with citations for hub/trace parity.
+
+        ``source`` defaults to ``corpus``; pass ``web`` or ``auto`` to run the
+        OSS web branch (``effort``: fast | thorough).
+        """
         payload = {
             "user_message": user_message,
             "index_name": index_name or DIGISEARCH_INDEX or "default",
             "top_k": top_k,
             "mode": mode,
             "workspace_id": workspace_id,
+            "source": source,
+            "effort": effort,
         }
         return _json.dumps(_run_research_turn(payload), indent=2)
 

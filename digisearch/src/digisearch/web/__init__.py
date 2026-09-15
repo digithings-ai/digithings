@@ -1,5 +1,8 @@
 """Phase B web research branch (#4064): grounding models + retrieve seam."""
 
+from importlib import import_module
+from typing import Any
+
 from digisearch.web.grounding_models import (
     EFFORT_PRESETS,
     Confidence,
@@ -27,5 +30,21 @@ __all__ = [
     "WebResearchConfig",
     "WebResearchError",
     "fetch_pages",
+    "grounded_answer",
     "live_search",
+    "structured_synthesis",
+    "verify_grounding",
 ]
+
+_LAZY_EXPORTS: dict[str, str] = {
+    "grounded_answer": "digisearch.web.answer",
+    "structured_synthesis": "digisearch.web.structured",
+    "verify_grounding": "digisearch.web.structured",
+}
+
+
+def __getattr__(name: str) -> Any:
+    module_path = _LAZY_EXPORTS.get(name)
+    if module_path is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(import_module(module_path), name)

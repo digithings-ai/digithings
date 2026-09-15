@@ -7,7 +7,7 @@ import os
 import time as _time
 from collections import deque as _deque
 from threading import Lock as _Lock
-from typing import Any
+from typing import Any, Literal
 
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
@@ -284,6 +284,26 @@ class ResearchTurnRequest(BaseModel):
             "Optional tenant/workspace id. Injected as a mandatory structured filter "
             "so the research path is scoped like POST /query (enterprise)."
         ),
+    )
+    source: Literal["corpus", "web", "auto"] = Field(
+        default="corpus",
+        description=(
+            "corpus | web | auto. Defaults to corpus; the web branch runs only when "
+            "web or auto is explicitly requested."
+        ),
+    )
+    effort: str = Field(
+        default="fast",
+        description="fast | thorough — web branch effort preset (validated by the branch).",
+    )
+    output_schema: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional JSON schema for structured web synthesis (web branch only).",
+    )
+    cited_top_n: int | None = Field(
+        default=None,
+        ge=1,
+        description="Explicit cited-source cap; wins over the effort preset when set.",
     )
 
     @field_validator("mode", mode="before")
@@ -752,6 +772,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         filt_raw = args.get("filter")
         filt = str(filt_raw).strip() if filt_raw else None
         _reject_raw_filter_if_disallowed(filt, idx)
+        src_raw = args.get("source")
         payload = {
             "user_message": msg,
             "index_name": idx,
@@ -761,6 +782,11 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             "filters": args.get("filters") if isinstance(args.get("filters"), list) else None,
             "session_id": args.get("session_id"),
             "workspace_id": args.get("workspace_id"),
+            "source": str(src_raw).strip().lower() if src_raw else "corpus",
+            "effort": str(args.get("effort") or "fast"),
+            "output_schema": args.get("output_schema")
+            if isinstance(args.get("output_schema"), dict)
+            else None,
         }
         body = run_research_turn(payload)
         return OrchestratorInvokeResponse(

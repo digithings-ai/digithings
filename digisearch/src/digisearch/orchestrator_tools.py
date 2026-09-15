@@ -317,6 +317,26 @@ def build_digisearch_research_delegate_tool() -> OpenAIToolDict:
                             "structured filter (multi-tenant isolation)."
                         ),
                     },
+                    "source": {
+                        "type": "string",
+                        "enum": ["corpus", "web", "auto"],
+                        "description": (
+                            "corpus (default) | web | auto. The OSS web branch runs "
+                            "only when web or auto is explicitly requested."
+                        ),
+                    },
+                    "effort": {
+                        "type": "string",
+                        "enum": ["fast", "thorough"],
+                        "description": "Web branch effort preset (default fast).",
+                    },
+                    "output_schema": {
+                        "type": "object",
+                        "description": (
+                            "Optional JSON schema for structured web synthesis; "
+                            "used only by the web branch."
+                        ),
+                    },
                 },
                 "required": ["user_message"],
             },
