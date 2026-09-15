@@ -1409,6 +1409,10 @@ Separately, the **research sandbox image** (`Dockerfile.sandbox`, #396) isolates
 
 Each `BacktestResult` has a `run_id` but no persistent store. The audit JSONL is append-only and not queryable. There is no `GET /runs/{run_id}` endpoint. Run history for comparison (A/B backtests) requires either a digiquant-owned store (SQLite/Postgres) or a shared digichat Postgres table. This gap blocks the "compare runs" user journey described in `DIGIQUANT_CHAT_PRODUCT_GAP.md`.
 
+### Gloomberb Market-Data Integration (Scoping, #3927)
+
+Scoping spec: [`2026-09-12-digifetch-scoping-design.md`](../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md). Proposed follow-up: 12 `digifetch_*` MCP tools (quotes, history, financials, options, news-adjacent analytics) over Gloomberb Cloud (`api.gloom.sh`) as an **enrichment** read path for agents, digichat, and a future same-origin dashboard market-data page — plus external deep links with "sourced from Gloomberb" attribution. It is explicitly **not** a pipeline data-source replacement (15-minute free-tier delay, rate limits, 5Y daily-history cap). Implementation is parked behind the human gate for new external service dependencies; nothing is wired by the scoping task.
+
 ---
 
 ## 12. Redesign Recommendations
