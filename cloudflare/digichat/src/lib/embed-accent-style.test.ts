@@ -6,6 +6,7 @@ describe("buildEmbedAccentStyle", () => {
   it("returns inline --accent for DataTap terracotta (regression)", () => {
     expect(buildEmbedAccentStyle("#b5562b", "#fff7f2")).toEqual({
       "--accent": "#b5562b",
+      "--tenant-accent": "#b5562b",
       "--accent-foreground": "#fff7f2",
     });
   });
@@ -23,8 +24,14 @@ describe("buildEmbedAccentStyle", () => {
   });
 
   it("omits foreground when only color is valid", () => {
-    expect(buildEmbedAccentStyle("#b5562b")).toEqual({ "--accent": "#b5562b" });
-    expect(buildEmbedAccentStyle("#b5562b", "red")).toEqual({ "--accent": "#b5562b" });
+    expect(buildEmbedAccentStyle("#b5562b")).toEqual({
+      "--accent": "#b5562b",
+      "--tenant-accent": "#b5562b",
+    });
+    expect(buildEmbedAccentStyle("#b5562b", "red")).toEqual({
+      "--accent": "#b5562b",
+      "--tenant-accent": "#b5562b",
+    });
   });
 
   it("round-trips DataTap ?accent=%23b5562b through parse → style", () => {
@@ -35,6 +42,7 @@ describe("buildEmbedAccentStyle", () => {
     expect(ui.welcome).toBe("Hello");
     expect(buildEmbedAccentStyle(ui.accent, ui.accentForeground)).toEqual({
       "--accent": "#b5562b",
+      "--tenant-accent": "#b5562b",
       "--accent-foreground": "#fff7f2",
     });
   });
