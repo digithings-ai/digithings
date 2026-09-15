@@ -658,8 +658,10 @@ def test_env_seam_builder_closes_the_replaced_client(monkeypatch: pytest.MonkeyP
             self.closed = True
 
     import digiquant.data.gloomberb as gloomberb_pkg
+    from digiquant.data.gloomberb import agent_tools as gloomberb_agent_tools
 
-    monkeypatch.setattr(mcp_server, "_gloomberb_clients", {})
+    # The factory (and its env-pair cache) moved to the data package in #4146.
+    monkeypatch.setattr(gloomberb_agent_tools, "_gloomberb_clients", {})
     monkeypatch.setattr(gloomberb_pkg, "GloomberbClient", _FakeClient)
     first = mcp_server._build_gloomberb_client()
     assert mcp_server._build_gloomberb_client() is first
