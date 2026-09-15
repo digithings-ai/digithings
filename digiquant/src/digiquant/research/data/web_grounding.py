@@ -32,8 +32,12 @@ logger = logging.getLogger(__name__)
 
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "search_domains.yaml"
 
-# Enforced include_domains cap on the first-party web_search tool call.
+# Enforced caps on the first-party web_search tool call. digisearch's
+# ``WebSearchRequest`` rejects the whole request over either (``include_domains``
+# <= 5, ``exclude_domains`` <= 20), which fails the segment and so the book —
+# the same class as the query cap (#4163).
 _MAX_ALLOWED_DOMAINS = 5
+_MAX_EXCLUDED_DOMAINS = 20
 
 
 class DashboardWebSearchError(RuntimeError):
@@ -80,6 +84,13 @@ def _pipeline_bearer() -> str | None:
     return get_service_jwt()
 
 
+# digisearch's ``WebSearchRequest.query`` is ``Field(max_length=500)``
+# (``digisearch/src/digisearch/web_search/models.py``, #3853). Enforced here as
+# well so an oversize query from any caller degrades to a logged truncation
+# instead of a ValidationError that fails a whole book run (#4163).
+_MAX_QUERY_CHARS = 500
+
+
 def call_web_search_tool(
     *,
     query: str,
@@ -106,6 +117,14 @@ def call_web_search_tool(
     """
     from digigraph.orchestration.registry import ToolContext
     from digigraph.orchestration.web_search_tools import call_digisearch_web_search
+
+    if len(query) > _MAX_QUERY_CHARS:
+        logger.warning(
+            "web_search query is %d chars; digisearch caps it at %d - truncating",
+            len(query),
+            _MAX_QUERY_CHARS,
+        )
+        query = query[:_MAX_QUERY_CHARS].rsplit(" ", 1)[0] or query[:_MAX_QUERY_CHARS]
 
     token = bearer_token if bearer_token is not None else _pipeline_bearer()
     context = ToolContext(
@@ -197,6 +216,15 @@ def fetch_web_grounding(
         if exclude_domains is not None
         else list(cfg.get("web_excluded_websites") or [])
     )
+    if len(excluded) > _MAX_EXCLUDED_DOMAINS:
+        # Warned, not silent: dropping entries means we search a domain the
+        # operator asked to exclude. digisearch would 400 the whole request.
+        logger.warning(
+            "exclude_domains has %d entries; digisearch caps it at %d - ignoring the rest",
+            len(excluded),
+            _MAX_EXCLUDED_DOMAINS,
+        )
+        excluded = excluded[:_MAX_EXCLUDED_DOMAINS]
     if max_results is None:
         try:
             max_results = int(cfg.get("max_search_results", 4) or 4)

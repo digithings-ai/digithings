@@ -138,6 +138,31 @@ def test_fetch_web_grounding_domain_overrides(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.unit
+def test_exclude_domains_is_capped_at_the_request_limit(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """digisearch caps ``exclude_domains`` at 20 and rejects the whole request
+    over it — the same class as the query cap (#4163). Drop the extras loudly
+    rather than shipping a rejection that fails the segment."""
+    seen: dict[str, Any] = {}
+
+    def _fake(**kwargs: Any) -> dict[str, Any]:
+        seen.update(kwargs)
+        return {"summary": "s", "sources": ["https://u"]}
+
+    monkeypatch.setattr(web_grounding, "call_web_search_tool", _fake)
+    with caplog.at_level("WARNING", logger="digiquant.research.data.web_grounding"):
+        web_grounding.fetch_web_grounding(
+            model="cheap",
+            segment="macro",
+            run_date=date(2026, 6, 9),
+            exclude_domains=[f"d{i}.example" for i in range(25)],
+        )
+    assert seen["exclude_domains"] == [f"d{i}.example" for i in range(20)]
+    assert "exclude_domains" in caplog.text
+
+
+@pytest.mark.unit
 def test_unmapped_segment_uses_default_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, Any] = {}
 
@@ -338,6 +363,38 @@ def test_pipeline_bearer_threaded(monkeypatch: pytest.MonkeyPatch) -> None:
     context = seen.get("context")
     assert context is not None
     assert context.state.get("digi_bearer") == "svc-jwt"
+
+
+@pytest.mark.unit
+def test_an_oversize_query_is_truncated_not_sent(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """digisearch rejects a >500-char query, which used to fail a whole book run
+    (#4163). Clamp at the boundary and warn instead of shipping the rejection."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    seen: dict[str, Any] = {}
+
+    def fake_call(query: str, **kw: Any) -> dict[str, Any]:
+        seen["query"] = query
+        return {
+            "content": "- [t](https://a.com/1): s",
+            "results": [{"doc_id": "https://a.com/1", "content": "s", "metadata": {"title": "t"}}],
+        }
+
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", fake_call)
+    with caplog.at_level("WARNING", logger="digiquant.research.data.web_grounding"):
+        out = _real_call_web_search_tool(
+            query=" ".join(["overlong-query"] * 80), include_domains=[], max_results=4
+        )
+    assert out["sources"] == ["https://a.com/1"]
+    assert len(seen["query"]) <= 500  # digisearch's WebSearchRequest cap (#3853)
+    assert seen["query"]  # not truncated to nothing
+    assert "truncating" in caplog.text
+    # The boundary constant must not drift from the cap being pinned here.
+    assert web_grounding._MAX_QUERY_CHARS == 500
 
 
 @pytest.mark.unit
