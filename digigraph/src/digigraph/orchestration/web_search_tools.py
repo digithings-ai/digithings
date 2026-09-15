@@ -53,6 +53,17 @@ WEB_SEARCH_TOOL: dict[str, Any] = {
 }
 
 
+class DigisearchHubError(RuntimeError):
+    """The digisearch hub call itself failed (#4106).
+
+    Distinct from an empty result set: a rate limit, auth rejection, open circuit,
+    or malformed envelope must never be reported downstream as "web_search
+    returned no rows" — on 2026-09-15 that masking hid a `/v1/orchestrator_invoke`
+    429 and failed the daily digiquant book run three times. Carries the hub's own
+    error text.
+    """
+
+
 def _web_search_available(context: ToolContext) -> bool:
     """web_search is request-opt-in only (#3420) — never ambient on corpus RAG."""
     return bool(context.state.get("enable_web_search"))
@@ -101,9 +112,11 @@ def _call_digisearch_web_search(
     :func:`digigraph.vertical_orchestrator.digisearch_hub.invoke_digisearch_tool`
     (``POST /v1/orchestrator_invoke``). Normalizes the hub envelope
     (``{"ok", "data": {"results": [{url, title, snippet}]}}``) into the digigraph
-    tool shape (``{"content", "results": [{doc_id, ...}]}``). Returns ``{}`` when
-    the service errors or yields no rows — callers fail hard (no synthesis
-    fallback, #3859).
+    tool shape (``{"content", "results": [{doc_id, ...}]}``). Returns ``{}`` only
+    for a genuinely empty result set; a hub failure raises
+    :class:`DigisearchHubError` carrying the hub's error text, so a 429 or a dead
+    service can never be reported as "returned no rows" (#4106). Callers fail
+    hard either way (no synthesis fallback, #3859).
     """
     from digigraph.vertical_orchestrator.digisearch_hub import invoke_digisearch_tool
 
@@ -121,11 +134,15 @@ def _call_digisearch_web_search(
         bearer_token=_digi_bearer_from_context(context) if context is not None else None,
         request_id=getattr(context, "request_id", None),
     )
-    if not isinstance(inv, dict) or not inv.get("ok"):
-        return {}
+    if not isinstance(inv, dict):
+        raise DigisearchHubError("digisearch web_search returned a non-object response")
+    if not inv.get("ok"):
+        raise DigisearchHubError(
+            f"digisearch web_search failed: {inv.get('error') or 'unknown error'}"
+        )
     data = inv.get("data")
     if not isinstance(data, dict):
-        return {}
+        raise DigisearchHubError("digisearch web_search envelope carried no data object")
     hits = data.get("results") or []
     rows: list[dict[str, Any]] = []
     for hit in hits:
