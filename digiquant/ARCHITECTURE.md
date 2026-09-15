@@ -389,19 +389,20 @@ plus an exact round-trip vs `compute_indicators` on the same history
 record goldens WITH a `close` column, then promote the premise guard to a
 real golden-value comparison.
 
-Macro carve-out: migration `124_drop_market_data_tables.sql` is **deferred**
-(#3951) and is now a **no-op**: the `price_history` + `price_technicals` DROPs
-are commented out because the on-cron Supabase readers (`execute_at_open.py`,
-NAV replay, period accounting, entry-price backfill, metrics refresh,
-freshness probes) were not yet migrated to the R2 helpers — so both tables are
-**retained**. The real drop must land as a **new numbered migration** (e.g.
-`126_drop_market_data_tables.sql`), never by re-editing 124: `db-migrate.yml`
-records every executed file in `olympus_schema_migrations` by name, so once this
-no-op is ledgered a re-edited 124 is silently skipped. `macro_series_observations`
-likewise stays (fedprob/bitview have no R2 homes; future work). Post-cutover
-size gate (`data/cutover_gate.py`, `POST_CUTOVER_SIZE_GATE_MB=320`) reads the
-`pg_database_size` total only: the ~172MB price-table saving is not realized
-until the future drop migration lands toward the ≈292MB target.
+Macro carve-out: migration `124_drop_market_data_tables.sql` is a **no-op**
+(#3951) — its `price_history` + `price_technicals` DROPs stay commented out
+because the on-cron Supabase readers were not yet migrated when it was ledgered.
+The real drop ships as **`127_drop_market_data_tables.sql`** (#4053) — a new
+numbered migration, never a re-edit of 124: `db-migrate.yml` records every
+executed file in `olympus_schema_migrations` by name, so a re-edited 124 is
+silently skipped. 127 drops the two views (`price_history_tickers`,
+`public_price_latest`) before the two tables; every market read is R2/live-only
+(see *Market-data reads: R2* above), and rollback is restore-from-generation +
+replay, **not** a flag flip. `macro_series_observations` (fedprob/bitview) and
+`trading_calendar` (calendar sync) are explicitly **not** dropped. The
+post-cutover size gate (`data/cutover_gate.py`, `POST_CUTOVER_SIZE_GATE_MB=320`)
+reads the `pg_database_size` total only: the ~172MB price-table saving lands
+with 127 toward the ≈292MB target.
 
 H9 seal coverage: H9 (`h9_cost_evidence.py`) reads the run-date session
 bar but R2 seals through the manifest `as_of`; seal < run_date fail-softs
@@ -543,8 +544,10 @@ python digiquant/scripts/sync_strategy_calibrations.py --verify
 python digiquant/scripts/verify_strategy_calibrations_rls.py
 ```
 
-The separate `pipeline-digiquant-prices.yml` job feeds **Supabase price_history**
-for research/dashboard and owns `position_events` writes at the market open; it does
+The separate `pipeline-digiquant-prices.yml` job owns `position_events` writes at the
+market open and the surviving macro ingest; price/technicals ingest moved to the R2
+refresh (`pipeline-market-data-refresh.yml`) and migration 127 dropped the Supabase
+`price_history`/`price_technicals` tables (#4053). It does
 **not** regenerate these public tearsheets. Two UTC crons cover New York daylight
 and standard time. `market_open_gate.py` selects the season-correct cron and keeps
 it valid after the open even when GitHub delivers it late, while rejecting the
@@ -2493,9 +2496,9 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
    still readable here, explicit columns/order/filter keys are shape-checked to
    bare column names (`_BARE_COLUMN_RE`) so no argument can smuggle PostgREST
    relationship syntax. H9 cost
-   evidence reads `hist_vol_21`/`atr_pct` through the R2 seam when
-   `DIGIQUANT_MARKET_DATA_BACKEND=r2`, else from `price_technicals`
-  (second read joined onto the history row) — never from `price_history`.
+   evidence reads `hist_vol_21`/`atr_pct` through the R2 seam (migration 127
+   dropped the Supabase `price_technicals` body, #4053; second read joined onto
+   the history row) — never from `price_history`.
   The versioned R2 cache is the market-data **read path** (#4013; see
   *Market-data reads: R2* above). Within the pipeline under the flag, the only
   remaining Supabase market reads are same-day execution (`d > seal`, at-open
@@ -2696,7 +2699,9 @@ assuming it is always present.
   captured (`usage.start`/`snapshot`/`reset`) across the whole run.
 - `cli_main` exits non-zero when `is_degraded` (failed-segment share > `DIGIQUANT_DEGRADED_RUN_PCT`,
   default 50%) so CI's outer retry fires on a starved run — one bad sector does not trip it.
-- **Technicals freshness (Pillar 1F).** `data/prices/refresh.recompute_technicals_from_history`
+- **Technicals freshness (Pillar 1F).** *Retired by migration 127 (#4053): the Supabase
+  market tables are dropped, so the recompute below can no longer land. The contracts are
+  kept as the historical record of the R2 cutover.* `data/prices/refresh.recompute_technicals_from_history`
   recomputes `price_technicals` from raw OHLCV in `price_history` (look-ahead-guarded,
   network-free, idempotent). Preflight may call this when stale (`DIGIQUANT_REFRESH_ON_DEMAND`).
   The daily prices cron (`pipeline-digiquant-prices.yml`) is the primary freshness mechanism.
@@ -2721,7 +2726,8 @@ assuming it is always present.
 - **Technicals repair (#1752).** `python -m digiquant prices recompute-technicals` drives the
   same core from the CLI: reads `price_history`, writes `price_technicals`, no network fetch and
   no CSV cache. `--since` bounds the *write*, `--dry-run` computes and reports without writing.
-  Exposed as `mode: repair-technicals` on `pipeline-digiquant-backfill.yml`. This is the repair
+  Was exposed as `mode: repair-technicals` on `pipeline-digiquant-backfill.yml` (workflow
+  deleted in #4053). This was the repair
   path for the NULL long-window bands that `compute-technicals` wrote from its ephemeral 1-year
   cache; `compute-technicals` itself keeps its cache-sourced contract and is unchanged.
 - **Market-clock schedules are DST-aware (#1775).** Every deadline in
@@ -3183,8 +3189,8 @@ used by dashboard/research (`config.toml project_id "digiquant-research"`, roote
 `digiquant/supabase/`), repurposed (renamed `core`) as the suite-wide backend rather than a
 separate project, because the `digiquant.io` org is free-tier (2-project limit) and both
 slots are taken (dashboard + the confidential twelve-x). The shared market datasets
-(`price_history`, `price_technicals`, `trading_calendar`, `macro_series_observations`)
-already live here; #1064 only **adds** the strategy store. See
+(`trading_calendar`, `macro_series_observations`; the two price tables were dropped in
+migration 127, #4053) already live here; #1064 only **adds** the strategy store. See
 `docs/adr/0021-digiquant-supabase-project-topology.md`.
 
 **Connection.** Accessor `digiquant.data.store` (`build_digiquant_client` + Polars-friendly
@@ -3202,8 +3208,9 @@ graduates onto its own project.
 - `strategy_tearsheets` — latest tearsheet payload per strategy (`metrics`, `equity_curve`, `as_of`).
 - `strategy_signals` — current state per strategy (`position` long/flat/short, `last_signal_date`, `last_price`).
 
-**Shared data layer.** `price_history`, `price_technicals`, `trading_calendar`,
-`macro_series_observations` already reside in `core` (no migration needed). `#1065`'s
+**Shared data layer.** `trading_calendar` and `macro_series_observations` already
+reside in `core` (no migration needed; `price_history`/`price_technicals` were dropped
+in migration 127, #4053). `#1065`'s
 cross-project price copy is therefore **superseded**. `#1066` adds a shared
 `economic_calendar` (migration `047`, mirroring twelve-x's `fx_economic_calendar`
 incl. `event_datetime_utc` + the impact CHECK + unique `external_id`; additive
@@ -3302,7 +3309,8 @@ and artifact disposition; Task 1.5 owns durable persistence and reconciliation.
 [`supabase/migrations/050_public_portfolio_views.sql`](supabase/migrations/050_public_portfolio_views.sql)
 adds digiquant.io's public read surface to this project's single migration chain: three
 curated anon-readable views — `public_portfolio_positions`, `public_nav_history`,
-`public_price_latest` — exposing performance metrics only (never
+`public_price_latest` (dropped in migration 127, #4053; browsers read the R2 market
+API now) — exposing performance metrics only (never
 `rationale`/`pm_notes`/risk parameters; user ruling 2026-07-10, #1462). The landing
 blotter uses `public_price_latest` as the mark when `positions.current_price` is
 still null (metrics cron is 22:00 UTC; the 12:00 book is unmarked until then). They pair with

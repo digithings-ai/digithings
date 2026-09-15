@@ -186,7 +186,8 @@ Holdings.
 finance-tearsheet primitives. Its command band, contribution chart, position
 ledgers, and PDF action remain presentation over `nav_history`, `positions`,
 `portfolio_metrics`, `position_attribution`,
-`public_daily_realized_attribution`, `position_events`, and `price_history`.
+`public_daily_realized_attribution`, `position_events`, and the R2 market API
+(the `price_history` table was dropped in migration 127, #4053).
 Contribution bars read the finalized per-ticker daily contribution from
 `public_daily_realized_attribution` (#3956) so they no longer depend on
 `positions.current_price` enrichment arriving on time, falling back to the

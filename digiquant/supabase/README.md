@@ -202,8 +202,9 @@ Outside extended US market hours (13:00–01:00 UTC, Mon–Fri) a caller gets
 gets `200 {"dormant": true}`; and a caller that loses the claim gets
 `200 {"skipped": "not claimed"}`. All three exit 200 so schedulers never see failures for
 expected idle states. In the market-closed windows the frontend values positions from the
-`public_price_latest` view — the latest daily close per ticker from `price_history`,
-which the `pipeline-digiquant-prices.yml` job keeps fed.
+R2 market-data API (`/v1/market/closes`, Yahoo Finance daily + archive); the
+`public_price_latest` view and its `price_history` source were **dropped in migration 127
+(#4053)** — this paragraph is historical for pre-drop deploys.
 
 **`skipped` is a signal in the cron log.** pg_cron fires every 60s against a 50s window, so a
 legitimate scheduled run always claims: in cron-only steady state `net._http_response` should
@@ -457,7 +458,7 @@ allowlist (performance metrics only, never research notes — user ruling 2026-0
 |---|---|
 | `public_portfolio_positions` | Latest-date positions: ticker, name, category, sector, weight, entry/current price, day/unrealized/since-entry returns. **Excludes** rationale, PM notes, thesis id, conviction, stops/targets/horizon. |
 | `public_nav_history` | NAV series + cash/invested % + derived daily return. |
-| `public_price_latest` | Latest daily close per ticker — the valuation fallback outside market hours (`prices-live` is live, not dormant, since 2026-07-13). |
+| `public_price_latest` | *(dropped in migration 127, #4053)* — was latest daily close per ticker; browsers read the R2 market API now. |
 
 ## What is public on purpose, what is locked (#1462 rulings, 2026-07-10)
 
