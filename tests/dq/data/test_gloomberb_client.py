@@ -1691,3 +1691,232 @@ def test_13f_holdings_bad_accession_is_invalid_input_without_request() -> None:
     )
     assert result.data.code == "invalid_input"  # type: ignore[union-attr]
     assert calls == []
+
+
+# ── coverage expansion: shiller / proxies / events / risks / short / diagnostic (#4110 phase 3) ─
+
+
+def test_shiller_is_anonymous_and_slices_the_tail() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "observations": [
+                    {"date": f"1871-{month:02d}-01", "price": float(month), "cape": None}
+                    for month in range(1, 5)
+                ],
+                "sourceUrl": "https://example.test/shiller.csv",
+                "fetchedAt": "2026-09-15T06:20:06.110Z",
+            },
+        )
+
+    result = make_client(handler).shiller({"limit": 2})
+    data = result.data  # type: ignore[union-attr]
+    assert [row.date for row in data.observations] == ["1871-03-01", "1871-04-01"]
+    assert data.total_available == 4
+    assert data.truncated is True
+    assert data.dataset_fetched_at == "2026-09-15T06:20:06.110Z"
+
+
+def test_proxy_statements_uppercases_ticker_and_requires_year_for_statement() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(
+            200,
+            json={
+                "company": {"ticker": "AAPL", "name": "Apple Inc."},
+                "proxies": [
+                    {
+                        "id": "p1",
+                        "ticker": "AAPL",
+                        "company": {"ticker": "AAPL", "name": "Apple Inc."},
+                        "proxyYear": 2026,
+                    }
+                ],
+            },
+        )
+
+    client = make_client(handler)
+    listed = client.proxy_statements({"ticker": "aapl"})
+    assert "/public/proxies/AAPL" in seen["url"]
+    assert listed.data.proxies[0].proxy_year == 2026  # type: ignore[union-attr]
+
+    invalid = client.proxy_statements({"ticker": "AAPL", "what": "statement"})
+    assert invalid.data.code == "invalid_input"  # type: ignore[union-attr]
+
+
+def test_proxy_statement_detail_maps_executives_and_unknown_is_not_found() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/2026"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "p1",
+                    "ticker": "AAPL",
+                    "company": {"ticker": "AAPL", "name": "Apple Inc."},
+                    "proxyYear": 2026,
+                    "ceo": {"name": "Tim Cook", "total": 74_294_811, "priorYearTotal": 74_609_802},
+                    "namedExecutives": [{"name": "Tim Cook", "total": 74_294_811}],
+                    "keyFigures": [],
+                    "otherYears": [],
+                },
+            )
+        return httpx.Response(404, json={"message": "No proxy statements for this ticker"})
+
+    client = make_client(handler)
+    statement = client.proxy_statements({"what": "statement", "ticker": "AAPL", "year": 2026})
+    assert statement.data.statement.ceo.name == "Tim Cook"  # type: ignore[union-attr]
+    missing = client.proxy_statements({"ticker": "ZZZZ"})
+    assert missing.data.code == "not_found"  # type: ignore[union-attr]
+
+
+def test_filing_events_sends_limit_and_maps_rows() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(
+            200,
+            json={
+                "ticker": "AAPL",
+                "events": [{"id": "e1", "ticker": "AAPL", "items": ["2.02"], "read": False}],
+            },
+        )
+
+    result = make_client(handler).filing_events({"ticker": "aapl", "limit": 5})
+    assert "/public/events/AAPL" in seen["url"]
+    assert "limit=5" in seen["url"]
+    assert result.data.events[0].items == ["2.02"]  # type: ignore[union-attr]
+
+
+def test_risk_reports_list_and_report_shapes() -> None:
+    company = {"ticker": "AAPL", "name": "Apple Inc."}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/2025"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "r1",
+                    "ticker": "AAPL",
+                    "company": company,
+                    "reportYear": 2025,
+                    "risks": [{"heading": "H", "excerpt": "E"}],
+                    "diff": {"added": [1], "removed": [], "reworded": [], "matched": 30},
+                    "notes": {"added": [], "removed": [], "reworded": [], "top": []},
+                    "otherYears": [],
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "company": company,
+                "reports": [{"id": "r1", "ticker": "AAPL", "company": company, "reportYear": 2025}],
+            },
+        )
+
+    client = make_client(handler)
+    listed = client.risk_reports({"ticker": "AAPL"})
+    assert listed.data.reports[0].report_year == 2025  # type: ignore[union-attr]
+    report = client.risk_reports({"what": "report", "ticker": "AAPL", "year": 2025})
+    assert report.data.report.diff.matched == 30  # type: ignore[union-attr]
+
+
+def test_short_interest_is_session_gated_and_sends_years() -> None:
+    calls: list[int] = []
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        seen["url"] = str(request.url)
+        return envelope(
+            {"symbol": "AAPL", "issueName": "Apple Inc.", "points": []},
+        )
+
+    denied = make_client(handler).short_interest({"symbol": "AAPL"})
+    assert denied.data.code == "auth_required"  # type: ignore[union-attr]
+    assert calls == []
+
+    allowed = make_client(handler, session_cookie="token").short_interest(
+        {"symbol": "AAPL", "years": 1}
+    )
+    assert "symbol=AAPL" in seen["url"]
+    assert "years=1" in seen["url"]
+    assert allowed.data.symbol == "AAPL"  # type: ignore[union-attr]
+
+
+def test_equity_diagnostic_is_session_gated_and_caches_reports_not_pending() -> None:
+    calls: list[int] = []
+    state = {"mode": "pending"}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        if state["mode"] == "pending":
+            return httpx.Response(202, json={"status": "generating", "retryAfterMs": 2000})
+        return httpx.Response(
+            200,
+            json={
+                "schemaVersion": 1,
+                "access": "preview",
+                "symbol": "AAPL",
+                "status": "partial",
+                "verdict": "unclear",
+                "findings": [],
+                "coverage": [],
+                "evidence": [],
+            },
+        )
+
+    denied = make_client(handler).equity_diagnostic({"symbol": "AAPL"})
+    assert denied.data.code == "auth_required"  # type: ignore[union-attr]
+    assert calls == []
+
+    client = make_client(handler, session_cookie="token")
+    first = client.equity_diagnostic({"symbol": "AAPL"})
+    # The payload's own `status=generating` must not read as an envelope error.
+    assert first.data.pending is not None  # type: ignore[union-attr]
+    assert first.data.pending.retry_after_ms == 2000  # type: ignore[union-attr]
+    client.equity_diagnostic({"symbol": "AAPL"})
+    assert len(calls) == 2  # pending payloads are never client-cached
+
+    state["mode"] = "complete"
+    assert client.equity_diagnostic({"symbol": "AAPL"}).data.report is not None  # type: ignore[union-attr]
+    client.equity_diagnostic({"symbol": "AAPL"})
+    assert len(calls) == 3  # complete reports are cached
+
+
+def test_equity_diagnostic_does_not_retry_generation_requests() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(503, json={"message": "unavailable"})
+
+    policy = RetryPolicy(attempts=3, base_delay=0.0, jitter=False, retry_on=RETRYABLE_EXCEPTIONS)
+    client = make_client(handler, session_cookie="token", retry_policy=policy)
+    result = client.equity_diagnostic({"symbol": "AAPL"})
+    assert result.data.code == "upstream_error"  # type: ignore[union-attr]
+    assert result.data.retryable is True  # type: ignore[union-attr]
+    # One attempt: the generation POST has no idempotency key and must not be
+    # silently re-requested, even though the client's shared policy allows 3.
+    assert len(calls) == 1
+
+
+def test_proxy_statements_malformed_payload_is_upstream_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={})  # no company/proxies block
+
+    result = make_client(handler).proxy_statements({"ticker": "AAPL"})
+    assert result.data.code == "upstream_error"  # type: ignore[union-attr]
+    assert "company block" in result.data.message  # type: ignore[union-attr]
+
+
+def test_risk_reports_malformed_payload_is_upstream_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"company": {"ticker": "AAPL"}})  # no reports
+
+    result = make_client(handler).risk_reports({"ticker": "AAPL"})
+    assert result.data.code == "upstream_error"  # type: ignore[union-attr]
+    assert "reports list" in result.data.message  # type: ignore[union-attr]

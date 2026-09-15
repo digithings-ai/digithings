@@ -29,21 +29,27 @@ from digiquant.data.gloomberb.normalizers import (  # noqa: E402
     normalize_corporate_actions,
     normalize_econ_calendar,
     normalize_econ_series,
+    normalize_equity_diagnostic,
     normalize_exchange_rate,
+    normalize_filing_events,
     normalize_funds_13f,
     normalize_holders,
     normalize_holdings_13f,
     normalize_news_list,
     normalize_options_chain,
     normalize_price_value_by_divisor,
+    normalize_proxy_statements,
     normalize_quote,
     normalize_quotes_batch_items,
     normalize_research_hits,
     normalize_research_search,
+    normalize_risk_reports,
     normalize_screener,
     normalize_search_results,
     normalize_sec_documents,
     normalize_sec_filings,
+    normalize_shiller,
+    normalize_short_interest,
     normalize_statements,
     normalize_transcripts,
     normalize_tweets,
@@ -845,3 +851,227 @@ def test_normalize_holdings_13f_form_maps_aliases_and_computes_has_more() -> Non
     assert holding.share_type == "SH"
     assert holding.voting_authority_sole == pytest.approx(12_561_737.0)
     assert normalize_holdings_13f(rows, "form", 50).has_more is False
+
+
+# ── coverage-expansion mappers (#4110 phase 3) ──────────────────────────────
+
+
+def test_normalize_shiller_keeps_the_most_recent_rows() -> None:
+    raw = {
+        "observations": [
+            {"date": f"1871-{month:02d}-01", "price": float(month), "cape": None}
+            for month in range(1, 13)
+        ],
+        "sourceUrl": "https://example.test/shiller.csv",
+        "fetchedAt": "2026-09-15T06:20:06.110Z",
+    }
+    result = normalize_shiller(raw, limit=3)
+    assert [row.date for row in result.observations] == [
+        "1871-10-01",
+        "1871-11-01",
+        "1871-12-01",
+    ]
+    assert result.total_available == 12
+    assert result.truncated is True
+    assert result.source_url == "https://example.test/shiller.csv"
+    assert result.dataset_fetched_at == "2026-09-15T06:20:06.110Z"
+    full = normalize_shiller(raw, limit=50)
+    assert len(full.observations) == 12
+    assert full.truncated is False
+
+
+def test_normalize_proxy_statements_list_and_statement() -> None:
+    company = {
+        "ticker": "AAPL",
+        "cik": "0000320193",
+        "name": "Apple Inc.",
+        "shortName": "Apple",
+    }
+    listed = normalize_proxy_statements(
+        {
+            "company": company,
+            "proxies": [{"id": "p1", "ticker": "AAPL", "company": company, "proxyYear": 2026}],
+        },
+        "list",
+    )
+    assert listed.what == "list"
+    assert listed.company is not None and listed.company.short_name == "Apple"
+    assert listed.proxies is not None and listed.proxies[0].proxy_year == 2026
+
+    statement = normalize_proxy_statements(
+        {
+            "id": "p1",
+            "ticker": "AAPL",
+            "company": company,
+            "proxyYear": 2026,
+            "namedExecutives": [{"name": "Tim Cook", "total": 74_294_811}],
+            "keyFigures": [{"label": "FY2025 Revenue", "value": "$416.2B", "note": "record"}],
+            "otherYears": [],
+        },
+        "statement",
+    )
+    assert statement.what == "statement"
+    assert statement.statement is not None
+    assert statement.statement.named_executives[0].total == pytest.approx(74_294_811.0)
+    assert statement.statement.key_figures[0].note == "record"
+
+
+def test_normalize_filing_events_maps_rows() -> None:
+    result = normalize_filing_events(
+        {
+            "ticker": "AAPL",
+            "events": [
+                {
+                    "id": "e1",
+                    "ticker": "AAPL",
+                    "items": ["2.02"],
+                    "material": False,
+                    "read": False,
+                    "people": [{"name": "Jane", "role": "CFO", "action": "appointed"}],
+                }
+            ],
+        }
+    )
+    assert result.ticker == "AAPL"
+    assert result.events[0].people[0].role == "CFO"
+
+
+def test_normalize_risk_reports_list_and_report() -> None:
+    company = {"ticker": "AAPL", "name": "Apple Inc."}
+    listed = normalize_risk_reports(
+        {
+            "company": company,
+            "reports": [
+                {
+                    "id": "r1",
+                    "ticker": "AAPL",
+                    "company": company,
+                    "reportYear": 2025,
+                    "riskCount": 31,
+                }
+            ],
+        },
+        "list",
+    )
+    assert listed.what == "list"
+    assert listed.reports is not None and listed.reports[0].risk_count == 31
+
+    report = normalize_risk_reports(
+        {
+            "id": "r1",
+            "ticker": "AAPL",
+            "company": company,
+            "reportYear": 2025,
+            "groups": ["Macro"],
+            "risks": [{"heading": "H", "group": "Macro", "excerpt": "E", "words": 3}],
+            "diff": {
+                "added": [1],
+                "removed": [{"heading": "Gone", "excerpt": "x"}],
+                "reworded": [
+                    {
+                        "index": 2,
+                        "similarity": 0.9,
+                        "headingChanged": True,
+                        "priorHeading": "Old",
+                    }
+                ],
+                "matched": 30,
+                "priorRiskCount": 34,
+            },
+            "notes": {
+                "added": [{"index": 1, "text": "n"}],
+                "removed": [],
+                "reworded": [],
+                "top": [],
+            },
+            "otherYears": [],
+        },
+        "report",
+    )
+    assert report.what == "report"
+    assert report.report is not None
+    assert report.report.diff is not None and report.report.diff.prior_risk_count == 34
+    assert report.report.notes is not None and report.report.notes.added[0].text == "n"
+
+
+def test_normalize_short_interest_maps_points() -> None:
+    result = normalize_short_interest(
+        {
+            "symbol": "AAPL",
+            "issueName": "Apple Inc.",
+            "points": [
+                {
+                    "settlementDate": "2026-08-31",
+                    "sharesShort": 1.5,
+                    "previousSharesShort": 1.0,
+                    "averageDailyVolume": 2.0,
+                    "daysToCover": 0.75,
+                    "changePercent": 50.0,
+                    "revised": True,
+                }
+            ],
+        }
+    )
+    assert result.issue_name == "Apple Inc."
+    point = result.points[0]
+    assert point.settlement_date == "2026-08-31"
+    assert point.shares_short == pytest.approx(1.5)
+    assert point.days_to_cover == pytest.approx(0.75)
+    assert point.revised is True
+
+
+def test_normalize_equity_diagnostic_pending_and_report() -> None:
+    pending = normalize_equity_diagnostic({"status": "generating", "retryAfterMs": 2000})
+    assert pending.pending is not None and pending.pending.retry_after_ms == 2000
+    assert pending.report is None
+
+    report = normalize_equity_diagnostic(
+        {
+            "schemaVersion": 1,
+            "access": "preview",
+            "symbol": "AAPL",
+            "status": "partial",
+            "verdict": "unclear",
+            "findings": [{"id": "F1", "kind": "anomaly", "severity": 1, "evidenceIds": ["E1"]}],
+            "coverage": [{"dataset": "statements", "status": "available"}],
+            "evidence": [
+                {"id": "E1", "dataset": "statements", "label": "10-K", "url": "https://x.test/e1"}
+            ],
+        }
+    )
+    assert report.pending is None
+    assert report.report is not None
+    assert report.report.access == "preview"
+    assert report.report.findings[0].evidence_ids == ["E1"]
+    assert report.report.evidence[0].url == "https://x.test/e1"
+
+    with pytest.raises(ValueError, match="not an object"):
+        normalize_equity_diagnostic("nope")
+
+
+def test_normalize_proxy_statements_rejects_malformed_payloads() -> None:
+    with pytest.raises(ValueError, match="not an object"):
+        normalize_proxy_statements("nope", "list")
+    with pytest.raises(ValueError, match="no company block"):
+        normalize_proxy_statements({"proxies": []}, "list")
+    with pytest.raises(ValueError, match="no proxies list"):
+        normalize_proxy_statements({"company": {"ticker": "AAPL"}}, "list")
+    with pytest.raises(ValueError, match="not an object"):
+        normalize_proxy_statements("nope", "statement")
+    # A detail payload missing its required company block is malformed too
+    # (pydantic ValidationError is a ValueError).
+    with pytest.raises(ValueError):
+        normalize_proxy_statements({"id": "p1", "ticker": "AAPL"}, "statement")
+
+
+def test_normalize_risk_reports_rejects_malformed_payloads() -> None:
+    with pytest.raises(ValueError, match="not an object"):
+        normalize_risk_reports("nope", "list")
+    with pytest.raises(ValueError, match="no company block"):
+        normalize_risk_reports({"reports": []}, "list")
+    with pytest.raises(ValueError, match="no reports list"):
+        normalize_risk_reports({"company": {"ticker": "AAPL"}}, "list")
+    with pytest.raises(ValueError, match="not an object"):
+        normalize_risk_reports(None, "report")
+    with pytest.raises(ValueError):
+        normalize_risk_reports({"id": "r1", "ticker": "AAPL"}, "report")
