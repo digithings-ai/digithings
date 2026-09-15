@@ -24,6 +24,7 @@ vi.mock('next/link', () => ({
 vi.mock('lucide-react', () => ({
   ArrowLeft: () => createElement('svg', { 'data-icon': 'arrow-left' }),
   ArrowUpRight: () => createElement('svg', { 'data-icon': 'arrow-up-right' }),
+  ExternalLink: () => createElement('svg', { 'data-icon': 'external-link' }),
   TrendingUp: () => createElement('svg', { 'data-icon': 'trending-up' }),
   TrendingDown: () => createElement('svg', { 'data-icon': 'trending-down' }),
   Lock: () => createElement('svg', { 'data-icon': 'lock' }),
@@ -127,6 +128,28 @@ describe('TickerDossierView — command band structure', () => {
     expect(html).toContain('data-region="metrics"');
     expect(html).not.toMatch(/dossier-command[^>]*glass-card/);
     expect(html).toContain('border-');
+    expect(html).toContain('data-testid="gloomberb-link"');
+    expect(html).toContain('https://term.gloom.sh/?ticker=XLE');
+    expect(html).toContain('Open in Gloomberb');
+  });
+
+  it('links every dossier ticker out to Gloomberb, crypto included', () => {
+    vi.mocked(useDashboard).mockReturnValue({
+      data: { positions: [], position_history: [], position_events: [] },
+      loading: false,
+    } as any);
+
+    vi.mocked(useAsyncData).mockReturnValue({
+      data: { ticker: 'BTC-USD', analyst: null, analystDate: null, coverage: null, decisions: [] },
+      loading: false,
+      error: null,
+    } as any);
+
+    const html = renderToStaticMarkup(createElement(TickerDossierView, { ticker: 'BTC-USD' }));
+
+    expect(html).toContain('data-testid="gloomberb-link"');
+    expect(html).toContain('https://term.gloom.sh/?ticker=BTC-USD');
+    expect(html).not.toContain('Sourced from Gloomberb');
   });
 
   it('renders held state with explicit "held" label', () => {
