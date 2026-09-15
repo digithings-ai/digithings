@@ -17,6 +17,11 @@ from digisearch.web_search.models import WebSearchRequest, WebSearchResponse, We
 
 __all__ = ["FetchedPage", "fetch_pages", "live_search"]
 
+#: Landed ``web_search.models.WebSearchRequest`` caps ``max_results`` at 10
+#: (``ge=1, le=10``); thorough's ``live_top_n=20`` is search intent, so clamp
+#: it here rather than letting the request fail validation.
+_MAX_RESULTS = 10
+
 
 class FetchedPage(BaseModel):
     """One fetched web page as extracted markdown (never indexed)."""
@@ -32,7 +37,7 @@ def _live(query: str, top_n: int) -> WebSearchResponse:
     """Run one query against the Task 0 search wrapper."""
     from digisearch.web_search.service import search_web
 
-    return search_web(WebSearchRequest(query=query, max_results=top_n))
+    return search_web(WebSearchRequest(query=query, max_results=min(top_n, _MAX_RESULTS)))
 
 
 def live_search(query: str, *, top_n: int) -> list[WebSearchResult]:
@@ -50,19 +55,31 @@ def live_search(query: str, *, top_n: int) -> list[WebSearchResult]:
 def _fetch(hits: list[WebSearchResult], top_n: int) -> list[FetchedPage]:
     """Fetch up to *top_n* hits as non-indexed markdown pages.
 
-    Pages whose markdown extracts empty are dropped. Raises
-    :class:`WebResearchError` on any fetch failure.
+    Individual pages that fail to fetch (or extract to empty markdown) are
+    skipped; only when no page survives does this raise
+    :class:`WebResearchError`, chaining the last fetch failure and naming the
+    failed count.
     """
     from digisearch.web_search.fetch import fetch_markdown
 
+    attempted = hits[:top_n]
     pages: list[FetchedPage] = []
-    for hit in hits[:top_n]:
+    failures = 0
+    last_exc: Exception | None = None
+    for hit in attempted:
         try:
             markdown = fetch_markdown(hit.url)
         except Exception as exc:
-            raise WebResearchError(f"fetch failed for {hit.url}: {exc}") from exc
+            failures += 1
+            last_exc = exc
+            continue
         if markdown:
             pages.append(FetchedPage(url=hit.url, title=hit.title, markdown=markdown))
+    if not pages:
+        message = f"web fetch produced no pages from {len(attempted)} hits ({failures} failed)"
+        if last_exc is not None:
+            raise WebResearchError(message) from last_exc
+        raise WebResearchError(message)
     return pages
 
 
