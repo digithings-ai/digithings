@@ -83,8 +83,16 @@ def test_the_query_is_a_search_query_not_a_synthesis_prompt(
     _tool_ok(monkeypatch, seen)
     ai_portfolios.fetch_ai_portfolio_grounding(model="cheap", run_date=date(2026, 6, 9))
     query = seen["query"]
-    for handle in ("theaiportfolios", "grkportfolio", "ralliesarena", "geminiportfolio"):
+    for handle in (
+        "theaiportfolios",
+        "grkportfolio",
+        "ralliesarena",
+        "aifinancelabs",
+        "geminiportfolio",
+        "theAIportfolio",
+    ):
         assert f"@{handle}" in query
+    assert "holdings" in query and "tickers" in query
     assert "For EACH account" not in query
     assert "CROSS-ACCOUNT" not in query
 

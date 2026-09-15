@@ -138,6 +138,31 @@ def test_fetch_web_grounding_domain_overrides(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.unit
+def test_exclude_domains_is_capped_at_the_request_limit(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """digisearch caps ``exclude_domains`` at 20 and rejects the whole request
+    over it — the same class as the query cap (#4163). Drop the extras loudly
+    rather than shipping a rejection that fails the segment."""
+    seen: dict[str, Any] = {}
+
+    def _fake(**kwargs: Any) -> dict[str, Any]:
+        seen.update(kwargs)
+        return {"summary": "s", "sources": ["https://u"]}
+
+    monkeypatch.setattr(web_grounding, "call_web_search_tool", _fake)
+    with caplog.at_level("WARNING", logger="digiquant.research.data.web_grounding"):
+        web_grounding.fetch_web_grounding(
+            model="cheap",
+            segment="macro",
+            run_date=date(2026, 6, 9),
+            exclude_domains=[f"d{i}.example" for i in range(25)],
+        )
+    assert seen["exclude_domains"] == [f"d{i}.example" for i in range(20)]
+    assert "exclude_domains" in caplog.text
+
+
+@pytest.mark.unit
 def test_unmapped_segment_uses_default_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, Any] = {}
 

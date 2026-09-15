@@ -32,8 +32,12 @@ logger = logging.getLogger(__name__)
 
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "search_domains.yaml"
 
-# Enforced include_domains cap on the first-party web_search tool call.
+# Enforced caps on the first-party web_search tool call. digisearch's
+# ``WebSearchRequest`` rejects the whole request over either (``include_domains``
+# <= 5, ``exclude_domains`` <= 20), which fails the segment and so the book —
+# the same class as the query cap (#4163).
 _MAX_ALLOWED_DOMAINS = 5
+_MAX_EXCLUDED_DOMAINS = 20
 
 
 class DashboardWebSearchError(RuntimeError):
@@ -212,6 +216,15 @@ def fetch_web_grounding(
         if exclude_domains is not None
         else list(cfg.get("web_excluded_websites") or [])
     )
+    if len(excluded) > _MAX_EXCLUDED_DOMAINS:
+        # Warned, not silent: dropping entries means we search a domain the
+        # operator asked to exclude. digisearch would 400 the whole request.
+        logger.warning(
+            "exclude_domains has %d entries; digisearch caps it at %d - ignoring the rest",
+            len(excluded),
+            _MAX_EXCLUDED_DOMAINS,
+        )
+        excluded = excluded[:_MAX_EXCLUDED_DOMAINS]
     if max_results is None:
         try:
             max_results = int(cfg.get("max_search_results", 4) or 4)
