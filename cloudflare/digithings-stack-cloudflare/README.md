@@ -210,7 +210,7 @@ Ollama in this path unless you need them.
 |---|---|---|
 | digikey `:8005` | edge | JWT / BFF |
 | digigraph `:8000` | edge | Chat brain (`research_rag`) |
-| digisearch `:8002` | loopback | RAG |
+| digisearch `:8002` | edge | RAG |
 | digivault `:8004` | loopback | Notes |
 | LiteLLM `:4000` | loopback | LLM router |
 | Redis `:6379` | loopback | digikey blocklist |
