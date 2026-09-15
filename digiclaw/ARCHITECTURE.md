@@ -2,7 +2,7 @@
 
 **Component:** digiclaw — Gateway, Heartbeat, and Audit Layer
 **Status:** Phase 3 (heartbeat + audit implemented); OpenClaw gateway deferred
-**Last updated:** 2026-08-27
+**Last updated:** 2026-09-15
 
 ---
 
@@ -13,6 +13,10 @@ digiclaw is the intended user-facing gateway and runtime layer for the digithing
 1. **Heartbeat runner** — a single-shot Python script that pings digigraph and digiquant health endpoints, checks strategy drift via digiquant `GET /check_drift` (requires a digikey bearer), and logs results to the JSONL audit file.
 2. **JSONL audit log** — an append-only structured log; digiclaw callers use `digiclaw.audit.audit_log`, which delegates to `digibase.audit.emit_event` (fleet-wide emitter, CHR-151 / #1193).
 3. **Agent scheduler** — cron and continuous scheduling with durable lifecycle state (`start` / `stop` / `pause` / `resume`), YAML schedule definitions under `digiclaw/agents/`, and `digiclaw schedule status` for next-run visibility. Event-mode is modeled in the schema but not triggered yet.
+
+A fourth, narrower concern landed with Phase C of digisearch monitors (#4065): the
+`web-watch-tick` agent (continuous, 60s) drives digisearch's scheduled watches by
+POSTing `/v1/monitors/tick` with a digikey service JWT — see Section 3.
 
 Everything else in scope for digiclaw — a persistent gateway runtime with channel adapters, session manager, queue manager, WebSocket control plane, full agent registry (#217), and MCP skill integration — is deferred. The `digiclaw/skills/README.md` defines the `run_digigraph_workflow` skill contract as a Phase 0 placeholder; no runtime implements it yet.
 
@@ -43,7 +47,8 @@ Everything else in scope for digiclaw — a persistent gateway runtime with chan
 | `digiclaw/schedule_schema.py` | Pydantic v2 schedule models + YAML loader for agent definitions |
 | `digiclaw/cron.py` | Standard 5-field cron parse + next-fire calculation |
 | `digiclaw/scheduler.py` | Scheduler: lifecycle, persistence, isolated ticks, status rows |
-| `digiclaw/agents/*.yaml` | Example schedule-focused agent definitions |
+| `digiclaw/monitors_tick.py` | `run_due_monitors()` — POSTs digisearch `/v1/monitors/tick` with a digikey service JWT (#4065) |
+| `digiclaw/agents/*.yaml` | Example schedule-focused agent definitions (includes `web-watch-tick.yaml`) |
 | `digiclaw/skills/README.md` | Skill contract definition for `run_digigraph_workflow` (Phase 0 contract only, no implementation) |
 | `HEARTBEAT.md` (repo root) | Checklist document read by the heartbeat agent; documents four check categories and the 7-day unattended run milestone |
 
@@ -92,7 +97,32 @@ unchanged — format migration is out of scope for #1193):
 | `DIGICLAW_AGENTS_DIR` | Optional override for agent YAML directory (default `digiclaw/agents`) |
 | `DIGICLAW_SCHEDULER_STATE` | Optional path for durable scheduler JSON (default `{DIGI_WORKSPACE}/.digiclaw/scheduler_state.json`) |
 
-digiclaw has **no HTTP server of its own**. It only calls outbound HTTP (digigraph `/health`, digiquant `/health`, digiquant `/check_drift`, digiquant `/run_optimize`, optional `AUDIT_SINK_URL`).
+digiclaw has **no HTTP server of its own**. It only calls outbound HTTP (digigraph `/health`, digiquant `/health`, digiquant `/check_drift`, digiquant `/run_optimize`, digisearch `/v1/monitors/tick`, optional `AUDIT_SINK_URL`).
+
+### Phase C monitor tick surface (#4065)
+
+| Surface | Description |
+|---------|-------------|
+| `digiclaw/agents/web-watch-tick.yaml` | Continuous schedule definition: `interval_seconds: 60`, `enabled: true` |
+| `digiclaw schedule start web-watch-tick` | Supervisor bootstrap; `start` is idempotent while the agent is RUNNING (re-arms, exit 0) and exits 2 only on a real `SchedulerError` |
+| `digiclaw schedule tick` | Runs the due `web-watch-tick` agent → `digiclaw.monitors_tick.run_due_monitors()` |
+| `digiclaw.monitors_tick.run_due_monitors` | POSTs `{DIGISEARCH_URL}/v1/monitors/tick`; returns `{"runs": n, "failed": m}` |
+| `DIGISEARCH_URL` | Target base URL; explicit arg → env → `http://127.0.0.1:8002` default (trailing `/` normalized, blank env falls through) |
+
+`run_due_monitors` mints its bearer with the landed `digibase.service_auth.get_service_jwt`
+(a function-local, fully qualified lazy import — no module-top import, no local
+alias), using `key_env="DIGICLAW_DIGIKEY_API_KEY"` (the heartbeat's provisioned
+key), `digikey_url_env="DIGIKEY_URL"`, and `scopes=("digisearch:query",)`. An
+explicit `bearer_token` argument skips minting entirely (tests / callers that
+already hold a token). The POST uses a 120s httpx client timeout and
+`raise_for_status()`: transport and auth failures **raise** rather than
+returning an empty tick, the scheduler persists them as the agent's
+`last_status="error"` + `last_error`, and `digiclaw schedule tick` prints the
+failed outcome. Only `web-watch-tick` maps to this runner; every other agent name
+keeps the scheduler's no-op `default_agent_runner`. The helper aggregates the
+route's `{"runs": [MonitorRun...]}` payload into counts, where `failed` counts
+runs with `status == "failed"` (per-watch failures are isolated inside digisearch
+and still come back as stored runs).
 
 ### Planned (deferred)
 
@@ -252,6 +282,42 @@ There is no queue, no buffer, and no batching. Each call opens, appends, and clo
 
 `_check_drift_and_reoptimize()` calls digiquant `GET /check_drift` with a digikey JWT. When no bearer is available, it logs `drift_check_skipped` (operators often misread this as “ADDM stub”). digiquant runs rolling Sharpe Z-score logic in `addm.py`; history is in-process until persisted. When `drift_detected` is true, the runner POSTs `/run_optimize` with a hardcoded symbol list (`["AAPL", "MSFT", "GOOGL"]`) — replace with strategy registry positions in a follow-up. See Section 12 for persistence and symbol wiring.
 
+### digiclaw → digisearch monitor tick (#4065)
+
+```
+[docker compose heartbeat command / supervisor]
+        |
+        | bootstrap once:  digiclaw schedule start web-watch-tick || exit 1
+        | background loop: python -m digiclaw; sleep 1800
+        | foreground loop: digiclaw schedule tick; sleep 60
+        v
+  Scheduler.tick()  [digiclaw/scheduler.py]
+        |
+        | due RUNNING agent -> runner=_dispatch_agent(agent)
+        v
+  cli._dispatch_agent  ->  "web-watch-tick"
+        |
+        v
+  digiclaw.monitors_tick.run_due_monitors()
+        |
+        | POST {DIGISEARCH_URL}/v1/monitors/tick
+        | Authorization: Bearer <service JWT>
+        |   (digibase.service_auth.get_service_jwt, DIGICLAW_DIGIKEY_API_KEY,
+        |    DIGIKEY_URL, scopes=("digisearch:query",))
+        v
+  digisearch tick_due_watches  ->  {"runs": [MonitorRun...]}
+        |
+        v
+  {"runs": n, "failed": m}  ->  scheduler persists last_status / last_error
+```
+
+The YAML file only marks the schedule `enabled`; lifecycle still defaults to
+STOPPED, so the bootstrap `schedule start` is what makes `tick()` pick the agent
+up. The 1800s heartbeat loop is preserved as its own background process; the 60s
+tick loop is the container's foreground supervisor. The `|| exit 1` bootstrap
+turns a real failure (missing agents dir, bad YAML) into a loud container exit
+instead of a silent no-op tick.
+
 ---
 
 ## 6. Security Analysis
@@ -349,7 +415,7 @@ digiquant also writes to the same `AUDIT_LOG_PATH` (`/app/results/audit/events.j
 
 ### digikey
 
-digikey correlation fields (`key_prefix`, `tenant`, `project_id`, `jti`) are optional parameters on `audit_log()`. They are populated by digigraph when it validates a digikey JWT and emits a workflow audit event. The heartbeat runner does not authenticate via digikey and does not populate these fields. There is no digikey-based authorization on the heartbeat service's outbound HTTP calls to digigraph and digiquant.
+digikey correlation fields (`key_prefix`, `tenant`, `project_id`, `jti`) are optional parameters on `audit_log()`. They are populated by digigraph when it validates a digikey JWT and emits a workflow audit event. The heartbeat runner does not populate these fields. There is no digikey-based authorization on the heartbeat service's outbound HTTP calls to digigraph and digiquant; the Phase C monitor tick is the service's one digikey-authenticated call — it mints a service JWT from `DIGICLAW_DIGIKEY_API_KEY` to reach digisearch `/v1/monitors/tick` (Section 3).
 
 ### Optional AUDIT_SINK_URL
 
@@ -369,11 +435,25 @@ docker compose --profile heartbeat up -d
 make up-heartbeat
 ```
 
-The service uses the `python:3.12-slim` base image (not a custom build), mounts the full workspace read-only, and runs the shell loop:
+The service builds from `digiclaw/Dockerfile` (`python:3.12-slim` + editable
+`digibase`/`digiclaw` installs, so the `digiclaw` console script is on `PATH`),
+mounts the full workspace read-only at `/workspace`, and runs the
+bootstrap-then-loops command:
 
 ```sh
-while true; do python -m digiclaw; sleep 1800; done
+# `schedule start` is idempotent when the agent is already running (exit 0,
+# re-arms it), so `|| exit 1` turns only real bootstrap failures into a loud exit.
+digiclaw schedule start web-watch-tick || exit 1
+while true; do python -m digiclaw; sleep 1800; done &
+while true; do digiclaw schedule tick; sleep 60; done
 ```
+
+Scheduler state persists on the `digiclaw_state:/state` named volume
+(`DIGICLAW_SCHEDULER_STATE=/state/scheduler_state.json`) because the workspace
+mount itself is read-only, and `DIGICLAW_AGENTS_DIR=/workspace/digiclaw/agents`
+points the scheduler at the mounted YAML definitions (the image ships no
+`agents/` directory). The monitor store side is digisearch's
+`digisearch_monitors` volume — see `digisearch/ARCHITECTURE.md` §10.
 
 ### Environment variables
 
@@ -388,8 +468,11 @@ while true; do python -m digiclaw; sleep 1800; done
 | `DIGIQUANT_DATA_DIR` | (unset) | Required by `/run_optimize`; skips re-optimization if missing |
 | `DIGICLAW_AGENTS_DIR` | `digiclaw/agents` | Directory of agent schedule YAML files |
 | `DIGICLAW_SCHEDULER_STATE` | `{DIGI_WORKSPACE}/.digiclaw/scheduler_state.json` | Durable scheduler lifecycle / next-run state |
+| `DIGISEARCH_URL` | `http://127.0.0.1:8002` | digisearch base URL for the monitor tick (`run_due_monitors`; compose sets `http://digisearch:8002`) |
+| `DIGICLAW_DIGIKEY_API_KEY` | (unset) | Machine API key exchanged for the tick's digikey service JWT; missing ⇒ `ServiceAuthError` surfaces as the agent's `last_error` |
+| `DIGIKEY_URL` | (unset) | digikey base URL read by `get_service_jwt` for the token exchange; unset ⇒ `ServiceAuthError` |
 
-In Docker Compose, `DIGIGRAPH_URL` and `DIGIQUANT_URL` are overridden to use internal service names (`http://digigraph:8000`, `http://digiquant:8001`).
+In Docker Compose, `DIGIGRAPH_URL`, `DIGIQUANT_URL`, and `DIGISEARCH_URL` are overridden to use internal service names (`http://digigraph:8000`, `http://digiquant:8001`, `http://digisearch:8002`).
 
 ### Future MCP server for `run_digigraph_workflow`
 
