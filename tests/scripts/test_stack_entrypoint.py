@@ -79,6 +79,16 @@ def _has_unguarded_write(line: str) -> bool:
     return target not in _SAFE_REDIRECT_TARGETS
 
 
+def _is_condition(line: str) -> bool:
+    """True for an `if`/`if !` condition, which `set -e` exempts.
+
+    A failure there selects the `else` branch; it cannot abort the boot. The
+    zammad alias relies on exactly that (`if printf … >> /etc/hosts; then … else
+    echo WARN … fi`), which is why this is not an offender.
+    """
+    return line.startswith("if ") or line.startswith("if!")
+
+
 def _boot_path_block(start_index: int) -> list[str]:
     """Lines from `start_index` through the block's closing `fi`."""
     block: list[str] = []
@@ -138,7 +148,7 @@ def test_no_unguarded_risky_command_before_exec():
         for line in _pre_exec_lines()
         if (_runs_risky_command(line) or _has_unguarded_write(line))
         and "||" not in line
-        and not line.startswith("if !")
+        and not _is_condition(line)
     ]
     assert not offenders, "unguarded command(s) on the boot path: " + "; ".join(offenders)
 
