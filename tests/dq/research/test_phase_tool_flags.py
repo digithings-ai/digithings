@@ -3,11 +3,14 @@ from __future__ import annotations
 from datetime import date, datetime
 
 import pytest
+from digiquant.data.gloomberb import EQUITY_TOOLS, MACRO_TOOLS
 from digiquant.research.phases import _node_factory
 from digiquant.research.phases.phase1_altdata import _SPECS as ALT_SPECS
 from digiquant.research.phases.phase2_institutional import _SPECS as INST_SPECS
 from digiquant.research.phases.phase3_macro import _SPEC as MACRO
 from digiquant.research.phases.phase4_assetclass import _SPECS as ASSET_SPECS
+from digiquant.research.phases.phase5_equities import _EQUITY_SPEC, _sector_spec
+from digiquant.research.sectors_config import load_sectors
 
 
 @pytest.mark.unit
@@ -49,6 +52,28 @@ def test_inst_phases_use_live_search_only():
     for spec in INST_SPECS:
         assert spec.live_search is True, spec.segment_slug
         assert spec.use_data_tools is False, spec.segment_slug
+
+
+# --- #4146: digifetch family flags (curated subset per phase) -----------------
+
+
+@pytest.mark.unit
+def test_macro_uses_the_macro_digifetch_subset():
+    assert MACRO.digifetch_tools == MACRO_TOOLS
+
+
+@pytest.mark.unit
+def test_equity_and_sector_specs_use_the_equity_digifetch_subset():
+    assert _EQUITY_SPEC.digifetch_tools == EQUITY_TOOLS
+    sectors = load_sectors()
+    assert sectors
+    assert _sector_spec(sectors[0]).digifetch_tools == EQUITY_TOOLS
+
+
+@pytest.mark.unit
+def test_other_research_specs_stay_digifetch_free():
+    for spec in (*ALT_SPECS, *INST_SPECS, *ASSET_SPECS):
+        assert spec.digifetch_tools is None, spec.segment_slug
 
 
 @pytest.mark.unit
