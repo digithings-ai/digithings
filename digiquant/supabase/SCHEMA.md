@@ -27,12 +27,7 @@ erDiagram
     theses           ||--o{ positions             : "thesis_id"
 
     documents        ||..o{ thesis_vehicles       : "source_exploration_key"
-    documents        ||..o{ deliberation_rounds   : "deep_dive_document_key"
     documents        ||..o{ analyst_coverage      : "current_recommendation_key"
-    documents        ||..o{ deep_dive_triggers    : "deep_dive_document_key"
-
-    deliberation_sessions ||--o{ deliberation_rounds : "session_id"
-    deliberation_sessions ||--o{ deep_dive_triggers  : "session_id"
 
     price_history        ||--o{ price_technicals : "(date, ticker)"
     price_history_tickers ||..|| price_history   : "view"
@@ -77,15 +72,15 @@ erDiagram
 | `macro_series_observations` | `(source, series_id, obs_date)` | FRED / Frankfurter / crypto FNG time series. **Not dropped** — fedprob/bitview still write it. |
 | `price_history_tickers` | _(view)_ | *(dropped in migration 127, #4053)* — was the distinct-ticker view; R2 manifests serve the universe now. |
 
-### portfolio deliberation — new in migration 024
+### portfolio deliberation — new in migration 024 (deliberation_* + deep_dive_triggers dropped in migration 128, #4053)
 
 | Table | PK | Purpose |
 |-------|----|---------|
 | `thesis_vehicles` | `(date, thesis_id, ticker)` | Per-thesis vehicle map; FK → `theses (date, thesis_id)`. |
-| `deliberation_sessions` | `(session_id UUID)` | One row per H6 deliberation session; `kind` is legacy (`baseline`, `delta_scoped`, `monthly`) — daily graph uses thesis-first H6 without separate session kinds. |
-| `deliberation_rounds` | `(id BIGSERIAL)` | Round-loop persistence; unique on `(session_id, ticker, round_number)`. |
+| `deliberation_sessions` | `(session_id UUID)` | **Dropped in migration 128 (#4053).** One row per H6 deliberation session; `kind` is legacy (`baseline`, `delta_scoped`, `monthly`) — daily graph uses thesis-first H6 without separate session kinds. |
+| `deliberation_rounds` | `(id BIGSERIAL)` | **Dropped in migration 128 (#4053).** Round-loop persistence; unique on `(session_id, ticker, round_number)`. |
 | `analyst_coverage` | `(date, ticker)` | Daily denormalized analyst ↔ ticker index. |
-| `deep_dive_triggers` | `(id BIGSERIAL)` | Audit trail of every recess- or delta-watch- or manually- forced deep-dive. |
+| `deep_dive_triggers` | `(id BIGSERIAL)` | **Dropped in migration 128 (#4053).** Audit trail of every recess- or delta-watch- or manually- forced deep-dive. |
 
 ### Strategy store — new in migration 046 (#1064)
 
@@ -826,9 +821,12 @@ policy (all `USING (true)` today) as `authenticated_read_public_reference`:
 
 | Group | Tables |
 |-------|--------|
-| Market / reference | `price_history`, `price_technicals`, `trading_calendar`, `fx_economic_calendar`, `macro_series_observations`, `onchain_cohort_positioning`, `strategy_tearsheets` |
-| Research artefacts | `decision_log`, `analyst_coverage`, `thesis_vehicles`, `deep_dive_triggers`, `deliberation_sessions`, `deliberation_rounds`, `architecture_notes` |
-| House projections already anon-public | `portfolio_lots`, `portfolio_trades`, `portfolio_holdings_daily`, `current_book_lookback` |
+| Market / reference | `price_history` (127), `price_technicals` (127), `trading_calendar`, `fx_economic_calendar` (128), `macro_series_observations`, `onchain_cohort_positioning`, `strategy_tearsheets` |
+| Research artefacts | `decision_log`, `analyst_coverage`, `thesis_vehicles`, `deep_dive_triggers` (128), `deliberation_sessions` (128), `deliberation_rounds` (128), `architecture_notes` |
+| House projections already anon-public | `portfolio_lots` (128), `portfolio_trades` (128), `portfolio_holdings_daily` (128), `current_book_lookback` |
+
+`(127)` / `(128)` mark relations later dropped by migration 127 / 128 (#4053); the
+parity rows are kept as the historical record of what 116 mirrored.
 
 Not a widening: the anon key already reads every one of these. Tables that are
 deliberately anon-denied (`atlas_run_diagnostics`, `checkpoint*`,

@@ -1872,7 +1872,9 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   `preflight_reflect` (not inside `decision_log`), snapshots due typed forecasts into
   `olympus_forecast_outcomes` using the trading calendar + first observed closes,
   cutoff eligibility, same-run exclusion, and append-only idempotency. Missing
-  calendar/close stays pending (never zero-return). **Shadow calibrator (#2680 / WP5.3):**
+  calendar/close stays pending (never zero-return) — including a ticker with no
+  sealed R2 generation (`UnknownTickerError`), where a matured forecast that has left
+  the universe stays pending instead of crashing the research graph (#4120). **Shadow calibrator (#2680 / WP5.3):**
   `portfolio/forecast_calibration.py` shrinks cohort residual bias toward a declared
   zero-mean prior (`PRIOR_DEFINITION` / `METHOD_VERSION`), reports Brier/log scores via
   Polars aggregation, and emits observational `CalibratedForecast` subjects with
@@ -2528,7 +2530,10 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   - `digiquant.portfolio.chain.run_research_then_portfolio(research_input, deps)` —
     end-to-end: research (no publish) → portfolio H1–H9 → `publish_phase` (research only).
     Cron: `python -m digiquant.portfolio.chain --cadence daily`
-    (`.github/workflows/pipeline-digiquant.yml`).
+    (`.github/workflows/pipeline-digiquant.yml`). The entry point installs an INFO stdout
+    handler (`DIGIQUANT_LOG_LEVEL`, default INFO) and narrates its stages —
+    `[n/5] preflight → research → portfolio → publish → beliefs` — with elapsed time
+    (#4116), so `artifacts/run.log` shows where a run is while it runs.
   - `digiquant.portfolio.graph.build_portfolio_graph(watchlist, deps)` plus
     `python -m digiquant.portfolio.graph --from-digest <state.json>` for
     isolated portfolio runs.
@@ -3303,6 +3308,8 @@ reside in `core` (no migration needed; `price_history`/`price_technicals` were d
 in migration 127, #4053). `#1065`'s
 cross-project price copy is therefore **superseded**. `#1066` adds a shared
 `economic_calendar` (migration `047`, mirroring twelve-x's `fx_economic_calendar`
+— since retired: core is the single source, and core's own vestigial
+`fx_economic_calendar` was dropped in migration 128, #4053;
 incl. `event_datetime_utc` + the impact CHECK + unique `external_id`; additive
 `economic_calendar_authenticated_select` in `114` so signed-in JWT users can
 SELECT the same public calendar as anon — do not number this `113`, which is

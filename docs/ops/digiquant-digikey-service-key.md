@@ -74,6 +74,22 @@ Do **not** use `--kind dev_global` in production: `dev_global` keys carry
 wildcard scopes and require `DIGIKEY_ALLOW_DEV_GLOBAL=1` (local development
 only).
 
+## The key store must be durable (#4080)
+
+The mint above writes into whatever `DIGIKEY_DATABASE_URL` the deployed digikey
+is using. When that is the SQLite fallback, the key lives on the Cloudflare
+Container's ephemeral `/data` disk: a deploy that replaces the instance wipes it,
+and the next run 401s at `/v1/oauth/token` (`ServiceAuthError: digikey exchange
+failed`) even though the secret is unchanged and freshly minted keys still work.
+That was 2026-09-15 (run 34999170506) — the key was fine, its storage was not.
+
+Point digikey at durable Postgres (see the
+[stack README](../../cloudflare/digithings-stack-cloudflare/README.md)), then
+**re-mint in the same change**: switching databases does not migrate keys out of
+the old SQLite store, so the previous secret stops resolving. digikey logs a
+startup warning while the store is SQLite; `DIGIKEY_REQUIRE_DURABLE_DB=1` turns
+that warning into a fail-closed startup error.
+
 ## Rotation
 
 1. Mint a new key with the same command and label (e.g. suffix the label with
