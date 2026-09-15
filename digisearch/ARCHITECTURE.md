@@ -166,6 +166,11 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 ### REST Endpoints
 
 All paths under the FastAPI app in `server.py`. Base URL: `http://digisearch:8002`.
+Hosted: the same server is reachable publicly as `https://search.digithings.ai`
+via the `cloudflare/digithings-stack-cloudflare` Worker (#4063 — new external
+route, owner-approved for CI web grounding). Auth is unchanged: `POST /v1/*`
+requires a digikey JWT scoped `digisearch:query` via `DigiAuthMiddleware`; only
+`GET /health` / `GET /healthz` are public.
 
 #### `GET /health` and `GET /healthz`
 

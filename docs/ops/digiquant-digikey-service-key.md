@@ -11,21 +11,35 @@ segments, `digiquant/src/digiquant/research/data/web_grounding.py`
 - exchanges them at `POST {DIGIKEY_URL}/v1/oauth/token` with
   `grant_type=api_key` and `requested_scopes=["digisearch:query"]`
 - caches the short-lived JWT in-process (no persistence)
+- sends the tool call to `{DIGISEARCH_URL}/v1/orchestrator_invoke` (digigraph's
+  `web_search` tool → `tool_common._digisearch_service_base()`, which fails loud
+  when the URL is unset)
 
-Missing either variable fails the whole book run — the 2026-09-14 incident
+Missing configuration fails the whole book run — the 2026-09-14 incident
 (#4028) died with `ServiceAuthError: DIGIQUANT_DIGIKEY_API_KEY is not set`,
-skipping portfolio and leaving no book (`book_materialized=false`).
+skipping portfolio and leaving no book (`book_materialized=false`); an unset
+`DIGISEARCH_URL` raises instead of answering ungrounded.
+
+`DIGISEARCH_URL` must point at a reachable digisearch. On GitHub Actions that is
+the hosted route `https://search.digithings.ai` (default), declared as a
+custom-domain `[[routes]]` entry in
+`cloudflare/digithings-stack-cloudflare/wrangler.toml` (#4063 — new external
+route, owner-approved). `http://digisearch:8002` is compose-only and does not
+resolve from CI. The route is not anonymous: digisearch's `DigiAuthMiddleware`
+requires the `digisearch:query` JWT for `POST /v1/orchestrator_invoke`; only
+`GET /health` is public.
 
 ## Required GitHub configuration
 
 | Name | Kind | Value |
 |------|------|-------|
 | `DIGIKEY_URL` | Actions **variable** | Deployed digikey base URL. Optional — the workflow defaults to `https://key.digithings.ai` (see [ADR-0018](../adr/0018-digichat-path-routing.md)). Set it only for a staging/self-hosted digikey. |
+| `DIGISEARCH_URL` | Actions **variable** | Hosted digisearch base URL. Optional — the workflow defaults to `https://search.digithings.ai` (stack Worker route, #4063). Set it only for a staging/self-hosted digisearch. |
 | `DIGIQUANT_DIGIKEY_API_KEY` | Actions **secret** | digikey service API key (`dgk_live_...`) scoped `digisearch:query`, kind `standard`. |
 
-Both are consumed at the `run` job level in `pipeline-digiquant.yml`, so every
-step of the pipeline job (provider preflight, chain, artifact upload, outcome
-report) sees them.
+All three are consumed at the `run` job level in `pipeline-digiquant.yml`, so
+every step of the pipeline job (provider preflight, chain, artifact upload,
+outcome report) sees them.
 
 ## Operator action — mint the key
 
@@ -45,9 +59,10 @@ Then:
 
 1. Settings → Secrets and variables → Actions → **New repository secret**
    → name `DIGIQUANT_DIGIKEY_API_KEY`, value = the printed `dgk_live_...` key.
-2. (Only if not using the default) Settings → Secrets and variables → Actions
-   → **Variables** → name `DIGIKEY_URL`, value = the digikey base URL,
-   e.g. `https://key.digithings.ai`.
+2. (Only if not using the defaults) Settings → Secrets and variables → Actions
+   → **Variables** → `DIGIKEY_URL` (digikey base, default
+   `https://key.digithings.ai`) and/or `DIGISEARCH_URL` (digisearch base,
+   default `https://search.digithings.ai`).
 3. Re-run the workflow (`gh workflow run "Pipeline: digiquant research"`) or
    wait for the next cron, and confirm the run no longer logs
    `DIGIQUANT_DIGIKEY_API_KEY is not set`.
@@ -73,4 +88,4 @@ Only `pipeline-digiquant.yml` runs the grounding code path (the research graph
 and beliefs distillation inside `digiquant.portfolio.chain`). The deterministic
 pipelines — `pipeline-digiquant-backfill.yml`, `pipeline-digiquant-prices.yml`,
 `pipeline-research-metrics.yml` — never call `get_service_jwt()` and do not
-need either variable.
+need these variables.
