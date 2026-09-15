@@ -722,12 +722,16 @@ implementers follow it verbatim:
   is banned — every task has a registry entry, a done-callback logging
   `(webset_id, ok|error)`, and removal on completion.
 - **Observability:** task start/done/cancel log `webset_id` + counts only
-  (never page bodies); `GET /v1/websets/{id}` surfaces `running` while a
-  registry entry exists.
+  (never page bodies); `GET /v1/websets/{id}` serves the stored webset status —
+  `running` only during the first pass, sticky `idle` after first completion; an
+  in-flight refresh is visible via its `WebsetSearch` row(s) + events, never as
+  a webset status flip.
 - **Startup resume:** on lifespan startup, `get_store()` opens the DB and
-  `resume_incomplete_websets()` lists websets still in `running` (crashed
-  worker — a clean shutdown cancels tasks first, so any `running` row at
-  boot is orphaned) and re-schedules `run_webset_async` for each. The
+  `resume_incomplete_websets()` selects every webset holding an in-flight
+  search (`WebsetSearch.status == "running"`) — including searches on a
+  sticky-`idle` webset, since a crashed refresh never flips the webset status
+  back — and re-schedules `run_webset_async` for each. A clean shutdown
+  cancels tasks first, so any `running` search at boot is orphaned. The
   runner is idempotent: `verified` items and terminal enrichment fields
   are skipped, `pending` items/fields are re-driven, already-appended
   events are never duplicated. Event idempotency key scheme (flag I3
@@ -1039,10 +1043,14 @@ to the sidecar, never `ingest_url`, never `run_web_search`).
   `item.created` but no `item.enriched` for it, its fields are `unresolved`
   (terminal), webset still reaches `idle`; `cancel_webset` mid-run yields
   `cancelled` with searches settled `cancelled` and unattempted fields
-  `skipped`; startup-resume test seeds a `running` webset row then calls
-  `resume_incomplete_websets()` and asserts it is re-driven without
-  duplicating existing events (the `(webset_id, dedup_key)` INSERT-or-ignore
-  scheme, § Async lifecycle).
+  `skipped`; startup-resume test seeds a `running` search row (a crashed pass
+  on a `running` webset, plus the refresh case: a sticky-`idle` webset holding
+  one) then calls `resume_incomplete_websets()` and asserts it is re-driven
+  without duplicating existing events (the `(webset_id, dedup_key)`
+  INSERT-or-ignore scheme, § Async lifecycle); a refresh (a new search
+  generation via `add_search` / `trigger_monitor`) re-emits `item.enriched` +
+  `webset.idle` under the new `search_id` while `Webset.status` stays `idle`
+  (generation-key contract, § Async lifecycle).
   `@pytest.mark.unit` on every test.
   Run: `pytest tests/ds/test_websets_runner.py -m unit -v` → FAIL.
 - [ ] Step 2: implement `AsyncioRunner` (semaphore 4 for fetch/verify,
