@@ -543,9 +543,9 @@ def _require_mcp() -> type:
 
 #: Tools safe for the dashboard-chat surface: latest/historical runs, published
 #: research reads, prices/technicals, macro, the house book, read-only gate
-#: evaluations, the coinmetrics catalog discovery tool, and the 13 digifetch x
-#: Gloomberb enrichment reads (#4069, spec §12.3 scope=read). Everything else
-#: (backtest / optimize / pipeline / export / fetches / fits / tearsheets /
+#: evaluations, the coinmetrics catalog discovery tool, and the 20 digifetch x
+#: Gloomberb enrichment reads (#4069, #4110, spec §12.3 scope=read). Everything
+#: else (backtest / optimize / pipeline / export / fetches / fits / tearsheets /
 #: policy-replay runs) is compute or mutate and stays on ``scope="full"`` only.
 READ_SCOPE_TOOLS: frozenset[str] = frozenset(
     {
@@ -572,6 +572,13 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digifetch_exchange_rate",
         "digifetch_search",
         "digifetch_news",
+        "digifetch_econ_calendar",
+        "digifetch_econ_series",
+        "digifetch_yield_curve",
+        "digifetch_cds",
+        "digifetch_research_search",
+        "digifetch_congress_trades",
+        "digifetch_transcripts",
     }
 )
 
@@ -908,14 +915,16 @@ def create_mcp_server(
                 out[ticker] = {"error": f"{type(exc).__name__}: {exc}"}
         return json.dumps(out, indent=2, default=str)
 
-    # ── digifetch x Gloomberb market-data reads (#4069) ─────────────────────
-    # 13 enrichment tools over api.gloom.sh (plus a Yahoo-backed earnings
+    # ── digifetch x Gloomberb market-data reads (#4069, #4110) ──────────────
+    # 20 enrichment tools over api.gloom.sh (plus a Yahoo-backed earnings
     # calendar). Default-ON behind GLOOMBERB_ENABLED; anonymous unless
-    # GLOOMBERB_SESSION_COOKIE is set for holders/analyst/corporate-actions.
-    # Read scope only. Cloud payloads carry §7 attribution ("Sourced from
-    # Gloomberb" + delay notice) and a term.gloom.sh deep link where a single
-    # listing is addressed; the Yahoo earnings tool is explicitly NOT attributed
-    # to Gloomberb. Never a pipeline primary (15-minute delay / caps).
+    # GLOOMBERB_SESSION_COOKIE is set for holders / analyst / corporate-actions
+    # / research-search / transcripts (transcripts additionally need a Pro
+    # plan). Read scope only. Cloud payloads carry §7 attribution ("Sourced
+    # from Gloomberb" + delay notice) and a term.gloom.sh deep link where a
+    # single listing is addressed; the Yahoo earnings tool is explicitly NOT
+    # attributed to Gloomberb. Never a pipeline primary (15-minute delay /
+    # caps).
 
     @_maybe_tool("digifetch_quote")
     def digifetch_quote(symbol: str, exchange: str | None = None) -> str:
@@ -1151,6 +1160,114 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().news(
                 {"feed": feed, "ticker": ticker, "story_id": story_id, "limit": limit}
             )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_econ_calendar")
+    def digifetch_econ_calendar() -> str:
+        """Structured economic calendar (Gloomberb Cloud; anonymous).
+
+        The route returns a fixed-size window (~105 rows; the upstream ignores
+        `limit`), so the tool takes no parameters. Rows carry date/time/country/
+        event/actual/forecast/prior/impact and preserve unknown fields. Wire
+        prints may be numeric or text (e.g. "3.2%"). Enrichment only: the
+        platform's data is delayed and is never a pipeline primary.
+        """
+        try:
+            envelope = _build_gloomberb_client().econ_calendar()
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_econ_series")
+    def digifetch_econ_series(series_id: str, limit: int = 100, sort_order: str = "desc") -> str:
+        """FRED-style macro series observations + metadata (Gloomberb Cloud; anonymous).
+
+        `series_id` is the FRED id (e.g. CPIAUCSL); `sort_order` is asc/desc.
+        Missing prints (FRED ".") map to null. Unknown metadata stays extras.
+        """
+        try:
+            envelope = _build_gloomberb_client().econ_series(
+                {"series_id": series_id, "limit": limit, "sort_order": sort_order}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_yield_curve")
+    def digifetch_yield_curve() -> str:
+        """Treasury yield-curve tenors (Gloomberb Cloud; anonymous).
+
+        Each point carries maturity/maturityYears/yield/asOf/stale; any stale
+        tenor folds into the envelope `stale` flag. Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().yield_curve()
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_cds")
+    def digifetch_cds(issuer: str | None = None, days: int = 30, limit: int = 100) -> str:
+        """DTCC PPD CDS trade tape (Gloomberb Cloud; anonymous).
+
+        `days` is bounded 1-90 and validated client-side, so an out-of-range
+        value is typed `invalid_input` with no request. Trade rows type the
+        dissemination/notional/rate fields and preserve the rest.
+        """
+        try:
+            envelope = _build_gloomberb_client().cds(
+                {"issuer": issuer, "days": days, "limit": limit}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_research_search")
+    def digifetch_research_search(query: str, limit: int = 10, offset: int = 0) -> str:
+        """Full-text research search across transcripts/news/filings (session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; HTTP 401 (or a missing cookie) is a
+        typed `auth_required` and no request is made. Hits carry
+        docType/ticker/title/url/snippet; `offset`/`limit` page the result and
+        `data.pagination` returns total/hasMore/nextOffset/countCapped.
+        Enrichment only: the platform's data is delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().research_search(
+                {"query": query, "limit": limit, "offset": offset}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_congress_trades")
+    def digifetch_congress_trades(year: int | None = None, limit: int = 50) -> str:
+        """US House disclosure trades (Gloomberb Cloud; anonymous).
+
+        The upstream OCR dependency is currently failing (HTTP 500, Mistral
+        monthly spend cap), surfaced as a typed `upstream_error`; the tool is
+        exposed so coverage is complete when upstream recovers. `year`/`limit`
+        filter the tape; unknown row fields are preserved.
+        """
+        try:
+            envelope = _build_gloomberb_client().congress_trades({"year": year, "limit": limit})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_transcripts")
+    def digifetch_transcripts(ticker: str, limit: int = 20) -> str:
+        """Earnings-call transcripts (Gloomberb Cloud; session-gated, requires Pro).
+
+        Requires GLOOMBERB_SESSION_COOKIE **and** a Gloomberb Pro plan. A free
+        (email-verified) session answers a "Pro plan required" body, mapped to
+        a typed `auth_required` with the upstream text - never an empty
+        success. Carries a term.gloom.sh deep link for `ticker`.
+        """
+        try:
+            envelope = _build_gloomberb_client().transcripts({"ticker": ticker, "limit": limit})
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=ticker)

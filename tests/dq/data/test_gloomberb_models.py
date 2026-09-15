@@ -13,8 +13,13 @@ pytestmark = pytest.mark.unit
 
 from digiquant.data.gloomberb.models import (  # noqa: E402
     AnalystResearchInput,
+    CdsInput,
+    CongressTradesInput,
     DigifetchEnvelope,
     DigifetchError,
+    EconCalendarEvent,
+    EconCalendarInput,
+    EconSeriesInput,
     ExchangeRateInput,
     HoldersInput,
     NewsInput,
@@ -24,8 +29,11 @@ from digiquant.data.gloomberb.models import (  # noqa: E402
     QuoteInput,
     QuoteResult,
     QuotesBatchInput,
+    ResearchSearchInput,
     SearchInput,
     SecFilingsInput,
+    TranscriptsInput,
+    YieldCurveInput,
     envelope_error,
 )
 
@@ -185,3 +193,69 @@ def test_generic_envelope_preserves_declared_envelope_alias() -> None:
         data=QuoteResult(quote=None), delay_note="Free-tier data delayed up to 15 minutes"
     )
     assert envelope.delay_note == "Free-tier data delayed up to 15 minutes"
+
+
+# ── coverage-expansion input bounds (#4110 phase 1) ─────────────────────────
+
+
+def test_cds_days_bounds_are_validated_in_the_input_model() -> None:
+    assert CdsInput(days=1).days == 1
+    assert CdsInput(days=90).days == 90
+    with pytest.raises(ValidationError):
+        CdsInput(days=0)
+    with pytest.raises(ValidationError):
+        CdsInput(days=91)
+
+
+def test_cds_issuer_is_bounded() -> None:
+    assert CdsInput(issuer="  Acme  ").issuer == "Acme"
+    with pytest.raises(ValidationError):
+        CdsInput(issuer="x" * 201)
+
+
+def test_new_tool_limits_are_bounded() -> None:
+    assert EconSeriesInput(series_id="CPIAUCSL", limit=1000).limit == 1000
+    with pytest.raises(ValidationError):
+        EconSeriesInput(series_id="CPIAUCSL", limit=1001)
+    assert ResearchSearchInput(query="inflation", limit=100).limit == 100
+    with pytest.raises(ValidationError):
+        ResearchSearchInput(query="inflation", limit=101)
+    assert CongressTradesInput(limit=200).limit == 200
+    with pytest.raises(ValidationError):
+        CongressTradesInput(limit=201)
+    assert TranscriptsInput(ticker="aapl", limit=100).limit == 100
+    with pytest.raises(ValidationError):
+        TranscriptsInput(ticker="aapl", limit=101)
+
+
+def test_research_search_offset_is_bounded() -> None:
+    assert ResearchSearchInput(query="inflation").offset == 0
+    assert ResearchSearchInput(query="inflation", offset=10_000).offset == 10_000
+    with pytest.raises(ValidationError):
+        ResearchSearchInput(query="inflation", offset=-1)
+    with pytest.raises(ValidationError):
+        ResearchSearchInput(query="inflation", offset=10_001)
+
+
+def test_econ_series_sort_order_vocabulary() -> None:
+    assert EconSeriesInput(series_id="CPIAUCSL", sort_order="asc").sort_order == "asc"
+    with pytest.raises(ValidationError):
+        EconSeriesInput(series_id="CPIAUCSL", sort_order="sideways")  # type: ignore[arg-type]
+
+
+def test_parameterless_inputs_forbid_unknown_fields() -> None:
+    assert YieldCurveInput().model_dump() == {}
+    assert EconCalendarInput().model_dump() == {}
+    with pytest.raises(ValidationError):
+        YieldCurveInput(maturities="all")  # type: ignore[call-arg]
+    with pytest.raises(ValidationError):
+        EconCalendarInput(limit=2)  # type: ignore[call-arg]
+
+
+def test_econ_calendar_event_keeps_textual_prints() -> None:
+    event = EconCalendarEvent(
+        id="e1", date="2026-09-15", event="CPI", actual="3.2%", forecast=3.1, prior=None
+    )
+    assert event.actual == "3.2%"
+    assert event.forecast == pytest.approx(3.1)
+    assert event.prior is None

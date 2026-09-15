@@ -478,11 +478,14 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 It is the **only** place the `api.gloom.sh` URL/site logic lives — `digifetch`
 stays a generic transport engine (no URLs, no env reads).
 
-- **13 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
+- **20 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
   `digifetch_price_history`, `digifetch_ticker_financials`, `digifetch_options_chain`,
   `digifetch_sec_filings`, `digifetch_holders`, `digifetch_analyst_research`,
   `digifetch_corporate_actions`, `digifetch_earnings_calendar`,
-  `digifetch_exchange_rate`, `digifetch_search`, `digifetch_news` are registered in
+  `digifetch_exchange_rate`, `digifetch_search`, `digifetch_news`, plus the #4110
+  phase-1 cohort `digifetch_econ_calendar`, `digifetch_econ_series`,
+  `digifetch_yield_curve`, `digifetch_cds`, `digifetch_research_search`,
+  `digifetch_congress_trades`, `digifetch_transcripts` are registered in
   `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed in
   `orchestrator_tools.py`. Keep them read-scope; the family is default-ON behind
   `GLOOMBERB_ENABLED` — only `1`/`true`/`yes`/`on` enable it, and any other value
@@ -505,9 +508,37 @@ stays a generic transport engine (no URLs, no env reads).
   `dataSource: "delayed"` / `delayMinutes > 0` → `"Free-tier data delayed up to
   15 minutes"` (not stale).
 - **Session cookie.** `GLOOMBERB_SESSION_COOKIE` (bare token or `name=value`) is
-  attached **only** to holders / analyst research / corporate actions. Never log
-  it, never put it in a tool payload; without it those tools return
-  `auth_required` with no request. SEC filings stay anonymous.
+  attached **only** to the five gated endpoints: holders / analyst research /
+  corporate actions / research search / transcripts. Never log it, never put it
+  in a tool payload; without it those tools return `auth_required` with no
+  request. SEC filings, econ, credit, congress, news, and the anonymous
+  `/market/search` listings lookup stay anonymous (the `/cloud/search` research
+  search is the cookie-gated one).
+- **Plan and upstream caveats (#4110 phase 1).** `digifetch_transcripts` requires
+  a **Gloomberb Pro** plan: a free (email-verified) session's non-JSON
+  `Pro plan required` body maps to a typed `auth_required` with the upstream
+  text — never an empty success and never a generic non-JSON error; the live
+  status is 402, which `_map_http_error` also maps to `auth_required` (payment
+  required is a plan gate, not a malformed request), and the plan-gate path must
+  not trip the circuit breaker. Read transcript rows from the upstream `calls`
+  key (`companyName`/`callAt`/`webcastUrl`); `transcripts` is accepted only as a
+  wrapped variant. `digifetch_congress_trades` is exposed but its upstream
+  Mistral OCR dependency currently answers HTTP 500 (`402 Customer monthly
+  spending limit reached`), surfaced as a typed `upstream_error`; its typed
+  fields follow the known live names (`memberName`/`assetName`/`sourceUrl`/
+  `filingDate`/`notificationDate`) and extras carry the rest.
+  `digifetch_econ_calendar` takes **no parameters** — upstream ignores `limit`
+  (fixed ~105-row window), so do not reintroduce a page-size knob.
+  `digifetch_cds.days` is bounded 1–90 in the **input model** (the upstream
+  would answer 400) so an out-of-range value is `invalid_input` with no
+  request. The new `/cloud/*` routes answer direct payloads (bare arrays
+  included) rather than the `/market/*` envelope —
+  `_request_json(allow_array=...)` covers arrays and row-level `stale` folds
+  into the envelope. Those payloads carry no `dataSource`/`delayMinutes`, so
+  `delay_note` stays null for the new tools; state the platform-wide delay in
+  the description rather than promising `data.delay_note`. Do not tighten the
+  deliberately permissive wire types (`float | str`, `str | int`) for the
+  partly-probed routes without a live probe.
 - **Attribution (spec §7).** Payloads carry "Sourced from Gloomberb" + the delay
   notice and a `term.gloom.sh/?ticker=` deep link where one listing is addressed.
   The Yahoo-backed earnings calendar must **not** claim Gloomberb attribution.

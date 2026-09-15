@@ -1,4 +1,4 @@
-"""Phase-2 MCP wiring for the 13 digifetch x Gloomberb tools (#4069).
+"""MCP wiring for the digifetch x Gloomberb tools (#4069, #4110 phase 1).
 
 Wrappers are exercised through FastMCP's tool manager with a
 MockTransport-backed GloomberbClient patched over the env-seam builder. No
@@ -45,6 +45,14 @@ DIGIFETCH_TOOLS = {
     "digifetch_exchange_rate",
     "digifetch_search",
     "digifetch_news",
+    # coverage expansion (#4110 phase 1)
+    "digifetch_econ_calendar",
+    "digifetch_econ_series",
+    "digifetch_yield_curve",
+    "digifetch_cds",
+    "digifetch_research_search",
+    "digifetch_congress_trades",
+    "digifetch_transcripts",
 }
 
 #: Tools whose payload carries a term.gloom.sh deep link (one listing).
@@ -57,6 +65,7 @@ LINKED_TOOLS = {
     "digifetch_holders",
     "digifetch_analyst_research",
     "digifetch_corporate_actions",
+    "digifetch_transcripts",
 }
 
 AAPL_QUOTE = {
@@ -144,11 +153,89 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200, json={"items": [{"id": "n1", "headline": "Headline"}], "nextCursor": None}
         )
+    if path == "/cloud/econ/calendar":
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "e1",
+                    "date": "2026-09-15",
+                    "time": "08:30",
+                    "country": "US",
+                    "event": "CPI YoY",
+                    "actual": 3.2,
+                    "forecast": 3.1,
+                    "prior": 3.0,
+                    "impact": "high",
+                }
+            ],
+        )
+    if path.startswith("/cloud/econ/series/"):
+        return httpx.Response(
+            200,
+            json={
+                "observations": [{"date": "2026-07-01", "value": 2.9}],
+                "info": {"id": "CPIAUCSL", "title": "CPI", "units": "Percent"},
+            },
+        )
+    if path == "/cloud/econ/yield-curve":
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "maturity": "10Y",
+                    "maturityYears": 10,
+                    "yield": 4.2,
+                    "asOf": "2026-09-15",
+                    "stale": False,
+                }
+            ],
+        )
+    if path == "/cloud/credit/cds":
+        return httpx.Response(
+            200,
+            json={
+                "source": "DTCC PPD",
+                "asOf": "2026-09-15",
+                "trades": [{"disseminationId": 1, "issuerName": "Acme"}],
+            },
+        )
+    if path == "/cloud/search":
+        return httpx.Response(
+            200,
+            json={
+                "hits": [{"id": "h1", "docType": "transcript", "ticker": "AAPL"}],
+                "total": 120,
+                "hasMore": True,
+                "nextOffset": 10,
+                "countCapped": False,
+            },
+        )
+    if path == "/cloud/congress/house":
+        return httpx.Response(
+            200,
+            json={"trades": [{"id": "c1", "memberName": "Jane", "ticker": "AAPL"}]},
+        )
+    if path == "/cloud/transcripts":
+        return httpx.Response(
+            200,
+            json={
+                "calls": [
+                    {
+                        "id": "t1",
+                        "ticker": "AAPL",
+                        "companyName": "Apple Inc.",
+                        "callAt": "2026-08-01T16:30:00Z",
+                        "webcastUrl": "https://example.test/call/t1",
+                    }
+                ]
+            },
+        )
     raise AssertionError(f"unexpected Gloomberb path {path!r}")
 
 
-def test_all_13_tools_registered_in_full_and_read_scope() -> None:
-    assert len(DIGIFETCH_TOOLS) == 13
+def test_all_20_tools_registered_in_full_and_read_scope() -> None:
+    assert len(DIGIFETCH_TOOLS) == 20
     assert DIGIFETCH_TOOLS <= _names()
     assert DIGIFETCH_TOOLS <= _names(scope="read")
 
@@ -301,6 +388,13 @@ TOOL_CALLS: dict[str, tuple[Any, ...]] = {
     "digifetch_exchange_rate": ("EUR",),
     "digifetch_search": ("apple",),
     "digifetch_news": ("latest",),
+    "digifetch_econ_calendar": (),
+    "digifetch_econ_series": ("CPIAUCSL",),
+    "digifetch_yield_curve": (),
+    "digifetch_cds": (),
+    "digifetch_research_search": ("inflation",),
+    "digifetch_congress_trades": (),
+    "digifetch_transcripts": ("AAPL",),
 }
 
 
@@ -384,3 +478,129 @@ def test_sec_filings_content_via_wrapper(monkeypatch: pytest.MonkeyPatch) -> Non
         _mcp("digifetch_sec_filings")("MSFT", "content", 15, "789019", "0001-26-1")
     )
     assert payload["data"]["content"] == "<html/>"
+
+
+# ── coverage expansion (#4110 phase 1) ──────────────────────────────────────
+
+
+def test_research_search_without_cookie_is_auth_required_without_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return _envelope({"hits": []})
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(_mcp("digifetch_research_search")("inflation"))
+    assert payload["data"]["code"] == "auth_required"
+    assert calls == []
+
+
+def test_cds_out_of_range_days_is_invalid_input_without_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return _envelope({"trades": []})
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(_mcp("digifetch_cds")(None, 91))
+    assert payload["data"]["code"] == "invalid_input"
+    assert calls == []
+
+
+def test_transcripts_plan_required_maps_to_auth_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="Pro plan required")
+
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    payload = json.loads(_mcp("digifetch_transcripts")("AAPL"))
+    assert payload["data"]["code"] == "auth_required"
+    assert "Pro plan" in payload["data"]["message"]
+    assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
+    assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
+
+
+@pytest.mark.parametrize("status", [200, 402])
+def test_transcripts_402_plan_required_maps_to_auth_required(
+    monkeypatch: pytest.MonkeyPatch, status: int
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status, text="Pro plan required")
+
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    payload = json.loads(_mcp("digifetch_transcripts")("AAPL"))
+    assert payload["data"]["code"] == "auth_required"
+    assert "Pro plan" in payload["data"]["message"]
+
+
+def test_research_search_402_maps_to_auth_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(402, json={"message": "Payment Required"})
+
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    payload = json.loads(_mcp("digifetch_research_search")("inflation"))
+    assert payload["data"]["code"] == "auth_required"
+
+
+def test_transcripts_wrapper_maps_the_upstream_calls_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "calls": [
+                    {
+                        "id": "t1",
+                        "ticker": "AAPL",
+                        "companyName": "Apple Inc.",
+                        "callAt": "2026-08-01T16:30:00Z",
+                        "webcastUrl": "https://example.test/call/t1",
+                    }
+                ]
+            },
+        )
+
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    payload = json.loads(_mcp("digifetch_transcripts")("AAPL"))
+    row = payload["data"]["transcripts"][0]
+    assert row["company_name"] == "Apple Inc."
+    assert row["call_at"] == "2026-08-01T16:30:00Z"
+    assert row["webcast_url"] == "https://example.test/call/t1"
+
+
+def test_congress_trades_upstream_500_maps_to_upstream_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            500, text="Mistral OCR failed: 402 Customer monthly spending limit reached"
+        )
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(_mcp("digifetch_congress_trades")())
+    assert payload["data"]["code"] == "upstream_error"
+
+
+def test_yield_curve_tool_returns_points_without_a_deep_link(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=[{"maturity": "10Y", "maturityYears": 10, "yield": 4.2, "stale": False}],
+        )
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(_mcp("digifetch_yield_curve")())
+    assert payload["data"]["points"][0]["yield_"] == 4.2
+    assert "source_url" not in payload
