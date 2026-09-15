@@ -151,11 +151,27 @@ def test_build_grounding_composes_data_and_digifetch_executors(
 def test_build_grounding_kill_switch_disables_digifetch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # A working data client (autouse fixture) plus a working digifetch client, so
+    # the env var is the only difference — the old version of this test passed
+    # vacuously because use_data_tools=False left no executors to attach to
+    # (#4146 review F5).
+    monkeypatch.setattr(agent_tools, "build_gloomberb_client", lambda: _client(_sweep_handler))
     monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "0")
-    tools, execute_tool, _ = _node_factory.build_grounding(
-        use_data_tools=False,
+    tools, _execute_tool, _ = _node_factory.build_grounding(
+        use_data_tools=True,
         live_search=False,
         run_date=date(2026, 9, 15),
         digifetch_tools=EQUITY_TOOLS,
     )
-    assert tools is None and execute_tool is None
+    names = set() if tools is None else {t["function"]["name"] for t in tools}
+    assert not any(name.startswith("digifetch_") for name in names)
+
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
+    tools, _execute_tool, _ = _node_factory.build_grounding(
+        use_data_tools=True,
+        live_search=False,
+        run_date=date(2026, 9, 15),
+        digifetch_tools=EQUITY_TOOLS,
+    )
+    assert tools is not None
+    assert "digifetch_quote" in {t["function"]["name"] for t in tools}

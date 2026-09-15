@@ -35,6 +35,7 @@ import json
 import logging
 import os
 import threading
+from collections.abc import Mapping
 from typing import (  # score:allow untyped any — duck-typed client + heterogeneous tool payloads
     Any,
     Callable,
@@ -46,6 +47,7 @@ from pydantic import BaseModel, ValidationError
 from .client import (
     GLOOMBERB_ENABLED_ENV,
     GLOOMBERB_SESSION_COOKIE_ENV,
+    gloomberb_enabled,
 )
 from .entitlements import TOOL_ENTITLEMENTS
 from .models import (
@@ -53,6 +55,8 @@ from .models import (
     CdsInput,
     CongressTradesInput,
     CorporateActionsInput,
+    DigifetchEnvelope,
+    DigifetchError,
     EarningsCalendarInput,
     EconCalendarInput,
     EconSeriesInput,
@@ -204,8 +208,10 @@ MACRO_TOOLS: tuple[str, ...] = (
     "digifetch_shiller",
     "digifetch_news",
     "digifetch_research_search",
-    "digifetch_congress_trades",
 )
+# ``digifetch_congress_trades`` stays MCP-only for now (#4146 review F9): its
+# upstream OCR dependency answers HTTP 500, so a pipeline tool could only return
+# a typed upstream_error. Re-add to MACRO_TOOLS when upstream recovers.
 
 PM_TOOLS: tuple[str, ...] = (
     "digifetch_quote",
@@ -259,11 +265,22 @@ def _session_cookie_present() -> bool:
 def available_digifetch_tools(subset: tuple[str, ...] | None = None) -> list[dict[str, Any]]:
     """Schemas for *subset* (default: every digifetch tool), runtime-gated.
 
-    ``free`` tools are always kept; ``session`` / ``preview`` / ``pro`` tools
-    are dropped when ``GLOOMBERB_SESSION_COOKIE`` is unset, because they would
-    only return the typed ``auth_required`` / ``pro_required`` error with no
-    request (#4099). An unknown name is a wiring bug and raises ``KeyError``.
+    Unlike the MCP surface — which registers gated tools and answers each call
+    with the typed ``auth_required`` / ``pro_required`` / disabled envelope —
+    this in-process surface filters the list so a pipeline LLM is never handed
+    a tool that can only error:
+
+    * the whole family is dropped when ``GLOOMBERB_ENABLED`` disables it
+      (default ON; a typo fails closed), because every call would return the
+      typed "disabled by kill switch" ``upstream_error``; and
+    * ``session`` / ``preview`` / ``pro`` tools are dropped when
+      ``GLOOMBERB_SESSION_COOKIE`` is unset, because they would return the
+      typed ``auth_required`` / ``pro_required`` error with no request (#4099).
+
+    An unknown name is a wiring bug and raises ``KeyError``.
     """
+    if not gloomberb_enabled():
+        return []
     names = _DEFAULT_TOOL_NAMES if subset is None else subset
     has_session = _session_cookie_present()
     schemas: list[dict[str, Any]] = []
@@ -339,6 +356,26 @@ DIGIFETCH_DISPATCH: dict[str, DigifetchDispatch] = {
 }
 
 
+def _symbol_for(spec: DigifetchDispatch, request: Any) -> str | None:
+    """Best-effort §7 deep-link symbol from the typed request, else the raw args.
+
+    On a Pydantic ``ValidationError`` the dispatcher falls back to the raw
+    payload, so the error envelope keeps the ``term.gloom.sh/?ticker=`` link the
+    MCP wrapper would have emitted for the same call (#4146 review F3).
+    """
+    if not spec.symbol_field:
+        return None
+    if isinstance(request, spec.input_model):
+        value = getattr(request, spec.symbol_field, None)
+    elif isinstance(request, Mapping):
+        value = request.get(spec.symbol_field)
+    else:
+        return None
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
 def build_digifetch_tool_dispatcher(
     client: Any | None = None,
 ) -> Callable[[str, dict[str, Any]], str]:
@@ -362,21 +399,36 @@ def build_digifetch_tool_dispatcher(
         spec = DIGIFETCH_DISPATCH.get(name)
         if spec is None:
             return f"Error: unknown digifetch tool {name!r}"
-        payload = dict(args or {})
         try:
+            payload = dict(args or {})
             request: Any = spec.input_model.model_validate(payload)
         except ValidationError:
             # Let the client produce its typed invalid_input envelope (the
-            # single validation/error contract for both surfaces).
+            # single validation/error contract for both surfaces); the raw
+            # payload still supplies the deep link when it carries one.
             request = payload
+        except (TypeError, ValueError) as exc:
+            # A non-mapping args payload (list/str/number) never reaches the
+            # client: answer with the same typed invalid_input shape (#4146
+            # review F2) instead of raising out of the tool loop.
+            logger.warning("digifetch tool %s got non-mapping args: %s", name, exc)
+            return gloomberb_envelope_json(
+                DigifetchEnvelope(
+                    data=DigifetchError(
+                        code="invalid_input",
+                        message=(f"tool args must be an object; got {type(args).__name__}: {exc}"),
+                        retryable=False,
+                    )
+                ),
+                attributed=spec.attributed,
+            )
         try:
             envelope = getattr(_resolve_client(), spec.client_method)(request)
         except Exception as exc:  # mirror the MCP wrappers: never raise to the loop
             logger.warning("digifetch tool %s failed: %s", name, exc)
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-        symbol: str | None = None
-        if spec.symbol_field and isinstance(request, spec.input_model):
-            symbol = getattr(request, spec.symbol_field, None)
-        return gloomberb_envelope_json(envelope, symbol=symbol, attributed=spec.attributed)
+        return gloomberb_envelope_json(
+            envelope, symbol=_symbol_for(spec, request), attributed=spec.attributed
+        )
 
     return execute_tool

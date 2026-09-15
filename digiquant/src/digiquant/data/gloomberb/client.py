@@ -145,6 +145,7 @@ __all__ = [
     "RETRYABLE_EXCEPTIONS",
     "ENDPOINTS",
     "GloomberbClient",
+    "gloomberb_enabled",
     "yfinance_earnings_events",
 ]
 
@@ -258,6 +259,17 @@ def _env_flag(name: str, *, default: bool) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() in _TRUTHY_ENV_VALUES
+
+
+def gloomberb_enabled() -> bool:
+    """Resolve the family kill switch from env (``GLOOMBERB_ENABLED``, default ON).
+
+    The same predicate ``GloomberbClient`` resolves at construction. Exposed so
+    the in-process agent surface can stop *advertising* a disabled family rather
+    than registering schemas whose every call returns the typed disabled
+    envelope (#4146 review F1).
+    """
+    return _env_flag(GLOOMBERB_ENABLED_ENV, default=True)
 
 
 def _parse_retry_after(value: str | None) -> float | None:
@@ -466,9 +478,7 @@ class GloomberbClient:
             self._fetcher = HttpFetcher(headers=DEFAULT_HEADERS)
             self._owns_fetcher = True
         self._base_url = base_url.rstrip("/")
-        self._enabled = (
-            enabled if enabled is not None else _env_flag(GLOOMBERB_ENABLED_ENV, default=True)
-        )
+        self._enabled = enabled if enabled is not None else gloomberb_enabled()
         if session_cookie is None:
             env_cookie = os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV, "").strip()
             self._session_cookie: str | None = env_cookie or None
@@ -2078,7 +2088,10 @@ class GloomberbClient:
                 return cast(EnvT, entry[1])
         # Produce outside the lock: the rate limiter paces upstream calls, and
         # holding the cache lock across a network request would serialize every
-        # parallel node behind the slowest call.
+        # parallel node behind the slowest call. Duplicate produce() calls on a
+        # concurrent same-key miss are deliberate — a per-key in-flight lock
+        # would reintroduce that serialization, and both results are identical
+        # envelopes (the rate limiter still paces the wire).
         envelope = produce()
         cacheable = not isinstance(envelope.data, DigifetchError) and (
             should_cache is None or should_cache(envelope)
@@ -2096,7 +2109,10 @@ class GloomberbClient:
         if opened_at is None:
             return None
         if self._monotonic() - opened_at >= self._circuit_reset_seconds:
-            # Half-open: let one probe through.
+            # Half-open window: probes are allowed again. There is deliberately
+            # no single-probe marker — parallel nodes may probe concurrently,
+            # and the next failure re-opens the breaker while a success resets
+            # it (a marker would need extra state and still race the lock).
             return None
         return DigifetchError(
             code="upstream_error",

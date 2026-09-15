@@ -3,18 +3,22 @@
 Offline: a ``httpx.MockTransport`` drives the real ``digifetch.HttpFetcher``
 and the dispatcher is given the client directly (the same patchable seam the
 MCP wrappers use). Covers schema/dispatcher parity with the orchestrator
-manifest builders, the curated per-phase subsets, the runtime session gate,
-the attribution envelope, and the client's cache/breaker locks.
+manifest builders and the MCP wrappers, the curated per-phase subsets, the
+runtime session + family kill-switch gates, the attribution envelope (including
+the typed-error paths), and the client's cache/breaker locks.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from pathlib import Path
+from typing import Any, get_args, get_type_hints
 
 import httpx
 import pytest
+from pydantic import BaseModel
 
 pytestmark = pytest.mark.unit
 
@@ -39,6 +43,8 @@ from digiquant.orchestrator_tools import build_orchestrator_tool_manifest  # noq
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy  # noqa: E402
 
 MANIFEST = {t["function"]["name"]: t for t in build_orchestrator_tool_manifest()}
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 AAPL_QUOTE = {
     "symbol": "AAPL",
@@ -94,7 +100,13 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
 def test_schemas_are_the_manifest_entries_for_the_entitled_names() -> None:
     names = [t["function"]["name"] for t in DIGIFETCH_TOOLS]
     assert names and len(names) == len(set(names))
-    assert set(names) == set(TOOL_ENTITLEMENTS)
+    # Derived from the manifest surface, not round-tripped through the same
+    # TOOL_ENTITLEMENTS filter: a builder added to the manifest without a
+    # declaration fails here instead of being silently dropped from the
+    # in-process surface (#4146 review F4).
+    manifest_digifetch = {name for name in MANIFEST if name.startswith("digifetch_")}
+    assert set(TOOL_ENTITLEMENTS) == manifest_digifetch
+    assert set(names) == manifest_digifetch
     for tool in DIGIFETCH_TOOLS:
         assert tool == MANIFEST[tool["function"]["name"]]
 
@@ -106,6 +118,53 @@ def test_dispatch_table_covers_every_schema_and_matches_its_parameters() -> None
         assert set(params.get("properties", {})) == set(spec.input_model.model_fields), name
         required = {f for f, v in spec.input_model.model_fields.items() if v.is_required()}
         assert set(params.get("required", [])) == required, name
+
+
+def test_dispatch_rows_match_the_client_methods() -> None:
+    for name, spec in DIGIFETCH_DISPATCH.items():
+        method = getattr(GloomberbClient, spec.client_method, None)
+        assert callable(method), f"{name}: GloomberbClient.{spec.client_method} missing"
+        # The row's input model must be the first BaseModel in the method's
+        # annotated request union (``Model | Mapping[str, Any]``).
+        models = [
+            arg
+            for arg in get_args(get_type_hints(method)["request"])
+            if isinstance(arg, type) and issubclass(arg, BaseModel)
+        ]
+        assert models == [spec.input_model], f"{name}: GloomberbClient.{spec.client_method}"
+
+
+def _mcp_envelope_contract() -> dict[str, tuple[str | None, bool]]:
+    """Parse the MCP wrappers' §7 envelope choices: ``name -> (symbol, attributed)``.
+
+    Reads ``mcp_server.py`` instead of duplicating the contract as a hand table,
+    so a wrapper that changes its deep-link/attribution choice fails this test
+    until the dispatch row matches (#4146 review F4). Whitespace is flattened so
+    a reformatted (wrapped) call still parses.
+    """
+    source = (_REPO_ROOT / "digiquant/src/digiquant/mcp_server.py").read_text()
+    contract: dict[str, tuple[str | None, bool]] = {}
+    for chunk in source.split('@_maybe_tool("')[1:]:
+        name, _, body = chunk.partition('"')
+        if not name.startswith("digifetch_"):
+            continue
+        flat = " ".join(body.split())
+        call = re.search(r"_gloomberb_envelope_json\(([^)]*)\)", flat)
+        assert call is not None, name
+        args = call.group(1)
+        symbol = re.search(r"symbol=(\w+)", args)
+        contract[name] = (symbol.group(1) if symbol else None, "attributed=False" not in args)
+    return contract
+
+
+def test_dispatch_link_and_attribution_match_the_mcp_wrappers() -> None:
+    contract = _mcp_envelope_contract()
+    assert set(contract) == set(DIGIFETCH_DISPATCH)
+    for name, spec in DIGIFETCH_DISPATCH.items():
+        assert spec.symbol_field == contract[name][0], name
+        assert spec.attributed is contract[name][1], name
+        if spec.symbol_field is not None:
+            assert spec.symbol_field in spec.input_model.model_fields, name
 
 
 def test_subsets_are_real_distinct_and_prompt_budgeted() -> None:
@@ -152,6 +211,22 @@ def test_pro_tool_gate_is_cookie_presence(monkeypatch: pytest.MonkeyPatch) -> No
 def test_available_digifetch_tools_rejects_an_unknown_name() -> None:
     with pytest.raises(KeyError):
         available_digifetch_tools(("digifetch_not_a_tool",))
+
+
+def test_available_digifetch_tools_respects_the_family_kill_switch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Default ON (env unset) → schemas; disabled → never advertise a tool whose
+    # every call can only return the typed disabled envelope (#4146 review F1).
+    assert available_digifetch_tools()
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "0")
+    assert available_digifetch_tools() == []
+    assert available_digifetch_tools(EQUITY_TOOLS) == []
+    # A typo fails closed, same as the client's kill switch.
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "ture")
+    assert available_digifetch_tools() == []
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
+    assert available_digifetch_tools()
 
 
 # ── dispatcher routing + envelope ─────────────────────────────────────────────
@@ -202,6 +277,20 @@ def test_dispatcher_maps_invalid_args_to_a_typed_error_without_a_request() -> No
     payload = json.loads(execute("digifetch_price_history", {"symbol": "AAPL"}))
     assert payload["data"]["code"] == "invalid_input"
     assert payload["data"]["retryable"] is False
+    # The raw payload still supplies the deep link the MCP wrapper emits (#4146
+    # review F3).
+    assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
+
+
+def test_dispatcher_non_mapping_args_return_typed_invalid_input() -> None:
+    def _fail(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("non-mapping args must not reach the wire")
+
+    execute = build_digifetch_tool_dispatcher(client=make_client(_fail))
+    payload = json.loads(execute("digifetch_quote", ["AAPL"]))  # type: ignore[arg-type]
+    assert payload["data"]["code"] == "invalid_input"
+    assert payload["data"]["retryable"] is False
+    assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
 
 
 def test_session_gated_tool_without_a_cookie_is_auth_required_without_a_request() -> None:

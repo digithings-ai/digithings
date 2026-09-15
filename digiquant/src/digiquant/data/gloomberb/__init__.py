@@ -48,6 +48,7 @@ from .client import (
     RETRYABLE_EXCEPTIONS,
     SESSION_COOKIE_NAMES,
     GloomberbClient,
+    gloomberb_enabled,
     session_cache_fingerprint,
     yfinance_earnings_events,
 )
@@ -304,6 +305,7 @@ __all__ = [
     "terminal_ticker_url",
     # client
     "GloomberbClient",
+    "gloomberb_enabled",
     "GLOOMBERB_BASE_URL",
     "GLOOMBERB_ENABLED_ENV",
     "GLOOMBERB_SESSION_COOKIE_ENV",

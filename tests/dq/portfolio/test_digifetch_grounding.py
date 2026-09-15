@@ -15,10 +15,16 @@ from digiquant.data.gloomberb import (
     GloomberbClient,
     agent_tools,
 )
+from digiquant.portfolio.phases import h7_pm_direction, portfolio_common
 from digiquant.portfolio.phases.h6_deliberation import _h6_grounding
 from digiquant.portfolio.phases.portfolio_common import _portfolio_grounding
 from digiquant.research.phases import _node_factory
-from digiquant.research.state import ResearchConfigBundle, ResearchState
+from digiquant.research.state import (
+    PhasePortfolioState,
+    PriorContext,
+    ResearchConfigBundle,
+    ResearchState,
+)
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy
 
@@ -39,8 +45,29 @@ def _state() -> ResearchState:
     return ResearchState(
         run_type="delta",
         run_date=date(2026, 9, 15),
+        baseline_date=date(2026, 9, 14),
         config=ResearchConfigBundle(watchlist=["AAPL"]),
+        prior_context=PriorContext(),
+        phase_portfolio=PhasePortfolioState(),
     )
+
+
+def _raise(**_kwargs: Any) -> Any:
+    """Short-circuit an LLM call after grounding has been recorded."""
+    raise RuntimeError("stop after grounding")
+
+
+def _record_grounding_calls(
+    monkeypatch: pytest.MonkeyPatch, recorded: list[dict[str, Any]]
+) -> None:
+    """Spy on ``portfolio_common.build_grounding`` keeping the real behavior."""
+    original = portfolio_common.build_grounding
+
+    def spy(**kwargs: Any) -> Any:
+        recorded.append(kwargs)
+        return original(**kwargs)
+
+    monkeypatch.setattr(portfolio_common, "build_grounding", spy)
 
 
 def _client(handler: Any) -> GloomberbClient:
@@ -87,6 +114,41 @@ def test_portfolio_grounding_equips_the_free_pm_subset(
 
     payload = json.loads(execute_tool("digifetch_quote", {"symbol": "AAPL"}))
     assert payload["data"]["quote"]["price"] == 200.0
+
+
+@pytest.mark.unit
+def test_h5_call_site_grounds_with_the_pm_subset(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Drive the real H5 entry point (not the helper directly) so dropping the
+    # grounding call from the node path fails here (#4146 review F6).
+    recorded: list[dict[str, Any]] = []
+    _record_grounding_calls(monkeypatch, recorded)
+    monkeypatch.setattr(agent_tools, "build_gloomberb_client", lambda: _client(_sweep_handler))
+    monkeypatch.setattr(portfolio_common, "run_research_agent", _raise)
+
+    payload, document, errors, _bundle = portfolio_common.run_asset_analyst_llm(
+        state=_state(),
+        ticker="AAPL",
+        roster_entry={"ticker": "AAPL"},
+        phase_slug="portfolio/asset-analyst-AAPL",
+    )
+    assert payload is None and document is None and errors
+    assert recorded, "H5 must ground through portfolio_common.build_grounding"
+    assert recorded[-1]["research_phase"] == "h5_analyst"
+    assert recorded[-1]["digifetch_tools"] == PM_TOOLS
+
+
+@pytest.mark.unit
+def test_h7_call_site_grounds_with_the_pm_subset(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorded: list[dict[str, Any]] = []
+    _record_grounding_calls(monkeypatch, recorded)
+    monkeypatch.setattr(agent_tools, "build_gloomberb_client", lambda: _client(_sweep_handler))
+    monkeypatch.setattr(h7_pm_direction, "run_research_agent", _raise)
+
+    out = h7_pm_direction._h7_node(_state())
+    assert out.get("errors"), "the stubbed LLM failure must fail soft"
+    assert recorded, "H7 must ground through portfolio_common.build_grounding"
+    assert recorded[-1]["research_phase"] == "h7_pm"
+    assert recorded[-1]["digifetch_tools"] == PM_TOOLS
 
 
 @pytest.mark.unit

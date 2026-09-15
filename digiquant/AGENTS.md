@@ -651,8 +651,14 @@ stays a generic transport engine (no URLs, no env reads).
   curated subsets `EQUITY_TOOLS` / `MACRO_TOOLS` / `PM_TOOLS` (each ≤16 names)
   are wired through `build_grounding(digifetch_tools=...)` +
   `SegmentNodeSpec.digifetch_tools`: equity + sector phases take EQUITY, macro
-  takes MACRO, portfolio H5 + H7 take PM. Session/preview/pro names are dropped
-  when `GLOOMBERB_SESSION_COOKIE` is unset (CI has none → never advertised).
+  takes MACRO, portfolio H5 + H7 take PM. Unlike the MCP surface (which
+  registers gated tools and answers `auth_required` / disabled envelopes), the
+  in-process list **filters instead of advertising**:
+  `available_digifetch_tools` returns no digifetch tools at all when
+  `GLOOMBERB_ENABLED` disables the family, and drops session/preview/pro names
+  when `GLOOMBERB_SESSION_COOKIE` is unset (CI has neither → never advertised);
+  the client still applies both gates per call. `digifetch_congress_trades`
+  stays MCP-only (its upstream OCR answers HTTP 500) and is not in `MACRO_TOOLS`.
   H6 stays off (research-tools-only by #2908) and legacy Phase 7D is unwired.
   Enrichment-only is enforced structurally: the subset attaches **only when a
   primary data/research executor built**. The client factory + envelope
