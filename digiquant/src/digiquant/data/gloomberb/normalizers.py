@@ -44,9 +44,15 @@ from .models import (
     EconSeriesObservation,
     EconSeriesResult,
     ExchangeRateResult,
+    Filing13F,
     FinancialStatement,
+    Fund13F,
     Fundamentals,
+    FundHolders13F,
+    Funds13FResult,
     Holder,
+    Holding13F,
+    Holdings13FResult,
     InstrumentSearchResult,
     NewsItem,
     OptionContract,
@@ -57,11 +63,21 @@ from .models import (
     ResearchHit,
     ResearchSearchPagination,
     ResearchSearchResult,
+    ScreenerResult,
+    ScreenerRow,
     SecFiling,
     SecFilingDocument,
     StatementHistory,
+    StatementRow,
+    StatementsResult,
     TickerFinancials,
+    TickerInfo13F,
+    TopFund13F,
     Transcript,
+    Tweet,
+    TweetsResult,
+    Venue,
+    VenuesResult,
     YieldCurvePoint,
 )
 
@@ -107,6 +123,13 @@ __all__ = [
     "normalize_research_search",
     "normalize_congress_trades",
     "normalize_transcripts",
+    # coverage expansion (#4110 phase 2)
+    "normalize_statements",
+    "normalize_tweets",
+    "normalize_venues",
+    "normalize_screener",
+    "normalize_funds_13f",
+    "normalize_holdings_13f",
 ]
 
 # ---------------------------------------------------------------------------
@@ -975,3 +998,131 @@ def normalize_transcripts(raw: Any) -> list[Transcript]:
     if isinstance(raw, Mapping):
         raw = raw.get("calls") or raw.get("transcripts")
     return [Transcript.model_validate(dict(entry)) for entry in _rows(raw, "calls")]
+
+
+# ---------------------------------------------------------------------------
+# Coverage-expansion mappers (#4110 phase 2)
+# ---------------------------------------------------------------------------
+
+
+def _str_or_none(value: Any) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _int_or_none(value: Any) -> int | None:
+    number = finite_number(value)
+    return int(number) if number is not None else None
+
+
+def normalize_statements(raw: Mapping[str, Any]) -> StatementsResult:
+    """Map the ``/market/statements`` payload (annual + quarterly rows)."""
+    return StatementsResult(
+        annual_statements=[
+            StatementRow.model_validate(dict(entry))
+            for entry in _rows(raw.get("annualStatements"), "annualStatements")
+        ],
+        quarterly_statements=[
+            StatementRow.model_validate(dict(entry))
+            for entry in _rows(raw.get("quarterlyStatements"), "quarterlyStatements")
+        ],
+    )
+
+
+def normalize_tweets(raw: Mapping[str, Any], limit: int) -> TweetsResult:
+    """Map a tweets payload and slice it to *limit*.
+
+    The upstream echoes ``limit`` without shrinking ``tweets`` (live-verified:
+    375 rows for limit=1); rows are sliced client-side and the pre-slice count
+    is reported so a caller can see that the window was larger.
+    """
+    tweets = [Tweet.model_validate(dict(entry)) for entry in _rows(raw.get("tweets"), "tweets")]
+    return TweetsResult(
+        query=_str_or_none(raw.get("query")) or "",
+        query_type=_str_or_none(raw.get("queryType")),
+        since=_str_or_none(raw.get("since")),
+        until=_str_or_none(raw.get("until")),
+        as_of=_str_or_none(raw.get("asOf")),
+        cached=raw.get("cached") if isinstance(raw.get("cached"), bool) else None,
+        hours=_int_or_none(raw.get("hours")),
+        ticker=_str_or_none(raw.get("ticker")),
+        cashtag=_str_or_none(raw.get("cashtag")),
+        include_replies=raw.get("includeReplies")
+        if isinstance(raw.get("includeReplies"), bool)
+        else None,
+        tweets=tweets[:limit],
+        returned_count=len(tweets),
+        truncated=len(tweets) > limit,
+    )
+
+
+def normalize_venues(raw: Mapping[str, Any]) -> VenuesResult:
+    """Map the ``/market/venues`` payload (137 venues, live-verified)."""
+    return VenuesResult(
+        provider_id=_str_or_none(raw.get("providerId")),
+        checked_at=_int_or_none(raw.get("checkedAt")),
+        refresh_at=_int_or_none(raw.get("refreshAt")),
+        venues=[Venue.model_validate(dict(entry)) for entry in _rows(raw.get("venues"), "venues")],
+    )
+
+
+def normalize_screener(raw: Any, category: str) -> ScreenerResult:
+    """Map a screener payload (Pro success shape is unprobed).
+
+    Accepts a bare row array or a mapping whose rows live under one of the
+    common keys (``results`` / ``rows`` / ``items`` / the category name).
+    """
+    if isinstance(raw, Mapping):
+        rows = next(
+            (
+                raw[key]
+                for key in ("results", "rows", "items", category)
+                if isinstance(raw.get(key), list)
+            ),
+            None,
+        )
+    else:
+        rows = raw
+    return ScreenerResult(
+        category=category,
+        rows=[ScreenerRow.model_validate(dict(entry)) for entry in _rows(rows, "rows")],
+    )
+
+
+def normalize_funds_13f(raw: Any, what: str) -> Funds13FResult:
+    """Map a 13F funds payload by ``what`` (search/top/tickers/holders)."""
+    if what == "search":
+        return Funds13FResult(
+            what="search",
+            funds=[Fund13F.model_validate(dict(entry)) for entry in _rows(raw, "funds")],
+        )
+    if what == "top":
+        return Funds13FResult(
+            what="top",
+            top_funds=[TopFund13F.model_validate(dict(entry)) for entry in _rows(raw, "topfunds")],
+        )
+    if what == "tickers":
+        return Funds13FResult(
+            what="tickers",
+            tickers=[TickerInfo13F.model_validate(dict(entry)) for entry in _rows(raw, "tickers")],
+        )
+    holders = raw if isinstance(raw, Mapping) else {}
+    return Funds13FResult(
+        what="holders",
+        holders=FundHolders13F.model_validate(dict(holders)),
+    )
+
+
+def normalize_holdings_13f(raw: Any, what: str, limit: int) -> Holdings13FResult:
+    """Map a 13F filings/forms/form payload by ``what``.
+
+    ``has_more`` is computed from the row count (``len(rows) >= limit``): the
+    upstream answers a bare array with no continuation token (live-verified),
+    so an exactly-full page is the only signal that more rows may exist.
+    """
+    if what == "form":
+        holdings = [Holding13F.model_validate(dict(entry)) for entry in _rows(raw, "holdings")]
+        return Holdings13FResult(what="form", holdings=holdings, has_more=len(holdings) >= limit)
+    filings = [Filing13F.model_validate(dict(entry)) for entry in _rows(raw, "filings")]
+    if what == "forms":
+        return Holdings13FResult(what="forms", forms=filings)
+    return Holdings13FResult(what="filings", filings=filings)

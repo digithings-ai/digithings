@@ -64,9 +64,11 @@ from .models import (
     EconSeriesInput,
     ExchangeRateEnvelope,
     ExchangeRateInput,
+    Funds13FEnvelope,
     HoldersEnvelope,
     HoldersInput,
     HoldersResult,
+    Holdings13FEnvelope,
     NewsEnvelope,
     NewsInput,
     NewsResult,
@@ -85,18 +87,29 @@ from .models import (
     QuotesBatchResult,
     ResearchSearchEnvelope,
     ResearchSearchInput,
+    ScreenerEnvelope,
+    ScreenerInput,
     SearchEnvelope,
     SearchInput,
     SearchResult,
     SecFilingsEnvelope,
     SecFilingsInput,
     SecFilingsResult,
+    StatementsEnvelope,
+    StatementsInput,
+    ThirteenFFundsInput,
+    ThirteenFHoldingsInput,
     TickerFinancialsEnvelope,
     TickerFinancialsInput,
     TickerFinancialsResult,
+    TickerTweetsInput,
     TranscriptsEnvelope,
     TranscriptsInput,
     TranscriptsResult,
+    TweetSearchInput,
+    TweetsEnvelope,
+    VenuesEnvelope,
+    VenuesInput,
     YieldCurveEnvelope,
     YieldCurveInput,
     YieldCurveResult,
@@ -169,6 +182,19 @@ ENDPOINTS: dict[str, str] = {
     "research_search": "/cloud/search",
     "congress_trades": "/cloud/congress/house",
     "transcripts": "/cloud/transcripts",
+    # coverage expansion (#4110 phase 2)
+    "statements": "/market/statements",
+    "tweets": "/news/tweets",
+    "tweet_search": "/news/tweets/search",
+    "venues": "/market/venues",
+    "screener": "/market/screener",
+    "13f_funds": "/cloud/sec/13f/funds",
+    "13f_topfunds": "/cloud/sec/13f/topfunds",
+    "13f_tickers": "/cloud/sec/13f/tickers",
+    "13f_holders": "/cloud/sec/13f/holders",
+    "13f_filings": "/cloud/sec/13f/filings",
+    "13f_forms": "/cloud/sec/13f/forms",
+    "13f_form": "/cloud/sec/13f/form",
 }
 
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -202,11 +228,19 @@ def _parse_retry_after(value: str | None) -> float | None:
     return seconds if seconds >= 0 else None
 
 
-# Plan-gated routes (`/cloud/transcripts`) answer a non-JSON text body such as
-# "Pro plan required" for a free (email-verified) session, sometimes with a
-# non-auth HTTP status. These markers route it to a typed `auth_required`
-# instead of a generic upstream error or an empty success.
-_PRO_PLAN_MARKERS: tuple[str, ...] = ("pro plan", "plan required", "upgrade", "subscription")
+# Plan-gated routes answer with a non-JSON text body ("Pro plan required",
+# `/cloud/transcripts`), sometimes with a non-auth HTTP status, or with a
+# 200 `status=unsupported` envelope whose reasonCode is `PRO_REQUIRED`
+# (`/market/screener`). These markers route either shape to a typed
+# `auth_required` instead of a generic upstream error or an empty success.
+_PRO_PLAN_MARKERS: tuple[str, ...] = (
+    "pro plan",
+    "plan required",
+    "upgrade",
+    "subscription",
+    "pro_required",
+    "pro required",
+)
 
 
 def _plan_required_error(text: str) -> DigifetchError | None:
@@ -1274,6 +1308,319 @@ class GloomberbClient:
 
         return self._cached("transcripts", parsed, produce)
 
+    # -- coverage expansion (#4110 phase 2) --------------------------------
+
+    def statements(self, request: StatementsInput | Mapping[str, Any]) -> StatementsEnvelope:
+        """Annual/quarterly statement rows (session-gated; direct envelope)."""
+        parsed = self._validate_input(StatementsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(StatementsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(StatementsEnvelope)
+
+        def produce() -> StatementsEnvelope:
+            params: dict[str, Any] = {
+                "symbol": parsed.symbol,
+                "period": parsed.period,
+            }
+            if parsed.exchange:
+                params["exchange"] = parsed.exchange
+            raw = self._request_json("GET", ENDPOINTS["statements"], params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(StatementsEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Cloud statements are unavailable for {parsed.symbol}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(StatementsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "statements")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(StatementsEnvelope, payload)
+            normalized = self._normalize(nz.normalize_statements, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(StatementsEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return StatementsEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("statements", parsed, produce)
+
+    def ticker_tweets(self, request: TickerTweetsInput | Mapping[str, Any]) -> TweetsEnvelope:
+        """Recent X/Twitter posts for one ticker (session-gated; direct payload)."""
+        parsed = self._validate_input(TickerTweetsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(TweetsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(TweetsEnvelope)
+
+        def produce() -> TweetsEnvelope:
+            params: dict[str, Any] = {
+                "ticker": parsed.ticker,
+                "limit": str(parsed.limit),
+                "includeReplies": "true" if parsed.include_replies else "false",
+            }
+            if parsed.hours is not None:
+                params["hours"] = str(parsed.hours)
+            raw = self._request_json("GET", ENDPOINTS["tweets"], params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud tweets are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "tweets")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, payload)
+            normalized = self._normalize(nz.normalize_tweets, payload, parsed.limit)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return TweetsEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("ticker_tweets", parsed, produce)
+
+    def tweet_search(self, request: TweetSearchInput | Mapping[str, Any]) -> TweetsEnvelope:
+        """Search X/Twitter posts by query (session-gated; direct payload)."""
+        parsed = self._validate_input(TweetSearchInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(TweetsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(TweetsEnvelope)
+
+        def produce() -> TweetsEnvelope:
+            params: dict[str, Any] = {
+                "query": parsed.query,
+                "queryType": parsed.query_type,
+                "limit": str(parsed.limit),
+            }
+            if parsed.hours is not None:
+                params["hours"] = str(parsed.hours)
+            raw = self._request_json("GET", ENDPOINTS["tweet_search"], params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud tweet search is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "tweet search")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, payload)
+            normalized = self._normalize(nz.normalize_tweets, payload, parsed.limit)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(TweetsEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return TweetsEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("tweet_search", parsed, produce)
+
+    def venues(self, request: VenuesInput | Mapping[str, Any] | None = None) -> VenuesEnvelope:
+        """Exchange venue metadata (anonymous; enveloped payload)."""
+        parsed = self._validate_input(VenuesInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(VenuesEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(VenuesEnvelope)
+
+        def produce() -> VenuesEnvelope:
+            raw = self._request_json("GET", ENDPOINTS["venues"])
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(VenuesEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud venues are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(VenuesEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "venues")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(VenuesEnvelope, payload)
+            normalized = self._normalize(nz.normalize_venues, payload)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(VenuesEnvelope, normalized)
+            fresh = self._freshness(raw, payload)
+            return VenuesEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("venues", parsed, produce)
+
+    def screener(self, request: ScreenerInput | Mapping[str, Any]) -> ScreenerEnvelope:
+        """Market screener (session-gated; **requires Gloomberb Pro**).
+
+        A free session answers ``{"status": "unsupported", "reasonCode":
+        "PRO_REQUIRED"}`` with HTTP 200; ``pro_gated`` maps that (like the 402
+        text body) to a typed ``auth_required`` instead of ``not_found``.
+        """
+        parsed = self._validate_input(ScreenerInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ScreenerEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ScreenerEnvelope)
+
+        def produce() -> ScreenerEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["screener"],
+                params={
+                    "category": parsed.category,
+                    "count": str(parsed.count),
+                    "mode": parsed.mode,
+                },
+                gated=True,
+                pro_gated=True,
+                allow_array=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(ScreenerEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud screener is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(ScreenerEnvelope, result)
+            data, warnings = result
+            normalized = self._normalize(nz.normalize_screener, data, parsed.category)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(ScreenerEnvelope, normalized)
+            fresh = self._freshness(raw, data, extra_stale=self._rows_stale(data))
+            return ScreenerEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("screener", parsed, produce)
+
+    def thirteen_f_funds(
+        self, request: ThirteenFFundsInput | Mapping[str, Any]
+    ) -> Funds13FEnvelope:
+        """13F funds: search / top funds / ticker map / CUSIP holders (anonymous)."""
+        parsed = self._validate_input(ThirteenFFundsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(Funds13FEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(Funds13FEnvelope)
+
+        def produce() -> Funds13FEnvelope:
+            if parsed.what == "search":
+                path = ENDPOINTS["13f_funds"]
+                params: dict[str, Any] = {
+                    "name": parsed.query,
+                    "limit": str(parsed.limit),
+                    "offset": str(parsed.offset),
+                }
+            elif parsed.what == "top":
+                path = ENDPOINTS["13f_topfunds"]
+                params = {
+                    "quarter": parsed.quarter,
+                    "limit": str(parsed.limit),
+                    "offset": str(parsed.offset),
+                }
+            elif parsed.what == "tickers":
+                path = ENDPOINTS["13f_tickers"]
+                params = {"tickers": ",".join(parsed.tickers)}
+            else:
+                path = ENDPOINTS["13f_holders"]
+                params = {"cusip": parsed.cusip, "period_of_report": parsed.period_of_report}
+            raw = self._request_json("GET", path, params=params, allow_array=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(Funds13FEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud 13F funds are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(Funds13FEnvelope, result)
+            data, warnings = result
+            normalized = self._normalize(nz.normalize_funds_13f, data, parsed.what)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(Funds13FEnvelope, normalized)
+            fresh = self._freshness(raw, data, extra_stale=self._rows_stale(data))
+            return Funds13FEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("thirteen_f_funds", parsed, produce)
+
+    def thirteen_f_holdings(
+        self, request: ThirteenFHoldingsInput | Mapping[str, Any]
+    ) -> Holdings13FEnvelope:
+        """13F filings / fund forms / one form's holdings (anonymous)."""
+        parsed = self._validate_input(ThirteenFHoldingsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(Holdings13FEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(Holdings13FEnvelope)
+
+        def produce() -> Holdings13FEnvelope:
+            if parsed.what == "filings":
+                path = ENDPOINTS["13f_filings"]
+                params: dict[str, Any] = {
+                    "from": parsed.from_date,
+                    "to": parsed.to_date,
+                    "limit": str(parsed.limit),
+                    "offset": str(parsed.offset),
+                }
+            elif parsed.what == "forms":
+                path = ENDPOINTS["13f_forms"]
+                params = {
+                    "cik": parsed.cik,
+                    "limit": str(parsed.limit),
+                    "offset": str(parsed.offset),
+                }
+                if parsed.from_date:
+                    params["from"] = parsed.from_date
+                if parsed.to_date:
+                    params["to"] = parsed.to_date
+            else:
+                path = ENDPOINTS["13f_form"]
+                params = {
+                    "cik": parsed.cik,
+                    "accession_number": parsed.accession_number,
+                    "limit": str(parsed.limit),
+                    "offset": str(parsed.offset),
+                }
+            raw = self._request_json("GET", path, params=params, allow_array=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(Holdings13FEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud 13F holdings are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(Holdings13FEnvelope, result)
+            data, warnings = result
+            normalized = self._normalize(nz.normalize_holdings_13f, data, parsed.what, parsed.limit)
+            if isinstance(normalized, DigifetchError):
+                return self._error_envelope(Holdings13FEnvelope, normalized)
+            fresh = self._freshness(raw, data, extra_stale=self._rows_stale(data))
+            return Holdings13FEnvelope(
+                data=normalized,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("thirteen_f_holdings", parsed, produce)
+
     # -- internals ---------------------------------------------------------
 
     def _validate_input(
@@ -1607,8 +1954,10 @@ class GloomberbClient:
             )
         if pro_gated:
             # A JSON error body for a plan-gated route must not read as an
-            # empty success (e.g. {"error": "Pro plan required"}).
-            for key in ("error", "message", "detail"):
+            # empty success: `{"error": "Pro plan required"}` and the screener's
+            # `{"status": "unsupported", "reasonCode": "PRO_REQUIRED"}` both
+            # need the typed plan error before the status mapping runs.
+            for key in ("error", "message", "detail", "reasonCode"):
                 value = payload.get(key)
                 plan_error = _plan_required_error(value) if isinstance(value, str) else None
                 if plan_error is not None:

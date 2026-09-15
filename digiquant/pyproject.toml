@@ -94,7 +94,7 @@ dev = ["digiquant[research]", "digiquant[indicators]", "digiquant[m2]"]
 # import (see #1705). Lift the bound only together with a migration to the 2.x API.
 # yfinance backs digifetch_earnings_calendar (the one Yahoo-backed tool in the
 # digifetch family, #4069). Declared on this extra so the MCP image
-# ([research,mcp]) serves all 20 tools instead of 19 + a typed upstream_error.
+# ([research,mcp]) serves all 27 tools instead of 26 + a typed upstream_error.
 mcp = ["mcp>=1.2,<2", "yfinance>=0.2"]
 otel = ["digibase[otel]"]
 # Alpaca paper Trading API adapter (K1). Cap to the current 0.x major — a broker

@@ -1181,3 +1181,355 @@ def test_transcripts_plan_required_does_not_open_the_breaker() -> None:
     # A plan gate is deterministic, not upstream degradation: the breaker stays closed.
     assert isinstance(client.quote({"symbol": "AAPL"}).data, QuoteResult)
     assert calls == ["/cloud/transcripts"] * 3 + ["/market/quote"]
+
+
+# ── coverage expansion: statements / tweets / venues / screener / 13F (#4110 phase 2) ─
+
+
+def test_statements_is_session_gated_and_maps_rows() -> None:
+    calls: list[int] = []
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        seen["url"] = str(request.url)
+        return httpx.Response(
+            200,
+            json={
+                "status": "success",
+                "data": {
+                    "annualStatements": [
+                        {
+                            "date": "2021-09-30",
+                            "currency": "USD",
+                            "dateSource": "provider",
+                            "purchaseOfBusiness": -33_000_000,
+                        }
+                    ],
+                    "quarterlyStatements": [],
+                },
+            },
+        )
+
+    denied = make_client(handler).statements({"symbol": "AAPL"})
+    assert denied.data.code == "auth_required"  # type: ignore[union-attr]
+    assert calls == []
+
+    allowed = make_client(handler, session_cookie="token").statements(
+        {"symbol": "AAPL", "period": "annual", "exchange": "NASDAQ"}
+    )
+    assert "symbol=AAPL" in seen["url"]
+    assert "period=annual" in seen["url"]
+    assert "exchange=NASDAQ" in seen["url"]
+    row = allowed.data.annual_statements[0]  # type: ignore[union-attr]
+    assert row.date == "2021-09-30"
+    assert row.currency == "USD"
+    assert row.date_source == "provider"
+    assert row.purchase_of_business == pytest.approx(-33_000_000.0)
+    assert allowed.data.quarterly_statements == []  # type: ignore[union-attr]
+
+
+def test_ticker_tweets_maps_metadata_and_slices_to_limit() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(
+            200,
+            json={
+                "query": "$AAPL -filter:replies",
+                "queryType": "Latest",
+                "limit": 1,
+                "hours": 336,
+                "cached": False,
+                "asOf": "2026-09-15T17:49:13.531Z",
+                "tweets": [{"id": str(i), "text": f"t{i}"} for i in range(5)],
+                "ticker": "AAPL",
+                "cashtag": "$AAPL",
+                "includeReplies": False,
+            },
+        )
+
+    denied = make_client(handler).ticker_tweets({"ticker": "AAPL"})
+    assert denied.data.code == "auth_required"  # type: ignore[union-attr]
+    assert calls == []
+
+    allowed = make_client(handler, session_cookie="token").ticker_tweets(
+        {"ticker": "AAPL", "limit": 2}
+    )
+    data = allowed.data  # type: ignore[union-attr]
+    assert data.query == "$AAPL -filter:replies"
+    assert data.hours == 336
+    assert data.ticker == "AAPL"
+    assert len(data.tweets) == 2
+    assert data.returned_count == 5
+    assert data.truncated is True
+
+
+def test_tweet_search_sends_query_type_and_slices() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(
+            200,
+            json={"query": "tariffs", "tweets": [{"id": "1", "text": "t"}]},
+        )
+
+    result = make_client(handler, session_cookie="token").tweet_search(
+        {"query": "tariffs", "query_type": "Top", "limit": 5}
+    )
+    assert "query=tariffs" in seen["url"]
+    assert "queryType=Top" in seen["url"]
+    assert result.data.tweets[0].id == "1"  # type: ignore[union-attr]
+    assert result.data.truncated is False  # type: ignore[union-attr]
+
+
+def test_venues_is_anonymous_and_maps_the_venue_list() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "status": "success",
+                "data": {
+                    "providerId": "gloomberb-cloud",
+                    "checkedAt": 1789494522591,
+                    "refreshAt": 1789494582591,
+                    "venues": [
+                        {
+                            "mic": "XADS",
+                            "name": "ADX",
+                            "countryCode": "AE",
+                            "isOpen": False,
+                            "timeToOpenSeconds": 43816,
+                        }
+                    ],
+                },
+                "asOf": "2026-09-15T17:48:42.591Z",
+            },
+        )
+
+    result = make_client(handler).venues()
+    data = result.data  # type: ignore[union-attr]
+    assert data.provider_id == "gloomberb-cloud"
+    assert data.checked_at == 1789494522591
+    venue = data.venues[0]
+    assert venue.mic == "XADS"
+    assert venue.country_code == "AE"
+    assert venue.is_open is False
+    assert venue.time_to_open_seconds == 43816
+
+
+def test_screener_maps_both_pro_gate_shapes_without_a_request_when_cookieless() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(
+            200,
+            json={"status": "unsupported", "data": None, "reasonCode": "PRO_REQUIRED"},
+        )
+
+    denied = make_client(handler).screener({"category": "gainers"})
+    assert denied.data.code == "auth_required"  # type: ignore[union-attr]
+    assert calls == []
+
+    by_reason = make_client(handler, session_cookie="token").screener({"category": "gainers"})
+    assert by_reason.data.code == "auth_required"  # type: ignore[union-attr]
+    assert "Pro plan" in by_reason.data.message  # type: ignore[union-attr]
+    assert "PRO_REQUIRED" in by_reason.data.message  # type: ignore[union-attr]
+
+
+def test_screener_402_text_body_maps_to_auth_required() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(402, text="Pro plan required")
+
+    result = make_client(handler, session_cookie="token").screener({"category": "gainers"})
+    assert result.data.code == "auth_required"  # type: ignore[union-attr]
+    assert result.data.retryable is False  # type: ignore[union-attr]
+
+
+def test_screener_pro_gate_does_not_open_the_breaker() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/market/screener":
+            return httpx.Response(
+                200,
+                json={"status": "unsupported", "data": None, "reasonCode": "PRO_REQUIRED"},
+            )
+        return envelope(AAPL_QUOTE)
+
+    client = make_client(handler, session_cookie="token", circuit_failure_threshold=2)
+    for _ in range(3):
+        assert client.screener({"category": "gainers"}).data.code == "auth_required"  # type: ignore[union-attr]
+    assert isinstance(client.quote({"symbol": "AAPL"}).data, QuoteResult)
+    assert calls == ["/market/screener"] * 3 + ["/market/quote"]
+
+
+def test_screener_success_payload_maps_rows_when_pro() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(
+            200,
+            json={"status": "success", "data": [{"symbol": "AAPL", "price": 200.0}]},
+        )
+
+    result = make_client(handler, session_cookie="token").screener(
+        {"category": "gainers", "count": 5, "mode": "cache-first"}
+    )
+    assert "category=gainers" in seen["url"]
+    assert "count=5" in seen["url"]
+    assert "mode=cache-first" in seen["url"]
+    assert result.data.category == "gainers"  # type: ignore[union-attr]
+    assert result.data.rows[0].symbol == "AAPL"  # type: ignore[union-attr]
+
+
+def test_13f_funds_each_what_sends_its_params() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(200, json=[{"name": "BERKSHIRE", "CIK": "0000949012"}])
+
+    result = make_client(handler).thirteen_f_funds({"what": "search", "query": "berkshire"})
+    assert "/cloud/sec/13f/funds" in seen["url"]
+    assert "name=berkshire" in seen["url"]
+    assert result.data.funds[0].cik == "0000949012"  # type: ignore[union-attr]
+
+
+def test_13f_funds_top_tickers_and_holders_shapes() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/cloud/sec/13f/topfunds":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "cik": "0001907544",
+                        "name": "Magma",
+                        "period_of_report": "2026-06-30",
+                        "pnl": 624.41,
+                    }
+                ],
+            )
+        if path == "/cloud/sec/13f/tickers":
+            return httpx.Response(
+                200, json=[{"cusip": "037833100", "ticker": "AAPL", "company_name": "Apple"}]
+            )
+        return httpx.Response(
+            200,
+            json={"cusip": "037833100", "periodOfReport": "2026-06-30", "ciks": ["0001067983"]},
+        )
+
+    seen: dict[str, str] = {}
+
+    def recording_handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return handler(request)
+
+    client = make_client(recording_handler)
+    top = client.thirteen_f_funds({"what": "top", "quarter": "2026Q2"})
+    assert "quarter=2026Q2" in seen["url"]
+    assert top.data.top_funds[0].pnl == pytest.approx(624.41)  # type: ignore[union-attr]
+
+    tickers = client.thirteen_f_funds({"what": "tickers", "tickers": ["AAPL", "MSFT"]})
+    assert "tickers=AAPL%2CMSFT" in seen["url"] or "tickers=AAPL,MSFT" in seen["url"]
+    assert tickers.data.tickers[0].company_name == "Apple"  # type: ignore[union-attr]
+
+    holders = client.thirteen_f_funds(
+        {"what": "holders", "cusip": "037833100", "period_of_report": "2026-06-30"}
+    )
+    assert "cusip=037833100" in seen["url"]
+    assert holders.data.holders.period_of_report == "2026-06-30"  # type: ignore[union-attr]
+    assert holders.data.holders.ciks == ["0001067983"]  # type: ignore[union-attr]
+
+
+def test_13f_holdings_filings_sends_the_date_range() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "accession_number": "0000950123-25-003235",
+                    "cik": "0001022837",
+                    "company_name": "SUMITOMO",
+                    "period_of_report": "2024-09-30",
+                    "table_value_total": 569157836,
+                }
+            ],
+        )
+
+    result = make_client(handler).thirteen_f_holdings(
+        {"what": "filings", "from_date": "2025-01-01", "to_date": "2025-03-31", "limit": 2}
+    )
+    assert "/cloud/sec/13f/filings" in seen["url"]
+    assert "from=2025-01-01" in seen["url"]
+    assert "to=2025-03-31" in seen["url"]
+    filing = result.data.filings[0]  # type: ignore[union-attr]
+    assert filing.accession_number == "0000950123-25-003235"
+    assert filing.table_value_total == pytest.approx(569157836.0)
+
+
+def test_13f_holdings_form_maps_holding_aliases_and_has_more() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "accession_number": "0001193125-26-352200",
+                    "cik": "0001067983",
+                    "name_of_issuer": "ALLY FINL INC",
+                    "title_of_class": "COM",
+                    "cusip": "02005N100",
+                    "ticker": "ALLY",
+                    "value": 577211815,
+                    "ssh_prnamt": 12561737,
+                    "ssh_prnamt_type": "SH",
+                    "investment_discretion": "DFND",
+                    "voting_authority_sole": 12561737,
+                    "voting_authority_shared": 0,
+                    "voting_authority_none": 0,
+                    "put_call": "",
+                    "pnl": -6.84,
+                }
+            ],
+        )
+
+    result = make_client(handler).thirteen_f_holdings(
+        {"what": "form", "cik": "1067983", "accession_number": "0001193125-26-352200", "limit": 1}
+    )
+    assert "cik=0001067983" in seen["url"]
+    assert "accession_number=0001193125-26-352200" in seen["url"]
+    holding = result.data.holdings[0]  # type: ignore[union-attr]
+    assert holding.issuer == "ALLY FINL INC"
+    assert holding.shares == pytest.approx(12561737.0)
+    assert holding.share_type == "SH"
+    assert holding.voting_authority_sole == pytest.approx(12561737.0)
+    assert result.data.has_more is True  # type: ignore[union-attr]
+
+
+def test_13f_holdings_missing_required_params_is_invalid_input_without_request() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, json=[])
+
+    for request in (
+        {"what": "filings"},
+        {"what": "forms"},
+        {"what": "form", "cik": "1067983"},
+    ):
+        result = make_client(handler).thirteen_f_holdings(request)
+        assert result.data.code == "invalid_input"  # type: ignore[union-attr]
+    assert calls == []

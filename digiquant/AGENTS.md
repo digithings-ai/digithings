@@ -478,14 +478,17 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 It is the **only** place the `api.gloom.sh` URL/site logic lives — `digifetch`
 stays a generic transport engine (no URLs, no env reads).
 
-- **20 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
+- **27 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
   `digifetch_price_history`, `digifetch_ticker_financials`, `digifetch_options_chain`,
   `digifetch_sec_filings`, `digifetch_holders`, `digifetch_analyst_research`,
   `digifetch_corporate_actions`, `digifetch_earnings_calendar`,
   `digifetch_exchange_rate`, `digifetch_search`, `digifetch_news`, plus the #4110
   phase-1 cohort `digifetch_econ_calendar`, `digifetch_econ_series`,
   `digifetch_yield_curve`, `digifetch_cds`, `digifetch_research_search`,
-  `digifetch_congress_trades`, `digifetch_transcripts` are registered in
+  `digifetch_congress_trades`, `digifetch_transcripts` and the #4110 phase-2
+  cohort `digifetch_statements`, `digifetch_ticker_tweets`,
+  `digifetch_tweet_search`, `digifetch_venues`, `digifetch_screener`,
+  `digifetch_13f_funds`, `digifetch_13f_holdings` are registered in
   `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed in
   `orchestrator_tools.py`. Keep them read-scope; the family is default-ON behind
   `GLOOMBERB_ENABLED` — only `1`/`true`/`yes`/`on` enable it, and any other value
@@ -508,12 +511,13 @@ stays a generic transport engine (no URLs, no env reads).
   `dataSource: "delayed"` / `delayMinutes > 0` → `"Free-tier data delayed up to
   15 minutes"` (not stale).
 - **Session cookie.** `GLOOMBERB_SESSION_COOKIE` (bare token or `name=value`) is
-  attached **only** to the five gated endpoints: holders / analyst research /
-  corporate actions / research search / transcripts. Never log it, never put it
-  in a tool payload; without it those tools return `auth_required` with no
-  request. SEC filings, econ, credit, congress, news, and the anonymous
-  `/market/search` listings lookup stay anonymous (the `/cloud/search` research
-  search is the cookie-gated one).
+  attached **only** to the eight gated endpoints: holders / analyst research /
+  corporate actions / research search / transcripts / statements / ticker
+  tweets / tweet search (screener is gated too, and Pro-only). Never log it,
+  never put it in a tool payload; without it those tools return `auth_required`
+  with no request. SEC filings, econ, credit, congress, news, venues, 13F, and
+  the anonymous `/market/search` listings lookup stay anonymous (the
+  `/cloud/search` research search is the cookie-gated one).
 - **Plan and upstream caveats (#4110 phase 1).** `digifetch_transcripts` requires
   a **Gloomberb Pro** plan: a free (email-verified) session's non-JSON
   `Pro plan required` body maps to a typed `auth_required` with the upstream
@@ -539,6 +543,27 @@ stays a generic transport engine (no URLs, no env reads).
   the description rather than promising `data.delay_note`. Do not tighten the
   deliberately permissive wire types (`float | str`, `str | int`) for the
   partly-probed routes without a live probe.
+- **Plan and upstream caveats (#4110 phase 2).** `digifetch_screener` is the
+  second Pro-only tool and has **two plan-gate shapes** that must map to the
+  same non-retryable `auth_required`: the 402 text body
+  (`Pro plan required`) and the live free-session HTTP 200 envelope
+  `{"status":"unsupported","data":null,"reasonCode":"PRO_REQUIRED"}` (matched
+  by `pro_gated` in `_request_json`, before `_status_error` can turn it into
+  `not_found`); neither may trip the breaker. The Pro success row shape is
+  unprobed — keep `ScreenerRow` fields optional and extras open. Tweets
+  (`digifetch_ticker_tweets` / `digifetch_tweet_search`) are session-gated; the
+  upstream echoes `limit` but returns its cached window (~375 rows for
+  `limit=1`, live-verified), so the client **slices** to `limit` and reports
+  `returned_count`/`truncated` — never remove that bound. 13F routes are
+  anonymous: `digifetch_13f_holdings` normalizes `cik` to the SEC's 10-digit
+  zero-padded form (the route accepts bare digits too) and computes
+  `has_more` from a full page (`len(rows) >= limit`), because the upstream
+  answers a bare array with no continuation token; `digifetch_13f_funds
+  .what='holders'` is exposed against the documented shape but the upstream
+  currently answers 400 for every `period_of_report` format probed. The
+  `what`-discriminated inputs validate required fields per branch **before**
+  any request (dashed quarters like `2026-Q2` are rejected client-side, since
+  the upstream answers 500).
 - **Attribution (spec §7).** Payloads carry "Sourced from Gloomberb" + the delay
   notice and a `term.gloom.sh/?ticker=` deep link where one listing is addressed.
   The Yahoo-backed earnings calendar must **not** claim Gloomberb attribution.
