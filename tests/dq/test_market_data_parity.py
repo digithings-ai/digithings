@@ -655,7 +655,7 @@ def test_query_price_deltas_drops_a_ticker_with_no_r2_generation(monkeypatch, ca
     )
 
     assert got == pytest.approx(known)
-    assert "GDX" in caplog.text
+    assert "price deltas: no sealed R2 generation for GDX" in caplog.text
 
 
 def test_query_price_deltas_all_tickers_unknown_returns_empty(monkeypatch):
@@ -716,7 +716,7 @@ def test_interval_price_returns_drops_a_ticker_with_no_r2_generation(monkeypatch
         )
 
     assert got == pytest.approx(known)
-    assert "GDX" in caplog.text
+    assert "commit_io NAV interval: no sealed R2 generation for GDX" in caplog.text
 
 
 def test_sector_relative_strength_drops_a_ticker_with_no_r2_generation(monkeypatch, caplog):
@@ -739,7 +739,7 @@ def test_sector_relative_strength_drops_a_ticker_with_no_r2_generation(monkeypat
     assert set(got) == set(known)
     for etf, row in known.items():
         assert got[etf] == pytest.approx(row, nan_ok=True)
-    assert "GDX" in caplog.text
+    assert "sector relative strength: no sealed R2 generation for GDX" in caplog.text
 
 
 def test_last_closes_r2_matches_supabase(monkeypatch):

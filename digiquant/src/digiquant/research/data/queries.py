@@ -208,7 +208,8 @@ def r2_close_rows_tolerant(
     price deltas, NAV interval returns, sector relative strength — cannot use
     that, since one unsealed ticker would otherwise fail the research graph or
     the book. Re-ask per ticker on that error and log what was dropped, so the
-    coverage gap stays visible instead of a signal quietly flattening (#4136).
+    coverage gap stays visible instead of a signal quietly flattening
+    (#4136, #4139).
     """
     try:
         return list(r2_close_rows(tickers=tickers, since=since, until=until))
@@ -588,6 +589,10 @@ def get_sector_relative_strength(
         return {}
     since = (run_date - timedelta(days=lookback_days)).isoformat()
     if r2_backend_enabled():
+        # A dropped sector ETF just contributes nothing; a dropped *benchmark*
+        # makes compute_relative_strength return {} (its own missing-benchmark
+        # contract). {} is the right outcome here — the warning names it, and an
+        # unsealed benchmark must not abort the research graph (#4139).
         rows = r2_close_rows_tolerant(
             tickers=tickers,
             since=since,

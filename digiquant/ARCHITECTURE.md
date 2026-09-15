@@ -350,11 +350,17 @@ printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_SE
 R2 is the market-data **read path** (#4013). History reads go through the
 seam helpers in `research/data/queries.py` — `r2_backend_enabled()`,
 `r2_close_rows(*, tickers, since, until)`,
+`r2_close_rows_tolerant(*, tickers, since, until, context)`,
 `r2_ohlcv_rows(*, tickers, since, until)`, `r2_manifest_seal()` — consumed by
 the five ops scripts (`execute_at_open.py`, `fill-entry-prices.py`,
 `refresh_performance_metrics.py`, `verify_nav_replay.py`,
 `finalize_period_accounting.py`) plus the research/portfolio readers that
-previously hit the Supabase market tables. The flag lives in
+previously hit the Supabase market tables. `r2_close_rows` fails loud on a
+ticker with no sealed generation; readers whose documented contract is to read
+a missing ticker as "no signal" (`query_price_deltas`,
+`commit_io._interval_price_returns`, `get_sector_relative_strength`) call
+`r2_close_rows_tolerant`, which drops the absent tickers and logs them by name
+(#4139). The flag lives in
 `.github/digiquant-pipeline.yml` (loaded into `$GITHUB_ENV` by
 `workflows/pipeline-digiquant.yml`) with per-step copies in the five
 research-metrics step envs and the at-open job env; unset/empty keeps the
