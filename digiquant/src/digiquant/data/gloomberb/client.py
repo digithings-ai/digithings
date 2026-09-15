@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from collections.abc import Callable, Mapping
 from datetime import date, datetime, timedelta, timezone
@@ -262,6 +263,31 @@ def _plan_required_error(text: str) -> DigifetchError | None:
 
 class _UpstreamServerError(RuntimeError):
     """A wire 5xx, wrapped so ``with_retry`` retries it without retrying 4xx."""
+
+
+# The 13F routes proxy their service's 4xx as a wire 5xx whose text body names
+# the real outcome (`Forms13F 400 for /holders`, live-verified). The inner
+# status is the deterministic one: a proxied 4xx is bad input, not degradation.
+_PROXY_STATUS_RE = re.compile(r"^Forms13F\s+(\d{3})\s+for\s+/")
+
+
+def _parse_proxy_status(text: str) -> int | None:
+    """Site-specific upstream status from a proxied 13F failure body, or None."""
+    match = _PROXY_STATUS_RE.match((text or "").strip())
+    return int(match[1]) if match else None
+
+
+class _ProxyStatusError(RuntimeError):
+    """A site-specific upstream 4xx proxied as a wire 5xx.
+
+    Deliberately outside ``RETRYABLE_EXCEPTIONS`` so ``with_retry`` surfaces it
+    immediately, and the caller maps it to a non-retryable ``invalid_input``
+    without recording a breaker failure.
+    """
+
+    def __init__(self, status: int) -> None:
+        super().__init__(f"Forms13F {status}")
+        self.status = status
 
 
 # Narrow retry classes: timeouts/connection faults and wire 5xx only. 401/404
@@ -1377,7 +1403,12 @@ class GloomberbClient:
             payload = self._as_mapping(data, "tweets")
             if isinstance(payload, DigifetchError):
                 return self._error_envelope(TweetsEnvelope, payload)
-            normalized = self._normalize(nz.normalize_tweets, payload, parsed.limit)
+            cutoff = (
+                self._now() - timedelta(hours=parsed.hours) if parsed.hours is not None else None
+            )
+            normalized = self._normalize(
+                nz.normalize_tweets, payload, parsed.limit, min_created_at=cutoff
+            )
             if isinstance(normalized, DigifetchError):
                 return self._error_envelope(TweetsEnvelope, normalized)
             fresh = self._freshness(raw, payload)
@@ -1417,7 +1448,12 @@ class GloomberbClient:
             payload = self._as_mapping(data, "tweet search")
             if isinstance(payload, DigifetchError):
                 return self._error_envelope(TweetsEnvelope, payload)
-            normalized = self._normalize(nz.normalize_tweets, payload, parsed.limit)
+            cutoff = (
+                self._now() - timedelta(hours=parsed.hours) if parsed.hours is not None else None
+            )
+            normalized = self._normalize(
+                nz.normalize_tweets, payload, parsed.limit, min_created_at=cutoff
+            )
             if isinstance(normalized, DigifetchError):
                 return self._error_envelope(TweetsEnvelope, normalized)
             fresh = self._freshness(raw, payload)
@@ -1879,12 +1915,23 @@ class GloomberbClient:
                 )
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code >= 500:
+                    proxy_status = _parse_proxy_status(exc.response.text)
+                    if proxy_status is not None and 400 <= proxy_status < 500:
+                        raise _ProxyStatusError(proxy_status) from exc
                     raise _UpstreamServerError(str(exc)) from exc
                 raise
 
         try:
             result = with_retry(
                 attempt, self._retry_policy, description=f"gloomberb {method} {path}"
+            )
+        except _ProxyStatusError as exc:
+            # A proxied upstream 4xx is deterministic (bad input), so it is not
+            # retried and must not trip the shared circuit breaker.
+            return DigifetchError(
+                code="invalid_input",
+                message=(f"Gloomberb 13F rejected the request upstream (Forms13F {exc.status})"),
+                retryable=False,
             )
         except httpx.HTTPStatusError as exc:
             # Plan-gated routes answer their gate with a body, not an auth code

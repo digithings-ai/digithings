@@ -8,6 +8,7 @@ union. No network.
 from __future__ import annotations
 
 import math
+from datetime import datetime, timezone
 
 import pytest
 
@@ -696,7 +697,7 @@ def test_normalize_tweets_slices_and_flags_truncation() -> None:
     assert result.cached is False
     assert result.include_replies is False
     assert len(result.tweets) == 2
-    assert result.returned_count == 5
+    assert result.total_available == 5
     assert result.truncated is True
     assert result.tweets[0].author is not None and result.tweets[0].author.user_name == "u"
     assert result.tweets[1].metrics is not None and result.tweets[1].metrics.likes == 1
@@ -704,9 +705,28 @@ def test_normalize_tweets_slices_and_flags_truncation() -> None:
 
 def test_normalize_tweets_without_truncation() -> None:
     result = normalize_tweets({"query": "q", "tweets": [{"id": "1"}]}, limit=50)
-    assert result.returned_count == 1
+    assert result.total_available == 1
     assert result.truncated is False
     assert result.tweets[0].text == ""
+
+
+def test_normalize_tweets_applies_the_hours_window() -> None:
+    result = normalize_tweets(
+        {
+            "query": "q",
+            "tweets": [
+                {"id": "recent", "createdAt": "2026-09-15T16:00:00.000Z"},
+                {"id": "old", "createdAt": "2026-09-01T00:00:00.000Z"},
+                {"id": "unparseable", "createdAt": "not-a-date"},
+                {"id": "missing"},
+            ],
+        },
+        limit=50,
+        min_created_at=datetime(2026, 9, 15, 0, 0, tzinfo=timezone.utc),
+    )
+    assert [tweet.id for tweet in result.tweets] == ["recent"]
+    assert result.total_available == 4
+    assert result.truncated is True
 
 
 def test_normalize_venues_maps_the_list_and_clocks() -> None:
@@ -732,6 +752,43 @@ def test_normalize_screener_accepts_list_and_wrapped_shapes() -> None:
     assert bare.category == "gainers"
     assert bare.rows[0].symbol == "AAPL"
     assert normalize_screener(None, "losers").rows == []
+
+
+def test_normalize_screener_maps_the_ts_payload_envelope() -> None:
+    result = normalize_screener(
+        {
+            "providerId": "gloomberb-cloud",
+            "category": "gainers",
+            "asOf": "2026-09-15T00:00:00Z",
+            "stale": False,
+            "items": [
+                {
+                    "symbol": "AAPL",
+                    "rank": 1,
+                    "tradeCount": 1000,
+                    "high52w": 260.0,
+                    "low52w": 160.0,
+                    "dayHigh": 205.0,
+                    "dayLow": 199.0,
+                    "lastUpdated": 1,
+                    "dataSource": "delayed",
+                }
+            ],
+        },
+        "gainers",
+    )
+    assert result.provider_id == "gloomberb-cloud"
+    assert result.category == "gainers"
+    assert result.as_of == "2026-09-15T00:00:00Z"
+    assert result.stale is False
+    row = result.rows[0]
+    assert row.rank == 1
+    assert row.trade_count == 1000
+    assert row.high52w == pytest.approx(260.0)
+    assert row.low52w == pytest.approx(160.0)
+    assert row.day_high == pytest.approx(205.0)
+    assert row.day_low == pytest.approx(199.0)
+    assert row.data_source == "delayed"
 
 
 def test_normalize_funds_13f_maps_each_what() -> None:

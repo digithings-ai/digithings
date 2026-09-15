@@ -1028,14 +1028,44 @@ def normalize_statements(raw: Mapping[str, Any]) -> StatementsResult:
     )
 
 
-def normalize_tweets(raw: Mapping[str, Any], limit: int) -> TweetsResult:
-    """Map a tweets payload and slice it to *limit*.
+def _tweet_created_at(tweet: Tweet) -> datetime | None:
+    """Aware UTC ``createdAt`` for a tweet row, or None when unparseable."""
+    if not tweet.created_at:
+        return None
+    try:
+        parsed = datetime.fromisoformat(tweet.created_at.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
-    The upstream echoes ``limit`` without shrinking ``tweets`` (live-verified:
-    375 rows for limit=1); rows are sliced client-side and the pre-slice count
-    is reported so a caller can see that the window was larger.
+
+def normalize_tweets(
+    raw: Mapping[str, Any],
+    limit: int,
+    *,
+    min_created_at: datetime | None = None,
+) -> TweetsResult:
+    """Map a tweets payload, drop rows older than *min_created_at*, slice to *limit*.
+
+    The upstream echoes ``limit``/``hours`` without applying either
+    (live-verified: 375 rows for limit=1; ~394 rows spanning ~13 days for
+    hours=1), so the client does both: the hours window is applied first (an
+    unparseable ``createdAt`` is dropped while a window is active, since it
+    cannot be verified), then the remainder is sliced to ``limit``.
+    ``total_available`` reports the upstream count before either reduction and
+    ``truncated`` says whether either reduction dropped rows.
     """
     tweets = [Tweet.model_validate(dict(entry)) for entry in _rows(raw.get("tweets"), "tweets")]
+    total_available = len(tweets)
+    if min_created_at is not None:
+        tweets = [
+            tweet
+            for tweet in tweets
+            if (created := _tweet_created_at(tweet)) is not None and created >= min_created_at
+        ]
+    sliced = tweets[:limit]
     return TweetsResult(
         query=_str_or_none(raw.get("query")) or "",
         query_type=_str_or_none(raw.get("queryType")),
@@ -1049,9 +1079,9 @@ def normalize_tweets(raw: Mapping[str, Any], limit: int) -> TweetsResult:
         include_replies=raw.get("includeReplies")
         if isinstance(raw.get("includeReplies"), bool)
         else None,
-        tweets=tweets[:limit],
-        returned_count=len(tweets),
-        truncated=len(tweets) > limit,
+        tweets=sliced,
+        total_available=total_available,
+        truncated=len(sliced) < total_available,
     )
 
 
@@ -1066,24 +1096,28 @@ def normalize_venues(raw: Mapping[str, Any]) -> VenuesResult:
 
 
 def normalize_screener(raw: Any, category: str) -> ScreenerResult:
-    """Map a screener payload (Pro success shape is unprobed).
+    """Map a screener payload.
 
-    Accepts a bare row array or a mapping whose rows live under one of the
-    common keys (``results`` / ``rows`` / ``items`` / the category name).
+    Shape source: the TS plugin's ``CloudMarketScreenerItem`` envelope
+    (``providerId``/``category``/``asOf``/``stale``/``items``); the Pro success
+    payload is unobservable from a free session (PRO_REQUIRED), so a bare row
+    array and the common wrapper keys (``items``/``results``/``rows``/category)
+    are all accepted.
     """
-    if isinstance(raw, Mapping):
-        rows = next(
-            (
-                raw[key]
-                for key in ("results", "rows", "items", category)
-                if isinstance(raw.get(key), list)
-            ),
-            None,
-        )
-    else:
-        rows = raw
+    source = raw if isinstance(raw, Mapping) else {}
+    rows = next(
+        (
+            source[key]
+            for key in ("items", "results", "rows", category)
+            if isinstance(source.get(key), list)
+        ),
+        raw if not isinstance(raw, Mapping) else None,
+    )
     return ScreenerResult(
-        category=category,
+        provider_id=_str_or_none(source.get("providerId")),
+        category=_str_or_none(source.get("category")) or category,
+        as_of=_str_or_none(source.get("asOf")),
+        stale=source.get("stale") if isinstance(source.get("stale"), bool) else None,
         rows=[ScreenerRow.model_validate(dict(entry)) for entry in _rows(rows, "rows")],
     )
 
@@ -1118,6 +1152,9 @@ def normalize_holdings_13f(raw: Any, what: str, limit: int) -> Holdings13FResult
     ``has_more`` is computed from the row count (``len(rows) >= limit``): the
     upstream answers a bare array with no continuation token (live-verified),
     so an exactly-full page is the only signal that more rows may exist.
+    Note the upstream TS plugin caps one 13F form at 20,000 rows
+    (``MAX_FORM_ROWS``), so a form near the cap is truncated upstream; this
+    client does not change that and only reports ``has_more``.
     """
     if what == "form":
         holdings = [Holding13F.model_validate(dict(entry)) for entry in _rows(raw, "holdings")]

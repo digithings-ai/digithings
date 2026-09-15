@@ -1262,7 +1262,7 @@ def test_ticker_tweets_maps_metadata_and_slices_to_limit() -> None:
     assert data.hours == 336
     assert data.ticker == "AAPL"
     assert len(data.tweets) == 2
-    assert data.returned_count == 5
+    assert data.total_available == 5
     assert data.truncated is True
 
 
@@ -1532,4 +1532,162 @@ def test_13f_holdings_missing_required_params_is_invalid_input_without_request()
     ):
         result = make_client(handler).thirteen_f_holdings(request)
         assert result.data.code == "invalid_input"  # type: ignore[union-attr]
+    assert calls == []
+
+
+# ── phase-2 review fixes (#4110) ────────────────────────────────────────────
+
+
+def test_ticker_tweets_hours_window_drops_old_and_unparseable_rows() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "query": "$AAPL",
+                "tweets": [
+                    {"id": "recent", "text": "r", "createdAt": "2026-09-15T16:00:00.000Z"},
+                    {"id": "old", "text": "o", "createdAt": "2026-09-01T00:00:00.000Z"},
+                    {"id": "unparseable", "text": "u", "createdAt": "not-a-date"},
+                    {"id": "missing"},
+                ],
+            },
+        )
+
+    client = make_client(
+        handler,
+        session_cookie="token",
+        now=lambda: datetime(2026, 9, 15, 17, 0, tzinfo=timezone.utc),
+    )
+    result = client.ticker_tweets({"ticker": "AAPL", "hours": 24, "limit": 50})
+    data = result.data  # type: ignore[union-attr]
+    assert [tweet.id for tweet in data.tweets] == ["recent"]
+    assert data.total_available == 4
+    assert data.truncated is True
+
+
+def test_tweet_search_hours_window_is_applied() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "query": "tariffs",
+                "tweets": [
+                    {"id": "recent", "createdAt": "2026-09-15T16:00:00Z"},
+                    {"id": "old", "createdAt": "2026-09-14T00:00:00Z"},
+                ],
+            },
+        )
+
+    client = make_client(
+        handler,
+        session_cookie="token",
+        now=lambda: datetime(2026, 9, 15, 17, 0, tzinfo=timezone.utc),
+    )
+    result = client.tweet_search({"query": "tariffs", "hours": 6, "limit": 50})
+    data = result.data  # type: ignore[union-attr]
+    assert [tweet.id for tweet in data.tweets] == ["recent"]
+    assert data.total_available == 2
+    assert data.truncated is True
+
+
+def test_venues_payload_level_stale_folds_into_the_envelope() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "status": "success",
+                "data": {"providerId": "gloomberb-cloud", "stale": True, "venues": []},
+            },
+        )
+
+    result = make_client(handler).venues()
+    assert result.stale is True
+    assert result.delay_note == STALE_NOTE
+
+
+def test_13f_holders_proxied_4xx_is_invalid_input_without_retry_or_breaker() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/cloud/sec/13f/holders":
+            return httpx.Response(500, text="Forms13F 400 for /holders")
+        return envelope(AAPL_QUOTE)
+
+    policy = RetryPolicy(attempts=3, base_delay=0.0, jitter=False, retry_on=RETRYABLE_EXCEPTIONS)
+    client = make_client(handler, retry_policy=policy, circuit_failure_threshold=2)
+    for _ in range(3):
+        result = client.thirteen_f_funds(
+            {"what": "holders", "cusip": "037833100", "period_of_report": "2026-06-30"}
+        )
+        assert result.data.code == "invalid_input"  # type: ignore[union-attr]
+        assert result.data.retryable is False  # type: ignore[union-attr]
+    # One wire call per request (no retries), and the shared breaker stays closed.
+    assert calls == ["/cloud/sec/13f/holders"] * 3
+    assert isinstance(client.quote({"symbol": "AAPL"}).data, QuoteResult)
+
+
+def test_forms13f_5xx_body_is_still_a_retryable_upstream_error() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(500, text="Forms13F 500 for /form")
+
+    policy = RetryPolicy(attempts=2, base_delay=0.0, jitter=False, retry_on=RETRYABLE_EXCEPTIONS)
+    client = make_client(handler, retry_policy=policy)
+    result = client.thirteen_f_holdings(
+        {"what": "form", "cik": "1067983", "accession_number": "0001193125-26-352200"}
+    )
+    assert result.data.code == "upstream_error"  # type: ignore[union-attr]
+    assert result.data.retryable is True  # type: ignore[union-attr]
+    assert len(calls) == 2
+
+
+def test_13f_holdings_malformed_dates_are_invalid_input_without_request() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, json=[])
+
+    result = make_client(handler).thirteen_f_holdings(
+        {"what": "filings", "from_date": "2026-6-1", "to_date": "2026-08-31"}
+    )
+    assert result.data.code == "invalid_input"  # type: ignore[union-attr]
+    assert calls == []
+
+
+def test_13f_holdings_undashed_accession_is_normalized() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(
+            200, json=[{"accession_number": "0001193125-26-352200", "name_of_issuer": "ALLY"}]
+        )
+
+    result = make_client(handler).thirteen_f_holdings(
+        {
+            "what": "form",
+            "cik": "1067983",
+            "accession_number": "000119312526352200",
+            "limit": 1,
+        }
+    )
+    assert "accession_number=0001193125-26-352200" in seen["url"]
+    assert result.data.holdings[0].issuer == "ALLY"  # type: ignore[union-attr]
+
+
+def test_13f_holdings_bad_accession_is_invalid_input_without_request() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, json=[])
+
+    result = make_client(handler).thirteen_f_holdings(
+        {"what": "form", "cik": "1067983", "accession_number": "0001"}
+    )
+    assert result.data.code == "invalid_input"  # type: ignore[union-attr]
     assert calls == []

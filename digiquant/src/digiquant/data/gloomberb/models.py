@@ -541,6 +541,9 @@ class ScreenerInput(_InputModel):
 
 
 Cusip = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=12)]
+# ISO date only; the upstream answers 500/400 for malformed values such as
+# 2026-6-1, so the contract rejects them before any request.
+DateIso = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{4}-\d{2}-\d{2}$")]
 # Live-verified 13F quarter token: 2026Q2 (a dashed 2026-Q2 is rejected upstream).
 Quarter13F = Annotated[
     str,
@@ -589,17 +592,21 @@ class ThirteenFFundsInput(_InputModel):
 class ThirteenFHoldingsInput(_InputModel):
     """The 13F filings/forms/holdings surface, discriminated by ``what``.
 
-    filings -> ``from_date`` + ``to_date``; forms -> ``cik``; form -> ``cik`` +
-    ``accession_number``. Anonymous (live-verified).
+    filings -> ``from_date`` + ``to_date`` (ISO ``YYYY-MM-DD``); forms ->
+    ``cik``; form -> ``cik`` + ``accession_number`` (dashed or undashed 18
+    digits — the client normalizes to the SEC's ``XXXXXXXXXX-YY-ZZZZZZ``
+    form). Anonymous (live-verified).
     """
 
     what: Literal["filings", "forms", "form"]
     cik: (
         Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10)] | None
     ) = None
-    accession_number: str | None = None
-    from_date: str | None = None
-    to_date: str | None = None
+    accession_number: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20)] | None
+    ) = None
+    from_date: DateIso | None = None
+    to_date: DateIso | None = None
     limit: int = Field(default=50, ge=1, le=200)
     offset: int = Field(default=0, ge=0, le=10_000)
 
@@ -613,6 +620,25 @@ class ThirteenFHoldingsInput(_InputModel):
         if not digits.isdigit():
             raise ValueError("cik must be digits only")
         return digits.zfill(10)
+
+    @field_validator("accession_number")
+    @classmethod
+    def _normalize_accession_number(cls, value: str | None) -> str | None:
+        """Normalize an 18-digit accession to the SEC's dashed form.
+
+        The upstream accepts the undashed form but the dashed form is the
+        canonical wire value; an undashed value passed through unchanged
+        silently returns an empty result set (live-verified), so it is
+        normalized here and anything else is rejected.
+        """
+        if value is None:
+            return None
+        digits = value.replace("-", "")
+        if len(digits) != 18 or not digits.isdigit():
+            raise ValueError(
+                f"accession_number must be 18 digits (dashed or undashed), got {value!r}"
+            )
+        return f"{digits[:10]}-{digits[10:12]}-{digits[12:]}"
 
     @model_validator(mode="after")
     def _require_fields_for_what(self) -> ThirteenFHoldingsInput:
@@ -1251,11 +1277,15 @@ class Tweet(_CamelModel):
 
 
 class TweetsResult(_CamelModel):
-    """The tweets payload's own metadata plus the (client-bounded) rows.
+    """The tweets payload's own metadata plus the client-reduced rows.
 
-    The upstream echoes ``limit`` without shrinking ``tweets`` (live-verified
-    375 rows for limit=1); the client slices to the request and reports the
-    pre-slice count in ``returned_count`` + ``truncated``.
+    The upstream echoes ``limit``/``hours`` without applying either (live
+    probes: 375 rows for limit=1; ~394 rows spanning ~13 days for hours=1), so
+    the client applies both: rows older than ``now - hours`` are dropped when
+    ``hours`` was requested (an unparseable ``createdAt`` is dropped while a
+    window is active), then the remainder is sliced to ``limit``.
+    ``total_available`` is the upstream row count before either reduction, and
+    ``truncated`` says whether either reduction dropped rows.
     """
 
     query: str = ""
@@ -1269,7 +1299,7 @@ class TweetsResult(_CamelModel):
     cashtag: str | None = None
     include_replies: bool | None = None
     tweets: list[Tweet] = Field(default_factory=list)
-    returned_count: int = 0
+    total_available: int = 0
     truncated: bool = False
 
 
@@ -1301,8 +1331,11 @@ class VenuesResult(_CamelModel):
 class ScreenerRow(_CamelModel):
     """One screener row.
 
-    The Pro success payload could not be observed (the free session answers
-    PRO_REQUIRED), so every field is optional and unknown keys stay extras.
+    Shape source: the gloomberb TS plugin's ``CloudMarketScreenerItem`` (the
+    Pro success payload cannot be observed from a free session — the route
+    answers PRO_REQUIRED). Every field is optional and unknown keys stay
+    extras; ``market_cap`` is not part of the upstream item type and was
+    dropped.
     """
 
     symbol: str | None = None
@@ -1312,11 +1345,31 @@ class ScreenerRow(_CamelModel):
     change: float | None = None
     change_percent: float | None = None
     volume: float | None = None
-    market_cap: float | None = None
+    rank: int | None = None
+    currency: str | None = None
+    trade_count: int | None = None
+    # Explicit aliases: `to_camel("high52w")` would produce "high52W" (digit
+    # followed by a lowercase letter defeats pydantic's identity shortcut).
+    high52w: float | None = Field(default=None, alias="high52w")
+    low52w: float | None = Field(default=None, alias="low52w")
+    day_high: float | None = None
+    day_low: float | None = None
+    last_updated: float | None = None
+    data_source: str | None = None
 
 
 class ScreenerResult(_CamelModel):
+    """The screener payload envelope (``CloudMarketScreenerItem`` list).
+
+    Payload-level fields follow the TS type's envelope
+    (``providerId``/``category``/``asOf``/``stale``/``items``); rows are
+    exposed as ``rows``.
+    """
+
+    provider_id: str | None = None
     category: str | None = None
+    as_of: str | None = None
+    stale: bool | None = None
     rows: list[ScreenerRow] = Field(default_factory=list)
 
 

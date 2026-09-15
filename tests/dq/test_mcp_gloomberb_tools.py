@@ -759,7 +759,7 @@ def test_ticker_tweets_wrapper_slices_to_the_requested_limit(
     _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
     payload = json.loads(_mcp("digifetch_ticker_tweets")("AAPL", 2))
     assert len(payload["data"]["tweets"]) == 2
-    assert payload["data"]["returned_count"] == 5
+    assert payload["data"]["total_available"] == 5
     assert payload["data"]["truncated"] is True
     assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
 
@@ -886,3 +886,46 @@ def test_13f_funds_holders_wrapper_maps_the_ciks(monkeypatch: pytest.MonkeyPatch
     holders = payload["data"]["holders"]
     assert holders["period_of_report"] == "2026-06-30"
     assert holders["ciks"] == ["1", "2"]
+
+
+def test_13f_holders_proxied_4xx_maps_to_invalid_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="Forms13F 400 for /holders")
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(
+        _mcp("digifetch_13f_funds")("holders", None, None, None, "037833100", "2026-06-30")
+    )
+    assert payload["data"]["code"] == "invalid_input"
+    assert payload["data"]["retryable"] is False
+    assert "Forms13F 400" in payload["data"]["message"]
+
+
+def test_ticker_tweets_wrapper_applies_the_hours_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "query": "$AAPL",
+                "tweets": [
+                    {"id": "recent", "createdAt": "2026-09-15T16:00:00.000Z"},
+                    {"id": "old", "createdAt": "2026-09-01T00:00:00.000Z"},
+                ],
+            },
+        )
+
+    _patch_client(
+        monkeypatch,
+        handler,
+        session_cookie="gloomberb.session_token=test",
+        now=lambda: datetime(2026, 9, 15, 17, 0, tzinfo=timezone.utc),
+    )
+    payload = json.loads(_mcp("digifetch_ticker_tweets")("AAPL", 50, 24))
+    data = payload["data"]
+    assert [tweet["id"] for tweet in data["tweets"]] == ["recent"]
+    assert data["total_available"] == 2
+    assert data["truncated"] is True

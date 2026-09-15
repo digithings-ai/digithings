@@ -31,6 +31,7 @@ from digiquant.data.gloomberb.models import (  # noqa: E402
     QuotesBatchInput,
     ResearchSearchInput,
     ScreenerInput,
+    ScreenerRow,
     SearchInput,
     SecFilingsInput,
     StatementsInput,
@@ -342,3 +343,46 @@ def test_13f_holdings_requires_fields_per_what_and_normalizes_cik() -> None:
         what="filings", from_date="2026-07-01", to_date="2026-08-31", limit=2
     )
     assert request.from_date == "2026-07-01"
+
+
+def test_tweet_search_hours_bounds_are_validated() -> None:
+    assert TweetSearchInput(query="tariffs", hours=1).hours == 1
+    assert TweetSearchInput(query="tariffs", hours=720).hours == 720
+    with pytest.raises(ValidationError):
+        TweetSearchInput(query="tariffs", hours=0)
+    with pytest.raises(ValidationError):
+        TweetSearchInput(query="tariffs", hours=721)
+
+
+def test_13f_holdings_normalizes_accession_and_validates_dates() -> None:
+    undashed = ThirteenFHoldingsInput(
+        what="form", cik="1067983", accession_number="000119312526352200"
+    )
+    assert undashed.accession_number == "0001193125-26-352200"
+    dashed = ThirteenFHoldingsInput(
+        what="form", cik="1067983", accession_number="0001193125-26-352200"
+    )
+    assert dashed.accession_number == "0001193125-26-352200"
+    with pytest.raises(ValidationError, match="18 digits"):
+        ThirteenFHoldingsInput(what="form", cik="1067983", accession_number="0001")
+    with pytest.raises(ValidationError):
+        ThirteenFHoldingsInput(what="filings", from_date="2026-6-1", to_date="2026-08-31")
+    with pytest.raises(ValidationError):
+        ThirteenFHoldingsInput(what="filings", from_date="2026-07-01", to_date="01/08/2026")
+
+
+def test_screener_row_follows_the_ts_item_shape() -> None:
+    # Shape source: CloudMarketScreenerItem; marketCap is not part of it.
+    assert "market_cap" not in ScreenerRow.model_fields
+    assert {
+        "symbol",
+        "rank",
+        "currency",
+        "trade_count",
+        "high52w",
+        "low52w",
+        "day_high",
+        "day_low",
+        "last_updated",
+        "data_source",
+    } <= set(ScreenerRow.model_fields)

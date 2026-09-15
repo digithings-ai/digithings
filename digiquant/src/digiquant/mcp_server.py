@@ -1308,10 +1308,12 @@ def create_mcp_server(
     ) -> str:
         """Recent X/Twitter posts mentioning one ticker (Gloomberb Cloud; session-gated).
 
-        Requires GLOOMBERB_SESSION_COOKIE. The upstream answers its cached
-        window and ignores `limit`, so the client slices to `limit` and flags
-        `truncated` / `returned_count`. Social posts are delayed and
-        best-effort - not a real-time feed. Carries a term.gloom.sh deep link.
+        Requires GLOOMBERB_SESSION_COOKIE. The upstream echoes `limit`/`hours`
+        but applies neither (it answers its cached window), so the client
+        drops rows older than `now - hours` when `hours` is given, slices to
+        `limit`, and reports `total_available`/`truncated`. Social posts are
+        delayed and best-effort - not a real-time feed. Carries a term.gloom.sh
+        deep link.
         """
         try:
             envelope = _build_gloomberb_client().ticker_tweets(
@@ -1333,9 +1335,10 @@ def create_mcp_server(
         """Search X/Twitter posts by query (Gloomberb Cloud; session-gated).
 
         Requires GLOOMBERB_SESSION_COOKIE. `query_type` is Latest | Top; the
-        upstream ignores `limit`, so the client slices and flags `truncated`.
-        Social search is delayed and best-effort - pair it with a live web
-        search when recency matters.
+        upstream applies neither `limit` nor `hours`, so the client drops rows
+        older than `now - hours` when `hours` is given, slices to `limit`, and
+        reports `total_available`/`truncated`. Social search is delayed and
+        best-effort - pair it with a live web search when recency matters.
         """
         try:
             envelope = _build_gloomberb_client().tweet_search(
@@ -1425,12 +1428,17 @@ def create_mcp_server(
     ) -> str:
         """13F filings / fund forms / one form's holdings (Gloomberb Cloud; anonymous).
 
-        `what` selects the route: `filings` (from/to), `forms` (cik), `form`
-        (cik + accession_number). `cik` is zero-padded to the SEC's 10-digit
-        form client-side. Holding rows map to issuer/shares/share_type plus the
-        voting-authority columns. `form` computes `has_more` from a full page
-        (the upstream answers a bare array with no continuation token). SEC
-        filing data is cached/delayed - cross-check against EDGAR for decisions.
+        `what` selects the route: `filings` (from_date/to_date, ISO
+        YYYY-MM-DD), `forms` (cik), `form` (cik + accession_number). `cik` is
+        zero-padded to the SEC's 10-digit form and `accession_number` is
+        normalized to the dashed form client-side; malformed dates/accessions
+        are typed `invalid_input` with no request. An upstream 13F rejection
+        proxied as a 5xx (`Forms13F 4xx` body) maps to non-retryable
+        `invalid_input` without opening the circuit breaker. Holding rows map
+        to issuer/shares/share_type plus the voting-authority columns; `form`
+        computes `has_more` from a full page (bare array, no continuation
+        token; the upstream caps one form at 20,000 rows — MAX_FORM_ROWS).
+        SEC filing data is cached/delayed - cross-check against EDGAR.
         """
         try:
             envelope = _build_gloomberb_client().thirteen_f_holdings(

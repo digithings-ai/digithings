@@ -709,10 +709,11 @@ def build_digifetch_ticker_tweets_tool() -> dict[str, Any]:
             "description": (
                 "Recent X/Twitter posts mentioning one ticker (Gloomberb Cloud; "
                 "session-gated). Requires GLOOMBERB_SESSION_COOKIE. The "
-                "upstream ignores limit, so the client slices to limit and "
-                "flags truncated/returned_count. Social posts are delayed and "
-                "best-effort — pair with a live web search when recency "
-                "matters. Adds a term.gloom.sh deep link for ticker."
+                "upstream applies neither limit nor hours, so the client drops "
+                "rows older than now - hours when hours is given, slices to "
+                "limit, and reports total_available/truncated. Social posts are "
+                "delayed and best-effort — pair with a live web search when "
+                "recency matters. Adds a term.gloom.sh deep link for ticker."
             ),
             "parameters": {
                 "type": "object",
@@ -739,9 +740,11 @@ def build_digifetch_tweet_search_tool() -> dict[str, Any]:
             "description": (
                 "Search X/Twitter posts by query (Gloomberb Cloud; "
                 "session-gated). Requires GLOOMBERB_SESSION_COOKIE. query_type "
-                "is Latest|Top; the upstream ignores limit, so the client "
-                "slices and flags truncated. Social search is delayed and "
-                "best-effort — pair with a live web search when recency matters."
+                "is Latest|Top; the upstream applies neither limit nor hours, "
+                "so the client drops rows older than now - hours when hours is "
+                "given, slices to limit, and reports total_available/truncated. "
+                "Social search is delayed and best-effort — pair with a live "
+                "web search when recency matters."
             ),
             "parameters": {
                 "type": "object",
@@ -862,12 +865,18 @@ def build_digifetch_13f_holdings_tool() -> dict[str, Any]:
             "name": "digifetch_13f_holdings",
             "description": (
                 "13F filings / fund forms / one form's holdings (Gloomberb "
-                "Cloud, anonymous). what=filings (from_date+to_date), "
-                "what=forms (cik), what=form (cik+accession_number). cik is "
-                "zero-padded to 10 digits client-side; holding rows map to "
-                "issuer/shares/share_type plus voting-authority columns; form "
-                "computes has_more from a full page. SEC filing data is "
-                "cached/delayed — cross-check against EDGAR for decisions."
+                "Cloud, anonymous). what=filings (from_date+to_date, ISO "
+                "YYYY-MM-DD), what=forms (cik), what=form "
+                "(cik+accession_number). cik is zero-padded to 10 digits and "
+                "accession_number is normalized to the dashed form "
+                "client-side; malformed dates/accessions are typed "
+                "invalid_input with no request. An upstream 13F rejection "
+                "proxied as a 5xx (Forms13F 4xx body) maps to non-retryable "
+                "invalid_input without opening the circuit breaker. Holding "
+                "rows map to issuer/shares/share_type plus voting-authority "
+                "columns; form computes has_more from a full page (the "
+                "upstream caps one form at 20,000 rows, MAX_FORM_ROWS). SEC "
+                "filing data is cached/delayed — cross-check against EDGAR."
             ),
             "parameters": {
                 "type": "object",

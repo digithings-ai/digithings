@@ -549,21 +549,33 @@ stays a generic transport engine (no URLs, no env reads).
   (`Pro plan required`) and the live free-session HTTP 200 envelope
   `{"status":"unsupported","data":null,"reasonCode":"PRO_REQUIRED"}` (matched
   by `pro_gated` in `_request_json`, before `_status_error` can turn it into
-  `not_found`); neither may trip the breaker. The Pro success row shape is
-  unprobed — keep `ScreenerRow` fields optional and extras open. Tweets
-  (`digifetch_ticker_tweets` / `digifetch_tweet_search`) are session-gated; the
-  upstream echoes `limit` but returns its cached window (~375 rows for
-  `limit=1`, live-verified), so the client **slices** to `limit` and reports
-  `returned_count`/`truncated` — never remove that bound. 13F routes are
-  anonymous: `digifetch_13f_holdings` normalizes `cik` to the SEC's 10-digit
-  zero-padded form (the route accepts bare digits too) and computes
-  `has_more` from a full page (`len(rows) >= limit`), because the upstream
-  answers a bare array with no continuation token; `digifetch_13f_funds
-  .what='holders'` is exposed against the documented shape but the upstream
-  currently answers 400 for every `period_of_report` format probed. The
-  `what`-discriminated inputs validate required fields per branch **before**
-  any request (dashed quarters like `2026-Q2` are rejected client-side, since
-  the upstream answers 500).
+  `not_found`); neither may trip the breaker. The Pro success payload is
+  unobservable — rows are typed from the TS plugin's
+  `CloudMarketScreenerItem` (`rank`/`currency`/`tradeCount`/`high52w`/`low52w`/
+  `dayHigh`/`dayLow`/`lastUpdated`/`dataSource`; no `marketCap`) with every
+  field optional and extras open, so keep it that way until a Pro probe.
+  Tweets (`digifetch_ticker_tweets` / `digifetch_tweet_search`) are
+  session-gated; the upstream echoes `limit`/`hours` but applies neither
+  (~375 rows for `limit=1`; ~394 rows spanning ~13 days for `hours=1`,
+  live-verified), so the client **drops rows older than `now - hours` when
+  `hours` is given, then slices to `limit`**, reporting
+  `total_available`/`truncated` — never remove either reduction. 13F routes
+  are anonymous: `digifetch_13f_holdings` normalizes `cik` to the SEC's
+  10-digit zero-padded form and `accession_number` to the dashed
+  `XXXXXXXXXX-YY-ZZZZZZ` form (an undashed value passed through would silently
+  return an empty result set), validates `from_date`/`to_date` as ISO
+  `YYYY-MM-DD` before any request, and computes `has_more` from a full page
+  (`len(rows) >= limit`) because the upstream answers a bare array with no
+  continuation token; the upstream caps one form at 20,000 rows
+  (`MAX_FORM_ROWS`). Upstream 13F rejections are proxied as HTTP 500 with a
+  `Forms13F 4xx for /route` body — the transport detects that body and maps it
+  to non-retryable `invalid_input` **without retrying and without recording a
+  breaker failure** (three such calls must never open the shared circuit).
+  `digifetch_13f_funds.what='holders'` is exposed against the documented shape
+  but the upstream currently answers such a proxied 4xx for every
+  `period_of_report` format probed. The `what`-discriminated inputs validate
+  required fields per branch **before** any request (dashed quarters like
+  `2026-Q2` are rejected client-side, since the upstream answers 500).
 - **Attribution (spec §7).** Payloads carry "Sourced from Gloomberb" + the delay
   notice and a `term.gloom.sh/?ticker=` deep link where one listing is addressed.
   The Yahoo-backed earnings calendar must **not** claim Gloomberb attribution.
