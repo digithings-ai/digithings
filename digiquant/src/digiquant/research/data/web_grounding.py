@@ -80,6 +80,13 @@ def _pipeline_bearer() -> str | None:
     return get_service_jwt()
 
 
+# digisearch's ``WebSearchRequest.query`` is ``Field(max_length=500)``
+# (``digisearch/src/digisearch/web_search/models.py``, #3853). Enforced here as
+# well so an oversize query from any caller degrades to a logged truncation
+# instead of a ValidationError that fails a whole book run (#4163).
+_MAX_QUERY_CHARS = 500
+
+
 def call_web_search_tool(
     *,
     query: str,
@@ -106,6 +113,14 @@ def call_web_search_tool(
     """
     from digigraph.orchestration.registry import ToolContext
     from digigraph.orchestration.web_search_tools import call_digisearch_web_search
+
+    if len(query) > _MAX_QUERY_CHARS:
+        logger.warning(
+            "web_search query is %d chars; digisearch caps it at %d - truncating",
+            len(query),
+            _MAX_QUERY_CHARS,
+        )
+        query = query[:_MAX_QUERY_CHARS].rsplit(" ", 1)[0] or query[:_MAX_QUERY_CHARS]
 
     token = bearer_token if bearer_token is not None else _pipeline_bearer()
     context = ToolContext(
