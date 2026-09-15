@@ -326,7 +326,7 @@ instead of a silent no-op tick.
 
 **Loopback-only by default.** All service ports in `docker-compose.yml` are bound to `127.0.0.1`. The heartbeat container has no published port at all. There is no digiclaw-owned network surface to attack remotely in the current implementation.
 
-**No public interface.** digiclaw makes only outbound HTTP calls to digigraph and digiquant on the internal Docker network (`http://digigraph:8000`, `http://digiquant:8001`). It does not listen on any port.
+**No public interface.** digiclaw makes only outbound HTTP calls to digigraph, digiquant, and digisearch on the internal Docker network (`http://digigraph:8000`, `http://digiquant:8001`, `http://digisearch:8002`). It does not listen on any port.
 
 **Audit log append-only.** The audit file is opened with `"a"` mode (append). There is no delete or overwrite path in `audit.py`. The Docker heartbeat service mounts the audit directory as a writable volume (`./digiquant/results/audit:/audit`); the workspace is mounted read-only (`.:/workspace:ro`).
 
@@ -415,7 +415,7 @@ digiquant also writes to the same `AUDIT_LOG_PATH` (`/app/results/audit/events.j
 
 ### digikey
 
-digikey correlation fields (`key_prefix`, `tenant`, `project_id`, `jti`) are optional parameters on `audit_log()`. They are populated by digigraph when it validates a digikey JWT and emits a workflow audit event. The heartbeat runner does not populate these fields. There is no digikey-based authorization on the heartbeat service's outbound HTTP calls to digigraph and digiquant; the Phase C monitor tick is the service's one digikey-authenticated call — it mints a service JWT from `DIGICLAW_DIGIKEY_API_KEY` to reach digisearch `/v1/monitors/tick` (Section 3).
+digikey correlation fields (`key_prefix`, `tenant`, `project_id`, `jti`) are optional parameters on `audit_log()`. They are populated by digigraph when it validates a digikey JWT and emits a workflow audit event. The heartbeat runner does not populate these fields. The heartbeat service's `/health` pings carry no digikey authorization; the Phase C monitor tick is its one digikey-authenticated call **to digisearch** — it mints a service JWT from `DIGICLAW_DIGIKEY_API_KEY` to reach digisearch `/v1/monitors/tick` (Section 3). Its digiquant calls (`/check_drift`, `/run_optimize`) also carry a digikey service JWT from `digikey_bearer_token()`.
 
 ### Optional AUDIT_SINK_URL
 

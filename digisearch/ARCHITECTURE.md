@@ -453,10 +453,10 @@ Auth: same `digisearch:query` scope via `DigiAuthMiddleware` (default path rule;
 Scheduled web-search watches: create a watch (query + schedule + dedup rule +
 delivery config), let the runner recall and dedup results, then read the
 canonical run history or receive delivery. One store, one runner, one envelope —
-the recall leg is the EXA adapter whenever `EXA_API_KEY` is configured and the
-OSS seam otherwise, and the `backend` a watch declares is recorded on each of its
-runs. Monitors are off end-to-end for the `datatap` workspace: create/update
-reject it and the tick skips it.
+the recall leg is `digisearch.web_exa.exa_search` whenever `EXA_API_KEY` is
+configured and the OSS seam otherwise, and the `backend` a watch declares is
+recorded on each of its runs. Monitors are off end-to-end for the `datatap`
+workspace: create/update reject it and the tick skips it.
 
 ##### Monitor HTTP routes
 
@@ -1369,10 +1369,10 @@ digikey service JWT minted by the landed
 digikey_url_env="DIGIKEY_URL", scopes=("digisearch:query",))`. Transport and
 auth failures raise, so the scheduler records the agent's `last_error` (never a
 silent successful tick) and `digiclaw schedule tick` prints the failed outcome.
-The route is the same `tick_due_watches` call the manual tick makes; per-watch
-failures come back inside the `{"runs": [...]}` payload and are counted by the
-digiclaw helper as `failed`. Compose wiring and the poll-vs-public-webhook ops
-choice are in §10.
+The route calls `tick_due_watches` directly (the route itself is the tick);
+per-watch failures come back inside the `{"runs": [...]}` payload and are
+counted by the digiclaw helper as `failed`. Compose wiring and the
+poll-vs-public-webhook ops choice are in §10.
 
 ### digiflow integration
 
@@ -1536,7 +1536,7 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGISEARCH_SMTP_HOST` | _(unset)_ | SMTP relay host for monitor email delivery; unset (or no usable from-address) ⇒ `smtp_not_configured` receipt |
 | `DIGISEARCH_SMTP_PORT` | `587` | SMTP relay port; a non-numeric value is treated as unconfigured |
 | `DIGISEARCH_SMTP_USER` | _(unset)_ | SMTP username; login happens only over STARTTLS, else `smtp_tls_unavailable` when credentials are set |
-| `DIGISEARCH_SMTP_PASS` | _(unset)_ | SMTP password (never logged, never in a receipt) |
+| `DIGISEARCH_SMTP_PASS` | _(unset)_ | SMTP password; treat as sensitive — receipt redaction (`_redacted_error`) strips the per-watch delivery secret and target URL today, not this value |
 | `DIGISEARCH_SMTP_FROM` | falls back to `DIGISEARCH_SMTP_USER` | From address for monitor email delivery; host + from must both resolve or email is a failed receipt |
 | `EXA_MONITOR_WEBHOOK_SECRET` | _(unset)_ | Shared secret compared against `X-Exa-Signature` on `POST /v1/monitors/exa_webhook`; unset ⇒ every webhook fails closed with 401 (#4065) |
 

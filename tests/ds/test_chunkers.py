@@ -219,6 +219,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 60 for #4055 (POST /ingest/url subsection + URL-ingest clause in the POST /ingest section of ARCHITECTURE.md), re-recorded again over the union with the #4059 module/digisearch sync (Azure workspace-scoping fix prose) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 67 for #4064 (Phase B web-branch ARCH section in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 80 for #4065 (Phase C monitors ARCH section + ops record) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 80) re-recorded for #4065 (Phase C docs corrections) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -248,8 +249,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "c6a2f8fbd65825a6",
         "7e8464fe6a6cc067",
         "9ce2b59017d82c91",
-        "547a8f9c5f69c323",
-        "bcedde1f667c7ced",
+        "ef0f58a96ed218c0",
+        "0e77d003d55f7ea9",
         "923b15634d704cae",
         "d6a6ad096c98de71",
         "d2b8e783e3662cee",
@@ -290,7 +291,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "79e1479908a647a2",
         "5881d77c9811fa5d",
         "4e43fa537ada9659",
-        "6fb20250b8903493",
+        "f86cd7836b6e8e7e",
         "81d310410772fb3e",
         "5e6a02ac4bf32f0f",
         "e8874754e8823dbd",
@@ -299,7 +300,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "9496728548f7cd2a",
         "6d57e6ff0ba47c28",
         "44ecfabe5926f420",
-        "f2897a3d748b8001",
+        "5191b4ec0bfecb12",
         "b12779e15e8ed950",
         "f91da07e81e00e0a",
         "634f3df55301a1f6",
