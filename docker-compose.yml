@@ -464,7 +464,9 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        digiclaw schedule start web-watch-tick
+        # `schedule start` is idempotent when the agent is already running (exit 0,
+        # re-arms it), so `|| exit 1` turns only real bootstrap failures into a loud exit.
+        digiclaw schedule start web-watch-tick || exit 1
         while true; do python -m digiclaw; sleep 1800; done &
         while true; do digiclaw schedule tick; sleep 60; done
     depends_on:

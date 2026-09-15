@@ -70,6 +70,53 @@ def test_tick_counts_failed_runs(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
+def test_tick_skips_jwt_minting_with_explicit_bearer(monkeypatch: pytest.MonkeyPatch) -> None:
+    import digibase.service_auth as svc
+
+    from digiclaw import monitors_tick as mod
+
+    minted: list[str] = []
+
+    def fake_jwt(**k: object) -> str:
+        minted.append("called")
+        return "unused"
+
+    monkeypatch.setattr(svc, "get_service_jwt", fake_jwt)
+    seen: dict = {}
+
+    def fake_post(url: str, token: str) -> dict:
+        seen["token"] = token
+        return {"runs": []}
+
+    monkeypatch.setattr(mod, "_post", fake_post)
+    out = mod.run_due_monitors(bearer_token="explicit")
+    assert minted == []
+    assert seen["token"] == "explicit"
+    assert out == {"runs": 0, "failed": 0}
+
+
+@pytest.mark.unit
+def test_tick_normalizes_env_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    from digiclaw import monitors_tick as mod
+
+    seen: list[str] = []
+
+    def fake_post(url: str, token: str) -> dict:
+        seen.append(url)
+        return {"runs": []}
+
+    monkeypatch.setattr(mod, "_post", fake_post)
+    monkeypatch.setenv("DIGISEARCH_URL", "  http://127.0.0.1:9000/  ")
+    mod.run_due_monitors(bearer_token="t")
+    monkeypatch.setenv("DIGISEARCH_URL", "   ")
+    mod.run_due_monitors(bearer_token="t")
+    assert seen == [
+        "http://127.0.0.1:9000/v1/monitors/tick",
+        "http://127.0.0.1:8002/v1/monitors/tick",
+    ]
+
+
+@pytest.mark.unit
 def test_post_raises_for_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from digiclaw import monitors_tick as mod
 
