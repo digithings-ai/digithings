@@ -57,8 +57,7 @@ synthesis/grounding, real-time (sub-second) answers, corpus ingest writes.
 
 - **CONSUMES — Phase A (search/fetch), landed surface only:** candidate recall runs on
   `search_web(WebSearchRequest)` (`digisearch.web_search.service:94` — search only, no
-  fetch enrichment) or, at the test stub boundary,
-  `SearXNGWebSearchProvider.search` (`web_search/searxng_provider.py:16,29`). Candidate
+  fetch enrichment), the single recall seam and stub boundary (R3). Candidate
   page markdown comes from `fetch_markdown(url)` (`web_search/fetch.py:52`), which
   downloads once through the digifetch SSRF guard and runs the landed
   `extract_markdown` (`-> str`, `web_search/extractor.py:42`); neither indexes.
@@ -177,8 +176,8 @@ conventions — lowercase, no `Digi` prefix):
 
 | Concept | OSS object | Key fields |
 |---|---|---|
-| webset | `Webset` | `id` (`ws_` + uuid4-hex, no new dep — `uuid.uuid4().hex` per `digibase.http` precedent), `object="webset"`, `status`: `running` \| `idle` \| `failed` \| `cancelled`, `workspace_id: str \| None = None` (tenant isolation, § Cross-phase alignment), `searches`, `enrichments`, `created_at`, `updated_at` |
-| search | `WebsetSearch` | `id` (`wss_` + uuid4-hex), `webset_id`, `query`, `count` (1–100, default 10 — target **verified** items for this search, NOT a result-page size; see `max_results` note below), `status`: `running` \| `idle` \| `failed` \| `cancelled` (flag I6 resolved: `cancel_webset` settles every non-terminal search as `cancelled`), `criteria` (1–5 rules) |
+| webset | `Webset` | `id` (`ws_` + uuid4-hex, no new dep — `uuid.uuid4().hex` per `digibase.http` precedent), `object="webset"`, `status`: `running` \| `idle` \| `failed` \| `cancelled`, `workspace_id: str \| None = None` (tenant isolation, § Cross-phase alignment), `backend: "oss" \| "exa" = "oss"` (R4 label, § Cross-phase alignment), `searches`, `enrichments`, `created_at`, `updated_at` |
+| search | `WebsetSearch` | `id` (`wss_` + uuid4-hex), `webset_id`, `query`, `count` (1–100, default 10 — target **verified** items for this search, NOT a result-page size; see `max_results` note below), `status`: `running` \| `idle` \| `failed` \| `cancelled` (flag I6 resolved: `cancel_webset` settles every non-terminal search as `cancelled`), `criteria` (1–5 rules), `backend: "oss" \| "exa" = "oss"` (R4 label) |
 | item | `WebsetItem` | `id` (`wsi_` + uuid4-hex), `webset_id`, `url`, `title`, `verification`: `pending` \| `verified` \| `rejected` (`pending` is in-flight/queued only — settled at candidate-pass end, § Verification gate), `criteria_results[]` (verdict + reasoning + references per rule), `enrichments{field: EnrichedField}` (per-field value + citations + terminal status), `created_at` |
 | enrichment | `EnrichmentDef` | `id` (`wse_` + uuid4-hex), `name`, `type`: `text` \| `number` \| `date` \| `url` \| `email` \| `phone` \| `options` \| `company_profile`, `description`, `options[]` (only for `options`), `status` |
 | webset monitor | `WebsetMonitor` | `id` (`wsm_…`, prefix kept), `object="webset_monitor"`, `webset_id`, `interval_seconds >= 60` (aligned with Phase C `WatchSchedule.interval_seconds`; `cadence_s` struck), `webhook_url`, `created_at`. POLL-ONLY v1 (R8): the interval is recorded schedule metadata for the deferred driver, never executed on a tick; v1 monitor ops are create/list/trigger-manually. There is deliberately **no `status`/`paused` field** — with no scheduled driver a pause state has no observable effect (flag I4 resolved); the `active\|paused` lifecycle belongs to the deferred driver follow-up (§ Tasks, re-scoped sequence note). A webset monitor is explicitly NOT a Phase C `Watch` (R7e; bare `Monitor` is banned — it collides with the Phase C `Watch`/`MonitorRun` family) |
@@ -224,9 +223,14 @@ conventions — lowercase, no `Digi` prefix):
   `item.enriched` (all requested enrichments settled for the item, ≥1
   resolved), `webset.idle`, `webset.failed`. Rejected candidates emit no
   item event (they remain queryable via `items?verification=rejected` for
-  audit). Tests assert the event log as a **multiset + `webset.idle`-last**
-  (exact-sequence assertions are banned — the concurrent runner does not
-  guarantee inter-item order).
+  audit). Events are generation-scoped: each re-settling flow — `add_search`,
+  an `add_enrichment` backfill run, `trigger_monitor` — runs as a new
+  `WebsetSearch` and re-emits its terminal events, while the webset status
+  never goes backwards (after first completion it stays `idle`, and refresh
+  progress is read from the new search's status + events, never from a webset
+  status flip — § Async lifecycle). Tests assert the event log as a
+  **multiset + `webset.idle`-last** (exact-sequence assertions are banned —
+  the concurrent runner does not guarantee inter-item order).
 
 ### Verification gate
 
@@ -544,10 +548,13 @@ def list_monitors(webset_id: str, *, store: WebsetStore | None = None) -> list[W
 def trigger_monitor(
     webset_id: str, monitor_id: str, *, store: WebsetStore | None = None
 ) -> Webset:
-    """Manually refresh: run the webset's searches again against the current
-    candidate set (the v1 substitute for the deferred tick driver) and return the
-    webset. Unknown ids raise ``WebsetStoreError`` with code
-    ``webset_not_found`` / ``monitor_not_found``."""
+    """Manually refresh: start a new settling pass as a new `WebsetSearch`
+    generation that re-runs the webset's searches against the current candidate
+    set (the v1 substitute for the deferred tick driver). Webset status never
+    goes backwards — after first completion it stays `idle`, and the refresh is
+    observed via the new search's status + events, not via a webset status
+    flip. Returns the webset. Unknown ids raise `WebsetStoreError` with code
+    `webset_not_found` / `monitor_not_found`."""
 
 def add_webhook(
     webset_id: str,
@@ -725,15 +732,30 @@ implementers follow it verbatim:
   are skipped, `pending` items/fields are re-driven, already-appended
   events are never duplicated. Event idempotency key scheme (flag I3
   resolved) — each event carries a deterministic `dedup_key` built from the
-  tuple `(webset_id, kind, item_id or "", field or "")`, enforced by a UNIQUE
-  index on `events(webset_id, dedup_key)` with `INSERT OR IGNORE`:
-  `item.created` → `(webset_id, "item.created", item_id, "")`;
-  `item.enriched` → `(webset_id, "item.enriched", item_id, "")` (one event per
-  item once § terminal-state conditions hold, so no field slot is needed);
-  `webset.idle` → `(webset_id, "webset.idle", "", "")`;
-  `webset.failed` → `(webset_id, "webset.failed", "", "")`. Non-item events
-  therefore dedup per (webset, kind), so resume cannot duplicate them either.
-  Unknown `kind` values are rejected by the insert path (no silent rows).
+  tuple `(webset_id, kind, search_id, item_id or "", field or "")`, where
+  `search_id` is the `WebsetSearch` generation that produced the event,
+  enforced by a UNIQUE index on `events(webset_id, dedup_key)` with
+  `INSERT OR IGNORE`:
+  `item.created` → `(webset_id, "item.created", search_id, item_id, "")`;
+  `item.enriched` → `(webset_id, "item.enriched", search_id, item_id, "")`
+  (one event per item per generation once § terminal-state conditions hold,
+  so no field slot is needed);
+  `webset.idle` → `(webset_id, "webset.idle", search_id, "", "")`;
+  `webset.failed` → `(webset_id, "webset.failed", search_id, "", "")`. The
+  `field` slot is empty for item/webset-level events and reserved for
+  field-scoped kinds (none in v1), so a resume WITHIN the same search cannot
+  duplicate any event; each re-settling flow — `add_search`, the
+  `add_enrichment` backfill run, `trigger_monitor` — creates a new
+  `WebsetSearch` row (a new generation), so a completed pass can emit its
+  terminal events again. Terminal `webset.*` events carry the generation of the
+  pass that produced them. Unknown `kind` values are rejected by the
+  insert path (no silent rows).
+- **Refresh contract (status never backwards):** an `add_search`, the
+  `add_enrichment` backfill run, and a manual `trigger_monitor` each start a new
+  settling pass by creating a new `WebsetSearch` row — the new event generation
+  above. `Webset.status` never goes backwards: after its first completion a
+  webset stays `idle` while a refresh pass runs, and callers observe the refresh
+  through the new search's status + events, never through a webset status flip.
 - **Cancellation under the semaphore:** `cancel_webset` flips the row to
   `cancelled` and settles every search not already `idle`/`failed` as
   `cancelled` (flag I6). The runner checks the flag before each semaphore
@@ -924,11 +946,14 @@ Consumes Task 1.
   connect exactly like Phase C (`monitors/store.py:159-166`): one connection per
   instance created in `__init__`, thread-bound, `WAL` + `busy_timeout=5000`, **no
   module `threading.Lock`** (R5); status transitions validated
-  (`running → idle|failed|cancelled`, never backwards); search statuses include
+  (`running → idle|failed|cancelled`, never backwards — `idle` is sticky after
+  first completion, and refresh passes run as new search generations without
+  flipping the webset back, § Async lifecycle); search statuses include
   `cancelled`; `set_webset_idle` refuses while any item has a `pending`
   verification or `pending` enrichment field; `events` is append-only (no
   UPDATE/DELETE path exists) with the `(webset_id, dedup_key)` UNIQUE index
-  behind the INSERT-or-ignore idempotency key scheme (§ Async lifecycle).
+  behind the per-generation INSERT-or-ignore idempotency key scheme (§ Async
+  lifecycle).
 - [ ] Step 3: run `pytest tests/ds/test_websets_store.py tests/ds/test_websets_models.py -m unit -v` →
   PASS + ruff clean.
 
@@ -998,10 +1023,9 @@ Consumes Phase B extraction contract (mocked at the digillm boundary).
 **Files:** create `websets/runner.py`, `websets/events.py`,
 `tests/ds/test_websets_runner.py`. Consumes Tasks 1–4, Phase A landed recall
 seams: `search_web` (`web_search/service.py:94`) and `fetch_markdown`
-(`web_search/fetch.py:52`) — stubbed at those two seams, or at
-`SearXNGWebSearchProvider.search` (`searxng_provider.py:29`) for the provider
-boundary (R3; direct import per R1; never raw httpx to the sidecar, never
-`ingest_url`, never `run_web_search`).
+(`web_search/fetch.py:52`) — stubbed at those two seams, with `search_web` as
+the single pinned provider boundary (R3; direct import per R1; never raw httpx
+to the sidecar, never `ingest_url`, never `run_web_search`).
 
 - [ ] Step 1: write the failing test — stubbed candidates (3) + stubbed
   verify (admit 2, reject 1) + stubbed enrich → after
