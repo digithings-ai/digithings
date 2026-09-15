@@ -24,7 +24,11 @@ from digiquant.portfolio.candidates import holdings_from_prior_book
 from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries
 from digiquant.portfolio.risk_envelope import risk_horizon_days
 from digiquant.portfolio.sector_map import sector_bucket
-from digiquant.research.data.queries import r2_backend_enabled, r2_close_rows
+from digiquant.research.data.queries import (
+    r2_backend_enabled,
+    r2_close_rows,
+    r2_close_rows_tolerant,
+)
 from digiquant.research.decision_log import persist_pending
 from digiquant.research.pretrade_risk_registry import (
     PreTradeRiskRegistryConflict,
@@ -197,10 +201,11 @@ def _interval_price_returns(
     # (#3780 Task 7b); ``until`` is run_date − 1d to mirror ``.lt(run_date)``.
     raw_rows: list[dict[str, Any]] = []
     if r2_backend_enabled():
-        raw_rows = r2_close_rows(
+        raw_rows = r2_close_rows_tolerant(
             tickers=ordered,
             since=floor,
             until=run_date - timedelta(days=1),
+            context="commit_io NAV interval",
         )
     else:
         # Retired: migration 127 drops price_history (#4053) — R2 only above.

@@ -63,9 +63,10 @@ export class DigiStackContainer extends Container {
     DIGIKEY_BFF_TOKEN: env.DIGIKEY_BFF_TOKEN ?? "",
     DIGIKEY_PRIVATE_KEY_PEM: env.DIGIKEY_PRIVATE_KEY_PEM ?? "",
     DIGIKEY_ADMIN_TOKEN: env.DIGIKEY_ADMIN_TOKEN ?? "",
-    DIGIKEY_DATABASE_URL:
-      env.DIGIKEY_DATABASE_URL ?? "sqlite:////data/digikey.db",
-    DIGIKEY_REQUIRE_DURABLE_DB: env.DIGIKEY_REQUIRE_DURABLE_DB ?? "0",
+    // No SQLite fallback: the Container's /data is ephemeral, so a synthesized
+    // default would silently lose every issued key. Unset means digikey refuses
+    // to start (#4080).
+    DIGIKEY_DATABASE_URL: env.DIGIKEY_DATABASE_URL ?? "",
     DIGIKEY_JWKS_URL: "http://127.0.0.1:8005/.well-known/jwks.json",
     DIGIVAULT_URL: env.DIGIVAULT_URL ?? "http://127.0.0.1:8004",
     DIGISEARCH_URL: env.DIGISEARCH_URL ?? "http://127.0.0.1:8002",
@@ -103,6 +104,8 @@ export class DigiStackContainer extends Container {
     DIGI_HOUSE_UPSTREAM: env.DIGI_HOUSE_UPSTREAM ?? "",
     LITELLM_PROXY_API_KEY: env.LITELLM_PROXY_API_KEY ?? "",
     LITELLM_MASTER_KEY: env.LITELLM_MASTER_KEY ?? "",
+    // Read-only Zammad helpdesk MCP (supervisord [program:zammad-mcp], OCC demo)
+    ZAMMAD_API_TOKEN: env.ZAMMAD_API_TOKEN ?? "",
   };
 
   /**
@@ -219,7 +222,6 @@ export interface Env {
   DIGIKEY_PRIVATE_KEY_PEM?: string;
   DIGIKEY_ADMIN_TOKEN?: string;
   DIGIKEY_DATABASE_URL?: string;
-  DIGIKEY_REQUIRE_DURABLE_DB?: string;
   DIGIVAULT_URL?: string;
   DIGISEARCH_URL?: string;
   DIGIQUANT_URL?: string;
@@ -245,6 +247,7 @@ export interface Env {
   DIGI_HOUSE_UPSTREAM?: string;
   LITELLM_PROXY_API_KEY?: string;
   LITELLM_MASTER_KEY?: string;
+  ZAMMAD_API_TOKEN?: string;
   DIGIQUANT_MCP_SCOPE?: string;
   DIGIQUANT_MARKET_DATA_BACKEND?: string;
   FRED_API_KEY?: string;

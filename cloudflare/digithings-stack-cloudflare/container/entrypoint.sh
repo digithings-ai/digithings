@@ -119,7 +119,9 @@ export VECTORIZE_API_TOKEN="${VECTORIZE_API_TOKEN:-}"
 export D1_ACCOUNT_ID="${D1_ACCOUNT_ID:-}"
 export D1_API_TOKEN="${D1_API_TOKEN:-}"
 export D1_DATABASE_MAP="${D1_DATABASE_MAP:-}"
-export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}"
+# Required, with no fallback: a synthesized SQLite path here would live on this
+# instance's ephemeral /data and lose every issued API key (#4080).
+export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-}"
 export DIGIKEY_BLOCKLIST_REDIS_URL="${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://127.0.0.1:6379/0}"
 export DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-0}"
 export PYTHONPATH="/app/digikey/src:/app/digigraph/src:/app/digisearch/src:/app/digivault/src:/app/digibase/src:/app/digillm/src:/app/digismith/src${PYTHONPATH:+:$PYTHONPATH}"
@@ -178,5 +180,40 @@ for client_dir in /seed/vault/clients/*; do
     esac
   done
 done
+
+# Alias the dotless name `zammad-mcp` to this container's own non-loopback
+# IPv4 so digigraph's remote-MCP client can dial `http://zammad-mcp:8770/mcp`
+# (its SSRF guard always blocks loopback, #3879, and there is no Docker DNS
+# under Firecracker). Warn and continue if no usable address is found.
+if ! getent hosts zammad-mcp >/dev/null 2>&1; then
+  zammad_mcp_ip=$(python3 -c '
+import socket
+
+
+def candidates():
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            yield info[4][0]
+    except OSError:
+        return
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("192.0.2.1", 80))
+        yield probe.getsockname()[0]
+    finally:
+        probe.close()
+
+
+for ip in candidates():
+    if not (ip.startswith("127.") or ip.startswith("169.254.")):
+        print(ip)
+        break
+' 2>/dev/null || true)
+  if [ -n "${zammad_mcp_ip:-}" ]; then
+    printf '%s zammad-mcp\n' "$zammad_mcp_ip" >> /etc/hosts
+  else
+    echo "digithings-stack: WARN no zammad-mcp host alias; Zammad MCP will be unreachable" >&2
+  fi
+fi
 
 exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/digithings.conf

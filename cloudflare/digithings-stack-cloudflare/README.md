@@ -55,9 +55,10 @@ R2 binding (`digithings-archive`); browser CORS is allowlisted via the
 - Provider keys for LiteLLM (e.g. `GROQ_API_KEY`)
 - Stable `DIGIKEY_PRIVATE_KEY_PEM` (do **not** use ephemeral keys in prod)
 - A durable Postgres database for digikey's API keys + JWT revocation state
-  (`DIGIKEY_DATABASE_URL`). The SQLite fallback lives on the Container's
-  ephemeral `/data`, so any deploy that replaces the instance wipes every issued
-  key — that is what 401'd the daily digiquant book run (#4080).
+  (`DIGIKEY_DATABASE_URL`). It is **required** — digikey refuses to start
+  without it, because the Container's `/data` is ephemeral and a fallback there
+  wipes every issued key on instance replacement — that is what 401'd the daily
+  digiquant book run (#4080).
 
 ## Deploy
 
@@ -72,10 +73,10 @@ npm install
 npx wrangler secret put DIGIKEY_PRIVATE_KEY_PEM
 npx wrangler secret put DIGIKEY_BFF_TOKEN
 npx wrangler secret put DIGIKEY_ADMIN_TOKEN   # optional
-# Durable key store (#4080) — required in prod, not optional: the SQLite
-# fallback stores keys on ephemeral /data and loses them on instance
-# replacement. Once set, re-issue the digiquant service key, because keys
-# minted into the old SQLite store do not exist in the new database:
+# Durable key store (#4080) — required, not optional: there is no fallback, so
+# digikey will not start until this is set. Once set, re-issue the digiquant
+# service key, because keys minted into the old SQLite store do not exist in the
+# new database:
 #   see docs/ops/digiquant-digikey-service-key.md
 npx wrangler secret put DIGIKEY_DATABASE_URL
 npx wrangler secret put GROQ_API_KEY

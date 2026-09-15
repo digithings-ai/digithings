@@ -1317,7 +1317,7 @@ with document snippets/bodies at `activityDetail: full`. Generic (non-retrieval)
 tool output is `{ input…, result, durationMs }` where `result` is the clipped MCP
 payload — the `tool_result` trace arrives the moment the tool returns, so the row
 completes mid-stream with its args + JSON Result pane (no per-tool UI;
-`ToolFallback` renders both). On the Foundry path the started row opens on
+`ToolFallback` renders both). When that result carries the Gloomberb §7 attribution block (`attribution` plus optional `delay_notice` / `source_url`), the first-party gallery thread also renders the attribution line — canonical string, delay notice, and the `term.gloom.sh` deep link — beneath the JSON Result pane; unattributed payloads (and off-terminal `source_url` values) render nothing extra. On the Foundry path the started row opens on
 `output_item.added` with the tool name; args arrive on the completed
 `mcp_call` item. `toolResult` passes the `labels` detail gate
 untouched (tenant's own tool output for the tenant's own user). Vault search `rag_sources` traces map through `mapDigivaultSearchNotes` (not the digisearch retrieve-with-no-docs path). A failed vault invoke is `execute_tool`/`failed`, never `{ hitCount: 0 }`. The website-like dogfood host

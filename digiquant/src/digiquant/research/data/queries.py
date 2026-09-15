@@ -193,6 +193,44 @@ def r2_close_rows(
     )
 
 
+def r2_close_rows_tolerant(
+    *,
+    tickers: list[str] | tuple[str, ...],
+    since: date | str,
+    until: date | str,
+    context: str,
+) -> list[dict[str, Any]]:
+    """``r2_close_rows`` for callers whose contract is to drop absent tickers.
+
+    ``r2_close_rows`` is deliberately all-or-nothing: the first ticker without a
+    sealed generation raises :class:`UnknownTickerError` and the whole batch is
+    lost. Callers that document "a missing ticker reads as no signal" — triage
+    price deltas, NAV interval returns, sector relative strength — cannot use
+    that, since one unsealed ticker would otherwise fail the research graph or
+    the book. Re-ask per ticker on that error and log what was dropped, so the
+    coverage gap stays visible instead of a signal quietly flattening
+    (#4136, #4139).
+    """
+    try:
+        return list(r2_close_rows(tickers=tickers, since=since, until=until))
+    except UnknownTickerError:
+        pass
+    rows: list[dict[str, Any]] = []
+    dropped: list[str] = []
+    for ticker in tickers:
+        try:
+            rows.extend(r2_close_rows(tickers=[ticker], since=since, until=until))
+        except UnknownTickerError:
+            dropped.append(ticker)
+    if dropped:
+        logger.warning(
+            "%s: no sealed R2 generation for %s; treating as no signal",
+            context,
+            ", ".join(sorted(dropped)),
+        )
+    return rows
+
+
 def r2_ohlcv_rows(
     *, tickers: list[str] | tuple[str, ...], since: date | str, until: date | str
 ) -> list[dict[str, Any]]:
@@ -551,7 +589,16 @@ def get_sector_relative_strength(
         return {}
     since = (run_date - timedelta(days=lookback_days)).isoformat()
     if r2_backend_enabled():
-        rows = r2_close_rows(tickers=tickers, since=since, until=run_date)
+        # A dropped sector ETF just contributes nothing; a dropped *benchmark*
+        # makes compute_relative_strength return {} (its own missing-benchmark
+        # contract). {} is the right outcome here — the warning names it, and an
+        # unsealed benchmark must not abort the research graph (#4139).
+        rows = r2_close_rows_tolerant(
+            tickers=tickers,
+            since=since,
+            until=run_date,
+            context="sector relative strength",
+        )
         if not rows:
             return {}
         return compute_relative_strength(pl.DataFrame(rows), benchmark=benchmark, as_of=run_date)
