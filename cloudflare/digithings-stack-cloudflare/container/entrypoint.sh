@@ -210,7 +210,13 @@ for ip in candidates():
         break
 ' 2>/dev/null || true)
   if [ -n "${zammad_mcp_ip:-}" ]; then
-    printf '%s zammad-mcp\n' "$zammad_mcp_ip" >> /etc/hosts
+    # Best-effort. This runs under `set -eu` immediately before
+    # `exec /usr/bin/supervisord`, so an unwritable /etc/hosts (read-only in
+    # some runtimes) must not abort the entrypoint — that takes the whole
+    # instance down: no :8000 to probe, so the Worker 503s every request and
+    # the container is reported as "just exited".
+    printf '%s zammad-mcp\n' "$zammad_mcp_ip" >> /etc/hosts 2>/dev/null \
+      || echo "digithings-stack: WARN could not alias zammad-mcp in /etc/hosts" >&2
   else
     echo "digithings-stack: WARN no zammad-mcp host alias; Zammad MCP will be unreachable" >&2
   fi
