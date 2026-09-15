@@ -727,14 +727,17 @@ implementers follow it verbatim:
   in-flight refresh is visible via its `WebsetSearch` row(s) + events, never as
   a webset status flip.
 - **Startup resume:** on lifespan startup, `get_store()` opens the DB and
-  `resume_incomplete_websets()` selects every webset holding an in-flight
-  search (`WebsetSearch.status == "running"`) — including searches on a
-  sticky-`idle` webset, since a crashed refresh never flips the webset status
-  back — and re-schedules `run_webset_async` for each. A clean shutdown
-  cancels tasks first, so any `running` search at boot is orphaned. The
+  `resume_incomplete_websets()` selects the UNION of every webset whose
+  `Webset.status == "running"` (a first pass that never completed — including
+  the window where all searches have settled but items/fields remain
+  `pending`, since the idle rule is a conjunction) and every webset holding a
+  non-terminal (`running`) search (a crashed refresh on a sticky-`idle`
+  webset, since a crashed refresh never flips the webset status back). Each
+  selected webset is re-scheduled via `run_webset_async`. A clean shutdown
+  cancels tasks first, so any selected webset at boot is an orphan. The
   runner is idempotent: `verified` items and terminal enrichment fields
   are skipped, `pending` items/fields are re-driven, already-appended
-  events are never duplicated. Event idempotency key scheme (flag I3
+  events are never duplicated within a generation. Event idempotency key scheme (flag I3
   resolved) — each event carries a deterministic `dedup_key` built from the
   tuple `(webset_id, kind, search_id, item_id or "", field or "")`, where
   `search_id` is the `WebsetSearch` generation that produced the event,
@@ -1050,7 +1053,10 @@ to the sidecar, never `ingest_url`, never `run_web_search`).
   INSERT-or-ignore scheme, § Async lifecycle); a refresh (a new search
   generation via `add_search` / `trigger_monitor`) re-emits `item.enriched` +
   `webset.idle` under the new `search_id` while `Webset.status` stays `idle`
-  (generation-key contract, § Async lifecycle).
+  (generation-key contract, § Async lifecycle) — the refresh stub must
+  introduce at least one new or not-yet-`enriched` candidate item, since a
+  pass over only already-enriched items legitimately re-emits `webset.idle`
+  alone.
   `@pytest.mark.unit` on every test.
   Run: `pytest tests/ds/test_websets_runner.py -m unit -v` → FAIL.
 - [ ] Step 2: implement `AsyncioRunner` (semaphore 4 for fetch/verify,
