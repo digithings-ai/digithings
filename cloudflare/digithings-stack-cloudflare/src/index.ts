@@ -63,9 +63,10 @@ export class DigiStackContainer extends Container {
     DIGIKEY_BFF_TOKEN: env.DIGIKEY_BFF_TOKEN ?? "",
     DIGIKEY_PRIVATE_KEY_PEM: env.DIGIKEY_PRIVATE_KEY_PEM ?? "",
     DIGIKEY_ADMIN_TOKEN: env.DIGIKEY_ADMIN_TOKEN ?? "",
-    DIGIKEY_DATABASE_URL:
-      env.DIGIKEY_DATABASE_URL ?? "sqlite:////data/digikey.db",
-    DIGIKEY_REQUIRE_DURABLE_DB: env.DIGIKEY_REQUIRE_DURABLE_DB ?? "0",
+    // No SQLite fallback: the Container's /data is ephemeral, so a synthesized
+    // default would silently lose every issued key. Unset means digikey refuses
+    // to start (#4080).
+    DIGIKEY_DATABASE_URL: env.DIGIKEY_DATABASE_URL ?? "",
     DIGIKEY_JWKS_URL: "http://127.0.0.1:8005/.well-known/jwks.json",
     DIGIVAULT_URL: env.DIGIVAULT_URL ?? "http://127.0.0.1:8004",
     DIGISEARCH_URL: env.DIGISEARCH_URL ?? "http://127.0.0.1:8002",
@@ -219,7 +220,6 @@ export interface Env {
   DIGIKEY_PRIVATE_KEY_PEM?: string;
   DIGIKEY_ADMIN_TOKEN?: string;
   DIGIKEY_DATABASE_URL?: string;
-  DIGIKEY_REQUIRE_DURABLE_DB?: string;
   DIGIVAULT_URL?: string;
   DIGISEARCH_URL?: string;
   DIGIQUANT_URL?: string;

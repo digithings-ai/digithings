@@ -369,7 +369,7 @@ Keys with `kind=dev_global` carry `scopes=["*"]` — full access to all services
 
 ### SQLite single-writer bottleneck
 
-The default `DIGIKEY_DATABASE_URL` is `sqlite:////data/digikey.db`. SQLite has a global write lock. Under concurrent load, key creation and token exchange (which reads the DB) will serialize. For production deployments with any significant token exchange rate, Postgres is required.
+SQLite — a local file, or a mounted volume in the Compose stack — has a global write lock. Under concurrent load, key creation and token exchange (which reads the DB) will serialize. For production deployments with any significant token exchange rate, Postgres is required.
 
 Additionally, SQLite's `check_same_thread=False` allows cross-thread access but does not address the write lock. FastAPI runs handlers in a thread pool. Under load, this will cause lock contention.
 
@@ -500,8 +500,7 @@ digichat depends on `digikey` and `digigraph` being healthy.
 
 | Variable | Default | Required | Purpose |
 |----------|---------|----------|---------|
-| `DIGIKEY_DATABASE_URL` | — | Yes | Postgres or SQLite URL. SQLite is instance-local: on the Cloudflare Container its `/data` disk is ephemeral, so a deploy that replaces the instance wipes issued keys and revocation state (#4080) |
-| `DIGIKEY_REQUIRE_DURABLE_DB` | `0` | No | `1`/`true`/`yes`/`on` fails startup when `DIGIKEY_DATABASE_URL` is SQLite, instead of the default startup warning. Recommended wherever `/data` is not a durable volume — the Cloudflare Container, where it is ephemeral |
+| `DIGIKEY_DATABASE_URL` | — | Yes | Postgres or SQLite URL. Required with no fallback: on the Cloudflare Container the `/data` disk is ephemeral, so a synthesized SQLite default would silently lose issued keys and revocation state (#4080) |
 | `DIGIKEY_PRIVATE_KEY_PEM` | — | Prod: Yes | PEM private key for RS256 signing |
 | `DIGIKEY_ALLOW_EPHEMERAL_KEY` | `0` (compose: `0`) | Dev only | Generate ephemeral key if PEM not set (set `1` for local dev only) |
 | `DIGIKEY_KEY_ID` | `digikey-1` | No | `kid` in JWKS and JWT header |

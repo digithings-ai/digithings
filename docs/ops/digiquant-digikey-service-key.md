@@ -86,9 +86,9 @@ That was 2026-09-15 (run 34999170506) — the key was fine, its storage was not.
 Point digikey at durable Postgres (see the
 [stack README](../../cloudflare/digithings-stack-cloudflare/README.md)), then
 **re-mint in the same change**: switching databases does not migrate keys out of
-the old SQLite store, so the previous secret stops resolving. digikey logs a
-startup warning while the store is SQLite; `DIGIKEY_REQUIRE_DURABLE_DB=1` turns
-that warning into a fail-closed startup error.
+the old SQLite store, so the previous secret stops resolving. The URL is
+required: digikey refuses to start without it rather than falling back to the
+Container's ephemeral `/data` (#4080).
 
 ## Rotation
 

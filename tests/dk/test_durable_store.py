@@ -1,14 +1,16 @@
-"""An ephemeral digikey key store must be loud, not silent (#4080).
+"""The key-store URL is required; nothing may invent a SQLite default (#4080).
 
-The stack's ``DIGIKEY_DATABASE_URL`` defaulted to SQLite on the Cloudflare
+The stack used to default ``DIGIKEY_DATABASE_URL`` to SQLite on the Cloudflare
 Container's ephemeral ``/data``, so a deploy that replaced the instance wiped
 every issued API key. The daily digiquant book run then failed with a 401 that
-looked like a bad key rather than lost storage.
+looked like a bad key rather than lost storage. The URL is now required — the
+service refuses to start without it — and a bare provider URL is routed to
+psycopg 3, the only driver digikey ships.
 """
 
 from __future__ import annotations
 
-import logging
+from pathlib import Path
 
 import pytest
 
@@ -26,37 +28,24 @@ def _reset_engine():
     db_mod._session_factory = None
 
 
-def test_sqlite_store_warns(caplog: pytest.LogCaptureFixture, monkeypatch) -> None:
-    monkeypatch.delenv("DIGIKEY_REQUIRE_DURABLE_DB", raising=False)
+def test_an_unset_url_is_refused(monkeypatch) -> None:
+    monkeypatch.delenv("DIGIKEY_DATABASE_URL", raising=False)
 
-    with caplog.at_level(logging.WARNING, logger="digikey.db"):
-        db_mod.require_durable_store("sqlite:////data/digikey.db")
-
-    assert any("ephemeral" in record.getMessage() for record in caplog.records)
+    with pytest.raises(RuntimeError, match="not set"):
+        db_mod.database_url()
 
 
-def test_sqlite_store_fails_closed_when_required(monkeypatch) -> None:
-    monkeypatch.setenv("DIGIKEY_REQUIRE_DURABLE_DB", "1")
+def test_a_blank_url_is_refused(monkeypatch) -> None:
+    monkeypatch.setenv("DIGIKEY_DATABASE_URL", "   ")
 
-    with pytest.raises(RuntimeError, match="ephemeral"):
-        db_mod.require_durable_store("sqlite:////data/digikey.db")
-
-
-def test_postgres_store_is_silent(caplog: pytest.LogCaptureFixture, monkeypatch) -> None:
-    monkeypatch.setenv("DIGIKEY_REQUIRE_DURABLE_DB", "1")
-
-    with caplog.at_level(logging.WARNING, logger="digikey.db"):
-        db_mod.require_durable_store("postgresql://digikey:pw@db.example:5432/digikey")
-
-    assert caplog.records == []
+    with pytest.raises(RuntimeError, match="not set"):
+        db_mod.database_url()
 
 
-def test_init_db_refuses_an_ephemeral_store(monkeypatch, tmp_path) -> None:
-    """The guard runs on the startup path, not just as a callable."""
-    monkeypatch.setenv("DIGIKEY_DATABASE_URL", f"sqlite:///{tmp_path / 'digikey.db'}")
-    monkeypatch.setenv("DIGIKEY_REQUIRE_DURABLE_DB", "1")
+def test_init_db_creates_no_engine_when_the_url_is_unset(monkeypatch) -> None:
+    monkeypatch.delenv("DIGIKEY_DATABASE_URL", raising=False)
 
-    with pytest.raises(RuntimeError, match="ephemeral"):
+    with pytest.raises(RuntimeError, match="not set"):
         db_mod.init_db()
 
     assert db_mod._engine is None
@@ -92,17 +81,32 @@ def test_a_bare_postgres_url_builds_a_psycopg_engine(monkeypatch) -> None:
     from sqlalchemy import create_engine
 
     monkeypatch.setenv("DIGIKEY_DATABASE_URL", "postgresql://dk:pw@127.0.0.1:5/digikey")
-    monkeypatch.setenv("DIGIKEY_REQUIRE_DURABLE_DB", "1")
 
     engine = create_engine(db_mod.database_url())
 
     assert engine.dialect.driver == "psycopg"
-    db_mod.require_durable_store(db_mod.database_url())
 
 
-@pytest.mark.parametrize("flag", ["1", "true", "YES", " on "])
-def test_strict_mode_accepts_common_truthy_spellings(monkeypatch, flag) -> None:
-    monkeypatch.setenv("DIGIKEY_REQUIRE_DURABLE_DB", flag)
+def test_sqlite_is_still_usable_when_asked_for_explicitly(monkeypatch, tmp_path) -> None:
+    """Dev/local deployments keep working — they just have to say so."""
+    monkeypatch.setenv("DIGIKEY_DATABASE_URL", f"sqlite:///{tmp_path / 'digikey.db'}")
 
-    with pytest.raises(RuntimeError, match="ephemeral"):
-        db_mod.require_durable_store("sqlite:////data/digikey.db")
+    db_mod.init_db()
+
+    assert db_mod._engine is not None
+
+
+def test_the_stack_does_not_synthesize_a_sqlite_url() -> None:
+    """Recurrence guard: refusing an unset URL is worthless if the stack sets one.
+
+    ``database_url()`` raises when the variable is empty, so the only way back to
+    #4080 is a substituted default. The Cloudflare stack carried exactly that on
+    two lines; pin that they stay gone.
+    """
+    root = Path(__file__).resolve().parents[2]
+    for rel in (
+        "cloudflare/digithings-stack-cloudflare/src/index.ts",
+        "cloudflare/digithings-stack-cloudflare/container/entrypoint.sh",
+    ):
+        text = (root / rel).read_text(encoding="utf-8")
+        assert "sqlite:////data/digikey.db" not in text, f"{rel} invents an ephemeral store"
