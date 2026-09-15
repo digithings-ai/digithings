@@ -14,13 +14,31 @@ _engine = None
 _session_factory: sessionmaker[Session] | None = None
 
 
+def _normalize_postgres_driver(url: str) -> str:
+    """Route a bare ``postgresql://`` URL to psycopg 3.
+
+    digikey ships ``psycopg[binary]`` (v3) only, while SQLAlchemy's bare
+    ``postgresql://`` dialect defaults to psycopg2 — an operator pasting the URL
+    their provider hands them (Supabase, libpq) would otherwise hit
+    ``No module named 'psycopg2'`` at engine creation (#4080).
+    """
+    scheme, sep, rest = url.partition("://")
+    if sep and scheme.lower() in {"postgres", "postgresql"}:
+        return f"postgresql+psycopg://{rest}"
+    return url
+
+
 def database_url() -> str:
+    """Resolve the key-store URL, failing loud when it is unset.
+
+    There is deliberately no SQLite fallback: the Cloudflare Container's ``/data``
+    is ephemeral, so inventing one silently loses every issued key and the JWT
+    revocation state with it (#4080).
+    """
     url = (os.environ.get("DIGIKEY_DATABASE_URL") or "").strip()
     if not url:
         raise RuntimeError("DIGIKEY_DATABASE_URL is not set")
-    if url.startswith("sqlite"):
-        return url
-    return url
+    return _normalize_postgres_driver(url)
 
 
 def get_engine():

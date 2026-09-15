@@ -636,6 +636,38 @@ def test_query_price_deltas_r2_matches_supabase(monkeypatch):
     assert got == pytest.approx(want)
 
 
+def test_query_price_deltas_drops_a_ticker_with_no_r2_generation(monkeypatch, caplog):
+    """#4136: ``r2_close_rows`` is all-or-nothing on an unknown ticker, but this
+    function documents missing tickers as dropped — one gap must not abort the
+    batch and fail the research graph."""
+    _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    known = query_price_deltas(
+        client=_ExplodingMarketClient(), tickers=tuple(_T7B_TICKERS), run_date=_T7B_RUN_DATE
+    )
+    assert known  # control: the tracked universe resolves from R2
+
+    caplog.set_level("WARNING")
+    got = query_price_deltas(
+        client=_ExplodingMarketClient(),
+        tickers=(*_T7B_TICKERS, "GDX"),
+        run_date=_T7B_RUN_DATE,
+    )
+
+    assert got == pytest.approx(known)
+    assert "GDX" in caplog.text
+
+
+def test_query_price_deltas_all_tickers_unknown_returns_empty(monkeypatch):
+    """Every ticker absent is still "no signal", not a crash."""
+    _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    got = query_price_deltas(
+        client=_ExplodingMarketClient(), tickers=("GDX", "NOPE"), run_date=_T7B_RUN_DATE
+    )
+    assert got == {}
+
+
 def test_query_returns_window_r2_matches_supabase(monkeypatch):
     _, _, sup = _t7b_both(monkeypatch)
     start = _T7B_RUN_DATE - _tdelta_mod(days=30)

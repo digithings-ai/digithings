@@ -77,6 +77,19 @@ def _resolve_r2_as_of(as_of: date | None) -> str:
     return str(_r2_manifest()["as_of"])
 
 
+class UnknownTickerError(LookupError):
+    """No sealed R2 generation for this ticker — absent, not a fault.
+
+    Raised by :func:`r2_close_rows` and friends so a caller that needs the series
+    cannot silently read an empty window. Callers where an absent ticker is a
+    legitimate state (the forecast-outcome reference/maturity lookups) catch this
+    specifically, rather than every ``LookupError`` — a ``KeyError`` from a
+    malformed manifest entry is a real fault and must keep failing loud.
+
+    A ``LookupError`` subclass so existing broad catchers keep working (#4120).
+    """
+
+
 def _r2_generation_window(
     *,
     tickers: list[str] | tuple[str, ...],
@@ -135,14 +148,14 @@ def _r2_generation_window(
                 except Exception as exc:
                     if not is_missing_object_error(exc):
                         raise
-                    raise LookupError(f"unknown ticker {ticker!r}") from None
+                    raise UnknownTickerError(f"unknown ticker {ticker!r}") from None
                 sha: str | None = None
                 for cand in datasets.values():
                     if isinstance(cand, dict) and cand.get("object") == gen_key:
                         sha = cand.get("sha256")
                         break
                 if sha is None:
-                    raise LookupError(f"unknown ticker {ticker!r}")
+                    raise UnknownTickerError(f"unknown ticker {ticker!r}")
                 payload = store.get_generation(gen_key, str(sha))
             frame = pl.read_parquet(io.BytesIO(payload))
             frame = frame.with_columns(pl.col("date").cast(pl.Date)).sort("date")
@@ -171,7 +184,7 @@ def r2_close_rows(
     date — settled generations never hold an unformed bar, so no live fetch is
     needed for lookback math). Mirrors the ``_read_r2_window`` manifest lookup
     (verbatim ticker, then normalized; ``latest`` pointer fallback). Raises
-    ``LookupError`` for an unknown ticker and ``ValueError`` for a non-v1
+    :class:`UnknownTickerError` for an unknown ticker and ``ValueError`` for a non-v1
     manifest — both fail loud, never an empty window. Null closes are passed
     through (callers coerce, mirroring the Supabase ``numeric``-as-string path).
     """
@@ -387,6 +400,7 @@ def get_market_context(
             # first) — no bulk first-seen pass needed on this path.
         else:
             since = (run_date - timedelta(days=price_window_days)).isoformat()
+            # Retired: migration 127 drops price_technicals (#4053) — R2 only above.
             resp = (
                 client.table("price_technicals")
                 .select(",".join(("ticker", *TECHNICAL_COLUMNS)))
@@ -463,6 +477,7 @@ def get_market_breadth(
     rows: list[dict[str, Any]] = []
     start = 0
     while True:
+        # Retired: migration 127 drops price_technicals (#4053) — R2 only above.
         resp = (
             client.table("price_technicals")
             .select("ticker,date,pct_vs_sma50,pct_vs_sma200")
@@ -543,6 +558,7 @@ def get_sector_relative_strength(
     rows: list[dict[str, Any]] = []
     start = 0
     while True:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         resp = (
             client.table("price_history")
             .select("date,ticker,close")
@@ -619,6 +635,7 @@ def get_etf_flows_proxy(
     rows: list[dict[str, Any]] = []
     start = 0
     while True:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         resp = (
             client.table("price_history")
             .select("date,ticker,close,volume")
@@ -762,6 +779,7 @@ def get_return_correlations(
         frame = pairwise_return_correlations(pl.DataFrame(rows))
         return frame if not frame.is_empty() else None
     try:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         resp = (
             client.table("price_history")
             .select("date,ticker,close")

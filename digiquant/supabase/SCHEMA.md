@@ -27,12 +27,7 @@ erDiagram
     theses           ||--o{ positions             : "thesis_id"
 
     documents        ||..o{ thesis_vehicles       : "source_exploration_key"
-    documents        ||..o{ deliberation_rounds   : "deep_dive_document_key"
     documents        ||..o{ analyst_coverage      : "current_recommendation_key"
-    documents        ||..o{ deep_dive_triggers    : "deep_dive_document_key"
-
-    deliberation_sessions ||--o{ deliberation_rounds : "session_id"
-    deliberation_sessions ||--o{ deep_dive_triggers  : "session_id"
 
     price_history        ||--o{ price_technicals : "(date, ticker)"
     price_history_tickers ||..|| price_history   : "view"
@@ -46,6 +41,11 @@ erDiagram
 > Solid lines are FKs; dashed lines are logical pointers (documents.document_key
 > strings — not enforced by FK because `documents` is partitioned and the
 > pointer target may be in any partition).
+
+> `price_history`, `price_technicals`, `price_history_tickers`, and
+> `public_price_latest` were dropped in migration 127 (#4053) — the ERD keeps
+> the pre-drop shape for lineage only. `macro_series_observations` and
+> `trading_calendar` are not dropped.
 
 ## Per-table inventory
 
@@ -61,26 +61,26 @@ erDiagram
 | `nav_history` | PK `(date)` kept; T0 also adds UNIQUE `(workspace_id, date)` | Daily portfolio NAV. |
 | `portfolio_metrics` | `(date)` unique kept; T0 also adds `(workspace_id, date)` | Pre-computed Sharpe, vol, drawdown, exposure metrics. |
 
-> `benchmark_history` was dropped in migration 010 — benchmark close series (SPY / QQQ / IWM …) now live as rows in `price_history`.
+> `benchmark_history` was dropped in migration 010 — benchmark close series (SPY / QQQ / IWM …) were rows in `price_history` (dropped in migration 127, #4053).
 
 ### Market data (migrations 005 / 007 / 015 / 018)
 
 | Table | PK | Purpose |
 |-------|----|---------|
-| `price_history` | `(date, ticker)` | OHLCV history for all watchlist tickers. |
-| `price_technicals` | `(date, ticker)` | 35+ pre-computed TA indicators per (date, ticker). |
-| `macro_series_observations` | `(source, series_id, obs_date)` | FRED / Frankfurter / crypto FNG time series. |
-| `price_history_tickers` | _(view)_ | Distinct tickers currently in `price_history`. |
+| `price_history` | `(date, ticker)` | *(dropped in migration 127, #4053)* — was OHLCV history; readers now use the R2 market data seam. |
+| `price_technicals` | `(date, ticker)` | *(dropped in migration 127, #4053)* — was 35+ pre-computed TA indicators per (date, ticker); R2/live now. |
+| `macro_series_observations` | `(source, series_id, obs_date)` | FRED / Frankfurter / crypto FNG time series. **Not dropped** — fedprob/bitview still write it. |
+| `price_history_tickers` | _(view)_ | *(dropped in migration 127, #4053)* — was the distinct-ticker view; R2 manifests serve the universe now. |
 
-### portfolio deliberation — new in migration 024
+### portfolio deliberation — new in migration 024 (deliberation_* + deep_dive_triggers dropped in migration 128, #4053)
 
 | Table | PK | Purpose |
 |-------|----|---------|
 | `thesis_vehicles` | `(date, thesis_id, ticker)` | Per-thesis vehicle map; FK → `theses (date, thesis_id)`. |
-| `deliberation_sessions` | `(session_id UUID)` | One row per H6 deliberation session; `kind` is legacy (`baseline`, `delta_scoped`, `monthly`) — daily graph uses thesis-first H6 without separate session kinds. |
-| `deliberation_rounds` | `(id BIGSERIAL)` | Round-loop persistence; unique on `(session_id, ticker, round_number)`. |
+| `deliberation_sessions` | `(session_id UUID)` | **Dropped in migration 128 (#4053).** One row per H6 deliberation session; `kind` is legacy (`baseline`, `delta_scoped`, `monthly`) — daily graph uses thesis-first H6 without separate session kinds. |
+| `deliberation_rounds` | `(id BIGSERIAL)` | **Dropped in migration 128 (#4053).** Round-loop persistence; unique on `(session_id, ticker, round_number)`. |
 | `analyst_coverage` | `(date, ticker)` | Daily denormalized analyst ↔ ticker index. |
-| `deep_dive_triggers` | `(id BIGSERIAL)` | Audit trail of every recess- or delta-watch- or manually- forced deep-dive. |
+| `deep_dive_triggers` | `(id BIGSERIAL)` | **Dropped in migration 128 (#4053).** Audit trail of every recess- or delta-watch- or manually- forced deep-dive. |
 
 ### Strategy store — new in migration 046 (#1064)
 
@@ -108,7 +108,7 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
 |------|-----------|---------|
 | `public_portfolio_positions` | `positions` | Latest-date position book, performance columns only. **Excludes** `rationale`, `pm_notes`, `thesis_id`, `conviction`, `stop_loss_pct`, `target_pct_gain`, `horizon_days`. |
 | `public_nav_history` | `nav_history` | Legacy NAV series + cash/invested % + derived `day_return_pct` (rollback target). |
-| `public_price_latest` | `price_history` | Latest daily close per ticker — valuation fallback outside market hours (`prices-live` is live, not dormant, since 2026-07-13). |
+| `public_price_latest` | `price_history` | *(dropped in migration 127, #4053)* — was latest daily close per ticker; browsers read the R2 market API now (intraday `prices-live` edge function unchanged). |
 
 ### Public accounting surface — migration 074 (#2599 / Task 3.4) + 084/085
 
@@ -821,9 +821,12 @@ policy (all `USING (true)` today) as `authenticated_read_public_reference`:
 
 | Group | Tables |
 |-------|--------|
-| Market / reference | `price_history`, `price_technicals`, `trading_calendar`, `fx_economic_calendar`, `macro_series_observations`, `onchain_cohort_positioning`, `strategy_tearsheets` |
-| Research artefacts | `decision_log`, `analyst_coverage`, `thesis_vehicles`, `deep_dive_triggers`, `deliberation_sessions`, `deliberation_rounds`, `architecture_notes` |
-| House projections already anon-public | `portfolio_lots`, `portfolio_trades`, `portfolio_holdings_daily`, `current_book_lookback` |
+| Market / reference | `price_history` (127), `price_technicals` (127), `trading_calendar`, `fx_economic_calendar` (128), `macro_series_observations`, `onchain_cohort_positioning`, `strategy_tearsheets` |
+| Research artefacts | `decision_log`, `analyst_coverage`, `thesis_vehicles`, `deep_dive_triggers` (128), `deliberation_sessions` (128), `deliberation_rounds` (128), `architecture_notes` |
+| House projections already anon-public | `portfolio_lots` (128), `portfolio_trades` (128), `portfolio_holdings_daily` (128), `current_book_lookback` |
+
+`(127)` / `(128)` mark relations later dropped by migration 127 / 128 (#4053); the
+parity rows are kept as the historical record of what 116 mirrored.
 
 Not a widening: the anon key already reads every one of these. Tables that are
 deliberately anon-denied (`atlas_run_diagnostics`, `checkpoint*`,

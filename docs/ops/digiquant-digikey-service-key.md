@@ -74,6 +74,25 @@ Do **not** use `--kind dev_global` in production: `dev_global` keys carry
 wildcard scopes and require `DIGIKEY_ALLOW_DEV_GLOBAL=1` (local development
 only).
 
+## The key store must be durable (#4080)
+
+The mint above writes into whatever `DIGIKEY_DATABASE_URL` the deployed digikey
+is using. It is required, so that can no longer silently be an ephemeral store —
+but the failure is worth recognising, because it does not look like a storage
+fault. When the key store was the old SQLite default it lived on the Cloudflare
+Container's ephemeral `/data` disk, and a deploy that replaced the instance wiped
+it. The next run then 401s at `/v1/oauth/token` (`ServiceAuthError: digikey
+exchange failed`) even though the secret is unchanged and freshly minted keys
+still work. That was 2026-09-15 (run 34999170506) — the key was fine, its storage
+was not.
+
+Point digikey at durable Postgres (see the
+[stack README](../../cloudflare/digithings-stack-cloudflare/README.md)), then
+**re-mint in the same change**: switching databases does not migrate keys out of
+the old SQLite store, so the previous secret stops resolving. The URL is
+required: digikey refuses to start without it rather than falling back to the
+Container's ephemeral `/data` (#4080).
+
 ## Rotation
 
 1. Mint a new key with the same command and label (e.g. suffix the label with
@@ -89,6 +108,6 @@ only).
 
 Only `pipeline-digiquant.yml` runs the grounding code path (the research graph
 and beliefs distillation inside `digiquant.portfolio.chain`). The deterministic
-pipelines — `pipeline-digiquant-backfill.yml`, `pipeline-digiquant-prices.yml`,
+pipelines — `pipeline-digiquant-prices.yml`,
 `pipeline-research-metrics.yml` — never call `get_service_jwt()` and do not
 need these variables.

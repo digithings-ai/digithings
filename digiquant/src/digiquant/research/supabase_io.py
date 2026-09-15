@@ -899,6 +899,7 @@ def query_price_technicals_freshness(
         return r2_manifest_seal()
     from datetime import timedelta
 
+    # Retired: migration 127 drops price_technicals (#4053) — R2 seal above.
     latest_resp = (
         client.table("price_technicals").select("date").order("date", desc=True).limit(1).execute()
     )
@@ -964,18 +965,35 @@ def query_price_deltas(
 
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
     if r2_backend_enabled():
-        from digiquant.research.data.queries import r2_close_rows
+        from digiquant.research.data.queries import UnknownTickerError, r2_close_rows
 
         # Strictly-before-run_date mirrors the Supabase ``.lt("date", run_date)``
         # (the seam's ``until`` is inclusive).
-        rows: list[PriceHistoryRow] = list(
-            r2_close_rows(
-                tickers=list(tickers),
-                since=floor,
-                until=run_date - timedelta(days=1),
+        until = run_date - timedelta(days=1)
+        try:
+            rows: list[PriceHistoryRow] = list(
+                r2_close_rows(tickers=list(tickers), since=floor, until=until)
             )
-        )
+        except UnknownTickerError:
+            # ``r2_close_rows`` is all-or-nothing: one ticker without a sealed
+            # generation aborts the whole batch, but this function's contract is
+            # to drop missing tickers and let a missing key read as "no signal".
+            # Re-ask per ticker so one coverage gap cannot fail the research
+            # graph, and name what was dropped so the gap stays visible (#4136).
+            rows = []
+            dropped: list[str] = []
+            for ticker in tickers:
+                try:
+                    rows.extend(r2_close_rows(tickers=[ticker], since=floor, until=until))
+                except UnknownTickerError:
+                    dropped.append(ticker)
+            if dropped:
+                logger.warning(
+                    "price deltas: no sealed R2 generation for %s; treating as no signal",
+                    ", ".join(sorted(dropped)),
+                )
     else:
+        # Retired: migration 127 drops price_history (#4053) — R2 rows above.
         ordered = sorted(tickers)
         batch = _price_delta_ticker_batch(lookback_days)
         rows = []
@@ -1136,7 +1154,7 @@ def query_returns_window(
             until=_parse_date(end_floor) - timedelta(days=1),
         )
     else:
-
+        # Retired: migration 127 drops price_history (#4053) — R2 rows above.
         def _fetch_window() -> list[dict[str, Any]]:
             window_resp = (
                 client.table("price_history")

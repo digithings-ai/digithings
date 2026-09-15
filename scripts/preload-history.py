@@ -2,6 +2,9 @@
 """
 Price history cache pre-loader.
 
+Retired as a Supabase writer: migration 127 drops ``price_history`` (#4053).
+The local Parquet cache path still works; ``--supabase`` cannot write.
+
 Downloads historical OHLCV data from Yahoo Finance, writes to a local Parquet
 cache (data/price-history/), and optionally upserts to a Supabase
 ``price_history`` table.

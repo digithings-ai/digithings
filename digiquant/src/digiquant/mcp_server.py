@@ -39,19 +39,6 @@ def _ttl_get(key: tuple) -> str | None:
     return None
 
 
-def _supabase_technicals(ticker: str, lookback: int) -> str:
-    """Current Supabase body, extracted unchanged (non-R2 path)."""
-    from digiquant.research.data.queries import get_price_technicals
-    from digiquant.research.supabase_io import SupabaseConfig, build_client
-
-    try:
-        client = build_client(SupabaseConfig.from_env())
-        result = get_price_technicals(client=client, ticker=ticker, lookback=lookback)
-    except Exception as exc:  # surface as JSON to the caller, never crash
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-    return json.dumps(result, default=str)
-
-
 def _supabase_macro(series_ids: list[str], lookback: int) -> str:
     """Current Supabase body, extracted unchanged (non-R2 path)."""
     from digiquant.research.data.queries import get_macro_series
@@ -386,9 +373,12 @@ def _read_r2_macro_window(
 def digiquant_get_price_technicals(
     ticker: str, lookback: int = 20, as_of: str | None = None
 ) -> str:
-    """Technicals for *ticker*, Supabase-backed by default or R2-backed with the flag.
+    """Technicals for *ticker* from the versioned R2 history (only path, #4053).
 
-    The R2 envelope is ``{"as_of", "rows", "stale"}``: ``stale`` is true when
+    The Supabase ``price_technicals`` body was retired with the table (migration
+    127); the flag no longer selects a backend here.
+
+    The envelope is ``{"as_of", "rows", "stale"}``: ``stale`` is true when
     the manifest seal is >5 trading days behind ``as_of`` (Task 6 gate) or the
     live overlap carried a per-ticker fetch error entry (history-only serve).
 
@@ -401,10 +391,6 @@ def digiquant_get_price_technicals(
     """
     try:
         lookback = min(int(lookback), 500)
-        from digiquant.research.data.queries import r2_backend_enabled
-
-        if not r2_backend_enabled():
-            return _supabase_technicals(ticker, lookback)
         manifest = _read_manifest()
         if manifest["version"] != 1:
             return json.dumps({"error": f"unsupported manifest version {manifest['version']}"})
@@ -765,10 +751,10 @@ def create_mcp_server(
     ) -> str:
         """Latest technical indicators + recent daily window for a ticker (JSON).
 
-        Reads the maintained ``price_technicals`` table in Supabase. Returns
-        ``{"error": ...}`` if the data layer is unavailable.
-        With ``DIGIQUANT_MARKET_DATA_BACKEND=r2``, reads the versioned R2
-        history sealed at ``as_of`` (default: manifest seal) instead.
+        Reads the versioned R2 history sealed at ``as_of`` (default: manifest
+        seal); the Supabase ``price_technicals`` table is dropped in migration
+        127 and is no longer read. Returns ``{"error": ...}`` if the data layer
+        is unavailable.
         """
         return digiquant_get_price_technicals(ticker, lookback=lookback, as_of=as_of)
 

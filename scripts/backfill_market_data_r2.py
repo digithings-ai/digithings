@@ -1,5 +1,9 @@
 """One-time backfill: Supabase market tables -> versioned R2 generations (#3780).
 
+Spent: migration 127 drops its Supabase source tables (#4053), so this script
+can only run against a pre-drop snapshot now. Rollback after 127 is
+restore-from-generation + replay, not a re-run of this backfill.
+
 Reads via direct-PG ONLY (never PostgREST: every statement runs under the
 authenticator role's 8s ``statement_timeout``), paginated by (ticker, date).
 Resume-safe: generations already recorded in the manifest are skipped; every

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
+import time
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -420,6 +422,39 @@ def _run_beliefs_fold(state: ResearchState, deps: ChainDeps, research_input: Res
         _record_chain_error(state, "beliefs", exc)
 
 
+def _configure_cli_logging() -> None:
+    """Make INFO progress lines visible in a plain CI log without touching library defaults.
+
+    The chain used to emit nothing below WARNING because no handler was installed: Python's
+    last-resort handler prints WARNING+ with no timestamp, so a multi-hour run was silent in
+    ``artifacts/run.log`` until it failed (#4116). Library imports must not configure logging;
+    the entry point does. ``DIGIQUANT_LOG_LEVEL`` overrides the INFO default.
+    """
+    level = getattr(logging, os.environ.get("DIGIQUANT_LOG_LEVEL", "INFO").upper(), logging.INFO)
+    root = logging.getLogger()
+    if not root.handlers:
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s %(levelname)s %(message)s",
+            datefmt="%H:%M:%S",
+            stream=sys.stdout,
+        )
+        return
+    root.setLevel(level)
+
+
+def _stage_start(step: int, total: int, name: str) -> float:
+    _logger.info("chain: [%d/%d] %s start", step, total, name)
+    return time.monotonic()
+
+
+def _stage_done(step: int, total: int, name: str, started: float, note: str = "") -> None:
+    suffix = f" ({note})" if note else ""
+    _logger.info(
+        "chain: [%d/%d] %s%s done in %.1fs", step, total, name, suffix, time.monotonic() - started
+    )
+
+
 def run_research_then_portfolio(
     *,
     research_input: ResearchInput,
@@ -477,7 +512,9 @@ def run_research_then_portfolio(
     if manage_usage:
         _usage.start(run_id=deps.diagnostics.run_id if deps.diagnostics is not None else None)
     try:
+        preflight_started = _stage_start(1, 5, "preflight")
         pinned = _preflight_config(deps)
+        _stage_done(1, 5, "preflight", preflight_started)
         if pinned is not None:
             # Preserve the already-pinned knowledge_cutoff_at. Overlay identity
             # must be on last-good state before fail-soft graph invoke; a raising
@@ -485,7 +522,9 @@ def run_research_then_portfolio(
             state = state.model_copy(update={"config": pinned})
         # Operator escape hatch: beliefs-only run (no research/portfolio research).
         if research_input.refresh_scope == "beliefs":
+            beliefs_only_started = _stage_start(5, 5, "beliefs")
             _run_beliefs_fold(state, deps, research_input)
+            _stage_done(5, 5, "beliefs", beliefs_only_started, note="beliefs-only")
             return state
 
         # Workspace PipelineSchedule gates (#3618) — one graph, skip disabled stages.
@@ -502,6 +541,7 @@ def run_research_then_portfolio(
         research_enabled = stage_report.research.status != "disabled"
         deliberation_enabled = stage_report.deliberation.status != "disabled"
 
+        research_started = _stage_start(2, 5, "research")
         if research_enabled:
             # research: research only, no publish.
             research_deps = ResearchGraphDeps(
@@ -577,10 +617,13 @@ def run_research_then_portfolio(
         # produced no fresh research — otherwise the PM commits decisions on stale prior
         # context. Exception: research schedule-disabled still allows deliberation when
         # enabled (preflight loaded priors; policy skip ≠ research crash).
+        _stage_done(2, 5, "research", research_started, note="" if research_enabled else "disabled")
+
         research_ok_for_portfolio = (
             stage_report.research.status == "disabled" or _diagnostics.research_produced(state)
         )
 
+        portfolio_started = _stage_start(3, 5, "portfolio")
         if deliberation_enabled and research_ok_for_portfolio:
             portfolio_graph = build_portfolio_graph(
                 watchlist=list(
@@ -648,13 +691,25 @@ def run_research_then_portfolio(
                 reason="research_insufficient",
             )
 
+        _stage_done(
+            3,
+            5,
+            "portfolio",
+            portfolio_started,
+            note="" if (deliberation_enabled and research_ok_for_portfolio) else "skipped",
+        )
+
         state = _persist_stage_report(state, stage_report)
 
         # Terminal phase — research artifacts only; portfolio terminal is H9 in-graph.
+        publish_started = _stage_start(4, 5, "publish")
         state = _run_terminal_phase(deps.publish, build_publish_phase, state, "publish")
+        _stage_done(4, 5, "publish", publish_started)
 
         # Daily short fold (WP-I) — always publishes a same-date beliefs document.
+        beliefs_started = _stage_start(5, 5, "beliefs")
         _run_beliefs_fold(state, deps, research_input)
+        _stage_done(5, 5, "beliefs", beliefs_started)
         return state
     except BaseException as exc:
         # Last-resort recorder (#1733/#1763). The diagnostics row is written by the ``finally``
@@ -828,6 +883,7 @@ def cli_main(argv: list[str] | None = None) -> int:
     from digigraph.model_config import apply_digiquant_house_env
 
     apply_digiquant_house_env()
+    _configure_cli_logging()
 
     # Re-use research's CLI helpers — they already handle --auto-baseline,
     # watchlist parsing, summary formatting.

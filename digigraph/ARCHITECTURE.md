@@ -207,6 +207,12 @@ calls carry its identity and each execution emits exactly one terminal `NodeRunR
 node-name registry: identity is `NodeSpec.name` plus the per-`Send` cursor, and nothing parses a
 ticker out of `phase` or `phase_slug`.
 
+Every node execution also narrates itself at INFO — one line on entry and one on exit carrying the
+phase position, the node name (and, for fan-out phases, the per-`Send` key), while a phase barrier
+reports the phase's wall time (single-node phases have no barrier; #4116). A book run takes hours,
+so this is what makes it watchable in a plain CI log; the narration never logs above INFO, leaving
+WARNING+ meaning trouble.
+
 The wrapper is `functools.wraps` + `*args/**kwargs`, and the form is load-bearing. LangGraph decides
 what to inject from `inspect.signature(func).parameters`, matched on parameter name *and*
 annotation, and `inspect.signature` follows `__wrapped__`. A `(state)`-only wrapper — with or
@@ -931,7 +937,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 
 - **Manifest:** `POST /v1/orchestrator_tools` — returns OpenAI tool dicts for `digisearch`, `digisearch_fetch_all`, `digisearch_research_delegate` (federated mode). Cached per `(base_url, index_config)`.
 - **Invoke:** `POST /v1/orchestrator_invoke` — dispatches tool execution. Accepts `{tool, arguments, default_index_name}`.
-- **web_search (built-in, #3853; tool-only #3859):** `orchestration/web_search_tools.py` owns the `web_search` tool dict (External evidence tier) and `_handle_web_search` calls the hub `web_search` tool (`invoke_digisearch_tool`, never `import digisearch`). There is no synthesis fallback: when the service errors or yields no rows, callers fail hard. The tool requires `enable_web_search`, which digichat forwards when the tenant allows and the user pref is on — user pref tenant-gated default-on (#3859; tenant gate still opt-in #3420), so web never mixes into corpus RAG silently.
+- **web_search (built-in, #3853; tool-only #3859):** `orchestration/web_search_tools.py` owns the `web_search` tool dict (External evidence tier) and `_handle_web_search` calls the hub `web_search` tool (`invoke_digisearch_tool`, never `import digisearch`). There is no synthesis fallback: a genuinely empty result set yields `{}`, while a hub failure (rate limit, auth rejection, open circuit, malformed envelope) raises `DigisearchHubError` carrying the hub's own error text — so a hosted-digisearch 429 can never surface as "returned no rows" (#4106). Callers fail hard either way. The tool requires `enable_web_search`, which digichat forwards when the tenant allows and the user pref is on — user pref tenant-gated default-on (#3859; tenant gate still opt-in #3420), so web never mixes into corpus RAG silently.
 - **Legacy:** `tools/digisearch.py` uses `POST /query` for non-orchestrator call sites (e.g. `_run_quant_or_augmented_path` in `research.py`).
 - **Auth:** Bearer token from `WorkflowState.digi_bearer` is forwarded via `Authorization: Bearer` header.
 - **Request correlation:** `X-Request-ID` forwarded from `ToolContext.request_id`.

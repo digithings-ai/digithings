@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -28,11 +26,16 @@ def client(monkeypatch, tmp_path):
     fake = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(blocklist, "_get_client", lambda: fake)
 
-    # Build public JWKS/PEM so jwt_verify has a key (for subsequent middleware tests)
+    # Build public JWKS/PEM so jwt_verify has a key (for subsequent middleware tests).
+    # Via monkeypatch, never a bare os.environ[] write: load_or_create_signing_key()
+    # mints a fresh keypair, so a direct write permanently replaces the session
+    # keypair tests/conftest.py installed. Any later suite that authenticates with a
+    # session-minted token (tests/contracts, tests/dv) then fails signature
+    # verification with a 401 instead of reaching its own assertion (#4125).
     from digikey.crypto_keys import load_or_create_signing_key, public_key_to_pem
 
     priv, _kid = load_or_create_signing_key()
-    os.environ["DIGIKEY_PUBLIC_KEY_PEM"] = public_key_to_pem(priv.public_key())
+    monkeypatch.setenv("DIGIKEY_PUBLIC_KEY_PEM", public_key_to_pem(priv.public_key()))
 
     from digikey.server import app
 
@@ -134,3 +137,28 @@ def test_revoke_is_idempotent(client: TestClient):
     # Second revoke is a no-op from a security standpoint — the jtis remain
     # in the blocklist; the count reflects live DB rows (safe to re-push).
     assert second.json()["revoked"] is True
+
+
+@pytest.mark.unit
+def test_module_does_not_replace_the_session_keypair(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A session-minted token still verifies after this module ran (#4125).
+
+    Deliberately requests no ``client`` fixture and sits last in the file, so it
+    observes what the tests above left behind. ``client`` mints a fresh keypair and
+    publishes its public half, so if that publish ever goes back to a bare
+    ``os.environ[]`` write the session keypair from ``tests/conftest.py`` is gone and
+    this verification fails — which is precisely the 401 ``tests/contracts`` and
+    ``tests/dv`` hit when they ran after this module.
+
+    This is a module-local canary, not a suite-wide guard: it only sees leaks from the
+    tests above it in this file, and running it alone (``-k``) skips them entirely.
+    ``DIGIKEY_JWKS_URL`` is cleared so ``decode_token`` takes its PEM branch, which is
+    the branch this module's clobbering write actually affected.
+    """
+    from digikey.jwt_verify import decode_token
+
+    from tests.digi_test_jwt import mint_test_jwt
+
+    monkeypatch.delenv("DIGIKEY_JWKS_URL", raising=False)
+    claims = decode_token(mint_test_jwt())
+    assert claims.sub == "pytest-sub"

@@ -63,8 +63,10 @@ export class DigiStackContainer extends Container {
     DIGIKEY_BFF_TOKEN: env.DIGIKEY_BFF_TOKEN ?? "",
     DIGIKEY_PRIVATE_KEY_PEM: env.DIGIKEY_PRIVATE_KEY_PEM ?? "",
     DIGIKEY_ADMIN_TOKEN: env.DIGIKEY_ADMIN_TOKEN ?? "",
-    DIGIKEY_DATABASE_URL:
-      env.DIGIKEY_DATABASE_URL ?? "sqlite:////data/digikey.db",
+    // No SQLite fallback: the Container's /data is ephemeral, so a synthesized
+    // default would silently lose every issued key. Unset means digikey refuses
+    // to start (#4080).
+    DIGIKEY_DATABASE_URL: env.DIGIKEY_DATABASE_URL ?? "",
     DIGIKEY_JWKS_URL: "http://127.0.0.1:8005/.well-known/jwks.json",
     DIGIVAULT_URL: env.DIGIVAULT_URL ?? "http://127.0.0.1:8004",
     DIGISEARCH_URL: env.DIGISEARCH_URL ?? "http://127.0.0.1:8002",
@@ -289,8 +291,9 @@ export default {
 
     // Read-only R2 market data (#4013 Task 8): public JSON for browser surfaces
     // (decision D1), served by the Worker itself — not proxied to the container.
-    // Public read-only is at parity with Supabase's anon-readable price_history;
-    // no writes, no auth, CORS limited to MARKET_DATA_ALLOWED_ORIGINS.
+    // Replaces the retired anon-readable Supabase market tables/views (dropped
+    // in migration 127, #4053); no writes, no auth, CORS limited to
+    // MARKET_DATA_ALLOWED_ORIGINS.
     if (url.pathname === "/v1/market/tickers" || url.pathname === "/v1/market/closes") {
       return handleMarketData(request, workerEnv, url);
     }

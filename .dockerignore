@@ -20,6 +20,9 @@ scripts
 # Dockerfile.digithings-stack-cloudflare (Cloudflare Containers, root context)
 # needs this one file; re-include it without un-ignoring the rest of scripts/.
 !scripts/merge_litellm_cheaperinference.py
+# Zammad MCP server (scripts/zammad_mcp/Dockerfile.mcp) also builds from the
+# root context; re-include just that package.
+!scripts/zammad_mcp
 agents
 cloudflare/digithings
 cloudflare/digiquant
