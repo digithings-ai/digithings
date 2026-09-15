@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 
 import pytest
 from digiquant.research.data.tools import DATA_TOOLS, build_data_tool_dispatcher
 
 from tests.dq.research.data.test_queries import _FakeClient
+
+# Registers Task 1's `r2_market` builder fixture for this module; pytest requires
+# plugin modules to be named here rather than imported (an imported fixture would
+# collide with the fixture-name parameters below under ruff F811).
+pytest_plugins = ["tests.fixtures.r2_market"]
 
 
 @pytest.mark.unit
@@ -65,25 +71,43 @@ def test_dispatcher_routes_and_returns_json_string():
 
 
 @pytest.mark.unit
-def test_dispatcher_routes_get_price_technicals():
+def test_dispatcher_routes_get_price_technicals(r2_market):
     """The in-process price-technicals tool is dispatched, not rejected (#3972).
 
     The research/portfolio skills execute against DATA_TOOLS, so pointing them
     at the MCP-only `digiquant_get_price_technicals` produced
-    ``Error: unknown tool``. This pins the unprefixed in-process name.
+    ``Error: unknown tool``. This pins the unprefixed in-process name. The rows
+    come from the sealed R2 generation (#4053) — no Supabase market body.
     """
-    client = _FakeClient(
+    r2_market(
         {
-            "price_technicals": [
-                {"ticker": "SPY", "date": "2026-06-08", "rsi_14": 55.0, "sma_50": 1.0},
-                {"ticker": "SPY", "date": "2026-06-05", "rsi_14": 54.0, "sma_50": 1.0},
+            "SPY": [
+                {
+                    "date": "2026-06-05",
+                    "open": 99.0,
+                    "high": 101.0,
+                    "low": 98.0,
+                    "close": 100.0,
+                    "volume": 1000,
+                },
+                {
+                    "date": "2026-06-08",
+                    "open": 100.0,
+                    "high": 102.0,
+                    "low": 99.0,
+                    "close": 101.0,
+                    "volume": 1100,
+                },
             ]
-        }
+        },
+        as_of="2026-06-08",
     )
-    dispatch = build_data_tool_dispatcher(client)
+    # run_date == the seal keeps the R2 read sealed (an as_of past the seal would
+    # trigger the live overlap fetch).
+    dispatch = build_data_tool_dispatcher(_FakeClient({}), run_date=date(2026, 6, 8))
     out = json.loads(dispatch("get_price_technicals", {"ticker": "SPY", "lookback": 2}))
     assert out["ticker"] == "SPY"
-    assert out["latest"]["rsi_14"] == 55.0
+    assert [row["date"] for row in out["window"]] == ["2026-06-08", "2026-06-05"]
     assert len(out["window"]) == 2
 
 
@@ -121,8 +145,6 @@ def test_query_data_table_none_returns_actionable_error():
 @pytest.mark.unit
 def test_dispatcher_macro_series_anchored_to_run_date():
     """The dispatcher threads its run_date as as_of (look-ahead-safe backfills)."""
-    from datetime import date
-
     client = _FakeClient(
         {
             "macro_series_observations": [

@@ -2514,6 +2514,9 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   skip the tool call on the fresh-data hot path (grounded-by-ingest skip).
   Tool-only with an unconditional abort: a requested search must succeed or raise
   `DashboardWebSearchError` — the run aborts rather than reasoning ungrounded.
+  A scoped search that returns zero rows retries once without `include_domains`
+  (logged; `relaxed_domains: true` on the tool result) before failing (#4086),
+  because the hosted `ddgs` provider can only post-filter, not bias, by domain.
   There is no synthesis fallback and no fail-soft flag.
 
 ### portfolio (thesis-aware portfolio loop)

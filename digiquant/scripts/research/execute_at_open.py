@@ -36,7 +36,6 @@ from digiquant.dashboard.tenancy import house_workspace_id  # noqa: E402
 from digiquant.portfolio.models.portfolio_ledger import OrderRejectionReason  # noqa: E402
 from digiquant.portfolio.models.position_event import PositionEventKind  # noqa: E402
 from digiquant.research.data.queries import (  # noqa: E402
-    r2_backend_enabled,
     r2_manifest_seal,
     r2_ohlcv_rows,
 )
@@ -236,25 +235,29 @@ def _parse_pct(value: Any) -> Optional[float]:
 
 def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
     day = str(d)[:10]
-    if r2_backend_enabled():
-        seal, _ = r2_manifest_seal()
-        if day <= seal.isoformat():
-            try:
-                rows = r2_ohlcv_rows(tickers=[ticker], since=day, until=day)
-            except LookupError:
-                return None
-            if not rows or rows[0].get("open") is None:
-                return None
-            try:
-                price = float(rows[0]["open"])
-            except (TypeError, ValueError):
-                return None
-            return price if math.isfinite(price) and price > 0 else None
-    # Same-day (unsealed) opens have no sealed R2 bar yet — fetch live (#4053).
+    seal, _ = r2_manifest_seal()
+    if day <= seal.isoformat():
+        try:
+            rows = r2_ohlcv_rows(tickers=[ticker], since=day, until=day)
+        except LookupError:
+            return None
+        if not rows or rows[0].get("open") is None:
+            return None
+        try:
+            price = float(rows[0]["open"])
+        except (TypeError, ValueError):
+            return None
+        return price if math.isfinite(price) and price > 0 else None
+    # Same-day (unsealed) opens have no sealed R2 bar yet — fetch live (#4053 D1).
     # Never raises into the morning job: a failed fetch is None (data_unavailable).
     try:
         from digiquant.data.prices.live_opens import fetch_live_open
-    except Exception:
+    except Exception as exc:
+        # A broken/missing seam must not degrade to silent data_unavailable — name it (#4053).
+        print(
+            f"⚠️  live-open seam unavailable ({exc}) — no same-day open for {ticker}",
+            file=sys.stderr,
+        )
         return None
     try:
         return fetch_live_open(ticker, day)
@@ -489,7 +492,7 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
     through binary floating point. Every other path in this file returns floats because
     `position_events` is a display table; this one feeds the record of what was bought.
 
-    Sealed dates read the R2 generation; same-day opens come from a live fetch —
+    Sealed dates read the R2 generation; same-day opens come from the live fetch —
     no sealed R2 bar exists yet (#4053). The R2 seam fetches one generation per
     ticker and raises ``LookupError`` for an unknown one, so that branch loops per
     ticker and skips only the unknown symbol's mark instead of declining every
@@ -497,42 +500,47 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
     """
     if not tickers:
         return {}
-    if r2_backend_enabled():
-        seal, _ = r2_manifest_seal()
-        if str(d)[:10] <= seal.isoformat():
-            rows: List[dict] = []
-            for ticker in sorted(set(tickers)):
-                try:
-                    rows.extend(
-                        r2_ohlcv_rows(tickers=[ticker], since=str(d)[:10], until=str(d)[:10])
-                    )
-                except LookupError:
-                    continue
-            marks: Dict[str, Decimal] = {}
-            for row in rows:
-                ticker = row.get("ticker")
-                raw = row.get("open")
-                if not ticker or raw is None:
-                    continue
-                try:
-                    price = Decimal(str(raw))
-                except (TypeError, ValueError, InvalidOperation):
-                    continue
-                # Stricter than the Supabase twin: non-finite marks would break PaperExecution.
-                if price.is_finite() and price > 0:
-                    marks[str(ticker).upper()] = price
-            return marks
-    # Same-day (unsealed) opens have no sealed R2 bar yet — fetch live (#4053).
+    seal, _ = r2_manifest_seal()
+    if str(d)[:10] <= seal.isoformat():
+        rows: List[dict] = []
+        for ticker in sorted(set(tickers)):
+            try:
+                rows.extend(
+                    r2_ohlcv_rows(tickers=[ticker], since=str(d)[:10], until=str(d)[:10])
+                )
+            except LookupError:
+                continue
+        marks: Dict[str, Decimal] = {}
+        for row in rows:
+            ticker = row.get("ticker")
+            raw = row.get("open")
+            if not ticker or raw is None:
+                continue
+            try:
+                price = Decimal(str(raw))
+            except (TypeError, ValueError, InvalidOperation):
+                continue
+            # Stricter than the retired Supabase twin: non-finite marks would break
+            # PaperExecution.
+            if price.is_finite() and price > 0:
+                marks[str(ticker).upper()] = price
+        return marks
+    # Same-day (unsealed) opens have no sealed R2 bar yet — fetch live (#4053 D1).
     # Failures skip per symbol (data_unavailable); never raise into the morning job.
     try:
         from digiquant.data.prices.live_opens import fetch_live_opens
-    except Exception:
+    except Exception as exc:
+        # A broken/missing seam must not degrade to silent data_unavailable — name it (#4053).
+        print(
+            f"⚠️  live-open seam unavailable ({exc}) — same-day marks unavailable",
+            file=sys.stderr,
+        )
         return {}
     try:
         live = fetch_live_opens(list(tickers), str(d)[:10])
     except Exception:
         return {}
-    marks: Dict[str, Decimal] = {}
+    marks = {}
     for ticker, raw in live.items():
         if not ticker or raw is None:
             continue
@@ -540,15 +548,15 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
             price = Decimal(str(raw))
         except (TypeError, ValueError, InvalidOperation):
             continue
-        # `is_finite()` first, and not merely for tidiness. `price_history.open` is a bare
-        # `numeric` with no CHECK, and Postgres `numeric` stores `NaN` and `Infinity`, both
-        # of which `Decimal(str(raw))` parses happily. `Decimal("NaN") > 0` *raises*
-        # `InvalidOperation`, and this call sits outside the decline contract — so a single
-        # poisoned row would take down the morning job rather than skipping one symbol.
-        # `Decimal("Infinity") > 0` is worse for being quiet here: it clears the gate,
-        # becomes a mark, and dies later inside `PaperExecution`, whose `PositivePrice` sets
-        # `allow_inf_nan=False`. Neither is a declared price, so both take the same exit as
-        # a null: absent from `marks`, and `data_unavailable` on the ledger.
+        # `is_finite()` first, and not merely for tidiness. A live/yfinance open is a
+        # bare float that can be NaN/inf; `Decimal("NaN") > 0` *raises*
+        # `InvalidOperation`, and this call sits outside the decline contract — so a
+        # single poisoned value would take down the morning job rather than skipping
+        # one symbol. `Decimal("Infinity") > 0` is worse for being quiet here: it
+        # clears the gate, becomes a mark, and dies later inside `PaperExecution`,
+        # whose `PositivePrice` sets `allow_inf_nan=False`. Neither is a declared
+        # price, so both take the same exit as a null: absent from `marks`, and
+        # `data_unavailable` on the ledger.
         if price.is_finite() and price > 0:
             marks[str(ticker).upper()] = price
     return marks
@@ -1014,12 +1022,12 @@ def _record_ledger_events(sb, d: str, rebalance_d: str, ledger_events: List[Dict
         sb.table("position_events").upsert(e, on_conflict="workspace_id,date,ticker").execute()
 
     # No null-price hint here on purpose: a ledger row's price *is* the fill price, so it
-    # cannot be missing. Only the HOLD rows read price_history, hence the narrower count.
+    # cannot be missing. Only the HOLD rows need an execution-day open, hence the narrower count.
     null_px = sum(1 for e in holds if e.get("price") is None)
     if null_px:
         print(
-            f"⚠️  {null_px} HOLD event(s) have null price (no price_history.open for {d} yet). "
-            f"After opens sync: python3 scripts/backfill_execution_prices.py --date {d}"
+            f"⚠️  {null_px} HOLD event(s) have null price (no execution-day open for {d} yet). "
+            f"After the R2 seal: python3 scripts/backfill_execution_prices.py --date {d}"
         )
     print(
         f"✅ recorded {len(ledger_events)} authoritative fill event(s) from the portfolio "
@@ -1031,7 +1039,7 @@ def _record_ledger_events(sb, d: str, rebalance_d: str, ledger_events: List[Dict
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Record market-open execution events into position_events (OPEN/EXIT/TRIM/ADD/HOLD). "
-        "Execution prices use price_history.open for --date (execution day). "
+        "Execution prices use the execution-day open (sealed R2 generation, else live fetch). "
         "HOLD rows keep the ledger continuous on no-trade days."
     )
     ap.add_argument(
@@ -1180,8 +1188,8 @@ def main() -> int:
                 null_px = sum(1 for e in digest_events if e.get("price") is None)
                 if null_px:
                     print(
-                        f"⚠️  {null_px} event(s) have null price (no price_history.open for {d} yet). "
-                        f"After opens sync: python3 scripts/backfill_execution_prices.py --date {d}"
+                        f"⚠️  {null_px} event(s) have null price (no execution-day open for {d} yet). "
+                        f"After the R2 seal: python3 scripts/backfill_execution_prices.py --date {d}"
                     )
                 trade_n = sum(1 for e in digest_events if e.get("event") != "HOLD")
                 hold_n = len(digest_events) - trade_n
@@ -1205,8 +1213,8 @@ def main() -> int:
         null_px = sum(1 for e in extra if e.get("price") is None)
         if null_px:
             print(
-                f"⚠️  {null_px} event(s) have null price (no price_history.open for {d} yet). "
-                f"After opens sync: python3 scripts/backfill_execution_prices.py --date {d}"
+                f"⚠️  {null_px} event(s) have null price (no execution-day open for {d} yet). "
+                f"After the R2 seal: python3 scripts/backfill_execution_prices.py --date {d}"
             )
         print(f"✅ recorded {len(extra)} HOLD event(s) from positions snapshot only for {d}")
         return 0
@@ -1230,8 +1238,8 @@ def main() -> int:
         null_px = sum(1 for e in extra if e.get("price") is None)
         if null_px:
             print(
-                f"⚠️  {null_px} event(s) have null price (no price_history.open for {d} yet). "
-                f"After opens sync: python3 scripts/backfill_execution_prices.py --date {d}"
+                f"⚠️  {null_px} event(s) have null price (no execution-day open for {d} yet). "
+                f"After the R2 seal: python3 scripts/backfill_execution_prices.py --date {d}"
             )
         print(f"✅ recorded {len(extra)} HOLD event(s) from positions snapshot only for {d}")
         return 0
@@ -1328,8 +1336,8 @@ def main() -> int:
     null_px = sum(1 for e in events if e.get("price") is None)
     if null_px:
         print(
-            f"⚠️  {null_px} event(s) have null price (no price_history.open for {d} yet). "
-            f"After opens sync: python3 scripts/backfill_execution_prices.py --date {d}"
+            f"⚠️  {null_px} event(s) have null price (no execution-day open for {d} yet). "
+            f"After the R2 seal: python3 scripts/backfill_execution_prices.py --date {d}"
         )
 
     hold_n = sum(1 for e in events if e.get("event") == "HOLD")

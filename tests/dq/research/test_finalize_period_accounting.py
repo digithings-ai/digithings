@@ -44,6 +44,20 @@ from tests.dq.research.test_supabase_io import FakeSupabaseClient, _FakeQuery, _
 
 pytestmark = pytest.mark.unit
 
+
+@pytest.fixture(autouse=True)
+def _empty_r2_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    """R2 is the only boundary-mark source (#4053): default to an empty sealed store.
+
+    Without this, reading a mark raises on a machine with R2 credentials in
+    ``.env`` it would silently reach the network instead. A test that needs
+    marks arms its own store.
+    """
+    from tests.fixtures.r2_market import MemoryR2
+
+    monkeypatch.setattr("digiquant.mcp_server._get_r2_store", lambda: MemoryR2())
+
+
 PERIOD = date(2026, 8, 25)
 POLICY = AccountingPolicy(policy_version_id="accounting-v1")
 EFFECTIVE = datetime(2026, 8, 25, 22, 0, tzinfo=UTC)
