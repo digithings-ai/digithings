@@ -164,6 +164,13 @@ DEFAULT_CACHE_MAX_ENTRIES = 256
 # Spec §5.1: the Cloud client wrapper caps search at 10 and flags the clamp.
 SEARCH_LIMIT_CAP = 10
 
+# The equity-diagnostic POST triggers server-side generation and carries no
+# idempotency key, so it must not be retried: a timed-out attempt would silently
+# re-request a generation. The server's `refreshAllowedAt` hints that it
+# de-dupes concurrent requests, but that is unverified, so pin one attempt.
+# (The shared policy still retries everything else.)
+_SINGLE_ATTEMPT_POLICY = RetryPolicy(attempts=1)
+
 # Upstream session cookie names (api-client/request.ts SESSION_COOKIE_NAMES).
 SESSION_COOKIE_NAMES: tuple[str, ...] = (
     "__Secure-gloomberb.session_token",
@@ -1889,6 +1896,7 @@ class GloomberbClient:
                 body=body,
                 gated=True,
                 direct_payload=True,
+                retry_policy=_SINGLE_ATTEMPT_POLICY,
             )
             if isinstance(raw, DigifetchError):
                 return self._error_envelope(EquityDiagnosticEnvelope, raw)
@@ -2153,6 +2161,7 @@ class GloomberbClient:
         allow_array: bool = False,
         pro_gated: bool = False,
         direct_payload: bool = False,
+        retry_policy: RetryPolicy | None = None,
     ) -> _RawResponse | DigifetchError:
         if not self._enabled:
             return DigifetchError(
@@ -2193,7 +2202,9 @@ class GloomberbClient:
 
         try:
             result = with_retry(
-                attempt, self._retry_policy, description=f"gloomberb {method} {path}"
+                attempt,
+                retry_policy or self._retry_policy,
+                description=f"gloomberb {method} {path}",
             )
         except _ProxyStatusError as exc:
             # A proxied upstream 4xx is deterministic (bad input), so it is not

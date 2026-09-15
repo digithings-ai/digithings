@@ -593,13 +593,18 @@ stays a generic transport engine (no URLs, no env reads).
   is session-gated with `years` bounded **1–10 client-side** (live: 1→24
   points, 5→120, 10→209; 0/11/99 silently fall back to the 3-year window
   upstream, so the contract must reject them first). `digifetch_equity_diagnostic`
-  is the one **POST** tool and the one **AI product endpoint**: its payload
+  is the only **POST** route outside `digifetch_quotes_batch` (#4069 POSTs
+  `/market/quotes/batch`) and the only **AI product endpoint**: its payload
   carries its own `status` (`generating`/`partial`/`complete`) rather than the
   CloudMarketResponse discriminator, so it is read with
   `_request_json(direct_payload=True)`; the first call per symbol answers a
   `pending` envelope (`status=generating` + `retryAfterMs`) and **pending
   payloads are never client-cached** (`_cached(should_cache=...)`), while
-  completed reports use the normal 900s TTL; free sessions only ever get
+  completed reports use the normal 900s TTL; the POST also pins **one attempt**
+  (`_SINGLE_ATTEMPT_POLICY`) because it triggers server-side generation and has
+  no idempotency key — a timed-out retry must not silently re-request a
+  generation (the server's `refreshAllowedAt` hints at de-dupe, unverified).
+  Free sessions only ever get
   `access="preview"`, and the verdict/summary are the model's reading — say so
   in copy, never as advice. The remaining plugin panes are deliberately out of
   scope: correlation/relationship (client math over history), dividend yield /

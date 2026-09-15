@@ -445,3 +445,12 @@ def test_equity_diagnostic_mode_vocabulary() -> None:
     assert EquityDiagnosticInput(symbol="AAPL", mode="refresh").mode == "refresh"
     with pytest.raises(ValidationError):
         EquityDiagnosticInput(symbol="AAPL", mode="force")  # type: ignore[arg-type]
+
+
+def test_package_exports_resolve() -> None:
+    # Every advertised name must actually exist on the package (a name in
+    # __all__ without an import breaks `from digiquant.data.gloomberb import X`).
+    import digiquant.data.gloomberb as gloomberb_pkg
+
+    missing = [name for name in gloomberb_pkg.__all__ if not hasattr(gloomberb_pkg, name)]
+    assert missing == []

@@ -1047,3 +1047,31 @@ def test_normalize_equity_diagnostic_pending_and_report() -> None:
 
     with pytest.raises(ValueError, match="not an object"):
         normalize_equity_diagnostic("nope")
+
+
+def test_normalize_proxy_statements_rejects_malformed_payloads() -> None:
+    with pytest.raises(ValueError, match="not an object"):
+        normalize_proxy_statements("nope", "list")
+    with pytest.raises(ValueError, match="no company block"):
+        normalize_proxy_statements({"proxies": []}, "list")
+    with pytest.raises(ValueError, match="no proxies list"):
+        normalize_proxy_statements({"company": {"ticker": "AAPL"}}, "list")
+    with pytest.raises(ValueError, match="not an object"):
+        normalize_proxy_statements("nope", "statement")
+    # A detail payload missing its required company block is malformed too
+    # (pydantic ValidationError is a ValueError).
+    with pytest.raises(ValueError):
+        normalize_proxy_statements({"id": "p1", "ticker": "AAPL"}, "statement")
+
+
+def test_normalize_risk_reports_rejects_malformed_payloads() -> None:
+    with pytest.raises(ValueError, match="not an object"):
+        normalize_risk_reports("nope", "list")
+    with pytest.raises(ValueError, match="no company block"):
+        normalize_risk_reports({"reports": []}, "list")
+    with pytest.raises(ValueError, match="no reports list"):
+        normalize_risk_reports({"company": {"ticker": "AAPL"}}, "list")
+    with pytest.raises(ValueError, match="not an object"):
+        normalize_risk_reports(None, "report")
+    with pytest.raises(ValueError):
+        normalize_risk_reports({"id": "r1", "ticker": "AAPL"}, "report")

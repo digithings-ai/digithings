@@ -1193,12 +1193,32 @@ def normalize_holdings_13f(raw: Any, what: str, limit: int) -> Holdings13FResult
 # ---------------------------------------------------------------------------
 
 
-def _company_ref(payload: Any) -> CompanyRef | None:
+def _payload_mapping(raw: Any, what: str) -> Mapping[str, Any]:
+    """A payload object, or a ValueError for a malformed response.
+
+    Raising (rather than coercing to an empty success) surfaces an unexpected
+    shape as a typed ``upstream_error``, the same contract as
+    :func:`normalize_equity_diagnostic`.
+    """
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"{what} payload is not an object")
+    return raw
+
+
+def _company_block(payload: Mapping[str, Any], what: str) -> CompanyRef:
     """The nested ``company`` block shared by the public filing products."""
-    if not isinstance(payload, Mapping):
-        return None
     company = payload.get("company")
-    return CompanyRef.model_validate(dict(company)) if isinstance(company, Mapping) else None
+    if not isinstance(company, Mapping):
+        raise ValueError(f"{what} payload has no company block")
+    return CompanyRef.model_validate(dict(company))
+
+
+def _required_rows(payload: Mapping[str, Any], key: str, what: str) -> list[Mapping[str, Any]]:
+    """The payload's row list, or a ValueError when the key is missing/not a list."""
+    rows = payload.get(key)
+    if not isinstance(rows, list):
+        raise ValueError(f"{what} payload has no {key} list")
+    return [entry for entry in rows if isinstance(entry, Mapping)]
 
 
 def normalize_shiller(raw: Mapping[str, Any], limit: int) -> ShillerResult:
@@ -1224,21 +1244,26 @@ def normalize_shiller(raw: Mapping[str, Any], limit: int) -> ShillerResult:
 
 
 def normalize_proxy_statements(raw: Any, what: str) -> ProxyStatementsResult:
-    """Map the public proxy-statement list or one full statement."""
+    """Map the public proxy-statement list or one full statement.
+
+    A malformed payload (non-object, or a missing ``company``/``proxies``
+    block) raises so the client returns a typed ``upstream_error`` instead of
+    a silent empty success.
+    """
     if what == "statement":
-        statement = ProxyStatement.model_validate(dict(raw)) if isinstance(raw, Mapping) else None
+        statement = ProxyStatement.model_validate(dict(_payload_mapping(raw, "proxy statement")))
         return ProxyStatementsResult(
             what="statement",
-            company=statement.company if statement is not None else None,
+            company=statement.company,
             statement=statement,
         )
-    payload = raw if isinstance(raw, Mapping) else {}
+    payload = _payload_mapping(raw, "proxy statements")
     return ProxyStatementsResult(
         what="list",
-        company=_company_ref(payload),
+        company=_company_block(payload, "proxy statements"),
         proxies=[
             ProxySummary.model_validate(dict(entry))
-            for entry in _rows(payload.get("proxies"), "proxies")
+            for entry in _required_rows(payload, "proxies", "proxy statements")
         ],
     )
 
@@ -1254,21 +1279,26 @@ def normalize_filing_events(raw: Mapping[str, Any]) -> FilingEventsResult:
 
 
 def normalize_risk_reports(raw: Any, what: str) -> RiskReportsResult:
-    """Map the public risk-report list or one full report."""
+    """Map the public risk-report list or one full report.
+
+    A malformed payload (non-object, or a missing ``company``/``reports``
+    block) raises so the client returns a typed ``upstream_error`` instead of
+    a silent empty success.
+    """
     if what == "report":
-        report = RiskReport.model_validate(dict(raw)) if isinstance(raw, Mapping) else None
+        report = RiskReport.model_validate(dict(_payload_mapping(raw, "risk report")))
         return RiskReportsResult(
             what="report",
-            company=report.company if report is not None else None,
+            company=report.company,
             report=report,
         )
-    payload = raw if isinstance(raw, Mapping) else {}
+    payload = _payload_mapping(raw, "risk reports")
     return RiskReportsResult(
         what="list",
-        company=_company_ref(payload),
+        company=_company_block(payload, "risk reports"),
         reports=[
             RiskSummary.model_validate(dict(entry))
-            for entry in _rows(payload.get("reports"), "reports")
+            for entry in _required_rows(payload, "reports", "risk reports")
         ],
     )
 

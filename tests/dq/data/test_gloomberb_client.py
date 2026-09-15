@@ -1885,3 +1885,38 @@ def test_equity_diagnostic_is_session_gated_and_caches_reports_not_pending() -> 
     assert client.equity_diagnostic({"symbol": "AAPL"}).data.report is not None  # type: ignore[union-attr]
     client.equity_diagnostic({"symbol": "AAPL"})
     assert len(calls) == 3  # complete reports are cached
+
+
+def test_equity_diagnostic_does_not_retry_generation_requests() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(503, json={"message": "unavailable"})
+
+    policy = RetryPolicy(attempts=3, base_delay=0.0, jitter=False, retry_on=RETRYABLE_EXCEPTIONS)
+    client = make_client(handler, session_cookie="token", retry_policy=policy)
+    result = client.equity_diagnostic({"symbol": "AAPL"})
+    assert result.data.code == "upstream_error"  # type: ignore[union-attr]
+    assert result.data.retryable is True  # type: ignore[union-attr]
+    # One attempt: the generation POST has no idempotency key and must not be
+    # silently re-requested, even though the client's shared policy allows 3.
+    assert len(calls) == 1
+
+
+def test_proxy_statements_malformed_payload_is_upstream_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={})  # no company/proxies block
+
+    result = make_client(handler).proxy_statements({"ticker": "AAPL"})
+    assert result.data.code == "upstream_error"  # type: ignore[union-attr]
+    assert "company block" in result.data.message  # type: ignore[union-attr]
+
+
+def test_risk_reports_malformed_payload_is_upstream_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"company": {"ticker": "AAPL"}})  # no reports
+
+    result = make_client(handler).risk_reports({"ticker": "AAPL"})
+    assert result.data.code == "upstream_error"  # type: ignore[union-attr]
+    assert "reports list" in result.data.message  # type: ignore[union-attr]
