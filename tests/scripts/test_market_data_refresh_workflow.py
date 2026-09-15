@@ -418,6 +418,224 @@ def test_overlap_hash_stable_for_equal_frames() -> None:
     )
 
 
+# -- core macro mirror (#3780) ---------------------------------------------
+
+
+class FakeCoreClient:
+    """Duck-typed supabase client capturing macro upsert batches."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self._table = ""
+
+    def table(self, name: str) -> "FakeCoreClient":
+        self._table = name
+        return self
+
+    def upsert(self, rows: list[dict], on_conflict: str | None = None) -> "FakeCoreClient":
+        self.calls.append({"table": self._table, "rows": list(rows), "on_conflict": on_conflict})
+        return self
+
+    def execute(self) -> Any:
+        return SimpleNamespace(data=[])
+
+
+def test_core_mirror_writes_only_mirrored_sources() -> None:
+    from scripts.refresh_market_data_r2 import mirror_macro_to_core
+
+    store = FakeStore(
+        macros={
+            ("yahoo", "FX/EUR"): [
+                {
+                    "source": "yahoo",
+                    "series_id": "FX/EUR",
+                    "obs_date": "2026-09-10",
+                    "value": 1.08,
+                    "unit": "fx",
+                },
+                {
+                    "source": "yahoo",
+                    "series_id": "FX/EUR",
+                    "obs_date": "2026-09-11",
+                    "value": 1.09,
+                    "unit": "fx",
+                },
+            ],
+            ("fred", "DGS10"): [
+                {
+                    "source": "fred",
+                    "series_id": "DGS10",
+                    "obs_date": "2026-09-11",
+                    "value": 4.0,
+                    "unit": "Percent",
+                },
+            ],
+        }
+    )
+    client = FakeCoreClient()
+    summary = mirror_macro_to_core(
+        store, [("yahoo", "FX/EUR"), ("fred", "DGS10")], run="2026-09-16", client=client
+    )
+    assert summary == {"rows": 2, "series": 1, "skipped": []}
+    assert len(client.calls) == 1
+    call = client.calls[0]
+    assert call["table"] == "macro_series_observations"
+    assert call["on_conflict"] == "source,series_id,obs_date"
+    assert {r["series_id"] for r in call["rows"]} == {"FX/EUR"}
+    assert all(r["source"] == "yahoo" and r["unit"] == "fx" for r in call["rows"])
+    assert all(
+        r["meta"] == {"yahoo_symbol": "EURUSD=X", "quote_convention": "USD_per_EUR"}
+        for r in call["rows"]
+    )
+
+
+def test_core_mirror_window_drops_out_of_range_rows() -> None:
+    from scripts.refresh_market_data_r2 import mirror_macro_to_core
+
+    store = FakeStore(
+        macros={
+            ("yahoo", "FX/JPY"): [
+                {
+                    "source": "yahoo",
+                    "series_id": "FX/JPY",
+                    "obs_date": "2026-06-01",
+                    "value": 100.0,
+                    "unit": "fx",
+                },
+                {
+                    "source": "yahoo",
+                    "series_id": "FX/JPY",
+                    "obs_date": "2026-09-11",
+                    "value": 148.0,
+                    "unit": "fx",
+                },
+            ]
+        }
+    )
+    client = FakeCoreClient()
+    summary = mirror_macro_to_core(store, [("yahoo", "FX/JPY")], run="2026-09-16", client=client)
+    assert summary["rows"] == 1
+    assert [r["obs_date"] for r in client.calls[0]["rows"]] == ["2026-09-11"]
+
+
+def test_core_mirror_fail_soft_without_client() -> None:
+    from scripts.refresh_market_data_r2 import mirror_macro_to_core
+
+    store = FakeStore(
+        macros={
+            ("yahoo", "FX/GBP"): [
+                {
+                    "source": "yahoo",
+                    "series_id": "FX/GBP",
+                    "obs_date": "2026-09-11",
+                    "value": 1.27,
+                    "unit": "fx",
+                }
+            ]
+        }
+    )
+    summary = mirror_macro_to_core(store, [("yahoo", "FX/GBP")], run="2026-09-16", client=None)
+    assert summary["rows"] == 0
+    assert summary["series"] == 0
+    assert summary["skipped"] == ["yahoo__FX/GBP: no core client"]
+
+
+def test_core_mirror_skips_unreadable_generation() -> None:
+    from scripts.refresh_market_data_r2 import mirror_macro_to_core
+
+    store = FakeStore()
+    client = FakeCoreClient()
+    summary = mirror_macro_to_core(store, [("yahoo", "FX/NZD")], run="2026-09-16", client=client)
+    assert summary["rows"] == 0
+    assert summary["skipped"] == ["yahoo__FX/NZD: LookupError"]
+    assert client.calls == []
+
+
+def test_main_mirrors_yahoo_fx_into_core(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import scripts.refresh_market_data_r2 as refresh_mod
+
+    manifest_doc = {"version": 1, "as_of": "2026-01-02", "datasets": {}}
+    store = FakeStore(
+        histories={"SPY": price_rows(HIST_DEFAULT)},
+        lives={"SPY": price_rows(HIST_DEFAULT) + price_rows([("2026-01-05", 105.0)])},
+        macros={
+            ("yahoo", "FX/EUR"): [
+                {
+                    "source": "yahoo",
+                    "series_id": "FX/EUR",
+                    "obs_date": "2026-01-05",
+                    "value": 1.08,
+                    "unit": "fx",
+                },
+            ]
+        },
+        macro_lives={
+            ("yahoo", "FX/EUR"): [
+                {
+                    "source": "yahoo",
+                    "series_id": "FX/EUR",
+                    "obs_date": "2026-01-06",
+                    "value": 1.09,
+                    "unit": "fx",
+                },
+            ]
+        },
+        manifest=manifest_doc,
+    )
+    client = FakeCoreClient()
+    monkeypatch.setattr(refresh_mod, "build_store", lambda uri: (store, manifest_doc))
+    monkeypatch.setattr(refresh_mod, "build_core_supabase_client", lambda: client)
+    rc = refresh_mod.main(
+        [
+            "--tickers",
+            "SPY",
+            "--macro-series",
+            "yahoo:FX/EUR",
+            "--postgres-uri",
+            "postgresql://fake",
+            "--as-of",
+            "2026-01-06",
+            "--manifest-out",
+            str(tmp_path / "refresh.json"),
+        ]
+    )
+    assert rc == 0
+    assert len(client.calls) == 1
+    assert [r["series_id"] for r in client.calls[0]["rows"]] == ["FX/EUR"]
+    artifact = json.loads((tmp_path / "refresh.json").read_text())
+    assert artifact["core_macro_mirror"]["rows"] == 1
+    assert artifact["core_macro_mirror"]["series"] == 1
+
+
+def test_main_skips_mirror_with_no_macro_specs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import scripts.refresh_market_data_r2 as refresh_mod
+
+    store = FakeStore(histories={"SPY": price_rows(HIST_DEFAULT)})
+    client = FakeCoreClient()
+
+    def _explode() -> Any:  # pragma: no cover - must never be called
+        raise AssertionError("mirror client built without macro specs")
+
+    monkeypatch.setattr(refresh_mod, "build_core_supabase_client", _explode)
+    monkeypatch.setattr(refresh_mod, "_today_iso", lambda: "2026-01-05")
+    monkeypatch.setattr(refresh_mod, "build_store", lambda uri: (store, manifest()))
+    rc = refresh_mod.main(
+        [
+            "--tickers",
+            "SPY",
+            "--skip-macro",
+            "--postgres-uri",
+            "postgresql://fake",
+            "--manifest-out",
+            str(tmp_path / "refresh.json"),
+        ]
+    )
+    assert rc in (0, 1)
+    assert client.calls == []
+
+
 # -- workflow YAML pins ----------------------------------------------------
 
 
