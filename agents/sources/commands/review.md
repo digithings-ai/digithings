@@ -88,6 +88,10 @@ labelled as one.
    - **security** — auth, keys, scopes, injection, anything under `digikey/`
    - **CI/deploy** — will it build; does a named workflow actually do what a
      comment says
+   - **boot path / blast radius** — container entrypoints, PID-1 scripts, and
+     startup checks. An unguarded command under `set -e` before `exec` takes the
+     whole instance down rather than a feature, so it is fatal-class however
+     small the diff ([CODE_REVIEW_POLICY.md § Severity is blast radius](docs/agents/CODE_REVIEW_POLICY.md))
 
    Skip Pass B lenses the scope pass marked clean. Tiny docs/CI-only diffs may
    stop after Pass A if nothing material is flagged — but a Markdown-only diff
@@ -98,6 +102,15 @@ labelled as one.
    run and its output. Put each surviving finding through a refuter told to
    *disprove* it, defaulting to refuted when unsure. Drop what does not survive —
    a plausible-but-wrong finding costs more than silence.
+
+   Never lower a finding's severity because you could not reproduce it — and never
+   drop it for that reason either. If the *mechanism* is verified, keep the finding
+   and label it unverified; "defaulting to refuted when unsure" applies to the claim,
+   not to whether it happened to be reproducible. Say in the findings comment what
+   you could not exercise, and keep the grade the blast radius implies: a boot-path
+   defect (an unguarded command under `set -e` before `exec`) stays **blocking**, and
+   for ordinary service-scope findings whole-service blast radius means Medium is the
+   floor ([CODE_REVIEW_POLICY.md § Severity is blast radius](docs/agents/CODE_REVIEW_POLICY.md)).
 
 4. **Post the findings**, even when there are none. The comment MUST open with this
    exact marker or the gate will refuse the label:

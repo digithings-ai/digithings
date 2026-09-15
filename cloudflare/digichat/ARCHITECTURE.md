@@ -516,8 +516,12 @@ server-only — `toDigichatClientConfig` / `toEmbedClientConfig` never project i
 `POST /api/plan-proof` with dashboard Supabase `Authorization: Bearer` + embed
 token; digichat verifies the access token against
 `DIGICHAT_DASHBOARD_SUPABASE_URL` / anon key, reads claims `plan_tier`, and
-signs Desk+ only. Client-asserted `X-Embed-Plan-Tier` / `?plan_tier=` are never
-trusted (see `src/lib/plan-proof.ts` and `src/app/api/plan-proof/route.ts`).
+signs Desk+ only. FX Hub product grantees (the 12x invite path) hold a product
+grant rather than a plan tier: when claims are below Desk+, the route verifies
+the caller's `my_access` products and mints the desk-equivalent proof
+(`FX_HUB_PROOF_TIER`). Client-asserted `X-Embed-Plan-Tier` / `?plan_tier=` are
+never trusted (see `src/lib/plan-proof.ts` and
+`src/app/api/plan-proof/route.ts`).
 
 On structured `free_quota_exceeded` / clear rate-limit errors, embed tenants with
 `llmAccess: free_then_byok` stop the turn and open the in-chat BYOK sequence

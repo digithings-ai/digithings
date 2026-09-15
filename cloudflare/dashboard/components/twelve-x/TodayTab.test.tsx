@@ -298,9 +298,9 @@ describe('TodayTab layout (Task 2.2)', () => {
     expect(html).toContain('The data disputes 1 of today');
   });
 
-  it('links to the track-record tab', () => {
+  it('does not surface the internal track-record scoreboard', () => {
     const html = render({}, []);
-    expect(html).toContain('data-track-record-link="true"');
-    expect(html).toContain('Full track record');
+    expect(html).not.toContain('data-track-record-link');
+    expect(html).not.toContain('Full track record');
   });
 });
