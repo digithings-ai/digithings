@@ -30,7 +30,7 @@ import { buildPipelineHref, DIGEST_DOCUMENT_KEYS } from '@/lib/pipeline-links';
 import { buildDocumentSearchItems } from '@/lib/document-search';
 import { fetchAllTickers } from '@/lib/queries';
 import { thesisDetailHref } from '@/lib/portfolio-url-state';
-import { useCanAccessProduct } from '@/lib/use-entitlement';
+import { useFxHubOnlyInvitee } from '@/lib/fx-hub-only';
 import type { Doc } from '@/lib/types';
 
 export type CmdItem = {
@@ -232,20 +232,31 @@ export default function CommandPalette() {
   const router = useRouter();
   const { data } = useDashboard();
   const { commandPaletteOpen: open, openCommandPalette, closeCommandPalette } = useAppShell();
-  const canFxHub = useCanAccessProduct('fx_hub');
+  const { canFxHub, fxHubOnlyInvitee } = useFxHubOnlyInvitee();
 
   const items = useMemo<CmdItem[]>(() => {
     const all = buildCommandItems(data);
+    if (fxHubOnlyInvitee) {
+      // 12x single-view contract: only FX Hub (+ account settings) is reachable.
+      return all.filter(
+        (i) =>
+          i.id === 'go-fx' || i.id === 'go-fx-how' || i.id === 'go-settings',
+      );
+    }
     if (canFxHub) return all;
     return all.filter((i) => i.id !== 'go-fx' && i.id !== 'go-fx-how');
-  }, [data, canFxHub]);
-  const docs = useMemo<Doc[]>(() => data?.docs ?? [], [data]);
+  }, [data, canFxHub, fxHubOnlyInvitee]);
+  const docs = useMemo<Doc[]>(
+    () => (fxHubOnlyInvitee ? [] : data?.docs ?? []),
+    [data, fxHubOnlyInvitee]
+  );
 
   // Live ticker union (#1562 PR2) — fetched once on mount, independent of the
   // dashboard context (positions alone would miss decision_log/analyst-only
   // tickers). Fail-soft: an empty list just omits the Tickers group.
   const [tickers, setTickers] = useState<string[]>([]);
   useEffect(() => {
+    if (fxHubOnlyInvitee) return;
     let alive = true;
     fetchAllTickers()
       .then((t) => {
@@ -257,8 +268,11 @@ export default function CommandPalette() {
     return () => {
       alive = false;
     };
-  }, []);
-  const tickerItems = useMemo<CmdItem[]>(() => buildTickerCommandItems(tickers), [tickers]);
+  }, [fxHubOnlyInvitee]);
+  const tickerItems = useMemo<CmdItem[]>(
+    () => (fxHubOnlyInvitee ? [] : buildTickerCommandItems(tickers)),
+    [fxHubOnlyInvitee, tickers]
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
