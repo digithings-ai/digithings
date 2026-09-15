@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { buildCommandItems, buildTickerCommandItems, filterCommandItems } from './command-palette';
+import {
+  buildCommandItems,
+  buildFxHubSearchItems,
+  buildTickerCommandItems,
+  filterCommandItems,
+} from './command-palette';
 import type { Doc } from '@/lib/types';
 
 const data = {
@@ -96,5 +101,63 @@ describe('filterCommandItems', () => {
   it('keeps static nav matches ahead of document hits', () => {
     const out = filterCommandItems(baseItems, docs, 'pipeline');
     expect(out[0].id).toBe('go-pipeline');
+  });
+});
+
+describe('buildFxHubSearchItems (12x FX-Hub-only palette group)', () => {
+  const briefs = [
+    {
+      run_date: '2026-09-15',
+      source_file: 'gs-usdjpy.pdf',
+      document_title: 'USD/JPY at the edge',
+      broker_name: 'Goldman',
+    },
+    {
+      run_date: '2026-09-14',
+      source_file: 'jpm-eur.pdf',
+      document_title: '',
+      broker_name: 'goldman',
+    },
+  ] as unknown as Parameters<typeof buildFxHubSearchItems>[0];
+  const ideas = [
+    {
+      run_date: '2026-09-15',
+      rank: 1,
+      pair: 'USD/JPY',
+      direction: 'short',
+      title: 'JPY SHORT — via USD/JPY',
+    },
+  ] as unknown as Parameters<typeof buildFxHubSearchItems>[1];
+
+  it('links briefs straight into the FX Hub brief slide-over', () => {
+    const items = buildFxHubSearchItems(briefs, ideas);
+    const row = items.find((i) => i.id === 'fx-brief-2026-09-15-gs-usdjpy.pdf')!;
+    expect(row.title).toBe('USD/JPY at the edge');
+    expect(row.hint).toContain('Goldman');
+    expect(row.href).toBe('/twelve-x?brief=gs-usdjpy.pdf&briefDate=2026-09-15');
+    expect(filterCommandItems(items, [], 'usd/jpy').some((i) => i.id.startsWith('fx-brief'))).toBe(
+      true
+    );
+  });
+
+  it('dedupes brokers (case-insensitive) onto the matrix', () => {
+    const items = buildFxHubSearchItems(briefs, ideas);
+    const brokers = items.filter((i) => i.id.startsWith('fx-broker-'));
+    expect(brokers).toHaveLength(1);
+    expect(brokers[0].href).toBe('/twelve-x?tab=matrix');
+  });
+
+  it('maps trade ideas to the trades tab', () => {
+    const items = buildFxHubSearchItems(briefs, ideas);
+    const idea = items.find((i) => i.id === 'fx-idea-2026-09-15-1')!;
+    expect(idea.title).toBe('JPY SHORT — via USD/JPY');
+    expect(idea.hint).toBe('Trade idea · USD/JPY · 2026-09-15');
+    expect(idea.href).toBe('/twelve-x?tab=trades');
+  });
+
+  it('falls back to broker or source file when a brief has no title', () => {
+    const items = buildFxHubSearchItems(briefs, ideas);
+    const row = items.find((i) => i.id === 'fx-brief-2026-09-14-jpm-eur.pdf')!;
+    expect(row.title).toBe('goldman');
   });
 });
