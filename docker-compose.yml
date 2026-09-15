@@ -429,6 +429,34 @@ services:
     volumes:
       - digivault_data:/data/vault
 
+  # ─── zammad-mcp: read-only Zammad helpdesk MCP for the OCC embed (profile: zammad-mcp) ───
+  # Operator MCP server for the occ tenant (config/examples/occ-embed.yaml,
+  # `mcp.servers[].url: http://zammad-mcp:8770/mcp`): URLs stay on the BFF, the
+  # token travels as the raw Authorization value via tokenEnv (#3841). The
+  # dotless name is dialable by digigraph's remote-MCP guard; loopback is not
+  # (#3879). Zammad has no Bearer scheme — auth rides as `Token token=<x>`.
+  zammad-mcp:
+    build:
+      context: .
+      dockerfile: scripts/zammad_mcp/Dockerfile.mcp
+    image: digi-zammad-mcp:latest
+    container_name: digi-zammad-mcp
+    profiles:
+      - zammad-mcp
+    ports:
+      - "127.0.0.1:8770:8770"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ZAMMAD_BASE_URL=${ZAMMAD_BASE_URL:-https://ticket.sitaas.de}
+      # ZAMMAD_API_TOKEN arrives via env_file (.env): the raw token or the full
+      # `Token token=<x>` header value. Server-side only — never committed.
+      - ZAMMAD_MCP_HOST=0.0.0.0
+      # digigraph dials `http://zammad-mcp:8770/mcp`; FastMCP's DNS-rebinding
+      # guard rejects the non-localhost Host header unless it is allowlisted.
+      - ZAMMAD_MCP_ALLOWED_HOSTS=zammad-mcp
+
   # ─── Phase 3: Heartbeat (run with: docker compose --profile heartbeat up) ───
   heartbeat:
     build:

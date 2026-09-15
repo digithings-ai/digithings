@@ -36,6 +36,20 @@ hosts:
         - id: web_search
           default: true
           label: Web search
+    # Operator MCP servers stay on the BFF — URLs are never projected to the
+    # browser. Zammad rides its `Token token=<x>` scheme as a raw authHeader
+    # value (#3841); digigraph treats the dotless `zammad-mcp` name as
+    # container-internal DNS (loopback URLs are never dialable, #3879).
+    mcp:
+      allowUserServers: false
+      allowAddForm: false
+      servers:
+        - id: zammad
+          url: http://zammad-mcp:8770/mcp
+          label: Zammad tickets
+          default: true
+          tokenEnv: ZAMMAD_API_TOKEN
+          authHeader: Authorization
     gate:
       mode: ungated
       activityDetail: labels
