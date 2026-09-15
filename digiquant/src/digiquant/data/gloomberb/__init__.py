@@ -11,6 +11,13 @@ is a later phase and lives in ``mcp_server.py``/``orchestrator_tools.py``.
 
 from __future__ import annotations
 
+from .attribution import (
+    GLOOMBERB_ATTRIBUTION,
+    GLOOMBERB_DELAY_NOTICE,
+    GLOOMBERB_TERMINAL_URL,
+    attribution_fields,
+    terminal_ticker_url,
+)
 from .client import (
     DEFAULT_CACHE_TTL_SECONDS,
     DEFAULT_CIRCUIT_FAILURE_THRESHOLD,
@@ -126,6 +133,12 @@ from .normalizers import (
 )
 
 __all__ = [
+    # attribution (§7)
+    "GLOOMBERB_ATTRIBUTION",
+    "GLOOMBERB_DELAY_NOTICE",
+    "GLOOMBERB_TERMINAL_URL",
+    "attribution_fields",
+    "terminal_ticker_url",
     # client
     "GloomberbClient",
     "GLOOMBERB_BASE_URL",

@@ -183,6 +183,331 @@ def build_digiquant_fetch_coinbase_ohlcv_tool() -> dict[str, Any]:
     }
 
 
+def build_digifetch_quote_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_quote",
+            "description": (
+                "Latest quote for one listing via Gloomberb Cloud (anonymous; "
+                "enrichment only — free-tier data is delayed up to 15 minutes). "
+                "Default-ON behind the GLOOMBERB_ENABLED kill switch. Payload "
+                "carries 'Sourced from Gloomberb' attribution and a term.gloom.sh "
+                "deep link. Refs #4069."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string", "description": "Ticker, e.g. 'AAPL'"},
+                    "exchange": {
+                        "type": "string",
+                        "description": "Optional venue, e.g. 'NASDAQ'/'LSE'",
+                    },
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_quotes_batch_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_quotes_batch",
+            "description": (
+                "Batch quotes for 1-20 listings (Gloomberb Cloud, anonymous). "
+                "Per-item status/stale preserved: a stale listing is a null quote "
+                "with a reason code, not a failed batch."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbols": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "1-20 ticker symbols",
+                    },
+                },
+                "required": ["symbols"],
+            },
+        },
+    }
+
+
+def build_digifetch_price_history_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_price_history",
+            "description": (
+                "OHLCV bars for one listing (Gloomberb Cloud). Caps per "
+                "resolution: 5m→1wk, 15m→1mo, 1h→3mo, 1d→5y (default), "
+                "1wk→5y, 1mo→all-time; out-of-contract requests return typed "
+                "invalid_input (never clamped)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "resolution": {
+                        "type": "string",
+                        "enum": ["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"],
+                    },
+                    "range": {
+                        "type": "string",
+                        "enum": ["1D", "1W", "1M", "3M", "6M", "1Y", "5Y", "ALL"],
+                        "description": "Defaults to 5Y for resolution=1d only",
+                    },
+                    "exchange": {"type": "string"},
+                },
+                "required": ["symbol", "resolution"],
+            },
+        },
+    }
+
+
+def build_digifetch_ticker_financials_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_ticker_financials",
+            "description": (
+                "Quote, profile, fundamentals, statements, and price history "
+                "(Gloomberb Cloud). extended_statements=true requests the "
+                "SEC-sourced extended statement history."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "exchange": {"type": "string"},
+                    "extended_statements": {"type": "boolean", "default": False},
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_options_chain_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_options_chain",
+            "description": (
+                "Options chain for one listing (Gloomberb Cloud). Calls/puts are "
+                "normalized to a side field per contract; the free-tier delay is "
+                "reported in data.delay_note."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "exchange": {"type": "string"},
+                    "expiration": {
+                        "type": "integer",
+                        "description": "Optional expiration in epoch seconds (all expirations when omitted)",
+                    },
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_sec_filings_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_sec_filings",
+            "description": (
+                "SEC filings, filing documents, or filing content (Gloomberb "
+                "Cloud /cloud/sec; anonymous, live-verified 200). what=documents/"
+                "content require cik + accession from an earlier filings lookup. "
+                "Cross-check vs direct EDGAR, not a replacement."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string"},
+                    "what": {
+                        "type": "string",
+                        "enum": ["filings", "documents", "content"],
+                        "default": "filings",
+                    },
+                    "count": {"type": "integer", "default": 15},
+                    "cik": {"type": "string"},
+                    "accession": {"type": "string"},
+                    "form": {"type": "string"},
+                },
+                "required": ["ticker"],
+            },
+        },
+    }
+
+
+def build_digifetch_holders_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_holders",
+            "description": (
+                "Holder records for one symbol (Gloomberb Cloud; session-gated). "
+                "Requires GLOOMBERB_SESSION_COOKIE — without it the envelope is a "
+                "typed auth_required error. owner_type filters client-side."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "owner_type": {
+                        "type": "string",
+                        "enum": ["all", "insider", "institution", "fund", "direct"],
+                        "default": "all",
+                    },
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_analyst_research_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_analyst_research",
+            "description": (
+                "Analyst recommendation, price target, and rating actions "
+                "(Gloomberb Cloud; session-gated). Requires "
+                "GLOOMBERB_SESSION_COOKIE — typed auth_required without it."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "limit": {"type": "integer", "default": 20},
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_corporate_actions_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_corporate_actions",
+            "description": (
+                "Dividends, splits, and earnings history for one symbol "
+                "(Gloomberb Cloud; session-gated). Requires "
+                "GLOOMBERB_SESSION_COOKIE — typed auth_required without it. "
+                "One kind-discriminated action list."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"symbol": {"type": "string"}},
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_earnings_calendar_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_earnings_calendar",
+            "description": (
+                "Upcoming earnings dates for 1-20 symbols (Yahoo via yfinance; "
+                "no Cloud route). horizon_days bounds the window from today; "
+                "fail-soft per symbol (throttled symbols land in warnings)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbols": {"type": "array", "items": {"type": "string"}},
+                    "horizon_days": {"type": "integer", "default": 90},
+                },
+                "required": ["symbols"],
+            },
+        },
+    }
+
+
+def build_digifetch_exchange_rate_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_exchange_rate",
+            "description": (
+                "USD exchange rate for an ISO-4217 currency (Gloomberb Cloud). "
+                "The Cloud route is USD-based (to_currency must be USD); the "
+                "15-minute delay is data.delay_note, kept distinct from stale."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "from_currency": {"type": "string", "description": "ISO-4217, e.g. 'EUR'"},
+                    "to_currency": {"type": "string", "default": "USD"},
+                },
+                "required": ["from_currency"],
+            },
+        },
+    }
+
+
+def build_digifetch_search_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_search",
+            "description": (
+                "Search listings across venues (Gloomberb Cloud, anonymous). "
+                "limit is 1-10; results keep symbol/exchange per row so the "
+                "caller can pick a listing before quote/history."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer", "default": 10, "minimum": 1, "maximum": 10},
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+
+def build_digifetch_news_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_news",
+            "description": (
+                "Aggregated market news headlines (Gloomberb Cloud, anonymous). "
+                "feed selects latest/top/breaking/ticker/sector/topic; ticker "
+                "filters the ticker feed; story_id fetches one story by id."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "feed": {
+                        "type": "string",
+                        "enum": ["latest", "top", "breaking", "ticker", "sector", "topic"],
+                        "default": "latest",
+                    },
+                    "ticker": {"type": "string"},
+                    "story_id": {"type": "string"},
+                    "limit": {"type": "integer", "default": 20},
+                },
+            },
+        },
+    }
+
+
 def build_digiquant_fit_btc_power_law_tool() -> dict[str, Any]:
     return {
         "type": "function",
@@ -612,6 +937,19 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digiquant_run_pipeline_tool(),
         build_digiquant_pipeline_delegate_tool(),
         build_digiquant_fetch_coinbase_ohlcv_tool(),
+        build_digifetch_quote_tool(),
+        build_digifetch_quotes_batch_tool(),
+        build_digifetch_price_history_tool(),
+        build_digifetch_ticker_financials_tool(),
+        build_digifetch_options_chain_tool(),
+        build_digifetch_sec_filings_tool(),
+        build_digifetch_holders_tool(),
+        build_digifetch_analyst_research_tool(),
+        build_digifetch_corporate_actions_tool(),
+        build_digifetch_earnings_calendar_tool(),
+        build_digifetch_exchange_rate_tool(),
+        build_digifetch_search_tool(),
+        build_digifetch_news_tool(),
         build_digiquant_fit_btc_power_law_tool(),
         build_digiquant_build_sdca_risk_index_tool(),
         build_digiquant_fetch_bitview_series_tool(),
