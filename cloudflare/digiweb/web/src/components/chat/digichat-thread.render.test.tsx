@@ -76,6 +76,24 @@ const GLOOMBERB_MESSAGES: ThreadMessageLike[] = [
   },
 ];
 
+const UNATTRIBUTED_MESSAGES: ThreadMessageLike[] = [
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: "u1",
+        toolName: "digifetch_earnings_calendar",
+        argsText: "{}",
+        result: {
+          result: { rows: [{ symbol: "AAPL", reportDate: "2026-09-18" }] },
+        },
+      },
+      { type: "text", text: "calendar ready" },
+    ],
+  },
+];
+
 const REASONING_MESSAGES: ThreadMessageLike[] = [
   {
     role: "assistant",
@@ -377,6 +395,25 @@ describe("DigichatThread", () => {
     );
     expect(link).toBeTruthy();
     expect(link?.textContent).toContain("Open in Gloomberb");
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
+    unmount();
+  });
+
+  it("omits the attribution line for tool results without an attribution block", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: UNATTRIBUTED_MESSAGES,
+      toolCallsMode: "expanded",
+    });
+    await act(async () => {});
+    const trigger = host.querySelector('[data-slot="tool-fallback-trigger"]');
+    expect(trigger).toBeTruthy();
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(host.querySelector('[data-slot="tool-fallback-result"]')).toBeTruthy();
+    expect(host.querySelector('[data-slot="tool-fallback-attribution"]')).toBeNull();
+    expect(host.textContent).not.toContain("Sourced from Gloomberb");
     unmount();
   });
 });

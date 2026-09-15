@@ -87,8 +87,12 @@ mounted so an iframe conversation survives close/reopen. It portals to
 not a second ChatMarkdown tree. Import the subpath — never the
 `@digithings/web` main barrel (webpack OOM). The design-reference `/chatbot`
 page is a fixture lab on **that same import** — see
-[`CHAT_THEME.md`](CHAT_THEME.md). The full
-assistant-ui elements catalog (every `/elements` slug, purpose, fetch command,
+[`CHAT_THEME.md`](CHAT_THEME.md). Tool rows whose result payload carries the
+Gloomberb `attribution` block render the attribution line (canonical string,
+delay notice, `term.gloom.sh` deep link) beneath the JSON result pane, driven
+by the shared `web/src/lib/gloomberb.ts` helper that the `@digithings/web`
+barrel exports (`GLOOMBERB_*`, `gloomberbTickerUrl`, `readGloomberbAttribution`).
+The full assistant-ui elements catalog (every `/elements` slug, purpose, fetch command,
 and digichat attach kind) lives in
 [`ASSISTANT_UI_ELEMENTS.md`](ASSISTANT_UI_ELEMENTS.md) — discover there, copy
 from the registry on demand; do not dump the catalog into `MANIFEST.json`.

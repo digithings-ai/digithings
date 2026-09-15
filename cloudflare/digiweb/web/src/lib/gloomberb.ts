@@ -41,20 +41,33 @@ function parseMaybeJson(value: unknown): unknown {
 
 /**
  * Reads the §7 attribution block off a tool result. Unwraps the `result`
- * envelope (digifetch payloads) and JSON-string results, then requires a real
- * `attribution` string: payloads that do not carry one (Yahoo-backed tools)
- * return null so no surface credits Gloomberb for data it did not source.
+ * envelope (digifetch payloads) and JSON-string results, then requires a
+ * non-blank `attribution` string: payloads that do not carry one (Yahoo-backed
+ * tools) return null so no surface credits Gloomberb for data it did not
+ * source. `source_url` is surfaced only when it is a `term.gloom.sh` link, so
+ * an off-terminal URL never wears the branded link.
  */
 export function readGloomberbAttribution(result: unknown): GloomberbAttribution | null {
   let payload = asRecord(parseMaybeJson(result));
   if (payload && "result" in payload) {
     payload = asRecord(parseMaybeJson(payload.result));
   }
-  if (!payload || typeof payload.attribution !== "string") return null;
+  if (
+    !payload ||
+    typeof payload.attribution !== "string" ||
+    payload.attribution.trim() === ""
+  ) {
+    return null;
+  }
+  const attribution = payload.attribution;
+  const sourceUrl = payload.source_url;
   return {
-    attribution: payload.attribution,
+    attribution,
     delayNotice:
       typeof payload.delay_notice === "string" ? payload.delay_notice : undefined,
-    sourceUrl: typeof payload.source_url === "string" ? payload.source_url : undefined,
+    sourceUrl:
+      typeof sourceUrl === "string" && sourceUrl.startsWith(GLOOMBERB_TERMINAL_URL)
+        ? sourceUrl
+        : undefined,
   };
 }

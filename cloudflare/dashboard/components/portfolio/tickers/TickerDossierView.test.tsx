@@ -131,6 +131,9 @@ describe('TickerDossierView — command band structure', () => {
     expect(html).toContain('data-testid="gloomberb-link"');
     expect(html).toContain('https://term.gloom.sh/?ticker=XLE');
     expect(html).toContain('Open in Gloomberb');
+    const gloomberbAnchor = html.match(/<a[^>]*data-testid="gloomberb-link"[^>]*>/)?.[0] ?? '';
+    expect(gloomberbAnchor).toContain('target="_blank"');
+    expect(gloomberbAnchor).toContain('rel="noopener noreferrer"');
   });
 
   it('links every dossier ticker out to Gloomberb, crypto included', () => {
