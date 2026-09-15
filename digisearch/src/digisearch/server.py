@@ -25,6 +25,7 @@ from digisearch.backend_require import require_real_search_backend
 from digisearch.core.models import Query
 from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TOP_K
 from digisearch.logging import configure_logging
+from digisearch.monitors.store import MonitorStore, get_store
 from digisearch.orchestrator_tools import (
     TOOL_DIGISEARCH,
     TOOL_DIGISEARCH_FETCH_ALL,
@@ -54,6 +55,17 @@ def _resolve_fetch_all_max(requested: int | None) -> int:
     hard_ceiling = int(os.environ.get("DIGISEARCH_FETCH_ALL_HARD_CEILING", "10000"))
     cap = requested if requested is not None else default_max
     return min(max(cap, 1), hard_ceiling)
+
+
+def get_monitor_store() -> MonitorStore:
+    """Return a Phase C monitor store for the configured home (#4065, Task 2).
+
+    Module-level seam for the Tasks 4/6/7 monitor consumers: each call resolves
+    ``DIGISEARCH_MONITORS_DB`` → ``{DIGI_WORKSPACE}/.digisearch/monitors.sqlite3``
+    → cwd fallback and opens a fresh store. Tests and callers monkeypatch this
+    attribute; there is deliberately no cached module-level store.
+    """
+    return get_store()
 
 
 app = FastAPI(
