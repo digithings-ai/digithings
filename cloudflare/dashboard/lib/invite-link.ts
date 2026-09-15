@@ -18,6 +18,8 @@ function currentPath(): string {
  * Module-level redeem flag so AuthGate can hold the shell while a stashed
  * invite is being redeemed (no DigiQuant flash before the fx_hub grant lands).
  */
+const REDEEM_TIMEOUT_MS = 10_000;
+
 let redeemInFlight = false;
 const redeemListeners = new Set<() => void>();
 
@@ -79,11 +81,21 @@ export function useInviteLink(): InviteLinkState {
     }
     let cancelled = false;
     setRedeemInFlight(true);
-    void redeemStashedInvite({
-      accessToken,
-      email,
-      refresh: requestAccessRefresh,
-    }).then(() => {
+    // Bounded wait: a stalled redeem must not pin AuthGate forever.
+    const timeout = new Promise<never>((_, reject) => {
+      window.setTimeout(
+        () => reject(new Error('invite redeem timed out')),
+        REDEEM_TIMEOUT_MS,
+      );
+    });
+    void Promise.race([
+      redeemStashedInvite({
+        accessToken,
+        email,
+        refresh: requestAccessRefresh,
+      }),
+      timeout,
+    ]).then(() => {
       if (!cancelled) setRedeemInFlight(false);
     });
     return () => {

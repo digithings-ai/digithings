@@ -92,9 +92,14 @@ function emitAccessStore(next: AccessStoreSnapshot): void {
   for (const listener of [...accessStoreListeners]) listener();
 }
 
+const ACCESS_RPC_TIMEOUT_MS = 10_000;
+
 let accessEpoch = 0;
 let accessLoadKey: string | null = null; // last settled `${userId}:${epoch}`
 let accessInFlightKey: string | null = null;
+// Last failed key. Failures are not cached as settled: the next hook mount
+// retries, but the retry runs without holding the shell (no remount loop).
+let accessFailedKey: string | null = null;
 
 function loadAccess(userId: string): void {
   const key = `${userId}:${accessEpoch}`;
@@ -106,27 +111,39 @@ function loadAccess(userId: string): void {
     return;
   }
   accessInFlightKey = key;
+  // After a failure, re-attempts run without holding the shell: a broken
+  // `my_access` must not pin every signed-in user on the loading screen.
+  const holdPending = accessFailedKey !== key;
   emitAccessStore({
     userId,
     rpc: accessStore.userId === userId ? accessStore.rpc : null,
-    pending: true,
+    pending: holdPending,
   });
-  void Promise.resolve(client.rpc('my_access' as never)).then(
+  // Bounded wait: a hung RPC settles as failed instead of hanging AuthGate.
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('my_access timed out')), ACCESS_RPC_TIMEOUT_MS);
+  });
+  void Promise.race([
+    Promise.resolve(client.rpc('my_access' as never)),
+    timeout,
+  ]).then(
     (result: RpcResult) => {
       if (accessInFlightKey !== key) return; // superseded by a refresh
       accessInFlightKey = null;
-      accessLoadKey = key;
       const { data, error } = result;
-      emitAccessStore({
-        userId,
-        rpc: error || !data || typeof data !== 'object' ? null : (data as RpcPayload),
-        pending: false,
-      });
+      if (error || !data || typeof data !== 'object') {
+        accessFailedKey = key; // retried on the next mount, never cached
+        emitAccessStore({ userId, rpc: null, pending: false });
+        return;
+      }
+      accessFailedKey = null;
+      accessLoadKey = key;
+      emitAccessStore({ userId, rpc: data as RpcPayload, pending: false });
     },
     () => {
       if (accessInFlightKey !== key) return;
       accessInFlightKey = null;
-      accessLoadKey = key;
+      accessFailedKey = key;
       emitAccessStore({ userId, rpc: null, pending: false });
     },
   );
@@ -139,6 +156,7 @@ export function requestAccessRefresh(): void {
   accessEpoch += 1;
   accessLoadKey = null;
   accessInFlightKey = null;
+  accessFailedKey = null;
   if (accessStore.userId) loadAccess(accessStore.userId);
   for (const listener of [...accessRefreshListeners]) listener();
 }
