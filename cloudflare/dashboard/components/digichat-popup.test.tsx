@@ -5,8 +5,14 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const entitlementMock = vi.hoisted(() => ({
+  planTier: 'desk' as const,
+  canFxHub: false,
+}));
+
 vi.mock('@/lib/use-entitlement', () => ({
-  usePlanTier: () => 'desk',
+  usePlanTier: () => entitlementMock.planTier,
+  useCanAccessProduct: () => entitlementMock.canFxHub,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -56,6 +62,7 @@ describe('DigichatPopup', () => {
       root.unmount();
     });
     container.remove();
+    entitlementMock.canFxHub = false;
     vi.useRealTimers();
   });
 
@@ -99,6 +106,25 @@ describe('DigichatPopup', () => {
       btn.click();
     });
     expect(document.body.querySelector('#digichat-popup-iframe')).toBeNull();
+  });
+
+  it('opens the iframe for an fx_hub product grantee on the free tier (#3662)', () => {
+    entitlementMock.canFxHub = true;
+    act(() => {
+      root.render(
+        createElement(DigichatPopup, { tier: 'free', config: CFG }),
+      );
+    });
+    const btn = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    act(() => {
+      btn.click();
+    });
+    expect(document.body.querySelector('#digichat-popup-iframe')).not.toBeNull();
+    expect(
+      document.body.querySelector('[data-testid="digichat-upgrade-cta"]'),
+    ).toBeNull();
   });
 
   it('renders launcher for Desk+ when config is present', () => {

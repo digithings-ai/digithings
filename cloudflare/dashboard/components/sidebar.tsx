@@ -11,7 +11,7 @@ import SidebarSettings from '@/components/sidebar-settings';
 import { useAuth } from '@/lib/auth-context';
 import { NAV, type NavItem } from '@/lib/nav';
 import { dashboardBasePath } from '@/lib/supabase';
-import { useAccessSnapshot, useCanAccessProduct } from '@/lib/use-entitlement';
+import { useFxHubOnlyInvitee } from '@/lib/fx-hub-only';
 
 function routeActive(pathname: string, base: string, href: string): boolean {
   const norm = pathname.replace(/\/+$/, '') || '/';
@@ -58,14 +58,12 @@ export default function Sidebar() {
     useAppShell();
   const { authEnabled, user, signOut } = useAuth();
   const [signOutError, setSignOutError] = useState<string | null>(null);
-  const canFxHub = useCanAccessProduct('fx_hub');
   // An FX-Hub-invited account with no paid plan (the 12x trader invite path)
   // sees ONLY FX Hub — no Brief/Portfolio/Pipeline nav, not even teaser
   // content, to avoid the confusion of a research dashboard they weren't
   // given access to. A real paying tier (or the studio-floor creator/admin)
   // is unaffected — this only fires for fx_hub-granted + free tier.
-  const { effectivePlanTier } = useAccessSnapshot();
-  const fxHubOnlyInvitee = canFxHub && effectivePlanTier === 'free';
+  const { canFxHub, fxHubOnlyInvitee } = useFxHubOnlyInvitee();
 
   useEffect(() => {
     setMobileNavOpen(false);

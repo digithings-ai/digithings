@@ -79,6 +79,19 @@ vi.mock('@/lib/invite-stash', async () => {
   return { ...actual, hasPendingInvite: () => inviteState.pending };
 });
 
+const entitlementState = vi.hoisted(() => ({ accessPending: false }));
+
+vi.mock('@/lib/use-entitlement', () => ({
+  requestAccessRefresh: vi.fn(),
+  useAccessPending: () => entitlementState.accessPending,
+}));
+
+const inviteLinkState = vi.hoisted(() => ({ pending: false }));
+
+vi.mock('@/lib/invite-link', () => ({
+  useInviteLink: () => ({ pending: inviteLinkState.pending }),
+}));
+
 vi.mock('@/components/dashboard-mark', () => ({ DashboardMark: () => null }));
 
 import { AuthGate, isDashboardAuthCallbackPath, isDashboardAuthPath } from './auth-gate';
@@ -134,6 +147,8 @@ describe('AuthGate', () => {
     pathnameState.value = '/';
     mountedState.client = true;
     inviteState.pending = false;
+    entitlementState.accessPending = false;
+    inviteLinkState.pending = false;
   });
 
   it('flag off: passes children through the app shell (today’s behavior)', () => {
@@ -192,6 +207,33 @@ describe('AuthGate', () => {
     expect(html).toContain('protected-child');
     expect(html).toContain('data-frame="1"');
     expect(html).not.toContain('data-login');
+  });
+
+  it('flag on + session + access pending: holds the shell, no chrome or children', () => {
+    authState.authEnabled = true;
+    authState.session = { access_token: 't' } as Session;
+    authState.user = { id: 'u1', email: 'a@example.com' } as User;
+    authState.loading = false;
+    mountedState.client = true;
+    entitlementState.accessPending = true;
+    const html = renderGate();
+    expect(html).toContain('Checking session');
+    expect(html).not.toContain('protected-child');
+    expect(html).not.toContain('data-frame');
+    expect(html).not.toContain('data-login');
+  });
+
+  it('flag on + session + invite redeem pending: holds the shell until the grant lands', () => {
+    authState.authEnabled = true;
+    authState.session = { access_token: 't' } as Session;
+    authState.user = { id: 'u1', email: 'a@example.com' } as User;
+    authState.loading = false;
+    mountedState.client = true;
+    inviteLinkState.pending = true;
+    const html = renderGate();
+    expect(html).toContain('Checking session');
+    expect(html).not.toContain('protected-child');
+    expect(html).not.toContain('data-frame');
   });
 
   it('flag on + mounted + loading: shows session check, not empty chrome or children', () => {
