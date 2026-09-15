@@ -61,8 +61,23 @@ vi.mock('@/components/app-frame', () => ({
 }));
 
 vi.mock('@/components/login-screen', () => ({
-  LoginScreen: () => createElement('div', { 'data-login': '1' }, 'Sign in to digiquant'),
+  LoginScreen: ({ initialMode }: { initialMode?: 'signin' | 'signup' }) =>
+    createElement(
+      'div',
+      { 'data-login': '1', 'data-mode': initialMode ?? 'signin' },
+      initialMode === 'signup' ? 'Sign up for digiquant' : 'Sign in to digiquant',
+    ),
 }));
+
+const inviteState = vi.hoisted(() => ({ pending: false }));
+
+vi.mock('@/lib/invite-stash', async () => {
+  // Preserve the real exports — useInviteLink() (unmocked) calls
+  // stashInviteFromSearch/pathWithoutInviteParam from this same module in
+  // its effects; a full-module mock would silently undefine them.
+  const actual = await vi.importActual<typeof import('./invite-stash')>('./invite-stash');
+  return { ...actual, hasPendingInvite: () => inviteState.pending };
+});
 
 vi.mock('@/components/dashboard-mark', () => ({ DashboardMark: () => null }));
 
@@ -118,6 +133,7 @@ describe('AuthGate', () => {
     authState.loading = false;
     pathnameState.value = '/';
     mountedState.client = true;
+    inviteState.pending = false;
   });
 
   it('flag off: passes children through the app shell (today’s behavior)', () => {
@@ -148,9 +164,22 @@ describe('AuthGate', () => {
     mountedState.client = true;
     const html = renderGate();
     expect(html).toContain('data-login="1"');
+    expect(html).toContain('data-mode="signin"');
     expect(html).toContain('Sign in to digiquant');
     expect(html).not.toContain('protected-child');
     expect(html).not.toContain('data-frame');
+  });
+
+  it('flag on + mounted + no session + pending invite: defaults to signup, not sign-in', () => {
+    authState.authEnabled = true;
+    authState.session = null;
+    authState.loading = false;
+    mountedState.client = true;
+    inviteState.pending = true;
+    const html = renderGate();
+    expect(html).toContain('data-login="1"');
+    expect(html).toContain('data-mode="signup"');
+    expect(html).toContain('Sign up for digiquant');
   });
 
   it('flag on + mounted + session: renders children inside the app shell', () => {

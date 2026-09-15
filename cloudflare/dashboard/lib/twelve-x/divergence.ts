@@ -1,3 +1,4 @@
+import { fmtSigned } from './format';
 import type { FxConsensusDivergence, FxConsensusSnapshotRow, FxTradeIdeaRow } from './types';
 
 /** Default |street − pmt| gap above which the chip flags (spec R-5 — calibrate later). */
@@ -32,10 +33,6 @@ export function divergenceThreshold(): number {
   const raw = process.env.NEXT_PUBLIC_TWELVEX_DIVERGENCE_THRESHOLD;
   const parsed = raw ? Number(raw) : DEFAULT_DIVERGENCE_THRESHOLD;
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DIVERGENCE_THRESHOLD;
-}
-
-function fmtSigned(v: number): string {
-  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}`;
 }
 
 export interface SmartBiasJoinRow {

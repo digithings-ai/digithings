@@ -416,6 +416,47 @@ def digiquant_get_macro_series(
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
 
+def digiquant_get_trade_levels(
+    direction: str,
+    ohlc_json: str | None = None,
+    pair: str | None = None,
+    ticker: str | None = None,
+    config_json: str | None = None,
+    cache_dir: str | None = None,
+) -> str:
+    """Causal ATR / swing-pivot / Donchian trade levels for one direction (JSON).
+
+    READ-scope and read-only: computes candidate entry band, stop, R-multiple
+    ladder and trail policy; it never sizes or places orders. The caller-
+    supplied OHLC frame (``ohlc_json``: JSON array of
+    ``{timestamp, open, high, low, close, volume}`` bars) is the primary path.
+    ``ticker`` is a non-blocking convenience over the local history cache.
+
+    Returns the contract ``{pair, direction, entry{low,high,ref}, sl,
+    tp_ladder[], trail_policy, source_ref, computed_at}`` or ``{"error": ...}``.
+    The contract also carries the ``reward_uncapped`` diagnostic (``true`` when
+    no opposite structure bounded the reward, so the stop was accepted without
+    an R:R check).
+    """
+    try:
+        from digiquant.data.prices.levels_api import (
+            config_from_json,
+            levels_for_ticker,
+            levels_json,
+            parse_ohlc,
+        )
+
+        cfg = config_from_json(config_json)
+        if ohlc_json:
+            df = parse_ohlc(ohlc_json)
+            return levels_json(df, direction, pair=pair or "UNKNOWN", cfg=cfg)
+        if ticker:
+            return levels_for_ticker(ticker, direction, cache_dir=cache_dir, cfg=cfg, pair=pair)
+        return json.dumps({"error": "either ohlc_json or ticker is required"})
+    except Exception as exc:  # surface as JSON to the caller, never crash
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+
 try:
     from mcp.server.fastmcp import FastMCP
 
@@ -441,6 +482,7 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digiquant_list_strategies",
         "digiquant_get_price_technicals",
         "digiquant_get_macro_series",
+        "digiquant_get_trade_levels",
         "digiquant_query_data",
         "dashboard_get_policy_replay",
         "dashboard_get_policy_comparison",
@@ -626,6 +668,29 @@ def create_mcp_server(
         history sealed at ``as_of`` (default: manifest seal) instead.
         """
         return digiquant_get_macro_series(series_ids, lookback=lookback, as_of=as_of)
+
+    @_maybe_tool("digiquant_get_trade_levels")
+    def digiquant_get_trade_levels_tool(
+        direction: str,
+        ohlc_json: str | None = None,
+        pair: str | None = None,
+        ticker: str | None = None,
+        config_json: str | None = None,
+        cache_dir: str | None = None,
+    ) -> str:
+        """Causal entry/stop/target levels for a direction (JSON, read-only).
+
+        Pass ``ohlc_json`` (a JSON array of OHLC bars) or a cached ``ticker``.
+        Never places orders; returns candidate levels with full precision.
+        """
+        return digiquant_get_trade_levels(
+            direction,
+            ohlc_json=ohlc_json,
+            pair=pair,
+            ticker=ticker,
+            config_json=config_json,
+            cache_dir=cache_dir,
+        )
 
     @_maybe_tool("digiquant_query_data")
     def digiquant_query_data(

@@ -196,4 +196,25 @@ describe('ConsensusDataTable component', () => {
     expect(html).toContain('data-divergence-chip="true"');
     expect(html).toContain('Δ2.00');
   });
+
+  it('renders Conf and n_eff columns from the latest snapshot rows', () => {
+    const series = tenCurrencySeries();
+    const latest = latestFrom(series).map((r) =>
+      r.currency === 'USD'
+        ? { ...r, confidence: 0.82, n_eff: 7.5 }
+        : r,
+    );
+    const html = render(series, latest);
+    expect(html).toContain('>Conf</button>');
+    expect(html).toContain('>n_eff</button>');
+    expect(html).toContain('82%');
+    expect(html).toContain('7.5');
+  });
+
+  it('renders an em dash for missing confidence / n_eff', () => {
+    const series = tenCurrencySeries();
+    const latest = latestFrom(series).map((r) => ({ ...r, confidence: NaN, n_eff: NaN }));
+    const html = render(series, latest);
+    expect(html).toContain('—');
+  });
 });

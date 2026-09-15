@@ -14,6 +14,7 @@ import {
 import { buildIdeaDetailModel, type IdeaDetailLevelRow } from '@/lib/twelve-x/trade-levels';
 import { useTwelveX } from './context';
 import { TwelveXSectionHeading } from './TwelveXSectionHeading';
+import LevelFixSection from './LevelFixSection';
 
 function dirClass(direction: string): string {
   const d = direction.toLowerCase();
@@ -138,6 +139,11 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
               ))}
             </div>
           ) : null}
+        </div>
+      ) : null}
+      {showLevels ? (
+        <div className="pt-1">
+          <LevelFixSection idea={idea} />
         </div>
       ) : null}
       {desks.length > 0 ? (

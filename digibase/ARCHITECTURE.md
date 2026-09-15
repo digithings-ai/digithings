@@ -133,6 +133,9 @@ that behaviour verbatim.
 ```python
 class ServiceAuthError(RuntimeError): ...
 
+EXCHANGE_TIMEOUT = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
+EXCHANGE_MAX_ATTEMPTS = 3
+
 clear_service_jwt_cache() -> None
 
 get_service_jwt(
@@ -160,6 +163,14 @@ with no user session (e.g. digiquant's web-grounding pipeline hub calls).
 - A response whose `access_token` is missing, `null`, or not a non-empty string
   raises `ServiceAuthError` (never coerced to the string `"None"`). Transport and
   non-2xx failures surface as `ServiceAuthError("digikey exchange failed: …")`.
+- The exchange runs under a **cold-start envelope** (`EXCHANGE_TIMEOUT`:
+  connect 5 s / read 60 s / write 10 s / pool 5 s) instead of the shared 30 s
+  read default — digikey runs on a scale-to-zero Cloudflare Container whose
+  first response can take tens of seconds (#4050). Transport failures
+  (timeouts and connection errors, all `httpx.TransportError`) are retried up
+  to `EXCHANGE_MAX_ATTEMPTS` (3 total attempts) with a short linear backoff.
+  HTTP error responses, including 401/403 auth rejections, are **never**
+  retried — a rejected key stays rejected.
 
 ### `digibase.errors`
 

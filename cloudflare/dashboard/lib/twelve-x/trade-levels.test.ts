@@ -24,6 +24,13 @@ const broker: FxTradeLevel = {
   source_ref: 'ING.pdf',
 };
 
+const engineComputed: FxTradeLevel = {
+  value: '1.1077',
+  provenance: 'computed',
+  source_ref:
+    'computed:atr14@2026-08-05T00:00:00|k=1.52598365|reg=1.017322434|br=pivot|piv=2|rr=1.5|src=base',
+};
+
 describe('parseTradeLevels', () => {
   it('returns null for empty object', () => {
     expect(parseTradeLevels({})).toBeNull();
@@ -51,6 +58,35 @@ describe('provenanceChipLabel', () => {
 
   it('labels computed vol refs', () => {
     expect(provenanceChipLabel(computed)).toBe('computed, 1.5×20d vol off 31 Jul fix');
+  });
+
+  it('labels digiquant engine atr refs with the structural branch', () => {
+    expect(provenanceChipLabel(engineComputed)).toBe('computed, 1.52598365×14d atr pivot');
+  });
+
+  it('labels engine donchian and atr branches', () => {
+    expect(
+      provenanceChipLabel({
+        ...engineComputed,
+        source_ref:
+          'computed:atr14@na|k=1.5|reg=1|br=donchian|piv=2|rr=1.5|src=base',
+      }),
+    ).toBe('computed, 1.5×14d atr donchian');
+    expect(
+      provenanceChipLabel({
+        ...engineComputed,
+        source_ref: 'computed:atr14@na|k=1.5|reg=1|br=atr|piv=2|rr=1.5|src=base',
+      }),
+    ).toBe('computed, 1.5×14d atr');
+  });
+
+  it('falls back to computed for unrecognised or incomplete refs', () => {
+    expect(provenanceChipLabel({ ...engineComputed, source_ref: 'computed:atr14@na' })).toBe(
+      'computed',
+    );
+    expect(
+      provenanceChipLabel({ ...engineComputed, source_ref: 'computed:ema20@na|k=1' }),
+    ).toBe('computed');
   });
 
   it('labels bank trade', () => {
