@@ -89,11 +89,14 @@ def test_a_bare_postgres_url_builds_a_psycopg_engine(monkeypatch) -> None:
 
 def test_sqlite_is_still_usable_when_asked_for_explicitly(monkeypatch, tmp_path) -> None:
     """Dev/local deployments keep working — they just have to say so."""
+    from sqlalchemy import inspect
+
     monkeypatch.setenv("DIGIKEY_DATABASE_URL", f"sqlite:///{tmp_path / 'digikey.db'}")
 
     db_mod.init_db()
 
-    assert db_mod._engine is not None
+    created = set(inspect(db_mod._engine).get_table_names())
+    assert {"digikey_api_keys", "digikey_jti_issued"} <= created
 
 
 def test_the_stack_does_not_synthesize_a_sqlite_url() -> None:
@@ -101,7 +104,8 @@ def test_the_stack_does_not_synthesize_a_sqlite_url() -> None:
 
     ``database_url()`` raises when the variable is empty, so the only way back to
     #4080 is a substituted default. The Cloudflare stack carried exactly that on
-    two lines; pin that they stay gone.
+    two lines; pin that no SQLite URL returns to either — matching any path or
+    ``:memory:`` form, not just the one that was there.
     """
     root = Path(__file__).resolve().parents[2]
     for rel in (
@@ -109,4 +113,4 @@ def test_the_stack_does_not_synthesize_a_sqlite_url() -> None:
         "cloudflare/digithings-stack-cloudflare/container/entrypoint.sh",
     ):
         text = (root / rel).read_text(encoding="utf-8")
-        assert "sqlite:////data/digikey.db" not in text, f"{rel} invents an ephemeral store"
+        assert "sqlite://" not in text, f"{rel} invents an ephemeral store"

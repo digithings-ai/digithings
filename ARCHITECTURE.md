@@ -532,7 +532,7 @@ The default Docker Compose deployment is designed for a single machine (develope
 | LangGraph `MemorySaver` (default) | In-process Python dict | Thread state lost on restart; no cross-instance sharing |
 | Chroma local volume | `digisearch_chroma` Docker volume on single host | Cannot be shared across digisearch replicas |
 | LiteLLM local cache | `type: local` in `litellm.yaml` | Per-process disk cache; not shared with other LiteLLM instances |
-| digikey SQLite (dev/Compose only) | `sqlite:////data/digikey.db` on a Compose volume | Not suitable for multiple digikey replicas, and impossible on the Cloudflare Container (ephemeral disk); use Postgres |
+| digikey SQLite (dev/Compose only) | `sqlite:////data/digikey.db` on a Compose volume | Not suitable for multiple digikey replicas, and not durable on the Cloudflare Container (ephemeral disk); use Postgres |
 
 ### Kubernetes Target Architecture
 

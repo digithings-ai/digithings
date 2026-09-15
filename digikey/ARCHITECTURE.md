@@ -314,7 +314,7 @@ _private_key, _kid = load_or_create_signing_key()
 
 ### SQLAlchemy DB schema
 
-Single table: `digikey_api_keys`. Engine is initialized lazily at first use via `db.py`. SQLite uses `check_same_thread=False` to allow access from FastAPI's async thread pool. Postgres uses the default pool. `pool_pre_ping=True` reconnects stale connections.
+Tables: `digikey_api_keys`, `digikey_jti_issued`, `digikey_user_profile_pointers`. The engine is created on first use via `db.py`, and `init_db()` runs the JTI migration plus `create_all` at server startup. SQLite uses `check_same_thread=False` to allow access from FastAPI's async thread pool. Postgres uses the default pool. `pool_pre_ping=True` reconnects stale connections.
 
 ### Scope matching (wildcards)
 
