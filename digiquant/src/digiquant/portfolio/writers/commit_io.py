@@ -203,6 +203,7 @@ def _interval_price_returns(
             until=run_date - timedelta(days=1),
         )
     else:
+        # Retired: migration 127 drops price_history (#4053) — R2 only above.
         for start in range(0, len(ordered), _NAV_INTERVAL_TICKER_BATCH):
             resp = (
                 client.table("price_history")
@@ -268,6 +269,46 @@ def _compute_nav(
     return round(prior_nav * (1.0 + port_return), 6)
 
 
+def _latest_values_r2(
+    *,
+    table: str,
+    value_col: str,
+    tickers: list[str],
+    run_date: date,
+    lookback_days: int,
+) -> dict[str, float]:
+    """Latest sealed value per ticker from R2 (#4053).
+
+    The Supabase ``price_history`` / ``price_technicals`` bodies this helper
+    replaces are dropped in migration 127; under the flag R2 is the only path.
+    """
+    from digiquant.research.data.queries import get_price_technicals
+
+    since = run_date - timedelta(days=lookback_days)
+    out: dict[str, float] = {}
+    if table == "price_history":
+        latest: dict[str, tuple[str, float | None]] = {}
+        for row in r2_close_rows(tickers=list(tickers), since=since, until=run_date):
+            ticker = row.get("ticker")
+            day = str(row.get("date") or "")
+            if not isinstance(ticker, str) or not day:
+                continue
+            value = _opt_float(row.get("close"))
+            if ticker not in latest or day > latest[ticker][0]:
+                latest[ticker] = (day, value)
+        return {t: v for t, (_, v) in latest.items() if v is not None}
+    if table == "price_technicals":
+        for ticker in tickers:
+            latest_row = get_price_technicals(
+                client=None, ticker=str(ticker), lookback=lookback_days, as_of=run_date
+            )["latest"]
+            value = _opt_float(latest_row.get(value_col))
+            if value is not None:
+                out[str(ticker)] = value
+        return out
+    return out
+
+
 def _latest_values(
     client: SupabaseClient,
     table: str,
@@ -286,6 +327,23 @@ def _latest_values(
     """
     if not tickers:
         return {}
+    if r2_backend_enabled():
+        try:
+            return _latest_values_r2(
+                table=table,
+                value_col=value_col,
+                tickers=tickers,
+                run_date=run_date,
+                lookback_days=lookback_days,
+            )
+        except Exception as exc:  # advisory fields must never block the book
+            logger.warning(
+                "commit_io: %s.%s R2 read failed (%s); risk fields degrade",
+                table,
+                value_col,
+                exc,
+            )
+            return {}
     since = (run_date - timedelta(days=lookback_days)).isoformat()
     try:
         resp = (
