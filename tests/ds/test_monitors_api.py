@@ -182,6 +182,59 @@ def test_patch_rotate_and_update_never_leaks_secret(monkeypatch, tmp_path):
 
 
 @pytest.mark.unit
+def test_patch_rotation_requires_literal_true(monkeypatch, tmp_path):
+    _patch_monitor_store(monkeypatch, tmp_path)
+    c = _monitor_client()
+    created = _create_watch(c)
+    wid = created["watch"]["watch_id"]
+    first_secret = created["delivery_secret"]
+
+    for coerced in ("false", "true", 1):
+        r = c.patch(f"/v1/monitors/{wid}", json={"rotate_delivery_secret": coerced})
+        assert r.status_code == 200, r.text
+        assert "delivery_secret" not in r.text  # only literal JSON true rotates
+
+    def stored_secret() -> str | None:
+        from digisearch.monitors.store import MonitorStore
+
+        return MonitorStore(db_path=str(tmp_path / "m.sqlite3")).get_delivery_secret(wid)
+
+    assert stored_secret() == first_secret
+
+    rotated = c.patch(f"/v1/monitors/{wid}", json={"rotate_delivery_secret": True})
+    assert rotated.status_code == 200, rotated.text
+    assert rotated.json()["delivery_secret"] not in (None, first_secret)
+    assert stored_secret() == rotated.json()["delivery_secret"]
+
+
+@pytest.mark.unit
+def test_trigger_recall_failure_returns_persisted_failed_run(monkeypatch, tmp_path):
+    _patch_monitor_store(monkeypatch, tmp_path)
+    from digisearch.monitors import runner as runner_mod
+
+    def _boom(**kwargs):
+        raise RuntimeError("recall exploded")
+
+    monkeypatch.setattr(runner_mod, "_invoke_shallow_recall", _boom)
+    c = _monitor_client()
+    wid = _create_watch(c)["watch"]["watch_id"]
+
+    r = c.post(f"/v1/monitors/{wid}/trigger", json={"mode": "poll"})
+    assert r.status_code == 201, r.text  # the persisted failure is the record, not a 5xx
+    body = r.json()
+    assert body["status"] == "failed"
+    assert body["error"] == "recall exploded"
+    assert body["results_all"] == [] and body["results_new"] == []
+
+    runs = c.get(f"/v1/monitors/{wid}/runs").json()["runs"]
+    assert [run["run_id"] for run in runs] == [body["run_id"]]
+    assert runs[0]["status"] == "failed"
+    detail = c.get(f"/v1/monitors/{wid}/runs/{body['run_id']}")
+    assert detail.status_code == 200
+    assert detail.json()["error"] == "recall exploded"
+
+
+@pytest.mark.unit
 def test_watch_and_run_not_found_codes(monkeypatch, tmp_path):
     _patch_monitor_store(monkeypatch, tmp_path)
     c = _monitor_client()
@@ -225,6 +278,27 @@ def test_create_and_patch_reject_bad_schedule(monkeypatch, tmp_path):
     assert patched.json()["error"]["code"] == "timezone_unknown"
     # Validation runs before persistence: the stored watch is untouched.
     assert c.get(f"/v1/monitors/{wid}").json()["schedule"]["timezone"] == "UTC"
+
+
+@pytest.mark.unit
+def test_non_numeric_cron_step_maps_to_invalid_cron(monkeypatch, tmp_path):
+    _patch_monitor_store(monkeypatch, tmp_path)
+    c = _monitor_client()
+    bad_cron = {"mode": "cron", "cron": "*/abc 0 0 0 0"}
+
+    created = c.post(
+        "/v1/monitors",
+        json={"name": "etf", "query": "etf flows", "schedule": bad_cron},
+    )
+    assert created.status_code == 422, created.text
+    assert created.json()["error"]["code"] == "invalid_cron"
+
+    wid = _create_watch(c)["watch"]["watch_id"]
+    patched = c.patch(f"/v1/monitors/{wid}", json={"schedule": bad_cron})
+    assert patched.status_code == 422, patched.text
+    assert patched.json()["error"]["code"] == "invalid_cron"
+    # Validation runs before persistence: the stored watch is untouched.
+    assert c.get(f"/v1/monitors/{wid}").json()["schedule"]["mode"] == "interval"
 
 
 @pytest.mark.unit

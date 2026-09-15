@@ -21,7 +21,7 @@ from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
-from digiclaw.cron import CronParseError, parse_cron
+from digiclaw.cron import parse_cron
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digisearch_path_scopes
 
 from digisearch import __version__
@@ -1203,7 +1203,9 @@ def _validate_watch_config(watch: Watch, request: Request) -> JSONResponse | Non
     if watch.schedule.mode == "cron" and watch.schedule.cron:
         try:
             parse_cron(watch.schedule.cron)
-        except CronParseError:
+        except ValueError:
+            # CronParseError subclasses ValueError; the parser also raises a bare
+            # ValueError on non-numeric step tokens. Both map to the same 422.
             return _monitor_error(
                 request,
                 422,
@@ -1263,7 +1265,7 @@ def api_update_monitor(
 ) -> dict[str, Any] | JSONResponse:
     """Apply a partial patch; ``{"rotate_delivery_secret": true}`` mints a new secret (R8)."""
     store = get_monitor_store()
-    rotate = bool(patch.pop("rotate_delivery_secret", False))
+    rotate = patch.pop("rotate_delivery_secret", False) is True
     try:
         current = store.get_watch(watch_id)
     except MonitorStoreError as exc:
