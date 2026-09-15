@@ -21,6 +21,7 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
+import time
 from dataclasses import dataclass
 
 # The noqa below is read by repo-local `scripts/score.py` (not ruff) — that
@@ -109,10 +110,59 @@ def _fanout_key(key_of: Callable[[Any], Any] | None, state: Any) -> str | None:
     return text or None
 
 
+def _phase_label(index: int, total: int, phase_name: str) -> str:
+    return f"[{index}/{total} {phase_name}]"
+
+
+class _Narration:
+    """One start/finish INFO line per node execution so a long run is watchable.
+
+    A book run is hours of provider calls; without narration the log is silent until it
+    fails. Each line carries the phase position, the node name and — for fan-out phases —
+    the item key, so an operator sees which segment is in flight. The first node of a phase
+    stamps ``phase_start`` so the phase barrier can report its own wall time.
+    """
+
+    def __init__(
+        self, label: str, node_name: str, key: str | None, phase_start: list[float]
+    ) -> None:
+        self._label = label
+        self._node_name = node_name
+        self._key = key
+        self._phase_start = phase_start
+        self._started = 0.0
+
+    def __enter__(self) -> None:
+        if not self._phase_start:
+            self._phase_start.append(time.monotonic())
+        self._started = time.monotonic()
+        logger.info("pipeline: %s %s%s start", self._label, self._node_name, self._suffix())
+
+    def __exit__(self, *exc: object) -> None:
+        logger.info(
+            "pipeline: %s %s%s done in %.1fs",
+            self._label,
+            self._node_name,
+            self._suffix(),
+            time.monotonic() - self._started,
+        )
+
+    def _suffix(self) -> str:
+        return f" ({self._key})" if self._key else ""
+
+
+def _phase_complete(label: str, phase_start: list[float]) -> None:
+    if phase_start:
+        logger.info("pipeline: %s complete in %.1fs", label, time.monotonic() - phase_start[0])
+
+
 def _instrumented(
     node_name: str,
     run: Callable[..., dict[str, Any]],
     key_of: Callable[[Any], Any] | None,
+    *,
+    label: str,
+    phase_start: list[float],
 ) -> Callable[..., dict[str, Any]]:
     """Wrap one node body in its run/node telemetry scope without changing its contract.
 
@@ -134,7 +184,11 @@ def _instrumented(
         @functools.wraps(run)
         async def _awrapped(*args: Any, **kwargs: Any) -> dict[str, Any]:
             state = args[0] if args else kwargs.get("state")
-            with node_run_scope(node_name, fanout_key=_fanout_key(key_of, state)):
+            key = _fanout_key(key_of, state)
+            with (
+                node_run_scope(node_name, fanout_key=key),
+                _Narration(label, node_name, key, phase_start),
+            ):
                 return await run(*args, **kwargs)
 
         return _awrapped
@@ -142,7 +196,11 @@ def _instrumented(
     @functools.wraps(run)
     def _wrapped(*args: Any, **kwargs: Any) -> dict[str, Any]:
         state = args[0] if args else kwargs.get("state")
-        with node_run_scope(node_name, fanout_key=_fanout_key(key_of, state)):
+        key = _fanout_key(key_of, state)
+        with (
+            node_run_scope(node_name, fanout_key=key),
+            _Narration(label, node_name, key, phase_start),
+        ):
             return run(*args, **kwargs)
 
     return _wrapped
@@ -199,22 +257,36 @@ def build_pipeline(
 
     graph: StateGraph = StateGraph(state_cls)
 
+    phase_total = len(phases)
+    logger.info("pipeline: %d phases — %s", phase_total, ", ".join(phase.name for phase in phases))
+
     # Register every runnable node inside its telemetry node scope. The wrapper is
     # signature-transparent (`functools.wraps` + `*args/**kwargs`), so LangGraph's
     # signature-driven config/writer/store/previous/runtime/error injection still sees the
-    # node's own parameters. Synthetic barriers below are intentionally NOT wrapped: `_noop`
-    # runs no user code and makes no provider calls, so it emits no node record —
+    # node's own parameters. Synthetic barriers below are intentionally NOT wrapped: they
+    # run no user code and make no provider calls, so they emit no node record —
     # reconciliation counts real node executions, not compiled graph nodes.
-    for phase in phases:
+    phase_starts: dict[str, list[float]] = {}
+    for phase_index, phase in enumerate(phases, start=1):
         key_of = phase.item_key if isinstance(phase, FanOutPhase) else None
+        label = _phase_label(phase_index, phase_total, phase.name)
+        phase_start = phase_starts.setdefault(phase.name, [])
         for node in phase.nodes:
-            graph.add_node(node.name, _instrumented(node.name, node.run, key_of))
+            graph.add_node(
+                node.name,
+                _instrumented(node.name, node.run, key_of, label=label, phase_start=phase_start),
+            )
 
     # Synthetic barriers. A barrier is a no-op node that joins a fan-out and
     # launches the next fan-out. For single-node phases, the node itself acts
-    # as its own entry + exit, so the barrier is skipped.
-    def _noop(_state: Any) -> dict[str, Any]:
-        return {}
+    # as its own entry + exit, so the barrier is skipped. When present it reports the
+    # phase's wall time, which is the coarse "where is the run now" signal.
+    def _barrier(label: str, phase_start: list[float]) -> Callable[[Any], dict[str, Any]]:
+        def _join(_state: Any) -> dict[str, Any]:
+            _phase_complete(label, phase_start)
+            return {}
+
+        return _join
 
     prev_exit: str = START
     for idx, phase in enumerate(phases):
@@ -222,7 +294,10 @@ def build_pipeline(
             # Map-reduce: prev_exit --(one Send per runtime item)--> worker (parallel) --> barrier.
             worker_name = phase.worker.name
             barrier_name = f"{_BARRIER_PREFIX}{idx}__{phase.name}"
-            graph.add_node(barrier_name, _noop)
+            graph.add_node(
+                barrier_name,
+                _barrier(_phase_label(idx + 1, phase_total, phase.name), phase_starts[phase.name]),
+            )
 
             def _dispatch(
                 state: Any,
@@ -253,7 +328,10 @@ def build_pipeline(
 
         # Multi-node phase: fan out from prev_exit to each node, fan in to a barrier.
         barrier_name = f"{_BARRIER_PREFIX}{idx}__{phase.name}"
-        graph.add_node(barrier_name, _noop)
+        graph.add_node(
+            barrier_name,
+            _barrier(_phase_label(idx + 1, phase_total, phase.name), phase_starts[phase.name]),
+        )
         for node in nodes:
             if prev_exit == START:
                 graph.add_edge(START, node.name)

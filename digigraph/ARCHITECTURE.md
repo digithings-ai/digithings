@@ -207,6 +207,11 @@ calls carry its identity and each execution emits exactly one terminal `NodeRunR
 node-name registry: identity is `NodeSpec.name` plus the per-`Send` cursor, and nothing parses a
 ticker out of `phase` or `phase_slug`.
 
+Every node execution also narrates itself at INFO — one line on entry and one on exit carrying the
+phase position, the node name and the per-`Send` key, with the phase barrier reporting the phase's
+wall time (#4116). A book run takes hours, so this is what makes it watchable in a plain CI log;
+the narration never logs above INFO, leaving WARNING+ meaning trouble.
+
 The wrapper is `functools.wraps` + `*args/**kwargs`, and the form is load-bearing. LangGraph decides
 what to inject from `inspect.signature(func).parameters`, matched on parameter name *and*
 annotation, and `inspect.signature` follows `__wrapped__`. A `(state)`-only wrapper — with or

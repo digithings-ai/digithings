@@ -2528,7 +2528,10 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   - `digiquant.portfolio.chain.run_research_then_portfolio(research_input, deps)` —
     end-to-end: research (no publish) → portfolio H1–H9 → `publish_phase` (research only).
     Cron: `python -m digiquant.portfolio.chain --cadence daily`
-    (`.github/workflows/pipeline-digiquant.yml`).
+    (`.github/workflows/pipeline-digiquant.yml`). The entry point installs an INFO stdout
+    handler (`DIGIQUANT_LOG_LEVEL`, default INFO) and narrates its stages —
+    `[n/5] preflight → research → portfolio → publish → beliefs` — with elapsed time
+    (#4116), so `artifacts/run.log` shows where a run is while it runs.
   - `digiquant.portfolio.graph.build_portfolio_graph(watchlist, deps)` plus
     `python -m digiquant.portfolio.graph --from-digest <state.json>` for
     isolated portfolio runs.
