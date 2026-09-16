@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowUpRight, ExternalLink } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { gloomberbTickerUrl } from '@digithings/web';
 import { pnlColor } from '@/components/ui';
 import type { BookReconciliation } from '@/lib/book-reconciliation';
@@ -135,7 +135,7 @@ export default function AllocationsPositionsTable(props: {
                                 title={`Open ${p.ticker} in Gloomberb`}
                                 aria-label={`Open ${p.ticker} in Gloomberb (opens in a new tab)`}
                               >
-                                <ExternalLink size={12} aria-hidden />
+                                <ArrowUpRight size={12} aria-hidden />
                               </a>
                             ) : null}
                           </span>
