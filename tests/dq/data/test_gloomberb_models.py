@@ -526,3 +526,20 @@ def test_preview_access_warning_marker_is_exported() -> None:
     assert (
         PREVIEW_ACCESS_WARNING == "preview access: report is a free-tier preview (access=preview)"
     )
+
+
+# ── coverage-expansion input bounds (#4110 phase 4a) ─────────────────────────
+
+
+def test_transcripts_accepts_exactly_one_target() -> None:
+    assert TranscriptsInput(ticker="AAPL").transcript_id is None
+    assert TranscriptsInput(transcript_id="t1").ticker is None
+    with pytest.raises(ValidationError):
+        TranscriptsInput()
+    with pytest.raises(ValidationError):
+        TranscriptsInput(ticker="AAPL", transcript_id="t1")
+    with pytest.raises(ValidationError):
+        TranscriptsInput(transcript_id="x" * 201)
+    assert TranscriptsInput(ticker="AAPL", limit=100).limit == 100
+    with pytest.raises(ValidationError):
+        TranscriptsInput(ticker="AAPL", limit=101)

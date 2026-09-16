@@ -1023,6 +1023,22 @@ def normalize_transcripts(raw: Any) -> list[Transcript]:
     return [Transcript.model_validate(dict(entry)) for entry in _rows(raw, "calls")]
 
 
+def normalize_transcript_detail(raw: Any, fallback_id: str) -> Transcript:
+    """Map ``/cloud/transcripts/{id}`` to one row (shape probe-pending).
+
+    Accepts a wrapped ``{"transcript": {...}}`` or a bare object; the requested
+    id supplies ``id`` when the payload omits it and a non-mapping payload
+    (unexpected wire shape) still yields a typed row. Unknown fields — the
+    transcript body included — stay extras; nothing is dropped.
+    """
+    payload: Any = raw
+    if isinstance(raw, Mapping) and isinstance(raw.get("transcript"), Mapping):
+        payload = raw["transcript"]
+    merged: dict[str, Any] = dict(payload) if isinstance(payload, Mapping) else {}
+    merged.setdefault("id", fallback_id)
+    return Transcript.model_validate(merged)
+
+
 # ---------------------------------------------------------------------------
 # Coverage-expansion mappers (#4110 phase 2)
 # ---------------------------------------------------------------------------
