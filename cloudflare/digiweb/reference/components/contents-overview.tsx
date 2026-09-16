@@ -7,9 +7,15 @@
  * isActive/aria-current pattern site-nav.tsx already solves current-page
  * wayfinding with, rather than leaving its own "you are here" card
  * indistinguishable from the other 12 links.
+ *
+ * Wave 1 (T6): the card is the stock `Card` from `@digithings/web/ui` — the
+ * hand-built `.co-card` dress (top accent bar, hover lift) is deleted with it.
+ * The current-page signal stays: the link carries `aria-current`, the Card
+ * picks it up through the group-aria variant as an accent ring.
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Card, CardContent } from "@digithings/web/ui";
 
 const FAMILIES = [
   { href: "/", label: "Foundations", blurb: "Livery system, feature picker, button & CTA states." },
@@ -57,12 +63,18 @@ export function ContentsOverview() {
           <Link
             key={f.href + f.label}
             href={f.href}
-            className="co-card"
             aria-current={isActive(f.href) ? "page" : undefined}
+            className="group block"
           >
-            <span className="font-mono text-[0.6rem] tracking-[0.1em] text-accent">{String(i).padStart(2, "0")}</span>
-            <span className="font-mono text-[0.95rem] text-ink">{f.label}</span>
-            <span className="text-[0.8rem] leading-[1.4] text-ink-soft">{f.blurb}</span>
+            <Card className="h-full group-aria-[current=page]:ring-accent">
+              <CardContent className="flex flex-col gap-[0.25rem]">
+                <span className="font-mono text-[0.6rem] tracking-[0.1em] text-accent">
+                  {String(i).padStart(2, "0")}
+                </span>
+                <span className="font-mono text-[0.95rem] text-ink">{f.label}</span>
+                <span className="text-[0.8rem] leading-[1.4] text-ink-soft">{f.blurb}</span>
+              </CardContent>
+            </Card>
           </Link>
         ))}
       </div>

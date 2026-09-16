@@ -159,66 +159,11 @@
 
 /* Contents overview — the reference's front door */
 
-/* .co-grid migrated to Tailwind utilities on contents-overview.tsx */
-
-.co-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 1rem;
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  background: var(--surface);
-  text-decoration: none;
-  position: relative;
-  overflow: hidden;
-  transition: border-color 0.25s var(--ease), transform 0.25s var(--ease);
-}
-
-.co-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 2px;
-  background: var(--accent);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.3s var(--ease);
-}
-
-.co-card:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
-}
-
-.co-card:hover::before {
-  transform: scaleX(1);
-}
-
-/* "You are here": this grid mirrors the top nav (see the section copy), and
-   site-nav.tsx already solves current-page wayfinding via aria-current —
-   applying the identical signal here so the grid's own card for the page
-   you're standing on is distinguishable at a glance, not just on hover. */
-.co-card[aria-current="page"] {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
-}
-
-.co-card[aria-current="page"]::before {
-  transform: scaleX(1);
-}
-
-/* .co-index, .co-label, .co-blurb migrated to Tailwind utilities on
-   contents-overview.tsx */
-
-@media (prefers-reduced-motion: reduce) {
-  .co-card {
-    transition: border-color 0.25s var(--ease);
-  }
-
-  .co-card:hover {
-    transform: none;
-  }
-}
+/* .co-grid migrated to Tailwind utilities on contents-overview.tsx.
+   `.co-card*` deleted in wave 1 (T6): the family card is the stock kit `Card`
+   (`@digithings/web/ui`); the grid/card layout is utilities at the call site
+   and the current-page accent ring comes from the link's aria-current via the
+   group-aria variant. */
 
 /* Theme gallery — global livery chooser */
 

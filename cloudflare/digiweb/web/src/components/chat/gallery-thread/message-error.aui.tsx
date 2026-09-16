@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ActionBarPrimitive,
   ErrorPrimitive,
   MessagePrimitive,
   useAuiState,
@@ -58,8 +59,8 @@ export const MessageError: FC = () => {
 
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root mt-2 flex items-start gap-2 rounded-md border border-hair bg-surface px-3 py-2 text-sm text-ink">
-        <DotMatrix state="error" label="Error" />
+      <ErrorPrimitive.Root className="aui-message-error-root mt-2 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-ink">
+        <DotMatrix state="error" label="Error" className="size-4 text-destructive" />
         <div className="min-w-0 flex-1">
           <ErrorPrimitive.Message className="aui-message-error-message whitespace-pre-wrap">
             {title}
@@ -75,6 +76,14 @@ export const MessageError: FC = () => {
               ) : null}
             </details>
           ) : null}
+          <ActionBarPrimitive.Reload asChild>
+            <button
+              type="button"
+              className="aui-message-error-retry mt-2 inline-flex shrink-0 items-center self-start rounded-md border border-hair bg-surface px-2.5 py-1 text-xs font-medium text-ink transition-colors hover:bg-muted"
+            >
+              Retry
+            </button>
+          </ActionBarPrimitive.Reload>
         </div>
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
