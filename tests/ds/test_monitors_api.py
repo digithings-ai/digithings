@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import time
 
 import pytest
@@ -212,6 +213,172 @@ def test_create_exa_refuses_cron_and_missing_webhook_target(monkeypatch, tmp_pat
 
 
 @pytest.mark.unit
+def test_create_exa_502_when_remote_secret_missing(monkeypatch, tmp_path):
+    """#4196: HTTP-level pin of the 502 paths — nothing is persisted on a miss."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    from digisearch.monitors import provisioning as provisioning_mod
+
+    monkeypatch.setattr(
+        provisioning_mod, "create_exa_monitor", lambda **kwargs: {"id": "exa_mon_1"}
+    )
+    compensated: list[str] = []
+    monkeypatch.setattr(
+        provisioning_mod,
+        "delete_exa_monitor",
+        lambda **kwargs: compensated.append(kwargs["exa_monitor_id"]),
+    )
+    c = _monitor_client()
+    r = c.post("/v1/monitors", json=_exa_watch_body())
+
+    assert r.status_code == 502, r.text
+    assert r.json()["error"]["code"] == "exa_webhook_secret_missing"
+    assert compensated == ["exa_mon_1"]
+    assert c.get("/v1/monitors").json()["watches"] == []
+
+
+@pytest.mark.unit
+def test_create_exa_502_when_remote_id_missing(monkeypatch, tmp_path):
+    """#4196: no remote id → 502, nothing persisted, no remote id to compensate."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    from digisearch.monitors import provisioning as provisioning_mod
+
+    monkeypatch.setattr(
+        provisioning_mod,
+        "create_exa_monitor",
+        lambda **kwargs: {"status": "active", "webhookSecret": "s" * 32},
+    )
+    c = _monitor_client()
+    r = c.post("/v1/monitors", json=_exa_watch_body())
+
+    assert r.status_code == 502, r.text
+    assert r.json()["error"]["code"] == "exa_monitor_id_missing"
+    assert c.get("/v1/monitors").json()["watches"] == []
+
+
+@pytest.mark.unit
+def test_patch_backend_flip_refused_and_rotation_still_gated(monkeypatch, tmp_path):
+    """#4196: the flip-then-rotate repro 409s at the flip; state stays exa."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    from digisearch.monitors.store import MonitorStore
+
+    c = _monitor_client()
+    created = _create_watch(c, backend="exa")
+    wid = created["watch"]["watch_id"]
+
+    flipped = c.patch(f"/v1/monitors/{wid}", json={"backend": "oss"})
+    assert flipped.status_code == 409, flipped.text
+    assert flipped.json()["error"]["code"] == "watch_backend_immutable"
+
+    unchanged = c.get(f"/v1/monitors/{wid}").json()
+    assert unchanged["backend"] == "exa"
+    assert unchanged["exa_monitor_id"] == "exa_mon_1"
+    stored_secret = MonitorStore(db_path=str(tmp_path / "m.sqlite3")).get_delivery_secret(wid)
+    assert stored_secret == created["delivery_secret"]
+
+    rotated = c.patch(f"/v1/monitors/{wid}", json={"rotate_delivery_secret": True})
+    assert rotated.status_code == 409, rotated.text
+    assert rotated.json()["error"]["code"] == "exa_secret_rotate_unsupported"
+    assert (
+        MonitorStore(db_path=str(tmp_path / "m.sqlite3")).get_delivery_secret(wid) == stored_secret
+    )
+
+
+@pytest.mark.unit
+def test_patch_backend_oss_to_exa_refused_and_same_value_is_noop(monkeypatch, tmp_path):
+    """#4196: the other flip direction is the same rule; same-value patches pass."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    c = _monitor_client()
+
+    oss = _create_watch(c)
+    oss_id = oss["watch"]["watch_id"]
+    upgraded = c.patch(f"/v1/monitors/{oss_id}", json={"backend": "exa"})
+    assert upgraded.status_code == 409, upgraded.text
+    assert upgraded.json()["error"]["code"] == "watch_backend_immutable"
+    assert c.get(f"/v1/monitors/{oss_id}").json()["exa_monitor_id"] is None
+
+    exa_id = _create_watch(c, backend="exa")["watch"]["watch_id"]
+    noop = c.patch(f"/v1/monitors/{exa_id}", json={"backend": "exa"})
+    assert noop.status_code == 200, noop.text
+    assert noop.json()["backend"] == "exa"
+    assert noop.json()["exa_monitor_id"] == "exa_mon_1"
+
+
+@pytest.mark.unit
+def test_patch_exa_monitor_id_clear_refused_and_delete_still_tears_down(monkeypatch, tmp_path):
+    """#4196: a null-out cannot orphan the remote monitor that DELETE would clean."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    import digisearch.server as srv
+
+    c = _monitor_client()
+    created = _create_watch(c, backend="exa")
+    wid = created["watch"]["watch_id"]
+    assert created["watch"]["exa_monitor_id"] == "exa_mon_1"
+
+    cleared = c.patch(f"/v1/monitors/{wid}", json={"exa_monitor_id": None})
+    assert cleared.status_code == 409, cleared.text
+    assert cleared.json()["error"]["code"] == "monitor_exa_monitor_id_immutable"
+    assert c.get(f"/v1/monitors/{wid}").json()["exa_monitor_id"] == "exa_mon_1"
+
+    recorded: list[dict] = []
+    monkeypatch.setattr(srv, "delete_exa_monitor", lambda **kwargs: recorded.append(kwargs))
+    deleted = c.delete(f"/v1/monitors/{wid}")
+    assert deleted.status_code == 200, deleted.text
+    assert recorded == [{"exa_monitor_id": "exa_mon_1"}]  # the stored link, not a cleared one
+
+
+@pytest.mark.unit
+def test_patch_exa_monitor_id_refuses_cross_watch_id_and_allows_same_value(monkeypatch, tmp_path):
+    """#4196: a patch cannot aim DELETE at another watch's remote monitor."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    import digisearch.server as srv
+    from digisearch.monitors import provisioning as provisioning_mod
+
+    remote_ids = iter(["exa_mon_a", "exa_mon_b"])
+    monkeypatch.setattr(
+        provisioning_mod,
+        "create_exa_monitor",
+        lambda **kwargs: {"id": next(remote_ids), "webhookSecret": "s" * 32},
+    )
+    c = _monitor_client()
+    alpha = _create_watch(c, backend="exa")["watch"]
+    other = _create_watch(c, backend="exa")["watch"]
+
+    aimed = c.patch(
+        f"/v1/monitors/{alpha['watch_id']}", json={"exa_monitor_id": other["exa_monitor_id"]}
+    )
+    assert aimed.status_code == 409, aimed.text
+    assert aimed.json()["error"]["code"] == "monitor_exa_monitor_id_immutable"
+    assert c.get(f"/v1/monitors/{alpha['watch_id']}").json()["exa_monitor_id"] == "exa_mon_a"
+
+    noop = c.patch(f"/v1/monitors/{alpha['watch_id']}", json={"exa_monitor_id": "exa_mon_a"})
+    assert noop.status_code == 200, noop.text
+    assert noop.json()["exa_monitor_id"] == "exa_mon_a"
+
+    recorded: list[dict] = []
+    monkeypatch.setattr(srv, "delete_exa_monitor", lambda **kwargs: recorded.append(kwargs))
+    assert c.delete(f"/v1/monitors/{alpha['watch_id']}").status_code == 200
+    assert recorded == [{"exa_monitor_id": "exa_mon_a"}]  # never the other watch's id
+
+
+@pytest.mark.unit
+def test_patch_rotate_refused_on_stale_exa_monitor_id_misconfig(monkeypatch, tmp_path):
+    """#4196: rotation is gated on remote presence, not only backend="exa"."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    from digisearch.monitors.store import MonitorStore
+
+    c = _monitor_client()
+    created = _create_watch(c, exa_monitor_id="exa_mon_oss")
+    wid = created["watch"]["watch_id"]
+    assert created["watch"]["backend"] == "oss"
+
+    refused = c.patch(f"/v1/monitors/{wid}", json={"rotate_delivery_secret": True})
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["error"]["code"] == "exa_secret_rotate_unsupported"
+    stored_secret = MonitorStore(db_path=str(tmp_path / "m.sqlite3")).get_delivery_secret(wid)
+    assert stored_secret == created["delivery_secret"]
+
+
+@pytest.mark.unit
 def test_patch_rotate_refused_on_exa_backed_watch(monkeypatch, tmp_path):
     """#4184: a locally minted secret would break EXA signature verification."""
     _patch_monitor_store(monkeypatch, tmp_path)
@@ -327,6 +494,17 @@ def _create_watch(client: TestClient, **overrides: object) -> dict:
     r = client.post("/v1/monitors", json=body)
     assert r.status_code == 201, r.text
     return r.json()
+
+
+def _exa_watch_body() -> dict:
+    """A provisionable body whose remote answer the test controls per case."""
+    return {
+        "name": "etf",
+        "query": "etf flows",
+        "backend": "exa",
+        "schedule": {"mode": "interval", "interval_seconds": 3600},
+        "delivery": {"mode": "poll", "targets": [{"kind": "webhook", "url": _PUBLIC_HOOK}]},
+    }
 
 
 @pytest.mark.unit
@@ -507,6 +685,60 @@ def test_delete_retains_runs_and_run_detail(monkeypatch, tmp_path):
     kept = c.get(f"/v1/monitors/{wid}/runs")
     assert kept.status_code == 200
     assert [r["run_id"] for r in kept.json()["runs"]] == [run["run_id"]]
+
+
+@pytest.mark.unit
+def test_delete_exa_watch_tears_down_remote_best_effort(monkeypatch, tmp_path, caplog):
+    """#4196: DELETE passes the stored monitor id; a remote failure never blocks it."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    import digisearch.server as srv
+    from digisearch.monitors import provisioning as provisioning_mod
+
+    monkeypatch.setattr(
+        provisioning_mod,
+        "create_exa_monitor",
+        lambda **kwargs: {"id": "exa_mon_delete_7", "webhookSecret": "d" * 32},
+    )
+    recorded: list[dict] = []
+    monkeypatch.setattr(srv, "delete_exa_monitor", lambda **kwargs: recorded.append(kwargs))
+    c = _monitor_client()
+
+    wid = _create_watch(c, backend="exa")["watch"]["watch_id"]
+    deleted = c.delete(f"/v1/monitors/{wid}")
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json() == {"deleted": wid}
+    assert recorded == [{"exa_monitor_id": "exa_mon_delete_7"}]
+
+    other = _create_watch(c, backend="exa")["watch"]["watch_id"]
+
+    def _boom(**kwargs):
+        raise RuntimeError("remote delete exploded")
+
+    monkeypatch.setattr(srv, "delete_exa_monitor", _boom)
+    with caplog.at_level(logging.WARNING):
+        still_deleted = c.delete(f"/v1/monitors/{other}")
+    assert still_deleted.status_code == 200, still_deleted.text
+    assert still_deleted.json() == {"deleted": other}
+    assert c.get(f"/v1/monitors/{other}").status_code == 404
+    assert "failed to delete EXA monitor" in caplog.text
+
+
+@pytest.mark.unit
+def test_delete_oss_watch_makes_no_remote_call(monkeypatch, tmp_path):
+    """#4196: the OSS delete path stays adapter-free."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    import digisearch.server as srv
+
+    def _forbidden(**kwargs):
+        raise AssertionError("oss watch delete must not call the EXA adapter")
+
+    monkeypatch.setattr(srv, "delete_exa_monitor", _forbidden)
+    c = _monitor_client()
+    wid = _create_watch(c)["watch"]["watch_id"]
+
+    deleted = c.delete(f"/v1/monitors/{wid}")
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json() == {"deleted": wid}
 
 
 @pytest.mark.unit

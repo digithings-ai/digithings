@@ -241,13 +241,19 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 105) re-recorded for #4189 (per-process
     reference-counted MCP webset driver wording in ARCHITECTURE.md) — fixture
     prose only; RecursiveChunker unchanged.
+    Re-recorded at count 107 for #4196 (watch-backend-immutable /
+    remote-presence rotation guard / best-effort remote DELETE notes in
+    ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 108 for #4196 (server-owned `exa_monitor_id` note
+    + `monitor_exa_monitor_id_immutable` row in ARCHITECTURE.md) — fixture
+    prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 105
+    assert len(chunks) == 108
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -273,14 +279,17 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "9ce2b59017d82c91",
         "ef0f58a96ed218c0",
         "0e77d003d55f7ea9",
-        "016048733f31d53f",
-        "cf899d5d38a192e2",
+        "7973399b6e155051",
+        "e0ed75d4b266835e",
+        "5e1cdcae7ee033f5",
         "866bf2f65945a727",
-        "b1f7e47e77dbce93",
+        "62e24ed27153c8a1",
+        "0ab88c4d28e41b7d",
         "ebd46ff18db018b4",
         "7af3cdc7d42ec69e",
-        "2a938dc090252417",
-        "507a7ce716be2ad1",
+        "a3b047cd3ed1947b",
+        "35d304250e94973f",
+        "da47bdad65c33ded",
         "aa924885a2a48bdc",
         "300297e0b6534ddf",
         "767113eb8e027a2b",
