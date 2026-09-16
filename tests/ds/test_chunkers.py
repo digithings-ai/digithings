@@ -222,13 +222,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 80) re-recorded for #4065 (Phase C docs corrections) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 82 for #4065 (Task 8c EXA adapter + webhook translation docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 83 for #4065 (final-review docs touches: exa_adapter.py module-map row + #4123 pin citation in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 93 for #4066 (Phase D websets ARCH section + orchestrator/MCP tool docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 96 for #4066 (Phase D live-record block + EXA-shim human-precondition / MCP-driver (#4170) deferral notes + webset env-table rows in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 97 for #4066 (final-review docs wave: wired-webhook-delivery paragraph + library-only v1 enrich scope + live-record wording corrections in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 83
+    assert len(chunks) == 97
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -242,8 +245,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5fc146dcd98ed469",
         "6bb725ee96409565",
         "2496b0331a6908ca",
-        "a0e7b563bf9ec4f9",
-        "39a904210e4cc87a",
+        "e7597b9d03630def",
+        "3280ddb5f7ce73ee",
+        "71c75006a73bbb9b",
         "36e8025d96e584db",
         "a7fc35b75f9b5e09",
         "208b4fbb16a49071",
@@ -257,9 +261,20 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "c689e2f168577314",
         "5509075d7fcabffe",
         "2f7edd4395376f0c",
-        "ac7b29b4d7b97c64",
-        "998a1c6dea39b3bf",
-        "03f0c3868b10ba8c",
+        "7917a7f6718389d3",
+        "e9497a8a97a30c67",
+        "16e13007e80dab2c",
+        "7090bb1895cf01fc",
+        "f72fb524bae160b6",
+        "a45fa09bea0e8e51",
+        "a73404f288469603",
+        "5b442a8e6f3d05d4",
+        "6de35d68bea0e990",
+        "c5776a6b47ee3e04",
+        "3aed1b59bbde9920",
+        "cd75df0bdf136bd3",
+        "8073886ccefe0be6",
+        "06560323c42c4962",
         "f5694c994b90e40c",
         "2f102978f3f92316",
         "d201d5cef8605cdf",
@@ -284,7 +299,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "f3195dfc3d6d0f6a",
         "9d7b263a74bc8726",
         "367d6f1945838ddd",
-        "20c027f468c04701",
+        "4187a3ee58add217",
+        "6dd7e1ff8128c024",
+        "5fa5abc98008e40d",
         "b8ffe03a9011fe85",
         "5f8ed5c780e4f898",
         "2c3b651039d4969c",
@@ -303,9 +320,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "472ca1370eb9ef1a",
         "a3987db99f2b72c5",
         "9496728548f7cd2a",
-        "6d57e6ff0ba47c28",
-        "44ecfabe5926f420",
-        "5191b4ec0bfecb12",
+        "3a05c94596483aed",
+        "0f567a2b684efdf4",
+        "b9b4365399d7da8c",
         "b8cb5035323ab950",
         "9820e49d040ba85a",
         "634f3df55301a1f6",

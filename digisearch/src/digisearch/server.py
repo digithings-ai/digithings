@@ -5,13 +5,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
 import os
 import re
 import secrets
+import sqlite3
 import time as _time
 from collections import deque as _deque
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from threading import Lock as _Lock
 from typing import Any, Literal
 
@@ -44,6 +48,12 @@ from digisearch.orchestrator_tools import (
     TOOL_DIGISEARCH_MONITORS_TRIGGER,
     TOOL_DIGISEARCH_RESEARCH_DELEGATE,
     TOOL_DIGISEARCH_WEB_SEARCH,
+    TOOL_DIGISEARCH_WEBSETS_ADD_SEARCH,
+    TOOL_DIGISEARCH_WEBSETS_CREATE,
+    TOOL_DIGISEARCH_WEBSETS_EVENTS,
+    TOOL_DIGISEARCH_WEBSETS_EXPORT,
+    TOOL_DIGISEARCH_WEBSETS_GET,
+    TOOL_DIGISEARCH_WEBSETS_LIST_ITEMS,
     TOOL_WEB_SEARCH,
     OpenAIToolDict,
 )
@@ -52,10 +62,27 @@ from digisearch.pipeline.url_ingest import UrlIngestResult, ingest_url
 from digisearch.search._stub import query_index
 from digisearch.web_exa import WebSearchData
 from digisearch.web_search.models import WebSearchConfigError, WebSearchRequest, WebSearchResponse
+from digisearch.websets import service as websets_service
+from digisearch.websets.models import (
+    EnrichmentDef,
+    Webset,
+    WebsetEvent,
+    WebsetItem,
+    WebsetSearch,
+)
+from digisearch.websets.runner import (
+    WEBSET_TASKS,
+    backfill_enrichment,
+    guard_webset_task,
+    schedule_webset_task,
+)
+from digisearch.websets.service import WebsetServiceError
+from digisearch.websets.store import WebsetStoreError
+from digisearch.websets.store import get_store as get_webset_store
 
 configure_logging()
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
@@ -88,11 +115,107 @@ def _digisearch_path_scopes(method: str, path: str) -> list[str] | None:
     EXA holds no digikey JWT, so it authenticates with the shared
     ``EXA_MONITOR_WEBHOOK_SECRET`` checked inside the handler (missing or
     mismatched secret → 401 ``exa_bad_signature``, fail closed). Every other
-    path keeps the landed ``digisearch_path_scopes`` rules — no digikey change.
+    path keeps the landed ``digisearch_path_scopes`` rules — no digikey change,
+    and the Phase D ``/v1/websets*`` routes inherit its ``digisearch:query``
+    fallthrough like the Phase C monitor paths do.
     """
     if method.upper() == "POST" and path == "/v1/monitors/exa_webhook":
         return None
     return digisearch_path_scopes(method, path)
+
+
+# --- Phase D websets: lifespan-owned scheduler (§ Async lifecycle, #4066) ----
+
+
+class _WebsetTaskScheduler:
+    """Lifespan-owned ``WebsetScheduler``: runs are TaskGroup children.
+
+    Installed on the service facade at startup (``set_scheduler``) so every
+    route/service schedule ends up in the lifespan TaskGroup:
+
+    - ``schedule_run`` delegates to ``runner.schedule_webset_task``, which owns
+      the ``WEBSET_TASKS`` registry entry, the ``(webset_id, ok|error)``
+      done-callback, and the single-drive guard;
+    - ``schedule_backfill`` opens a tracked ``runner.backfill_enrichment`` task
+      (the ``add_enrichment`` drain path);
+    - ``cancel_all`` cancels every tracked task first so a clean shutdown never
+      hangs on an in-flight pass (spec § Async lifecycle: a selected webset at
+      boot is an orphan).
+    """
+
+    def __init__(self, task_group: asyncio.TaskGroup) -> None:
+        self._task_group = task_group
+        self._backfills: set[asyncio.Task[list[WebsetItem] | None]] = set()
+
+    def schedule_run(self, webset_id: str, *, verification_mode: str = "llm") -> None:
+        schedule_webset_task(self._task_group, webset_id, verification_mode=verification_mode)
+
+    def schedule_backfill(self, webset_id: str, enrichment_id: str) -> None:
+        task = self._task_group.create_task(
+            guard_webset_task(
+                backfill_enrichment(webset_id, enrichment_id),
+                webset_id=webset_id,
+                kind="backfill",
+            )
+        )
+        self._backfills.add(task)
+        task.add_done_callback(self._backfills.discard)
+
+    def cancel_all(self) -> None:
+        for task in [*WEBSET_TASKS.values(), *self._backfills]:
+            task.cancel()
+
+
+def _load_incomplete_websets() -> list[Webset]:
+    """Startup-resume selector query, run on a worker thread by the lifespan."""
+    return get_webset_store().list_incomplete_websets()
+
+
+def _require_real_search_backend() -> None:
+    """Fail startup unless Vectorize, Azure, Chroma, or DIGISEARCH_ALLOW_STUB=1 (unit tests) is set."""
+    require_real_search_backend()
+
+
+async def _resume_incomplete_websets(task_group: asyncio.TaskGroup) -> None:
+    """Re-schedule every orphaned webset as a registry-tracked run.
+
+    § Async lifecycle: the selector is the store's union of websets still
+    ``running`` and websets holding a non-terminal ``running`` search; each
+    selected webset is re-scheduled via ``run_webset_async`` (here through
+    ``schedule_webset_task``, so the run is visible in ``WEBSET_TASKS`` like
+    every other pass) under its persisted ``verification_mode``. The store
+    query runs on a worker thread because the sqlite connection is thread-bound.
+    A store that cannot be opened must not block startup: the routes will
+    surface the same fault per request.
+    """
+    try:
+        incomplete = await asyncio.to_thread(_load_incomplete_websets)
+    except (OSError, sqlite3.Error, WebsetStoreError) as exc:
+        logger.warning("webset startup resume skipped; store unavailable: %s", exc)
+        return
+    for webset in incomplete:
+        logger.info("webset startup resume scheduled webset_id=%s", webset.id)
+        schedule_webset_task(task_group, webset.id, verification_mode=webset.verification_mode)
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """App lifespan: fail-closed backend gate + webset TaskGroup ownership.
+
+    The TaskGroup wraps the whole serving window, so route-scheduled runs and
+    backfills stay cancelable at shutdown; ``set_scheduler`` is undone first so
+    no new work can be scheduled mid-teardown.
+    """
+    _require_real_search_backend()
+    async with asyncio.TaskGroup() as task_group:
+        scheduler = _WebsetTaskScheduler(task_group)
+        websets_service.set_scheduler(scheduler)
+        await _resume_incomplete_websets(task_group)
+        try:
+            yield
+        finally:
+            websets_service.set_scheduler(None)
+            scheduler.cancel_all()
 
 
 app = FastAPI(
@@ -103,16 +226,11 @@ app = FastAPI(
         "Interactive docs: `/docs` (Swagger) and `/redoc`."
     ),
     version=__version__,
+    lifespan=_lifespan,
 )
 install_metrics(app, service="digisearch", version=__version__)
 install_cors(app, service="digisearch")
 app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=_digisearch_path_scopes)
-
-
-@app.on_event("startup")
-def _require_real_search_backend() -> None:
-    """Fail startup unless Vectorize, Azure, Chroma, or DIGISEARCH_ALLOW_STUB=1 (unit tests) is set."""
-    require_real_search_backend()
 
 
 _rl_windows: dict[str, _deque] = {}
@@ -127,6 +245,9 @@ _RATE_LIMITS: dict[str, tuple[int, int]] = {
     "/v1/monitors": (30, 60),
     "/v1/monitors/tick": (10, 60),
     "/v1/monitors/exa_webhook": (10, 60),
+    # § Interfaces websets statics (creation is a DoS surface); the
+    # parameterized webset routes follow the same two-tier mechanism (D17).
+    "/v1/websets": (10, 60),
 }
 _DEFAULT_RATE_LIMIT = (30, 60)
 _UNLIMITED_PATHS = {"/health", "/healthz"}
@@ -139,6 +260,15 @@ _RATE_LIMIT_PATTERNS: tuple[tuple[re.Pattern[str], tuple[int, int]], ...] = (
     (re.compile(r"^/v1/monitors/[^/]+/runs$"), (30, 60)),
     (re.compile(r"^/v1/monitors/[^/]+/runs/[^/]+$"), (30, 60)),
     (re.compile(r"^/v1/monitors/[^/]+$"), (30, 60)),
+    # § Interfaces websets pattern budget, most specific first: creation/refresh
+    # surfaces 10/min, read surfaces 30/min. ``/v1/websets`` stays an exact
+    # static above so the list/create path cannot fall into the id pattern.
+    (re.compile(r"^/v1/websets/[^/]+/monitors/[^/]+/trigger$"), (10, 60)),
+    (re.compile(r"^/v1/websets/[^/]+/webhooks/[^/]+/rotate$"), (10, 60)),
+    (re.compile(r"^/v1/websets/[^/]+/(searches|monitors|webhooks|cancel|export)$"), (10, 60)),
+    (re.compile(r"^/v1/websets/[^/]+/enrichments/[^/]+$"), (30, 60)),
+    (re.compile(r"^/v1/websets/[^/]+/(items|events|enrichments)$"), (30, 60)),
+    (re.compile(r"^/v1/websets/[^/]+$"), (30, 60)),
 )
 
 
@@ -600,6 +730,42 @@ class MonitorRunsData(BaseModel):
     next_cursor: str | None = None
 
 
+class WebsetCounts(BaseModel):
+    """Item counts by verification state for ``digisearch_websets_get`` (#4066)."""
+
+    pending: int = 0
+    verified: int = 0
+    rejected: int = 0
+
+
+class WebsetGetData(BaseModel):
+    """Payload for the ``digisearch_websets_get`` orchestrator tool (#4066)."""
+
+    webset: Webset
+    counts: WebsetCounts
+
+
+class WebsetItemsData(BaseModel):
+    """Payload for the ``digisearch_websets_list_items`` orchestrator tool (#4066)."""
+
+    items: list[WebsetItem]
+    next_cursor: str | None = None
+
+
+class WebsetEventsData(BaseModel):
+    """Payload for the ``digisearch_websets_events`` orchestrator tool (#4066)."""
+
+    events: list[WebsetEvent]
+    next_cursor: str | None = None
+
+
+class WebsetExportData(BaseModel):
+    """Payload for the ``digisearch_websets_export`` orchestrator tool (#4066)."""
+
+    format: str
+    content: str
+
+
 class OrchestratorInvokeResponse(BaseModel):
     """Response for POST /v1/orchestrator_invoke (SIMP-020)."""
 
@@ -614,6 +780,12 @@ class OrchestratorInvokeResponse(BaseModel):
         | WebSearchData
         | MonitorRun
         | MonitorRunsData
+        | Webset
+        | WebsetSearch
+        | WebsetGetData
+        | WebsetItemsData
+        | WebsetEventsData
+        | WebsetExportData
         | None
     ) = None
     error: str | None = None
@@ -714,6 +886,115 @@ def _coerce_web_search_max_results(raw: object) -> int | None:
     else:
         return None
     return min(max(num, 1), 10)
+
+
+# --- Phase D websets: orchestrator invoke branches (#4066, R12) --------------
+
+_WEBSET_VERIFICATION_STATES = ("verified", "rejected", "pending")
+
+
+def _coerce_webset_int(raw: object, *, default: int, minimum: int, maximum: int) -> int | None:
+    """Defensively coerce an orchestrator webset integer arg (None when invalid).
+
+    Bools are rejected (the bool-is-int quirk), integral strings are accepted,
+    and the result is clamped to the documented bound.
+    """
+    if raw is None:
+        return default
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        number = raw
+    elif isinstance(raw, str) and raw.strip().lstrip("-").isdigit():
+        number = int(raw.strip())
+    else:
+        return None
+    return min(max(number, minimum), maximum)
+
+
+def _invoke_webset_tool(tool: str, args: dict[str, Any]) -> OrchestratorInvokeResponse:
+    """Dispatch one ``digisearch_websets_*`` tool to the service facade.
+
+    Every failure is ``ok=False`` with the stable code (``code: message``) — the
+    orchestrator surface raises no new error shape (R12). Missing required args
+    are the same shape, never a 5xx.
+    """
+    webset_id = str(args.get("webset_id") or "").strip()
+    if tool != TOOL_DIGISEARCH_WEBSETS_CREATE and not webset_id:
+        return OrchestratorInvokeResponse(ok=False, error="webset_id is required")
+    try:
+        if tool == TOOL_DIGISEARCH_WEBSETS_CREATE:
+            query = str(args.get("query") or "").strip()
+            if not query:
+                return OrchestratorInvokeResponse(ok=False, error="query is required")
+            count = _coerce_webset_int(args.get("count"), default=10, minimum=1, maximum=100)
+            if count is None:
+                return OrchestratorInvokeResponse(ok=False, error="count must be an integer 1-100")
+            criteria = args.get("criteria") if isinstance(args.get("criteria"), list) else []
+            enrichments = (
+                args.get("enrichments") if isinstance(args.get("enrichments"), list) else None
+            )
+            data: Any = websets_service.create_webset(
+                query=query,
+                count=count,
+                criteria=criteria,
+                enrichments=enrichments,
+                verification_mode=str(args.get("verification_mode") or "llm"),
+                workspace_id=(
+                    str(args["workspace_id"]).strip() if args.get("workspace_id") else None
+                ),
+            )
+        elif tool == TOOL_DIGISEARCH_WEBSETS_GET:
+            webset = websets_service.get_webset(webset_id)
+            data = WebsetGetData(
+                webset=webset,
+                counts=WebsetCounts(**websets_service.count_items(webset_id)),
+            )
+        elif tool == TOOL_DIGISEARCH_WEBSETS_ADD_SEARCH:
+            query = str(args.get("query") or "").strip()
+            if not query:
+                return OrchestratorInvokeResponse(ok=False, error="query is required")
+            count = _coerce_webset_int(args.get("count"), default=10, minimum=1, maximum=100)
+            if count is None:
+                return OrchestratorInvokeResponse(ok=False, error="count must be an integer 1-100")
+            criteria = args.get("criteria") if isinstance(args.get("criteria"), list) else None
+            data = websets_service.add_search(
+                webset_id, query=query, count=count, criteria=criteria
+            )
+        elif tool == TOOL_DIGISEARCH_WEBSETS_LIST_ITEMS:
+            verification = args.get("verification")
+            if verification is not None and verification not in _WEBSET_VERIFICATION_STATES:
+                return OrchestratorInvokeResponse(
+                    ok=False, error="verification must be verified | rejected | pending"
+                )
+            limit = _coerce_webset_int(args.get("limit"), default=50, minimum=1, maximum=200)
+            if limit is None:
+                return OrchestratorInvokeResponse(ok=False, error="limit must be an integer 1-200")
+            cursor = str(args["cursor"]).strip() if args.get("cursor") else None
+            items, next_cursor = websets_service.list_items(
+                webset_id, verification=verification, limit=limit, cursor=cursor
+            )
+            data = WebsetItemsData(items=items, next_cursor=next_cursor)
+        elif tool == TOOL_DIGISEARCH_WEBSETS_EVENTS:
+            limit = _coerce_webset_int(args.get("limit"), default=50, minimum=1, maximum=200)
+            if limit is None:
+                return OrchestratorInvokeResponse(ok=False, error="limit must be an integer 1-200")
+            after = str(args["after"]).strip() if args.get("after") else None
+            events, next_cursor = websets_service.list_events(webset_id, after=after, limit=limit)
+            data = WebsetEventsData(events=events, next_cursor=next_cursor)
+        elif tool == TOOL_DIGISEARCH_WEBSETS_EXPORT:
+            fmt = str(args.get("format") or "json").strip().lower()
+            content, _media_type = websets_service.export_webset(webset_id, fmt=fmt)
+            data = WebsetExportData(format=fmt, content=content)
+        else:  # pragma: no cover - the dispatch guard admits only the six names
+            return OrchestratorInvokeResponse(ok=False, error=f"unknown webset tool: {tool!r}")
+    except WebsetServiceError as exc:
+        return OrchestratorInvokeResponse(ok=False, error=f"{exc.code}: {exc}")
+    except ValidationError as exc:
+        return OrchestratorInvokeResponse(ok=False, error=f"validation_error: {exc}")
+    except ValueError as exc:
+        return OrchestratorInvokeResponse(ok=False, error=str(exc))
+    return OrchestratorInvokeResponse(ok=True, service="digisearch", tool=tool, data=data)
 
 
 @app.post("/v1/orchestrator_invoke")
@@ -991,6 +1272,26 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             tool=tool,
             data=MonitorRunsData(runs=runs, next_cursor=next_cursor),
         )
+
+    # Phase D websets (#4066, R12): six prefixed manifest names, each reaching
+    # the facade through _invoke_webset_tool (errors are ok:false, never 4xx).
+    if tool == TOOL_DIGISEARCH_WEBSETS_CREATE:
+        return _invoke_webset_tool(tool, args)
+
+    if tool == TOOL_DIGISEARCH_WEBSETS_GET:
+        return _invoke_webset_tool(tool, args)
+
+    if tool == TOOL_DIGISEARCH_WEBSETS_ADD_SEARCH:
+        return _invoke_webset_tool(tool, args)
+
+    if tool == TOOL_DIGISEARCH_WEBSETS_LIST_ITEMS:
+        return _invoke_webset_tool(tool, args)
+
+    if tool == TOOL_DIGISEARCH_WEBSETS_EVENTS:
+        return _invoke_webset_tool(tool, args)
+
+    if tool == TOOL_DIGISEARCH_WEBSETS_EXPORT:
+        return _invoke_webset_tool(tool, args)
 
     raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
 
@@ -1457,6 +1758,356 @@ async def api_exa_webhook(request: Request) -> dict[str, Any] | JSONResponse:
     except MonitorStoreError as exc:
         return _store_error(request, exc)
     return run.model_dump(mode="json")
+
+
+# --- Phase D websets (§ Interfaces, #4066) -----------------------------------
+#
+# Thin handlers only: validate the body shape, call the T6 service facade (which
+# opens its own thread-bound store per call via DIGISEARCH_WEBSETS_DB), and
+# render either the object or the shared digibase error envelope. The run itself
+# is never awaited here: the lifespan-installed scheduler owns the TaskGroup and
+# the WEBSET_TASKS registry (§ Async lifecycle), and every route returns
+# immediately (202/201).
+
+
+def _webset_error(request: Request, status_code: int, code: str, message: str) -> JSONResponse:
+    """Build the shared digibase error envelope for a webset route."""
+    return json_error_response(
+        status_code=status_code,
+        code=code,
+        message=message,
+        request=request,
+        service="digisearch",
+    )
+
+
+#: Stable webset codes → HTTP status. Anything absent (and any 500-class entry)
+#: renders as the generic ``internal_error``, so store-internal invariant codes
+#: (``webset_not_settled``, ``transition_invalid``, ...) can never surface.
+_WEBSET_ERROR_STATUS: dict[str, int] = {
+    "webset_not_found": 404,
+    "search_not_found": 404,
+    "monitor_not_found": 404,
+    "enrichment_not_found": 404,
+    "item_not_found": 404,
+    "webhook_not_found": 404,
+    "cursor_not_found": 404,
+    "invalid_criteria": 422,
+    "invalid_verification_mode": 422,
+    "datatap_websets_disabled": 422,
+    "webhook_url_required": 422,
+    "webhook_url_private": 422,
+    "enrichment_limit_exceeded": 400,
+    "webset_terminal": 409,
+    # A T5b ledger receipt error, never a route failure: map to the internal
+    # shape so neither the code nor ledger detail surfaces.
+    "webhook_secret_missing": 500,
+}
+
+
+def _webset_service_error(request: Request, exc: WebsetServiceError) -> JSONResponse:
+    """Map a facade failure to the § Interfaces envelope (unknown → internal)."""
+    status_code = _WEBSET_ERROR_STATUS.get(exc.code)
+    if status_code is None or status_code >= 500:
+        logger.warning("webset service error mapped to internal_error: %s", exc.code)
+        return _webset_error(
+            request, 500, websets_service.INTERNAL_ERROR_CODE, "internal webset failure"
+        )
+    return _webset_error(request, status_code, exc.code, str(exc))
+
+
+class WebsetCreateRequest(BaseModel):
+    """Request body for POST /v1/websets (spec § Interfaces)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(..., min_length=1, description="Natural-language candidate query")
+    count: int = Field(
+        default=10, ge=1, le=100, description="Target VERIFIED items (not a page size)"
+    )
+    criteria: list[dict[str, str]] = Field(
+        default_factory=list,
+        description=(
+            "1-5 verification rules [{name, rule}]; the service raises invalid_criteria "
+            "for 0 or >5 so the stable code reaches the envelope"
+        ),
+    )
+    enrichments: list[dict[str, Any]] | None = Field(
+        default=None, description="Up to 10 typed enrichment defs (max 10 enforced by the service)"
+    )
+    verification_mode: str = Field(
+        default="llm",
+        description="llm (default) | rules — validated by the service (invalid_verification_mode)",
+    )
+    workspace_id: str | None = Field(
+        default=None, description="Tenant id; 'datatap' is rejected (datatap_websets_disabled)"
+    )
+
+
+class WebsetSearchRequest(BaseModel):
+    """Request body for POST /v1/websets/{webset_id}/searches."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(..., min_length=1)
+    count: int = Field(default=10, ge=1, le=100)
+    criteria: list[dict[str, str]] | None = Field(
+        default=None, description="Missing criteria inherit the webset's initial rules"
+    )
+
+
+class WebsetMonitorRequest(BaseModel):
+    """Request body for POST /v1/websets/{webset_id}/monitors (poll-only v1)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    interval_seconds: int = Field(
+        default=3600, ge=60, description="Refresh-cadence METADATA; no tick driver runs it in v1"
+    )
+    webhook_url: str | None = Field(
+        default=None, description="Optional https public URL (Phase C SSRF gate)"
+    )
+
+
+class WebsetWebhookRequest(BaseModel):
+    """Request body for POST /v1/websets/{webset_id}/webhooks (secret returned once)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field(default="", description="https public URL (Phase C SSRF gate)")
+    events: list[str] = Field(
+        default_factory=list,
+        description="Subset of item.created|item.enriched|webset.idle|webset.failed",
+    )
+
+
+class WebsetEnrichmentRequest(BaseModel):
+    """Request body for POST /v1/websets/{webset_id}/enrichments."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1, max_length=120)
+    type: Literal["text", "number", "date", "url", "email", "phone", "options", "company_profile"]
+    description: str = ""
+    options: list[str] = Field(default_factory=list)
+
+    def to_definition(self) -> EnrichmentDef:
+        """Build the T1 def (raises ``ValidationError`` on invalid options usage)."""
+        return EnrichmentDef(
+            name=self.name, type=self.type, description=self.description, options=self.options
+        )
+
+
+@app.post("/v1/websets", status_code=202, response_model=None)
+def api_create_webset(req: WebsetCreateRequest, request: Request) -> dict[str, Any] | JSONResponse:
+    """Create a webset + initial search; the run is scheduled and 202 returns."""
+    try:
+        webset = websets_service.create_webset(
+            query=req.query,
+            count=req.count,
+            criteria=req.criteria,
+            enrichments=req.enrichments,
+            verification_mode=req.verification_mode,
+            workspace_id=req.workspace_id,
+        )
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    except ValidationError as exc:
+        return _webset_error(request, 422, "validation_error", str(exc))
+    return webset.model_dump(mode="json")
+
+
+@app.get("/v1/websets/{webset_id}", response_model=None)
+def api_get_webset(webset_id: str, request: Request) -> dict[str, Any] | JSONResponse:
+    """Load one webset (status + search generations + enrichment defs)."""
+    try:
+        webset = websets_service.get_webset(webset_id)
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    return webset.model_dump(mode="json")
+
+
+@app.post("/v1/websets/{webset_id}/searches", status_code=202, response_model=None)
+def api_add_webset_search(
+    webset_id: str, req: WebsetSearchRequest, request: Request
+) -> dict[str, Any] | JSONResponse:
+    """Attach a follow-up search generation (async; 202 returns status=running)."""
+    try:
+        search = websets_service.add_search(
+            webset_id, query=req.query, count=req.count, criteria=req.criteria
+        )
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    except ValidationError as exc:
+        return _webset_error(request, 422, "validation_error", str(exc))
+    return search.model_dump(mode="json")
+
+
+@app.get("/v1/websets/{webset_id}/items", response_model=None)
+def api_list_webset_items(
+    webset_id: str,
+    request: Request,
+    verification: Literal["verified", "rejected", "pending"] | None = None,
+    limit: int = 50,
+    cursor: str | None = None,
+) -> dict[str, Any] | JSONResponse:
+    """Page items NEWEST-first (R11); ``cursor`` is the previous page's last item id."""
+    try:
+        items, next_cursor = websets_service.list_items(
+            webset_id, verification=verification, limit=limit, cursor=cursor
+        )
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    return {
+        "items": [item.model_dump(mode="json") for item in items],
+        "next_cursor": next_cursor,
+    }
+
+
+@app.post("/v1/websets/{webset_id}/enrichments", status_code=201, response_model=None)
+def api_add_webset_enrichment(
+    webset_id: str, req: WebsetEnrichmentRequest, request: Request
+) -> dict[str, Any] | JSONResponse:
+    """Attach an enrichment def (max 10 active; 11th → 400 enrichment_limit_exceeded)."""
+    try:
+        definition = req.to_definition()
+        attached = websets_service.add_enrichment(webset_id, definition)
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    except ValidationError as exc:
+        return _webset_error(request, 422, "validation_error", str(exc))
+    return attached.model_dump(mode="json")
+
+
+@app.delete(
+    "/v1/websets/{webset_id}/enrichments/{enrichment_id}",
+    status_code=204,
+    response_class=Response,
+)
+def api_remove_webset_enrichment(webset_id: str, enrichment_id: str, request: Request) -> Response:
+    """Detach an enrichment; already-resolved item values are retained."""
+    try:
+        websets_service.remove_enrichment(webset_id, enrichment_id)
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    return Response(status_code=204)
+
+
+@app.post("/v1/websets/{webset_id}/monitors", status_code=201, response_model=None)
+def api_create_webset_monitor(
+    webset_id: str, req: WebsetMonitorRequest, request: Request
+) -> dict[str, Any] | JSONResponse:
+    """Record a poll-only refresh cadence on a webset (never a Phase C Watch)."""
+    try:
+        monitor = websets_service.create_monitor(
+            webset_id, interval_seconds=req.interval_seconds, webhook_url=req.webhook_url
+        )
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    return monitor.model_dump(mode="json")
+
+
+@app.get("/v1/websets/{webset_id}/monitors", response_model=None)
+def api_list_webset_monitors(webset_id: str, request: Request) -> dict[str, Any] | JSONResponse:
+    """List a webset's monitors newest-created first."""
+    try:
+        monitors = websets_service.list_monitors(webset_id)
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    return {"monitors": [monitor.model_dump(mode="json") for monitor in monitors]}
+
+
+@app.post(
+    "/v1/websets/{webset_id}/monitors/{monitor_id}/trigger", status_code=202, response_model=None
+)
+def api_trigger_webset_monitor(
+    webset_id: str, monitor_id: str, request: Request
+) -> dict[str, Any] | JSONResponse:
+    """Manual refresh: open a new search generation (the v1 tick-driver substitute)."""
+    try:
+        webset = websets_service.trigger_monitor(webset_id, monitor_id)
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    return webset.model_dump(mode="json")
+
+
+@app.get("/v1/websets/{webset_id}/events", response_model=None)
+def api_list_webset_events(
+    webset_id: str,
+    request: Request,
+    after: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any] | JSONResponse:
+    """Page the append-only event log OLDEST-first; ``after`` is the last seen event id."""
+    try:
+        events, next_cursor = websets_service.list_events(webset_id, after=after, limit=limit)
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    return {
+        "events": [event.model_dump(mode="json") for event in events],
+        "next_cursor": next_cursor,
+    }
+
+
+@app.post("/v1/websets/{webset_id}/webhooks", status_code=201, response_model=None)
+def api_add_webset_webhook(
+    webset_id: str, req: WebsetWebhookRequest, request: Request
+) -> dict[str, Any] | JSONResponse:
+    """Register a webhook; the server-generated secret appears in this response only.
+
+    An unknown ``events`` kind is caller input: ``WebsetWebhookRequest.events`` is
+    ``list[str]`` while ``WebhookConfig.events`` is ``list[EventKind]``, so the
+    service's pydantic ``ValidationError`` maps to 422 here (the sibling routes'
+    ``validation_error`` envelope) instead of escaping into the generic 500.
+    """
+    try:
+        webhook = websets_service.add_webhook(webset_id, url=req.url, events=req.events)
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    except ValidationError as exc:
+        return _webset_error(request, 422, "validation_error", str(exc))
+    return webhook.model_dump(mode="json")
+
+
+@app.post("/v1/websets/{webset_id}/webhooks/{webhook_id}/rotate", response_model=None)
+def api_rotate_webset_webhook(
+    webset_id: str, webhook_id: str, request: Request
+) -> dict[str, Any] | JSONResponse:
+    """Rotate the webhook secret with a 24h overlap; returns the NEW secret once."""
+    try:
+        webhook = websets_service.rotate_webhook_secret(webset_id, webhook_id)
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    return webhook.model_dump(mode="json")
+
+
+@app.post("/v1/websets/{webset_id}/cancel", response_model=None)
+def api_cancel_webset(webset_id: str, request: Request) -> dict[str, Any] | JSONResponse:
+    """Cancel a webset; the runner settles every non-terminal search ``cancelled``."""
+    try:
+        webset = websets_service.cancel_webset(webset_id)
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    return webset.model_dump(mode="json")
+
+
+@app.get("/v1/websets/{webset_id}/export", response_model=None)
+def api_export_webset(
+    webset_id: str, request: Request, format: str = "json"
+) -> Response | JSONResponse:
+    """Export verified items as CSV (polars) or JSON (per-field citations retained)."""
+    try:
+        content, media_type = websets_service.export_webset(webset_id, fmt=format.strip().lower())
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    except ValueError as exc:
+        return _webset_error(request, 422, "validation_error", str(exc))
+    filename = f"{webset_id}.{'csv' if media_type == 'text/csv' else 'json'}"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 register_fastapi_error_handlers(app, service="digisearch")
