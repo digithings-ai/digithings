@@ -65,6 +65,7 @@ import {
   wantsProviderKeyPing,
 } from "@/components/stock/embed-provider-flow";
 import { listenMcpOAuthResult, startMcpOAuth } from "@/components/stock/embed-mcp-oauth";
+import { THINKING_MODES, VIEW_MODES } from "@/lib/view-modes";
 
 export type ComposerMenuKind =
   | "settings"
@@ -73,6 +74,8 @@ export type ComposerMenuKind =
   | "tools"
   | "language"
   | "effort"
+  | "view"
+  | "thinking"
   | "provider";
 
 type MenuView =
@@ -80,6 +83,8 @@ type MenuView =
   | "language"
   | "models"
   | "effort"
+  | "view"
+  | "thinking"
   | "tools"
   | "mcp"
   | "mcp-edit"
@@ -99,6 +104,19 @@ type MenuRow = {
 
 const EFFORTS = ["low", "medium", "high"] as const;
 
+const VIEW_LABELS: Record<string, string> = {
+  hidden: "Hidden · answer only",
+  compact: "Compact · closed",
+  balanced: "Balanced · collapse when done",
+  detailed: "Detailed · stays open",
+};
+
+const THINKING_LABELS: Record<string, string> = {
+  auto: "Auto · follow view",
+  collapsed: "Collapsed",
+  open: "Open",
+};
+
 function slashName(id: string): string {
   return id.startsWith("/") ? id : `/${id}`;
 }
@@ -112,6 +130,8 @@ function initialView(kind: ComposerMenuKind): MenuView {
   if (kind === "models") return "models";
   if (kind === "language") return "language";
   if (kind === "effort") return "effort";
+  if (kind === "view") return "view";
+  if (kind === "thinking") return "thinking";
   if (kind === "tools") return "tools";
   if (kind === "mcp") return "mcp";
   if (kind === "provider") return "provider";
@@ -246,6 +266,10 @@ export function EmbedComposerMenu({
         setCursor(Math.max(0, languageCodes.indexOf(api.prefs.language)));
       } else if (kind === "effort") {
         setCursor(Math.max(0, EFFORTS.indexOf(api.prefs.effort as (typeof EFFORTS)[number])));
+      } else if (kind === "view") {
+        setCursor(Math.max(0, VIEW_MODES.indexOf(api.prefs.view)));
+      } else if (kind === "thinking") {
+        setCursor(Math.max(0, THINKING_MODES.indexOf(api.prefs.thinking)));
       } else if (kind === "provider") {
         const current = defaultProviderPick(providerActive?.provider, initialProvider);
         setProviderPick(current);
@@ -291,11 +315,22 @@ export function EmbedComposerMenu({
       });
     }
     rows.push({
+      id: "view",
+      label: slashName("view"),
+      value: api.prefs.view,
+      activate: () => {
+        setCursor(Math.max(0, VIEW_MODES.indexOf(api.prefs.view)));
+        setView("view");
+      },
+    });
+    rows.push({
       id: "thinking",
       label: slashName("thinking"),
-      value: api.prefs.thinking ? "On" : "Off",
-      checked: api.prefs.thinking,
-      activate: () => api.setThinking(!api.prefs.thinking),
+      value: api.prefs.thinking,
+      activate: () => {
+        setCursor(Math.max(0, THINKING_MODES.indexOf(api.prefs.thinking)));
+        setView("thinking");
+      },
     });
     rows.push({
       id: "language",
@@ -404,6 +439,38 @@ export function EmbedComposerMenu({
         exclusive: true,
         activate: () => {
           api.setEffort(id);
+          onClose();
+        },
+      })),
+    [api, onClose],
+  );
+
+  const viewRows = useMemo(
+    (): MenuRow[] =>
+      VIEW_MODES.map((id) => ({
+        id,
+        label: slashName(`view ${id}`),
+        value: VIEW_LABELS[id] ?? "",
+        checked: api.prefs.view === id,
+        exclusive: true,
+        activate: () => {
+          api.setView(id);
+          onClose();
+        },
+      })),
+    [api, onClose],
+  );
+
+  const thinkingRows = useMemo(
+    (): MenuRow[] =>
+      THINKING_MODES.map((id) => ({
+        id,
+        label: slashName(`thinking ${id}`),
+        value: THINKING_LABELS[id] ?? "",
+        checked: api.prefs.thinking === id,
+        exclusive: true,
+        activate: () => {
+          api.setThinking(id);
           onClose();
         },
       })),
@@ -671,8 +738,12 @@ export function EmbedComposerMenu({
         ? languageRows
         : view === "effort"
           ? effortRows
-          : view === "tools"
-            ? toolsRows
+          : view === "view"
+            ? viewRows
+            : view === "thinking"
+              ? thinkingRows
+              : view === "tools"
+                ? toolsRows
             : view === "mcp"
               ? mcpRows
               : view === "mcp-edit"
@@ -691,8 +762,12 @@ export function EmbedComposerMenu({
         ? "/models"
         : view === "effort"
           ? "/effort"
-          : view === "tools"
-            ? "/tools"
+          : view === "view"
+            ? "/view"
+            : view === "thinking"
+              ? "/thinking"
+              : view === "tools"
+                ? "/tools"
             : view === "mcp" || view === "mcp-edit"
               ? "/mcp"
               : view === "provider" || view === "provider-key" || view === "provider-model"
@@ -825,9 +900,23 @@ export function EmbedComposerMenu({
           api.setEffort(cycle(EFFORTS, api.prefs.effort, delta));
           return;
         }
+        if (view === "main" && row?.id === "view") {
+          event.preventDefault();
+          event.stopPropagation();
+          api.setView(cycle(VIEW_MODES, api.prefs.view, delta));
+          return;
+        }
+        if (view === "main" && row?.id === "thinking") {
+          event.preventDefault();
+          event.stopPropagation();
+          api.setThinking(cycle(THINKING_MODES, api.prefs.thinking, delta));
+          return;
+        }
         if (
           view === "language" ||
           view === "effort" ||
+          view === "view" ||
+          view === "thinking" ||
           view === "models" ||
           view === "tools" ||
           view === "mcp" ||

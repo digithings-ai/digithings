@@ -157,7 +157,7 @@ describe("the rows a reader ends up seeing", () => {
     const greeting = [
       { type: "response.output_item.done", item: { type: "reasoning", summary: [], content: [] } },
     ] as unknown as FoundryStreamEvent[];
-    const spans = greeting.map(mapFoundryEvent).filter((m) => m?.type === "activity");
+    const spans = greeting.map((event) => mapFoundryEvent(event)).filter((m) => m?.type === "activity");
     expect(spans).toHaveLength(0);
   });
 });

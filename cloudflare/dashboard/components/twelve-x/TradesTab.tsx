@@ -256,11 +256,15 @@ export default function TradesTab({
         <h2 className="font-display text-2xl tracking-tight text-ink">Trades</h2>
       </div>
       <p className="max-w-2xl px-1 text-xs text-ink-mute">
-        Every trade recommendation and whether it worked. Each idea stays live until the
-        next board that posts the same currency axis, either orientation (successor clock).
-        Impact shows the observed excursion extremes with the close mark; directional
-        outcomes use daily closes. Stop / target levels are quoted as published and never
-        drive lifecycle scoring.
+        Every trade recommendation and whether it worked. A trade stays live until its stop
+        or target is touched (first touch wins, ordered by 1h/5m candles), the bookkeeper
+        drops it, or a newer board replaces it. Result carries the one-word grade: Right or
+        Wrong when a direction resolved (measured at the touched level or exit close when
+        filled, directional when the entry never filled), Closed for an ended trade with no
+        verdict, and Live while it runs. Status names the close reason — Target, Stop, Both,
+        Dropped, or Superseded — and reads Live while the trade runs. Impact pairs the
+        excursion range with the return at close where one exists, tagged with its grading
+        basis on ended trades or open while live.
       </p>
 
       {history.length === 0 ? (

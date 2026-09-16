@@ -35,7 +35,7 @@ docker compose up -d digisearch
 uvicorn digisearch.server:app
 ```
 
-MCP: `digisearch mcp   (FastMCP streamable-http: digisearch_query, digisearch_research_turn)`
+MCP: `digisearch mcp   (FastMCP streamable-http: semantic, research_turn)`
 
 ## Configuration
 - `CHROMA_PATH`: Persistent Chroma directory (activates the Chroma backend).
@@ -103,8 +103,8 @@ Composite research turn (plan → retrieve → aggregate) with citations.
 auth: digisearch:query · rate: 10/min/IP · requires the digisearch[agent] extra
 
 ## MCP tools
-- `digisearch_query` — Search documents; returns formatted hits with score + preview.
-- `digisearch_research_turn` — Composite research turn with citations (needs digisearch[agent]).
+- `semantic` — Search documents; returns formatted hits with score + preview.
+- `research_turn` — Composite research turn with citations (needs digisearch[agent]).
 
 ## Stack
 Chroma, Azure AI Search, OpenAI, BeautifulSoup, pdfplumber, LangGraph, FastAPI

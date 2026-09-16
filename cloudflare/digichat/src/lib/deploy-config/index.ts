@@ -7,6 +7,8 @@ export {
   PersistenceSchema,
   AuthModeSchema,
   DisclosureModeSchema,
+  ViewModeSchema,
+  ThinkingModeSchema,
   PageContextModeSchema,
   disclosureIsVisible,
   disclosureDefaultOpen,
@@ -27,6 +29,20 @@ export {
   type PageContextMode,
   type ToolCatalogEntry,
 } from "./schema";
+
+export {
+  VIEW_MODES,
+  THINKING_MODES,
+  DEFAULT_VIEW_MODE,
+  DEFAULT_THINKING_MODE,
+  isViewMode,
+  isThinkingMode,
+  effectiveReasoningMode,
+  effectiveToolCallsMode,
+  type ViewMode,
+  type ThinkingMode,
+  type ChainDisclosureMode,
+} from "@/lib/view-modes";
 
 export {
   toDigichatClientConfig,

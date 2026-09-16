@@ -28,6 +28,7 @@ is the only shared chrome.
 | `/`                | Foundations | contents map, livery switcher, feature picker, button/CTA states |
 | `/iterate`         | Iterate     | utilitarian terminal blend gallery — pick corners, type, CTAs, nav, heroes, density (herdr / agentmail / omarchy); preference ledger → `design/BLEND.md` |
 | `/controls`        | Controls    | custom dropdown pane, search bar, nav buttons, form fields, tooltip (4 placements), range slider (fill + ticks + disabled), tags/chips input, accordion (single-open disclosure), skeleton loading states (shimmer), empty/error states |
+| `/ui`              | UI kit      | stock shadcn Button/Input/Card/Dialog from `@digithings/web/ui` on the single token bridge — dark, light, and a scoped-livery proof |
 | `/layout-patterns` | Layout      | feature cell, bento grid, container-scaled product frame, phone mockup (dashboard app) |
 | `/typography`      | Typography  | type specimen + live type-suite switcher (5 coordinated suites: display + body + mono), scroll-linked word reveals (blur / muted / outline), copy & voice grammar |
 | `/data`            | Data        | dot-matrix stat, count-up stat, odometer digit-roll, marquee ticker, sticky card deck, changelog rail, repository activity, sortable data table, pricing, comparison matrix |

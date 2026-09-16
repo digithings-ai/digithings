@@ -295,7 +295,7 @@ Request: `ResearchTurnRequest {user_message, index_name, top_k, mode, filter?, f
 
 Auth required (`digisearch:query` scope via the default `digisearch_path_scopes` fallthrough). Rate limited: 30 req/min (default bucket).
 
-Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4), recency_days (1–365, default 7; mapped onto provider recency filters — searxng day/month/year with a week mapping to month — omitted when null)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. `run_web_search` tries the searxng sidecar first, fails over to embedded ddgs (`DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs`, sidecar URL from `DIGISEARCH_SEARXNG_URL`), then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). The fetch is SSRF-guarded by digifetch (#3934): http/https only, internal/metadata addresses refused, and every redirect hop re-validated (no auto-follow) with the operator `DIGISEARCH_FETCH_ALLOWED_HOSTS` allowlist as the explicit escape hatch. Fetch/extract failures keep the original search snippet — enrichment never fails the response. No new port: served by the existing digisearch HTTP app.
+Proprietary web search (#3853). Request `WebSearchRequest {query, include_domains (max 5), exclude_domains (max 20), max_results (1–10, default 4), recency_days (1–365, default 7; mapped onto provider recency filters — searxng day/month/year with a week mapping to month — omitted when null)}`; response `WebSearchResponse {query, results [{url, title, snippet, score, engine}], provider}`. The orchestrator `web_search` invoke maps its `arguments` onto the same model field-for-field — including `recency_days`, which is omitted when the caller does not set it so the default window stays in force, and rejected as `ok: false` naming the field when out of range (#4165). `run_web_search` tries the searxng sidecar first, fails over to embedded ddgs (`DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs`, sidecar URL from `DIGISEARCH_SEARXNG_URL`), then enriches up to `fetch_max_pages` (default 3) hits by fetching via composed digifetch (`HttpFetcher` + `with_retry` + `RateLimiter`) and extracting markdown (trafilatura primary with `favor_precision` + `deduplicate`, readability fallback). The fetch is SSRF-guarded by digifetch (#3934): http/https only, internal/metadata addresses refused, and every redirect hop re-validated (no auto-follow) with the operator `DIGISEARCH_FETCH_ALLOWED_HOSTS` allowlist as the explicit escape hatch. Fetch/extract failures keep the original search snippet — enrichment never fails the response. No new port: served by the existing digisearch HTTP app.
 
 ### MCP Tools
 
@@ -303,11 +303,17 @@ MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streama
 
 | Tool | Description | Optional |
 |------|-------------|----------|
-| `digisearch_query` | Search documents; returns formatted string of hits with score and content preview | No |
+| `semantic` | Semantic search over documents; returns formatted hits with score and content preview | No |
 | `web_search` | Search the public web; returns JSON `WebSearchResponse` (#3853) | Yes (`digisearch[web-search]`) |
-| `digisearch_research_turn` | Composite research turn (plan → retrieve → aggregate) with citations | Yes (`digisearch[agent]`) |
+| `search_strategies` | Filtered semantic search over the research library | No |
+| `research_turn` | Composite research turn (plan → retrieve → aggregate) with citations | Yes (`digisearch[agent]`) |
 
-Tool parameters for `digisearch_query`: `text`, `index_name`, `top_k`, `mode`.
+These are the names the MCP server advertises. digigraph prefixes the operator
+server id (`{id}_{tool}`, `mcp_client.prefixed_tool_name`), so the model calls
+`digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`,
+and `digisearch_research_turn`.
+
+Tool parameters for `semantic`: `text`, `index_name`, `top_k`, `mode`.
 
 The `digisearch mcp` CLI builds a real `DigiSearch` client first
 (`DigiSearchConfig.from_config` when `--config` is passed, else
@@ -985,9 +991,9 @@ The contract is versioned by `{"tools": [...], "version": 1}` in the tools respo
 
 ### digiclaw MCP attachment
 
-digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback, `digisearch-mcp` Docker profile). Tools available: `digisearch_query`, `web_search` (when `[web-search]` is installed), `digisearch_research_turn` (when `[agent]` is installed).
+digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback in standalone/Docker profiles; in the Cloudflare stack the process binds 0.0.0.0 and is reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route). Tools available: `semantic`, `web_search` (when `[web-search]` is installed), `search_strategies`, `research_turn` (when `[agent]` is installed). digigraph sees the same tools prefixed as `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`, and `digisearch_research_turn` (`{id}_{tool}`).
 
-MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is purely at network level (loopback binding).
+MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is at network level (loopback binding, or the secret-gated edge route in the stack).
 
 ### digiflow integration
 

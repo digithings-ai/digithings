@@ -15,6 +15,12 @@
 import type { ActivityDetail } from "@/lib/chat-activity";
 import type { PageContextMode } from "@/lib/deploy-config/schema";
 import {
+  THINKING_MODES,
+  VIEW_MODES,
+  type ThinkingMode,
+  type ViewMode,
+} from "@/lib/view-modes";
+import {
   defaultThreadSkinForTenant,
   isThreadSkin,
   threadSkinChoices,
@@ -105,6 +111,17 @@ export type EmbedTenantConfig = {
    * X-Digi-Enable-Web-Search.
    */
   webSearch?: boolean;
+  /**
+   * Chain-of-thought view mode for this tenant's embeds (digichat skin):
+   * hidden / compact / balanced / detailed. `balanced` (default) opens
+   * reasoning + tool groups while they stream and collapses them when done.
+   */
+  view?: ViewMode;
+  /**
+   * Reasoning-only override on top of `view`: auto (follow the view mode),
+   * collapsed (pinned closed), open (pinned expanded).
+   */
+  thinking?: ThinkingMode;
   /** page = full content chrome inside iframe; embed = compact iframe child. */
   layout?: "page" | "embed";
   /**
@@ -119,6 +136,12 @@ export type EmbedTenantConfig = {
       default?: boolean;
       token?: string;
       tokenEnv?: string;
+      /**
+       * MCP setup values applied when this server's tools are registered (e.g.
+       * the digisearch index name or the digivault path prefix). Forwarded to
+       * digigraph; never client-projected. Mirrors the YAML `mcp.servers[].setup`.
+       */
+      setup?: Record<string, string>;
       authHeader?: string;
     }>;
     allowUserServers?: boolean;
@@ -334,6 +357,12 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
     throw new Error(`${ctx}: webSearch must be a boolean`);
   }
+  if (v.view !== undefined && !VIEW_MODES.includes(v.view as ViewMode)) {
+    throw new Error(`${ctx}: view must be "hidden", "compact", "balanced", or "detailed"`);
+  }
+  if (v.thinking !== undefined && !THINKING_MODES.includes(v.thinking as ThinkingMode)) {
+    throw new Error(`${ctx}: thinking must be "auto", "collapsed", or "open"`);
+  }
   if (v.attachments !== undefined && typeof v.attachments !== "boolean") {
     throw new Error(`${ctx}: attachments must be a boolean`);
   }
@@ -419,6 +448,25 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
           `embed tenant "${hostKey}": mcp.servers[${index}].authHeader must be a string`,
         );
       }
+      let setup: Record<string, string> | undefined;
+      const rawSetup = server.setup;
+      if (rawSetup !== undefined) {
+        if (typeof rawSetup !== "object" || rawSetup === null || Array.isArray(rawSetup)) {
+          throw new Error(
+            `embed tenant "${hostKey}": mcp.servers[${index}].setup must be an object`,
+          );
+        }
+        const entries = Object.entries(rawSetup as Record<string, unknown>);
+        for (const [key, value] of entries) {
+          if (typeof value !== "string") {
+            throw new Error(
+              `embed tenant "${hostKey}": mcp.servers[${index}].setup.${key} must be a string`,
+            );
+          }
+        }
+        // Empty maps are legal and simply omitted — nothing to forward.
+        if (entries.length) setup = { ...(rawSetup as Record<string, string>) };
+      }
       return {
         id: server.id,
         url: server.url,
@@ -426,6 +474,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         ...(typeof server.default === "boolean" ? { default: server.default } : {}),
         ...(typeof server.token === "string" ? { token: server.token } : {}),
         ...(typeof server.tokenEnv === "string" ? { tokenEnv: server.tokenEnv } : {}),
+        ...(setup ? { setup } : {}),
         ...(typeof server.authHeader === "string" ? { authHeader: server.authHeader } : {}),
       };
     });
@@ -473,6 +522,10 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
+    view: VIEW_MODES.includes(v.view as ViewMode) ? (v.view as ViewMode) : undefined,
+    thinking: THINKING_MODES.includes(v.thinking as ThinkingMode)
+      ? (v.thinking as ThinkingMode)
+      : undefined,
     attachments: typeof v.attachments === "boolean" ? v.attachments : undefined,
     pageContext: PAGE_CONTEXT_MODES.includes(v.pageContext as PageContextMode)
       ? (v.pageContext as PageContextMode)

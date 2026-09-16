@@ -30,7 +30,9 @@ def _open_vault() -> Vault:
     return Vault(root)
 
 
-# Single registration path — discovery names == VAULT_HANDLERS keys.
+# Single registration path — register_mcp_tools advertises the MCP surface name
+# of every VAULT_HANDLERS entry (canonical ids stay internal; digigraph adds the
+# `{server_id}_` prefix on its side).
 register_mcp_tools(mcp, _open_vault)
 
 
