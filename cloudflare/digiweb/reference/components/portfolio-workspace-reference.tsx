@@ -3,7 +3,20 @@
  * restrained command band establishes exposure, then a full-width position
  * ledger carries only the information needed to monitor and follow a holding.
  * Static data, token-only dress.
+ *
+ * Wave 1 (T6): the ledger is the controls-layer kit `Table`
+ * (`@digithings/web`); the `.pw-table*` dress is deleted from finance.css.
+ * The command band keeps its `.pw-command*` grammar.
  */
+
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@digithings/web";
 
 const POSITIONS = [
   { ticker: "XLE", category: "energy", weight: "17.2%", targetWeight: "18.0%", stop: "−8%", priceTarget: "+15%" },
@@ -50,34 +63,40 @@ export function PortfolioWorkspaceReference() {
             <span className="pw-section-meta">allocation · risk · dossier</span>
           </div>
 
-          <div className="pw-table-wrap">
-            <table className="pw-table">
-              <thead>
-                <tr>
-                  <th scope="col">ticker</th>
-                  <th scope="col">category</th>
-                  <th scope="col">current / target</th>
-                  <th scope="col">stop / target</th>
-                  <th scope="col">follow</th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="ctl-table-scroll">
+            <Table>
+              <TableHeader className="border-b border-hair">
+                <TableRow>
+                  <TableHead>ticker</TableHead>
+                  <TableHead>category</TableHead>
+                  <TableHead numeric>current / target</TableHead>
+                  <TableHead numeric>stop / target</TableHead>
+                  <TableHead>follow</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {POSITIONS.map((position) => (
-                  <tr key={position.ticker}>
-                    <td><strong>{position.ticker}</strong></td>
-                    <td>{position.category}</td>
-                    <td>
+                  <TableRow key={position.ticker}>
+                    <TableCell>
+                      <strong>{position.ticker}</strong>
+                    </TableCell>
+                    <TableCell className="text-ink-mute">{position.category}</TableCell>
+                    <TableCell numeric>
                       <span className="pw-allocation">
                         <strong>{position.weight}</strong>
                         <small>target {position.targetWeight}</small>
                       </span>
-                    </td>
-                    <td>{position.stop} / {position.priceTarget}</td>
-                    <td><span className="pw-follow">dossier</span></td>
-                  </tr>
+                    </TableCell>
+                    <TableCell numeric>
+                      {position.stop} / {position.priceTarget}
+                    </TableCell>
+                    <TableCell>
+                      <span className="pw-follow">dossier</span>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </section>
       </div>

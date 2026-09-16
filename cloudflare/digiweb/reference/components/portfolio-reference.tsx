@@ -6,9 +6,21 @@
  * display template, no charting engine.
  *
  * Wave 1: the side pill is the stock kit Badge (outline) with the money tone
- * as a call-site utility, per the wave-1 chip map.
+ * as a call-site utility, per the wave-1 chip map. T6: the table itself is the
+ * controls-layer kit `Table` (`@digithings/web`) — the frame stays the plain
+ * call-site shell; numeric columns take the kit's numeric treatment.
  */
 import { Badge } from "@digithings/web/ui";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@digithings/web";
+
 type Position = {
   sym: string;
   side: "long" | "short";
@@ -44,88 +56,75 @@ export function PortfolioReference() {
         the long/short side read. Tabular numerals keep the columns honest.
       </p>
 
-      {/* Migrated to token-backed utilities + the stock kit Badge. The side pill
-          is `outline` with the money tone as a call-site utility (long → up,
-          short → down); the P&L column keeps its per-row up/down read. */}
+      {/* Migrated to the stock kit Badge + the controls-layer kit Table. The
+          side pill is `outline` with the money tone as a call-site utility
+          (long → up, short → down); the P&L column keeps its per-row up/down
+          read. The frame stays the plain call-site shell. */}
       <div className="mt-[1.2rem] overflow-x-auto rounded-none border border-hair bg-surface">
-        <table className="w-full min-w-[560px] border-collapse font-mono text-[0.82rem] [font-variant-numeric:tabular-nums]">
-          <thead>
-            <tr>
-              {(
-                [
-                  ["instrument", "text-left"],
-                  ["side", ""],
-                  ["size", "text-right"],
-                  ["entry", "text-right"],
-                  ["mark", "text-right"],
-                  ["unrealized", "text-right"],
-                ] as const
-              ).map(([label, align]) => (
-                <th
-                  key={label}
-                  scope="col"
-                  className={`border-b border-hair px-4 py-[0.7rem] text-[0.58rem] font-normal uppercase tracking-[0.1em] text-ink-mute ${align}`}
-                >
-                  {label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
+        <Table className="min-w-[560px]">
+          <TableHeader className="border-b border-hair">
+            <TableRow>
+              <TableHead>instrument</TableHead>
+              <TableHead>side</TableHead>
+              <TableHead numeric>size</TableHead>
+              <TableHead numeric>entry</TableHead>
+              <TableHead numeric>mark</TableHead>
+              <TableHead numeric>unrealized</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {POSITIONS.map((p) => (
-              <tr key={p.sym}>
-                <th
-                  scope="row"
-                  className="border-b border-hair/55 px-4 py-[0.62rem] text-left font-normal text-ink"
-                >
+              <TableRow key={p.sym}>
+                {/* The kit Table exposes no row-header part; keep the native
+                    `th scope="row"` and borrow the kit's cell dress class. */}
+                <th scope="row" className="ctl-table-td text-left font-normal text-ink">
                   {p.sym}
                 </th>
-                <td className="border-b border-hair/55 px-4 py-[0.62rem] text-ink-soft">
+                <TableCell>
                   <Badge
                     variant="outline"
                     className={p.side === "long" ? "text-up" : "text-down"}
                   >
                     {p.side}
                   </Badge>
-                </td>
-                <td className="border-b border-hair/55 px-4 py-[0.62rem] text-right text-ink-soft">
+                </TableCell>
+                <TableCell numeric className="text-ink-soft">
                   {p.size}
-                </td>
-                <td className="border-b border-hair/55 px-4 py-[0.62rem] text-right text-ink-mute">
+                </TableCell>
+                <TableCell numeric className="text-ink-mute">
                   {p.entry.toLocaleString()}
-                </td>
-                <td className="border-b border-hair/55 px-4 py-[0.62rem] text-right text-ink-soft">
+                </TableCell>
+                <TableCell numeric className="text-ink-soft">
                   {p.mark.toLocaleString()}
-                </td>
-                <td
-                  className={`border-b border-hair/55 px-4 py-[0.62rem] text-right ${
-                    p.pnl >= 0 ? "text-up" : "text-down"
-                  }`}
+                </TableCell>
+                <TableCell
+                  numeric
+                  className={p.pnl >= 0 ? "text-up" : "text-down"}
                 >
                   {money(p.pnl)}{" "}
                   <span className="text-[0.72rem]">{pctf(p.pct)}</span>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td
-                className="border-t border-hair px-4 py-[0.8rem] text-left text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute"
+          </TableBody>
+          <TableFooter className="border-t border-hair">
+            <TableRow>
+              <TableCell
                 colSpan={5}
+                className="text-left text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute"
               >
                 net unrealized
-              </td>
-              <td className="border-t border-hair px-4 py-[0.8rem] text-right">
+              </TableCell>
+              <TableCell numeric>
                 <span
                   className={`text-[0.9rem] tracking-normal ${net >= 0 ? "text-up" : "text-down"}`}
                 >
                   {money(net)}
                 </span>
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+              </TableCell>
+            </TableRow>
+          </TableFooter>
+        </Table>
       </div>
     </section>
   );
