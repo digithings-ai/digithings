@@ -44,6 +44,8 @@ export function useStockChatPrefs({
     language: clientConfig.chrome.defaultLanguage || detectBrowserLanguageCode(),
     model: clientConfig.models.default ?? clientConfig.models.available[0] ?? "",
     extra: extraOffFromCatalog(catalogTools),
+    view: clientConfig.features.view,
+    thinking: clientConfig.features.thinking,
   }));
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
   const [providerSeed, setProviderSeed] = useState<string | undefined>();
@@ -110,6 +112,7 @@ export function useStockChatPrefs({
         const resolved = tryResolveLanguageInput(code) ?? DEFAULT_LANGUAGE_CODE;
         setChatPrefs((p) => ({ ...p, language: resolved }));
       },
+      setView: (mode) => setChatPrefs((p) => ({ ...p, view: mode })),
       setThinking: (value) => setChatPrefs((p) => ({ ...p, thinking: value })),
       setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
       setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort })),
@@ -118,6 +121,8 @@ export function useStockChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: DEFAULT_LANGUAGE_CODE,
           extra: extraOffFromCatalog(catalogTools),
+          view: clientConfig.features.view,
+          thinking: clientConfig.features.thinking,
         }),
       tenantAllowsWeb,
       showByok,
@@ -150,6 +155,12 @@ export function useStockChatPrefs({
       openEffort: () => {
         setComposerMenu("effort");
       },
+      openView: () => {
+        setComposerMenu("view");
+      },
+      openThinking: () => {
+        setComposerMenu("thinking");
+      },
       openLanguage: () => {
         setComposerMenu("language");
       },
@@ -163,6 +174,8 @@ export function useStockChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: DEFAULT_LANGUAGE_CODE,
           extra: extraOffFromCatalog(catalogTools),
+          view: clientConfig.features.view,
+          thinking: clientConfig.features.thinking,
         });
         newThread();
       },
@@ -171,6 +184,8 @@ export function useStockChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: DEFAULT_LANGUAGE_CODE,
           extra: extraOffFromCatalog(catalogTools),
+          view: clientConfig.features.view,
+          thinking: clientConfig.features.thinking,
         });
         newThread();
       },
@@ -191,6 +206,8 @@ export function useStockChatPrefs({
       clientConfig.mcp.allowUserServers,
       clientConfig.mcp.allowAddForm,
       clientConfig.mcp.servers,
+      clientConfig.features.view,
+      clientConfig.features.thinking,
     ],
   );
 

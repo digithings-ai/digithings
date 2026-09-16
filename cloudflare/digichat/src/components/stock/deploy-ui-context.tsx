@@ -6,16 +6,14 @@
  */
 
 import { createContext, useContext } from "react";
-import type { DisclosureMode, UserAlign } from "@/lib/deploy-config/schema";
-import {
-  disclosureDefaultOpen,
-  disclosureIsLocked,
-  disclosureIsVisible,
-} from "@/lib/deploy-config/schema";
+import type { UserAlign } from "@/lib/deploy-config/schema";
+import type { ChainDisclosureMode } from "@/lib/view-modes";
 
 export type DeployUiValue = {
-  reasoning: DisclosureMode;
-  toolCalls: DisclosureMode;
+  /** Effective reasoning disclosure (view mode + thinking override). */
+  reasoning: ChainDisclosureMode;
+  /** Effective tool-call disclosure (view mode only). */
+  toolCalls: ChainDisclosureMode;
   userAlign: UserAlign;
 };
 
@@ -38,8 +36,8 @@ export function useDisclosureUi(kind: "reasoning" | "toolCalls") {
   const mode = ui[kind];
   return {
     mode,
-    visible: disclosureIsVisible(mode),
-    defaultOpen: disclosureDefaultOpen(mode),
-    locked: disclosureIsLocked(mode),
+    visible: mode !== "off",
+    defaultOpen: mode === "expanded",
+    locked: false,
   };
 }

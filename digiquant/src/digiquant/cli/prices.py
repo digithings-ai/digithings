@@ -576,6 +576,81 @@ def fetch_macro_cmd(
     click.echo(f"  upserted {res.rows} rows into macro_series_observations")
 
 
+# ─── fetch-fx-intraday ───────────────────────────────────────────────────
+
+
+@prices.command("fetch-fx-intraday")
+@click.option(
+    "--interval",
+    type=str,
+    default="1h",
+    show_default=True,
+    help=(
+        "yfinance candle interval, persisted per row to "
+        "fx_intraday_observations.interval; FX 1h bars cap at 730d of history, "
+        "5m at 60d."
+    ),
+)
+@click.option(
+    "--period",
+    type=str,
+    default="730d",
+    show_default=True,
+    help="yfinance lookback window for the candle download.",
+)
+@click.option("--dry-run", is_flag=True)
+@click.option("--supabase", is_flag=True)
+def fetch_fx_intraday_cmd(interval: str, period: str, dry_run: bool, supabase: bool) -> None:
+    """Ingest intraday FX candles (Yahoo) into fx_intraday_observations.
+
+    The twelve-x trade grader reads this table with the core service key to
+    order stop-vs-target touches inside a day, which the daily close cannot
+    express. ``--interval`` is persisted on every row (part of the upsert key),
+    so a 5m and a 1h candle coexist at the same bar OPEN. Deliberately exempt
+    from the R2 writers-stop: intraday candles have no R2 generation and no
+    Supabase-side reader to migrate — the same argument as fedprob in
+    fetch-macro_cmd.
+    """
+    from digiquant.data.prices.macro_ingest import fetch_fx_intraday
+    from digiquant.data.prices.supabase_writer import (
+        build_supabase_client,
+        upsert_fx_intraday_observations,
+    )
+
+    candles = fetch_fx_intraday(interval=interval, period=period)
+    rows = [
+        {
+            "source": "yahoo",
+            "series_id": c.series_id,
+            "interval": interval,
+            "ts": c.ts.isoformat(),
+            "open": c.open,
+            "high": c.high,
+            "low": c.low,
+            "close": c.close,
+        }
+        for c in candles
+    ]
+    click.echo(f"fx intraday: {len(rows)} candles (interval={interval}, period={period})")
+
+    if dry_run or not supabase:
+        # Dry-run: print a compact summary by series (mirrors fetch-macro).
+        summary: dict[str, int] = {}
+        for r in rows:
+            summary[r["series_id"]] = summary.get(r["series_id"], 0) + 1
+        click.echo(json.dumps(summary, indent=2))
+        return
+
+    client = build_supabase_client(
+        os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL")),
+        os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY")),
+    )
+    if client is None:
+        raise click.ClickException("Supabase credentials not set.")
+    res = upsert_fx_intraday_observations(client, rows)
+    click.echo(f"  upserted {res.rows} rows into fx_intraday_observations")
+
+
 # ─── sync-calendar ───────────────────────────────────────────────────────
 
 
