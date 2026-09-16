@@ -228,9 +228,6 @@ def test_mcp_search_notes_reads_the_local_vault(
     monkeypatch.setenv("DIGIVAULT_ROOT", str(root))
     fake = _FakeMcp()
     register_mcp_tools(fake, lambda: Vault(root))
-    assert (
-        fake.tools["search_notes"]("alpha", "")
-        == "[digivault error: path_prefix is required]"
-    )
+    assert fake.tools["search_notes"]("alpha", "") == "[digivault error: path_prefix is required]"
     payload = json.loads(fake.tools["search_notes"]("alpha", "sub"))
     assert payload["hits"]
