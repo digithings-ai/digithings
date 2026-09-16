@@ -489,7 +489,21 @@ function callIdOf(item: { call_id?: string }): string | undefined {
   return typeof item.call_id === "string" && item.call_id.trim() ? item.call_id.trim() : undefined;
 }
 
-function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | null {
+/**
+ * Per-turn mapping state. Foundry emits a call's output as its own item, and
+ * the message item carrying citation annotations is the turn's LAST event — a
+ * stateless mapper cannot tell "those chunks already reached the wire" from
+ * "these annotations are the only source of them".
+ */
+export interface FoundryMapState {
+  /** Set once an `azure_ai_search_call_output` item has streamed this turn. */
+  sawSearchOutput: boolean;
+}
+
+function mapOutputItemDone(
+  event: OutputItemDoneEvent,
+  state?: FoundryMapState,
+): FoundryServerEvent | null {
   const item = event.item;
 
   // The tool this agent actually calls. `arguments` is the model's own search
@@ -621,6 +635,10 @@ function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | nul
       }
     }
     if (documents.length > 0) {
+      // The message item is the turn's LAST event. When the search output item
+      // already streamed these chunks into the search row's result, emitting a
+      // second `file_search` row here appended it after the answer; suppress.
+      if (state?.sawSearchOutput) return null;
       return {
         type: "activity",
         span: {
@@ -643,7 +661,10 @@ function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | nul
  * duplicated every reply), and fires both `.in_progress` and `.searching` for
  * one search step (mapping both duplicated the "Searching…" trace line).
  */
-export function mapFoundryEvent(event: FoundryStreamEvent): FoundryServerEvent | null {
+export function mapFoundryEvent(
+  event: FoundryStreamEvent,
+  state?: FoundryMapState,
+): FoundryServerEvent | null {
   switch (event.type) {
     case "response.output_text.delta": {
       const delta = extractTextDelta((event as Record<string, unknown>).delta);
@@ -708,8 +729,14 @@ export function mapFoundryEvent(event: FoundryStreamEvent): FoundryServerEvent |
       // of a search whose row is already open.
       return null;
     }
-    case "response.output_item.done":
-      return mapOutputItemDone(event as OutputItemDoneEvent);
+    case "response.output_item.done": {
+      const doneEvent = event as OutputItemDoneEvent;
+      const mapped = mapOutputItemDone(doneEvent, state);
+      if (state && doneEvent.item?.type === "azure_ai_search_call_output") {
+        state.sawSearchOutput = true;
+      }
+      return mapped;
+    }
     case "response.completed":
       return { type: "done" };
     case "response.error":
@@ -834,8 +861,9 @@ export async function createFoundryStreamResponse(opts: {
         });
 
         const textFilter = new FoundryToolLeakFilter();
+        const mapState: FoundryMapState = { sawSearchOutput: false };
         for await (const event of responseStream) {
-          const mapped = mapFoundryEvent(event);
+          const mapped = mapFoundryEvent(event, mapState);
           if (!mapped) continue;
           if (mapped.type === "text-delta") {
             const delta = textFilter.push(mapped.delta);

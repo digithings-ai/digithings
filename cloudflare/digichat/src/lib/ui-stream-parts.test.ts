@@ -122,6 +122,49 @@ describe("writeStandardActivity", () => {
     expect(outputs[0]?.output).not.toHaveProperty("label");
   });
 
+  it("collapses a streamed call and its later output item into one row", () => {
+    // Live Foundry sequence: `.added` opens the search row, the call's `.done`
+    // settles it with the query, and the `azure_ai_search_call_output` item —
+    // same call_id — arrives afterwards. That output must land on the SAME row
+    // (AI SDK replaces tool-output-available in place), not mint a second one.
+    const chunks = collect([
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "Searching the knowledge base…",
+        toolName: "azure_ai_search",
+        callId: "call_1",
+      },
+      {
+        operation: "execute_tool",
+        status: "completed",
+        label: 'Searched for: "auth"',
+        toolName: "azure_ai_search",
+        query: "auth",
+        callId: "call_1",
+      },
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "Sources",
+        toolName: "azure_ai_search",
+        callId: "call_1",
+        documents: [{ title: "Auth doc", path: "https://example.com/auth" }],
+      },
+    ]);
+    const starts = chunks.filter((c) => c.type === "tool-input-start");
+    expect(starts).toHaveLength(1);
+    const inputs = chunks.filter((c) => c.type === "tool-input-available");
+    expect(inputs).toHaveLength(1);
+    const outputs = chunks.filter((c) => c.type === "tool-output-available");
+    expect(outputs).toHaveLength(2);
+    expect(outputs.every((c) => c.toolCallId === starts[0]?.toolCallId)).toBe(true);
+    expect(outputs.at(-1)?.output).toMatchObject({
+      query: "auth",
+      documents: [{ title: "Auth doc", path: "https://example.com/auth" }],
+    });
+  });
+
   it("does not emit tool-input-available on a started call until finish (avoids Approve)", () => {
     const chunks = collect(
       {

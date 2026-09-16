@@ -144,7 +144,11 @@ function completeToolCall(
   if (callId) {
     const rowId = ctx.rowByCallId.get(callId);
     if (rowId) {
-      ctx.rowByCallId.delete(callId);
+      // Retain the mapping: Foundry streams a call's OUTPUT as a later item
+      // that carries the same call_id (e.g. an `azure_ai_search_call_output`
+      // after the search_call's own completion). Re-resolving the same row
+      // lets that output update the row in place instead of opening a second
+      // one. The map lives for a single response stream.
       const q = ctx.pendingByName.get(name);
       if (q) {
         const at = q.indexOf(rowId);
