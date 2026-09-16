@@ -173,3 +173,25 @@ def test_family_kill_switch_disables_the_tool_not_the_name(
     body = r.json()
     assert body["ok"] is False
     assert body["data"]["data"]["code"] == "upstream_error"
+
+
+def test_client_fault_returns_error_not_an_envelope(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The dispatcher's non-envelope path (agent_tools.py: the client call raised)
+    # answers {"error": "<Type>: <msg>"} — the endpoint must surface it as
+    # ok:false with the message preserved under `data`.
+    class _Boom:
+        def quote(self, request: Any) -> Any:
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(agent_tools, "build_gloomberb_client", lambda: _Boom())
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "digifetch_quote", "arguments": {"symbol": "AAPL"}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert body["error"].startswith("RuntimeError")
+    assert body["data"] == {"error": "RuntimeError: boom"}

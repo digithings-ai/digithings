@@ -8,7 +8,7 @@ import logging
 import os
 import threading
 from queue import Empty, Queue
-from typing import Any
+from typing import Any, get_args
 
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
@@ -386,11 +386,18 @@ def _digifetch_error_message(payload: dict[str, Any]) -> str | None:
     """Typed error message when a digifetch envelope's ``data`` is a ``DigifetchError``.
 
     The dispatcher's only envelope producer serializes a typed error as exactly
-    ``code`` / ``message`` / ``retryable`` (#4097); no success payload carries
-    all three, so the signature distinguishes the two without re-validating.
+    ``code`` / ``message`` / ``retryable`` with ``code`` from the §5.3
+    ``ErrorCode`` vocabulary (#4097); no success payload matches that signature,
+    so the check distinguishes the two without re-validating the payload.
     """
+    from digiquant.data.gloomberb.models import ErrorCode
+
     data = payload.get("data")
-    if isinstance(data, dict) and {"code", "message", "retryable"} <= set(data):
+    if (
+        isinstance(data, dict)
+        and {"code", "message", "retryable"} <= set(data)
+        and data["code"] in get_args(ErrorCode)
+    ):
         return str(data["message"])
     return None
 
