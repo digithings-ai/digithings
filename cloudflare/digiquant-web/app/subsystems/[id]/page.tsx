@@ -61,7 +61,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
             </div>
             {POSTER[s.id] ? (
               <Card
-                className={`sub-poster accent-${s.id} relative mb-8 overflow-hidden px-[1.6rem] pb-[1.4rem] pt-[4.5rem]`}
+                className={`sub-poster accent-${s.id} relative mb-8 gap-0 overflow-hidden px-[1.6rem] pb-[1.4rem] pt-[4.5rem]`}
               >
                 <span className="sub-regmark" aria-hidden="true">+</span>
                 <h1 className="sub-poster-name">{s.name}</h1>

@@ -184,12 +184,12 @@ function PivotStatsGrid({
       >
         <TableHeader>
           <TableRow>
-            <TableHead className="ts-pivot-metric-col">Metric</TableHead>
+            <TableHead className="ts-pivot-metric-col sticky top-0 bg-surface">Metric</TableHead>
             {columns.map(({ slice }) => (
               <TableHead
                 key={slice.id}
                 numeric
-                className="ts-pivot-col"
+                className="ts-pivot-col sticky top-0 bg-surface"
                 aria-label={slice.id === "full" ? "Full period" : undefined}
               >
                 {slice.id === "full" ? "" : slice.label}
