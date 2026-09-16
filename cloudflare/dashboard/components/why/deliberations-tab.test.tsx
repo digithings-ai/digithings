@@ -58,6 +58,11 @@ describe('DeliberationsPanel', () => {
     const anchor = html.match(/<a[^>]*data-testid="gloomberb-link-NVDA"[^>]*>/)?.[0] ?? '';
     expect(anchor).toContain('target="_blank"');
     expect(anchor).toContain('rel="noopener noreferrer"');
+    // The arrow idiom, not the external-link glyph (#4204).
+    const block =
+      html.match(/<a[^>]*data-testid="gloomberb-link-NVDA"[\s\S]*?<\/a>/)?.[0] ?? '';
+    expect(block).toContain('lucide-arrow-up-right');
+    expect(block).not.toContain('lucide-external-link');
   });
 
   // The third surface already guarded; pin the absent branch so the guard cannot
