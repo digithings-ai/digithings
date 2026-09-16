@@ -63,16 +63,19 @@ describe("ChatEmbedShell contracts", () => {
     expect(readParentDocumentTheme({ getAttribute: () => null })).toBe("dark");
   });
 
-  it("keeps ContainerBootLoader + transparent iframe until digichat:ready", async () => {
+  it("keeps DigichatBootLoader + transparent iframe until digichat:ready settles", async () => {
     // Source contract: avoid a white flash on the dark digithings theme (#2093).
     const { readFileSync } = await import("node:fs");
     const { fileURLToPath } = await import("node:url");
     const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
     const src = readFileSync(path, "utf8");
-    expect(src).toContain("ContainerBootLoader");
-    expect(src).toContain('digichat:ready');
+    expect(src).toContain("DigichatBootLoader");
+    expect(src).toContain("digichat:ready");
     expect(src).toContain("opacity: embedReady ? 1 : 0");
     expect(src).toContain('backgroundColor: "transparent"');
+    // The overlay drops on the loader's settle callback, not on ready itself.
+    expect(src).toContain("showBoot = !shellLoadError && !bootSettled");
+    expect(src).toContain("onSettled={() => setBootSettled(true)}");
   });
 
   it("keeps the boot overlay transparent so .grain/.glow show through while loading", async () => {
@@ -87,22 +90,20 @@ describe("ChatEmbedShell contracts", () => {
     const shellPath = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
     const shellSrc = readFileSync(shellPath, "utf8");
 
-    // The overlay div wrapping ContainerBootLoader: transparent, not var(--bg).
+    // The overlay div wrapping the boot loader: transparent, not var(--bg).
     const overlayBlock = shellSrc.slice(
       shellSrc.indexOf("showBoot ? ("),
-      shellSrc.indexOf("<ContainerBootLoader"),
+      shellSrc.indexOf("<DigichatBootLoader"),
     );
     expect(overlayBlock).toContain('background: "transparent"');
     expect(overlayBlock).not.toContain('background: "var(--bg)"');
 
-    // ContainerBootLoader's own .tl-boot class fills var(--bg) by default (right
-    // for its usual standalone-app mode) -- this usage must override it via a
-    // scoped className, not by changing the shared component's default.
+    // The loader paints no background of its own (transparent by design); the
+    // scoped className stays so the shell can target it if it ever needs to.
     expect(shellSrc).toContain('className="dc-embed-boot"');
 
     const cssPath = fileURLToPath(new URL("../app/globals.css", import.meta.url));
     const css = readFileSync(cssPath, "utf8");
-    expect(css).toContain(".tl-boot.dc-embed-boot");
-    expect(css.match(/\.tl-boot\.dc-embed-boot\s*\{[^}]*background:\s*transparent/)).toBeTruthy();
+    expect(css).toContain("@digithings/web/styles/digichat-boot-loader.css");
   });
 });

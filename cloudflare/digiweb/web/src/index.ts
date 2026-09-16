@@ -109,6 +109,13 @@ export {
   type ChatResponseLoaderProps,
 } from "./components/terminal/ChatResponseLoader";
 
+// digichat boot loader — the default embed warm-up animation (composer-outline
+// cube field). Styles: @digithings/web/styles/digichat-boot-loader.css.
+export {
+  DigichatBootLoader,
+  type DigichatBootLoaderProps,
+} from "./components/chat/DigichatBootLoader";
+
 // controls layer (#1419)
 export { Button, type ButtonProps, type ButtonDress, type ButtonReferenceVariant, type ButtonChatVariant, type ButtonChatSize } from "./components/controls/Button";
 export { Badge, type BadgeProps, type BadgeDress, type BadgeReferenceVariant, type BadgeChatVariant } from "./components/controls/Badge";
