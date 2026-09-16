@@ -118,10 +118,7 @@ def test_http_overwrites_body_mcp_servers(monkeypatch: pytest.MonkeyPatch) -> No
 
 @pytest.mark.unit
 def test_parse_mcp_servers_json_keeps_auth_token() -> None:
-    raw = (
-        '[{"id":"linear","url":"https://mcp.linear.app/mcp",'
-        '"auth":"oauth","token":"tok"}]'
-    )
+    raw = '[{"id":"linear","url":"https://mcp.linear.app/mcp","auth":"oauth","token":"tok"}]'
     assert parse_mcp_servers_json(raw) == [
         {
             "id": "linear",
@@ -168,9 +165,7 @@ def test_parse_mcp_servers_json_drops_malformed_auth_header() -> None:
         '"token":"tok","authHeader":"bad header!"}]'
     )
     parsed = parse_mcp_servers_json(raw)
-    assert parsed == [
-        {"id": "datatap", "url": "https://mcp.datatap.example/mcp", "token": "tok"}
-    ]
+    assert parsed == [{"id": "datatap", "url": "https://mcp.datatap.example/mcp", "token": "tok"}]
     assert "authHeader" not in parsed[0]
 
 
@@ -416,6 +411,53 @@ def test_call_prefixed_tool_setup_path_prefix_wins_over_model_arg() -> None:
         )
     call.assert_called_once_with(
         servers[0],
+        "search_tag",
+        {"tag": "guide", "path_prefix": "clients/acme"},
+    )
+
+
+@pytest.mark.unit
+def test_mcp_setup_survives_http_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Operator ``setup`` survives header → McpServerRef → state → tool call (#4246 review).
+
+    The HTTP boundary rebuilt ``McpServerRef`` field-by-field and silently
+    dropped ``setup``, so digivault's ``path_prefix`` (and digisearch's
+    ``index_name``) never reached :func:`call_prefixed_tool` in production.
+    """
+    monkeypatch.delenv("DIGI_MCP_SERVERS", raising=False)
+    from digigraph.http_api.context import _digi_fields_from_request, _with_digi_request_context
+
+    request = SimpleNamespace(
+        state=SimpleNamespace(digi_bearer=None, digi_auth=None),
+        headers={
+            "X-Digi-Mcp-Servers": (
+                '[{"id":"digivault","url":"http://digivault-mcp:8769/mcp",'
+                '"setup":{"path_prefix":"clients/acme"}}]'
+            )
+        },
+    )
+    refs = _digi_fields_from_request(request)["mcp_servers"]
+    assert refs
+    assert refs[0].setup == {"path_prefix": "clients/acme"}
+
+    copied = _with_digi_request_context(request, WorkflowRequest(prompt="hi"))
+    assert copied.mcp_servers is not None
+    assert copied.mcp_servers[0].setup == {"path_prefix": "clients/acme"}
+
+    # workflow.py projects refs with model_dump(exclude_none=True, by_alias=True)
+    # into graph state; research.py hands that list to execute → call_prefixed_tool.
+    state_servers = [r.model_dump(exclude_none=True, by_alias=True) for r in copied.mcp_servers]
+    with patch(
+        "digigraph.orchestration.mcp_client._call_tool_blocking",
+        return_value={"ok": True},
+    ) as call:
+        call_prefixed_tool(
+            "digivault_search_tag",
+            {"tag": "guide", "path_prefix": "clients/other"},
+            state_servers,
+        )
+    call.assert_called_once_with(
+        state_servers[0],
         "search_tag",
         {"tag": "guide", "path_prefix": "clients/acme"},
     )

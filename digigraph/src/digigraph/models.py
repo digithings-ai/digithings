@@ -274,6 +274,18 @@ class McpServerRef(BaseModel):
     auth_header: str | None = Field(
         None, max_length=41, pattern=r"^[A-Za-z][A-Za-z0-9-]{0,40}$", alias="authHeader"
     )
+    # Operator setup kwargs merged into every tool call for this server
+    # (digivault path_prefix, digisearch index_name, …). Carried through the
+    # HTTP boundary as a JSON object on X-Digi-Mcp-Servers and decoded here
+    # (#4246 review).
+    setup: dict[str, str] | None = Field(
+        None,
+        description=(
+            "Operator setup kwargs merged into every MCP tool call for this server "
+            "(e.g. digivault path_prefix, digisearch index_name). Header-supplied "
+            "session overlay; never trusted from a request body."
+        ),
+    )
 
 
 class WorkflowResult(BaseModel):

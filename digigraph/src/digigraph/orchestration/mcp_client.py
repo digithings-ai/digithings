@@ -570,13 +570,20 @@ def call_prefixed_tool(
     if not server or not server.get("url"):
         return {"error": "unknown_mcp_server", "tool": name}
     setup_raw = server.get("setup")
-    if setup_raw:
+    # State carries the decoded mapping (workflow.py dumps McpServerRef.setup);
+    # a raw parsed-header row carries the JSON-encoded form.
+    setup: dict[str, Any] = {}
+    if isinstance(setup_raw, dict):
+        setup = setup_raw
+    elif setup_raw:
         try:
-            setup = json.loads(setup_raw)
+            decoded = json.loads(setup_raw)
         except (TypeError, json.JSONDecodeError):
-            setup = {}
-        if isinstance(setup, dict) and setup:
-            args = {**args, **{str(k): v for k, v in setup.items()}}
+            decoded = {}
+        if isinstance(decoded, dict):
+            setup = decoded
+    if setup:
+        args = {**args, **{str(k): v for k, v in setup.items()}}
     return _call_tool_blocking(server, tool, args)
 
 

@@ -200,6 +200,7 @@ def get_tools(
 def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
     """Dispatch to the handler for the given tool name. Returns handler result (str or dict)."""
     from digigraph.orchestration.mcp_client import call_prefixed_tool, split_prefixed_tool_name
+    from digigraph.tool_policy import is_proxied_web_search_tool
 
     split = split_prefixed_tool_name(name)
     is_extra = bool(
@@ -211,6 +212,21 @@ def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict
     )
     if not has_tool(name) and not is_extra:
         return f"Unknown tool: {name}"
+    # Execute-level opt-out gate (#4246 review). The concrete allowlist that
+    # strips proxied web-search tools is discovery-dependent — an MCP list
+    # failure caches [] for 60s, so an unrestricted session stays at None and
+    # a model-guessed {id}_web_search would otherwise reach the remote tool,
+    # which has no handler-side availability check. Native ``web_search``
+    # keeps its own handler gate, so only the proxied suffix is denied here.
+    if is_proxied_web_search_tool(name) and not context.state.get("enable_web_search"):
+        return {
+            "error": "tool_not_allowed",
+            "tool": name,
+            "message": (
+                f"Tool {name!r} requires web search to be enabled for this session. "
+                "Set enable_web_search on the request (X-Digi-Enable-Web-Search)."
+            ),
+        }
     if context.allowed_tool_names is not None and name not in context.allowed_tool_names:
         from digigraph.audit import audit_log
 

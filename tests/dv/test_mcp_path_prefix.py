@@ -30,7 +30,7 @@ from digivault.tool_dispatch import (
     register_mcp_tools,
     resolve_vault_prefix,
 )
-from digivault.vault import Vault
+from digivault.vault import Vault, VaultError
 
 pytestmark = pytest.mark.unit
 
@@ -156,6 +156,31 @@ def test_dispatch_rejects_traversal_prefix_everywhere(tmp_path: Path, prefix: st
         result = dispatch_vault_tool(name, args, vault)
         assert result.ok is False, name
         assert result.error is not None and "path_prefix" in result.error
+
+
+@pytest.mark.parametrize("prefix", ["a\0b", "clients/\x01acme", "clients/acme\x1b"])
+def test_dispatch_rejects_control_characters_in_prefix(tmp_path: Path, prefix: str) -> None:
+    """An embedded control char must surface as a tool error, not a bare ValueError.
+
+    ``Vault._safe_path`` raises a plain ``ValueError`` for these, which
+    :func:`dispatch_vault_tool` does not translate — so the refusal belongs in
+    :func:`resolve_vault_prefix` (#4246 review).
+    """
+    vault = _vault(tmp_path)
+    for name, args in (
+        (TOOL_VAULT_SEARCH_TAG, {"tag": "guide", "path_prefix": prefix}),
+        (TOOL_VAULT_BACKLINKS, {"name": "hub", "path_prefix": prefix}),
+        (TOOL_VAULT_LINT, {"path_prefix": prefix}),
+        (TOOL_VAULT_CREATE_NOTE, {"name": "x", "path_prefix": prefix}),
+    ):
+        result = dispatch_vault_tool(name, args, vault)
+        assert result.ok is False, name
+        assert result.error is not None and "path_prefix" in result.error
+
+
+def test_resolve_vault_prefix_rejects_control_characters() -> None:
+    with pytest.raises(VaultError):
+        resolve_vault_prefix("a\0b")
 
 
 def test_resolve_vault_prefix_normalizes_blank_and_slashes() -> None:

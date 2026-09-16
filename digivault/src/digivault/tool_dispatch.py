@@ -98,13 +98,19 @@ def resolve_vault_prefix(raw: Any) -> str:
 
     Refuses ``..``, ``.`` and leading-dot components so a prefix can never walk
     out of ``DIGIVAULT_ROOT`` or into a directory the index skips; ``Vault``'s
-    own ``_safe_path`` remains the second line of defence for writes.
+    own ``_safe_path`` remains the second line of defence for writes. Control
+    characters (``ord(ch) < 32``, e.g. an embedded NUL) are refused here too —
+    ``_safe_path`` raises a bare ``ValueError`` for them, which
+    :func:`dispatch_vault_tool` does not translate into a tool error
+    (#4246 review).
     """
     if raw is None:
         return ""
     text = str(raw).strip().replace("\\", "/").strip("/")
     if not text:
         return ""
+    if any(ord(ch) < 32 for ch in text):
+        raise VaultError(f"Invalid path_prefix: {raw!r}")
     parts = text.split("/")
     if any(part in (".", "..") or part.startswith(".") for part in parts):
         raise VaultError(f"Invalid path_prefix: {raw!r}")

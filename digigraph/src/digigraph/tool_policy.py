@@ -25,6 +25,16 @@ def is_web_search_tool(name: str) -> bool:
     return name == WEB_SEARCH_TOOL_NAME or name.endswith(_WEB_SEARCH_MCP_SUFFIX)
 
 
+def is_proxied_web_search_tool(name: str) -> bool:
+    """True only for the MCP-proxied form ``{server_id}_web_search`` (native excluded).
+
+    The execute-level opt-out gate uses this: the native ``web_search`` handler
+    already checks ``state["enable_web_search"]`` itself, while the MCP proxy
+    forwards to a remote tool with no such handler-side check (#4246 review).
+    """
+    return name.endswith(_WEB_SEARCH_MCP_SUFFIX)
+
+
 def strip_web_search_tools(names: frozenset[str]) -> frozenset[str]:
     """Drop ``web_search`` and every MCP-proxied ``{id}_web_search`` from an allowlist."""
     return frozenset(n for n in names if not is_web_search_tool(n))

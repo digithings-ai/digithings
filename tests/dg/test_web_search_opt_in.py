@@ -140,6 +140,57 @@ def test_mcp_web_search_allowed_when_opt_in() -> None:
     call.assert_called_once()
 
 
+def test_mcp_web_search_denied_at_execute_when_discovery_returned_nothing() -> None:
+    """Discovery failure leaves allowed_tool_names None; a guessed proxy tool is still refused.
+
+    ``list_tools_cached`` caches ``[]`` for 60s when the MCP list call fails, so
+    ``apply_mcp_extra_tools`` never sees a ``{id}_web_search`` and cannot
+    materialize the allowlist. Before the execute-level deny, a model-guessed
+    ``digisearch_web_search`` would execute despite the opt-out (#4246 review).
+    """
+    from unittest.mock import patch
+
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={"enable_web_search": False},
+        extra_mcp_servers=[{"id": "digisearch", "url": "http://digisearch-mcp:8765/mcp"}],
+        allowed_tool_names=None,
+    )
+    with patch(
+        "digigraph.orchestration.mcp_client.call_prefixed_tool",
+        return_value={"ok": True},
+    ) as call:
+        out = execute(MCP_WEB_SEARCH, {"query": "latest"}, ctx)
+    assert isinstance(out, dict)
+    assert out.get("error") == "tool_not_allowed"
+    call.assert_not_called()
+
+
+def test_mcp_web_search_still_runs_unrestricted_when_opted_in() -> None:
+    """The execute-level gate must not deny the proxied tool on an opted-in session."""
+    from unittest.mock import patch
+
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={"enable_web_search": True},
+        extra_mcp_servers=[{"id": "digisearch", "url": "http://digisearch-mcp:8765/mcp"}],
+        allowed_tool_names=None,
+    )
+    with patch(
+        "digigraph.orchestration.mcp_client.call_prefixed_tool",
+        return_value={"ok": True, "text": "hit"},
+    ) as call:
+        out = execute(MCP_WEB_SEARCH, {"query": "latest"}, ctx)
+    assert out == {"ok": True, "text": "hit"}
+    call.assert_called_once()
+
+
 def test_apply_web_search_opt_in_unrestricted_stays_none() -> None:
     assert apply_web_search_opt_in(None, enable_web_search=False) is None
     assert apply_web_search_opt_in(None, enable_web_search=True) is None
