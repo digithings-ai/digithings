@@ -6,7 +6,7 @@
 > `docs/superpowers/plans/2026-09-16-shadcn-wave-1.md` (to be written).
 
 - **Date:** 2026-09-16
-- **Status:** draft — for owner review (Q1 font resolved 2026-09-16: JetBrains Mono; remaining decisions in §9 must be answered before Wave 1)
+- **Status:** draft — for owner review (all decisions resolved 2026-09-16: JetBrains Mono font, Base UI base, single-chart-stack ambition, migrate-everything; see §9)
 - **Owner decision (m0398, verbatim):** "proceed then with this library with
   Shadzian [shadcn]. … I would want to lean on it as much as possible for all
   things from components to elements to animations. I prefer if we just use what
@@ -147,10 +147,10 @@ never run mixed styles for long.
 | **WS1** | Bridge | shadcn vars in `web-theme.css`; stock button renders canon-clean in reference | — |
 | **WS2** | Vendored package | `web/components.json`, `src/ui/`, `./ui` export, `@source` lines, reference `components/ui` deleted | WS1 |
 | **WS3** | Primitive sweep | button/input/textarea/label/badge/card/dialog/dropdown/tabs/tooltip/collapsible/sheet/skeleton/avatar/separator/table adopted across apps; old hand-built controls deleted or dressed | WS2 |
-| **WS4** | Data + charts | shadcn Data Table (TanStack) for admin/repo/dashboard tables; shadcn Chart (Recharts) for general charts; lightweight-charts untouched | WS2 |
+| **WS4** | Data + charts | shadcn Data Table (TanStack) for admin/repo/dashboard tables; shadcn Chart (Recharts) for **all** charts pending a finance reproduction audit (candles, sparklines, live ticks — §9 Q4); `lightweight-charts` removed if the audit passes, else finance-only | WS2 |
 | **WS5** | Shells & blocks | sidebar block, command palette (supersedes hand-built), login/OTP blocks where applicable | WS2 |
 | **WS6** | Animation pass | Motion patterns from blocks; View Transitions for routes; AutoAnimate for tables | WS3–WS5 |
-| **WS7** | Marketing blocks | selective react-bits / Magic UI / SmoothUI / Aceternity additions on Lyra tokens (registry vetted per block, lazy-loaded) | WS2, owner pick |
+| **WS7** | Marketing blocks | shadcn Blocks first; third-party react-bits / Magic UI / SmoothUI / Aceternity only where shadcn has no equivalent, each owner-signed per block on Lyra tokens (lazy-loaded) | WS2, owner pick |
 | **WS8** | Canon & docs | MIGRATION.md, ARCHITECTURE.md, MANIFEST.json, ASSISTANT_UI_ELEMENTS.md, guard allowlist updated; stale css/families removed | runs with every wave |
 
 Rules for every WS: token utilities in TSX for layout/spacing/color/type; css
@@ -216,7 +216,7 @@ unaffected).
 | Copy-paste set grows unmanaged | MANIFEST.json registry added in WS2; `shadcn diff` job in Wave 3+ |
 | Marketing block registry rot (Tremor-style) | per-block vetting: MIT, React 19 + TW4 compatible, copied in (no npm runtime) |
 
-## 9. Open decisions (owner input needed before Wave 1)
+## 9. Decisions (all resolved with the owner, 2026-09-16)
 
 1. **Font — resolved (owner, 2026-09-16):** adopt **JetBrains Mono** as the
    shipping family: "we could move to JetBrains. It's a pretty popular font
@@ -234,15 +234,28 @@ unaffected).
    files); no mixed bases. Assistant UI keeps its own internals regardless.
    Implication: `radix-ui` stays only as long as assistant-ui/deps need it;
    no new Radix primitives from us.
-3. **Blocks first cut:** confirm sidebar, command palette, data table, charts,
-   login/OTP for Wave 2–3; anything else ranked above?
-4. **Charts:** confirm shadcn Chart/Recharts for general charts while
-   lightweight-charts stays finance-only.
-5. **Marketing registries:** approve which of react-bits / Magic UI / SmoothUI /
-   Aceternity may be pulled from, and whether each addition needs explicit
-   per-block sign-off (recommend: yes, owner picks per block during Wave 4).
-6. **Tracking issue:** create the migration epic issue (waves as sub-issues)
-   before Wave 0 PRs so every PR links (#N / `Fixes #N`).
+3. **Blocks first cut — resolved (owner, 2026-09-16):** sidebar, command palette,
+   data table, charts, login/OTP confirmed for Wave 2–3.
+4. **Charts — resolved (owner, 2026-09-16), single-stack ambition:** "if the
+   default charts are good enough for our financial charts, I think we should
+   just have a single chart package. And that way they all look the same. If it
+   could reproduce everything we need." → WS4 gains a finance-chart
+   reproduction audit (candles, sparklines, heat/dot-matrix moments, real-time
+   tick updates) against shadcn Chart/Recharts; if it passes, all charts
+   consolidate on Chart/Recharts and `lightweight-charts` is **removed** — one
+   look, one dependency, no dual stack. If it fails, lightweight-charts stays
+   finance-only (shadcn Chart elsewhere) and the audit's failing cases are
+   recorded here.
+5. **Marketing registries — resolved (owner, 2026-09-16), migrate everything:**
+   "I want to migrate everything, essentially. We'll make it work. I just want
+   to reduce the amount of dependencies and custom build-out we have." →
+   shadcn Blocks are the first source for every surface; third-party
+   registries (react-bits / Magic UI / SmoothUI / Aceternity) only where
+   shadcn has no equivalent, each addition still owner-signed per block during
+   Wave 4. Success metric is fewer bespoke components and dependencies, not
+   more.
+6. **Tracking issue — approved (owner, 2026-09-16):** create the migration epic
+   (waves as sub-issues) before Wave 0 PRs so every PR links (#N / `Fixes #N`).
 
 ## 10. Definition of done
 
