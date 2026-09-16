@@ -286,6 +286,12 @@ export const McpServerSchema = z
      */
     tokenEnv: z.string().optional(),
     /**
+     * MCP setup values applied when this server's tools are registered (e.g.
+     * the digisearch index name or the digivault path prefix). Forwarded
+     * verbatim to digigraph; the model never sees or supplies them.
+     */
+    setup: z.record(z.string(), z.string()).optional(),
+    /**
      * Custom outbound header name for the resolved token, e.g. "X-API-Key".
      * Defaults to `Authorization: Bearer <token>` when unset. Operator-only —
      * the session overlay (user-supplied auth) cannot set this (#3841).

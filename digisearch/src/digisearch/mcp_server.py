@@ -43,7 +43,7 @@ def create_mcp_with_indexes(client: object) -> FastMCP:
 
 
 @mcp.tool()
-def digisearch_query(
+def semantic(
     text: str,
     index_name: str | None = None,
     top_k: int = 10,
@@ -174,7 +174,7 @@ try:
     from digisearch.agent.pipeline import run_research_turn as _run_research_turn
 
     @mcp.tool()
-    def digisearch_research_turn(
+    def research_turn(
         user_message: str,
         index_name: str | None = None,
         top_k: int = 10,

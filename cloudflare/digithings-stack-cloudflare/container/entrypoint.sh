@@ -60,7 +60,7 @@ export DIGI_WORKFLOW_PROFILE="${DIGI_WORKFLOW_PROFILE:-research_rag}"
 # env, so those edits were real). Keep this list in sync with agents.allowed_tools in
 # infra/digichat-release/config/digiproject.yaml, which outranks it whenever the project
 # config loads; this value only decides what happens when that load fails (#2306).
-export DIGI_ALLOWED_TOOLS="${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes,digivault_get_note,zammad__search_tickets,zammad__get_ticket,zammad__ticket_report}"
+export DIGI_ALLOWED_TOOLS="${DIGI_ALLOWED_TOOLS:-digisearch,digisearch_semantic,digisearch_web_search,digivault_search_notes,digivault_get_note,zammad_search_tickets,zammad_get_ticket,zammad_ticket_report}"
 # "Is Vectorize configured?" must agree with digisearch's own Python check
 # (the CLOUDFLARE_*/VECTORIZE_*/D1_* canonical-with-fallback lookup, see
 # digisearch/src/digisearch/search/_stub.py's _first_env) byte-for-byte, or one

@@ -201,7 +201,14 @@ def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict
     """Dispatch to the handler for the given tool name. Returns handler result (str or dict)."""
     from digigraph.orchestration.mcp_client import call_prefixed_tool, split_prefixed_tool_name
 
-    is_extra = bool(split_prefixed_tool_name(name) and context.extra_mcp_servers)
+    split = split_prefixed_tool_name(name)
+    is_extra = bool(
+        split
+        and any(
+            isinstance(s, dict) and s.get("id") == split[0]
+            for s in (context.extra_mcp_servers or [])
+        )
+    )
     if not has_tool(name) and not is_extra:
         return f"Unknown tool: {name}"
     if context.allowed_tool_names is not None and name not in context.allowed_tool_names:

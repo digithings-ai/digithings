@@ -8,8 +8,19 @@ hosts:
       theme: light
       skin: digichat
       title: OCC Help
-      welcome: Ask about OCC policies and procedures.
-      placeholder: Ask OCC help
+      welcome:
+        title: Ask about OCC
+        body: Explore the documentation, search the knowledge base, or ask about support tickets.
+      placeholder: Ask about OCC
+      suggestions:
+        - How do I file a support ticket?
+        - What are the OCC complaint procedures?
+        - Show my open support tickets
+        - Where can I find the policy documentation?
+        - Summarize this week's support tickets
+        - What are the latest compliance updates?
+        - How do I contact the OCC support team?
+        - Search the knowledge base for onboarding
       attribution: true
     persistence: none
     auth: anonymous
@@ -56,6 +67,18 @@ hosts:
           default: true
           tokenEnv: ZAMMAD_API_TOKEN
           authHeader: Authorization
+        - id: digisearch
+          url: http://digisearch-mcp:8765/mcp
+          label: Help search
+          default: true
+          setup:
+            index_name: occ_help
+        - id: digivault
+          url: http://digivault-mcp:8769/mcp
+          label: Knowledge vault
+          default: true
+          setup:
+            path_prefix: clients/online-compliance-center
     gate:
       mode: ungated
       activityDetail: labels

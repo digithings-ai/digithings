@@ -277,9 +277,10 @@ describe("DigichatConfigSchema", () => {
     );
     const dt = digithings.hosts?.["digithings.ai"];
     expect(dt?.chrome.skin).toBe("digichat");
-    expect(welcomeTitle(dt?.chrome.welcome)).toBe("Ask about digithings.");
+    expect(welcomeTitle(dt?.chrome.welcome)).toBe("Ask about digithings");
     expect(dt?.backend).toEqual({
       type: "digigraph",
+      digisearchIndex: "digithings_docs",
       vaultPathPrefix: "clients/digithings",
     });
     expect(dt?.tools?.allowUserToggle).toBe(true);
@@ -324,7 +325,11 @@ describe("DigichatConfigSchema", () => {
     expect(occHost?.tools?.catalog.find((t) => t.id === "web_search")?.default).toBe(true);
     expect(occHost?.gate?.webSearch).toBe(true);
     expect(occHost?.mcp?.allowUserServers).toBe(false);
-    expect(occHost?.mcp?.servers.map((s) => s.id)).toEqual(["zammad"]);
+    expect(occHost?.mcp?.servers.map((s) => s.id)).toEqual([
+      "zammad",
+      "digisearch",
+      "digivault",
+    ]);
     expect(occHost?.mcp?.servers[0]?.tokenEnv).toBe("ZAMMAD_API_TOKEN");
     expect(occHost?.mcp?.servers[0]?.authHeader).toBe("Authorization");
     expect(allowedForceTools(occHost)).toEqual(["digisearch", "digivault", "zammad"]);

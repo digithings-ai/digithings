@@ -2,7 +2,7 @@
 
 The BFF forwards allowlisted ``{id, url}`` pairs on ``X-Digi-Mcp-Servers``,
 optionally with ``auth`` / ``token`` after a session overlay merge. This
-module lists those tools (prefixed ``{id}__{name}``) and proxies calls.
+module lists those tools (prefixed ``{id}_{name}``) and proxies calls.
 Visitor URLs never come from an untrusted JSON body — only the BFF header
 (and ``DIGI_MCP_SERVERS``). Tokens are never logged.
 
@@ -443,6 +443,15 @@ def parse_mcp_servers_json(raw: str | None) -> list[dict[str, str]]:
         extra = _auth_fields(item)
         if extra:
             row.update(extra)
+        setup = item.get("setup")
+        if isinstance(setup, dict) and setup:
+            clean = {
+                str(k): str(v)
+                for k, v in setup.items()
+                if isinstance(k, str) and isinstance(v, (str, int, float, bool))
+            }
+            if clean:
+                row["setup"] = json.dumps(clean, sort_keys=True)
         out.append(row)
     return out
 
@@ -482,7 +491,7 @@ def merge_mcp_servers(
 
 def prefixed_tool_name(server_id: str, tool_name: str) -> str:
     safe = re.sub(r"[^a-zA-Z0-9_-]", "_", tool_name)[:64]
-    return f"{server_id}__{safe}"
+    return f"{server_id}_{safe}"
 
 
 def resolve_mcp_force_id(raw: str | None, servers: list[dict[str, str]]) -> str | None:
@@ -494,9 +503,9 @@ def resolve_mcp_force_id(raw: str | None, servers: list[dict[str, str]]) -> str 
 
 
 def split_prefixed_tool_name(name: str) -> tuple[str, str] | None:
-    if "__" not in name:
+    if "_" not in name:
         return None
-    sid, rest = name.split("__", 1)
+    sid, rest = name.split("_", 1)
     if not _ID_RE.match(sid) or not rest:
         return None
     return sid, rest
@@ -516,7 +525,7 @@ def expand_mcp_disabled_tokens(
     tokens: list[str] | tuple[str, ...] | None,
     extra_names: list[str],
 ) -> frozenset[str]:
-    """Disable ``id`` and ``id__*`` tools when the catalog MCP id is off."""
+    """Disable ``id`` and ``id_*`` tools when the catalog MCP id is off."""
     if not tokens:
         return frozenset()
     extra = set(extra_names)
@@ -525,7 +534,7 @@ def expand_mcp_disabled_tokens(
         key = str(raw).strip().lower()
         if not key:
             continue
-        prefix = f"{key}__"
+        prefix = f"{key}_"
         out |= {n for n in extra if n == key or n.startswith(prefix)}
     return frozenset(out)
 
@@ -560,6 +569,14 @@ def call_prefixed_tool(
     server = next((s for s in servers if s["id"] == sid), None)
     if not server or not server.get("url"):
         return {"error": "unknown_mcp_server", "tool": name}
+    setup_raw = server.get("setup")
+    if setup_raw:
+        try:
+            setup = json.loads(setup_raw)
+        except (TypeError, json.JSONDecodeError):
+            setup = {}
+        if isinstance(setup, dict) and setup:
+            args = {**args, **{str(k): v for k, v in setup.items()}}
     return _call_tool_blocking(server, tool, args)
 
 
