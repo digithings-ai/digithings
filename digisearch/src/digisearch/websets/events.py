@@ -33,6 +33,20 @@ append and its fan-out is recoverable, without ever double-POSTing a target.
 Rotation overlap (R7, divergence from Phase C's immediate rotate):
 :func:`verify_webhook_signature` accepts a webhook's ``previous_secret`` only
 while ``previous_expires_at`` is in the future, then drops it.
+
+Re-delivery (#4226, the retired ARCH deferral): :func:`redeliver_webhook`
+re-attempts one failed ledger row on behalf of the shared driver's re-delivery
+loop (``websets/driver.py``). It rebuilds the byte-identical
+``{event, webset_id, delivered_at}`` body from the stored event and re-POSTs
+through the same :func:`_attempt_delivery` core (the in-call 3-attempt/5s-25s
+backoff is preserved), always signing with the webhook's *current* secret so a
+retry after rotation is accepted under the 24h overlap. Retries are bounded —
+``_WEBHOOK_REDELIVERY_ATTEMPTS`` attempts on the pinned
+``_WEBHOOK_REDELIVERY_BACKOFF_S`` ladder — and each outcome updates the same
+ledger row in place; an exhausted row keeps a terminal failed row that the due
+selector never offers again. :func:`deliver_webhook`'s one-shot semantics are
+unchanged (its "a recorded terminal failure is final" contract governs the
+append path; re-delivery is the loop explicitly driving failed rows).
 """
 
 from __future__ import annotations
@@ -41,14 +55,14 @@ import hmac
 import json
 import logging
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
 
 from digisearch.monitors.delivery import redact_error, sign_webhook_body
 from digisearch.websets.models import EventKind, WebhookConfig, WebsetEvent, WebsetItem
-from digisearch.websets.store import WebhookDelivery, WebsetStore
+from digisearch.websets.store import WebhookDelivery, WebsetStore, WebsetStoreError
 
 __all__ = [
     "append_event",
@@ -58,6 +72,7 @@ __all__ = [
     "emit_webset_failed",
     "emit_webset_idle",
     "list_events",
+    "redeliver_webhook",
     "sign_webhook_body",
     "verify_webhook_signature",
 ]
@@ -69,8 +84,23 @@ _WEBHOOK_ATTEMPTS = 3
 _WEBHOOK_BACKOFF_S: tuple[float, ...] = (5.0, 25.0)
 _DEFAULT_TIMEOUT_S = 10.0
 
+#: § Webhook re-delivery (#4226): bounded attempts on the pinned 5m/30m/2h/6h
+#: ladder. A failure stores ``attempts + 1`` and schedules the next attempt
+#: from the ladder while that incremented count stays below
+#: ``_WEBHOOK_REDELIVERY_ATTEMPTS``; the cap-many failure exhausts the row
+#: (``next_attempt_at = None``), which the due selector then never offers again.
+_WEBHOOK_REDELIVERY_ATTEMPTS = 4
+_WEBHOOK_REDELIVERY_BACKOFF_S: tuple[float, ...] = (300.0, 1800.0, 7200.0, 21600.0)
+
 #: Stable ledger error for a webhook whose server-generated secret is missing.
 _SECRET_MISSING = "webhook_secret_missing"
+
+#: Stable terminal ledger errors for a re-delivery target that can never POST:
+#: the webhook is inactive (or no longer subscribed), deleted, or its event row
+#: is gone. Recorded once, then exhausted.
+_WEBHOOK_INACTIVE = "webhook_inactive"
+_WEBHOOK_MISSING = "webhook_not_found"
+_EVENT_MISSING = "event_not_found"
 
 # Sleep seam: tests record backoff without waiting (Phase C `_sleep` precedent).
 _sleep = time.sleep
@@ -402,3 +432,123 @@ def deliver_webhook(
                 error,
             )
     return results
+
+
+# ── webhook re-delivery (#4226) ───────────────────────────────────────────────
+
+
+def _redelivery_backoff_s(attempt: int) -> float:
+    """The pinned gap before 1-based *attempt*, clamped like :func:`_backoff_s`.
+
+    Clamping (not indexing) keeps a raised ``_WEBHOOK_REDELIVERY_ATTEMPTS``
+    from running past the pinned ladder with an ``IndexError``.
+    """
+    return _WEBHOOK_REDELIVERY_BACKOFF_S[min(attempt - 1, len(_WEBHOOK_REDELIVERY_BACKOFF_S) - 1)]
+
+
+def _exhaust_delivery(store: WebsetStore, delivery: WebhookDelivery, error: str) -> WebhookDelivery:
+    """Mark a row terminal without a POST (a target/event that can never deliver).
+
+    ``attempts`` is pinned at the cap so the row drops out of
+    ``list_due_webhook_deliveries`` even though ``next_attempt_at`` is ``None``
+    (NULL there means "unscheduled, due now" for a fresh first-attempt failure).
+    """
+    return store.update_webhook_delivery(
+        delivery.webhook_id,
+        delivery.event_id,
+        ok=False,
+        status_code=None,
+        error=error,
+        attempts=_WEBHOOK_REDELIVERY_ATTEMPTS,
+        next_attempt_at=None,
+    )
+
+
+def redeliver_webhook(
+    store: WebsetStore,
+    delivery: WebhookDelivery,
+    *,
+    now: datetime | None = None,
+    timeout_s: float = _DEFAULT_TIMEOUT_S,
+) -> WebhookDelivery:
+    """Re-attempt one failed ledger row and update it in place (R7, #4226).
+
+    The shared driver's re-delivery pass calls this for every due row:
+    ``deliver_webhook``'s ``(webhook_id, event_id)`` INSERT-or-ignore contract
+    makes it a no-op for recorded pairs, so this is the explicit re-drive.
+
+    The POST reuses the delivery core unchanged: the payload is rebuilt with the
+    same :func:`_delivery_body` from the stored event, and
+    :func:`_attempt_delivery` keeps its 3 in-call attempts with the pinned
+    5s/25s backoff. Signing always uses the webhook's *current* secret, so a
+    retry after rotation lands inside the 24h previous-secret overlap.
+
+    Ledger accounting (``attempts`` counts re-deliveries performed against the
+    row): success stores ``ok=True``, the status, ``error=None`` and
+    ``next_attempt_at=None`` (done). Failure stores ``attempts + 1`` and, while
+    that count stays below ``_WEBHOOK_REDELIVERY_ATTEMPTS``, the next due moment
+    from the pinned ladder; at the cap the row is exhausted
+    (``next_attempt_at=None``) and stays a terminal failed ledger row. A
+    webhook/event that is gone, or a webhook that is inactive or no longer
+    subscribed, is exhausted once without a POST; a missing secret records the
+    fail-closed ``webhook_secret_missing`` outcome exactly like the one-shot
+    path (no egress). Store faults other than the not-found lookups propagate
+    to the caller's per-row containment. Returns the updated ledger row.
+    """
+    moment = _as_utc(now or datetime.now(UTC))
+    try:
+        event = store.get_event(delivery.event_id)
+    except WebsetStoreError as exc:
+        if exc.code != "event_not_found":
+            raise
+        return _exhaust_delivery(store, delivery, _EVENT_MISSING)
+    try:
+        webhook = store.get_webhook(event.webset_id, delivery.webhook_id)
+    except WebsetStoreError as exc:
+        if exc.code != "webhook_not_found":
+            raise
+        return _exhaust_delivery(store, delivery, _WEBHOOK_MISSING)
+    if not webhook.active or event.type not in webhook.events:
+        return _exhaust_delivery(store, delivery, _WEBHOOK_INACTIVE)
+    payload = _delivery_body(event, moment)
+    if not webhook.secret:
+        # Fail closed exactly like the one-shot path: nothing is POSTed (signing
+        # with "" would send an unverifiable request); the attempt is recorded
+        # and the bounded schedule still applies, so the row exhausts on its own.
+        ok, status_code, error = False, None, _SECRET_MISSING
+    else:
+        ok, status_code, error = _attempt_delivery(webhook, payload, timeout_s=timeout_s)
+    attempts = delivery.attempts + 1
+    if ok:
+        return store.update_webhook_delivery(
+            delivery.webhook_id,
+            delivery.event_id,
+            ok=True,
+            status_code=status_code,
+            error=None,
+            attempts=attempts,
+            next_attempt_at=None,
+        )
+    next_attempt_at = (
+        moment + timedelta(seconds=_redelivery_backoff_s(attempts))
+        if attempts < _WEBHOOK_REDELIVERY_ATTEMPTS
+        else None
+    )
+    logger.warning(
+        "webset webhook re-delivery failed webhook_id=%s event_id=%s attempts=%s "
+        "status=%s error=%s",
+        delivery.webhook_id,
+        delivery.event_id,
+        attempts,
+        status_code,
+        error,
+    )
+    return store.update_webhook_delivery(
+        delivery.webhook_id,
+        delivery.event_id,
+        ok=False,
+        status_code=status_code,
+        error=error,
+        attempts=attempts,
+        next_attempt_at=next_attempt_at,
+    )

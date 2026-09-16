@@ -33,9 +33,16 @@ mirrors the spec's object tables:
   :class:`~digisearch.websets.models.WebhookConfig` permits ``""`` and the
   ledger key below must never collapse to an empty id.
 - ``webhook_deliveries (webhook_id, event_id, ok, status_code, error,
-  recorded_at)`` with ``PRIMARY KEY (webhook_id, event_id)`` — the T5b ledger;
-  :meth:`WebsetStore.record_webhook_delivery` is INSERT-or-ignore so a resumed
-  delivery cannot double-record.
+  recorded_at, attempts, next_attempt_at)`` with ``PRIMARY KEY (webhook_id,
+  event_id)`` — the T5b ledger; :meth:`WebsetStore.record_webhook_delivery` is
+  INSERT-or-ignore so a resumed delivery cannot double-record. ``attempts`` and
+  ``next_attempt_at`` (ISO-8601 UTC, nullable) are the #4226 re-delivery state:
+  fresh failures start ``attempts=0``/``next_attempt_at NULL`` (unscheduled, so
+  a due scan picks them up), :meth:`WebsetStore.update_webhook_delivery` moves
+  them in place, and :meth:`WebsetStore.list_due_webhook_deliveries` selects
+  failed, unexhausted rows whose scheduled moment has arrived. Databases
+  predating those columns are upgraded in ``__init__`` with guarded ``ALTER
+  TABLE`` statements (the ``monitors.store`` precedent).
 - ``events (event_id PK, webset_id, kind, dedup_key, created_at, body)`` with a
   UNIQUE ``(webset_id, dedup_key)`` index — append-only (there is deliberately
   no update/delete path) and INSERT-or-ignore. ``dedup_key`` is built from
@@ -110,6 +117,12 @@ _MIN_LIMIT = 1
 _MAX_LIMIT = 200
 _DEFAULT_LIMIT = 50
 _MAX_ENRICHMENTS = 10
+
+#: Re-delivery cap, mirrored from ``websets.events._WEBHOOK_REDELIVERY_ATTEMPTS``
+#: (kept in both modules to avoid a store -> events import cycle; a test pins
+#: the equality). A failed row stops being due once ``attempts`` reaches it, so
+#: an exhausted row (``next_attempt_at NULL``) is never offered again.
+_MAX_DELIVERY_ATTEMPTS = 4
 
 _EVENT_KINDS = frozenset(get_args(EventKind))
 _EVENT_ID_RE = re.compile(r"[0-9a-f]{32}")
@@ -192,6 +205,8 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
     status_code INTEGER,
     error TEXT,
     recorded_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at TEXT,
     PRIMARY KEY (webhook_id, event_id)
 );
 
@@ -214,13 +229,14 @@ class WebsetStoreError(RuntimeError):
     Spec codes raised today: ``webset_not_found``, ``search_not_found``,
     ``monitor_not_found``, ``enrichment_limit_exceeded``, ``cursor_not_found``
     (unknown item/event cursor). Sibling codes for the types the spec's list
-    omits: ``item_not_found``, ``enrichment_not_found``, ``webhook_not_found``,
-    ``webhook_id_required`` (an empty webhook id can never key the delivery
-    ledger). Internal invariant violations raise ``transition_invalid``
-    (illegal status move), ``webset_not_settled`` (idle requested while work is
-    pending), ``invalid_event_kind`` (unknown append kind),
-    ``invalid_webhook_delivery`` (empty ledger key), and ``event_not_stored``
-    (a conflicting event row could not be read back).
+    omits: ``item_not_found``, ``enrichment_not_found``, ``webhook_not_found``
+    (also a missing delivery-ledger pair on update), ``webhook_id_required`` (an
+    empty webhook id can never key the delivery ledger), ``event_not_found`` (a
+    missing event row). Internal invariant violations raise
+    ``transition_invalid`` (illegal status move), ``webset_not_settled`` (idle
+    requested while work is pending), ``invalid_event_kind`` (unknown append
+    kind), ``invalid_webhook_delivery`` (empty ledger key), and
+    ``event_not_stored`` (a conflicting event row could not be read back).
     """
 
     def __init__(self, message: str, *, code: str) -> None:
@@ -230,7 +246,14 @@ class WebsetStoreError(RuntimeError):
 
 @dataclass(frozen=True)
 class WebhookDelivery:
-    """One ``webhook_deliveries`` ledger row (T5b records terminal state)."""
+    """One ``webhook_deliveries`` ledger row (T5b records terminal state).
+
+    ``attempts`` counts the re-deliveries the shared driver's loop has performed
+    against the row (``0`` for a fresh first-attempt failure) and
+    ``next_attempt_at`` is when the row becomes due again (``None`` when
+    unscheduled or exhausted) — both #4226 re-delivery state carried on the
+    ledger, not part of the original T5b row.
+    """
 
     webhook_id: str
     event_id: str
@@ -238,6 +261,8 @@ class WebhookDelivery:
     recorded_at: datetime
     status_code: int | None = None
     error: str | None = None
+    attempts: int = 0
+    next_attempt_at: datetime | None = None
 
 
 class WebsetStore:
@@ -254,6 +279,7 @@ class WebsetStore:
         self._conn.execute(f"PRAGMA busy_timeout={_BUSY_TIMEOUT_MS}")
         with self._conn:
             self._conn.executescript(_SCHEMA)
+            _ensure_delivery_retry_columns(self._conn)
 
     # -- websets ----------------------------------------------------------
 
@@ -797,7 +823,10 @@ class WebsetStore:
 
         Returns ``True`` when this call created the ledger row and ``False``
         when the pair was already recorded (a retry or a resumed delivery never
-        double-records). The event row itself is never mutated.
+        double-records). The event row itself is never mutated. A new row keeps
+        the re-delivery columns' defaults (``attempts = 0``, ``next_attempt_at
+        NULL``) — a first-attempt failure is deliberately left unscheduled so
+        the shared driver's re-delivery loop picks it up.
         """
         if not webhook_id or not event_id:
             raise WebsetStoreError(
@@ -812,42 +841,99 @@ class WebsetStore:
             )
         return cursor.rowcount == 1
 
+    def update_webhook_delivery(
+        self,
+        webhook_id: str,
+        event_id: str,
+        *,
+        ok: bool,
+        status_code: int | None,
+        error: str | None,
+        attempts: int,
+        next_attempt_at: datetime | None,
+    ) -> WebhookDelivery:
+        """Rewrite an existing ledger row's outcome and re-delivery state.
+
+        The #4226 re-delivery loop's write: every mutable field is replaced
+        (``ok``, ``status_code``, ``error``, ``attempts``, ``next_attempt_at``)
+        while ``recorded_at`` — the pair's first recorded moment — is kept. A
+        missing pair (including an empty key) raises ``webhook_not_found``, the
+        same not-found convention as :meth:`get_webhook`. Returns the updated
+        row.
+        """
+        with self._conn:
+            cursor = self._conn.execute(
+                "UPDATE webhook_deliveries SET ok = ?, status_code = ?, error = ?, "
+                "attempts = ?, next_attempt_at = ? WHERE webhook_id = ? AND event_id = ?",
+                (
+                    int(ok),
+                    status_code,
+                    error,
+                    attempts,
+                    _utc_iso(next_attempt_at) if next_attempt_at is not None else None,
+                    webhook_id,
+                    event_id,
+                ),
+            )
+        if cursor.rowcount == 0:
+            raise WebsetStoreError(
+                f"webhook delivery not found: {webhook_id}/{event_id}",
+                code="webhook_not_found",
+            )
+        row = self.get_webhook_delivery(webhook_id, event_id)
+        if row is None:  # pragma: no cover - row existed when the update matched
+            raise WebsetStoreError(
+                f"webhook delivery not found: {webhook_id}/{event_id}",
+                code="webhook_not_found",
+            )
+        return row
+
     def get_webhook_delivery(self, webhook_id: str, event_id: str) -> WebhookDelivery | None:
         """Load one ledger row, or ``None`` when the pair was never recorded."""
         row = self._conn.execute(
-            "SELECT ok, status_code, error, recorded_at FROM webhook_deliveries "
+            "SELECT webhook_id, event_id, ok, status_code, error, recorded_at, "
+            "attempts, next_attempt_at FROM webhook_deliveries "
             "WHERE webhook_id = ? AND event_id = ?",
             (webhook_id, event_id),
         ).fetchone()
-        if row is None:
-            return None
-        return WebhookDelivery(
-            webhook_id=webhook_id,
-            event_id=event_id,
-            ok=bool(row[0]),
-            status_code=row[1],
-            error=row[2],
-            recorded_at=_parse_utc(row[3]),
-        )
+        return None if row is None else _delivery_from_row(row)
 
     def list_webhook_deliveries(self, webhook_id: str) -> list[WebhookDelivery]:
         """Ledger rows for one webhook in recording order."""
         rows = self._conn.execute(
-            "SELECT event_id, ok, status_code, error, recorded_at FROM webhook_deliveries "
+            "SELECT webhook_id, event_id, ok, status_code, error, recorded_at, "
+            "attempts, next_attempt_at FROM webhook_deliveries "
             "WHERE webhook_id = ? ORDER BY recorded_at ASC, event_id ASC",
             (webhook_id,),
         ).fetchall()
-        return [
-            WebhookDelivery(
-                webhook_id=webhook_id,
-                event_id=row[0],
-                ok=bool(row[1]),
-                status_code=row[2],
-                error=row[3],
-                recorded_at=_parse_utc(row[4]),
-            )
-            for row in rows
-        ]
+        return [_delivery_from_row(row) for row in rows]
+
+    def list_due_webhook_deliveries(
+        self, *, now: datetime, limit: int = 100
+    ) -> list[WebhookDelivery]:
+        """Failed ledger rows due for a re-delivery attempt, oldest-due first.
+
+        A row is due when it is still failed (``ok = 0``), it has not exhausted
+        the re-delivery attempts (``attempts < _MAX_DELIVERY_ATTEMPTS`` — an
+        exhausted row keeps ``next_attempt_at NULL`` and is never offered
+        again), and its scheduled moment has arrived (``next_attempt_at`` NULL
+        for a never-scheduled first-attempt failure, or at/before ``now``).
+        Order is deterministic — unscheduled rows first, then earliest scheduled
+        moment, then ``recorded_at``, then the ledger key — so a pass processes
+        a stable sequence. ``limit`` is clamped to 1..200 like the other
+        selectors.
+        """
+        limit = _clamp_limit(limit)
+        rows = self._conn.execute(
+            "SELECT webhook_id, event_id, ok, status_code, error, recorded_at, "
+            "attempts, next_attempt_at FROM webhook_deliveries "
+            "WHERE ok = 0 AND attempts < ? AND "
+            "(next_attempt_at IS NULL OR next_attempt_at <= ?) "
+            "ORDER BY next_attempt_at ASC NULLS FIRST, recorded_at ASC, "
+            "webhook_id ASC, event_id ASC LIMIT ?",
+            (_MAX_DELIVERY_ATTEMPTS, _utc_iso(now), limit),
+        ).fetchall()
+        return [_delivery_from_row(row) for row in rows]
 
     # -- events -----------------------------------------------------------
 
@@ -889,6 +975,20 @@ class WebsetStore:
             ).fetchone()
         if row is None:  # pragma: no cover - insert failure with no conflicting row
             raise WebsetStoreError(f"event not stored: {stored.id}", code="event_not_stored")
+        return WebsetEvent.model_validate_json(row[0])
+
+    def get_event(self, event_id: str) -> WebsetEvent:
+        """Load one stored event by id; a missing id raises ``event_not_found``.
+
+        The re-delivery loop's read: the event body is the payload source for a
+        re-sent delivery, so the row must be recoverable from the ledger's
+        ``event_id`` alone.
+        """
+        row = self._conn.execute(
+            "SELECT body FROM events WHERE event_id = ?", (event_id,)
+        ).fetchone()
+        if row is None:
+            raise WebsetStoreError(f"event not found: {event_id}", code="event_not_found")
         return WebsetEvent.model_validate_json(row[0])
 
     def list_events(
@@ -1002,6 +1102,38 @@ def _new_entity_id(prefix: str) -> str:
 def _base_document(webset: Webset) -> str:
     """Serialize the webset row body without the child collections (own tables)."""
     return webset.model_copy(update={"searches": [], "enrichments": []}).model_dump_json()
+
+
+def _ensure_delivery_retry_columns(conn: sqlite3.Connection) -> None:
+    """Add the #4226 re-delivery columns when a pre-existing DB predates them.
+
+    ``CREATE TABLE IF NOT EXISTS`` cannot add columns to an existing table, so
+    databases created before ``attempts``/``next_attempt_at`` are upgraded here
+    (the ``monitors.store._ensure_secret_column`` precedent). Both guards make a
+    re-open idempotent; any failure propagates out of ``__init__`` rather than
+    leaving a store whose ledger is missing the columns.
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(webhook_deliveries)")}
+    if "attempts" not in columns:
+        conn.execute(
+            "ALTER TABLE webhook_deliveries ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0"
+        )
+    if "next_attempt_at" not in columns:
+        conn.execute("ALTER TABLE webhook_deliveries ADD COLUMN next_attempt_at TEXT")
+
+
+def _delivery_from_row(row: tuple[Any, ...]) -> WebhookDelivery:
+    """Map a full eight-column ledger row (the store's canonical select order)."""
+    return WebhookDelivery(
+        webhook_id=row[0],
+        event_id=row[1],
+        ok=bool(row[2]),
+        status_code=row[3],
+        error=row[4],
+        recorded_at=_parse_utc(row[5]),
+        attempts=int(row[6]),
+        next_attempt_at=_parse_utc(row[7]) if row[7] is not None else None,
+    )
 
 
 def _dedup_key(event: WebsetEvent) -> str:

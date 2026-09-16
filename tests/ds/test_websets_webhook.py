@@ -27,6 +27,18 @@ Covered:
   delivery recorded in the ledger without raising, and one failing target not
   aborting the remaining targets.
 
+#4226 re-delivery (``redeliver_webhook``):
+
+- a due failed row is re-attempted through the same body builder and in-call
+  3-attempt/5s-25s POST core, always signed with the webhook's *current* secret
+  (asserted after a rotation);
+- failures step the pinned 5m/30m/2h/6h ladder, and the cap-many failure
+  exhausts the row (``next_attempt_at=None``) so the due selector never offers
+  it again;
+- a webhook that is inactive/unsubscribed, or a webhook/event that no longer
+  exists, is exhausted once without a POST; a missing secret records the
+  fail-closed ``webhook_secret_missing`` outcome with no egress.
+
 Offline: ``httpx.MockTransport`` and the ``_sleep`` / ``_client_for`` seams,
 real sqlite files under ``tmp_path``. ``@pytest.mark.unit`` on every test.
 """
@@ -697,3 +709,169 @@ def test_append_event_isolates_one_failing_target_from_the_others(monkeypatch, t
     assert store.get_webhook_delivery(bad_hook.webhook_id, event.id).ok is False
     assert store.get_webhook_delivery(good_hook.webhook_id, event.id).ok is True
     assert calls == [_URL_BAD, _URL_BAD, _URL_BAD, _URL_GOOD]
+
+
+# ── #4226: automated re-delivery of failed ledger rows ────────────────────────
+
+
+def _record_failed(store: WebsetStore, webhook_id: str, event_id: str) -> None:
+    """A terminal first-attempt failure, exactly as ``deliver_webhook`` records it."""
+    assert store.record_webhook_delivery(
+        webhook_id, event_id, ok=False, status_code=500, error="HTTP 500"
+    )
+
+
+def _delivery(store: WebsetStore, webhook_id: str, event_id: str):
+    row = store.get_webhook_delivery(webhook_id, event_id)
+    assert row is not None
+    return row
+
+
+@pytest.mark.unit
+def test_redeliver_success_updates_the_row_and_signs_with_the_current_secret(
+    monkeypatch, tmp_path, sleeps
+):
+    store = _store(tmp_path)
+    webset = _webset(store)
+    event = _event(store, webset.id)
+    webhook = _webhook(store, webset.id, _URL_GOOD)
+    statuses = {"code": 503}
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(statuses["code"])
+
+    _patch_transport(monkeypatch, handler)
+    first = mod.deliver_webhook(store, event, now=_T0)
+    assert first[0].ok is False and first[0].attempts == 0 and first[0].next_attempt_at is None
+    assert sleeps == [5.0, 25.0]
+
+    # The secret rotates before the retry: the re-delivery must sign with the
+    # current one (the receiver still accepts the previous one under the 24h
+    # overlap, but the sender never falls back to it).
+    store.update_webhook(
+        webset.id,
+        webhook.model_copy(
+            update={
+                "secret": _ROTATED_SECRET,
+                "previous_secret": _SECRET,
+                "previous_expires_at": _T0 + timedelta(hours=24),
+            }
+        ),
+    )
+    statuses["code"] = 200
+    retry_at = _T0 + timedelta(minutes=1)
+    row = mod.redeliver_webhook(store, _delivery(store, webhook.webhook_id, event.id), now=retry_at)
+
+    assert row.ok is True and row.status_code == 200 and row.error is None
+    assert row.attempts == 1 and row.next_attempt_at is None
+    assert row == store.get_webhook_delivery(webhook.webhook_id, event.id)
+    assert sleeps == [5.0, 25.0]  # success on the first re-attempt: no extra waits
+
+    body = seen[-1].read()
+    signature = seen[-1].headers["x-digi-signature"]
+    assert signature == phase_c.sign_webhook_body(_ROTATED_SECRET, body)
+    assert signature != phase_c.sign_webhook_body(_SECRET, body)
+    payload = json.loads(body.decode("utf-8"))
+    assert payload["event"]["id"] == event.id
+    assert payload["webset_id"] == webset.id
+    assert payload["delivered_at"] == retry_at.isoformat()
+
+
+@pytest.mark.unit
+def test_redeliver_failure_steps_the_pinned_ladder_then_exhausts(monkeypatch, tmp_path, sleeps):
+    assert mod._WEBHOOK_REDELIVERY_ATTEMPTS == 4
+    assert mod._WEBHOOK_REDELIVERY_BACKOFF_S == (300.0, 1800.0, 7200.0, 21600.0)
+    store = _store(tmp_path)
+    webset = _webset(store)
+    event = _event(store, webset.id)
+    webhook = _webhook(store, webset.id, _URL_GOOD)
+    _record_failed(store, webhook.webhook_id, event.id)
+    _patch_transport(monkeypatch, lambda request: httpx.Response(500))
+
+    now = _T0
+    row = mod.redeliver_webhook(store, _delivery(store, webhook.webhook_id, event.id), now=now)
+    assert (row.attempts, row.next_attempt_at) == (1, now + timedelta(seconds=300))
+    now = row.next_attempt_at
+    row = mod.redeliver_webhook(store, row, now=now)
+    assert (row.attempts, row.next_attempt_at) == (2, now + timedelta(seconds=1800))
+    now = row.next_attempt_at
+    row = mod.redeliver_webhook(store, row, now=now)
+    assert (row.attempts, row.next_attempt_at) == (3, now + timedelta(seconds=7200))
+    now = row.next_attempt_at
+    row = mod.redeliver_webhook(store, row, now=now)
+
+    assert row.ok is False and row.status_code == 500 and row.error == "HTTP 500"
+    assert row.attempts == mod._WEBHOOK_REDELIVERY_ATTEMPTS
+    assert row.next_attempt_at is None  # exhausted: a terminal failed row
+    assert row.recorded_at == _delivery(store, webhook.webhook_id, event.id).recorded_at
+    # The in-call 3-attempt/5s-25s retry core is preserved on every re-delivery.
+    assert sleeps == [5.0, 25.0] * mod._WEBHOOK_REDELIVERY_ATTEMPTS
+    # Exhausted rows never become due again, however far the clock runs.
+    assert store.list_due_webhook_deliveries(now=_T0 + timedelta(days=365)) == []
+
+
+@pytest.mark.unit
+def test_redeliver_inactive_or_unsubscribed_webhook_exhausts_without_egress(monkeypatch, tmp_path):
+    store = _store(tmp_path)
+    webset = _webset(store)
+    event = _event(store, webset.id)
+    inactive = _webhook(store, webset.id, _URL_GOOD)
+    store.update_webhook(webset.id, inactive.model_copy(update={"active": False}))
+    unsubscribed = _webhook(
+        store, webset.id, "https://other.example.com/x", events=("item.created",)
+    )
+    _record_failed(store, inactive.webhook_id, event.id)
+    _record_failed(store, unsubscribed.webhook_id, event.id)
+    calls: list[int] = []
+
+    _patch_transport(monkeypatch, lambda request: calls.append(1) or httpx.Response(200))
+    for webhook in (inactive, unsubscribed):
+        row = mod.redeliver_webhook(store, _delivery(store, webhook.webhook_id, event.id), now=_T0)
+        assert row.ok is False and row.status_code is None
+        assert row.error == "webhook_inactive"
+        assert row.attempts == mod._WEBHOOK_REDELIVERY_ATTEMPTS
+        assert row.next_attempt_at is None
+
+    assert calls == []
+    assert store.list_due_webhook_deliveries(now=_T0) == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("missing", ["webhook", "event"])
+def test_redeliver_missing_webhook_or_event_exhausts_without_egress(monkeypatch, tmp_path, missing):
+    store = _store(tmp_path)
+    webset = _webset(store)
+    event = _event(store, webset.id)
+    webhook = _webhook(store, webset.id, _URL_GOOD)
+    webhook_id = "f" * 32 if missing == "webhook" else webhook.webhook_id
+    event_id = "e" * 32 if missing == "event" else event.id
+    _record_failed(store, webhook_id, event_id)
+    calls: list[int] = []
+
+    _patch_transport(monkeypatch, lambda request: calls.append(1) or httpx.Response(200))
+    row = mod.redeliver_webhook(store, _delivery(store, webhook_id, event_id), now=_T0)
+
+    assert calls == []
+    assert row.ok is False and row.next_attempt_at is None
+    assert row.attempts == mod._WEBHOOK_REDELIVERY_ATTEMPTS
+    assert row.error == ("webhook_not_found" if missing == "webhook" else "event_not_found")
+
+
+@pytest.mark.unit
+def test_redeliver_missing_secret_fails_closed_and_stays_on_the_ladder(monkeypatch, tmp_path):
+    store = _store(tmp_path)
+    webset = _webset(store)
+    event = _event(store, webset.id)
+    webhook = _webhook(store, webset.id, _URL_GOOD, secret="")
+    _record_failed(store, webhook.webhook_id, event.id)
+    calls: list[int] = []
+
+    _patch_transport(monkeypatch, lambda request: calls.append(1) or httpx.Response(200))
+    row = mod.redeliver_webhook(store, _delivery(store, webhook.webhook_id, event.id), now=_T0)
+
+    assert calls == []
+    assert row.ok is False and row.status_code is None and row.error == "webhook_secret_missing"
+    assert row.attempts == 1
+    assert row.next_attempt_at == _T0 + timedelta(seconds=300)

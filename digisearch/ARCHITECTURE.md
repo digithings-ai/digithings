@@ -717,6 +717,28 @@ and the ledger turns a duplicate re-append into a no-op (no second POST).
 `verify_webhook_signature` is a public helper (rotation-overlap acceptance)
 for webhook consumers; it deliberately has no production caller.
 
+**Automated re-delivery is wired (#4226).** The shared driver runs a second
+scheduled task next to the tick loop: one pass per `WEBSET_REDELIVERY_SECONDS`
+(300s) reads the failed, due ledger rows
+(`store.list_due_webhook_deliveries` — `ok=0`, not exhausted, `next_attempt_at`
+NULL or elapsed) and re-attempts each through `events.redeliver_webhook`, which
+rebuilds the same `{event, webset_id, delivered_at}` body from the stored event
+and reuses the one-shot POST core (3 in-call attempts, 5s/25s backoff) — always
+signing with the webhook's **current** secret, so a retry after rotation lands
+inside the 24h previous-secret overlap. Retries are bounded:
+`_WEBHOOK_REDELIVERY_ATTEMPTS = 4` timed attempts stepping the pinned
+`(300, 1800, 7200, 21600)`-second ladder, and the cap-count failure exhausts the
+row (`next_attempt_at = NULL`), which the due selector never offers again — the
+ledger keeps a terminal failed row. A webhook that is inactive or no longer
+subscribed, or a webhook/event that is gone, is exhausted once with no POST; a
+missing secret records the fail-closed `webhook_secret_missing` outcome. Success
+flips the same ledger row `ok=True` (no new event append, no extra POST outside
+the bounded retry). Rows are processed serially with a per-pass in-flight guard,
+per-row faults are contained, and nothing re-delivers without an installed
+driver. `deliver_webhook`'s one-shot semantics are unchanged: a recorded
+terminal failure stays final for the append path; re-delivery is this loop
+explicitly driving failed rows.
+
 ##### Webset HTTP routes
 
 All routes are auth-gated through `DigiAuthMiddleware`; the paths hit the
@@ -774,9 +796,9 @@ the Phase D live record does not claim it (tracked by the #4123 live-pin
 precedent).
 
 **Deferred (explicitly out of v1).** Recall paging
-(count is reached by query diversification, `max_results ≤ 10` per call),
-automated webhook re-delivery after a failed delivery, and EXA-websets live
-validation + wiring (Pro key; tracked by the #4123 live-pin precedent).
+(count is reached by query diversification, `max_results ≤ 10` per call) and
+EXA-websets live validation + wiring (Pro key; tracked by the #4123 live-pin
+precedent).
 
 **MCP driving is wired (#4170).** Both entrypoints carry the shared
 `websets/driver.py` lifespan: the FastAPI app lifespan installs it for the HTTP
@@ -1483,12 +1505,12 @@ no-new-provider discipline as Phase C. One-line responsibilities:
 | File | Responsibility |
 |------|----------------|
 | `websets/models.py` | `Webset` / `WebsetSearch` / `WebsetItem` / `EnrichmentDef` / `EnrichedField` / `CompanyEntity` / `WebsetMonitor` / `WebhookConfig` / `WebsetEvent`; shared `Citation` imported, never redefined; `verification_mode` persisted on webset + search |
-| `websets/store.py` | SQLite persistence (websets/searches/items/enrichments/monitors/webhooks/webhook_deliveries/events), `ws_/wss_/wsi_/wse_/wsm_` + uuid4-hex ids, cursor pagination, the append-only `(webset_id, dedup_key)` event log, the `(webhook_id, event_id)` delivery ledger |
+| `websets/store.py` | SQLite persistence (websets/searches/items/enrichments/monitors/webhooks/webhook_deliveries/events), `ws_/wss_/wsi_/wse_/wsm_` + uuid4-hex ids, cursor pagination, the append-only `(webset_id, dedup_key)` event log, the `(webhook_id, event_id)` delivery ledger with its `attempts`/`next_attempt_at` re-delivery state (`update_webhook_delivery`, `list_due_webhook_deliveries`, #4226) |
 | `websets/verify.py` | `verify_item` (llm + offline rules modes) and the fail-closed settlement of still-pending items at candidate-pass end |
 | `websets/enrich.py` | `enrich_item` (8 typed fields, per-field citations), funding reconciliation (ECB snapshot), entity merge, `company_profile_field` |
 | `websets/runner.py` | `AsyncioRunner` (semaphore 4, per-item containment, semaphore-aware cancellation), `run_webset_async`, `backfill_enrichment`, `schedule_webset_task` + `WEBSET_TASKS` |
-| `websets/driver.py` | Shared in-process driver (`webset_task_lifespan`, `WebsetTaskScheduler`): installs the scheduler seam per install window (first entry to last exit), reference-counted across concurrent invocations — first entry installs + runs the startup-resume union, last exit cancels tracked runs/backfills, and a later window reinstalls + re-resumes; concurrent HTTP/MCP sessions share one install (#4170/#4189); carried by both the FastAPI and FastMCP lifespans; runs the scheduled tick loop (`WEBSET_TICK_SECONDS`, in-process `last_tick`) in the same TaskGroup (#4221) |
-| `websets/events.py` | Event emit helpers, the shared Phase C signing core, `append_event` fan-out through `deliver_webhook` (3 attempts, 5s/25s) + ledger recording, public `verify_webhook_signature` |
+| `websets/driver.py` | Shared in-process driver (`webset_task_lifespan`, `WebsetTaskScheduler`): installs the scheduler seam per install window (first entry to last exit), reference-counted across concurrent invocations — first entry installs + runs the startup-resume union, last exit cancels tracked runs/backfills, and a later window reinstalls + re-resumes; concurrent HTTP/MCP sessions share one install (#4170/#4189); carried by both the FastAPI and FastMCP lifespans; runs the scheduled tick loop (`WEBSET_TICK_SECONDS`, in-process `last_tick`) and the webhook re-delivery loop (`WEBSET_REDELIVERY_SECONDS`, due failed ledger rows) in the same TaskGroup (#4221, #4226) |
+| `websets/events.py` | Event emit helpers, the shared Phase C signing core, `append_event` fan-out through `deliver_webhook` (3 attempts, 5s/25s) + ledger recording, `redeliver_webhook` (bounded 4-attempt re-drive on the pinned backoff ladder, current-secret signing, #4226), public `verify_webhook_signature` |
 | `websets/export.py` | `export_json` (per-field citations) and `export_csv` (polars) |
 | `websets/service.py` | The sync facade the HTTP/MCP/orchestrator surfaces call (create/get/items/counts/add_search/add_enrichment/remove/monitors/webhooks/events/cancel/export) + the scheduler seam |
 | `websets/providers/exa_websets.py` | Dormant EXA Pro shim: OSS⇄EXA translation for create/read/refresh, `ExaWebsetsProRequiredError(ExaError)` |
