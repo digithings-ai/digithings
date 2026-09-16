@@ -22,7 +22,7 @@ Every request is a GET. The token only ever leaves this process as the
 | `ZAMMAD_BASE_URL` | `https://ticket.sitaas.de` | Zammad root, no `/api/v1` suffix |
 | `ZAMMAD_API_TOKEN` | — | Zammad API token — raw value or the full `Token token=<x>` header value; server-side only, never commit or send to a browser |
 | `ZAMMAD_MCP_HOST` | `127.0.0.1` | Bind host for streamable HTTP |
-| `ZAMMAD_MCP_ALLOWED_HOSTS` | — | Comma-separated Host patterns allowed past FastMCP's DNS-rebinding guard (e.g. `zammad-mcp` for cross-container access; enforced only when the mcp build exposes transport_security — the 1.9.x stack image does not) |
+| `ZAMMAD_MCP_ALLOWED_HOSTS` | — | Comma-separated Host patterns allowed past FastMCP's DNS-rebinding guard (e.g. `zammad-mcp` for cross-container access; enforced only when the mcp build exposes transport_security — older mcp versions do not) |
 
 ```bash
 ZAMMAD_API_TOKEN=... python -m scripts.zammad_mcp.server --port 8770
@@ -83,10 +83,12 @@ only external path is the key-gated route
 `https://graph.digithings.ai/_stack/mcp/zammad/*` (the Worker checks
 `x-digi-mcp-key` against the `MCP_EDGE_KEY` secret and fails closed with a 401).
 The prod occ tenant entry in `DIGICHAT_EMBED_TENANTS` therefore carries
-`url: https://graph.digithings.ai/_stack/mcp/zammad/mcp` with
-`tokenEnv: MCP_EDGE_KEY` and `authHeader: x-digi-mcp-key`; the server still
-authenticates to Zammad with its own environment (no Zammad token in the tenant
-entry).
+`url: https://graph.digithings.ai/_stack/mcp/zammad/mcp`, `authHeader:
+x-digi-mcp-key`, and a literal `token` holding the `MCP_EDGE_KEY` value
+(`tokenEnv` only resolves variables present in the digichat Container's own
+environment, and the Worker secret is deliberately not forwarded there); the
+server still authenticates to Zammad with its own environment (no Zammad token
+in the tenant entry).
 
 ## Privacy & exposure
 
