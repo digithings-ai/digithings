@@ -129,7 +129,15 @@ When `stream: true` in `POST /v1/chat/completions`:
      `error`), the queued clipped `arguments`, and a size-capped `result`
      (`_clip_tool_result`, 12_000-char JSON cap with truncated preview) — so the
      BFF row shows args + JSON result and completes the moment the tool returns
-     instead of lingering until end-of-stream. The
+     instead of lingering until end-of-stream. When the raw result carries the §7
+     attribution block (`attribution` / `delay_notice` / `source_url`, appended
+     last by digiquant's `gloomberb_envelope_json`), those keys are hoisted out of
+     the clip and attached ahead of the emitted `result` — structured envelope or
+     the MCP `{"ok": true, "text": …}` wrapper alike — because a string scalar is
+     cut at 2,000 chars with no key structure left to read, and the digichat
+     attribution line (#4130) reads them off the result object (#4131). The
+     truncated preview budget shrinks by the hoisted block and is enforced on the
+     re-serialized record so the 12_000-char cap is unchanged. The
      `round_boundary` event marks the end of a digillm tool round: `round_idx` is the
      zero-based round number, and `narration` is the assistant text produced that round
      (with `stream_deltas`, content deltas were already emitted; without streaming,

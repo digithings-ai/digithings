@@ -164,6 +164,98 @@ def _clip_tool_result(result: Any, _depth: int = 0) -> Any | None:
     return _clip_scalar(result)
 
 
+# §7 attribution keys appended to digifetch_* payloads
+# (digiquant/src/digiquant/data/gloomberb/agent_tools.py::gloomberb_envelope_json).
+# Hoisted out of the size-capped result so the digichat attribution line (#4130)
+# still renders when the payload is clipped (#4131).
+_ATTRIBUTION_KEYS = ("attribution", "delay_notice", "source_url")
+_MAX_ATTRIBUTION_WALK_DEPTH = 3
+_MAX_ATTRIBUTION_WALK_ITEMS = 64
+
+
+def _attribution_from_mapping(value: dict[str, Any]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for key in _ATTRIBUTION_KEYS:
+        item = value.get(key)
+        if isinstance(item, str) and item.strip():
+            out[key] = item
+    return out
+
+
+def _extract_attribution(value: Any, _depth: int = 0) -> dict[str, str]:
+    """Find the §7 attribution block on a raw tool result (#4131).
+
+    Handles a structured envelope and the MCP client's opaque wrapper
+    (``orchestration/mcp_client.py``: ``{"ok": true, "text": "<json>"}``): the
+    envelope appends the block LAST (``gloomberb_envelope_json``), so the
+    wrapper's 2,000-char scalar cap cuts it before any reader sees a key.
+    Bounded walk; malformed JSON is skipped, never raised.
+    """
+    if _depth > _MAX_ATTRIBUTION_WALK_DEPTH:
+        return {}
+    if isinstance(value, dict):
+        found = _attribution_from_mapping(value)
+        if found:
+            return found
+        items = list(value.values())
+    elif isinstance(value, list):
+        items = list(value)
+    elif isinstance(value, str):
+        if '"attribution"' not in value:
+            return {}
+        try:
+            parsed = json.loads(value)
+        except (TypeError, ValueError):
+            return {}
+        return _extract_attribution(parsed, _depth + 1)
+    else:
+        return {}
+    for item in items[:_MAX_ATTRIBUTION_WALK_ITEMS]:
+        found = _extract_attribution(item, _depth + 1)
+        if found:
+            return found
+    return {}
+
+
+def _render_clipped_tool_result(result_data: dict[str, Any]) -> Any | None:
+    """Render a generic tool result for the trace, preserving §7 provenance.
+
+    The §7 keys are hoisted from the raw result before the clip and attached
+    ahead of it: the digichat attribution line (#4130) reads them off the
+    emitted result (``cloudflare/digiweb/web/src/lib/gloomberb.ts``), and the
+    scalar cap leaves no key structure to read once a string is cut.
+    """
+    attribution = _extract_attribution(result_data)
+    clipped_result = _clip_tool_result(result_data)
+    if clipped_result is None:
+        return None
+    try:
+        serialized = json.dumps(clipped_result)
+        rendered: Any = clipped_result
+        if len(serialized) > _MAX_TOOL_RESULT_CHARS:
+            budget = _MAX_TOOL_RESULT_CHARS - 100
+            if attribution:
+                budget -= len(json.dumps(attribution))
+            preview = serialized[:budget]
+            # The slice is JSON text: its quote characters escape again when the
+            # record is re-serialized, so measure the record, not the slice, and
+            # shrink until it fits. The §7 keys are never trimmed.
+            while True:
+                rendered = {
+                    **attribution,
+                    "truncated": True,
+                    "preview": preview + "… [truncated]",
+                }
+                if len(json.dumps(rendered)) <= _MAX_TOOL_RESULT_CHARS or not preview:
+                    break
+                preview = preview[:-64]
+    except (TypeError, ValueError):
+        rendered = {"preview": str(clipped_result)[:2000]}
+    if attribution and isinstance(rendered, dict):
+        rendered = {**attribution, **rendered}
+    return rendered
+
+
 def _audit_digi_kwargs(req: WorkflowRequest) -> dict[str, str]:
     out: dict[str, str] = {}
     if req.digi_trace_key_prefix:
@@ -701,20 +793,8 @@ def run_digigraph_workflow_streaming(
                 if "query" in data and isinstance(data["query"], str) and data["query"].strip():
                     generic_payload["query"] = data["query"].strip()
                 result_data = {k: v for k, v in data.items() if k != "name"}
-                clipped_result = _clip_tool_result(result_data)
-                if clipped_result is not None:
-                    rendered = clipped_result
-                    try:
-                        if len(json.dumps(clipped_result)) > _MAX_TOOL_RESULT_CHARS:
-                            rendered = {
-                                "truncated": True,
-                                "preview": json.dumps(clipped_result)[
-                                    : _MAX_TOOL_RESULT_CHARS - 100
-                                ]
-                                + "… [truncated]",
-                            }
-                    except (TypeError, ValueError):
-                        rendered = {"preview": str(clipped_result)[:2000]}
+                rendered = _render_clipped_tool_result(result_data)
+                if rendered is not None:
                     generic_payload["result"] = rendered
                 emit(
                     (
