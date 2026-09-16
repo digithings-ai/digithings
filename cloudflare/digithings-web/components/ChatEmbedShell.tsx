@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ContainerBootLoader } from "@digithings/web";
+import { DigichatBootLoader } from "@digithings/web";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
 
 const READY = "digichat:ready";
@@ -91,9 +91,11 @@ export type ChatEmbedShellProps = {
  * pins first paint via `?theme=`, then posts `digichat:theme` on ready and on
  * live toggles so the iframe stays in sync without reload.
  *
- * Boot: shows `@digithings/web` ContainerBootLoader on a theme-matched surface
- * until `digichat:ready`. The iframe stays transparent / opacity-0 underneath
- * so a white default document never flashes on the dark digithings theme.
+ * Boot: shows `@digithings/web` DigichatBootLoader (the composer-outline cube
+ * field) on a transparent surface until `digichat:ready` plus the loader's
+ * settle + typewriter sequence finish. The iframe stays transparent /
+ * opacity-0 underneath so a white default document never flashes on the dark
+ * digithings theme.
  *
  * Ready failures: posts `digichat:parent-error` into the iframe for in-chat
  * terminal lines (no page banner). If the iframe never loads, shows the same
@@ -110,6 +112,10 @@ export function ChatEmbedShell({
   /** Only when iframe never loads — cannot deliver parent-error postMessage. */
   const [shellLoadError, setShellLoadError] = useState<string | null>(null);
   const [embedReady, setEmbedReady] = useState(false);
+  // The boot overlay drops on the loader's own schedule (settle + typewriter),
+  // not the moment digichat:ready arrives -- otherwise the cube field would
+  // vanish mid-parks. Reset with embedReady when the origin effect re-runs.
+  const [bootSettled, setBootSettled] = useState(false);
   // Defer iframe src until after mount so we can read the real parent theme
   // (themeInitScript already flipped data-theme) and avoid a wrong-mode flash.
   const [src, setSrc] = useState("");
@@ -157,6 +163,7 @@ export function ChatEmbedShell({
     queueMicrotask(() => {
       setShellLoadError(null);
       setEmbedReady(false);
+      setBootSettled(false);
     });
 
     function onMessage(ev: MessageEvent) {
@@ -212,7 +219,7 @@ export function ChatEmbedShell({
     );
   }
 
-  const showBoot = !shellLoadError && !embedReady;
+  const showBoot = !shellLoadError && !bootSettled;
 
   return (
     <div
@@ -291,14 +298,14 @@ export function ChatEmbedShell({
             background: "transparent",
           }}
         >
-          <ContainerBootLoader
-            title="digichat"
-            note="waking the embed · first paint after digichat:ready"
-            fullscreen={false}
-            // ContainerBootLoader's own .tl-boot class fills var(--bg) by default --
-            // right for its usual mode (a plain app with nothing behind it), wrong
-            // here where .grain/.glow should show through. Scoped override below,
-            // not a change to the shared component or its default styling.
+          <DigichatBootLoader
+            // The overlay drops only after the loader parks + types in; the
+            // iframe's opacity (below) is keyed on embedReady alone, so the
+            // ready frame is already painted underneath while it settles.
+            ready={embedReady}
+            onSettled={() => setBootSettled(true)}
+            // The loader paints straight onto the transparent overlay (no
+            // background of its own), so .grain/.glow keep showing through.
             className="dc-embed-boot"
           />
         </div>
