@@ -77,7 +77,7 @@ export function ButtonsCtaReference() {
         <Button type="button" disabled>
           <span
             aria-hidden="true"
-            className="size-[11px] shrink-0 animate-spin rounded-full border-2 border-current/30 border-t-current"
+            className="size-[11px] shrink-0 animate-spin rounded-full border-2 border-current/30 border-t-current motion-reduce:animate-none"
           />
           Backtesting…
         </Button>
