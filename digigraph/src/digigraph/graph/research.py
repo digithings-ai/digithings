@@ -468,9 +468,11 @@ def _run_document_rag_path(
 
     user_content = str(prompt)
     if mcp_force:
+        # MCP tool names are ``{server_id}_{tool}`` (mcp_client.prefixed_tool_name);
+        # the trailing separator is the id boundary, not the retired ``__`` form.
         user_content = (
             f"The user invoked /{mcp_force} for this turn. "
-            f"You must use tools whose names start with {mcp_force}__.\n\n" + user_content
+            f"You must use tools whose names start with {mcp_force}_.\n\n" + user_content
         )
 
     # Project mode only: prepend NL filter hints so the LLM folds them into
