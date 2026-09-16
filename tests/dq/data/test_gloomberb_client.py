@@ -448,6 +448,31 @@ def test_price_history_start_only_window_omits_end_date() -> None:
     assert "endDate" not in seen["url"]
 
 
+def test_price_history_end_only_window_omits_start_date() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return envelope([], currency="USD", providerMeta={"provider": "yahoo"})
+
+    make_client(handler).price_history(
+        {"symbol": "AAPL", "resolution": "1wk", "end_date": "2020-01-02"}
+    )
+    assert "rangeKey=ALL" in seen["url"]
+    assert "endDate=2020-01-02" in seen["url"]
+    assert "startDate" not in seen["url"]
+
+
+def test_price_history_numeric_timestamp_window_is_invalid_input_without_request() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("a numeric timestamp must not reach the wire")
+
+    result = make_client(handler).price_history(
+        {"symbol": "AAPL", "resolution": "1wk", "start_date": 1420070400.0}
+    )
+    assert result.data.code == "invalid_input"  # type: ignore[union-attr]
+
+
 def test_price_history_window_with_range_is_invalid_input_without_request() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError("a window + range request must not reach the wire")

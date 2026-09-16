@@ -6,6 +6,8 @@ bounds, and the shared envelope/error contract.
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from pydantic import ValidationError
 
@@ -138,6 +140,24 @@ def test_price_history_date_window_rejects_reversed_and_malformed_dates() -> Non
         PriceHistoryInput(symbol="AAPL", resolution="1wk", start_date="2015-1-1")
     with pytest.raises(ValidationError):
         PriceHistoryInput(symbol="AAPL", resolution="1wk", start_date="2015-13-01")
+
+
+def test_price_history_date_window_accepts_a_single_day_window() -> None:
+    request = PriceHistoryInput(
+        symbol="AAPL", resolution="1wk", start_date="2015-01-01", end_date="2015-01-01"
+    )
+    assert request.start_date == request.end_date
+    # A real `date` (e.g. an internal caller) is accepted as well.
+    assert PriceHistoryInput(
+        symbol="AAPL", resolution="1wk", start_date=date(2015, 1, 1)
+    ).start_date == date(2015, 1, 1)
+
+
+def test_price_history_date_window_rejects_coerced_timestamps() -> None:
+    # A bare `date` field would silently coerce these (#4100 review F3).
+    for bad in (1420070400.0, 1420070400, 0, "2015-01-01T00:00:00"):
+        with pytest.raises(ValidationError, match="ISO YYYY-MM-DD"):
+            PriceHistoryInput(symbol="AAPL", resolution="1wk", start_date=bad)
 
 
 def test_quotes_batch_bounds() -> None:

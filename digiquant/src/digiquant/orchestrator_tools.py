@@ -247,7 +247,9 @@ def build_digifetch_price_history_tool() -> dict[str, Any]:
                 "invalid_input (never clamped). For windows beyond the caps "
                 "(e.g. 1wk back to 2015) pass start_date/end_date (ISO "
                 "YYYY-MM-DD, mutually exclusive with range) — the request is "
-                "sent as rangeKey=ALL + startDate/endDate."
+                "sent as rangeKey=ALL + startDate/endDate. Only the 1wk "
+                "window is probe-verified; intraday windows are allowed but "
+                "upstream-unverified."
             ),
             "parameters": {
                 "type": "object",

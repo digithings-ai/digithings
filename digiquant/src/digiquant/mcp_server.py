@@ -939,7 +939,8 @@ def create_mcp_server(
         `start_date`/`end_date` (ISO YYYY-MM-DD) request an explicit window
         beyond those caps for long history (e.g. 1wk back to 2015); they are
         mutually exclusive with `range` and are sent as rangeKey=ALL +
-        startDate/endDate upstream.
+        startDate/endDate upstream. Only the weekly (1wk) window path is
+        probe-verified; intraday windows are allowed but upstream-unverified.
         """
         try:
             envelope = _build_gloomberb_client().price_history(

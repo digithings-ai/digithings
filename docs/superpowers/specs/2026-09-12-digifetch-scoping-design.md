@@ -148,7 +148,7 @@ are the test-visible contract (13 rows).
 |------|-------|----------|-------------|--------------|------|
 | `digifetch_quote` | `getQuote` | `GET /market/quote` | `QuoteInput{symbol: str, exchange: str \| None}` | `QuoteResult(quote: Quote \| None)` | anon |
 | `digifetch_quotes_batch` | `getQuotesBatch` | `POST /market/quotes/batch` | `QuotesBatchInput{symbols: list[str] (1–20)}` | `QuotesBatchResult(quotes: list[QuoteBatchItem])` | anon |
-| `digifetch_price_history` | `getPriceHistory` | `GET /market/history` | `PriceHistoryInput{symbol, resolution: Resolution, range: Range, exchange?}` | `PriceHistoryResult(bars: list[PriceBar], metadata)` | anon |
+| `digifetch_price_history` | `getPriceHistory` | `GET /market/history` | `PriceHistoryInput{symbol, resolution: Resolution, range?: Range, start_date?/end_date?: ISO date (YYYY-MM-DD), exchange?}` — `range` is optional (defaults to `5Y` for `1d` only) and `start_date`/`end_date` (the #4100 window) are mutually exclusive with it | `PriceHistoryResult(bars: list[PriceBar], metadata)` | anon |
 | `digifetch_ticker_financials` | `getTickerFinancials` (+Batch) | `GET /market/financials` (+`statementHistory=extended`), `POST /market/financials/batch` | `TickerFinancialsInput{symbol, exchange?, extended_statements: bool = False}` | `TickerFinancialsResult(financials: TickerFinancials)` | anon |
 | `digifetch_options_chain` | `getOptionsChain` | `GET /market/options` | `OptionsChainInput{symbol, exchange?, expiration: int \| None (epoch s)}` | `OptionsChainResult(chain: OptionsChain)` | anon |
 | `digifetch_sec_filings` | `getSecFilings` / `…Documents` / `…Content` | `GET /cloud/sec/filings`, `/cloud/sec/filing/documents`, `/cloud/sec/filing/content` | `SecFilingsInput{ticker, what: Literal["filings","documents","content"], count: int = 15, cik?, accession?, form?}` | `SecFilingsResult(filings \| documents \| content)` | anon (live-verified) |
@@ -200,11 +200,16 @@ chart-resolution enum (`1m…1mo`). A request outside the contract raises
 
 **Widening escape hatch (#4100).** `PriceHistoryInput` additionally accepts an
 explicit `start_date`/`end_date` window (ISO `YYYY-MM-DD`, either end optional,
-`start_date <= end_date`). The window is **mutually exclusive** with `range`
-and bypasses the caps above: the client sends `rangeKey=ALL` + `startDate`/
-`endDate`, the combination a live probe verified serves 610 weekly bars back to
-2015-01-05 — beyond the `1wk` 5-year cap, while `rangeKey=ALL` alone still
-returns the ~29-bar default window. The range-based caps in the table are
+`start_date <= end_date`; only a strict ISO string or a real `date` is
+accepted — numeric timestamps and datetime strings are rejected). The window is
+**mutually exclusive** with `range` and bypasses the caps above: the client
+sends `rangeKey=ALL` + `startDate`/`endDate`, the combination a live probe
+verified serves 610 weekly bars back to 2015-01-05 — beyond the `1wk` 5-year
+cap, while `rangeKey=ALL` alone still returns the ~29-bar default window. Only
+the weekly (`1wk`) window path is probe-verified; intraday windows are allowed
+(the window is not gated by resolution) but upstream-unverified.
+`PriceHistoryMetadata.range` stays `''` for windowed calls — there is no range
+key, the requested dates bound the read. The range-based caps in the table are
 unchanged.
 
 ### 5.3 Envelope, errors, freshness
