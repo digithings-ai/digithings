@@ -63,7 +63,13 @@ from digisearch.pipeline.ingest import IngestError, ingest_source
 from digisearch.pipeline.url_ingest import UrlIngestResult, ingest_url
 from digisearch.search._stub import query_index
 from digisearch.web_exa import WebSearchData
-from digisearch.web_search.models import WebSearchConfigError, WebSearchRequest, WebSearchResponse
+from digisearch.web_search.models import (
+    WebSearchConfigError,
+    WebSearchErrorResponse,
+    WebSearchProviderError,
+    WebSearchRequest,
+    WebSearchResponse,
+)
 from digisearch.websets import service as websets_service
 from digisearch.websets.driver import webset_task_lifespan
 from digisearch.websets.models import (
@@ -716,6 +722,11 @@ class OrchestratorInvokeResponse(BaseModel):
         | None
     ) = None
     error: str | None = None
+    # Provider-failure hints for the web_search branch (#4192): rate limits and
+    # other transient upstream failures are ``retryable`` so callers can back
+    # off instead of treating them as a hard failure.
+    retryable: bool | None = None
+    status_code: int | None = None
 
 
 def _research_turn_available() -> bool:
@@ -1125,6 +1136,15 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             resp = run_web_search(web_req)
         except WebSearchConfigError as e:
             return OrchestratorInvokeResponse(ok=False, error=f"invalid web_search config: {e}")
+        except WebSearchProviderError as e:
+            # Provider failures are soft in-envelope errors, never a 500 that
+            # can cancel a caller's run (#4192).
+            return OrchestratorInvokeResponse(
+                ok=False,
+                error=str(e),
+                retryable=e.retryable,
+                status_code=e.status_code,
+            )
         return OrchestratorInvokeResponse(
             ok=True,
             service="digisearch",
@@ -1237,9 +1257,13 @@ def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
     return ResearchTurnOutput.model_validate(run_research_turn(req.model_dump(mode="json")))
 
 
-@app.post("/v1/web_search", response_model=WebSearchResponse)
-def v1_web_search(req: WebSearchRequest) -> WebSearchResponse:
-    """Search the public web (searxng with ddgs fallback, fetch + extract enrichment)."""
+@app.post("/v1/web_search", response_model=WebSearchResponse | WebSearchErrorResponse)
+def v1_web_search(req: WebSearchRequest) -> WebSearchResponse | WebSearchErrorResponse:
+    """Search the public web (searxng with ddgs fallback, fetch + extract enrichment).
+
+    Provider failures (429 / 5xx / connection / timeout) return HTTP 200 with
+    the soft ``{"ok": false, ...}`` envelope instead of a 500 (#4192).
+    """
     try:
         from digisearch.web_search.service import run_web_search
     except ImportError as e:
@@ -1254,6 +1278,12 @@ def v1_web_search(req: WebSearchRequest) -> WebSearchResponse:
             status_code=503,
             detail=f"invalid web_search config: {e}",
         ) from e
+    except WebSearchProviderError as e:
+        return WebSearchErrorResponse(
+            error=str(e),
+            retryable=e.retryable,
+            status_code=e.status_code,
+        )
 
 
 class ExaWebSearchRequest(BaseModel):

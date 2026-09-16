@@ -267,6 +267,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 111) re-recorded for the #4226 review-fix wave
     (re-delivery cap/full-ladder wording in ARCHITECTURE.md) — fixture prose
     only; RecursiveChunker unchanged.
+    Hashes only (count still 111) re-recorded for #4192 (web_search provider
+    soft-error envelope sentence in ARCHITECTURE.md) — fixture prose only;
+    RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -296,9 +299,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "ff826630927efa87",
         "c86663a520afa724",
         "7e8464fe6a6cc067",
-        "9ce2b59017d82c91",
-        "ef0f58a96ed218c0",
-        "0e77d003d55f7ea9",
+        "805b4f2eb13bd3fd",
+        "44ec568505a0232f",
+        "e1cbdda23bdfbf37",
         "7973399b6e155051",
         "e0ed75d4b266835e",
         "5e1cdcae7ee033f5",
