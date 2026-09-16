@@ -35,8 +35,9 @@ Covered:
 - failures step the full pinned 5m/30m/2h/6h ladder: five timed re-deliveries,
   the first four arming 300/1800/7200/21600 seconds, and the fifth exhausting
   the row (``next_attempt_at=None``) so the due selector never offers it again;
-- a fault escaping the POST core (client construction included) is contained
-  and recorded as a counted, redacted failed attempt like the one-shot path;
+- a fault escaping the payload build or the POST core (client construction
+  included) is contained and recorded as a counted, redacted failed attempt
+  like the one-shot path;
   a non-not-found ``WebsetStoreError`` from a lookup or the ledger update
   propagates without touching the row;
 - a webhook that is inactive/unsubscribed, or a webhook/event that no longer
@@ -918,6 +919,40 @@ def test_redeliver_client_construction_fault_records_a_counted_redacted_attempt(
     # Counted like any other failed re-delivery: on the ladder, not exhausted.
     assert row.attempts == 1
     assert row.next_attempt_at == _T0 + timedelta(seconds=300)
+
+
+@pytest.mark.unit
+def test_redeliver_payload_build_fault_records_a_counted_redacted_attempt(monkeypatch, tmp_path):
+    """A fault out of ``_delivery_body`` is contained like the POST-core faults (#4226).
+
+    The payload build sits inside ``redeliver_webhook``'s broad containment: a
+    fault escaping it would leave the row ``attempts=0``/``next_attempt_at=NULL``
+    and re-offered every pass with no ladder accounting. It must instead be
+    recorded as a counted, redacted failed attempt on the first rung.
+    """
+    store = _store(tmp_path)
+    webset = _webset(store)
+    event = _event(store, webset.id)
+    webhook = _webhook(store, webset.id, _URL_GOOD)
+    _record_failed(store, webhook.webhook_id, event.id)
+    calls: list[int] = []
+
+    def boom(event, delivered_at):
+        raise ValueError(f"payload exploded for {webhook.url} with {_SECRET}")
+
+    monkeypatch.setattr(mod, "_delivery_body", boom)
+    _patch_transport(monkeypatch, lambda request: calls.append(1) or httpx.Response(200))
+    row = mod.redeliver_webhook(store, _delivery(store, webhook.webhook_id, event.id), now=_T0)
+
+    assert calls == []  # the fault precedes any POST (no egress)
+    assert row.ok is False and row.status_code is None
+    # Redacted exactly like the delivery ledger (R8): no URL, no secret.
+    assert row.error == "ValueError: payload exploded for <target> with <redacted>"
+    assert _SECRET not in row.error and _URL_GOOD not in row.error
+    # Counted like any other failed re-delivery: on the ladder, not exhausted.
+    assert row.attempts == 1
+    assert row.next_attempt_at == _T0 + timedelta(seconds=300)
+    assert store.list_due_webhook_deliveries(now=row.next_attempt_at) == [row]
 
 
 @pytest.mark.unit
