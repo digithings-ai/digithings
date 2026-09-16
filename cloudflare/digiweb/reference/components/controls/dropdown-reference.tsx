@@ -1,13 +1,43 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+  Input,
+} from "@digithings/web/ui";
 
 /**
- * Dropdown — a custom select whose pane is its own surface: an in-pane filter,
- * grouped options, rich rows (livery dot, description, profit-factor badge), and
- * a footer action. Type to filter, arrow keys to move, Enter to choose,
- * click-outside or Escape to close; navigable order mirrors the grouped render
- * order so keyboard focus stays aligned. Static interactive display template.
+ * Dropdown — the stock DropdownMenu from `@digithings/web/ui` with an inline
+ * filter. The pane stays its own surface: a filter row, grouped options, rich
+ * rows (livery dot, description, profit-factor metric), and a footer action.
+ * The filter state is app-side; roving highlight, keyboard navigation and
+ * focus-return-to-trigger are Base UI defaults.
+ *
+ * Wave 1 mapping from the deleted hand-built `.dd-*` pane:
+ *   .dd-trigger/.dd-value/.dd-label/.dd-note/.dd-caret
+ *     → DropdownMenuTrigger rendered as the kit Button
+ *   .dd-search-row/.dd-search-glyph/.dd-search
+ *     → call-site row wrapping the kit Input inside DropdownMenuContent
+ *   .dd-scroll/.dd-group/.dd-group-label
+ *     → DropdownMenuContent scrolls; DropdownMenuGroup + DropdownMenuLabel
+ *   .dd-option (+ .dd-dot/.dd-opt-note/.dd-metric/.dd-check)
+ *     → DropdownMenuRadioItem (+ DropdownMenuShortcut for the metric)
+ *   .dd-empty → call-site paragraph (no stock empty part)
+ *   .dd-footer/.dd-footer-action → DropdownMenuSeparator + DropdownMenuItem
+ * Base UI menu items keep the menu open on click by default, so every pick
+ * carries `closeOnClick` — the old pane closed on choice and on the footer
+ * action.
  */
 type Option = { id: string; group: string; label: string; note: string; pf: string; livery: string };
 
@@ -20,13 +50,8 @@ const OPTIONS: Option[] = [
 ];
 
 export function DropdownReference() {
-  const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(OPTIONS[0].id);
   const [query, setQuery] = useState("");
-  const [active, setActive] = useState(0);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   const current = OPTIONS.find((o) => o.id === selected) ?? OPTIONS[0];
   const filtered = OPTIONS.filter(
@@ -34,180 +59,89 @@ export function DropdownReference() {
       o.label.toLowerCase().includes(query.toLowerCase()) ||
       o.note.toLowerCase().includes(query.toLowerCase()),
   );
+  // Group order mirrors the source order, filtered set first.
   const groups = Array.from(new Set(filtered.map((o) => o.group)));
-  // Navigable order mirrors the grouped render order below, so ArrowUp/Down and
-  // Enter stay aligned even if OPTIONS is reordered to interleave groups.
-  const ordered = groups.flatMap((g) => filtered.filter((o) => o.group === g));
-
-  // Closing via Enter/Escape/a definitive in-pane action (option pick, footer
-  // action) returns focus to the trigger — the focused filter <input> simply
-  // unmounts when `open` goes false, and a focused element removed from the
-  // DOM falls back to <body>, stranding a keyboard user at the top of the
-  // document instead of back where they opened the menu from.
-  const closeMenu = () => {
-    setOpen(false);
-    triggerRef.current?.focus();
-  };
-
-  // While open, Escape/Enter are caught by a DOCUMENT-level listener (below)
-  // so they work no matter which row/field inside the pane has focus. That
-  // only stays correct as long as focus is actually still somewhere inside
-  // the pane: if a keyboard user Tabs past the footer action onto later page
-  // content (nothing else here closes the menu on tab-out) — or another
-  // widget's own shortcut steals focus away, e.g. SearchBarReference's `/`
-  // hotkey — `open` stays true and a later, unrelated Escape/Enter keypress
-  // elsewhere on the page would still hit this pane's handler, including
-  // closeMenu()'s forced refocus back onto the trigger. Auto-closing the
-  // instant focus actually leaves the wrapper removes that stale-armed
-  // state. Same pattern as NavShell.tsx's onFocusLeave (React's onBlur is
-  // focusout, so it bubbles from children; relatedTarget is the element
-  // gaining focus, so this only fires once focus has genuinely left the
-  // pane). Plain setOpen, not closeMenu: focus already moved somewhere else
-  // on purpose, so it isn't yanked back to the trigger.
-  const onWrapperBlur = (e: React.FocusEvent<HTMLDivElement>) => {
-    if (wrapRef.current?.contains(e.relatedTarget as Node | null)) return;
-    setOpen(false);
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      // Deliberately plain setOpen(false), not closeMenu(): the user clicked
-      // somewhere else on purpose, so their click target keeps focus (the
-      // browser's own default click-to-focus already handles that) rather
-      // than this yanking focus back to the trigger.
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeMenu();
-      else if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setActive((i) => Math.min(ordered.length - 1, i + 1));
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setActive((i) => Math.max(0, i - 1));
-      } else if (e.key === "Enter" && ordered[active]) {
-        e.preventDefault();
-        setSelected(ordered[active].id);
-        closeMenu();
-      }
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, active, ordered]);
-
-  const openMenu = () => {
-    setQuery("");
-    // index into the same grouped order the pane renders, not raw OPTIONS order
-    const allGroups = Array.from(new Set(OPTIONS.map((o) => o.group)));
-    const allOrdered = allGroups.flatMap((g) => OPTIONS.filter((o) => o.group === g));
-    setActive(Math.max(0, allOrdered.findIndex((o) => o.id === selected)));
-    setOpen(true);
-    requestAnimationFrame(() => inputRef.current?.focus());
-  };
-
-  let flat = -1;
 
   return (
     <section className="section-block">
       <p className="kicker">{"// dropdown"}</p>
       <h2 className="title">A pane, not a list.</h2>
       <p className="section-copy">
-        A custom select whose pane is its own surface: an in-pane filter, grouped options, rich
-        rows (livery dot, description, a profit-factor badge), and a footer action. Type to filter,
-        arrow-keys to move, Enter to choose, click-outside or Escape to close.
+        The stock menu with an in-pane filter: grouped options, rich rows (livery dot, description,
+        a profit-factor metric), and a footer action. Type to filter, arrow-keys to move, Enter to
+        choose, click-outside or Escape to close.
       </p>
 
-      <div className="relative mt-[1.2rem] w-[min(100%,22rem)]" ref={wrapRef} onBlur={onWrapperBlur}>
-        <button
-          ref={triggerRef}
-          type="button"
-          className={`dd-trigger${open ? " open" : ""}`}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          onClick={() => (open ? setOpen(false) : openMenu())}
+      <div className="mt-[1.2rem] w-[min(100%,22rem)]">
+        <DropdownMenu
+          onOpenChange={(open) => {
+            if (open) setQuery("");
+          }}
         >
-          <span className="dd-value">
-            <span className="dd-label">{current.label}</span>
-            <span className="dd-note">{current.note}</span>
-          </span>
-          <span className="dd-caret" aria-hidden="true" />
-        </button>
+          <DropdownMenuTrigger
+            render={<Button variant="outline" className="h-auto w-full justify-between py-2" />}
+          >
+            <span className="flex flex-col items-start">
+              <span className="text-[0.86rem]">{current.label}</span>
+              <span className="text-[0.62rem] text-muted-foreground">{current.note}</span>
+            </span>
+            <svg
+              className="size-2 shrink-0 text-muted-foreground"
+              viewBox="0 0 8 8"
+              aria-hidden="true"
+            >
+              <path d="M1 2.5 4 5.5 7 2.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            </svg>
+          </DropdownMenuTrigger>
 
-        {open ? (
-          <div className="dd-menu">
-            <div className="dd-search-row">
-              <span className="dd-search-glyph" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6">
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-                </svg>
-              </span>
-              <input
-                ref={inputRef}
-                className="dd-search"
-                placeholder="Filter strategies…"
+          <DropdownMenuContent>
+            <div className="border-b border-hair p-1">
+              <Input
                 value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setActive(0);
-                }}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Filter strategies…"
+                aria-label="Filter strategies"
               />
             </div>
 
-            <div className="dd-scroll" role="listbox" aria-label="Strategy">
-              {filtered.length === 0 ? (
-                <p className="dd-empty">No strategy matches “{query}”.</p>
-              ) : (
-                groups.map((g) => (
-                  <div key={g} className="dd-group">
-                    <p className="dd-group-label">{g}</p>
+            {filtered.length === 0 ? (
+              <p className="p-[1rem] text-center font-mono text-[0.74rem] text-muted-foreground">
+                No strategy matches “{query}”.
+              </p>
+            ) : (
+              <DropdownMenuRadioGroup
+                value={selected}
+                onValueChange={(value) => setSelected(String(value))}
+              >
+                {groups.map((g) => (
+                  <DropdownMenuGroup key={g}>
+                    <DropdownMenuLabel>{g}</DropdownMenuLabel>
                     {filtered
                       .filter((o) => o.group === g)
-                      .map((o) => {
-                        flat += 1;
-                        const idx = flat;
-                        return (
-                          <button
-                            key={o.id}
-                            type="button"
-                            role="option"
-                            aria-selected={o.id === selected}
-                            className={`dd-option accent-${o.livery}${idx === active ? " active" : ""}${o.id === selected ? " selected" : ""}`}
-                            onMouseEnter={() => setActive(idx)}
-                            onClick={() => {
-                              setSelected(o.id);
-                              closeMenu();
-                            }}
-                          >
-                            <span className="dd-dot" aria-hidden="true" />
-                            <span className="dd-opt-label">{o.label}</span>
-                            <span className="dd-opt-note">{o.note}</span>
-                            <span className="dd-metric">PF {o.pf}</span>
-                            {o.id === selected ? (
-                              <span className="dd-check" aria-hidden="true">
-                                ✓
-                              </span>
-                            ) : null}
-                          </button>
-                        );
-                      })}
-                  </div>
-                ))
-              )}
-            </div>
+                      .map((o) => (
+                        <DropdownMenuRadioItem
+                          key={o.id}
+                          value={o.id}
+                          closeOnClick
+                          className={`accent-${o.livery}`}
+                        >
+                          <span className="size-[7px] rounded-full bg-accent" aria-hidden="true" />
+                          <span className="text-[0.8rem]">{o.label}</span>
+                          <span className="text-[0.62rem] text-muted-foreground">{o.note}</span>
+                          <DropdownMenuShortcut>PF {o.pf}</DropdownMenuShortcut>
+                        </DropdownMenuRadioItem>
+                      ))}
+                  </DropdownMenuGroup>
+                ))}
+              </DropdownMenuRadioGroup>
+            )}
 
-            <div className="dd-footer">
-              <button type="button" className="dd-footer-action" onClick={closeMenu}>
-                <span aria-hidden="true">+</span> New strategy…
-              </button>
-            </div>
-          </div>
-        ) : null}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem closeOnClick className="text-accent">
+              <span aria-hidden="true">+</span> New strategy…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </section>
   );
