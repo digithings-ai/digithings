@@ -506,7 +506,10 @@ stays a generic transport engine (no URLs, no env reads).
 - **Enrichment only, never a pipeline primary.** 15-minute free-tier delay, rate
   limits, and the §5.2 caps (5m→1wk … 1wk→5y, 1mo→all-time) disqualify Cloud as a
   source of record. Contract violations are **rejected** (`invalid_input`), never
-  clamped. Do not rewire prices/history/technicals onto it.
+  clamped. `digifetch_price_history`'s explicit `start_date`/`end_date` window
+  (ISO `YYYY-MM-DD`, mutually exclusive with `range`, #4100) widens history reads
+  past the caps by sending `rangeKey=ALL` + `startDate`/`endDate`; the
+  delay/rate limits still stand. Do not rewire prices/history/technicals onto it.
 - **Envelope contract.** Every call returns `DigifetchEnvelope[T]` with `data`
   either the payload or a typed `DigifetchError` (`auth_required` / `pro_required` /
   `not_found` / `rate_limited` / `upstream_error` / `invalid_input`); tools never raise. Keep the
@@ -643,6 +646,29 @@ stays a generic transport engine (no URLs, no env reads).
 - **Human gate.** `api.gloom.sh` is a new external service dependency — the
   implementation PR cannot self-merge (`agents.yml` `human_gates`), and the
   container-egress / ToS spike items (spec §12 item 5) stay open.
+- **Pipeline agent access (#4146).** `data/gloomberb/agent_tools.py` is the
+  in-process surface for the research analysts + PM: `DIGIFETCH_TOOLS` is
+  generated from the `orchestrator_tools.py` manifest builders (never hand-copy
+  schemas), `build_digifetch_tool_dispatcher()` routes name → input model →
+  `GloomberbClient` method and returns the attribution envelope, and the
+  curated subsets `EQUITY_TOOLS` / `MACRO_TOOLS` / `PM_TOOLS` (each ≤16 names)
+  are wired through `build_grounding(digifetch_tools=...)` +
+  `SegmentNodeSpec.digifetch_tools`: equity + sector phases take EQUITY, macro
+  takes MACRO, portfolio H5 + H7 take PM. Unlike the MCP surface (which
+  registers gated tools and answers `auth_required` / disabled envelopes), the
+  in-process list **filters instead of advertising**:
+  `available_digifetch_tools` returns no digifetch tools at all when
+  `GLOOMBERB_ENABLED` disables the family, and drops session/preview/pro names
+  when `GLOOMBERB_SESSION_COOKIE` is unset (CI has neither → never advertised);
+  the client still applies both gates per call. `digifetch_congress_trades`
+  stays MCP-only (its upstream OCR answers HTTP 500) and is not in `MACRO_TOOLS`.
+  H6 stays off (research-tools-only by #2908) and legacy Phase 7D is unwired.
+  Enrichment-only is enforced structurally: the subset attaches **only when a
+  primary data/research executor built**. The client factory + envelope
+  serializer moved here from `mcp_server.py` (which imports them) so MCP and
+  pipeline share one env-keyed, lock-guarded pacing/cache/breaker client. When
+  adding a tool, add it to `TOOL_ENTITLEMENTS` + the dispatcher table +
+  (usually) a subset — the parity tests pin the rest.
 - **Tests are offline.** `httpx.MockTransport` on the injected
   `digifetch.HttpFetcher`, or a patched `_build_gloomberb_client`; never hit the
   live API. Run `pytest tests/dq/test_mcp_gloomberb_tools.py tests/dq/data/test_gloomberb_*.py`

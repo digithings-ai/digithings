@@ -10,7 +10,13 @@ set -eu
 DATA_CHROMA="${CHROMA_PATH:-/data/chroma}"
 DATA_VAULT="${DIGIVAULT_ROOT:-/data/vault}"
 
-mkdir -p "$DATA_CHROMA" "$DATA_VAULT" /data/digikey /var/log/supervisor
+# Required storage. Unlike the vault seed below, the stack cannot serve without
+# these, so this one stays fail-fast — but deliberately, with a legible message,
+# rather than letting `set -e` abort PID 1 on a bare shell error (#4156).
+if ! mkdir -p "$DATA_CHROMA" "$DATA_VAULT" /data/digikey /var/log/supervisor; then
+  echo "digithings-stack: FATAL cannot create required data dirs (chroma, vault, digikey, supervisor logs)" >&2
+  exit 1
+fi
 
 # Stable digikey issuer defaults for CF custom domains (overridable via envVars).
 export DIGIKEY_ISSUER="${DIGIKEY_ISSUER:-https://key.digithings.ai}"
@@ -160,21 +166,28 @@ fi
 # Copy vault seed notes. Files named seed-*.md are always refreshed from the
 # image (dogfood corpus). Other filenames are copied only if missing so
 # operator / docs_onboard notes are never overwritten.
+#
+# Best-effort: the seed corpus is dogfood content, so a failed copy degrades the
+# vault rather than the service. Unguarded it would abort PID 1 before
+# `exec supervisord` and take digikey/digigraph down with it (#4149, #4156).
 for client_dir in /seed/vault/clients/*; do
   [ -d "$client_dir" ] || continue
   client=$(basename "$client_dir")
-  mkdir -p "$DATA_VAULT/clients/$client"
+  mkdir -p "$DATA_VAULT/clients/$client" \
+    || echo "digithings-stack: WARN cannot create vault client dir: $client" >&2
   for f in "$client_dir"/*; do
     [ -f "$f" ] || continue
     base=$(basename "$f")
     dest="$DATA_VAULT/clients/$client/$base"
     case "$base" in
       seed-*.md|seed-*.markdown)
-        cp "$f" "$dest"
+        cp "$f" "$dest" \
+          || echo "digithings-stack: WARN cannot refresh vault seed: $base" >&2
         ;;
       *)
         if [ ! -f "$dest" ]; then
-          cp "$f" "$dest"
+          cp "$f" "$dest" \
+            || echo "digithings-stack: WARN cannot seed vault note: $base" >&2
         fi
         ;;
     esac
@@ -186,37 +199,28 @@ done
 # (its SSRF guard always blocks loopback, #3879, and there is no Docker DNS
 # under Firecracker). Warn and continue if no usable address is found.
 if ! getent hosts zammad-mcp >/dev/null 2>&1; then
-  zammad_mcp_ip=$(python3 -c '
+  # Bounded and non-fatal by design: a resolver probe must never stall
+  # startup, and a failed write must never trip `set -eu` (an entrypoint
+  # that exits takes the whole stack container with it).
+  zammad_mcp_ip=$(timeout 5 python3 -c '
 import socket
 
-
-def candidates():
-    try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            yield info[4][0]
-    except OSError:
-        return
-    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        probe.connect(("192.0.2.1", 80))
-        yield probe.getsockname()[0]
-    finally:
-        probe.close()
-
-
-for ip in candidates():
-    if not (ip.startswith("127.") or ip.startswith("169.254.")):
-        print(ip)
-        break
+probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    probe.connect(("192.0.2.1", 80))
+    print(probe.getsockname()[0])
+finally:
+    probe.close()
 ' 2>/dev/null || true)
+  case "${zammad_mcp_ip:-}" in
+    127.* | 169.254.*) zammad_mcp_ip="" ;;
+  esac
   if [ -n "${zammad_mcp_ip:-}" ]; then
-    # Best-effort. This runs under `set -eu` immediately before
-    # `exec /usr/bin/supervisord`, so an unwritable /etc/hosts (read-only in
-    # some runtimes) must not abort the entrypoint — that takes the whole
-    # instance down: no :8000 to probe, so the Worker 503s every request and
-    # the container is reported as "just exited".
-    printf '%s zammad-mcp\n' "$zammad_mcp_ip" >> /etc/hosts 2>/dev/null \
-      || echo "digithings-stack: WARN could not alias zammad-mcp in /etc/hosts" >&2
+    if printf '%s zammad-mcp\n' "$zammad_mcp_ip" >> /etc/hosts 2>/dev/null; then
+      echo "digithings-stack: aliased zammad-mcp -> $zammad_mcp_ip"
+    else
+      echo "digithings-stack: WARN could not write the zammad-mcp host alias" >&2
+    fi
   else
     echo "digithings-stack: WARN no zammad-mcp host alias; Zammad MCP will be unreachable" >&2
   fi

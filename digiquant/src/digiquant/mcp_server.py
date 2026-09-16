@@ -16,6 +16,18 @@ import os
 import time
 from typing import Any, Literal, overload  # score:allow untyped any — MCP payloads
 
+# The digifetch x Gloomberb client factory + §7 envelope serializer live in the
+# data package (#4146) so the MCP tools and the pipeline's in-process dispatch
+# share one env-keyed client (pacing/cache/circuit breaker). Importing them
+# under the historical private names keeps the module-level patch seam the MCP
+# tests use (``monkeypatch.setattr(mcp_server, "_build_gloomberb_client", ...)``).
+from digiquant.data.gloomberb.agent_tools import (
+    build_gloomberb_client as _build_gloomberb_client,
+)
+from digiquant.data.gloomberb.agent_tools import (
+    gloomberb_envelope_json as _gloomberb_envelope_json,
+)
+
 logger = logging.getLogger(__name__)
 
 # ── Market-data backend: Supabase vs versioned R2 history (#3780, Task 4) ──
@@ -101,71 +113,12 @@ def _r2_is_stale(manifest_as_of: str, resolved_as_of: str) -> bool:
 
 # ── digifetch x Gloomberb client seam (#4069) ───────────────────────────────
 #
-# One lazily-built ``GloomberbClient`` per (kill switch, session cookie) env
-# pair. The builder is the patchable seam tests use to inject a
-# MockTransport-backed client. ``GLOOMBERB_ENABLED`` defaults ON (author
-# decision, spec §11/§12.6); the session cookie is never logged or echoed into
-# tool payloads.
-
-_gloomberb_clients: dict[tuple[str, str], Any] = {}
-
-
-def _close_gloomberb_client(client: Any) -> None:
-    """Best-effort close for a client being replaced (never mask the new one)."""
-    close = getattr(client, "close", None)
-    if not callable(close):
-        return
-    try:
-        close()
-    except Exception:  # closing is cleanup; an error must not break a tool call
-        pass
-
-
-def _build_gloomberb_client() -> Any:
-    """Build/cache the Gloomberb client from env (patchable seam for tests).
-
-    Keyed by the raw ``GLOOMBERB_ENABLED`` / ``GLOOMBERB_SESSION_COOKIE`` env
-    values so an operator or test env change gets a fresh client without a
-    process restart; the default (unset) pair is the anonymous, default-ON
-    client. Only one client is kept alive: when the env pair changes, the
-    replaced client is closed so its transport is not leaked.
-    """
-    from digiquant.data.gloomberb import GloomberbClient
-    from digiquant.data.gloomberb.client import (
-        GLOOMBERB_ENABLED_ENV,
-        GLOOMBERB_SESSION_COOKIE_ENV,
-    )
-
-    key = (
-        os.environ.get(GLOOMBERB_ENABLED_ENV, ""),
-        os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV, ""),
-    )
-    client = _gloomberb_clients.get(key)
-    if client is not None:
-        return client
-    client = GloomberbClient()
-    for stale in _gloomberb_clients.values():
-        _close_gloomberb_client(stale)
-    _gloomberb_clients.clear()
-    _gloomberb_clients[key] = client
-    return client
-
-
-def _gloomberb_envelope_json(
-    envelope: Any, *, symbol: str | None = None, attributed: bool = True
-) -> str:
-    """Serialize a ``DigifetchEnvelope`` with §7 attribution + deep link.
-
-    ``symbol`` adds a ``term.gloom.sh/?ticker=`` source link. ``attributed``
-    is False for the Yahoo-backed earnings calendar, which is not Gloomberb-
-    sourced and must not claim the attribution.
-    """
-    payload = envelope.model_dump(mode="json")
-    if attributed:
-        from digiquant.data.gloomberb import attribution_fields
-
-        payload.update(attribution_fields(symbol))
-    return json.dumps(payload, indent=2, default=str)
+# The client factory + envelope serializer moved to the data package (#4146,
+# ``digiquant.data.gloomberb.agent_tools``) and are imported at the top of this
+# module under ``_build_gloomberb_client`` / ``_gloomberb_envelope_json``. The
+# builder remains the patchable seam tests use to inject a MockTransport-backed
+# client. ``GLOOMBERB_ENABLED`` defaults ON (author decision, spec §11/§12.6);
+# the session cookie is never logged or echoed into tool payloads.
 
 
 @overload
@@ -974,6 +927,8 @@ def create_mcp_server(
         resolution: str,
         range: str | None = None,
         exchange: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
     ) -> str:
         """OHLCV bars for one listing (Gloomberb Cloud; JSON envelope).
 
@@ -981,6 +936,11 @@ def create_mcp_server(
         6M/1Y/5Y/ALL and is capped per resolution (5m→1wk, 15m→1mo, 1h→3mo,
         1d→5y default, 1wk→5y, 1mo→all-time). Out-of-contract requests return
         typed `invalid_input` - requests are rejected, never silently clamped.
+        `start_date`/`end_date` (ISO YYYY-MM-DD) request an explicit window
+        beyond those caps for long history (e.g. 1wk back to 2015); they are
+        mutually exclusive with `range` and are sent as rangeKey=ALL +
+        startDate/endDate upstream. Only the weekly (1wk) window path is
+        probe-verified; intraday windows are allowed but upstream-unverified.
         """
         try:
             envelope = _build_gloomberb_client().price_history(
@@ -989,6 +949,8 @@ def create_mcp_server(
                     "resolution": resolution,
                     "range": range,
                     "exchange": exchange,
+                    "start_date": start_date,
+                    "end_date": end_date,
                 }
             )
         except Exception as exc:  # surface as JSON to the caller, never crash

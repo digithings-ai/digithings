@@ -563,6 +563,52 @@ def test_price_history_rejects_out_of_contract_request_before_any_request(
     assert calls == []
 
 
+def test_price_history_date_window_widens_the_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return _envelope(
+            [{"date": "2015-01-05T00:00:00.000Z", "close": 100.0}],
+            currency="USD",
+            providerMeta={"provider": "yahoo"},
+        )
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(_mcp("digifetch_price_history")("AAPL", "1wk", start_date="2015-01-01"))
+    assert "interval=1week" in seen["url"]
+    assert "rangeKey=ALL" in seen["url"]
+    assert "startDate=2015-01-01" in seen["url"]
+    assert payload["data"]["bars"][0]["close"] == 100.0
+    assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
+
+
+def test_price_history_window_with_range_is_invalid_input_without_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return _envelope([])
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(
+        _mcp("digifetch_price_history")("AAPL", "1wk", "5Y", start_date="2015-01-01")
+    )
+    assert payload["data"]["code"] == "invalid_input"
+    assert calls == []
+
+
+def test_price_history_manifest_and_description_expose_the_date_window() -> None:
+    rows = {row["function"]["name"]: row for row in build_orchestrator_tool_manifest()}
+    function = rows["digifetch_price_history"]["function"]
+    properties = function["parameters"]["properties"]
+    assert {"start_date", "end_date"} <= set(properties)
+    assert "YYYY-MM-DD" in properties["start_date"]["description"]
+    assert "start_date" in function["description"]
+
+
 def test_news_with_ticker_carries_deep_link(monkeypatch: pytest.MonkeyPatch) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -658,8 +704,10 @@ def test_env_seam_builder_closes_the_replaced_client(monkeypatch: pytest.MonkeyP
             self.closed = True
 
     import digiquant.data.gloomberb as gloomberb_pkg
+    from digiquant.data.gloomberb import agent_tools as gloomberb_agent_tools
 
-    monkeypatch.setattr(mcp_server, "_gloomberb_clients", {})
+    # The factory (and its env-pair cache) moved to the data package in #4146.
+    monkeypatch.setattr(gloomberb_agent_tools, "_gloomberb_clients", {})
     monkeypatch.setattr(gloomberb_pkg, "GloomberbClient", _FakeClient)
     first = mcp_server._build_gloomberb_client()
     assert mcp_server._build_gloomberb_client() is first

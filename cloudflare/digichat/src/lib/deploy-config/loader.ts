@@ -150,7 +150,7 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     theme: dep.chrome.theme,
     skin: dep.chrome.skin,
     accent: dep.chrome.accent,
-    attribution: dep.chrome.attribution === true,
+    attribution: dep.chrome.attribution !== false,
     title: dep.chrome.title,
     welcome: welcomeTitle(dep.chrome.welcome),
     welcomeBody: welcomeBodyLines(dep.chrome.welcome),
