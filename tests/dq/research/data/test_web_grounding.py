@@ -398,6 +398,146 @@ def test_an_oversize_query_is_truncated_not_sent(
 
 
 @pytest.mark.unit
+def test_the_query_is_a_search_query_not_a_synthesis_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """digisearch's ``web_search`` returns result rows and ``call_web_search_tool``
+    formats the summary, so instruction text only dilutes retrieval and eats the
+    500-char cap (#4165; same shape as ``ai_portfolios._build_query``, #4163)."""
+    seen: dict[str, Any] = {}
+
+    def _fake(**kwargs: Any) -> dict[str, Any]:
+        seen.update(kwargs)
+        return {"summary": "s", "sources": ["https://u"]}
+
+    monkeypatch.setattr(web_grounding, "call_web_search_tool", _fake)
+    web_grounding.fetch_web_grounding(model="cheap", segment="macro", run_date=date(2026, 6, 9))
+    query = seen["query"]
+    assert "macro" in query
+    assert "sentiment" in query and "flows" in query
+    assert "Summarize" not in query
+    assert "search the web" not in query
+    assert "bullet points" not in query
+    assert len(query) <= web_grounding._MAX_QUERY_CHARS
+
+
+@pytest.mark.unit
+def test_the_query_folds_scope_in_as_keywords(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A caller-supplied scope is search context, not a ``Focus on:`` instruction (#4165)."""
+    seen: dict[str, Any] = {}
+
+    def _fake(**kwargs: Any) -> dict[str, Any]:
+        seen.update(kwargs)
+        return {"summary": "s", "sources": ["https://u"]}
+
+    monkeypatch.setattr(web_grounding, "call_web_search_tool", _fake)
+    web_grounding.fetch_web_grounding(
+        model="cheap", segment="macro", run_date=date(2026, 6, 9), scope="oil inventories"
+    )
+    assert "oil inventories" in seen["query"]
+    assert "Focus on:" not in seen["query"]
+
+
+@pytest.mark.unit
+def test_fetch_web_grounding_passes_config_recency_days(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``search_domains.yaml``'s ``recency_days`` must reach the request, not sit
+    dead in the file while digisearch's own default applies (#4165)."""
+    seen: dict[str, Any] = {}
+
+    def _fake(**kwargs: Any) -> dict[str, Any]:
+        seen.update(kwargs)
+        return {"summary": "s", "sources": ["https://u"]}
+
+    monkeypatch.setattr(
+        web_grounding,
+        "_config",
+        lambda: {"web_allowed_websites": ["reuters.com"], "recency_days": 30},
+    )
+    monkeypatch.setattr(web_grounding, "call_web_search_tool", _fake)
+    web_grounding.fetch_web_grounding(model="cheap", segment="macro", run_date=date(2026, 6, 9))
+    assert seen["recency_days"] == 30
+
+
+@pytest.mark.unit
+def test_recency_days_reaches_the_hub_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The plumbing seam: ``call_web_search_tool`` -> ``call_digisearch_web_search`` (#4165)."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", _fake_hub_results(seen))
+    _real_call_web_search_tool(
+        query="etf flows", include_domains=[], max_results=4, recency_days=30
+    )
+    assert seen["recency_days"] == 30
+
+
+@pytest.mark.unit
+def test_recency_days_is_none_when_the_caller_does_not_set_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unset must stay unset: digisearch applies its own default window (#4165)."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", _fake_hub_results(seen))
+    _real_call_web_search_tool(query="etf flows", include_domains=[], max_results=4)
+    assert seen["recency_days"] is None
+
+
+@pytest.mark.unit
+def test_out_of_range_recency_days_is_clamped_not_sent(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """digisearch accepts ``recency_days`` 1-365 and rejects the whole request
+    outside it — the same fail-the-book class as the query/domain caps (#4165)."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", _fake_hub_results(seen))
+    for raw, expected in ((900, 365), (0, 1)):
+        seen.clear()
+        with caplog.at_level("WARNING", logger="digiquant.research.data.web_grounding"):
+            _real_call_web_search_tool(
+                query="etf flows", include_domains=[], max_results=4, recency_days=raw
+            )
+        assert seen["recency_days"] == expected
+        assert "recency_days" in caplog.text
+
+
+def _digisearch_bound(field_name: str, attr: str) -> Any:
+    """Read a bound straight from digisearch's request model (drift alarm only)."""
+    from digisearch.web_search.models import WebSearchRequest
+
+    for meta in WebSearchRequest.model_fields[field_name].metadata:
+        value = getattr(meta, attr, None)
+        if value is not None:
+            return value
+    raise AssertionError(f"WebSearchRequest.{field_name} has no {attr} constraint")
+
+
+@pytest.mark.unit
+def test_local_request_bounds_match_the_digisearch_model() -> None:
+    """Drift alarm for the mirrored request bounds (#4165).
+
+    digiquant never imports digisearch at runtime — the tool call goes over the
+    hub — so its request bounds are deliberately mirrored constants. Reading
+    them back off the model here is what makes lowering digisearch's cap fail
+    this suite instead of only failing a live book run.
+    """
+    assert web_grounding._MAX_QUERY_CHARS == _digisearch_bound("query", "max_length")
+    assert web_grounding._MAX_ALLOWED_DOMAINS == _digisearch_bound("include_domains", "max_length")
+    assert web_grounding._MAX_EXCLUDED_DOMAINS == _digisearch_bound("exclude_domains", "max_length")
+    assert web_grounding._MIN_RECENCY_DAYS == _digisearch_bound("recency_days", "ge")
+    assert web_grounding._MAX_RECENCY_DAYS == _digisearch_bound("recency_days", "le")
+
+
+@pytest.mark.unit
 def test_explicit_bearer_token_wins_over_pipeline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

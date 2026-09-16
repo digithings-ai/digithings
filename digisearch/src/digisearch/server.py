@@ -863,13 +863,19 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         max_results = _coerce_web_search_max_results(args.get("max_results", 4))
         if max_results is None:
             return OrchestratorInvokeResponse(ok=False, error="max_results must be an integer 1-10")
+        web_kwargs: dict[str, Any] = {
+            "query": qtext,
+            "include_domains": [str(d) for d in include],
+            "exclude_domains": [str(d) for d in exclude],
+            "max_results": max_results,
+        }
+        # Absent (or null) keeps the model default window (7). Anything present
+        # is validated by the model (1-365 / int) and rejected as a clean
+        # ok:False rather than a silent fallback to the default (#4165).
+        if args.get("recency_days") is not None:
+            web_kwargs["recency_days"] = args["recency_days"]
         try:
-            web_req = WebSearchRequest(
-                query=qtext,
-                include_domains=[str(d) for d in include],
-                exclude_domains=[str(d) for d in exclude],
-                max_results=max_results,
-            )
+            web_req = WebSearchRequest(**web_kwargs)
         except ValidationError as e:
             from digisearch.web_search.models import summarize_validation_error
 

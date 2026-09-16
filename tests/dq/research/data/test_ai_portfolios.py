@@ -98,6 +98,33 @@ def test_the_query_is_a_search_query_not_a_synthesis_prompt(
 
 
 @pytest.mark.unit
+def test_the_config_recency_days_reaches_the_tool_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``ai_portfolio_accounts.yaml``'s ``recency_days`` must reach the request; it
+    used to sit dead while digisearch's own default of 7 applied (#4165)."""
+    seen: dict[str, Any] = {}
+    _tool_ok(monkeypatch, seen)
+    ai_portfolios.fetch_ai_portfolio_grounding(model="cheap", run_date=date(2026, 6, 9))
+    assert seen["recency_days"] == 7
+
+
+@pytest.mark.unit
+def test_an_operator_recency_days_change_reaches_the_tool_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The #4165 repro: raising the knob to 30 must search 30 days, not keep 7."""
+    seen: dict[str, Any] = {}
+    _tool_ok(monkeypatch, seen)
+    monkeypatch.setattr(
+        ai_portfolios,
+        "_config",
+        lambda: {"accounts": [{"handle": "grkportfolio"}], "recency_days": 30},
+    )
+    ai_portfolios.fetch_ai_portfolio_grounding(model="cheap", run_date=date(2026, 6, 9))
+    assert seen["recency_days"] == 30
+    assert "last 30 days" in seen["query"]
+
+
+@pytest.mark.unit
 def test_fetch_ai_portfolio_grounding_raises_on_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

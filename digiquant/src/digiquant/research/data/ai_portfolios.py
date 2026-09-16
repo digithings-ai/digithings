@@ -80,6 +80,7 @@ def fetch_ai_portfolio_grounding(
             query=_build_query(accounts, recency),
             include_domains=list(_X_DOMAINS),
             max_results=max_results,
+            recency_days=recency,
         )
     except DashboardWebSearchError:
         raise
