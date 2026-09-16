@@ -281,8 +281,50 @@ export interface IdeaDetailLevelRow {
 
 export interface IdeaDetailEvidenceRow {
   statement: string;
+  /** Display summary — everything before the ';' boilerplate tail. */
+  summary: string;
+  /** Boilerplate tail (factor/desk tallies) folded behind a disclosure, or null. */
+  detail: string | null;
   stance: FxMarketEvidence['stance'];
   className: string;
+  /** Human label for the evidence source slug (e.g. smart-bias-tracker → Smart Bias). */
+  sourceLabel: string;
+  /** Evidence instrument/currency (EUR, USD, EUR/USD …). */
+  instrument: string;
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  'smart-bias-tracker': 'Smart Bias',
+  'dmx-overview': 'DMX overview',
+};
+
+/** Human label for an evidence source slug; unknown slugs get Title Case. */
+export function evidenceSourceLabel(sourceSlug: string): string {
+  const known = SOURCE_LABELS[sourceSlug];
+  if (known) return known;
+  return sourceSlug
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((word) => word[0].toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+/**
+ * Display summary of an evidence statement: the leading clause before the
+ * ';'-separated factor/desk tallies, so a pair's two Smart Bias rows differ by
+ * their own words (currency + bias) instead of drowning in the shared template.
+ */
+export function evidenceSummary(statement: string): string {
+  const cut = statement.indexOf(';');
+  return (cut >= 0 ? statement.slice(0, cut) : statement).trim();
+}
+
+/** Boilerplate tail of an evidence statement (factors/banks tallies), or null. */
+export function evidenceDetail(statement: string): string | null {
+  const cut = statement.indexOf(';');
+  if (cut < 0) return null;
+  const detail = statement.slice(cut + 1).trim();
+  return detail || null;
 }
 
 export interface IdeaDetailModel {
@@ -385,8 +427,12 @@ export function buildIdeaDetailModel(idea: FxTradeIdeaRow): IdeaDetailModel {
 
   const evidenceRows = parseEvidence(idea.evidence).map((row) => ({
     statement: row.statement,
+    summary: evidenceSummary(row.statement),
+    detail: evidenceDetail(row.statement),
     stance: row.stance,
     className: evidenceStanceClass(row.stance),
+    sourceLabel: evidenceSourceLabel(row.source_slug),
+    instrument: row.instrument,
   }));
 
   const riskReward = tradeLevels?.risk_reward ?? null;
