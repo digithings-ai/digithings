@@ -13,8 +13,9 @@
  *   /healthz            → digigraph
  *   /_stack/key/*       → digikey (strip prefix)
  *
- * (No /_stack/mcp/* forwarder — unauthenticated MCP forwarding must not ship.
- * mcp.digithings.ai answers only once its route is enabled behind the JWT gate.)
+ * /_stack/mcp/zammad/* → zammad-mcp :8770 (secret-gated edge path; requires the
+ * x-digi-mcp-key header matching MCP_EDGE_KEY — fail-closed 401 otherwise).
+ * mcp.digithings.ai stays reserved and answers only behind its JWT gate.)
  *
  * digivault / LiteLLM are loopback-only inside the Container. digisearch binds
  * 0.0.0.0:8002 (container/start_digisearch.sh) so the Worker can reach it at the
