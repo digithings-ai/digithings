@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { isToolUIPart, readUIMessageStream, type UIMessage, type UIMessageChunk } from "ai";
 import {
   createActivityWriteContext,
@@ -209,5 +209,61 @@ describe("stock ToolFallbackAttribution", () => {
     expect(link.getAttribute("href")).toBe(
       "https://term.gloom.sh/?ticker=BTC-USD",
     );
+  });
+});
+
+describe("stock ToolFallback attribution wiring", () => {
+  function renderCompleted(result: unknown, toolName = "digifetch_quote") {
+    return render(
+      <ToolFallback
+        type="tool-call"
+        toolCallId="t-g1"
+        toolName={toolName}
+        args={{ symbol: "AAPL" }}
+        argsText='{"symbol":"AAPL"}'
+        result={result}
+        status={{ type: "complete" }}
+        addResult={() => undefined}
+        resume={() => undefined}
+        respondToApproval={async () => undefined}
+      />,
+    );
+  }
+
+  it("credits Gloomberb under the expanded Result pane", () => {
+    renderCompleted({
+      result: {
+        attribution: "Sourced from Gloomberb",
+        delay_notice: "Data delayed up to 15 minutes",
+        source_url: "https://term.gloom.sh/?ticker=AAPL",
+      },
+      durationMs: 12,
+    });
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("Sourced from Gloomberb")).toBeTruthy();
+    const link = screen.getByRole("link", { name: /Open in Gloomberb/ });
+    expect(link.getAttribute("href")).toBe("https://term.gloom.sh/?ticker=AAPL");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  it("keeps the expanded Result pane unchanged for a clipped payload", () => {
+    renderCompleted({
+      result: { truncated: true, preview: '{"data":{' },
+      durationMs: 12,
+    });
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("Result:")).toBeTruthy();
+    expect(screen.queryByText("Sourced from Gloomberb")).toBeNull();
+  });
+
+  it("keeps the expanded Result pane unchanged for an unattributed payload", () => {
+    renderCompleted(
+      { result: { rows: [{ symbol: "AAPL" }] }, durationMs: 12 },
+      "digifetch_earnings_calendar",
+    );
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("Result:")).toBeTruthy();
+    expect(screen.queryByText("Sourced from Gloomberb")).toBeNull();
   });
 });
