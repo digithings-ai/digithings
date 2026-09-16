@@ -80,6 +80,8 @@ describe("parseEmbedTenants", () => {
                 url: "http://zammad-mcp:8770/mcp",
                 label: "Zammad tickets",
                 default: true,
+                token: "edge-test-token",
+                authHeader: "x-digi-mcp-key",
               },
             ],
             allowUserServers: false,
@@ -95,6 +97,8 @@ describe("parseEmbedTenants", () => {
           url: "http://zammad-mcp:8770/mcp",
           label: "Zammad tickets",
           default: true,
+          token: "edge-test-token",
+          authHeader: "x-digi-mcp-key",
         },
       ],
       allowUserServers: false,
@@ -416,6 +420,24 @@ describe("parseEmbedTenants", () => {
       }),
     );
     expect(reg.get("example.com")?.gateMode).toBe("trial_form");
+  });
+
+  it("accepts view/thinking modes and rejects unknown values", () => {
+    const entry = (keys: Record<string, unknown>) =>
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "turn_limited",
+          token: "t",
+          ...keys,
+        },
+      });
+    const reg = parseEmbedTenants(entry({ view: "detailed", thinking: "open" }));
+    expect(reg.get("example.com")?.view).toBe("detailed");
+    expect(reg.get("example.com")?.thinking).toBe("open");
+    expect(() => parseEmbedTenants(entry({ view: "expanded" }))).toThrow(/view/);
+    expect(() => parseEmbedTenants(entry({ thinking: "yes" }))).toThrow(/thinking/);
   });
 
   it("throws on an invalid gateMode or theme", () => {

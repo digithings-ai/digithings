@@ -9,8 +9,18 @@ on the search route, APIs need a digikey JWT (`digisearch:query`, or
 CI pipeline. Auth-exempt on every host is only the shared service allowlist —
 `/health`, `/healthz`, `/metrics`, `/docs`, `/redoc`, `/openapi.json`, plus
 OPTIONS preflights (CORS is enforced separately) — and the Worker-served paths
-`/_stack/meta`, `/v1/market/tickers|closes`, and `/_stack/key/*` (proxied to
-digikey). Secrets only via `npx wrangler secret put` — never commit values.
+`/_stack/meta`, `/v1/market/tickers|closes`, `/_stack/key/*` (proxied to
+digikey). `/_stack/mcp/zammad/*` (the read-only OCC Zammad MCP, proxied to
+the stack container's :8770) is **not** auth-exempt: it requires `x-digi-mcp-key`
+matching the `MCP_EDGE_KEY` secret or returns a fail-closed 401.
+Secrets only via `npx wrangler secret put` — never commit values. Operator
+secrets currently required: `MCP_EDGE_KEY` (edge key for the OCC MCP path; set
+with `printf '%s' "$VALUE" | npx wrangler secret put MCP_EDGE_KEY`; rotate by
+re-putting the secret and updating the `token` in the occ entry of
+`DIGICHAT_EMBED_TENANTS`; the Worker reads the secret per request, so the edge
+rotates instantly, while a running digichat Container keeps start-time env values
+until recycled — bump the rebuild marker in `Dockerfile.digichat-cloudflare`
+when a rotation must reach a live instance).
 
 One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 `*.trycloudflare.com` quick tunnels for production digichat.
@@ -26,6 +36,7 @@ One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 | _(loopback only)_ | digisearch-mcp `:8765` | RAG MCP (fail-loud backend gate) |
 | _(loopback only)_ | digivault-mcp `:8769` | vault-notes MCP (4 vault-local tools) |
 | _(loopback only)_ | digigraph-mcp `:8766` | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
+| _(container only)_ | zammad-mcp `:8770` | read-only OCC Zammad MCP; only external path is the key-gated `/_stack/mcp/zammad/*` route |
 
 ```text
 Pages digithings.ai/chat[/occ]

@@ -25,8 +25,10 @@ name: "Pipeline: digiquant prices"
 #     have no R2 home and the daily pipeline still reads them from Supabase.
 #
 #   PAUSED (`if: run_writers`, re-enable with a manual dispatch + the flag):
-#   * fx-refresh → Yahoo FX rows (no R2 read path serves them and no prod
-#     Supabase reader consumes them; the market-data-refresh cron keeps the
+#   * fx-refresh → Yahoo FX daily rows + 1h candles (no R2 read path serves
+#     them and no prod Supabase reader consumes the daily rows; the 1h candles
+#     (fx_intraday_observations, migration 130) are the twelve-x trade-grading
+#     feed and have no R2 home at all. The market-data-refresh cron keeps the
 #     `yahoo__FX/*` R2 generations fresh from vendors for when the read path
 #     lands; rollback serves the frozen rows stale).
 #   * eod-macro fetch-macro (fred,yahoo) → macro rows (FRED readers are R2;
@@ -58,7 +60,8 @@ name: "Pipeline: digiquant prices"
 #                 the Worker's 15-min dispatch still lands — clock removal is
 #                 a follow-up; same-day opens now live-fetch)
 #   * at-open   — position_events at the 09:30 ET open (13:40 + 14:40 UTC, one gated out)
-#   * fx-refresh — latest Yahoo daily FX candle every 2h through the FX week
+#   * fx-refresh — latest Yahoo daily FX candle + 1h candles every 2h through
+#                 the FX week (the candles feed twelve-x trade grading)
 #   * eod-macro — once per weekday at 21:27 UTC, after the close in both ET offsets,
 #                 and because FRED is day-delayed.
 #
@@ -89,7 +92,7 @@ on:
         type: choice
         options: [intraday, eod-macro, at-open, fx-refresh]
       run_writers:
-        description: 'Run the paused Supabase market-table writers (fetch-macro fred/yahoo). Default false = writes stay paused; KEPT steps (calendar sync) always run.'
+        description: 'Run the paused Supabase market-table writers (fetch-macro fred/yahoo, fetch-fx-intraday). Default false = writes stay paused; KEPT steps (calendar sync) always run.'
         required: false
         default: false
         type: boolean
@@ -157,6 +160,14 @@ jobs:
             --sources yahoo \
             --manifest digiquant/src/digiquant/research/config/macro_series.yaml \
             --latest-only \
+            --supabase
+      - name: Upsert Yahoo 1h FX candles (twelve-x grading)
+        # fx_intraday_observations (migration 130): the twelve-x grader walks a
+        # day's candles to order stop-vs-target touches, which the daily close
+        # cannot express. Gated by the job-level run_writers `if` like the
+        # fetch-macro step above; same CORE_SUPABASE_* env.
+        run: |
+          uv run --frozen --no-sync python -m digiquant prices fetch-fx-intraday \
             --supabase
 
   at-open-clock:

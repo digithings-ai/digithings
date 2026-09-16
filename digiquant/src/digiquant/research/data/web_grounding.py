@@ -98,8 +98,12 @@ def call_web_search_tool(
     max_results: int,
     bearer_token: str | None = None,
     exclude_domains: list[str] | None = None,
+    timeout_s: float = 120.0,
 ) -> dict[str, Any]:
     """First-party web_search tool via digigraph's orchestrator hub (#3853).
+
+    ``timeout_s`` bounds the single hub HTTP call (#4198 pre-flight passes a
+    short value, so a hung provider cannot stall the pipeline gate).
 
     Carries the Task 1 service JWT (#3859): an explicit ``bearer_token`` wins,
     else :func:`_pipeline_bearer` mints one via digikey. The token threads
@@ -142,6 +146,7 @@ def call_web_search_tool(
             exclude_domains=excluded,
             max_results=max_results,
             context=context,
+            timeout=timeout_s,
         )
         return (tool_out or {}).get("results") or []
 
