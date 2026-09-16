@@ -160,6 +160,43 @@ def test_invalid_args_are_typed_invalid_input_not_400(
     assert body["data"]["data"]["code"] == "invalid_input"
 
 
+def test_price_history_date_window_dispatches_through_the_endpoint(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(
+            200,
+            json={
+                "status": "success",
+                "data": [{"date": "2015-01-05T00:00:00.000Z", "close": 100.0}],
+                "currency": "USD",
+                "providerMeta": {"provider": "yahoo"},
+            },
+        )
+
+    _patch_client(monkeypatch, handler)
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={
+            "tool": "digifetch_price_history",
+            "arguments": {
+                "symbol": "AAPL",
+                "resolution": "1wk",
+                "start_date": "2015-01-01",
+            },
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert "rangeKey=ALL" in seen["url"]
+    assert "startDate=2015-01-01" in seen["url"]
+    assert body["data"]["data"]["bars"][0]["close"] == 100.0
+
+
 def test_family_kill_switch_disables_the_tool_not_the_name(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

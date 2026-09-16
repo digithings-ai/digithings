@@ -408,6 +408,81 @@ def test_price_history_sends_interval_and_range_key() -> None:
     assert "rangeKey=6M" in seen["url"]
 
 
+def test_price_history_date_window_sends_range_key_all_and_dates() -> None:
+    # #4100: the live probe verified rangeKey=ALL + startDate serves >5Y of
+    # weekly bars; a windowed request maps start/end onto those query params.
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return envelope([], currency="USD", providerMeta={"provider": "yahoo"})
+
+    result = make_client(handler).price_history(
+        {
+            "symbol": "AAPL",
+            "resolution": "1wk",
+            "start_date": "2015-01-01",
+            "end_date": "2026-09-01",
+        }
+    )
+    assert "interval=1week" in seen["url"]
+    assert "rangeKey=ALL" in seen["url"]
+    assert "startDate=2015-01-01" in seen["url"]
+    assert "endDate=2026-09-01" in seen["url"]
+    # The windowed call is a normal success envelope (no range in metadata).
+    assert result.data.metadata.range == ""  # type: ignore[union-attr]
+
+
+def test_price_history_start_only_window_omits_end_date() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return envelope([], currency="USD", providerMeta={"provider": "yahoo"})
+
+    make_client(handler).price_history(
+        {"symbol": "AAPL", "resolution": "1d", "startDate": "2015-01-01"}
+    )
+    assert "rangeKey=ALL" in seen["url"]
+    assert "startDate=2015-01-01" in seen["url"]
+    assert "endDate" not in seen["url"]
+
+
+def test_price_history_end_only_window_omits_start_date() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return envelope([], currency="USD", providerMeta={"provider": "yahoo"})
+
+    make_client(handler).price_history(
+        {"symbol": "AAPL", "resolution": "1wk", "end_date": "2020-01-02"}
+    )
+    assert "rangeKey=ALL" in seen["url"]
+    assert "endDate=2020-01-02" in seen["url"]
+    assert "startDate" not in seen["url"]
+
+
+def test_price_history_numeric_timestamp_window_is_invalid_input_without_request() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("a numeric timestamp must not reach the wire")
+
+    result = make_client(handler).price_history(
+        {"symbol": "AAPL", "resolution": "1wk", "start_date": 1420070400.0}
+    )
+    assert result.data.code == "invalid_input"  # type: ignore[union-attr]
+
+
+def test_price_history_window_with_range_is_invalid_input_without_request() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("a window + range request must not reach the wire")
+
+    result = make_client(handler).price_history(
+        {"symbol": "AAPL", "resolution": "1wk", "range": "5Y", "start_date": "2015-01-01"}
+    )
+    assert result.data.code == "invalid_input"  # type: ignore[union-attr]
+
+
 def test_price_history_rejects_malformed_intraday_from_non_yahoo_upstream() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return envelope(INTRADAY_OUTLIER_POINTS, providerMeta={"provider": "twelvedata"})
