@@ -1,9 +1,14 @@
 /**
  * Portfolio — the open-positions blotter. A mono table of every position with
  * side, size, entry, mark, and unrealized P&L in dollars and percent, plus a
- * net footer. P&L wears the money colors (teal up / red down); side is neutral.
- * Static data — a display template, no charting engine.
+ * net footer. P&L wears the money colors (teal up / red down); the side read
+ * wears them too — long takes --up, short takes --down. Static data — a
+ * display template, no charting engine.
+ *
+ * Wave 1: the side pill is the stock kit Badge (outline) with the money tone
+ * as a call-site utility, per the wave-1 chip map.
  */
+import { Badge } from "@digithings/web/ui";
 type Position = {
   sym: string;
   side: "long" | "short";
@@ -35,13 +40,13 @@ export function PortfolioReference() {
       <h2 className="title">Every position, marked to market.</h2>
       <p className="section-copy">
         The open-positions blotter: side, size, entry, and live mark with unrealized P&amp;L in
-        dollars and percent, netted at the foot. Gains and losses wear the money colors; side stays
-        neutral. Tabular numerals keep the columns honest.
+        dollars and percent, netted at the foot. Gains and losses wear the money colors — as does
+        the long/short side read. Tabular numerals keep the columns honest.
       </p>
 
-      {/* Migrated to token-backed utilities. The .pos-side pill group stays in
-          finance.css (its --short border is a two-color ink+hair mix). Money
-          colors (text-up/text-down) are applied per-row on the unrealized P&L. */}
+      {/* Migrated to token-backed utilities + the stock kit Badge. The side pill
+          is `outline` with the money tone as a call-site utility (long → up,
+          short → down); the P&L column keeps its per-row up/down read. */}
       <div className="mt-[1.2rem] overflow-x-auto rounded-none border border-hair bg-surface">
         <table className="w-full min-w-[560px] border-collapse font-mono text-[0.82rem] [font-variant-numeric:tabular-nums]">
           <thead>
@@ -76,7 +81,12 @@ export function PortfolioReference() {
                   {p.sym}
                 </th>
                 <td className="border-b border-hair/55 px-4 py-[0.62rem] text-ink-soft">
-                  <span className={`pos-side pos-side--${p.side}`}>{p.side}</span>
+                  <Badge
+                    variant="outline"
+                    className={p.side === "long" ? "text-up" : "text-down"}
+                  >
+                    {p.side}
+                  </Badge>
                 </td>
                 <td className="border-b border-hair/55 px-4 py-[0.62rem] text-right text-ink-soft">
                   {p.size}

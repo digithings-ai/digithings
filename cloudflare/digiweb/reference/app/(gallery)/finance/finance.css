@@ -81,24 +81,8 @@
    (The promoted .tk drops the old margin-top — the consumer adds mt.) */
 
 /* ── portfolio positions blotter ────────────────────────────────────────── */
-/* Blotter shell, table, cells, and P&L colors migrated to token-backed
-   utilities in portfolio-reference.tsx. Only the .pos-side pill group stays
-   here: the --short variant border is a two-color ink+hair mix. */
-
-.pos-side {
-  font-size: 0.58rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 0.12rem 0.45rem;
-  border-radius: 0;
-  border: 1px solid var(--hair);
-  color: var(--ink-soft);
-}
-
-.pos-side--short {
-  color: var(--ink);
-  border-color: color-mix(in srgb, var(--ink) 30%, var(--hair));
-}
+/* Blotter shell, table, cells, P&L colors, and the side pill all migrated to
+   token-backed utilities + the stock kit in portfolio-reference.tsx. */
 
 /* ── portfolio workspace ───────────────────────────────────────────────── */
 

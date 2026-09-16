@@ -262,30 +262,7 @@
   user-select: none;
 }
 
-/* .cr-card-head + .cr-version → utilities in changelog-rail-reference.tsx.
-   .cr-tag stays CSS: it pairs with .cr-tag-feature / -breaking (specificity tie
-   + two-color mix borders). */
-
-.cr-tag {
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 0.15rem 0.45rem;
-  border-radius: 0;
-  border: 1px solid var(--hair);
-  color: var(--ink-mute);
-}
-
-.cr-tag-feature {
-  color: var(--up);
-  border-color: color-mix(in srgb, var(--up) 40%, var(--hair));
-}
-
-.cr-tag-breaking {
-  color: var(--down);
-  border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
-}
+/* .cr-card-head + .cr-version → utilities in changelog-rail-reference.tsx. */
 
 /* .cr-date + .cr-title → utilities in changelog-rail-reference.tsx */
 

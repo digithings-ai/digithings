@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { Button } from "@digithings/web/ui";
 import { Skeleton, SkeletonGroup, Switch } from "@digithings/web";
 
 /**
@@ -14,6 +15,8 @@ import { Skeleton, SkeletonGroup, Switch } from "@digithings/web";
  * <SkeletonGroup/> primitives from @digithings/web, and the replay toggle is
  * the controls-layer <Switch/> (the stock kit has no switch yet — ruled
  * W3–4); the hand-built `.sk-toggle*` dress is gone.
+ *
+ * Wave 1: the loaded-state action is the stock kit Button (ghost).
  */
 const METRICS = [
   { k: "CAGR", v: "+44.9%", tone: "up" },
@@ -70,9 +73,9 @@ export function SkeletonReference() {
                 <p className="m-0 font-mono text-[0.9rem] text-ink">trend_xsec</p>
                 <p className="m-0 font-mono text-[0.72rem] text-ink-mute">cross-sectional momentum</p>
               </div>
-              <button type="button" className="btn-ghost">
+              <Button type="button" variant="ghost">
                 View tearsheet
-              </button>
+              </Button>
             </>
           )}
         </article>

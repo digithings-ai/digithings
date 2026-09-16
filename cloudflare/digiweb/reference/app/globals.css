@@ -506,7 +506,7 @@ html {
   max-width: 68ch;
 }
 
-/* Buttons — consumed by several pages (foundations, data, account) */
+/* Button rows — layout scaffolding; the button dress is the stock kit Button. */
 
 .btn-row {
   margin-top: 1.2rem;
@@ -518,94 +518,6 @@ html {
 
 .btn-row-states {
   margin-top: 0.8rem;
-}
-
-.btn-primary,
-.btn-ghost,
-.btn-quiet,
-.btn-danger {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.02em;
-  border-radius: 0;
-  padding: 0.62rem 1.3rem;
-  cursor: pointer;
-  border: 1px solid transparent;
-}
-
-/* Loud control = paper/ink fill (not accent). Accent stays for focus/live. */
-.btn-primary {
-  background: var(--ink);
-  color: var(--bg);
-  border-color: var(--ink);
-}
-
-.btn-primary:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.btn-magnetic {
-  will-change: transform;
-}
-
-.btn-loading {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.btn-spinner {
-  width: 11px;
-  height: 11px;
-  border-radius: 999px;
-  border: 2px solid color-mix(in srgb, var(--bg) 30%, transparent);
-  border-top-color: var(--bg);
-  animation: btn-spin 0.7s linear infinite;
-}
-
-@keyframes btn-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--ink);
-  border-color: var(--hair);
-}
-
-.btn-ghost:hover {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
-}
-
-.btn-quiet {
-  background: transparent;
-  color: var(--ink-mute);
-  border-color: transparent;
-  padding-left: 0.2rem;
-  padding-right: 0.2rem;
-}
-
-.btn-quiet:hover {
-  color: var(--ink);
-}
-
-.btn-danger {
-  background: transparent;
-  color: var(--down);
-  border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
-}
-
-.btn-danger:hover {
-  background: color-mix(in srgb, var(--down) 10%, transparent);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .btn-spinner {
-    animation: none !important;
-  }
 }
 
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));

@@ -2,11 +2,17 @@
 
 import { useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { m, useReducedMotion } from "motion/react";
+import { Button } from "@digithings/web/ui";
 
 /**
- * Buttons & CTA states — the button vocabulary (primary / ghost / quiet) plus a
- * magnetic CTA that eases toward the pointer and settles back on leave (disabled
- * under reduced motion). A gallery of the interactive states every surface reuses.
+ * Buttons & CTA states — the stock-kit button vocabulary plus a magnetic CTA
+ * that eases toward the pointer and settles back on leave (disabled under
+ * reduced motion). A gallery of the interactive states every surface reuses.
+ *
+ * Wave 1: dress is the kit Button (`@digithings/web/ui`) — primary → default,
+ * ghost → ghost, quiet → outline, danger → destructive. The kit has no
+ * `loading` prop, so the loading idiom is `disabled` plus an inline spinner
+ * span at the call site (the states row below is the specimen).
  */
 type MagneticButtonProps = { children: ReactNode };
 
@@ -24,17 +30,21 @@ function MagneticButton({ children }: MagneticButtonProps) {
   }
 
   return (
-    <m.button
+    <Button
       ref={ref}
       type="button"
-      className="btn-primary btn-magnetic"
+      className="will-change-transform"
       onMouseMove={onMouseMove}
       onMouseLeave={() => setOffset({ x: 0, y: 0 })}
-      animate={{ x: offset.x, y: offset.y }}
-      transition={{ type: "spring", stiffness: 220, damping: 18, mass: 0.4 }}
+      render={
+        <m.button
+          animate={{ x: offset.x, y: offset.y }}
+          transition={{ type: "spring", stiffness: 220, damping: 18, mass: 0.4 }}
+        />
+      }
     >
       {children}
-    </m.button>
+    </Button>
   );
 }
 
@@ -45,31 +55,35 @@ export function ButtonsCtaReference() {
       <h2 className="title">One loud thing per viewport.</h2>
       <p className="section-copy">
         Utilitarian v0.1: the loud control is a white/ink rectangle — not an accent pill. Accent is
-        reserved for focus, live state, and identity. Every sibling control recedes to a hairline
-        outline. The magnetic button below is the one earned exception to the one-motion-moment law.
+        reserved for focus, live state, and identity. Every sibling control recedes — a hover-only
+        wash or a hairline outline. The magnetic button below is the one earned exception to the
+        one-motion-moment law.
       </p>
 
       <div className="btn-row">
         <MagneticButton>Deploy strategy</MagneticButton>
-        <button type="button" className="btn-ghost">
+        <Button type="button" variant="ghost">
           Read the docs
-        </button>
-        <button type="button" className="btn-quiet">
+        </Button>
+        <Button type="button" variant="outline">
           View source
-        </button>
+        </Button>
       </div>
 
       <div className="btn-row btn-row-states">
-        <button type="button" className="btn-primary" disabled>
+        <Button type="button" disabled>
           Disabled
-        </button>
-        <button type="button" className="btn-primary btn-loading" disabled>
-          <span className="btn-spinner" aria-hidden="true" />
+        </Button>
+        <Button type="button" disabled>
+          <span
+            aria-hidden="true"
+            className="size-[11px] shrink-0 animate-spin rounded-full border-2 border-current/30 border-t-current"
+          />
           Backtesting…
-        </button>
-        <button type="button" className="btn-danger">
+        </Button>
+        <Button type="button" variant="destructive">
           Kill switch
-        </button>
+        </Button>
       </div>
     </section>
   );

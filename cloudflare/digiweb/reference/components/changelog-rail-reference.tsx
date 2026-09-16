@@ -2,13 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
+import { Badge } from "@digithings/web/ui";
 
 /**
  * Changelog rail — a horizontal scroll strip of release cards. Swipe, wheel, or
  * use the arrow buttons to move; cards snap into place and the edges fade so the
- * row reads as a continuous strip rather than a cut-off grid. Tags wear the up /
- * down colours by kind. Doubles as the sanctioned mobile fallback for any band
- * too wide to stack. Interactive display template.
+ * row reads as a continuous strip rather than a cut-off grid. Tags read by kind
+ * (feature · fix · breaking). Doubles as the sanctioned mobile fallback for any
+ * band too wide to stack. Interactive display template.
+ *
+ * Wave 1: the release tag is the stock kit Badge — feature → secondary,
+ * breaking → destructive, fix → outline (the neutral stock tone).
  */
 type Release = {
   version: string;
@@ -158,7 +162,17 @@ export function ChangelogRailReference() {
             <article key={rel.version} className="cr-card" role="listitem" tabIndex={0}>
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[0.95rem] text-ink">{rel.version}</span>
-                <span className={`cr-tag cr-tag-${rel.tag}`}>{rel.tag}</span>
+                <Badge
+                  variant={
+                    rel.tag === "breaking"
+                      ? "destructive"
+                      : rel.tag === "feature"
+                        ? "secondary"
+                        : "outline"
+                  }
+                >
+                  {rel.tag}
+                </Badge>
               </div>
               <p className="mt-[0.5rem] font-mono text-[0.62rem] tracking-[0.06em] text-ink-mute">{rel.date}</p>
               <h3 className="mt-[0.15rem] text-[1.05rem] text-ink">{rel.title}</h3>
