@@ -4,8 +4,9 @@ Pins the T7 surfaces over the landed T1-T6 stack:
 
 - the § Interfaces HTTP routes (`POST /v1/websets` 202 running, polls to idle;
   items/events cursors; enrichment cap 400 `enrichment_limit_exceeded`; monitor
-  create/list/trigger; webhook create/rotate with the one-time secret; cancel;
-  CSV/JSON export) plus the shared digibase error envelope on every failure;
+  create/list/pause/trigger; webhook create/rotate with the one-time secret;
+  cancel; CSV/JSON export) plus the shared digibase error envelope on every
+  failure;
 - the two T6 carry fixes: the terminal-status gate on `add_search` /
   `trigger_monitor` / `add_enrichment` (`webset_terminal`, 409) and
   `verification_mode` persistence/threading (a `rules` webset stays `rules`
@@ -270,6 +271,71 @@ def test_get_unknown_webset_and_unknown_monitor(api):
     no_monitor = client.post(f"/v1/websets/{real['id']}/monitors/wsm_x/trigger")
     assert no_monitor.status_code == 404
     assert no_monitor.json()["error"]["code"] == "monitor_not_found"
+
+
+@pytest.mark.unit
+def test_patch_monitor_pause_round_trip(api):
+    """PATCH flips the tick switch; the list/read surfaces carry the flag."""
+    client, _ = api
+    created = _create(client)
+    monitor = client.post(f"/v1/websets/{created['id']}/monitors", json={"interval_seconds": 60})
+    assert monitor.status_code == 201, monitor.text
+    assert monitor.json()["paused"] is False
+    monitor_id = monitor.json()["id"]
+
+    paused = client.patch(
+        f"/v1/websets/{created['id']}/monitors/{monitor_id}", json={"paused": True}
+    )
+    assert paused.status_code == 200, paused.text
+    assert paused.json()["id"] == monitor_id
+    assert paused.json()["paused"] is True
+    assert paused.json()["interval_seconds"] == 60
+
+    listed = client.get(f"/v1/websets/{created['id']}/monitors").json()["monitors"]
+    assert [m["paused"] for m in listed] == [True]
+
+    resumed = client.patch(
+        f"/v1/websets/{created['id']}/monitors/{monitor_id}", json={"paused": False}
+    )
+    assert resumed.status_code == 200, resumed.text
+    assert resumed.json()["paused"] is False
+    listed = client.get(f"/v1/websets/{created['id']}/monitors").json()["monitors"]
+    assert [m["paused"] for m in listed] == [False]
+
+
+@pytest.mark.unit
+def test_patch_monitor_pause_errors(api):
+    client, _ = api
+    created = _create(client)
+    monitor = client.post(f"/v1/websets/{created['id']}/monitors", json={"interval_seconds": 60})
+    monitor_id = monitor.json()["id"]
+
+    missing = client.patch(
+        f"/v1/websets/{created['id']}/monitors/wsm_missing", json={"paused": True}
+    )
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "monitor_not_found"
+
+    ghost = client.patch(
+        f"/v1/websets/ws_00000000000000000000000000000000/monitors/{monitor_id}",
+        json={"paused": True},
+    )
+    assert ghost.status_code == 404
+    assert ghost.json()["error"]["code"] == "webset_not_found"
+
+    extra = client.patch(
+        f"/v1/websets/{created['id']}/monitors/{monitor_id}",
+        json={"paused": True, "bogus": 1},
+    )
+    assert extra.status_code == 422, extra.text
+    assert extra.json()["error"]["code"] == "validation_error"
+
+    no_field = client.patch(f"/v1/websets/{created['id']}/monitors/{monitor_id}", json={})
+    assert no_field.status_code == 422
+    assert no_field.json()["error"]["code"] == "validation_error"
+
+    listed = client.get(f"/v1/websets/{created['id']}/monitors").json()["monitors"]
+    assert [m["paused"] for m in listed] == [False]
 
 
 @pytest.mark.unit
@@ -678,6 +744,7 @@ def test_rate_limit_budgets_key_webset_routes():
     assert srv._rate_limit_for(f"/v1/websets/{wid}/enrichments") == (30, 60)
     assert srv._rate_limit_for(f"/v1/websets/{wid}/enrichments/wse_x") == (30, 60)
     assert srv._rate_limit_for(f"/v1/websets/{wid}/monitors") == (10, 60)
+    assert srv._rate_limit_for(f"/v1/websets/{wid}/monitors/wsm_x") == (30, 60)
     assert srv._rate_limit_for(f"/v1/websets/{wid}/monitors/wsm_x/trigger") == (10, 60)
     assert srv._rate_limit_for(f"/v1/websets/{wid}/webhooks") == (10, 60)
     assert srv._rate_limit_for(f"/v1/websets/{wid}/webhooks/wh_x/rotate") == (10, 60)

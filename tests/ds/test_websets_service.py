@@ -15,9 +15,10 @@ shapes from the spec
   ``add_search`` inherits the webset's criteria; ``add_enrichment`` attaches
   (status ``running``) + schedules the backfill, caps at 10, and
   ``remove_enrichment`` retains resolved item values;
-- monitors are poll-only v1 metadata: ``WebsetMonitor`` with no
-  ``status``/``paused`` field, ``list_monitors`` newest-first, and
-  ``trigger_monitor`` opening a new search generation;
+- monitors carry the tick-driven refresh cadence: ``WebsetMonitor`` with the
+  ``paused`` switch (and no ``status`` field), ``list_monitors`` newest-first,
+  ``set_monitor_paused`` rewriting the monitor, and ``trigger_monitor`` opening
+  a new search generation;
 - ``add_webhook`` returns a one-time server-generated secret and enforces the
   Phase C SSRF/private-IP rejection (https-only, public addresses), identical
   codes/message text; ``rotate_webhook_secret`` keeps the old secret valid for
@@ -451,15 +452,15 @@ def test_remove_enrichment_retains_resolved_values(tmp_path, scheduler):
         service.remove_enrichment("ws_missing", definition.id, store=store)
 
 
-# ── monitors (poll-only v1) ──────────────────────────────────────────────────
+# ── monitors (tick-driven refresh cadence) ───────────────────────────────────
 
 
-def test_create_monitor_is_poll_only_metadata(tmp_path):
+def test_create_monitor_is_tick_driven_metadata(tmp_path):
     store = _store(tmp_path)
     webset = service.create_webset(query="q", criteria=[_CRITERION], store=store)
 
     assert "status" not in WebsetMonitor.model_fields
-    assert "paused" not in WebsetMonitor.model_fields
+    assert WebsetMonitor.model_fields["paused"].annotation is bool
     with pytest.raises(ImportError):
         from digisearch.websets.models import Monitor  # noqa: F401
 
@@ -470,6 +471,7 @@ def test_create_monitor_is_poll_only_metadata(tmp_path):
     assert monitor.interval_seconds == 120
     assert monitor.webhook_url == _URL_MONITOR
     assert monitor.object == "webset_monitor"
+    assert monitor.paused is False
     assert monitor.created_at is not None
 
     with pytest.raises(ValidationError):
@@ -524,6 +526,41 @@ def test_trigger_monitor_unknown_ids(tmp_path):
 
     with pytest.raises(WebsetNotFoundError):
         service.trigger_monitor("ws_missing", monitor.id, store=store)
+
+
+def test_set_monitor_paused_pauses_and_resumes(tmp_path, scheduler):
+    store = _store(tmp_path)
+    webset = service.create_webset(query="q", criteria=[_CRITERION], store=store)
+    monitor = service.create_monitor(webset.id, interval_seconds=120, store=store)
+    scheduler.runs.clear()
+
+    paused = service.set_monitor_paused(webset.id, monitor.id, paused=True, store=store)
+
+    assert paused.paused is True
+    assert paused.id == monitor.id
+    assert paused.interval_seconds == 120
+    assert paused.created_at == monitor.created_at
+    assert store.get_monitor(webset.id, monitor.id).paused is True
+    assert service.list_monitors(webset.id, store=store)[0].paused is True
+    assert scheduler.runs == [] and scheduler.backfills == []
+
+    resumed = service.set_monitor_paused(webset.id, monitor.id, paused=False, store=store)
+
+    assert resumed.paused is False
+    assert store.get_monitor(webset.id, monitor.id).paused is False
+
+
+def test_set_monitor_paused_unknown_ids(tmp_path):
+    store = _store(tmp_path)
+    webset = store.create_webset(Webset(criteria=[_CRITERION]))
+    monitor = store.add_monitor(webset.id, WebsetMonitor(webset_id=webset.id))
+
+    with pytest.raises(WebsetServiceError) as ei:
+        service.set_monitor_paused(webset.id, "wsm_missing", paused=True, store=store)
+    assert ei.value.code == "monitor_not_found"
+
+    with pytest.raises(WebsetNotFoundError):
+        service.set_monitor_paused("ws_missing", monitor.id, paused=True, store=store)
 
 
 # ── webhooks ─────────────────────────────────────────────────────────────────

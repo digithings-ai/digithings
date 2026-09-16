@@ -135,6 +135,7 @@ __all__ = [
     "remove_enrichment",
     "rotate_webhook_secret",
     "run_webset_async",
+    "set_monitor_paused",
     "set_scheduler",
     "trigger_monitor",
 ]
@@ -438,7 +439,7 @@ def remove_enrichment(
     _call(store.remove_enrichment, webset_id, enrichment_id)
 
 
-# ── monitors (poll-only v1, R8) ───────────────────────────────────────────────
+# ── monitors (tick-driven refresh cadence) ────────────────────────────────────
 
 
 def create_monitor(
@@ -448,10 +449,10 @@ def create_monitor(
     webhook_url: str | None = None,
     store: WebsetStore | None = None,
 ) -> WebsetMonitor:
-    """Record a refresh cadence (metadata only; no tick driver runs it in v1).
+    """Record a refresh cadence the shared tick driver executes per interval.
 
     A ``webhook_url`` is validated with the Phase C delivery rule (https, public
-    address) even though v1 never delivers from a monitor record.
+    address) even though a monitor record itself never delivers.
     """
     store = _store_or_default(store)
     _require_webset(store, webset_id)
@@ -464,14 +465,32 @@ def create_monitor(
 
 
 def list_monitors(webset_id: str, *, store: WebsetStore | None = None) -> list[WebsetMonitor]:
-    """List a webset's monitors newest-created first (poll-only v1 operator surface)."""
+    """List a webset's monitors newest-created first."""
     store = _store_or_default(store)
     _require_webset(store, webset_id)
     return _call(store.list_monitors, webset_id)
 
 
+def set_monitor_paused(
+    webset_id: str, monitor_id: str, *, paused: bool, store: WebsetStore | None = None
+) -> WebsetMonitor:
+    """Pause or resume a monitor's scheduled refreshes (the tick driver switch).
+
+    Validates the webset and the monitor, then rewrites the monitor body through
+    ``store.update_monitor``. A paused monitor is skipped by the tick loop only —
+    the manual ``trigger_monitor`` route still refreshes it on demand, so pause
+    is a cadence switch, never a lock.
+    """
+    store = _store_or_default(store)
+    _require_webset(store, webset_id)
+    monitor = _call(store.get_monitor, webset_id, monitor_id)
+    return _call(
+        store.update_monitor, webset_id, monitor_id, monitor.model_copy(update={"paused": paused})
+    )
+
+
 def trigger_monitor(webset_id: str, monitor_id: str, *, store: WebsetStore | None = None) -> Webset:
-    """Manually refresh: open a new search generation (the v1 tick-driver substitute).
+    """Manually refresh: open a new search generation (the tick uses this path).
 
     The new generation inherits the latest search's persisted
     ``verification_mode`` — straight inheritance: ``WebsetSearch.verification_mode``

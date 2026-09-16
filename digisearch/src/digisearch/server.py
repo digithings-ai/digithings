@@ -187,9 +187,10 @@ _RATE_LIMIT_PATTERNS: tuple[tuple[re.Pattern[str], tuple[int, int]], ...] = (
     (re.compile(r"^/v1/monitors/[^/]+/runs/[^/]+$"), (30, 60)),
     (re.compile(r"^/v1/monitors/[^/]+$"), (30, 60)),
     # § Interfaces websets pattern budget, most specific first: creation/refresh
-    # surfaces 10/min, read surfaces 30/min. ``/v1/websets`` stays an exact
+    # surfaces 10/min, read/pause surfaces 30/min. ``/v1/websets`` stays an exact
     # static above so the list/create path cannot fall into the id pattern.
     (re.compile(r"^/v1/websets/[^/]+/monitors/[^/]+/trigger$"), (10, 60)),
+    (re.compile(r"^/v1/websets/[^/]+/monitors/[^/]+$"), (30, 60)),
     (re.compile(r"^/v1/websets/[^/]+/webhooks/[^/]+/rotate$"), (10, 60)),
     (re.compile(r"^/v1/websets/[^/]+/(searches|monitors|webhooks|cancel|export)$"), (10, 60)),
     (re.compile(r"^/v1/websets/[^/]+/enrichments/[^/]+$"), (30, 60)),
@@ -1888,15 +1889,31 @@ class WebsetSearchRequest(BaseModel):
 
 
 class WebsetMonitorRequest(BaseModel):
-    """Request body for POST /v1/websets/{webset_id}/monitors (poll-only v1)."""
+    """Request body for POST /v1/websets/{webset_id}/monitors."""
 
     model_config = ConfigDict(extra="forbid")
 
     interval_seconds: int = Field(
-        default=3600, ge=60, description="Refresh-cadence METADATA; no tick driver runs it in v1"
+        default=3600,
+        ge=60,
+        description="Refresh cadence in seconds; the shared tick driver executes it",
     )
     webhook_url: str | None = Field(
         default=None, description="Optional https public URL (Phase C SSRF gate)"
+    )
+
+
+class WebsetMonitorPauseRequest(BaseModel):
+    """Request body for PATCH /v1/websets/{webset_id}/monitors/{monitor_id}."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    paused: bool = Field(
+        ...,
+        description=(
+            "True pauses the tick driver's scheduled refreshes; the manual trigger route "
+            "still refreshes on demand"
+        ),
     )
 
 
@@ -2028,7 +2045,7 @@ def api_remove_webset_enrichment(webset_id: str, enrichment_id: str, request: Re
 def api_create_webset_monitor(
     webset_id: str, req: WebsetMonitorRequest, request: Request
 ) -> dict[str, Any] | JSONResponse:
-    """Record a poll-only refresh cadence on a webset (never a Phase C Watch)."""
+    """Record a tick-driven refresh cadence on a webset (never a Phase C Watch)."""
     try:
         monitor = websets_service.create_monitor(
             webset_id, interval_seconds=req.interval_seconds, webhook_url=req.webhook_url
@@ -2048,13 +2065,25 @@ def api_list_webset_monitors(webset_id: str, request: Request) -> dict[str, Any]
     return {"monitors": [monitor.model_dump(mode="json") for monitor in monitors]}
 
 
+@app.patch("/v1/websets/{webset_id}/monitors/{monitor_id}", response_model=None)
+def api_set_webset_monitor_paused(
+    webset_id: str, monitor_id: str, req: WebsetMonitorPauseRequest, request: Request
+) -> dict[str, Any] | JSONResponse:
+    """Pause or resume a monitor's scheduled refreshes (the tick driver switch)."""
+    try:
+        monitor = websets_service.set_monitor_paused(webset_id, monitor_id, paused=req.paused)
+    except WebsetServiceError as exc:
+        return _webset_service_error(request, exc)
+    return monitor.model_dump(mode="json")
+
+
 @app.post(
     "/v1/websets/{webset_id}/monitors/{monitor_id}/trigger", status_code=202, response_model=None
 )
 def api_trigger_webset_monitor(
     webset_id: str, monitor_id: str, request: Request
 ) -> dict[str, Any] | JSONResponse:
-    """Manual refresh: open a new search generation (the v1 tick-driver substitute)."""
+    """Manual refresh: open a new search generation (the same path the tick uses)."""
     try:
         webset = websets_service.trigger_monitor(webset_id, monitor_id)
     except WebsetServiceError as exc:

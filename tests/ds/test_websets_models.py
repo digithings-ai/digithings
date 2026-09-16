@@ -254,15 +254,16 @@ def test_no_provider_or_auto_field_exists():
         assert not {"auto", "searxng", "ddgs", "off"} & set(args)
 
 
-def test_webset_monitor_poll_only_surface():
+def test_webset_monitor_tick_and_pause_surface():
     monitor = WebsetMonitor(webset_id=_WS_ID, webhook_url="https://hooks.test/websets")
     assert monitor.object == "webset_monitor"
     assert monitor.interval_seconds == 3600
     assert monitor.webhook_url == "https://hooks.test/websets"
+    assert monitor.paused is False
     assert "status" not in WebsetMonitor.model_fields
-    assert "paused" not in WebsetMonitor.model_fields
+    assert WebsetMonitor.model_fields["paused"].annotation is bool
     assert not hasattr(monitor, "status")
-    assert not hasattr(monitor, "paused")
+    assert WebsetMonitor(webset_id=_WS_ID, paused=True).paused is True
     assert _ID_RE.match(monitor.id)
     with pytest.raises(ValidationError):
         WebsetMonitor(webset_id=_WS_ID, interval_seconds=59)

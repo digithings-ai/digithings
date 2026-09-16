@@ -25,8 +25,9 @@ mirrors the spec's object tables:
   a stable positional anchor.
 - ``enrichments (enrichment_id PK, webset_id, name, status, created_at, body)``
   — at most 10 active defs per webset; ``name`` is the item field key.
-- ``webset_monitors (monitor_id PK, webset_id, created_at, body)`` — poll-only
-  v1 refresh-cadence metadata, never a Phase C ``Watch``.
+- ``webset_monitors (monitor_id PK, webset_id, created_at, body)`` — refresh-
+  cadence metadata read by the tick driver (``list_all_monitors``), never a
+  Phase C ``Watch``.
 - ``webhooks (webhook_id PK, webset_id, created_at, body)`` — the id is
   server-assigned (uuid4 hex, outside the five prefixed families) because
   :class:`~digisearch.websets.models.WebhookConfig` permits ``""`` and the
@@ -628,7 +629,7 @@ class WebsetStore:
     # -- monitors ---------------------------------------------------------
 
     def add_monitor(self, webset_id: str, monitor: WebsetMonitor) -> WebsetMonitor:
-        """Record a refresh cadence (poll-only v1); id and date are server-owned."""
+        """Record a refresh cadence (the tick driver executes it); id/date server-owned."""
         self.get_webset(webset_id)
         created = monitor.model_copy(
             update={
@@ -661,13 +662,57 @@ class WebsetStore:
         return WebsetMonitor.model_validate_json(row[0])
 
     def list_monitors(self, webset_id: str) -> list[WebsetMonitor]:
-        """Monitors newest-created first (poll-only v1 operator surface)."""
+        """Monitors newest-created first (per-webset operator surface)."""
         rows = self._conn.execute(
             "SELECT body FROM webset_monitors WHERE webset_id = ? "
             "ORDER BY created_at DESC, monitor_id DESC",
             (webset_id,),
         ).fetchall()
         return [WebsetMonitor.model_validate_json(row[0]) for row in rows]
+
+    def list_all_monitors(self) -> list[WebsetMonitor]:
+        """Every monitor across every webset, oldest-created first.
+
+        The tick driver's read: deterministic ``created_at ASC, monitor_id ASC``
+        order so a pass processes rows in a stable sequence. An empty table is
+        an empty list (no webset needs to exist for a reader); the monitor body
+        carries its own ``webset_id``, so the caller needs no join.
+        """
+        rows = self._conn.execute(
+            "SELECT body FROM webset_monitors ORDER BY created_at ASC, monitor_id ASC"
+        ).fetchall()
+        return [WebsetMonitor.model_validate_json(row[0]) for row in rows]
+
+    def update_monitor(
+        self, webset_id: str, monitor_id: str, monitor: WebsetMonitor
+    ) -> WebsetMonitor:
+        """Replace a monitor's body (the pause lifecycle writes here).
+
+        The path's ids are authoritative (mirrors ``update_enrichment``): the row
+        must exist for this webset, the rewritten body keeps the stored
+        ``created_at`` when the incoming record carries none, and a missing row
+        raises ``monitor_not_found`` — the same not-found semantics as
+        :meth:`get_monitor`.
+        """
+        row = self._conn.execute(
+            "SELECT created_at FROM webset_monitors WHERE webset_id = ? AND monitor_id = ?",
+            (webset_id, monitor_id),
+        ).fetchone()
+        if row is None:
+            raise WebsetStoreError(f"monitor not found: {monitor_id}", code="monitor_not_found")
+        updated = monitor.model_copy(
+            update={
+                "id": monitor_id,
+                "webset_id": webset_id,
+                "created_at": monitor.created_at or _parse_utc(row[0]),
+            }
+        )
+        with self._conn:
+            self._conn.execute(
+                "UPDATE webset_monitors SET body = ? WHERE monitor_id = ?",
+                (updated.model_dump_json(), monitor_id),
+            )
+        return updated
 
     # -- webhooks ---------------------------------------------------------
 
