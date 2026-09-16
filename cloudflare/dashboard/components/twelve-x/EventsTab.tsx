@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Card } from '@digithings/web/ui';
 import { CalendarClock, ChevronRight, Globe, Users } from 'lucide-react';
 import { eventLocalDateKey, hasResolvedTime } from '@/lib/twelve-x/fetch';
 import type {
@@ -489,7 +490,7 @@ export default function EventsTab({
         grouped.length > 0 ? (
           <div className="space-y-4">
             {grouped.map(([dateStr, rows]) => (
-              <div key={dateStr} className="oly-slab overflow-hidden p-0">
+              <Card key={dateStr} data-reveal className="gap-0 overflow-hidden p-0">
                 <div className="flex items-center gap-3 border-b border-hair bg-term-bg px-4 py-2.5">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
                     {formatDateLabel(dateStr)}
@@ -507,16 +508,16 @@ export default function EventsTab({
                     />
                   ))}
                 </div>
-              </div>
+              </Card>
             ))}
           </div>
         ) : (
-          <div className="oly-slab p-10 text-center text-sm text-ink-mute">{EMPTY_COPY}</div>
+          <Card data-reveal className="gap-0 p-10 text-center text-sm text-ink-mute">{EMPTY_COPY}</Card>
         )
       ) : null}
 
       {view === 'timeline' ? (
-        <div className="oly-slab p-4">
+        <Card data-reveal className="gap-0 p-4">
           {timelineEvents.length > 0 ? (
             <EventsTimeline
               events={timelineEvents}
@@ -527,7 +528,7 @@ export default function EventsTab({
           ) : (
             <p className="text-sm text-ink-mute">{EMPTY_COPY}</p>
           )}
-        </div>
+        </Card>
       ) : null}
 
       <EventDetailPanel

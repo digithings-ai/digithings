@@ -1,6 +1,7 @@
 'use client';
 
 import { Menu, Search, X } from 'lucide-react';
+import { Button } from '@digithings/web/ui';
 import { DashboardMark } from '@/components/dashboard-mark';
 import { useAppShell } from '@/components/app-shell-context';
 
@@ -18,27 +19,31 @@ export default function MobileAppBar() {
       aria-label="digiquant"
     >
       <div className="flex min-h-[72px] w-full items-center justify-between gap-2 px-4 sm:px-6">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-lg"
           onClick={toggleMobileNav}
-          className="flex h-9 w-9 shrink-0 items-center justify-center border border-hair text-ink hover:bg-ink/[0.06]"
+          className="shrink-0 rounded-none border border-hair text-ink hover:bg-ink/[0.06]"
           aria-expanded={mobileNavOpen}
           aria-controls="app-sidebar-nav"
           aria-label={mobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
         >
           {mobileNavOpen ? <X size={22} strokeWidth={2} /> : <Menu size={22} strokeWidth={2} />}
-        </button>
+        </Button>
         <div className="flex min-w-0 flex-1 items-center justify-center">
           <DashboardMark className="shrink-0" />
         </div>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-lg"
           onClick={openCommandPalette}
-          className="flex h-9 w-9 shrink-0 items-center justify-center border border-hair text-ink hover:bg-ink/[0.06]"
+          className="shrink-0 rounded-none border border-hair text-ink hover:bg-ink/[0.06]"
           aria-label="Search"
         >
           <Search size={20} strokeWidth={2} />
-        </button>
+        </Button>
       </div>
     </header>
   );

@@ -1,9 +1,9 @@
 import { ReactNode, ElementType } from 'react';
 import {
-  Badge as ControlBadge,
-  type BadgeProps as ControlBadgeProps,
-  type BadgeReferenceVariant,
-} from '@digithings/web';
+  Badge as KitBadge,
+  Card,
+  type BadgeProps as KitBadgeProps,
+} from '@digithings/web/ui';
 
 interface StatCardProps {
   label: string;
@@ -17,10 +17,7 @@ interface StatCardProps {
 /** dashboard's historical tone names, kept so call sites need zero churn. */
 type DashboardBadgeVariant = 'default' | 'blue' | 'green' | 'red' | 'amber';
 
-type BadgeProps = Omit<
-  Extract<ControlBadgeProps, { dress?: 'reference' }>,
-  'dress' | 'variant'
-> & {
+type BadgeProps = Omit<KitBadgeProps, 'variant'> & {
   variant?: DashboardBadgeVariant;
 };
 
@@ -31,11 +28,9 @@ interface SectionTitleProps {
 
 /** Reusable stat card for KPI display.
  *
- * F4 ruling (#1450): stays LOCAL — the promoted controls Card (ctl-card-ref:
- * 12px radius, ruled header rows, no shadow/hover) and the metrics grammar
- * (PerfMetrics: n-up hairline grid, mono values) both render a different
- * look, and the `.oly-slab` class here is load-bearing for MotionLayer's
- * scroll-reveal system (globals.css `html.motion-on .oly-slab`). */
+ * Wave-2 (#4206): the box is now the kit `Card` (same `--surface` fill, zero
+ * radius, hairline ring) and the scroll-reveal hook is the `data-reveal`
+ * attribute — MotionLayer no longer needs the retired `.oly-slab` class. */
 export function StatCard({
   label,
   value,
@@ -45,7 +40,7 @@ export function StatCard({
   valueClass = '',
 }: StatCardProps) {
   return (
-    <div className="oly-slab flex min-h-36 flex-col px-5 py-5">
+    <Card data-reveal className="min-h-36 gap-0 px-5 py-5">
       <div className="flex items-start justify-between gap-3">
         <span className="font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
           {label}
@@ -62,27 +57,34 @@ export function StatCard({
           {subtitle}
         </p>
       )}
-    </div>
+    </Card>
   );
 }
 
-/** dashboard tone → shared reference-dress tone (same color semantics). */
-const BADGE_TONE: Record<DashboardBadgeVariant, BadgeReferenceVariant> = {
-  default: 'neutral',
-  blue: 'accent',
-  green: 'up',
-  red: 'down',
-  amber: 'warn',
+/** dashboard tone → kit Badge tone utilities (same color semantics). */
+const BADGE_TONE: Record<DashboardBadgeVariant, string> = {
+  default: 'text-ink-mute',
+  blue: 'border-accent-weak text-accent',
+  green: 'border-up/40 text-up',
+  red: 'border-down/40 text-down',
+  amber: 'border-warn/40 text-warn',
 };
 
-/** Badge — thin re-export of the shared @digithings/web controls Badge
- * (#1419 shim pattern, adopted for F4 #1450). Pinned to dress="reference"
- * (the .dg-tier mono micro-caps hairline pill); dashboard's historical tone
- * names map onto the shared tones so every call site keeps its color
- * semantics with zero churn. Extra props (data-testid, aria-*) now pass
+/** Badge — thin tone mapper over the vendored kit `Badge` (@digithings/web/ui).
+ *
+ * Decision (#4206): the old reference-dress shim (controls-layer Badge
+ * `dress="reference"`) is deleted; dashboard's historical tone names map onto
+ * the kit outline badge plus token utilities, so every call site keeps its
+ * color semantics with zero churn. Extra props (data-testid, aria-*) pass
  * through to the rendered span. */
-export function Badge({ variant = 'default', ...props }: BadgeProps) {
-  return <ControlBadge dress="reference" variant={BADGE_TONE[variant]} {...props} />;
+export function Badge({ variant = 'default', className = '', ...props }: BadgeProps) {
+  return (
+    <KitBadge
+      variant="outline"
+      className={`${BADGE_TONE[variant]} ${className}`.trim()}
+      {...props}
+    />
+  );
 }
 
 /** Section heading used inside pages */

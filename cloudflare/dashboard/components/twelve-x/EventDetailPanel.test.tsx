@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import EventDetailPanel from './EventDetailPanel';
+import EventDetailPanel, { EventDetailBody } from './EventDetailPanel';
 import type { MatchedOpinions } from './EventsTab';
 import type { FxEconomicCalendarRow } from '@/lib/twelve-x/types';
 
@@ -53,13 +53,23 @@ const opinions: MatchedOpinions = {
   runDate: '2026-06-22',
 };
 
-function render(props: Parameters<typeof EventDetailPanel>[0]): string {
-  return renderToStaticMarkup(createElement(EventDetailPanel, props));
+/**
+ * SSR-only test (node env, renderToStaticMarkup). The panel chrome now rides
+ * the shared @digithings/web Sheet, whose popup lives in a Base UI portal that
+ * never renders under static SSR — so the content assertions target the
+ * exported EventDetailBody directly (same split as BriefPanel), and the
+ * closed-state assertion targets the panel shell. Live dialog semantics
+ * (Escape, backdrop, scroll lock, focus) are Base UI's, verified with CDP.
+ */
+function render(props: Parameters<typeof EventDetailBody>[0]): string {
+  return renderToStaticMarkup(createElement(EventDetailBody, props));
 }
 
 describe('EventDetailPanel', () => {
   it('renders nothing when event is null (closed)', () => {
-    const html = render({ event: null, opinions: null, onClose: () => {} });
+    const html = renderToStaticMarkup(
+      createElement(EventDetailPanel, { event: null, opinions: null, onClose: () => {} }),
+    );
     expect(html).toBe('');
   });
 
@@ -96,9 +106,12 @@ describe('EventDetailPanel', () => {
     expect(html).toContain('No desk commentary for this event yet.');
   });
 
-  it('renders as a slide-over dialog (role=dialog, aria-modal)', () => {
+  it('renders the content as a Sheet title-bearing dialog body', () => {
     const html = render({ event, opinions, onClose: () => {} });
-    expect(html).toContain('role="dialog"');
-    expect(html).toContain('aria-modal="true"');
+    // SheetTitle renders the dialog heading; the Sheet shell adds role=dialog
+    // + aria-modal (portaled client-side).
+    expect(html).toContain('<h2');
+    expect(html).toContain('Core PCE Price Index');
+    expect(html).toContain('aria-label="Close"');
   });
 });

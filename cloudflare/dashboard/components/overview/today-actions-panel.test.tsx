@@ -61,8 +61,10 @@ describe('TodayActionsPanel', () => {
     expect(normal).toContain('Full rebalance memo');
     expect(bare).not.toContain('Full rebalance memo');
     expect(bare).not.toContain('glass-card');
-    expect(bare).not.toContain('oly-slab');
-    expect(normal).toContain('oly-slab');
+    // Wave-2: the slab is the kit Card; bare mode neutralizes its frame.
+    expect(bare).not.toContain('bg-card');
+    expect(normal).toContain('data-slot="card"');
+    expect(normal).toContain('bg-card');
     expect(normal).not.toContain('glass-card');
     // …but the move content itself still renders.
     expect(bare).toContain('NVDA');

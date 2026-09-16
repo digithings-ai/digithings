@@ -14,6 +14,7 @@ import {
   SETTINGS_LOAD_ERROR_MESSAGE,
   SettingsLoadError,
 } from './settings-load-error';
+import { Button, Input, Label } from '@digithings/web/ui';
 
 export type NotifyTabProps = {
   api: SettingsApiOptions | null;
@@ -134,18 +135,18 @@ export function NotifyTab({
         </p>
       ) : null}
 
-      <label className="block space-y-1">
+      <Label className="block space-y-1">
         <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
           Email
         </span>
-        <input
+        <Input
           type="email"
-          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           data-testid="notify-email"
         />
-      </label>
+      </Label>
 
       <Toggle
         label="Daily digest"
@@ -169,20 +170,20 @@ export function NotifyTab({
         testId="notify-execution"
       />
 
-      <label className="block space-y-1 max-w-xs">
+      <Label className="block space-y-1 max-w-xs">
         <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
           Digest hour (UTC)
         </span>
-        <input
+        <Input
           type="number"
           min={0}
           max={23}
-          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
+          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
           value={digestHour}
           onChange={(e) => setDigestHour(Number(e.target.value))}
           data-testid="notify-hour"
         />
-      </label>
+      </Label>
 
       {loadError ? (
         <SettingsLoadError
@@ -201,15 +202,15 @@ export function NotifyTab({
         </p>
       ) : null}
 
-      <button
+      <Button
         type="button"
         disabled={busy || loading}
         onClick={() => void onSave()}
-        className="border border-ink bg-ink px-4 py-2 text-sm font-medium text-bg disabled:opacity-50"
+        className="h-auto px-4 py-2 text-sm"
         data-testid="notify-save"
       >
         {busy ? 'Saving…' : 'Save preferences'}
-      </button>
+      </Button>
 
       <div className="space-y-2" data-testid="notify-log">
         <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
@@ -258,7 +259,7 @@ function Toggle({
   testId?: string;
 }) {
   return (
-    <label className="flex items-start justify-between gap-3 border border-hair bg-term-bg/40 px-3 py-2">
+    <Label className="flex items-start justify-between gap-3 border border-hair bg-term-bg/40 px-3 py-2">
       <div className="space-y-0.5">
         <span className="text-sm text-ink">{label}</span>
         <span className="text-xs text-ink-mute">{description}</span>
@@ -269,6 +270,6 @@ function Toggle({
         onChange={(e) => onChange(e.target.checked)}
         data-testid={testId}
       />
-    </label>
+    </Label>
   );
 }

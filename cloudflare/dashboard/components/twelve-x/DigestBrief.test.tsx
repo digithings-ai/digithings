@@ -31,7 +31,8 @@ describe('DigestBrief — digest summary markdown', () => {
   it('renders the empty state when there is no digest', () => {
     const html = render(null);
     expect(html).toContain('No digest for today yet.');
-    expect(html).toContain('oly-slab');
+    expect(html).toContain('data-slot="card"');
+    expect(html).toContain('data-reveal');
     expect(html).not.toContain('glass-card');
   });
 

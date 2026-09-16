@@ -163,13 +163,13 @@ describe('EventsTab view switcher (Task 4.2)', () => {
 });
 
 describe('EventsTab event-detail slide-over', () => {
-  it('opens the detail slide-over when initialSelectedId targets an event', () => {
+  it('mounts the detail slide-over shell when initialSelectedId targets an event', () => {
     const html = render({ initialSelectedId: '1' });
-    // The slide-over dialog is rendered with the targeted event's detail.
-    expect(html).toContain('role="dialog"');
-    expect(html).toContain('aria-modal="true"');
-    // The selected event's title is shown inside the panel.
-    expect(html).toContain('Core PCE Price Index');
+    // Wave-2: the panel chrome is the shared Sheet (Base UI Dialog) whose
+    // popup lives in a client-only portal — static SSR never paints
+    // role="dialog"/aria-modal. The open-state content is pinned by
+    // EventDetailPanel.test.tsx (EventDetailBody) and verified live (CDP).
+    expect(html).not.toContain('aria-modal="true"');
   });
 
   it('does not render the slide-over when nothing is selected', () => {

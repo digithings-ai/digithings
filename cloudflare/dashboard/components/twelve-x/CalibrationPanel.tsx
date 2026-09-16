@@ -5,6 +5,7 @@ import type {
   ConsensusStabilitySummary,
   IdeaOutcomeSummary,
 } from '@/lib/twelve-x/track-record';
+import { Card } from '@digithings/web/ui';
 import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 import WilsonStat from './WilsonStat';
 
@@ -33,7 +34,7 @@ export function CalibrationPanel({
   consensusAccuracy: ConsensusAccuracySummary;
 }) {
   return (
-    <section className="oly-slab space-y-4 p-5" data-testid="calibration-panel">
+    <Card data-reveal className="gap-0 space-y-4 p-5" data-testid="calibration-panel">
       <TwelveXSectionHeading>Calibration</TwelveXSectionHeading>
       <p className="max-w-2xl text-xs text-ink-mute">
         Hit-rates with 95% Wilson intervals. Small samples widen the interval instead of
@@ -96,7 +97,7 @@ export function CalibrationPanel({
           <Count label="Missing rates" value={consensusAccuracy.missingCount} />
         </div>
       </div>
-    </section>
+    </Card>
   );
 }
 

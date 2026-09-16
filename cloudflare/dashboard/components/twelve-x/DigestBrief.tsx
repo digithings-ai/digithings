@@ -2,6 +2,7 @@
 
 import { FileText } from 'lucide-react';
 
+import { Card } from '@digithings/web/ui';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 
@@ -12,14 +13,14 @@ export default function DigestBrief({
 }) {
   if (!digest) {
     return (
-      <section className="oly-slab p-5">
+      <Card data-reveal className="gap-0 p-5">
         <TwelveXSectionHeading>Digest brief</TwelveXSectionHeading>
         <p className="mt-2 text-sm text-ink-mute">No digest for today yet.</p>
-      </section>
+      </Card>
     );
   }
   return (
-    <section className="oly-slab flex flex-col gap-2 p-5">
+    <Card data-reveal className="flex flex-col gap-2 p-5">
       <header className="flex min-w-0 items-baseline gap-2">
         <FileText size={15} className="shrink-0 text-accent" aria-hidden />
         <TwelveXSectionHeading>Digest brief</TwelveXSectionHeading>
@@ -43,6 +44,6 @@ export default function DigestBrief({
           ))}
         </div>
       ) : null}
-    </section>
+    </Card>
   );
 }

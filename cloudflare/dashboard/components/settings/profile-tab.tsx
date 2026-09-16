@@ -14,6 +14,15 @@ import {
   type SettingsApiOptions,
 } from '@/lib/settings-api';
 import {
+  Select,
+  SelectItem,
+  SelectItemIndicator,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from '@digithings/web';
+import { Alert, AlertDescription, Button, Input, Label } from '@digithings/web/ui';
+import {
   SETTINGS_LOAD_ERROR_MESSAGE,
   SettingsLoadError,
 } from './settings-load-error';
@@ -210,28 +219,28 @@ export function ProfileTab({
         </p>
       ) : null}
 
-      <label className="block space-y-1">
+      <Label className="block space-y-1">
         <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
           Overlay key
         </span>
-        <input
-          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
+        <Input
+          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
           value={profileKey}
           onChange={(e) => setProfileKey(e.target.value)}
           data-testid="profile-key-input"
         />
-      </label>
+      </Label>
 
-      <label className="block space-y-1">
+      <Label className="block space-y-1">
         <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
           Label
         </span>
-        <input
-          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+        <Input
+          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
         />
-      </label>
+      </Label>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <SelectField
@@ -241,22 +250,22 @@ export function ProfileTab({
           onChange={(v) => setInvestment((s) => ({ ...s, risk_tolerance: v }))}
           testId="risk-tolerance"
         />
-        <label className="block space-y-1">
+        <Label className="block space-y-1">
           <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
             Horizon (years)
           </span>
-          <input
+          <Input
             type="number"
             min={1}
             max={50}
-            className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
+            className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
             value={investment.horizon_years}
             onChange={(e) =>
               setInvestment((s) => ({ ...s, horizon_years: Number(e.target.value) }))
             }
             data-testid="horizon-years"
           />
-        </label>
+        </Label>
         <SelectField
           label="Liquidity needs"
           value={investment.liquidity_needs}
@@ -283,30 +292,30 @@ export function ProfileTab({
         />
       </div>
 
-      <label className="block space-y-1">
+      <Label className="block space-y-1">
         <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
           Excluded tickers
         </span>
-        <input
-          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
+        <Input
+          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
           placeholder="TSLA, GME"
           value={excludedTickers}
           onChange={(e) => setExcludedTickers(e.target.value)}
         />
-      </label>
+      </Label>
 
       {loadError ? (
         <SettingsLoadError message={loadError} onRetry={() => void hydrate()} />
       ) : null}
       {fieldError ? (
-        <p className="text-sm text-down" data-testid="profile-field-error" role="alert">
-          {fieldError}
-        </p>
+        <Alert variant="destructive" data-testid="profile-field-error">
+          <AlertDescription>{fieldError}</AlertDescription>
+        </Alert>
       ) : null}
       {conflict ? (
-        <p className="text-sm text-warn" data-testid="profile-conflict" role="alert">
-          Profile changed elsewhere — reload before saving again.
-        </p>
+        <Alert data-testid="profile-conflict" className="border-warn/40 text-warn">
+          <AlertDescription>Profile changed elsewhere — reload before saving again.</AlertDescription>
+        </Alert>
       ) : null}
       {savedVersion ? (
         <p className="text-sm text-ink-soft" data-testid="profile-saved">
@@ -314,15 +323,15 @@ export function ProfileTab({
         </p>
       ) : null}
 
-      <button
+      <Button
         type="button"
         onClick={() => void onSave()}
         disabled={saving || loading}
-        className="border border-ink bg-ink px-4 py-2 text-sm font-medium text-bg hover:opacity-90 disabled:opacity-50"
+        className="h-auto px-4 py-2 text-sm"
         data-testid="profile-save"
       >
         {saving ? 'Saving…' : 'Save overlay'}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -341,22 +350,31 @@ function SelectField({
   testId?: string;
 }) {
   return (
-    <label className="block space-y-1">
+    <Label className="block space-y-1">
       <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
         {label}
       </span>
-      <select
-        className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+      <Select
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        data-testid={testId}
+        onValueChange={(next) => {
+          if (typeof next === 'string') onChange(next);
+        }}
       >
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-    </label>
+        <SelectTrigger
+          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+          data-testid={testId}
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectPopup>
+          {options.map((o) => (
+            <SelectItem key={o} value={o}>
+              {o}
+              <SelectItemIndicator />
+            </SelectItem>
+          ))}
+        </SelectPopup>
+      </Select>
+    </Label>
   );
 }
