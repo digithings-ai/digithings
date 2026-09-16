@@ -131,6 +131,11 @@ describe('AllocationsPositionsTable', () => {
     expect(anchor).toContain('target="_blank"');
     expect(anchor).toContain('rel="noopener noreferrer"');
     expect(anchor).toContain('aria-label="Open NVDA in Gloomberb (opens in a new tab)"');
+    // The arrow idiom, not the external-link glyph (#4204).
+    const block =
+      html.match(/<a[^>]*data-testid="gloomberb-link-NVDA"[\s\S]*?<\/a>/)?.[0] ?? '';
+    expect(block).toContain('lucide-arrow-up-right');
+    expect(block).not.toContain('lucide-external-link');
   });
 
   it('uppercases a lowercase book ticker in its Gloomberb deep link', () => {

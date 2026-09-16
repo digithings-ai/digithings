@@ -24,7 +24,6 @@ vi.mock('next/link', () => ({
 vi.mock('lucide-react', () => ({
   ArrowLeft: () => createElement('svg', { 'data-icon': 'arrow-left' }),
   ArrowUpRight: () => createElement('svg', { 'data-icon': 'arrow-up-right' }),
-  ExternalLink: () => createElement('svg', { 'data-icon': 'external-link' }),
   TrendingUp: () => createElement('svg', { 'data-icon': 'trending-up' }),
   TrendingDown: () => createElement('svg', { 'data-icon': 'trending-down' }),
   Lock: () => createElement('svg', { 'data-icon': 'lock' }),
@@ -134,6 +133,11 @@ describe('TickerDossierView — command band structure', () => {
     const gloomberbAnchor = html.match(/<a[^>]*data-testid="gloomberb-link"[^>]*>/)?.[0] ?? '';
     expect(gloomberbAnchor).toContain('target="_blank"');
     expect(gloomberbAnchor).toContain('rel="noopener noreferrer"');
+    // The arrow idiom, not the external-link glyph (#4204).
+    const gloomberbBlock =
+      html.match(/<a[^>]*data-testid="gloomberb-link"[\s\S]*?<\/a>/)?.[0] ?? '';
+    expect(gloomberbBlock).toContain('arrow-up-right');
+    expect(gloomberbBlock).not.toContain('external-link');
   });
 
   it('links every dossier ticker out to Gloomberb, crypto included', () => {
