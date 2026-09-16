@@ -248,10 +248,14 @@ compose-local searxng via `DIGISEARCH_SEARXNG_URL` remains for dev.
 digigraph chat-only env (set in `wrangler.toml` / entrypoint / bundle compose):
 
 - `DIGI_PROJECT_CONFIG=/app/config/digiproject.yaml` — `research_rag`, research only,
-  tools `digisearch` + `digivault_search_notes` + `digivault_get_note` (this stack has D1)
+  tools `digisearch` + `digisearch_semantic` + `digisearch_web_search` +
+  `digivault_search_notes` + `digivault_get_note` + `web_search` (request opt-in; #3420)
+  (this stack has D1)
 - `DIGI_WORKFLOW_PROFILE=research_rag`
-- `DIGI_ALLOWED_TOOLS=digisearch,digivault_search_notes,digivault_get_note` — fallback
+- `DIGI_ALLOWED_TOOLS=digisearch,digisearch_semantic,digisearch_web_search,digivault_search_notes,digivault_get_note` — fallback
   only, read solely when `digiproject.yaml` fails to load; kept in sync with it
+- Zammad ticket tools are not in the shared allowlist; the OCC tenant reaches them per
+  request via its `mcp.servers` entry (`X-Digi-Mcp-Servers`)
 - `DIGIQUANT_URL=` (empty) — never route to `backtest_node`
 
 digichat: `DIGICHAT_ENABLED_SERVICES=digigraph` (do not probe digiquant).
