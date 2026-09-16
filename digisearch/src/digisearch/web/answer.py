@@ -267,8 +267,11 @@ def grounded_answer(
     ``_live``/``_fetch``/``_rank`` chain is skipped entirely (no search/fetch/
     rerank stage is recorded) and those pages are the cited set, so usage is
     honest for a direct caller — ``searches=0``, ``pages_fetched=0``,
-    ``pages_cited=len(pages)``, plus the synthesis ``llm_calls``. ``None``
-    runs the live retrieval loop unchanged.
+    ``pages_cited=len(pages)``, plus the synthesis ``llm_calls``. Result rows
+    built from supplied pages carry neutral ``score=0.0`` / ``engine=""``
+    values (there is no live search hit to key them to); the web branch
+    rebuilds its result rows from ``web_hits``. ``None`` runs the live
+    retrieval loop unchanged.
 
     Raises :class:`WebResearchError` on any dependency failure or when no
     source survives to cite. Usage travels as the explicit second tuple

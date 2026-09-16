@@ -414,7 +414,9 @@ def structured_synthesis(
     ``output={"content", "grounding", "text"}``. ``pages`` is the optional
     pre-retrieved seam: when supplied, ``_retrieve_cited`` is skipped entirely
     and those pages are the cited set, so usage reports ``searches=0``,
-    ``pages_fetched=0``, ``pages_cited=len(pages)``, ``llm_calls=1``. ``None``
+    ``pages_fetched=0``, ``pages_cited=len(pages)``, ``llm_calls=1``. Result
+    rows carry neutral ``score=0.0`` / ``engine=""`` on both paths
+    (``_retrieve_cited`` does not re-expose the search surface). ``None``
     runs the retrieval chain unchanged. Raises :class:`WebResearchError` on any
     dependency failure, zero cited pages, a missing required key, or an
     unusable model payload. Usage travels as the explicit second tuple

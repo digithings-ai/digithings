@@ -20,6 +20,8 @@ import logging
 import time
 from typing import Any
 
+from pydantic import ValidationError
+
 from digisearch.agent.citations import rag_sources_from_hits
 from digisearch.agent.pipeline_models import ResearchTurnState, ResearchTurnTraceStep
 from digisearch.web.accounting import estimate_cost, finalize_usage, record_stage, start_clock
@@ -174,6 +176,19 @@ def node_web_retrieve(state: ResearchTurnState) -> dict[str, Any]:
     }
 
 
+def _cited_pages_from_state(state: ResearchTurnState) -> list[FetchedPage]:
+    """Rebuild the retrieve node's cited pages from their JSON dumps.
+
+    ``web_pages`` is untyped JSON on the turn state, so a corrupt or drifted
+    dump fails hard here as :class:`WebResearchError` instead of leaking
+    ``pydantic.ValidationError`` past the node's fail-hard funnel.
+    """
+    try:
+        return [FetchedPage.model_validate(page) for page in state.web_pages or []]
+    except ValidationError as exc:
+        raise WebResearchError(f"web_pages in turn state failed validation: {exc}") from exc
+
+
 def node_web_aggregate(state: ResearchTurnState) -> dict[str, Any]:
     """Synthesize from the retrieved pages, then rebuild results/citations/accounting.
 
@@ -186,7 +201,7 @@ def node_web_aggregate(state: ResearchTurnState) -> dict[str, Any]:
     question = str(state.user_message).strip()
     try:
         cfg = resolve_web_config(effort=state.effort, cited_top_n=state.cited_top_n)
-        cited_pages = [FetchedPage.model_validate(page) for page in state.web_pages or []]
+        cited_pages = _cited_pages_from_state(state)
         if state.output_schema:
             data, synthesis = structured_synthesis(
                 question, output_schema=state.output_schema, config=cfg, pages=cited_pages
