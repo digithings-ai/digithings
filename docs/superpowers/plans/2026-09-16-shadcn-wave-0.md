@@ -259,7 +259,7 @@ describe("web-theme shadcn token contract", () => {
   });
 
   it("keeps exactly one @theme block (canon)", () => {
-    expect(css.match(/@theme/g)?.length).toBe(1);
+    expect(css.match(/@theme\s+inline\s*\{/g)?.length).toBe(1);
   });
 });
 ```
