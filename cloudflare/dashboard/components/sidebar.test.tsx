@@ -94,13 +94,16 @@ describe('Sidebar', () => {
     expect(anchor).toContain('href="https://term.gloom.sh/"');
     expect(anchor).toContain('target="_blank"');
     expect(anchor).toContain('rel="noopener noreferrer"');
-    // The brand mark, decorative, not a generic arrow glyph.
+    // The brand mark, decorative and monochrome (currentColor, no brand hexes).
     const block =
       html.match(/<a[^>]*data-testid="sidebar-gloomberb-link"[\s\S]*?<\/a>/)?.[0] ?? '';
     expect(block).toContain('class="gloomberb-mark shrink-0"');
     expect(block).toContain('viewBox="0 0 512 512"');
     expect(block).toContain('aria-hidden="true"');
-    expect(block).toContain('gloomberb-mark-green-body');
+    expect(block).toContain('fill="currentColor"');
+    expect(block).not.toContain('linearGradient');
+    expect(block).not.toContain('gloomberb-mark-green-body');
+    expect(block).not.toMatch(/#[0-9a-fA-F]{3}/);
   });
 
   it('flag off: does not render identity/sign-out chrome', () => {
