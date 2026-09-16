@@ -672,16 +672,18 @@ def build_digifetch_transcripts_tool() -> dict[str, Any]:
                 "Earnings-call transcripts (Gloomberb Cloud; session-gated, "
                 "requires Gloomberb Pro). Requires GLOOMBERB_SESSION_COOKIE and "
                 "a Pro plan — a free session's 'Pro plan required' body maps to "
-                "typed pro_required, never an empty success. Adds a "
-                "term.gloom.sh deep link for ticker."
+                "typed pro_required, never an empty success. ticker lists a "
+                "listing's calls; transcript_id (from a list row) fetches one "
+                "call's detail — provide exactly one. Adds a term.gloom.sh "
+                "deep link for ticker."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "ticker": {"type": "string"},
                     "limit": {"type": "integer", "default": 20},
+                    "transcript_id": {"type": "string"},
                 },
-                "required": ["ticker"],
             },
         },
     }
@@ -790,6 +792,24 @@ def build_digifetch_venues_tool() -> dict[str, Any]:
                 "parameters; rows carry mic/name/title/country/timezone plus "
                 "session clock fields (isOpen, timeToOpenSeconds, ...). "
                 "Enrichment only."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+
+
+def build_digifetch_saved_searches_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_saved_searches",
+            "description": (
+                "The signed-in session's saved searches (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE - without it "
+                "the call is a typed auth_required with no request. No "
+                "parameters; rows carry the saved-search id/name/query and "
+                "unknown fields are preserved. Enrichment only: the platform's "
+                "data is delayed."
             ),
             "parameters": {"type": "object", "properties": {}},
         },
@@ -1561,6 +1581,7 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digifetch_risk_reports_tool(),
         build_digifetch_short_interest_tool(),
         build_digifetch_equity_diagnostic_tool(),
+        build_digifetch_saved_searches_tool(),
         build_digiquant_fit_btc_power_law_tool(),
         build_digiquant_build_sdca_risk_index_tool(),
         build_digiquant_fetch_bitview_series_tool(),
