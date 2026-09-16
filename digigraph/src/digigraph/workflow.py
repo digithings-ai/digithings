@@ -217,43 +217,95 @@ def _extract_attribution(value: Any, _depth: int = 0) -> dict[str, str]:
     return {}
 
 
+def _attribution_variants(attribution: dict[str, str]) -> list[dict[str, str]]:
+    """The §7 block, richest first, for fitting inside the record cap.
+
+    ``source_url`` is the optional deep link and usually the largest key, so it
+    is dropped before ``delay_notice``: #4131 exists to keep the canonical
+    attribution string and the delay notice visible, and both are kept while
+    the cap allows. An empty block is always the last variant.
+    """
+    if not attribution:
+        return [{}]
+    variants = [dict(attribution)]
+    without_url = {k: v for k, v in attribution.items() if k != "source_url"}
+    if without_url != attribution:
+        variants.append(without_url)
+    without_notice = {k: v for k, v in without_url.items() if k != "delay_notice"}
+    if without_notice not in variants:
+        variants.append(without_notice)
+    return variants
+
+
+def _fits_tool_result_cap(record: Any) -> bool:
+    try:
+        return len(json.dumps(record)) <= _MAX_TOOL_RESULT_CHARS
+    except (TypeError, ValueError):
+        return False
+
+
+def _truncated_tool_result(serialized: str, block: dict[str, str]) -> dict[str, Any] | None:
+    """A ``{block…, truncated, preview}`` record within the cap, or ``None``.
+
+    The slice is JSON text: its quote characters escape again when the record
+    is re-serialized, so measure the record, not the slice, and shrink until it
+    fits. ``None`` means even an empty preview overflows with this block.
+    """
+    budget = _MAX_TOOL_RESULT_CHARS - 100 - (len(json.dumps(block)) if block else 0)
+    preview = serialized[: max(budget, 0)]
+    while True:
+        record = {**block, "truncated": True, "preview": preview + "… [truncated]"}
+        if _fits_tool_result_cap(record):
+            return record
+        if not preview:
+            return None
+        preview = preview[:-64]
+
+
 def _render_clipped_tool_result(result_data: dict[str, Any]) -> Any | None:
     """Render a generic tool result for the trace, preserving §7 provenance.
 
     The §7 keys are hoisted from the raw result before the clip and attached
     ahead of it: the digichat attribution line (#4130) reads them off the
     emitted result (``cloudflare/digiweb/web/src/lib/gloomberb.ts``), and the
-    scalar cap leaves no key structure to read once a string is cut.
+    scalar cap leaves no key structure to read once a string is cut. The
+    emitted record is always within ``_MAX_TOOL_RESULT_CHARS`` — including the
+    already-≤-cap payload whose hoisted block alone would push it over — so
+    digichat's sanitizer never replaces it wholesale. When the full block does
+    not fit, ``source_url`` is dropped first (see ``_attribution_variants``),
+    then ``delay_notice``; a record that still overflows is emitted with
+    ``truncated``/``preview`` rather than silently exceeding the cap.
     """
     attribution = _extract_attribution(result_data)
     clipped_result = _clip_tool_result(result_data)
     if clipped_result is None:
         return None
+    variants = _attribution_variants(attribution)
     try:
         serialized = json.dumps(clipped_result)
-        rendered: Any = clipped_result
-        if len(serialized) > _MAX_TOOL_RESULT_CHARS:
-            budget = _MAX_TOOL_RESULT_CHARS - 100
-            if attribution:
-                budget -= len(json.dumps(attribution))
-            preview = serialized[:budget]
-            # The slice is JSON text: its quote characters escape again when the
-            # record is re-serialized, so measure the record, not the slice, and
-            # shrink until it fits. The §7 keys are never trimmed.
-            while True:
-                rendered = {
-                    **attribution,
-                    "truncated": True,
-                    "preview": preview + "… [truncated]",
-                }
-                if len(json.dumps(rendered)) <= _MAX_TOOL_RESULT_CHARS or not preview:
-                    break
-                preview = preview[:-64]
     except (TypeError, ValueError):
-        rendered = {"preview": str(clipped_result)[:2000]}
-    if attribution and isinstance(rendered, dict):
-        rendered = {**attribution, **rendered}
-    return rendered
+        rendered: Any = {"preview": str(clipped_result)[:2000]}
+        for block in variants:
+            candidate = {**block, **rendered}
+            if _fits_tool_result_cap(candidate):
+                return candidate
+        return rendered
+
+    if len(serialized) <= _MAX_TOOL_RESULT_CHARS:
+        # The payload fits as-is; keep the richest §7 subset that fits with it.
+        if isinstance(clipped_result, dict) and attribution:
+            for block in variants:
+                candidate = {**block, **clipped_result}
+                if _fits_tool_result_cap(candidate):
+                    return candidate
+        return clipped_result
+
+    for block in variants:
+        record = _truncated_tool_result(serialized, block)
+        if record is not None:
+            return record
+    # No §7 block fits even with an empty preview; drop it and still stay capped.
+    return {"truncated": True, "preview": "… [truncated]"}
 
 
 def _audit_digi_kwargs(req: WorkflowRequest) -> dict[str, str]:

@@ -148,3 +148,82 @@ def test_truncated_structured_record_stays_within_the_cap() -> None:
     # when the record is re-serialized, so the bound must hold on the
     # re-serialized record (12,023 chars pre-fix), not on the raw slice.
     assert len(json.dumps(rendered)) <= _MAX_TOOL_RESULT_CHARS
+
+
+@pytest.mark.unit
+def test_nested_attribution_on_under_cap_payload_stays_within_the_cap() -> None:
+    """Hoisting must not push an already-≤-cap clipped payload over the cap.
+
+    Regression for the review's MEDIUM: the clip is 11,887 chars, the block is
+    ~142, and the pre-fix final merge emitted 12,029 with no ``truncated`` flag
+    — digichat's sanitizer then replaced the whole record and the §7 keys were
+    lost (the exact failure #4131 exists to prevent).
+    """
+    raw = {
+        "big": ["y" * 1950] * 6,
+        "nested": {
+            "attribution": _ATTRIBUTION,
+            "delay_notice": _DELAY_NOTICE,
+            "source_url": _SOURCE_URL,
+        },
+    }
+    rendered = _render_clipped_tool_result(raw)
+    assert len(json.dumps(rendered)) <= _MAX_TOOL_RESULT_CHARS
+    # The canonical string and the delay notice survive: §7 requires them
+    # wherever a Gloomberb value is rendered. ``source_url`` is the optional
+    # deep link dropped first when the full block cannot fit.
+    assert rendered["attribution"] == _ATTRIBUTION
+    assert rendered["delay_notice"] == _DELAY_NOTICE
+    assert "source_url" not in rendered
+    # The payload itself fit, so nothing was replaced by a preview.
+    assert "truncated" not in rendered
+
+
+@pytest.mark.unit
+def test_pathological_attribution_block_is_dropped_before_the_cap_is_exceeded() -> None:
+    """A §7 block larger than the cap must be trimmed, never exceed the cap.
+
+    Regression for the review's LOW: a 20k ``source_url`` left the pre-fix
+    record at 22,258 chars with no ``truncated`` flag (or, on the truncation
+    path, emptied the preview and broke the shrink loop at 20,170).
+    """
+    raw = {
+        "nested": {
+            "attribution": _ATTRIBUTION,
+            "delay_notice": _DELAY_NOTICE,
+            "source_url": _SOURCE_URL + "A" * 20_000,
+        }
+    }
+    rendered = _render_clipped_tool_result(raw)
+    assert len(json.dumps(rendered)) <= _MAX_TOOL_RESULT_CHARS
+    assert rendered["attribution"] == _ATTRIBUTION
+    assert rendered["delay_notice"] == _DELAY_NOTICE
+    assert "source_url" not in rendered
+
+
+@pytest.mark.unit
+def test_pathological_attribution_block_with_oversized_payload_keeps_cap() -> None:
+    """The truncation path must also shed an oversized §7 block to stay capped."""
+    raw = {
+        "rows": ["row-" + "x" * 400 for _ in range(50)],
+        "nested": {
+            "attribution": _ATTRIBUTION,
+            "delay_notice": _DELAY_NOTICE,
+            "source_url": _SOURCE_URL + "A" * 20_000,
+        },
+    }
+    rendered = _render_clipped_tool_result(raw)
+    assert len(json.dumps(rendered)) <= _MAX_TOOL_RESULT_CHARS
+    assert rendered["truncated"] is True
+    assert rendered["attribution"] == _ATTRIBUTION
+    assert rendered["delay_notice"] == _DELAY_NOTICE
+    assert "source_url" not in rendered
+
+
+@pytest.mark.unit
+def test_attribution_block_larger_than_the_cap_is_dropped_entirely() -> None:
+    """When even the canonical string cannot fit, emit a capped preview record."""
+    raw = {"rows": ["row-" + "x" * 400 for _ in range(50)], "attribution": "A" * 20_000}
+    rendered = _render_clipped_tool_result(raw)
+    assert len(json.dumps(rendered)) <= _MAX_TOOL_RESULT_CHARS
+    assert rendered == {"truncated": True, "preview": "… [truncated]"}

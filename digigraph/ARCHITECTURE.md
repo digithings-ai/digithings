@@ -136,8 +136,11 @@ When `stream: true` in `POST /v1/chat/completions`:
      the MCP `{"ok": true, "text": …}` wrapper alike — because a string scalar is
      cut at 2,000 chars with no key structure left to read, and the digichat
      attribution line (#4130) reads them off the result object (#4131). The
-     truncated preview budget shrinks by the hoisted block and is enforced on the
-     re-serialized record so the 12_000-char cap is unchanged. The
+     12_000-char cap is enforced on the merged record unconditionally; when the
+     full block does not fit, `source_url` is dropped first, then
+     `delay_notice`, and the truncated preview budget shrinks by whatever
+     survives and is measured on the re-serialized record — so the emitted
+     record never exceeds the cap while looking untruncated. The
      `round_boundary` event marks the end of a digillm tool round: `round_idx` is the
      zero-based round number, and `narration` is the assistant text produced that round
      (with `stream_deltas`, content deltas were already emitted; without streaming,
