@@ -114,3 +114,117 @@ def test_route_forwards_domains(monkeypatch):
     assert seen["query"] == "hello"
     assert seen["kwargs"]["include_domains"] == ["example.com"]
     assert seen["kwargs"]["exclude_domains"] == ["bad.example"]
+
+
+# --- Paging (#4234): offset over one enlarged window, bounded by the EXA cap ----
+
+
+def _page_results(n: int) -> list[dict]:
+    return [{"title": f"t{i}", "url": f"https://example.com/{i}"} for i in range(1, n + 1)]
+
+
+def _patch_exa_post(monkeypatch, results: list[dict], seen: dict) -> None:
+    """Fake EXA POST honoring ``numResults`` (returns at most that many results)."""
+
+    class FakeResp:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return {"results": results[: seen["payload"]["numResults"]], "searchType": "auto"}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        seen["url"] = url
+        seen["payload"] = json
+        seen.setdefault("payloads", []).append(json)
+        return FakeResp()
+
+    monkeypatch.setattr(web_exa.httpx, "post", fake_post)
+
+
+def test_exa_max_results_is_the_pinned_cap():
+    """The cap is the 1-100 EXA bound pinned by monitors models (#4065 / R6)."""
+    assert web_exa.EXA_MAX_RESULTS == 100
+    from digisearch.monitors.models import Watch
+
+    bounds = Watch.model_fields["num_results"].metadata
+    assert web_exa.EXA_MAX_RESULTS in [getattr(m, "le", None) for m in bounds]
+
+
+def test_search_default_call_is_unchanged(monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    seen: dict = {}
+    _patch_exa_post(monkeypatch, _page_results(8), seen)
+    data = web_exa.exa_search("blog post about AI")
+    assert seen["payload"] == {
+        "query": "blog post about AI",
+        "type": "auto",
+        "numResults": 8,
+        "contents": {"highlights": {"query": "blog post about AI", "maxCharacters": 4000}},
+    }
+    assert [r["url"] for r in data.results] == [f"https://example.com/{i}" for i in range(1, 9)]
+
+
+def test_search_pages_offset_over_one_enlarged_window(monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    seen: dict = {}
+    _patch_exa_post(monkeypatch, _page_results(20), seen)
+    data = web_exa.exa_search("q", num_results=8, offset=8)
+    # EXA POST /search has no offset: the window is enlarged on the wire...
+    assert seen["payload"]["numResults"] == 16
+    assert "offset" not in seen["payload"]
+    # ...and the page is sliced client-side.
+    assert [r["url"] for r in data.results] == [f"https://example.com/{i}" for i in range(9, 17)]
+
+
+def test_search_page1_and_page2_are_deterministic_and_non_overlapping(monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    seen: dict = {}
+    _patch_exa_post(monkeypatch, _page_results(16), seen)
+    page1 = web_exa.exa_search("q", num_results=8, offset=0)
+    page2 = web_exa.exa_search("q", num_results=8, offset=8)
+    urls1 = [r["url"] for r in page1.results]
+    urls2 = [r["url"] for r in page2.results]
+    assert urls1 == [f"https://example.com/{i}" for i in range(1, 9)]
+    assert urls2 == [f"https://example.com/{i}" for i in range(9, 17)]
+    assert not set(urls1) & set(urls2)
+    assert [p["numResults"] for p in seen["payloads"]] == [8, 16]
+
+
+def test_search_window_clipped_by_cap_is_out_of_range(monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    seen: dict = {}
+    _patch_exa_post(monkeypatch, _page_results(100), seen)
+    with pytest.raises(web_exa.ExaPageOutOfRangeError, match="cap"):
+        web_exa.exa_search("q", num_results=8, offset=95)
+    # Never a silent truncated page, and never an unbounded scan.
+    assert "payloads" not in seen
+
+
+def test_search_offset_beyond_cap_is_out_of_range(monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    seen: dict = {}
+    _patch_exa_post(monkeypatch, _page_results(100), seen)
+    with pytest.raises(web_exa.ExaPageOutOfRangeError) as excinfo:
+        web_exa.exa_search("q", num_results=8, offset=100)
+    assert isinstance(excinfo.value, ValueError)  # existing callers catch ValueError
+    assert "100" in str(excinfo.value)
+    assert "payloads" not in seen
+
+
+def test_search_last_page_at_the_cap_is_reachable(monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    seen: dict = {}
+    _patch_exa_post(monkeypatch, _page_results(100), seen)
+    data = web_exa.exa_search("q", num_results=8, offset=92)
+    assert seen["payload"]["numResults"] == 100
+    assert [r["url"] for r in data.results] == [f"https://example.com/{i}" for i in range(93, 101)]
+
+
+def test_search_negative_offset_rejected(monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    seen: dict = {}
+    _patch_exa_post(monkeypatch, _page_results(8), seen)
+    with pytest.raises(ValueError, match="offset"):
+        web_exa.exa_search("q", offset=-1)
+    assert "payloads" not in seen
