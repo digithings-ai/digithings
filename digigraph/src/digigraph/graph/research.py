@@ -393,7 +393,6 @@ def _run_document_rag_path(
         extra_tool_names_for_servers,
         resolve_mcp_force_id,
     )
-    from digigraph.orchestration.registry import list_tool_names
 
     mcp_force = None
     if not resolve_force_tool(state.get("force_tool")):
@@ -401,11 +400,17 @@ def _run_document_rag_path(
     if mcp_servers:
         extra_names = extra_tool_names_for_servers(mcp_servers)
         disabled_extra = expand_mcp_disabled_tokens(state.get("disabled_tools"), extra_names)
-        live_extra = frozenset(n for n in extra_names if n not in disabled_extra)
-        if disabled_extra and context.allowed_tool_names is None:
-            context.allowed_tool_names = frozenset(list_tool_names()) | live_extra
-        elif live_extra and context.allowed_tool_names is not None:
-            context.allowed_tool_names = context.allowed_tool_names | live_extra
+        # policy owns the union: it subtracts disabled MCP tokens and gates the
+        # MCP-proxied web_search behind the same request opt-in as native
+        # web_search (#3420, #4223 review) — never re-implement either here.
+        from digigraph.tool_policy import apply_mcp_extra_tools
+
+        context.allowed_tool_names = apply_mcp_extra_tools(
+            context.allowed_tool_names,
+            frozenset(extra_names),
+            disabled_extra,
+            enable_web_search=bool(state.get("enable_web_search")),
+        )
     tools_for_llm = get_tools_for_skills(skill_ids, context)
     collected_stored: dict[str, dict] = {}
     collected_rag: list[dict] = []
