@@ -53,7 +53,8 @@ def test_entrypoint_guards_the_etc_hosts_write():
     ]
     assert writes, "expected the /etc/hosts alias write"
     for line in writes:
-        assert "||" in line, f"/etc/hosts write is unguarded: {line.strip()}"
+        guarded = "||" in line or line.lstrip().startswith("if ")
+        assert guarded, f"/etc/hosts write is unguarded: {line.strip()}"
 
 
 def test_a_failing_redirect_aborts_set_e_unless_guarded(tmp_path):
