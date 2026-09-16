@@ -1,13 +1,17 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { isToolUIPart, readUIMessageStream, type UIMessage, type UIMessageChunk } from "ai";
 import {
   createActivityWriteContext,
   finishStandardActivity,
   writeStandardActivity,
 } from "@/lib/ui-stream-parts";
-import { ToolFallback, formatToolDuration } from "./tool-fallback.aui";
+import {
+  ToolFallback,
+  ToolFallbackAttribution,
+  formatToolDuration,
+} from "./tool-fallback.aui";
 
 /** Feed the exact chunks the adapter emits for an orphaned tool row through the
  * AI SDK runtime conversion, as a real client does. */
@@ -122,5 +126,144 @@ describe("stock formatToolDuration", () => {
     expect(formatToolDuration(1000)).toBe("1.0s (1000ms)");
     expect(formatToolDuration(2300)).toBe("2.3s (2300ms)");
     expect(formatToolDuration(65000)).toBe("1m 5s (65000ms)");
+  });
+});
+
+describe("stock ToolFallbackAttribution", () => {
+  it("renders the source line, delay notice, and terminal deep link", () => {
+    render(
+      <ToolFallbackAttribution
+        result={{
+          result: {
+            attribution: "Sourced from Gloomberb",
+            delay_notice: "Data delayed up to 15 minutes",
+            source_url: "https://term.gloom.sh/?ticker=AAPL",
+          },
+          durationMs: 12,
+        }}
+      />,
+    );
+    expect(screen.getByText("Sourced from Gloomberb")).toBeTruthy();
+    expect(screen.getByText(/Data delayed up to 15 minutes/)).toBeTruthy();
+    const link = screen.getByRole("link", { name: /Open in Gloomberb/ });
+    expect(link.getAttribute("href")).toBe("https://term.gloom.sh/?ticker=AAPL");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  it("renders the source line without a link when no single listing was addressed", () => {
+    render(
+      <ToolFallbackAttribution
+        result={{
+          result: {
+            attribution: "Sourced from Gloomberb",
+            delay_notice: "Data delayed up to 15 minutes",
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText("Sourced from Gloomberb")).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("renders nothing for an unattributed tool result", () => {
+    const { container } = render(
+      <ToolFallbackAttribution
+        result={{ result: { rows: [{ symbol: "AAPL" }] }, durationMs: 4 }}
+      />,
+    );
+    expect(
+      container.querySelector('[data-slot="tool-fallback-attribution"]'),
+    ).toBeNull();
+  });
+
+  it("renders nothing for a digigraph-clipped payload (#4131)", () => {
+    const { container } = render(
+      <ToolFallbackAttribution
+        result={{
+          result: {
+            truncated: true,
+            preview: '{"data":{"attribution":"Sourced fr… [truncated]',
+          },
+        }}
+      />,
+    );
+    expect(
+      container.querySelector('[data-slot="tool-fallback-attribution"]'),
+    ).toBeNull();
+  });
+
+  it("reads a JSON-string result envelope", () => {
+    render(
+      <ToolFallbackAttribution
+        result={{
+          result: JSON.stringify({
+            attribution: "Sourced from Gloomberb",
+            delay_notice: "Data delayed up to 15 minutes",
+            source_url: "https://term.gloom.sh/?ticker=BTC-USD",
+          }),
+        }}
+      />,
+    );
+    const link = screen.getByRole("link", { name: /Open in Gloomberb/ });
+    expect(link.getAttribute("href")).toBe(
+      "https://term.gloom.sh/?ticker=BTC-USD",
+    );
+  });
+});
+
+describe("stock ToolFallback attribution wiring", () => {
+  function renderCompleted(result: unknown, toolName = "digifetch_quote") {
+    return render(
+      <ToolFallback
+        type="tool-call"
+        toolCallId="t-g1"
+        toolName={toolName}
+        args={{ symbol: "AAPL" }}
+        argsText='{"symbol":"AAPL"}'
+        result={result}
+        status={{ type: "complete" }}
+        addResult={() => undefined}
+        resume={() => undefined}
+        respondToApproval={async () => undefined}
+      />,
+    );
+  }
+
+  it("credits Gloomberb under the expanded Result pane", () => {
+    renderCompleted({
+      result: {
+        attribution: "Sourced from Gloomberb",
+        delay_notice: "Data delayed up to 15 minutes",
+        source_url: "https://term.gloom.sh/?ticker=AAPL",
+      },
+      durationMs: 12,
+    });
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("Sourced from Gloomberb")).toBeTruthy();
+    const link = screen.getByRole("link", { name: /Open in Gloomberb/ });
+    expect(link.getAttribute("href")).toBe("https://term.gloom.sh/?ticker=AAPL");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  it("keeps the expanded Result pane unchanged for a clipped payload", () => {
+    renderCompleted({
+      result: { truncated: true, preview: '{"data":{' },
+      durationMs: 12,
+    });
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("Result:")).toBeTruthy();
+    expect(screen.queryByText("Sourced from Gloomberb")).toBeNull();
+  });
+
+  it("keeps the expanded Result pane unchanged for an unattributed payload", () => {
+    renderCompleted(
+      { result: { rows: [{ symbol: "AAPL" }] }, durationMs: 12 },
+      "digifetch_earnings_calendar",
+    );
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("Result:")).toBeTruthy();
+    expect(screen.queryByText("Sourced from Gloomberb")).toBeNull();
   });
 });

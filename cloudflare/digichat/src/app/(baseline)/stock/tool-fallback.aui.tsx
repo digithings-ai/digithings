@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { toolRowTitle } from "@/lib/adapters/digithings/activity/tool-display";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
+import { readGloomberbAttribution } from "@digithings/web";
 
 const ANIMATION_DURATION = 200;
 
@@ -311,6 +312,41 @@ function ToolFallbackResult({
       <pre className="aui-tool-fallback-result-content bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs whitespace-pre-wrap">
         {formatJsonDump(result)}
       </pre>
+    </div>
+  );
+}
+
+function ToolFallbackAttribution({
+  result,
+  className,
+  ...props
+}: React.ComponentProps<"div"> & {
+  result?: unknown;
+}) {
+  const attribution = readGloomberbAttribution(result);
+  if (!attribution) return null;
+
+  return (
+    <div
+      data-slot="tool-fallback-attribution"
+      className={cn(
+        "aui-tool-fallback-attribution text-muted-foreground flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs",
+        className,
+      )}
+      {...props}
+    >
+      <span>{attribution.attribution}</span>
+      {attribution.delayNotice ? <span>· {attribution.delayNotice}</span> : null}
+      {attribution.sourceUrl ? (
+        <a
+          href={attribution.sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="aui-tool-fallback-attribution-link text-foreground/90 underline-offset-2 hover:underline"
+        >
+          Open in Gloomberb
+        </a>
+      ) : null}
     </div>
   );
 }
@@ -761,7 +797,10 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
           />
         )}
         {!isCancelled && !isErrorStatus && (
-          <ToolFallbackResult result={result} />
+          <>
+            <ToolFallbackResult result={result} />
+            <ToolFallbackAttribution result={result} />
+          </>
         )}
       </ToolFallbackContent>
     </ToolFallbackRoot>
@@ -798,4 +837,5 @@ export {
   ToolFallbackResult,
   ToolFallbackError,
   ToolFallbackApproval,
+  ToolFallbackAttribution,
 };

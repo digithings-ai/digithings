@@ -80,6 +80,8 @@ __all__ = [
     "TickerTweetsInput",
     "TweetSearchInput",
     "VenuesInput",
+    # coverage expansion (#4110 phase 4a)
+    "SavedSearchesInput",
     "ScreenerInput",
     "ThirteenFFundsInput",
     "ThirteenFHoldingsInput",
@@ -144,10 +146,14 @@ __all__ = [
     "CongressTrade",
     "CongressTradesResult",
     "Transcript",
+    "TranscriptId",
     "TranscriptsResult",
     # coverage expansion (#4110 phase 2)
     "StatementRow",
     "StatementsResult",
+    # coverage expansion (#4110 phase 4a)
+    "SavedSearch",
+    "SavedSearchesResult",
     "TweetAuthor",
     "TweetMetrics",
     "Tweet",
@@ -217,6 +223,8 @@ __all__ = [
     "StatementsEnvelope",
     "TweetsEnvelope",
     "VenuesEnvelope",
+    # coverage expansion (#4110 phase 4a)
+    "SavedSearchesEnvelope",
     "ScreenerEnvelope",
     "Funds13FEnvelope",
     "Holdings13FEnvelope",
@@ -608,9 +616,30 @@ class CongressTradesInput(_InputModel):
     limit: int = Field(default=50, ge=1, le=200)
 
 
+#: One transcript id from a `digifetch_transcripts` list row
+#: (`/cloud/transcripts/{id}`; probe-pending shape, so the bound is generous).
+TranscriptId = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+]
+
+
 class TranscriptsInput(_InputModel):
-    ticker: Symbol
+    """List one ticker's calls, or fetch one call by id (exactly one target).
+
+    `ticker` selects ``GET /cloud/transcripts``; `transcript_id` (from a list
+    row) selects ``GET /cloud/transcripts/{id}``. Both routes are session-gated
+    and require a Gloomberb Pro plan.
+    """
+
+    ticker: Symbol | None = None
+    transcript_id: TranscriptId | None = None
     limit: int = Field(default=20, ge=1, le=100)
+
+    @model_validator(mode="after")
+    def _exactly_one_target(self) -> "TranscriptsInput":
+        if (self.ticker is None) == (self.transcript_id is None):
+            raise ValueError("provide exactly one of ticker or transcript_id")
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -643,6 +672,10 @@ class TweetSearchInput(_InputModel):
 
 class VenuesInput(_InputModel):
     """The Cloud venues route takes no parameters."""
+
+
+class SavedSearchesInput(_InputModel):
+    """The Cloud saved-searches route takes no parameters."""
 
 
 class ScreenerInput(_InputModel):
@@ -1508,6 +1541,25 @@ class VenuesResult(_CamelModel):
     venues: list[Venue] = Field(default_factory=list)
 
 
+class SavedSearch(_CamelModel):
+    """One saved-search row from ``/cloud/search/saved`` (shape probe-pending).
+
+    The live row shape is unverified (the probed session returned an empty
+    list); the common fields are typed optionally and unknown fields stay
+    extras until a probe records the payload.
+    """
+
+    id: str | int | None = None
+    name: str | None = None
+    query: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class SavedSearchesResult(_CamelModel):
+    searches: list[SavedSearch] = Field(default_factory=list)
+
+
 class ScreenerRow(_CamelModel):
     """One screener row.
 
@@ -1990,6 +2042,7 @@ TranscriptsEnvelope = DigifetchEnvelope[TranscriptsResult]
 StatementsEnvelope = DigifetchEnvelope[StatementsResult]
 TweetsEnvelope = DigifetchEnvelope[TweetsResult]
 VenuesEnvelope = DigifetchEnvelope[VenuesResult]
+SavedSearchesEnvelope = DigifetchEnvelope[SavedSearchesResult]
 ScreenerEnvelope = DigifetchEnvelope[ScreenerResult]
 Funds13FEnvelope = DigifetchEnvelope[Funds13FResult]
 Holdings13FEnvelope = DigifetchEnvelope[Holdings13FResult]

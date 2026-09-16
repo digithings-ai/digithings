@@ -482,19 +482,40 @@ new tool in each surface.
 
 ---
 
-## 11. Open questions
+## 11. Probe record and open questions
 
-1. **Transcripts detail payload shape** — does `/cloud/transcripts/{id}` return
-   the full transcript text (sections/segments), a wrapped
-   `{transcript: {...}}`, or the same list-row shape? Task 1 probe decides; the
-   plan's permissive model tolerates all three.
-2. **Saved searches semantics** — "saved searches" (definitions) vs "saved
-   search results"? The name and the issue's parenthetical suggest definitions;
-   the probe freezes it. If it turns out to be results, rename to
-   `digifetch_saved_search_results` in the spec amendment.
-3. **Pro gating of `/cloud/search/saved`** — unknown until probed (affects the
-   entitlement row only).
-4. **Phase 4b worth** — whether any composition pane is worth building as an
+### 11.1 Task 1 probe record (2026-09-16, `api.gloom.sh`)
+
+Recorded from the plan's Task 1 live probes. The only cookie available was a
+**free (non-Pro) session**; the value was never echoed or committed.
+
+| Route | Status | Observed shape | Gate | Verdict |
+|---|---|---|---|---|
+| `GET /cloud/transcripts?ticker=AAPL&limit=1` | `402`, `text/plain` | body `Pro plan required` (not JSON) | Pro | free session cannot list; no id to fetch |
+| `GET /cloud/transcripts/{id}` (dummy id) | `402`, `text/plain` | body `Pro plan required` (not JSON) | Pro | Pro gate answers before id validation |
+| `GET /cloud/search/saved` (session) | `200`, `application/json` | `{"searches": []}` — wrapped under `searches`; rows unobservable (empty list) | session | **Go** — envelope key confirmed |
+| `GET /cloud/search/saved` (no cookie) | `401`, `application/json` | `{"message": "Unauthorized"}` | session | maps to typed `auth_required` |
+
+**Go/no-go: GO.** Both routes exist and neither answered `404`/`405`/absent, so
+Tasks 2-5 proceed. Consequences for §4/§6:
+
+- **Transcripts detail shape is probe-pending** (free session; Pro-account probe
+  outstanding). Both the wrapped `{transcript: {...}}` and bare-object forms
+  stay supported, all row fields stay optional, extras are preserved, and the
+  id stays `str | int` permissive (§4.2 probe-first rule — no tightening).
+- **`/cloud/search/saved` is session-gated, not Pro** — §4/§6 keep the
+  `session` entitlement. The live envelope key is `searches`; the normalizer's
+  `saved` fallback is retained as an unverified variant.
+- **Saved-search row fields are probe-pending** (the live list was empty);
+  `SavedSearch` stays permissive with unknown fields preserved.
+
+### 11.2 Open questions
+
+1. **Phase 4b worth** — whether any composition pane is worth building as an
    agent-side helper; deferred to that phase's spec, not answered here.
-5. **Pipeline subsets** — should `digifetch_saved_searches` ever join a
+2. **Pipeline subsets** — should `digifetch_saved_searches` ever join a
    curated subset? D4 says no for now; revisit if a pipeline use case appears.
+3. **Pro-account re-probe** — a Pro session should re-record the transcripts
+   list and detail payloads and may then tighten the permissive transcript wire
+   types (per the §5 "no tightening without a probe" rule). Tracked with the
+   post-deploy verification of #4101, not blocking phase 4a.
