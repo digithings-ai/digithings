@@ -13,13 +13,15 @@ export type CrossLink =
   | { kind: 'currency'; currency: string }
   | { kind: 'brief'; sourceFile: string; runDate: string | null }
   | { kind: 'event'; eventName: string | null; externalId?: string | null }
-  | { kind: 'tab'; tab: TwelveXTab };
+  | { kind: 'tab'; tab: TwelveXTab }
+  | { kind: 'ideas' };
 
 /** Shared workspace plumbing every tab can reach via `useTwelveX()`. */
 export interface TwelveXContextValue {
   runDate: string | null;
   crossLink: (l: CrossLink) => void;
   openBrief: (sourceFile: string, runDate: string | null) => void;
+  openIdea: (runDate: string, rank: number) => void;
   watchlist: WatchlistApi;
 }
 

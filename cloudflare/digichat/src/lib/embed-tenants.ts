@@ -129,7 +129,15 @@ export type EmbedTenantConfig = {
    * as ids/labels only.
    */
   mcp?: {
-    servers: Array<{ id: string; url: string; label?: string; default?: boolean }>;
+    servers: Array<{
+      id: string;
+      url: string;
+      label?: string;
+      default?: boolean;
+      token?: string;
+      tokenEnv?: string;
+      authHeader?: string;
+    }>;
     allowUserServers?: boolean;
     allowAddForm?: boolean;
   };
@@ -423,11 +431,25 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       if (server.default !== undefined && typeof server.default !== "boolean") {
         throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].default must be a boolean`);
       }
+      if (server.token !== undefined && typeof server.token !== "string") {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].token must be a string`);
+      }
+      if (server.tokenEnv !== undefined && typeof server.tokenEnv !== "string") {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].tokenEnv must be a string`);
+      }
+      if (server.authHeader !== undefined && typeof server.authHeader !== "string") {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].authHeader must be a string`,
+        );
+      }
       return {
         id: server.id,
         url: server.url,
         ...(typeof server.label === "string" ? { label: server.label } : {}),
         ...(typeof server.default === "boolean" ? { default: server.default } : {}),
+        ...(typeof server.token === "string" ? { token: server.token } : {}),
+        ...(typeof server.tokenEnv === "string" ? { tokenEnv: server.tokenEnv } : {}),
+        ...(typeof server.authHeader === "string" ? { authHeader: server.authHeader } : {}),
       };
     });
     const rawMcpRecord = rawMcp as Record<string, unknown>;

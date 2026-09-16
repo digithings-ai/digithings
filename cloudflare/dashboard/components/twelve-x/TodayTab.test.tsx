@@ -303,4 +303,15 @@ describe('TodayTab layout (Task 2.2)', () => {
     expect(html).not.toContain('data-track-record-link');
     expect(html).not.toContain('Full track record');
   });
+
+  it('links the macro timeline header to the Gloomberb terminal root (#4193)', () => {
+    const html = render();
+    expect(html).toContain('data-testid="gloomberb-terminal-link-timeline"');
+    expect(html).toContain('href="https://term.gloom.sh/"');
+    const anchor = html.match(/<a[^>]*data-testid="gloomberb-terminal-link-timeline"[^>]*>/)?.[0] ?? '';
+    expect(anchor).toContain('target="_blank"');
+    expect(anchor).toContain('rel="noopener noreferrer"');
+    // No invented macro deeplink — the terminal has no stable macro query form.
+    expect(anchor).not.toContain('?');
+  });
 });

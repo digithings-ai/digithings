@@ -119,6 +119,38 @@ describe('AllocationsPositionsTable', () => {
     expect(html).not.toContain('Decision');
   });
 
+  // #4193 — the external shortcut rides beside the symbol; the internal dossier
+  // arrow stays the row's in-app follow-through.
+  it('deep-links every holding out to the Gloomberb terminal', () => {
+    const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
+      reconciliation: recon([pos({ ticker: 'NVDA' })]),
+    }));
+    expect(html).toContain('data-testid="gloomberb-link-NVDA"');
+    expect(html).toContain('href="https://term.gloom.sh/?ticker=NVDA"');
+    const anchor = html.match(/<a[^>]*data-testid="gloomberb-link-NVDA"[^>]*>/)?.[0] ?? '';
+    expect(anchor).toContain('target="_blank"');
+    expect(anchor).toContain('rel="noopener noreferrer"');
+    expect(anchor).toContain('aria-label="Open NVDA in Gloomberb (opens in a new tab)"');
+  });
+
+  it('uppercases a lowercase book ticker in its Gloomberb deep link', () => {
+    const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
+      reconciliation: recon([pos({ ticker: 'Nvda' })]),
+    }));
+    expect(html).toContain('data-testid="gloomberb-link-NVDA"');
+    expect(html).toContain('href="https://term.gloom.sh/?ticker=NVDA"');
+  });
+
+  // A blank symbol must not render an anchor: `?ticker=` makes the terminal fall
+  // back to its default listing, which would read as this row's ticker.
+  it('renders no Gloomberb link when the ticker is blank', () => {
+    const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
+      reconciliation: recon([pos({ ticker: '   ' })]),
+    }));
+    expect(html).not.toContain('gloomberb-link');
+    expect(html).not.toContain('term.gloom.sh');
+  });
+
   it('uses no off-palette blue/purple literals', () => {
     const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
       reconciliation: recon([pos({})]),

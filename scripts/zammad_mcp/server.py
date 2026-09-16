@@ -102,8 +102,18 @@ def run_mcp(
     mcp.settings.port = port
     extra_hosts = _allowed_host_patterns(os.environ.get("ZAMMAD_MCP_ALLOWED_HOSTS", ""))
     if extra_hosts:
-        allowed = mcp.settings.transport_security.allowed_hosts
-        allowed.extend(pattern for pattern in extra_hosts if pattern not in allowed)
+        # Older mcp builds (the stack image resolves 1.9.x) have no
+        # transport_security on Settings; host allowlisting then just
+        # stays unavailable instead of crashing the program.
+        security = getattr(mcp.settings, "transport_security", None)
+        if security is not None:
+            allowed = security.allowed_hosts
+            allowed.extend(pattern for pattern in extra_hosts if pattern not in allowed)
+        else:
+            logger.warning(
+                "ZAMMAD_MCP_ALLOWED_HOSTS is set but this mcp version has no "
+                "transport_security; host allowlisting is unavailable"
+            )
     mcp.run(transport=transport)
 
 

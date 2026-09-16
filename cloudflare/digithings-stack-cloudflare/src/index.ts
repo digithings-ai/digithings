@@ -13,8 +13,9 @@
  *   /healthz            → digigraph
  *   /_stack/key/*       → digikey (strip prefix)
  *
- * (No /_stack/mcp/* forwarder — unauthenticated MCP forwarding must not ship.
- * mcp.digithings.ai answers only once its route is enabled behind the JWT gate.)
+ * /_stack/mcp/zammad/* → zammad-mcp :8770 (secret-gated edge path; requires the
+ * x-digi-mcp-key header matching MCP_EDGE_KEY — fail-closed 401 otherwise).
+ * mcp.digithings.ai stays reserved and answers only behind its JWT gate.)
  *
  * digivault / LiteLLM are loopback-only inside the Container. digisearch binds
  * 0.0.0.0:8002 (container/start_digisearch.sh) so the Worker can reach it at the
@@ -248,6 +249,7 @@ export interface Env {
   LITELLM_PROXY_API_KEY?: string;
   LITELLM_MASTER_KEY?: string;
   ZAMMAD_API_TOKEN?: string;
+  MCP_EDGE_KEY?: string;
   DIGIQUANT_MCP_SCOPE?: string;
   DIGIQUANT_MARKET_DATA_BACKEND?: string;
   FRED_API_KEY?: string;
@@ -262,6 +264,9 @@ export interface Env {
   MARKET_DATA: R2Bucket;
   MARKET_DATA_ALLOWED_ORIGINS?: string;
 }
+
+const ZAMMAD_MCP_PORT = 8770;
+const ZAMMAD_MCP_PUBLIC_PATH = "/_stack/mcp/zammad";
 
 function rewriteKeyStackPath(request: Request): Request {
   const url = new URL(request.url);
@@ -290,6 +295,32 @@ export default {
     if (url.pathname === "/_stack/key" || url.pathname.startsWith("/_stack/key/")) {
       const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
       return container.fetch(switchPort(rewriteKeyStackPath(request), DIGIKEY_PORT));
+    }
+
+    // Read-only Zammad MCP for the OCC embed, reached over a secret-gated edge
+    // path. The container-internal `zammad-mcp` name cannot be resolved in the
+    // Cloudflare runtime (/etc/hosts is read-only, so the entrypoint alias is
+    // skipped), so digraph dials this public HTTPS path instead; the embed
+    // tenant entry carries the matching x-digi-mcp-key (#3841 authHeader).
+    // Fail closed: no secret configured -> 401.
+    if (
+      url.pathname === ZAMMAD_MCP_PUBLIC_PATH ||
+      url.pathname.startsWith(`${ZAMMAD_MCP_PUBLIC_PATH}/`)
+    ) {
+      const expected = workerEnv.MCP_EDGE_KEY?.trim();
+      const provided = request.headers.get("x-digi-mcp-key")?.trim();
+      if (!expected || !provided || provided !== expected) {
+        return new Response("digithings-stack: unauthorized", { status: 401 });
+      }
+      let stripped = url.pathname.slice(ZAMMAD_MCP_PUBLIC_PATH.length) || "/";
+      if (!stripped.endsWith("/")) {
+        stripped += "/";
+      }
+      const target = new URL(url.toString());
+      target.pathname = stripped;
+      const forwarded = new Request(target.toString(), request);
+      const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+      return container.fetch(switchPort(forwarded, ZAMMAD_MCP_PORT));
     }
 
     // Read-only R2 market data (#4013 Task 8): public JSON for browser surfaces
