@@ -15,6 +15,7 @@ import pytest
 from click.testing import CliRunner
 from digiquant.cli.prices import (
     compute_technicals_cmd,
+    fetch_fx_intraday_cmd,
     fetch_macro_cmd,
     fetch_quotes_cmd,
     recompute_technicals_cmd,
@@ -383,3 +384,77 @@ def test_supabase_writers_stay_active_by_default(tmp_path, monkeypatch) -> None:
             recompute_technicals_cmd, ["--tickers", "SPY", "--dry-run", "--as-of", "2026-03-01"]
         )
     assert result.exit_code == 0, result.output
+
+
+# ─── fetch-fx-intraday (twelve-x grading candles) ─────────────────────────
+
+_FETCH_INTRADAY = "digiquant.data.prices.macro_ingest.fetch_fx_intraday"
+
+
+def _fake_candles():
+    from datetime import UTC, datetime
+
+    from digiquant.data.prices.macro_ingest import CandleObservation
+
+    return [
+        CandleObservation(
+            series_id="FX/EUR",
+            ts=datetime(2025, 4, 1, 13, tzinfo=UTC),
+            open=1.08,
+            high=1.10,
+            low=1.07,
+            close=1.09,
+        ),
+        CandleObservation(
+            series_id="FX/EUR",
+            ts=datetime(2025, 4, 1, 14, tzinfo=UTC),
+            open=1.09,
+            high=1.11,
+            low=1.08,
+            close=1.10,
+        ),
+    ]
+
+
+def test_fetch_fx_intraday_dry_run_summarizes_without_credentials() -> None:
+    with patch(_FETCH_INTRADAY, return_value=_fake_candles()):
+        result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--dry-run"])
+
+    assert result.exit_code == 0, result.output
+    assert "fx intraday: 2 candles" in result.output
+    assert '"FX/EUR": 2' in result.output
+
+
+def test_fetch_fx_intraday_upserts_candles_as_rows() -> None:
+    with (
+        patch(_FETCH_INTRADAY, return_value=_fake_candles()),
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(f"{_WRITER}.upsert_fx_intraday_observations", return_value=Mock(rows=2)) as upsert,
+    ):
+        result = CliRunner().invoke(
+            fetch_fx_intraday_cmd, ["--supabase", "--interval", "30m", "--period", "60d"]
+        )
+
+    assert result.exit_code == 0, result.output
+    assert "upserted 2 rows into fx_intraday_observations" in result.output
+    rows = upsert.call_args.args[1]
+    assert rows[0] == {
+        "source": "yahoo",
+        "series_id": "FX/EUR",
+        "ts": "2025-04-01T13:00:00+00:00",
+        "open": 1.08,
+        "high": 1.10,
+        "low": 1.07,
+        "close": 1.09,
+    }
+
+
+def test_fetch_fx_intraday_requires_credentials() -> None:
+    with (
+        patch(_FETCH_INTRADAY, return_value=_fake_candles()),
+        patch(f"{_WRITER}.build_supabase_client", return_value=None),
+    ):
+        result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--supabase"])
+
+    assert result.exit_code != 0
+    assert "Supabase credentials not set" in result.output

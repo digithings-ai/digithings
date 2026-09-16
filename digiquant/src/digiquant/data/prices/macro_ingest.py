@@ -9,7 +9,11 @@ The default daily pipeline pulls FRED + Yahoo FX (:func:`fetch_fx_yahoo`).
 Frankfurter FX and crypto Fear & Greed were dropped as default sources in
 issue #328 and their fetchers removed in the deslop pass (WS4b).
 
-Each fetcher returns a list of row dicts matching the
+:func:`fetch_fx_intraday` pulls Yahoo intraday OHLC candles for the separate
+``fx_intraday_observations`` table (twelve-x trade grading); its series ids
+match the daily convention exactly.
+
+Each daily fetcher returns a list of row dicts matching the
 ``macro_series_observations`` Supabase schema exactly:
 
     {"source": str, "series_id": str, "obs_date": "YYYY-MM-DD",
@@ -23,6 +27,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from math import isfinite
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -77,6 +82,24 @@ class MacroObservation(TypedDict, total=False):
     value: float
     unit: str | None
     meta: MacroObservationMeta | None
+
+
+@dataclass(frozen=True)
+class CandleObservation:
+    """One ``fx_intraday_observations`` row (intraday OHLC candle).
+
+    ``ts`` is the candle OPEN instant in UTC — yfinance indexes intraday bars
+    by their start. ``series_id`` reuses the daily ``FX/<CUR>`` ids so both
+    tables join on it, and the OHLC values stay in Yahoo's native quote
+    direction per pair (see :data:`YAHOO_FX_DEFAULT`).
+    """
+
+    series_id: str
+    ts: datetime
+    open: float
+    high: float
+    low: float
+    close: float
 
 
 @dataclass(frozen=True)
@@ -293,17 +316,57 @@ YAHOO_FX_DEFAULT: dict[str, dict[str, str]] = {
 }
 
 
+def _finite_float(value: Any) -> float | None:
+    """Coerce ``value`` to a finite float, or ``None`` when it cannot be one.
+
+    ``None`` covers missing (``None``/empty), non-numeric, NaN and ±inf — the
+    shapes yfinance emits for holidays, halts and the trailing partial candle.
+    """
+    try:
+        fval = float(value)
+    except (TypeError, ValueError):
+        return None
+    return fval if isfinite(fval) else None
+
+
+def _utc_datetime(value: Any) -> datetime | None:
+    """Coerce a frame timestamp to a tz-aware UTC datetime.
+
+    Naive timestamps are stamped UTC (yfinance's intraday index carries no
+    exchange ambiguity for FX); aware ones are converted. Non-parseable values
+    return ``None`` so callers can skip the row instead of raising.
+    """
+    try:
+        if hasattr(value, "to_pydatetime"):  # pandas Timestamp
+            dt = value.to_pydatetime()
+        elif isinstance(value, datetime):
+            dt = value
+        else:
+            dt = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
 def _yahoo_fx_download(
     yahoo_symbols: list[str],
     *,
-    start: str | None,
-    end: str | None,
+    start: str | None = None,
+    end: str | None = None,
+    interval: str | None = None,
+    period: str | None = None,
+    ohlc: bool = False,
 ):
     """Boundary helper: call yfinance and return a long-format Polars frame.
 
-    Returns a ``pl.DataFrame`` with columns ``(obs_date, yahoo_symbol, close)``,
-    NaN closes already filtered. Split out so tests can monkeypatch this one
-    seam without leaking pandas anywhere into the test surface.
+    The daily path (``ohlc=False``) returns columns ``(obs_date, yahoo_symbol,
+    close)``, NaN closes already filtered. The intraday path (``ohlc=True``,
+    driven by ``interval``/``period``) returns ``(ts, yahoo_symbol, open, high,
+    low, close)`` with rows missing any OHLC value filtered and ``ts`` a
+    tz-aware UTC datetime. Split out so tests can monkeypatch this one seam
+    without leaking pandas anywhere into the test surface.
 
     We deliberately do not reuse :func:`_retrying_session` — yfinance manages
     its own HTTP session and retry semantics internally.
@@ -311,17 +374,32 @@ def _yahoo_fx_download(
     import polars as pl
     import yfinance as yf  # type: ignore[import-not-found]
 
-    empty = pl.DataFrame(
-        schema={"obs_date": pl.String, "yahoo_symbol": pl.String, "close": pl.Float64}
+    empty_schema = (
+        {
+            "ts": pl.Datetime("us", "UTC"),
+            "yahoo_symbol": pl.String,
+            "open": pl.Float64,
+            "high": pl.Float64,
+            "low": pl.Float64,
+            "close": pl.Float64,
+        }
+        if ohlc
+        else {"obs_date": pl.String, "yahoo_symbol": pl.String, "close": pl.Float64}
     )
     kwargs: dict[str, Any] = {"progress": False, "threads": True, "auto_adjust": False}
     if start:
         kwargs["start"] = start
     if end:
         kwargs["end"] = end
+    if interval:
+        kwargs["interval"] = interval
+    if period:
+        kwargs["period"] = period
     raw = yf.download(yahoo_symbols, **kwargs)
     if raw is None or getattr(raw, "empty", True):
-        return empty
+        return pl.DataFrame(schema=empty_schema)
+    if ohlc:
+        return _yahoo_fx_candles_pandas_to_long(raw, yahoo_symbols)
     return _yahoo_fx_pandas_to_long(raw, yahoo_symbols)
 
 
@@ -359,6 +437,60 @@ def _yahoo_fx_pandas_to_long(raw, yahoo_symbols: list[str]):
     if not records:
         return pl.DataFrame(
             schema={"obs_date": pl.String, "yahoo_symbol": pl.String, "close": pl.Float64}
+        )
+    return pl.DataFrame(records)
+
+
+def _yahoo_fx_candles_pandas_to_long(raw, yahoo_symbols: list[str]):
+    """Convert yfinance's intraday pandas frame to a long-format OHLC frame.
+
+    Same multi-symbol/flat detection as :func:`_yahoo_fx_pandas_to_long`, but
+    keeps all four OHLC fields. The index is the candle OPEN time, normalized
+    to UTC by :func:`_utc_datetime`; a row is skipped when any OHLC value is
+    missing or non-finite (holidays, halts, and the trailing partial candle all
+    arrive that way). The emitted ``ts`` is a Python datetime; the payload
+    conversion step is what guarantees the candles handed to callers are
+    tz-aware UTC.
+    """
+    import polars as pl
+
+    flat = raw.reset_index()
+    cols = list(flat.columns)
+    # Detect multi-symbol layout by tuple-typed column labels.
+    is_multi = any(isinstance(c, tuple) for c in cols)
+    records: list[dict[str, Any]] = []
+    n_rows = len(flat)
+    for i in range(n_rows):
+        ts = _utc_datetime(flat.iloc[i, 0])
+        if ts is None:
+            continue
+        for sym in yahoo_symbols:
+            values: list[float | None] = []
+            for field in ("Open", "High", "Low", "Close"):
+                col = (field, sym) if is_multi else field
+                values.append(_finite_float(flat.iloc[i][col]) if col in cols else None)
+            if any(value is None for value in values):
+                continue
+            records.append(
+                {
+                    "ts": ts,
+                    "yahoo_symbol": sym,
+                    "open": values[0],
+                    "high": values[1],
+                    "low": values[2],
+                    "close": values[3],
+                }
+            )
+    if not records:
+        return pl.DataFrame(
+            schema={
+                "ts": pl.Datetime("us", "UTC"),
+                "yahoo_symbol": pl.String,
+                "open": pl.Float64,
+                "high": pl.Float64,
+                "low": pl.Float64,
+                "close": pl.Float64,
+            }
         )
     return pl.DataFrame(records)
 
@@ -436,6 +568,71 @@ def fetch_fx_yahoo(
     return list(latest.values())
 
 
+def fx_intraday_payload_to_candles(
+    payload,
+    yahoo_to_series: dict[str, dict[str, str]],
+) -> list[CandleObservation]:
+    """Convert a long-format OHLC frame into :class:`CandleObservation` rows.
+
+    ``payload`` is the ``pl.DataFrame`` returned by :func:`_yahoo_fx_download`
+    with ``ohlc=True`` — columns ``(ts, yahoo_symbol, open, high, low, close)``.
+    Timestamps are normalized to tz-aware UTC and rows with any missing or
+    non-finite OHLC value are dropped (defensive: the download seam already
+    filters them, but a hand-built payload must not poison the contract).
+    """
+    if payload is None or payload.is_empty():
+        return []
+    candles: list[CandleObservation] = []
+    for record in payload.iter_rows(named=True):
+        cfg = yahoo_to_series.get(record["yahoo_symbol"])
+        if cfg is None:
+            continue
+        ts = _utc_datetime(record["ts"])
+        if ts is None:
+            continue
+        open_, high, low, close = (
+            _finite_float(record[field]) for field in ("open", "high", "low", "close")
+        )
+        if open_ is None or high is None or low is None or close is None:
+            continue
+        candles.append(
+            CandleObservation(
+                series_id=cfg["series_id"],
+                ts=ts,
+                open=open_,
+                high=high,
+                low=low,
+                close=close,
+            )
+        )
+    return candles
+
+
+def fetch_fx_intraday(
+    *,
+    interval: str = "1h",
+    period: str = "730d",
+    symbols: dict[str, dict[str, str]] | None = None,
+) -> list[CandleObservation]:
+    """Fetch intraday FX candles from Yahoo Finance (``source="yahoo"``).
+
+    One batched yfinance download for ``symbols`` (defaults to
+    :data:`YAHOO_FX_DEFAULT`). ``interval``/``period`` are passed straight to
+    yfinance; ``1h`` bars cap at ``730d`` of history. Rows whose OHLC is
+    missing or non-finite are dropped, every ``ts`` is a tz-aware UTC
+    datetime, and ``series_id`` values match the daily :func:`fetch_fx_yahoo`
+    convention exactly so consumers can join the two tables on
+    ``(source, series_id)``.
+    """
+    yahoo_to_series = symbols or YAHOO_FX_DEFAULT
+    if not yahoo_to_series:
+        return []
+    payload = _yahoo_fx_download(
+        list(yahoo_to_series.keys()), interval=interval, period=period, ohlc=True
+    )
+    return fx_intraday_payload_to_candles(payload, yahoo_to_series)
+
+
 def dedupe_observation_rows(rows: list[MacroObservation]) -> list[MacroObservation]:
     """Last-wins per (source, series_id, obs_date) — matches the research helper."""
     out: dict[tuple[str, str, str], MacroObservation] = {}
@@ -452,6 +649,7 @@ def dedupe_observation_rows(rows: list[MacroObservation]) -> list[MacroObservati
 __all__ = [
     "FRED_OBS_URL",
     "YAHOO_FX_DEFAULT",
+    "CandleObservation",
     "FredRawObservation",
     "FredSeriesEntry",
     "MacroManifest",
@@ -460,7 +658,9 @@ __all__ = [
     "dedupe_observation_rows",
     "fetch_fred",
     "fetch_fred_series",
+    "fetch_fx_intraday",
     "fetch_fx_yahoo",
     "fred_observations_to_rows",
+    "fx_intraday_payload_to_candles",
     "yahoo_fx_payload_to_rows",
 ]

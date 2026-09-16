@@ -13,6 +13,7 @@ from digiquant.data.prices import TECHNICAL_COLUMNS
 from digiquant.data.prices.supabase_writer import (
     ohlcv_to_price_history_rows,
     technicals_to_rows,
+    upsert_fx_intraday_observations,
     upsert_instruments,
     upsert_macro_observations,
     upsert_price_history,
@@ -290,11 +291,50 @@ def test_upsert_macro_observations_uses_on_conflict() -> None:
 
 
 @pytest.mark.unit
+def test_upsert_fx_intraday_observations_uses_ts_conflict_key() -> None:
+    """Intraday candles upsert on (source, series_id, ts), not the daily key."""
+    captured: dict[str, Any] = {}
+
+    class _CaptureQuery(_FakeQuery):
+        def upsert(self, rows, on_conflict=None):
+            captured["on_conflict"] = on_conflict
+            return super().upsert(rows, on_conflict=on_conflict)
+
+    class _CaptureClient:
+        def __init__(self):
+            self.store: dict[str, list] = {}
+
+        def table(self, name):
+            captured["table"] = name
+            return _CaptureQuery(table_name=name, store=self.store)
+
+    client = _CaptureClient()
+    rows = [
+        {
+            "source": "yahoo",
+            "series_id": "FX/EUR",
+            "ts": "2025-04-01T13:00:00+00:00",
+            "open": 1.08,
+            "high": 1.10,
+            "low": 1.07,
+            "close": 1.09,
+        }
+    ]
+    res = upsert_fx_intraday_observations(client, rows)
+
+    assert res.rows == 1
+    assert res.table == "fx_intraday_observations"
+    assert captured["table"] == "fx_intraday_observations"
+    assert captured["on_conflict"] == "source,series_id,ts"
+
+
+@pytest.mark.unit
 def test_upsert_empty_rows_is_noop() -> None:
     client = FakeSupabaseClient()
     assert upsert_price_history(client, []).rows == 0
     assert upsert_price_technicals(client, []).rows == 0
     assert upsert_macro_observations(client, []).rows == 0
+    assert upsert_fx_intraday_observations(client, []).rows == 0
     assert client.store == {}
 
 

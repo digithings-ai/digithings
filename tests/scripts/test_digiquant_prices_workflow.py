@@ -43,16 +43,22 @@ def test_any_remaining_supabase_market_write_is_run_writers_gated() -> None:
     """No Supabase market write runs on cadence (#4053).
 
     The intraday fetch-quotes writer retired with the stripped job; the market
-    writers that remain (fx-refresh and the eod-macro fetch-macro step) are the
-    run_writers-gated paused remainder and must stay gated.
+    writers that remain (fx-refresh's fetch-macro + fetch-fx-intraday steps and
+    the eod-macro fetch-macro step) are the run_writers-gated paused remainder
+    and must stay gated.
 
     ``sync-calendar --supabase`` writes ``trading_calendar`` (not a market table)
     and stays on cadence — it is deliberately not matched here.
     """
     spec = _spec()
-    market_writers = ("fetch-macro", "fetch-quotes", "compute-technicals")
+    market_writers = (
+        "fetch-macro",
+        "fetch-fx-intraday",
+        "fetch-quotes",
+        "compute-technicals",
+    )
     for job_name, job in spec["jobs"].items():
-        # fx-refresh gates the whole job (its only step is the writer); the
+        # fx-refresh gates the whole job (both steps are writers); the
         # eod-macro fetch-macro step is gated at the step level.
         job_gated = "run_writers" in str(job.get("if", ""))
         for step in job.get("steps", []) or []:

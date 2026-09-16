@@ -10,8 +10,10 @@ from digiquant.data.prices.macro_ingest import (
     MacroManifest,
     dedupe_observation_rows,
     fetch_fred,
+    fetch_fx_intraday,
     fetch_fx_yahoo,
     fred_observations_to_rows,
+    fx_intraday_payload_to_candles,
     yahoo_fx_payload_to_rows,
 )
 
@@ -379,6 +381,182 @@ def test_fetch_fx_yahoo_does_not_collide_with_frankfurter_rows() -> None:
     assert len(deduped) == 2  # both survive — distinct sources
     sources = {r["source"] for r in deduped}
     assert sources == {"yahoo", "frankfurter"}
+
+
+# ─── Yahoo FX intraday candles (twelve-x turn grading) ─────────────────
+
+
+def _fake_yahoo_ohlc_frame():
+    """Long-format Polars frame matching `_yahoo_fx_download(ohlc=True)`'s
+    post-conversion contract: one row per (ts, symbol) with an OHLC quad.
+    The boundary helper is responsible for the pandas→Polars conversion, so
+    tests work with Polars only."""
+    from datetime import UTC, datetime
+
+    import polars as pl
+
+    rows = []
+    for hour in (13, 14):
+        for idx, sym in enumerate(YAHOO_FX_DEFAULT):
+            rows.append(
+                {
+                    "ts": datetime(2025, 4, 1, hour, tzinfo=UTC),
+                    "yahoo_symbol": sym,
+                    "open": 100.0 + idx,
+                    "high": 101.0 + idx,
+                    "low": 99.0 + idx,
+                    "close": 100.5 + idx,
+                }
+            )
+    return pl.DataFrame(rows)
+
+
+@pytest.mark.unit
+def test_fetch_fx_intraday_one_batched_download_defaults_to_1h_730d(monkeypatch) -> None:
+    import digiquant.data.prices.macro_ingest as mi
+
+    calls: list[dict] = []
+
+    def fake_download(yahoo_symbols, **kwargs):
+        calls.append({"symbols": list(yahoo_symbols), **kwargs})
+        return _fake_yahoo_ohlc_frame()
+
+    monkeypatch.setattr(mi, "_yahoo_fx_download", fake_download)
+    candles = fetch_fx_intraday()
+
+    # One HTTP call for all seven default pairs — not one per pair.
+    assert len(calls) == 1
+    assert set(calls[0]["symbols"]) == set(YAHOO_FX_DEFAULT)
+    assert calls[0]["interval"] == "1h"
+    assert calls[0]["period"] == "730d"
+    assert calls[0]["ohlc"] is True
+    # 7 pairs x 2 bars, ids matching the daily FX/<CUR> convention exactly.
+    assert len(candles) == 14
+    assert {c.series_id for c in candles} == {
+        "FX/EUR",
+        "FX/GBP",
+        "FX/JPY",
+        "FX/CAD",
+        "FX/AUD",
+        "FX/CHF",
+        "FX/NZD",
+    }
+    eur = next(c for c in candles if c.series_id == "FX/EUR" and c.ts.hour == 13)
+    assert eur.close == pytest.approx(100.5)
+    assert eur.open == pytest.approx(100.0)
+
+
+@pytest.mark.unit
+def test_fetch_fx_intraday_passes_interval_period_and_custom_symbols(monkeypatch) -> None:
+    import digiquant.data.prices.macro_ingest as mi
+
+    captured: dict = {}
+
+    def fake_download(yahoo_symbols, **kwargs):
+        captured.update({"symbols": list(yahoo_symbols), **kwargs})
+        return _fake_yahoo_ohlc_frame()
+
+    monkeypatch.setattr(mi, "_yahoo_fx_download", fake_download)
+    mapping = {"EURUSD=X": {"series_id": "FX/EUR", "quote_convention": "USD_per_EUR"}}
+    candles = fetch_fx_intraday(interval="30m", period="60d", symbols=mapping)
+
+    assert captured["symbols"] == ["EURUSD=X"]
+    assert captured["interval"] == "30m"
+    assert captured["period"] == "60d"
+    assert captured["ohlc"] is True
+    assert {c.series_id for c in candles} == {"FX/EUR"}
+
+
+@pytest.mark.unit
+def test_fetch_fx_intraday_timestamps_are_tz_aware_utc(monkeypatch) -> None:
+    """Naive frame timestamps are stamped UTC; offsets are converted to UTC."""
+    from datetime import timedelta
+
+    import digiquant.data.prices.macro_ingest as mi
+    import polars as pl
+
+    payload = pl.DataFrame(
+        {
+            "ts": ["2025-04-01T13:00:00", "2025-04-01T15:00:00+02:00"],
+            "yahoo_symbol": ["EURUSD=X", "EURUSD=X"],
+            "open": [1.08, 1.09],
+            "high": [1.10, 1.11],
+            "low": [1.07, 1.08],
+            "close": [1.09, 1.10],
+        }
+    )
+    monkeypatch.setattr(mi, "_yahoo_fx_download", lambda symbols, **kwargs: payload)
+    candles = fetch_fx_intraday()
+
+    assert len(candles) == 2
+    for candle in candles:
+        assert candle.ts.tzinfo is not None
+        assert candle.ts.utcoffset() == timedelta(0)
+    naive, offset = candles
+    assert naive.ts.hour == 13  # naive input is stamped UTC, not shifted
+    assert offset.ts.hour == 13  # 15:00+02:00 == 13:00 UTC
+
+
+@pytest.mark.unit
+def test_fx_intraday_payload_drops_missing_or_non_finite_ohlc() -> None:
+    """NaN, NULL and inf in any OHLC field drop the whole candle."""
+    import polars as pl
+
+    payload = pl.DataFrame(
+        {
+            "ts": ["2025-04-01T13:00:00+00:00"] * 4,
+            "yahoo_symbol": ["EURUSD=X"] * 4,
+            "open": [1.08, 1.08, 1.08, 1.08],
+            "high": [1.10, float("nan"), 1.10, 1.10],
+            "low": [1.07, 1.07, None, 1.07],
+            "close": [1.09, 1.09, 1.09, float("inf")],
+        }
+    )
+    candles = fx_intraday_payload_to_candles(payload, YAHOO_FX_DEFAULT)
+
+    assert len(candles) == 1
+    assert candles[0].series_id == "FX/EUR"
+
+
+@pytest.mark.unit
+def test_fetch_fx_intraday_skips_unmapped_symbols(monkeypatch) -> None:
+    import digiquant.data.prices.macro_ingest as mi
+    import polars as pl
+
+    payload = pl.DataFrame(
+        {
+            "ts": ["2025-04-01T13:00:00+00:00", "2025-04-01T13:00:00+00:00"],
+            "yahoo_symbol": ["EURUSD=X", "NOTAMAPPED=X"],
+            "open": [1.08, 1.0],
+            "high": [1.10, 1.1],
+            "low": [1.07, 0.9],
+            "close": [1.09, 1.0],
+        }
+    )
+    monkeypatch.setattr(mi, "_yahoo_fx_download", lambda symbols, **kwargs: payload)
+    candles = fetch_fx_intraday()
+
+    assert [c.series_id for c in candles] == ["FX/EUR"]
+
+
+@pytest.mark.unit
+def test_fetch_fx_intraday_handles_empty_payload(monkeypatch) -> None:
+    """Upstream returns an empty frame (weekend / blackout) → no candles, no crash."""
+    import digiquant.data.prices.macro_ingest as mi
+    import polars as pl
+
+    empty = pl.DataFrame(
+        schema={
+            "ts": pl.Datetime("us", "UTC"),
+            "yahoo_symbol": pl.String,
+            "open": pl.Float64,
+            "high": pl.Float64,
+            "low": pl.Float64,
+            "close": pl.Float64,
+        }
+    )
+    monkeypatch.setattr(mi, "_yahoo_fx_download", lambda symbols, **kwargs: empty)
+    assert fetch_fx_intraday() == []
 
 
 # ─── CLI default sources (issue #328 — fred,yahoo replaces fred,frankfurter,fng) ─
