@@ -927,6 +927,8 @@ def create_mcp_server(
         resolution: str,
         range: str | None = None,
         exchange: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
     ) -> str:
         """OHLCV bars for one listing (Gloomberb Cloud; JSON envelope).
 
@@ -934,6 +936,10 @@ def create_mcp_server(
         6M/1Y/5Y/ALL and is capped per resolution (5m→1wk, 15m→1mo, 1h→3mo,
         1d→5y default, 1wk→5y, 1mo→all-time). Out-of-contract requests return
         typed `invalid_input` - requests are rejected, never silently clamped.
+        `start_date`/`end_date` (ISO YYYY-MM-DD) request an explicit window
+        beyond those caps for long history (e.g. 1wk back to 2015); they are
+        mutually exclusive with `range` and are sent as rangeKey=ALL +
+        startDate/endDate upstream.
         """
         try:
             envelope = _build_gloomberb_client().price_history(
@@ -942,6 +948,8 @@ def create_mcp_server(
                     "resolution": resolution,
                     "range": range,
                     "exchange": exchange,
+                    "start_date": start_date,
+                    "end_date": end_date,
                 }
             )
         except Exception as exc:  # surface as JSON to the caller, never crash

@@ -611,11 +611,20 @@ class GloomberbClient:
             return self._disabled(PriceHistoryEnvelope)
 
         def produce() -> PriceHistoryEnvelope:
+            # #4100: an explicit date window (mutually exclusive with `range`
+            # at the model) maps to the probe-verified combination —
+            # rangeKey=ALL + startDate/endDate serves bars beyond Cloud's
+            # declared 5Y cap (live: 610 weekly bars back to 2015-01-05).
+            windowed = parsed.start_date is not None or parsed.end_date is not None
             params: dict[str, Any] = {
                 "symbol": parsed.symbol,
                 "interval": nz.to_cloud_interval(parsed.resolution),
-                "rangeKey": parsed.range,
+                "rangeKey": "ALL" if windowed else parsed.range,
             }
+            if parsed.start_date is not None:
+                params["startDate"] = parsed.start_date.isoformat()
+            if parsed.end_date is not None:
+                params["endDate"] = parsed.end_date.isoformat()
             if parsed.exchange:
                 params["exchange"] = parsed.exchange
             raw = self._request_json("GET", ENDPOINTS["history"], params=params)

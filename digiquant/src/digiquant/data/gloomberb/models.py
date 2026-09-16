@@ -378,14 +378,45 @@ class QuotesBatchInput(_InputModel):
 
 
 class PriceHistoryInput(_InputModel):
+    """One chart-history read (§5.2 caps, plus the #4100 date window).
+
+    ``range`` is the contract dimension: capped per resolution and rejected
+    (never clamped) outside the table. ``start_date``/``end_date`` are the
+    #4100 widening escape hatch: an explicit ISO window is **mutually
+    exclusive** with ``range`` and bypasses the caps — the client maps it to
+    the probe-verified ``rangeKey=ALL`` + ``startDate``/``endDate`` upstream
+    combination, which serves weekly bars beyond Cloud's declared 5Y (live:
+    610 bars back to 2015-01-05). Either end may be omitted (open-ended
+    window); the caller's dates bound the read instead of a range key.
+    """
+
     symbol: Symbol
     resolution: Resolution
     # None means "contract default": resolved to 5Y for 1d only. Never clamped.
     range: Range | None = None
+    start_date: date | None = None
+    end_date: date | None = None
     exchange: str | None = None
 
     @model_validator(mode="after")
     def _enforce_resolution_range_caps(self) -> PriceHistoryInput:
+        if self.start_date is not None or self.end_date is not None:
+            if self.range is not None:
+                raise ValueError(
+                    "start_date/end_date and range are mutually exclusive: an "
+                    "explicit date window replaces the range key (the client "
+                    "sends rangeKey=ALL with it)"
+                )
+            if (
+                self.start_date is not None
+                and self.end_date is not None
+                and self.start_date > self.end_date
+            ):
+                raise ValueError(
+                    f"start_date must be on or before end_date "
+                    f"(got {self.start_date.isoformat()} > {self.end_date.isoformat()})"
+                )
+            return self
         cap = RESOLUTION_MAX_RANGE[self.resolution]
         if self.range is None:
             if self.resolution != "1d":

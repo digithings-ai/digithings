@@ -198,6 +198,15 @@ Range vocabulary is the `TimeRange` enum (`1D…5Y, ALL`); resolution is the
 chart-resolution enum (`1m…1mo`). A request outside the contract raises
 `invalid_input` (never silently clamps), matching the envelope policy in §5.3.
 
+**Widening escape hatch (#4100).** `PriceHistoryInput` additionally accepts an
+explicit `start_date`/`end_date` window (ISO `YYYY-MM-DD`, either end optional,
+`start_date <= end_date`). The window is **mutually exclusive** with `range`
+and bypasses the caps above: the client sends `rangeKey=ALL` + `startDate`/
+`endDate`, the combination a live probe verified serves 610 weekly bars back to
+2015-01-05 — beyond the `1wk` 5-year cap, while `rangeKey=ALL` alone still
+returns the ~29-bar default window. The range-based caps in the table are
+unchanged.
+
 ### 5.3 Envelope, errors, freshness
 
 One shared envelope, generic over the tool payload:
