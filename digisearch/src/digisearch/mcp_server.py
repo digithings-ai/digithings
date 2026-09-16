@@ -1,7 +1,8 @@
 """digisearch MCP server. Exposes document search as MCP tools for digigraph/digiflow."""
 
-from __future__ import annotations
-
+# No `from __future__ import annotations`: the stack image ships FastMCP 1.9.3,
+# which calls issubclass() on raw annotations — PEP 563 string annotations crash
+# every @mcp.tool() at import (Dockerfile.digithings-stack-cloudflare marker v8).
 import logging
 import os
 from typing import Any

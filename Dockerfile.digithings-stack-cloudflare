@@ -72,8 +72,11 @@ COPY cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.con
      /etc/supervisor/conf.d/digithings.conf
 # Rebuild marker: wrangler tags the container image from this Dockerfile, so a
 # context-only change (e.g. entrypoint.sh) must bump this comment to rebuild.
-# Rebuild marker v6 (2026-09-16): forces a full rebuild for digigraph/src-only
-# changes (wrangler caches the build context by Dockerfile hash).
+# Rebuild marker v8 (2026-09-16): drop `from __future__ import annotations` from
+# the MCP tool modules (digisearch, digivault, digigraph). FastMCP 1.9.3 in this
+# image calls issubclass() on raw annotations, so PEP 563 string annotations
+# made :8765/:8769/:8766 crash at import and never bind. Full rebuild required
+# (wrangler caches the build context by Dockerfile hash).
 # Rebuild marker v5 (2026-09-16): bakes the zammad__* tools into the digiproject
 # allowlist (agents.allowed_tools) so digigraph exposes them in the OCC chat.
 # Rebuild marker v4 (2026-09-16): ships the mcp 1.9.x transport-security guard so

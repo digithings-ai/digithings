@@ -39,3 +39,21 @@ def test_default_port_does_not_collide_with_digigraph():
     default_port = inspect.signature(mcp_server.run_mcp).parameters["port"].default
     assert default_port == 8769
     assert default_port != 8766  # digigraph keeps 8766
+
+
+@pytest.mark.unit
+def test_tool_dispatch_avoids_pep563_annotations() -> None:
+    """FastMCP 1.9.3 in the stack image crashes on PEP 563 string annotations.
+
+    ``from __future__ import annotations`` turns every annotated ``@mcp.tool()``
+    parameter into a string, and FastMCP 1.9.3 ``Tool.from_function`` calls
+    ``issubclass()`` on the raw annotation — see Dockerfile.digithings-stack-cloudflare
+    rebuild marker v8.
+    """
+    from pathlib import Path
+
+    from digivault import tool_dispatch
+
+    source = Path(tool_dispatch.__file__).read_text()
+    banned = "from __future__ import annotations"
+    assert not any(line.strip().startswith(banned) for line in source.splitlines())
