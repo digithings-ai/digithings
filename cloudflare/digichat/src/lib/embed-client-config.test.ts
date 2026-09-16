@@ -193,6 +193,28 @@ describe("toEmbedClientConfig", () => {
     expect(toEmbedClientConfig(silent.get("example.com")!).pageContext).toBe("silent");
   });
 
+  it("carries view/thinking modes into the client config and bridge features", () => {
+    const registry = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          attribution: false,
+          token: "t",
+          view: "detailed",
+          thinking: "open",
+        },
+      }),
+    );
+    const cfg = toEmbedClientConfig(registry.get("example.com")!);
+    expect(cfg.view).toBe("detailed");
+    expect(cfg.thinking).toBe("open");
+    const projected = clientConfigFromEmbedTenant(cfg);
+    expect(projected.features.view).toBe("detailed");
+    expect(projected.features.thinking).toBe("open");
+  });
+
   it("strips operator MCP URLs from the client projection", () => {
     const cfg = toEmbedClientConfig({
       slug: "datatap",
