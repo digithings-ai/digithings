@@ -2,10 +2,21 @@
 
 import type { FormEvent } from "react";
 
+import { Button as LayerButton } from "@digithings/web";
+import { Button, Input, Label, Separator } from "@digithings/web/ui";
+
 /**
  * Login — the sign-in card. Three states: oauth first, email default, and
- * error. OAuth first is Google filled, GitHub ghost, then email under a
+ * error. OAuth first is Google filled, GitHub outline, then email under a
  * hairline. An interactive display template.
+ *
+ * Wave 1: fields are the stock kit — Input/Label/Separator/Button from
+ * `@digithings/web/ui`; the mono micro-caps label type, the block-button
+ * width/margins, and the error tone are the reference's call-site grammar.
+ * The quiet "Forgot password?" control stays on the `@digithings/web`
+ * controls layer, whose Button carries the ruled `variant="quiet"` dress.
+ * The old input/field/divider/error/forgot/block-button dress is gone; the
+ * error state rides the input's own `aria-invalid` treatment.
  */
 
 function preventSubmit(event: FormEvent<HTMLFormElement>) {
@@ -46,24 +57,25 @@ export function LoginCard() {
             <p className="mt-2 text-[0.88rem] leading-[1.45] text-ink-soft">
               Google or GitHub. Email if you already have a workspace password.
             </p>
-            <button type="button" className="btn-primary acct-btn-block">
+            <Button type="button" className="mt-[1.1rem] w-full">
               Continue with Google
-            </button>
-            <button type="button" className="btn-ghost acct-btn-block">
+            </Button>
+            <Button type="button" variant="outline" className="mt-[1.1rem] w-full">
               Continue with GitHub
-            </button>
-            <div className="acct-divider">
+            </Button>
+            <div className="my-4 flex items-center gap-[0.7rem] font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute">
+              <Separator className="h-px flex-1" />
               <span>or email</span>
+              <Separator className="h-px flex-1" />
             </div>
-            <div className="acct-field" style={{ marginTop: 0 }}>
-              <label
-                className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+            <div className="flex flex-col gap-[0.35rem]">
+              <Label
+                className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
                 htmlFor="login-oauth-email"
               >
                 Email
-              </label>
-              <input
-                className="acct-input"
+              </Label>
+              <Input
                 id="login-oauth-email"
                 name="email"
                 type="email"
@@ -71,15 +83,14 @@ export function LoginCard() {
                 autoComplete="off"
               />
             </div>
-            <div className="acct-field">
-              <label
-                className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+            <div className="mt-[0.85rem] flex flex-col gap-[0.35rem]">
+              <Label
+                className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
                 htmlFor="login-oauth-password"
               >
                 Password
-              </label>
-              <input
-                className="acct-input"
+              </Label>
+              <Input
                 id="login-oauth-password"
                 name="password"
                 type="password"
@@ -87,9 +98,9 @@ export function LoginCard() {
                 autoComplete="off"
               />
             </div>
-            <button type="submit" className="btn-ghost acct-btn-block">
+            <Button type="submit" variant="outline" className="mt-[1.1rem] w-full">
               Sign in with email
-            </button>
+            </Button>
           </form>
         </div>
 
@@ -105,12 +116,14 @@ export function LoginCard() {
             <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
               digithings <span className="text-ink-mute">· sign in</span>
             </p>
-            <div className="acct-field">
-              <label className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute" htmlFor="login-email">
+            <div className="mt-[0.85rem] flex flex-col gap-[0.35rem]">
+              <Label
+                className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+                htmlFor="login-email"
+              >
                 Email
-              </label>
-              <input
-                className="acct-input"
+              </Label>
+              <Input
                 id="login-email"
                 name="email"
                 type="email"
@@ -118,12 +131,14 @@ export function LoginCard() {
                 autoComplete="off"
               />
             </div>
-            <div className="acct-field">
-              <label className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute" htmlFor="login-password">
+            <div className="mt-[0.85rem] flex flex-col gap-[0.35rem]">
+              <Label
+                className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+                htmlFor="login-password"
+              >
                 Password
-              </label>
-              <input
-                className="acct-input"
+              </Label>
+              <Input
                 id="login-password"
                 name="password"
                 type="password"
@@ -131,18 +146,20 @@ export function LoginCard() {
                 autoComplete="off"
               />
             </div>
-            <button type="submit" className="btn-primary acct-btn-block">
+            <Button type="submit" className="mt-[1.1rem] w-full">
               Sign in
-            </button>
-            <div className="acct-divider">
+            </Button>
+            <div className="my-4 flex items-center gap-[0.7rem] font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute">
+              <Separator className="h-px flex-1" />
               <span>or</span>
+              <Separator className="h-px flex-1" />
             </div>
-            <button type="button" className="btn-ghost acct-btn-block">
+            <Button type="button" variant="outline" className="mt-[1.1rem] w-full">
               Continue with SSO
-            </button>
-            <button type="button" className="btn-quiet acct-forgot">
+            </Button>
+            <LayerButton type="button" variant="quiet" className="mt-2 w-full text-[0.7rem]">
               Forgot password?
-            </button>
+            </LayerButton>
           </form>
         </div>
 
@@ -158,12 +175,14 @@ export function LoginCard() {
             <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
               digithings <span className="text-ink-mute">· sign in</span>
             </p>
-            <div className="acct-field">
-              <label className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute" htmlFor="login-error-email">
+            <div className="mt-[0.85rem] flex flex-col gap-[0.35rem]">
+              <Label
+                className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+                htmlFor="login-error-email"
+              >
                 Email
-              </label>
-              <input
-                className="acct-input acct-input-error"
+              </Label>
+              <Input
                 id="login-error-email"
                 name="email"
                 type="email"
@@ -173,12 +192,14 @@ export function LoginCard() {
                 aria-describedby="login-error-note"
               />
             </div>
-            <div className="acct-field">
-              <label className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute" htmlFor="login-error-password">
+            <div className="mt-[0.85rem] flex flex-col gap-[0.35rem]">
+              <Label
+                className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+                htmlFor="login-error-password"
+              >
                 Password
-              </label>
-              <input
-                className="acct-input acct-input-error"
+              </Label>
+              <Input
                 id="login-error-password"
                 name="password"
                 type="password"
@@ -187,22 +208,24 @@ export function LoginCard() {
                 aria-invalid="true"
                 aria-describedby="login-error-note"
               />
-              <p className="acct-error" id="login-error-note" role="alert">
+              <p className="font-mono text-[0.68rem] text-danger" id="login-error-note" role="alert">
                 invalid credentials — 2 attempts remaining
               </p>
             </div>
-            <button type="submit" className="btn-primary acct-btn-block">
+            <Button type="submit" className="mt-[1.1rem] w-full">
               Sign in
-            </button>
-            <div className="acct-divider">
+            </Button>
+            <div className="my-4 flex items-center gap-[0.7rem] font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute">
+              <Separator className="h-px flex-1" />
               <span>or</span>
+              <Separator className="h-px flex-1" />
             </div>
-            <button type="button" className="btn-ghost acct-btn-block">
+            <Button type="button" variant="outline" className="mt-[1.1rem] w-full">
               Continue with SSO
-            </button>
-            <button type="button" className="btn-quiet acct-forgot">
+            </Button>
+            <LayerButton type="button" variant="quiet" className="mt-2 w-full text-[0.7rem]">
               Forgot password?
-            </button>
+            </LayerButton>
           </form>
         </div>
       </div>
