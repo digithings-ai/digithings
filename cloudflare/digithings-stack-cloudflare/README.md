@@ -33,10 +33,10 @@ One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 | _(loopback only)_ | digivault `:8004` | Vault notes |
 | _(loopback only)_ | LiteLLM `:4000` | LLM router |
 | _(loopback only)_ | Redis `:6379` | digikey blocklist |
-| _(loopback only)_ | digisearch-mcp `:8765` | RAG MCP (fail-loud backend gate) |
-| _(loopback only)_ | digivault-mcp `:8769` | vault-notes MCP (4 vault-local tools) |
+| _(key-gated edge)_ | digisearch-mcp `:8765` | RAG MCP (fail-loud backend gate); edge route `/_stack/mcp/digisearch/*` (x-digi-mcp-key) |
+| _(key-gated edge)_ | digivault-mcp `:8769` | vault MCP (search_notes/search_tag/backlinks/lint; write `create_note` needs `DIGIVAULT_MCP_WRITE=1`) |
 | _(loopback only)_ | digigraph-mcp `:8766` | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
-| _(container only)_ | zammad-mcp `:8770` | read-only OCC Zammad MCP; only external path is the key-gated `/_stack/mcp/zammad/*` route |
+| _(container only)_ | zammad-mcp `:8770` | read-only OCC Zammad MCP; external paths are the key-gated `/_stack/mcp/*` edge routes |
 
 ```text
 Pages digithings.ai/chat[/occ]

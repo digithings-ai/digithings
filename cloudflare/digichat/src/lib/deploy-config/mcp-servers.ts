@@ -6,7 +6,7 @@
 
 import type { DigichatDeployment } from "./schema";
 
-const MCP_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+const MCP_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const METADATA_HOSTS = new Set([
   "169.254.169.254",
   "100.100.100.200",

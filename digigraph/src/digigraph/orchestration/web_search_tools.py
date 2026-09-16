@@ -69,6 +69,18 @@ def _web_search_available(context: ToolContext) -> bool:
     return bool(context.state.get("enable_web_search"))
 
 
+def web_search_disabled_payload(tool_name: str) -> dict[str, Any]:
+    """Denial payload for a web_search surface (native or MCP) when not opted in (#3420)."""
+    return {
+        "error": "tool_not_allowed",
+        "tool": tool_name,
+        "message": (
+            "web_search is opt-in and disabled for this session. "
+            "Enable via X-Digi-Enable-Web-Search / enable_web_search."
+        ),
+    }
+
+
 def _as_str_list(value: Any) -> list[str]:
     """Coerce an optional tool arg to a clean string list (a bare string becomes one entry)."""
     if isinstance(value, str):

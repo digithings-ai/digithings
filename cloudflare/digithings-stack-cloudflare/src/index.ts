@@ -252,6 +252,8 @@ export interface Env {
   LITELLM_MASTER_KEY?: string;
   ZAMMAD_API_TOKEN?: string;
   MCP_EDGE_KEY?: string;
+  /** Optional per-server edge keys (`{"digivault":"…"}`); falls back to MCP_EDGE_KEY. */
+  MCP_EDGE_KEYS?: string;
   DIGIQUANT_MCP_SCOPE?: string;
   DIGIQUANT_MARKET_DATA_BACKEND?: string;
   FRED_API_KEY?: string;
@@ -274,6 +276,27 @@ const MCP_EDGE_SERVERS: Record<string, number> = {
   digisearch: 8765,
   digivault: 8769,
 };
+
+/** Edge key for one server: an MCP_EDGE_KEYS entry wins, else the shared key. */
+function mcpEdgeKeyFor(serverId: string, workerEnv: Env): string {
+  const fallback = workerEnv.MCP_EDGE_KEY?.trim() ?? "";
+  const raw = workerEnv.MCP_EDGE_KEYS?.trim();
+  if (!raw) {
+    return fallback;
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      const value = (parsed as Record<string, unknown>)[serverId];
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+    }
+  } catch {
+    // fall back to the shared key
+  }
+  return fallback;
+}
 
 function rewriteKeyStackPath(request: Request): Request {
   const url = new URL(request.url);
@@ -316,7 +339,7 @@ export default {
       const serverId = slash === -1 ? rest : rest.slice(0, slash);
       const port = MCP_EDGE_SERVERS[serverId];
       if (typeof port === "number") {
-        const expected = workerEnv.MCP_EDGE_KEY?.trim();
+        const expected = mcpEdgeKeyFor(serverId, workerEnv);
         const provided = request.headers.get("x-digi-mcp-key")?.trim();
         if (!expected || !provided || provided !== expected) {
           return new Response("digithings-stack: unauthorized", { status: 401 });

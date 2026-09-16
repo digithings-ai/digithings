@@ -22,6 +22,7 @@ from digivault.tool_dispatch import (
     MCP_TOOL_BACKLINKS,
     MCP_TOOL_CREATE_NOTE,
     MCP_TOOL_LINT,
+    MCP_TOOL_SEARCH_NOTES,
     MCP_TOOL_SEARCH_TAG,
     RUNTIME_ONLY_TOOL_NAMES,
     TOOL_VAULT_BACKLINKS,
@@ -64,6 +65,7 @@ def test_mcp_discovery_matches_vault_handler_set() -> None:
             MCP_TOOL_BACKLINKS,
             MCP_TOOL_LINT,
             MCP_TOOL_CREATE_NOTE,
+            MCP_TOOL_SEARCH_NOTES,
         }
     )
     # FastMCP keeps tools on the tool manager; names must match our registry.

@@ -19,11 +19,12 @@ from digivault.vault import VaultError
 
 
 @pytest.mark.unit
-def test_mcp_tool_names_is_exactly_the_four_vault_local_tools():
+def test_mcp_tool_names_is_the_vault_local_set_plus_search_notes():
     from digivault.tool_dispatch import (
         MCP_TOOL_BACKLINKS,
         MCP_TOOL_CREATE_NOTE,
         MCP_TOOL_LINT,
+        MCP_TOOL_SEARCH_NOTES,
         MCP_TOOL_SEARCH_TAG,
     )
 
@@ -32,8 +33,8 @@ def test_mcp_tool_names_is_exactly_the_four_vault_local_tools():
         MCP_TOOL_BACKLINKS,
         MCP_TOOL_LINT,
         MCP_TOOL_CREATE_NOTE,
+        MCP_TOOL_SEARCH_NOTES,
     }
-    assert "search_notes" not in mcp_tool_names()
     assert "get_note" not in mcp_tool_names()
 
 
