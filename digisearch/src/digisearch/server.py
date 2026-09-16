@@ -1542,10 +1542,15 @@ def api_update_monitor(
     (409 ``watch_backend_immutable``) — delete and re-create the watch to change
     the backend (a same-value ``backend`` is a no-op), so neither an
     ``oss → exa`` claim-without-monitor nor an ``exa → oss`` orphan can be
-    produced. Rotation is refused (409 ``exa_secret_rotate_unsupported``)
-    whenever the watch is ``backend="exa"`` or carries an ``exa_monitor_id``:
-    its delivery secret is EXA's per-monitor ``webhookSecret``, so a locally
-    minted replacement would silently break ``exa-signature`` verification.
+    produced. ``exa_monitor_id`` is server-owned too: a patch naming a value
+    different from the stored link (including ``null``) is refused (409
+    ``monitor_exa_monitor_id_immutable``), so DELETE teardown can neither be
+    bypassed by clearing the id nor aimed at another watch's remote monitor
+    (a same-value ``exa_monitor_id`` is a no-op). Rotation is refused (409
+    ``exa_secret_rotate_unsupported``) whenever the watch is ``backend="exa"``
+    or carries an ``exa_monitor_id``: its delivery secret is EXA's per-monitor
+    ``webhookSecret``, so a locally minted replacement would silently break
+    ``exa-signature`` verification.
     """
     store = get_monitor_store()
     rotate = patch.pop("rotate_delivery_secret", False) is True
@@ -1561,6 +1566,15 @@ def api_update_monitor(
             "watch_backend_immutable",
             f"Watch {watch_id!r} backend is fixed at create ({current.backend!r}), "
             "so it cannot be changed; delete and re-create the watch instead.",
+        )
+    if "exa_monitor_id" in patch and patch["exa_monitor_id"] != current.exa_monitor_id:
+        return _monitor_error(
+            request,
+            409,
+            "monitor_exa_monitor_id_immutable",
+            f"Watch {watch_id!r} exa_monitor_id is server-owned "
+            f"({current.exa_monitor_id!r}) and cannot be changed by a patch; "
+            "delete and re-create the watch instead.",
         )
     if rotate and (current.backend == "exa" or current.exa_monitor_id):
         return _monitor_error(

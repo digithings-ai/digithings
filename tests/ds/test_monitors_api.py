@@ -304,6 +304,63 @@ def test_patch_backend_oss_to_exa_refused_and_same_value_is_noop(monkeypatch, tm
 
 
 @pytest.mark.unit
+def test_patch_exa_monitor_id_clear_refused_and_delete_still_tears_down(monkeypatch, tmp_path):
+    """#4196: a null-out cannot orphan the remote monitor that DELETE would clean."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    import digisearch.server as srv
+
+    c = _monitor_client()
+    created = _create_watch(c, backend="exa")
+    wid = created["watch"]["watch_id"]
+    assert created["watch"]["exa_monitor_id"] == "exa_mon_1"
+
+    cleared = c.patch(f"/v1/monitors/{wid}", json={"exa_monitor_id": None})
+    assert cleared.status_code == 409, cleared.text
+    assert cleared.json()["error"]["code"] == "monitor_exa_monitor_id_immutable"
+    assert c.get(f"/v1/monitors/{wid}").json()["exa_monitor_id"] == "exa_mon_1"
+
+    recorded: list[dict] = []
+    monkeypatch.setattr(srv, "delete_exa_monitor", lambda **kwargs: recorded.append(kwargs))
+    deleted = c.delete(f"/v1/monitors/{wid}")
+    assert deleted.status_code == 200, deleted.text
+    assert recorded == [{"exa_monitor_id": "exa_mon_1"}]  # the stored link, not a cleared one
+
+
+@pytest.mark.unit
+def test_patch_exa_monitor_id_refuses_cross_watch_id_and_allows_same_value(monkeypatch, tmp_path):
+    """#4196: a patch cannot aim DELETE at another watch's remote monitor."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    import digisearch.server as srv
+    from digisearch.monitors import provisioning as provisioning_mod
+
+    remote_ids = iter(["exa_mon_a", "exa_mon_b"])
+    monkeypatch.setattr(
+        provisioning_mod,
+        "create_exa_monitor",
+        lambda **kwargs: {"id": next(remote_ids), "webhookSecret": "s" * 32},
+    )
+    c = _monitor_client()
+    alpha = _create_watch(c, backend="exa")["watch"]
+    other = _create_watch(c, backend="exa")["watch"]
+
+    aimed = c.patch(
+        f"/v1/monitors/{alpha['watch_id']}", json={"exa_monitor_id": other["exa_monitor_id"]}
+    )
+    assert aimed.status_code == 409, aimed.text
+    assert aimed.json()["error"]["code"] == "monitor_exa_monitor_id_immutable"
+    assert c.get(f"/v1/monitors/{alpha['watch_id']}").json()["exa_monitor_id"] == "exa_mon_a"
+
+    noop = c.patch(f"/v1/monitors/{alpha['watch_id']}", json={"exa_monitor_id": "exa_mon_a"})
+    assert noop.status_code == 200, noop.text
+    assert noop.json()["exa_monitor_id"] == "exa_mon_a"
+
+    recorded: list[dict] = []
+    monkeypatch.setattr(srv, "delete_exa_monitor", lambda **kwargs: recorded.append(kwargs))
+    assert c.delete(f"/v1/monitors/{alpha['watch_id']}").status_code == 200
+    assert recorded == [{"exa_monitor_id": "exa_mon_a"}]  # never the other watch's id
+
+
+@pytest.mark.unit
 def test_patch_rotate_refused_on_stale_exa_monitor_id_misconfig(monkeypatch, tmp_path):
     """#4196: rotation is gated on remote presence, not only backend="exa"."""
     _patch_monitor_store(monkeypatch, tmp_path)
