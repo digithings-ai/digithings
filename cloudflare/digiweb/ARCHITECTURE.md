@@ -150,7 +150,7 @@ with no sheet of its own (all utilities, same bridge):
 
 Refresh it with `npx shadcn@latest add <name>` inside `cloudflare/digiweb/web`
 (the `components.json` there is authoritative); local deltas stay limited to
-import adaptations (`cn` from `@/lib/utils`, sibling `./button`). The kit is
+import adaptations (`cn` from `../lib/utils`, sibling `./button`). The kit is
 not in `MANIFEST.json` — that file is generated from the reference app, and
 package-family indexing is tracked in #4225; discovery is the barrel and
 [MIGRATION.md](MIGRATION.md).

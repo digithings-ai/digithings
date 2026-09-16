@@ -901,12 +901,10 @@ export async function createFoundryStreamResponse(opts: {
         }
       } catch (err) {
         if (opts.signal?.aborted) return;
-        openText();
         if (err instanceof FoundryProtocolError) {
           writer.write({
-            type: "text-delta",
-            id: textId,
-            delta: `Upstream error: ${err.message}`,
+            type: "error",
+            errorText: `Upstream error: ${err.message}`,
           });
         } else {
           // An unexpected SDK/network exception, not Foundry's own protocol
@@ -918,9 +916,8 @@ export async function createFoundryStreamResponse(opts: {
             err instanceof Error ? err.message : String(err)
           );
           writer.write({
-            type: "text-delta",
-            id: textId,
-            delta: "The assistant is unavailable right now. Please try again shortly.",
+            type: "error",
+            errorText: "The assistant is unavailable right now. Please try again shortly.",
           });
         }
       } finally {

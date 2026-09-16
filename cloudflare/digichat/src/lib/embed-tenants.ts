@@ -136,6 +136,12 @@ export type EmbedTenantConfig = {
       default?: boolean;
       token?: string;
       tokenEnv?: string;
+      /**
+       * MCP setup values applied when this server's tools are registered (e.g.
+       * the digisearch index name or the digivault path prefix). Forwarded to
+       * digigraph; never client-projected. Mirrors the YAML `mcp.servers[].setup`.
+       */
+      setup?: Record<string, string>;
       authHeader?: string;
     }>;
     allowUserServers?: boolean;
@@ -442,6 +448,25 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
           `embed tenant "${hostKey}": mcp.servers[${index}].authHeader must be a string`,
         );
       }
+      let setup: Record<string, string> | undefined;
+      const rawSetup = server.setup;
+      if (rawSetup !== undefined) {
+        if (typeof rawSetup !== "object" || rawSetup === null || Array.isArray(rawSetup)) {
+          throw new Error(
+            `embed tenant "${hostKey}": mcp.servers[${index}].setup must be an object`,
+          );
+        }
+        const entries = Object.entries(rawSetup as Record<string, unknown>);
+        for (const [key, value] of entries) {
+          if (typeof value !== "string") {
+            throw new Error(
+              `embed tenant "${hostKey}": mcp.servers[${index}].setup.${key} must be a string`,
+            );
+          }
+        }
+        // Empty maps are legal and simply omitted — nothing to forward.
+        if (entries.length) setup = { ...(rawSetup as Record<string, string>) };
+      }
       return {
         id: server.id,
         url: server.url,
@@ -449,6 +474,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         ...(typeof server.default === "boolean" ? { default: server.default } : {}),
         ...(typeof server.token === "string" ? { token: server.token } : {}),
         ...(typeof server.tokenEnv === "string" ? { tokenEnv: server.tokenEnv } : {}),
+        ...(setup ? { setup } : {}),
         ...(typeof server.authHeader === "string" ? { authHeader: server.authHeader } : {}),
       };
     });

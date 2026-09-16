@@ -103,9 +103,10 @@ kit has **no CSS file of its own**.
   (`"ui": "@/ui"`). Never vendor into an app; the kit is package-owned, the
   same as any promoted primitive.
 - **Consume**: import from `@digithings/web/ui`, and add
-  `@source "../../web/src/ui";` to the app entry (rule 3 above). Registry
-  components may import `@/lib/utils` — the consumer root must resolve that
-  alias until the kit is made package-relative.
+  `@source "../../web/src/ui";` to the app entry (rule 3 above). The shipped
+  components import `cn` package-relative (`../lib/utils`); `npx shadcn add`
+  re-introduces `@/lib/utils` in new files, so re-point those imports before
+  committing — consumers need no `@/lib/utils` alias.
 - **`--color-primary` is ink/paper — never the accent.** Accent stays a
   livery/scoped signal; primary is the neutral action.
 
