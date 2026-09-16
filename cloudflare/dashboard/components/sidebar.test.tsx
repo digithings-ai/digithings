@@ -84,6 +84,18 @@ describe('Sidebar', () => {
     expect(html).not.toContain('Why');
   });
 
+  // The dedicated terminal entry (#4204): a flat external link in the nav's
+  // bottom tools area — label, destination, and new-tab hardening.
+  it('renders the dedicated Gloomberb Terminal entry', () => {
+    const html = renderToStaticMarkup(createElement(Sidebar));
+    expect(html).toContain('Gloomberb Terminal');
+    expect(html).toContain('data-testid="sidebar-gloomberb-link"');
+    const anchor = html.match(/<a[^>]*data-testid="sidebar-gloomberb-link"[^>]*>/)?.[0] ?? '';
+    expect(anchor).toContain('href="https://term.gloom.sh/"');
+    expect(anchor).toContain('target="_blank"');
+    expect(anchor).toContain('rel="noopener noreferrer"');
+  });
+
   it('flag off: does not render identity/sign-out chrome', () => {
     const html = renderToStaticMarkup(createElement(Sidebar));
     expect(html).not.toContain('sidebar-auth-identity');
@@ -109,6 +121,9 @@ describe('Sidebar', () => {
     for (const label of ['Brief', 'Portfolio', 'Pipeline']) {
       expect(html).not.toContain(label);
     }
+    // Single-view contract: the terminal entry is a destination like any other.
+    expect(html).not.toContain('Gloomberb Terminal');
+    expect(html).not.toContain('sidebar-gloomberb-link');
   });
 
   it('a paying free-tier-on-paper but plan_floor-elevated account is unaffected', () => {

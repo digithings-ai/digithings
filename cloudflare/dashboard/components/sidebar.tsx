@@ -3,8 +3,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, LogOut, Search } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/web';
+import { ArrowUpRight, ChevronLeft, ChevronRight, LogOut, Search } from 'lucide-react';
+import {
+  GLOOMBERB_TERMINAL_URL,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@digithings/web';
 import { DashboardMark } from '@/components/dashboard-mark';
 import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
@@ -121,6 +127,42 @@ export default function Sidebar() {
     );
   };
 
+  // Dedicated terminal entry (#4204) — the external terminal research tool,
+  // deliberately a flat external anchor rather than a nav route, pinned to
+  // the bottom tools area; per-ticker deep links stay on the surfaces that
+  // carry a symbol. Hidden for an fx_hub-only invitee, like every other
+  // destination the single-view contract omits.
+  const showGloomberb = !fxHubOnlyInvitee;
+  const gloomberbLink = (
+    <a
+      href={GLOOMBERB_TERMINAL_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      data-testid="sidebar-gloomberb-link"
+      className={`
+        flex items-center gap-3 py-3 text-sm font-medium transition-all
+        ${sidebarCollapsed ? 'md:justify-center md:px-3' : 'px-6'}
+        text-ink-mute hover:text-ink-soft hover:bg-ink/[0.02]
+      `}
+    >
+      <ArrowUpRight size={18} className="shrink-0" aria-hidden />
+      <span className={`qn-sidebar-label ${sidebarCollapsed ? 'md:sr-only' : ''}`}>
+        Gloomberb Terminal
+      </span>
+    </a>
+  );
+
+  const renderGloomberbLink = () => {
+    if (!showGloomberb) return null;
+    if (!sidebarCollapsed) return gloomberbLink;
+    return (
+      <Tooltip>
+        <TooltipTrigger render={gloomberbLink} />
+        <TooltipContent side="right">Gloomberb Terminal</TooltipContent>
+      </Tooltip>
+    );
+  };
+
   const primary = NAV.filter((n) => {
     if (n.demoted) return false;
     if (n.href === '/twelve-x') return canFxHub;
@@ -198,9 +240,10 @@ export default function Sidebar() {
           )}
           <TooltipProvider delay={200}>
             {primary.map(renderLink)}
-            {demoted.length > 0 ? (
-              <div className="mt-auto pt-4 border-t border-hair/60">{demoted.map(renderLink)}</div>
-            ) : null}
+            <div className="mt-auto pt-4 border-t border-hair/60">
+              {demoted.map(renderLink)}
+              {renderGloomberbLink()}
+            </div>
           </TooltipProvider>
         </nav>
 
