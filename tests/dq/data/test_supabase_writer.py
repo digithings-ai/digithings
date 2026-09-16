@@ -13,6 +13,7 @@ from digiquant.data.prices import TECHNICAL_COLUMNS
 from digiquant.data.prices.supabase_writer import (
     ohlcv_to_price_history_rows,
     technicals_to_rows,
+    upsert_fx_intraday_observations,
     upsert_instruments,
     upsert_macro_observations,
     upsert_price_history,
@@ -290,11 +291,118 @@ def test_upsert_macro_observations_uses_on_conflict() -> None:
 
 
 @pytest.mark.unit
+def test_upsert_fx_intraday_observations_uses_interval_ts_conflict_key() -> None:
+    """Intraday candles upsert on (source, series_id, interval, ts).
+
+    ``interval`` is load-bearing: 5m and 1h bars share :00 opens, so without it
+    in the key the 5m upsert would replace the 1h row.
+    """
+    captured: dict[str, Any] = {}
+
+    class _CaptureQuery(_FakeQuery):
+        def upsert(self, rows, on_conflict=None):
+            captured["on_conflict"] = on_conflict
+            return super().upsert(rows, on_conflict=on_conflict)
+
+    class _CaptureClient:
+        def __init__(self):
+            self.store: dict[str, list] = {}
+
+        def table(self, name):
+            captured["table"] = name
+            return _CaptureQuery(table_name=name, store=self.store)
+
+    client = _CaptureClient()
+    rows = [
+        {
+            "source": "yahoo",
+            "series_id": "FX/EUR",
+            "interval": "1h",
+            "ts": "2025-04-01T13:00:00+00:00",
+            "open": 1.08,
+            "high": 1.10,
+            "low": 1.07,
+            "close": 1.09,
+        }
+    ]
+    res = upsert_fx_intraday_observations(client, rows)
+
+    assert res.rows == 1
+    assert res.table == "fx_intraday_observations"
+    assert captured["table"] == "fx_intraday_observations"
+    assert captured["on_conflict"] == "source,series_id,interval,ts"
+
+
+@pytest.mark.unit
+def test_upsert_fx_intraday_5m_and_1h_coexist_at_same_ts() -> None:
+    """A fake with PostgREST on-conflict semantics: both bars survive one ts.
+
+    Mirrors the new PK (source, series_id, interval, ts) in SQL: upserting a 5m
+    candle at a :00 open must not overwrite the 1h candle at the same instant,
+    while a re-served settled 5m candle still replaces its own previous row.
+    """
+
+    class _ConflictKeyedQuery:
+        def __init__(self, client: "_ConflictKeyedClient") -> None:
+            self._client = client
+            self._rows: list[dict[str, Any]] = []
+            self._on_conflict: str | None = None
+
+        def upsert(self, rows, on_conflict=None):
+            self._rows = list(rows)
+            self._on_conflict = on_conflict
+            return self
+
+        def execute(self) -> _FakeResponse:
+            keys = (self._on_conflict or "").split(",")
+            for row in self._rows:
+                self._client.rows[tuple(row[k] for k in keys)] = row
+            return _FakeResponse(data=self._rows)
+
+    class _ConflictKeyedClient:
+        def __init__(self) -> None:
+            self.rows: dict[tuple[str, ...], dict[str, Any]] = {}
+
+        def table(self, name: str) -> _ConflictKeyedQuery:
+            return _ConflictKeyedQuery(self)
+
+    client = _ConflictKeyedClient()
+    ts = "2025-04-01T13:00:00+00:00"
+    hourly = {
+        "source": "yahoo",
+        "series_id": "FX/EUR",
+        "interval": "1h",
+        "ts": ts,
+        "open": 1.08,
+        "high": 1.10,
+        "low": 1.07,
+        "close": 1.09,
+    }
+    five_min = {**hourly, "interval": "5m", "close": 1.085}
+
+    res = upsert_fx_intraday_observations(client, [hourly, five_min])
+
+    assert res.rows == 2
+    assert len(client.rows) == 2, "5m and 1h at the same ts must both persist"
+    assert client.rows[("yahoo", "FX/EUR", "5m", ts)]["close"] == 1.085
+    assert client.rows[("yahoo", "FX/EUR", "1h", ts)]["close"] == 1.09
+
+    # The trailing 5m candle is re-served settled: it replaces its own row only.
+    settled = {**five_min, "close": 1.087}
+    upsert_fx_intraday_observations(client, [settled])
+
+    assert len(client.rows) == 2
+    assert client.rows[("yahoo", "FX/EUR", "5m", ts)]["close"] == 1.087
+    assert client.rows[("yahoo", "FX/EUR", "1h", ts)]["close"] == 1.09
+
+
+@pytest.mark.unit
 def test_upsert_empty_rows_is_noop() -> None:
     client = FakeSupabaseClient()
     assert upsert_price_history(client, []).rows == 0
     assert upsert_price_technicals(client, []).rows == 0
     assert upsert_macro_observations(client, []).rows == 0
+    assert upsert_fx_intraday_observations(client, []).rows == 0
     assert client.store == {}
 
 

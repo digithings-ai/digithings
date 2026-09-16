@@ -9,8 +9,18 @@ on the search route, APIs need a digikey JWT (`digisearch:query`, or
 CI pipeline. Auth-exempt on every host is only the shared service allowlist —
 `/health`, `/healthz`, `/metrics`, `/docs`, `/redoc`, `/openapi.json`, plus
 OPTIONS preflights (CORS is enforced separately) — and the Worker-served paths
-`/_stack/meta`, `/v1/market/tickers|closes`, and `/_stack/key/*` (proxied to
-digikey). Secrets only via `npx wrangler secret put` — never commit values.
+`/_stack/meta`, `/v1/market/tickers|closes`, `/_stack/key/*` (proxied to
+digikey). `/_stack/mcp/zammad/*` (the read-only OCC Zammad MCP, proxied to
+the stack container's :8770) is **not** auth-exempt: it requires `x-digi-mcp-key`
+matching the `MCP_EDGE_KEY` secret or returns a fail-closed 401.
+Secrets only via `npx wrangler secret put` — never commit values. Operator
+secrets currently required: `MCP_EDGE_KEY` (edge key for the OCC MCP path; set
+with `printf '%s' "$VALUE" | npx wrangler secret put MCP_EDGE_KEY`; rotate by
+re-putting the secret and updating the `token` in the occ entry of
+`DIGICHAT_EMBED_TENANTS`; the Worker reads the secret per request, so the edge
+rotates instantly, while a running digichat Container keeps start-time env values
+until recycled — bump the rebuild marker in `Dockerfile.digichat-cloudflare`
+when a rotation must reach a live instance).
 
 One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 `*.trycloudflare.com` quick tunnels for production digichat.
@@ -23,9 +33,10 @@ One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 | _(loopback only)_ | digivault `:8004` | Vault notes |
 | _(loopback only)_ | LiteLLM `:4000` | LLM router |
 | _(loopback only)_ | Redis `:6379` | digikey blocklist |
-| _(loopback only)_ | digisearch-mcp `:8765` | RAG MCP (fail-loud backend gate) |
-| _(loopback only)_ | digivault-mcp `:8769` | vault-notes MCP (4 vault-local tools) |
+| _(key-gated edge)_ | digisearch-mcp `:8765` | RAG MCP (fail-loud backend gate); edge route `/_stack/mcp/digisearch/*` (x-digi-mcp-key) |
+| _(key-gated edge)_ | digivault-mcp `:8769` | vault MCP (search_notes/search_tag/backlinks/lint; write `create_note` needs `DIGIVAULT_MCP_WRITE=1`) |
 | _(loopback only)_ | digigraph-mcp `:8766` | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
+| _(container only)_ | zammad-mcp `:8770` | read-only OCC Zammad MCP; external paths are the key-gated `/_stack/mcp/*` edge routes |
 
 ```text
 Pages digithings.ai/chat[/occ]
@@ -225,8 +236,8 @@ Ollama in this path unless you need them.
 | digivault `:8004` | loopback | Notes |
 | LiteLLM `:4000` | loopback | LLM router |
 | Redis `:6379` | loopback | digikey blocklist |
-| digisearch-mcp `:8765` | loopback | RAG MCP (fail-loud backend gate) |
-| digivault-mcp `:8769` | loopback | vault-notes MCP (4 vault-local tools) |
+| digisearch-mcp `:8765` | key-gated edge | RAG MCP (fail-loud backend gate); `/_stack/mcp/digisearch/*` |
+| digivault-mcp `:8769` | key-gated edge | vault MCP (search_notes/search_tag/backlinks/lint; `create_note` with `DIGIVAULT_MCP_WRITE=1`) |
 | digigraph-mcp `:8766` | loopback | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
 
 hosted `:8765` `web_search` uses the embedded ddgs fallback (no searxng sidecar in-stack);

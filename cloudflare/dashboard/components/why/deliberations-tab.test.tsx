@@ -38,6 +38,52 @@ describe('DeliberationsPanel', () => {
     const docs: PipelineTickerDoc[] = [{ document_key: 'x', ticker: 'X', payload: { foo: 'bar' } }];
     expect(renderToStaticMarkup(createElement(DeliberationsPanel, { docs }))).toBe('');
   });
+
+  // #4193 — coverage: the per-ticker debate ledger deep-links each ticker.
+  it('links every debate ticker out to the Gloomberb terminal', () => {
+    const docs: PipelineTickerDoc[] = [
+      {
+        document_key: 'deliberation/NVDA',
+        ticker: 'NVDA',
+        payload: {
+          net_stance: 'bullish',
+          bull_thesis: 'Datacenter capex compounding.',
+          bear_thesis: 'Valuation rich into earnings.',
+        },
+      },
+    ];
+    const html = renderToStaticMarkup(createElement(DeliberationsPanel, { docs }));
+    expect(html).toContain('data-testid="gloomberb-link-NVDA"');
+    expect(html).toContain('href="https://term.gloom.sh/?ticker=NVDA"');
+    const anchor = html.match(/<a[^>]*data-testid="gloomberb-link-NVDA"[^>]*>/)?.[0] ?? '';
+    expect(anchor).toContain('target="_blank"');
+    expect(anchor).toContain('rel="noopener noreferrer"');
+    // The arrow idiom, not the external-link glyph (#4204).
+    const block =
+      html.match(/<a[^>]*data-testid="gloomberb-link-NVDA"[\s\S]*?<\/a>/)?.[0] ?? '';
+    expect(block).toContain('lucide-arrow-up-right');
+    expect(block).not.toContain('lucide-external-link');
+  });
+
+  // The third surface already guarded; pin the absent branch so the guard cannot
+  // regress into an upstream default-symbol link.
+  it('renders no Gloomberb link for a debate row with a blank ticker', () => {
+    const docs: PipelineTickerDoc[] = [
+      {
+        document_key: 'deliberation/',
+        ticker: '   ',
+        payload: {
+          net_stance: 'bullish',
+          bull_thesis: 'Datacenter capex compounding.',
+          bear_thesis: 'Valuation rich into earnings.',
+        },
+      },
+    ];
+    const html = renderToStaticMarkup(createElement(DeliberationsPanel, { docs }));
+    expect(html).toContain('data-testid="ticker-debate-ledger"');
+    expect(html).not.toContain('gloomberb-link');
+    expect(html).not.toContain('term.gloom.sh');
+  });
 });
 
 describe('sortDocsByDateDesc', () => {

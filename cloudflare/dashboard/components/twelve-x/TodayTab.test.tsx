@@ -303,4 +303,12 @@ describe('TodayTab layout (Task 2.2)', () => {
     expect(html).not.toContain('data-track-record-link');
     expect(html).not.toContain('Full track record');
   });
+
+  // The dedicated terminal entry lives in the sidebar now (#4204); the
+  // twelve-x macro surfaces must not carry their own Gloomberb links.
+  it('does not link the macro timeline header out to Gloomberb', () => {
+    const html = render();
+    expect(html).not.toContain('gloomberb-terminal-link');
+    expect(html).not.toContain('term.gloom.sh');
+  });
 });

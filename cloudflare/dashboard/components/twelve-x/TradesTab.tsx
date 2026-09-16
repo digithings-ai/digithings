@@ -18,6 +18,7 @@ import {
   closeReason,
   displayableTradeHistory,
   filterTradeHistory,
+  finalResult,
   formatHoldPct,
   formatPctRight,
   sortTradeHistory,
@@ -165,9 +166,12 @@ function PairFilterDropdown({
 export default function TradesTab({
   ideas,
   ideaEval,
+  onOpenIdea,
 }: {
   ideas: FxTradeIdeaRow[];
   ideaEval: FxIdeaEvalRow[];
+  /** Open the idea lifecycle sidebar for a row (local state in TwelveXClient). */
+  onOpenIdea?: (runDate: string, rank: number) => void;
   /** Kept optional for call-site compat; consensus sections were removed. */
   consensusEval?: unknown;
 }) {
@@ -252,11 +256,15 @@ export default function TradesTab({
         <h2 className="font-display text-2xl tracking-tight text-ink">Trades</h2>
       </div>
       <p className="max-w-2xl px-1 text-xs text-ink-mute">
-        Every trade recommendation and whether it worked. Each idea stays live until the
-        next board that posts the same currency axis, either orientation (successor clock).
-        Impact shows the observed excursion extremes with the close mark; directional
-        outcomes use daily closes. Stop / target levels are quoted as published and never
-        drive lifecycle scoring.
+        Every trade recommendation and whether it worked. A trade stays live until its stop
+        or target is touched (first touch wins, ordered by 1h/5m candles), the bookkeeper
+        drops it, or a newer board replaces it. Result carries the one-word grade: Right or
+        Wrong when a direction resolved (measured at the touched level or exit close when
+        filled, directional when the entry never filled), Closed for an ended trade with no
+        verdict, and Live while it runs. Status names the close reason — Target, Stop, Both,
+        Dropped, or Superseded — and reads Live while the trade runs. Impact pairs the
+        excursion range with the return at close where one exists, tagged with its grading
+        basis on ended trades or open while live.
       </p>
 
       {history.length === 0 ? (
@@ -382,12 +390,16 @@ export default function TradesTab({
                       align="right"
                     />
                     <SortHeader label="Result" sortKey="result" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                    <th className="px-3 py-2 text-left font-medium">Close</th>
+                    <th className="px-3 py-2 text-left font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-hair">
                   {visible.map((row) => (
-                    <TradeRow key={`${row.runDate}-${row.rank}`} row={row} />
+                    <TradeRow
+                      key={`${row.runDate}-${row.rank}`}
+                      row={row}
+                      onOpenIdea={onOpenIdea}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -428,12 +440,31 @@ function Metric({
   );
 }
 
-function TradeRow({ row }: { row: TradeHistoryRow }) {
+function TradeRow({
+  row,
+  onOpenIdea,
+}: {
+  row: TradeHistoryRow;
+  onOpenIdea?: (runDate: string, rank: number) => void;
+}) {
   const result = tradeResult(row);
   const close = closeReason(row);
+  const final = finalResult(row);
   if (result === null) return null;
+  const openIdea = () => onOpenIdea?.(row.runDate, row.rank);
   return (
-    <tr>
+    <tr
+      role="button"
+      tabIndex={0}
+      onClick={openIdea}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openIdea();
+        }
+      }}
+      className="cursor-pointer transition-colors hover:bg-ink/[0.03] focus:outline-none focus-visible:bg-ink/[0.05]"
+    >
       <td className="whitespace-nowrap px-3 py-2 font-mono text-ink-mute">
         {row.runDate}
         {row.continuedFrom ? <span className="ml-1">· cont. since {row.continuedFrom}</span> : null}
@@ -463,6 +494,21 @@ function TradeRow({ row }: { row: TradeHistoryRow }) {
           maxFavorable={row.maxFavorable}
           holdReturn={row.holdReturn}
         />
+        {final ? (
+          <span
+            className={`mt-0.5 block font-mono text-[10px] tabular-nums ${
+              final.pct > 0 ? 'text-up' : final.pct < 0 ? 'text-down' : 'text-ink-mute'
+            }`}
+            title={
+              final.basis === 'directional'
+                ? 'Directional grade — entry never filled'
+                : 'Measured at the filled bracket / exit close'
+            }
+          >
+            {formatHoldPct(final.pct)}
+            <span className="ml-1 text-ink-mute">· {final.live ? 'open' : (final.basis ?? 'result')}</span>
+          </span>
+        ) : null}
       </td>
       <td className="whitespace-nowrap px-3 py-2">
         <ResultPill result={result} />

@@ -7,12 +7,12 @@ import type {
   AuthMode,
   ChromeMode,
   DigichatDeployment,
-  DisclosureMode,
   PageContextMode,
   PersistenceMode,
   ToolCatalogEntry,
   UserAlign,
 } from "./schema";
+import type { ThinkingMode, ViewMode } from "@/lib/view-modes";
 import { welcomeBodyLines, welcomeTitle } from "./schema";
 import {
   BASELINE_EMBED_PLACEHOLDER,
@@ -28,8 +28,8 @@ export type DigichatClientFeatures = {
   attachments: boolean;
   dictation: boolean;
   speech: boolean;
-  reasoning: DisclosureMode;
-  toolCalls: DisclosureMode;
+  view: ViewMode;
+  thinking: ThinkingMode;
   sources: boolean;
   modelPicker: boolean;
   branchPicker: boolean;
@@ -126,8 +126,8 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     attachments: true,
     dictation: false,
     speech: false,
-    reasoning: "collapsed",
-    toolCalls: "collapsed",
+    view: "balanced",
+    thinking: "auto",
     sources: true,
     modelPicker: false,
     branchPicker: true,

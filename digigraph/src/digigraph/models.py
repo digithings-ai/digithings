@@ -265,7 +265,7 @@ class McpServerRef(BaseModel):
     # (context.py) but dumped by its wire alias `authHeader` (workflow.py).
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9-]{0,63}$")
     url: str = Field(..., min_length=1, max_length=2048)
     auth: str | None = Field(None, max_length=16)
     token: str | None = Field(None, max_length=4096)
@@ -273,6 +273,18 @@ class McpServerRef(BaseModel):
     # "X-API-Key". Never settable via the user-facing session overlay.
     auth_header: str | None = Field(
         None, max_length=41, pattern=r"^[A-Za-z][A-Za-z0-9-]{0,40}$", alias="authHeader"
+    )
+    # Operator setup kwargs merged into every tool call for this server
+    # (digivault path_prefix, digisearch index_name, …). Carried through the
+    # HTTP boundary as a JSON object on X-Digi-Mcp-Servers and decoded here
+    # (#4246 review).
+    setup: dict[str, str] | None = Field(
+        None,
+        description=(
+            "Operator setup kwargs merged into every MCP tool call for this server "
+            "(e.g. digivault path_prefix, digisearch index_name). Header-supplied "
+            "session overlay; never trusted from a request body."
+        ),
     )
 
 

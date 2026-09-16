@@ -119,12 +119,14 @@ def test_worker_routes_mcp_service() -> None:
     index = WORKER_INDEX.read_text()
     assert "DigiQuantMcpContainer" in index
     assert "DIGIQUANT_MCP_PORT" in index
-    # Finding 1: no live unauthenticated forwarding route ships. The workers.dev
-    # `/_stack/mcp` path forwarder is removed (Worker-edge digikey enforcement
-    # is a separate prod-gate follow-up); the commented mcp.digithings.ai route
-    # stays reserved, not live. Comments may name the removed path only to
-    # record its removal, so this pins the quoted route literals, not the words.
-    assert '"/_stack/mcp"' not in index
+    # Finding 1: no *unauthenticated* forwarding route ships. The removed
+    # workers.dev `/_stack/mcp` path forwarder never comes back; the only live
+    # MCP edge routes are the secret-gated per-server map in index.ts
+    # (MCP_EDGE_PREFIX + MCP_EDGE_KEY, fail-closed 401 without a matching
+    # x-digi-mcp-key header — the same pattern as the #4174 zammad route).
+    assert 'const MCP_EDGE_PREFIX = "/_stack/mcp";' in index
+    assert "x-digi-mcp-key" in index
+    assert "workerEnv.MCP_EDGE_KEY?.trim()" in index
     assert '"/_stack/mcp/"' not in index
     # Finding 4: hostname routing is the exact reserved hostname, never a
     # `startsWith("mcp.")` prefix matching any mcp.* host.

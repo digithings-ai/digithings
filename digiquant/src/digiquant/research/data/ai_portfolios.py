@@ -9,6 +9,7 @@ empty results, and tool errors all raise :exc:`DashboardWebSearchError`.
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
@@ -20,6 +21,8 @@ import yaml
 
 # simulator must patch this binding too — it escapes the web_grounding patch (from-import).
 from digiquant.research.data.web_grounding import DashboardWebSearchError, call_web_search_tool
+
+logger = logging.getLogger(__name__)
 
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "ai_portfolio_accounts.yaml"
 
@@ -69,7 +72,15 @@ def fetch_ai_portfolio_grounding(
         raise DashboardWebSearchError(
             "alt-ai-portfolios: no tracked accounts in ai_portfolio_accounts.yaml"
         )
-    recency = int(cfg.get("recency_days", 7))
+    raw_recency = cfg.get("recency_days", 7)
+    try:
+        recency = int(raw_recency)
+    except (TypeError, ValueError):
+        logger.warning(
+            "recency_days=%r is not an integer; using the default of 7",
+            raw_recency,
+        )
+        recency = 7
     try:
         max_results = int(cfg.get("max_search_results", 8) or 8)
     except (TypeError, ValueError):
@@ -80,6 +91,7 @@ def fetch_ai_portfolio_grounding(
             query=_build_query(accounts, recency),
             include_domains=list(_X_DOMAINS),
             max_results=max_results,
+            recency_days=recency,
         )
     except DashboardWebSearchError:
         raise

@@ -36,6 +36,9 @@ from digiquant.data.gloomberb.models import (  # noqa: E402
     QuotesBatchInput,
     ResearchSearchInput,
     RiskReportsInput,
+    SavedSearch,
+    SavedSearchesInput,
+    SavedSearchesResult,
     ScreenerInput,
     ScreenerRow,
     SearchInput,
@@ -526,3 +529,35 @@ def test_preview_access_warning_marker_is_exported() -> None:
     assert (
         PREVIEW_ACCESS_WARNING == "preview access: report is a free-tier preview (access=preview)"
     )
+
+
+# ── coverage-expansion input bounds (#4110 phase 4a) ─────────────────────────
+
+
+def test_transcripts_accepts_exactly_one_target() -> None:
+    assert TranscriptsInput(ticker="AAPL").transcript_id is None
+    assert TranscriptsInput(transcript_id="t1").ticker is None
+    with pytest.raises(ValidationError):
+        TranscriptsInput()
+    with pytest.raises(ValidationError):
+        TranscriptsInput(ticker="AAPL", transcript_id="t1")
+    with pytest.raises(ValidationError):
+        TranscriptsInput(transcript_id="x" * 201)
+    assert TranscriptsInput(ticker="AAPL", limit=100).limit == 100
+    with pytest.raises(ValidationError):
+        TranscriptsInput(ticker="AAPL", limit=101)
+
+
+def test_saved_searches_models_are_parameterless_and_permissive() -> None:
+    assert SavedSearchesInput().model_dump() == {}
+    with pytest.raises(ValidationError):
+        SavedSearchesInput(limit=5)  # type: ignore[call-arg]
+
+    row = SavedSearch(id="s1", name="AI capex", query="AI capex", created_at="2026-09-01T00:00:00Z")
+    assert row.name == "AI capex"
+    assert row.query == "AI capex"
+    result = SavedSearchesResult(searches=[row])
+    assert result.searches[0].id == "s1"
+    # Extras stay available (the live row shape is probe-pending).
+    extra = SavedSearch(id="s2", pinned=True)
+    assert extra.model_dump()["pinned"] is True

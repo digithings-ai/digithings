@@ -62,6 +62,9 @@ USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-# Rebuild marker v4 (2026-09-15): container instances keep their start-time env,
+# Rebuild marker v7 (2026-09-16): force a fresh instance so the updated
+# DIGICHAT_EMBED_TENANTS (hosted digisearch/digivault MCP edge entries for both
+# tenants) reaches the runtime.
+# Rebuild marker v5 (2026-09-15): container instances keep their start-time env,
 # so bump this comment when a Worker secret change must reach a running instance.
 CMD ["node", "cloudflare/digichat/scripts/trusted-proxy-server.mjs"]

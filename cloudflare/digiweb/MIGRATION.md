@@ -83,11 +83,37 @@ DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages,
 PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family (ChatTranscript/
 ChatMessage/ChatMarkdown/ChatToolCall/…), the controls layer (Button/Badge/
 Card/Input/Label/Avatar/DropdownMenu/Sheet/Tooltip/Collapsible on the `dress`
-axis), Terminal, Emblem/StackRow, ModuleCard, Reveal/Stagger/HeroEntrance,
+axis), the vendored shadcn kit (`@digithings/web/ui`, below), Terminal,
+Emblem/StackRow, ModuleCard, Reveal/Stagger/HeroEntrance,
 useScrollyFeatures/ScrollyRail. Motion always via `m` under `MotionProvider`
 (LazyMotion `domAnimation` `strict` — a raw `motion.*` element creator throws).
 The reference app (port 4013) is the live catalog; `/digiweb` is the agent
 entry point.
+
+## The vendored UI kit (shadcn, #4206 wave 0)
+
+The migration's first stock shadcn/ui components live in `@digithings/web`:
+`web/src/ui/` — Button, Card, Dialog, Input — barrel `web/src/ui/index.ts`,
+package export `@digithings/web/ui`. Base UI (`@base-ui/react`) underneath,
+`base-lyra` preset (radius 0, Lucide), wearing the same single bridge — the
+kit has **no CSS file of its own**.
+
+- **Add a component**: run `npx shadcn@latest add <name>` inside
+  `cloudflare/digiweb/web` — its `components.json` is authoritative
+  (`"ui": "@/ui"`). Never vendor into an app; the kit is package-owned, the
+  same as any promoted primitive.
+- **Consume**: import from `@digithings/web/ui`, and add
+  `@source "../../web/src/ui";` to the app entry (rule 3 above). The shipped
+  components import `cn` package-relative (`../lib/utils`); `npx shadcn add`
+  re-introduces `@/lib/utils` in new files, so re-point those imports before
+  committing — consumers need no `@/lib/utils` alias.
+- **`--color-primary` is ink/paper — never the accent.** Accent stays a
+  livery/scoped signal; primary is the neutral action.
+
+Until later waves migrate it, the `dress`-axis controls layer above remains
+for surfaces that need its `dress="reference"|"chat"` variants; new work
+should start from the kit where the component exists there. Proof route:
+`reference/app/(gallery)/ui/page.tsx` (dark, light, and a scoped livery).
 
 ## Promotion playbook (v2 — the #1414 epic shape)
 

@@ -4,7 +4,11 @@
  * side by side, the featured one tinted; the precision table rides the same
  * hairline-row, mono-numeral voice as our tearsheets. Static display template
  * consuming Pricing + PrecisionTable from @digithings/web.
+ *
+ * Wave 1: both tier CTAs are the stock kit Button — ghost for the read-more
+ * path, default for the one filled CTA.
  */
+import { Button } from "@digithings/web/ui";
 import { PrecisionTable, Pricing } from "@digithings/web";
 
 const MODELS = [
@@ -32,9 +36,9 @@ export function PricingReference() {
             description:
               "Open core · BYOK · audit-on by default. All modules, usage-based inference.",
             cta: (
-              <button type="button" className="btn-ghost">
+              <Button type="button" variant="ghost">
                 Read the docs
-              </button>
+              </Button>
             ),
           },
           {
@@ -48,9 +52,9 @@ export function PricingReference() {
               </>
             ),
             cta: (
-              <button type="button" className="btn-primary">
+              <Button type="button">
                 Contact sales
-              </button>
+              </Button>
             ),
           },
         ]}

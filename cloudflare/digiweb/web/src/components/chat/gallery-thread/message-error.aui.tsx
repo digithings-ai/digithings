@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ActionBarPrimitive,
   ErrorPrimitive,
   MessagePrimitive,
   useAuiState,
@@ -41,10 +42,12 @@ function splitError(raw: string | undefined): {
       detail?: string;
     };
     const code = parsed.error ?? parsed.code;
-    const title = parsed.message || (typeof code === "string" ? code : raw);
+    const title =
+      (typeof parsed.message === "string" && parsed.message) ||
+      (typeof code === "string" ? code : raw);
     return {
       title,
-      detail: parsed.detail,
+      detail: typeof parsed.detail === "string" ? parsed.detail : undefined,
       code: typeof code === "string" ? code : undefined,
     };
   } catch {
@@ -52,16 +55,28 @@ function splitError(raw: string | undefined): {
   }
 }
 
+/**
+ * Error state — the assistant-ui error-state element pattern: a quiet banner
+ * where the reply would have been, naming the failure with a retry path.
+ *
+ * MessagePrimitive.Error renders the banner only while the message carries an
+ * error (status incomplete + reason error), so nothing here has to check.
+ * ActionBarPrimitive.Reload re-runs the failed turn.
+ */
 export const MessageError: FC = () => {
   const raw = useAuiState((s) => messageStatusErrorText(s.message.status ?? {}));
   const { title, detail, code } = splitError(raw);
 
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root mt-2 flex items-start gap-2 rounded-md border border-hair bg-surface px-3 py-2 text-sm text-ink">
-        <DotMatrix state="error" label="Error" />
+      <ErrorPrimitive.Root className="aui-message-error-root mt-2 flex items-start gap-2.5 rounded-2xl bg-destructive/5 px-4 py-3 text-sm dark:bg-destructive/10">
+        <DotMatrix
+          state="error"
+          label="Error"
+          className="mt-0.5 size-4 shrink-0 text-destructive/80"
+        />
         <div className="min-w-0 flex-1">
-          <ErrorPrimitive.Message className="aui-message-error-message whitespace-pre-wrap">
+          <ErrorPrimitive.Message className="aui-message-error-message whitespace-pre-wrap text-destructive">
             {title}
           </ErrorPrimitive.Message>
           {detail || code ? (
@@ -76,6 +91,9 @@ export const MessageError: FC = () => {
             </details>
           ) : null}
         </div>
+        <ActionBarPrimitive.Reload className="aui-message-error-retry ms-auto flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50">
+          Retry
+        </ActionBarPrimitive.Reload>
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   );

@@ -298,7 +298,7 @@ export function DigichatSkin({
       hiddenAttachmentNames={
         pageContext === "silent" ? [PAGE_CONTEXT_ATTACHMENT_NAME] : undefined
       }
-            reasoningMode={prefs?.prefs.thinking === false ? "off" : reasoningUi.mode}
+      reasoningMode={reasoningUi.mode}
       toolCallsMode={toolCallsUi.mode}
     />
   );

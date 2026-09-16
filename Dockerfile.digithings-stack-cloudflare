@@ -48,6 +48,10 @@ COPY digifetch/pyproject.toml digifetch/ARCHITECTURE.md ./digifetch/
 COPY digifetch/src ./digifetch/src
 RUN uv pip install --system -e "./digifetch"
 
+COPY digiclaw/pyproject.toml digiclaw/ARCHITECTURE.md ./digiclaw/
+COPY digiclaw/src ./digiclaw/src
+RUN uv pip install --system -e "./digiclaw"
+
 COPY digisearch/pyproject.toml digisearch/ARCHITECTURE.md ./digisearch/
 COPY digisearch/src ./digisearch/src
 COPY digisearch/seeds ./digisearch/seeds
@@ -72,6 +76,19 @@ COPY cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.con
      /etc/supervisor/conf.d/digithings.conf
 # Rebuild marker: wrangler tags the container image from this Dockerfile, so a
 # context-only change (e.g. entrypoint.sh) must bump this comment to rebuild.
+# Rebuild marker v8 (2026-09-16): drop `from __future__ import annotations` from
+# the MCP tool modules (digisearch, digivault, digigraph). FastMCP 1.9.3 in this
+# image calls issubclass() on raw annotations, so PEP 563 string annotations
+# made :8765/:8769/:8766 crash at import and never bind. Full rebuild required
+# (wrangler caches the build context by Dockerfile hash).
+# Rebuild marker v7 (2026-09-16): bakes #4223's config-driven hosted MCP changes
+# (entrypoint.sh, digigraph/src, infra/digichat-release/config/digiproject.yaml).
+# Rebuild marker v6 (2026-09-16): forces a full rebuild for digigraph/src-only
+# changes (wrangler caches the build context by Dockerfile hash).
+# Rebuild marker v5 (2026-09-16): bakes the zammad__* tools into the digiproject
+# allowlist (agents.allowed_tools) so digigraph exposes them in the OCC chat.
+# Rebuild marker v4 (2026-09-16): ships the mcp 1.9.x transport-security guard so
+# zammad-mcp binds :8770 under supervisord instead of crash-looping.
 # Rebuild marker v3 (2026-09-15): ships the FastMCP 1.9.3-compatible zammad server
 # (no `from __future__ import annotations`); container instances keep their start-time env,
 # so force a fresh image (and with it a fresh instance) when secrets/env must land.
