@@ -2,13 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
+import { Badge, Card, CardContent } from "@digithings/web/ui";
 
 /**
  * Changelog rail — a horizontal scroll strip of release cards. Swipe, wheel, or
  * use the arrow buttons to move; cards snap into place and the edges fade so the
- * row reads as a continuous strip rather than a cut-off grid. Tags wear the up /
- * down colours by kind. Doubles as the sanctioned mobile fallback for any band
- * too wide to stack. Interactive display template.
+ * row reads as a continuous strip rather than a cut-off grid. Tags read by kind
+ * (feature · fix · breaking). Doubles as the sanctioned mobile fallback for any
+ * band too wide to stack. Interactive display template.
+ *
+ * Wave 1: the release tag is the stock kit Badge — feature → secondary,
+ * breaking → destructive, fix → outline (the neutral stock tone). T6: the card
+ * is the stock kit `Card` (`@digithings/web/ui`); the rail mechanics (flex
+ * basis, scroll-snap, user-select) stay call-site utilities on the Card, and
+ * `.cr-card*` is deleted from data.css.
  */
 type Release = {
   version: string;
@@ -66,7 +73,7 @@ export function ChangelogRailReference() {
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
   // .cr-track's own padding (2.2rem each side, for the edge-fade mask)
-  // combined with scroll-snap-align: start on the FIRST .cr-card means the
+  // combined with scroll-snap-align: start on the FIRST card means the
   // browser's natural resting scrollLeft is NOT 0 — confirmed live:
   // scrollTo({left: 0}) and even a negative value both settle back to
   // ~35px. This is a start-only effect, not a symmetric one: scroll-snap
@@ -155,19 +162,41 @@ export function ChangelogRailReference() {
           tabIndex={0}
         >
           {RELEASES.map((rel) => (
-            <article key={rel.version} className="cr-card" role="listitem" tabIndex={0}>
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[0.95rem] text-ink">{rel.version}</span>
-                <span className={`cr-tag cr-tag-${rel.tag}`}>{rel.tag}</span>
-              </div>
-              <p className="mt-[0.5rem] font-mono text-[0.62rem] tracking-[0.06em] text-ink-mute">{rel.date}</p>
-              <h3 className="mt-[0.15rem] text-[1.05rem] text-ink">{rel.title}</h3>
-              <ul>
-                {rel.entries.map((entry) => (
-                  <li key={entry}>{entry}</li>
-                ))}
-              </ul>
-            </article>
+            <Card
+              key={rel.version}
+              role="listitem"
+              tabIndex={0}
+              className="flex-[0_0_16.5rem] snap-start select-none"
+            >
+              <CardContent className="flex flex-col">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[0.95rem] text-ink">{rel.version}</span>
+                  <Badge
+                    variant={
+                      rel.tag === "breaking"
+                        ? "destructive"
+                        : rel.tag === "feature"
+                          ? "secondary"
+                          : "outline"
+                    }
+                  >
+                    {rel.tag}
+                  </Badge>
+                </div>
+                <p className="mt-[0.5rem] font-mono text-[0.62rem] tracking-[0.06em] text-ink-mute">{rel.date}</p>
+                <h3 className="mt-[0.15rem] text-[1.05rem] text-ink">{rel.title}</h3>
+                <ul className="mt-[0.7rem] grid list-none gap-[0.4rem] p-0">
+                  {rel.entries.map((entry) => (
+                    <li
+                      key={entry}
+                      className="relative pl-4 text-[0.82rem] text-ink-soft before:absolute before:left-0 before:font-mono before:text-ink-mute before:content-['+']"
+                    >
+                      {entry}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
           ))}
         </div>
       </div>

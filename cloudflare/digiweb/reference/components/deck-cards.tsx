@@ -4,7 +4,15 @@
  * deck owns positioning, stacking, and the rail, so these just lay out their
  * own body and wear the up / down colours where P&L applies. Static display
  * templates.
+ *
+ * Wave 1 (T6): the alert is the stock kit `Alert` (`@digithings/web/ui`) —
+ * `tone="down"` (an incident) → `destructive`, `tone="up"` → `default`, the
+ * only honest map onto the two stock variants. The old up/down status dot (a
+ * money-token glow on non-P&L status) leaves with `.deck-alert*` in data.css;
+ * no money tokens are applied to the alert content.
  */
+
+import { Alert, AlertDescription, AlertTitle } from "@digithings/web/ui";
 
 type MetricCardProps = {
   name: string;
@@ -87,14 +95,13 @@ type AlertCardProps = {
 
 export function AlertCard({ status, tone, timestamp, title, impact }: AlertCardProps) {
   return (
-    <div className="deck-alert">
-      <div className={`deck-alert-status ${tone}`}>
-        <span className="deck-alert-dot" aria-hidden="true" />
-        <span>{status}</span>
-        <span className="deck-alert-time">{timestamp}</span>
+    <Alert variant={tone === "down" ? "destructive" : "default"}>
+      <div className="flex items-center justify-between gap-3 font-mono text-[0.68rem] uppercase tracking-[0.08em]">
+        <span className="text-ink">{status}</span>
+        <span className="text-ink-mute">{timestamp}</span>
       </div>
-      <h3>{title}</h3>
-      <p>{impact}</p>
-    </div>
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription>{impact}</AlertDescription>
+    </Alert>
   );
 }
