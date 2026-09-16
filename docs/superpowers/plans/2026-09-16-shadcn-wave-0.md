@@ -422,32 +422,29 @@ export * from "./input";
 Run: `npm --workspace @digithings/web run test -- src/ui/ui.render.test.tsx`
 Expected: 3 passed.
 
-- [ ] **Step 6: Move DotMatrix into the package**
+- [ ] **Step 6: Retire the dead legacy ui files (partial)**
 
-```bash
-git mv cloudflare/digiweb/reference/components/ui/dot-matrix.tsx cloudflare/digiweb/web/src/components/dot-matrix.tsx
-```
+`DotMatrix` already lives in the package (`web/src/components/chat/DotMatrix.tsx`,
+export `./chat/dot-matrix`); the reference `components/ui/dot-matrix.tsx` is a re-export shim and
+`gallery-thread.source.test.ts` pins both it and the tooltip parity specimen
+(`components/ui/tooltip.tsx`). Delete only the verified-dead files:
+`avatar button collapsible dialog skeleton textarea`. Keep `tooltip.tsx` + `dot-matrix.tsx`
+(load-bearing for the product guard; their retirement belongs with that guard's owner).
+Consumers of the shim (`chatbot-thread-list.tsx`, `cube-matrix-legend.tsx`) stay unchanged.
 
-It imports `cn` from `@/lib/utils` — the same specifier now resolves via the package tsconfig (Task 1), no edit needed. Rewire its two consumers:
-- `cloudflare/digiweb/reference/components/chatbot/chatbot-thread-list.tsx:8`: `@/components/ui/dot-matrix` → `@digithings/web/dot-matrix`
-- `cloudflare/digiweb/reference/components/chatbot/cube-matrix-legend.tsx:1`: same replacement
+- [ ] **Step 7: Export the barrel** — add `"./ui": "./src/ui/index.ts"` only.
 
-Then delete the rest: `git rm -r cloudflare/digiweb/reference/components/ui`
+- [ ] **Step 8: Reference app consumes it** — add `@source "../../web/src/ui";`;
+  keep `@source not "../components/ui";` (dir still holds the two survivors).
 
-- [ ] **Step 7: Export the new modules**
+- [ ] **Step 8b: Reconcile the stale reference bridge (ruled addendum)**
 
-In `cloudflare/digiweb/web/package.json` `exports`, following the existing explicit-path convention, add:
-
-```json
-"./ui": "./src/ui/index.ts",
-"./dot-matrix": "./src/components/dot-matrix.tsx",
-```
-
-- [ ] **Step 8: Reference app consumes it**
-
-In `cloudflare/digiweb/reference/app/globals.css`:
-- Add to the `@source` list (one line per dir convention): `@source "../../web/src/ui";`
-- Remove the now-dead `@source not "../components/ui";` line (keep `@source not "../components/chatbot"`).
+`reference/app/globals.css` still carried a local shadcn token bridge (comment + second
+`@theme inline` block) predating the Task 3 package bridge. The package supersedes every row
+except `--color-input-background`, so that row was folded into `web-theme.css` (+ contract test
+pair) and the stale local block deleted. The keyframes-only `@theme inline` (collapsible) stays.
+Effective reference mapping now equals the canon (primary = ink, popover = surface-2,
+muted-foreground = ink-soft, destructive = down, ring = 40% accent mix).
 
 - [ ] **Step 9: Verify the full package + reference gates**
 
