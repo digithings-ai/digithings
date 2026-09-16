@@ -32,6 +32,10 @@
    any residual .tl-* usage on the marketing shell; the live chat UI lives in
    the iframe. AFTER chat-core.css. */
 @import "@digithings/web/styles/terminal-loaders.css";
+/* DigiChat boot loader — the composer-outline cube field shown while the
+   digichat embed warms (the default DigiChat loading animation). AFTER
+   chat-core.css. */
+@import "@digithings/web/styles/digichat-boot-loader.css";
 @import "@digithings/digichat-ui/styles/cursor.css";
 @import "@digithings/digichat-ui/styles/session.css";
 
