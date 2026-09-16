@@ -639,13 +639,18 @@ done-callback per run; a bare `asyncio.create_task` is never used). Both serving
 entrypoints carry the same driver lifespan — the FastAPI app lifespan
 (`server._lifespan`, after its backend gate) and the FastMCP server lifespan
 (`mcp_server.mcp`) — so an MCP-only deployment drives its own runs (#4170).
-Install is per process, reference-counted across concurrent lifespan
-invocations (#4189): FastMCP on streamable-http (digisearch's only transport)
-enters the lifespan once per client session, so overlapping sessions share the
-one install — installed on the first entry, torn down on the last exit. A
-session's exit neither nulls the `set_scheduler` seam nor cancels another
-still-active session's runs. The driver installs the scheduler on the service
-facade at startup (`set_scheduler`), re-schedules the startup-resume union
+The install window is first entry to last exit within one process,
+reference-counted across concurrent lifespan invocations (#4189): FastMCP on
+streamable-http (digisearch's only transport) enters the lifespan once per
+client session, so overlapping sessions share the one install — installed on
+the first entry, torn down on the last exit; a later window reinstalls and
+re-runs the startup resume. A session's exit neither nulls the `set_scheduler`
+seam nor cancels another still-active session's runs. The install guard is a
+per-running-loop lock (#4202): sequential windows on fresh event loops each
+install, resume, and tear down cleanly, while entering a window while an
+install is active on a different loop raises `RuntimeError`. The driver installs
+the scheduler on the service facade at startup (`set_scheduler`), re-schedules
+the startup-resume union
 (websets still `running` ∪ websets holding a non-terminal `running` search;
 once per install window, not per session) as registry-tracked runs under each
 webset's persisted `verification_mode`, and on shutdown undoes the seam first

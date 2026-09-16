@@ -5,15 +5,24 @@ Both serving entrypoints carry the same driver:
 - the FastAPI app lifespan (``digisearch.server._lifespan``), and
 - the FastMCP server lifespan (``digisearch.mcp_server.mcp``).
 
-:func:`webset_task_lifespan` owns one **per-process** install, reference-counted
-across concurrent lifespan invocations (#4189). The first entry starts a
-supervisor coroutine that owns the ``asyncio.TaskGroup``, installs a
-:class:`WebsetTaskScheduler` on the service facade (``set_scheduler``),
-re-schedules the startup-resume union of incomplete websets, and then waits for
-the last exit; teardown undoes the seam first, then cancels every tracked
-run/backfill.
+:func:`webset_task_lifespan` owns one install window at a time per process,
+reference-counted across concurrent lifespan invocations (#4189). The first
+entry starts a supervisor coroutine that owns the ``asyncio.TaskGroup``,
+installs a :class:`WebsetTaskScheduler` on the service facade
+(``set_scheduler``), re-schedules the startup-resume union of incomplete
+websets, and then waits for the last exit; teardown undoes the seam first, then
+cancels every tracked run/backfill.
 
-The install lifetime is therefore the process, not the lifespan invocation:
+The install guard is a **per-running-loop** lock (#4202): the lock is reused
+only while the running loop is unchanged, so a process that opens a fresh loop
+per window (two sequential ``asyncio.run`` calls, for example) installs,
+resumes, and tears down cleanly in each. Concurrent installs on *different*
+event loops in one process remain unsupported: entering while an install is
+active on another loop raises ``RuntimeError`` instead of corrupting the
+reference count.
+
+The install lifetime is therefore the install window (first entry to last
+exit), not the lifespan invocation:
 
 - the FastAPI lifespan spans the HTTP serving window (exactly one invocation);
 - the stdio MCP lifespan spans the process (FastMCP runs once per process);
@@ -57,10 +66,28 @@ __all__ = [
     "webset_task_lifespan",
 ]
 
-_install_lock = asyncio.Lock()
+_install_lock: asyncio.Lock | None = None
+_lock_loop: asyncio.AbstractEventLoop | None = None
+_supervisor_loop: asyncio.AbstractEventLoop | None = None
 _active = 0
 _supervisor: asyncio.Task[None] | None = None
 _stop: asyncio.Event | None = None
+
+
+def _install_lock_for_running_loop() -> asyncio.Lock:
+    """Return the install guard, bound to the running event loop (#4202).
+
+    An ``asyncio.Lock`` binds to the first event loop that contends it, so one
+    module-level lock breaks a process that opens a fresh loop per install
+    window (two sequential ``asyncio.run`` calls, for example). Reuse the lock
+    only while the running loop is unchanged; a new loop gets a fresh lock.
+    """
+    global _install_lock, _lock_loop
+    loop = asyncio.get_running_loop()
+    if _install_lock is None or _lock_loop is not loop:
+        _install_lock = asyncio.Lock()
+        _lock_loop = loop
+    return _install_lock
 
 
 class WebsetTaskScheduler:
@@ -184,21 +211,35 @@ async def webset_task_lifespan(_app: object | None = None) -> AsyncIterator[None
     MCP lifespan spans the process, and FastMCP on streamable-http enters this
     context manager once per MCP client session, so concurrent sessions share
     the one install. See the module docstring.
+
+    The install guard is a per-running-loop lock (#4202): sequential windows on
+    fresh event loops each install, resume, and tear down cleanly, while
+    entering this context manager concurrently from a different event loop than
+    an active install raises ``RuntimeError`` (one process must use one event
+    loop at a time).
     """
-    global _active, _stop, _supervisor
-    async with _install_lock:
+    global _active, _stop, _supervisor, _supervisor_loop
+    running_loop = asyncio.get_running_loop()
+    async with _install_lock_for_running_loop():
+        if _active > 0 and _supervisor_loop is not running_loop:
+            raise RuntimeError(
+                "webset driver is already installed on another event loop; "
+                "one process must use one event loop"
+            )
         if _active == 0 or _supervisor is None or _supervisor.done():
             stop = asyncio.Event()
             ready = asyncio.Event()
             supervisor = asyncio.create_task(_supervise(stop, ready))
             _stop = stop
             _supervisor = supervisor
+            _supervisor_loop = running_loop
             try:
                 await _await_ready(ready, supervisor)
             except BaseException:
                 if _supervisor is supervisor:
                     _stop = None
                     _supervisor = None
+                    _supervisor_loop = None
                     if not supervisor.done():
                         supervisor.cancel()
                         with contextlib.suppress(asyncio.CancelledError):
@@ -208,13 +249,14 @@ async def webset_task_lifespan(_app: object | None = None) -> AsyncIterator[None
     try:
         yield
     finally:
-        async with _install_lock:
+        async with _install_lock_for_running_loop():
             _active -= 1
             if _active == 0:
                 stop = _stop
                 supervisor = _supervisor
                 _stop = None
                 _supervisor = None
+                _supervisor_loop = None
                 if stop is not None:
                     stop.set()
                 if supervisor is not None:
