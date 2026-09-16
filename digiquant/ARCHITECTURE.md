@@ -392,7 +392,10 @@ archive). The read path is registry-read-only (registry inserts raise) so the
 cron's `CORE_POSTGRES_URI` is deliberately NOT forwarded here.
 `DIGIQUANT_MARKET_DATA_BACKEND` is passed through with no Worker-side default:
 unset/empty keeps the library default (`supabase`); set it to `"r2"`
-explicitly via env for the hosted path.
+explicitly via env for the hosted path. The Gloomberb session cookie is **not**
+forwarded to this container yet (gated digifetch tools answer the typed
+`auth_required`); the operator path and tracked wiring follow-up are in
+[docs/ops/gloomberb-session-cookie.md](../docs/ops/gloomberb-session-cookie.md).
 
 Owner applies the five secrets from `cloudflare/digithings-stack-cloudflare/`
 (`$VALUE` filled only in the operator's shell history — never in the repo;
@@ -1635,7 +1638,7 @@ The sandbox runs as UID `10001` (`sandbox`). It does not install digiquant itsel
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | JWT audience |
 | `DIGIKEY_PUBLIC_KEY_PEM` | `""` | Inline PEM for offline JWT verification |
 | `GLOOMBERB_ENABLED` | unset (ON) | Kill switch for the 33 `digifetch_*` Gloomberb tools. Only `1`/`true`/`yes`/`on` enable the family; any other value (including a typo) disables it, and every call then returns a typed `upstream_error` without a request |
-| `GLOOMBERB_SESSION_COOKIE` | `""` | Optional Gloom session cookie for the session-gated endpoints (holders, analyst research, corporate actions, research search, transcripts, statements, ticker tweets, tweet search, short interest, equity diagnostic — screener is also gated and, like transcripts, additionally needs a Pro plan; 11 gated call sites in `client.py`). The `/public/proxies/*`, `/public/risks/*`, and `/public/events/*` filing reads are open and never send it. Bare token or `name=value`; never logged, never echoed into payloads, forwarded only to same-origin redirect hops |
+| `GLOOMBERB_SESSION_COOKIE` | `""` | Optional Gloom session cookie for the session-gated endpoints (holders, analyst research, corporate actions, research search, transcripts, statements, ticker tweets, tweet search, short interest, equity diagnostic — screener is also gated and, like transcripts, additionally needs a Pro plan; 11 gated call sites in `client.py`). The `/public/proxies/*`, `/public/risks/*`, and `/public/events/*` filing reads are open and never send it. Bare token or `name=value`; never logged, never echoed into payloads, forwarded only to same-origin redirect hops — operator runbook: [docs/ops/gloomberb-session-cookie.md](../docs/ops/gloomberb-session-cookie.md) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `""` | OpenTelemetry collector endpoint |
 | `LOG_LEVEL` | `"INFO"` | Logging level for MCP server |
 
