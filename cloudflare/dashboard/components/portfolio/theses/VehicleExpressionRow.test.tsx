@@ -146,4 +146,22 @@ describe('VehicleExpressionRow — Gloomberb shortcut', () => {
     expect(anchor).toContain('rel="noopener noreferrer"');
     expect(html).toContain('Open in Gloomberb');
   });
+
+  // A blank symbol must not render an anchor: `?ticker=` makes the terminal fall
+  // back to its default listing, which would read as this vehicle's ticker.
+  it('renders no Gloomberb link when the ticker is blank', () => {
+    const html = renderToStaticMarkup(
+      createElement(VehicleExpressionRow, {
+        ticker: '   ',
+        rationale: null,
+        candidateRank: null,
+        position: null,
+        latestDecision: null,
+        dossierHref: '/portfolio/tickers?ticker=',
+        deliberationHref: '/pipeline',
+      }),
+    );
+    expect(html).not.toContain('gloomberb-link');
+    expect(html).not.toContain('term.gloom.sh');
+  });
 });

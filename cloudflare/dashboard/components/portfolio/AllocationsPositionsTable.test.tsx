@@ -141,6 +141,16 @@ describe('AllocationsPositionsTable', () => {
     expect(html).toContain('href="https://term.gloom.sh/?ticker=NVDA"');
   });
 
+  // A blank symbol must not render an anchor: `?ticker=` makes the terminal fall
+  // back to its default listing, which would read as this row's ticker.
+  it('renders no Gloomberb link when the ticker is blank', () => {
+    const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
+      reconciliation: recon([pos({ ticker: '   ' })]),
+    }));
+    expect(html).not.toContain('gloomberb-link');
+    expect(html).not.toContain('term.gloom.sh');
+  });
+
   it('uses no off-palette blue/purple literals', () => {
     const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
       reconciliation: recon([pos({})]),

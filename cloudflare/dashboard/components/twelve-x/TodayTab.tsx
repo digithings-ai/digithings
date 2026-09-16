@@ -190,7 +190,7 @@ export default function TodayTab({
             href={GLOOMBERB_TERMINAL_URL}
             target="_blank"
             rel="noopener noreferrer"
-            data-testid="gloomberb-terminal-link"
+            data-testid="gloomberb-terminal-link-timeline"
             className="inline-flex items-center gap-1 text-xs text-accent hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
             title="Open the Gloomberb terminal (opens in a new tab)"
           >

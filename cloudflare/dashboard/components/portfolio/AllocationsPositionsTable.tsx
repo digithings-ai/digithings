@@ -121,19 +121,23 @@ export default function AllocationsPositionsTable(props: {
                             {/*
                               Gloomberb shortcut (#4193) — `tickerKey` is the uppercased
                               symbol, so a lowercase book ticker still deep-links as the
-                              dossier link above does (helper: @digithings/web).
+                              dossier link above does (helper: @digithings/web). A blank
+                              symbol renders no anchor: the helper would hand the terminal
+                              `?ticker=`, which silently falls back to its default symbol.
                             */}
-                            <a
-                              href={gloomberbTickerUrl(tickerKey)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              data-testid={`gloomberb-link-${tickerKey}`}
-                              className="inline-flex items-center text-ink-mute hover:text-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
-                              title={`Open ${p.ticker} in Gloomberb`}
-                              aria-label={`Open ${p.ticker} in Gloomberb (opens in a new tab)`}
-                            >
-                              <ExternalLink size={12} aria-hidden />
-                            </a>
+                            {tickerKey.trim() ? (
+                              <a
+                                href={gloomberbTickerUrl(tickerKey)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                data-testid={`gloomberb-link-${tickerKey}`}
+                                className="inline-flex items-center text-ink-mute hover:text-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+                                title={`Open ${p.ticker} in Gloomberb`}
+                                aria-label={`Open ${p.ticker} in Gloomberb (opens in a new tab)`}
+                              >
+                                <ExternalLink size={12} aria-hidden />
+                              </a>
+                            ) : null}
                           </span>
                           {p.name.trim().toUpperCase() !== p.ticker.trim().toUpperCase() ? (
                             <span

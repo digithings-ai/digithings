@@ -59,6 +59,26 @@ describe('DeliberationsPanel', () => {
     expect(anchor).toContain('target="_blank"');
     expect(anchor).toContain('rel="noopener noreferrer"');
   });
+
+  // The third surface already guarded; pin the absent branch so the guard cannot
+  // regress into an upstream default-symbol link.
+  it('renders no Gloomberb link for a debate row with a blank ticker', () => {
+    const docs: PipelineTickerDoc[] = [
+      {
+        document_key: 'deliberation/',
+        ticker: '   ',
+        payload: {
+          net_stance: 'bullish',
+          bull_thesis: 'Datacenter capex compounding.',
+          bear_thesis: 'Valuation rich into earnings.',
+        },
+      },
+    ];
+    const html = renderToStaticMarkup(createElement(DeliberationsPanel, { docs }));
+    expect(html).toContain('data-testid="ticker-debate-ledger"');
+    expect(html).not.toContain('gloomberb-link');
+    expect(html).not.toContain('term.gloom.sh');
+  });
 });
 
 describe('sortDocsByDateDesc', () => {

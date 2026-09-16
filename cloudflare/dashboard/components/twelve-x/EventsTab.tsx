@@ -452,15 +452,15 @@ export default function EventsTab({
         <h2 className="font-display text-2xl tracking-tight text-ink">Upcoming catalysts</h2>
         {/*
           Macro research shortcut (#4193). The terminal has no stable macro/econ
-          deeplink: `research-entry.ts` only accepts `?ticker=`, and share/layout
-          forms are generated ids — so this links the terminal root, and the
-          label claims nothing more than the destination.
+          deeplink: `research-entry.ts` requires `?ticker=` and exposes no macro
+          form, and share/layout forms are generated ids — so this links the
+          terminal root, and the label claims nothing more than the destination.
         */}
         <a
           href={GLOOMBERB_TERMINAL_URL}
           target="_blank"
           rel="noopener noreferrer"
-          data-testid="gloomberb-terminal-link"
+          data-testid="gloomberb-terminal-link-events"
           className="inline-flex items-center gap-1 text-xs text-accent hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
           title="Open the Gloomberb terminal (opens in a new tab)"
         >

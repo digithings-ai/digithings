@@ -229,8 +229,9 @@ export function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
             <div key={d.ticker} className="px-5 py-4 space-y-3">
               <div className="flex items-baseline gap-3">
                 <span className="font-mono text-sm font-semibold text-accent">{d.ticker}</span>
-                {/* Per-covered-ticker Gloomberb shortcut (#4193). */}
-                {d.ticker ? (
+                {/* Per-covered-ticker Gloomberb shortcut (#4193). Blank tickers render no
+                    anchor — `?ticker=` would fall back to the terminal's default symbol. */}
+                {d.ticker.trim() ? (
                   <a
                     href={gloomberbTickerUrl(d.ticker)}
                     target="_blank"
