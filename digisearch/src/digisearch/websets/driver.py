@@ -1,16 +1,30 @@
-"""Shared webset driver (#4170): process-level run ownership for HTTP and MCP.
+"""Shared webset driver (#4170): in-process run ownership for HTTP and MCP.
 
-Both serving entrypoints carry the same driver for their whole serving window:
+Both serving entrypoints carry the same driver:
 
 - the FastAPI app lifespan (``digisearch.server._lifespan``), and
 - the FastMCP server lifespan (``digisearch.mcp_server.mcp``).
 
-:func:`webset_task_lifespan` owns one ``asyncio.TaskGroup`` per process,
+:func:`webset_task_lifespan` owns one ``asyncio.TaskGroup`` per invocation,
 installs a :class:`WebsetTaskScheduler` on the service facade
 (``set_scheduler``), re-schedules the startup-resume union of incomplete
 websets, and on shutdown undoes the seam first, then cancels every tracked
-run/backfill. HTTP and MCP processes stay independent: each owns its own
-scheduler instance and the ``WEBSET_TASKS`` registry is per-process.
+run/backfill.
+
+The install lifetime is set by the host, not by this module:
+
+- the FastAPI lifespan spans the HTTP serving window;
+- the stdio MCP lifespan spans the process (FastMCP runs once per process);
+- the streamable-http MCP lifespan is entered **once per client session** by
+  the installed ``mcp`` 1.26.0 FastMCP, so the driver, its ``TaskGroup``, and
+  the seam install last only for that session.
+
+Because ``set_scheduler`` and ``WEBSET_TASKS`` are process-global, overlapping
+streamable-http sessions can uninstall or cancel each other's runs; the
+reference-counted install is tracked in
+https://github.com/digithings-ai/digithings/issues/4189. HTTP and MCP
+processes otherwise stay independent: each owns its own scheduler instance
+and the ``WEBSET_TASKS`` registry is per-process.
 
 No HTTP-app import lives here, so either entrypoint can carry the lifespan.
 """
@@ -56,6 +70,15 @@ class WebsetTaskScheduler:
     - ``cancel_all`` cancels every tracked task first so a clean shutdown never
       hangs on an in-flight pass (spec § Async lifecycle: a selected webset at
       boot is an orphan).
+
+    One instance is installed per :func:`webset_task_lifespan` invocation, so
+    its lifetime is the HTTP serving window, an MCP client session
+    (streamable-http), or the MCP process (stdio) — see the module docstring.
+    The seam itself is process-global: a later install replaces an earlier
+    session's scheduler, and ``cancel_all`` cancels every ``WEBSET_TASKS``
+    entry in the process, not only its own instance's. Per-process
+    (reference-counted) install semantics are tracked in
+    https://github.com/digithings-ai/digithings/issues/4189.
     """
 
     def __init__(self, task_group: asyncio.TaskGroup) -> None:
@@ -110,14 +133,22 @@ async def _resume_incomplete_websets(task_group: asyncio.TaskGroup) -> None:
 
 @asynccontextmanager
 async def webset_task_lifespan(_app: object | None = None) -> AsyncIterator[None]:
-    """Install and own the webset scheduler for one serving window.
+    """Install and own the webset scheduler for one lifespan invocation.
 
     Entered by the FastAPI lifespan (``server._lifespan``, after its
     fail-closed backend gate) and by the FastMCP lifespan
     (``mcp_server.mcp``); ``_app`` is the hosting app instance and is unused.
-    The TaskGroup wraps the whole serving window, so schedules from any
-    surface stay cancelable at shutdown; ``set_scheduler`` is undone first so
-    no new work can be scheduled mid-teardown.
+    The TaskGroup wraps the invocation, so schedules from any surface stay
+    cancelable at teardown; ``set_scheduler`` is undone first so no new work
+    can be scheduled mid-teardown.
+
+    How long that invocation lasts is the host's decision: the FastAPI
+    lifespan spans the HTTP serving window and the stdio MCP lifespan spans
+    the process, but FastMCP on streamable-http enters this context manager
+    once per MCP client session, so the install lasts for that session only.
+    ``set_scheduler`` and ``WEBSET_TASKS`` are process-global, so overlapping
+    streamable-http sessions can null or cancel each other's runs — tracked in
+    https://github.com/digithings-ai/digithings/issues/4189.
     """
     async with asyncio.TaskGroup() as task_group:
         scheduler = WebsetTaskScheduler(task_group)

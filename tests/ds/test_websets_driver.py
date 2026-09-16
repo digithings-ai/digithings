@@ -1,4 +1,4 @@
-"""Shared webset driver (#4170): the process-level scheduler both entrypoints carry.
+"""Shared webset driver (#4170): the in-process scheduler both entrypoints carry.
 
 Offline only: every store/runner seam is monkeypatched and no real store file is
 opened. Pins the shared lifespan install/teardown protocol (AC1), the

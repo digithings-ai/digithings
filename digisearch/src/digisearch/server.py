@@ -129,10 +129,12 @@ def _require_real_search_backend() -> None:
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """App lifespan: fail-closed backend gate + shared webset driver.
 
-    The driver's TaskGroup wraps the whole serving window, so route-scheduled
-    runs and backfills stay cancelable at shutdown; ``set_scheduler`` is undone
-    first so no new work can be scheduled mid-teardown. The same driver backs
-    the standalone MCP process (#4170).
+    The driver's TaskGroup wraps the whole HTTP serving window, so
+    route-scheduled runs and backfills stay cancelable at shutdown;
+    ``set_scheduler`` is undone first so no new work can be scheduled
+    mid-teardown. The same driver backs the standalone MCP serving path
+    (#4170); there its install lasts per MCP client session on streamable-http
+    (per process on stdio) — see ``digisearch.websets.driver`` and #4189.
     """
     _require_real_search_backend()
     async with webset_task_lifespan(_app):

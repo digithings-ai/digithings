@@ -232,6 +232,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     `websets/driver.py` module-map row + FastMCP-lifespan / MCP-process-driving
     resolution notes in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
     unchanged.
+    Hashes only (count still 102) re-recorded for the #4170 follow-up docs
+    correction (per-session MCP lifespan caveat + #4189 citation across
+    ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -271,19 +274,19 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "7af3cdc7d42ec69e",
         "78f3776581e1eaf1",
         "aa924885a2a48bdc",
-        "8e641e27bfee4936",
-        "16e13007e80dab2c",
+        "13e56068a3dbb881",
+        "767113eb8e027a2b",
         "7090bb1895cf01fc",
         "f72fb524bae160b6",
         "a45fa09bea0e8e51",
         "a73404f288469603",
-        "95dd096e8d7aa670",
+        "b00e40c26e67a7db",
         "6de35d68bea0e990",
         "c5776a6b47ee3e04",
         "3aed1b59bbde9920",
         "cd75df0bdf136bd3",
-        "7bbcff0de578bc73",
-        "877cfb0918c9f5f6",
+        "8b9534582ad6954f",
+        "deab5eb58f390797",
         "f5694c994b90e40c",
         "2f102978f3f92316",
         "d201d5cef8605cdf",
@@ -309,9 +312,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "9d7b263a74bc8726",
         "367d6f1945838ddd",
         "4187a3ee58add217",
-        "125d31d225ad9516",
+        "cea61babea9674b7",
         "19fbb7c0db259870",
-        "d076b4a30ca15a31",
+        "7d49f202ff0c492a",
         "66ce13f7ba2fafdc",
         "26ca223dcbe8b403",
         "d5e8de001fd3bc4d",
