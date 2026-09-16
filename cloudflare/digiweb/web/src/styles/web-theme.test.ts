@@ -2,7 +2,19 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const css = readFileSync(path.resolve(__dirname, "web-theme.css"), "utf8");
+// Single `__dirname` usage: the tsconfig carries no node types, so this file
+// already reports TS2304 for it (pre-existing, like its node: imports).
+const here = __dirname;
+
+const css = readFileSync(path.resolve(here, "web-theme.css"), "utf8");
+
+// The hair tokens are defined per [data-theme] block in the design package;
+// the web-theme bridge only maps them to utilities. Pin the escalation alias
+// where the other hair tokens actually live.
+const tokens = readFileSync(
+  path.resolve(here, "../../../design/tokens.css"),
+  "utf8",
+);
 
 const chartNames = [
   "--color-chart-1",
@@ -58,5 +70,40 @@ describe("web-theme shadcn token contract", () => {
 
   it("keeps exactly one @theme block (canon)", () => {
     expect(css.match(/@theme\s+inline\s*\{/g)?.length).toBe(1);
+  });
+});
+
+describe("web-theme overlay contract", () => {
+  it("declares the shared data-open/data-closed variants exactly once", () => {
+    const variants = [
+      '@custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));',
+      '@custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));',
+    ];
+    for (const declaration of variants) {
+      expect(css.split(declaration).length - 1).toBe(1);
+    }
+  });
+
+  it("carries the collapsible keyframes with the Base UI panel-height fallback", () => {
+    for (const name of ["collapsible-down", "collapsible-up"]) {
+      expect(css.match(new RegExp(`@keyframes ${name}\\b`, "g"))?.length).toBe(1);
+    }
+    const fallback =
+      "var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto))";
+    expect(css.split(fallback).length - 1).toBe(2);
+  });
+});
+
+describe("hair scale contract (design/tokens.css)", () => {
+  it("defines --hair-strong once per theme block as the --hair-2 escalation", () => {
+    const dark = tokens.slice(
+      tokens.indexOf(':root[data-theme="dark"]'),
+      tokens.indexOf(':root[data-theme="light"]'),
+    );
+    const light = tokens.slice(tokens.indexOf(':root[data-theme="light"]'));
+    for (const block of [dark, light]) {
+      expect(block).toContain("--hair-strong: var(--hair-2);");
+    }
+    expect(tokens.match(/--hair-strong:/g)?.length).toBe(2);
   });
 });
