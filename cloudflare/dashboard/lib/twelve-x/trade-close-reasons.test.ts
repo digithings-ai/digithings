@@ -4,6 +4,7 @@ import {
   closeCounts,
   closeReason,
   displayableTradeHistory,
+  finalResult,
   tradeResult,
   type TradeHistoryRow,
 } from './trade-history';
@@ -38,14 +39,14 @@ describe('closeReason (Trades close column)', () => {
       closeReason(
         row({ lifecycle: 'closed', levelOutcome: 'target', exitDate: '2026-09-05' }),
       ),
-    ).toEqual({ kind: 'target', label: 'Target hit', detail: 'Closed 2026-09-05' });
+    ).toEqual({ kind: 'target', label: 'Target', detail: 'Closed 2026-09-05' });
     expect(closeReason(row({ lifecycle: 'closed', levelOutcome: 'stop' }))).toMatchObject({
       kind: 'stop',
-      label: 'Stop hit',
+      label: 'Stop',
     });
     expect(closeReason(row({ lifecycle: 'closed', levelOutcome: 'both' }))).toMatchObject({
       kind: 'both',
-      label: 'Target + stop hit',
+      label: 'Both',
     });
   });
 
@@ -53,10 +54,10 @@ describe('closeReason (Trades close column)', () => {
     const close = closeReason(row({ lifecycle: 'closed', exitDate: '2026-09-05' }));
     expect(close).toEqual({
       kind: 'superseded',
-      label: 'Superseded by next board',
+      label: 'Superseded',
       detail: 'Superseded 2026-09-05',
     });
-    expect(closeReason(row({ lifecycle: 'closed' })).detail).toBeUndefined();
+    expect(closeReason(row({ lifecycle: 'closed' })).detail).toBe('Superseded by next board');
   });
 
   it('surfaces the bookkeeper drop rationale', () => {
@@ -64,16 +65,16 @@ describe('closeReason (Trades close column)', () => {
       closeReason(
         row({ lifecycle: 'closed', evalStatus: 'dropped', verdictReason: 'thesis dead' }),
       ),
-    ).toMatchObject({ kind: 'dropped', label: 'Dropped — thesis dead' });
+    ).toMatchObject({ kind: 'dropped', label: 'Dropped', detail: 'thesis dead' });
     expect(
-      closeReason(row({ lifecycle: 'closed', evalStatus: 'dropped' })).label,
+      closeReason(row({ lifecycle: 'closed', evalStatus: 'dropped' })).detail,
     ).toBe('Dropped by bookkeeper');
   });
 
   it('marks live, no-data and unscored rows', () => {
     expect(closeReason(row({ lifecycle: 'live' }))).toEqual({ kind: 'live', label: 'Live' });
     expect(closeReason(row({ lifecycle: 'no_data' })).kind).toBe('no-data');
-    expect(closeReason(row({ lifecycle: 'no_data' })).label).toBe('No data — missing rates');
+    expect(closeReason(row({ lifecycle: 'no_data' })).label).toBe('No data');
     expect(closeReason(row({ lifecycle: 'unscored' })).label).toBe('Unscored');
   });
 
@@ -84,8 +85,8 @@ describe('closeReason (Trades close column)', () => {
       ),
     ).toEqual({
       kind: 'superseded',
-      label: 'Never filled — superseded',
-      detail: 'Superseded 2026-09-05',
+      label: 'Superseded',
+      detail: 'Never filled — superseded 2026-09-05',
     });
   });
 
@@ -184,5 +185,46 @@ describe('closeCounts (close-reason tally)', () => {
       noData: 1,
       live: 1,
     });
+  });
+});
+
+describe('outcome grading (migration 032)', () => {
+  it('prefers the stored outcome over the legacy directional win', () => {
+    expect(
+      tradeResult(row({ lifecycle: 'closed', outcome: 'right', directionalWin: false })),
+    ).toBe('right');
+    expect(
+      tradeResult(row({ lifecycle: 'closed', outcome: 'wrong', directionalWin: true })),
+    ).toBe('wrong');
+    expect(tradeResult(row({ lifecycle: 'closed', directionalWin: true }))).toBe('right');
+  });
+
+  it('grades a dropped row from its stored outcome', () => {
+    const dropped = row({
+      lifecycle: 'closed',
+      evalStatus: 'dropped',
+      closedBy: 'drop',
+      outcome: 'wrong',
+      verdictReason: 'thesis dead',
+    });
+    expect(tradeResult(dropped)).toBe('wrong');
+    expect(closeReason(dropped)).toMatchObject({ kind: 'dropped', label: 'Dropped' });
+  });
+});
+
+describe('finalResult (Impact column)', () => {
+  it('returns the signed mark with its basis and live flag', () => {
+    expect(finalResult(row({ holdReturn: 0.0125, gradeBasis: 'measured' }))).toEqual({
+      pct: 0.0125,
+      basis: 'measured',
+      live: false,
+    });
+    expect(
+      finalResult(row({ holdReturn: -0.004, gradeBasis: 'directional', lifecycle: 'live' })),
+    ).toEqual({ pct: -0.004, basis: 'directional', live: true });
+  });
+
+  it('returns null when there is no mark', () => {
+    expect(finalResult(row({ holdReturn: null }))).toBeNull();
   });
 });

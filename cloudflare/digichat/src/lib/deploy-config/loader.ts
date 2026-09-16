@@ -28,6 +28,7 @@ import {
   BASELINE_EMBED_WELCOME_BODY,
 } from "@/lib/baseline-embed";
 import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
+import { DEFAULT_THINKING_MODE, DEFAULT_VIEW_MODE } from "@/lib/view-modes";
 import {
   isThreadSkin,
   defaultThreadSkinForTenant,
@@ -101,8 +102,8 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       attachments: cfg.attachments === true,
       dictation: false,
       speech: false,
-      reasoning: "collapsed",
-      toolCalls: "collapsed",
+      view: cfg.view ?? DEFAULT_VIEW_MODE,
+      thinking: cfg.thinking ?? DEFAULT_THINKING_MODE,
       sources: true,
       modelPicker: false,
       branchPicker: true,
@@ -162,6 +163,8 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     showLanguageSelector: dep.gate.showLanguageSelector,
     attachments: dep.features.attachments === true,
     pageContext: dep.features.pageContext,
+    view: dep.features.view,
+    thinking: dep.features.thinking,
     webSearch:
       dep.gate.webSearch === true ||
       dep.tools?.catalog?.some((t) => t.id === "web_search") === true,
