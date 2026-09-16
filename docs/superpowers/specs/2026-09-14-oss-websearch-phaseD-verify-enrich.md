@@ -30,6 +30,35 @@ Scope of the erratum: **docs + fixtures only, no production code**.
 | R12 | Orchestrator wiring = dispatch branches + manifest entries + `ORCHESTRATOR_TOOL_NAMES` constants |
 | R13 | Human gate stays on the webhook-delivery task (new egress) |
 
+## Erratum (T1, 2026-09-16) — C↔D bridge landed (#4249)
+
+The v1 erratum named the C↔D bridge a follow-up; it is now landed. The
+contract (one envelope, one retry owner, one idempotency ledger):
+
+- **Direction + envelope.** A Phase C `Watch` carrying `bridge={webset_id}`
+  (`monitors/models.py`) hands each `ok` run to Phase D in-process — the
+  runner calls `service.handoff_from_watch(webset_id, watch_id, run_id)`
+  through an import seam, no loopback HTTP and no bearer token (R2 precedent).
+  The handoff runs after persist, like delivery; `no_change`/`failed` runs
+  never hand off. The run's `query_snapshot` records the bridge target.
+- **Retry ownership is single: the watch turn.** The runner attempts the
+  handoff once per `ok` run and records the outcome as a `BridgeReceipt` on
+  the RETURNED run (`ok=False, error=…` on failure) — it never flips the
+  run's status. The next `ok` run re-attempts.
+- **Idempotency.** The websets store's `bridge_handoffs` ledger keyed
+  `(watch_id, run_id, webset_id)` is written in the same transaction as the
+  search row (`INSERT OR IGNORE` + `UPDATE … search_id`); a redelivered run
+  returns the first search with `created=False` and never opens a second
+  generation. Back-pressure is limited to scheduling one settling pass.
+- **Shared-host stores.** Phase C and Phase D stores share the one documented
+  concurrency model (R5): one thread-bound connection per instance, `WAL` +
+  `PRAGMA busy_timeout=5000` on every connect, no module-level lock — the
+  bridge adds no cross-store transaction and no new lock order (each store
+  commits independently; the ledger makes the second write a no-op).
+- **EXA watches reject `bridge`** at the config gate
+  (`bridge_exa_unsupported`): remote EXA monitors are translated by the
+  webhook adapter and never run `run_watch`.
+
 ## Goal
 
 Build the dataset-building capability of the OSS web-search program: an
@@ -111,11 +140,11 @@ status -> "idle" (terminal: all searches settled AND all items settled —
   │
    ├── poll:   GET /v1/websets/{id} + GET .../items
    ├── push:   webhooks (HMAC-signed; shared Phase C signing core)
-   │           (Phase C `Watch`es are NOT a fan-out target — see § Interfaces;
-   │           a C↔D bridge is a named follow-up, not this spec.
-   │           POLL-ONLY v1: there is no scheduled tick driver — webset
-   │           monitors are created/listed/triggered manually; the driver is a
-   │           named follow-up, see § Tasks, re-scoped sequence note)
+   │           (Phase C `Watch`es are NOT a webhook fan-out target, but a
+   │           watch MAY hand an `ok` run to a webset via its `bridge` field —
+   │           landed #4249; contract in § Erratum T1 + § Interfaces.
+   │           Webset monitors are tick-driven v1 — the shared driver's loop
+   │           honors `interval_seconds` with a `paused` switch)
    └── export: GET .../export?format=csv|json
 ```
 
@@ -565,6 +594,18 @@ def trigger_monitor(
     (T7 carry); a terminal `cancelled`/`failed` webset raises `webset_terminal`.
     Returns the webset. Unknown ids raise `WebsetStoreError` with code
     `webset_not_found` / `monitor_not_found`."""
+
+def handoff_from_watch(
+    webset_id: str, *, watch_id: str, run_id: str, store: WebsetStore | None = None
+) -> tuple[WebsetSearch, bool]:
+    """C→D bridge (#4249): open ONE search generation for a watch handoff,
+    idempotently. No monitor row is required (a watch hands off directly); the
+    new generation inherits the latest search exactly like `trigger_monitor`;
+    a terminal `cancelled`/`failed` webset raises `webset_terminal`. The
+    `(watch_id, run_id, webset_id)` ledger (one transaction, `INSERT OR
+    IGNORE` on `bridge_handoffs`) makes a repeat delivery of one run return
+    the already-created search with `created=False`; only `created=True`
+    schedules a settling pass. Returns `(search, created)`."""
 
 def add_webhook(
     webset_id: str,

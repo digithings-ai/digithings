@@ -571,3 +571,113 @@ def test_tick_skips_datatap_watches(monkeypatch, tmp_path):
     delivered = _stub_pipeline(monkeypatch)
     assert mod.tick_due_watches(store=store) == []
     assert delivered == []
+
+
+# ── C→D bridge handoff (#4249) ───────────────────────────────────────────────
+
+
+class _BridgeSearch:
+    """Minimal stand-in for the service's ``WebsetSearch`` return value."""
+
+    id = "wss_bridge1"
+
+
+def _bridge_stub(monkeypatch, *, created: bool = True) -> list[tuple[str, str, str]]:
+    """Patch the handoff import boundary; record (webset, watch, run) calls."""
+    from digisearch.monitors import runner as mod
+
+    calls: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(
+        mod,
+        "_invoke_handoff",
+        lambda webset_id, *, watch_id, run_id: calls.append((webset_id, watch_id, run_id))
+        or (_BridgeSearch(), created),
+    )
+    return calls
+
+
+@pytest.mark.unit
+def test_run_watch_bridge_handoff_receipt(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, bridge={"webset_id": "ws_bridge"})
+    monkeypatch.setattr(mod, "_invoke_shallow_recall", lambda **k: _recall_data())
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+    calls = _bridge_stub(monkeypatch, created=True)
+
+    run = mod.run_watch(watch.watch_id, store=store)
+
+    assert run.status == "ok"
+    assert run.bridge is not None
+    assert run.bridge.ok is True
+    assert run.bridge.webset_id == "ws_bridge"
+    assert run.bridge.search_id == "wss_bridge1"
+    assert run.bridge.duplicate is False
+    assert run.query_snapshot["bridge"] == {"webset_id": "ws_bridge"}
+    assert calls == [("ws_bridge", watch.watch_id, run.run_id)]
+    # Receipts ride the returned run only; the append-only store keeps bridge=None.
+    assert store.get_run(watch.watch_id, run.run_id).bridge is None
+
+
+@pytest.mark.unit
+def test_run_watch_bridge_duplicate_receipt(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, bridge={"webset_id": "ws_bridge"})
+    monkeypatch.setattr(mod, "_invoke_shallow_recall", lambda **k: _recall_data())
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+    _bridge_stub(monkeypatch, created=False)
+
+    run = mod.run_watch(watch.watch_id, store=store)
+
+    assert run.bridge is not None
+    assert run.bridge.ok is True
+    assert run.bridge.duplicate is True
+    assert run.bridge.search_id == "wss_bridge1"
+
+
+@pytest.mark.unit
+def test_run_watch_bridge_failure_is_a_receipt_not_a_status_flip(monkeypatch, tmp_path):
+    """Retry ownership stays with the watch turn: the failure never flips status."""
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, bridge={"webset_id": "ws_bridge"})
+    monkeypatch.setattr(mod, "_invoke_shallow_recall", lambda **k: _recall_data())
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+
+    def boom(webset_id, *, watch_id, run_id):
+        raise RuntimeError("websets unavailable")
+
+    monkeypatch.setattr(mod, "_invoke_handoff", boom)
+
+    run = mod.run_watch(watch.watch_id, store=store)
+
+    assert run.status == "ok"
+    assert run.bridge is not None
+    assert run.bridge.ok is False
+    assert run.bridge.search_id is None
+    assert run.bridge.error is not None and "websets unavailable" in run.bridge.error
+
+
+@pytest.mark.unit
+def test_run_watch_bridge_skipped_without_bridge_or_on_no_change(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    plain = _make_watch(store)
+    monkeypatch.setattr(mod, "_invoke_shallow_recall", lambda **k: _recall_data())
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+    calls = _bridge_stub(monkeypatch)
+
+    bridged = _make_watch(store, bridge={"webset_id": "ws_bridge"})
+    first = mod.run_watch(bridged.watch_id, store=store)
+    second = mod.run_watch(bridged.watch_id, store=store)
+    plain_run = mod.run_watch(plain.watch_id, store=store)
+
+    assert first.bridge is not None
+    assert second.status == "no_change" and second.bridge is None
+    assert plain_run.status == "ok" and plain_run.bridge is None
+    assert calls == [("ws_bridge", bridged.watch_id, first.run_id)]

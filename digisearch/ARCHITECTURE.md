@@ -476,7 +476,10 @@ delivery config), let the runner recall and dedup results, then read the
 canonical run history or receive delivery. One store, one runner, one envelope —
 the recall leg is `digisearch.web_exa.exa_search` whenever `EXA_API_KEY` is
 configured and the OSS seam otherwise, and the `backend` a watch declares is
-recorded on each of its runs. Monitors are off end-to-end for the `datatap`
+recorded on each of its runs. A watch may carry a `bridge` target
+(`{"webset_id"}`, #4249): every `ok` run then hands one search generation to
+that Phase D webset in-process, idempotent per run through the websets store's
+ledger (see § Phase D websets). Monitors are off end-to-end for the `datatap`
 workspace: create/update reject it and the tick skips it.
 
 ##### Monitor HTTP routes
@@ -677,6 +680,17 @@ each search generation: `add_search` and `trigger_monitor` inherit it, so a
 `rules` webset never silently switches to `llm` on a refresh. The runner's
 backfill generations (`add_enrichment`) persist the inherited mode too, so a
 backfill cannot reset a `rules` webset to the model default.
+
+**C→D bridge (#4249).** A Phase C watch may hand its `ok` runs to a webset
+(`Watch.bridge`). The runner calls `handoff_from_watch(webset_id, watch_id,
+run_id)` in-process after persist: the websets store's `bridge_handoffs` ledger
+keyed `(watch_id, run_id, webset_id)` is written in the same transaction as the
+new search row, so a re-delivered run returns the first generation with
+`created=False` and only `created=True` schedules a settle pass. The watch turn
+is the single retry owner — a handoff failure is recorded as a `BridgeReceipt`
+on the returned run and never flips its status; the next `ok` run re-attempts.
+An EXA-backed watch rejects `bridge` at the config gate
+(`bridge_exa_unsupported`).
 
 **Scheduled tick driver (#4221).** Each install window also runs one tick task
 inside the driver's `asyncio.TaskGroup` (`WEBSET_TICK_SECONDS`, 60s default):

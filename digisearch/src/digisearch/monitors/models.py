@@ -71,6 +71,14 @@ class DeliveryConfig(BaseModel):
     targets: list[DeliveryTarget] = Field(default_factory=list, max_length=5)
 
 
+class WatchBridge(BaseModel):
+    """C→D handoff target (#4249): hand an ``ok`` run to this webset."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    webset_id: str = Field(min_length=1)
+
+
 class Watch(BaseModel):
     """A scheduled web-search watch.
 
@@ -89,6 +97,10 @@ class Watch(BaseModel):
       generated server-side and returned only in create/rotate responses.
     - ``exa_monitor_id`` identifies the remote EXA monitor and is required
       once ``backend="exa"`` (enforced by the Task 8 create path).
+    - ``bridge`` is the C→D handoff switch (#4249): when set, every ``ok`` run
+      opens one search generation on the named webset through the websets
+      store's idempotency ledger. It is OSS-local-only — EXA watches reject it
+      at the config gate (remote monitors never hand off).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -104,6 +116,7 @@ class Watch(BaseModel):
     schedule: WatchSchedule
     dedup: DedupRule = Field(default_factory=DedupRule)
     delivery: DeliveryConfig = Field(default_factory=DeliveryConfig)
+    bridge: WatchBridge | None = None
     backend: Literal["oss", "exa"] = "oss"
     exa_monitor_id: str | None = None
     workspace_id: str | None = None
@@ -127,6 +140,21 @@ class DeliveryReceipt(BaseModel):
     error: str | None = None
 
 
+class BridgeReceipt(BaseModel):
+    """Outcome of one C→D handoff attempt (#4249).
+
+    ``duplicate=True`` means the ``(watch_id, run_id, webset_id)`` ledger
+    already recorded the search and this delivery returned it unchanged (a
+    repeat of the same run never opens a second generation).
+    """
+
+    webset_id: str
+    ok: bool
+    search_id: str | None = None
+    duplicate: bool = False
+    error: str | None = None
+
+
 class MonitorRun(BaseModel):
     """Canonical run envelope — backend is a label, never a shape fork.
 
@@ -135,6 +163,10 @@ class MonitorRun(BaseModel):
     stored/delivered; ``no_change`` = turn succeeded but dedup removed
     everything (delivery skipped, run still persisted); ``failed`` = the turn
     raised or the backend errored (``error`` set, delivery skipped).
+
+    ``delivery`` and ``bridge`` receipts are attached to the RETURNED run only:
+    the append-only store cannot rewrite the already-persisted body, so stored
+    runs keep both lists empty.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -152,4 +184,5 @@ class MonitorRun(BaseModel):
     dedup_stats: dict[str, int]
     cost_dollars: dict[str, Any] | None = None
     delivery: list[DeliveryReceipt] = Field(default_factory=list)
+    bridge: BridgeReceipt | None = None
     error: str | None = None

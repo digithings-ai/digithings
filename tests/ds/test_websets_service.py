@@ -528,6 +528,62 @@ def test_trigger_monitor_unknown_ids(tmp_path):
         service.trigger_monitor("ws_missing", monitor.id, store=store)
 
 
+def test_handoff_from_watch_is_idempotent_and_schedules_once(tmp_path, scheduler):
+    store = _store(tmp_path)
+    webset = service.create_webset(
+        query="photonics startups", count=5, criteria=[_CRITERION], store=store
+    )
+    initial = webset.searches[0]
+    scheduler.runs.clear()
+
+    first, created = service.handoff_from_watch(
+        webset.id, watch_id="watch_1", run_id="run_1", store=store
+    )
+
+    assert created is True
+    assert first.status == "running"
+    assert first.query == initial.query
+    assert first.count == initial.count
+    assert scheduler.runs == [(webset.id, "llm")]
+
+    second, created_again = service.handoff_from_watch(
+        webset.id, watch_id="watch_1", run_id="run_1", store=store
+    )
+
+    assert created_again is False
+    assert second.id == first.id
+    assert scheduler.runs == [(webset.id, "llm")]
+    assert [s.id for s in service.get_webset(webset.id, store=store).searches] == [
+        initial.id,
+        first.id,
+    ]
+
+    later, created_later = service.handoff_from_watch(
+        webset.id, watch_id="watch_1", run_id="run_2", store=store
+    )
+
+    assert created_later is True
+    assert later.id != first.id
+    assert len(scheduler.runs) == 2
+
+
+def test_handoff_from_watch_rejects_terminal_webset(tmp_path, scheduler):
+    store = _store(tmp_path)
+    webset = service.create_webset(query="q", criteria=[_CRITERION], store=store)
+    service.cancel_webset(webset.id, store=store)
+
+    with pytest.raises(WebsetServiceError) as ei:
+        service.handoff_from_watch(webset.id, watch_id="watch_1", run_id="run_1", store=store)
+    assert ei.value.code == "webset_terminal"
+
+
+def test_handoff_from_watch_unknown_webset(tmp_path):
+    store = _store(tmp_path)
+
+    with pytest.raises(WebsetNotFoundError):
+        service.handoff_from_watch("ws_missing", watch_id="watch_1", run_id="run_1", store=store)
+
+
 def test_set_monitor_paused_pauses_and_resumes(tmp_path, scheduler):
     store = _store(tmp_path)
     webset = service.create_webset(query="q", criteria=[_CRITERION], store=store)

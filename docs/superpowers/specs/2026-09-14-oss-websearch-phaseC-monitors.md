@@ -221,6 +221,10 @@ class DeliveryConfig(BaseModel):
     mode: Literal["poll", "webhook", "fanout"] = "poll"
     targets: list[DeliveryTarget] = Field(default_factory=list, max_length=5)
 
+class WatchBridge(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    webset_id: str = Field(min_length=1)       # C→D handoff target (#4249)
+
 class Watch(BaseModel):
     model_config = ConfigDict(extra="forbid")
     watch_id: str = ""                         # server-assigned ulid-hex on create
@@ -235,6 +239,9 @@ class Watch(BaseModel):
     schedule: WatchSchedule
     dedup: DedupRule = Field(default_factory=DedupRule)
     delivery: DeliveryConfig = Field(default_factory=DeliveryConfig)
+    bridge: WatchBridge | None = None          # hand `ok` runs to a Phase D webset (#4249);
+                                               # OSS-local-only — backend=exa rejects it (422
+                                               # bridge_exa_unsupported)
     backend: Literal["oss", "exa"] = "oss"
     exa_monitor_id: str | None = None          # required when backend=exa
     workspace_id: str | None = None
@@ -246,6 +253,13 @@ class DeliveryReceipt(BaseModel):
     target_kind: str
     ok: bool
     status_code: int | None = None
+    error: str | None = None
+
+class BridgeReceipt(BaseModel):
+    webset_id: str
+    ok: bool
+    search_id: str | None = None
+    duplicate: bool = False                    # True: the ledger already recorded this run (#4249)
     error: str | None = None
 
 class MonitorRun(BaseModel):
@@ -262,11 +276,13 @@ class MonitorRun(BaseModel):
     query_snapshot: dict[str, Any]             # query/search_type/num_results (post-clamp, with a
                                                # num_results_clamped_from entry when R6 clamps) /
                                                # recency_days (always None for monitors, R5) / domains
+                                               # / bridge target when the watch sets one (#4249)
     results_all: list[dict[str, Any]]          # WebSearchData result dicts, as returned
     results_new: list[dict[str, Any]]          # dedup survivors only
     dedup_stats: dict[str, int]                # {seen, new, changed, unchanged}
     cost_dollars: dict[str, Any] | None = None # passthrough from WebSearchData
     delivery: list[DeliveryReceipt] = Field(default_factory=list)
+    bridge: BridgeReceipt | None = None        # returned-run receipt only (stored runs keep None)
     error: str | None = None
 ```
 
@@ -359,6 +375,9 @@ adaptation happens through `_oss_response_to_data` so the runner always holds a
 `WebSearchData`; the OSS leg itself returns `WebSearchResponse`) → `dedup_results`
 against `seen_fingerprints` → persist run → fan out delivery only when
 `status == ok` and `mode != poll` (R13; `no_change`/`failed` runs never deliver)
+→ hand off to the watch's `bridge` webset when set and `status == ok` (#4249:
+in-process `websets.service.handoff_from_watch`, receipt on the returned run,
+one attempt per run — the next `ok` run retries and the websets ledger dedups)
 → return run. Per R2 there is NO same-process loopback HTTP to self, and NO
 bearer token is threaded through the runner. Any recall exception → persist
 `status: failed` with `error=str(exc)` and re-raise as `MonitorRunError`

@@ -144,3 +144,36 @@ def test_monitor_run_rejects_unknown_status_and_keys():
         MonitorRun.model_validate(_run_payload(status="exploded"))
     with pytest.raises(ValidationError):
         MonitorRun.model_validate(_run_payload(bogus=1))
+
+
+# ── config gate: EXA-local-only options (#4249) ──────────────────────────────
+
+
+def test_watch_bridge_round_trips_and_stays_strict():
+    assert _watch().bridge is None
+    watch = _watch(bridge={"webset_id": "ws_1"})
+    assert watch.bridge is not None and watch.bridge.webset_id == "ws_1"
+    with pytest.raises(ValidationError):
+        _watch(bridge={"webset_id": ""})
+    with pytest.raises(ValidationError):
+        _watch(bridge={"webset_id": "ws_1", "extra": 1})
+
+
+def test_config_gate_rejects_bridge_on_exa_watches():
+    from digisearch.monitors.validation import watch_config_error
+
+    assert watch_config_error(_watch(bridge={"webset_id": "ws_1"})) is None
+    error = watch_config_error(
+        _watch(backend="exa", exa_monitor_id="mon_1", bridge={"webset_id": "ws_1"})
+    )
+    assert error is not None
+    assert error[0] == 422 and error[1] == "bridge_exa_unsupported"
+
+
+def test_monitor_run_bridge_receipt_round_trips():
+    assert MonitorRun.model_validate(_run_payload()).bridge is None
+    run = MonitorRun.model_validate(
+        _run_payload(bridge={"webset_id": "ws_1", "ok": True, "search_id": "wss_1"})
+    )
+    assert run.bridge is not None
+    assert run.bridge.duplicate is False

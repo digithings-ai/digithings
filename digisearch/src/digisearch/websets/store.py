@@ -212,6 +212,15 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
     PRIMARY KEY (webhook_id, event_id)
 );
 
+CREATE TABLE IF NOT EXISTS bridge_handoffs (
+    watch_id TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    webset_id TEXT NOT NULL,
+    search_id TEXT,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (watch_id, run_id, webset_id)
+);
+
 CREATE TABLE IF NOT EXISTS events (
     event_id TEXT PRIMARY KEY,
     webset_id TEXT NOT NULL,
@@ -237,8 +246,10 @@ class WebsetStoreError(RuntimeError):
     missing event row). Internal invariant violations raise
     ``transition_invalid`` (illegal status move), ``webset_not_settled`` (idle
     requested while work is pending), ``invalid_event_kind`` (unknown append
-    kind), ``invalid_webhook_delivery`` (empty ledger key), and
-    ``event_not_stored`` (a conflicting event row could not be read back).
+    kind), ``invalid_webhook_delivery`` (empty ledger key),
+    ``bridge_handoff_not_stored`` (a bridge ledger row whose search id could
+    not be read back), and ``event_not_stored`` (a conflicting event row could
+    not be read back).
     """
 
     def __init__(self, message: str, *, code: str) -> None:
@@ -442,6 +453,75 @@ class WebsetStore:
                 ),
             )
         return created
+
+    def bridge_handoff(
+        self,
+        webset_id: str,
+        *,
+        watch_id: str,
+        run_id: str,
+        search: WebsetSearch,
+    ) -> tuple[WebsetSearch, bool]:
+        """Idempotently open one search generation for a watch handoff (#4249).
+
+        Single transaction: an INSERT-or-ignore ledger row keyed
+        ``(watch_id, run_id, webset_id)``. The first delivery of a run creates
+        the generation (server-assigned ``wss`` id, ``running``) and records its
+        id on the ledger; every repeat delivery of the same run finds the ledger
+        row and returns the already-created search unchanged — never a second
+        generation. Returns ``(search, created)``.
+        """
+        self.get_webset(webset_id)
+        now = _now()
+        created: WebsetSearch | None = None
+        existing_id: str | None = None
+        with self._conn:
+            cursor = self._conn.execute(
+                "INSERT OR IGNORE INTO bridge_handoffs "
+                "(watch_id, run_id, webset_id, search_id, created_at) "
+                "VALUES (?, ?, ?, NULL, ?)",
+                (watch_id, run_id, webset_id, _utc_iso(now)),
+            )
+            if cursor.rowcount == 0:
+                row = self._conn.execute(
+                    "SELECT search_id FROM bridge_handoffs "
+                    "WHERE watch_id = ? AND run_id = ? AND webset_id = ?",
+                    (watch_id, run_id, webset_id),
+                ).fetchone()
+                existing_id = row[0] if row is not None else None
+                if not existing_id:
+                    raise WebsetStoreError(
+                        f"bridge handoff ledger row has no search: {watch_id}/{run_id}",
+                        code="bridge_handoff_not_stored",
+                    )
+            else:
+                created = search.model_copy(
+                    update={
+                        "webset_id": webset_id,
+                        "id": _new_entity_id("wss"),
+                        "status": "running",
+                    }
+                )
+                self._conn.execute(
+                    "INSERT INTO searches (search_id, webset_id, status, created_at, body) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        created.id,
+                        created.webset_id,
+                        created.status,
+                        _utc_iso(now),
+                        created.model_dump_json(),
+                    ),
+                )
+                self._conn.execute(
+                    "UPDATE bridge_handoffs SET search_id = ? "
+                    "WHERE watch_id = ? AND run_id = ? AND webset_id = ?",
+                    (created.id, watch_id, run_id, webset_id),
+                )
+        if created is not None:
+            return created, True
+        assert existing_id is not None
+        return self.get_search(webset_id, existing_id), False
 
     def get_search(self, webset_id: str, search_id: str) -> WebsetSearch:
         """Load one search generation; a missing id raises ``search_not_found``."""
