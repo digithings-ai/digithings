@@ -39,8 +39,11 @@ def test_mcp_module_avoids_pep563_annotations() -> None:
     ``issubclass()`` on the raw annotation — see Dockerfile.digithings-stack-cloudflare
     rebuild marker v8.
     """
+    import re
     from pathlib import Path
 
     source = Path(mcp_server.__file__).read_text()
-    banned = "from __future__ import annotations"
-    assert not any(line.strip().startswith(banned) for line in source.splitlines())
+    assert not any(
+        re.match(r"^from\s+__future__\s+import\s+annotations", line.strip())
+        for line in source.splitlines()
+    )
