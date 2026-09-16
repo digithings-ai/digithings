@@ -84,11 +84,13 @@ def call_digisearch_web_search(
     exclude_domains: list[str] | None = None,
     max_results: int = 4,
     context: ToolContext | None = None,
+    timeout: float = 120.0,
 ) -> dict[str, Any]:
     """Public entry point for the digisearch ``web_search`` tool call.
 
     Thin delegation to :func:`_call_digisearch_web_search` — external callers
     (digiquant pipeline grounding) import this, never the private name.
+    ``timeout`` bounds the single hub HTTP call.
     """
     return _call_digisearch_web_search(
         query,
@@ -96,6 +98,7 @@ def call_digisearch_web_search(
         exclude_domains=exclude_domains,
         max_results=max_results,
         context=context,
+        timeout=timeout,
     )
 
 
@@ -105,6 +108,7 @@ def _call_digisearch_web_search(
     exclude_domains: list[str] | None = None,
     max_results: int = 4,
     context: ToolContext | None = None,
+    timeout: float = 120.0,
 ) -> dict[str, Any]:
     """Invoke digisearch ``web_search`` via the vertical-orchestrator hub.
 
@@ -133,10 +137,13 @@ def _call_digisearch_web_search(
         default_index_name=index_name,
         bearer_token=_digi_bearer_from_context(context) if context is not None else None,
         request_id=getattr(context, "request_id", None),
+        timeout=timeout,
     )
     if not isinstance(inv, dict):
         raise DigisearchHubError("digisearch web_search returned a non-object response")
-    if not inv.get("ok"):
+    # #4198: only a real JSON ``true`` counts as success — a malformed envelope whose
+    # ``ok`` is a truthy non-boolean (e.g. ``"false"``) must fail the pre-flight gate.
+    if inv.get("ok") is not True:
         raise DigisearchHubError(
             f"digisearch web_search failed: {inv.get('error') or 'unknown error'}"
         )
