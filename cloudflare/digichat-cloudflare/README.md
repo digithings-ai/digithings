@@ -108,6 +108,14 @@ Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/ap
 }
 ```
 
+Tenant entries may also carry the same operator-only `mcp.servers` entries as
+the deploy YAML — `{ id, url, label?, default?, token?, tokenEnv?, authHeader? }`
+— e.g. the OCC Zammad server via the key-gated stack route
+(`url: https://graph.digithings.ai/_stack/mcp/zammad/mcp`,
+`tokenEnv: MCP_EDGE_KEY`, `authHeader: x-digi-mcp-key`). They are resolved
+server-side and stripped by the browser projections (see
+`cloudflare/digichat/ARCHITECTURE.md`).
+
 `DIGICHAT_EMBED_HOSTS` is already set in `wrangler.toml` `[vars]` (CSP
 `frame-ancestors` — no tokens). Keep it aligned with tenant host keys:
 

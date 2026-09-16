@@ -887,7 +887,10 @@ browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip `url`/`token`/
 deploy environment by `loader.ts`, inline `token` wins if both are set) plus an optional `authHeader` — the outbound
 header name for that token, e.g. `X-API-Key` for MCP servers that don't speak `Authorization: Bearer` (DataTap's,
 `#3841`). `authHeader` is operator-only: it has no counterpart on the session-overlay schema, so a client can never
-set or override it — only the operator/token pairing on the same YAML row can. `/tools` lists every
+set or override it — only the operator/token pairing on the same YAML row can.
+The `DIGICHAT_EMBED_TENANTS` env registry accepts the same operator-only fields on a tenant's
+`mcp.servers` entry (`token`/`tokenEnv`/`authHeader`), merged through the same loader and stripped
+by the same browser projections. `/tools` lists every
 connected catalog + MCP tool as On/Off (each is also a slash command). `/mcp` lists MCP
 tools with status Active / Disabled / Needs auth; Enter opens the session JSON and field
 editors (including bearer paste). When `auth` is `oauth` and the token is empty, **Authenticate**

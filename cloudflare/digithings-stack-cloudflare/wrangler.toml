@@ -31,7 +31,9 @@ bucket_name = "digithings-archive"
 # on APIs. Auth-exempt on each host is only the shared service allowlist
 # (/health, /healthz, /metrics, /docs, /redoc, /openapi.json, OPTIONS
 # preflights) plus the Worker-served /_stack/meta and /v1/market/tickers|closes,
-# and /_stack/key/* which proxies to digikey.
+# and /_stack/key/* which proxies to digikey. /_stack/mcp/zammad/* is not
+# auth-exempt: it is key-gated (x-digi-mcp-key vs the MCP_EDGE_KEY secret,
+# fail-closed 401).
 [[routes]]
 pattern = "graph.digithings.ai"
 zone_name = "digithings.ai"

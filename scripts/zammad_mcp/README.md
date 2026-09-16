@@ -22,7 +22,7 @@ Every request is a GET. The token only ever leaves this process as the
 | `ZAMMAD_BASE_URL` | `https://ticket.sitaas.de` | Zammad root, no `/api/v1` suffix |
 | `ZAMMAD_API_TOKEN` | — | Zammad API token — raw value or the full `Token token=<x>` header value; server-side only, never commit or send to a browser |
 | `ZAMMAD_MCP_HOST` | `127.0.0.1` | Bind host for streamable HTTP |
-| `ZAMMAD_MCP_ALLOWED_HOSTS` | — | Comma-separated Host patterns allowed past FastMCP's DNS-rebinding guard (e.g. `zammad-mcp` for cross-container access; protection stays on) |
+| `ZAMMAD_MCP_ALLOWED_HOSTS` | — | Comma-separated Host patterns allowed past FastMCP's DNS-rebinding guard (e.g. `zammad-mcp` for cross-container access; enforced only when the mcp build exposes transport_security — the 1.9.x stack image does not) |
 
 ```bash
 ZAMMAD_API_TOKEN=... python -m scripts.zammad_mcp.server --port 8770
@@ -78,10 +78,15 @@ dotless name `zammad-mcp` to the container's own address in `/etc/hosts`, so
 digigraph's remote-MCP guard can dial `http://zammad-mcp:8770/mcp` (dotless
 names may resolve to private space; loopback is never dialable, #3879). Set the
 token on the stack worker only — `wrangler secret put ZAMMAD_API_TOKEN` — with
-the same `Token token=<x>` value. The MCP port stays inside the container (no
-public route), and the prod occ tenant entry in `DIGICHAT_EMBED_TENANTS` does
-not need `tokenEnv`: the server authenticates to Zammad with its own
-environment.
+the same `Token token=<x>` value. The MCP port is not published publicly; its
+only external path is the key-gated route
+`https://graph.digithings.ai/_stack/mcp/zammad/*` (the Worker checks
+`x-digi-mcp-key` against the `MCP_EDGE_KEY` secret and fails closed with a 401).
+The prod occ tenant entry in `DIGICHAT_EMBED_TENANTS` therefore carries
+`url: https://graph.digithings.ai/_stack/mcp/zammad/mcp` with
+`tokenEnv: MCP_EDGE_KEY` and `authHeader: x-digi-mcp-key`; the server still
+authenticates to Zammad with its own environment (no Zammad token in the tenant
+entry).
 
 ## Privacy & exposure
 
@@ -90,10 +95,12 @@ The OCC embed is anonymous and ungated, so the formatters are conservative:
 - internal articles (`internal: true`) are not returned — `get_ticket` notes how many were omitted
 - customer emails are masked (`k***@domain`)
 
-The MCP endpoint itself is unauthenticated: `tokenEnv` / `authHeader` carry the
-Zammad token outbound to Zammad, they are not an auth boundary for the MCP port.
-Keep it on loopback or the compose network; do not publish the port until an
-auth layer exists.
+The MCP transport itself carries no auth of its own: `tokenEnv` / `authHeader`
+carry the Zammad token outbound to Zammad, they are not an auth boundary for the
+MCP port. On the Cloudflare stack the only external ingress is the key-gated
+worker route (`x-digi-mcp-key` vs `MCP_EDGE_KEY`, fail-closed 401); the
+container port stays unpublished. Compose deployments keep it on loopback or
+the compose network.
 
 ## Tests
 
