@@ -266,7 +266,7 @@ describe("DigichatConfigSchema", () => {
     );
     const dt = digithings.hosts?.["digithings.ai"];
     expect(dt?.chrome.skin).toBe("digichat");
-    expect(welcomeTitle(dt?.chrome.welcome)).toBe("Ask about digithings.");
+    expect(welcomeTitle(dt?.chrome.welcome)).toBe("Ask about digithings");
     expect(dt?.backend).toEqual({
       type: "digigraph",
       digisearchIndex: "digithings_docs",

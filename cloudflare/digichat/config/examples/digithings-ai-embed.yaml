@@ -10,11 +10,19 @@ hosts:
       theme: dark
       skin: digichat
       title: ask digichat
-      welcome: Ask about digithings.
+      welcome:
+        title: Ask about digithings
+        body: Explore the documentation, dig into the stack, or search the web.
       placeholder: Ask a question
       suggestions:
         - What is digigraph?
         - How do embeds work?
+        - What components are in the stack?
+        - How do I run the stack locally?
+        - What models does digichat support?
+        - How does digiquant handle backtests?
+        - What is digivault?
+        - How do I create an embed?
       attribution: true
       launcher:
         mode: bar
