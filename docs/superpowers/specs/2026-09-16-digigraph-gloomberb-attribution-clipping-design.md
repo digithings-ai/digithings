@@ -298,16 +298,19 @@ separately from the raw result (`digillm/src/digillm/client.py:2173-2179`).
 | Scalar string cap | 2,000 chars (unchanged) | `workflow.py:121` |
 | Total record cap | 12,000 chars (unchanged) | `workflow.py:115` |
 | Truncation marker | `"… [truncated]"` (unchanged) | `workflow.py:714` |
-| Truncation preview budget | `12_000 - 100 - len(json.dumps(attribution))`; `12_000 - 100` when no block is present | new, same cap |
+| Truncation preview budget | initial slice `12_000 - 100 - len(json.dumps(attribution))` (`12_000 - 100` when no block is present), then shrunk in 64-char steps until `len(json.dumps(record)) <= 12_000` | new, same cap |
 | Extraction walk depth / breadth | 3 levels / 64 values per mapping or sequence | new |
 | JSON-parse guard | parse a string only when `'"attribution"' in value` | new |
 | Digichat record value cap | 300 chars (unchanged) | `chat-activity.ts:30,220` |
 | Digichat record cap | 12,000 chars (unchanged) | `chat-activity.ts:40` |
 
-The preview budget accounts for the hoisted block so the emitted record never
-exceeds 12,000 chars — otherwise digichat's sanitizer
-(`chat-activity.ts:230-234`) would replace the whole record with a
-`{truncated, preview}` pair and drop the keys.
+The preview budget accounts for the hoisted block and is enforced on the
+**re-serialized record** (`len(json.dumps(...))`), not on the raw preview
+slice: the slice is JSON text whose quote characters escape again when the
+record is serialized, so a slice-only budget can exceed the cap (the plan's
+50-row fixture emits 12,023 chars pre-fix). A record over 12,000 chars would
+be replaced wholesale by digichat's sanitizer (`chat-activity.ts:230-234`),
+dropping the keys; the §7 keys are never trimmed.
 
 ---
 
@@ -368,9 +371,14 @@ Success = all three green plus the digigraph suite unchanged.
 
 - **Front-side re-truncation.** If the emitted record exceeds 12,000 chars,
   `chat-activity.ts:230-234` replaces it with `{truncated, preview}` and the
-  keys vanish. Mitigated by the preview budget in §5; the plan pins the total
-  with an assertion. If a future cap change breaks the budget, the fallback is
-  to shorten the preview further (the cap is on the record, not the preview).
+  keys vanish. Mitigated by the preview budget in §5, which is enforced on the
+  re-serialized record (`len(json.dumps(...))`) rather than the raw slice —
+  escaped quotes in the JSON preview re-expand on serialization, and the
+  pre-fix record for the plan's 50×404-char fixture is 12,023 chars. The same
+  latent overflow exists in the current inline branch at `workflow.py:708-715`,
+  which the plan replaces. The plan pins the total with an assertion. If a
+  future cap change breaks the budget, the fallback is to shorten the preview
+  further (the cap is on the record, not the preview).
 - **Parse cost.** Extraction parses a string only when it contains
   `"attribution"`; Digifetch envelopes append the block last, so large
   payloads pay one `json.loads` of an already-serialized string. If that ever

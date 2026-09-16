@@ -15,7 +15,7 @@
 - **Issue / branch discipline:** work on `task/3927-*`, cut with `make task ISSUE=3927` from a fresh `module/digiquant` (the script fetches `origin` and refuses a stale module base); PR base `module/digiquant`. The PR body carries `Closes #3927`. Docs-only diff — no human gate applies.
 - **Evidence only:** every claim in the close-out comment must be a command output from Task 1 or a file:line in the spec's §6 table. Do not assert a clean sweep: the AC1 CLI-diff deviation and the AC3 13-vs-12 tool-count deviation must be stated.
 - **The primary deliverable already shipped** (`docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`, PRs #4070/#4074); the follow-up shipped as #4069 → PR #4085 (merged by a human, 2026-09-15). Do not re-litigate the design.
-- **Residual routing (fixed):** the dashboard-page *build* → #4098 / #4110 phase 4c (the iframe *evaluation* is satisfied by spec §8); post-deploy verification → #4101; cookie runbook → #4099; the `bunx gloomberb api list --json` diff stays a documented carried item (no Bun in any environment).
+- **Residual routing (fixed):** the dashboard-page *build* → #4098 / #4110 phase 4c (the iframe *evaluation* is satisfied by spec §8); post-deploy verification → #4101; cookie runbook → #4099; the `bunx gloomberb api list --json` diff stays a documented carried item (Bun is not available in CI and not used by any workflow; the CLI diff was never run — recorded deviation).
 - **No new external dependency, no code change beyond the one-line docs fix.** If verification surfaces something bigger, stop and report to #4110 rather than expanding this plan.
 - **Cross-references:** #4069/#4085 (implementation origin), #4110 (coverage expansion; its spec/plan pair is `docs/superpowers/{specs,plans}/2026-09-16-digifetch-coverage-expansion*`), #4098, #4099, #4101.
 - **Naming:** lowercase `digi*` in prose, commits, and PR text; the upstream project is `gloomberb` (lowercase in this repo's prose).
@@ -52,7 +52,7 @@ grep -i "iframe" docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md \
   | grep -Ei "rule.*out|not (viable|recommended)"
 grep -i "human_gates\|human sign-off" docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md
 grep -i "MIT\|copyright notice\|attribution" docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md
-grep -A3 "digifetch" digiquant/ARCHITECTURE.md | head -20
+grep -n "Gloomberb Market-Data\|scoping-design" digiquant/ARCHITECTURE.md
 grep -n "are on their task branches" digiquant/ARCHITECTURE.md
 ```
 Expected:
@@ -61,7 +61,7 @@ Expected:
 - iframe: the line containing `It is not viable and not recommended` (spec §8 first line);
 - human gate: `human_gates` line(s) from spec §9;
 - MIT: the copyright/`MIT` lines from spec §10;
-- ARCH pointer: `### Gloomberb Market-Data Integration (#3927, implemented in #4069; coverage expanded in #4110)` and the spec link;
+- ARCH pointer: the heading at `digiquant/ARCHITECTURE.md:1693` (`### Gloomberb Market-Data Integration (#3927, implemented in #4069; coverage expanded in #4110)`) and the scoping-spec link at `:1695` (`:1164` is an earlier link to the same spec);
 - stale phrase: exactly one hit, `digiquant/ARCHITECTURE.md:1697` — `are on their task branches`. Record the line number.
 
 - [ ] **Step 3: Run the shipped family tests**
@@ -191,12 +191,12 @@ deviations, none blocks the close. Verification spec:
 
 | AC | Verdict | Evidence |
 |---|---|---|
-| 1 — capability table vs real source/CLI | Satisfied with a recorded deviation | Spec §3 (14-method table) + §3.2 (8 live probes, 2026-09-15) + Validation items 1-7; validated against `gloom-sh/gloomberb 0.13.3`. `bunx gloomberb api list --json` was **not run** — recorded in spec §3 Validation item 5, §11, §12 item 5 and `ARCHITECTURE.md` §11 open items (no Bun in any environment) |
+| 1 — capability table vs real source/CLI | Satisfied with a recorded deviation | Spec §3 (14-method table) + §3.2 (8 live probes, 2026-09-15) + Validation items 1-7; validated against `gloom-sh/gloomberb 0.13.3`. `bunx gloomberb api list --json` was **not run** — recorded in spec §3 Validation item 5, §11, §12 item 5 and `ARCHITECTURE.md` §11 open items (Bun not available in CI and not used by any workflow; CLI diff never run — recorded deviation) |
 | 2 — Decision with recommendation and trade-offs | Satisfied | Spec `## Decision`: recommends approach (c) (Python HTTP client over `api.gloom.sh` + digifetch), rejects (a) CLI shell-out and (b) vendoring with explicit trade-offs, documents (d) as fallback |
 | 3 — `digifetch_*` surface + Pydantic v2 + caps | Satisfied with a recorded deviation | Spec §5.1/§5.2/§5.3: **13** tools (news added by author decision 2026-09-15), superseding the issue's 12-row grep (Validation item 3). Shipped and pinned by `tests/dq/data/test_gloomberb_models.py` (`RESOLUTION_MAX_RANGE` caps, reject-never-clamp) |
 | 4 — iframe ruled out | Satisfied | Spec §8: iframe is "not viable and not recommended" for three named reasons (egress proxy at investigation time, human gate, cross-origin DOM blindness); same-origin page evaluated but not committed |
 | 5 — human gate stated | Satisfied with a correction | Spec §9 states the new-dependency gate. The shipped dependency is `api.gloom.sh` (approach (c)) — not direct Yahoo/SEC as the issue predicted (Yahoo was pre-existing via `yfinance`; SEC goes through `/cloud/sec/*`). The gate was honored: PR #4085 merged by a human on 2026-09-15 |
-| 6 — MIT notice retention | Satisfied; retention clause not triggered | Spec §10 records MIT / `Copyright (c) 2026 Gloomberb Contributors`; approach (c) vendors no code, so no file notice is required (`grep -rn "Gloomberb Contributors"` matches the spec only) |
+| 6 — MIT notice retention | Satisfied; retention clause not triggered | Spec §10 records MIT / `Copyright (c) 2026 Gloomberb Contributors`; approach (c) vendors no code, so no file notice is required (`grep -rn "Gloomberb Contributors" --include='*.py' --include='*.ts'` → no match) |
 | 7 — ARCHITECTURE §11 pointer | Satisfied; stale phrase fixed | Bullet at `digiquant/ARCHITECTURE.md:1693` with the spec link; the "on their task branches" phrase was corrected to "merged via #4112/#4119/#4126 (entitlement layer #4135)" in #<PR> |
 
 **Residual scope routing**

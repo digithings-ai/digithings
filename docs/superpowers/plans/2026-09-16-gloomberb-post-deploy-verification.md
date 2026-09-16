@@ -142,7 +142,7 @@ def test_doc_never_contains_a_literal_cookie_value() -> None:
 - [ ] **Step 3: Run the test to verify it fails**
 
 Run: `PATH="$PWD/.venv/bin:$PATH" pytest tests/scripts/test_digifetch_post_deploy_verification_doc.py -v`
-Expected: FAIL — every test errors with `FileNotFoundError: ... docs/ops/digifetch-post-deploy-verification.md` (file-absence RED).
+Expected: FAIL — 5 errors + 1 passed: the five tests that read the file error with `FileNotFoundError: ... docs/ops/digifetch-post-deploy-verification.md`, while `test_cohort_names_are_registered_read_scope_tools` never calls `_text()` and passes (file-absence RED).
 
 - [ ] **Step 4: Write the verification doc**
 
@@ -213,7 +213,7 @@ Build/commit under test: <sha>.
 ```
    and the exact posting command shape: `gh issue comment 4101 -R digithings-ai/digithings --body "$(cat <<'EOF' ... EOF)"`. Failures are filed as issues with the typed envelope and the request shape (never re-run in a loop for a pass).
 7. `## Drift signals and escalation` — the normative criteria: S1 `not_found` on the pinned request shapes on 2 runs ≥24h apart; S2 payload field loss (`upstream_error` "unexpected payload") twice; S3 anonymous endpoint returns 401/403 or cookie names no longer match `SESSION_COOKIE_NAMES` (`client.py:180-183`); S4 smoke fails 2 consecutive days with non-rate-limit errors; S5 host/family-wide break. Escalation: file an issue (`component:digiquant`, `priority:medium`, `priority:high` for S5/S3) with envelope + request shape + dates. Scheduled probe trigger: ≥2 distinct drift events in 30 days or one family-wide break; probe = one anonymous quote + one anonymous history per day (`0 14 * * *` UTC), no cookie. State exactly: `api.gloom.sh is an existing runtime dependency of the client (client.py:152), so a scheduled probe is not new network exposure.` Rate limits (`rate_limited`) and free-tier delays are non-events.
-8. `## Related` — links: `docs/superpowers/specs/2026-09-16-gloomberb-post-deploy-verification-design.md`, `docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`, `gloomberb-session-cookie.md`, issues `#4101`, `#4069`, `#4110`.
+8. `## Related` — links: `docs/superpowers/specs/2026-09-16-gloomberb-post-deploy-verification-design.md`, `docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`, issues `#4101`, `#4069`, `#4110` — and `gloomberb-session-cookie.md` **only once the #4099 runbook has merged** (that plan creates the file; until then omit the link so `make doc-check` stays green, and add it in a follow-up). One rule, no exceptions.
 
 Link forms must resolve from `docs/ops/` (e.g. `../superpowers/specs/...`).
 
@@ -225,7 +225,7 @@ Expected: PASS — `6 passed`.
 - [ ] **Step 6: Run the doc link check**
 
 Run: `make doc-check`
-Expected: `check_doc_links: OK (<N> markdown files scanned)` and exit 0.
+Expected: `check_doc_links: OK (<N> markdown files scanned)` and exit 0. This holds only if Step 4 item 8's rule was followed: the `gloomberb-session-cookie.md` link is present only after the #4099 runbook has merged, omitted before then.
 
 - [ ] **Step 7: Commit**
 

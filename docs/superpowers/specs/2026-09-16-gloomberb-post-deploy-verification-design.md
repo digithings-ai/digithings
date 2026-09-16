@@ -99,7 +99,7 @@ deliberately still cookie-free so no secret wiring is needed.
   with "(mcp.digithings.ai is reserved; its route is not yet enabled.)"
   (`index.ts:379-384`). Auth for the day it lands: digikey JWT, scope
   `digiquant:backtest` (`digiquant/ARCHITECTURE.md` § MCP hosting, lines
-  387–390). `mcp.digithings.ai` is **not** on the `/_stack/mcp` edge-key map
+  368–369 and 510). `mcp.digithings.ai` is **not** on the `/_stack/mcp` edge-key map
   (`MCP_EDGE_SERVERS`, `index.ts:274-278`).
 
 ### 2.3 The live smoke harness

@@ -381,7 +381,7 @@ def test_transcripts_detail_mode_maps_the_wrapped_payload(
 - [ ] **Step 6: Run the test to verify it fails**
 
 Run: `pytest tests/dq/test_mcp_gloomberb_tools.py::test_transcripts_detail_mode_maps_the_wrapped_payload -v`
-Expected: FAIL — `KeyError: 'transcripts'`: the current wrapper does not pass `transcript_id`, so the model rejects the call and the envelope carries `invalid_input` data.
+Expected: FAIL — `TypeError` (wrong arity): the current wrapper is `digifetch_transcripts(ticker, limit)` while the test calls `_mcp("digifetch_transcripts")` with three positional args (`None, 20, "t1"`), so the call never reaches the model.
 
 - [ ] **Step 7: Write the minimal implementation (wrapper + manifest)**
 
@@ -410,7 +410,13 @@ Replace the wrapper in `mcp_server.py` (`:1236-1249`) with:
             )
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-        return _gloomberb_envelope_json(envelope, symbol=ticker)
+        # Detail mode has no ticker argument, but the row can carry one — the
+        # spec's "or the payload carries one" deep-link rule.
+        symbol = ticker
+        if symbol is None:
+            rows = getattr(envelope.data, "transcripts", None) or []
+            symbol = rows[0].ticker if rows else None
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
 ```
 
 Update `build_digifetch_transcripts_tool` in `orchestrator_tools.py` (`:666-687`): add `transcript_id` to `properties` and delete the `"required": ["ticker"]` line (neither target is schema-required; the Pydantic validator enforces exactly-one):
@@ -597,7 +603,7 @@ git commit -m "feat(digiquant): saved-searches models and normalizer (#4110)"
 - Modify: `digiquant/src/digiquant/mcp_server.py:489-535` (`READ_SCOPE_TOOLS`) and add a wrapper after `digifetch_venues` (`~:1331`)
 - Modify: `digiquant/src/digiquant/orchestrator_tools.py` (builder after `build_digifetch_venues_tool` `:783-796`; manifest list `:1515-1577`)
 - Modify: `digiquant/src/digiquant/data/gloomberb/agent_tools.py` (imports `:74-88`; `DIGIFETCH_DISPATCH` `:342-343`)
-- Test: `tests/dq/data/test_gloomberb_client.py`, `tests/dq/test_mcp_gloomberb_tools.py`
+- Test: `tests/dq/data/test_gloomberb_client.py`, `tests/dq/test_mcp_gloomberb_tools.py`, `tests/dq/test_mcp_server_scope.py` (existing-count updates — see Step 5)
 
 **Interfaces:**
 - Consumes: `SavedSearchesInput`/`SavedSearchesEnvelope`/`normalize_saved_searches` (Task 4); `_request_json`, `_data_or_error`, `_as_mapping`, `_normalize`, `_freshness`, `_cached`.
@@ -690,7 +696,15 @@ Expected: PASS.
 
 - [ ] **Step 5: Write the failing MCP + wiring test**
 
-In `tests/dq/test_mcp_gloomberb_tools.py`, add `"digifetch_saved_searches"` to the module-level `DIGIFETCH_TOOLS` set (after `"digifetch_equity_diagnostic"`); do **not** add it to `LINKED_TOOLS` (no deep link). Append:
+In `tests/dq/test_mcp_gloomberb_tools.py`, add `"digifetch_saved_searches"` to the module-level `DIGIFETCH_TOOLS` set (after `"digifetch_equity_diagnostic"`); do **not** add it to `LINKED_TOOLS` (no deep link).
+
+Adding the name also invalidates three existing assertions — update them in this same step:
+
+- `tests/dq/test_mcp_gloomberb_tools.py:452-454` (`test_all_33_tools_registered_in_full_and_read_scope`): rename to `test_all_34_tools_registered_in_full_and_read_scope` and change `len(DIGIFETCH_TOOLS) == 33` to `== 34`.
+- `tests/dq/test_mcp_gloomberb_tools.py:1393-1413` (`test_declared_entitlements_match_the_gate_behavior`): add `"digifetch_saved_searches"` to the hard-coded `"session"` set — or to the `"pro"` set if Task 1's probe moved the entitlement.
+- `tests/dq/test_mcp_server_scope.py:163-166` (`test_tool_counts_pin_post_3855_surface`): `len(READ_SCOPE_TOOLS) == 43` → `44` and `len(_tool_names(create_mcp_server())) == 57` → `58` (`COMPUTE_TOOLS` stays 14).
+
+Append:
 
 ```python
 def test_saved_searches_without_cookie_is_auth_required_without_request(
@@ -787,7 +801,7 @@ pytest tests/dq/test_mcp_gloomberb_tools.py -m unit -q
 pytest tests/dq/data/test_gloomberb_agent_tools.py -m unit -q
 pytest tests/dq/test_mcp_server_scope.py -m unit -q
 ```
-Expected: PASS. The parity tests require the name in `TOOL_ENTITLEMENTS`, the manifest, `DIGIFETCH_DISPATCH`, and the MCP wrapper with matching symbol/attribution choices; the scope test pins `READ_SCOPE_TOOLS`. If any parity test fails, one of the four surfaces is missing.
+Expected: PASS **only after Step 5's existing-test updates** (the 33→34 set assertion, the session-entitlement set, and the 43/57 scope counts). The parity tests require the name in `TOOL_ENTITLEMENTS`, the manifest, `DIGIFETCH_DISPATCH`, and the MCP wrapper with matching symbol/attribution choices; the scope test pins `READ_SCOPE_TOOLS`. If any parity test fails, one of the four surfaces is missing.
 
 - [ ] **Step 9: Commit**
 
@@ -801,8 +815,8 @@ git commit -m "feat(digiquant): register digifetch_saved_searches on all surface
 ### Task 6: Docs, verification sweep, PR
 
 **Files:**
-- Modify: `digiquant/ARCHITECTURE.md` (§5 digifetch table rows and/or the phase-3 paragraph; §11 Gloomberb bullet; the tool-count sentence `:276-282`; the "Deliberately out of scope" paragraph `:1330-1346`)
-- Modify: `digiquant/AGENTS.md:474+` (family size, saved-searches mention, remove the "per-transcript detail route remains a candidate extension" sentence `:617-619`)
+- Modify: `digiquant/ARCHITECTURE.md` (§5 digifetch table rows and/or the phase-3 paragraph; §11 Gloomberb bullet; the tool-count sentence `:276-282`; the "Deliberately out of scope" paragraph `:1334-1347`)
+- Modify: `digiquant/AGENTS.md:474+` (family size, saved-searches mention, remove the "per-transcript detail route remains a candidate extension" sentence `:617-618`)
 - Modify: `digiquant/src/digiquant/mcp_server.py:485` (the `"33 digifetch x"` comment)
 - Test: the full offline sweep (no new test file)
 
@@ -814,9 +828,9 @@ git commit -m "feat(digiquant): register digifetch_saved_searches on all surface
 
 - `digiquant/ARCHITECTURE.md:276-282`: `all 57 tools` → `all 58`; `only the 43 dashboard-chat reads` → `44`; `the 33 digifetch_*` → `the 34 digifetch_*`.
 - `digiquant/ARCHITECTURE.md` §5 table: extend the `digifetch_transcripts` row with the `transcript_id` detail mode; add a `digifetch_saved_searches` row (`/cloud/search/saved`, session-gated, parameterless).
-- `digiquant/ARCHITECTURE.md:1344-1346`: the sentence "The per-transcript detail route (`/cloud/transcripts/{id}`) exists and remains a candidate extension" → "The per-transcript detail route (`/cloud/transcripts/{id}`) shipped as `digifetch_transcripts`' `transcript_id` mode (#4110 phase 4a); `digifetch_saved_searches` covers `/cloud/search/saved`."
+- `digiquant/ARCHITECTURE.md:1345-1347`: the sentence "The per-transcript detail route (`/cloud/transcripts/{id}`) exists and remains a candidate extension" → "The per-transcript detail route (`/cloud/transcripts/{id}`) shipped as `digifetch_transcripts`' `transcript_id` mode (#4110 phase 4a); `digifetch_saved_searches` covers `/cloud/search/saved`."
 - `digiquant/ARCHITECTURE.md` §11 Gloomberb bullet: `The family is 33 read tools total` → `34`; add the phase-4a sentence (`transcripts` detail mode + `saved_searches`) and note the remaining scope (plugin panes per the paragraph, surface integration #4098).
-- `digiquant/AGENTS.md` Gloomberb section: `**33 tools**` → `**34 tools**`; add `digifetch_saved_searches` to the phase-3 cohort list (or a new phase-4a clause); replace the sentence at `:617-619` ("the per-transcript detail route (`/cloud/transcripts/{id}`) remains a candidate extension") with "the per-transcript detail route (`/cloud/transcripts/{id}`) is `digifetch_transcripts`' `transcript_id` mode."
+- `digiquant/AGENTS.md` Gloomberb section: `**33 tools**` → `**34 tools**`; add `digifetch_saved_searches` to the phase-3 cohort list (or a new phase-4a clause); replace the sentence at `:617-618` ("the per-transcript detail route (`/cloud/transcripts/{id}`) remains a candidate extension") with "the per-transcript detail route (`/cloud/transcripts/{id}`) is `digifetch_transcripts`' `transcript_id` mode."
 - `mcp_server.py:485` comment: `the 33 digifetch x` → `the 34 digifetch x`.
 
 - [ ] **Step 2: Run the full verification sweep**
@@ -834,7 +848,7 @@ print(len(TOOL_ENTITLEMENTS), "digifetch tools")
 PY
 make doc-check
 ```
-Expected: all green; `34 digifetch tools`; `make doc-check` passes (updated internal links).
+Expected: all green **only after Task 5's existing-test updates** (33→34 set, session-entitlement set, 43/57 scope counts); `34 digifetch tools`; `make doc-check` passes (updated internal links).
 
 - [ ] **Step 3: Commit the docs**
 

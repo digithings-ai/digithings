@@ -132,7 +132,7 @@ pipeline LLMs are never offered a tool that can only error.
   That is pinned by `tests/scripts/test_mcp_container.py`
   (`MCP_SCOPED_VARS`, lines 35–42; `test_stack_container_env_has_no_mcp_duplication`,
   lines 141–149) and by the secrets comment in
-  `cloudflare/digithings-stack-cloudflare/wrangler.toml` lines 135–155.
+  `cloudflare/digithings-stack-cloudflare/wrangler.toml` lines 135–164.
 - The hosted MCP route itself is **not enabled**: the `mcp.digithings.ai`
   `[[routes]]` entry is commented out (`wrangler.toml` lines 63–73) pending
   Worker-edge digikey JWT enforcement (`digiquant/ARCHITECTURE.md`
@@ -148,8 +148,10 @@ pipeline LLMs are never offered a tool that can only error.
   `docs/ops/core-postgres-uri-secret.md`, `docs/ops/vectorize-cutover.md`,
   `docs/ops/checkpoint-archive-vacuum.md`.
 - `make doc-check` (Makefile lines 46–47) runs
-  `scripts/check_doc_links.py`, which scans every `*.md` under `docs/` and
-  validates relative link targets; fenced code blocks are exempt.
+  `scripts/check_doc_links.py`, which rglobs the repo for Markdown — all of
+  `docs/` plus an allowlist of root docs and every `AGENTS.md`/`CLAUDE.md`/
+  `DIGI*.md`, minus an exclude list — and validates relative link targets;
+  fenced code blocks are stripped.
 
 ### 2.5 The signup surface
 
@@ -239,7 +241,7 @@ signup turns out to be unavailable the runbook records that finding instead
      § MCP hosting operator block);
   3. add the name to `MCP_SCOPED_VARS` in `tests/scripts/test_mcp_container.py`
      and to `test_wrangler_documents_mcp_secrets`;
-  4. add it to the wrangler.toml secrets comment (lines 135–155).
+  4. add it to the wrangler.toml secrets comment (lines 135–164).
 - Local placement: repo-root `.env` only (gitignored); the `.env.example`
   placeholder must stay commented and value-free.
 

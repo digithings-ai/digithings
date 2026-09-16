@@ -78,9 +78,9 @@ landed. The issue is the last open artifact of that chain.
 
 ### 2.3 The one carried item (AC1's CLI half)
 
-`bunx gloomberb api list --json` was never run — Bun is absent from the
-authoring/review and CI environments. The spec records this in three places:
-Validation item 5 (`:91-93`), Risks (`:379`), Follow-up outline item 5
+`bunx gloomberb api list --json` was never run — Bun is not available in CI
+and not used by any workflow (recorded deviation). The spec records this in
+three places: Validation item 5 (`:91-93`), Risks (`:379`), Follow-up outline item 5
 (`:395-398`); `digiquant/ARCHITECTURE.md:1697` repeats it in the #4069 open
 items. The **substantive** AC1 requirement — read the real source directly and
 call out discrepancies vs the issue's paraphrased summary — was done: source at
@@ -138,7 +138,8 @@ this is an issue close-out comment.
 | AC | Verdict | Evidence |
 ...one row per AC with file:line and the command run...
 
-**Carried item:** bunx gloomberb api list --json diff — not run (no Bun);
+**Carried item:** bunx gloomberb api list --json diff — not run (Bun not
+available in CI and not used by any workflow; recorded deviation);
 recorded in spec §3 Validation item 5 / §12 item 5 and ARCHITECTURE §11.
 **Residual scope:** dashboard-page build → #4098 (surface integration) /
 #4110 phase 4c; iframe ruled out by spec §8; no action in #3927.
@@ -158,7 +159,7 @@ to #4085 (merged by a human, 2026-09-15).
 | iframe ruling | `grep -i "iframe"` contains "ruled out" + "not viable and not recommended" | spec `:323-325` |
 | Human gate | `grep -i "human_gates\|human sign-off"` non-empty | spec `:343-355` |
 | MIT / notice | `grep -i "MIT\|copyright notice\|attribution"` non-empty | spec `:357-367` |
-| ARCH §11 pointer | `grep -A3 "digifetch" digiquant/ARCHITECTURE.md` shows the bullet | `:1693-1697` |
+| ARCH §11 pointer | `grep -n "Gloomberb Market-Data\|scoping-design" digiquant/ARCHITECTURE.md` shows the heading at `:1693` and the spec link at `:1695` | `:1693-1697` |
 | Family tests | `pytest tests/dq/test_mcp_gloomberb_tools.py tests/dq/data/test_gloomberb_*.py -m unit -q` green | 5 test modules |
 
 ---
@@ -172,7 +173,7 @@ to #4085 (merged by a human, 2026-09-15).
 | **3** MCP surface + Pydantic v2 + caps | Spec §5.1 `:140-178` (13 tools, input/output models), §5.2 `:180-213` (caps + #4100 escape hatch), §5.3 `:215-267`; shipped implementation `models.py:244-265` (`RESOLUTION_MAX_RANGE`), tests `tests/dq/data/test_gloomberb_models.py` | **Satisfied with recorded deviation** (13 rows; news added per author decision `:14-19`) |
 | **4** iframe ruled out | Spec §8 `:323-341`; three reasons at `:328-336`; alternative evaluated `:337-341` | **Satisfied**; no residual (build → #4098) |
 | **5** human gate | Spec §9 `:343-355`; actual dependency `api.gloom.sh` shipped via PR #4085 (merged 2026-09-15 by `chrizefan`); Yahoo pre-existing via `yfinance` (`spec §6 :300`); SEC via `/cloud/sec/*` | **Satisfied with correction** (issue's Yahoo/SEC-direct prediction superseded by approach (c)) |
-| **6** MIT / notice retention | Spec §10 `:357-367`; copyright `:39`, `:359`; no vendored gloomberb code in the tree (`grep -rn "Gloomberb Contributors"` matches only the spec); `docs/LICENSING.md` has no gloomberb row | **Satisfied**; retention clause not triggered (no vendoring) |
+| **6** MIT / notice retention | Spec §10 `:357-367`; copyright `:39`, `:359`; no vendored gloomberb code in the tree (`grep -rn "Gloomberb Contributors" --include='*.py' --include='*.ts'` → no match); `docs/LICENSING.md` has no gloomberb row | **Satisfied**; retention clause not triggered (no vendoring) |
 | **7** ARCH §11 pointer | `digiquant/ARCHITECTURE.md:1693` (heading), `:1695` (spec link), `:1697` (family/phase summary + open items) | **Satisfied; one stale phrase** — `:1697` says phases 1–3 "are on their task branches" though they merged (#4112/#4119/#4126). Fix in plan Task 2 |
 
 ---
@@ -201,7 +202,7 @@ grep -i "iframe" docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md \
   | grep -Ei "rule.*out|not (viable|recommended)"
 grep -i "human_gates\|human sign-off" docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md
 grep -i "MIT\|copyright notice\|attribution" docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md
-grep -A3 "digifetch" digiquant/ARCHITECTURE.md | head -20
+grep -n "Gloomberb Market-Data\|scoping-design" digiquant/ARCHITECTURE.md
 pytest tests/dq/test_mcp_gloomberb_tools.py tests/dq/data/test_gloomberb_client.py \
        tests/dq/data/test_gloomberb_models.py tests/dq/data/test_gloomberb_normalizers.py \
        tests/dq/data/test_gloomberb_agent_tools.py -m unit -q
@@ -226,7 +227,7 @@ latest comment.
 | Risk | Mitigation |
 |---|---|
 | Closing #3927 is read as "the CLI diff was done" | The close-out comment states the carried item explicitly; the in-tree records (spec §12 item 5, `ARCHITECTURE.md:1697`) remain the tracker |
-| The docs fix conflicts with the other #4110 spec/plan PR from the same day | Both touch different files; the pointer fix is a one-line edit to an isolated phrase — rebase if the §11 bullet moves |
+| The docs fix conflicts with the other #4110 spec/plan PR from the same day | Both PRs edit `digiquant/ARCHITECTURE.md` (different lines: this fix touches only the §11 phase sentence at `:1697`); the pointer fix is a one-line edit to an isolated phrase — rebase if the §11 bullet moves |
 | A reviewer argues AC3's 12-row grep is the literal test | Pre-empt in the comment: Validation item 3 records the 13-tool supersession (author decision, news as the 13th tool); the issue's own text allows recording deviations |
 | The `dashboard-page evaluation` is argued to require a built page | Quote §8 `:337-341` ("not committed, not built here") and route the build to #4098 |
 | Someone wants `docs/LICENSING.md` to list gloomberb | Not required (no vendored code, attribution is appreciated, not required); recorded as open question Q3, not a task |
@@ -246,13 +247,16 @@ latest comment.
 ## 11. Open questions
 
 1. **Should the carried CLI-diff spike item be closed as "won't do"?** It has
-   been unreachable since 2026-09-12 (no Bun in any environment) and the
+   been unreachable since 2026-09-12 (Bun is not available in CI and not used
+   by any workflow; the CLI diff was never run — recorded deviation) and the
    evidence of record does not depend on it. Recommendation: leave the in-tree
    notes, close #3927 as completed, and let #4101 decide if the diff ever
    becomes load-bearing.
 2. **Is the ARCH §11 stale phrase the only pointer drift?** The verification
-   found no other stale references (`grep -rn "3927"` shows the spec and
-   `ARCHITECTURE.md` only).
+   found no other stale references in code or config (`grep -rn "3927"
+   --include='*.py' --include='*.ts'` → no match); the remaining hits are
+   documentation/lockfile text, including this spec, the #4110 pair, and the
+   intended `ARCHITECTURE.md` §11 pointer.
 3. **Add gloomberb to `docs/LICENSING.md`?** Not required — approach (c) ports
    no code; the spec §10 carries the MIT copyright. Default: no, unless the
    owner wants the data-source attribution recorded there too.

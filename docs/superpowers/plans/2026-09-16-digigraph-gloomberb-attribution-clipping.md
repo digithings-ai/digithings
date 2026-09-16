@@ -4,7 +4,7 @@
 
 **Goal:** When digigraph's generic tool-result trace clipper cuts a large `digifetch_*` envelope, the emitted trace result still carries the §7 attribution block (`attribution`, `delay_notice`, `source_url`) so the digichat attribution line (#4130) renders instead of vanishing.
 
-**Architecture:** A new bounded extractor in `digigraph/src/digigraph/workflow.py` hoists the §7 keys from the **raw** result — structured envelope dicts or the serialized envelope inside the MCP client's opaque `{"ok": true, "text": "<json>"}` wrapper — and a new render helper attaches them as top-level keys on the emitted `result` object, ahead of the existing clip. The truncation preview budget shrinks by the hoisted block's serialized size so the 12,000-char record cap is unchanged. No frontend code changes: the digichat adapter already passes `payload.result` through and the #4130 renderer already reads top-level keys off it. Tasks 3–4 add frontend contract-pin tests only.
+**Architecture:** A new bounded extractor in `digigraph/src/digigraph/workflow.py` hoists the §7 keys from the **raw** result — structured envelope dicts or the serialized envelope inside the MCP client's opaque `{"ok": true, "text": "<json>"}` wrapper — and a new render helper attaches them as top-level keys on the emitted `result` object, ahead of the existing clip. The truncation preview budget shrinks by the hoisted block's serialized size and is enforced on the re-serialized record (escaped quotes in the preview re-expand on serialization), so the 12,000-char record cap is unchanged. No frontend code changes: the digichat adapter already passes `payload.result` through and the #4130 renderer already reads top-level keys off it. Tasks 3–4 add frontend contract-pin tests only.
 
 **Tech Stack:** Python 3.12 + pytest (`unit` marker, root `pytest.ini`), digigraph trace pipeline (`workflow.py`, `TraceEventV1`), ruff (line length 100); TypeScript + Vitest 4 in `cloudflare/digichat` and `cloudflare/digiweb/web` (`@digithings/web`).
 
@@ -210,15 +210,25 @@ def _render_clipped_tool_result(result_data: dict[str, Any]) -> Any | None:
     if clipped_result is None:
         return None
     try:
+        serialized = json.dumps(clipped_result)
         rendered: Any = clipped_result
-        if len(json.dumps(clipped_result)) > _MAX_TOOL_RESULT_CHARS:
+        if len(serialized) > _MAX_TOOL_RESULT_CHARS:
             budget = _MAX_TOOL_RESULT_CHARS - 100
             if attribution:
                 budget -= len(json.dumps(attribution))
-            rendered = {
-                "truncated": True,
-                "preview": json.dumps(clipped_result)[:budget] + "… [truncated]",
-            }
+            preview = serialized[:budget]
+            # The slice is JSON text: its quote characters escape again when the
+            # record is re-serialized, so measure the record, not the slice, and
+            # shrink until it fits. The §7 keys are never trimmed.
+            while True:
+                rendered = {
+                    **attribution,
+                    "truncated": True,
+                    "preview": preview + "… [truncated]",
+                }
+                if len(json.dumps(rendered)) <= _MAX_TOOL_RESULT_CHARS or not preview:
+                    break
+                preview = preview[:-64]
     except (TypeError, ValueError):
         rendered = {"preview": str(clipped_result)[:2000]}
     if attribution and isinstance(rendered, dict):
@@ -284,8 +294,8 @@ clip and attached ahead of the emitted `result` — structured envelope or
 the MCP `{"ok": true, "text": …}` wrapper alike — because a string scalar
 is cut at 2,000 chars with no key structure left to read, and the digichat
 attribution line (#4130) reads them off the result object (#4131). The
-truncated preview budget shrinks by the hoisted block so the 12_000-char
-cap is unchanged.
+truncated preview budget shrinks by the hoisted block and is enforced on the
+re-serialized record so the 12_000-char cap is unchanged.
 ```
 
 - [ ] **Step 8: Commit**
@@ -384,6 +394,9 @@ def test_truncated_structured_record_stays_within_the_cap() -> None:
     assert rendered["truncated"] is True
     assert rendered["preview"].endswith("… [truncated]")
     assert rendered["attribution"] == _ATTRIBUTION
+    # The preview slice is itself JSON text: its quote characters escape again
+    # when the record is re-serialized, so the bound must hold on the
+    # re-serialized record (12,023 chars pre-fix), not on the raw slice.
     assert len(json.dumps(rendered)) <= _MAX_TOOL_RESULT_CHARS
 ```
 

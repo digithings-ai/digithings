@@ -79,7 +79,7 @@ Two endpoints from the issue's "ready to add" table are not yet tool-exposed:
 
 | Endpoint | Status | Evidence |
 |---|---|---|
-| `GET /cloud/transcripts/{id}` | **Residual** — the list route shipped; the detail route is explicitly recorded as a candidate extension | `digiquant/ARCHITECTURE.md:1344-1346`; `digiquant/AGENTS.md:617-619` |
+| `GET /cloud/transcripts/{id}` | **Residual** — the list route shipped; the detail route is explicitly recorded as a candidate extension | `digiquant/ARCHITECTURE.md:1345-1347`; `digiquant/AGENTS.md:617-618` |
 | `GET /cloud/search/saved` | **Residual** — no occurrence anywhere in the tree | `grep -rn "search/saved" digiquant/` → no match (2026-09-16) |
 
 Everything else in the issue's matrix is reachable through a shipped tool
@@ -408,7 +408,7 @@ plan is written for shipped phases 0-3 — the code and tests are their record.
   volatility/credit, dividend yield) need no new fetch and are deferred to a
   UX/agent task; the fiscaldata/prediction-market/scanner panes are blocked
   (new external dependency, no endpoint, websocket) and stay out of #4110. The
-  `ARCHITECTURE.md:1330-1346` rationale is confirmed and extended here.
+  `ARCHITECTURE.md:1334-1347` rationale is confirmed and extended here.
 - **D6 — No new storage, no attribution changes.** All tools stay read-only
   enrichment; nothing is persisted; the §7 attribution/deep-link rules and the
   earnings-calendar non-attribution exception are unchanged.
@@ -432,8 +432,8 @@ grep -n "transcripts" digiquant/src/digiquant/data/gloomberb/client.py
 grep -n "saved_searches" digiquant/src/digiquant/data/gloomberb/client.py
 
 # 2. Both tools are registered on all three surfaces and declared
-grep -c "digifetch_saved_searches" digiquant/src/digiquant/mcp_server.py          # 2 (READ_SCOPE_TOOLS + wrapper)
-grep -c "digifetch_saved_searches" digiquant/src/digiquant/orchestrator_tools.py  # 2 (builder name + manifest list)
+grep -c "digifetch_saved_searches" digiquant/src/digiquant/mcp_server.py          # 3 (READ_SCOPE_TOOLS + decorator + def)
+grep -c "digifetch_saved_searches" digiquant/src/digiquant/orchestrator_tools.py  # 3 (builder def + name + manifest list)
 grep -c "digifetch_saved_searches" digiquant/src/digiquant/data/gloomberb/agent_tools.py    # 1 (DIGIFETCH_DISPATCH)
 grep -c "digifetch_saved_searches" digiquant/src/digiquant/data/gloomberb/entitlements.py   # 1 (TOOL_ENTITLEMENTS)
 

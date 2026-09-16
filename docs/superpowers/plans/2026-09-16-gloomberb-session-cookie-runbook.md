@@ -60,7 +60,7 @@ The gated digifetch tools (11 names, `data/gloomberb/entitlements.py`)
 answer typed `auth_required` on the hosted MCP surface because
 `DigiQuantMcpContainer.envVars` (cloudflare/digithings-stack-cloudflare/src/index.ts:177-185)
 does not forward `GLOOMBERB_SESSION_COOKIE` and no `wrangler secret` exists for it
-(wrangler.toml secrets comment:148-155).
+(wrangler.toml secrets comment:135–164).
 
 Wiring (4 edits, one PR):
 1. index.ts envVars: `GLOOMBERB_SESSION_COOKIE: env.GLOOMBERB_SESSION_COOKIE ?? ""`
@@ -85,7 +85,7 @@ No files changed in this task. Proceed.
 ### Task 2: Operator dry-run — free account, cookie extraction, local verification
 
 **Files:**
-- Modify (local only, never committed): `.env` (repo root, gitignored)
+- Modify (local only, never committed): `.env` (repo root, gitignored; the file may be absent in a fresh worktree — create it locally in that case)
 
 **Interfaces:**
 - Consumes: the shipped client (`digiquant/src/digiquant/data/gloomberb/client.py:152-154, 482-486, 2143-2154`), `term.gloom.sh` as the only in-tree web surface (`attribution.py:23`).
@@ -256,7 +256,7 @@ Create `docs/ops/gloomberb-session-cookie.md`. Required sections and content (fa
 5. `## Extract the session cookie` — browser devtools → Application/Storage → Cookies → `term.gloom.sh`; copy `__Secure-gloomberb.session_token` (fallback `gloomberb.session_token`; `client.py:180-183`). Accepted forms: `name=value` or a bare token (`client.py:437-439, 2143-2154`). Show only `GLOOMBERB_SESSION_COOKIE=__Secure-gloomberb.session_token=<cookie-value>` as the example.
 6. `## Place it per deployment` — three subsections:
    - **Local runs:** add the line to the repo-root `.env` (gitignored); `.env.example` now carries a commented placeholder.
-   - **Hosted MCP container:** NOT forwarded today — `DigiQuantMcpContainer.envVars` (`cloudflare/digithings-stack-cloudflare/src/index.ts:177-185`) carries only scope/backend/FRED/R2, pinned by `tests/scripts/test_mcp_container.py:35-42`; the `mcp.digithings.ai` route is commented out (`wrangler.toml:63-73`, human gate). The tracked wiring (follow-up issue `#<FWD>`) is exactly: add `GLOOMBERB_SESSION_COOKIE: env.GLOOMBERB_SESSION_COOKIE ?? ""` to `envVars`; run `printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put GLOOMBERB_SESSION_COOKIE`; add the name to `MCP_SCOPED_VARS` in `tests/scripts/test_mcp_container.py` and to `test_wrangler_documents_mcp_secrets`; add it to the `wrangler.toml` secrets comment (lines 135–155).
+   - **Hosted MCP container:** NOT forwarded today — `DigiQuantMcpContainer.envVars` (`cloudflare/digithings-stack-cloudflare/src/index.ts:177-185`) carries only scope/backend/FRED/R2, pinned by `tests/scripts/test_mcp_container.py:35-42`; the `mcp.digithings.ai` route is commented out (`wrangler.toml:63-73`, human gate). The tracked wiring (follow-up issue `#<FWD>`) is exactly: add `GLOOMBERB_SESSION_COOKIE: env.GLOOMBERB_SESSION_COOKIE ?? ""` to `envVars`; run `printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put GLOOMBERB_SESSION_COOKIE`; add the name to `MCP_SCOPED_VARS` in `tests/scripts/test_mcp_container.py` and to `test_wrangler_documents_mcp_secrets`; add it to the `wrangler.toml` secrets comment (lines 135–164).
    - **GitHub Actions pipeline:** no `GLOOMBERB_*` env is set in any workflow today (verified 2026-09-16); unset means session tools are filtered from the in-process agent surface (`agent_tools.py:261-292`). If the pipeline ever needs a gated tool, a repo secret feeding the pipeline job is the placement — tracked as future work, not documented as live.
 7. `## Verify the cookie works` — the Task 2 Step 4 command verbatim and its expected output (`OK holders rows = <n>`) plus the `FAIL auth_required` troubleshooting note (quoting, `set -a` export). State that the command prints only a code or a row count, never the value.
 8. `## Privacy rules` — never log, never echo, never paste into issues/PRs/chat; the TTL cache discriminator is a truncated SHA-256 fingerprint, not the cookie (`client.py:186-197`); cookies are forwarded only to same-origin redirect hops (`digifetch/src/digifetch/http.py:224`); rotate by replacing the value in every placement (local `.env`, and the hosted secret once wired) — the fingerprint separates sessions, so no cache flush or restart is required for correctness.
