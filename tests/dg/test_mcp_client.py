@@ -393,3 +393,29 @@ def test_call_prefixed_tool_injects_setup() -> None:
         {"index_name": "occ_help", "text": "q"},
     )
     assert out == {"ok": True}
+
+
+@pytest.mark.unit
+def test_call_prefixed_tool_setup_path_prefix_wins_over_model_arg() -> None:
+    """Operator setup.path_prefix must override a model-supplied value (#4223 review)."""
+    servers = [
+        {
+            "id": "digivault",
+            "url": "http://digivault-mcp:8769/mcp",
+            "setup": '{"path_prefix": "clients/acme"}',
+        }
+    ]
+    with patch(
+        "digigraph.orchestration.mcp_client._call_tool_blocking",
+        return_value={"ok": True},
+    ) as call:
+        call_prefixed_tool(
+            "digivault_search_tag",
+            {"tag": "guide", "path_prefix": "clients/other"},
+            servers,
+        )
+    call.assert_called_once_with(
+        servers[0],
+        "search_tag",
+        {"tag": "guide", "path_prefix": "clients/acme"},
+    )
