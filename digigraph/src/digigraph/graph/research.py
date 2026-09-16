@@ -393,7 +393,6 @@ def _run_document_rag_path(
         extra_tool_names_for_servers,
         resolve_mcp_force_id,
     )
-    from digigraph.orchestration.registry import list_tool_names
 
     mcp_force = None
     if not resolve_force_tool(state.get("force_tool")):
@@ -401,17 +400,17 @@ def _run_document_rag_path(
     if mcp_servers:
         extra_names = extra_tool_names_for_servers(mcp_servers)
         disabled_extra = expand_mcp_disabled_tokens(state.get("disabled_tools"), extra_names)
-        live_extra = frozenset(n for n in extra_names if n not in disabled_extra)
-        if not state.get("enable_web_search"):
-            from digigraph.orchestration.web_search_tools import WEB_SEARCH_TOOL_NAME
+        # policy owns the union: it subtracts disabled MCP tokens and gates the
+        # MCP-proxied web_search behind the same request opt-in as native
+        # web_search (#3420, #4223 review) — never re-implement either here.
+        from digigraph.tool_policy import apply_mcp_extra_tools
 
-            live_extra = frozenset(
-                n for n in live_extra if not n.endswith(f"_{WEB_SEARCH_TOOL_NAME}")
-            )
-        if disabled_extra and context.allowed_tool_names is None:
-            context.allowed_tool_names = frozenset(list_tool_names()) | live_extra
-        elif live_extra and context.allowed_tool_names is not None:
-            context.allowed_tool_names = context.allowed_tool_names | live_extra
+        context.allowed_tool_names = apply_mcp_extra_tools(
+            context.allowed_tool_names,
+            frozenset(extra_names),
+            disabled_extra,
+            enable_web_search=bool(state.get("enable_web_search")),
+        )
     tools_for_llm = get_tools_for_skills(skill_ids, context)
     collected_stored: dict[str, dict] = {}
     collected_rag: list[dict] = []
@@ -469,9 +468,11 @@ def _run_document_rag_path(
 
     user_content = str(prompt)
     if mcp_force:
+        # MCP tool names are ``{server_id}_{tool}`` (mcp_client.prefixed_tool_name);
+        # the trailing separator is the id boundary, not the retired ``__`` form.
         user_content = (
             f"The user invoked /{mcp_force} for this turn. "
-            f"You must use tools whose names start with {mcp_force}__.\n\n" + user_content
+            f"You must use tools whose names start with {mcp_force}_.\n\n" + user_content
         )
 
     # Project mode only: prepend NL filter hints so the LLM folds them into

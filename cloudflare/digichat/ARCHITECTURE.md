@@ -880,9 +880,11 @@ list when the provider requires one. PaywallCard / ChatShell still use `ByokCliF
 (tools ON + English — not localStorage); catalog and auth toggles persist to
 localStorage. No sign-in is required for these session prefs.
 
-**Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default? }` is
-forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?}`). **Operator URLs never reach the
-browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip `url`/`token`/`tokenEnv`/`authHeader`, keeping only
+**Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default?, setup? }` is
+forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?,setup?}`). `setup` is the
+operator's tool-registration values (digisearch `index_name`, digivault `path_prefix`); digigraph merges it over the
+model's tool args. **Operator URLs never reach the
+browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip `url`/`token`/`tokenEnv`/`authHeader`/`setup`, keeping only
 `id`/`label`/`default`). An operator server may set a static `token` (inline) or `tokenEnv` (resolved from the
 deploy environment by `loader.ts`, inline `token` wins if both are set) plus an optional `authHeader` — the outbound
 header name for that token, e.g. `X-API-Key` for MCP servers that don't speak `Authorization: Bearer` (DataTap's,

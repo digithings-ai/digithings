@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any  # score:allow untyped any — Starlette headers / request extras
 
 from fastapi import HTTPException, Request
@@ -25,6 +26,26 @@ def _hget(headers: Any, *keys: str) -> str:
         if raw and str(raw).strip():
             return str(raw)
     return ""
+
+
+def _mcp_setup(raw: Any) -> dict[str, str] | None:
+    """Decode a parsed-header ``setup`` value into the ``McpServerRef`` mapping.
+
+    ``parse_mcp_servers_json`` keeps each server row flat (``dict[str, str]``),
+    so ``setup`` arrives JSON-encoded; the model field is a mapping. Malformed
+    or non-object values are dropped rather than failing the turn.
+    """
+    if isinstance(raw, dict):
+        return {str(k): str(v) for k, v in raw.items()}
+    if not raw:
+        return None
+    try:
+        decoded = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    return {str(k): str(v) for k, v in decoded.items()}
 
 
 def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
@@ -119,6 +140,7 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
             auth=s.get("auth") or None,
             token=s.get("token") or None,
             auth_header=s.get("authHeader") or None,
+            setup=_mcp_setup(s.get("setup")),
         )
         for s in mcp_servers
     ]
