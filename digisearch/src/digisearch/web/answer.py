@@ -256,9 +256,22 @@ def _synthesize(
 
 
 def grounded_answer(
-    question: str, *, config: WebResearchConfig | None = None
+    question: str,
+    *,
+    config: WebResearchConfig | None = None,
+    pages: list[FetchedPage] | None = None,
 ) -> tuple[WebSearchData, TurnUsage]:
     """Run the web research loop and return the envelope plus per-turn usage.
+
+    ``pages`` is the optional pre-retrieved seam: when supplied, the
+    ``_live``/``_fetch``/``_rank`` chain is skipped entirely (no search/fetch/
+    rerank stage is recorded) and those pages are the cited set, so usage is
+    honest for a direct caller — ``searches=0``, ``pages_fetched=0``,
+    ``pages_cited=len(pages)``, plus the synthesis ``llm_calls``. Result rows
+    built from supplied pages carry neutral ``score=0.0`` / ``engine=""``
+    values (there is no live search hit to key them to); the web branch
+    rebuilds its result rows from ``web_hits``. ``None`` runs the live
+    retrieval loop unchanged.
 
     Raises :class:`WebResearchError` on any dependency failure or when no
     source survives to cite. Usage travels as the explicit second tuple
@@ -267,22 +280,35 @@ def grounded_answer(
     cfg = config or EFFORT_PRESETS[EffortMode.FAST]
     timer = start_clock()
 
-    started = time.perf_counter()
-    hits = _live(question, cfg.live_top_n)
-    record_stage(timer, "search_ms", int((time.perf_counter() - started) * 1000))
+    hits_by_url: dict[str, WebSearchResult] = {}
+    if pages is not None:
+        cited = list(pages)
+        if not cited:
+            raise WebResearchError(
+                f"web research found no citable sources for {question!r} (0 supplied page(s))"
+            )
+        searches = 0
+        pages_fetched = 0
+    else:
+        started = time.perf_counter()
+        hits = _live(question, cfg.live_top_n)
+        record_stage(timer, "search_ms", int((time.perf_counter() - started) * 1000))
 
-    started = time.perf_counter()
-    pages = _fetch(hits, cfg.fetch_top_n)
-    record_stage(timer, "fetch_ms", int((time.perf_counter() - started) * 1000))
+        started = time.perf_counter()
+        fetched = _fetch(hits, cfg.fetch_top_n)
+        record_stage(timer, "fetch_ms", int((time.perf_counter() - started) * 1000))
 
-    started = time.perf_counter()
-    cited = _rank(question, pages, cfg.cited_top_n)
-    record_stage(timer, "rerank_ms", int((time.perf_counter() - started) * 1000))
-    if not cited:
-        raise WebResearchError(
-            f"web research found no citable sources for {question!r} "
-            f"({len(pages)} fetched page(s) survived filtering)"
-        )
+        started = time.perf_counter()
+        cited = _rank(question, fetched, cfg.cited_top_n)
+        record_stage(timer, "rerank_ms", int((time.perf_counter() - started) * 1000))
+        if not cited:
+            raise WebResearchError(
+                f"web research found no citable sources for {question!r} "
+                f"({len(fetched)} fetched page(s) survived filtering)"
+            )
+        searches = 1
+        pages_fetched = len(fetched)
+        hits_by_url = {hit.url: hit for hit in hits}
 
     started = time.perf_counter()
     answer, counts = _synthesize(question, cited, cfg)
@@ -291,13 +317,12 @@ def grounded_answer(
     llm_calls = int(counts.get("llm_calls", 0))
     usage = finalize_usage(
         timer,
-        searches=1,
-        pages_fetched=len(pages),
+        searches=searches,
+        pages_fetched=pages_fetched,
         pages_cited=len(cited),
         llm_calls=llm_calls,
     )
 
-    hits_by_url = {hit.url: hit for hit in hits}
     results: list[dict[str, Any]] = []
     for page in cited:
         hit = hits_by_url.get(page.url)
@@ -315,7 +340,7 @@ def grounded_answer(
         output={"text": answer},
         search_type=f"web-{cfg.effort.value}",
         cost_dollars=estimate_cost(
-            searches=1, pages_fetched=len(pages), llm_calls=llm_calls
+            searches=searches, pages_fetched=pages_fetched, llm_calls=llm_calls
         ).model_dump(),
     )
     return data, usage

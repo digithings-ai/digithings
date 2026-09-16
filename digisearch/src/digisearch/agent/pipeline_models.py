@@ -46,6 +46,7 @@ class ResearchTurnState(BaseModel):
     output_schema: dict[str, Any] | None = None
     cited_top_n: int | None = None
     web_hits: list[dict[str, Any]] = Field(default_factory=list)
+    web_pages: list[dict[str, Any]] = Field(default_factory=list)
     web_output: dict[str, Any] | None = None
     cost_dollars: dict[str, Any] | None = None
     usage: dict[str, Any] | None = None

@@ -340,7 +340,9 @@ web_retrieve    search_web (landed searxng→ddgs failover) → fetch_markdown
                 (never ingest_url: fetched pages are never indexed, R3) →
                 chunk (get_document_chunker) → BM25 filter (optional) →
                 BGE rerank → cited hits [{url,title,snippet,score,engine}]
-web_aggregate   digillm synthesis over numbered sources
+                + cited pages stored on the state (web_pages)
+web_aggregate   digillm synthesis over the cited pages handed back in
+                (pages= seam — never a second search/fetch/rank round)
                   markdown path    grounded_answer → answer with inline [n]
                   structured path  structured_synthesis → json_schema wrapper
                                    {content:<output_schema>, grounding:[…]}
@@ -403,14 +405,18 @@ web_aggregate   digillm synthesis over numbered sources
   branch — it gates `query_index()`'s rerank only (#2441) — and the branch
   hardcodes `Reranker(provider="bge", strict=True)`, so
   `DIGISEARCH_RERANK_PROVIDER` does not change it.
-- **Known limitation (Task 5 ruling):** a web turn currently runs the
-  retrieval chain twice — `node_web_retrieve` does search+fetch+rank, then
-  the synthesis monoliths re-run search+fetch internally because they take no
-  injected pages. The second round is **not** counted in
-  `usage`/`cost_dollars`. The answer's `[n]` numbering comes from the
-  synthesis round and can diverge from the returned
-  `results`/`formatted_context` ordering. A scoped follow-up closes this
-  before Phase C/D.
+- **Single retrieval round (`pages=` seam, #4084):** a web turn runs exactly
+  one search/fetch/rank round. `node_web_retrieve` does the retrieval and
+  stores the cited pages on the turn state (`web_pages`, serialized
+  `FetchedPage` dicts); `node_web_aggregate` rebuilds them and passes them
+  through the synthesis monoliths' optional `pages=` argument, which skips
+  `_live`/`_fetch`/`_rank` entirely (standalone callers that omit `pages` keep
+  the live retrieval loop). `usage` therefore counts only what ran: the
+  retrieval round's `searches=1`/`pages_fetched`, `pages_cited` from the cited
+  set, and the synthesis `llm_calls` — nothing double-counted or dropped.
+  Because `results`/`formatted_context` and the answer's `[n]` numbering are
+  built from the same ranked set, they stay aligned (the pre-#4084 divergence
+  note no longer applies).
 - **Eval:** `tests/ds/test_web_eval_live.py` runs `grounded_answer` plus one
   `structured_synthesis` per `RESEARCH_CASES` case (extended landed module
   `digisearch/tests/web_search_eval_cases.py`), mocked offline by default;

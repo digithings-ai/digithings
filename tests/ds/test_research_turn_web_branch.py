@@ -163,6 +163,23 @@ def test_state_and_output_thread_web_keys():
     assert dumped["usage"] == {"searches": 1}
 
 
+def test_web_pages_state_round_trips_as_fetched_pages():
+    pages = [
+        _page("https://a.com/1", "A", "body a"),
+        _page("https://b.com/2", "B", "body b"),
+    ]
+    state = ResearchTurnState(
+        user_message="q",
+        source="web",
+        web_pages=[page.model_dump(mode="json") for page in pages],
+    )
+
+    assert [FetchedPage.model_validate(page) for page in state.web_pages] == pages
+    dumped_pages = state.model_dump(mode="json")["web_pages"]
+    assert dumped_pages == [page.model_dump(mode="json") for page in pages]
+    assert ResearchTurnState(user_message="q").web_pages == []
+
+
 def test_web_retrieve_normalizes_cited_hits_and_usage(monkeypatch):
     from digisearch.agent import web_branch as mod
 
@@ -199,6 +216,7 @@ def test_web_retrieve_normalizes_cited_hits_and_usage(monkeypatch):
             "engine": "ddgs",
         }
     ]
+    assert out["web_pages"] == [{"url": "https://b.com/2", "title": "B", "markdown": "body b"}]
     assert seen["live_top_n"] == EFFORT_PRESETS[EffortMode.THOROUGH].live_top_n
     assert seen["fetch_top_n"] == EFFORT_PRESETS[EffortMode.THOROUGH].fetch_top_n
     assert seen["rank_top_n"] == 2
@@ -268,9 +286,10 @@ def test_web_aggregate_rebuilds_results_citations_and_usage(monkeypatch):
     )
     seen: dict[str, Any] = {}
 
-    def fake_grounded_answer(question, *, config=None):
+    def fake_grounded_answer(question, *, config=None, pages=None):
         seen["question"] = question
         seen["config"] = config
+        seen["pages"] = pages
         return collapsed, synthesis
 
     monkeypatch.setattr(mod, "grounded_answer", fake_grounded_answer)
@@ -280,12 +299,20 @@ def test_web_aggregate_rebuilds_results_citations_and_usage(monkeypatch):
         effort="fast",
         cited_top_n=2,
         web_hits=WEB_HITS,
+        web_pages=[
+            _page("https://a.com/1", "A", "s a").model_dump(mode="json"),
+            _page("https://b.com/2", "B", "s b").model_dump(mode="json"),
+        ],
         usage=_retrieval_usage(),
     )
     out = mod.node_web_aggregate(state)
 
     assert seen["question"] == "q"
     assert seen["config"].cited_top_n == 2
+    assert seen["pages"] == [
+        _page("https://a.com/1", "A", "s a"),
+        _page("https://b.com/2", "B", "s b"),
+    ]
     assert out["backend"] == "web-oss"
     assert out["web_output"] == {"text": "answer [1]"}
     assert out["results"] == [
@@ -350,9 +377,10 @@ def test_web_aggregate_structured_path_uses_output_schema(monkeypatch):
     synthesis = TurnUsage(llm_calls=1, synthesis_ms=7, total_ms=507)
     seen: dict[str, Any] = {}
 
-    def fake_structured(question, *, output_schema=None, config=None):
+    def fake_structured(question, *, output_schema=None, config=None, pages=None):
         seen["output_schema"] = output_schema
         seen["config"] = config
+        seen["pages"] = pages
         return data, synthesis
 
     def no_markdown(question, *, config=None):
@@ -366,11 +394,19 @@ def test_web_aggregate_structured_path_uses_output_schema(monkeypatch):
         effort="fast",
         output_schema=output_schema,
         web_hits=WEB_HITS,
+        web_pages=[
+            _page("https://a.com/1", "A", "s a").model_dump(mode="json"),
+            _page("https://b.com/2", "B", "s b").model_dump(mode="json"),
+        ],
         usage=_retrieval_usage(),
     )
     out = mod.node_web_aggregate(state)
 
     assert seen["output_schema"] == output_schema
+    assert seen["pages"] == [
+        _page("https://a.com/1", "A", "s a"),
+        _page("https://b.com/2", "B", "s b"),
+    ]
     assert out["web_output"] == data.output
     assert out["results"][0]["score"] == 1.0
     assert out["results"][0]["engine"] == "searxng"
@@ -380,16 +416,129 @@ def test_web_aggregate_structured_path_uses_output_schema(monkeypatch):
     assert out["cost_dollars"]["breakdown"]["pages_fetched"] == 5
 
 
+@pytest.mark.parametrize("structured", [False, True], ids=["markdown", "structured"])
+def test_web_aggregate_passes_cited_pages_without_second_retrieval(monkeypatch, structured):
+    """The real retrieve node's cited pages reach the monolith seam; one round only.
+
+    Runs ``node_web_retrieve`` first so the tested contract is the genuine
+    retrieve → aggregate hand-off (``web_pages`` dumps rebuilt as the cited
+    ``FetchedPage`` objects, in rank order), then boobytraps the retrieval
+    seams so any aggregate-time round would fail loudly.
+    """
+    from digisearch.agent import web_branch as mod
+
+    hits = [
+        _hit("https://a.com/1", "A", score=0.9),
+        _hit("https://b.com/2", "B", score=0.4),
+    ]
+    pages = [
+        _page("https://a.com/1", "A", "s a"),
+        _page("https://b.com/2", "B", "s b"),
+    ]
+    cited = [pages[1], pages[0]]  # rank order, not state/web_hits order
+    retrieval_calls: dict[str, int] = {"live": 0, "fetch": 0, "rank": 0}
+
+    def count_live(*args: Any, **kwargs: Any) -> Any:
+        retrieval_calls["live"] += 1
+        return hits
+
+    def count_fetch(*args: Any, **kwargs: Any) -> Any:
+        retrieval_calls["fetch"] += 1
+        return pages
+
+    def count_rank(*args: Any, **kwargs: Any) -> Any:
+        retrieval_calls["rank"] += 1
+        return cited
+
+    monkeypatch.setattr(mod, "_live", count_live)
+    monkeypatch.setattr(mod, "_fetch", count_fetch)
+    monkeypatch.setattr(mod, "_rank", count_rank)
+    state = ResearchTurnState(
+        user_message="q",
+        source="web",
+        output_schema={"type": "object"} if structured else None,
+    )
+    retrieve_out = mod.node_web_retrieve(state)
+    assert retrieval_calls == {"live": 1, "fetch": 1, "rank": 1}
+    assert retrieve_out["web_pages"] == [page.model_dump(mode="json") for page in cited]
+
+    def no_retrieval(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("web_aggregate must not search/fetch/rank again")
+
+    monkeypatch.setattr(mod, "_live", no_retrieval)
+    monkeypatch.setattr(mod, "_fetch", no_retrieval)
+    monkeypatch.setattr(mod, "_rank", no_retrieval)
+
+    seen: dict[str, Any] = {}
+
+    def fake_monolith(question, *, output_schema=None, config=None, pages=None):
+        seen["question"] = question
+        seen["config"] = config
+        seen["pages"] = pages
+        return (
+            WebSearchData(results=[], output={"text": "answer [1]"}),
+            TurnUsage(llm_calls=1, rerank_ms=999, synthesis_ms=5, total_ms=1004),
+        )
+
+    def wrong_path(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError(f"wrong synthesis path (structured={structured})")
+
+    if structured:
+        monkeypatch.setattr(mod, "structured_synthesis", fake_monolith)
+        monkeypatch.setattr(mod, "grounded_answer", wrong_path)
+    else:
+        monkeypatch.setattr(mod, "grounded_answer", fake_monolith)
+        monkeypatch.setattr(mod, "structured_synthesis", wrong_path)
+
+    out = mod.node_web_aggregate(state.model_copy(update=retrieve_out))
+
+    assert seen["question"] == "q"
+    assert seen["pages"] == cited  # the retrieve node's cited pages, rebuilt in order
+    assert [page.url for page in seen["pages"]] == ["https://b.com/2", "https://a.com/1"]
+    assert retrieval_calls == {"live": 1, "fetch": 1, "rank": 1}  # retrieve's one round only
+    assert "error" not in out
+    assert out["usage"]["searches"] == 1
+    assert out["usage"]["pages_fetched"] == 2
+    assert out["usage"]["pages_cited"] == 2
+    assert out["usage"]["llm_calls"] == 1
+    assert out["usage"]["rerank_ms"] == retrieve_out["usage"]["rerank_ms"]
+    assert out["usage"]["rerank_ms"] != 999  # synthesis rerank_ms cannot overwrite retrieval's
+    assert out["usage"]["synthesis_ms"] == 5
+
+
 def test_web_aggregate_fail_hard_sets_error(monkeypatch):
     from digisearch.agent import web_branch as mod
 
-    def boom(question, *, config=None):
+    def boom(question, *, config=None, pages=None):
         raise WebResearchError("digillm down")
 
     monkeypatch.setattr(mod, "grounded_answer", boom)
     state = ResearchTurnState(user_message="q", source="web", web_hits=WEB_HITS)
     out = mod.node_web_aggregate(state)
     assert out["error"] is not None and "digillm down" in out["error"]
+    assert out["trace"][0].step == "web_aggregate"
+    assert out["trace"][0].status == "failed"
+
+
+def test_web_aggregate_malformed_web_pages_fails_hard(monkeypatch):
+    """A corrupt ``web_pages`` dump becomes a WebResearchError, not a raw ValidationError."""
+    from digisearch.agent import web_branch as mod
+
+    def no_synthesis(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("synthesis must not run on unvalidatable web_pages")
+
+    monkeypatch.setattr(mod, "grounded_answer", no_synthesis)
+    monkeypatch.setattr(mod, "structured_synthesis", no_synthesis)
+    state = ResearchTurnState(
+        user_message="q",
+        source="web",
+        web_hits=WEB_HITS,
+        web_pages=[{"title": "missing url"}],
+        usage=_retrieval_usage(),
+    )
+    out = mod.node_web_aggregate(state)
+    assert out["error"] is not None
+    assert "web_pages in turn state failed validation" in out["error"]
     assert out["trace"][0].step == "web_aggregate"
     assert out["trace"][0].status == "failed"
 
@@ -402,16 +551,19 @@ def test_run_web_research_turn_wires_retrieve_into_aggregate(monkeypatch):
     monkeypatch.setattr(mod, "_live", lambda q, top_n: hits)
     monkeypatch.setattr(mod, "_fetch", lambda h, top_n: pages)
     monkeypatch.setattr(mod, "_rank", lambda q, p, top_n: pages)
-    monkeypatch.setattr(
-        mod,
-        "grounded_answer",
-        lambda q, *, config=None: (
+    seen: dict[str, Any] = {}
+
+    def fake_grounded_answer(question, *, config=None, pages=None):
+        seen["pages"] = pages
+        return (
             WebSearchData(results=[], output={"text": "answer [1]"}),
             TurnUsage(llm_calls=1, synthesis_ms=5, total_ms=5),
-        ),
-    )
+        )
+
+    monkeypatch.setattr(mod, "grounded_answer", fake_grounded_answer)
     out = mod.run_web_research_turn({"user_message": "q", "source": "web", "effort": "fast"})
 
+    assert seen["pages"] == pages  # the retrieve node's cited set, passed through as FetchedPage
     assert out["error"] is None
     assert out["backend"] == "web-oss"
     assert out["results"] == [
