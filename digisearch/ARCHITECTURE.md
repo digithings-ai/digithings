@@ -487,8 +487,8 @@ Rate limits are per-IP (R10): CRUD and runs 30/min, trigger / tick / exa_webhook
 | `POST /v1/monitors` | 201 `{"watch": …, "delivery_secret": …}` | config codes (422), `exa_schedule_unsupported` / `exa_webhook_target_missing` (422), `exa_webhook_secret_missing` / `exa_monitor_id_missing` / `exa_api_error` (502) | Validated before persistence; the one-time secret is in this response only (R8). `backend="exa"` is provisioned remote-first (#4184): the remote monitor is created first (interval period mapped exactly; a webhook delivery target is required), its one-time `webhookSecret` becomes the watch secret, and the watch is persisted with `exa_monitor_id` only after EXA answered — nothing is stored when provisioning fails, and a local persist failure compensates by deleting the remote |
 | `GET /v1/monitors` | 200 `{"watches": [...]}` | — | Optional `?workspace_id=` filter |
 | `GET /v1/monitors/{watch_id}` | 200 `Watch` | `watch_not_found` (404) | Never returns the secret |
-| `PATCH /v1/monitors/{watch_id}` | 200 `Watch`, or `{"watch": …, "delivery_secret": …}` when rotating | `watch_not_found` (404), `validation_error` / config codes (422), `exa_secret_rotate_unsupported` (409) | Partial patch; merging is top-level (a nested object replaces the whole nested object). Rotation is refused for `backend="exa"` watches — their secret is EXA's per-monitor `webhookSecret`, so a locally minted replacement would break signature verification; re-create the watch to rotate |
-| `DELETE /v1/monitors/{watch_id}` | 200 `{"deleted": watch_id}` | `watch_not_found` (404) | Runs are retained |
+| `PATCH /v1/monitors/{watch_id}` | 200 `Watch`, or `{"watch": …, "delivery_secret": …}` when rotating | `watch_not_found` (404), `validation_error` / config codes (422), `watch_backend_immutable` (409), `exa_secret_rotate_unsupported` (409) | Partial patch; merging is top-level (a nested object replaces the whole nested object). `backend` is create-time only: a patch naming a different value is refused 409 `watch_backend_immutable` (a same-value `backend` is a no-op), closing both the `oss→exa` claim-without-monitor and the `exa→oss` orphan direction. Rotation is refused for any watch backed by a remote EXA monitor — `backend="exa"` or a non-null `exa_monitor_id` — because its secret is EXA's per-monitor `webhookSecret`, so a locally minted replacement would break signature verification; re-create the watch to rotate |
+| `DELETE /v1/monitors/{watch_id}` | 200 `{"deleted": watch_id}` | `watch_not_found` (404) | A `backend="exa"` watch carrying an `exa_monitor_id` first tears its remote monitor down best-effort (`delete_exa_monitor`); a remote failure is logged and swallowed so the local delete still succeeds. OSS watches make no adapter call. Runs are retained |
 | `POST /v1/monitors/{watch_id}/trigger` | 201 `MonitorRun` | `watch_not_found` (404) | Body `{"mode": "manual"\|"poll"}` (default `manual`); a failed turn still returns its persisted `status="failed"` run rather than a 5xx |
 | `GET /v1/monitors/{watch_id}/runs` | 200 `{"runs": [...], "next_cursor": …}` | `run_not_found` (404, unknown cursor) | `limit` 1–100 (default 20); `cursor` is the last `run_id` of the previous page |
 | `GET /v1/monitors/{watch_id}/runs/{run_id}` | 200 `MonitorRun` | `run_not_found` (404) | — |
@@ -511,7 +511,8 @@ Rate limits are per-IP (R10): CRUD and runs 30/min, trigger / tick / exa_webhook
 | `exa_run_status_unknown` | — (adapter) | `exa_run_to_monitor_run` called directly with a non-terminal run status; the webhook route acks every parseable non-terminal status 200 without persisting, so it never reaches translation |
 | `exa_schedule_unsupported` | 422 | EXA watch create: `schedule.mode="cron"` (EXA interval triggers cannot express a cron), or `interval_seconds` not exactly divisible by 86400/3600/60 — EXA periods are exact units (`"1d"`/`"1h"`/`"1m"`) only, never rounded |
 | `exa_webhook_target_missing` | 422 | EXA watch create: no delivery target of kind `webhook` with a non-blank URL — EXA returns a `webhookSecret` only for a webhook-bound monitor |
-| `exa_secret_rotate_unsupported` | 409 | `PATCH {"rotate_delivery_secret": true}` on a `backend="exa"` watch — its secret is EXA's per-monitor `webhookSecret`; re-create the watch to rotate |
+| `watch_backend_immutable` | 409 | `PATCH` naming a `backend` different from the watch's current one — the backend is fixed at create (a same-value `backend` is a no-op); delete and re-create the watch to change it |
+| `exa_secret_rotate_unsupported` | 409 | `PATCH {"rotate_delivery_secret": true}` on a watch backed by a remote EXA monitor (`backend="exa"` or a non-null `exa_monitor_id`) — its secret is EXA's per-monitor `webhookSecret`; re-create the watch to rotate |
 | `exa_webhook_secret_missing` | 502 | EXA watch create: the remote answer carried no non-blank `webhookSecret`; the just-created remote monitor is best-effort deleted and nothing is persisted |
 | `exa_api_error` | 502 | EXA watch create: any `ExaAdapterError` other than `exa_request_invalid` (upstream/transport/key failure); the watch is not persisted |
 | `exa_request_invalid` | 422 | EXA watch create: local caller input the adapter rejects (blank query/schedule). Every other adapter failure maps to 502 `exa_api_error` |
@@ -557,8 +558,9 @@ EXA's extra rule is theirs. Evidence: `.superpowers/sdd/4123-exa-shape-pin/
 `webhookSecret`, captured by the remote-first create (#4184). `PATCH
 {"rotate_delivery_secret": true}` mints a fresh one in the same shape and
 rotates only on the literal `true` (truthy strings/numbers do not); rotation is
-refused 409 `exa_secret_rotate_unsupported` for `backend="exa"` watches, whose
-secret must keep matching EXA's signature — re-create the watch to rotate. The
+refused 409 `exa_secret_rotate_unsupported` for any watch backed by a remote
+monitor (`backend="exa"` or a non-null `exa_monitor_id`), whose secret must keep
+matching EXA's signature — re-create the watch to rotate. The
 secret lives in a dedicated nullable `secret` column, never in the watch body,
 so `GET`/list reads and stored run bodies are secret-free.
 
@@ -577,6 +579,19 @@ local persist failure also deletes the remote monitor before the original error
 is re-raised, so a broken store cannot orphan a monitor. The stored watch
 carries `exa_monitor_id`, and the inbound webhook verifies against the remote
 secret with no out-of-band `set_delivery_secret` step.
+
+**Backend transitions (#4196).** The backend is create-time only: `PATCH
+/v1/monitors/{watch_id}` naming a `backend` different from the watch's current
+one is 409 `watch_backend_immutable`, so an `exa` watch can never be flipped
+into a local watch that orphans its remote monitor and an OSS watch can never
+claim `backend="exa"` without a remote monitor behind it. The rotation guard is
+keyed on remote presence (`backend="exa"` **or** a non-null `exa_monitor_id`),
+so even a misconfigured watch — an `exa_monitor_id` left on an OSS row — cannot
+mint a local secret that no longer matches EXA's signature. `DELETE
+/v1/monitors/{watch_id}` tears the remote monitor down best-effort first
+(`delete_exa_monitor` with the stored id; failures `logger.warning`-logged and
+swallowed), then deletes the local row — the response stays `{"deleted":
+watch_id}` and OSS watches make no adapter call.
 
 **Delivery (R13).** Fan-out happens only for `status="ok"` runs whose watch
 delivery mode is not `poll`. Webhook/slack targets receive the exact

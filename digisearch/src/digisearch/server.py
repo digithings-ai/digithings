@@ -32,6 +32,7 @@ from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TO
 from digisearch.logging import configure_logging
 from digisearch.monitors.exa_adapter import (
     ExaAdapterError,
+    delete_exa_monitor,
     exa_event_is_non_terminal,
     exa_monitor_id_from_payload,
     exa_run_to_monitor_run,
@@ -1453,6 +1454,18 @@ def _store_error(request: Request, exc: MonitorStoreError) -> JSONResponse:
     return _monitor_error(request, status_code, exc.code, str(exc))
 
 
+def _delete_remote_exa_monitor(exa_monitor_id: str) -> None:
+    """Best-effort remote EXA teardown on watch delete; never mask the delete."""
+    try:
+        delete_exa_monitor(exa_monitor_id=exa_monitor_id)
+    except Exception:
+        logger.warning(
+            "failed to delete EXA monitor %s while deleting its watch",
+            exa_monitor_id,
+            exc_info=True,
+        )
+
+
 def _validate_watch_config(watch: Watch, request: Request) -> JSONResponse | None:
     """Create/update gate: datatap off, known timezone, parseable cron, deliverable.
 
@@ -1525,10 +1538,14 @@ def api_update_monitor(
 ) -> dict[str, Any] | JSONResponse:
     """Apply a partial patch; ``{"rotate_delivery_secret": true}`` mints a new secret (R8).
 
-    Rotation is refused (409 ``exa_secret_rotate_unsupported``) for an
-    ``backend="exa"`` watch: its delivery secret is EXA's per-monitor
-    ``webhookSecret``, so a locally minted replacement would silently break
-    ``exa-signature`` verification. Re-create the watch to rotate.
+    ``backend`` is fixed at create: a patch naming any other value is refused
+    (409 ``watch_backend_immutable``) — delete and re-create the watch to change
+    the backend (a same-value ``backend`` is a no-op), so neither an
+    ``oss → exa`` claim-without-monitor nor an ``exa → oss`` orphan can be
+    produced. Rotation is refused (409 ``exa_secret_rotate_unsupported``)
+    whenever the watch is ``backend="exa"`` or carries an ``exa_monitor_id``:
+    its delivery secret is EXA's per-monitor ``webhookSecret``, so a locally
+    minted replacement would silently break ``exa-signature`` verification.
     """
     store = get_monitor_store()
     rotate = patch.pop("rotate_delivery_secret", False) is True
@@ -1536,7 +1553,16 @@ def api_update_monitor(
         current = store.get_watch(watch_id)
     except MonitorStoreError as exc:
         return _store_error(request, exc)
-    if rotate and current.backend == "exa":
+    backend = patch.get("backend")
+    if backend is not None and backend != current.backend:
+        return _monitor_error(
+            request,
+            409,
+            "watch_backend_immutable",
+            f"Watch {watch_id!r} backend is fixed at create ({current.backend!r}), "
+            "so it cannot be changed; delete and re-create the watch instead.",
+        )
+    if rotate and (current.backend == "exa" or current.exa_monitor_id):
         return _monitor_error(
             request,
             409,
@@ -1568,8 +1594,20 @@ def api_update_monitor(
 
 @app.delete("/v1/monitors/{watch_id}", response_model=None)
 def api_delete_monitor(watch_id: str, request: Request) -> dict[str, Any] | JSONResponse:
-    """Delete a watch; its run history is retained."""
+    """Delete a watch; its run history is retained.
+
+    A ``backend="exa"`` watch carrying an ``exa_monitor_id`` first tears its
+    remote monitor down best-effort: an adapter failure is logged
+    (``logger.warning``) and swallowed so the local delete still succeeds.
+    OSS watches make no remote call, and a missing watch keeps the 404 path.
+    """
     store = get_monitor_store()
+    try:
+        watch = store.get_watch(watch_id)
+    except MonitorStoreError as exc:
+        return _store_error(request, exc)
+    if watch.backend == "exa" and watch.exa_monitor_id:
+        _delete_remote_exa_monitor(watch.exa_monitor_id)
     try:
         store.delete_watch(watch_id)
     except MonitorStoreError as exc:
