@@ -618,18 +618,17 @@ done-callback per run; a bare `asyncio.create_task` is never used). Both serving
 entrypoints carry the same driver lifespan — the FastAPI app lifespan
 (`server._lifespan`, after its backend gate) and the FastMCP server lifespan
 (`mcp_server.mcp`) — so an MCP-only deployment drives its own runs (#4170).
-Install lifetime is per lifespan invocation, not per process: the HTTP app
-lifespan spans the serving window and the stdio MCP lifespan spans the process,
-but FastMCP on streamable-http (digisearch's only transport) enters the lifespan
-once per client session. Because `set_scheduler` and `WEBSET_TASKS` are
-process-global, overlapping streamable-http sessions can uninstall or cancel
-each other's runs; reference-counted install semantics are tracked in
-[#4189](https://github.com/digithings-ai/digithings/issues/4189). The
-driver installs the scheduler on the service facade at startup
-(`set_scheduler`), re-schedules the startup-resume union (websets still
-`running` ∪ websets holding a non-terminal `running` search) as
-registry-tracked runs under each webset's persisted `verification_mode`, and
-on shutdown undoes the seam first and then cancels every tracked run/backfill.
+Install is per process, reference-counted across concurrent lifespan
+invocations (#4189): FastMCP on streamable-http (digisearch's only transport)
+enters the lifespan once per client session, so overlapping sessions share the
+one install — installed on the first entry, torn down on the last exit. A
+session's exit neither nulls the `set_scheduler` seam nor cancels another
+still-active session's runs. The driver installs the scheduler on the service
+facade at startup (`set_scheduler`), re-schedules the startup-resume union
+(websets still `running` ∪ websets holding a non-terminal `running` search;
+once per install window, not per session) as registry-tracked runs under each
+webset's persisted `verification_mode`, and on shutdown undoes the seam first
+and then cancels every tracked run/backfill.
 `Webset.status` never goes backwards: `idle` is
 sticky after the first completion, and a refresh (`add_search` /
 `trigger_monitor`) runs as a new `WebsetSearch` generation observed through the
@@ -730,15 +729,14 @@ validation + wiring (Pro key; tracked by the #4123 live-pin precedent).
 **MCP driving is wired (#4170).** Both entrypoints carry the shared
 `websets/driver.py` lifespan: the FastAPI app lifespan installs it for the HTTP
 serving window, and the FastMCP server lifespan (`mcp_server.mcp`) installs it
-for an MCP session (streamable-http) or the process (stdio), so a webset created
-or refreshed through the standalone MCP tools is driven in-process through the
-same service facade, runner, and per-process `WEBSET_TASKS` registry (HTTP and
-MCP processes stay independent). The install is per lifespan invocation, while
-`set_scheduler` and `WEBSET_TASKS` are process-global: on streamable-http —
-digisearch's only transport — FastMCP enters the lifespan once per client
-session, so overlapping sessions can uninstall or cancel each other's runs.
-Per-process (reference-counted) install semantics are tracked in
-[#4189](https://github.com/digithings-ai/digithings/issues/4189).
+per process (stdio) or across concurrent MCP client sessions (streamable-http),
+so a webset created or refreshed through the standalone MCP tools is driven
+in-process through the same service facade, runner, and per-process
+`WEBSET_TASKS` registry (HTTP and MCP processes stay independent). The install
+is reference-counted (#4189): the first entry installs the scheduler and runs
+the startup resume, later concurrent entries only bump the depth, and the last
+exit tears the seam down and cancels tracked runs — one session closing never
+uninstalls or cancels another session's runs.
 
 **Phase D live verification record (2026-09-15, #4066 Task 8 — not measured,
 live stack absent in this env):**
@@ -812,10 +810,9 @@ cannot be opened. They are the deliberate v1 chat surface: enrichment
 add/remove, webhook secrets, monitors, and cancel stay HTTP-only operator ops.
 The FastMCP instance carries the shared driver lifespan
 (`websets/driver.py`), so these tools drive their own runs without an HTTP
-process (#4170) — installed per MCP client session on streamable-http (per
-process on stdio; overlapping-session caveat in § Phase D websets, tracked in
-[#4189](https://github.com/digithings-ai/digithings/issues/4189)). See § Phase D
-websets for the async lifecycle.
+process (#4170) — one reference-counted per-process install shared by
+concurrent streamable-http MCP client sessions (stdio: the process), torn down
+on the last exit (#4189). See § Phase D websets for the async lifecycle.
 
 Tool parameters for `digisearch_query`: `text`, `index_name`, `top_k`, `mode`.
 
@@ -1438,7 +1435,7 @@ no-new-provider discipline as Phase C. One-line responsibilities:
 | `websets/verify.py` | `verify_item` (llm + offline rules modes) and the fail-closed settlement of still-pending items at candidate-pass end |
 | `websets/enrich.py` | `enrich_item` (8 typed fields, per-field citations), funding reconciliation (ECB snapshot), entity merge, `company_profile_field` |
 | `websets/runner.py` | `AsyncioRunner` (semaphore 4, per-item containment, semaphore-aware cancellation), `run_webset_async`, `backfill_enrichment`, `schedule_webset_task` + `WEBSET_TASKS` |
-| `websets/driver.py` | Shared in-process driver (`webset_task_lifespan`, `WebsetTaskScheduler`): installs the scheduler seam per lifespan invocation (HTTP serving window / MCP client session / stdio process), re-schedules the startup-resume union, cancels tracked runs/backfills on shutdown — carried by both the FastAPI and FastMCP lifespans (#4170; per-session seam semantics #4189) |
+| `websets/driver.py` | Shared in-process driver (`webset_task_lifespan`, `WebsetTaskScheduler`): installs the scheduler seam per process with a reference-counted lifecycle (first entry installs + runs the startup-resume union, last exit cancels tracked runs/backfills; concurrent HTTP/MCP sessions share one install — #4170/#4189), carried by both the FastAPI and FastMCP lifespans |
 | `websets/events.py` | Event emit helpers, the shared Phase C signing core, `append_event` fan-out through `deliver_webhook` (3 attempts, 5s/25s) + ledger recording, public `verify_webhook_signature` |
 | `websets/export.py` | `export_json` (per-field citations) and `export_csv` (polars) |
 | `websets/service.py` | The sync facade the HTTP/MCP/orchestrator surfaces call (create/get/items/counts/add_search/add_enrichment/remove/monitors/webhooks/events/cancel/export) + the scheduler seam |
@@ -1458,14 +1455,15 @@ legitimately re-emit terminal events. Item `verification` and the enrichment
 names are real columns for filtered listing.
 
 **Execution model.** The shared driver (`websets/driver.py`) owns one
-`asyncio.TaskGroup` + `WEBSET_TASKS` per lifespan invocation — installed by the
-HTTP lifespan (serving window) and the FastMCP lifespan (MCP client session on
-streamable-http, process on stdio) alike (#4170); the service facade schedules
-through the `set_scheduler` seam (no bare `asyncio.create_task`, no awaiting a
-run inline) and all store I/O inside the runner crosses through one dedicated
-worker thread (the store is thread-bound). Startup resume, the terminal-status
-gate, `verification_mode` threading, and the deferred items are documented in
-§ Phase D websets.
+`asyncio.TaskGroup` + `WEBSET_TASKS` per process install window, reference-counted
+across concurrent lifespan invocations — installed by the HTTP lifespan (one
+serving window) and the FastMCP lifespan (MCP client sessions on
+streamable-http, process on stdio) alike (#4170/#4189); the service facade
+schedules through the `set_scheduler` seam (no bare `asyncio.create_task`, no
+awaiting a run inline) and all store I/O inside the runner crosses through one
+dedicated worker thread (the store is thread-bound). Startup resume, the
+terminal-status gate, `verification_mode` threading, and the deferred items are
+documented in § Phase D websets.
 
 ---
 

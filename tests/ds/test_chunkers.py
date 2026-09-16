@@ -238,6 +238,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 105 for #4184 (`monitors/provisioning.py` module-map
     rows + EXA provisioning / rotation-refusal / broadened-non-terminal-ack
     docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 105) re-recorded for #4189 (per-process
+    reference-counted MCP webset driver wording in ARCHITECTURE.md) — fixture
+    prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -279,19 +282,19 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "2a938dc090252417",
         "507a7ce716be2ad1",
         "aa924885a2a48bdc",
-        "13e56068a3dbb881",
+        "300297e0b6534ddf",
         "767113eb8e027a2b",
         "7090bb1895cf01fc",
         "f72fb524bae160b6",
         "a45fa09bea0e8e51",
         "a73404f288469603",
-        "b00e40c26e67a7db",
+        "808c94507c095b2a",
         "6de35d68bea0e990",
         "c5776a6b47ee3e04",
         "3aed1b59bbde9920",
         "cd75df0bdf136bd3",
-        "8b9534582ad6954f",
-        "deab5eb58f390797",
+        "5236bbbddc296b54",
+        "0221d840d8073811",
         "f5694c994b90e40c",
         "2f102978f3f92316",
         "d201d5cef8605cdf",
@@ -318,9 +321,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "ea4b9c63695d2f69",
         "367d6f1945838ddd",
         "4187a3ee58add217",
-        "cea61babea9674b7",
+        "01f256208a140f34",
         "19fbb7c0db259870",
-        "7d49f202ff0c492a",
+        "3ec5f2b1fce1b494",
         "66ce13f7ba2fafdc",
         "26ca223dcbe8b403",
         "ac5eea8b8b2f7820",
