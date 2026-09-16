@@ -18,6 +18,24 @@ only when ``status == ok`` and the watch's delivery mode is not ``poll`` (R13),
 threading the watch's stored secret into :func:`deliver` for the
 ``X-digi-signature`` HMAC. ``no_change`` and ``failed`` runs never deliver.
 
+The C→D bridge (#4249) runs after persist like delivery: an ``ok`` run on a
+watch carrying ``bridge`` opens one search generation on the target webset via
+:func:`handoff` — an in-process call into the websets service (R2: no loopback
+HTTP, no bearer token), never on ``no_change``/``failed`` runs. The websets
+store's ``(watch_id, run_id, webset_id)`` ledger makes repeat deliveries of one
+run idempotent, and this turn is the single retry owner: a bridge failure is
+recorded as a ``BridgeReceipt(ok=False)`` on the returned run — it never flips
+the run's status — so the next ``ok`` run re-attempts the handoff.
+
+Research mode (#4250) swaps the turn: ``answer_mode="research"`` runs the full
+Phase B research turn for the watch query (the optional ``digisearch[agent]``
+layer, lazily imported) and stores a cited ``MonitorDigest`` on the run. The
+turn's hits still flow through the SAME ``dedup_results`` pass (URL identity via
+``normalize_url``), but status semantics diverge by design: ``ok`` means a
+digest was produced — URL novelty for research runs lives only in
+``results_new``/``dedup_stats``, so a fresh digest delivers/bridges even when no
+URL is new. Recall mode is byte-identical to v1.
+
 Fail-hard semantics: any recall exception persists a ``status="failed"`` run
 with ``error=str(exc)`` and re-raises ``MonitorRunError`` carrying the persisted
 ``run_id``. A delivery-enabled run whose stored secret is ``None`` (see
@@ -50,14 +68,28 @@ from zoneinfo import ZoneInfo
 from digiclaw.cron import parse_cron
 
 from digisearch.monitors.dedup import dedup_results
-from digisearch.monitors.models import DeliveryReceipt, MonitorRun, Watch
+from digisearch.monitors.models import (
+    BridgeReceipt,
+    DeliveryReceipt,
+    MonitorDigest,
+    MonitorRun,
+    Watch,
+)
 from digisearch.monitors.store import MonitorStore, get_store, new_ulid
 from digisearch.monitors.validation import DATATAP_WORKSPACE_ID
 from digisearch.web_exa import ExaSearchType, WebSearchData, exa_search, is_exa_configured
+from digisearch.web_search.citation import Citation, normalize_url
 from digisearch.web_search.models import WebSearchRequest, WebSearchResponse
 from digisearch.web_search.service import search_web
 
-__all__ = ["MonitorRunError", "deliver", "is_due", "run_watch", "tick_due_watches"]
+__all__ = [
+    "MonitorRunError",
+    "deliver",
+    "handoff",
+    "is_due",
+    "run_watch",
+    "tick_due_watches",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -97,9 +129,10 @@ def run_watch(
     A delivery-enabled run with no stored secret persists ``status="failed"``
     (``error="delivery_secret_missing"``, ``results_all=[]`` so the dedup memory
     does not absorb undelivered content, ``results_new`` kept as the factual
-    record) and raises :class:`MonitorRunError`. Delivery receipts are attached
-    to the returned run; the append-only store cannot rewrite the already-
-    persisted body, so stored runs keep ``delivery=[]``.
+    record) and raises :class:`MonitorRunError`. Delivery and bridge receipts
+    are attached to the returned run; the append-only store cannot rewrite the
+    already-persisted body, so stored runs keep ``delivery=[]`` and
+    ``bridge=None``.
     """
     store = store if store is not None else get_store()
     watch = store.get_watch(watch_id)
@@ -107,15 +140,19 @@ def run_watch(
     exa_configured = is_exa_configured()
     query_snapshot = _query_snapshot(watch, exa_configured=exa_configured)
 
+    digest: MonitorDigest | None = None
     try:
-        data = _invoke_shallow_recall(
-            query=watch.query,
-            search_type=watch.search_type,
-            num_results=watch.num_results,
-            category=watch.category,
-            include_domains=watch.include_domains,
-            exclude_domains=watch.exclude_domains,
-        )
+        if watch.answer_mode == "research":
+            digest, data = _invoke_research_digest(watch, watch_id=watch_id)
+        else:
+            data = _invoke_shallow_recall(
+                query=watch.query,
+                search_type=watch.search_type,
+                num_results=watch.num_results,
+                category=watch.category,
+                include_domains=watch.include_domains,
+                exclude_domains=watch.exclude_domains,
+            )
     except Exception as exc:
         run = MonitorRun(
             run_id=new_ulid(),
@@ -141,7 +178,12 @@ def run_watch(
     results_new, dedup_stats = dedup_results(
         results_all, store.seen_fingerprints(watch_id), watch.dedup
     )
-    status: _RunStatus = "ok" if results_new else "no_change"
+    if watch.answer_mode == "research":
+        # Divergence by design (#4250): a produced digest is the ok signal;
+        # URL novelty lives only in results_new/dedup_stats.
+        status: _RunStatus = "ok" if digest is not None and digest.answer else "no_change"
+    else:
+        status = "ok" if results_new else "no_change"
 
     error: str | None = None
     deliver_after_persist = status == "ok" and watch.delivery.mode != "poll"
@@ -172,6 +214,7 @@ def run_watch(
         results_new=results_new,
         dedup_stats=dedup_stats,
         cost_dollars=data.cost_dollars,
+        digest=digest,
         error=error,
     )
     store.append_run(run)
@@ -187,6 +230,10 @@ def run_watch(
         # Create-time check leaves a DNS-rebinding window; verified TLS + no redirects mitigate.
         receipts = deliver(run, watch, delivery_secret=delivery_secret)
         run = run.model_copy(update={"delivery": receipts})
+
+    bridge = handoff(run, watch) if run.status == "ok" else None
+    if bridge is not None:
+        run = run.model_copy(update={"bridge": bridge})
 
     logger.info(
         "monitor run watch_id=%s run_id=%s status=%s new=%d all=%d",
@@ -280,6 +327,45 @@ def deliver(
     return _deliver(run, watch, delivery_secret=delivery_secret, timeout_s=timeout_s)
 
 
+def handoff(run: MonitorRun, watch: Watch) -> BridgeReceipt | None:
+    """Bridge seam — hand an ``ok`` run to its webset (C→D contract, #4249).
+
+    Returns ``None`` when the watch carries no ``bridge``. The actual call goes
+    through :func:`_invoke_handoff` (lazily imported, patchable in tests); any
+    failure becomes a ``BridgeReceipt(ok=False, error=...)`` — the handoff
+    never flips the run's status. Retry ownership stays with the watch turn
+    (one attempt here): the next ``ok`` run re-attempts, and the websets store
+    ledger makes that re-attempt idempotent per ``(watch_id, run_id,
+    webset_id)``.
+    """
+    bridge = watch.bridge
+    if bridge is None:
+        return None
+    try:
+        search, created = _invoke_handoff(
+            bridge.webset_id, watch_id=watch.watch_id, run_id=run.run_id
+        )
+    except Exception as exc:
+        logger.warning(
+            "monitor bridge handoff failed watch_id=%s run_id=%s webset_id=%s error=%s",
+            watch.watch_id,
+            run.run_id,
+            bridge.webset_id,
+            exc,
+        )
+        return BridgeReceipt(webset_id=bridge.webset_id, ok=False, error=str(exc))
+    return BridgeReceipt(
+        webset_id=bridge.webset_id, ok=True, search_id=search.id, duplicate=not created
+    )
+
+
+def _invoke_handoff(webset_id: str, *, watch_id: str, run_id: str) -> tuple[Any, bool]:
+    """Call the websets service handoff in-process (lazy import seam, #4249)."""
+    from digisearch.websets.service import handoff_from_watch
+
+    return handoff_from_watch(webset_id, watch_id=watch_id, run_id=run_id)
+
+
 def _invoke_shallow_recall(
     *,
     query: str,
@@ -334,6 +420,65 @@ def _oss_response_to_data(resp: WebSearchResponse) -> WebSearchData:
     return WebSearchData(results=[result.model_dump() for result in resp.results])
 
 
+def _invoke_research_digest(watch: Watch, *, watch_id: str) -> tuple[MonitorDigest, WebSearchData]:
+    """Run the Phase B research turn in-process and adapt its output (#4250).
+
+    Always the OSS Phase B web branch (``source="web"``): research mode is
+    OSS-local-only and rejected on EXA watches at the config gate. The turn is
+    the optional ``digisearch[agent]`` layer, so it is imported lazily — a
+    missing extra surfaces as the call raising ImportError inside
+    :func:`run_watch`'s failure path. A turn-reported ``error`` is raised too:
+    a failed turn persists a failed run, never an empty digest.
+    """
+    from digisearch.agent import run_research_turn
+
+    turn = run_research_turn(
+        {
+            "user_message": watch.query,
+            "source": "web",
+            "effort": watch.effort,
+            "index_name": "default",
+            "session_id": f"watch:{watch_id}",
+        }
+    )
+    if turn.get("error"):
+        raise RuntimeError(f"research turn failed: {turn['error']}")
+    web_output = dict(turn.get("web_output") or {})
+    rows = [row for row in (turn.get("results") or []) if isinstance(row, dict)]
+    digest = MonitorDigest(
+        answer=str(web_output.get("text") or "").strip(),
+        citations=_digest_citations(rows),
+        effort=watch.effort,
+    )
+    return digest, WebSearchData(
+        results=[dict(row) for row in rows],
+        output=web_output,
+        cost_dollars=turn.get("cost_dollars"),
+    )
+
+
+def _digest_citations(rows: list[dict[str, Any]]) -> list[Citation]:
+    """Cited hit rows → ``Citation``s, deduped on ``normalize_url`` identity (#4250)."""
+    citations: list[Citation] = []
+    seen: set[str] = set()
+    for row in rows:
+        url = str(row.get("url") or "")
+        if not url:
+            continue
+        identity = normalize_url(url)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        citations.append(
+            Citation(
+                url=url,
+                title=str(row.get("title") or ""),
+                excerpt=str(row.get("snippet") or ""),
+            )
+        )
+    return citations
+
+
 def _oss_clamped_num_results(num_results: int) -> int:
     """Clamp to the landed OSS ``max_results`` bound (R6)."""
     return min(num_results, _OSS_MAX_RESULTS)
@@ -349,6 +494,12 @@ def _query_snapshot(watch: Watch, *, exa_configured: bool) -> dict[str, Any]:
         "include_domains": list(watch.include_domains),
         "exclude_domains": list(watch.exclude_domains),
     }
+    if watch.answer_mode != "recall":
+        # Gated so recall-mode snapshots stay byte-identical to v1 (#4250).
+        snapshot["answer_mode"] = watch.answer_mode
+        snapshot["effort"] = watch.effort
+    if watch.bridge is not None:
+        snapshot["bridge"] = {"webset_id": watch.bridge.webset_id}
     if exa_configured:
         snapshot["num_results"] = watch.num_results
         return snapshot

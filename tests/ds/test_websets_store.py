@@ -1028,3 +1028,42 @@ def test_get_store_falls_back_to_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     get_store().create_webset(_webset())
     assert (tmp_path / ".digisearch" / "websets.sqlite3").exists()
+
+
+def test_bridge_handoff_ledger_is_idempotent(tmp_path):
+    store = WebsetStore(db_path=str(tmp_path / "w.sqlite3"))
+    webset = store.create_webset(_webset())
+
+    first, created = store.bridge_handoff(
+        webset.id, watch_id="watch_1", run_id="run_1", search=_search(webset.id)
+    )
+
+    assert created is True
+    assert first.status == "running"
+    assert first.webset_id == webset.id
+    assert _WSS_ID_RE.match(first.id)
+    assert [s.id for s in store.list_searches(webset.id)] == [first.id]
+
+    again, created_again = store.bridge_handoff(
+        webset.id, watch_id="watch_1", run_id="run_1", search=_search(webset.id)
+    )
+
+    assert created_again is False
+    assert again.id == first.id
+    assert [s.id for s in store.list_searches(webset.id)] == [first.id]
+
+    other, created_other = store.bridge_handoff(
+        webset.id, watch_id="watch_1", run_id="run_2", search=_search(webset.id)
+    )
+
+    assert created_other is True
+    assert other.id != first.id
+    assert [s.id for s in store.list_searches(webset.id)] == [first.id, other.id]
+
+
+def test_bridge_handoff_unknown_webset(tmp_path):
+    store = WebsetStore(db_path=str(tmp_path / "w.sqlite3"))
+
+    with pytest.raises(WebsetStoreError) as ei:
+        store.bridge_handoff(_GHOST, watch_id="w", run_id="r", search=_search(_GHOST))
+    assert ei.value.code == "webset_not_found"

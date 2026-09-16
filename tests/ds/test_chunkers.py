@@ -278,13 +278,17 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 113 for the #4241 docs note (EXA hosted Websets API
     subscription surface in ARCHITECTURE.md) — fixture prose only;
     RecursiveChunker unchanged.
+    Re-recorded at count 114 for the #4249–#4252 docs wave (C↔D bridge + bridge
+    ledger notes, research-mode watch digests, effort-normalized spend scoring,
+    and the re-measured anchor receipt pointer in ARCHITECTURE.md) — fixture
+    prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 113
+    assert len(chunks) == 114
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -302,15 +306,15 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "3280ddb5f7ce73ee",
         "71c75006a73bbb9b",
         "0035aa02c8d4c789",
-        "a7fc35b75f9b5e09",
-        "208b4fbb16a49071",
-        "ff826630927efa87",
-        "c86663a520afa724",
+        "b959e75c8c4b124a",
+        "a94797156eb57efd",
+        "58efb49707626f90",
+        "cd6a3f2ea2f1a0d0",
         "7e8464fe6a6cc067",
         "805b4f2eb13bd3fd",
         "9e59c09159a62591",
         "1103ffe080b90ed4",
-        "decc6483e87f6403",
+        "a18beb19efb240aa",
         "7973399b6e155051",
         "e0ed75d4b266835e",
         "5e1cdcae7ee033f5",
@@ -325,7 +329,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "8685a691c30714f9",
         "ce691515430dae1f",
         "73d141db4779c6b1",
-        "3ba5f0d98d67de27",
+        "167b81ebf198af11",
+        "cd07a7d19166471f",
         "d43b29499a454968",
         "0fdafef266e479fd",
         "4d46ce009fe0a623",

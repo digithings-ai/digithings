@@ -15,6 +15,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from digisearch.web_exa import VALID_SEARCH_TYPES
+from digisearch.web_search.citation import Citation
 
 
 class WatchSchedule(BaseModel):
@@ -71,6 +72,14 @@ class DeliveryConfig(BaseModel):
     targets: list[DeliveryTarget] = Field(default_factory=list, max_length=5)
 
 
+class WatchBridge(BaseModel):
+    """C→D handoff target (#4249): hand an ``ok`` run to this webset."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    webset_id: str = Field(min_length=1)
+
+
 class Watch(BaseModel):
     """A scheduled web-search watch.
 
@@ -89,6 +98,16 @@ class Watch(BaseModel):
       generated server-side and returned only in create/rotate responses.
     - ``exa_monitor_id`` identifies the remote EXA monitor and is required
       once ``backend="exa"`` (enforced by the Task 8 create path).
+    - ``bridge`` is the C→D handoff switch (#4249): when set, every ``ok`` run
+      opens one search generation on the named webset through the websets
+      store's idempotency ledger. It is OSS-local-only — EXA watches reject it
+      at the config gate (remote monitors never hand off).
+    - ``answer_mode`` (#4250) selects the turn behind each run: ``recall``
+      (default) is the Phase B shallow-recall leg byte-identical to v1;
+      ``research`` runs the full Phase B research turn and stores a cited
+      ``MonitorDigest`` on the run. ``effort`` (``fast``/``thorough``) applies
+      to ``research`` only. Both are OSS-local-only — EXA watches reject
+      ``research`` at the config gate.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -104,6 +123,9 @@ class Watch(BaseModel):
     schedule: WatchSchedule
     dedup: DedupRule = Field(default_factory=DedupRule)
     delivery: DeliveryConfig = Field(default_factory=DeliveryConfig)
+    bridge: WatchBridge | None = None
+    answer_mode: Literal["recall", "research"] = "recall"
+    effort: Literal["fast", "thorough"] = "fast"
     backend: Literal["oss", "exa"] = "oss"
     exa_monitor_id: str | None = None
     workspace_id: str | None = None
@@ -127,6 +149,35 @@ class DeliveryReceipt(BaseModel):
     error: str | None = None
 
 
+class BridgeReceipt(BaseModel):
+    """Outcome of one C→D handoff attempt (#4249).
+
+    ``duplicate=True`` means the ``(watch_id, run_id, webset_id)`` ledger
+    already recorded the search and this delivery returned it unchanged (a
+    repeat of the same run never opens a second generation).
+    """
+
+    webset_id: str
+    ok: bool
+    search_id: str | None = None
+    duplicate: bool = False
+    error: str | None = None
+
+
+class MonitorDigest(BaseModel):
+    """Cited answer stored on a research-mode run (#4250).
+
+    ``citations`` dedupe on ``normalize_url`` identity so one page is cited
+    once; ``answer`` is the Phase B synthesis text (inline ``[n]`` markers).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    answer: str
+    citations: list[Citation] = Field(default_factory=list)
+    effort: Literal["fast", "thorough"] = "fast"
+
+
 class MonitorRun(BaseModel):
     """Canonical run envelope — backend is a label, never a shape fork.
 
@@ -135,6 +186,11 @@ class MonitorRun(BaseModel):
     stored/delivered; ``no_change`` = turn succeeded but dedup removed
     everything (delivery skipped, run still persisted); ``failed`` = the turn
     raised or the backend errored (``error`` set, delivery skipped).
+
+    ``delivery`` and ``bridge`` receipts are attached to the RETURNED run only:
+    the append-only store cannot rewrite the already-persisted body, so stored
+    runs keep both lists empty. ``digest`` is different: a research-mode run
+    builds it before persist, so the stored body carries it.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -152,4 +208,6 @@ class MonitorRun(BaseModel):
     dedup_stats: dict[str, int]
     cost_dollars: dict[str, Any] | None = None
     delivery: list[DeliveryReceipt] = Field(default_factory=list)
+    bridge: BridgeReceipt | None = None
+    digest: MonitorDigest | None = None
     error: str | None = None

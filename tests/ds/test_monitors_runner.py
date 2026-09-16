@@ -571,3 +571,287 @@ def test_tick_skips_datatap_watches(monkeypatch, tmp_path):
     delivered = _stub_pipeline(monkeypatch)
     assert mod.tick_due_watches(store=store) == []
     assert delivered == []
+
+
+# ── C→D bridge handoff (#4249) ───────────────────────────────────────────────
+
+
+class _BridgeSearch:
+    """Minimal stand-in for the service's ``WebsetSearch`` return value."""
+
+    id = "wss_bridge1"
+
+
+def _bridge_stub(monkeypatch, *, created: bool = True) -> list[tuple[str, str, str]]:
+    """Patch the handoff import boundary; record (webset, watch, run) calls."""
+    from digisearch.monitors import runner as mod
+
+    calls: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(
+        mod,
+        "_invoke_handoff",
+        lambda webset_id, *, watch_id, run_id: calls.append((webset_id, watch_id, run_id))
+        or (_BridgeSearch(), created),
+    )
+    return calls
+
+
+@pytest.mark.unit
+def test_run_watch_bridge_handoff_receipt(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, bridge={"webset_id": "ws_bridge"})
+    monkeypatch.setattr(mod, "_invoke_shallow_recall", lambda **k: _recall_data())
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+    calls = _bridge_stub(monkeypatch, created=True)
+
+    run = mod.run_watch(watch.watch_id, store=store)
+
+    assert run.status == "ok"
+    assert run.bridge is not None
+    assert run.bridge.ok is True
+    assert run.bridge.webset_id == "ws_bridge"
+    assert run.bridge.search_id == "wss_bridge1"
+    assert run.bridge.duplicate is False
+    assert run.query_snapshot["bridge"] == {"webset_id": "ws_bridge"}
+    assert calls == [("ws_bridge", watch.watch_id, run.run_id)]
+    # Receipts ride the returned run only; the append-only store keeps bridge=None.
+    assert store.get_run(watch.watch_id, run.run_id).bridge is None
+
+
+@pytest.mark.unit
+def test_run_watch_bridge_duplicate_receipt(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, bridge={"webset_id": "ws_bridge"})
+    monkeypatch.setattr(mod, "_invoke_shallow_recall", lambda **k: _recall_data())
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+    _bridge_stub(monkeypatch, created=False)
+
+    run = mod.run_watch(watch.watch_id, store=store)
+
+    assert run.bridge is not None
+    assert run.bridge.ok is True
+    assert run.bridge.duplicate is True
+    assert run.bridge.search_id == "wss_bridge1"
+
+
+@pytest.mark.unit
+def test_run_watch_bridge_failure_is_a_receipt_not_a_status_flip(monkeypatch, tmp_path):
+    """Retry ownership stays with the watch turn: the failure never flips status."""
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, bridge={"webset_id": "ws_bridge"})
+    monkeypatch.setattr(mod, "_invoke_shallow_recall", lambda **k: _recall_data())
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+
+    def boom(webset_id, *, watch_id, run_id):
+        raise RuntimeError("websets unavailable")
+
+    monkeypatch.setattr(mod, "_invoke_handoff", boom)
+
+    run = mod.run_watch(watch.watch_id, store=store)
+
+    assert run.status == "ok"
+    assert run.bridge is not None
+    assert run.bridge.ok is False
+    assert run.bridge.search_id is None
+    assert run.bridge.error is not None and "websets unavailable" in run.bridge.error
+
+
+@pytest.mark.unit
+def test_run_watch_bridge_skipped_without_bridge_or_on_no_change(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    plain = _make_watch(store)
+    monkeypatch.setattr(mod, "_invoke_shallow_recall", lambda **k: _recall_data())
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+    calls = _bridge_stub(monkeypatch)
+
+    bridged = _make_watch(store, bridge={"webset_id": "ws_bridge"})
+    first = mod.run_watch(bridged.watch_id, store=store)
+    second = mod.run_watch(bridged.watch_id, store=store)
+    plain_run = mod.run_watch(plain.watch_id, store=store)
+
+    assert first.bridge is not None
+    assert second.status == "no_change" and second.bridge is None
+    assert plain_run.status == "ok" and plain_run.bridge is None
+    assert calls == [("ws_bridge", bridged.watch_id, first.run_id)]
+
+
+# ── research-mode watches (#4250) ────────────────────────────────────────────
+
+
+def _research_turn_stub(monkeypatch, **overrides) -> list[tuple[str, str, str]]:
+    """Patch the Phase B turn import; return recorded (query, effort, session) calls."""
+    turn: dict = {
+        "error": None,
+        "results": [
+            {
+                "url": "https://a.com/1",
+                "title": "A",
+                "snippet": "alpha",
+                "score": 0.9,
+                "engine": "searxng",
+                "metadata": {"evidence_tier": "External"},
+            },
+            {"url": "https://b.com/2/", "title": "B", "snippet": "beta"},
+        ],
+        "web_output": {"text": "Synthesized answer [1]."},
+        "cost_dollars": {
+            "total": 0.0,
+            "provider": "web-oss",
+            "breakdown": {"searches": 1, "pages_fetched": 3, "llm_calls": 1},
+            "note": "oss-synthesis; llm spend metered in digillm telemetry, not here",
+        },
+    }
+    turn.update(overrides)
+    calls: list[tuple[str, str, str]] = []
+    import digisearch.agent as agent_mod
+
+    monkeypatch.setattr(
+        agent_mod,
+        "run_research_turn",
+        lambda payload: calls.append(
+            (payload["user_message"], payload["effort"], payload["session_id"])
+        )
+        or turn,
+    )
+    return calls
+
+
+@pytest.mark.unit
+def test_run_watch_research_mode_builds_cited_digest(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, answer_mode="research", effort="thorough")
+    calls = _research_turn_stub(monkeypatch)
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+
+    run = mod.run_watch(watch.watch_id, store=store)
+
+    assert run.status == "ok"
+    assert run.digest is not None
+    assert run.digest.answer == "Synthesized answer [1]."
+    assert run.digest.effort == "thorough"
+    assert [c.url for c in run.digest.citations] == ["https://a.com/1", "https://b.com/2/"]
+    assert [c.title for c in run.digest.citations] == ["A", "B"]
+    assert run.digest.citations[1].excerpt == "beta"
+    assert run.query_snapshot["answer_mode"] == "research"
+    assert run.query_snapshot["effort"] == "thorough"
+    assert calls == [("etf flows", "thorough", f"watch:{watch.watch_id}")]
+    assert run.cost_dollars is not None and run.cost_dollars["provider"] == "web-oss"
+    # The digest is built before persist: the stored body carries it.
+    stored = store.get_run(watch.watch_id, run.run_id)
+    assert stored.digest is not None and stored.digest.answer == "Synthesized answer [1]."
+
+
+@pytest.mark.unit
+def test_run_watch_research_mode_ok_on_fresh_digest_without_new_urls(monkeypatch, tmp_path):
+    """Divergence by design: a repeat turn stays ok (digest); URL novelty only dedups."""
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, answer_mode="research")
+    _research_turn_stub(monkeypatch)
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+
+    first = mod.run_watch(watch.watch_id, store=store)
+    second = mod.run_watch(watch.watch_id, store=store)
+
+    assert first.status == "ok" and second.status == "ok"
+    assert second.results_new == []
+    assert second.dedup_stats["unchanged"] == 2
+    assert second.digest is not None and second.digest.answer
+
+
+@pytest.mark.unit
+def test_run_watch_research_mode_failure_persists_failed(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, answer_mode="research")
+    _research_turn_stub(monkeypatch, error="web_retrieve exploded")
+
+    with pytest.raises(mod.MonitorRunError) as ei:
+        mod.run_watch(watch.watch_id, store=store)
+
+    stored = store.get_run(watch.watch_id, ei.value.run_id)
+    assert stored.status == "failed"
+    assert stored.error is not None and "web_retrieve exploded" in stored.error
+    assert stored.digest is None
+
+
+@pytest.mark.unit
+def test_digest_citations_dedupe_on_normalized_url(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, answer_mode="research")
+    _research_turn_stub(
+        monkeypatch,
+        results=[
+            {"url": "https://A.com/1", "title": "A", "snippet": "alpha"},
+            {"url": "https://a.com/1/", "title": "A dup", "snippet": "alpha"},
+            {"url": "", "title": "empty"},
+        ],
+    )
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+
+    run = mod.run_watch(watch.watch_id, store=store)
+
+    assert run.digest is not None
+    assert [c.url for c in run.digest.citations] == ["https://A.com/1"]
+
+
+@pytest.mark.unit
+def test_run_watch_recall_mode_has_no_digest(monkeypatch, tmp_path):
+    from digisearch.monitors import runner as mod
+
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store)
+    _stub_pipeline(monkeypatch)
+
+    run = mod.run_watch(watch.watch_id, store=store)
+
+    assert run.digest is None
+    assert "answer_mode" not in run.query_snapshot
+    assert "effort" not in run.query_snapshot
+
+
+@pytest.mark.unit
+def test_run_watch_bridge_through_the_real_seam(monkeypatch, tmp_path):
+    """Runner → service → store for real (no seam stubs): pins the wiring kwargs."""
+    from digisearch.monitors import runner as mod
+    from digisearch.websets import service as websets_service
+
+    monkeypatch.setenv("DIGISEARCH_WEBSETS_DB", str(tmp_path / "websets.sqlite3"))
+    webset = websets_service.create_webset(
+        query="etf flows",
+        count=3,
+        criteria=[{"name": "etf", "rule": "mentions ETF flows"}],
+    )
+    store = MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
+    watch = _make_watch(store, bridge={"webset_id": webset.id})
+    monkeypatch.setattr(mod, "_invoke_shallow_recall", lambda **k: _recall_data())
+    monkeypatch.setattr(mod, "deliver", lambda run, watch, **k: [])
+
+    run = mod.run_watch(watch.watch_id, store=store)
+
+    assert run.bridge is not None
+    assert run.bridge.ok is True
+    assert run.bridge.duplicate is False
+    search_id = run.bridge.search_id
+    assert search_id is not None
+    searches = websets_service.get_webset(webset.id).searches
+    assert [s.id for s in searches] == [webset.searches[0].id, search_id]
+
+    # Repeating the handoff of the SAME run is a duplicate through the real seam.
+    receipt = mod.handoff(run, store.get_watch(watch.watch_id))
+    assert receipt is not None
+    assert (receipt.ok, receipt.duplicate, receipt.search_id) == (True, True, search_id)

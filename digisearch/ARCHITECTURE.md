@@ -362,7 +362,7 @@ web_aggregate   digillm synthesis over the cited pages handed back in
 | `results` | EXA hits (`{title,url,highlights[]/text,…}`) | cited web hits `{title,url,snippet,score,engine}` (`snippet`, never `highlights`) |
 | `output` | `{text, structured, grounding}` | markdown: `{text}`; structured: `{content, grounding[{field,citations[{url,title,excerpt}],confidence}], text}` |
 | `search_type` | `instant`\|`fast`\|`auto`\|`deep-lite`\|`deep`\|`deep-reasoning` | `web-fast` \| `web-thorough` |
-| `cost_dollars` | metered dollars (e.g. `{total: 0.012}`) | `{total: 0.0, provider: "web-oss", breakdown, note}` — advisory-only |
+| `cost_dollars` | metered dollars (e.g. `{total: 0.012}`) | `{total: 0.0, provider: "web-oss", breakdown, note}` — advisory-only; "OSS total excludes LLM spend" |
 
   `format_web_results` renders EXA `highlights`/`text`; OSS `snippet` rows
   therefore degrade to Title/URL-only lines (never a crash), which is why the
@@ -395,7 +395,13 @@ web_aggregate   digillm synthesis over the cited pages handed back in
   llm_calls}, note}` and `WebSearchData.search_type` is `"web-<effort>"`.
   **`total` MUST NOT drive budget/routing gates alone** — OSS synthesis has
   no metered per-call dollar cost and LLM spend is metered in digillm
-  telemetry, never folded in (the `note` says exactly that).
+  telemetry, never folded in (the `note` says exactly that). Budget/routing
+  gates combine stage-ms with the digillm telemetry counts
+  (`breakdown.llm_calls > 0` ⇒ consult the `CallPurpose.WEB_SEARCH` counters;
+  treat them as UNKNOWN — fail open + log — never as $0 when absent), budgets
+  are declared per effort preset, and no backend choice is cheapest-total-wins;
+  the three-axis effort-normalized rule is
+  `docs/superpowers/specs/2026-09-16-oss-websearch-effort-scoring.md` (#4251).
 - **Ops notes:** `DIGISEARCH_SYNTHESIS_MODEL` must be set to a digillm model
   id or every web turn fails hard with `WebResearchError` (never an uncited
   answer). The branch requires the `[rerank]` extra (sentence-transformers
@@ -423,6 +429,12 @@ web_aggregate   digillm synthesis over the cited pages handed back in
   the shared `DIGISEARCH_WEB_SEARCH_LIVE=1` gate runs the live-sampled leg
   and prints p50 stage ms + citation coverage. Live dollar/latency numbers
   are single-key, single-day scaffolding anchors — never SLO constants.
+  Re-measured 2026-09-16 (#4252): shallow per-call prices held
+  ($0.007 search / $0.012 deep-structured / $0.003 contents / $0.005 answer),
+  while the deep agent-run anchor came in 3.0x below its 2026-09-14 sample
+  ($0.0887 vs $0.2642) and stays provisional — two single samples cannot
+  separate price change from step-count variance (receipt:
+  `docs/superpowers/specs/2026-09-16-oss-websearch-exa-remeasure-anchors.json`).
 
 Phase B live verification record (2026-09-15, #4064 Task 6 — not measured,
 prerequisites absent in this env):
@@ -476,7 +488,15 @@ delivery config), let the runner recall and dedup results, then read the
 canonical run history or receive delivery. One store, one runner, one envelope —
 the recall leg is `digisearch.web_exa.exa_search` whenever `EXA_API_KEY` is
 configured and the OSS seam otherwise, and the `backend` a watch declares is
-recorded on each of its runs. Monitors are off end-to-end for the `datatap`
+recorded on each of its runs. A watch may carry a `bridge` target
+(`{"webset_id"}`, #4249): every `ok` run then hands one search generation to
+that Phase D webset in-process, idempotent per run through the websets store's
+ledger (see § Phase D websets). A watch may also set
+`answer_mode="research"` (#4250): the turn becomes the full Phase B research
+turn (OSS-local-only, lazily imported `digisearch[agent]`) and the run carries a
+cited `MonitorDigest` — `ok` then means a digest was produced, with URL novelty
+living only in `results_new`/`dedup_stats` (`effort` applies to research mode
+only). Monitors are off end-to-end for the `datatap`
 workspace: create/update reject it and the tick skips it.
 
 ##### Monitor HTTP routes
@@ -677,6 +697,17 @@ each search generation: `add_search` and `trigger_monitor` inherit it, so a
 `rules` webset never silently switches to `llm` on a refresh. The runner's
 backfill generations (`add_enrichment`) persist the inherited mode too, so a
 backfill cannot reset a `rules` webset to the model default.
+
+**C→D bridge (#4249).** A Phase C watch may hand its `ok` runs to a webset
+(`Watch.bridge`). The runner calls `handoff_from_watch(webset_id, watch_id,
+run_id)` in-process after persist: the websets store's `bridge_handoffs` ledger
+keyed `(watch_id, run_id, webset_id)` is written in the same transaction as the
+new search row, so a re-delivered run returns the first generation with
+`created=False` and only `created=True` schedules a settle pass. The watch turn
+is the single retry owner — a handoff failure is recorded as a `BridgeReceipt`
+on the returned run and never flips its status; the next `ok` run re-attempts.
+An EXA-backed watch rejects `bridge` at the config gate
+(`bridge_exa_unsupported`).
 
 **Scheduled tick driver (#4221).** Each install window also runs one tick task
 inside the driver's `asyncio.TaskGroup` (`WEBSET_TICK_SECONDS`, 60s default):

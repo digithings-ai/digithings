@@ -129,6 +129,7 @@ __all__ = [
     "create_webset",
     "export_webset",
     "get_webset",
+    "handoff_from_watch",
     "list_events",
     "list_items",
     "list_monitors",
@@ -522,6 +523,52 @@ def trigger_monitor(webset_id: str, monitor_id: str, *, store: WebsetStore | Non
     )
     _schedule_run(webset_id, verification_mode=mode)
     return _call(store.get_webset, webset_id)
+
+
+def handoff_from_watch(
+    webset_id: str,
+    *,
+    watch_id: str,
+    run_id: str,
+    store: WebsetStore | None = None,
+) -> tuple[WebsetSearch, bool]:
+    """Open one search generation for a watch handoff, idempotently (#4249).
+
+    The C→D bridge's service entry point: no monitor row is required (a watch
+    hands off directly), a terminal (``cancelled``/``failed``) webset is
+    rejected with ``webset_terminal``, and the new generation inherits the
+    latest generation's query/count/criteria/``verification_mode`` exactly like
+    :func:`trigger_monitor`. The ``(watch_id, run_id, webset_id)`` ledger in
+    the websets store makes repeat deliveries of one run a no-op that returns
+    the already-created search with ``created=False``; only a ``created``
+    result schedules a settling pass. Returns ``(search, created)``.
+    """
+    store = _store_or_default(store)
+    webset = _require_webset(store, webset_id)
+    _require_refreshable(webset)
+    if not webset.searches:
+        raise WebsetServiceError(
+            f"webset {webset_id} has no search generation to re-run",
+            code="search_not_found",
+        )
+    latest = webset.searches[-1]
+    mode = latest.verification_mode
+    search, created = _call(
+        store.bridge_handoff,
+        webset_id,
+        watch_id=watch_id,
+        run_id=run_id,
+        search=WebsetSearch(
+            webset_id=webset_id,
+            query=latest.query,
+            count=latest.count,
+            criteria=latest.criteria,
+            verification_mode=mode,
+        ),
+    )
+    if created:
+        _schedule_run(webset_id, verification_mode=mode)
+    return search, created
 
 
 # ── webhooks (delivery wiring stays with T7; R13 gate) ────────────────────────

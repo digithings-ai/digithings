@@ -96,12 +96,16 @@ Design rules:
   `WebSearchRequest.recency_days` default is 7 days) and clamp `num_results` to
   the OSS `max_results le=10` cap, recording the clamp in the run's
   `query_snapshot` (R5/R6). Never `import` the Phase B
-  `digisearch_research_delegate` turn. Same-process loopback HTTP to self
+  `digisearch_research_delegate` delegate tool (MCP-side); the opt-in research
+  mode's turn import (`digisearch.agent.run_research_turn`) is the sanctioned
+  #4250 exception. Same-process loopback HTTP to self
   (`POST /v1/orchestrator_invoke {tool: web_search | digisearch_web_search}`)
   is NOT a runtime path; it survives only as an integration-test path. Tool-only
   fail-hard is inherited: an empty/failed recall raises, the run is persisted
   with `status: failed`, and delivery is skipped. No synthesis fallback is
-  added here (plan 2026-09-11 deleted all synthesis paths). Cost passthrough
+  added here (plan 2026-09-11 deleted all synthesis paths) — the ONE sanctioned
+  exception is the per-watch opt-in `answer_mode="research"` turn (#4250): never
+  a fallback, only a caller-chosen mode. Cost passthrough
   (`cost_dollars`) is advisory-only display data, never a gate.
 - **One canonical run envelope.** `MonitorRun` is the only shape downstream
   consumers (MCP, orchestrator, poll clients, EXA adapter) ever see. The EXA
@@ -221,6 +225,10 @@ class DeliveryConfig(BaseModel):
     mode: Literal["poll", "webhook", "fanout"] = "poll"
     targets: list[DeliveryTarget] = Field(default_factory=list, max_length=5)
 
+class WatchBridge(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    webset_id: str = Field(min_length=1)       # C→D handoff target (#4249)
+
 class Watch(BaseModel):
     model_config = ConfigDict(extra="forbid")
     watch_id: str = ""                         # server-assigned ulid-hex on create
@@ -235,6 +243,13 @@ class Watch(BaseModel):
     schedule: WatchSchedule
     dedup: DedupRule = Field(default_factory=DedupRule)
     delivery: DeliveryConfig = Field(default_factory=DeliveryConfig)
+    bridge: WatchBridge | None = None          # hand `ok` runs to a Phase D webset (#4249);
+                                               # OSS-local-only — backend=exa rejects it (422
+                                               # bridge_exa_unsupported)
+    answer_mode: Literal["recall", "research"] = "recall"  # research: full Phase B turn (#4250)
+                                               # + cited digest; OSS-local-only (422
+                                               # research_exa_unsupported)
+    effort: Literal["fast", "thorough"] = "fast"           # research-mode only
     backend: Literal["oss", "exa"] = "oss"
     exa_monitor_id: str | None = None          # required when backend=exa
     workspace_id: str | None = None
@@ -247,6 +262,18 @@ class DeliveryReceipt(BaseModel):
     ok: bool
     status_code: int | None = None
     error: str | None = None
+
+class BridgeReceipt(BaseModel):
+    webset_id: str
+    ok: bool
+    search_id: str | None = None
+    duplicate: bool = False                    # True: the ledger already recorded this run (#4249)
+    error: str | None = None
+
+class MonitorDigest(BaseModel):
+    answer: str                                # Phase B synthesis text (inline [n] markers)
+    citations: list[Citation] = Field(default_factory=list)  # deduped on normalize_url identity
+    effort: Literal["fast", "thorough"] = "fast"
 
 class MonitorRun(BaseModel):
     """Canonical envelope. OSS runs are born in this shape; EXA runs are
@@ -262,18 +289,25 @@ class MonitorRun(BaseModel):
     query_snapshot: dict[str, Any]             # query/search_type/num_results (post-clamp, with a
                                                # num_results_clamped_from entry when R6 clamps) /
                                                # recency_days (always None for monitors, R5) / domains
+                                               # / bridge target when the watch sets one (#4249)
+                                               # / answer_mode+effort only on research runs (#4250)
     results_all: list[dict[str, Any]]          # WebSearchData result dicts, as returned
     results_new: list[dict[str, Any]]          # dedup survivors only
     dedup_stats: dict[str, int]                # {seen, new, changed, unchanged}
     cost_dollars: dict[str, Any] | None = None # passthrough from WebSearchData
     delivery: list[DeliveryReceipt] = Field(default_factory=list)
+    bridge: BridgeReceipt | None = None        # returned-run receipt only (stored runs keep None)
+    digest: MonitorDigest | None = None        # research-mode runs only; built before persist
     error: str | None = None
 ```
 
 Status semantics: `ok` = new content found and stored/delivered; `no_change` =
 turn succeeded but dedup removed everything (delivery skipped, run still
 persisted); `failed` = turn raised or backend errored (delivery skipped,
-`error` set, fail-hard preserved — never an empty `ok`).
+`error` set, fail-hard preserved — never an empty `ok`). Research mode (#4250)
+diverges by design: `ok` = a digest was produced — URL novelty lives only in
+`results_new`/`dedup_stats`, so a fresh digest delivers/bridges even when no URL
+is new.
 
 ### 4.2 Store (`monitors/store.py`)
 
@@ -356,9 +390,15 @@ def _invoke_shallow_recall(
 `web_search/service.py::search_web` with `recency_days=None` — R5, no silent
 rolling window — and `max_results=min(watch.num_results, 10)` — R6, the
 adaptation happens through `_oss_response_to_data` so the runner always holds a
-`WebSearchData`; the OSS leg itself returns `WebSearchResponse`) → `dedup_results`
+`WebSearchData`; the OSS leg itself returns `WebSearchResponse`) — or, when
+`answer_mode="research"` (#4250), the Phase B research turn (`source="web"`,
+lazily imported from the optional `digisearch[agent]` layer) adapted to the same
+`WebSearchData` plus a cited `MonitorDigest` → `dedup_results`
 against `seen_fingerprints` → persist run → fan out delivery only when
 `status == ok` and `mode != poll` (R13; `no_change`/`failed` runs never deliver)
+→ hand off to the watch's `bridge` webset when set and `status == ok` (#4249:
+in-process `websets.service.handoff_from_watch`, receipt on the returned run,
+one attempt per run — the next `ok` run retries and the websets ledger dedups)
 → return run. Per R2 there is NO same-process loopback HTTP to self, and NO
 bearer token is threaded through the runner. Any recall exception → persist
 `status: failed` with `error=str(exc)` and re-raise as `MonitorRunError`
@@ -465,7 +505,9 @@ num_results?, category?, include_domains?, exclude_domains?, delivery_mode?) -> 
 `monitors_trigger_watch(watch_id, mode?) -> str` (JSON `MonitorRun`),
 `monitors_get_runs(watch_id, limit?) -> str`. Fail-closed without a
 reachable store or backend exactly like `digisearch_web_search` returns its
-disabled string without `EXA_API_KEY`.
+disabled string without `EXA_API_KEY`. The `bridge` and `answer_mode` opt-ins
+(#4249/#4250) are deliberately **operator-HTTP-only**: the MCP surface has no
+update tool, so it exposes neither (the shipped defaults are unchanged).
 
 Orchestrator manifest additions (`orchestrator_tools.py`):
 `TOOL_DIGISEARCH_MONITORS_TRIGGER = "digisearch_monitors_trigger"` and

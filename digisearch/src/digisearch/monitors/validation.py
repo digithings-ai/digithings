@@ -28,16 +28,33 @@ __all__ = ["DATATAP_WORKSPACE_ID", "watch_config_error"]
 def watch_config_error(watch: Watch) -> tuple[int, str, str] | None:
     """Return ``(status_code, code, message)`` for the first violation, else ``None``.
 
-    Checks run in the §4.6 order: datatap workspace off, known timezone,
-    parseable cron, deliverable delivery config. HTTP callers render the tuple
-    through the shared error envelope; MCP callers flatten it into their text
-    convention — both surfaces share this one decision.
+    Checks run in the §4.6 order: datatap workspace off, EXA-local-only options,
+    known timezone, parseable cron, deliverable delivery config. HTTP callers
+    render the tuple through the shared error envelope; MCP callers flatten it
+    into their text convention — both surfaces share this one decision.
     """
     if watch.workspace_id == DATATAP_WORKSPACE_ID:
         return (
             _HTTP_UNPROCESSABLE,
             "datatap_monitors_disabled",
             "Monitors are disabled for the datatap workspace.",
+        )
+    if watch.backend == "exa" and watch.bridge is not None:
+        # EXA watches are remote monitors translated by the webhook adapter;
+        # run_watch (the handoff's only caller) never runs them (#4249).
+        return (
+            _HTTP_UNPROCESSABLE,
+            "bridge_exa_unsupported",
+            "bridge is OSS-local-only: backend='exa' watches run remote EXA monitors.",
+        )
+    if watch.backend == "exa" and watch.answer_mode == "research":
+        # The Phase B research turn is the OSS web branch only; EXA's remote
+        # monitor runs (and reports) its own search shape (#4250).
+        return (
+            _HTTP_UNPROCESSABLE,
+            "research_exa_unsupported",
+            "answer_mode='research' is OSS-local-only: "
+            "backend='exa' watches run remote EXA monitors.",
         )
     try:
         ZoneInfo(watch.schedule.timezone)
