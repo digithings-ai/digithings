@@ -62,7 +62,13 @@ from digisearch.monitors.models import (
     Watch,
 )
 
-__all__ = ["DeliveryConfigError", "deliver", "validate_delivery"]
+__all__ = [
+    "DeliveryConfigError",
+    "deliver",
+    "redact_error",
+    "sign_webhook_body",
+    "validate_delivery",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +97,17 @@ class DeliveryConfigError(ValueError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+def sign_webhook_body(secret: str, payload: bytes) -> str:
+    """Return the ``X-digi-signature`` header value for *payload* (R7h/R7).
+
+    This is the single HMAC-SHA256 signing core shared by both webhook egresses
+    (Phase C monitor runs, Phase D webset events), so the header bytes are
+    identical across phases: ``sha256=<hex(hmac_sha256(secret, payload))>``.
+    """
+    digest = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+    return f"sha256={digest}"
 
 
 def validate_delivery(config: DeliveryConfig) -> None:
@@ -208,7 +225,7 @@ def _attempt_target(
         return DeliveryReceipt(
             target_kind=target.kind,
             ok=False,
-            error=_redacted_error(exc, secret=delivery_secret, target_url=target.url),
+            error=redact_error(exc, secret=delivery_secret, target_url=target.url),
         )
 
 
@@ -217,10 +234,9 @@ def _post_json(
 ) -> DeliveryReceipt:
     """POST the signed run body to a webhook/slack target, retried per §4.5."""
     url = target.url or ""
-    signature = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
     headers = {
         "Content-Type": "application/json",
-        "X-digi-signature": f"sha256={signature}",
+        "X-digi-signature": sign_webhook_body(secret, payload),
     }
     last_response: httpx.Response | None = None
     with _client_for(timeout_s) as client:
@@ -345,12 +361,13 @@ def _email_body(run: MonitorRun, watch: Watch) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _redacted_error(exc: BaseException, *, secret: str, target_url: str | None) -> str:
+def redact_error(exc: BaseException, *, secret: str, target_url: str | None) -> str:
     """Exception text safe for receipts and logs (R8).
 
     httpx transport errors may embed the request URL (whose path can carry a
     webhook token), so both the target URL and the per-watch secret are
-    stripped before the text leaves this module.
+    stripped before the text leaves this module. Shared with the Phase D
+    webset ledger (``digisearch.websets.events``), which redacts the same way.
     """
     text = f"{type(exc).__name__}: {exc}"
     if secret:

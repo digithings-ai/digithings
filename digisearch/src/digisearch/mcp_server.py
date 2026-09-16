@@ -22,6 +22,12 @@ from digisearch.monitors.validation import watch_config_error
 from digisearch.research_search import search_strategies as _search_strategies_impl
 from digisearch.search._stub import query_index
 from digisearch.web_search.models import summarize_validation_error
+from digisearch.websets import service as websets_service
+from digisearch.websets.export import export_csv, export_json
+from digisearch.websets.models import VerificationState
+from digisearch.websets.service import WebsetServiceError
+from digisearch.websets.store import WebsetStore
+from digisearch.websets.store import get_store as get_webset_store
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -376,6 +382,206 @@ def monitors_get_runs(watch_id: str, limit: int = 20) -> str:
         {"runs": [run.model_dump(mode="json") for run in runs], "next_cursor": next_cursor},
         indent=2,
     )
+
+
+# --- Phase D websets (#4066, R10) ---------------------------------------------
+#
+# Six unprefixed ``websets_*`` tools over the same T6 service facade the HTTP
+# routes use (the manifest keeps the prefixed ``digisearch_websets_*`` names).
+# The async-first contract holds here too: ``websets_create`` /
+# ``websets_add_search`` return ids while the run is scheduled — the chat surface
+# polls ``websets_get`` / ``websets_events``. Enrichment add/remove, webhook
+# secrets, monitors, and cancel are deliberate HTTP-only v1 operator ops.
+# Fail-closed shape of ``digisearch_web_search``: without a reachable store the
+# tools return a disabled string instead of raising.
+
+_WEBSETS_DISABLED = "digisearch websets are disabled (webset store is unavailable)."
+
+
+def _webset_store_or_none() -> WebsetStore | None:
+    """Open the webset store, or fail closed with ``None`` when unreachable."""
+    try:
+        return get_webset_store()
+    except (OSError, sqlite3.Error) as e:
+        logger.error("digisearch webset store unavailable: %s", e)
+        return None
+
+
+def _websets_error(op: str, exc: Exception) -> str:
+    """Flatten a facade failure to the documented string (stable code included)."""
+    if isinstance(exc, WebsetServiceError):
+        return f"[websets {op} error: {exc.code}: {exc}]"
+    return f"[websets {op} error: {exc}]"
+
+
+@mcp.tool()
+def websets_create(
+    query: str,
+    count: int = 10,
+    criteria_json: str = "",
+    enrichments_json: str = "",
+) -> str:
+    """Create a verified + enriched dataset (webset) asynchronously.
+
+    Returns JSON ``{"id", "object", "status"}`` immediately (status ``running``);
+    poll ``websets_get`` / ``websets_events`` until ``idle``, then
+    ``websets_export``. ``criteria_json`` is a JSON array of ``{name, rule}``
+    (1-5 rules); ``enrichments_json`` is a JSON array of ``{name, type, ...}``.
+    Runs are driven by the HTTP service's scheduler, so in an MCP-only process
+    the created webset stays ``running`` until an HTTP process resumes it.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    text = query.strip()
+    if not text:
+        return "[websets create error: query is required]"
+    try:
+        criteria = json.loads(criteria_json) if criteria_json.strip() else []
+        enrichments = json.loads(enrichments_json) if enrichments_json.strip() else None
+    except ValueError as e:
+        return f"[websets create error: criteria_json/enrichments_json is not valid JSON: {e}]"
+    if not isinstance(criteria, list):
+        return "[websets create error: criteria_json must be a JSON array]"
+    if enrichments is not None and not isinstance(enrichments, list):
+        return "[websets create error: enrichments_json must be a JSON array]"
+    try:
+        webset = websets_service.create_webset(
+            query=text,
+            count=count,
+            criteria=criteria,
+            enrichments=enrichments,
+            store=store,
+        )
+    except (WebsetServiceError, ValidationError) as e:
+        return _websets_error("create", e)
+    return json.dumps({"id": webset.id, "object": webset.object, "status": webset.status})
+
+
+@mcp.tool()
+def websets_get(webset_id: str) -> str:
+    """Return one webset's status/search generations + item counts, as JSON.
+
+    ``counts`` carries verified/pending/rejected item counts.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    try:
+        webset = websets_service.get_webset(webset_id, store=store)
+        counts = websets_service.count_items(webset_id, store=store)
+    except WebsetServiceError as e:
+        return _websets_error("get", e)
+    return json.dumps(
+        {"webset": webset.model_dump(mode="json"), "counts": counts},
+        indent=2,
+    )
+
+
+@mcp.tool()
+def websets_add_search(webset_id: str, query: str, count: int = 10) -> str:
+    """Attach a follow-up search generation to a running/idle webset (async).
+
+    Returns JSON ``{"id", "object", "status"}`` for the new search; the refresh
+    is observed through the webset's new search row + events. The refresh is
+    driven by the HTTP service's scheduler, so in an MCP-only process it stays
+    ``running`` until an HTTP process resumes it.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    text = query.strip()
+    if not text:
+        return "[websets add_search error: query is required]"
+    try:
+        search = websets_service.add_search(webset_id, query=text, count=count, store=store)
+    except (WebsetServiceError, ValidationError) as e:
+        return _websets_error("add_search", e)
+    return json.dumps({"id": search.id, "object": "webset_search", "status": search.status})
+
+
+@mcp.tool()
+def websets_list_items(
+    webset_id: str,
+    verification: VerificationState | None = None,
+    limit: int = 20,
+    cursor: str | None = None,
+) -> str:
+    """List a webset's items NEWEST-first as compact text.
+
+    Optional ``verification`` filter (verified | rejected | pending). The last
+    line is ``next_cursor: <id>`` when more items exist — pass it back as
+    ``cursor`` to page.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    try:
+        items, next_cursor = websets_service.list_items(
+            webset_id, verification=verification, limit=limit, cursor=cursor, store=store
+        )
+    except WebsetServiceError as e:
+        return _websets_error("list_items", e)
+    if not items:
+        return "No webset items."
+    lines: list[str] = []
+    for item in items:
+        lines.append(f"[{item.verification}] {item.url} — {item.title or '(no title)'}")
+        for name, field in item.enrichments.items():
+            lines.append(f"  {name}: {field.value!r} ({field.status})")
+    if next_cursor:
+        lines.append(f"next_cursor: {next_cursor}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def websets_events(webset_id: str, after: str | None = None, limit: int = 50) -> str:
+    """Tail a webset's append-only event log OLDEST-first as compact text.
+
+    ``after`` is the last seen event id; only strictly newer events are
+    returned. The last line is ``next_cursor: <id>`` when more events exist.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    try:
+        events, next_cursor = websets_service.list_events(
+            webset_id, after=after, limit=limit, store=store
+        )
+    except WebsetServiceError as e:
+        return _websets_error("events", e)
+    if not events:
+        return "No webset events."
+    lines = [
+        f"{event.created_at.isoformat() if event.created_at else ''} {event.type} "
+        f"search={event.search_id} item={event.item_id or '-'}"
+        for event in events
+    ]
+    if next_cursor:
+        lines.append(f"next_cursor: {next_cursor}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def websets_export(webset_id: str, format: str = "json") -> str:
+    """Export a webset's verified items as CSV or citation-preserving JSON text.
+
+    Caps at 200 rows in chat; rejected audit rows are never exported.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    fmt = format.strip().lower()
+    if fmt not in ("csv", "json"):
+        return f"[websets export error: format must be csv or json, got {format!r}]"
+    try:
+        webset = websets_service.get_webset(webset_id, store=store)
+        items, _cursor = websets_service.list_items(
+            webset_id, verification="verified", limit=200, store=store
+        )
+    except WebsetServiceError as e:
+        return _websets_error("export", e)
+    return export_csv(webset, items) if fmt == "csv" else export_json(webset, items)
 
 
 def run_mcp(

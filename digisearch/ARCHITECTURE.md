@@ -283,21 +283,36 @@ Auth required (`digisearch:query` scope). Rate limited: 30 req/min.
 
 Returns OpenAI-style tool definitions for digigraph orchestration. Accepts optional `index_config` body to specialize tool schemas (filterable_fields, facetable_fields, result_metadata_fields).
 
-Returns the tool manifest (the two Phase C monitor tools are unconditional — the
-OSS recall leg needs no key):
+Returns the tool manifest (the Phase C monitor and Phase D webset tools are
+unconditional — the OSS legs need no key):
 - `digisearch` — standard search with pagination
 - `digisearch_fetch_all` — auto-paginating fetch of full result sets
 - `web_search` — public web search (searxng→ddgs, fetch + extract enriched; #3853)
 - `digisearch_monitors_trigger` — run one watch turn now (`watch_id`, optional `mode`; #4065)
 - `digisearch_monitors_runs` — page one watch's run history (`watch_id`, `limit`, `cursor`; #4065)
+- `digisearch_websets_create` — create a verified + enriched dataset, async (`query`, `count`, `criteria`, `enrichments`, `verification_mode`; #4066)
+- `digisearch_websets_get` — webset status + verified/pending/rejected counts (`webset_id`; #4066)
+- `digisearch_websets_add_search` — attach a follow-up search generation (`webset_id`, `query`, `count`; #4066)
+- `digisearch_websets_list_items` — page items newest-first (`webset_id`, `verification`, `limit`, `cursor`; #4066)
+- `digisearch_websets_events` — tail the append-only event log oldest-first (`webset_id`, `after`, `limit`; #4066)
+- `digisearch_websets_export` — export verified items as CSV/JSON (`webset_id`, `format`; #4066)
 - `digisearch_research_delegate` — composite research turn (only when `digisearch[agent]` is installed)
 - `digisearch_web_search` — EXA live web search (only when `EXA_API_KEY` is set)
+
+The webset entries are advertised unconditionally because the OSS verify/enrich
+path has no key gate; `create`/`get`/`items`/`events` are also available over MCP
+under the unprefixed `websets_*` names (see § MCP Tools). The two `#4066` halves
+are wired as three parts (R12): the `TOOL_DIGISEARCH_WEBSETS_*` constants +
+`ORCHESTRATOR_TOOL_NAMES`, the manifest entries above, and the
+`if tool == "digisearch_websets_…"` dispatch branches in
+`api_orchestrator_invoke` — a manifest entry without the dispatch branch is a
+400 `Unknown orchestrator tool` at invoke time.
 
 #### `POST /v1/orchestrator_invoke`
 
 Auth required (`digisearch:query` scope). Rate limited: 10 req/min.
 
-Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, `digisearch_research_delegate`, or `web_search`. The hub calls this to execute search without importing digisearch Python code directly.
+Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, `digisearch_research_delegate`, `web_search`, or the monitor/webset tools above. The hub calls this to execute search without importing digisearch Python code directly. Webset dispatch failures are `ok=false` with the stable code in `error` (`code: message`) — never a 4xx — so a missing webset or invalid criteria stays readable to the hub.
 
 #### `POST /v1/research_turn`
 
@@ -532,6 +547,162 @@ in-process (no loopback HTTP, no bearer token — R2): EXA when configured, else
 `num_results_clamped_from` when the clamp applied. Storage, dedup, and tick
 semantics are in §5.
 
+#### Phase D websets (`/v1/websets`, #4066)
+
+Async-first verified + enriched dataset building. A caller submits a query +
+1-5 natural-language verification criteria + up to 10 typed enrichments; the
+runner recalls candidates through the landed Phase A seam (`search_web`, query
+diversification — no paging), verifies every candidate against every rule
+(`fetch_markdown` page text; `llm` or offline `rules` mode), enriches admitted
+items field-by-field with per-field citations, and appends events until the
+webset reaches `idle`. Every route is thin over the T6 service facade
+(`digisearch.websets.service`) — no pipeline logic lives in `server.py`.
+
+**Async lifecycle.** No endpoint blocks on the build: `POST /v1/websets` and
+the refresh routes return 202 and schedule the pass on the server lifespan
+`asyncio.TaskGroup` (registry `WEBSET_TASKS`, done-callback per run; a bare
+`asyncio.create_task` is never used). The lifespan installs the scheduler on the
+service facade at startup (`set_scheduler`), re-schedules the startup-resume
+union (websets still `running` ∪ websets holding a non-terminal `running`
+search) as registry-tracked runs under each webset's persisted
+`verification_mode`, and on shutdown undoes the seam first and then cancels
+every tracked run/backfill. `Webset.status` never goes backwards: `idle` is
+sticky after the first completion, and a refresh (`add_search` /
+`trigger_monitor`) runs as a new `WebsetSearch` generation observed through the
+new row + events. Terminal `cancelled`/`failed` websets refuse new searches,
+enrichments, and monitor triggers with `webset_terminal` (409) — a running
+search appended to a terminal webset could never settle and would be
+re-selected by startup resume forever.
+
+`verification_mode` (`llm` default | `rules`) is persisted on the webset and
+each search generation: `add_search` and `trigger_monitor` inherit it, so a
+`rules` webset never silently switches to `llm` on a refresh. The runner's
+backfill generations (`add_enrichment`) persist the inherited mode too, so a
+backfill cannot reset a `rules` webset to the model default.
+
+**Library-only in v1.** The enricher's cross-page company merge
+(`merge_company_entities` / `reconcile_funding_history` in `websets/enrich.py`)
+and the spec's targeted second extraction pass (a re-fetch or follow-up
+`search_web` when a field is still unresolved) have no runner caller: the
+runner drives single-page `enrich_item` on the one already-fetched
+`fetch_markdown` text, so a `company_profile` is built from its own item page
+only and an unresolved field is not re-attempted on a second page in v1.
+
+**Webhook delivery is wired.** `POST /v1/websets/{webset_id}/webhooks`
+registers a signed target; the single event writer (`websets/events.py`
+`append_event`) fans every stored event out to the webset's active, subscribed
+`WebhookConfig` entries (`deliver_webhook`) after the append — one POST of
+`{event, webset_id, delivered_at}` signed with the shared Phase C core
+(byte-identical `X-digi-signature`), 3 attempts with the pinned 5s/25s
+backoff, 429/5xx retried and any other 4xx final. Delivery state lives in the
+`webhook_deliveries` ledger keyed `(webhook_id, event_id)`: per-target
+failures become recorded `failed` rows and never raise out of the append path,
+and the ledger turns a duplicate re-append into a no-op (no second POST).
+`verify_webhook_signature` is a public helper (rotation-overlap acceptance)
+for webhook consumers; it deliberately has no production caller.
+
+##### Webset HTTP routes
+
+All routes are auth-gated through `DigiAuthMiddleware`; the paths hit the
+landed `digisearch_path_scopes` `digisearch:query` fallthrough (no digikey
+change), and errors use the shared `digibase.errors` envelope — read
+`body["error"]["code"]`, never a top-level `body["code"]`. Rate limits are
+per-IP via the two-tier mechanism: `/v1/websets` is an exact 10/min static;
+the parameterized paths are matched most-specific-first (creation/refresh
+10/min, reads 30/min). `POST`+`GET` on one path share that path's budget
+(`/monitors` is 10/min for both).
+
+| Method + path | Success | Error codes | Notes |
+|----------------|---------|-------------|-------|
+| `POST /v1/websets` | 202 `Webset` | `invalid_criteria`, `invalid_verification_mode`, `datatap_websets_disabled` (422), `enrichment_limit_exceeded` (400) | Body `{query, count 1-100, criteria, enrichments, verification_mode, workspace_id}`; the supplied criteria are required (0 or >5 → `invalid_criteria`) |
+| `GET /v1/websets/{webset_id}` | 200 `Webset` | `webset_not_found` (404) | Includes search generations + enrichment defs |
+| `POST /v1/websets/{webset_id}/searches` | 202 `WebsetSearch` | `webset_not_found` (404), `webset_terminal` (409), `invalid_criteria` (422) | Missing criteria inherit the webset's |
+| `GET /v1/websets/{webset_id}/items` | 200 `{"items", "next_cursor"}` | `webset_not_found` (404), `cursor_not_found` (404) | NEWEST-first; `cursor` = previous page's last item id; `verification` filter `verified\|rejected\|pending` |
+| `POST /v1/websets/{webset_id}/enrichments` | 201 `EnrichmentDef` | `webset_not_found` (404), `webset_terminal` (409), `enrichment_limit_exceeded` (400) | Max 10 active; the attach schedules the backfill drain |
+| `DELETE /v1/websets/{webset_id}/enrichments/{enrichment_id}` | 204 | `webset_not_found` / `enrichment_not_found` (404) | Already-resolved item values are retained |
+| `POST /v1/websets/{webset_id}/monitors` | 201 `WebsetMonitor` | `webset_not_found` (404), `webhook_url_required` / `webhook_url_private` (422) | Poll-only v1: `interval_seconds` ≥ 60 is stored metadata, nothing ticks it |
+| `GET /v1/websets/{webset_id}/monitors` | 200 `{"monitors": [...]}` | `webset_not_found` (404) | Newest-created first |
+| `POST /v1/websets/{webset_id}/monitors/{monitor_id}/trigger` | 202 `Webset` | `webset_not_found` / `monitor_not_found` (404), `webset_terminal` (409) | Manual refresh; the v1 substitute for the deferred tick driver |
+| `GET /v1/websets/{webset_id}/events` | 200 `{"events", "next_cursor"}` | `webset_not_found` (404), `cursor_not_found` (404) | OLDEST-first append-only tail; `after` = last seen event id |
+| `POST /v1/websets/{webset_id}/webhooks` | 201 `WebhookConfig` | `webset_not_found` (404), `webhook_url_required` / `webhook_url_private` / `validation_error` (422) | Secret-once: the server-generated secret is in this response; there is no read route. An unknown `events` kind maps to the 422 `validation_error` envelope, never a 500 |
+| `POST /v1/websets/{webset_id}/webhooks/{webhook_id}/rotate` | 200 `WebhookConfig` | `webset_not_found` / `webhook_not_found` (404) | New secret + 24h `previous_expires_at` overlap |
+| `POST /v1/websets/{webset_id}/cancel` | 200 `Webset` | `webset_not_found` (404) | Settles non-terminal searches `cancelled`; an already-`idle` webset stays `idle` (sticky) |
+| `GET /v1/websets/{webset_id}/export?format=csv\|json` | 200 file (`text/csv` / `application/json`) | `webset_not_found` (404), `validation_error` (422, unknown format) | Verified items only; CSV via polars, JSON keeps per-field citations |
+
+Store-internal invariant codes (`webset_not_settled`, `transition_invalid`,
+`invalid_event_kind`, `invalid_webhook_delivery`, `event_not_stored`,
+`webhook_id_required`) and the T5b ledger receipt code `webhook_secret_missing`
+are never surfaced: the service facade maps them to a generic 500
+`internal_error` (logged server-side with the original code).
+
+**Store home.** `DIGISEARCH_WEBSETS_DB` → `{DIGI_WORKSPACE}/.digisearch/websets.sqlite3`
+→ `./.digisearch/websets.sqlite3` (cwd fallback), resolved per request by
+`websets.store.get_store`; one thread-bound `sqlite3` connection per store,
+WAL + `busy_timeout=5000`, no in-process lock. The digillm model ids for
+`llm`-mode verification/enrichment come from `DIGISEARCH_VERIFY_MODEL` /
+`DIGISEARCH_ENRICH_MODEL` (unset ⇒ verification settles `rejected`, fail
+closed; enrichment settles `unresolved`).
+
+**EXA shim (dormant).** `websets/providers/exa_websets.py` is the paid
+alternative: dormant without `EXA_API_KEY` and **not wired** into the
+HTTP/MCP/orchestrator surfaces (the OSS path always runs, `backend="oss"`). It
+translates create/read/refresh into `POST /websets`, `GET /websets/{id}`,
+`POST /websets/{id}/searches` (base `https://api.exa.ai/websets/v0`) and maps
+EXA's Pro-plan 401 to `ExaWebsetsProRequiredError(ExaError)`. Request/response
+shapes are recorded in the module docstring; live Pro-key validation and
+end-to-end wiring remain deferred (the vendored free-tier 401 fixture keeps
+key-less CI green). Re-validating the translation against a Pro-tier key is a
+**human precondition**: it requires a Pro key, has **not** been performed, and
+the Phase D live record does not claim it (tracked by the #4123 live-pin
+precedent).
+
+**Deferred (explicitly out of v1).** The scheduled webset tick driver
+(poll-only v1: monitor interval is metadata; refreshes are manual
+`trigger_monitor` calls — still deferred, no tracking issue yet), recall paging
+(count is reached by query diversification, `max_results ≤ 10` per call),
+automated webhook re-delivery after a failed delivery, EXA-websets live
+validation + wiring (Pro key; tracked by the #4123 live-pin precedent), and
+driving a webset created through the standalone MCP process (#4170) — MCP tools
+share the service facade, but the run scheduler is installed by the HTTP
+lifespan, so an MCP-only process leaves the webset `running` until an HTTP
+process resumes it.
+
+**Phase D live verification record (2026-09-15, #4066 Task 8 — not measured,
+live stack absent in this env):**
+
+- Live leg: **not measurable here.** `DIGISEARCH_WEBSETS_LIVE=1 pytest
+  tests/ds/test_websets_live.py -m unit -k live -x` fails at the harness's own
+  prerequisite gate, which asserts exactly `DIGISEARCH_VERIFY_MODEL` /
+  `DIGISEARCH_ENRICH_MODEL` (both unset). Separately confirmed in this env: no
+  digillm provider key, no searxng sidecar (`127.0.0.1:8080` connection
+  refused), and no digisearch HTTP process (`:8002`). With the model ids unset,
+  verification settles every item `rejected` and enrichment settles every field
+  `unresolved` (fail-closed), so a gated run here would measure nothing — the
+  harness refuses it rather than recording a vacuous pass.
+- How to measure: provision a search backend + `DIGISEARCH_VERIFY_MODEL` /
+  `DIGISEARCH_ENRICH_MODEL` + a provider key, then run the gated command above.
+  It drives the service/runner path in-process (`service.create_webset` +
+  `run_webset_async`; assertions read `service.get_webset` / `list_events` /
+  `list_items` / `export_webset` — not the HTTP poll surface) for the brief's
+  5-count company webset
+  (`query="agtech robotics startups Series A 2024-2026"`, 2 criteria, 3
+  enrichments incl. `company_profile`), asserts the event multiset +
+  `webset.idle`-last (never an exact sequence), records the live-vs-s5 funding
+  deltas, and writes the CSV export into the pytest tmp dir. Append the printed
+  JSON + date/key tier here before quoting any number — single-day scaffolding
+  anchors, never SLOs.
+- Measured in this env: the ECB daily feed was re-fetched (2026-09-15) and
+  still served `reference_date 2026-09-15` with all 29 rates identical, so
+  `tests/ds/fixtures/websets/fx_ecb_snapshot.json` is unchanged (provenance
+  note updated in the fixture README). The vendored s5 company sample and the
+  Pro-tier 401 fixture were NOT re-validated against live EXA (no key; the
+  Pro-key re-validation is a human precondition, § EXA shim above).
+- Offline evidence on this branch: `pytest tests/ds/test_websets_live.py -m unit
+  -v` → 5 passed, 1 skipped (the gated live leg), zero `Traceback`; the wider
+  `pytest tests/ds -m unit` → 897 passed, 6 skipped, 13 failed — all 13 the
+  pre-existing `chonkie` env failures (`test_chonkie_chunking.py`,
+  `test_research_ingest.py`), unrelated to this record.
+
 ### MCP Tools
 
 MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streamable HTTP.
@@ -546,6 +717,12 @@ MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streama
 | `monitors_list_watches` | List watches newest-updated first as `{"watches": [...]}` JSON | No |
 | `monitors_trigger_watch` | Run one watch turn now (`mode` `manual`\|`poll`); returns the JSON `MonitorRun`, failed turns included | No |
 | `monitors_get_runs` | List stored runs newest-first as `{"runs", "next_cursor"}` JSON | No |
+| `websets_create` | Create a verified + enriched dataset (`query`, `count`, `criteria_json`, `enrichments_json`); returns `{id, object, status}` JSON immediately | No |
+| `websets_get` | One webset's status/search generations + `{verified, pending, rejected}` counts as JSON | No |
+| `websets_add_search` | Attach a follow-up search generation (`webset_id`, `query`, `count`); returns `{id, object, status}` | No |
+| `websets_list_items` | Compact item text newest-first (`webset_id`, `verification`, `limit`, `cursor`) | No |
+| `websets_events` | Compact event tail oldest-first (`webset_id`, `after`, `limit`) | No |
+| `websets_export` | CSV/JSON export text for verified items (caps at 200 rows in chat) | No |
 
 The four monitor tools share the HTTP API's store/runner and its
 `watch_config_error` create gate (a watch whose cron could not parse would raise
@@ -554,6 +731,14 @@ otherwise vanish). Without a reachable monitor store they return the fail-closed
 `digisearch monitors are disabled (monitor store is unavailable).` string; the
 create tool maps the non-`poll` delivery modes it cannot configure targets for
 to the same validation string the HTTP API would return.
+
+The six `websets_*` tools are **unprefixed** (R10; the orchestrator manifest
+keeps `digisearch_websets_*`) and wrap the same T6 service facade the HTTP
+routes use, with the same fail-closed disabled string when the webset store
+cannot be opened. They are the deliberate v1 chat surface: enrichment
+add/remove, webhook secrets, monitors, and cancel stay HTTP-only operator ops.
+See § Phase D websets for the async lifecycle and the deferred MCP-process
+driving note.
 
 Tool parameters for `digisearch_query`: `text`, `index_name`, `top_k`, `mode`.
 
@@ -1159,6 +1344,44 @@ the HTTP trigger route returns that stored run (201) instead of masking it with 
 5xx, while the digiclaw helper counts it as `failed`. `no_change` runs persist
 and never deliver.
 
+### Phase D websets (#4066)
+
+`digisearch/src/digisearch/websets/` is the async verify + enrich layer over the
+Phase A recall/fetch seams and the Phase B structured-output path — same
+no-new-provider discipline as Phase C. One-line responsibilities:
+
+| File | Responsibility |
+|------|----------------|
+| `websets/models.py` | `Webset` / `WebsetSearch` / `WebsetItem` / `EnrichmentDef` / `EnrichedField` / `CompanyEntity` / `WebsetMonitor` / `WebhookConfig` / `WebsetEvent`; shared `Citation` imported, never redefined; `verification_mode` persisted on webset + search |
+| `websets/store.py` | SQLite persistence (websets/searches/items/enrichments/monitors/webhooks/webhook_deliveries/events), `ws_/wss_/wsi_/wse_/wsm_` + uuid4-hex ids, cursor pagination, the append-only `(webset_id, dedup_key)` event log, the `(webhook_id, event_id)` delivery ledger |
+| `websets/verify.py` | `verify_item` (llm + offline rules modes) and the fail-closed settlement of still-pending items at candidate-pass end |
+| `websets/enrich.py` | `enrich_item` (8 typed fields, per-field citations), funding reconciliation (ECB snapshot), entity merge, `company_profile_field` |
+| `websets/runner.py` | `AsyncioRunner` (semaphore 4, per-item containment, semaphore-aware cancellation), `run_webset_async`, `backfill_enrichment`, `schedule_webset_task` + `WEBSET_TASKS` |
+| `websets/events.py` | Event emit helpers, the shared Phase C signing core, `append_event` fan-out through `deliver_webhook` (3 attempts, 5s/25s) + ledger recording, public `verify_webhook_signature` |
+| `websets/export.py` | `export_json` (per-field citations) and `export_csv` (polars) |
+| `websets/service.py` | The sync facade the HTTP/MCP/orchestrator surfaces call (create/get/items/counts/add_search/add_enrichment/remove/monitors/webhooks/events/cancel/export) + the scheduler seam |
+| `websets/providers/exa_websets.py` | Dormant EXA Pro shim: OSS⇄EXA translation for create/read/refresh, `ExaWebsetsProRequiredError(ExaError)` |
+
+**Storage.** One SQLite file (`sqlite3` stdlib) resolved
+`DIGISEARCH_WEBSETS_DB` → `{DIGI_WORKSPACE}/.digisearch/websets.sqlite3` →
+`./.digisearch/websets.sqlite3`, WAL + 5s busy timeout, one thread-bound
+connection per store instance (constructed per request/worker thread — no
+in-process lock). `websets`/`searches` keep `status` (and the webset
+`workspace_id`) as real columns for the resume selector and workspace filters;
+the JSON `body` is the model document, so `verification_mode` persists with the
+row. Events are append-only with a UNIQUE `(webset_id, dedup_key)` index
+(INSERT-or-ignore, generation-scoped keys) so a resumed pass cannot duplicate an
+event while a new `add_search`/backfill/`trigger_monitor` generation can
+legitimately re-emit terminal events. Item `verification` and the enrichment
+names are real columns for filtered listing.
+
+**Execution model.** The HTTP lifespan owns one `asyncio.TaskGroup` +
+`WEBSET_TASKS`; the service facade schedules through the `set_scheduler` seam
+(no bare `asyncio.create_task`, no awaiting a run inline) and all store I/O
+inside the runner crosses through one dedicated worker thread (the store is
+thread-bound). Startup resume, the terminal-status gate, `verification_mode`
+threading, and the deferred items are documented in § Phase D websets.
+
 ---
 
 ## 6. Security Analysis
@@ -1528,6 +1751,10 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGISEARCH_SEARXNG_URL` | `http://127.0.0.1:8080` | searxng sidecar base URL (compose sets `http://searxng:8080` in-container; #3853) |
 | `DIGISEARCH_FETCH_ALLOWED_HOSTS` | _(unset)_ | Comma-separated operator-trusted hostnames exempted from the digifetch SSRF address refusal (e.g. an egress proxy). Also accepted per-call via `WebSearchConfig.fetch_allowed_hosts`; passed to `HttpFetcher(allowed_hosts=…)` (#3934) |
 | `DIGISEARCH_WEB_SEARCH_LIVE` | _(unset)_ | Set `1` to run the live-sampled legs of `digisearch/tests/test_web_search_eval.py` (provider suite, real backends, p50 fetch+extract < 5s) and `tests/ds/test_web_eval_live.py` (Phase B research-turn cases, p50 stage ms + citation coverage scaffolding, never SLOs); default runs fully mocked offline (#3853, #4064) |
+| `DIGISEARCH_WEBSETS_LIVE` | _(unset)_ | Set `1` to run the live leg of `tests/ds/test_websets_live.py` (real searxng/ddgs recall + digillm verify/enrich; prints the Phase D record — timings, event multiset, s5 funding deltas, CSV shape — never SLOs); also needs `DIGISEARCH_VERIFY_MODEL`/`DIGISEARCH_ENRICH_MODEL` + a provider key; default runs fully offline (#4066) |
+| `DIGISEARCH_WEBSETS_DB` | _(unset)_ | Explicit SQLite path for the Phase D webset store; wins over the `DIGI_WORKSPACE` default and the cwd fallback (#4066) |
+| `DIGISEARCH_VERIFY_MODEL` | _(unset)_ | digillm model id for `llm`-mode webset verification; unset ⇒ verification settles `rejected` (fail closed, never admitted) (#4066) |
+| `DIGISEARCH_ENRICH_MODEL` | _(unset)_ | digillm model id for webset enrichment; unset ⇒ every field settles `unresolved` (fail closed, never guessed) (#4066) |
 | `DIGISEARCH_SYNTHESIS_MODEL` | _(unset)_ | digillm model id for Phase B web-research synthesis (`source=web\|auto` turns only). Unset ⇒ every web turn fails hard with `WebResearchError`, never an uncited answer; no new port/service (#4064) |
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
 | `DIGISEARCH_EMBED` | `1` (on when unset) | Set `0` to skip pipeline-level embed on ingest |
