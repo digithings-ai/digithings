@@ -170,4 +170,28 @@ describe('TradeIdeasPanel', () => {
     expect(html).not.toContain('Levels');
     expect(html).not.toContain('sm:grid-cols-2');
   });
+
+  it('labels evidence rows with source and instrument and folds boilerplate behind a detail toggle', () => {
+    const smartBiasIdea: FxTradeIdeaRow = {
+      ...IDEAS[0],
+      trade_levels: undefined,
+      evidence: [
+        {
+          source_slug: 'smart-bias-tracker',
+          instrument: 'EUR',
+          as_of: '2026-09-06T00:00:00Z',
+          statement:
+            'PMT Smart Bias weak bearish for EUR (week of 2026-09-06); factors: Trend_Sentiment=range; banks: 3/11 bullish',
+          stance: 'supports',
+          snapshot_id: '00000000-0000-0000-0000-000000000003',
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(createElement(IdeaDetail, { idea: smartBiasIdea }));
+    expect(html).toContain('Smart Bias · EUR');
+    expect(html).toContain('PMT Smart Bias weak bearish for EUR (week of 2026-09-06)');
+    expect(html).not.toContain('factors:');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('detail');
+  });
 });
