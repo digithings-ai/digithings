@@ -31,6 +31,8 @@ agents:
   research_brief: false
   allowed_tools:
     - digisearch
+    - digisearch_semantic
+    - digisearch_web_search
     - digivault_search_notes
     - digivault_get_note
     # Read-only Zammad ticket tools via the secret-gated edge route (/_stack/mcp/zammad).

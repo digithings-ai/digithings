@@ -383,13 +383,13 @@ def test_call_prefixed_tool_injects_setup() -> None:
         return_value={"ok": True},
     ) as call:
         out = call_prefixed_tool(
-            "digisearch_digisearch_query",
+            "digisearch_semantic",
             {"index_name": "wrong", "text": "q"},
             servers,
         )
     call.assert_called_once_with(
         servers[0],
-        "digisearch_query",
+        "semantic",
         {"index_name": "occ_help", "text": "q"},
     )
     assert out == {"ok": True}

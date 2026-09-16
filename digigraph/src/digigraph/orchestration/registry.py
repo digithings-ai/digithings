@@ -235,7 +235,8 @@ def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict
                 "Adjust agents.allowed_tools, DIGI_ALLOWED_TOOLS, or the request allowed_tools field."
             ),
         }
-    if is_extra and not has_tool(name):
+    # Configured MCP servers win over same-named native tools (the config decides).
+    if is_extra:
         return call_prefixed_tool(name, args, context.extra_mcp_servers or [])
     _, _, handler, _ = _tools[name]
     return handler(args, context)

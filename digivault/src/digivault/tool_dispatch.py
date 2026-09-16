@@ -213,7 +213,7 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
         ]
         return _json.dumps(slim)
 
-    @mcp.tool(name=TOOL_VAULT_SEARCH_TAG)
+    @mcp.tool(name="search_tag")
     def digivault_search_tag(tag: str) -> str:
         """Find vault notes carrying a given tag (without '#'). Use to locate docs by topic."""
         try:
@@ -224,7 +224,7 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
             dispatch_vault_tool(TOOL_VAULT_SEARCH_TAG, {"tag": tag}, vault)
         )
 
-    @mcp.tool(name=TOOL_VAULT_BACKLINKS)
+    @mcp.tool(name="backlinks")
     def digivault_backlinks(name: str) -> str:
         """List notes that link to a given note (its backlinks)."""
         try:
@@ -233,7 +233,7 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
             return f"[digivault error: {e}]"
         return _mcp_result(dispatch_vault_tool(TOOL_VAULT_BACKLINKS, {"name": name}, vault))
 
-    @mcp.tool(name=TOOL_VAULT_LINT)
+    @mcp.tool(name="lint")
     def digivault_lint() -> str:
         """Validate the vault: unresolved wikilinks, missing frontmatter, orphans, tags."""
         try:
@@ -242,7 +242,7 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
             return f"[digivault error: {e}]"
         return _mcp_result(dispatch_vault_tool(TOOL_VAULT_LINT, {}, vault))
 
-    @mcp.tool(name=TOOL_VAULT_CREATE_NOTE)
+    @mcp.tool(name="create_note")
     def digivault_create_note(name: str, title: str | None = None, body: str = "") -> str:
         """Create a new markdown note in the vault with optional title and body."""
         try:
