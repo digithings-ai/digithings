@@ -222,11 +222,11 @@
 
 .dboot-caret {
   display: inline-block;
-  width: 7px;
-  height: 14px;
-  margin-left: 3px;
-  vertical-align: -3px;
-  background: var(--ink);
+  width: 0.5em;
+  height: 1.3em;
+  margin-left: 0.2em;
+  vertical-align: -0.25em;
+  background: var(--dboot-caret, var(--accent, var(--ink)));
   animation: dboot-blink 1.06s steps(1) infinite;
 }
 
@@ -262,4 +262,47 @@
   .dboot-line {
     transition: none;
   }
+}
+
+/* Shared-loader metrics matched to the settled embed (parity with the DataTap
+   port): suggestion rows carry the embed's py-0.5 padding, 0.5 row gap and
+   19.024px line box; the mock composer sits flush above the footer rows; and
+   when a tenant has attachments off, the attach glyph and its placeholder
+   gutter disappear so the handoff does not shift. */
+.dboot-dock {
+  gap: 0;
+  padding: 0;
+}
+
+.dboot-welcome {
+  margin-bottom: 12px;
+}
+
+.dboot-chips {
+  gap: 1.6px;
+  margin-bottom: 16px;
+}
+
+.dboot-chip {
+  padding: 3.2px 0;
+}
+
+.dboot-chip-text {
+  line-height: 19.024px;
+}
+
+.dboot-composer-wrap {
+  height: 38px;
+}
+
+.dboot-placeholder {
+  padding-left: var(--composer-gutter, 22px);
+}
+
+.dboot[data-attach="0"] .dboot-plus {
+  display: none;
+}
+
+.dboot[data-attach="0"] .dboot-placeholder {
+  padding-left: 6px;
 }
