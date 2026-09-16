@@ -9,6 +9,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "."),
+      // Subpath first: Vite alias matching is prefix-based, so the bare
+      // "@digithings/web" entry below would otherwise swallow
+      // "@digithings/web/ui" and resolve it as `src/index.ts/ui`.
+      "@digithings/web/ui": path.resolve(__dirname, "../digiweb/web/src/ui/index.ts"),
       "@digithings/web": path.resolve(__dirname, "../digiweb/web/src/index.ts"),
     },
   },

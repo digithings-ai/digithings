@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef } from "react";
 import { Reveal } from "@digithings/web";
+import { Card } from "@digithings/web/ui";
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
@@ -141,7 +142,12 @@ export function ResearchPipeline() {
                   }}
                 >
                   <span className="dqpipe-rail" aria-hidden="true" />
-                  <div className="dqpipe-card">
+                  <Card
+                    className={
+                      "relative w-[min(100%,340px)] gap-[0.45rem] px-[1.3rem] py-[1.15rem]" +
+                      (isExec ? " bg-[linear-gradient(180deg,var(--accent-weak),var(--surface))]" : "")
+                    }
+                  >
                     {/* step numbers wear the accent phosphor (sequence, not P&L) */}
                     <span className="font-mono text-[0.8rem] tracking-[0.1em] text-accent">
                       {s.n}
@@ -151,7 +157,7 @@ export function ResearchPipeline() {
                     <span className="self-start rounded-none border border-hair px-[0.6rem] py-[0.2rem] font-mono text-[0.68rem] uppercase tracking-[0.06em] text-ink-mute">
                       {s.tool}
                     </span>
-                  </div>
+                  </Card>
                 </li>
               );
             })}

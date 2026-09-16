@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Footer, Emblem, Reveal, StackRow, subsystems, subsystemById } from "@digithings/web";
+import { Card, buttonVariants } from "@digithings/web/ui";
 import { DQ_FOOTER, DQ_FOOTER_META } from "../../_nav";
 import { SiteNav } from "@/components/landing/SiteNav";
 
@@ -59,12 +60,14 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
               <Emblem id={s.emblem} size={48} /><span className="dg-tier t-core">{s.step}</span>
             </div>
             {POSTER[s.id] ? (
-              <div className={`sub-poster accent-${s.id}`}>
+              <Card
+                className={`sub-poster accent-${s.id} relative mb-8 overflow-hidden px-[1.6rem] pb-[1.4rem] pt-[4.5rem]`}
+              >
                 <span className="sub-regmark" aria-hidden="true">+</span>
                 <h1 className="sub-poster-name">{s.name}</h1>
                 <p className="sub-poster-epithet">{POSTER[s.id].epithet}</p>
                 <p className="sub-poster-fine">{POSTER[s.id].fine}</p>
-              </div>
+              </Card>
             ) : (
               <h1 className="hero-title" style={{ fontSize: "clamp(2.4rem,6vw,3.6rem)", margin: ".4rem 0 .5rem" }}>{s.name}</h1>
             )}
@@ -91,8 +94,8 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
           <pre className="codeblock">{s.initSnippet.code}</pre>
 
           <div style={{ display: "flex", gap: ".75rem", flexWrap: "wrap", marginTop: "2rem" }}>
-            <a className="btn btn-primary" href="/dashboard/">Open dashboard <span aria-hidden="true">→</span></a>
-            <a className="btn btn-ghost" href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">Source</a>
+            <a className={buttonVariants({ variant: "default" })} href="/dashboard/">Open dashboard <span aria-hidden="true">→</span></a>
+            <a className={buttonVariants({ variant: "ghost" })} href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">Source</a>
           </div>
 
           <div style={{ marginTop: "3rem", paddingTop: "1.8rem", borderTop: "1px solid var(--hair)" }}>

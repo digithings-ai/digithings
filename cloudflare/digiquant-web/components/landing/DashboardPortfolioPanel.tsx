@@ -36,7 +36,19 @@
  * or blank, and all routes prerender.
  */
 import { useEffect, useRef, useState } from "react";
-import { LiveBadge, PerformanceDashboard, Reveal, fmtNum, fmtPct } from "@digithings/web";
+import {
+  LiveBadge,
+  PerformanceDashboard,
+  Reveal,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  fmtNum,
+  fmtPct,
+} from "@digithings/web";
 import type { DashboardHeadline, DashboardRatio } from "@digithings/web";
 import { useLivePortfolio, type LivePosition } from "@/lib/live";
 
@@ -139,35 +151,30 @@ function PositionsTable({ positions }: { positions: LivePosition[] }) {
   const rows = [...positions].sort((a, b) => b.weightPct - a.weightPct);
   return (
     <div className="mt-[1.1rem] overflow-x-auto rounded-none border border-hair bg-surface">
-      <table className="w-full min-w-[560px] border-collapse font-mono text-[0.8rem] [font-variant-numeric:tabular-nums]">
-        <thead>
-          <tr className="border-b border-hair">
+      <Table className="min-w-[560px]">
+        <TableHeader>
+          <TableRow>
             {["ticker", "sleeve", "weight", "price", "day", "since entry"].map((h, i) => (
-              <th
-                key={h}
-                className={`px-4 py-[0.7rem] text-[0.56rem] font-normal uppercase tracking-[0.1em] text-ink-mute ${
-                  i <= 1 ? "text-left" : "text-right"
-                }`}
-              >
+              <TableHead key={h} numeric={i > 1}>
                 {h}
-              </th>
+              </TableHead>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.map((p) => (
-            <tr key={p.ticker} className="border-b border-hair/60 last:border-b-0">
-              <td className="px-4 py-[0.6rem] text-left text-ink">
+            <TableRow key={p.ticker}>
+              <TableCell className="text-ink">
                 <span className="inline-flex items-center gap-2">
                   {p.ticker}
                   {p.isLive ? <LiveBadge ariaLabel={`${p.ticker} price is live`} /> : null}
                 </span>
-              </td>
-              <td className="px-4 py-[0.6rem] text-left text-ink-mute">{p.sectorBucket ?? "—"}</td>
+              </TableCell>
+              <TableCell className="text-ink-mute">{p.sectorBucket ?? "—"}</TableCell>
               {/* weight = the book's "book weights" allocation, folded into the
                   blotter: value + an accent share bar (accent = a share, never a
                   P&L direction — money colours stay on day/since-entry only). */}
-              <td className="px-4 py-[0.6rem]">
+              <TableCell numeric>
                 <div className="flex items-center justify-end gap-2.5">
                   <span className="text-ink-soft">{fmtNum(p.weightPct, 1)}%</span>
                   <span className="h-[6px] w-[56px] shrink-0 overflow-hidden rounded-none bg-ink/[0.08]">
@@ -177,24 +184,22 @@ function PositionsTable({ positions }: { positions: LivePosition[] }) {
                     />
                   </span>
                 </div>
-              </td>
-              <td
-                className={`px-4 py-[0.6rem] text-right ${p.isLive ? "text-ink" : "text-ink-soft"}`}
-              >
+              </TableCell>
+              <TableCell numeric className={p.isLive ? "text-ink" : "text-ink-soft"}>
                 <FlashNum value={p.livePrice}>{fmtPrice(p.livePrice)}</FlashNum>
-              </td>
-              <td className={`px-4 py-[0.6rem] text-right ${toneText(p.dayChangePct)}`}>
+              </TableCell>
+              <TableCell numeric className={toneText(p.dayChangePct)}>
                 <FlashNum value={p.dayChangePct}>{signedPct(p.dayChangePct)}</FlashNum>
-              </td>
-              <td className={`px-4 py-[0.6rem] text-right ${toneText(p.sinceEntryReturnPct)}`}>
+              </TableCell>
+              <TableCell numeric className={toneText(p.sinceEntryReturnPct)}>
                 <FlashNum value={p.sinceEntryReturnPct}>
                   {signedPct(p.sinceEntryReturnPct)}
                 </FlashNum>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
