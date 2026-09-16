@@ -88,12 +88,15 @@ _RETRYABLE_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
 #: error string: httpx embeds the full request URL (userinfo, query) in
 #: ``HTTPStatusError``/``TransportError`` text.
 _URL_USERINFO_RE = re.compile(r"([a-zA-Z][a-zA-Z0-9+.\-]*://)[^/@\s]+@")
+#: Scheme-less userinfo (e.g. ``httpx.Proxy("user:pass@host")`` error text).
+_URL_BARE_USERINFO_RE = re.compile(r"[^\s/@:]+:[^\s/@:]+@")
 _URL_QUERY_RE = re.compile(r"\?[^\s'\"`)]*")
 
 
 def _scrub_provider_detail(text: str) -> str:
     """Strip URL userinfo and query strings (secrets) from provider text."""
     text = _URL_USERINFO_RE.sub(r"\1***@", text)
+    text = _URL_BARE_USERINFO_RE.sub("***@", text)
     return _URL_QUERY_RE.sub("?<redacted>", text)
 
 

@@ -330,3 +330,20 @@ def test_search_only_scrubs_provider_url_credentials(monkeypatch):
     assert "token=abc123" not in message
     assert "429 Too Many Requests" in message
     assert "***@searxng.internal" in message
+
+
+def test_search_only_scrubs_scheme_less_provider_credentials(monkeypatch):
+    """Proxy-style userinfo without a scheme must also be masked."""
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    _provider_raising(
+        monkeypatch,
+        lambda: RuntimeError("Unknown scheme for proxy URL URL('user:pass@proxy.internal:8080')"),
+    )
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    message = str(excinfo.value)
+    assert "user:pass" not in message
+    assert "***@proxy.internal" in message

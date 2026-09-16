@@ -39,6 +39,7 @@ type PrepareSendMessagesRequestResult = { headers: Record<string, string>; body:
 type PrepareSendMessagesRequestFn = (args: {
   messages: UIMessage[];
   body?: unknown;
+  trigger?: "submit-message" | "regenerate-message";
 }) => PrepareSendMessagesRequestResult | Promise<PrepareSendMessagesRequestResult>;
 
 let capturedTransportConfig: { prepareSendMessagesRequest: PrepareSendMessagesRequestFn } | undefined;

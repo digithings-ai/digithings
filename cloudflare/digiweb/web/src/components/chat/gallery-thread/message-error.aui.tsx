@@ -42,10 +42,12 @@ function splitError(raw: string | undefined): {
       detail?: string;
     };
     const code = parsed.error ?? parsed.code;
-    const title = parsed.message || (typeof code === "string" ? code : raw);
+    const title =
+      (typeof parsed.message === "string" && parsed.message) ||
+      (typeof code === "string" ? code : raw);
     return {
       title,
-      detail: parsed.detail,
+      detail: typeof parsed.detail === "string" ? parsed.detail : undefined,
       code: typeof code === "string" ? code : undefined,
     };
   } catch {

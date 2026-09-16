@@ -80,6 +80,39 @@ def test_search_posts_expected_shape(monkeypatch):
     assert web_exa.format_web_results(data).startswith("Title: t")
 
 
+def test_offset_page_ignores_extra_provider_rows(monkeypatch):
+    """Offset paging must return exactly the requested page, not the tail.
+
+    The provider occasionally returns more rows than asked for; the slice
+    must stay ``[start:start+n]`` over the junk-filtered window so extra
+    rows and non-dict entries cannot lengthen a page.
+    """
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    results = ["junk"] + [{"title": f"t{i}"} for i in range(5)]
+
+    class FakeResp:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return {
+                "results": results,
+                "searchType": "auto",
+                "costDollars": {"total": 0.007},
+            }
+
+    seen: dict = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        seen["payload"] = json
+        return FakeResp()
+
+    monkeypatch.setattr(web_exa.httpx, "post", fake_post)
+    data = web_exa.exa_search("ai", num_results=2, offset=1)
+    assert seen["payload"]["numResults"] == 3
+    assert [r["title"] for r in data.results] == ["t1", "t2"]
+
+
 def test_format_empty_results():
     assert "No EXA results" in web_exa.format_web_results(web_exa.WebSearchData())
 

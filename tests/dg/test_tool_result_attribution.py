@@ -267,3 +267,23 @@ def test_non_string_top_level_key_does_not_shadow_hoisted_block() -> None:
     rendered = _render_clipped_tool_result(raw)
     assert rendered["attribution"] == _ATTRIBUTION
     assert rendered["delay_notice"] == _DELAY_NOTICE
+
+
+@pytest.mark.unit
+def test_nested_block_wins_string_collision_on_hoisted_key() -> None:
+    """The hoisted §7 block is canonical when both levels carry the key.
+
+    ``{**clipped_result, **block}`` makes the validated nested value win even
+    when the payload's own top-level value is a usable string, so the merge
+    order is pinned deliberately rather than by accident.
+    """
+    raw = {
+        "source_url": "TOP",
+        "data": {
+            "attribution": _ATTRIBUTION,
+            "source_url": _SOURCE_URL,
+        },
+    }
+    rendered = _render_clipped_tool_result(raw)
+    assert rendered["attribution"] == _ATTRIBUTION
+    assert rendered["source_url"] == _SOURCE_URL
