@@ -134,8 +134,9 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     route-scheduled runs and backfills stay cancelable at shutdown;
     ``set_scheduler`` is undone first so no new work can be scheduled
     mid-teardown. The same driver backs the standalone MCP serving path
-    (#4170); there its install lasts per MCP client session on streamable-http
-    (per process on stdio) — see ``digisearch.websets.driver`` and #4189.
+    (#4170); there concurrent streamable-http MCP client sessions share one
+    per-process install, torn down on the last exit — see
+    ``digisearch.websets.driver`` and #4189.
     """
     _require_real_search_backend()
     async with webset_task_lifespan(_app):

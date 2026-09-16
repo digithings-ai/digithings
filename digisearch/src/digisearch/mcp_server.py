@@ -435,9 +435,9 @@ def websets_create(
     The MCP server drives its own runs through the shared in-process driver
     (same service facade, runner, and ``WEBSET_TASKS`` registry as the HTTP
     lifespan), so the webset settles without an HTTP process (#4170). The
-    driver is installed for the MCP client session on streamable-http (for the
-    process on stdio); overlapping streamable-http sessions are tracked in
-    https://github.com/digithings-ai/digithings/issues/4189.
+    driver install is per process and reference-counted (#4189): concurrent
+    streamable-http MCP client sessions share one install, and a session's exit
+    neither uninstalls the seam nor cancels another session's runs.
     """
     store = _webset_store_or_none()
     if store is None:

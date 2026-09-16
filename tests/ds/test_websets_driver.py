@@ -1,10 +1,13 @@
-"""Shared webset driver (#4170): the in-process scheduler both entrypoints carry.
+"""Shared webset driver (#4170) and its per-process ref-counted install (#4189).
 
 Offline only: every store/runner seam is monkeypatched and no real store file is
 opened. Pins the shared lifespan install/teardown protocol (AC1), the
 startup-resume scheduling + store-failure tolerance (AC2), the unchanged
-scheduler delegation incl. the ``WEBSET_TASKS`` dedupe (AC3), and the FastMCP
-lifespan wiring (AC4).
+scheduler delegation incl. the ``WEBSET_TASKS`` dedupe (AC3), the FastMCP
+lifespan wiring (AC4), and the #4189 ref-counting: overlapping sessions share
+one install, only the last exit tears down and cancels, resume runs once per
+install window (not per session), a cancelled entry leaks nothing, and a later
+install window is fresh.
 
 ``@pytest.mark.unit`` on every test.
 """
@@ -26,6 +29,19 @@ from digisearch.websets.models import VerificationCriterion, Webset
 from digisearch.websets.store import WebsetStoreError
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture(autouse=True)
+def _reset_driver_state():
+    driver._install_lock = asyncio.Lock()
+    driver._active = 0
+    driver._supervisor = None
+    driver._stop = None
+    yield
+    driver._install_lock = asyncio.Lock()
+    driver._active = 0
+    driver._supervisor = None
+    driver._stop = None
 
 
 class _FakeStore:
@@ -112,6 +128,153 @@ def test_shared_lifespan_cancels_tracked_backfills_on_exit(monkeypatch):
 
     task = asyncio.run(_run())
     assert task.cancelled()
+
+
+# ── #4189: one ref-counted per-process install ───────────────────────────────
+
+
+@pytest.mark.unit
+def test_overlapping_sessions_share_one_install_and_teardown_on_last_exit(monkeypatch):
+    monkeypatch.setattr(driver, "get_webset_store", lambda: _FakeStore())
+    monkeypatch.setattr(runner_module, "run_webset_async", _never)
+    resumes: list[int] = []
+
+    async def _resume(task_group: asyncio.TaskGroup) -> None:
+        resumes.append(1)
+
+    monkeypatch.setattr(driver, "_resume_incomplete_websets", _resume)
+    installed: list[Any] = []
+    monkeypatch.setattr(service_module, "set_scheduler", installed.append)
+    runner_module.WEBSET_TASKS.clear()
+
+    async def _run() -> None:
+        a = driver.webset_task_lifespan(None)
+        await a.__aenter__()
+        scheduler_a = installed[-1]
+        assert isinstance(scheduler_a, driver.WebsetTaskScheduler)
+        scheduler_a.schedule_run("ws_a")
+        task_a = runner_module.WEBSET_TASKS["ws_a"]
+
+        b = driver.webset_task_lifespan(None)
+        await b.__aenter__()
+        assert installed == [scheduler_a]
+        assert driver._active == 2
+        assert resumes == [1]
+
+        await b.__aexit__(None, None, None)
+        assert installed == [scheduler_a]
+        assert driver._active == 1
+        assert not task_a.done()
+
+        scheduler_a.schedule_run("ws_b")
+        task_b = runner_module.WEBSET_TASKS["ws_b"]
+        assert not task_b.done()
+
+        await a.__aexit__(None, None, None)
+        assert installed[-1] is None
+        assert task_a.cancelled()
+        assert task_b.cancelled()
+
+    asyncio.run(_run())
+    assert resumes == [1]
+    assert len(installed) == 2
+    assert installed[-1] is None
+    assert runner_module.WEBSET_TASKS == {}
+    assert driver._active == 0
+    assert driver._supervisor is None
+    assert driver._stop is None
+
+
+@pytest.mark.unit
+def test_single_session_resumes_once(monkeypatch):
+    resumes: list[int] = []
+
+    async def _resume(task_group: asyncio.TaskGroup) -> None:
+        resumes.append(1)
+
+    monkeypatch.setattr(driver, "_resume_incomplete_websets", _resume)
+    installed: list[Any] = []
+    monkeypatch.setattr(service_module, "set_scheduler", installed.append)
+
+    async def _run() -> None:
+        async with driver.webset_task_lifespan(None):
+            pass
+
+    asyncio.run(_run())
+    assert resumes == [1]
+    assert len(installed) == 2
+
+
+@pytest.mark.unit
+def test_cancelled_entry_leaves_no_installed_scheduler_or_orphan_tasks(monkeypatch):
+    monkeypatch.setattr(driver, "get_webset_store", lambda: _FakeStore())
+    monkeypatch.setattr(runner_module, "run_webset_async", _never)
+    installed: list[Any] = []
+    monkeypatch.setattr(service_module, "set_scheduler", installed.append)
+    runner_module.WEBSET_TASKS.clear()
+    resume_started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _slow_resume(task_group: asyncio.TaskGroup) -> None:
+        driver.schedule_webset_task(task_group, "ws_orphan")
+        resume_started.set()
+        await release.wait()
+
+    monkeypatch.setattr(driver, "_resume_incomplete_websets", _slow_resume)
+
+    async def _run() -> None:
+        entry = asyncio.create_task(driver.webset_task_lifespan(None).__aenter__())
+        await asyncio.wait_for(resume_started.wait(), timeout=5)
+        assert isinstance(installed[-1], driver.WebsetTaskScheduler)
+        orphan = runner_module.WEBSET_TASKS["ws_orphan"]
+        assert not orphan.done()
+
+        entry.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await entry
+
+        assert installed[-1] is None
+        assert orphan.cancelled()
+        assert runner_module.WEBSET_TASKS == {}
+        assert driver._active == 0
+        assert driver._supervisor is None
+        assert driver._stop is None
+
+        release.set()
+        async with driver.webset_task_lifespan(None):
+            assert isinstance(installed[-1], driver.WebsetTaskScheduler)
+        assert installed[-1] is None
+        assert driver._active == 0
+
+    asyncio.run(_run())
+
+
+@pytest.mark.unit
+def test_sequential_install_windows_install_and_resume_afresh(monkeypatch):
+    resumes: list[int] = []
+
+    async def _resume(task_group: asyncio.TaskGroup) -> None:
+        resumes.append(1)
+
+    monkeypatch.setattr(driver, "_resume_incomplete_websets", _resume)
+    installed: list[Any] = []
+    monkeypatch.setattr(service_module, "set_scheduler", installed.append)
+
+    async def _run() -> tuple[Any, Any]:
+        async with driver.webset_task_lifespan(None):
+            first = installed[-1]
+        assert installed[-1] is None
+        async with driver.webset_task_lifespan(None):
+            second = installed[-1]
+        assert installed[-1] is None
+        return first, second
+
+    first, second = asyncio.run(_run())
+    assert isinstance(first, driver.WebsetTaskScheduler)
+    assert isinstance(second, driver.WebsetTaskScheduler)
+    assert first is not second
+    assert resumes == [1, 1]
+    assert installed == [first, None, second, None]
 
 
 # ── AC2: startup resume ───────────────────────────────────────────────────────
