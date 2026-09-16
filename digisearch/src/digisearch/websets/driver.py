@@ -36,6 +36,14 @@ exit), not the lifespan invocation:
 HTTP and MCP processes stay independent: each owns its own scheduler instance
 and the ``WEBSET_TASKS`` registry is per-process.
 
+Each install window also runs the scheduled tick loop (#4221): one pass per
+``WEBSET_TICK_SECONDS`` re-reads every monitor (``store.list_all_monitors``)
+and refreshes each due, unpaused monitor through the same
+``websets_service.trigger_monitor`` path the manual route uses, containing
+per-monitor faults so the pass survives. ``last_tick`` is in-process state owned
+by the install window, so a restart re-anchors every cadence at its first
+post-install sighting. Nothing ticks without an installed driver.
+
 No HTTP-app import lives here, so either entrypoint can carry the lifespan.
 """
 
@@ -45,11 +53,12 @@ import asyncio
 import contextlib
 import logging
 import sqlite3
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from digisearch.websets import service as websets_service
-from digisearch.websets.models import Webset, WebsetItem
+from digisearch.websets.models import Webset, WebsetItem, WebsetMonitor
 from digisearch.websets.runner import (
     WEBSET_TASKS,
     backfill_enrichment,
@@ -62,9 +71,19 @@ from digisearch.websets.store import get_store as get_webset_store
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "WEBSET_TICK_SECONDS",
     "WebsetTaskScheduler",
     "webset_task_lifespan",
 ]
+
+#: Seconds between scheduled tick passes (monkeypatchable; in-process state).
+WEBSET_TICK_SECONDS: float = 60.0
+
+
+def _now() -> float:
+    """Monotonic seconds for tick-due math (monkeypatched with a fake clock)."""
+    return time.monotonic()
+
 
 _install_lock: asyncio.Lock | None = None
 _lock_loop: asyncio.AbstractEventLoop | None = None
@@ -141,6 +160,11 @@ def _load_incomplete_websets() -> list[Webset]:
     return get_webset_store().list_incomplete_websets()
 
 
+def _load_all_monitors() -> list[WebsetMonitor]:
+    """Tick selector query, run on a worker thread by the driver."""
+    return get_webset_store().list_all_monitors()
+
+
 async def _resume_incomplete_websets(task_group: asyncio.TaskGroup) -> None:
     """Re-schedule every orphaned webset as a registry-tracked run.
 
@@ -163,13 +187,102 @@ async def _resume_incomplete_websets(task_group: asyncio.TaskGroup) -> None:
         schedule_webset_task(task_group, webset.id, verification_mode=webset.verification_mode)
 
 
+async def _tick_once(last_tick: dict[tuple[str, str], float], stop: asyncio.Event) -> None:
+    """Run one tick pass: refresh every due, unpaused monitor.
+
+    Due-selection per monitor from ``store.list_all_monitors``:
+
+    - ``paused`` monitors are skipped and never anchored, so the first pass
+      after a resume anchors their cadence then;
+    - the first sight of a ``(webset_id, monitor_id)`` pair anchors
+      ``last_tick = now`` instead of firing, so an install (or restart — the map
+      is per install window) never emits a refresh storm for cadences that
+      elapsed while the process was down;
+    - a monitor whose webset already has a run in ``WEBSET_TASKS`` is skipped
+      (dedupe: manual triggers and prior ticks share the registry);
+    - due is ``now - last_tick >= interval_seconds``; ``last_tick`` is recorded
+      at trigger time so cadence stays interval-spaced.
+
+    ``last_tick`` is recorded for service-skipped monitors too
+    (``webset_terminal``, ``search_not_found``, ...) so a doomed refresh is
+    retried at the monitor's interval instead of every tick. Store work runs on
+    worker threads (thread-bound sqlite, same as :func:`_resume_incomplete_websets`);
+    a store that cannot be opened skips the pass, and per-monitor failures
+    (``WebsetServiceError`` and broad ``Exception``) are logged and contained —
+    one bad monitor never kills the pass, the tick task, or the TaskGroup.
+    ``stop`` is checked between monitors so teardown does not wait out a pass.
+    """
+    try:
+        monitors = await asyncio.to_thread(_load_all_monitors)
+    except (OSError, sqlite3.Error, WebsetStoreError) as exc:
+        logger.warning("webset tick skipped; store unavailable: %s", exc)
+        return
+    now = _now()
+    for monitor in monitors:
+        if stop.is_set():
+            return
+        if monitor.paused:
+            continue
+        key = (monitor.webset_id, monitor.id)
+        anchor = last_tick.get(key)
+        if anchor is None:
+            last_tick[key] = now
+            continue
+        if monitor.webset_id in WEBSET_TASKS:
+            continue
+        if now - anchor < monitor.interval_seconds:
+            continue
+        last_tick[key] = now
+        try:
+            await asyncio.to_thread(websets_service.trigger_monitor, monitor.webset_id, monitor.id)
+        except websets_service.WebsetServiceError as exc:
+            logger.warning(
+                "webset tick refresh skipped webset_id=%s monitor_id=%s: %s",
+                monitor.webset_id,
+                monitor.id,
+                exc,
+            )
+        except Exception:
+            logger.exception(
+                "webset tick refresh failed webset_id=%s monitor_id=%s",
+                monitor.webset_id,
+                monitor.id,
+            )
+
+
+async def _tick_loop(stop: asyncio.Event) -> None:
+    """One tick pass per ``WEBSET_TICK_SECONDS`` until *stop* is set.
+
+    Waiting on the stop event with a tick-interval timeout (rather than a plain
+    sleep) keeps teardown prompt: a set stop event ends the wait immediately, an
+    in-flight pass finishes and then observes the stop before the next pass, and
+    the task is cancel-safe besides. ``last_tick`` is created here, so it lives
+    exactly one install window. A pass-level escape is logged here instead of
+    raised: the tick task is a TaskGroup child, so an uncontained raise would
+    cancel the sibling runs.
+    """
+    last_tick: dict[tuple[str, str], float] = {}
+    while True:
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=WEBSET_TICK_SECONDS)
+        except TimeoutError:
+            pass
+        if stop.is_set():
+            return
+        try:
+            await _tick_once(last_tick, stop)
+        except Exception:
+            logger.exception("webset tick pass failed")
+
+
 async def _supervise(stop: asyncio.Event, ready: asyncio.Event) -> None:
-    """Own one process install: TaskGroup, seam install, resume, teardown."""
+    """Own one process install: TaskGroup, seam install, resume, tick, teardown."""
     async with asyncio.TaskGroup() as task_group:
         scheduler = WebsetTaskScheduler(task_group)
         websets_service.set_scheduler(scheduler)
         try:
             await _resume_incomplete_websets(task_group)
+            task_group.create_task(_tick_loop(stop))
             ready.set()
             await stop.wait()
         finally:

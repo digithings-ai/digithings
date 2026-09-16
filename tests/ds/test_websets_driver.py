@@ -1,7 +1,8 @@
 """Shared webset driver (#4170) and its per-process ref-counted install (#4189).
 
-Offline only: every store/runner seam is monkeypatched and no real store file is
-opened. Pins the shared lifespan install/teardown protocol (AC1), the
+Offline only: store/runner seams are monkeypatched fakes, except the tick
+integration test, which opens a real sqlite store under ``tmp_path``. Pins the
+shared lifespan install/teardown protocol (AC1), the
 startup-resume scheduling + store-failure tolerance (AC2), the unchanged
 scheduler delegation incl. the ``WEBSET_TASKS`` dedupe (AC3), the FastMCP
 lifespan wiring (AC4), the #4189 ref-counting: overlapping sessions share one
@@ -12,7 +13,10 @@ window is fresh, and the #4202 loop-safe install guard: sequential
 supervisor that dies before ready clears the driver state for the next window, a
 dead supervisor at depth ≥ 1 re-installs fresh, and a concurrent install on a
 different event loop raises ``RuntimeError`` — whether it is reference-counted
-or still starting up.
+or still starting up. The scheduled tick loop (#4221) is pinned at the end:
+first-sight anchoring / interval due-ness with an injected clock, paused and
+active-run skips, per-monitor and per-pass containment, prompt stop-event exit
+before and mid-pass, and the install-window-only lifetime.
 
 ``@pytest.mark.unit`` on every test.
 """
@@ -24,6 +28,7 @@ import contextlib
 import logging
 import sqlite3
 import threading
+import time as _time
 from collections.abc import Awaitable
 from typing import Any
 
@@ -31,7 +36,7 @@ import pytest
 from digisearch.websets import driver
 from digisearch.websets import runner as runner_module
 from digisearch.websets import service as service_module
-from digisearch.websets.models import VerificationCriterion, Webset
+from digisearch.websets.models import VerificationCriterion, Webset, WebsetMonitor, WebsetSearch
 from digisearch.websets.store import WebsetStoreError
 
 pytestmark = pytest.mark.unit
@@ -54,17 +59,60 @@ class _FakeStore:
     """Fake webset store: records the calling thread, raises on demand."""
 
     def __init__(
-        self, incomplete: list[Webset] | None = None, *, error: Exception | None = None
+        self,
+        incomplete: list[Webset] | None = None,
+        *,
+        error: Exception | None = None,
+        monitors: list[WebsetMonitor] | None = None,
+        monitor_error: Exception | None = None,
     ) -> None:
         self.incomplete = list(incomplete or [])
         self.error = error
+        self.monitors = list(monitors or [])
+        self.monitor_error = monitor_error
         self.threads: list[int] = []
+        self.monitor_threads: list[int] = []
 
     def list_incomplete_websets(self) -> list[Webset]:
         self.threads.append(threading.get_ident())
         if self.error is not None:
             raise self.error
         return self.incomplete
+
+    def list_all_monitors(self) -> list[WebsetMonitor]:
+        self.monitor_threads.append(threading.get_ident())
+        if self.monitor_error is not None:
+            raise self.monitor_error
+        return list(self.monitors)
+
+
+def _monitor(webset_id: str, *, interval: int = 60, paused: bool = False) -> WebsetMonitor:
+    return WebsetMonitor(webset_id=webset_id, interval_seconds=interval, paused=paused)
+
+
+def _search(webset: Webset) -> WebsetSearch:
+    return WebsetSearch(webset_id=webset.id, query="photonics startups", criteria=webset.criteria)
+
+
+class _Clock:
+    """Fake monotonic clock injected through ``driver._now``."""
+
+    def __init__(self, now: float) -> None:
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
+
+
+class _JumpingClock:
+    """Fake monotonic clock that advances 100s on every read (anchors, then due)."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        self.now += 100.0
+        return self.now
 
 
 def _webset(*, mode: str = "llm") -> Webset:
@@ -718,3 +766,383 @@ def test_fastmcp_instance_carries_driver_lifespan(monkeypatch):
         assert installed[-1] is None
 
     asyncio.run(_run())
+
+
+# ── #4221: the scheduled tick loop ────────────────────────────────────────────
+
+
+@pytest.mark.unit
+def test_tick_first_sight_anchors_then_fires_at_interval(monkeypatch):
+    """First sight anchors (no storm); due at ``interval``; re-anchored at trigger."""
+    monitor = _monitor("ws_1", interval=60)
+    store = _FakeStore(monitors=[monitor])
+    monkeypatch.setattr(driver, "get_webset_store", lambda: store)
+    clock = _Clock(1000.0)
+    monkeypatch.setattr(driver, "_now", clock)
+    triggers: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        service_module,
+        "trigger_monitor",
+        lambda webset_id, monitor_id: triggers.append((webset_id, monitor_id)),
+    )
+    main_thread = threading.get_ident()
+
+    async def _run() -> dict[tuple[str, str], float]:
+        last_tick: dict[tuple[str, str], float] = {}
+        stop = asyncio.Event()
+
+        await driver._tick_once(last_tick, stop)
+        assert triggers == []
+        assert last_tick == {("ws_1", monitor.id): 1000.0}
+
+        clock.now = 1059.0
+        await driver._tick_once(last_tick, stop)
+        assert triggers == []
+
+        clock.now = 1060.0
+        await driver._tick_once(last_tick, stop)
+        assert triggers == [("ws_1", monitor.id)]
+        assert last_tick[("ws_1", monitor.id)] == 1060.0
+
+        clock.now = 1119.0
+        await driver._tick_once(last_tick, stop)
+        assert triggers == [("ws_1", monitor.id)]
+
+        clock.now = 1120.0
+        await driver._tick_once(last_tick, stop)
+        assert triggers == [("ws_1", monitor.id), ("ws_1", monitor.id)]
+        return last_tick
+
+    last_tick = asyncio.run(_run())
+    assert last_tick[("ws_1", monitor.id)] == 1120.0
+    assert store.monitor_threads and store.monitor_threads[0] != main_thread
+
+
+@pytest.mark.unit
+def test_tick_skips_paused_monitors_and_anchors_on_resume(monkeypatch):
+    paused = _monitor("ws_1", interval=60, paused=True)
+    store = _FakeStore(monitors=[paused])
+    monkeypatch.setattr(driver, "get_webset_store", lambda: store)
+    clock = _Clock(2000.0)
+    monkeypatch.setattr(driver, "_now", clock)
+    triggers: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        service_module,
+        "trigger_monitor",
+        lambda webset_id, monitor_id: triggers.append((webset_id, monitor_id)),
+    )
+
+    async def _run() -> None:
+        last_tick: dict[tuple[str, str], float] = {}
+        stop = asyncio.Event()
+
+        await driver._tick_once(last_tick, stop)
+        clock.now = 2100.0
+        await driver._tick_once(last_tick, stop)
+        assert triggers == []
+        assert last_tick == {}
+
+        store.monitors = [paused.model_copy(update={"paused": False})]
+        await driver._tick_once(last_tick, stop)
+        assert triggers == []
+        assert last_tick == {("ws_1", paused.id): 2100.0}
+
+        clock.now = 2159.0
+        await driver._tick_once(last_tick, stop)
+        assert triggers == []
+
+        clock.now = 2160.0
+        await driver._tick_once(last_tick, stop)
+        assert triggers == [("ws_1", paused.id)]
+
+    asyncio.run(_run())
+
+
+@pytest.mark.unit
+def test_tick_dedupes_while_a_run_is_active(monkeypatch):
+    monitor = _monitor("ws_1", interval=60)
+    store = _FakeStore(monitors=[monitor])
+    monkeypatch.setattr(driver, "get_webset_store", lambda: store)
+    clock = _Clock(1000.0)
+    monkeypatch.setattr(driver, "_now", clock)
+    triggers: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        service_module,
+        "trigger_monitor",
+        lambda webset_id, monitor_id: triggers.append((webset_id, monitor_id)),
+    )
+
+    async def _run() -> None:
+        last_tick: dict[tuple[str, str], float] = {}
+        stop = asyncio.Event()
+        await driver._tick_once(last_tick, stop)  # anchor
+
+        runner_module.WEBSET_TASKS.clear()
+        active = asyncio.create_task(asyncio.sleep(3600))
+        runner_module.WEBSET_TASKS["ws_1"] = active
+        try:
+            clock.now = 1060.0
+            await driver._tick_once(last_tick, stop)
+            assert triggers == []
+
+            runner_module.WEBSET_TASKS.clear()
+            await driver._tick_once(last_tick, stop)
+            assert triggers == [("ws_1", monitor.id)]
+        finally:
+            active.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await active
+            runner_module.WEBSET_TASKS.clear()
+
+    asyncio.run(_run())
+
+
+@pytest.mark.unit
+def test_tick_contains_per_monitor_failures_and_continues(monkeypatch, caplog):
+    terminal = _monitor("ws_terminal", interval=60)
+    no_search = _monitor("ws_no_search", interval=60)
+    exploding = _monitor("ws_exploding", interval=60)
+    healthy = _monitor("ws_healthy", interval=60)
+    store = _FakeStore(monitors=[terminal, no_search, exploding, healthy])
+    monkeypatch.setattr(driver, "get_webset_store", lambda: store)
+    clock = _Clock(1000.0)
+    monkeypatch.setattr(driver, "_now", clock)
+    calls: list[tuple[str, str]] = []
+
+    def _trigger(webset_id: str, monitor_id: str) -> None:
+        calls.append((webset_id, monitor_id))
+        if webset_id == "ws_terminal":
+            raise service_module.WebsetServiceError("webset is cancelled", code="webset_terminal")
+        if webset_id == "ws_no_search":
+            raise service_module.WebsetServiceError("no generation", code="search_not_found")
+        if webset_id == "ws_exploding":
+            raise RuntimeError("store exploded")
+
+    monkeypatch.setattr(service_module, "trigger_monitor", _trigger)
+
+    async def _run() -> dict[tuple[str, str], float]:
+        last_tick: dict[tuple[str, str], float] = {}
+        stop = asyncio.Event()
+        await driver._tick_once(last_tick, stop)  # anchor all four
+        clock.now = 1060.0
+        await driver._tick_once(last_tick, stop)
+        return last_tick
+
+    with caplog.at_level(logging.WARNING, logger="digisearch.websets.driver"):
+        last_tick = asyncio.run(_run())
+
+    assert calls == [
+        ("ws_terminal", terminal.id),
+        ("ws_no_search", no_search.id),
+        ("ws_exploding", exploding.id),
+        ("ws_healthy", healthy.id),
+    ]
+    # Service-skipped monitors are re-anchored too: retry at interval, not every tick.
+    for monitor in (terminal, no_search, exploding, healthy):
+        assert last_tick[(monitor.webset_id, monitor.id)] == 1060.0
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("skipped webset_id=ws_terminal" in message for message in messages)
+    assert any("skipped webset_id=ws_no_search" in message for message in messages)
+    assert any("failed webset_id=ws_exploding" in message for message in messages)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "error",
+    [
+        OSError("websets home is not readable"),
+        sqlite3.Error("database is locked"),
+        WebsetStoreError("ledger locked", code="store_locked"),
+    ],
+)
+def test_tick_store_failure_skips_the_pass(monkeypatch, caplog, error):
+    store = _FakeStore(monitor_error=error)
+    monkeypatch.setattr(driver, "get_webset_store", lambda: store)
+    triggers: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        service_module,
+        "trigger_monitor",
+        lambda webset_id, monitor_id: triggers.append((webset_id, monitor_id)),
+    )
+
+    async def _run() -> dict[tuple[str, str], float]:
+        last_tick: dict[tuple[str, str], float] = {}
+        await driver._tick_once(last_tick, asyncio.Event())
+        return last_tick
+
+    with caplog.at_level(logging.WARNING, logger="digisearch.websets.driver"):
+        last_tick = asyncio.run(_run())
+    assert last_tick == {}
+    assert triggers == []
+    assert any(
+        "webset tick skipped; store unavailable" in record.getMessage() for record in caplog.records
+    )
+
+
+@pytest.mark.unit
+def test_tick_with_no_monitors_is_a_noop(monkeypatch):
+    store = _FakeStore()
+    monkeypatch.setattr(driver, "get_webset_store", lambda: store)
+    triggers: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        service_module,
+        "trigger_monitor",
+        lambda webset_id, monitor_id: triggers.append((webset_id, monitor_id)),
+    )
+
+    async def _run() -> dict[tuple[str, str], float]:
+        last_tick: dict[tuple[str, str], float] = {}
+        await driver._tick_once(last_tick, asyncio.Event())
+        return last_tick
+
+    assert asyncio.run(_run()) == {}
+    assert triggers == []
+    assert store.monitor_threads  # the pass still read the store
+
+
+@pytest.mark.unit
+def test_tick_loop_returns_promptly_when_stop_is_set(monkeypatch):
+    """Stop ends the wait immediately — no sleeping out a full tick interval."""
+    monkeypatch.setattr(driver, "WEBSET_TICK_SECONDS", 3600.0)
+    passes: list[int] = []
+
+    async def _record(last_tick: dict[tuple[str, str], float], stop: asyncio.Event) -> None:
+        passes.append(1)
+
+    monkeypatch.setattr(driver, "_tick_once", _record)
+
+    async def _run() -> None:
+        stop = asyncio.Event()
+        loop_task = asyncio.create_task(driver._tick_loop(stop))
+        await asyncio.sleep(0)
+        assert not loop_task.done()
+        stop.set()
+        await asyncio.wait_for(loop_task, timeout=1.0)
+        assert not loop_task.cancelled()
+
+    asyncio.run(_run())
+    assert passes == []
+
+
+@pytest.mark.unit
+def test_tick_loop_stop_mid_pass_skips_remaining_monitors(monkeypatch):
+    """A stop set while refreshing one monitor ends the pass and the loop.
+
+    Three due monitors: the first refresh signals teardown, the per-monitor
+    check skips the other two, and ``_tick_loop`` exits instead of running on.
+    """
+    monitors = [_monitor(f"ws_{suffix}", interval=60) for suffix in ("a", "b", "c")]
+    store = _FakeStore(monitors=monitors)
+    monkeypatch.setattr(driver, "get_webset_store", lambda: store)
+    monkeypatch.setattr(driver, "_now", _JumpingClock())
+    monkeypatch.setattr(driver, "WEBSET_TICK_SECONDS", 0.01)
+    stop = asyncio.Event()
+    calls: list[tuple[str, str]] = []
+
+    def _trigger(webset_id: str, monitor_id: str) -> None:
+        calls.append((webset_id, monitor_id))
+        stop.set()  # teardown lands mid-pass; the next monitor must not fire
+
+    monkeypatch.setattr(service_module, "trigger_monitor", _trigger)
+
+    async def _run() -> None:
+        loop_task = asyncio.create_task(driver._tick_loop(stop))
+        await asyncio.wait_for(loop_task, timeout=1.0)
+        assert not loop_task.cancelled()
+
+    asyncio.run(_run())
+    assert calls == [("ws_a", monitors[0].id)]
+
+
+@pytest.mark.unit
+def test_tick_loop_contains_a_raising_pass(monkeypatch):
+    """A pass-level escape is contained: the install survives and tears down."""
+    passes: list[int] = []
+
+    async def _boom(last_tick: dict[tuple[str, str], float], stop: asyncio.Event) -> None:
+        passes.append(1)
+        raise RuntimeError("tick pass exploded")
+
+    monkeypatch.setattr(driver, "_tick_once", _boom)
+    monkeypatch.setattr(driver, "WEBSET_TICK_SECONDS", 0.001)
+    monkeypatch.setattr(driver, "get_webset_store", lambda: _FakeStore())
+    installed: list[Any] = []
+    monkeypatch.setattr(service_module, "set_scheduler", installed.append)
+
+    async def _run() -> None:
+        async with driver.webset_task_lifespan(None):
+            deadline = _time.monotonic() + 5.0
+            while len(passes) < 2 and _time.monotonic() < deadline:
+                await asyncio.sleep(0.002)
+            assert len(passes) >= 2  # repeated pass failures never kill the loop
+            assert isinstance(installed[-1], driver.WebsetTaskScheduler)
+        assert installed[-1] is None
+
+    asyncio.run(_run())
+    assert driver._active == 0
+    assert driver._supervisor is None
+    assert driver._stop is None
+
+
+@pytest.mark.unit
+def test_tick_loop_starts_only_inside_an_install_window(monkeypatch):
+    """No driver install → nothing ticks; the loop is a TaskGroup child."""
+    started: list[asyncio.Event] = []
+
+    async def _fake_loop(stop: asyncio.Event) -> None:
+        started.append(stop)
+        await stop.wait()
+
+    monkeypatch.setattr(driver, "_tick_loop", _fake_loop)
+    monkeypatch.setattr(driver, "get_webset_store", lambda: _FakeStore())
+    installed: list[Any] = []
+    monkeypatch.setattr(service_module, "set_scheduler", installed.append)
+
+    assert started == []
+
+    async def _run() -> None:
+        async with driver.webset_task_lifespan(None):
+            assert len(started) == 1
+            assert not started[0].is_set()
+        assert started[0].is_set()
+
+    asyncio.run(_run())
+
+
+@pytest.mark.unit
+def test_tick_refreshes_through_the_real_service_path(monkeypatch, tmp_path):
+    """Integration: real store + real ``trigger_monitor``; only the pass is parked.
+
+    The tick's trigger must open a real ``WebsetSearch`` generation and reach
+    the installed ``WebsetTaskScheduler`` from its worker thread (the same
+    worker-thread scheduling the sync HTTP routes use).
+    """
+    from digisearch.websets.store import WebsetStore
+
+    db = tmp_path / "websets.sqlite3"
+    monkeypatch.setenv("DIGISEARCH_WEBSETS_DB", str(db))
+    monkeypatch.setattr(runner_module, "run_webset_async", _never)
+    monkeypatch.setattr(driver, "WEBSET_TICK_SECONDS", 0.01)
+
+    monkeypatch.setattr(driver, "_now", _JumpingClock())
+
+    store = WebsetStore(db_path=str(db))
+    webset = store.create_webset(_webset())
+    search = store.add_search(_search(webset))
+    store.settle_search(webset.id, search.id, "idle")
+    store.set_webset_idle(webset.id)
+    store.add_monitor(webset.id, _monitor(webset.id, interval=60))
+    runner_module.WEBSET_TASKS.clear()
+
+    async def _run() -> None:
+        async with driver.webset_task_lifespan(None):
+            deadline = _time.monotonic() + 5.0
+            while _time.monotonic() < deadline:
+                if len(store.list_searches(webset.id)) >= 2:
+                    break
+                await asyncio.sleep(0.01)
+            assert len(store.list_searches(webset.id)) >= 2
+            assert webset.id in runner_module.WEBSET_TASKS
+
+    asyncio.run(_run())
+    assert runner_module.WEBSET_TASKS == {}

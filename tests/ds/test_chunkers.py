@@ -258,13 +258,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     `pages=` single-retrieval-round wording replacing the old double-retrieval
     limitation note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
     unchanged.
+    Re-recorded at count 110 for #4221 (scheduled webset tick driver paragraph
+    + monitor pause route/table rows in ARCHITECTURE.md) — fixture prose only;
+    RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 109
+    assert len(chunks) == 110
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -304,12 +307,13 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "aa924885a2a48bdc",
         "ce691515430dae1f",
         "73d141db4779c6b1",
-        "767113eb8e027a2b",
-        "7090bb1895cf01fc",
-        "f72fb524bae160b6",
-        "a45fa09bea0e8e51",
-        "a73404f288469603",
-        "808c94507c095b2a",
+        "3ba5f0d98d67de27",
+        "c090ca5fb79ad463",
+        "7e9bcd09f5f3abf1",
+        "bed41ccd5021ddf1",
+        "d168142221e6f74f",
+        "d9b2d30344aeff83",
+        "025bd495edce8546",
         "6de35d68bea0e990",
         "c5776a6b47ee3e04",
         "3aed1b59bbde9920",
@@ -342,7 +346,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "ea4b9c63695d2f69",
         "367d6f1945838ddd",
         "4187a3ee58add217",
-        "290f4da5ff7aca14",
+        "cb38d3721bb6f2b8",
         "59f90a800d366aa9",
         "3ec5f2b1fce1b494",
         "66ce13f7ba2fafdc",

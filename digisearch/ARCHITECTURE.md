@@ -675,6 +675,27 @@ each search generation: `add_search` and `trigger_monitor` inherit it, so a
 backfill generations (`add_enrichment`) persist the inherited mode too, so a
 backfill cannot reset a `rules` webset to the model default.
 
+**Scheduled tick driver (#4221).** Each install window also runs one tick task
+inside the driver's `asyncio.TaskGroup` (`WEBSET_TICK_SECONDS`, 60s default):
+every pass re-reads every monitor (`store.list_all_monitors`) and refreshes
+each due, unpaused monitor through the same `websets_service.trigger_monitor`
+path the manual route uses — a new `WebsetSearch` generation inheriting the
+persisted `verification_mode`. Due-selection is in-process schedule state owned
+by the install window: `last_tick` per `(webset_id, monitor_id)`, anchored at
+the first post-install sighting (a restart re-anchors every cadence instead of
+stampeding refreshes), and a monitor is skipped while its webset already has a
+run in `WEBSET_TASKS` (dedupe with manual triggers and prior ticks). A failed
+refresh is contained per monitor (`WebsetServiceError` and broad exceptions are
+logged, the pass continues and `last_tick` still moves so a doomed refresh
+retries at the monitor's interval), a store that cannot be opened skips the
+pass (the startup resume's tolerance), and teardown ends the loop promptly when
+the stop event is set. Offline callers install no driver, so nothing ticks
+there and refreshes stay explicit.
+`PATCH /v1/websets/{webset_id}/monitors/{monitor_id}` flips the monitor's
+`paused` flag (`{"paused": true|false}`, unknown keys rejected); a paused
+monitor is skipped by the tick only — the manual trigger route still refreshes
+it on demand.
+
 **Library-only in v1.** The enricher's cross-page company merge
 (`merge_company_entities` / `reconcile_funding_history` in `websets/enrich.py`)
 and the spec's targeted second extraction pass (a re-fetch or follow-up
@@ -704,7 +725,7 @@ change), and errors use the shared `digibase.errors` envelope — read
 `body["error"]["code"]`, never a top-level `body["code"]`. Rate limits are
 per-IP via the two-tier mechanism: `/v1/websets` is an exact 10/min static;
 the parameterized paths are matched most-specific-first (creation/refresh
-10/min, reads 30/min). `POST`+`GET` on one path share that path's budget
+10/min, reads/pause 30/min). `POST`+`GET` on one path share that path's budget
 (`/monitors` is 10/min for both).
 
 | Method + path | Success | Error codes | Notes |
@@ -715,9 +736,10 @@ the parameterized paths are matched most-specific-first (creation/refresh
 | `GET /v1/websets/{webset_id}/items` | 200 `{"items", "next_cursor"}` | `webset_not_found` (404), `cursor_not_found` (404) | NEWEST-first; `cursor` = previous page's last item id; `verification` filter `verified\|rejected\|pending` |
 | `POST /v1/websets/{webset_id}/enrichments` | 201 `EnrichmentDef` | `webset_not_found` (404), `webset_terminal` (409), `enrichment_limit_exceeded` (400) | Max 10 active; the attach schedules the backfill drain |
 | `DELETE /v1/websets/{webset_id}/enrichments/{enrichment_id}` | 204 | `webset_not_found` / `enrichment_not_found` (404) | Already-resolved item values are retained |
-| `POST /v1/websets/{webset_id}/monitors` | 201 `WebsetMonitor` | `webset_not_found` (404), `webhook_url_required` / `webhook_url_private` (422) | Poll-only v1: `interval_seconds` ≥ 60 is stored metadata, nothing ticks it |
-| `GET /v1/websets/{webset_id}/monitors` | 200 `{"monitors": [...]}` | `webset_not_found` (404) | Newest-created first |
-| `POST /v1/websets/{webset_id}/monitors/{monitor_id}/trigger` | 202 `Webset` | `webset_not_found` / `monitor_not_found` (404), `webset_terminal` (409) | Manual refresh; the v1 substitute for the deferred tick driver |
+| `POST /v1/websets/{webset_id}/monitors` | 201 `WebsetMonitor` | `webset_not_found` (404), `webhook_url_required` / `webhook_url_private` (422) | Tick-driven v1: `interval_seconds` ≥ 60 is the cadence the shared driver's tick loop honors (`paused` defaults `false`) |
+| `GET /v1/websets/{webset_id}/monitors` | 200 `{"monitors": [...]}` | `webset_not_found` (404) | Newest-created first; the body carries `paused` |
+| `PATCH /v1/websets/{webset_id}/monitors/{monitor_id}` | 200 `WebsetMonitor` | `webset_not_found` / `monitor_not_found` (404), `validation_error` (422) | Body `{"paused": true\|false}` (`extra="forbid"`); the tick driver skips a paused monitor, the manual trigger route does not |
+| `POST /v1/websets/{webset_id}/monitors/{monitor_id}/trigger` | 202 `Webset` | `webset_not_found` / `monitor_not_found` (404), `webset_terminal` (409) | Manual refresh; the shared driver's tick loop calls this same service path |
 | `GET /v1/websets/{webset_id}/events` | 200 `{"events", "next_cursor"}` | `webset_not_found` (404), `cursor_not_found` (404) | OLDEST-first append-only tail; `after` = last seen event id |
 | `POST /v1/websets/{webset_id}/webhooks` | 201 `WebhookConfig` | `webset_not_found` (404), `webhook_url_required` / `webhook_url_private` / `validation_error` (422) | Secret-once: the server-generated secret is in this response; there is no read route. An unknown `events` kind maps to the 422 `validation_error` envelope, never a 500 |
 | `POST /v1/websets/{webset_id}/webhooks/{webhook_id}/rotate` | 200 `WebhookConfig` | `webset_not_found` / `webhook_not_found` (404) | New secret + 24h `previous_expires_at` overlap |
@@ -751,9 +773,7 @@ key-less CI green). Re-validating the translation against a Pro-tier key is a
 the Phase D live record does not claim it (tracked by the #4123 live-pin
 precedent).
 
-**Deferred (explicitly out of v1).** The scheduled webset tick driver
-(poll-only v1: monitor interval is metadata; refreshes are manual
-`trigger_monitor` calls — still deferred, no tracking issue yet), recall paging
+**Deferred (explicitly out of v1).** Recall paging
 (count is reached by query diversification, `max_results ≤ 10` per call),
 automated webhook re-delivery after a failed delivery, and EXA-websets live
 validation + wiring (Pro key; tracked by the #4123 live-pin precedent).
@@ -1467,7 +1487,7 @@ no-new-provider discipline as Phase C. One-line responsibilities:
 | `websets/verify.py` | `verify_item` (llm + offline rules modes) and the fail-closed settlement of still-pending items at candidate-pass end |
 | `websets/enrich.py` | `enrich_item` (8 typed fields, per-field citations), funding reconciliation (ECB snapshot), entity merge, `company_profile_field` |
 | `websets/runner.py` | `AsyncioRunner` (semaphore 4, per-item containment, semaphore-aware cancellation), `run_webset_async`, `backfill_enrichment`, `schedule_webset_task` + `WEBSET_TASKS` |
-| `websets/driver.py` | Shared in-process driver (`webset_task_lifespan`, `WebsetTaskScheduler`): installs the scheduler seam per install window (first entry to last exit), reference-counted across concurrent invocations — first entry installs + runs the startup-resume union, last exit cancels tracked runs/backfills, and a later window reinstalls + re-resumes; concurrent HTTP/MCP sessions share one install (#4170/#4189); carried by both the FastAPI and FastMCP lifespans |
+| `websets/driver.py` | Shared in-process driver (`webset_task_lifespan`, `WebsetTaskScheduler`): installs the scheduler seam per install window (first entry to last exit), reference-counted across concurrent invocations — first entry installs + runs the startup-resume union, last exit cancels tracked runs/backfills, and a later window reinstalls + re-resumes; concurrent HTTP/MCP sessions share one install (#4170/#4189); carried by both the FastAPI and FastMCP lifespans; runs the scheduled tick loop (`WEBSET_TICK_SECONDS`, in-process `last_tick`) in the same TaskGroup (#4221) |
 | `websets/events.py` | Event emit helpers, the shared Phase C signing core, `append_event` fan-out through `deliver_webhook` (3 attempts, 5s/25s) + ledger recording, public `verify_webhook_signature` |
 | `websets/export.py` | `export_json` (per-field citations) and `export_csv` (polars) |
 | `websets/service.py` | The sync facade the HTTP/MCP/orchestrator surfaces call (create/get/items/counts/add_search/add_enrichment/remove/monitors/webhooks/events/cancel/export) + the scheduler seam |

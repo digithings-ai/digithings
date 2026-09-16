@@ -47,8 +47,10 @@ Lifecycle (spec § Async lifecycle, implemented verbatim):
 - **Startup resume**: :func:`resume_incomplete_websets` re-drives the union of
   websets still ``running`` and websets holding a non-terminal ``running``
   search (the store's selector), idempotently.
-- **Poll-only v1 (R8)**: the fan-out target is the webset row itself; no
-  scheduled tick driver and no Phase C ``Watch`` is involved (residual risk 6).
+- **Refresh cadence**: the fan-out target is the webset row itself; the
+  scheduled tick driver (``websets/driver.py``, #4221) reaches this runner
+  through ``service.trigger_monitor``, and no Phase C ``Watch`` is involved
+  (residual risk 6).
 - **Ownership**: :func:`schedule_webset_task` registers every background run in
   ``WEBSET_TASKS`` with a done-callback logging ``(webset_id, ok|error)`` and
   removal on completion; bare ``asyncio.create_task`` without a handle is not

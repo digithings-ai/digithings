@@ -313,16 +313,17 @@ class WebsetItem(BaseModel):
 
 
 class WebsetMonitor(BaseModel):
-    """Refresh-cadence metadata on a webset — poll-only v1 (R8).
+    """Refresh-cadence metadata on a webset, executed by the tick driver (#4221).
 
-    ``interval_seconds`` is stored schedule metadata for the deferred scheduled
-    driver; nothing executes it on a tick in v1 (refreshes are the manual
-    ``trigger_monitor`` call). There is deliberately no ``status``/``paused``
-    field — with no scheduled driver a pause state has no observable effect
-    (flag I4); the ``active|paused`` lifecycle belongs to the driver follow-up.
-    A webset monitor is explicitly NOT a Phase C ``Watch`` (R7e — the bare
-    ``Monitor`` name is banned because it collides with the landed
-    Watch/MonitorRun family).
+    ``interval_seconds`` is the cadence the shared driver's tick loop honors
+    (``websets/driver.py``: due when ``now - last_tick >= interval_seconds``
+    over in-process schedule state re-anchored at the first post-install
+    sighting). ``paused`` is the operator switch the tick honors: a paused
+    monitor is skipped by the tick while the manual ``trigger_monitor`` route
+    still refreshes it on demand — the ``active|paused`` lifecycle (flag I4),
+    now observable. A webset monitor is explicitly NOT a Phase C ``Watch``
+    (R7e — the bare ``Monitor`` name is banned because it collides with the
+    landed Watch/MonitorRun family).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -332,6 +333,7 @@ class WebsetMonitor(BaseModel):
     webset_id: str = Field(min_length=1)
     interval_seconds: int = Field(default=3600, ge=60)
     webhook_url: str | None = None
+    paused: bool = False
     created_at: datetime | None = None
 
 

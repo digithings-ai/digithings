@@ -555,6 +555,74 @@ def test_monitor_crud_and_newest_first_ordering(tmp_path):
     assert assigned.created_at is not None
 
 
+def test_list_all_monitors_spans_websets_in_created_order(tmp_path):
+    store = WebsetStore(db_path=str(tmp_path / "websets.sqlite3"))
+    assert store.list_all_monitors() == []
+
+    first_ws = store.create_webset(_webset())
+    second_ws = store.create_webset(_webset())
+    newest = store.add_monitor(
+        second_ws.id,
+        WebsetMonitor(webset_id=second_ws.id, created_at=_T0 + timedelta(hours=2)),
+    )
+    oldest = store.add_monitor(first_ws.id, WebsetMonitor(webset_id=first_ws.id, created_at=_T0))
+    middle = store.add_monitor(
+        first_ws.id,
+        WebsetMonitor(webset_id=first_ws.id, created_at=_T0 + timedelta(hours=1)),
+    )
+
+    all_monitors = store.list_all_monitors()
+    assert [m.id for m in all_monitors] == [oldest.id, middle.id, newest.id]
+    assert [m.webset_id for m in all_monitors] == [
+        first_ws.id,
+        first_ws.id,
+        second_ws.id,
+    ]
+    assert store.list_all_monitors() == all_monitors
+
+
+def test_update_monitor_persists_body_and_preserves_created_at(tmp_path):
+    store = WebsetStore(db_path=str(tmp_path / "websets.sqlite3"))
+    webset = store.create_webset(_webset())
+    monitor = store.add_monitor(
+        webset.id,
+        WebsetMonitor(webset_id=webset.id, interval_seconds=120, created_at=_T0),
+    )
+    assert monitor.paused is False
+
+    paused = store.update_monitor(
+        webset.id, monitor.id, monitor.model_copy(update={"paused": True})
+    )
+
+    assert paused.id == monitor.id
+    assert paused.paused is True
+    assert paused.created_at == _T0
+    assert store.get_monitor(webset.id, monitor.id) == paused
+    assert [m.paused for m in store.list_monitors(webset.id)] == [True]
+    assert [m.paused for m in store.list_all_monitors()] == [True]
+
+    resumed = store.update_monitor(
+        webset.id, monitor.id, paused.model_copy(update={"paused": False})
+    )
+    assert resumed.paused is False
+    assert store.get_monitor(webset.id, monitor.id).paused is False
+
+    # An incoming body without created_at keeps the stored row's timestamp.
+    bare = store.update_monitor(
+        webset.id, monitor.id, WebsetMonitor(webset_id=webset.id, paused=False)
+    )
+    assert bare.created_at == _T0
+
+    with pytest.raises(WebsetStoreError) as ei:
+        store.update_monitor(webset.id, _GHOST_MONITOR, monitor)
+    assert ei.value.code == "monitor_not_found"
+
+    other = store.create_webset(_webset())
+    with pytest.raises(WebsetStoreError) as ei:
+        store.update_monitor(other.id, monitor.id, monitor)
+    assert ei.value.code == "monitor_not_found"
+
+
 def test_webhook_crud_assigns_non_empty_ids_and_ledger_is_insert_or_ignore(tmp_path):
     path = tmp_path / "websets.sqlite3"
     store = WebsetStore(db_path=str(path))
