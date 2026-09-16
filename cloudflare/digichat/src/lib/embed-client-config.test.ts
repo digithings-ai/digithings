@@ -225,12 +225,20 @@ describe("toEmbedClientConfig", () => {
       activityDetail: "labels",
       backend: { type: "digigraph" },
       mcp: {
-        servers: [{ id: "datatap", url: "https://mcp.datatap.example/mcp", label: "DataTap" }],
+        servers: [
+          {
+            id: "datatap",
+            url: "https://mcp.datatap.example/mcp",
+            label: "DataTap",
+            setup: { path_prefix: "clients/acme" },
+          },
+        ],
         allowUserServers: false,
       },
     });
     const serialized = JSON.stringify(cfg);
     expect(serialized).not.toContain("mcp.datatap.example");
+    expect(serialized).not.toContain("clients/acme");
     expect(cfg.mcp?.servers).toEqual([{ id: "datatap", label: "DataTap" }]);
   });
 });

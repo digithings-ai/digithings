@@ -83,6 +83,13 @@ describe("parseEmbedTenants", () => {
                 token: "edge-test-token",
                 authHeader: "x-digi-mcp-key",
               },
+              {
+                id: "digivault",
+                url: "http://digivault-mcp:8769/mcp",
+                label: "Knowledge vault",
+                default: true,
+                setup: { path_prefix: "clients/online-compliance-center" },
+              },
             ],
             allowUserServers: false,
             allowAddForm: false,
@@ -100,9 +107,47 @@ describe("parseEmbedTenants", () => {
           token: "edge-test-token",
           authHeader: "x-digi-mcp-key",
         },
+        {
+          id: "digivault",
+          url: "http://digivault-mcp:8769/mcp",
+          label: "Knowledge vault",
+          default: true,
+          setup: { path_prefix: "clients/online-compliance-center" },
+        },
       ],
       allowUserServers: false,
       allowAddForm: false,
+    });
+  });
+
+  it("rejects malformed MCP setup values", () => {
+    const withMcp = (mcp: unknown) =>
+      JSON.stringify({
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          mcp,
+        },
+      });
+    expect(() =>
+      parseEmbedTenants(
+        withMcp({ servers: [{ id: "v", url: "http://v.test/mcp", setup: ["x"] }] }),
+      ),
+    ).toThrow(/mcp\.servers\[0\]\.setup must be an object/);
+    expect(() =>
+      parseEmbedTenants(
+        withMcp({ servers: [{ id: "v", url: "http://v.test/mcp", setup: { n: 1 } }] }),
+      ),
+    ).toThrow(/mcp\.servers\[0\]\.setup\.n must be a string/);
+    // An empty map is legal and simply omitted (no setup to forward).
+    const reg = parseEmbedTenants(
+      withMcp({ servers: [{ id: "v", url: "http://v.test/mcp", setup: {} }] }),
+    );
+    expect(reg.get("occ.digithings.ai")?.mcp?.servers[0]).toEqual({
+      id: "v",
+      url: "http://v.test/mcp",
     });
   });
 
