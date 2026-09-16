@@ -293,6 +293,18 @@ function EventRow({
   );
 }
 
+/** Open-state derivation for the event-detail slide-over: resolve a calendar
+ *  event by id (`null`/empty ⇒ closed, unmatched id ⇒ closed). Pure and
+ *  SSR-safe — consumed by the initial seed and both view selectors, and
+ *  unit-tested positively so the open wiring is not only covered live. */
+export function eventById(
+  events: readonly FxEconomicCalendarRow[],
+  id: string | number | null | undefined,
+): FxEconomicCalendarRow | null {
+  if (id == null || id === '') return null;
+  return events.find((e) => String(e.id) === String(id)) ?? null;
+}
+
 export default function EventsTab({
   events,
   opinions,
@@ -421,8 +433,8 @@ export default function EventsTab({
   // The event whose detail slide-over is open, or null. Opened from both the List
   // and the Timeline so the two views surface the identical event-detail popup.
   // Seeded from initialSelectedId so the open state is renderable under SSR tests.
-  const [selected, setSelected] = useState<FxEconomicCalendarRow | null>(
-    () => events.find((e) => String(e.id) === initialSelectedId) ?? null,
+  const [selected, setSelected] = useState<FxEconomicCalendarRow | null>(() =>
+    eventById(events, initialSelectedId),
   );
 
   // Map the full upcoming window to the reusable timeline's event shape, shared
@@ -523,7 +535,7 @@ export default function EventsTab({
               events={timelineEvents}
               mode="multi"
               selectableIds={selectableIds}
-              onSelect={(id) => setSelected(events.find((e) => String(e.id) === id) ?? null)}
+              onSelect={(id) => setSelected(eventById(events, id))}
             />
           ) : (
             <p className="text-sm text-ink-mute">{EMPTY_COPY}</p>

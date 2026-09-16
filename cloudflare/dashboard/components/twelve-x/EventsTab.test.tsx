@@ -162,17 +162,13 @@ describe('EventsTab view switcher (Task 4.2)', () => {
   });
 });
 
-describe('EventsTab event-detail slide-over', () => {
-  it('mounts the detail slide-over shell when initialSelectedId targets an event', () => {
-    const html = render({ initialSelectedId: '1' });
-    // Wave-2: the panel chrome is the shared Sheet (Base UI Dialog) whose
-    // popup lives in a client-only portal — static SSR never paints
-    // role="dialog"/aria-modal. The open-state content is pinned by
-    // EventDetailPanel.test.tsx (EventDetailBody) and verified live (CDP).
-    expect(html).not.toContain('aria-modal="true"');
-  });
-
-  it('does not render the slide-over when nothing is selected', () => {
+describe('EventsTab event-detail slide-over (SSR shell)', () => {
+  // The panel chrome is the shared Sheet (Base UI Dialog) whose popup lives in
+  // a client-only portal — static SSR never paints it, open or closed. The
+  // positive open-state wiring is covered by EventsTab.open-state.test.tsx
+  // (happy-dom: seed + row click + Escape), the content by
+  // EventDetailPanel.test.tsx, and the live dialog semantics by CDP.
+  it('does not render the slide-over shell in static SSR', () => {
     const html = render();
     expect(html).not.toContain('aria-modal="true"');
   });

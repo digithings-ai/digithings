@@ -43,17 +43,13 @@ describe('MatrixTab', () => {
     expect(html).toContain('desk name to see that broker');
   });
 
-  it('does not open the broker profile by default', () => {
+  // The panel chrome is the shared Sheet (Base UI Dialog) whose popup lives in
+  // a client-only portal — static SSR never paints it, open or closed. The
+  // positive open-state wiring is covered by MatrixTab.open-state.test.tsx
+  // (happy-dom: desk-label click + seed + Escape) and the content by
+  // BrokerProfilePanel.test.tsx.
+  it('does not render the broker profile in static SSR', () => {
     const html = render();
     expect(html).not.toContain('role="dialog"');
-  });
-
-  it('mounts the broker-profile slide-over shell when a broker is pre-selected', () => {
-    const html = render('research Macro');
-    // Wave-2: the panel chrome is the shared Sheet (Base UI Dialog) whose
-    // popup lives in a client-only portal — static SSR never paints
-    // role="dialog". The open-state content is pinned by
-    // BrokerProfilePanel.test.tsx (BrokerProfileBody) and verified live (CDP).
-    expect(html).not.toContain('aria-modal="true"');
   });
 });

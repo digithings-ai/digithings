@@ -1,9 +1,9 @@
-import { ReactNode, ElementType } from 'react';
-import {
-  Badge as KitBadge,
-  Card,
-  type BadgeProps as KitBadgeProps,
-} from '@digithings/web/ui';
+import { ReactNode, ElementType, type ComponentProps } from 'react';
+import { Badge as KitBadge, Card } from '@digithings/web/ui';
+
+/** The kit Badge's own prop surface, derived locally (the kit does not export
+ *  its prop type). Includes the `variant` axis from `badgeVariants`. */
+type KitBadgeProps = ComponentProps<typeof KitBadge>;
 
 interface StatCardProps {
   label: string;

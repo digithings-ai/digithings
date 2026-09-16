@@ -106,10 +106,12 @@ describe('EventDetailPanel', () => {
     expect(html).toContain('No desk commentary for this event yet.');
   });
 
-  it('renders the content as a Sheet title-bearing dialog body', () => {
+  it('renders the content as the Sheet dialog body', () => {
     const html = render({ event, opinions, onClose: () => {} });
-    // SheetTitle renders the dialog heading; the Sheet shell adds role=dialog
-    // + aria-modal (portaled client-side).
+    // This is the body half that mounts inside the Sheet popup: the visible
+    // heading is an <h2> and the close control carries aria-label="Close".
+    // The dialog shell (role="dialog"; Base UI emits no aria-modal) is portaled
+    // client-side and covered by the happy-dom open-state tests + CDP.
     expect(html).toContain('<h2');
     expect(html).toContain('Core PCE Price Index');
     expect(html).toContain('aria-label="Close"');
