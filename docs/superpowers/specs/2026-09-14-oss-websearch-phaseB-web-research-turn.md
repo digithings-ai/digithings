@@ -91,7 +91,10 @@ implementation for the prompt/citation loop only, not vendored code):
    mirroring EXA's `costDollars` / `usage` reporting. Cost `total` is
    advisory-only: OSS reports `{total: 0.0, provider, breakdown, note}` and
    `total` MUST NOT drive budget/routing gates alone (per R6 below); any
-   comparison copy MUST say "OSS total excludes LLM spend".
+   comparison copy MUST say "OSS total excludes LLM spend". The R6 follow-up
+   scoring spec landed 2026-09-16 (#4251):
+   `2026-09-16-oss-websearch-effort-scoring.md` (the three-axis metric +
+   per-effort budget rule).
 
 **EXA stays** as the paid alternative behind the same `WebSearchData`
 interface (`digisearch/web_exa.py` untouched). OSS synthesis output MUST be
@@ -111,10 +114,16 @@ interface (`digisearch/web_exa.py` untouched). OSS synthesis output MUST be
   `usage{agentComputeUnits, searches, emails, phoneNumbers}` +
   `costDollars{total: 0.2642, agentCompute, search, ...}` (~$0.26 deep run
   vs ~$0.007–0.012 shallow). Hence effort modes + advisory cost/latency
-  fields. All dollar figures and `/tmp/exa-review/` fixtures are
-  single-key, single-day scaffolding anchors for Task 6 harness shape —
-  NOT SLO constants; Task 6 records per-environment re-measurements before
-  any SLO is written from them.
+  fields. All dollar figures are single-key, single-day scaffolding anchors
+  for Task 6 harness shape — NOT SLO constants. Re-measured 2026-09-16
+  (#4252, same battery): shallow per-call prices unchanged ($0.007 search /
+  $0.012 deep-structured / $0.003 contents / $0.005 answer / $0.007 similar);
+  deep agent run `total: 0.0887` (agentCompute 0.0647 + search 0.024) — 3.0x
+  below the original sample, and two single samples cannot distinguish a
+  price change from step-count variance, so the deep anchor stays
+  **provisional**. Raw receipt:
+  `2026-09-16-oss-websearch-exa-remeasure-anchors.json`; re-measure per
+  environment before any SLO is written from these numbers.
 
 **Consolidation with prior web-search plans (no contradictions):**
 
@@ -1369,7 +1378,10 @@ web-branch suite lives in `tests/ds/`, and both are wired via `pytest.ini`.
 The live gate is SCAFFOLDING: its dollar/latency anchors are single-key,
 single-day samples (see Goal), not SLO constants — Step 4 MUST re-measure
 per environment and record the numbers with date/key-tier before any SLO is
-written. ARCH edit per file list (no code-doc drift: every named interface
+written. Re-measured 2026-09-16 (#4252, receipt:
+`2026-09-16-oss-websearch-exa-remeasure-anchors.json`): shallow prices held,
+deep anchor is 3.0x below the 2026-09-14 sample and stays provisional.
+ARCH edit per file list (no code-doc drift: every named interface
 matches Tasks 0–5, including the #3859 supersession note from R5).
 
 - [ ] **Step 4: Run all gates to verify they pass**
@@ -1406,7 +1418,8 @@ carries measured numbers; OSS/EXA interchange proven by rendering one OSS
    high, C/D bound to must-hide-UNVERIFIED (T4) ✓; effort modes (T1)
    + advisory-only cost/latency accounting (`{total: 0.0, provider,
    breakdown, note}`, no `total`-alone gates) with live scaffolding
-   anchors (re-measured per environment, never SLOs) (T2+T6) ✓;
+   anchors re-measured 2026-09-16 (#4252 receipt; deep provisional,
+   never SLOs) (T2+T6) ✓;
    `WebSearchData` interchange so EXA stays a drop-in paid alternative
    (Goal + T3–T5; envelope split R1: landed `WebSearchResult` retrieval
    rows, `WebSearchData` output envelope; `format_web_results` Title/URL-only

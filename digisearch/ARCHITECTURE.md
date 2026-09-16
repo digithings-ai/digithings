@@ -362,7 +362,7 @@ web_aggregate   digillm synthesis over the cited pages handed back in
 | `results` | EXA hits (`{title,url,highlights[]/text,…}`) | cited web hits `{title,url,snippet,score,engine}` (`snippet`, never `highlights`) |
 | `output` | `{text, structured, grounding}` | markdown: `{text}`; structured: `{content, grounding[{field,citations[{url,title,excerpt}],confidence}], text}` |
 | `search_type` | `instant`\|`fast`\|`auto`\|`deep-lite`\|`deep`\|`deep-reasoning` | `web-fast` \| `web-thorough` |
-| `cost_dollars` | metered dollars (e.g. `{total: 0.012}`) | `{total: 0.0, provider: "web-oss", breakdown, note}` — advisory-only |
+| `cost_dollars` | metered dollars (e.g. `{total: 0.012}`) | `{total: 0.0, provider: "web-oss", breakdown, note}` — advisory-only; "OSS total excludes LLM spend" |
 
   `format_web_results` renders EXA `highlights`/`text`; OSS `snippet` rows
   therefore degrade to Title/URL-only lines (never a crash), which is why the
@@ -395,7 +395,13 @@ web_aggregate   digillm synthesis over the cited pages handed back in
   llm_calls}, note}` and `WebSearchData.search_type` is `"web-<effort>"`.
   **`total` MUST NOT drive budget/routing gates alone** — OSS synthesis has
   no metered per-call dollar cost and LLM spend is metered in digillm
-  telemetry, never folded in (the `note` says exactly that).
+  telemetry, never folded in (the `note` says exactly that). Budget/routing
+  gates combine stage-ms with the digillm telemetry counts
+  (`breakdown.llm_calls > 0` ⇒ consult the `CallPurpose.WEB_SEARCH` counters;
+  treat them as UNKNOWN — fail open + log — never as $0 when absent), budgets
+  are declared per effort preset, and no backend choice is cheapest-total-wins;
+  the three-axis effort-normalized rule is
+  `docs/superpowers/specs/2026-09-16-oss-websearch-effort-scoring.md` (#4251).
 - **Ops notes:** `DIGISEARCH_SYNTHESIS_MODEL` must be set to a digillm model
   id or every web turn fails hard with `WebResearchError` (never an uncited
   answer). The branch requires the `[rerank]` extra (sentence-transformers
@@ -423,6 +429,12 @@ web_aggregate   digillm synthesis over the cited pages handed back in
   the shared `DIGISEARCH_WEB_SEARCH_LIVE=1` gate runs the live-sampled leg
   and prints p50 stage ms + citation coverage. Live dollar/latency numbers
   are single-key, single-day scaffolding anchors — never SLO constants.
+  Re-measured 2026-09-16 (#4252): shallow per-call prices held
+  ($0.007 search / $0.012 deep-structured / $0.003 contents / $0.005 answer),
+  while the deep agent-run anchor came in 3.0x below its 2026-09-14 sample
+  ($0.0887 vs $0.2642) and stays provisional — two single samples cannot
+  separate price change from step-count variance (receipt:
+  `docs/superpowers/specs/2026-09-16-oss-websearch-exa-remeasure-anchors.json`).
 
 Phase B live verification record (2026-09-15, #4064 Task 6 — not measured,
 prerequisites absent in this env):
