@@ -288,21 +288,34 @@ def _invoke_shallow_recall(
     category: str | None,
     include_domains: list[str] | None,
     exclude_domains: list[str] | None,
+    offset: int = 0,
 ) -> WebSearchData:
     """Call the shallow recall leg directly in-process and return ``WebSearchData``.
 
     EXA when configured; otherwise the OSS seam with ``recency_days=None`` (R5)
     and the R6 clamp, adapted through :func:`_oss_response_to_data` (R3). The
     EXA-only ``search_type``/``category`` knobs are passed only to EXA.
+
+    ``offset`` threads the #4234 paging contract through this third
+    ``exa_search`` call site (#4241). Watches carry no paging config, so
+    :func:`run_watch` always takes the default ``offset=0`` — the unpaged call,
+    byte-identical to before. The OSS leg has no offset (``WebSearchRequest``
+    has no such field): a nonzero ``offset`` there raises rather than silently
+    serving page 1.
     """
     if is_exa_configured():
         return exa_search(
             query,
             search_type=cast(ExaSearchType, search_type),
             num_results=num_results,
+            offset=offset,
             category=category,
             include_domains=include_domains,
             exclude_domains=exclude_domains,
+        )
+    if offset != 0:
+        raise ValueError(
+            f"offset is EXA-only (got {offset}): the OSS web_search seam has no offset"
         )
     response = search_web(
         WebSearchRequest(

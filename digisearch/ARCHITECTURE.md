@@ -461,10 +461,10 @@ default:** every entry point fails closed without `EXA_API_KEY` (503 / disabled 
 
 | Surface | Shape |
 |---------|-------|
-| `POST /v1/digisearch_web_search` | `search_type` instant\|fast\|auto\|deep-lite\|deep\|deep-reasoning, `category`, `contents_text`, `output_schema`, `system_prompt` → `WebSearchData{results, output, search_type, cost_dollars}` (mounted here — not `/v1/web_search` — because the first-party search above owns that route) |
+| `POST /v1/digisearch_web_search` | `search_type` instant\|fast\|auto\|deep-lite\|deep\|deep-reasoning, `num_results` (1-100), `offset`, `category`, `contents_text`, `output_schema`, `system_prompt` → `WebSearchData{results, output, search_type, cost_dollars}` (mounted here — not `/v1/web_search` — because the first-party search above owns that route); `offset` pages like the MCP row below — a window past `EXA_MAX_RESULTS` is 400 with the explicit `ExaPageOutOfRangeError` message, a negative offset is 422 (#4241) |
 | `POST /v1/web_contents` | Known-URL fetch (`text`/`highlights`/`summary`) |
 | `POST /v1/web_answer` | Grounded answer with citations |
-| Orchestrator `digisearch_web_search` | Advertised in the manifest only when `EXA_API_KEY` is set; dispatched via `POST /v1/orchestrator_invoke` |
+| Orchestrator `digisearch_web_search` | Advertised in the manifest only when `EXA_API_KEY` is set; dispatched via `POST /v1/orchestrator_invoke`. `offset` is in the manifest schema and forwarded by the invoke branch; an out-of-range page is `ok:false` carrying the explicit cap error, never a truncated page (#4241) |
 | MCP `digisearch_web_search` | `query`, `search_type`, `num_results`, `category`, `offset` → formatted text. `offset` pages the recall set (client-side slice of one enlarged window, `numResults = offset + num_results`, because EXA `POST /search` has no offset); cap `EXA_MAX_RESULTS` = 100 pinned by the monitors 1-100 bound; a page reaching past the cap errors explicitly (never a silent truncated page) and a page past the query's result count returns an explicit empty page (#4234) |
 
 Auth: same `digisearch:query` scope via `DigiAuthMiddleware` (default path rule; no digikey change).
@@ -624,8 +624,11 @@ in-process (no loopback HTTP, no bearer token — R2): EXA when configured, else
 `max_results=min(num_results, 10)` (R6); the OSS leg is adapted to the canonical
 `WebSearchData` payload via `_oss_response_to_data`, and the run's
 `query_snapshot` records the effective `num_results` plus
-`num_results_clamped_from` when the clamp applied. Storage, dedup, and tick
-semantics are in §5.
+`num_results_clamped_from` when the clamp applied. `_invoke_shallow_recall` also
+accepts the #4234 `offset` (EXA-only) for call-site parity (#4241), but watches
+carry no paging config — `run_watch` always takes the default `offset=0`
+(byte-identical), and the OSS leg raises on a nonzero offset instead of silently
+serving page 1. Storage, dedup, and tick semantics are in §5.
 
 #### Phase D websets (`/v1/websets`, #4066)
 

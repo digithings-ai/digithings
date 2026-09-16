@@ -409,7 +409,9 @@ def build_web_search_tool() -> OpenAIToolDict:
                 "Use for current events, competitors, companies/people, papers, "
                 "or anything outside ingested documents. Dormant without EXA_API_KEY. "
                 "Supports search_type instant|fast|auto|deep-lite|deep|deep-reasoning, "
-                "category/company|people|publication|news, and outputSchema synthesis."
+                "category/company|people|publication|news, outputSchema synthesis, "
+                "and offset paging over one enlarged result window (EXA caps "
+                "numResults at 100; a page past the cap errors explicitly)."
             ),
             "parameters": {
                 "type": "object",
@@ -423,6 +425,15 @@ def build_web_search_tool() -> OpenAIToolDict:
                     "num_results": {
                         "type": "integer",
                         "description": "Results to return (1-100, default 8).",
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": (
+                            "Page start over one enlarged window (default 0 = unpaged). "
+                            "offset + num_results must stay within the 100-result EXA cap; "
+                            "a page past the cap returns an explicit error, never a "
+                            "silently truncated page."
+                        ),
                     },
                     "category": {
                         "type": "string",

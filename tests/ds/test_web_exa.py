@@ -228,3 +228,105 @@ def test_search_negative_offset_rejected(monkeypatch):
     with pytest.raises(ValueError, match="offset"):
         web_exa.exa_search("q", offset=-1)
     assert "payloads" not in seen
+
+
+# --- HTTP route (#4241): offset on POST /v1/digisearch_web_search ---------------
+
+
+def test_route_default_offset_is_byte_identical(monkeypatch):
+    """The default call and an explicit ``offset=0`` are the same request/response."""
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    seen: dict = {}
+    _patch_exa_post(monkeypatch, _page_results(16), seen)
+    client = TestClient(app, headers=auth_headers())
+    default = client.post("/v1/digisearch_web_search", json={"query": "q", "num_results": 8})
+    explicit = client.post(
+        "/v1/digisearch_web_search", json={"query": "q", "num_results": 8, "offset": 0}
+    )
+    assert default.status_code == 200, default.text
+    assert default.content == explicit.content
+    assert seen["payloads"][0] == seen["payloads"][1]
+    assert seen["payload"]["numResults"] == 8
+    assert "offset" not in seen["payload"]
+
+
+def test_route_page2_is_deterministic_and_non_overlapping(monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    seen: dict = {}
+    _patch_exa_post(monkeypatch, _page_results(16), seen)
+    client = TestClient(app, headers=auth_headers())
+    page1 = client.post("/v1/digisearch_web_search", json={"query": "q", "num_results": 8})
+    page2 = client.post(
+        "/v1/digisearch_web_search", json={"query": "q", "num_results": 8, "offset": 8}
+    )
+    assert page1.status_code == 200, page1.text
+    assert page2.status_code == 200, page2.text
+    urls1 = [r["url"] for r in page1.json()["results"]]
+    urls2 = [r["url"] for r in page2.json()["results"]]
+    assert urls1 == [f"https://example.com/{i}" for i in range(1, 9)]
+    assert urls2 == [f"https://example.com/{i}" for i in range(9, 17)]
+    # One enlarged window on the wire; the page is sliced client-side.
+    assert [p["numResults"] for p in seen["payloads"]] == [8, 16]
+
+
+def test_route_window_past_the_cap_is_400_explicit(monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    seen: dict = {}
+    _patch_exa_post(monkeypatch, _page_results(100), seen)
+    client = TestClient(app, headers=auth_headers())
+    resp = client.post(
+        "/v1/digisearch_web_search", json={"query": "q", "num_results": 8, "offset": 95}
+    )
+    assert resp.status_code == 400, resp.text
+    assert "cap" in resp.text
+    assert "100" in resp.text
+    # Refused before any EXA POST — never a silently truncated page.
+    assert "payloads" not in seen
+
+
+def test_route_offset_beyond_the_cap_is_400_explicit(monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    seen: dict = {}
+    _patch_exa_post(monkeypatch, _page_results(100), seen)
+    client = TestClient(app, headers=auth_headers())
+    resp = client.post("/v1/digisearch_web_search", json={"query": "q", "offset": 100})
+    assert resp.status_code == 400, resp.text
+    assert "100" in resp.text
+    assert "payloads" not in seen
+
+
+def test_route_negative_offset_is_422(monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    client = TestClient(app, headers=auth_headers())
+    resp = client.post("/v1/digisearch_web_search", json={"query": "q", "offset": -1})
+    assert resp.status_code == 422, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "validation_error"
+    # The envelope flattens the field path; the ge=0 bound is still explicit.
+    assert "greater than or equal to 0" in error["message"]
+
+
+def test_route_last_page_at_the_cap_is_reachable(monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    seen: dict = {}
+    _patch_exa_post(monkeypatch, _page_results(100), seen)
+    client = TestClient(app, headers=auth_headers())
+    resp = client.post(
+        "/v1/digisearch_web_search", json={"query": "q", "num_results": 8, "offset": 92}
+    )
+    assert resp.status_code == 200, resp.text
+    assert seen["payload"]["numResults"] == 100
+    urls = [r["url"] for r in resp.json()["results"]]
+    assert urls == [f"https://example.com/{i}" for i in range(93, 101)]
+
+
+# --- Orchestrator manifest (#4241): offset advertised in the invoke schema ------
+
+
+def test_manifest_web_search_exposes_offset():
+    tool = build_web_search_tool()
+    props = tool["function"]["parameters"]["properties"]
+    assert props["offset"]["type"] == "integer"
+    assert "100" in props["offset"]["description"]
+    # required stays query-only: offset is optional and defaults to the unpaged call.
+    assert tool["function"]["parameters"]["required"] == ["query"]
