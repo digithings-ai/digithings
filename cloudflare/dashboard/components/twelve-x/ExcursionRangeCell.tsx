@@ -8,7 +8,8 @@ import { formatHoldPct } from '@/lib/twelve-x/trade-history';
  * daily closes); the ink marker is the hold return, also scored from daily
  * closes. All three share one
  * axis running from the low extreme through 0 (entry — the accent tick) to
- * the high extreme. Display-only: levels never drive lifecycle scoring.
+ * the high extreme. Display-only: renders the stored excursion and close
+ * marks; level touches are scored upstream.
  */
 export default function ExcursionRangeCell({
   maxAdverse,

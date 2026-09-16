@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { Button } from "@digithings/web/ui";
 import { ToastStack, type ToastItem, type ToastTone } from "@digithings/web";
 
 /**
@@ -12,6 +13,9 @@ import { ToastStack, type ToastItem, type ToastTone } from "@digithings/web";
  * Consumes the shared <ToastStack/> primitive from @digithings/web — the
  * toast LIST stays app-owned (this demo's push/deploy state), the primitive
  * only renders it and fires onDismiss.
+ *
+ * Wave 1: the trigger row is the stock kit Button — ghost for the tone demos,
+ * default for the deploy action.
  */
 let counter = 0;
 
@@ -62,12 +66,12 @@ export function ToastStackReference() {
       </p>
 
       <div className="mt-[1.3rem] flex flex-wrap gap-[0.7rem]">
-        <button type="button" className="btn-ghost" onClick={() => push("success", "Backtest complete", "PF 2.31 · saved to vault")}>
+        <Button type="button" variant="ghost" onClick={() => push("success", "Backtest complete", "PF 2.31 · saved to vault")}>
           Success
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="btn-ghost"
+          variant="ghost"
           onClick={() =>
             push("error", "Run failed", "digikey token expired — reissue", 4200, {
               label: "Reissue",
@@ -76,13 +80,13 @@ export function ToastStackReference() {
           }
         >
           Error
-        </button>
-        <button type="button" className="btn-ghost" onClick={() => push("info", "New data", "3,102 ETH-USD bars indexed")}>
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => push("info", "New data", "3,102 ETH-USD bars indexed")}>
           Info
-        </button>
-        <button type="button" className="btn-primary" onClick={deploy}>
+        </Button>
+        <Button type="button" onClick={deploy}>
           Deploy (loading → done)
-        </button>
+        </Button>
       </div>
 
       <ToastStack toasts={toasts} onDismiss={dismiss} />

@@ -1,7 +1,8 @@
 /**
  * Pure assembly for the Trades history table: full idea rows joined to
  * lifecycle eval rows. Close-based verdicts plus excursion (bias) and
- * level-touch outputs; levels never drive lifecycle scoring.
+ * level-touch outputs; a touched level can close the trade and set the
+ * measured grade basis.
  */
 import type { FxIdeaEvalRow, FxLevelProvenance, FxTradeIdeaRow } from './types';
 import { formatLevelValue, hasTradeLevels, parseTradeLevels } from './trade-levels';

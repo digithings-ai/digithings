@@ -2,11 +2,21 @@
 
 import type { FormEvent } from "react";
 
+import { Button as LayerButton } from "@digithings/web";
+import { Input, Label } from "@digithings/web/ui";
+
 /**
  * Payment band — a checkout pairing: card form on the left, plan receipt on the
  * right. Every charge is a hairline row with a mono figure and only the total
  * spends full ink; the loading state reuses the house spinner button rather than
  * anything bespoke. An interactive display template.
+ *
+ * Wave 1: card fields are the stock kit — Input/Label from
+ * `@digithings/web/ui`; the block field spacing is call-site grammar. The
+ * button pair stays on the `@digithings/web` controls layer: the processing
+ * state needs its `loading` spinner, so both actions wear that one dress
+ * rather than mixing generations inside the row. The old field dress is
+ * gone.
  */
 
 function preventSubmit(event: FormEvent<HTMLFormElement>) {
@@ -26,15 +36,14 @@ export function PaymentBand() {
 
       <div className="mt-[1.2rem] grid grid-cols-[minmax(0,1fr)_320px] items-start gap-[1.2rem] max-[900px]:grid-cols-1">
         <form className="acct-pay-form" onSubmit={preventSubmit} noValidate>
-          <div className="acct-field">
-            <label
-              className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+          <div className="flex flex-col gap-[0.35rem]">
+            <Label
+              className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
               htmlFor="pay-name"
             >
               Cardholder
-            </label>
-            <input
-              className="acct-input"
+            </Label>
+            <Input
               id="pay-name"
               name="cardholder"
               type="text"
@@ -42,15 +51,14 @@ export function PaymentBand() {
               autoComplete="off"
             />
           </div>
-          <div className="acct-field">
-            <label
-              className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+          <div className="mt-[0.85rem] flex flex-col gap-[0.35rem]">
+            <Label
+              className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
               htmlFor="pay-card"
             >
               Card number
-            </label>
-            <input
-              className="acct-input"
+            </Label>
+            <Input
               id="pay-card"
               name="card-number"
               type="text"
@@ -61,15 +69,14 @@ export function PaymentBand() {
             />
           </div>
           <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-[0.8rem]">
-            <div className="acct-field">
-              <label
-                className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+            <div className="flex flex-col gap-[0.35rem]">
+              <Label
+                className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
                 htmlFor="pay-expiry"
               >
                 Expiry
-              </label>
-              <input
-                className="acct-input"
+              </Label>
+              <Input
                 id="pay-expiry"
                 name="expiry"
                 type="text"
@@ -79,15 +86,14 @@ export function PaymentBand() {
                 autoComplete="off"
               />
             </div>
-            <div className="acct-field">
-              <label
-                className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+            <div className="flex flex-col gap-[0.35rem]">
+              <Label
+                className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
                 htmlFor="pay-cvc"
               >
                 CVC
-              </label>
-              <input
-                className="acct-input"
+              </Label>
+              <Input
                 id="pay-cvc"
                 name="cvc"
                 type="text"
@@ -99,13 +105,10 @@ export function PaymentBand() {
             </div>
           </div>
           <div className="mt-[1.2rem] flex flex-wrap items-center gap-[0.8rem]">
-            <button type="submit" className="btn-primary">
-              Pay $165.56
-            </button>
-            <button type="button" className="btn-primary btn-loading" disabled>
-              <span className="btn-spinner" aria-hidden="true" />
+            <LayerButton type="submit">Pay $165.56</LayerButton>
+            <LayerButton type="button" loading disabled>
               Processing…
-            </button>
+            </LayerButton>
           </div>
         </form>
 

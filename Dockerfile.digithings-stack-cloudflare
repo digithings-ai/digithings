@@ -77,6 +77,10 @@ COPY cloudflare/digithings-stack-cloudflare/container/supervisor/supervisord.con
 # image calls issubclass() on raw annotations, so PEP 563 string annotations
 # made :8765/:8769/:8766 crash at import and never bind. Full rebuild required
 # (wrangler caches the build context by Dockerfile hash).
+# Rebuild marker v7 (2026-09-16): bakes #4223's config-driven hosted MCP changes
+# (entrypoint.sh, digigraph/src, infra/digichat-release/config/digiproject.yaml).
+# Rebuild marker v6 (2026-09-16): forces a full rebuild for digigraph/src-only
+# changes (wrangler caches the build context by Dockerfile hash).
 # Rebuild marker v5 (2026-09-16): bakes the zammad__* tools into the digiproject
 # allowlist (agents.allowed_tools) so digigraph exposes them in the OCC chat.
 # Rebuild marker v4 (2026-09-16): ships the mcp 1.9.x transport-security guard so

@@ -1,8 +1,14 @@
 "use client";
 
+import { Button } from "@digithings/web/ui";
+
 /**
  * Session — signed-in identity plus a quiet Sign out control. Same card grammar
  * as login: mark, mono meta, one hairline, one ghost action. Display template.
+ *
+ * Wave 1: the Sign out action is the stock kit Button from `@digithings/web/ui`
+ * (`variant="outline"`, full width via call-site utilities — the old
+ * block-button override is gone).
  */
 
 export function SessionCard() {
@@ -28,9 +34,9 @@ export function SessionCard() {
         <p className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute">
           github · workspace free
         </p>
-        <button type="button" className="btn-ghost acct-btn-block">
+        <Button type="button" variant="outline" className="mt-[1.1rem] w-full">
           Sign out
-        </button>
+        </Button>
       </div>
     </section>
   );

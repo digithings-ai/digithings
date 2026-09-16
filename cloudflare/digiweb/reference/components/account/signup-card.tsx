@@ -2,9 +2,18 @@
 
 import { useState, type FormEvent } from "react";
 
+import { Checkbox } from "@digithings/web";
+import { Button, Input, Label, Separator } from "@digithings/web/ui";
+
 /**
  * Sign-up — the account-creation card, same grammar as sign-in with a live
  * password-strength meter and OAuth fallbacks (Google / GitHub) under a hairline.
+ *
+ * Wave 1: fields are the stock kit — Input/Label/Separator/Button from
+ * `@digithings/web/ui`; the terms row pairs a `@digithings/web` controls-layer
+ * Checkbox with a Label (the form-fields grammar). The strength meter keeps
+ * its four-segment grid on call-site utilities; the terms/checkbox dress and
+ * the `.acct-*` field dress are gone.
  */
 
 const STRENGTH_WORDS = ["", "weak", "fair", "good", "strong"] as const;
@@ -61,24 +70,25 @@ export function SignupCard() {
             <p className="mt-2 text-[0.88rem] leading-[1.45] text-ink-soft">
               Google or GitHub to start. Email if you would rather keep a password.
             </p>
-            <button type="button" className="btn-primary acct-btn-block">
+            <Button type="button" className="mt-[1.1rem] w-full">
               Continue with Google
-            </button>
-            <button type="button" className="btn-ghost acct-btn-block">
+            </Button>
+            <Button type="button" variant="outline" className="mt-[1.1rem] w-full">
               Continue with GitHub
-            </button>
-            <div className="acct-divider">
+            </Button>
+            <div className="my-4 flex items-center gap-[0.7rem] font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute">
+              <Separator className="h-px flex-1" />
               <span>or email</span>
+              <Separator className="h-px flex-1" />
             </div>
-            <div className="acct-field" style={{ marginTop: 0 }}>
-              <label
-                className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+            <div className="flex flex-col gap-[0.35rem]">
+              <Label
+                className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
                 htmlFor="signup-oauth-email"
               >
                 Email
-              </label>
-              <input
-                className="acct-input"
+              </Label>
+              <Input
                 id="signup-oauth-email"
                 name="email"
                 type="email"
@@ -86,15 +96,14 @@ export function SignupCard() {
                 autoComplete="off"
               />
             </div>
-            <div className="acct-field">
-              <label
-                className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+            <div className="mt-[0.85rem] flex flex-col gap-[0.35rem]">
+              <Label
+                className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
                 htmlFor="signup-oauth-password"
               >
                 Password
-              </label>
-              <input
-                className="acct-input"
+              </Label>
+              <Input
                 id="signup-oauth-password"
                 name="password"
                 type="password"
@@ -102,9 +111,9 @@ export function SignupCard() {
                 autoComplete="off"
               />
             </div>
-            <button type="submit" className="btn-ghost acct-btn-block">
+            <Button type="submit" variant="outline" className="mt-[1.1rem] w-full">
               Create account with email
-            </button>
+            </Button>
           </form>
         </div>
 
@@ -117,82 +126,85 @@ export function SignupCard() {
             onSubmit={preventSubmit}
             noValidate
           >
-          <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
-            digithings <span className="text-ink-mute">· create account</span>
-          </p>
-          <div className="acct-field">
-            <label
-              className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
-              htmlFor="signup-email"
-            >
-              Email
-            </label>
-            <input
-              className="acct-input"
-              id="signup-email"
-              name="email"
-              type="email"
-              placeholder="you@desk.tld"
-              autoComplete="off"
-            />
-          </div>
-          <div className="acct-field">
-            <label
-              className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
-              htmlFor="signup-password"
-            >
-              Password
-            </label>
-            <input
-              className="acct-input"
-              id="signup-password"
-              name="password"
-              type="password"
-              placeholder="8+ chars, mixed case, a digit"
-              autoComplete="off"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              aria-describedby="signup-strength"
-            />
-            <div className="mt-2 flex items-center gap-[0.7rem]">
-              <div
-                className="grid flex-1 grid-cols-[repeat(4,minmax(0,1fr))] gap-[6px]"
-                aria-hidden="true"
+            <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
+              digithings <span className="text-ink-mute">· create account</span>
+            </p>
+            <div className="mt-[0.85rem] flex flex-col gap-[0.35rem]">
+              <Label
+                className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+                htmlFor="signup-email"
               >
-                {[0, 1, 2, 3].map((index) => (
-                  <span
-                    key={index}
-                    className="acct-strength-seg"
-                    style={index < score ? { background: STRENGTH_COLORS[score] } : undefined}
-                  />
-                ))}
-              </div>
-              <span
-                className="min-w-[3.6rem] text-right font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
-                id="signup-strength"
-                role="status"
-              >
-                {STRENGTH_WORDS[score] || "—"}
-              </span>
+                Email
+              </Label>
+              <Input
+                id="signup-email"
+                name="email"
+                type="email"
+                placeholder="you@desk.tld"
+                autoComplete="off"
+              />
             </div>
-          </div>
-          <label className="acct-terms" htmlFor="signup-terms">
-            <input id="signup-terms" name="terms" type="checkbox" />
-            <span>I accept the terms — and the audit log that comes with them.</span>
-          </label>
-          <button type="submit" className="btn-primary acct-btn-block">
-            Create account
-          </button>
-          <div className="acct-divider">
-            <span>or</span>
-          </div>
-          <button type="button" className="btn-ghost acct-btn-block">
-            Continue with Google
-          </button>
-          <button type="button" className="btn-ghost acct-btn-block">
-            Continue with GitHub
-          </button>
-        </form>
+            <div className="mt-[0.85rem] flex flex-col gap-[0.35rem]">
+              <Label
+                className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+                htmlFor="signup-password"
+              >
+                Password
+              </Label>
+              <Input
+                id="signup-password"
+                name="password"
+                type="password"
+                placeholder="8+ chars, mixed case, a digit"
+                autoComplete="off"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                aria-describedby="signup-strength"
+              />
+              <div className="mt-2 flex items-center gap-[0.7rem]">
+                <div
+                  className="grid flex-1 grid-cols-[repeat(4,minmax(0,1fr))] gap-[6px]"
+                  aria-hidden="true"
+                >
+                  {[0, 1, 2, 3].map((index) => (
+                    <span
+                      key={index}
+                      className="h-[3px] bg-[color-mix(in_srgb,var(--ink-mute)_22%,transparent)] transition-[background] duration-[250ms] ease-[var(--ease)]"
+                      style={index < score ? { background: STRENGTH_COLORS[score] } : undefined}
+                    />
+                  ))}
+                </div>
+                <span
+                  className="min-w-[3.6rem] text-right font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+                  id="signup-strength"
+                  role="status"
+                >
+                  {STRENGTH_WORDS[score] || "—"}
+                </span>
+              </div>
+            </div>
+            <Label
+              className="mt-4 flex cursor-pointer items-start gap-2 font-mono text-[0.68rem] leading-[1.5] text-ink-soft"
+              htmlFor="signup-terms"
+            >
+              <Checkbox className="mt-[2px]" id="signup-terms" name="terms" />
+              <span>I accept the terms — and the audit log that comes with them.</span>
+            </Label>
+            <Button type="submit" className="mt-[1.1rem] w-full">
+              Create account
+            </Button>
+            <div className="my-4 flex items-center gap-[0.7rem] font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute">
+              <Separator className="h-px flex-1" />
+              <span>or</span>
+              <Separator className="h-px flex-1" />
+            </div>
+            <Button type="button" variant="outline" className="mt-[1.1rem] w-full">
+              Continue with Google
+            </Button>
+            <Button type="button" variant="outline" className="mt-[1.1rem] w-full">
+              Continue with GitHub
+            </Button>
+          </form>
         </div>
       </div>
     </section>
