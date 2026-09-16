@@ -31,13 +31,15 @@ import {
  *     → call-site row wrapping the kit Input inside DropdownMenuContent
  *   .dd-scroll/.dd-group/.dd-group-label
  *     → DropdownMenuContent scrolls; DropdownMenuGroup + DropdownMenuLabel
+ *   .dd-menu → DropdownMenuContent (the pane surface/positioning)
  *   .dd-option (+ .dd-dot/.dd-opt-note/.dd-metric/.dd-check)
  *     → DropdownMenuRadioItem (+ DropdownMenuShortcut for the metric)
+ *   .dd-opt-label → plain markup (no stock equivalent needed)
  *   .dd-empty → call-site paragraph (no stock empty part)
  *   .dd-footer/.dd-footer-action → DropdownMenuSeparator + DropdownMenuItem
- * Base UI menu items keep the menu open on click by default, so every pick
- * carries `closeOnClick` — the old pane closed on choice and on the footer
- * action.
+ * Base UI radio items keep the menu open on pick by default (plain menu
+ * items close), so every RadioItem carries `closeOnClick` to match the old
+ * pane's close-on-choice; the footer action likewise closes.
  */
 type Option = { id: string; group: string; label: string; note: string; pf: string; livery: string };
 

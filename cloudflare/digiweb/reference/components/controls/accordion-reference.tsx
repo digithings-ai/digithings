@@ -66,10 +66,10 @@ export function AccordionReference() {
               <span>{it.q}</span>
               <span
                 aria-hidden="true"
-                className="size-2 shrink-0 rotate-45 border-r-[1.6px] border-b-[1.6px] border-current transition-transform duration-300 group-data-open:-rotate-135"
+                className="size-2 shrink-0 rotate-45 border-r-[1.6px] border-b-[1.6px] border-current transition-transform duration-300 group-data-open:-rotate-135 motion-reduce:transition-none"
               />
             </CollapsibleTrigger>
-            <CollapsibleContent className="overflow-hidden transition-[height] duration-300 ease-out data-open:h-[var(--collapsible-panel-height)] data-starting-style:h-0 data-ending-style:h-0 data-closed:h-0">
+            <CollapsibleContent className="overflow-hidden transition-[height] duration-300 ease-out motion-reduce:transition-none data-open:h-[var(--collapsible-panel-height)] data-starting-style:h-0 data-ending-style:h-0 data-closed:h-0">
               <p className="m-0 max-w-[62ch] px-[1.1rem] pb-[1.1rem] text-[0.86rem] leading-[1.6] text-ink-soft">
                 {it.a}
               </p>
