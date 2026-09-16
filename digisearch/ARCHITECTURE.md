@@ -800,6 +800,16 @@ key-less CI green). Re-validating the translation against a Pro-tier key is a
 the Phase D live record does not claim it (tracked by the #4123 live-pin
 precedent).
 
+**EXA's hosted Websets API is a separate subscription surface.** digisearch
+deliberately implements its own "Websets-like" verified + enriched flow over the
+landed retrieve/verify/enrich seams (the `exa_websets` shim above is the paid
+alternative). EXA's hosted **Websets API** (`https://api.exa.ai/websets/v0`,
+same `EXA_API_KEY`) is **subscription-billed** — Free is limited to websets
+≤ 25 results, Core is $49/mo, Pro $449/mo, Enterprise custom
+([exa.ai/docs/websets/faq](https://exa.ai/docs/websets/faq),
+[websets.exa.ai/billing](https://websets.exa.ai/billing)) — and is not covered
+by the pay-as-you-go Exa Search credits `web_exa.py` relies on.
+
 **Deferred (explicitly out of v1).** Recall paging
 (count is reached by query diversification, `max_results ≤ 10` per call) and
 EXA-websets live validation + wiring (Pro key; tracked by the #4123 live-pin
