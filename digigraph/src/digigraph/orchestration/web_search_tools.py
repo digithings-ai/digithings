@@ -95,6 +95,7 @@ def call_digisearch_web_search(
     include_domains: list[str] | None = None,
     exclude_domains: list[str] | None = None,
     max_results: int = 4,
+    recency_days: int | None = None,
     context: ToolContext | None = None,
     timeout: float = 120.0,
 ) -> dict[str, Any]:
@@ -102,13 +103,15 @@ def call_digisearch_web_search(
 
     Thin delegation to :func:`_call_digisearch_web_search` — external callers
     (digiquant pipeline grounding) import this, never the private name.
-    ``timeout`` bounds the single hub HTTP call.
+    ``timeout`` bounds the single hub HTTP call. ``recency_days`` is forwarded
+    only when set, so ``None`` keeps digisearch's own default window (#4165).
     """
     return _call_digisearch_web_search(
         query,
         include_domains=include_domains,
         exclude_domains=exclude_domains,
         max_results=max_results,
+        recency_days=recency_days,
         context=context,
         timeout=timeout,
     )
@@ -119,6 +122,7 @@ def _call_digisearch_web_search(
     include_domains: list[str] | None = None,
     exclude_domains: list[str] | None = None,
     max_results: int = 4,
+    recency_days: int | None = None,
     context: ToolContext | None = None,
     timeout: float = 120.0,
 ) -> dict[str, Any]:
@@ -137,15 +141,21 @@ def _call_digisearch_web_search(
     from digigraph.vertical_orchestrator.digisearch_hub import invoke_digisearch_tool
 
     index_name = getattr(context, "index_name", None) or "default"
+    arguments: dict[str, Any] = {
+        "query": query,
+        "include_domains": _as_str_list(include_domains),
+        "exclude_domains": _as_str_list(exclude_domains),
+        "max_results": max_results,
+    }
+    if recency_days is not None:
+        # Omitted when unset: digisearch's WebSearchRequest defaults to 7, so a
+        # caller that never asked keeps the default window — the hub skips a
+        # JSON null rather than forwarding it (#4165).
+        arguments["recency_days"] = recency_days
     inv = invoke_digisearch_tool(
         _digisearch_service_base(),
         "web_search",
-        {
-            "query": query,
-            "include_domains": _as_str_list(include_domains),
-            "exclude_domains": _as_str_list(exclude_domains),
-            "max_results": max_results,
-        },
+        arguments,
         default_index_name=index_name,
         bearer_token=_digi_bearer_from_context(context) if context is not None else None,
         request_id=getattr(context, "request_id", None),
