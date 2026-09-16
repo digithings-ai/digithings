@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Reveal } from "@digithings/web";
+import { buttonVariants } from "@digithings/web/ui";
 import { DtFooter } from "@/components/DtFooter";
 import { Mono, PageHead } from "../_company/prose";
 import { DtNav } from "@/components/DtNav";
@@ -217,18 +218,18 @@ export default function AboutPage() {
               </p>
             </Reveal>
             <div className="flex flex-wrap gap-[0.8rem]">
-              <Link className="btn btn-primary" href="/docs">
+              <Link className={buttonVariants({ variant: "default" })} href="/docs">
                 Read the docs <span aria-hidden="true">→</span>
               </Link>
               <a
-                className="btn btn-ghost"
+                className={buttonVariants({ variant: "ghost" })}
                 href="https://github.com/digithings-ai/digithings"
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 Browse the repository
               </a>
-              <Link className="btn btn-ghost" href="/quality">
+              <Link className={buttonVariants({ variant: "ghost" })} href="/quality">
                 How it is tested
               </Link>
             </div>
