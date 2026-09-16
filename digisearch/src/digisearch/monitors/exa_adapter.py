@@ -1,56 +1,95 @@
 # score:allow untyped any
 # EXA payloads are dynamic remote JSON; Any is the honest annotation.
-"""Phase C EXA monitor adapter — EXPERIMENTAL, tier-gated, fail closed (#4065, Task 8c).
+"""Phase C EXA monitor adapter — live-pinned 2026-09-16, fail closed (#4065, #4123).
 
-EXPERIMENTAL — NOT LIVE-VALIDATED. The remote shapes used here are derived from
-observed EXA docs/error strings (2026-09-14), not from a live probe: the Task 8a
-spike was deferred because the operator's key tier observably rejects the
-monitor/websets family (paywall 401, the "Upgrade to a Pro plan" class). The
-create request shape (``search`` / ``trigger`` / ``webhook``), the run payload
-fields (``id`` / ``monitorId`` / ``status`` / ``createdAt`` / ``completedAt`` /
-``results`` / ``newResults``), and the observed validation messages (``[webhook]:
-Required``, ``[webhook.url]: ...localhost...``) are therefore provisional. A
-live-pin follow-up issue (#4123) tracks validation and reconciliation; there
-is deliberately no ``# PIN`` record in this docstring — the follow-up owns it,
-and nothing here may be treated as frozen.
+**PIN (observed 2026-09-16, real key).** The follow-up live probe
+(``.superpowers/sdd/4123-exa-shape-pin/spike-output-3.txt``) replaced this
+module's earlier EXPERIMENTAL assumptions: the monitors endpoints ARE
+accessible on the operator's key tier — create/list/get/trigger/runs/delete all
+answer 2xx, no 401/403 (the websets family stays Pro-gated). Pinned remote
+shapes:
 
-Fail-closed posture (never a silent OSS fallback): a missing API key, a
-tier-gated key (401/403), any other remote failure, or an untranslatable
-payload raises :class:`ExaAdapterError` carrying a stable ``code``:
+- ``POST /monitors`` (201). Request ``{"search": {"query": …}, "trigger":
+  {"type": "interval", "period": "1d"}, "webhook": {"url": …}}``; response
+  carries ``id/name/status/search/trigger/outputSchema/metadata/webhook/
+  nextRunAt/createdAt/updatedAt`` plus a one-time 32-char ``webhookSecret``.
+  ``GET /monitors`` and ``GET /monitors/{id}`` omit that secret; the list is
+  ``{"data": [...], "hasMore": false, "nextCursor": null}``.
+- ``POST /monitors/{id}/trigger`` (200) ``{"triggered": true}``.
+- ``GET /monitors/{id}/runs`` (200) paginated run objects (``id/monitorId/
+  status/output/failReason/startedAt/completedAt/failedAt/cancelledAt/
+  durationMs/createdAt/updatedAt``).
+- ``DELETE /monitors/{id}`` (200) returns the monitor object (not 204).
+
+Webhook deliveries are the NESTED event envelope ``{"id": "event_…",
+"object": "event", "type": "monitor.run.created" | "monitor.run.completed",
+"data": {<RUN>}, "createdAt": …}`` — the run lives under ``data`` (the flat
+shape this module originally assumed does not exist on the wire, and there is
+no ``newResults`` key in delivered payloads). Run ``output`` is ``null`` while
+running; on completion it is ``{"results": [{"id","url","publishedDate",
+"title","author?","image?"}], "content": "<answer with [n] markers>",
+"grounding": [{"field","citations","confidence"}]}``. Non-terminal events ARE
+delivered (``monitor.run.created`` with run ``status: "running"``), so the
+inbound route acks them 200 without persisting a run row.
+
+Delivery signature (live-verified 4/4, ``signature-check.txt``): header
+``exa-signature: t=<unix>,v1=<hex>`` where ``v1 = HMAC-SHA256(secret,
+f"{t}.{body}")`` (hex) and ``secret`` is the PER-MONITOR ``webhookSecret``
+(Stripe-style timestamped HMAC); other delivery headers are ``user-agent:
+Exa-Webhook/1.0`` and ``content-type: application/json``. EXA's own webhook URL
+validator rejects reserved documentation domains (``https://example.com/...`` →
+400 ``[webhook.url]: Webhook URL cannot point to localhost, .local domains, or
+private IP addresses``) while accepting e.g. ``https://httpbin.org/post``; that
+remote rule is EXA's and the stricter landed :func:`validate_delivery` SSRF gate
+stays as-is — this adapter documents the difference, it does not relax the gate.
+
+Fail-closed posture (never a silent OSS fallback): a missing API key, any remote
+failure, or an untranslatable payload raises :class:`ExaAdapterError` carrying a
+stable ``code``:
 
 - ``exa_not_configured`` — no explicit key and no ``EXA_API_KEY``.
-- ``exa_tier_gated`` — EXA answered 401/403 (paywall / unauthorized class).
-- ``exa_webhook_rejected`` — remote 4xx naming the ``[webhook…]`` field family;
-  the message is preserved verbatim.
 - ``exa_api_error`` — any other remote/transport failure.
 - ``exa_monitor_not_found`` — delete against a missing remote monitor.
 - ``exa_request_invalid`` — local caller input (blank query/schedule/id).
-- ``exa_payload_invalid`` — untranslatable webhook payload (missing/blank
-  ``status``, or a malformed ``results``/``newResults`` container);
-  ``exa_run_status_unknown`` — a non-terminal remote status.
-- ``exa_monitor_id_missing`` — webhook payload without a ``monitorId``.
+- ``exa_payload_invalid`` — a delivery that is not the pinned nested envelope
+  (missing/blank ``type``, missing/non-object ``data``, missing/blank run
+  ``status``) or that carries a malformed nested container (present-but-wrong
+  ``data.output`` / ``data.output.results``).
+- ``exa_run_status_unknown`` — a non-terminal remote run status (e.g.
+  ``running``); the route acks the pinned non-terminal event without persisting.
+- ``exa_monitor_id_missing`` — the nested run has no ``monitorId``.
+- ``exa_webhook_rejected`` — remote 4xx naming the ``[webhook…]`` field family;
+  the message is preserved verbatim.
+- ``exa_tier_gated`` — EXA answered 401/403 (paywall / unauthorized class);
+  observed only outside the monitors family on this key tier.
 
-One integration gap is deliberately not papered over: EXA returns a one-time
-per-monitor ``webhookSecret`` that signs its deliveries, while the landed
-inbound route compares the static shared ``EXA_MONITOR_WEBHOOK_SECRET``. The
-adapter returns EXA's created document untouched (nothing persists the remote
-secret yet); reconciling the two is the live-pin follow-up's call, not a silent
-guess here.
+Translation (:func:`exa_run_to_monitor_run`): the nested envelope is canonical
+and the run is ``exa_payload["data"]``. ``completed`` with a non-empty
+``data.output.results`` list is ``ok`` with ``results_all = results_new =
+results`` (delivered payloads carry no ``newResults`` split, so nothing is
+classified as seen/unchanged and ``changed`` stays 0); ``completed`` with
+empty/absent results is ``no_change``; ``failed``/``error`` is ``failed`` with
+``failReason`` passed through (``_EXA_RUN_FAILED`` only when it is
+missing/blank). Result containers must be lists of objects when present — a
+present-but-malformed ``results`` (or a present ``null``) is
+``exa_payload_invalid``, never silently coerced to empty: coercing would read
+as ``no_change`` and skip delivery. ``costDollars`` is advisory passthrough
+when the run carries a mapping, else ``None``. ``backend="exa"`` and
+``trigger="exa_webhook"`` are fixed; ``query_snapshot`` records only what the
+wire actually carries — ``exa_run_id`` (the run ``id``, never the event id),
+``exa_event_type``, and ``exa_monitor_id`` — no invented query fields.
 
-Translation (``exa_run_to_monitor_run``): a ``completed`` payload with a
-non-empty ``newResults`` list is ``ok``; ``completed`` with empty/absent
-``newResults`` is ``no_change``; ``failed``/``error`` is ``failed`` with the
-payload ``error`` passed through. Result containers must be lists of objects
-when present: a present-but-malformed container (or a present ``null``) is
-``exa_payload_invalid``, never silently coerced to empty — coercing would read
-as ``no_change`` and skip delivery. ``dedup_stats`` reflects EXA's remote dedup
-over ``len(results)`` vs ``len(newResults)``: ``new`` counts ``newResults`` and
-``seen``/``unchanged`` count the remote-filtered remainder (clamped at 0),
-while ``changed`` stays 0 — EXA reports only new-vs-already-seen, never a
-changed bucket. ``costDollars`` is advisory passthrough when it is a mapping,
-else ``None``. ``backend="exa"`` and ``trigger="exa_webhook"`` are fixed; EXA's
-own run fields (``id``, ``trigger``) are preserved in ``run_id`` /
-``query_snapshot``.
+Secret handling (R8 ↔ EXA): EXA returns the one-time 32-char per-monitor
+``webhookSecret`` at create and omits it from list/get.
+:func:`exa_monitor_secret_from_response` surfaces it without changing
+:func:`create_exa_monitor`'s return contract. The inbound route verifies
+deliveries with the watch's STORED per-monitor secret
+(``MonitorStore.get_delivery_secret``) and fails closed 401
+``exa_bad_signature`` when it is missing — no static shared-secret fallback.
+The landed HTTP/MCP watch-create paths do not yet call EXA remotely, so
+persisting the remote secret at create is deliberate deferred wiring: a caller
+that creates a remote monitor must pair it with ``MonitorStore.set_delivery_secret``
+until that path lands.
 
 ``create_exa_monitor`` runs the landed :func:`validate_delivery` gate FIRST, so
 a webhook EXA would reject (missing, non-https, or private target) fails before
@@ -58,15 +97,17 @@ any EXA call is spent; a remote 4xx body naming ``[webhook…]`` is re-raised
 with the verbatim message. ``delete_exa_monitor`` is the matching teardown.
 
 The webhook route (``server.py``) resolves the target watch by matching the
-payload's ``monitorId`` against ``Watch.exa_monitor_id`` in the landed store —
-the minimal derivation that needs no new store API; ambiguity (two watches
-sharing one remote id) resolves newest-updated first and the follow-up pin can
-tighten it.
+nested run's ``monitorId`` against ``Watch.exa_monitor_id`` in the landed store,
+then verifies the signature with that watch's stored secret before any
+translation or persistence; datatap-scoped watches never match.
 """
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
+import time
 from datetime import UTC, datetime
 from typing import Any, Literal
 from urllib.parse import quote
@@ -82,21 +123,28 @@ __all__ = [
     "ExaAdapterError",
     "create_exa_monitor",
     "delete_exa_monitor",
+    "exa_event_is_non_terminal",
     "exa_monitor_id_from_payload",
+    "exa_monitor_secret_from_response",
     "exa_run_to_monitor_run",
+    "verify_exa_signature",
 ]
 
 _EXA_MONITORS_PATH = "/monitors"
+
+#: Live-pinned default signature tolerance (symmetric replay window, seconds).
+_DEFAULT_SIGNATURE_TOLERANCE_S = 300
 
 _RunStatus = Literal["ok", "no_change", "failed"]
 
 _COMPLETED = "completed"
 _FAILED_STATUSES = frozenset({"failed", "error"})
+_RUNNING = "running"
 
-# Stable status text recorded when EXA fails a run without an error message.
+# Stable status text recorded when EXA fails a run without a failReason.
 _EXA_RUN_FAILED = "exa_run_failed"
 
-# Default trigger period for the EXPERIMENTAL create helper (see docstring).
+# Default trigger period for the create helper (live-pinned request shape).
 _DEFAULT_SCHEDULE = "1d"
 
 
@@ -113,53 +161,102 @@ class ExaAdapterError(RuntimeError):
         self.code = code
 
 
-def exa_run_to_monitor_run(*, watch_id: str, exa_payload: dict[str, Any]) -> MonitorRun:
-    """Translate one EXA run payload into the canonical ``MonitorRun`` envelope.
+def verify_exa_signature(
+    *, header: str, body: bytes, secret: str, tolerance_s: int = _DEFAULT_SIGNATURE_TOLERANCE_S
+) -> bool:
+    """Verify an ``exa-signature`` header against the live-pinned HMAC scheme.
 
-    Translation table and ``dedup_stats`` derivation are pinned in the module
-    docstring. Raises :class:`ExaAdapterError` (``exa_payload_invalid`` /
-    ``exa_run_status_unknown``) for a payload that is not a finished run, and
-    never falls back to an OSS interpretation.
+    Scheme (live-verified 4/4, 2026-09-16): ``v1 = HMAC-SHA256(secret,
+    f"{t}.{body}")`` (hex) where ``secret`` is the per-monitor
+    ``webhookSecret`` and ``t`` is unix seconds. ``abs(now - t) > tolerance_s``
+    is rejected (replay window). Every malformed or unencodable input returns
+    ``False`` — fail closed, never raise into a webhook handler, and never log
+    the header or secret.
     """
-    status = exa_payload.get("status")
-    if not isinstance(status, str) or not status.strip():
-        raise ExaAdapterError("exa_payload_invalid", "EXA run payload has no status.")
-    normalized = status.strip().lower()
+    if not header or not secret:
+        return False
+    parts: dict[str, str] = {}
+    for segment in header.split(","):
+        key, separator, value = segment.partition("=")
+        if not separator or not key.strip():
+            return False
+        parts[key.strip()] = value.strip()
+    raw_t = parts.get("t", "")
+    presented = parts.get("v1", "")
+    if not raw_t or not presented:
+        return False
+    try:
+        timestamp = int(raw_t)
+    except ValueError:
+        return False
+    if abs(time.time() - timestamp) > tolerance_s:
+        return False
+    try:
+        body_text = body.decode()
+    except UnicodeDecodeError:
+        return False
+    expected = hmac.new(
+        secret.encode(), f"{timestamp}.{body_text}".encode(), hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, presented)
 
-    results_all = _result_dicts(exa_payload, "results")
-    results_new = _result_dicts(exa_payload, "newResults")
+
+def exa_event_is_non_terminal(exa_payload: dict[str, Any]) -> bool:
+    """True when a delivery announces a run that has not finished.
+
+    The pinned non-terminal delivery is ``monitor.run.created`` with run
+    ``status: "running"``; the inbound route acks those 200 without persisting.
+    The nested run status is the authoritative signal — an event ``type`` alone
+    never suppresses a terminal run. A malformed envelope or missing/blank
+    status fails ``exa_payload_invalid``; any other status returns ``False`` so
+    the translation call raises ``exa_run_status_unknown`` (fail closed) or
+    persists the terminal run.
+    """
+    _, run = _event_envelope(exa_payload)
+    return _normalized_status(run) == _RUNNING
+
+
+def exa_run_to_monitor_run(*, watch_id: str, exa_payload: dict[str, Any]) -> MonitorRun:
+    """Translate one EXA event delivery into the canonical ``MonitorRun``.
+
+    The NESTED event envelope is canonical (module PIN): the run is
+    ``exa_payload["data"]``. Translation and ``dedup_stats`` derivation are
+    pinned in the module docstring. Raises :class:`ExaAdapterError`
+    (``exa_payload_invalid`` / ``exa_run_status_unknown``) for a payload that
+    is not a finished run, and never falls back to an OSS interpretation.
+    """
+    event_type, run = _event_envelope(exa_payload)
+    normalized = _normalized_status(run)
+    results = _output_results(run)
 
     if normalized == _COMPLETED:
-        run_status: _RunStatus = "ok" if results_new else "no_change"
+        run_status: _RunStatus = "ok" if results else "no_change"
         error: str | None = None
     elif normalized in _FAILED_STATUSES:
         run_status = "failed"
-        raw_error = exa_payload.get("error")
-        error = str(raw_error) if raw_error not in (None, "") else _EXA_RUN_FAILED
+        raw_error = run.get("failReason")
+        message = str(raw_error).strip() if raw_error not in (None, "") else ""
+        error = message or _EXA_RUN_FAILED
     else:
-        raise ExaAdapterError("exa_run_status_unknown", f"Unknown EXA run status: {status!r}.")
+        raise ExaAdapterError("exa_run_status_unknown", f"Unknown EXA run status: {normalized!r}.")
 
-    # EXA dedups remotely: `results` is what the run saw, `newResults` is what
-    # survived. seen/unchanged share the filtered remainder (OSS semantics let
-    # a seen result be counted in both); there is no changed bucket remotely.
-    filtered = max(0, len(results_all) - len(results_new))
-    dedup_stats = {"seen": filtered, "new": len(results_new), "changed": 0, "unchanged": filtered}
+    # Delivered payloads carry no remote dedup split (`newResults` does not
+    # exist on the wire): every surfaced result is new, so seen/unchanged stay 0.
+    dedup_stats = {"seen": 0, "new": len(results), "changed": 0, "unchanged": 0}
 
     now = datetime.now(UTC)
-    raw_run_id = exa_payload.get("id")
-    snapshot: dict[str, Any] = {"query": str(exa_payload.get("query") or "")}
-    if isinstance(raw_run_id, str) and raw_run_id.strip():
-        snapshot["exa_run_id"] = raw_run_id
-    exa_trigger = exa_payload.get("trigger")
-    if isinstance(exa_trigger, str) and exa_trigger.strip():
-        snapshot["exa_trigger"] = exa_trigger
+    raw_run_id = run.get("id")
+    clean_run_id = raw_run_id.strip() if isinstance(raw_run_id, str) else ""
+    run_id = clean_run_id or new_ulid()
+    snapshot: dict[str, Any] = {}
+    if clean_run_id:
+        snapshot["exa_run_id"] = clean_run_id
+    snapshot["exa_event_type"] = event_type
+    raw_monitor_id = run.get("monitorId")
+    if isinstance(raw_monitor_id, str) and raw_monitor_id.strip():
+        snapshot["exa_monitor_id"] = raw_monitor_id.strip()
 
-    cost = exa_payload.get("costDollars")
-    run_id = (
-        str(raw_run_id).strip()
-        if isinstance(raw_run_id, str) and raw_run_id.strip()
-        else new_ulid()
-    )
+    cost = run.get("costDollars")
 
     return MonitorRun(
         run_id=run_id,
@@ -167,11 +264,15 @@ def exa_run_to_monitor_run(*, watch_id: str, exa_payload: dict[str, Any]) -> Mon
         backend="exa",
         status=run_status,
         trigger="exa_webhook",
-        started_at=_parse_timestamp(exa_payload.get("createdAt")) or now,
-        finished_at=_parse_timestamp(exa_payload.get("completedAt")) or now,
+        started_at=_parse_timestamp(run.get("startedAt"))
+        or _parse_timestamp(run.get("createdAt"))
+        or now,
+        finished_at=_parse_timestamp(run.get("completedAt"))
+        or _parse_timestamp(run.get("failedAt"))
+        or now,
         query_snapshot=snapshot,
-        results_all=results_all,
-        results_new=results_new,
+        results_all=results,
+        results_new=results,
         dedup_stats=dedup_stats,
         cost_dollars=cost if isinstance(cost, dict) else None,
         error=error,
@@ -179,18 +280,34 @@ def exa_run_to_monitor_run(*, watch_id: str, exa_payload: dict[str, Any]) -> Mon
 
 
 def exa_monitor_id_from_payload(exa_payload: dict[str, Any]) -> str:
-    """Return the EXA monitor id a webhook delivery is about (fail closed).
+    """Return the EXA monitor id a delivery is about (nested, fail closed).
 
-    The route matches this id against stored ``Watch.exa_monitor_id`` values;
-    a payload without one cannot be routed and must not be guessed at.
+    The route matches this id against stored ``Watch.exa_monitor_id`` values,
+    then verifies the delivery with that watch's stored secret; a payload
+    without the nested envelope or without a ``monitorId`` cannot be routed and
+    must not be guessed at.
     """
-    value = exa_payload.get("monitorId")
+    _, run = _event_envelope(exa_payload)
+    value = run.get("monitorId")
     if not isinstance(value, str) or not value.strip():
         raise ExaAdapterError(
             "exa_monitor_id_missing",
             "EXA webhook payload has no monitorId — cannot resolve the target watch.",
         )
     return value.strip()
+
+
+def exa_monitor_secret_from_response(created: dict[str, Any]) -> str | None:
+    """Return EXA's one-time per-monitor ``webhookSecret``, else ``None``.
+
+    ``POST /monitors`` returns the secret once; list/get omit it. Callers
+    persist it through ``MonitorStore.set_delivery_secret``. This is a read-only
+    accessor so :func:`create_exa_monitor`'s return contract stays unchanged.
+    """
+    secret = created.get("webhookSecret")
+    if not isinstance(secret, str) or not secret.strip():
+        return None
+    return secret.strip()
 
 
 def create_exa_monitor(
@@ -202,11 +319,12 @@ def create_exa_monitor(
 ) -> dict[str, Any]:
     """Create a remote EXA monitor and return EXA's created-monitor document.
 
-    EXPERIMENTAL: request/response shapes are provisional (see module
-    docstring). ``validate_delivery`` runs first — a webhook EXA would reject
-    fails before any EXA call is spent — then the key is resolved (explicit
-    argument → ``EXA_API_KEY`` → fail closed). ``schedule`` is the EXA interval
-    period (``"1d"``, ``"7d"``, …).
+    Request/response shapes are live-pinned (module docstring):
+    ``validate_delivery`` runs first — a webhook EXA would reject fails before
+    any EXA call is spent — then the key is resolved (explicit argument →
+    ``EXA_API_KEY`` → fail closed). ``schedule`` is the EXA interval period
+    (``"1d"``, ``"7d"``, …). The response's one-time ``webhookSecret`` is
+    surfaced by :func:`exa_monitor_secret_from_response`.
     """
     try:
         validate_delivery(
@@ -245,7 +363,7 @@ def create_exa_monitor(
 def delete_exa_monitor(*, exa_monitor_id: str, api_key: str | None = None) -> None:
     """Delete a remote EXA monitor; a missing monitor fails closed.
 
-    EXPERIMENTAL: shapes are provisional (see module docstring). Returns
+    Live-pinned: DELETE answers 200 with the monitor object (not 204). Returns
     ``None`` on any 2xx; raises :class:`ExaAdapterError` otherwise.
     """
     monitor = (exa_monitor_id or "").strip()
@@ -263,23 +381,52 @@ def delete_exa_monitor(*, exa_monitor_id: str, api_key: str | None = None) -> No
 # --- internals ---------------------------------------------------------------------
 
 
-def _result_dicts(exa_payload: dict[str, Any], field: str) -> list[dict[str, Any]]:
-    """Read a result container: absent → empty, present-but-malformed → error.
+def _event_envelope(exa_payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Unwrap the pinned nested delivery envelope (fail closed).
 
-    An absent key is the brief-pinned "no results" case. A present container
-    that is not a list of objects is shape drift and must fail closed:
-    coercing it to ``[]`` would read as ``no_change`` and silently skip
-    delivery, contradicting the module's fail-closed posture.
+    Returns ``(type, data)`` where ``data`` is the run object. A payload
+    without the envelope — missing/blank/non-string ``type``, or ``data`` that
+    is not an object — is shape drift and fails ``exa_payload_invalid``.
     """
-    if field not in exa_payload:
+    event_type = exa_payload.get("type")
+    if not isinstance(event_type, str) or not event_type.strip():
+        raise ExaAdapterError("exa_payload_invalid", "EXA event payload has no type.")
+    data = exa_payload.get("data")
+    if not isinstance(data, dict):
+        raise ExaAdapterError("exa_payload_invalid", "EXA event payload has no data object.")
+    return event_type.strip(), data
+
+
+def _normalized_status(run: dict[str, Any]) -> str:
+    """Read the nested run status; missing/blank is ``exa_payload_invalid``."""
+    status = run.get("status")
+    if not isinstance(status, str) or not status.strip():
+        raise ExaAdapterError("exa_payload_invalid", "EXA run payload has no status.")
+    return status.strip().lower()
+
+
+def _output_results(run: dict[str, Any]) -> list[dict[str, Any]]:
+    """Read the pinned ``data.output.results``: null/absent → empty, else strict.
+
+    ``output`` is ``null`` while a run is running and on failures; a
+    present-but-malformed container is shape drift and must fail closed:
+    coercing it to ``[]`` would read as ``no_change`` and silently skip
+    delivery.
+    """
+    output = run.get("output")
+    if output is None:
         return []
-    value = exa_payload[field]
-    if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+    if not isinstance(output, dict):
+        raise ExaAdapterError("exa_payload_invalid", "EXA run output must be an object.")
+    if "results" not in output:
+        return []
+    results = output["results"]
+    if not isinstance(results, list) or any(not isinstance(item, dict) for item in results):
         raise ExaAdapterError(
             "exa_payload_invalid",
-            f"EXA run payload field {field!r} must be a list of objects.",
+            "EXA run output field 'results' must be a list of objects.",
         )
-    return list(value)
+    return list(results)
 
 
 def _parse_timestamp(value: Any) -> datetime | None:
@@ -338,6 +485,6 @@ def _check_response(response: httpx.Response, *, context: str) -> None:
         )
     if 400 <= status < 500 and "[webhook" in body:
         # EXA's webhook-field validation family: ``[webhook]: Required``,
-        # ``[webhook.url]: ...localhost...``. Preserved verbatim.
+        # ``[webhook.url]: ...localhost, .local domains...``. Preserved verbatim.
         raise ExaAdapterError("exa_webhook_rejected", body)
     raise ExaAdapterError("exa_api_error", f"EXA {context} failed (HTTP {status}): {body[:500]}")

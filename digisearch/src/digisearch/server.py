@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-import hmac
+import json
 import logging
 import os
 import re
@@ -34,8 +34,10 @@ from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TO
 from digisearch.logging import configure_logging
 from digisearch.monitors.exa_adapter import (
     ExaAdapterError,
+    exa_event_is_non_terminal,
     exa_monitor_id_from_payload,
     exa_run_to_monitor_run,
+    verify_exa_signature,
 )
 from digisearch.monitors.models import MonitorRun, Watch
 from digisearch.monitors.runner import MonitorRunError, run_watch, tick_due_watches
@@ -112,9 +114,9 @@ def _digisearch_path_scopes(method: str, path: str) -> list[str] | None:
     """Local scope resolver for the digikey auth middleware (R1).
 
     ``POST /v1/monitors/exa_webhook`` is the one auth-exempt digisearch route:
-    EXA holds no digikey JWT, so it authenticates with the shared
-    ``EXA_MONITOR_WEBHOOK_SECRET`` checked inside the handler (missing or
-    mismatched secret → 401 ``exa_bad_signature``, fail closed). Every other
+    EXA holds no digikey JWT, so it authenticates with the resolved watch's
+    per-monitor stored secret checked inside the handler (missing or
+    unverifiable secret → 401 ``exa_bad_signature``, fail closed). Every other
     path keeps the landed ``digisearch_path_scopes`` rules — no digikey change,
     and the Phase D ``/v1/websets*`` routes inherit its ``digisearch:query``
     fallthrough like the Phase C monitor paths do.
@@ -1684,34 +1686,34 @@ def api_tick_monitors(request: Request) -> dict[str, Any]:
 
 @app.post("/v1/monitors/exa_webhook", response_model=None)
 async def api_exa_webhook(request: Request) -> dict[str, Any] | JSONResponse:
-    """Auth-exempt but secret-gated EXA result webhook (R1, §4.6).
+    """Auth-exempt but per-watch-secret-gated EXA delivery webhook (R1, §4.6).
 
     EXA cannot present a digikey JWT, so the route is exempted in
-    :func:`_digisearch_path_scopes` and authenticates with the shared
-    ``EXA_MONITOR_WEBHOOK_SECRET`` compared by ``hmac.compare_digest``. A
-    missing server secret or a mismatched header fails closed with 401
-    ``exa_bad_signature``; the presented value is never logged or echoed, and
-    the body is not read until the signature gate has passed.
+    :func:`_digisearch_path_scopes` and authenticates each delivery with the
+    WATCH's own stored secret (``MonitorStore.get_delivery_secret``) against the
+    live-pinned ``exa-signature: t=<unix>,v1=<hex>`` header
+    (``HMAC-SHA256(secret, f"{t}.{body}")``, #4123). There is deliberately no
+    static shared-secret fallback: a missing stored secret, a missing header,
+    or a mismatch fails closed with 401 ``exa_bad_signature``; the presented
+    value is never logged or echoed.
 
-    The target watch is resolved by matching the payload's ``monitorId``
-    against stored ``Watch.exa_monitor_id`` values — the minimal derivation
-    that needs no new store API; datatap-scoped watches never match (§5). The
-    resolved watch must be ``backend="exa"`` (a mismatch is a misconfiguration:
-    409 ``watch_backend_mismatch``, nothing persisted). The translated run
-    (Task 8c adapter) is persisted through the monitor store and returned as
-    the canonical ``MonitorRun`` envelope; translation and store failures use
-    the shared fail-closed error envelope.
+    The target watch is resolved by matching the NESTED event envelope's
+    ``data.monitorId`` against stored ``Watch.exa_monitor_id`` values — the
+    minimal derivation that needs no new store API; datatap-scoped watches
+    never match (§5). Signature verification happens before any translation or
+    persistence, and the resolved watch must be ``backend="exa"`` (a mismatch
+    is a misconfiguration: 409 ``watch_backend_mismatch``, nothing persisted).
+
+    Non-terminal deliveries (``monitor.run.created``, run ``status: "running"``)
+    are acked 200 ``{"acknowledged": true}`` without persisting; terminal
+    deliveries translate (Task 8c adapter) into the canonical ``MonitorRun``
+    and persist it — 201 on first store, and an idempotent 200 with the stored
+    run on redelivery (EXA retries non-2xx, so ``run_exists`` must never answer
+    409). Translation and store failures use the shared fail-closed envelope.
     """
-    presented = request.headers.get("X-Exa-Signature") or ""
-    configured = os.environ.get("EXA_MONITOR_WEBHOOK_SECRET", "")
-    if (
-        not configured
-        or not presented
-        or not hmac.compare_digest(presented.encode("utf-8"), configured.encode("utf-8"))
-    ):
-        return _monitor_error(request, 401, "exa_bad_signature", "Invalid EXA webhook signature.")
+    raw_body = await request.body()
     try:
-        payload = await request.json()
+        payload = json.loads(raw_body)
     except ValueError:
         return _monitor_error(
             request, 400, "exa_payload_invalid", "EXA webhook body is not valid JSON."
@@ -1742,6 +1744,13 @@ async def api_exa_webhook(request: Request) -> dict[str, Any] | JSONResponse:
             "watch_not_found",
             f"No watch is linked to EXA monitor {exa_monitor_id!r}.",
         )
+    try:
+        secret = store.get_delivery_secret(watch.watch_id)
+    except MonitorStoreError as exc:
+        return _store_error(request, exc)
+    presented = request.headers.get("exa-signature") or ""
+    if not secret or not verify_exa_signature(header=presented, body=raw_body, secret=secret):
+        return _monitor_error(request, 401, "exa_bad_signature", "Invalid EXA webhook signature.")
     if watch.backend != "exa":
         return _monitor_error(
             request,
@@ -1750,14 +1759,25 @@ async def api_exa_webhook(request: Request) -> dict[str, Any] | JSONResponse:
             f"Watch {watch.watch_id!r} is not an exa-backend watch.",
         )
     try:
+        if exa_event_is_non_terminal(payload):
+            return {"acknowledged": True}
+    except ExaAdapterError as exc:
+        return _monitor_error(request, 422, exc.code, str(exc))
+    try:
         run = exa_run_to_monitor_run(watch_id=watch.watch_id, exa_payload=payload)
     except ExaAdapterError as exc:
         return _monitor_error(request, 422, exc.code, str(exc))
     try:
         store.append_run(run)
     except MonitorStoreError as exc:
-        return _store_error(request, exc)
-    return run.model_dump(mode="json")
+        if exc.code != "run_exists":
+            return _store_error(request, exc)
+        try:
+            stored = store.get_run(watch.watch_id, run.run_id)
+        except MonitorStoreError as lookup_exc:
+            return _store_error(request, lookup_exc)
+        return stored.model_dump(mode="json")
+    return JSONResponse(status_code=201, content=run.model_dump(mode="json"))
 
 
 # --- Phase D websets (§ Interfaces, #4066) -----------------------------------

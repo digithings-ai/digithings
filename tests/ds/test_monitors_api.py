@@ -14,6 +14,11 @@ on first use. Building it inside the handler thread is what production does.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
+import time
+
 import pytest
 from digisearch.web_exa import WebSearchData
 from fastapi.testclient import TestClient
@@ -118,16 +123,19 @@ def test_datatap_watch_rejected(monkeypatch, tmp_path):
 
 @pytest.mark.unit
 def test_exa_webhook_exempt_but_secret_gated(monkeypatch, tmp_path):
+    _patch_monitor_store(monkeypatch, tmp_path)
     import digisearch.server as srv
-    from digisearch.monitors.store import MonitorStore
 
-    monkeypatch.setattr(
-        srv, "get_monitor_store", lambda: MonitorStore(db_path=str(tmp_path / "m.sqlite3"))
-    )
-    monkeypatch.setenv("EXA_MONITOR_WEBHOOK_SECRET", "shh")
+    _create_watch(_monitor_client(), backend="exa", exa_monitor_id="exa_mon_1")
     anon = TestClient(srv.app)  # no JWT: exemption lets it reach the handler
-    r = anon.post("/v1/monitors/exa_webhook", json={"nope": True})
+    body, _ = _signed_delivery(_event(), "not-the-watch-secret")
+    r = anon.post(
+        "/v1/monitors/exa_webhook",
+        content=body,
+        headers={"Content-Type": "application/json"},
+    )
     assert r.status_code == 401
+    # Route-level 401 (the middleware would answer its own auth code first).
     assert r.json()["error"]["code"] == "exa_bad_signature"
 
 
@@ -145,6 +153,44 @@ def _monitor_client() -> TestClient:
     import digisearch.server as srv
 
     return TestClient(srv.app, headers=auth_headers())
+
+
+def _event(*, event_type: str = "monitor.run.completed", **run_overrides: object) -> dict:
+    """A live-pinned nested EXA event envelope; *run_overrides* patch ``data``."""
+    run: dict = {
+        "id": "exa_run_9",
+        "monitorId": "exa_mon_1",
+        "status": "completed",
+        "output": {
+            "results": [{"id": "https://a.com/1", "url": "https://a.com/1", "title": "A"}],
+            "content": "Answer with [1] markers.",
+        },
+        "failReason": None,
+        "startedAt": "2026-09-16T00:00:00Z",
+        "completedAt": "2026-09-16T00:05:00Z",
+        "failedAt": None,
+        "cancelledAt": None,
+        "durationMs": 300000,
+        "createdAt": "2026-09-16T00:00:00Z",
+        "updatedAt": "2026-09-16T00:05:00Z",
+        "metadata": None,
+    }
+    run.update(run_overrides)
+    return {
+        "id": "event_1",
+        "object": "event",
+        "type": event_type,
+        "data": run,
+        "createdAt": "2026-09-16T00:00:00.000Z",
+    }
+
+
+def _signed_delivery(payload: dict, secret: str, *, t: int | None = None) -> tuple[bytes, dict]:
+    """Serialize *payload* and sign it with the live ``t.body`` scheme."""
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    ts = int(time.time()) if t is None else t
+    v1 = hmac.new(secret.encode(), f"{ts}.{body.decode()}".encode(), hashlib.sha256).hexdigest()
+    return body, {"exa-signature": f"t={ts},v1={v1}"}
 
 
 def _create_watch(client: TestClient, **overrides: object) -> dict:
@@ -396,54 +442,108 @@ def test_trigger_route_holds_ten_per_minute_through_middleware(monkeypatch, tmp_
 
 
 @pytest.mark.unit
-def test_exa_webhook_valid_secret_translates_and_persists(monkeypatch, tmp_path):
-    """Task 8c: a valid signature now translates + persists (never 503 again)."""
+def test_exa_webhook_per_watch_secret_translates_and_persists(monkeypatch, tmp_path):
+    """#4123: the delivery is verified with the watch's stored secret, then persisted."""
     _patch_monitor_store(monkeypatch, tmp_path)
     import digisearch.server as srv
 
     c = _monitor_client()
-    wid = _create_watch(c, backend="exa", exa_monitor_id="exa_mon_1")["watch"]["watch_id"]
-
+    created = _create_watch(c, backend="exa", exa_monitor_id="exa_mon_1")
+    wid = created["watch"]["watch_id"]
+    secret = created["delivery_secret"]
     anon = TestClient(srv.app)
-    monkeypatch.delenv("EXA_MONITOR_WEBHOOK_SECRET", raising=False)
-    unset = anon.post("/v1/monitors/exa_webhook", headers={"X-Exa-Signature": "shh"}, json={})
-    assert unset.status_code == 401  # no server secret: fail closed
 
-    monkeypatch.setenv("EXA_MONITOR_WEBHOOK_SECRET", "shh")
-    wrong = anon.post("/v1/monitors/exa_webhook", headers={"X-Exa-Signature": "nope"}, json={})
+    body, _ = _signed_delivery(_event(), secret)
+    unsigned = anon.post(
+        "/v1/monitors/exa_webhook", content=body, headers={"Content-Type": "application/json"}
+    )
+    assert unsigned.status_code == 401  # never a static-secret fallback
+
+    wrong_body, wrong_headers = _signed_delivery(_event(), "0" * len(secret))
+    wrong = anon.post(
+        "/v1/monitors/exa_webhook",
+        content=wrong_body,
+        headers={**wrong_headers, "Content-Type": "application/json"},
+    )
     assert wrong.status_code == 401
     assert wrong.json()["error"]["code"] == "exa_bad_signature"
-    non_ascii = anon.post(
-        "/v1/monitors/exa_webhook", headers=[(b"X-Exa-Signature", b"\xe9")], json={}
-    )
-    assert non_ascii.status_code == 401  # never a 500 from compare_digest
 
-    # The signature gate passes only now: EXA payload → canonical MonitorRun.
+    non_ascii = anon.post(
+        "/v1/monitors/exa_webhook",
+        content=body,
+        headers=[(b"exa-signature", b"\xe9"), (b"Content-Type", b"application/json")],
+    )
+    assert non_ascii.status_code == 401  # never a 500 from header parsing
+
+    signed_body, signed_headers = _signed_delivery(_event(), secret)
     matched = anon.post(
         "/v1/monitors/exa_webhook",
-        headers={"X-Exa-Signature": "shh"},
-        json={
-            "id": "exa_run_9",
-            "monitorId": "exa_mon_1",
-            "status": "completed",
-            "trigger": "schedule",
-            "createdAt": "2026-09-14T00:00:00Z",
-            "completedAt": "2026-09-14T00:01:00Z",
-            "query": "etf flows",
-            "results": [{"url": "https://a.com/1", "title": "A"}],
-            "newResults": [{"url": "https://a.com/1", "title": "A"}],
-        },
+        content=signed_body,
+        headers={**signed_headers, "Content-Type": "application/json"},
     )
-    assert matched.status_code == 200, matched.text
-    body = matched.json()
-    assert body["backend"] == "exa"
-    assert body["watch_id"] == wid
-    assert body["status"] == "ok"
-    assert body["trigger"] == "exa_webhook"
-    assert body["results_new"] == [{"url": "https://a.com/1", "title": "A"}]
+    assert matched.status_code == 201, matched.text
+    run = matched.json()
+    assert run["backend"] == "exa"
+    assert run["watch_id"] == wid
+    assert run["run_id"] == "exa_run_9"  # the nested run id, never the event id
+    assert run["status"] == "ok"
+    assert run["trigger"] == "exa_webhook"
+    assert run["results_new"] == [{"id": "https://a.com/1", "url": "https://a.com/1", "title": "A"}]
 
     runs = c.get(f"/v1/monitors/{wid}/runs").json()["runs"]
-    assert [run["run_id"] for run in runs] == [body["run_id"]]
+    assert [stored["run_id"] for stored in runs] == [run["run_id"]]
+
+
+@pytest.mark.unit
+def test_exa_webhook_non_terminal_event_acks_without_persisting(monkeypatch, tmp_path):
+    """#4123: ``monitor.run.created`` (run ``running``) is acked, never stored."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    import digisearch.server as srv
+
+    c = _monitor_client()
+    created = _create_watch(c, backend="exa", exa_monitor_id="exa_mon_1")
+    wid = created["watch"]["watch_id"]
+    secret = created["delivery_secret"]
+
+    body, headers = _signed_delivery(
+        _event(event_type="monitor.run.created", status="running", output=None), secret
+    )
+    anon = TestClient(srv.app)
+    r = anon.post(
+        "/v1/monitors/exa_webhook",
+        content=body,
+        headers={**headers, "Content-Type": "application/json"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json() == {"acknowledged": True}
+    assert c.get(f"/v1/monitors/{wid}/runs").json()["runs"] == []
+
+
+@pytest.mark.unit
+def test_exa_webhook_duplicate_delivery_is_idempotent(monkeypatch, tmp_path):
+    """#4123: EXA retries non-2xx, so a redelivered run answers 200 + stored run."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    import digisearch.server as srv
+
+    c = _monitor_client()
+    created = _create_watch(c, backend="exa", exa_monitor_id="exa_mon_1")
+    wid = created["watch"]["watch_id"]
+    secret = created["delivery_secret"]
+
+    body, headers = _signed_delivery(_event(), secret)
+    anon = TestClient(srv.app)
+    post = lambda: anon.post(  # noqa: E731 - two deliveries of the same bytes
+        "/v1/monitors/exa_webhook",
+        content=body,
+        headers={**headers, "Content-Type": "application/json"},
+    )
+    first = post()
+    assert first.status_code == 201, first.text
+    second = post()
+    assert second.status_code == 200, second.text
+    assert second.json() == first.json()
+    runs = c.get(f"/v1/monitors/{wid}/runs").json()["runs"]
+    assert [stored["run_id"] for stored in runs] == [first.json()["run_id"]]
 
 
 @pytest.mark.unit
@@ -451,25 +551,38 @@ def test_exa_webhook_bad_payload_or_unknown_monitor_fails_closed(monkeypatch, tm
     _patch_monitor_store(monkeypatch, tmp_path)
     import digisearch.server as srv
 
-    monkeypatch.setenv("EXA_MONITOR_WEBHOOK_SECRET", "shh")
+    created = _create_watch(_monitor_client(), backend="exa", exa_monitor_id="exa_mon_1")
+    secret = created["delivery_secret"]
     anon = TestClient(srv.app)
-    headers = {"X-Exa-Signature": "shh"}
 
+    unknown_body, unknown_headers = _signed_delivery(_event(monitorId="nope"), secret)
     unknown = anon.post(
         "/v1/monitors/exa_webhook",
-        headers=headers,
-        json={"monitorId": "nope", "status": "completed"},
+        content=unknown_body,
+        headers={**unknown_headers, "Content-Type": "application/json"},
     )
     assert unknown.status_code == 404
     assert unknown.json()["error"]["code"] == "watch_not_found"
 
-    missing = anon.post("/v1/monitors/exa_webhook", headers=headers, json={"status": "completed"})
-    assert missing.status_code == 422
-    assert missing.json()["error"]["code"] == "exa_monitor_id_missing"
-
-    malformed = anon.post("/v1/monitors/exa_webhook", headers=headers, content=b"{not json")
+    malformed = anon.post(
+        "/v1/monitors/exa_webhook",
+        content=b"{not json",
+        headers={"Content-Type": "application/json"},
+    )
     assert malformed.status_code == 400
     assert malformed.json()["error"]["code"] == "exa_payload_invalid"
+
+    # The flat pre-pin shape is no longer a valid envelope (#4123).
+    flat_body, flat_headers = _signed_delivery(
+        {"monitorId": "exa_mon_1", "status": "completed"}, secret
+    )
+    flat = anon.post(
+        "/v1/monitors/exa_webhook",
+        content=flat_body,
+        headers={**flat_headers, "Content-Type": "application/json"},
+    )
+    assert flat.status_code == 422
+    assert flat.json()["error"]["code"] == "exa_payload_invalid"
 
 
 @pytest.mark.unit
@@ -480,18 +593,43 @@ def test_exa_webhook_non_exa_backend_watch_fails_closed(monkeypatch, tmp_path):
 
     c = _monitor_client()
     # backend defaults to "oss" while carrying an exa_monitor_id: misconfigured.
-    wid = _create_watch(c, exa_monitor_id="exa_mon_oss")["watch"]["watch_id"]
+    created = _create_watch(c, exa_monitor_id="exa_mon_oss")
+    wid = created["watch"]["watch_id"]
 
-    monkeypatch.setenv("EXA_MONITOR_WEBHOOK_SECRET", "shh")
+    body, headers = _signed_delivery(
+        _event(monitorId="exa_mon_oss", output=None), created["delivery_secret"]
+    )
     anon = TestClient(srv.app)
     r = anon.post(
         "/v1/monitors/exa_webhook",
-        headers={"X-Exa-Signature": "shh"},
-        json={"monitorId": "exa_mon_oss", "status": "completed", "newResults": []},
+        content=body,
+        headers={**headers, "Content-Type": "application/json"},
     )
     assert r.status_code == 409
     assert r.json()["error"]["code"] == "watch_backend_mismatch"
     assert c.get(f"/v1/monitors/{wid}/runs").json()["runs"] == []  # nothing persisted
+
+
+@pytest.mark.unit
+def test_exa_webhook_watch_without_a_stored_secret_fails_closed(monkeypatch, tmp_path):
+    """A watch whose stored secret is empty can never verify a delivery (#4123)."""
+    _patch_monitor_store(monkeypatch, tmp_path)
+    import digisearch.server as srv
+    from digisearch.monitors.store import MonitorStore
+
+    created = _create_watch(_monitor_client(), backend="exa", exa_monitor_id="exa_mon_1")
+    wid = created["watch"]["watch_id"]
+    MonitorStore(db_path=str(tmp_path / "m.sqlite3")).set_delivery_secret(wid, "")
+
+    body, headers = _signed_delivery(_event(), "some-secret")
+    anon = TestClient(srv.app)
+    r = anon.post(
+        "/v1/monitors/exa_webhook",
+        content=body,
+        headers={**headers, "Content-Type": "application/json"},
+    )
+    assert r.status_code == 401
+    assert r.json()["error"]["code"] == "exa_bad_signature"
 
 
 @pytest.mark.unit
