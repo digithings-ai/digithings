@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarClock, ChevronRight, ExternalLink, Globe, Users } from 'lucide-react';
-import { GLOOMBERB_TERMINAL_URL } from '@digithings/web';
+import { CalendarClock, ChevronRight, Globe, Users } from 'lucide-react';
 import { eventLocalDateKey, hasResolvedTime } from '@/lib/twelve-x/fetch';
 import type {
   FxEconomicCalendarRow,
@@ -450,22 +449,6 @@ export default function EventsTab({
       <div className="flex flex-wrap items-center gap-3 px-1">
         <CalendarClock size={18} className="shrink-0 text-accent" aria-hidden />
         <h2 className="font-display text-2xl tracking-tight text-ink">Upcoming catalysts</h2>
-        {/*
-          Macro research shortcut (#4193). The terminal has no stable macro/econ
-          deeplink: `research-entry.ts` requires `?ticker=` and exposes no macro
-          form, and share/layout forms are generated ids — so this links the
-          terminal root, and the label claims nothing more than the destination.
-        */}
-        <a
-          href={GLOOMBERB_TERMINAL_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-testid="gloomberb-terminal-link-events"
-          className="inline-flex items-center gap-1 text-xs text-accent hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
-          title="Open the Gloomberb terminal (opens in a new tab)"
-        >
-          Gloomberb terminal <ExternalLink size={12} aria-hidden />
-        </a>
         {/* List | Timeline segmented control (demo's #evtSubnav). */}
         <div
           className="ml-auto inline-flex overflow-hidden rounded-none border border-hair text-[11px]"

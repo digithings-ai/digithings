@@ -178,9 +178,9 @@ describe('TradesTab', () => {
       }),
     );
 
-    expect(html).toContain('Close');
+    expect(html).toContain('Status');
     expect(html).toContain('CLOSED');
-    expect(html).toContain('Dropped — thesis dead');
+    expect(html).toContain('title="thesis dead"');
     expect(html).toContain('Superseded');
     expect(html).toContain('Dropped');
   });
@@ -241,11 +241,12 @@ describe('TradesTab', () => {
       }),
     );
 
-    expect(html).toContain('Close');
+    expect(html).toContain('Status');
     expect(html).toContain('CLOSED');
-    expect(html).toContain('Dropped — thesis dead');
+    expect(html).toContain('title="thesis dead"');
     expect(html).toContain('Superseded');
     expect(html).toContain('Dropped');
+    expect(html).toContain('-0.3%');
   });
 });
 

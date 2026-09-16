@@ -46,6 +46,8 @@ describe("GET /api/embed/tenant-config", () => {
       slug: "datatapstream",
       gateMode: "ungated",
       theme: "light",
+      view: "balanced",
+      thinking: "auto",
       skin: "base",
       accent: { color: "#b5562b", foreground: "#fff7f2" },
       attribution: true,

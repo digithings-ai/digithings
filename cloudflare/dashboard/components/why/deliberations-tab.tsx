@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, ExternalLink, FileText, GitBranch, Scale, TrendingUp } from 'lucide-react';
+import { ArrowUpRight, Calendar, FileText, GitBranch, Scale, TrendingUp } from 'lucide-react';
 import { gloomberbTickerUrl } from '@digithings/web';
 import DocumentExpandInline from '@/components/library/DocumentExpandInline';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
@@ -241,7 +241,7 @@ export function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
                     title={`Open ${d.ticker} in Gloomberb`}
                     aria-label={`Open ${d.ticker} in Gloomberb (opens in a new tab)`}
                   >
-                    <ExternalLink size={12} aria-hidden />
+                    <ArrowUpRight size={12} aria-hidden />
                   </a>
                 ) : null}
                 {stance ? <span className={`text-xs font-medium capitalize ${stanceColor}`}>{stance}</span> : null}

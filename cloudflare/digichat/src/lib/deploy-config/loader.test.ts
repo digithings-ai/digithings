@@ -503,6 +503,25 @@ describe("embed tenant round-trip", () => {
     expect(deploymentToEmbedTenant(dep).pageContext).toBe("visible");
   });
 
+  it("preserves view/thinking through the embed-tenant round trip", () => {
+    const dep = embedTenantToDeployment({
+      slug: "datatap-dev",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "light",
+      attribution: false,
+      activityDetail: "labels",
+      view: "detailed",
+      thinking: "open",
+    });
+    expect(dep.features.view).toBe("detailed");
+    expect(dep.features.thinking).toBe("open");
+    const back = deploymentToEmbedTenant(dep);
+    expect(back.view).toBe("detailed");
+    expect(back.thinking).toBe("open");
+  });
+
   it("preserves requiredPlanTier through YAML converters (#3662)", () => {
     const original: EmbedTenantConfig = {
       slug: "digiquant-dashboard",

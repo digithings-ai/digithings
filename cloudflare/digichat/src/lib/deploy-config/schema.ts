@@ -11,6 +11,12 @@ import {
   LANGUAGES,
 } from "@/lib/languages";
 import { THREAD_SKINS, DEFAULT_THREAD_SKIN } from "@/lib/thread-skins";
+import {
+  DEFAULT_THINKING_MODE,
+  DEFAULT_VIEW_MODE,
+  THINKING_MODES,
+  VIEW_MODES,
+} from "@/lib/view-modes";
 
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -94,16 +100,10 @@ export const DisclosureModeSchema = z.enum([
 ]);
 export type DisclosureMode = z.infer<typeof DisclosureModeSchema>;
 
-function coerceDisclosureMode(value: unknown): unknown {
-  if (value === true) return "collapsed";
-  if (value === false) return "off";
-  return value;
-}
-
-const DisclosureModeInputSchema = z.preprocess(
-  coerceDisclosureMode,
-  DisclosureModeSchema,
-);
+/** Chain-of-thought view mode (reasoning + tool calls). See view-modes.ts. */
+export const ViewModeSchema = z.enum(VIEW_MODES);
+/** Reasoning-only override on top of the view mode. */
+export const ThinkingModeSchema = z.enum(THINKING_MODES);
 
 export const AccentSchema = z.object({
   color: z.string().regex(HEX_COLOR, "must be #rrggbb"),
@@ -155,19 +155,57 @@ export const ChromeSchema = z
   })
   .strict();
 
-export const FeaturesSchema = z
-  .object({
-    attachments: z.boolean().default(true),
-    dictation: z.boolean().default(false),
-    speech: z.boolean().default(false),
-    reasoning: DisclosureModeInputSchema.default("collapsed"),
-    toolCalls: DisclosureModeInputSchema.default("collapsed"),
-    sources: z.boolean().default(true),
-    modelPicker: z.boolean().default(false),
-    branchPicker: z.boolean().default(true),
-    pageContext: PageContextModeSchema.default("visible"),
-  })
-  .strict();
+/**
+ * Legacy `features.reasoning` / `features.toolCalls` disclosure keys fold
+ * forward onto the view-mode pair so older YAML keeps loading. Per-field:
+ * a new-style value always wins; a legacy value maps to the closest mode
+ * (toolCalls off→hidden / expanded→detailed / collapsed→compact; reasoning
+ * expanded→thinking open, anything else→pinned collapsed).
+ */
+function foldLegacyDisclosure(value: unknown): unknown {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+  const record = { ...(value as Record<string, unknown>) };
+  const toolCalls = record.toolCalls;
+  const reasoning = record.reasoning;
+  delete record.toolCalls;
+  delete record.reasoning;
+  if (record.view == null && toolCalls !== undefined) {
+    record.view =
+      toolCalls === false || toolCalls === "off"
+        ? "hidden"
+        : toolCalls === "expanded" || toolCalls === "locked_open"
+          ? "detailed"
+          : "compact";
+  }
+  if (record.thinking == null && reasoning !== undefined) {
+    record.thinking =
+      reasoning === "expanded" || reasoning === "locked_open"
+        ? "open"
+        : "collapsed";
+  }
+  return record;
+}
+
+export const FeaturesSchema = z.preprocess(
+  foldLegacyDisclosure,
+  z
+    .object({
+      attachments: z.boolean().default(true),
+      dictation: z.boolean().default(false),
+      speech: z.boolean().default(false),
+      /** Chain-of-thought disclosure for reasoning + tool calls. */
+      view: ViewModeSchema.default(DEFAULT_VIEW_MODE),
+      /** Reasoning-only override on top of `view`. */
+      thinking: ThinkingModeSchema.default(DEFAULT_THINKING_MODE),
+      sources: z.boolean().default(true),
+      modelPicker: z.boolean().default(false),
+      branchPicker: z.boolean().default(true),
+      pageContext: PageContextModeSchema.default("visible"),
+    })
+    .strict(),
+);
 
 export const ModelsSchema = z
   .object({
@@ -314,8 +352,8 @@ export const DeploymentSchema = z
       attachments: true,
       dictation: false,
       speech: false,
-      reasoning: "collapsed",
-      toolCalls: "collapsed",
+      view: DEFAULT_VIEW_MODE,
+      thinking: DEFAULT_THINKING_MODE,
       sources: true,
       modelPicker: false,
       branchPicker: true,

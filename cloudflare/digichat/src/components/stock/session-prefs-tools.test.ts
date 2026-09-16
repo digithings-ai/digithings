@@ -16,6 +16,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setMcpConfig: vi.fn(),
     removeMcpConfig: vi.fn(),
     setLanguage: vi.fn(),
+    setView: vi.fn(),
     setThinking: vi.fn(),
     setModel: vi.fn(),
     setEffort: vi.fn(),
@@ -37,6 +38,8 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     openByok: vi.fn(),
     openModels: vi.fn(),
     openEffort: vi.fn(),
+    openView: vi.fn(),
+    openThinking: vi.fn(),
     openLanguage: vi.fn(),
     openSessions: vi.fn(),
     newThread: vi.fn(),
@@ -48,7 +51,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
 }
 
 describe("applySessionTool", () => {
-  it("maps language, model, effort, thinking, and tools onto prefs", () => {
+  it("maps language, model, effort, view, thinking, and tools onto prefs", () => {
     const a = api();
     expect(applySessionTool("session_set_language", { code: "Dutch" }, a).ok).toBe(true);
     expect(a.setLanguage).toHaveBeenCalledWith("nl");
@@ -56,8 +59,13 @@ describe("applySessionTool", () => {
     expect(a.setModel).toHaveBeenCalled();
     applySessionTool("session_set_effort", { effort: "high" }, a);
     expect(a.setEffort).toHaveBeenCalledWith("high");
+    applySessionTool("session_set_view", { mode: "balanced" }, a);
+    expect(a.setView).toHaveBeenCalledWith("balanced");
+    // Boolean-era contract still maps onto the 3-mode thinking pref.
     applySessionTool("session_set_thinking", { enabled: false }, a);
-    expect(a.setThinking).toHaveBeenCalledWith(false);
+    expect(a.setThinking).toHaveBeenCalledWith("collapsed");
+    applySessionTool("session_set_thinking", { mode: "open" }, a);
+    expect(a.setThinking).toHaveBeenCalledWith("open");
     applySessionTool("session_toggle_tool", { id: "digisearch", enabled: false }, a);
     expect(a.setDigisearch).toHaveBeenCalledWith(false);
   });
