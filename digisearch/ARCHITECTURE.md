@@ -303,11 +303,16 @@ MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streama
 
 | Tool | Description | Optional |
 |------|-------------|----------|
-| `digisearch_query` | Search documents; returns formatted string of hits with score and content preview | No |
+| `semantic` | Search documents; returns formatted string of hits with score and content preview | No |
 | `web_search` | Search the public web; returns JSON `WebSearchResponse` (#3853) | Yes (`digisearch[web-search]`) |
-| `digisearch_research_turn` | Composite research turn (plan → retrieve → aggregate) with citations | Yes (`digisearch[agent]`) |
+| `search_strategies` | Filtered semantic search over the research library | No |
+| `research_turn` | Composite research turn (plan → retrieve → aggregate) with citations | Yes (`digisearch[agent]`) |
 
-Tool parameters for `digisearch_query`: `text`, `index_name`, `top_k`, `mode`.
+These are the names the MCP server advertises. digigraph prefixes the operator
+server id (`{id}_{tool}`, `mcp_client.prefixed_tool_name`), so the model calls
+`digisearch_semantic`, `digisearch_web_search`, and `digisearch_research_turn`.
+
+Tool parameters for `semantic`: `text`, `index_name`, `top_k`, `mode`.
 
 The `digisearch mcp` CLI builds a real `DigiSearch` client first
 (`DigiSearchConfig.from_config` when `--config` is passed, else
@@ -985,7 +990,7 @@ The contract is versioned by `{"tools": [...], "version": 1}` in the tools respo
 
 ### digiclaw MCP attachment
 
-digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback, `digisearch-mcp` Docker profile). Tools available: `digisearch_query`, `web_search` (when `[web-search]` is installed), `digisearch_research_turn` (when `[agent]` is installed).
+digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback, `digisearch-mcp` Docker profile). Tools available: `semantic`, `web_search` (when `[web-search]` is installed), `search_strategies`, `research_turn` (when `[agent]` is installed). digigraph sees the same tools prefixed as `digisearch_semantic`, `digisearch_web_search`, and `digisearch_research_turn` (`{id}_{tool}`).
 
 MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is purely at network level (loopback binding).
 
