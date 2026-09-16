@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.2.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.1.0...digichat-v2.2.0) (2026-09-16)
+
+
+### Features
+
+* **chat:** render upstream failures as a retryable error card ([e7278fd](https://github.com/digithings-ai/digithings/commit/e7278fd23f986710504acebaba61717b6a8d01be))
+* **chat:** render upstream failures as a retryable error card ([56fe9fd](https://github.com/digithings-ai/digithings/commit/56fe9fdea288dc285b7a9f6570ef39a0ad7ce2cb))
+* **digichat:** configurable view modes (hidden/compact/balanced/detailed) + 3-mode thinking override ([cec11ac](https://github.com/digithings-ai/digithings/commit/cec11ac36f91d9971564d84afcfe7977781a2d9d))
+* **digichat:** curated embed welcome copy + suggestion pools for occ and digithings.ai ([a1981c1](https://github.com/digithings-ai/digithings/commit/a1981c10b9490721e2c17faebd23cf9774347760))
+* **digichat:** Gloomberb attribution line for tool results ([#4098](https://github.com/digithings-ai/digithings/issues/4098)) ([e733165](https://github.com/digithings-ai/digithings/commit/e733165f9e0516d7d32083bb27381d0bf67426bb))
+* **digichat:** render Gloomberb attribution in the vendored tool fallback ([#4098](https://github.com/digithings-ai/digithings/issues/4098)) ([5c2f657](https://github.com/digithings-ai/digithings/commit/5c2f6572bf26058c9f28bf0c5dd1511714eadc06))
+* **digichat:** wire Gloomberb attribution into the stock tool fallback ([#4098](https://github.com/digithings-ai/digithings/issues/4098)) ([f6f1be2](https://github.com/digithings-ai/digithings/commit/f6f1be2bfb0afa147ded68c6295098157e689536))
+* **mcp:** close out PR [#4223](https://github.com/digithings-ai/digithings/issues/4223) follow-ups (web_search gate, vault search_notes + write gate, per-server edge keys, id validation, docs) ([5453696](https://github.com/digithings-ai/digithings/commit/5453696931ce3f81a889c4e1be96c8fa1a3d4bdc))
+* **mcp:** close out PR [#4223](https://github.com/digithings-ai/digithings/issues/4223) follow-ups (web_search gate, vault search_notes, per-server edge keys, id validation, docs) ([1189661](https://github.com/digithings-ai/digithings/commit/11896611728e50b705bc9c59add0e9ad6ca347d4))
+* **mcp:** config-driven hosted digisearch/digivault MCP + clean {server}_{verb} tool names ([59b2396](https://github.com/digithings-ai/digithings/commit/59b2396d296633c1eff6232cdb60837fa6f7cd47))
+* **mcp:** config-driven hosted MCP servers for embeds + single-underscore MCP tool names ([b637ccb](https://github.com/digithings-ai/digithings/commit/b637ccb86f3bd52a38a18cc21d683c37a14c5777))
+
+
+### Bug Fixes
+
+* **digichat:** forward operator MCP setup from the env tenant registry ([f7a0d23](https://github.com/digithings-ai/digithings/commit/f7a0d23692dabf314fed083499ad43e94e4a792d))
+* **digichat:** seat the painted block caret on the compact composer line box ([9ce970a](https://github.com/digithings-ai/digithings/commit/9ce970a94d502ded2799d4dc304ce606c278ceb1))
+* **digichat:** seat the painted block caret on the compact line box ([02d7cfa](https://github.com/digithings-ai/digithings/commit/02d7cfa19a9360cf119dd32453dc9a1f1f68bc5b))
+* **mcp:** review follow-ups — digivault path_prefix, session view/thinking tools, web-search opt-in ([#4223](https://github.com/digithings-ai/digithings/issues/4223)/[#4218](https://github.com/digithings-ai/digithings/issues/4218)/[#4237](https://github.com/digithings-ai/digithings/issues/4237)) ([dd72667](https://github.com/digithings-ai/digithings/commit/dd7266769c5724e255c8afeb4da26c0b40597368))
+* **review follow-ups:** harden web-search error paths and reload turn mode ([90953af](https://github.com/digithings-ai/digithings/commit/90953af5bee27c9c80196ef18db69299203cc686))
+* **review follow-ups:** harden web-search error paths and reload turn mode ([5362be7](https://github.com/digithings-ai/digithings/commit/5362be77bf2e44758fef7fa8807e404d49b7526a))
+* **review follow-ups:** pin paging slice, guard error-card types, scrub scheme-less userinfo, pin attribution collision ([fca20ce](https://github.com/digithings-ai/digithings/commit/fca20ce3f68108945847eb5e964b8867d9f3e8d7))
+
 ## [2.1.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.0.0...digichat-v2.1.0) (2026-09-16)
 
 
