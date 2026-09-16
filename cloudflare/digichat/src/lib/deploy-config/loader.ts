@@ -163,6 +163,8 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     showLanguageSelector: dep.gate.showLanguageSelector,
     attachments: dep.features.attachments === true,
     pageContext: dep.features.pageContext,
+    view: dep.features.view,
+    thinking: dep.features.thinking,
     webSearch:
       dep.gate.webSearch === true ||
       dep.tools?.catalog?.some((t) => t.id === "web_search") === true,
