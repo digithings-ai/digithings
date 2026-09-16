@@ -184,3 +184,166 @@ def test_run_web_search_lets_config_error_propagate(monkeypatch):
     monkeypatch.setenv("DIGISEARCH_WEB_SEARCH_BACKEND", "bogus")
     with pytest.raises(WebSearchConfigError):
         run_web_search(WebSearchRequest(query="etf"))
+
+
+def test_search_web_delegates_to_search_only(monkeypatch):
+    from digisearch.web_search import service as mod
+    from digisearch.web_search.models import WebSearchRequest, WebSearchResponse
+
+    seen: dict[str, object] = {}
+
+    def fake_search_only(req, config):
+        seen["query"] = req.query
+        return WebSearchResponse(query=req.query, provider="searxng")
+
+    monkeypatch.setattr(mod, "_search_only", fake_search_only)
+    resp = mod.search_web(WebSearchRequest(query="q"))
+    assert resp.provider == "searxng" and seen["query"] == "q"
+
+
+def _provider_raising(monkeypatch, exc):
+    """Point every failover provider at a fake raising ``exc()`` (#4192)."""
+    from digisearch.web_search import service as svc
+
+    class _Down:
+        name = "down"
+
+        def search(self, req):
+            raise exc()
+
+    monkeypatch.setattr(svc, "SearXNGWebSearchProvider", lambda **k: _Down())
+    monkeypatch.setattr(svc, "DdgsWebSearchProvider", lambda *a, **k: _Down())
+
+
+def test_search_only_wraps_provider_429_with_status_and_retryable(monkeypatch):
+    import httpx
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    request = httpx.Request("GET", "https://searxng.invalid/search")
+    response = httpx.Response(429, request=request, text="Too Many Requests")
+    _provider_raising(
+        monkeypatch,
+        lambda: httpx.HTTPStatusError(
+            "Client error '429 Too Many Requests'", request=request, response=response
+        ),
+    )
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code == 429
+    assert excinfo.value.retryable is True
+    assert "all web-search backends failed" in str(excinfo.value)
+    assert "429" in str(excinfo.value)
+
+
+def test_search_only_wraps_connection_error_as_retryable(monkeypatch):
+    import httpx
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    _provider_raising(monkeypatch, lambda: httpx.ConnectError("connection refused"))
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code is None
+    assert excinfo.value.retryable is True
+
+
+def test_search_only_wraps_hard_provider_error_as_not_retryable(monkeypatch):
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    _provider_raising(monkeypatch, lambda: ValueError("provider exploded"))
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code is None
+    assert excinfo.value.retryable is False
+    assert isinstance(excinfo.value, RuntimeError)
+
+
+def test_search_only_wraps_ddgs_ratelimit_as_429_retryable(monkeypatch):
+    """Pin ddgs 9.0.x ``RatelimitException`` -> 429/retryable (#4192).
+
+    ddgs carries no HTTP response, so the classifier keys off the exception
+    *name*. ddgs >=9.1 no longer raises this class (failed searches surface as
+    ``DDGSException``, pinned below), so this covers the legacy deployed pin.
+    """
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    ratelimit = pytest.importorskip("ddgs.exceptions").RatelimitException
+    _provider_raising(monkeypatch, ratelimit)
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code == 429
+    assert excinfo.value.retryable is True
+    assert "429" in str(excinfo.value)
+
+
+def test_search_only_wraps_ddgs_timeout_as_retryable(monkeypatch):
+    """Pin ddgs ``TimeoutException`` -> retryable, with no status hint (#4192)."""
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    timeout = pytest.importorskip("ddgs.exceptions").TimeoutException
+    _provider_raising(monkeypatch, timeout)
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code is None
+    assert excinfo.value.retryable is True
+
+
+def test_search_only_wraps_ddgs_hard_failure_as_not_retryable(monkeypatch):
+    """ddgs >=9.1 collapses failed searches (even provider 429s) into this."""
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    ddgs_error = pytest.importorskip("ddgs.exceptions").DDGSException
+    _provider_raising(monkeypatch, lambda: ddgs_error("No results found."))
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    assert excinfo.value.status_code is None
+    assert excinfo.value.retryable is False
+    assert "No results found." in str(excinfo.value)
+
+
+def test_search_only_scrubs_provider_url_credentials(monkeypatch):
+    """Provider URL userinfo and query tokens must not leak into the error."""
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    secret_url = (
+        "Client error '429 Too Many Requests' for url "
+        "'http://user:s3cr3t@searxng.internal:8080/search?q=etf&token=abc123'"
+    )
+    _provider_raising(monkeypatch, lambda: RuntimeError(secret_url))
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    message = str(excinfo.value)
+    assert "s3cr3t" not in message
+    assert "token=abc123" not in message
+    assert "429 Too Many Requests" in message
+    assert "***@searxng.internal" in message
+
+
+def test_search_only_scrubs_scheme_less_provider_credentials(monkeypatch):
+    """Proxy-style userinfo without a scheme must also be masked."""
+    import pytest
+
+    from digisearch.web_search.models import WebSearchProviderError, WebSearchRequest
+
+    _provider_raising(
+        monkeypatch,
+        lambda: RuntimeError("Unknown scheme for proxy URL URL('user:pass@proxy.internal:8080')"),
+    )
+    with pytest.raises(WebSearchProviderError) as excinfo:
+        run_web_search(WebSearchRequest(query="etf"), config=WebSearchConfig(backend="auto"))
+    message = str(excinfo.value)
+    assert "user:pass" not in message
+    assert "***@proxy.internal" in message
