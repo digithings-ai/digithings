@@ -713,6 +713,207 @@ def test_webhook_crud_assigns_non_empty_ids_and_ledger_is_insert_or_ignore(tmp_p
     assert "PRIMARY KEY (webhook_id, event_id)" in ddl
 
 
+# ── #4226: re-delivery ledger state (attempts / next_attempt_at) ──────────────
+
+_LEGACY_DELIVERIES_DDL = """
+CREATE TABLE webhook_deliveries (
+    webhook_id TEXT NOT NULL,
+    event_id TEXT NOT NULL,
+    ok INTEGER NOT NULL,
+    status_code INTEGER,
+    error TEXT,
+    recorded_at TEXT NOT NULL,
+    PRIMARY KEY (webhook_id, event_id)
+);
+"""
+
+
+def _table_columns(path, table: str) -> set[str]:
+    with sqlite3.connect(path) as conn:
+        return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def test_legacy_webhook_deliveries_table_gains_retry_columns(tmp_path):
+    """A pre-#4226 DB is upgraded in place on open, and reopening is a no-op."""
+    path = tmp_path / "legacy.sqlite3"
+    webhook_id, event_id = "w" * 32, "e" * 32
+    with sqlite3.connect(path) as conn:
+        conn.executescript(_LEGACY_DELIVERIES_DDL)
+        conn.execute(
+            "INSERT INTO webhook_deliveries VALUES (?, ?, ?, ?, ?, ?)",
+            (webhook_id, event_id, 0, 503, "HTTP 503", _T0.isoformat()),
+        )
+    assert _table_columns(path, "webhook_deliveries") == {
+        "webhook_id",
+        "event_id",
+        "ok",
+        "status_code",
+        "error",
+        "recorded_at",
+    }
+
+    store = WebsetStore(db_path=str(path))
+    assert {"attempts", "next_attempt_at"} <= _table_columns(path, "webhook_deliveries")
+    legacy = store.get_webhook_delivery(webhook_id, event_id)
+    assert legacy is not None
+    assert legacy.attempts == 0 and legacy.next_attempt_at is None
+    assert legacy.recorded_at == _T0
+
+    migrated = store.update_webhook_delivery(
+        webhook_id,
+        event_id,
+        ok=False,
+        status_code=503,
+        error="HTTP 503",
+        attempts=1,
+        next_attempt_at=_T0 + timedelta(seconds=300),
+    )
+    assert migrated.attempts == 1 and migrated.recorded_at == _T0
+    # Reopening runs both guarded ALTERs again; the store must stay usable.
+    reopened = WebsetStore(db_path=str(path))
+    assert reopened.get_webhook_delivery(webhook_id, event_id) == migrated
+
+
+def test_update_webhook_delivery_round_trips_and_keeps_recorded_at(tmp_path, monkeypatch):
+    monkeypatch.setattr(store_module, "_now", lambda: _T0)
+    store = WebsetStore(db_path=str(tmp_path / "websets.sqlite3"))
+    webhook_id, event_id = "a" * 32, "e" * 32
+    store.record_webhook_delivery(webhook_id, event_id, ok=False, status_code=503, error="HTTP 503")
+    recorded = store.get_webhook_delivery(webhook_id, event_id)
+    assert recorded is not None
+    assert recorded.attempts == 0 and recorded.next_attempt_at is None
+
+    scheduled = store.update_webhook_delivery(
+        webhook_id,
+        event_id,
+        ok=False,
+        status_code=503,
+        error="HTTP 503",
+        attempts=1,
+        next_attempt_at=_T0 + timedelta(seconds=300),
+    )
+    assert scheduled == store.get_webhook_delivery(webhook_id, event_id)
+    assert scheduled.attempts == 1
+    assert scheduled.next_attempt_at == _T0 + timedelta(seconds=300)
+    assert scheduled.recorded_at == recorded.recorded_at == _T0
+
+    recovered = store.update_webhook_delivery(
+        webhook_id,
+        event_id,
+        ok=True,
+        status_code=200,
+        error=None,
+        attempts=2,
+        next_attempt_at=None,
+    )
+    assert recovered.ok is True and recovered.status_code == 200 and recovered.error is None
+    assert recovered.attempts == 2 and recovered.next_attempt_at is None
+    assert recovered.recorded_at == _T0
+
+    with pytest.raises(WebsetStoreError) as ei:
+        store.update_webhook_delivery(
+            "b" * 32,
+            event_id,
+            ok=True,
+            status_code=200,
+            error=None,
+            attempts=1,
+            next_attempt_at=None,
+        )
+    assert ei.value.code == "webhook_not_found"
+
+
+def test_list_due_webhook_deliveries_filters_and_orders(tmp_path, monkeypatch):
+    monkeypatch.setattr(store_module, "_now", lambda: _T0 - timedelta(minutes=5))
+    store = WebsetStore(db_path=str(tmp_path / "websets.sqlite3"))
+
+    def _at(moment: datetime) -> None:
+        monkeypatch.setattr(store_module, "_now", lambda: moment)
+
+    # Unscheduled first-attempt failures: due, oldest recorded first.
+    assert store.record_webhook_delivery(
+        "a" * 32, "e" * 32, ok=False, status_code=500, error="HTTP 500"
+    )
+    _at(_T0 - timedelta(minutes=4))
+    assert store.record_webhook_delivery(
+        "b" * 32, "e" * 32, ok=False, status_code=500, error="HTTP 500"
+    )
+    # Scheduled failure whose moment has arrived: due after the NULL group.
+    _at(_T0 - timedelta(minutes=3))
+    assert store.record_webhook_delivery(
+        "c" * 32, "e" * 32, ok=False, status_code=503, error="HTTP 503"
+    )
+    store.update_webhook_delivery(
+        "c" * 32,
+        "e" * 32,
+        ok=False,
+        status_code=503,
+        error="HTTP 503",
+        attempts=1,
+        next_attempt_at=_T0 - timedelta(seconds=60),
+    )
+    # Not due: future-scheduled, exhausted (attempts at the cap), or successful.
+    assert store.record_webhook_delivery(
+        "d" * 32, "e" * 32, ok=False, status_code=503, error="HTTP 503"
+    )
+    store.update_webhook_delivery(
+        "d" * 32,
+        "e" * 32,
+        ok=False,
+        status_code=503,
+        error="HTTP 503",
+        attempts=1,
+        next_attempt_at=_T0 + timedelta(seconds=60),
+    )
+    assert store.record_webhook_delivery(
+        "f" * 32, "e" * 32, ok=False, status_code=503, error="HTTP 503"
+    )
+    store.update_webhook_delivery(
+        "f" * 32,
+        "e" * 32,
+        ok=False,
+        status_code=503,
+        error="HTTP 503",
+        attempts=store_module._MAX_DELIVERY_ATTEMPTS,
+        next_attempt_at=None,
+    )
+    assert store.record_webhook_delivery("g" * 32, "e" * 32, ok=True, status_code=200)
+
+    due = store.list_due_webhook_deliveries(now=_T0)
+    assert [row.webhook_id for row in due] == ["a" * 32, "b" * 32, "c" * 32]
+    assert due[2].attempts == 1
+    assert due[2].next_attempt_at == _T0 - timedelta(seconds=60)
+    assert [row.webhook_id for row in store.list_due_webhook_deliveries(now=_T0, limit=2)] == [
+        "a" * 32,
+        "b" * 32,
+    ]
+    # An exhausted row never becomes due again, however far the clock runs;
+    # the future-scheduled row does (its moment has passed by then).
+    far = store.list_due_webhook_deliveries(now=_T0 + timedelta(days=365))
+    assert {row.webhook_id for row in far} == {"a" * 32, "b" * 32, "c" * 32, "d" * 32}
+    assert "f" * 32 not in {row.webhook_id for row in far}
+
+
+def test_get_event_round_trips_and_missing_raises(tmp_path):
+    store = WebsetStore(db_path=str(tmp_path / "websets.sqlite3"))
+    webset = store.create_webset(_webset())
+    search = store.add_search(_search(webset.id))
+    event = store.append_event(
+        WebsetEvent(webset_id=webset.id, type="webset.idle", search_id=search.id)
+    )
+    assert store.get_event(event.id) == event
+    with pytest.raises(WebsetStoreError) as ei:
+        store.get_event("e" * 32)
+    assert ei.value.code == "event_not_found"
+
+
+def test_delivery_attempt_cap_matches_the_events_redelivery_schedule():
+    """The due selector's cap and the events retry schedule are one contract."""
+    from digisearch.websets import events as events_module
+
+    assert store_module._MAX_DELIVERY_ATTEMPTS == events_module._WEBHOOK_REDELIVERY_ATTEMPTS
+
+
 def test_create_webset_assigns_server_owned_identity_for_nested_children(tmp_path):
     store = WebsetStore(db_path=str(tmp_path / "websets.sqlite3"))
     spoofed_webset = "ws_" + "e" * 32

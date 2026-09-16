@@ -261,13 +261,19 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 110 for #4221 (scheduled webset tick driver paragraph
     + monitor pause route/table rows in ARCHITECTURE.md) — fixture prose only;
     RecursiveChunker unchanged.
+    Re-recorded at count 111 for #4226 (automated webhook re-delivery paragraph,
+    retired deferral entry, and module-map rows in ARCHITECTURE.md) — fixture
+    prose only; RecursiveChunker unchanged.
+    Hashes only (count still 111) re-recorded for the #4226 review-fix wave
+    (re-delivery cap/full-ladder wording in ARCHITECTURE.md) — fixture prose
+    only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 110
+    assert len(chunks) == 111
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -308,12 +314,13 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "ce691515430dae1f",
         "73d141db4779c6b1",
         "3ba5f0d98d67de27",
-        "c090ca5fb79ad463",
-        "7e9bcd09f5f3abf1",
+        "d43b29499a454968",
+        "0fdafef266e479fd",
+        "4d46ce009fe0a623",
         "bed41ccd5021ddf1",
         "d168142221e6f74f",
-        "d9b2d30344aeff83",
-        "025bd495edce8546",
+        "18d2781b06700dd8",
+        "5ede406baf408986",
         "6de35d68bea0e990",
         "c5776a6b47ee3e04",
         "3aed1b59bbde9920",
@@ -346,8 +353,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "ea4b9c63695d2f69",
         "367d6f1945838ddd",
         "4187a3ee58add217",
-        "cb38d3721bb6f2b8",
-        "59f90a800d366aa9",
+        "85cad0d45c341571",
+        "d22113bcc2f23495",
         "3ec5f2b1fce1b494",
         "66ce13f7ba2fafdc",
         "26ca223dcbe8b403",

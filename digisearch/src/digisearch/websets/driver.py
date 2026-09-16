@@ -44,6 +44,16 @@ per-monitor faults so the pass survives. ``last_tick`` is in-process state owned
 by the install window, so a restart re-anchors every cadence at its first
 post-install sighting. Nothing ticks without an installed driver.
 
+A second TaskGroup child owns automated webhook re-delivery (#4226): one pass
+per ``WEBSET_REDELIVERY_SECONDS`` reads the failed, due ledger rows
+(``store.list_due_webhook_deliveries``) and re-attempts each through
+``websets.events.redeliver_webhook`` — the same signed POST core, current-secret
+signing, and the bounded attempts/backoff the events module pins. Rows are
+processed serially under a per-pass in-flight guard, each row's fault is
+contained, and the pass is torn down promptly by the stop event, so a failed
+delivery recorded while the process was down is retried once the driver
+installs. Nothing re-delivers without an installed driver.
+
 No HTTP-app import lives here, so either entrypoint can carry the lifespan.
 """
 
@@ -56,8 +66,10 @@ import sqlite3
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from digisearch.websets import service as websets_service
+from digisearch.websets.events import redeliver_webhook
 from digisearch.websets.models import Webset, WebsetItem, WebsetMonitor
 from digisearch.websets.runner import (
     WEBSET_TASKS,
@@ -65,12 +77,13 @@ from digisearch.websets.runner import (
     guard_webset_task,
     schedule_webset_task,
 )
-from digisearch.websets.store import WebsetStoreError
+from digisearch.websets.store import WebhookDelivery, WebsetStoreError
 from digisearch.websets.store import get_store as get_webset_store
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "WEBSET_REDELIVERY_SECONDS",
     "WEBSET_TICK_SECONDS",
     "WebsetTaskScheduler",
     "webset_task_lifespan",
@@ -79,10 +92,21 @@ __all__ = [
 #: Seconds between scheduled tick passes (monkeypatchable; in-process state).
 WEBSET_TICK_SECONDS: float = 60.0
 
+#: Seconds between webhook re-delivery passes (monkeypatchable; in-process state).
+WEBSET_REDELIVERY_SECONDS: float = 300.0
+
+#: Due-ledger rows a single re-delivery pass scans.
+_WEBSET_REDELIVERY_BATCH = 100
+
 
 def _now() -> float:
     """Monotonic seconds for tick-due math (monkeypatched with a fake clock)."""
     return time.monotonic()
+
+
+def _utc_now() -> datetime:
+    """UTC wall clock for ledger due-ness (monkeypatched with a fake clock)."""
+    return datetime.now(UTC)
 
 
 _install_lock: asyncio.Lock | None = None
@@ -163,6 +187,16 @@ def _load_incomplete_websets() -> list[Webset]:
 def _load_all_monitors() -> list[WebsetMonitor]:
     """Tick selector query, run on a worker thread by the driver."""
     return get_webset_store().list_all_monitors()
+
+
+def _load_due_deliveries(now: datetime, limit: int) -> list[WebhookDelivery]:
+    """Re-delivery selector query, run on a worker thread by the driver."""
+    return get_webset_store().list_due_webhook_deliveries(now=now, limit=limit)
+
+
+def _redeliver_delivery(delivery: WebhookDelivery, now: datetime) -> WebhookDelivery:
+    """Re-attempt one due ledger row on a worker thread (thread-bound sqlite)."""
+    return redeliver_webhook(get_webset_store(), delivery, now=now)
 
 
 async def _resume_incomplete_websets(task_group: asyncio.TaskGroup) -> None:
@@ -275,6 +309,68 @@ async def _tick_loop(stop: asyncio.Event) -> None:
             logger.exception("webset tick pass failed")
 
 
+async def _redeliver_once(stop: asyncio.Event) -> None:
+    """Run one re-delivery pass: re-attempt every due failed ledger row.
+
+    Due selection is the store's ``list_due_webhook_deliveries`` (failed,
+    unexhausted, scheduled at/before the injected wall clock) run on a worker
+    thread — thread-bound sqlite, same as the tick pass. Rows are processed
+    serially and pinned in a per-pass in-flight set, so one pass cannot
+    double-process a pair (even if a snapshot carried it twice) and a row whose
+    attempt is still running is never re-picked. Each row's re-delivery runs
+    under its own containment (a fault is logged and the next row still runs),
+    a store that cannot be opened skips the pass, and ``stop`` is checked
+    between rows so teardown does not wait out a pass.
+    """
+    now = _utc_now()
+    try:
+        due = await asyncio.to_thread(_load_due_deliveries, now, _WEBSET_REDELIVERY_BATCH)
+    except (OSError, sqlite3.Error, WebsetStoreError) as exc:
+        logger.warning("webset webhook redelivery skipped; store unavailable: %s", exc)
+        return
+    in_flight: set[tuple[str, str]] = set()
+    for delivery in due:
+        if stop.is_set():
+            return
+        key = (delivery.webhook_id, delivery.event_id)
+        if key in in_flight:
+            continue
+        in_flight.add(key)
+        try:
+            await asyncio.to_thread(_redeliver_delivery, delivery, now)
+        except Exception:
+            logger.exception(
+                "webset webhook redelivery failed webhook_id=%s event_id=%s",
+                delivery.webhook_id,
+                delivery.event_id,
+            )
+
+
+async def _redelivery_loop(stop: asyncio.Event) -> None:
+    """One re-delivery pass per ``WEBSET_REDELIVERY_SECONDS`` until *stop* is set.
+
+    Mirrors :func:`_tick_loop`: waiting on the stop event with an interval
+    timeout (rather than a plain sleep) keeps teardown prompt — a set stop event
+    ends the wait immediately, an in-flight pass finishes and then observes the
+    stop before the next pass, and the task is cancel-safe besides. A pass-level
+    escape is logged here instead of raised: the task is a TaskGroup child, so
+    an uncontained raise would cancel the sibling runs. The loop is created by
+    :func:`_supervise`, so it lives exactly one install window and nothing
+    re-delivers without an installed driver.
+    """
+    while True:
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=WEBSET_REDELIVERY_SECONDS)
+        except TimeoutError:
+            pass
+        if stop.is_set():
+            return
+        try:
+            await _redeliver_once(stop)
+        except Exception:
+            logger.exception("webset webhook redelivery pass failed")
+
+
 async def _supervise(stop: asyncio.Event, ready: asyncio.Event) -> None:
     """Own one process install: TaskGroup, seam install, resume, tick, teardown."""
     async with asyncio.TaskGroup() as task_group:
@@ -283,6 +379,7 @@ async def _supervise(stop: asyncio.Event, ready: asyncio.Event) -> None:
         try:
             await _resume_incomplete_websets(task_group)
             task_group.create_task(_tick_loop(stop))
+            task_group.create_task(_redelivery_loop(stop))
             ready.set()
             await stop.wait()
         finally:

@@ -16,7 +16,13 @@ different event loop raises ``RuntimeError`` — whether it is reference-counted
 or still starting up. The scheduled tick loop (#4221) is pinned at the end:
 first-sight anchoring / interval due-ness with an injected clock, paused and
 active-run skips, per-monitor and per-pass containment, prompt stop-event exit
-before and mid-pass, and the install-window-only lifetime.
+before and mid-pass, and the install-window-only lifetime. The webhook
+re-delivery loop (#4226) is pinned after it: due-row selection from an injected
+wall clock, serial (never double-processed) rows within a pass, per-row
+containment, prompt stop, store-failure skip, prompt loop exit, loop-level
+catch, install-window-only lifetime, and an integration pass that recovers a
+failed delivery through the real store and real ``redeliver_webhook`` (only the
+POST transport is faked).
 
 ``@pytest.mark.unit`` on every test.
 """
@@ -30,14 +36,22 @@ import sqlite3
 import threading
 import time as _time
 from collections.abc import Awaitable
+from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 import pytest
 from digisearch.websets import driver
 from digisearch.websets import runner as runner_module
 from digisearch.websets import service as service_module
-from digisearch.websets.models import VerificationCriterion, Webset, WebsetMonitor, WebsetSearch
-from digisearch.websets.store import WebsetStoreError
+from digisearch.websets.models import (
+    VerificationCriterion,
+    WebhookConfig,
+    Webset,
+    WebsetMonitor,
+    WebsetSearch,
+)
+from digisearch.websets.store import WebhookDelivery, WebsetStoreError
 
 pytestmark = pytest.mark.unit
 
@@ -65,13 +79,20 @@ class _FakeStore:
         error: Exception | None = None,
         monitors: list[WebsetMonitor] | None = None,
         monitor_error: Exception | None = None,
+        due: list[WebhookDelivery] | None = None,
+        due_error: Exception | None = None,
     ) -> None:
         self.incomplete = list(incomplete or [])
         self.error = error
         self.monitors = list(monitors or [])
         self.monitor_error = monitor_error
+        self.due = list(due or [])
+        self.due_error = due_error
         self.threads: list[int] = []
         self.monitor_threads: list[int] = []
+        self.due_threads: list[int] = []
+        self.due_nows: list[datetime] = []
+        self.due_limits: list[int] = []
 
     def list_incomplete_websets(self) -> list[Webset]:
         self.threads.append(threading.get_ident())
@@ -84,6 +105,14 @@ class _FakeStore:
         if self.monitor_error is not None:
             raise self.monitor_error
         return list(self.monitors)
+
+    def list_due_webhook_deliveries(self, *, now: datetime, limit: int = 100):
+        self.due_threads.append(threading.get_ident())
+        self.due_nows.append(now)
+        self.due_limits.append(limit)
+        if self.due_error is not None:
+            raise self.due_error
+        return list(self.due)
 
 
 def _monitor(webset_id: str, *, interval: int = 60, paused: bool = False) -> WebsetMonitor:
@@ -1145,4 +1174,259 @@ def test_tick_refreshes_through_the_real_service_path(monkeypatch, tmp_path):
             assert webset.id in runner_module.WEBSET_TASKS
 
     asyncio.run(_run())
+    assert runner_module.WEBSET_TASKS == {}
+
+
+# ── #4226: the webhook re-delivery loop ───────────────────────────────────────
+
+_UTC_T0 = datetime(2026, 9, 14, 12, 0, 0, tzinfo=UTC)
+
+
+def _delivery(webhook_id: str, event_id: str) -> WebhookDelivery:
+    return WebhookDelivery(webhook_id=webhook_id, event_id=event_id, ok=False, recorded_at=_UTC_T0)
+
+
+def _record_redeliveries(monkeypatch, *, fail: set[str] | None = None) -> list[tuple[Any, ...]]:
+    """Patch ``driver.redeliver_webhook``; records ``(webhook_id, now)`` calls."""
+    calls: list[tuple[Any, ...]] = []
+
+    def _fake(store, delivery, *, now=None, timeout_s=10.0):
+        calls.append((delivery.webhook_id, now))
+        if fail is not None and delivery.webhook_id in fail:
+            raise RuntimeError("re-delivery exploded")
+        return delivery
+
+    monkeypatch.setattr(driver, "redeliver_webhook", _fake)
+    return calls
+
+
+@pytest.mark.unit
+def test_redeliver_once_picks_due_rows_with_the_injected_clock_and_contains_failures(
+    monkeypatch, caplog
+):
+    rows = [
+        _delivery("a" * 32, "e" * 32),
+        _delivery("b" * 32, "e" * 32),
+        _delivery("c" * 32, "e" * 32),
+    ]
+    store = _FakeStore(due=rows)
+    monkeypatch.setattr(driver, "get_webset_store", lambda: store)
+    monkeypatch.setattr(driver, "_utc_now", lambda: _UTC_T0)
+    calls = _record_redeliveries(monkeypatch, fail={"b" * 32})
+    main_thread = threading.get_ident()
+
+    with caplog.at_level(logging.ERROR, logger="digisearch.websets.driver"):
+        asyncio.run(driver._redeliver_once(asyncio.Event()))
+
+    assert [webhook_id for webhook_id, _ in calls] == ["a" * 32, "b" * 32, "c" * 32]
+    assert {now for _, now in calls} == {_UTC_T0}
+    assert store.due_nows == [_UTC_T0]
+    assert store.due_limits == [driver._WEBSET_REDELIVERY_BATCH]
+    assert store.due_threads and store.due_threads[0] != main_thread  # sqlite stays off-loop
+    assert any(
+        "redelivery failed webhook_id=" + "b" * 32 in record.getMessage()
+        for record in caplog.records
+    )
+
+
+@pytest.mark.unit
+def test_redeliver_once_processes_rows_serially_and_never_double_processes(monkeypatch):
+    """One in-flight row at a time; a duplicated pair in the snapshot runs once."""
+    pair = ("a" * 32, "e" * 32)
+    rows = [_delivery(*pair), _delivery(*pair), _delivery("b" * 32, "e" * 32)]
+    store = _FakeStore(due=rows)
+    monkeypatch.setattr(driver, "get_webset_store", lambda: store)
+    monkeypatch.setattr(driver, "_utc_now", lambda: _UTC_T0)
+    order: list[tuple[str, str]] = []
+
+    def _fake(store_arg, delivery, *, now=None, timeout_s=10.0):
+        order.append(("start", delivery.webhook_id))
+        order.append(("end", delivery.webhook_id))
+        return delivery
+
+    monkeypatch.setattr(driver, "redeliver_webhook", _fake)
+    asyncio.run(driver._redeliver_once(asyncio.Event()))
+
+    assert order == [
+        ("start", "a" * 32),
+        ("end", "a" * 32),
+        ("start", "b" * 32),
+        ("end", "b" * 32),
+    ]
+
+
+@pytest.mark.unit
+def test_redeliver_once_stop_mid_pass_skips_remaining_rows(monkeypatch):
+    rows = [_delivery("a" * 32, "e" * 32), _delivery("b" * 32, "e" * 32)]
+    store = _FakeStore(due=rows)
+    monkeypatch.setattr(driver, "get_webset_store", lambda: store)
+    stop = asyncio.Event()
+    calls: list[str] = []
+
+    def _fake(store_arg, delivery, *, now=None, timeout_s=10.0):
+        calls.append(delivery.webhook_id)
+        stop.set()  # teardown lands mid-pass; the next row must not fire
+        return delivery
+
+    monkeypatch.setattr(driver, "redeliver_webhook", _fake)
+    asyncio.run(driver._redeliver_once(stop))
+
+    assert calls == ["a" * 32]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "error",
+    [
+        OSError("websets home is not readable"),
+        sqlite3.Error("database is locked"),
+        WebsetStoreError("ledger locked", code="store_locked"),
+    ],
+)
+def test_redeliver_once_store_failure_skips_the_pass(monkeypatch, caplog, error):
+    store = _FakeStore(due_error=error)
+    monkeypatch.setattr(driver, "get_webset_store", lambda: store)
+    calls = _record_redeliveries(monkeypatch)
+
+    with caplog.at_level(logging.WARNING, logger="digisearch.websets.driver"):
+        asyncio.run(driver._redeliver_once(asyncio.Event()))
+
+    assert calls == []
+    assert any(
+        "webset webhook redelivery skipped; store unavailable" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+@pytest.mark.unit
+def test_redelivery_loop_returns_promptly_when_stop_is_set(monkeypatch):
+    """Stop ends the wait immediately — no sleeping out a full interval."""
+    monkeypatch.setattr(driver, "WEBSET_REDELIVERY_SECONDS", 3600.0)
+    passes: list[int] = []
+
+    async def _record(stop: asyncio.Event) -> None:
+        passes.append(1)
+
+    monkeypatch.setattr(driver, "_redeliver_once", _record)
+
+    async def _run() -> None:
+        stop = asyncio.Event()
+        loop_task = asyncio.create_task(driver._redelivery_loop(stop))
+        await asyncio.sleep(0)
+        assert not loop_task.done()
+        stop.set()
+        await asyncio.wait_for(loop_task, timeout=1.0)
+        assert not loop_task.cancelled()
+
+    asyncio.run(_run())
+    assert passes == []
+
+
+@pytest.mark.unit
+def test_redelivery_loop_contains_a_raising_pass(monkeypatch):
+    """A pass-level escape is contained: the install survives and tears down."""
+    passes: list[int] = []
+
+    async def _boom(stop: asyncio.Event) -> None:
+        passes.append(1)
+        raise RuntimeError("redelivery pass exploded")
+
+    monkeypatch.setattr(driver, "_redeliver_once", _boom)
+    monkeypatch.setattr(driver, "WEBSET_REDELIVERY_SECONDS", 0.001)
+    monkeypatch.setattr(driver, "get_webset_store", lambda: _FakeStore())
+    installed: list[Any] = []
+    monkeypatch.setattr(service_module, "set_scheduler", installed.append)
+
+    async def _run() -> None:
+        async with driver.webset_task_lifespan(None):
+            deadline = _time.monotonic() + 5.0
+            while len(passes) < 2 and _time.monotonic() < deadline:
+                await asyncio.sleep(0.002)
+            assert len(passes) >= 2  # repeated pass failures never kill the loop
+            assert isinstance(installed[-1], driver.WebsetTaskScheduler)
+        assert installed[-1] is None
+
+    asyncio.run(_run())
+    assert driver._active == 0
+
+
+@pytest.mark.unit
+def test_redelivery_loop_starts_only_inside_an_install_window(monkeypatch):
+    """No driver install → nothing re-delivers; the loop is a TaskGroup child."""
+    started: list[asyncio.Event] = []
+
+    async def _fake_loop(stop: asyncio.Event) -> None:
+        started.append(stop)
+        await stop.wait()
+
+    monkeypatch.setattr(driver, "_redelivery_loop", _fake_loop)
+    monkeypatch.setattr(driver, "get_webset_store", lambda: _FakeStore())
+    installed: list[Any] = []
+    monkeypatch.setattr(service_module, "set_scheduler", installed.append)
+
+    assert started == []
+
+    async def _run() -> None:
+        async with driver.webset_task_lifespan(None):
+            assert len(started) == 1
+            assert not started[0].is_set()
+        assert started[0].is_set()
+
+    asyncio.run(_run())
+
+
+@pytest.mark.unit
+def test_redelivery_loop_recovers_a_failed_delivery(monkeypatch, tmp_path):
+    """Integration: real store + real ``redeliver_webhook``; only the POST is faked.
+
+    The one-shot delivery records a terminal failure (three 503s); once the
+    target recovers, the install window's re-delivery pass must flip that same
+    ledger row to ``ok`` without a fresh event append.
+    """
+    from digisearch.websets import events as events_module
+    from digisearch.websets.store import WebsetStore
+
+    db = tmp_path / "websets.sqlite3"
+    monkeypatch.setenv("DIGISEARCH_WEBSETS_DB", str(db))
+    monkeypatch.setattr(driver, "WEBSET_REDELIVERY_SECONDS", 0.01)
+    monkeypatch.setattr(events_module, "_sleep", lambda _seconds: None)
+    status = {"code": 503}
+    transport = httpx.MockTransport(lambda request: httpx.Response(status["code"]))
+    monkeypatch.setattr(
+        events_module, "_client_for", lambda timeout: httpx.Client(transport=transport)
+    )
+
+    store = WebsetStore(db_path=str(db))
+    webset = store.create_webset(_webset())
+    search = store.add_search(_search(webset))
+    store.settle_search(webset.id, search.id, "idle")
+    store.set_webset_idle(webset.id)
+    webhook = store.add_webhook(
+        webset.id,
+        WebhookConfig(
+            url="https://good.example.com/hooks", events=["webset.idle"], secret="s3cr3t"
+        ),
+    )
+    event = events_module.emit_webset_idle(store, webset.id, search.id)
+    failed = store.get_webhook_delivery(webhook.webhook_id, event.id)
+    assert failed is not None and failed.ok is False
+    assert [row.webhook_id for row in store.list_due_webhook_deliveries(now=datetime.now(UTC))] == [
+        webhook.webhook_id
+    ]
+
+    status["code"] = 200
+
+    async def _run() -> None:
+        async with driver.webset_task_lifespan(None):
+            deadline = _time.monotonic() + 5.0
+            while _time.monotonic() < deadline:
+                row = store.get_webhook_delivery(webhook.webhook_id, event.id)
+                if row is not None and row.ok:
+                    break
+                await asyncio.sleep(0.01)
+            row = store.get_webhook_delivery(webhook.webhook_id, event.id)
+            assert row is not None and row.ok is True and row.next_attempt_at is None
+
+    asyncio.run(_run())
+    assert store.list_events(webset.id)[0][-1].id == event.id  # no duplicate append
     assert runner_module.WEBSET_TASKS == {}
