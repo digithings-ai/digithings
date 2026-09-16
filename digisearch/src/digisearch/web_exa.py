@@ -199,10 +199,11 @@ def exa_search(
     output = data.get("output") if isinstance(data.get("output"), dict) else None
     cost = data.get("costDollars") if isinstance(data.get("costDollars"), dict) else None
     # Slice after filtering non-dict rows so ``offset`` counts the results the
-    # caller actually sees.
+    # caller actually sees, and bound the page by ``n``: the provider was asked
+    # for ``start + n`` rows, so non-dict junk must not lengthen the page.
     window = [r for r in results if isinstance(r, dict)]
     return WebSearchData(
-        results=window[start:],
+        results=window[start : start + n],
         output=output,
         search_type=str(data.get("searchType") or data.get("resolvedSearchType") or search_type),
         cost_dollars=cost,
