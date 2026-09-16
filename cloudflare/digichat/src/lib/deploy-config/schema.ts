@@ -268,7 +268,7 @@ export const McpServerSchema = z
   .object({
     id: z
       .string()
-      .regex(/^[a-z0-9][a-z0-9_-]{0,63}$/, "mcp server id must be lowercase slug"),
+      .regex(/^[a-z0-9][a-z0-9-]{0,63}$/, "mcp server id must be a lowercase slug without underscores"),
     /** BFF-only URL — never projected to the browser */
     url: z.string().url(),
     label: z.string().optional(),
