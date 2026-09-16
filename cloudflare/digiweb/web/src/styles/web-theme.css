@@ -44,6 +44,39 @@
   --font-display: var(--font-display);
 
   --ease-brand: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* shadcn/ui token contract — Base UI base, lyra preset.
+     See docs/superpowers/specs/2026-09-16-shadcn-migration-design.md §3.2 */
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--surface-2);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--ink);
+  --color-primary-foreground: var(--bg);
+  --color-secondary: var(--surface-2);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--surface);
+  --color-muted-foreground: var(--ink-soft);
+  /* Brand --color-accent is intentionally held (owned by the row at the top of
+     this block); shadcn's subtle accent role + brand-alias rename defer to the
+     Wave 2/3 alias sweep. */
+  --color-accent-foreground: var(--on-accent);
+  --color-destructive: var(--danger);
+  --color-border: var(--hair);
+  --color-input: var(--hair);
+  --color-ring: color-mix(in srgb, var(--accent) 40%, transparent);
+  --color-input-background: var(--surface);
+  --color-chart-1: var(--ink);
+  --color-chart-2: var(--accent);
+  --color-chart-3: var(--ink-soft);
+  --color-chart-4: var(--up);
+  --color-chart-5: var(--warn);
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
 }
 
 /* Base element defaults shared by the React apps.

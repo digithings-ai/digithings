@@ -3,8 +3,9 @@ name: "Pipeline: research metrics refresh"
 
 # Daily refresh of the derived performance + lookback surfaces the dashboard
 # dashboard reads (portfolio_metrics, current_book_lookback). Both are deterministic
-# Polars/SQL recomputes — zero LLM cost. Runs after the EOD price ingest (21:00,
-# pipeline-digiquant-prices.yml) so the latest closes are in price_history, and after the
+# Polars/SQL recomputes — zero LLM cost. Runs after the EOD market-data refresh
+# (pipeline-market-data-refresh.yml writes the R2 generations; the Supabase
+# price tables were dropped in migration 127, #4053), and after the
 # weekday delta book (12:00) / Saturday baseline book have materialized.
 #
 # Before this cron, these scripts ran nowhere, so portfolio_metrics +

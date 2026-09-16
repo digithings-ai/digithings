@@ -19,9 +19,10 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import types
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -169,6 +170,60 @@ class _FakeResponse:
     data: list[dict[str, Any]]
 
 
+# ─── R2 seal + live-open seams (#4053) ──────────────────────────────────────
+#
+# `_fetch_open` / `_open_marks` read the R2 seal first: dates at or before it
+# read the sealed generation, same-day dates come from the live-fetch seam
+# (`digiquant.data.prices.live_opens`). A unit test has neither, so every test
+# in this module runs behind a fixed PAST seal (all fixture dates take the live
+# branch) and a stub live seam that serves each `_FakeClient`'s canned
+# `price_history` rows — the same values the retired Supabase read returned.
+# No test touches R2 credentials, Yahoo, or the network.
+
+_LIVE_OPENS: dict[tuple[str, str], Any] = {}
+_LIVE_CALLS: list[tuple[str, str]] = []
+_PAST_SEAL = date(2020, 1, 1)
+
+
+def _register_live_rows(tables: dict[str, list[dict[str, Any]]]) -> None:
+    for row in tables.get("price_history", []) or []:
+        if not isinstance(row, dict) or not row.get("ticker") or not row.get("date"):
+            continue
+        key = (str(row["ticker"]).upper(), str(row["date"])[:10])
+        # First-non-null-open wins: the ledger fixture appends open-less seed-close
+        # rows after the mark rows, and the old `.limit(1)` read served the mark.
+        if key not in _LIVE_OPENS or (_LIVE_OPENS[key] is None and row.get("open") is not None):
+            _LIVE_OPENS[key] = row.get("open")
+
+
+def _live_fetch_open(ticker: str, d: str) -> Any:
+    key = (str(ticker).upper(), str(d)[:10])
+    _LIVE_CALLS.append(key)
+    return _LIVE_OPENS.get(key)
+
+
+def _live_fetch_opens(tickers: list[str], d: str) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for ticker in tickers:
+        key = (str(ticker).upper(), str(d)[:10])
+        _LIVE_CALLS.append(key)
+        if key in _LIVE_OPENS:
+            out[key[0]] = _LIVE_OPENS[key]
+    return out
+
+
+@pytest.fixture(autouse=True)
+def _market_seams(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serve the same-day open seam from the fixture tables; never the network."""
+    _LIVE_OPENS.clear()
+    _LIVE_CALLS.clear()
+    stub = types.ModuleType("digiquant.data.prices.live_opens")
+    stub.fetch_live_open = _live_fetch_open  # type: ignore[attr-defined]
+    stub.fetch_live_opens = _live_fetch_opens  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "digiquant.data.prices.live_opens", stub)
+    monkeypatch.setattr(_mod, "r2_manifest_seal", lambda: (_PAST_SEAL, 0))
+
+
 @dataclass
 class _FakeClient:
     """Per-table canned reads plus a captured upsert log."""
@@ -176,6 +231,9 @@ class _FakeClient:
     tables: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     upserts: list[dict[str, Any]] = field(default_factory=list)
     inserts: list[dict[str, Any]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        _register_live_rows(self.tables)
 
     def table(self, name: str) -> _FakeQuery:
         self.tables.setdefault(name, [])
@@ -812,13 +870,13 @@ class TestOpenMarksAreDecimal:
         )
         assert got == {"UUP": Decimal("27.40")}
 
-    def test_the_marks_are_one_batched_read(self) -> None:
-        """One `in_` over the day's pending symbols — the shape #2484 exists to stop.
+    def test_the_marks_live_fetch_once_per_ticker_and_skip_supabase(self) -> None:
+        """One live fetch per pending symbol, and no Supabase read at all (#4053).
 
-        The legacy `_fetch_open` loop issues a round trip per ticker. The symbol list here
-        is bounded by the day's pending orders, so it fits in one read, and the count is
-        asserted rather than the filter because a per-ticker loop would still produce the
-        right marks and pass every value assertion above.
+        The retired path did one `in_` over the day's pending symbols (the shape
+        #2484 exists to stop adding row-per-symbol round trips to). Same-day opens
+        have no sealed R2 bar, so each symbol gets exactly one live call instead —
+        and the Supabase table is not consulted even though the client carries rows.
         """
         reads: list[str] = []
 
@@ -835,7 +893,8 @@ class TestOpenMarksAreDecimal:
             }
         )
         assert len(_mod._open_marks(client, ["FXI", "UUP", "XLF"], _EXEC_D)) == 3
-        assert reads == ["price_history"]
+        assert reads == []
+        assert sorted(_LIVE_CALLS) == [("FXI", _EXEC_D), ("UUP", _EXEC_D), ("XLF", _EXEC_D)]
 
     def test_no_pending_symbols_means_no_read_at_all(self) -> None:
         """A quiet day must not turn into an unfiltered scan of `price_history`."""

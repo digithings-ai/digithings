@@ -10,7 +10,13 @@ set -eu
 DATA_CHROMA="${CHROMA_PATH:-/data/chroma}"
 DATA_VAULT="${DIGIVAULT_ROOT:-/data/vault}"
 
-mkdir -p "$DATA_CHROMA" "$DATA_VAULT" /data/digikey /var/log/supervisor
+# Required storage. Unlike the vault seed below, the stack cannot serve without
+# these, so this one stays fail-fast — but deliberately, with a legible message,
+# rather than letting `set -e` abort PID 1 on a bare shell error (#4156).
+if ! mkdir -p "$DATA_CHROMA" "$DATA_VAULT" /data/digikey /var/log/supervisor; then
+  echo "digithings-stack: FATAL cannot create required data dirs (chroma, vault, digikey, supervisor logs)" >&2
+  exit 1
+fi
 
 # Stable digikey issuer defaults for CF custom domains (overridable via envVars).
 export DIGIKEY_ISSUER="${DIGIKEY_ISSUER:-https://key.digithings.ai}"
@@ -54,7 +60,7 @@ export DIGI_WORKFLOW_PROFILE="${DIGI_WORKFLOW_PROFILE:-research_rag}"
 # env, so those edits were real). Keep this list in sync with agents.allowed_tools in
 # infra/digichat-release/config/digiproject.yaml, which outranks it whenever the project
 # config loads; this value only decides what happens when that load fails (#2306).
-export DIGI_ALLOWED_TOOLS="${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes,digivault_get_note}"
+export DIGI_ALLOWED_TOOLS="${DIGI_ALLOWED_TOOLS:-digisearch,digisearch_semantic,digisearch_web_search,digivault_search_notes,digivault_get_note,zammad_search_tickets,zammad_get_ticket,zammad_ticket_report}"
 # "Is Vectorize configured?" must agree with digisearch's own Python check
 # (the CLOUDFLARE_*/VECTORIZE_*/D1_* canonical-with-fallback lookup, see
 # digisearch/src/digisearch/search/_stub.py's _first_env) byte-for-byte, or one
@@ -119,7 +125,9 @@ export VECTORIZE_API_TOKEN="${VECTORIZE_API_TOKEN:-}"
 export D1_ACCOUNT_ID="${D1_ACCOUNT_ID:-}"
 export D1_API_TOKEN="${D1_API_TOKEN:-}"
 export D1_DATABASE_MAP="${D1_DATABASE_MAP:-}"
-export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}"
+# Required, with no fallback: a synthesized SQLite path here would live on this
+# instance's ephemeral /data and lose every issued API key (#4080).
+export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-}"
 export DIGIKEY_BLOCKLIST_REDIS_URL="${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://127.0.0.1:6379/0}"
 export DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-0}"
 export PYTHONPATH="/app/digikey/src:/app/digigraph/src:/app/digisearch/src:/app/digivault/src:/app/digibase/src:/app/digillm/src:/app/digismith/src${PYTHONPATH:+:$PYTHONPATH}"
@@ -158,25 +166,64 @@ fi
 # Copy vault seed notes. Files named seed-*.md are always refreshed from the
 # image (dogfood corpus). Other filenames are copied only if missing so
 # operator / docs_onboard notes are never overwritten.
+#
+# Best-effort: the seed corpus is dogfood content, so a failed copy degrades the
+# vault rather than the service. Unguarded it would abort PID 1 before
+# `exec supervisord` and take digikey/digigraph down with it (#4149, #4156).
 for client_dir in /seed/vault/clients/*; do
   [ -d "$client_dir" ] || continue
   client=$(basename "$client_dir")
-  mkdir -p "$DATA_VAULT/clients/$client"
+  mkdir -p "$DATA_VAULT/clients/$client" \
+    || echo "digithings-stack: WARN cannot create vault client dir: $client" >&2
   for f in "$client_dir"/*; do
     [ -f "$f" ] || continue
     base=$(basename "$f")
     dest="$DATA_VAULT/clients/$client/$base"
     case "$base" in
       seed-*.md|seed-*.markdown)
-        cp "$f" "$dest"
+        cp "$f" "$dest" \
+          || echo "digithings-stack: WARN cannot refresh vault seed: $base" >&2
         ;;
       *)
         if [ ! -f "$dest" ]; then
-          cp "$f" "$dest"
+          cp "$f" "$dest" \
+            || echo "digithings-stack: WARN cannot seed vault note: $base" >&2
         fi
         ;;
     esac
   done
 done
+
+# Alias the dotless name `zammad-mcp` to this container's own non-loopback
+# IPv4 so digigraph's remote-MCP client can dial `http://zammad-mcp:8770/mcp`
+# (its SSRF guard always blocks loopback, #3879, and there is no Docker DNS
+# under Firecracker). Warn and continue if no usable address is found.
+if ! getent hosts zammad-mcp >/dev/null 2>&1; then
+  # Bounded and non-fatal by design: a resolver probe must never stall
+  # startup, and a failed write must never trip `set -eu` (an entrypoint
+  # that exits takes the whole stack container with it).
+  zammad_mcp_ip=$(timeout 5 python3 -c '
+import socket
+
+probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    probe.connect(("192.0.2.1", 80))
+    print(probe.getsockname()[0])
+finally:
+    probe.close()
+' 2>/dev/null || true)
+  case "${zammad_mcp_ip:-}" in
+    127.* | 169.254.*) zammad_mcp_ip="" ;;
+  esac
+  if [ -n "${zammad_mcp_ip:-}" ]; then
+    if printf '%s zammad-mcp\n' "$zammad_mcp_ip" >> /etc/hosts 2>/dev/null; then
+      echo "digithings-stack: aliased zammad-mcp -> $zammad_mcp_ip"
+    else
+      echo "digithings-stack: WARN could not write the zammad-mcp host alias" >&2
+    fi
+  else
+    echo "digithings-stack: WARN no zammad-mcp host alias; Zammad MCP will be unreachable" >&2
+  fi
+fi
 
 exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/digithings.conf

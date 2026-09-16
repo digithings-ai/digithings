@@ -1,12 +1,12 @@
-"""R2 market-data reads for backfill_context (#4013, Phase A Task 5).
+"""R2-only market reads for backfill_context (#4053 Task 4).
 
-``fetch_context`` keeps its Supabase body for the default backend and gains an
-R2 branch (``r2_backend_enabled`` / ``r2_close_rows`` / ``r2_ohlcv_rows`` /
-``get_price_technicals`` — the technicals helper owns its own backend switch).
-Macro series and snapshots stay on Supabase even under R2 (D2), so the R2 branch
-still builds a client through ``_sb`` — the ``fake_sb`` fixture keeps these unit
-tests off a real one. Loaded via ``importlib.util`` like the other script-level
-tests (``digiquant/scripts/`` is not an installed package).
+``fetch_context`` reads prices/technicals from the sealed R2 generations
+(``r2_close_rows`` / ``r2_ohlcv_rows`` / ``get_price_technicals`` — the
+technicals helper is R2-only since #4053). Macro series and snapshots stay on
+Supabase (D2), so the function still builds a client through ``_sb`` — the
+``fake_sb`` fixture keeps these unit tests off a real one. Loaded via
+``importlib.util`` like the other script-level tests (``digiquant/scripts/`` is
+not an installed package).
 """
 
 from __future__ import annotations

@@ -56,7 +56,7 @@ The following is built and functional as of this architecture review (March 2026
 | Logical provider-call purpose and lineage | Built | `llm_client.py`, `usage.py`, `graph/research_agent.py`, `digillm` contracts |
 | Planning executor (topo-sort + parallel steps) | Built | `planning/executor.py` |
 | Graphiti graph memory | **Not built** | Phase 2 roadmap |
-| Operator remote MCP (trusted BFF `X-Digi-Mcp-Servers`) | **Built** | `orchestration/mcp_client.py`; YAML + SSRF-guarded session overlay in digichat; connect-time DNS validation/pinning (#3879) |
+| Operator remote MCP (trusted BFF `X-Digi-Mcp-Servers`) | **Built** | `orchestration/mcp_client.py`; YAML + SSRF-guarded session overlay in digichat; connect-time DNS validation/pinning (#3879); tool failures surface `BaseExceptionGroup` sub-exceptions in the `mcp_call_failed` message |
 | Auth-bound checkpoints (per-key RBAC) | **Not built** | Phase 2 roadmap |
 | OpenAI Responses API | **Not built** | Phase 2 roadmap |
 
@@ -206,6 +206,12 @@ and the incumbent aggregate.
 calls carry its identity and each execution emits exactly one terminal `NodeRunRecord`. There is no
 node-name registry: identity is `NodeSpec.name` plus the per-`Send` cursor, and nothing parses a
 ticker out of `phase` or `phase_slug`.
+
+Every node execution also narrates itself at INFO — one line on entry and one on exit carrying the
+phase position, the node name (and, for fan-out phases, the per-`Send` key), while a phase barrier
+reports the phase's wall time (single-node phases have no barrier; #4116). A book run takes hours,
+so this is what makes it watchable in a plain CI log; the narration never logs above INFO, leaving
+WARNING+ meaning trouble.
 
 The wrapper is `functools.wraps` + `*args/**kwargs`, and the form is load-bearing. LangGraph decides
 what to inject from `inspect.signature(func).parameters`, matched on parameter name *and*
@@ -481,7 +487,7 @@ START
                                                                └─ optimize enabled → optimize → END
 ```
 
-Retrieval is model-driven by default: `research_node` (document RAG path) hands the full tool set to `run_tools` with a `max_tool_rounds=4` budget and lets the model decide whether and when to call `digisearch` / `digivault_search_notes`. After a locate, `auto_load_notes` (`retrieval.py`) calls `digivault_get_note` (batch ≤20 vault paths) so the model synthesizes from full notes instead of asking permission to read what it already found. `RagSourceItem.body` is stamped only on get_note (`include_body=True`, cap `MAX_RAG_SOURCE_BODY_CHARS`) and overlaid onto duplicate locate keys in `merge_loaded_notes` / `merge_rag_sources_accumulator`; WorkflowState strips `body` before checkpoint so the pane reads the stream, not graph state. Slash `/digisearch` and `/digivault` on the public embed set `force_tool` / `X-Digi-Force-Tool`: `last_user_turn()` (`chat_prompt.py`) extracts the current user string from the flattened `User:` / `Assistant:` transcript so the tool `query` is that turn, not the whole history. The locate is injected *before* the LLM turn **only when** `allowed_tool_names` is unrestricted (`None`) or includes the resolved tool — otherwise tenants with an allowlist would still get a started `tool_call` / Searching… row and a deny blob in `force_tool_messages` even though `execute()` would refuse the call. Extra operator MCP server ids (`X-Digi-Mcp-Servers`) are **not** injected: `research_node` prepends a user hint and sets `tool_choice="required"` so the model must call `{id}__*` tools. Then `run_tools` synthesizes with `tool_choice="auto"` after a catalog locate (even when `require_tool_calls` is set). `agents.always_retrieve_tools` is dead configuration — `DigiProjectConfig.get_always_retrieve_tools()` still exists and still parses the key, but nothing calls it, since the prefetch it used to gate was removed. All shipped `digiproject.yaml` files have had the key dropped. If the model calls no tools (and no force-tool ran), `run_tools` runs a single streamed completion (no tool rounds). **`max_tool_rounds=4` bounds tool-calling rounds, not completions outright**: `digillm.client.run_tools` (`digillm/src/digillm/client.py:2138-2147`) fires one additional tool-free completion when the round budget is exhausted and the model still hasn't produced final content, so a fully-exhausted budget costs up to **5** completions, not 4.
+Retrieval is model-driven by default: `research_node` (document RAG path) hands the full tool set to `run_tools` with a `max_tool_rounds=4` budget and lets the model decide whether and when to call `digisearch` / `digivault_search_notes`. After a locate, `auto_load_notes` (`retrieval.py`) calls `digivault_get_note` (batch ≤20 vault paths) so the model synthesizes from full notes instead of asking permission to read what it already found. `RagSourceItem.body` is stamped only on get_note (`include_body=True`, cap `MAX_RAG_SOURCE_BODY_CHARS`) and overlaid onto duplicate locate keys in `merge_loaded_notes` / `merge_rag_sources_accumulator`; WorkflowState strips `body` before checkpoint so the pane reads the stream, not graph state. Slash `/digisearch` and `/digivault` on the public embed set `force_tool` / `X-Digi-Force-Tool`: `last_user_turn()` (`chat_prompt.py`) extracts the current user string from the flattened `User:` / `Assistant:` transcript so the tool `query` is that turn, not the whole history. The locate is injected *before* the LLM turn **only when** `allowed_tool_names` is unrestricted (`None`) or includes the resolved tool — otherwise tenants with an allowlist would still get a started `tool_call` / Searching… row and a deny blob in `force_tool_messages` even though `execute()` would refuse the call. Extra operator MCP server ids (`X-Digi-Mcp-Servers`) are **not** injected: `research_node` prepends a user hint and sets `tool_choice="required"` so the model must call `{id}_*` tools. Then `run_tools` synthesizes with `tool_choice="auto"` after a catalog locate (even when `require_tool_calls` is set). `agents.always_retrieve_tools` is dead configuration — `DigiProjectConfig.get_always_retrieve_tools()` still exists and still parses the key, but nothing calls it, since the prefetch it used to gate was removed. All shipped `digiproject.yaml` files have had the key dropped. If the model calls no tools (and no force-tool ran), `run_tools` runs a single streamed completion (no tool rounds). **`max_tool_rounds=4` bounds tool-calling rounds, not completions outright**: `digillm.client.run_tools` (`digillm/src/digillm/client.py:2138-2147`) fires one additional tool-free completion when the round budget is exhausted and the model still hasn't produced final content, so a fully-exhausted budget costs up to **5** completions, not 4.
 
 `agents.research_brief` (default `true`; env `DIGI_RESEARCH_BRIEF=0/1` overrides) controls whether `build_research_subgraph()` wires `research_brief_builder` after `research_inner`. When false, the subgraph ends when the answer stream completes — dogfood chat uses this to avoid a post-answer `completion_text` latency tax.
 
@@ -657,14 +663,14 @@ An allowlist of `[]` (empty list) blocks all tools, forcing research-only mode. 
 coerced to unrestricted by a falsy check.
 
 `WorkflowRequest.disabled_tools` (`X-Digi-Disabled-Tools`) then subtracts catalog
-search/vault aliases **and** extra operator MCP server ids (`id` and `id__*`).
+search/vault aliases **and** extra operator MCP server ids (`id` and `id_*`).
 Unknown tokens are ignored. If `force_tool` is set, that locate / MCP id is
 unioned back so a one-shot `/digisearch <query>` still runs when the session
 toggle is off.
 
 Operator MCP tools are listed from Streamable HTTP servers declared by the
 trusted BFF (`X-Digi-Mcp-Servers`, optionally merged with `DIGI_MCP_SERVERS`).
-Names are prefixed `{server_id}__{tool}`. `Authorization: Bearer` is
+Names are prefixed `{server_id}_{tool}` (`mcp_client.prefixed_tool_name`). `Authorization: Bearer` is
 passed into `streamablehttp_client` by default when the BFF overlay includes a
 token. An operator-only `authHeader` (deploy YAML `mcp.servers[].authHeader`,
 #3841) sends the token under that header name instead — e.g. `X-API-Key` for
@@ -931,7 +937,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 
 - **Manifest:** `POST /v1/orchestrator_tools` — returns OpenAI tool dicts for `digisearch`, `digisearch_fetch_all`, `digisearch_research_delegate` (federated mode). Cached per `(base_url, index_config)`.
 - **Invoke:** `POST /v1/orchestrator_invoke` — dispatches tool execution. Accepts `{tool, arguments, default_index_name}`.
-- **web_search (built-in, #3853; tool-only #3859):** `orchestration/web_search_tools.py` owns the `web_search` tool dict (External evidence tier) and `_handle_web_search` calls the hub `web_search` tool (`invoke_digisearch_tool`, never `import digisearch`). There is no synthesis fallback: when the service errors or yields no rows, callers fail hard. The tool requires `enable_web_search`, which digichat forwards when the tenant allows and the user pref is on — user pref tenant-gated default-on (#3859; tenant gate still opt-in #3420), so web never mixes into corpus RAG silently.
+- **web_search (built-in, #3853; tool-only #3859):** `orchestration/web_search_tools.py` owns the `web_search` tool dict (External evidence tier) and `_handle_web_search` calls the hub `web_search` tool (`invoke_digisearch_tool`, never `import digisearch`). There is no synthesis fallback: a genuinely empty result set yields `{}`, while a hub failure (rate limit, auth rejection, open circuit, malformed envelope) raises `DigisearchHubError` carrying the hub's own error text — so a hosted-digisearch 429 can never surface as "returned no rows" (#4106). Callers fail hard either way. Only a real JSON `true` in `ok` counts as success (`inv.get("ok") is not True` raises, #4198), and `call_digisearch_web_search` takes an optional `timeout` (default 120 s) bounding the single hub POST — digiquant's fail-fast pre-flight passes a short value. It also takes `recency_days`, forwarded into the hub `arguments` only when the caller sets one — absent or JSON `null` both keep digisearch's own default window (the hub skips a null rather than forwarding it), so digiquant's yaml-driven grounding can pin the search recency (#4165). The tool requires `enable_web_search`, which digichat forwards when the tenant allows and the user pref is on — user pref tenant-gated default-on (#3859; tenant gate still opt-in #3420), so web never mixes into corpus RAG silently.
 - **Legacy:** `tools/digisearch.py` uses `POST /query` for non-orchestrator call sites (e.g. `_run_quant_or_augmented_path` in `research.py`).
 - **Auth:** Bearer token from `WorkflowState.digi_bearer` is forwarded via `Authorization: Bearer` header.
 - **Request correlation:** `X-Request-ID` forwarded from `ToolContext.request_id`.

@@ -1481,8 +1481,10 @@ dependencies = [
     { name = "click" },
     { name = "cryptography" },
     { name = "digibase" },
+    { name = "digifetch" },
     { name = "digikey" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "jinja2" },
     { name = "langgraph" },
     { name = "optuna" },
@@ -1531,6 +1533,7 @@ m2 = [
 ]
 mcp = [
     { name = "mcp" },
+    { name = "yfinance" },
 ]
 nautilus = [
     { name = "nautilus-trader" },
@@ -1583,6 +1586,7 @@ requires-dist = [
     { name = "curl-cffi", marker = "extra == 'data'", specifier = ">=0.15.0" },
     { name = "digibase", editable = "digibase" },
     { name = "digibase", extras = ["otel"], marker = "extra == 'otel'", editable = "digibase" },
+    { name = "digifetch", editable = "digifetch" },
     { name = "digikey", editable = "digikey" },
     { name = "digiquant", extras = ["indicators"], marker = "extra == 'dev'", editable = "digiquant" },
     { name = "digiquant", extras = ["m2"], marker = "extra == 'dev'", editable = "digiquant" },
@@ -1591,6 +1595,7 @@ requires-dist = [
     { name = "exchange-calendars", marker = "extra == 'prices'", specifier = ">=4.5" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "fredapi", marker = "extra == 'm2'", specifier = ">=0.5" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'brokers-ibkr'", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'research'", specifier = ">=0.27" },
     { name = "jinja2", specifier = ">=3.1" },
@@ -1620,6 +1625,7 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
     { name = "yfinance", marker = "extra == 'data'", specifier = ">=0.2" },
     { name = "yfinance", marker = "extra == 'm2'", specifier = ">=0.2" },
+    { name = "yfinance", marker = "extra == 'mcp'", specifier = ">=0.2" },
     { name = "yfinance", marker = "extra == 'prices'", specifier = ">=0.2" },
     { name = "zstandard", marker = "extra == 'research'", specifier = ">=0.23" },
 ]

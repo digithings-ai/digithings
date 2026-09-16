@@ -18,6 +18,7 @@ import {
   Search,
   Settings,
   Tag,
+  Users,
   X,
 } from 'lucide-react';
 import {
@@ -30,7 +31,9 @@ import { buildPipelineHref, DIGEST_DOCUMENT_KEYS } from '@/lib/pipeline-links';
 import { buildDocumentSearchItems } from '@/lib/document-search';
 import { fetchAllTickers } from '@/lib/queries';
 import { thesisDetailHref } from '@/lib/portfolio-url-state';
-import { useCanAccessProduct } from '@/lib/use-entitlement';
+import { useFxHubOnlyInvitee } from '@/lib/fx-hub-only';
+import { getBriefs, getTradeIdeaArchive } from '@/lib/twelve-x/fetch';
+import type { FxBriefRow, FxTradeIdeaRow } from '@/lib/twelve-x/types';
 import type { Doc } from '@/lib/types';
 
 export type CmdItem = {
@@ -189,6 +192,47 @@ export function buildTickerCommandItems(tickers: string[]): CmdItem[] {
 }
 
 /**
+ * FX-Hub-only search rows (12x single view) — briefs and trade ideas from the
+ * FX research tables, plus one row per broker (the matrix is the broker
+ * surface). Every href stays inside `/twelve-x`; no DiGiQuant paths.
+ */
+export function buildFxHubSearchItems(
+  briefs: FxBriefRow[],
+  ideas: FxTradeIdeaRow[],
+): CmdItem[] {
+  const brokers = new Map<string, string>();
+  for (const brief of briefs) {
+    const name = brief.broker_name?.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (!brokers.has(key)) brokers.set(key, name);
+  }
+  const brokerItems: CmdItem[] = [...brokers.entries()].map(([key, name]) => ({
+    id: `fx-broker-${key.replace(/[^a-z0-9]+/g, '-')}`,
+    title: name,
+    hint: 'Broker — desk profile in the research matrix',
+    href: '/twelve-x?tab=matrix',
+    icon: Users,
+  }));
+  const briefItems: CmdItem[] = briefs.map((brief) => ({
+    id: `fx-brief-${brief.run_date}-${brief.source_file}`,
+    title:
+      brief.document_title?.trim() || brief.broker_name?.trim() || brief.source_file,
+    hint: `Brief · ${brief.broker_name?.trim() || 'unknown broker'} · ${brief.run_date}`,
+    href: `/twelve-x?brief=${encodeURIComponent(brief.source_file)}&briefDate=${encodeURIComponent(brief.run_date)}`,
+    icon: FileText,
+  }));
+  const ideaItems: CmdItem[] = ideas.slice(0, 100).map((idea) => ({
+    id: `fx-idea-${idea.run_date}-${idea.rank}`,
+    title: idea.title?.trim() || `${idea.pair} ${idea.direction}`,
+    hint: `Trade idea · ${idea.pair} · ${idea.run_date}`,
+    href: '/twelve-x?tab=trades',
+    icon: Scale,
+  }));
+  return [...briefItems, ...ideaItems, ...brokerItems];
+}
+
+/**
  * Filter the static command list by query, then append live document hits (Surface 6).
  * Document hits are query-dependent and keyed off `document_key` (`buildDocumentSearchItems`),
  * so a blank query returns the static list verbatim — no doc dump in the empty-query view.
@@ -232,20 +276,31 @@ export default function CommandPalette() {
   const router = useRouter();
   const { data } = useDashboard();
   const { commandPaletteOpen: open, openCommandPalette, closeCommandPalette } = useAppShell();
-  const canFxHub = useCanAccessProduct('fx_hub');
+  const { canFxHub, fxHubOnlyInvitee } = useFxHubOnlyInvitee();
 
   const items = useMemo<CmdItem[]>(() => {
     const all = buildCommandItems(data);
+    if (fxHubOnlyInvitee) {
+      // 12x single-view contract: only FX Hub (+ account settings) is reachable.
+      return all.filter(
+        (i) =>
+          i.id === 'go-fx' || i.id === 'go-fx-how' || i.id === 'go-settings',
+      );
+    }
     if (canFxHub) return all;
     return all.filter((i) => i.id !== 'go-fx' && i.id !== 'go-fx-how');
-  }, [data, canFxHub]);
-  const docs = useMemo<Doc[]>(() => data?.docs ?? [], [data]);
+  }, [data, canFxHub, fxHubOnlyInvitee]);
+  const docs = useMemo<Doc[]>(
+    () => (fxHubOnlyInvitee ? [] : data?.docs ?? []),
+    [data, fxHubOnlyInvitee]
+  );
 
   // Live ticker union (#1562 PR2) — fetched once on mount, independent of the
   // dashboard context (positions alone would miss decision_log/analyst-only
   // tickers). Fail-soft: an empty list just omits the Tickers group.
   const [tickers, setTickers] = useState<string[]>([]);
   useEffect(() => {
+    if (fxHubOnlyInvitee) return;
     let alive = true;
     fetchAllTickers()
       .then((t) => {
@@ -257,8 +312,36 @@ export default function CommandPalette() {
     return () => {
       alive = false;
     };
-  }, []);
-  const tickerItems = useMemo<CmdItem[]>(() => buildTickerCommandItems(tickers), [tickers]);
+  }, [fxHubOnlyInvitee]);
+  const tickerItems = useMemo<CmdItem[]>(
+    () => (fxHubOnlyInvitee ? [] : buildTickerCommandItems(tickers)),
+    [fxHubOnlyInvitee, tickers]
+  );
+
+  // FX-Hub-only search sources (briefs, brokers via briefs, trade ideas). Loaded
+  // when the 12x single view mounts so it keeps its own searchable content.
+  // Fail-soft: an empty source list simply omits the FX Hub group.
+  const [fxSources, setFxSources] = useState<{
+    briefs: FxBriefRow[];
+    ideas: FxTradeIdeaRow[];
+  }>({ briefs: [], ideas: [] });
+  useEffect(() => {
+    if (!fxHubOnlyInvitee) return;
+    let alive = true;
+    Promise.all([
+      getBriefs(30).catch(() => [] as FxBriefRow[]),
+      getTradeIdeaArchive().catch(() => [] as FxTradeIdeaRow[]),
+    ]).then(([briefs, ideas]) => {
+      if (alive) setFxSources({ briefs, ideas });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [fxHubOnlyInvitee]);
+  const fxItems = useMemo<CmdItem[]>(
+    () => buildFxHubSearchItems(fxSources.briefs, fxSources.ideas),
+    [fxSources]
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -294,18 +377,27 @@ export default function CommandPalette() {
   // The Tickers group (#1562 PR2) is labeled and appended only when it has
   // matches — `filterCommandItems(tickerItems, [], query)` reuses the same
   // substring/starts-with ranking with no document hits mixed in (docs=[]).
+  // The FX Hub group (12x single view) follows the same contract: query-only,
+  // so the empty view never dumps the brief/idea archive.
   const groups = useMemo(
     () =>
       (query: string): CommandPaletteGroup[] => {
         const tickerMatches = filterCommandItems(tickerItems, [], query);
+        const fxMatches =
+          fxHubOnlyInvitee && query.trim()
+            ? filterCommandItems(fxItems, [], query)
+            : [];
         return [
           { items: filterCommandItems(items, docs, query).map(toOption) },
+          ...(fxMatches.length > 0
+            ? [{ id: 'fx-hub', label: 'FX Hub', items: fxMatches.map(toOption) }]
+            : []),
           ...(tickerMatches.length > 0
             ? [{ id: 'tickers', label: 'Tickers', items: tickerMatches.map(toOption) }]
             : []),
         ];
       },
-    [items, docs, tickerItems, toOption]
+    [items, docs, fxHubOnlyInvitee, fxItems, tickerItems, toOption]
   );
 
   return (

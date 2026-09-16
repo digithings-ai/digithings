@@ -2,8 +2,9 @@
 
 # score:allow untyped any
 # MCP tool payloads carry heterogeneous JSON; Any is the honest annotation.
-from __future__ import annotations
-
+# No `from __future__ import annotations`: the stack image ships FastMCP 1.9.3,
+# which calls issubclass() on raw annotations — PEP 563 string annotations crash
+# every @mcp.tool() at import (Dockerfile.digithings-stack-cloudflare marker v8).
 import json
 import logging
 import os
@@ -60,7 +61,7 @@ def create_mcp_with_indexes(client: object) -> FastMCP:
 
 
 @mcp.tool()
-def digisearch_query(
+def semantic(
     text: str,
     index_name: str | None = None,
     top_k: int = 10,
@@ -191,7 +192,7 @@ try:
     from digisearch.agent.pipeline import run_research_turn as _run_research_turn
 
     @mcp.tool()
-    def digisearch_research_turn(
+    def research_turn(
         user_message: str,
         index_name: str | None = None,
         top_k: int = 10,
@@ -217,11 +218,11 @@ try:
         return _json.dumps(_run_research_turn(payload), indent=2)
 
 except ImportError:
-    logger.info("digisearch_research_turn MCP tool omitted (install digisearch[agent])")
+    logger.info("research_turn MCP tool omitted (install digisearch[agent])")
 
 
 @mcp.tool()
-def digisearch_web_search(
+def exa_web_search(
     query: str,
     search_type: str = "auto",
     num_results: int = 8,
@@ -281,7 +282,7 @@ def digisearch_web_search(
 # --- Phase C monitors (§4.7, #4065) -------------------------------------------------
 #
 # Four MCP tools over the same store/runner the HTTP routes use. Fail-closed
-# shape of `digisearch_web_search`: without a reachable store the tools return a
+# shape of `exa_web_search`: without a reachable store the tools return a
 # disabled message instead of raising. Create/update-time validation goes
 # through `watch_config_error` — the same gate the HTTP API applies — because a
 # watch with an unparseable cron would raise inside `is_due` at tick time, where
@@ -419,7 +420,7 @@ def monitors_get_runs(watch_id: str, limit: int = 20) -> str:
 # ``websets_add_search`` return ids while the run is scheduled — the chat surface
 # polls ``websets_get`` / ``websets_events``. Enrichment add/remove, webhook
 # secrets, monitors, and cancel are deliberate HTTP-only v1 operator ops.
-# Fail-closed shape of ``digisearch_web_search``: without a reachable store the
+# Fail-closed shape of ``exa_web_search``: without a reachable store the
 # tools return a disabled string instead of raising.
 
 _WEBSETS_DISABLED = "digisearch websets are disabled (webset store is unavailable)."

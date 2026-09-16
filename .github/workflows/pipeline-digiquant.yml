@@ -143,6 +143,16 @@ jobs:
       # Operator provisioning + rotation: docs/ops/digiquant-digikey-service-key.md (#4028).
       DIGIKEY_URL: ${{ vars.DIGIKEY_URL || 'https://key.digithings.ai' }}
       DIGIQUANT_DIGIKEY_API_KEY: ${{ secrets.DIGIQUANT_DIGIKEY_API_KEY }}
+      # Reachable digisearch for the same web-grounding path (#4063): the tool
+      # call goes to digisearch's POST /v1/orchestrator_invoke, whose base comes
+      # from digigraph's tool_common._digisearch_service_base() reading
+      # DIGISEARCH_URL — unset, it fails loud ("digisearch service URL is not
+      # configured … refusing web_search"), and `http://digisearch:8002` is a
+      # compose-only hostname. search.digithings.ai is the stack Worker's public
+      # route to the in-container :8002; the call is authenticated by the
+      # digisearch:query JWT above. Route declared in
+      # cloudflare/digithings-stack-cloudflare/wrangler.toml.
+      DIGISEARCH_URL: ${{ vars.DIGISEARCH_URL || 'https://search.digithings.ai' }}
     steps:
       - name: Check out digiquant source
         uses: actions/checkout@v4
@@ -233,6 +243,13 @@ jobs:
             sleep 5
           done
           echo "::warning::digikey warm-up did not succeed; pipeline will exchange for a token itself"
+
+      # #4198: fail fast when the search provider is down — every research
+      # phase grounds on web_search, so running without it only burns hours
+      # before the same failure. One cheap probe; DIGISEARCH_URL is job-level.
+      - name: Pre-flight web_search health check
+        timeout-minutes: 5
+        run: uv run --frozen --no-sync python -m digiquant web-search healthcheck
 
       - name: Run digiquant research pipeline
         id: run

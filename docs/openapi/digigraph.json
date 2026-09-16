@@ -175,9 +175,24 @@
           "id": {
             "maxLength": 64,
             "minLength": 1,
-            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
             "title": "Id",
             "type": "string"
+          },
+          "setup": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Operator setup kwargs merged into every MCP tool call for this server (e.g. digivault path_prefix, digisearch index_name). Header-supplied session overlay; never trusted from a request body.",
+            "title": "Setup"
           },
           "token": {
             "anyOf": [

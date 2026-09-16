@@ -322,8 +322,9 @@ class _FakeHistoryStore:
 
 def _run_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exc: Exception) -> int:
     monkeypatch.setattr(backfill, "R2Backend", lambda **kw: object())
-    monkeypatch.setattr(backfill, "R2HistoryStore", lambda b, i: _FakeHistoryStore(exc))
+    monkeypatch.setattr(backfill, "R2HistoryStore", lambda b, i, lk=None: _FakeHistoryStore(exc))
     monkeypatch.setattr(backfill, "_pg_registry_insert", lambda uri: lambda *a: None)
+    monkeypatch.setattr(backfill, "_pg_registry_lookup", lambda uri: lambda key: None)
     monkeypatch.setattr(backfill, "make_price_fetcher", lambda uri: lambda tk, off, lim: [])
     for env in (
         backfill.R2_ACCOUNT_ENV,

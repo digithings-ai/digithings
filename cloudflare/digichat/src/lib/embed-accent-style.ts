@@ -20,7 +20,12 @@ export function buildEmbedAccentStyle(
   foreground?: string | null,
 ): CSSProperties | undefined {
   if (!isEmbedHexColor(color)) return undefined;
-  const style: Record<string, string> = { "--accent": color };
+  const style: Record<string, string> = {
+    "--accent": color,
+    // The digichat thread re-defines --accent with its own ink token, so keep
+    // a second copy the painted block caret can read from deep in the thread.
+    "--tenant-accent": color,
+  };
   if (isEmbedHexColor(foreground)) {
     style["--accent-foreground"] = foreground;
   }

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-backfill_context.py — Generate structured "as-of date" research context from Supabase.
+backfill_context.py — Generate structured "as-of date" research context.
 
 Outputs a JSON object with prices, technicals, macro data, and prior snapshot
 context that an agent can use as numerical ground-truth for a historical
-simulation, WITHOUT forward-looking data contamination.
+simulation, WITHOUT forward-looking data contamination. Market data reads the
+sealed R2 generations (#4053); macro + snapshots stay on Supabase (no R2 home).
 
 All queries are bounded to date <= AS_OF_DATE so the agent sees exactly what
 would have been available in the DB at close of business on that date.
@@ -120,113 +121,17 @@ def _fetch_baseline_snapshot(sb, as_of_date: str) -> tuple[str | None, dict | No
 
 
 def fetch_context(as_of_date: str) -> dict[str, Any]:
-    # Imported per call (cached in sys.modules afterwards) so the default path needs no
-    # digiquant import at module scope, matching fill-entry-prices.py.
-    from digiquant.research.data.queries import r2_backend_enabled
+    """Build the as-of research context: sealed R2 prices/technicals + Supabase macro/state.
 
-    if r2_backend_enabled():
-        return _fetch_context_r2(as_of_date)
-    sb = _sb()
-
-    # ── 1. Latest price_technicals on or before as_of_date ────────────────────
-    # Anchor on SPY to find the latest US equity trading day (avoids crypto-only weekend dates)
-    res = (
-        sb.table("price_technicals")
-        .select("date")
-        .lte("date", as_of_date)
-        .eq("ticker", "SPY")
-        .order("date", desc=True)
-        .limit(1)
-        .execute()
-    )
-    latest_price_date = None
-    rows = getattr(res, "data", None) or []
-    if rows:
-        latest_price_date = str(rows[0]["date"])[:10]
-    else:
-        # Fallback: any ticker
-        res2 = (
-            sb.table("price_technicals")
-            .select("date")
-            .lte("date", as_of_date)
-            .order("date", desc=True)
-            .limit(1)
-            .execute()
-        )
-        r2 = getattr(res2, "data", None) or []
-        if r2:
-            latest_price_date = str(r2[0]["date"])[:10]
-
-    prices: list[dict] = []
-    if latest_price_date:
-        res2 = (
-            sb.table("price_history")
-            .select("ticker,date,open,high,low,close,volume")
-            .eq("date", latest_price_date)
-            .in_("ticker", CORE_TICKERS)
-            .execute()
-        )
-        ph_rows = {r["ticker"]: r for r in (getattr(res2, "data", None) or [])}
-
-        res3 = (
-            sb.table("price_technicals")
-            .select("ticker,date,sma_20,sma_50,sma_200,rsi_14,macd,macd_signal,macd_hist,"
-                    "roc_5,roc_21,bb_pct_b,zscore_50,zscore_200,atr_pct,hist_vol_21,adx_14")
-            .eq("date", latest_price_date)
-            .in_("ticker", CORE_TICKERS)
-            .execute()
-        )
-        for r in getattr(res3, "data", None) or []:
-            tk = r["ticker"]
-            ph = ph_rows.get(tk, {})
-            prices.append({
-                "ticker": tk,
-                "date": str(r["date"])[:10],
-                "close": ph.get("close"),
-                "open": ph.get("open"),
-                "high": ph.get("high"),
-                "low": ph.get("low"),
-                "volume": ph.get("volume"),
-                "sma_20": r.get("sma_20"),
-                "sma_50": r.get("sma_50"),
-                "sma_200": r.get("sma_200"),
-                "rsi_14": r.get("rsi_14"),
-                "macd": r.get("macd"),
-                "macd_signal": r.get("macd_signal"),
-                "roc_5": r.get("roc_5"),
-                "roc_21": r.get("roc_21"),
-                "bb_pct_b": r.get("bb_pct_b"),
-                "zscore_50": r.get("zscore_50"),
-                "atr_pct": r.get("atr_pct"),
-                "hist_vol_21": r.get("hist_vol_21"),
-            })
-    prices.sort(key=lambda x: x["ticker"])
-
-    # ── 2. Macro series (FRED, Frankfurter, crypto F&G, Treasury) ─────────────
-    macro_series = _fetch_macro_series(sb, as_of_date)
-
-    # ── 3. Prior snapshot (for continuity / delta chaining) ───────────────────
-    prior_date, prior_snapshot = _fetch_prior_snapshot(sb, as_of_date)
-
-    # ── 4. Latest baseline for the week ──────────────────────────────────────
-    baseline_date, baseline_snapshot = _fetch_baseline_snapshot(sb, as_of_date)
-
-    return {
-        "as_of_date": as_of_date,
-        "latest_price_date": latest_price_date,
-        "prior_snapshot_date": prior_date,
-        "baseline_date": baseline_date,
-        "prices": prices,
-        "macro_series": macro_series,
-        "prior_snapshot": prior_snapshot,
-        "baseline_snapshot": baseline_snapshot,
-    }
+    Market data (prices, technicals) reads R2 only (#4053); macro series and
+    snapshots have no R2 source (D2) and stay on Supabase.
+    """
+    return _fetch_context_r2(as_of_date)
 
 
-# Indicator keys the prompt table indexes. The Supabase body joins them from
-# `price_technicals`; R2's envelope uses different windows for some names
-# (`macd_hist`/`zscore_200`/`pct_vs_sma*`), so those stay None — never a
-# different-window substitute.
+# Indicator keys the prompt table indexes. R2's envelope uses different windows
+# for some names (`macd_hist`/`zscore_200`/`pct_vs_sma*`), so those stay None —
+# never a different-window substitute.
 _PRICE_INDICATOR_KEYS: tuple[str, ...] = (
     "sma_20",
     "sma_50",
@@ -244,19 +149,18 @@ _PRICE_INDICATOR_KEYS: tuple[str, ...] = (
 
 
 def _fetch_context_r2(as_of_date: str) -> dict[str, Any]:
-    """R2 branch of :func:`fetch_context` (#4013).
+    """Market half of :func:`fetch_context` — sealed R2 generations (#4053).
 
     Prices come from the sealed R2 generations and technicals from
-    :func:`get_price_technicals` (backend-branched internally — no flag check
-    around it here). Each price row is rebuilt to the Supabase price-entry
-    shape (:data:`_PRICE_INDICATOR_KEYS`, None when R2 has no equivalent name)
-    so :func:`build_agent_prompt` renders it unchanged. Macro series and
-    snapshots have no R2 source (D2: only market/price data moves), so they are
-    read from Supabase through the same helpers as the default path — the
-    prompt's prior/baseline lines carry real research state, not a false
-    "first run".
+    :func:`get_price_technicals` (R2-only since #4053 — no flag check around it
+    here). Each price row is rebuilt to the Supabase price-entry shape
+    (:data:`_PRICE_INDICATOR_KEYS`, None when R2 has no equivalent name) so
+    :func:`build_agent_prompt` renders it unchanged. Macro series and snapshots
+    have no R2 source (D2: only market/price data moves), so they are read from
+    Supabase — the prompt's prior/baseline lines carry real research state, not
+    a false "first run".
     """
-    # Imported per call (cached in sys.modules afterwards) so the default path needs no
+    # Imported per call (cached in sys.modules afterwards) so loading the module needs no
     # digiquant import at module scope, matching fill-entry-prices.py.
     from digiquant.research.data.queries import (
         get_price_technicals,
@@ -376,8 +280,8 @@ def build_agent_prompt(ctx: dict) -> str:
         f"You MUST treat today as {as_of} and apply these constraints:",
         f"",
         f"1. **Prices / technicals / macro**: use only the data provided in the",
-        f"   \"Supabase Data Layer\" section below (already filtered to <= {as_of}).",
-        f"   Do NOT query live prices or technicals from Supabase directly.",
+        f"   \"Market Data\" section below (already filtered to <= {as_of}).",
+        f"   Do NOT query live prices or technicals directly.",
         f"",
         f"2. **Web research**: when searching for news, catalysts, or analyst opinions,",
         f"   **add a date bound to every search query**:",
@@ -391,10 +295,10 @@ def build_agent_prompt(ctx: dict) -> str:
         f"",
         f"4. **Memory files**: use memory/*.ROLLING.md entries with dates <= {as_of} only.",
         f"",
-        f"## Supabase Data Layer (as of {ctx.get('latest_price_date', as_of)})",
+        f"## Market Data Layer (as of {ctx.get('latest_price_date', as_of)})",
         f"",
-        f"*(All values sourced from price_history + price_technicals filtered to",
-        f"latest available date on/before {as_of})*",
+        f"*(Prices/technicals sourced from the sealed R2 generations filtered to",
+        f"latest available date on/before {as_of}; macro series from Supabase)*",
         f"",
         f"### Price & Technical Indicators",
         f"",

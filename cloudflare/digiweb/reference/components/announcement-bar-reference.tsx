@@ -1,12 +1,16 @@
 "use client";
 
 import { useState, type MouseEvent } from "react";
-import { AnnouncementBar } from "@digithings/web";
+import { AnnouncementBar, Button as LayerButton } from "@digithings/web";
 
 /** Graphite's announcement bar: 48px above the nav, the ENTIRE bar is the
  *  link, dismissible, an a11y region. Content-gated in production — it only
  *  ships with real news (a release, a launch), never evergreen marketing.
- *  Consumes the shared <AnnouncementBar/> primitive from @digithings/web. */
+ *  Consumes the shared <AnnouncementBar/> primitive from @digithings/web.
+ *
+ *  Wave 1: the restore affordance stays on the controls-layer Button
+ *  (`variant="quiet"`) — it is an inline text link, and the stock kit has no
+ *  borderless-muted variant to keep that parity (the T4 ruling). */
 export function AnnouncementBarReference() {
   const [dismissed, setDismissed] = useState(false);
 
@@ -22,9 +26,9 @@ export function AnnouncementBarReference() {
 
       {dismissed ? (
         <p className="mt-[1.2rem]">
-          <button type="button" className="btn-quiet" onClick={() => setDismissed(false)}>
+          <LayerButton variant="quiet" type="button" onClick={() => setDismissed(false)}>
             Restore the demo bar
-          </button>
+          </LayerButton>
         </p>
       ) : (
         <AnnouncementBar

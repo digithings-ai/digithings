@@ -53,9 +53,32 @@ WEB_SEARCH_TOOL: dict[str, Any] = {
 }
 
 
+class DigisearchHubError(RuntimeError):
+    """The digisearch hub call itself failed (#4106).
+
+    Distinct from an empty result set: a rate limit, auth rejection, open circuit,
+    or malformed envelope must never be reported downstream as "web_search
+    returned no rows" — on 2026-09-15 that masking hid a `/v1/orchestrator_invoke`
+    429 and failed the daily digiquant book run three times. Carries the hub's own
+    error text.
+    """
+
+
 def _web_search_available(context: ToolContext) -> bool:
     """web_search is request-opt-in only (#3420) — never ambient on corpus RAG."""
     return bool(context.state.get("enable_web_search"))
+
+
+def web_search_disabled_payload(tool_name: str) -> dict[str, Any]:
+    """Denial payload for a web_search surface (native or MCP) when not opted in (#3420)."""
+    return {
+        "error": "tool_not_allowed",
+        "tool": tool_name,
+        "message": (
+            "web_search is opt-in and disabled for this session. "
+            "Enable via X-Digi-Enable-Web-Search / enable_web_search."
+        ),
+    }
 
 
 def _as_str_list(value: Any) -> list[str]:
@@ -72,19 +95,25 @@ def call_digisearch_web_search(
     include_domains: list[str] | None = None,
     exclude_domains: list[str] | None = None,
     max_results: int = 4,
+    recency_days: int | None = None,
     context: ToolContext | None = None,
+    timeout: float = 120.0,
 ) -> dict[str, Any]:
     """Public entry point for the digisearch ``web_search`` tool call.
 
     Thin delegation to :func:`_call_digisearch_web_search` — external callers
     (digiquant pipeline grounding) import this, never the private name.
+    ``timeout`` bounds the single hub HTTP call. ``recency_days`` is forwarded
+    only when set, so ``None`` keeps digisearch's own default window (#4165).
     """
     return _call_digisearch_web_search(
         query,
         include_domains=include_domains,
         exclude_domains=exclude_domains,
         max_results=max_results,
+        recency_days=recency_days,
         context=context,
+        timeout=timeout,
     )
 
 
@@ -93,7 +122,9 @@ def _call_digisearch_web_search(
     include_domains: list[str] | None = None,
     exclude_domains: list[str] | None = None,
     max_results: int = 4,
+    recency_days: int | None = None,
     context: ToolContext | None = None,
+    timeout: float = 120.0,
 ) -> dict[str, Any]:
     """Invoke digisearch ``web_search`` via the vertical-orchestrator hub.
 
@@ -101,31 +132,46 @@ def _call_digisearch_web_search(
     :func:`digigraph.vertical_orchestrator.digisearch_hub.invoke_digisearch_tool`
     (``POST /v1/orchestrator_invoke``). Normalizes the hub envelope
     (``{"ok", "data": {"results": [{url, title, snippet}]}}``) into the digigraph
-    tool shape (``{"content", "results": [{doc_id, ...}]}``). Returns ``{}`` when
-    the service errors or yields no rows — callers fail hard (no synthesis
-    fallback, #3859).
+    tool shape (``{"content", "results": [{doc_id, ...}]}``). Returns ``{}`` only
+    for a genuinely empty result set; a hub failure raises
+    :class:`DigisearchHubError` carrying the hub's error text, so a 429 or a dead
+    service can never be reported as "returned no rows" (#4106). Callers fail
+    hard either way (no synthesis fallback, #3859).
     """
     from digigraph.vertical_orchestrator.digisearch_hub import invoke_digisearch_tool
 
     index_name = getattr(context, "index_name", None) or "default"
+    arguments: dict[str, Any] = {
+        "query": query,
+        "include_domains": _as_str_list(include_domains),
+        "exclude_domains": _as_str_list(exclude_domains),
+        "max_results": max_results,
+    }
+    if recency_days is not None:
+        # Omitted when unset: digisearch's WebSearchRequest defaults to 7, so a
+        # caller that never asked keeps the default window — the hub skips a
+        # JSON null rather than forwarding it (#4165).
+        arguments["recency_days"] = recency_days
     inv = invoke_digisearch_tool(
         _digisearch_service_base(),
         "web_search",
-        {
-            "query": query,
-            "include_domains": _as_str_list(include_domains),
-            "exclude_domains": _as_str_list(exclude_domains),
-            "max_results": max_results,
-        },
+        arguments,
         default_index_name=index_name,
         bearer_token=_digi_bearer_from_context(context) if context is not None else None,
         request_id=getattr(context, "request_id", None),
+        timeout=timeout,
     )
-    if not isinstance(inv, dict) or not inv.get("ok"):
-        return {}
+    if not isinstance(inv, dict):
+        raise DigisearchHubError("digisearch web_search returned a non-object response")
+    # #4198: only a real JSON ``true`` counts as success — a malformed envelope whose
+    # ``ok`` is a truthy non-boolean (e.g. ``"false"``) must fail the pre-flight gate.
+    if inv.get("ok") is not True:
+        raise DigisearchHubError(
+            f"digisearch web_search failed: {inv.get('error') or 'unknown error'}"
+        )
     data = inv.get("data")
     if not isinstance(data, dict):
-        return {}
+        raise DigisearchHubError("digisearch web_search envelope carried no data object")
     hits = data.get("results") or []
     rows: list[dict[str, Any]] = []
     for hit in hits:

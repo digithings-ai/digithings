@@ -6,6 +6,7 @@ from typing import Any, Literal  # score:allow untyped any — used for dict sha
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
+from digiquant.data.gloomberb.agent_tools import MACRO_TOOLS
 from digiquant.research.phases._node_factory import (
     SegmentNodeSpec,
     build_segment_node,
@@ -40,6 +41,9 @@ _SPEC = SegmentNodeSpec(
     live_search=True,  # non-US M2 / CB rhetoric — now a stale-only paid tool call (#711)
     live_search_is_fallback=True,  # fire web_search only when the FRED layer is stale (#711)
     extra_context_keys=("bonds", "commodities", "forex", "equity"),  # cross-asset priors (#696)
+    # #4146: rates/credit/long-run valuation enrichment via the digifetch family
+    # (the ingestion layer stays primary; Gloomberb is delayed enrichment only).
+    digifetch_tools=MACRO_TOOLS,
 )
 
 

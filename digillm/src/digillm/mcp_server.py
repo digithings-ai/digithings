@@ -23,7 +23,9 @@ like a network API with gateway auth, since callers spend the operator key.
 stdio suits trusted local clients.
 """
 
-from __future__ import annotations
+# No `from __future__ import annotations`: the stack image ships FastMCP 1.9.3,
+# which calls issubclass() on raw annotations — PEP 563 string annotations crash
+# every @mcp.tool() at import (Dockerfile.digithings-stack-cloudflare marker v8).
 
 import argparse
 import logging

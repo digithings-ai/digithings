@@ -127,6 +127,36 @@ describe('TickerDossierView — command band structure', () => {
     expect(html).toContain('data-region="metrics"');
     expect(html).not.toMatch(/dossier-command[^>]*glass-card/);
     expect(html).toContain('border-');
+    expect(html).toContain('data-testid="gloomberb-link"');
+    expect(html).toContain('https://term.gloom.sh/?ticker=XLE');
+    expect(html).toContain('Open in Gloomberb');
+    const gloomberbAnchor = html.match(/<a[^>]*data-testid="gloomberb-link"[^>]*>/)?.[0] ?? '';
+    expect(gloomberbAnchor).toContain('target="_blank"');
+    expect(gloomberbAnchor).toContain('rel="noopener noreferrer"');
+    // The arrow idiom, not the external-link glyph (#4204).
+    const gloomberbBlock =
+      html.match(/<a[^>]*data-testid="gloomberb-link"[\s\S]*?<\/a>/)?.[0] ?? '';
+    expect(gloomberbBlock).toContain('arrow-up-right');
+    expect(gloomberbBlock).not.toContain('external-link');
+  });
+
+  it('links every dossier ticker out to Gloomberb, crypto included', () => {
+    vi.mocked(useDashboard).mockReturnValue({
+      data: { positions: [], position_history: [], position_events: [] },
+      loading: false,
+    } as any);
+
+    vi.mocked(useAsyncData).mockReturnValue({
+      data: { ticker: 'BTC-USD', analyst: null, analystDate: null, coverage: null, decisions: [] },
+      loading: false,
+      error: null,
+    } as any);
+
+    const html = renderToStaticMarkup(createElement(TickerDossierView, { ticker: 'BTC-USD' }));
+
+    expect(html).toContain('data-testid="gloomberb-link"');
+    expect(html).toContain('https://term.gloom.sh/?ticker=BTC-USD');
+    expect(html).not.toContain('Sourced from Gloomberb');
   });
 
   it('renders held state with explicit "held" label', () => {

@@ -1,12 +1,15 @@
 # digithings Profile A stack on Cloudflare Containers (Workers Paid).
 # One multi-process Container: digikey + digigraph + digisearch + digivault + LiteLLM.
 # Public hostnames (auth still required on APIs):
-#   graph.digithings.ai → digigraph :8000
-#   key.digithings.ai   → digikey   :8005
-# digisearch / digivault / LiteLLM stay loopback-only inside the Container.
+#   graph.digithings.ai  → digigraph   :8000
+#   key.digithings.ai    → digikey     :8005
+#   search.digithings.ai → digisearch  :8002  (digikey JWT `digisearch:query`)
+# digivault / LiteLLM stay loopback-only inside the Container.
 #
-# HUMAN GATE — infra/network: these hostnames expose digigraph + digikey to the
-# public internet (JWT/BFF still required). Secrets via `wrangler secret put` only.
+# HUMAN GATE — infra/network: these hostnames expose digigraph + digikey +
+# digisearch to the public internet (JWT/BFF still required). The search route
+# is a new external route, owner-approved for CI web grounding (#4063).
+# Secrets via `wrangler secret put` only.
 name = "digithings-stack"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
@@ -24,7 +27,13 @@ binding = "MARKET_DATA"
 bucket_name = "digithings-archive"
 
 # Custom domains — the only ingress. Verify /healthz on each after deploy.
-# Human gate: public digigraph + digikey; JWT/BFF still required on APIs.
+# Human gate: public digigraph + digikey + digisearch; JWT/BFF still required
+# on APIs. Auth-exempt on each host is only the shared service allowlist
+# (/health, /healthz, /metrics, /docs, /redoc, /openapi.json, OPTIONS
+# preflights) plus the Worker-served /_stack/meta and /v1/market/tickers|closes,
+# and /_stack/key/* which proxies to digikey. /_stack/mcp/zammad/* is not
+# auth-exempt: it is key-gated (x-digi-mcp-key vs the MCP_EDGE_KEY secret,
+# fail-closed 401).
 [[routes]]
 pattern = "graph.digithings.ai"
 zone_name = "digithings.ai"
@@ -32,6 +41,22 @@ custom_domain = true
 
 [[routes]]
 pattern = "key.digithings.ai"
+zone_name = "digithings.ai"
+custom_domain = true
+
+# Hosted digisearch (#4063 — new external route, owner-approved): the CI book
+# pipeline's web grounding calls digisearch's POST /v1/orchestrator_invoke with
+# a digikey JWT scoped `digisearch:query`, enforced per path by digisearch's
+# DigiAuthMiddleware (digisearch_path_scopes). Auth-exempt is only the shared
+# service allowlist — /health, /healthz, /metrics, /docs, /redoc,
+# /openapi.json — plus OPTIONS preflights (CORS is enforced separately);
+# everything else (/query, /ingest, /v1/*) needs a scoped JWT. The in-container
+# base stays http://127.0.0.1:8002 for digigraph, and digisearch binds
+# 0.0.0.0:8002 (container/start_digisearch.sh) so the Worker can proxy to the
+# container network address — a loopback-only bind is unreachable (#4071).
+# Declared here like graph/key; `wrangler deploy` provisions the custom domain.
+[[routes]]
+pattern = "search.digithings.ai"
 zone_name = "digithings.ai"
 custom_domain = true
 
@@ -111,11 +136,18 @@ new_sqlite_classes = ["DigiQuantMcpContainer"]
 #   DIGIKEY_BFF_TOKEN
 #   DIGIKEY_PRIVATE_KEY_PEM   # stable RS256; do not use ephemeral in prod
 #   DIGIKEY_ADMIN_TOKEN       # optional; for key issue / ops
+#   DIGIKEY_DATABASE_URL      # REQUIRED. Durable Postgres/Supabase URL for API
+#                             # keys + revocation state. There is no fallback --
+#                             # the instance's /data is ephemeral, so digikey
+#                             # refuses to start rather than silently losing every
+#                             # issued key (#4080). A bare postgresql:// URL is
+#                             # accepted (routed to psycopg 3).
 #   GROQ_API_KEY / OPENROUTER_API_KEY / OPENAI_API_KEY  (as needed by LiteLLM)
 #   CHEAPERINFERENCE_API_KEY  # house default digillm upstream when set
 #   CHEAPERINFERENCE_API_BASE # optional; default https://api.cheaperinference.com/v1
 #   DIGI_HOUSE_UPSTREAM       # optional; set "openrouter" to force OpenRouter
 #   LITELLM_PROXY_API_KEY     # optional shared proxy key
+#   ZAMMAD_API_TOKEN          # read-only Zammad helpdesk MCP (zammad-mcp program, OCC tickets)
 #   FRED_API_KEY              # digiquant-mcp live macro overlap (#3780 Task 8)
 #   R2_ACCOUNT_ID             # digiquant-mcp market-data history reads
 #   R2_BUCKET                 # digiquant-mcp (same digithings-archive bucket)
@@ -175,6 +207,8 @@ DIGISEARCH_URL = "http://127.0.0.1:8002"
 # Chat-only Profile A — digiquant / digismith HTTP are not in this Container.
 DIGIQUANT_URL = ""
 DIGISMITH_URL = ""
+# #4053: containers must read the R2 market seam — 127 drops the Supabase tables.
+DIGIQUANT_MARKET_DATA_BACKEND = "r2"
 OPENAI_API_BASE = "http://127.0.0.1:4000/v1"
 DIGI_CONFIG_PATH = "/app/config"
 DIGI_PROJECT_CONFIG = "/app/config/digiproject.yaml"
@@ -188,7 +222,12 @@ DIGI_ALLOWED_TOOLS = "digisearch,digivault_search_notes,digivault_get_note"
 DIGI_LLM_MODE = "test"
 CHROMA_PATH = "/data/chroma"
 DIGIVAULT_ROOT = "/data/vault"
-DIGIKEY_DATABASE_URL = "sqlite:////data/digikey.db"
+# DIGIKEY_DATABASE_URL is deliberately NOT a var: a connection URL carries a
+# password, and the Container's /data is ephemeral -- a fallback would lose every
+# issued API key and the JWT revocation blocklist on the next instance replace
+# (#4080). It is required: set it with
+# `npx wrangler secret put DIGIKEY_DATABASE_URL` (see the secrets list above), or
+# digikey refuses to start.
 DIGISEARCH_INDEX = "digithings_docs"
 # Defense-in-depth corpus map (headers from digichat still win).
 DIGI_TENANT_CORPUS_MAP = "{\"digithings\":{\"digisearchIndex\":\"digithings_docs\",\"vaultPathPrefix\":\"clients/digithings\"},\"occ\":{\"digisearchIndex\":\"occ_help\",\"vaultPathPrefix\":\"clients/online-compliance-center\"}}"

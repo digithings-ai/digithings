@@ -899,6 +899,7 @@ def query_price_technicals_freshness(
         return r2_manifest_seal()
     from datetime import timedelta
 
+    # Retired: migration 127 drops price_technicals (#4053) — R2 seal above.
     latest_resp = (
         client.table("price_technicals").select("date").order("date", desc=True).limit(1).execute()
     )
@@ -964,18 +965,20 @@ def query_price_deltas(
 
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
     if r2_backend_enabled():
-        from digiquant.research.data.queries import r2_close_rows
+        from digiquant.research.data.queries import r2_close_rows_tolerant
 
         # Strictly-before-run_date mirrors the Supabase ``.lt("date", run_date)``
-        # (the seam's ``until`` is inclusive).
-        rows: list[PriceHistoryRow] = list(
-            r2_close_rows(
-                tickers=list(tickers),
-                since=floor,
-                until=run_date - timedelta(days=1),
-            )
+        # (the seam's ``until`` is inclusive). Tolerant read: this function's
+        # contract is to drop missing tickers so a missing key reads as "no
+        # signal" rather than failing the research graph (#4136).
+        rows: list[PriceHistoryRow] = r2_close_rows_tolerant(
+            tickers=list(tickers),
+            since=floor,
+            until=run_date - timedelta(days=1),
+            context="price deltas",
         )
     else:
+        # Retired: migration 127 drops price_history (#4053) — R2 rows above.
         ordered = sorted(tickers)
         batch = _price_delta_ticker_batch(lookback_days)
         rows = []
@@ -1136,7 +1139,7 @@ def query_returns_window(
             until=_parse_date(end_floor) - timedelta(days=1),
         )
     else:
-
+        # Retired: migration 127 drops price_history (#4053) — R2 rows above.
         def _fetch_window() -> list[dict[str, Any]]:
             window_resp = (
                 client.table("price_history")

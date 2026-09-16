@@ -60,8 +60,13 @@ def invoke_digisearch_tool(
     default_index_name: str,
     bearer_token: str | None,
     request_id: str | None,
+    timeout: float = 120.0,
 ) -> dict[str, Any]:
-    """POST ``/v1/orchestrator_invoke`` on digisearch."""
+    """POST ``/v1/orchestrator_invoke`` on digisearch.
+
+    ``timeout`` bounds the single HTTP call; the #4198 web-search pre-flight
+    passes a short value so a hung provider fails fast.
+    """
     url = f"{base_url.strip().rstrip('/')}/v1/orchestrator_invoke"
     headers = outbound_service_headers(request_id, bearer_token)
     headers["Content-Type"] = "application/json"
@@ -80,7 +85,7 @@ def invoke_digisearch_tool(
         # rejection, not a blip"), not evidence the service is down, so it must not
         # trip the process-wide circuit for every other caller.
         with _cb:
-            with sync_client(timeout=120.0) as client:
+            with sync_client(timeout=timeout) as client:
                 r = client.post(url, json=payload, headers=headers)
         r.raise_for_status()
         body = r.json()

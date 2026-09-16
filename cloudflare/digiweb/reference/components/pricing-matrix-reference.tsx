@@ -2,10 +2,16 @@
  *  cells, an annual toggle (20% off), per-tier CTA verbs that escalate with
  *  commitment — and enterprise never shows a price. Display template consuming
  *  PricingMatrix from @digithings/web (the primitive owns the toggle state;
- *  both billing price lines are precomputed here). */
+ *  both billing price lines are precomputed here).
+ *
+ *  Wave 1: tier CTAs are the stock kit Button — kind primary → default,
+ *  ghost → ghost, quiet → outline. */
+import { Button } from "@digithings/web/ui";
 import { PricingMatrix, type PricingMatrixGroup, type PricingMatrixTier } from "@digithings/web";
 
 const ANNUAL_OFF = 0.2; // the toggle is worth exactly what it says
+
+const CTA_VARIANT = { primary: "default", ghost: "ghost", quiet: "outline" } as const;
 
 const tier = (
   name: string,
@@ -24,12 +30,9 @@ const tier = (
           priceAnnual: `$${Math.round(monthly * (1 - ANNUAL_OFF))}/mo`,
         }),
   cta: (
-    <button
-      type="button"
-      className={kind === "primary" ? "btn-primary" : kind === "ghost" ? "btn-ghost" : "btn-quiet"}
-    >
+    <Button type="button" variant={CTA_VARIANT[kind]}>
       {cta}
-    </button>
+    </Button>
   ),
   popular,
 });

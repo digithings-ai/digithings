@@ -14,18 +14,6 @@
   padding: 1rem;
 }
 
-.budget-shell .badge {
-  display: inline-block;
-  padding: 0.16rem 0.5rem;
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  font-family: var(--font-mono);
-  color: var(--ink-mute);
-  font-size: 0.6rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .budget-title {
   margin-top: 0.9rem;
   font-family: var(--font-mono);
@@ -102,8 +90,7 @@
 
 /* .rv-head / .rv-path / .rv-stat migrated to utilities in
    code-review-reference.tsx. Everything below stays: the +/- counts, washes and
-   marks read --rv-add / --rv-del (the diff colour domain) defined on .rv-frame,
-   and .rv-chip carries a 2-colour color-mix border. */
+   marks read --rv-add / --rv-del (the diff colour domain) defined on .rv-frame. */
 
 .rv-add-count {
   color: var(--rv-add);
@@ -111,16 +98,6 @@
 
 .rv-del-count {
   color: var(--rv-del);
-}
-
-.rv-chip {
-  border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--hair));
-  color: var(--warn);
-  border-radius: 0;
-  padding: 0.12rem 0.5rem;
-  font-size: 0.58rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 
 .rv-diff {

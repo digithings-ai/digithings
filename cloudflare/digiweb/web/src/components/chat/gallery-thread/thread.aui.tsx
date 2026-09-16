@@ -71,11 +71,14 @@ export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 /**
  * Disclosure behavior for a grouped chain of reasoning / tool-call steps.
  * `off` hides the group entirely, `collapsed` (default) renders a closed
- * dropdown, `expanded` starts open, and `locked_open` pins it open.
+ * dropdown, `balanced` opens while the group is still streaming and
+ * auto-collapses when it completes, `expanded` starts open, and
+ * `locked_open` pins it open.
  */
 export type GroupDisclosureMode =
   | "off"
   | "collapsed"
+  | "balanced"
   | "expanded"
   | "locked_open";
 
@@ -716,6 +719,10 @@ const AssistantMessage: FC = () => {
                   <ToolGroupRoot
                     variant="ghost"
                     defaultOpen={toolCallsMode === "expanded" || locked}
+                    streamingOpen={
+                      toolCallsMode === "balanced" &&
+                      part.status.type === "running"
+                    }
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
                     <ToolGroupTrigger
@@ -739,8 +746,8 @@ const AssistantMessage: FC = () => {
                 return (
                   <ReasoningRoot
                     variant="ghost"
-                    streaming={running}
-                    defaultOpen={running || reasoningMode === "expanded" || locked}
+                    streaming={running && reasoningMode === "balanced"}
+                    defaultOpen={reasoningMode === "expanded" || locked}
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
                     <ReasoningTrigger active={running} disabled={locked} />
@@ -787,8 +794,17 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-footer"
         className={cn("col-start-1 flex items-center", ACTION_BAR_HEIGHT)}
       >
-        <BranchPicker />
-        <AssistantActionBar />
+        <AuiIf
+          condition={(s) =>
+            !(
+              s.message.status?.type === "incomplete" &&
+              s.message.status.reason === "error"
+            )
+          }
+        >
+          <BranchPicker />
+          <AssistantActionBar />
+        </AuiIf>
       </div>
     </MessagePrimitive.Root>
   );

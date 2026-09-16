@@ -500,23 +500,23 @@ def _use_r2(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
 
 
-def test_get_price_technicals_helper_r2_matches_supabase(monkeypatch):
-    _, _, sup = _t7b_both(monkeypatch)
-    _use_supabase(monkeypatch)
-    want = q.get_price_technicals(client=sup, ticker="SPY", lookback=20, as_of=_T7B_RUN_DATE)
-    _use_r2(monkeypatch)
+def test_get_price_technicals_helper_reads_r2_only(monkeypatch):
+    """The retired Supabase body is gone: the helper serves the sealed generation (#4053).
+
+    Even with the backend flag forced to ``supabase`` the read goes to R2 (the
+    exploding client proves no Supabase market read), and the window matches the
+    independently computed technicals (``compute_indicators``) over the same
+    generation.
+    """
+    dates, closes_by_ticker, _ = _t7b_both(monkeypatch)
+    _use_supabase(monkeypatch)  # the retired flag no longer diverts the read
     got = q.get_price_technicals(
         client=_ExplodingMarketClient(), ticker="SPY", lookback=20, as_of=_T7B_RUN_DATE
     )
-    assert [r["date"] for r in got["window"]] == [r["date"] for r in want["window"]]
-    # The shared fake ignores select() projections, so project the Supabase
-    # side through the helper's real TECHNICAL_COLUMNS select (production
-    # PostgREST returns exactly these keys).
-    want_window = [{k: r.get(k) for k in q.TECHNICAL_COLUMNS} for r in want["window"]]
+    want_rows = _t7b_indicator_rows("SPY", dates, closes_by_ticker["SPY"])[-20:][::-1]
+    want_window = [{k: r.get(k) for k in q.TECHNICAL_COLUMNS} for r in want_rows]
     assert got["window"] == pytest.approx(want_window, nan_ok=True)
-    assert got["latest"] == pytest.approx(
-        {k: want["latest"].get(k) for k in q.TECHNICAL_COLUMNS}, nan_ok=True
-    )
+    assert got["latest"] == pytest.approx(want_window[0], nan_ok=True)
 
 
 def test_get_macro_series_helper_r2_matches_supabase(monkeypatch):
@@ -636,6 +636,38 @@ def test_query_price_deltas_r2_matches_supabase(monkeypatch):
     assert got == pytest.approx(want)
 
 
+def test_query_price_deltas_drops_a_ticker_with_no_r2_generation(monkeypatch, caplog):
+    """#4136: ``r2_close_rows`` is all-or-nothing on an unknown ticker, but this
+    function documents missing tickers as dropped — one gap must not abort the
+    batch and fail the research graph."""
+    _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    known = query_price_deltas(
+        client=_ExplodingMarketClient(), tickers=tuple(_T7B_TICKERS), run_date=_T7B_RUN_DATE
+    )
+    assert known  # control: the tracked universe resolves from R2
+
+    caplog.set_level("WARNING")
+    got = query_price_deltas(
+        client=_ExplodingMarketClient(),
+        tickers=(*_T7B_TICKERS, "GDX"),
+        run_date=_T7B_RUN_DATE,
+    )
+
+    assert got == pytest.approx(known)
+    assert "price deltas: no sealed R2 generation for GDX" in caplog.text
+
+
+def test_query_price_deltas_all_tickers_unknown_returns_empty(monkeypatch):
+    """Every ticker absent is still "no signal", not a crash."""
+    _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    got = query_price_deltas(
+        client=_ExplodingMarketClient(), tickers=("GDX", "NOPE"), run_date=_T7B_RUN_DATE
+    )
+    assert got == {}
+
+
 def test_query_returns_window_r2_matches_supabase(monkeypatch):
     _, _, sup = _t7b_both(monkeypatch)
     start = _T7B_RUN_DATE - _tdelta_mod(days=30)
@@ -662,6 +694,52 @@ def test_interval_price_returns_r2_matches_supabase(monkeypatch):
     _use_r2(monkeypatch)
     got = _interval_price_returns(client=_ExplodingMarketClient(), **kwargs)
     assert got == pytest.approx(want)
+
+
+def test_interval_price_returns_drops_a_ticker_with_no_r2_generation(monkeypatch, caplog):
+    """#4139: this documents the same conservative-drop contract as
+    ``query_price_deltas``, so one unsealed held ticker must not abort the batch
+    and sink NAV/book materialization."""
+    _, _, _sup = _t7b_both(monkeypatch)
+    kwargs: dict = {
+        "tickers": tuple(_T7B_TICKERS),
+        "start_date": _T7B_RUN_DATE - _tdelta_mod(days=30),
+        "run_date": _T7B_RUN_DATE,
+    }
+    _use_r2(monkeypatch)
+    known = _interval_price_returns(client=_ExplodingMarketClient(), **kwargs)
+    assert known  # control: the tracked universe resolves
+
+    with caplog.at_level("WARNING"):
+        got = _interval_price_returns(
+            client=_ExplodingMarketClient(), **{**kwargs, "tickers": (*_T7B_TICKERS, "GDX")}
+        )
+
+    assert got == pytest.approx(known)
+    assert "commit_io NAV interval: no sealed R2 generation for GDX" in caplog.text
+
+
+def test_sector_relative_strength_drops_a_ticker_with_no_r2_generation(monkeypatch, caplog):
+    """#4139: an unsealed sector ETF must not abort the relative-strength batch."""
+    _, _, _sup = _t7b_both(monkeypatch)
+    kwargs: dict = {"etfs": ["QQQ"], "benchmark": "SPY", "lookback_days": 70}
+    _use_r2(monkeypatch)
+    known = q.get_sector_relative_strength(
+        client=_ExplodingMarketClient(), run_date=_T7B_RUN_DATE, **kwargs
+    )
+    assert known  # control: the requested sector ETF resolves
+
+    with caplog.at_level("WARNING"):
+        got = q.get_sector_relative_strength(
+            client=_ExplodingMarketClient(),
+            run_date=_T7B_RUN_DATE,
+            **{**kwargs, "etfs": ["QQQ", "GDX"]},
+        )
+
+    assert set(got) == set(known)
+    for etf, row in known.items():
+        assert got[etf] == pytest.approx(row, nan_ok=True)
+    assert "sector relative strength: no sealed R2 generation for GDX" in caplog.text
 
 
 def test_last_closes_r2_matches_supabase(monkeypatch):

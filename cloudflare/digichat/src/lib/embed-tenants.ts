@@ -15,6 +15,12 @@
 import type { ActivityDetail } from "@/lib/chat-activity";
 import type { PageContextMode } from "@/lib/deploy-config/schema";
 import {
+  THINKING_MODES,
+  VIEW_MODES,
+  type ThinkingMode,
+  type ViewMode,
+} from "@/lib/view-modes";
+import {
   defaultThreadSkinForTenant,
   isThreadSkin,
   threadSkinChoices,
@@ -105,6 +111,17 @@ export type EmbedTenantConfig = {
    * X-Digi-Enable-Web-Search.
    */
   webSearch?: boolean;
+  /**
+   * Chain-of-thought view mode for this tenant's embeds (digichat skin):
+   * hidden / compact / balanced / detailed. `balanced` (default) opens
+   * reasoning + tool groups while they stream and collapses them when done.
+   */
+  view?: ViewMode;
+  /**
+   * Reasoning-only override on top of `view`: auto (follow the view mode),
+   * collapsed (pinned closed), open (pinned expanded).
+   */
+  thinking?: ThinkingMode;
   /** page = full content chrome inside iframe; embed = compact iframe child. */
   layout?: "page" | "embed";
   /**
@@ -112,7 +129,21 @@ export type EmbedTenantConfig = {
    * as ids/labels only.
    */
   mcp?: {
-    servers: Array<{ id: string; url: string; label?: string; default?: boolean }>;
+    servers: Array<{
+      id: string;
+      url: string;
+      label?: string;
+      default?: boolean;
+      token?: string;
+      tokenEnv?: string;
+      /**
+       * MCP setup values applied when this server's tools are registered (e.g.
+       * the digisearch index name or the digivault path prefix). Forwarded to
+       * digigraph; never client-projected. Mirrors the YAML `mcp.servers[].setup`.
+       */
+      setup?: Record<string, string>;
+      authHeader?: string;
+    }>;
     allowUserServers?: boolean;
     allowAddForm?: boolean;
   };
@@ -326,6 +357,12 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
     throw new Error(`${ctx}: webSearch must be a boolean`);
   }
+  if (v.view !== undefined && !VIEW_MODES.includes(v.view as ViewMode)) {
+    throw new Error(`${ctx}: view must be "hidden", "compact", "balanced", or "detailed"`);
+  }
+  if (v.thinking !== undefined && !THINKING_MODES.includes(v.thinking as ThinkingMode)) {
+    throw new Error(`${ctx}: thinking must be "auto", "collapsed", or "open"`);
+  }
   if (v.attachments !== undefined && typeof v.attachments !== "boolean") {
     throw new Error(`${ctx}: attachments must be a boolean`);
   }
@@ -371,7 +408,94 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: requiredPlanTier must be "desk", "studio", or "enterprise"`);
   }
 
+  const rawMcp = (v as Record<string, unknown>).mcp;
+  let mcp: EmbedTenantConfig["mcp"];
+  if (rawMcp !== undefined) {
+    if (typeof rawMcp !== "object" || rawMcp === null || Array.isArray(rawMcp)) {
+      throw new Error(`embed tenant "${hostKey}": mcp must be an object`);
+    }
+    const rawServers = (rawMcp as Record<string, unknown>).servers;
+    if (!Array.isArray(rawServers)) {
+      throw new Error(`embed tenant "${hostKey}": mcp.servers must be an array`);
+    }
+    const servers = rawServers.map((entry, index) => {
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}] must be an object`);
+      }
+      const server = entry as Record<string, unknown>;
+      if (typeof server.id !== "string" || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(server.id)) {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].id must match /^[a-z0-9][a-z0-9_-]{0,63}$/`,
+        );
+      }
+      if (typeof server.url !== "string" || !server.url.trim()) {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].url must be a non-empty string`);
+      }
+      if (server.label !== undefined && typeof server.label !== "string") {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].label must be a string`);
+      }
+      if (server.default !== undefined && typeof server.default !== "boolean") {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].default must be a boolean`);
+      }
+      if (server.token !== undefined && typeof server.token !== "string") {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].token must be a string`);
+      }
+      if (server.tokenEnv !== undefined && typeof server.tokenEnv !== "string") {
+        throw new Error(`embed tenant "${hostKey}": mcp.servers[${index}].tokenEnv must be a string`);
+      }
+      if (server.authHeader !== undefined && typeof server.authHeader !== "string") {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].authHeader must be a string`,
+        );
+      }
+      let setup: Record<string, string> | undefined;
+      const rawSetup = server.setup;
+      if (rawSetup !== undefined) {
+        if (typeof rawSetup !== "object" || rawSetup === null || Array.isArray(rawSetup)) {
+          throw new Error(
+            `embed tenant "${hostKey}": mcp.servers[${index}].setup must be an object`,
+          );
+        }
+        const entries = Object.entries(rawSetup as Record<string, unknown>);
+        for (const [key, value] of entries) {
+          if (typeof value !== "string") {
+            throw new Error(
+              `embed tenant "${hostKey}": mcp.servers[${index}].setup.${key} must be a string`,
+            );
+          }
+        }
+        // Empty maps are legal and simply omitted — nothing to forward.
+        if (entries.length) setup = { ...(rawSetup as Record<string, string>) };
+      }
+      return {
+        id: server.id,
+        url: server.url,
+        ...(typeof server.label === "string" ? { label: server.label } : {}),
+        ...(typeof server.default === "boolean" ? { default: server.default } : {}),
+        ...(typeof server.token === "string" ? { token: server.token } : {}),
+        ...(typeof server.tokenEnv === "string" ? { tokenEnv: server.tokenEnv } : {}),
+        ...(setup ? { setup } : {}),
+        ...(typeof server.authHeader === "string" ? { authHeader: server.authHeader } : {}),
+      };
+    });
+    const rawMcpRecord = rawMcp as Record<string, unknown>;
+    if (rawMcpRecord.allowUserServers !== undefined && typeof rawMcpRecord.allowUserServers !== "boolean") {
+      throw new Error(`embed tenant "${hostKey}": mcp.allowUserServers must be a boolean`);
+    }
+    if (rawMcpRecord.allowAddForm !== undefined && typeof rawMcpRecord.allowAddForm !== "boolean") {
+      throw new Error(`embed tenant "${hostKey}": mcp.allowAddForm must be a boolean`);
+    }
+    mcp = {
+      servers,
+      ...(typeof rawMcpRecord.allowUserServers === "boolean"
+        ? { allowUserServers: rawMcpRecord.allowUserServers }
+        : {}),
+      ...(typeof rawMcpRecord.allowAddForm === "boolean" ? { allowAddForm: rawMcpRecord.allowAddForm } : {}),
+    };
+  }
+
   return {
+    mcp,
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
     backend: backendCfg,
@@ -385,7 +509,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         aliases: v.aliases as string[] | undefined,
       }),
     accent,
-    attribution: v.attribution === true,
+    attribution: v.attribution !== false,
     token: v.token,
     title: typeof v.title === "string" ? v.title : undefined,
     welcome: typeof v.welcome === "string" ? v.welcome : undefined,
@@ -398,6 +522,10 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
+    view: VIEW_MODES.includes(v.view as ViewMode) ? (v.view as ViewMode) : undefined,
+    thinking: THINKING_MODES.includes(v.thinking as ThinkingMode)
+      ? (v.thinking as ThinkingMode)
+      : undefined,
     attachments: typeof v.attachments === "boolean" ? v.attachments : undefined,
     pageContext: PAGE_CONTEXT_MODES.includes(v.pageContext as PageContextMode)
       ? (v.pageContext as PageContextMode)

@@ -54,6 +54,46 @@ const TOOL_MESSAGES: ThreadMessageLike[] = [
   },
 ];
 
+const GLOOMBERB_MESSAGES: ThreadMessageLike[] = [
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: "g1",
+        toolName: "digifetch_quote",
+        argsText: '{"symbol":"AAPL"}',
+        result: {
+          result: {
+            attribution: "Sourced from Gloomberb",
+            delay_notice: "Data delayed up to 15 minutes",
+            source_url: "https://term.gloom.sh/?ticker=AAPL",
+          },
+        },
+      },
+      { type: "text", text: "quote ready" },
+    ],
+  },
+];
+
+const UNATTRIBUTED_MESSAGES: ThreadMessageLike[] = [
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: "u1",
+        toolName: "digifetch_earnings_calendar",
+        argsText: "{}",
+        result: {
+          result: { rows: [{ symbol: "AAPL", reportDate: "2026-09-18" }] },
+        },
+      },
+      { type: "text", text: "calendar ready" },
+    ],
+  },
+];
+
 const REASONING_MESSAGES: ThreadMessageLike[] = [
   {
     role: "assistant",
@@ -334,6 +374,46 @@ describe("DigichatThread", () => {
     });
     await act(async () => {});
     expect(host.querySelector('[data-slot="message-timing-trigger"]')).toBeNull();
+    unmount();
+  });
+
+  it("credits Gloomberb in the expanded tool result pane", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: GLOOMBERB_MESSAGES,
+      toolCallsMode: "expanded",
+    });
+    await act(async () => {});
+    const trigger = host.querySelector('[data-slot="tool-fallback-trigger"]');
+    expect(trigger).toBeTruthy();
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(host.textContent).toContain("Sourced from Gloomberb");
+    expect(host.textContent).toContain("Data delayed up to 15 minutes");
+    const link = host.querySelector(
+      'a[href="https://term.gloom.sh/?ticker=AAPL"]',
+    );
+    expect(link).toBeTruthy();
+    expect(link?.textContent).toContain("Open in Gloomberb");
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
+    unmount();
+  });
+
+  it("omits the attribution line for tool results without an attribution block", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: UNATTRIBUTED_MESSAGES,
+      toolCallsMode: "expanded",
+    });
+    await act(async () => {});
+    const trigger = host.querySelector('[data-slot="tool-fallback-trigger"]');
+    expect(trigger).toBeTruthy();
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(host.querySelector('[data-slot="tool-fallback-result"]')).toBeTruthy();
+    expect(host.querySelector('[data-slot="tool-fallback-attribution"]')).toBeNull();
+    expect(host.textContent).not.toContain("Sourced from Gloomberb");
     unmount();
   });
 });

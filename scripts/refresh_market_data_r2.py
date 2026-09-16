@@ -35,6 +35,12 @@ the manifest entry shape stays identical. (The brief names the price fetcher
 
 Exit codes: 0 fresh, 1 stale (gate refused or any ticker history-only/error),
 SystemExit message on missing credentials/URIs (fail closed, like backfill).
+
+Core macro mirror (#3780): the writers-stop paused the Supabase macro writers,
+but ``macro_series_observations`` is a carve-out table still read directly by
+twelve-x (Yahoo FX pair series). When core Supabase creds are present the
+refresh mirrors the sealed Yahoo FX R2 generations back into that table
+(:func:`mirror_macro_to_core`, fail-soft) so the carve-out keeps flowing.
 """
 
 from __future__ import annotations
@@ -97,6 +103,21 @@ MACRO_VALUE_COLS = ("obs_date", "value")
 MACRO_COLUMNS = ("source", "series_id", "obs_date", "value", "unit")
 POSTGRES_URI_ENV = "CORE_POSTGRES_URI"
 FRED_API_KEY_ENV = "FRED_API_KEY"
+# Core Supabase REST creds for the macro mirror (same names the digiquant
+# prices workflow already uses, with the legacy fallbacks).
+CORE_SUPABASE_URL_ENV = "CORE_SUPABASE_URL"
+CORE_SUPABASE_SERVICE_KEY_ENV = "CORE_SUPABASE_SERVICE_KEY"
+SUPABASE_URL_FALLBACK_ENV = "SUPABASE_URL"
+SUPABASE_SERVICE_KEY_FALLBACK_ENV = "SUPABASE_SERVICE_ROLE_KEY"
+# Sources whose sealed R2 generations must ALSO land in core
+# ``macro_series_observations`` because a core-only reader still consumes them.
+# The #3780 writers-stop paused every Supabase macro writer on the premise that
+# no production reader remained; that premise missed twelve-x, whose
+# ``fx_rates.py`` reads the Yahoo FX pair series (``FX/EUR`` … ``FX/CHF``,
+# ``source="yahoo"``) straight from core ``macro_series_observations``. FRED is
+# deliberately excluded: its core readers moved to R2, so re-writing it would
+# resurrect a path that was retired on purpose.
+CORE_MIRROR_MACRO_SOURCES = frozenset({"yahoo"})
 
 
 def _sibling(name: str) -> Any:
@@ -535,6 +556,127 @@ def _put_macro(store: Any, source: str, series: str, frame: pl.DataFrame, as_of:
     return key
 
 
+def _yahoo_series_meta() -> dict[str, dict[str, str]]:
+    """``series_id`` -> ``{yahoo_symbol, quote_convention}`` for mirror metadata."""
+    from digiquant.data.prices.macro_ingest import YAHOO_FX_DEFAULT
+
+    return {
+        cfg["series_id"]: {
+            "yahoo_symbol": sym,
+            "quote_convention": cfg["quote_convention"],
+        }
+        for sym, cfg in YAHOO_FX_DEFAULT.items()
+    }
+
+
+def core_macro_rows(
+    source: str,
+    series: str,
+    frame: pl.DataFrame,
+    *,
+    run: str,
+    lookback_days: int = LIVE_WINDOW_DAYS,
+) -> list[dict[str, Any]]:
+    """Sealed R2 macro frame -> core ``macro_series_observations`` rows (#3780).
+
+    Windowed to ``[run - lookback_days, run]`` so the daily mirror re-writes a
+    trailing overlap instead of the whole series — idempotent on the core PK
+    ``(source, series_id, obs_date)``. ``lookback_days`` must exceed any gap a
+    paused writer can leave, or the mirror cannot heal it; the default is the
+    same 45-day horizon the R2 live fetch already uses.
+    """
+    if frame is None or frame.is_empty() or "obs_date" not in frame.columns:
+        return []
+    cutoff = (datetime.fromisoformat(run).date() - timedelta(days=lookback_days)).isoformat()
+    meta = _yahoo_series_meta().get(series)
+    out: list[dict[str, Any]] = []
+    for record in frame.iter_rows(named=True):
+        obs_date = record.get("obs_date")
+        obs_iso = obs_date.isoformat() if hasattr(obs_date, "isoformat") else str(obs_date)[:10]
+        if not obs_iso or obs_iso > run or obs_iso < cutoff:
+            continue
+        raw = record.get("value")
+        if raw is None:
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        row: dict[str, Any] = {
+            "source": source,
+            "series_id": series,
+            "obs_date": obs_iso,
+            "value": value,
+            "unit": record.get("unit") or "fx",
+        }
+        if meta is not None:
+            row["meta"] = dict(meta)
+        out.append(row)
+    return out
+
+
+def build_core_supabase_client() -> Any | None:
+    """Core Supabase client from env, or ``None`` when creds are absent."""
+    url = (
+        os.environ.get(CORE_SUPABASE_URL_ENV, "").strip()
+        or os.environ.get(SUPABASE_URL_FALLBACK_ENV, "").strip()
+    )
+    key = (
+        os.environ.get(CORE_SUPABASE_SERVICE_KEY_ENV, "").strip()
+        or os.environ.get(SUPABASE_SERVICE_KEY_FALLBACK_ENV, "").strip()
+    )
+    if not url or not key:
+        return None
+    from digiquant.data.prices.supabase_writer import build_supabase_client
+
+    return build_supabase_client(url, key)
+
+
+def mirror_macro_to_core(
+    store: Any,
+    specs: list[tuple[str, str]],
+    *,
+    run: str,
+    client: Any | None,
+    lookback_days: int = LIVE_WINDOW_DAYS,
+) -> dict[str, Any]:
+    """Mirror sealed R2 macro generations into core ``macro_series_observations``.
+
+    The #3780 writers-stop paused the Supabase macro writers for every source;
+    the carve-out kept ``macro_series_observations`` alive for fedprob/bitview,
+    but the Yahoo FX series that twelve-x reads from that same table stopped
+    landing. The R2 generation is the source of truth, so mirroring a trailing
+    window back into core restores the consumer without touching R2.
+
+    Fail-soft by design: a missing client, an unreadable generation, or an
+    upsert error is recorded and never fails the R2 refresh.
+    """
+    summary: dict[str, Any] = {"rows": 0, "series": 0, "skipped": []}
+    targets = [(s.lower(), sid) for s, sid in specs if s.lower() in CORE_MIRROR_MACRO_SOURCES]
+    if client is None or not targets:
+        summary["skipped"] = [f"{s}__{sid}: no core client" for s, sid in targets]
+        return summary
+    from digiquant.data.prices.supabase_writer import upsert_macro_observations
+
+    rows: list[dict[str, Any]] = []
+    for source, series in targets:
+        try:
+            frame = store.read_macro(source, series)
+        except Exception as exc:
+            summary["skipped"].append(f"{source}__{series}: {type(exc).__name__}")
+            continue
+        series_rows = core_macro_rows(source, series, frame, run=run, lookback_days=lookback_days)
+        if not series_rows:
+            summary["skipped"].append(f"{source}__{series}: empty window")
+            continue
+        rows.extend(series_rows)
+        summary["series"] += 1
+    if rows:
+        result = upsert_macro_observations(client, rows)
+        summary["rows"] = result.rows
+    return summary
+
+
 def refresh_macro_series(
     source: str,
     series: str,
@@ -840,7 +982,11 @@ def build_store(postgres_uri: str) -> tuple[RefreshStore, dict[str, Any]]:
         access_key=access,
         secret_key=secret,
     )
-    store = R2HistoryStore(backend, _backfill._pg_registry_insert(postgres_uri))
+    store = R2HistoryStore(
+        backend,
+        _backfill._pg_registry_insert(postgres_uri),
+        _backfill._pg_registry_lookup(postgres_uri),
+    )
     try:
         manifest = store.read_manifest()
     except Exception as exc:
@@ -885,6 +1031,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--macro-manifest", default="digiquant/src/digiquant/research/config/macro_series.yaml"
+    )
+    parser.add_argument(
+        "--core-macro-mirror",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Mirror sealed R2 macro generations for core-only readers (Yahoo FX "
+            "-> macro_series_observations) when core Supabase creds are set. "
+            "#3780. Use --no-core-macro-mirror to disable."
+        ),
     )
     parser.add_argument("--postgres-uri", default=os.environ.get(POSTGRES_URI_ENV, ""))
     parser.add_argument("--manifest-out", default="/tmp/market-data-refresh.json")
@@ -939,6 +1095,21 @@ def main(argv: list[str] | None = None) -> int:
         macro_outcomes.append(outcome)
         print(f"{outcome['ticker']}: {outcome['mode']} ({outcome['note']})")
 
+    mirror: dict[str, Any] = {"rows": 0, "series": 0, "skipped": []}
+    if args.core_macro_mirror and macro_specs:
+        try:
+            mirror = mirror_macro_to_core(
+                store, macro_specs, run=run, client=build_core_supabase_client()
+            )
+        except Exception as exc:
+            mirror = {
+                "rows": 0,
+                "series": 0,
+                "skipped": [f"mirror raised: {type(exc).__name__}"],
+            }
+        note = f"; skipped {', '.join(map(str, mirror['skipped']))}" if mirror["skipped"] else ""
+        print(f"core macro mirror: {mirror['rows']} rows / {mirror['series']} series{note}")
+
     outcomes = ticker_outcomes + macro_outcomes
     datasets = manifest.get("datasets") or {}
     new_as_of = max(
@@ -958,6 +1129,7 @@ def main(argv: list[str] | None = None) -> int:
         "gate": gate,
         "failed": [o["ticker"] for o in failed],
         "outcomes": outcomes,
+        "core_macro_mirror": mirror,
         "manifest_sha": digest,
     }
     Path(args.manifest_out).write_text(json.dumps(artifact, indent=2, sort_keys=True))

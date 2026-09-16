@@ -2,12 +2,18 @@
 
 /**
  * Session-only embed/popup prefs (#3733 / #3736). Reload and `/new` reset:
- * /digisearch and /digivault on, /websearch on, language English, thinking on.
- * Not localStorage.
+ * /digisearch and /digivault on, /websearch on, language English, view
+ * balanced, thinking auto. Not localStorage.
  */
 
 import { createContext, useContext, type ReactNode } from "react";
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
+import {
+  DEFAULT_THINKING_MODE,
+  DEFAULT_VIEW_MODE,
+  type ThinkingMode,
+  type ViewMode,
+} from "@/lib/view-modes";
 import type { SessionMcpConfig } from "@/components/stock/embed-mcp-flow";
 
 export type EmbedChatPrefs = {
@@ -19,7 +25,10 @@ export type EmbedChatPrefs = {
   /** Session MCP JSON (user-added + operator overlays). Reload / /new clears. */
   mcpCustom: SessionMcpConfig[];
   language: string;
-  thinking: boolean;
+  /** Chain-of-thought view mode (reasoning + tool calls). */
+  view: ViewMode;
+  /** Reasoning-only override on top of `view`. */
+  thinking: ThinkingMode;
   model: string;
   effort: string;
 };
@@ -31,7 +40,8 @@ export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
   extra: {},
   mcpCustom: [],
   language: DEFAULT_LANGUAGE_CODE,
-  thinking: true,
+  view: DEFAULT_VIEW_MODE,
+  thinking: DEFAULT_THINKING_MODE,
   model: "",
   effort: "medium",
 };
@@ -48,7 +58,8 @@ export type EmbedChatPrefsApi = {
   setMcpConfig: (config: SessionMcpConfig, previousId?: string) => void;
   removeMcpConfig: (id: string) => void;
   setLanguage: (code: string) => void;
-  setThinking: (value: boolean) => void;
+  setView: (mode: ViewMode) => void;
+  setThinking: (value: ThinkingMode) => void;
   setModel: (id: string) => void;
   setEffort: (effort: string) => void;
   reset: () => void;
@@ -70,6 +81,8 @@ export type EmbedChatPrefsApi = {
   openByok: (seed?: string) => void;
   openModels: () => void;
   openEffort: () => void;
+  openView: () => void;
+  openThinking: () => void;
   openLanguage: () => void;
   openSessions: () => void;
   newThread: () => void;

@@ -14,6 +14,7 @@
 import { isFirstPartyEmbedHost } from "@/lib/embed-first-party";
 import { getTenantSuggestionPool } from "@/lib/embed-suggestion-pools";
 import type { PageContextMode } from "@/lib/deploy-config/schema";
+import type { ThinkingMode, ViewMode } from "@/lib/view-modes";
 import {
   resolveEmbedTenantByHost,
   type EmbedLlmAccess,
@@ -56,6 +57,10 @@ export type EmbedTenantClientConfig = {
   showLanguageSelector?: boolean;
   /** Tenant allows opt-in web search UI (#3420). Default false. */
   webSearch?: boolean;
+  /** Chain-of-thought view mode (reasoning + tool calls). Omit = deploy default. */
+  view?: ViewMode;
+  /** Reasoning-only override on top of `view`. Omit = deploy default. */
+  thinking?: ThinkingMode;
   /** Catalog entries — no MCP URLs */
   tools?: { catalog: Array<{ id: string; default?: boolean; label?: string }> };
   /** Operator MCP ids/labels only */
@@ -85,7 +90,7 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   theme: "dark",
   skin: BASELINE_EMBED_SKIN,
   accent: null,
-  attribution: false,
+  attribution: true,
   welcome: BASELINE_EMBED_WELCOME,
   welcomeBody: [...BASELINE_EMBED_WELCOME_BODY],
   placeholder: BASELINE_EMBED_PLACEHOLDER,
@@ -133,6 +138,8 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     // an enabled tenant pairs with the default-on user pref before digichat
     // sends X-Digi-Enable-Web-Search.
     webSearch: cfg.webSearch === true,
+    view: cfg.view,
+    thinking: cfg.thinking,
     tools: cfg.tools,
     mcp: cfg.mcp
       ? {

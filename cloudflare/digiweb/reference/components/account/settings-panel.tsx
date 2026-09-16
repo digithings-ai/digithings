@@ -2,9 +2,28 @@
 
 import { useState } from "react";
 
+import {
+  Select,
+  SelectItem,
+  SelectItemIndicator,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+  Switch,
+} from "@digithings/web";
+import { Button, Tabs, TabsList, TabsTrigger } from "@digithings/web/ui";
+
 /**
  * Settings — preference rows in one card, plus the tab-visibility rule: a lower
  * plan never sees Custom+ tabs (they are omitted, not greyed). Danger zone last.
+ *
+ * Wave 1: the toggle rows are the `@digithings/web` controls-layer Switch, the
+ * module picker is its Select (popup renders in place inside the panel, no
+ * portal wrapper), and every tab strip is the stock kit Tabs from
+ * `@digithings/web/ui` — the theme row and the two plan-visibility strips are
+ * panel-less tabs (they select, they do not reveal content). The
+ * old toggle/segment/select/tabs dress is gone; the danger action is the
+ * stock destructive Button.
  */
 
 type Theme = "system" | "light" | "dark";
@@ -15,25 +34,11 @@ const THEMES: { value: Theme; label: string }[] = [
   { value: "dark", label: "Dark" },
 ];
 
-type ToggleProps = {
-  on: boolean;
-  labelledBy: string;
-  onToggle: () => void;
-};
+const MODULES = ["digiquant", "digigraph", "digisearch", "digivault"];
 
-function Toggle({ on, labelledBy, onToggle }: ToggleProps) {
-  return (
-    <button
-      type="button"
-      className="acct-toggle"
-      aria-pressed={on}
-      aria-labelledby={labelledBy}
-      onClick={onToggle}
-    >
-      <span className="acct-toggle-knob" aria-hidden="true" />
-    </button>
-  );
-}
+const CUSTOM_TABS = ["Profile", "Pipeline", "Keys", "Brokers", "Notifications", "Billing", "About"];
+
+const OBSERVER_TABS = ["Notifications", "Billing", "About"];
 
 export function SettingsPanel() {
   const [digests, setDigests] = useState(true);
@@ -58,10 +63,10 @@ export function SettingsPanel() {
             </p>
             <p className="acct-setting-desc">Weekly PnL and drift summary, Mondays 07:00.</p>
           </div>
-          <Toggle
-            on={digests}
-            labelledBy="setting-digests"
-            onToggle={() => setDigests((value) => !value)}
+          <Switch
+            checked={digests}
+            aria-labelledby="setting-digests"
+            onCheckedChange={setDigests}
           />
         </div>
 
@@ -72,10 +77,10 @@ export function SettingsPanel() {
             </p>
             <p className="acct-setting-desc">Anonymous counters only — never strategy payloads.</p>
           </div>
-          <Toggle
-            on={telemetry}
-            labelledBy="setting-telemetry"
-            onToggle={() => setTelemetry((value) => !value)}
+          <Switch
+            checked={telemetry}
+            aria-labelledby="setting-telemetry"
+            onCheckedChange={setTelemetry}
           />
         </div>
 
@@ -86,18 +91,15 @@ export function SettingsPanel() {
             </p>
             <p className="acct-setting-desc">Follows the OS unless pinned.</p>
           </div>
-          <div className="acct-segment" role="group" aria-labelledby="setting-theme">
-            {THEMES.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={theme === option.value}
-                onClick={() => setTheme(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <Tabs value={theme} onValueChange={(value) => setTheme(value as Theme)}>
+            <TabsList aria-labelledby="setting-theme">
+              {THEMES.map((option) => (
+                <TabsTrigger key={option.value} value={option.value}>
+                  {option.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
         </div>
 
         <div className="acct-setting-row">
@@ -107,42 +109,43 @@ export function SettingsPanel() {
             </label>
             <p className="acct-setting-desc">Where new sessions open.</p>
           </div>
-          <span className="acct-select-wrap">
-            <select className="acct-select" id="setting-module" defaultValue="digiquant">
-              <option value="digiquant">digiquant</option>
-              <option value="digigraph">digigraph</option>
-              <option value="digisearch">digisearch</option>
-              <option value="digivault">digivault</option>
-            </select>
-          </span>
+          <Select defaultValue="digiquant">
+            <SelectTrigger id="setting-module">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectPopup>
+              {MODULES.map((module) => (
+                <SelectItem key={module} value={module}>
+                  {module}
+                  <SelectItemIndicator />
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
         </div>
 
-        <div className="acct-setting-tabs" role="tablist" aria-label="Settings (custom plan)">
-          {["Profile", "Pipeline", "Keys", "Brokers", "Notifications", "Billing", "About"].map(
-            (label, index) => (
-              <span
-                key={label}
-                className={index === 0 ? "acct-setting-tab acct-setting-tab-on" : "acct-setting-tab"}
-              >
+        <Tabs defaultValue={CUSTOM_TABS[0]} className="px-[1.1rem] pt-4">
+          <TabsList aria-label="Settings (custom plan)">
+            {CUSTOM_TABS.map((label) => (
+              <TabsTrigger key={label} value={label}>
                 {label}
-              </span>
-            ),
-          )}
-        </div>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         <p className="acct-setting-tab-note">
           Custom+ sees every tab. Observer (free) never sees Profile, Pipeline, Keys, or Brokers —
           those controls are omitted, not greyed out.
         </p>
-        <div className="acct-setting-tabs" role="tablist" aria-label="Settings (observer plan)">
-          {["Notifications", "Billing", "About"].map((label, index) => (
-            <span
-              key={label}
-              className={index === 0 ? "acct-setting-tab acct-setting-tab-on" : "acct-setting-tab"}
-            >
-              {label}
-            </span>
-          ))}
-        </div>
+        <Tabs defaultValue={OBSERVER_TABS[0]} className="px-[1.1rem] pt-4">
+          <TabsList aria-label="Settings (observer plan)">
+            {OBSERVER_TABS.map((label) => (
+              <TabsTrigger key={label} value={label}>
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
 
         <div className="acct-danger">
           <div>
@@ -151,9 +154,9 @@ export function SettingsPanel() {
               Deletes every strategy, backtest, and API key in this workspace. No undo.
             </p>
           </div>
-          <button type="button" className="btn-danger">
+          <Button type="button" variant="destructive">
             Delete workspace
-          </button>
+          </Button>
         </div>
       </div>
     </section>

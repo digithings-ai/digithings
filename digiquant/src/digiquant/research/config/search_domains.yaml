@@ -63,6 +63,7 @@ per_segment:
     - reuters.com
     - ft.com
 
+# Recency window forwarded to digisearch's `web_search` request (clamped to 1-365).
 recency_days: 7
 # Domains excluded from every grounding search (passes through as `exclude_domains`).
 web_excluded_websites: []

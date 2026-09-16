@@ -121,6 +121,13 @@ export interface PerformanceTearsheet {
    * only exercise chart/KPI math; production `getPerformanceBundle` always sets it.
    */
   contributionSource?: PerformanceContributionSource;
+  /**
+   * First date the realized contribution series actually carries a point (#4102).
+   * Finalized accounting starts mid-history, so the bars begin here rather than at
+   * the plotted window's first date; the chart says so instead of implying the
+   * earlier days contributed nothing.
+   */
+  contributionStartsOn?: string | null;
   currentHoldings: PerformanceHoldingRow[];
   historicalHoldings: PerformanceHoldingRow[];
   /**

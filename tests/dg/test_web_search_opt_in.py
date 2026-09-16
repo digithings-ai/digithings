@@ -9,10 +9,15 @@ from digigraph.orchestration.registry import ToolContext, execute, get_tools
 from digigraph.tool_policy import (
     WEB_SEARCH_TOOL_NAME,
     allowed_tool_names_for_workflow,
+    apply_mcp_extra_tools,
     apply_web_search_opt_in,
+    is_web_search_tool,
 )
 
 pytestmark = pytest.mark.unit
+
+MCP_WEB_SEARCH = "digisearch_web_search"
+MCP_QUERY = "digisearch_semantic"
 
 
 def test_apply_web_search_opt_in_default_off() -> None:
@@ -22,6 +27,168 @@ def test_apply_web_search_opt_in_default_off() -> None:
     assert WEB_SEARCH_TOOL_NAME in apply_web_search_opt_in(base, enable_web_search=True)
     no_web = frozenset({"digisearch"})
     assert WEB_SEARCH_TOOL_NAME not in apply_web_search_opt_in(no_web, enable_web_search=True)
+
+
+def test_is_web_search_tool_covers_mcp_proxy_form() -> None:
+    assert is_web_search_tool(WEB_SEARCH_TOOL_NAME) is True
+    assert is_web_search_tool(MCP_WEB_SEARCH) is True
+    assert is_web_search_tool(MCP_QUERY) is False
+    # Only the ``{id}_web_search`` suffix counts — a differently suffixed native
+    # tool is left alone.
+    assert is_web_search_tool("web_search_archive") is False
+
+
+def test_apply_web_search_opt_in_strips_mcp_proxy_form() -> None:
+    """The deployed digiproject.yaml allowlists ``digisearch_web_search`` (#4223)."""
+    base = frozenset({MCP_QUERY, MCP_WEB_SEARCH, WEB_SEARCH_TOOL_NAME})
+    stripped = apply_web_search_opt_in(base, enable_web_search=False)
+    assert stripped == frozenset({MCP_QUERY})
+    kept = apply_web_search_opt_in(base, enable_web_search=True)
+    assert kept == base
+
+
+def test_apply_mcp_extra_tools_gates_proxy_web_search() -> None:
+    extra = frozenset({MCP_QUERY, MCP_WEB_SEARCH})
+    got = apply_mcp_extra_tools(frozenset({MCP_QUERY}), extra, frozenset(), enable_web_search=False)
+    assert got == frozenset({MCP_QUERY})
+    got_on = apply_mcp_extra_tools(
+        frozenset({MCP_QUERY}), extra, frozenset(), enable_web_search=True
+    )
+    assert MCP_WEB_SEARCH in got_on
+
+
+def test_apply_mcp_extra_tools_materializes_unrestricted_session() -> None:
+    """None would admit the proxied tool by default; the gate must concrete it."""
+    got = apply_mcp_extra_tools(
+        None, frozenset({MCP_QUERY, MCP_WEB_SEARCH}), frozenset(), enable_web_search=False
+    )
+    assert got is not None
+    assert MCP_WEB_SEARCH not in got
+    assert MCP_QUERY in got
+    assert "digisearch" in got  # registered tools still admitted
+    # No proxied web search discovered → unrestricted stays unrestricted.
+    assert (
+        apply_mcp_extra_tools(
+            None, frozenset({"datatap_list"}), frozenset(), enable_web_search=False
+        )
+        is None
+    )
+
+
+def test_apply_mcp_extra_tools_disabled_tokens_still_subtract() -> None:
+    got = apply_mcp_extra_tools(
+        frozenset({"digisearch"}),
+        frozenset({MCP_QUERY, MCP_WEB_SEARCH}),
+        frozenset({MCP_WEB_SEARCH, MCP_QUERY}),
+        enable_web_search=True,
+    )
+    assert got == frozenset({"digisearch"})
+
+
+def test_mcp_web_search_denied_when_opt_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    from unittest.mock import patch
+
+    allowed = apply_mcp_extra_tools(
+        frozenset({MCP_QUERY, MCP_WEB_SEARCH}),
+        frozenset({MCP_QUERY, MCP_WEB_SEARCH}),
+        frozenset(),
+        enable_web_search=False,
+    )
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={"enable_web_search": False},
+        extra_mcp_servers=[{"id": "digisearch", "url": "http://digisearch-mcp:8765/mcp"}],
+        allowed_tool_names=allowed,
+    )
+    with patch(
+        "digigraph.orchestration.mcp_client.call_prefixed_tool",
+        return_value={"ok": True},
+    ) as call:
+        out = execute(MCP_WEB_SEARCH, {"query": "latest"}, ctx)
+    assert isinstance(out, dict)
+    assert out.get("error") == "tool_not_allowed"
+    call.assert_not_called()
+
+
+def test_mcp_web_search_allowed_when_opt_in() -> None:
+    from unittest.mock import patch
+
+    allowed = apply_mcp_extra_tools(
+        frozenset({MCP_QUERY, MCP_WEB_SEARCH}),
+        frozenset({MCP_QUERY, MCP_WEB_SEARCH}),
+        frozenset(),
+        enable_web_search=True,
+    )
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={"enable_web_search": True},
+        extra_mcp_servers=[{"id": "digisearch", "url": "http://digisearch-mcp:8765/mcp"}],
+        allowed_tool_names=allowed,
+    )
+    with patch(
+        "digigraph.orchestration.mcp_client.call_prefixed_tool",
+        return_value={"ok": True, "text": "hit"},
+    ) as call:
+        out = execute(MCP_WEB_SEARCH, {"query": "latest"}, ctx)
+    assert out == {"ok": True, "text": "hit"}
+    call.assert_called_once()
+
+
+def test_mcp_web_search_denied_at_execute_when_discovery_returned_nothing() -> None:
+    """Discovery failure leaves allowed_tool_names None; a guessed proxy tool is still refused.
+
+    ``list_tools_cached`` caches ``[]`` for 60s when the MCP list call fails, so
+    ``apply_mcp_extra_tools`` never sees a ``{id}_web_search`` and cannot
+    materialize the allowlist. Before the execute-level deny, a model-guessed
+    ``digisearch_web_search`` would execute despite the opt-out (#4246 review).
+    """
+    from unittest.mock import patch
+
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={"enable_web_search": False},
+        extra_mcp_servers=[{"id": "digisearch", "url": "http://digisearch-mcp:8765/mcp"}],
+        allowed_tool_names=None,
+    )
+    with patch(
+        "digigraph.orchestration.mcp_client.call_prefixed_tool",
+        return_value={"ok": True},
+    ) as call:
+        out = execute(MCP_WEB_SEARCH, {"query": "latest"}, ctx)
+    assert isinstance(out, dict)
+    assert out.get("error") == "tool_not_allowed"
+    call.assert_not_called()
+
+
+def test_mcp_web_search_still_runs_unrestricted_when_opted_in() -> None:
+    """The execute-level gate must not deny the proxied tool on an opted-in session."""
+    from unittest.mock import patch
+
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={"enable_web_search": True},
+        extra_mcp_servers=[{"id": "digisearch", "url": "http://digisearch-mcp:8765/mcp"}],
+        allowed_tool_names=None,
+    )
+    with patch(
+        "digigraph.orchestration.mcp_client.call_prefixed_tool",
+        return_value={"ok": True, "text": "hit"},
+    ) as call:
+        out = execute(MCP_WEB_SEARCH, {"query": "latest"}, ctx)
+    assert out == {"ok": True, "text": "hit"}
+    call.assert_called_once()
 
 
 def test_apply_web_search_opt_in_unrestricted_stays_none() -> None:

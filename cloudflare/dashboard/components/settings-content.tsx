@@ -13,6 +13,7 @@ import {
 } from '@/components/tier/custom-workspace-surfaces';
 import { can, type PlanTier } from '@/lib/entitlements';
 import { usePlanTier } from '@/lib/use-entitlement';
+import { useFxHubOnlyInvitee } from '@/lib/fx-hub-only';
 
 export interface SettingsContentProps {
   /** Tighter spacing for the sidebar popover; slightly fuller for the page. */
@@ -57,6 +58,7 @@ export function SettingsContent({
   const pipe = pipelineActive(pathname);
   const settings = settingsActive(pathname);
   const sessionTier = usePlanTier();
+  const { fxHubOnlyInvitee } = useFxHubOnlyInvitee();
   const resolvedTier = tier ?? sessionTier;
   const showPrivateBook = can(resolvedTier, 'private_book');
   const showBroker = can(resolvedTier, 'broker_status');
@@ -64,6 +66,7 @@ export function SettingsContent({
 
   return (
     <div className={variant === 'page' ? 'space-y-6' : 'space-y-5'}>
+      {fxHubOnlyInvitee ? null : (
       <div>
         <p className="text-[10px] font-medium text-ink-mute mb-2">Status</p>
         {lastRunDate ? (
@@ -83,6 +86,7 @@ export function SettingsContent({
           </div>
         )}
       </div>
+      )}
 
       <div>
         <p className="text-[10px] font-medium text-ink-mute mb-2">Appearance</p>
@@ -146,21 +150,27 @@ export function SettingsContent({
       ) : null}
 
       <div>
-        <p className="text-[10px] font-medium text-ink-mute mb-2">About</p>
+        <p className="text-[10px] font-medium text-ink-mute mb-2">
+          {fxHubOnlyInvitee ? 'Shortcuts' : 'About'}
+        </p>
         <div className="border border-hair bg-term-bg/50 divide-y divide-hair">
-          <div className="flex items-center justify-between gap-2 px-3 py-2">
-            <span className="text-xs text-ink-soft">Build</span>
-            <span className="font-mono text-[11px] text-ink-mute">{version}</span>
-          </div>
-          <div className="flex items-center justify-between gap-2 px-3 py-2">
-            <span className="text-xs text-ink-soft">Data source</span>
-            <span
-              className="font-mono text-[11px] text-ink-mute truncate max-w-[55%]"
-              title={dataSourceHost ?? undefined}
-            >
-              {dataSourceHost ?? 'not configured'}
-            </span>
-          </div>
+          {fxHubOnlyInvitee ? null : (
+            <>
+              <div className="flex items-center justify-between gap-2 px-3 py-2">
+                <span className="text-xs text-ink-soft">Build</span>
+                <span className="font-mono text-[11px] text-ink-mute">{version}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2 px-3 py-2">
+                <span className="text-xs text-ink-soft">Data source</span>
+                <span
+                  className="font-mono text-[11px] text-ink-mute truncate max-w-[55%]"
+                  title={dataSourceHost ?? undefined}
+                >
+                  {dataSourceHost ?? 'not configured'}
+                </span>
+              </div>
+            </>
+          )}
           {onOpenPalette ? (
             <button
               type="button"
@@ -177,16 +187,18 @@ export function SettingsContent({
               </kbd>
             </button>
           ) : null}
-          <Link
-            href="/pipeline"
-            onClick={onNavigate}
-            className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors ${
-              pipe ? 'text-accent' : 'text-ink-soft hover:bg-ink/[0.04] hover:text-ink'
-            }`}
-          >
-            <Database size={14} className="shrink-0" aria-hidden />
-            <span>Pipeline</span>
-          </Link>
+          {fxHubOnlyInvitee ? null : (
+            <Link
+              href="/pipeline"
+              onClick={onNavigate}
+              className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors ${
+                pipe ? 'text-accent' : 'text-ink-soft hover:bg-ink/[0.04] hover:text-ink'
+              }`}
+            >
+              <Database size={14} className="shrink-0" aria-hidden />
+              <span>Pipeline</span>
+            </Link>
+          )}
         </div>
         {!settings ? (
           <Link

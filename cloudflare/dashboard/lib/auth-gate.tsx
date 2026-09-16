@@ -9,6 +9,7 @@ import { LoginScreen } from '@/components/login-screen';
 import { useAuth } from '@/lib/auth-context';
 import { hasPendingInvite } from '@/lib/invite-stash';
 import { useInviteLink } from '@/lib/invite-link';
+import { useAccessPending } from '@/lib/use-entitlement';
 
 /** Exact auth routes (Next usePathname strips basePath). */
 const AUTH_PATHS = new Set(['/login', '/signup', '/auth/callback']);
@@ -89,7 +90,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const { authEnabled, session, loading } = useAuth();
   const pathname = usePathname();
   const mounted = useHasMounted();
-  useInviteLink();
+  const { pending: invitePending } = useInviteLink();
+  const accessPending = useAccessPending();
 
   if (!authEnabled) {
     return <AppProviders>{children}</AppProviders>;
@@ -120,6 +122,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
     // An invite link is how a visitor without an account arrives — default
     // them to signup, not sign-in, so the link is one click, not two.
     return <LoginScreen initialMode={hasPendingInvite() ? 'signup' : 'signin'} />;
+  }
+
+  // Hold the shell until `my_access` (and any stashed invite redeem) settle:
+  // a 12x FX-Hub-only invitee must never flash the full DigiQuant chrome.
+  if (accessPending || invitePending) {
+    return <AuthLoadingScreen />;
   }
 
   return <AppProviders>{children}</AppProviders>;

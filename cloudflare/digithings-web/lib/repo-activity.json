@@ -1,155 +1,127 @@
 {
-  "generatedAt": "2026-09-08T14:52:37Z",
+  "generatedAt": "2026-09-15T15:32:35Z",
   "windowDays": 30,
-  "commits": 2214,
+  "commits": 2388,
   "features": [
     {
-      "scope": "digiweb",
-      "summary": "add merge heat graph to detailed repo activity",
-      "pr": 3724,
-      "date": "2026-09-08T10:25:35Z"
+      "scope": "stack",
+      "summary": "expose hosted digisearch route (search.digithings.ai) for CI web grounding",
+      "pr": 4067,
+      "date": "2026-09-15T10:47:03Z"
     },
     {
-      "scope": "website",
-      "summary": "host openwiki visualizer at /openwiki",
-      "pr": 3698,
-      "date": "2026-09-08T00:07:14Z"
+      "scope": "digiquant",
+      "summary": "market reads R2-only; remove Supabase bodies",
+      "pr": 4082,
+      "date": "2026-09-14T22:52:37Z"
     },
     {
-      "scope": "digichat",
-      "summary": "cut published package to 2.0.0",
-      "pr": 3629,
-      "date": "2026-09-07T22:54:46Z"
-    },
-    {
-      "scope": "digillm",
-      "summary": "generic provider router, fail-fast house, MCP server",
-      "pr": 3692,
-      "date": "2026-09-07T21:19:23Z"
+      "scope": "digiquant-web",
+      "summary": "live prices seeded from the R2 market API",
+      "pr": 4079,
+      "date": "2026-09-14T22:00:40Z"
     },
     {
       "scope": "dashboard",
-      "summary": "polish Notifications Settings empty/error/soft-503 UX",
-      "pr": 3684,
-      "date": "2026-09-07T13:43:14Z"
+      "summary": "market reads R2-API-only; universe from /v1/market/tickers",
+      "pr": 4078,
+      "date": "2026-09-14T21:26:11Z"
     },
     {
-      "scope": "digithings-web",
-      "summary": "add Cheaper Inference and Assistant UI stack chips",
-      "pr": 3649,
-      "date": "2026-09-05T21:38:04Z"
+      "scope": "digiquant",
+      "summary": "same-day opens from a live fetch; retire intraday Supabase writer",
+      "pr": 4062,
+      "date": "2026-09-14T21:20:09Z"
+    },
+    {
+      "scope": "digiquant-web",
+      "summary": "benchmark history from the R2 market API",
+      "pr": 4049,
+      "date": "2026-09-14T17:21:48Z"
     }
   ],
-  "pullsMerged": 1188,
-  "issuesClosed": 468,
+  "pullsMerged": 1126,
+  "issuesClosed": 532,
   "pullsOpen": 2,
-  "issuesOpen": 145,
+  "issuesOpen": 163,
   "mergedPulls": [
     {
-      "number": 3716,
-      "title": "Nautilus engine as single source of truth for NAV (#3695)",
-      "url": "https://github.com/digithings-ai/digithings/pull/3716",
-      "mergedAt": "2026-09-08T13:24:48Z"
+      "number": 4094,
+      "title": "fix(website): keep repo-activity openIssues to real issues (#4091)",
+      "url": "https://github.com/digithings-ai/digithings/pull/4094",
+      "mergedAt": "2026-09-15T15:23:07Z"
     },
     {
-      "number": 3728,
-      "title": "docs: add package-root re-export to review regression lens",
-      "url": "https://github.com/digithings-ai/digithings/pull/3728",
-      "mergedAt": "2026-09-08T11:01:00Z"
+      "number": 4090,
+      "title": "chore(promote): module/digiquant -> develop (#4069)",
+      "url": "https://github.com/digithings-ai/digithings/pull/4090",
+      "mergedAt": "2026-09-15T15:10:04Z"
     },
     {
-      "number": 3727,
-      "title": "promote: develop \u2192 main (gallery Thread as first-party skin)",
-      "url": "https://github.com/digithings-ai/digithings/pull/3727",
-      "mergedAt": "2026-09-08T10:59:15Z"
+      "number": 4092,
+      "title": "chore(sync): module/digiquant <- develop",
+      "url": "https://github.com/digithings-ai/digithings/pull/4092",
+      "mergedAt": "2026-09-15T14:56:21Z"
     },
     {
-      "number": 3726,
-      "title": "fix(digichat): render gallery Thread as the first-party skin",
-      "url": "https://github.com/digithings-ai/digithings/pull/3726",
-      "mergedAt": "2026-09-08T10:54:22Z"
+      "number": 4088,
+      "title": "chore(release): promote develop to main \u2014 web-grounding retry + R2-only market reads",
+      "url": "https://github.com/digithings-ai/digithings/pull/4088",
+      "mergedAt": "2026-09-15T14:54:29Z"
     },
     {
-      "number": 3724,
-      "title": "feat(digiweb): merge heat graph for detailed repo activity",
-      "url": "https://github.com/digithings-ai/digithings/pull/3724",
-      "mergedAt": "2026-09-08T10:39:09Z"
+      "number": 4085,
+      "title": "feat(digiquant): digifetch x Gloomberb market-data tools (#4069)",
+      "url": "https://github.com/digithings-ai/digithings/pull/4085",
+      "mergedAt": "2026-09-15T14:50:56Z"
     },
     {
-      "number": 3722,
-      "title": "promote: develop \u2192 main (restore wrangler deploy --message)",
-      "url": "https://github.com/digithings-ai/digithings/pull/3722",
-      "mergedAt": "2026-09-08T10:18:16Z"
+      "number": 4087,
+      "title": "fix(digiquant): retry web grounding unscoped when a scoped search is empty (#4086)",
+      "url": "https://github.com/digithings-ai/digithings/pull/4087",
+      "mergedAt": "2026-09-15T14:39:55Z"
     }
   ],
   "openIssues": [
     {
-      "number": 3729,
-      "title": "[agent] Port approved /chatbot theme onto product gallery Thread",
-      "url": "https://github.com/digithings-ai/digithings/issues/3729",
-      "updatedAt": "2026-09-08T14:07:35Z"
+      "number": 4101,
+      "title": "ops(digiquant): post-deploy verification of digifetch_* tools + upstream drift checks",
+      "url": "https://github.com/digithings-ai/digithings/issues/4101",
+      "updatedAt": "2026-09-15T15:42:30Z"
     },
     {
-      "number": 3078,
-      "title": "digiquant-daily-failure",
-      "url": "https://github.com/digithings-ai/digithings/issues/3078",
-      "updatedAt": "2026-09-08T14:02:57Z"
+      "number": 4100,
+      "title": "feat(digiquant): widen 1wk history range via startDate (upstream serves >5Y)",
+      "url": "https://github.com/digithings-ai/digithings/issues/4100",
+      "updatedAt": "2026-09-15T15:42:29Z"
     },
     {
-      "number": 3694,
-      "title": "research: BlockHorizon charts API for valuation time series (later pipeline)",
-      "url": "https://github.com/digithings-ai/digithings/issues/3694",
-      "updatedAt": "2026-09-08T09:24:45Z"
+      "number": 4099,
+      "title": "docs(digiquant): runbook for GLOOMBERB_SESSION_COOKIE (free account + per-deployment env)",
+      "url": "https://github.com/digithings-ai/digithings/issues/4099",
+      "updatedAt": "2026-09-15T15:42:28Z"
     },
     {
-      "number": 3712,
-      "title": "[site-smoke] production design assets failing",
-      "url": "https://github.com/digithings-ai/digithings/issues/3712",
-      "updatedAt": "2026-09-08T09:24:43Z"
+      "number": 4098,
+      "title": "feat(digiquant): surface Gloomberb deep links + attribution in digiquant pages and digichat",
+      "url": "https://github.com/digithings-ai/digithings/issues/4098",
+      "updatedAt": "2026-09-15T15:42:27Z"
     },
     {
-      "number": 3676,
-      "title": "docs(dashboard): Settings UX pass \u2014 page-by-page user-facing readiness",
-      "url": "https://github.com/digithings-ai/digithings/issues/3676",
-      "updatedAt": "2026-09-07T09:42:49Z"
+      "number": 4097,
+      "title": "feat(digiquant): wire /v1/orchestrator_invoke dispatch for the digifetch_* tool family",
+      "url": "https://github.com/digithings-ai/digithings/issues/4097",
+      "updatedAt": "2026-09-15T15:42:26Z"
     },
     {
-      "number": 3673,
-      "title": "[cleanup] 21 stale merged branches \u2014 2026-09-07",
-      "url": "https://github.com/digithings-ai/digithings/issues/3673",
-      "updatedAt": "2026-09-07T08:09:33Z"
+      "number": 4096,
+      "title": "ops(digiquant): verify Gloomberb MCP image builds + in-container egress (last #4069 spike)",
+      "url": "https://github.com/digithings-ai/digithings/issues/4096",
+      "updatedAt": "2026-09-15T15:42:25Z"
     }
   ],
   "branch": "main",
   "dailyContributions": [
-    {
-      "date": "2025-09-03",
-      "count": 0
-    },
-    {
-      "date": "2025-09-04",
-      "count": 0
-    },
-    {
-      "date": "2025-09-05",
-      "count": 0
-    },
-    {
-      "date": "2025-09-06",
-      "count": 0
-    },
-    {
-      "date": "2025-09-07",
-      "count": 0
-    },
-    {
-      "date": "2025-09-08",
-      "count": 0
-    },
-    {
-      "date": "2025-09-09",
-      "count": 0
-    },
     {
       "date": "2025-09-10",
       "count": 0
@@ -1032,35 +1004,35 @@
     },
     {
       "date": "2026-04-18",
-      "count": 12
-    },
-    {
-      "date": "2026-04-19",
-      "count": 141
-    },
-    {
-      "date": "2026-04-20",
-      "count": 43
-    },
-    {
-      "date": "2026-04-21",
       "count": 21
     },
     {
+      "date": "2026-04-19",
+      "count": 222
+    },
+    {
+      "date": "2026-04-20",
+      "count": 91
+    },
+    {
+      "date": "2026-04-21",
+      "count": 61
+    },
+    {
       "date": "2026-04-22",
-      "count": 8
+      "count": 20
     },
     {
       "date": "2026-04-23",
-      "count": 39
+      "count": 55
     },
     {
       "date": "2026-04-24",
-      "count": 18
+      "count": 26
     },
     {
       "date": "2026-04-25",
-      "count": 1
+      "count": 2
     },
     {
       "date": "2026-04-26",
@@ -1068,15 +1040,15 @@
     },
     {
       "date": "2026-04-27",
-      "count": 63
+      "count": 87
     },
     {
       "date": "2026-04-28",
-      "count": 28
+      "count": 41
     },
     {
       "date": "2026-04-29",
-      "count": 8
+      "count": 13
     },
     {
       "date": "2026-04-30",
@@ -1084,7 +1056,7 @@
     },
     {
       "date": "2026-05-01",
-      "count": 38
+      "count": 56
     },
     {
       "date": "2026-05-02",
@@ -1092,11 +1064,11 @@
     },
     {
       "date": "2026-05-03",
-      "count": 12
+      "count": 16
     },
     {
       "date": "2026-05-04",
-      "count": 4
+      "count": 6
     },
     {
       "date": "2026-05-05",
@@ -1108,11 +1080,11 @@
     },
     {
       "date": "2026-05-07",
-      "count": 12
+      "count": 19
     },
     {
       "date": "2026-05-08",
-      "count": 7
+      "count": 9
     },
     {
       "date": "2026-05-09",
@@ -1128,7 +1100,7 @@
     },
     {
       "date": "2026-05-12",
-      "count": 2
+      "count": 3
     },
     {
       "date": "2026-05-13",
@@ -1220,143 +1192,143 @@
     },
     {
       "date": "2026-06-04",
-      "count": 4
-    },
-    {
-      "date": "2026-06-05",
-      "count": 20
-    },
-    {
-      "date": "2026-06-06",
-      "count": 23
-    },
-    {
-      "date": "2026-06-07",
-      "count": 7
-    },
-    {
-      "date": "2026-06-08",
-      "count": 16
-    },
-    {
-      "date": "2026-06-09",
       "count": 11
     },
     {
-      "date": "2026-06-10",
-      "count": 8
+      "date": "2026-06-05",
+      "count": 129
     },
     {
-      "date": "2026-06-11",
-      "count": 1
-    },
-    {
-      "date": "2026-06-12",
-      "count": 29
-    },
-    {
-      "date": "2026-06-13",
-      "count": 15
-    },
-    {
-      "date": "2026-06-14",
-      "count": 8
-    },
-    {
-      "date": "2026-06-15",
+      "date": "2026-06-06",
       "count": 36
     },
     {
-      "date": "2026-06-16",
-      "count": 20
+      "date": "2026-06-07",
+      "count": 11
     },
     {
-      "date": "2026-06-17",
-      "count": 30
+      "date": "2026-06-08",
+      "count": 27
     },
     {
-      "date": "2026-06-18",
-      "count": 35
-    },
-    {
-      "date": "2026-06-19",
-      "count": 51
-    },
-    {
-      "date": "2026-06-20",
-      "count": 21
-    },
-    {
-      "date": "2026-06-21",
-      "count": 0
-    },
-    {
-      "date": "2026-06-22",
-      "count": 63
-    },
-    {
-      "date": "2026-06-23",
+      "date": "2026-06-09",
       "count": 17
     },
     {
-      "date": "2026-06-24",
-      "count": 29
-    },
-    {
-      "date": "2026-06-25",
-      "count": 35
-    },
-    {
-      "date": "2026-06-26",
-      "count": 34
-    },
-    {
-      "date": "2026-06-27",
+      "date": "2026-06-10",
       "count": 13
     },
     {
-      "date": "2026-06-28",
-      "count": 10
+      "date": "2026-06-11",
+      "count": 2
     },
     {
-      "date": "2026-06-29",
-      "count": 18
+      "date": "2026-06-12",
+      "count": 44
     },
     {
-      "date": "2026-06-30",
-      "count": 9
+      "date": "2026-06-13",
+      "count": 23
     },
     {
-      "date": "2026-07-01",
-      "count": 66
+      "date": "2026-06-14",
+      "count": 13
     },
     {
-      "date": "2026-07-02",
+      "date": "2026-06-15",
+      "count": 62
+    },
+    {
+      "date": "2026-06-16",
       "count": 34
     },
     {
+      "date": "2026-06-17",
+      "count": 64
+    },
+    {
+      "date": "2026-06-18",
+      "count": 87
+    },
+    {
+      "date": "2026-06-19",
+      "count": 58
+    },
+    {
+      "date": "2026-06-20",
+      "count": 42
+    },
+    {
+      "date": "2026-06-21",
+      "count": 11
+    },
+    {
+      "date": "2026-06-22",
+      "count": 108
+    },
+    {
+      "date": "2026-06-23",
+      "count": 51
+    },
+    {
+      "date": "2026-06-24",
+      "count": 154
+    },
+    {
+      "date": "2026-06-25",
+      "count": 61
+    },
+    {
+      "date": "2026-06-26",
+      "count": 68
+    },
+    {
+      "date": "2026-06-27",
+      "count": 43
+    },
+    {
+      "date": "2026-06-28",
+      "count": 25
+    },
+    {
+      "date": "2026-06-29",
+      "count": 31
+    },
+    {
+      "date": "2026-06-30",
+      "count": 23
+    },
+    {
+      "date": "2026-07-01",
+      "count": 140
+    },
+    {
+      "date": "2026-07-02",
+      "count": 98
+    },
+    {
       "date": "2026-07-03",
-      "count": 21
+      "count": 86
     },
     {
       "date": "2026-07-04",
-      "count": 10
+      "count": 24
     },
     {
       "date": "2026-07-05",
-      "count": 20
+      "count": 40
     },
     {
       "date": "2026-07-06",
-      "count": 16
+      "count": 60
     },
     {
       "date": "2026-07-07",
-      "count": 5
+      "count": 67
     },
     {
       "date": "2026-07-08",
-      "count": 72
+      "count": 90
     },
     {
       "date": "2026-07-09",
@@ -1588,11 +1560,11 @@
     },
     {
       "date": "2026-09-04",
-      "count": 240
+      "count": 243
     },
     {
       "date": "2026-09-05",
-      "count": 161
+      "count": 164
     },
     {
       "date": "2026-09-06",
@@ -1600,11 +1572,39 @@
     },
     {
       "date": "2026-09-07",
-      "count": 64
+      "count": 70
     },
     {
       "date": "2026-09-08",
-      "count": 63
+      "count": 147
+    },
+    {
+      "date": "2026-09-09",
+      "count": 105
+    },
+    {
+      "date": "2026-09-10",
+      "count": 179
+    },
+    {
+      "date": "2026-09-11",
+      "count": 183
+    },
+    {
+      "date": "2026-09-12",
+      "count": 93
+    },
+    {
+      "date": "2026-09-13",
+      "count": 182
+    },
+    {
+      "date": "2026-09-14",
+      "count": 133
+    },
+    {
+      "date": "2026-09-15",
+      "count": 60
     }
   ],
   "latestRelease": {
@@ -1616,37 +1616,37 @@
   "modules": {
     "digigraph": {
       "path": "digigraph",
-      "lastCommit": "2026-09-07T21:52:24Z",
-      "files": 149,
-      "lines": 20515
+      "lastCommit": "2026-09-14T21:29:51Z",
+      "files": 153,
+      "lines": 22823
     },
     "digiquant": {
       "path": "digiquant",
-      "lastCommit": "2026-09-07T21:52:24Z",
-      "files": 788,
-      "lines": 170420
+      "lastCommit": "2026-09-15T14:27:04Z",
+      "files": 816,
+      "lines": 178909
     },
     "digisearch": {
       "path": "digisearch",
-      "lastCommit": "2026-09-04T11:51:21Z",
-      "files": 106,
-      "lines": 11028
+      "lastCommit": "2026-09-15T11:22:07Z",
+      "files": 122,
+      "lines": 12699
     },
     "digichat": {
       "path": "cloudflare/digichat",
-      "lastCommit": "2026-09-08T10:43:43Z",
-      "files": 645,
-      "lines": 80230
+      "lastCommit": "2026-09-13T17:59:17Z",
+      "files": 692,
+      "lines": 92940
     },
     "digikey": {
       "path": "digikey",
-      "lastCommit": "2026-09-02T14:56:28Z",
-      "files": 25,
-      "lines": 2636
+      "lastCommit": "2026-09-11T21:57:22Z",
+      "files": 26,
+      "lines": 2922
     },
     "digismith": {
       "path": "digismith",
-      "lastCommit": "2026-09-04T11:28:16Z",
+      "lastCommit": "2026-09-11T21:57:22Z",
       "files": 10,
       "lines": 951
     },
@@ -1658,15 +1658,15 @@
     },
     "digibase": {
       "path": "digibase",
-      "lastCommit": "2026-09-04T11:28:16Z",
+      "lastCommit": "2026-09-14T18:27:33Z",
       "files": 16,
-      "lines": 2157
+      "lines": 2326
     },
     "digivault": {
       "path": "digivault",
-      "lastCommit": "2026-09-05T13:27:26Z",
-      "files": 23,
-      "lines": 4871
+      "lastCommit": "2026-09-11T21:41:25Z",
+      "files": 24,
+      "lines": 5003
     }
   }
 }

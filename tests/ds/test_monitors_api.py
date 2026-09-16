@@ -788,6 +788,11 @@ def test_trigger_route_holds_ten_per_minute_through_middleware(monkeypatch, tmp_
     _patch_monitor_store(monkeypatch, tmp_path)
     c = _monitor_client()
     wid = _create_watch(c)["watch"]["watch_id"]
+    # Neutralize the #4106 identity-aware multiplier so this test pins the
+    # per-watch route budget itself (10/min), not the token headroom a bearer
+    # caller gets by default (6x budget + 6x per-IP ceiling).
+    monkeypatch.setenv("DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER", "1")
+    monkeypatch.setenv("DIGISEARCH_IP_CEILING_MULTIPLIER", "1")
     forwarded = {"X-Forwarded-For": "203.0.113.91"}  # unique IP: testclient bypasses limits
     for _ in range(10):
         r = c.post(f"/v1/monitors/{wid}/trigger", json={"mode": "poll"}, headers=forwarded)

@@ -25,10 +25,12 @@ import {
 import { ThreadSkinView } from "@/components/assistant-ui/skins";
 import type { ComposerLayout } from "@digithings/web/chat/thread";
 import type { DigichatClientConfig, DigichatClientFeatures } from "@/lib/deploy-config";
+import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
 import {
-  DEFAULT_CLIENT_CONFIG,
-  disclosureIsVisible,
-} from "@/lib/deploy-config";
+  effectiveReasoningMode,
+  effectiveToolCallsMode,
+  type ChainDisclosureMode,
+} from "@/lib/view-modes";
 import { cn } from "@/lib/utils";
 import { skinOwnsPageChrome } from "@/lib/thread-skins";
 import { useEmbedChatPrefsOptional } from "@/components/stock/embed-chat-prefs";
@@ -110,19 +112,21 @@ export function buildProductRuntimeAdapters(
 function FeatureCss({
   features,
   hideModelPicker,
-  hideThinking,
+  reasoningMode,
+  toolCallsMode,
 }: {
   features: DigichatClientFeatures;
   hideModelPicker: boolean;
-  hideThinking: boolean;
+  reasoningMode: ChainDisclosureMode;
+  toolCallsMode: ChainDisclosureMode;
 }) {
   const rules: string[] = [];
-  if (!disclosureIsVisible(features.reasoning) || hideThinking) {
+  if (reasoningMode === "off") {
     rules.push(
       '[data-stock-product] [data-slot="aui_reasoning"], [data-stock-product] .aui-reasoning-root { display: none !important; }',
     );
   }
-  if (!disclosureIsVisible(features.toolCalls)) {
+  if (toolCallsMode === "off") {
     rules.push(
       '[data-stock-product] [data-slot="aui_tool-fallback"], [data-stock-product] .aui-tool-fallback-root { display: none !important; }',
     );
@@ -183,16 +187,19 @@ export function ProductStockShell({
   const mode = persistence ?? cfg.persistence;
   const adapters = useMemo(() => buildProductRuntimeAdapters(features), [features]);
   const chatPrefs = useEmbedChatPrefsOptional();
-  const hideThinking = chatPrefs?.prefs.thinking === false;
+  const view = chatPrefs?.prefs.view ?? features.view;
+  const thinking = chatPrefs?.prefs.thinking ?? features.thinking;
+  const reasoningMode = effectiveReasoningMode(view, thinking);
+  const toolCallsMode = effectiveToolCallsMode(view);
 
   const deployUi = useMemo<DeployUiValue>(
     () => ({
-      reasoning: features.reasoning,
-      toolCalls: features.toolCalls,
+      reasoning: reasoningMode,
+      toolCalls: toolCallsMode,
       userAlign:
         cfg.chrome.skin === "digichat" ? "left" : cfg.chrome.transcript.userAlign,
     }),
-    [features.reasoning, features.toolCalls, cfg.chrome.skin, cfg.chrome.transcript.userAlign],
+    [reasoningMode, toolCallsMode, cfg.chrome.skin, cfg.chrome.transcript.userAlign],
   );
 
   const skinChrome = useMemo<SkinChromeValue>(
@@ -266,7 +273,8 @@ export function ProductStockShell({
             <FeatureCss
               features={features}
               hideModelPicker={!skinChrome.modelPicker}
-              hideThinking={hideThinking}
+              reasoningMode={reasoningMode}
+              toolCallsMode={toolCallsMode}
             />
             <SessionPrefsToolBridge />
             <div
@@ -274,8 +282,10 @@ export function ProductStockShell({
               data-chrome-mode={cfg.chrome.mode}
               data-thread-skin={cfg.chrome.skin}
               data-persistence={mode}
-              data-reasoning={features.reasoning}
-              data-tool-calls={features.toolCalls}
+              data-view={view}
+              data-thinking={thinking}
+              data-reasoning={reasoningMode}
+              data-tool-calls={toolCallsMode}
               data-user-align={deployUi.userAlign}
               data-theme={cfg.chrome.theme}
               className={cn(

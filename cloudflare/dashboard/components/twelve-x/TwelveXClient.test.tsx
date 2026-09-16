@@ -12,15 +12,14 @@ import type { TwelveXTab } from './context';
 
 describe('TwelveXClient tab set', () => {
   it('exposes exactly seven tabs', () => {
-    expect(TWELVE_X_TABS).toHaveLength(7);
+    expect(TWELVE_X_TABS).toHaveLength(6);
   });
 
-  it('is the canonical Today / Consensus / Trades / Track-record / Matrix / Events / How-it-works set', () => {
+  it('is the canonical Today / Consensus / Trades / Matrix / Events / How-it-works set', () => {
     expect(TWELVE_X_TABS.map((t) => t.id)).toEqual([
       'today',
       'consensus',
       'trades',
-      'track-record',
       'matrix',
       'events',
       'how-it-works',
@@ -38,7 +37,6 @@ describe('TwelveXClient tab set', () => {
       today: 'Today',
       consensus: 'Consensus',
       trades: 'Trades',
-      'track-record': 'Track record',
       matrix: 'Matrix',
       events: 'Events',
       'how-it-works': 'How it works',

@@ -56,7 +56,7 @@ from digigraph.orchestration.registry import register_skill, register_tool
 from digigraph.orchestration.session_prefs_tools import (
     SESSION_TOOL_NAMES,
     SESSION_TOOL_SCHEMAS,
-    _handle_session_tool,
+    session_tool_handler,
 )
 from digigraph.orchestration.tool_common import (  # noqa: F401
     _LLM_SEARCH_PREVIEW_CHARS,
@@ -180,7 +180,7 @@ def _register_tools() -> None:
         _handle_web_search,
     )
     for name, schema in SESSION_TOOL_SCHEMAS:
-        register_tool(name, schema, _handle_session_tool)
+        register_tool(name, schema, session_tool_handler(name))
     if federated_hub_enabled():
         register_tool(
             "digisearch_research_delegate",

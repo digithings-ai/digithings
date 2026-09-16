@@ -69,7 +69,10 @@ import {
   PARENT_GATE_TIMEOUT_MS,
   resolveGateFallbackCard,
 } from "@/lib/embed-trial-messages";
-import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
+import {
+  EMBED_TRIAL_TURN_LIMIT,
+  formatEmbedTurnCounter,
+} from "@/lib/embed-turn-limits";
 import { buildEmbedAccentStyle } from "@/lib/embed-accent-style";
 import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
 import type { EmbedUiParams } from "@/lib/embed-ui-params";
@@ -292,14 +295,15 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
   // [data-theme] sync above, just targeting an ancestor instead of <html>).
   useEffect(() => {
     document.querySelector(".dc-embed-shell")?.setAttribute("data-wide", urlColors.wide ? "1" : "0");
-  }, [urlColors.wide]);
+    document.querySelector(".dc-embed-shell")?.setAttribute("data-skin-canvas", tenantCfg.skin === "digichat" ? "1" : "0");
+  }, [urlColors.wide, tenantCfg.skin]);
 
   return (
     <>
       <style>{ACCENT_CSS}</style>
       {urlColors.wide ? null : <div className="dc-grain" aria-hidden />}
       <div
-        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide ? "" : "bg-background"} text-foreground`}
+        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide || tenantCfg.skin === "digichat" ? "" : "bg-background"} text-foreground`}
         style={accentStyle}
       >
         <EmbedChat
@@ -350,6 +354,8 @@ function EmbedChat({
   const pageContextMode = stockClient.features.pageContext;
   const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
     ...DEFAULT_EMBED_CHAT_PREFS,
+    view: stockClient.features.view,
+    thinking: stockClient.features.thinking,
     extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
   }));
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
@@ -1016,6 +1022,7 @@ function EmbedChat({
         const resolved = tryResolveLanguageInput(code) ?? DEFAULT_LANGUAGE_CODE;
         setChatPrefs((p) => ({ ...p, language: resolved }));
       },
+      setView: (mode) => setChatPrefs((p) => ({ ...p, view: mode })),
       setThinking: (value) => setChatPrefs((p) => ({ ...p, thinking: value })),
       setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
       setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort: effort })),
@@ -1023,6 +1030,8 @@ function EmbedChat({
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: DEFAULT_LANGUAGE_CODE,
+          view: stockClient.features.view,
+          thinking: stockClient.features.thinking,
           extra: extraOffFromCatalog(catalogTools),
         }),
       tenantAllowsWeb,
@@ -1056,6 +1065,12 @@ function EmbedChat({
       openEffort: () => {
         setComposerMenu("effort");
       },
+      openView: () => {
+        setComposerMenu("view");
+      },
+      openThinking: () => {
+        setComposerMenu("thinking");
+      },
       openLanguage: () => {
         setComposerMenu("language");
       },
@@ -1064,6 +1079,8 @@ function EmbedChat({
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: DEFAULT_LANGUAGE_CODE,
+          view: stockClient.features.view,
+          thinking: stockClient.features.thinking,
           extra: extraOffFromCatalog(catalogTools),
         });
         chat.reset?.();
@@ -1072,6 +1089,8 @@ function EmbedChat({
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: DEFAULT_LANGUAGE_CODE,
+          view: stockClient.features.view,
+          thinking: stockClient.features.thinking,
           extra: extraOffFromCatalog(catalogTools),
         });
         chat.reset?.();
@@ -1094,6 +1113,8 @@ function EmbedChat({
       stockClient.mcp.allowUserServers,
       stockClient.mcp.allowAddForm,
       stockClient.mcp.servers,
+      stockClient.features.view,
+      stockClient.features.thinking,
     ],
   );
 
@@ -1141,6 +1162,15 @@ function EmbedChat({
     </p>
   ) : null;
 
+  const turnCounterSlot = isTrialForm ? (
+    <p
+      className="dc-turn-counter relative z-10 mx-auto w-full max-w-2xl select-none pb-1 pt-1.5 pr-3 text-right text-xs font-normal leading-none tabular-nums tracking-wide text-muted-foreground"
+      data-testid="embed-turn-counter"
+    >
+      {formatEmbedTurnCounter(gate.turns, gate.limit)}
+    </p>
+  ) : null;
+
   // turn_limited: only raise paywall when the visitor asks past the free
   // limit (gateRequest.requested). Showing it on gate.locked alone replaced
   // the Thread after the third answer — so they could never type the fourth
@@ -1171,6 +1201,7 @@ function EmbedChat({
       <div className="flex h-dvh flex-col" data-chrome-mode="embed" data-thread-skin={stockClient.chrome.skin}>
         {headerSlot}
         <div className="flex flex-1 items-center justify-center p-4">{gateForm}</div>
+        {turnCounterSlot}
         {footerSlot}
       </div>
     );
@@ -1218,6 +1249,7 @@ function EmbedChat({
                 {handshakeError}
               </div>
             ) : null}
+            {turnCounterSlot}
             {footerSlot}
           </>
         }
