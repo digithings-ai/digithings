@@ -80,6 +80,8 @@ __all__ = [
     "TickerTweetsInput",
     "TweetSearchInput",
     "VenuesInput",
+    # coverage expansion (#4110 phase 4a)
+    "SavedSearchesInput",
     "ScreenerInput",
     "ThirteenFFundsInput",
     "ThirteenFHoldingsInput",
@@ -149,6 +151,9 @@ __all__ = [
     # coverage expansion (#4110 phase 2)
     "StatementRow",
     "StatementsResult",
+    # coverage expansion (#4110 phase 4a)
+    "SavedSearch",
+    "SavedSearchesResult",
     "TweetAuthor",
     "TweetMetrics",
     "Tweet",
@@ -218,6 +223,8 @@ __all__ = [
     "StatementsEnvelope",
     "TweetsEnvelope",
     "VenuesEnvelope",
+    # coverage expansion (#4110 phase 4a)
+    "SavedSearchesEnvelope",
     "ScreenerEnvelope",
     "Funds13FEnvelope",
     "Holdings13FEnvelope",
@@ -665,6 +672,10 @@ class TweetSearchInput(_InputModel):
 
 class VenuesInput(_InputModel):
     """The Cloud venues route takes no parameters."""
+
+
+class SavedSearchesInput(_InputModel):
+    """The Cloud saved-searches route takes no parameters."""
 
 
 class ScreenerInput(_InputModel):
@@ -1530,6 +1541,25 @@ class VenuesResult(_CamelModel):
     venues: list[Venue] = Field(default_factory=list)
 
 
+class SavedSearch(_CamelModel):
+    """One saved-search row from ``/cloud/search/saved`` (shape probe-pending).
+
+    The live row shape is unverified (the probed session returned an empty
+    list); the common fields are typed optionally and unknown fields stay
+    extras until a probe records the payload.
+    """
+
+    id: str | int | None = None
+    name: str | None = None
+    query: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class SavedSearchesResult(_CamelModel):
+    searches: list[SavedSearch] = Field(default_factory=list)
+
+
 class ScreenerRow(_CamelModel):
     """One screener row.
 
@@ -2012,6 +2042,7 @@ TranscriptsEnvelope = DigifetchEnvelope[TranscriptsResult]
 StatementsEnvelope = DigifetchEnvelope[StatementsResult]
 TweetsEnvelope = DigifetchEnvelope[TweetsResult]
 VenuesEnvelope = DigifetchEnvelope[VenuesResult]
+SavedSearchesEnvelope = DigifetchEnvelope[SavedSearchesResult]
 ScreenerEnvelope = DigifetchEnvelope[ScreenerResult]
 Funds13FEnvelope = DigifetchEnvelope[Funds13FResult]
 Holdings13FEnvelope = DigifetchEnvelope[Holdings13FResult]

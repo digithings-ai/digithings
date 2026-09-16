@@ -75,6 +75,8 @@ from .models import (
     RiskReport,
     RiskReportsResult,
     RiskSummary,
+    SavedSearch,
+    SavedSearchesResult,
     ScreenerResult,
     ScreenerRow,
     SecFiling,
@@ -1131,6 +1133,20 @@ def normalize_venues(raw: Mapping[str, Any]) -> VenuesResult:
         checked_at=_int_or_none(raw.get("checkedAt")),
         refresh_at=_int_or_none(raw.get("refreshAt")),
         venues=[Venue.model_validate(dict(entry)) for entry in _rows(raw.get("venues"), "venues")],
+    )
+
+
+def normalize_saved_searches(raw: Any) -> SavedSearchesResult:
+    """Map ``/cloud/search/saved`` rows (bare array or a wrapped key).
+
+    The live envelope key is ``searches`` (probe-verified 2026-09-16); ``saved``
+    is retained as an unverified fallback. Unknown row fields stay extras.
+    """
+    payload: Any = raw
+    if isinstance(raw, Mapping):
+        payload = raw.get("searches") or raw.get("saved")
+    return SavedSearchesResult(
+        searches=[SavedSearch.model_validate(dict(entry)) for entry in _rows(payload, "searches")]
     )
 
 
