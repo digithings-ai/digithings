@@ -639,13 +639,18 @@ done-callback per run; a bare `asyncio.create_task` is never used). Both serving
 entrypoints carry the same driver lifespan — the FastAPI app lifespan
 (`server._lifespan`, after its backend gate) and the FastMCP server lifespan
 (`mcp_server.mcp`) — so an MCP-only deployment drives its own runs (#4170).
-Install is per process, reference-counted across concurrent lifespan
-invocations (#4189): FastMCP on streamable-http (digisearch's only transport)
-enters the lifespan once per client session, so overlapping sessions share the
-one install — installed on the first entry, torn down on the last exit. A
-session's exit neither nulls the `set_scheduler` seam nor cancels another
-still-active session's runs. The driver installs the scheduler on the service
-facade at startup (`set_scheduler`), re-schedules the startup-resume union
+The install window is first entry to last exit within one process,
+reference-counted across concurrent lifespan invocations (#4189): FastMCP on
+streamable-http (digisearch's only transport) enters the lifespan once per
+client session, so overlapping sessions share the one install — installed on
+the first entry, torn down on the last exit; a later window reinstalls and
+re-runs the startup resume. A session's exit neither nulls the `set_scheduler`
+seam nor cancels another still-active session's runs. The install guard is a
+per-running-loop lock (#4202): sequential windows on fresh event loops each
+install, resume, and tear down cleanly, while entering a window while an
+install is active on a different loop raises `RuntimeError`. The driver installs
+the scheduler on the service facade at startup (`set_scheduler`), re-schedules
+the startup-resume union
 (websets still `running` ∪ websets holding a non-terminal `running` search;
 once per install window, not per session) as registry-tracked runs under each
 webset's persisted `verification_mode`, and on shutdown undoes the seam first
@@ -1456,7 +1461,7 @@ no-new-provider discipline as Phase C. One-line responsibilities:
 | `websets/verify.py` | `verify_item` (llm + offline rules modes) and the fail-closed settlement of still-pending items at candidate-pass end |
 | `websets/enrich.py` | `enrich_item` (8 typed fields, per-field citations), funding reconciliation (ECB snapshot), entity merge, `company_profile_field` |
 | `websets/runner.py` | `AsyncioRunner` (semaphore 4, per-item containment, semaphore-aware cancellation), `run_webset_async`, `backfill_enrichment`, `schedule_webset_task` + `WEBSET_TASKS` |
-| `websets/driver.py` | Shared in-process driver (`webset_task_lifespan`, `WebsetTaskScheduler`): installs the scheduler seam per process with a reference-counted lifecycle (first entry installs + runs the startup-resume union, last exit cancels tracked runs/backfills; concurrent HTTP/MCP sessions share one install — #4170/#4189), carried by both the FastAPI and FastMCP lifespans |
+| `websets/driver.py` | Shared in-process driver (`webset_task_lifespan`, `WebsetTaskScheduler`): installs the scheduler seam per install window (first entry to last exit), reference-counted across concurrent invocations — first entry installs + runs the startup-resume union, last exit cancels tracked runs/backfills, and a later window reinstalls + re-resumes; concurrent HTTP/MCP sessions share one install (#4170/#4189); carried by both the FastAPI and FastMCP lifespans |
 | `websets/events.py` | Event emit helpers, the shared Phase C signing core, `append_event` fan-out through `deliver_webhook` (3 attempts, 5s/25s) + ledger recording, public `verify_webhook_signature` |
 | `websets/export.py` | `export_json` (per-field citations) and `export_csv` (polars) |
 | `websets/service.py` | The sync facade the HTTP/MCP/orchestrator surfaces call (create/get/items/counts/add_search/add_enrichment/remove/monitors/webhooks/events/cancel/export) + the scheduler seam |

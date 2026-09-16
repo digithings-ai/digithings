@@ -4,10 +4,15 @@ Offline only: every store/runner seam is monkeypatched and no real store file is
 opened. Pins the shared lifespan install/teardown protocol (AC1), the
 startup-resume scheduling + store-failure tolerance (AC2), the unchanged
 scheduler delegation incl. the ``WEBSET_TASKS`` dedupe (AC3), the FastMCP
-lifespan wiring (AC4), and the #4189 ref-counting: overlapping sessions share
-one install, only the last exit tears down and cancels, resume runs once per
-install window (not per session), a cancelled entry leaks nothing, and a later
-install window is fresh.
+lifespan wiring (AC4), the #4189 ref-counting: overlapping sessions share one
+install, only the last exit tears down and cancels, resume runs once per install
+window (not per session), a cancelled entry leaks nothing, and a later install
+window is fresh, and the #4202 loop-safe install guard: sequential
+``asyncio.run`` windows across event loops install/tear down cleanly, a
+supervisor that dies before ready clears the driver state for the next window, a
+dead supervisor at depth ≥ 1 re-installs fresh, and a concurrent install on a
+different event loop raises ``RuntimeError`` — whether it is reference-counted
+or still starting up.
 
 ``@pytest.mark.unit`` on every test.
 """
@@ -15,6 +20,7 @@ install window is fresh.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import sqlite3
 import threading
@@ -33,15 +39,15 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture(autouse=True)
 def _reset_driver_state():
-    driver._install_lock = asyncio.Lock()
     driver._active = 0
     driver._supervisor = None
     driver._stop = None
+    driver._supervisor_loop = None
     yield
-    driver._install_lock = asyncio.Lock()
     driver._active = 0
     driver._supervisor = None
     driver._stop = None
+    driver._supervisor_loop = None
 
 
 class _FakeStore:
@@ -275,6 +281,282 @@ def test_sequential_install_windows_install_and_resume_afresh(monkeypatch):
     assert first is not second
     assert resumes == [1, 1]
     assert installed == [first, None, second, None]
+
+
+# ── #4202: loop-safe install guard ────────────────────────────────────────────
+
+
+@pytest.mark.unit
+def test_sequential_windows_across_event_loops_install_and_tear_down(monkeypatch):
+    """M1 pin (#4202): a second event loop must not inherit the first's lock.
+
+    Two ``asyncio.run`` windows — two distinct event loops in one process —
+    each with overlapping sessions that make the install lock contend (the
+    waiting session is what bound the old module-level lock to the first loop
+    and raised ``RuntimeError: ... bound to a different event loop`` here).
+    """
+    resumes: list[int] = []
+    installed: list[Any] = []
+    monkeypatch.setattr(service_module, "set_scheduler", installed.append)
+
+    async def _window() -> None:
+        release = asyncio.Event()
+        resume_started = asyncio.Event()
+
+        async def _slow_resume(task_group: asyncio.TaskGroup) -> None:
+            resumes.append(1)
+            resume_started.set()
+            await release.wait()
+
+        monkeypatch.setattr(driver, "_resume_incomplete_websets", _slow_resume)
+
+        first = driver.webset_task_lifespan(None)
+        first_enter = asyncio.create_task(first.__aenter__())
+        await resume_started.wait()
+        assert driver._active == 0
+
+        second = driver.webset_task_lifespan(None)
+        second_enter = asyncio.create_task(second.__aenter__())
+        await asyncio.sleep(0)
+        release.set()
+        await first_enter
+        await second_enter
+        assert driver._active == 2
+        scheduler = installed[-1]
+        assert isinstance(scheduler, driver.WebsetTaskScheduler)
+
+        await second.__aexit__(None, None, None)
+        assert driver._active == 1
+        assert installed[-1] is scheduler
+
+        await first.__aexit__(None, None, None)
+        assert driver._active == 0
+        assert installed[-1] is None
+
+    asyncio.run(_window())
+    asyncio.run(_window())
+
+    assert resumes == [1, 1]
+    assert len(installed) == 4
+    assert installed[0] is not installed[2]
+    assert installed[-1] is None
+    assert driver._active == 0
+    assert driver._supervisor is None
+    assert driver._stop is None
+
+
+@pytest.mark.unit
+def test_supervisor_failure_before_ready_clears_state_and_next_window_installs(monkeypatch):
+    """#4202: a supervisor dying before ready surfaces the failure, clears the
+    driver state, and leaves the next install window healthy."""
+    monkeypatch.setattr(
+        driver, "get_webset_store", lambda: _FakeStore(error=ValueError("webset ledger corrupt"))
+    )
+    installed: list[Any] = []
+    monkeypatch.setattr(service_module, "set_scheduler", installed.append)
+
+    async def _broken() -> None:
+        with pytest.raises(ExceptionGroup) as excinfo:
+            async with driver.webset_task_lifespan(None):
+                pass
+        assert any(isinstance(exc, ValueError) for exc in excinfo.value.exceptions)
+
+    asyncio.run(_broken())
+    assert driver._active == 0
+    assert driver._supervisor is None
+    assert driver._stop is None
+    assert driver._supervisor_loop is None
+    assert installed[-1] is None
+
+    monkeypatch.setattr(driver, "get_webset_store", lambda: _FakeStore())
+
+    async def _healthy() -> None:
+        async with driver.webset_task_lifespan(None):
+            pass
+
+    asyncio.run(_healthy())
+    assert isinstance(installed[-2], driver.WebsetTaskScheduler)
+    assert installed[-1] is None
+    assert driver._active == 0
+    assert driver._supervisor is None
+    assert driver._stop is None
+
+
+@pytest.mark.unit
+def test_dead_supervisor_at_depth_reinstalls_fresh(monkeypatch):
+    """#4202: a dead supervisor at depth ≥ 1 is replaced on the next entry."""
+    resumes: list[int] = []
+
+    async def _resume(task_group: asyncio.TaskGroup) -> None:
+        resumes.append(1)
+
+    monkeypatch.setattr(driver, "_resume_incomplete_websets", _resume)
+    installed: list[Any] = []
+    monkeypatch.setattr(service_module, "set_scheduler", installed.append)
+
+    async def _run() -> None:
+        first = driver.webset_task_lifespan(None)
+        await first.__aenter__()
+        first_scheduler = installed[-1]
+        assert isinstance(first_scheduler, driver.WebsetTaskScheduler)
+
+        dead = driver._supervisor
+        assert dead is not None
+        dead.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await dead
+        assert dead.done()
+        assert installed[-1] is None
+
+        second = driver.webset_task_lifespan(None)
+        await second.__aenter__()
+        second_scheduler = installed[-1]
+        assert isinstance(second_scheduler, driver.WebsetTaskScheduler)
+        assert second_scheduler is not first_scheduler
+        assert driver._active == 2
+        assert resumes == [1, 1]
+
+        await second.__aexit__(None, None, None)
+        assert driver._active == 1
+        assert installed[-1] is second_scheduler
+
+        await first.__aexit__(None, None, None)
+        assert driver._active == 0
+        assert installed[-1] is None
+
+    asyncio.run(_run())
+    assert resumes == [1, 1]
+    assert installed[-1] is None
+    assert driver._active == 0
+    assert driver._supervisor is None
+    assert driver._stop is None
+
+
+@pytest.mark.unit
+def test_concurrent_install_on_another_event_loop_raises(monkeypatch):
+    """#4202: a second loop entering while an install is active must fail loud."""
+    resumes: list[int] = []
+
+    async def _resume(task_group: asyncio.TaskGroup) -> None:
+        resumes.append(1)
+
+    monkeypatch.setattr(driver, "_resume_incomplete_websets", _resume)
+    installed: list[Any] = []
+    monkeypatch.setattr(service_module, "set_scheduler", installed.append)
+
+    entered = threading.Event()
+    release = threading.Event()
+    outcome: list[Exception] = []
+
+    async def _holder() -> None:
+        async with driver.webset_task_lifespan(None):
+            entered.set()
+            await asyncio.to_thread(release.wait, 20)
+
+    def _second_loop() -> None:
+        async def _attempt() -> None:
+            async with driver.webset_task_lifespan(None):
+                pass
+
+        try:
+            asyncio.run(_attempt())
+        except Exception as exc:
+            outcome.append(exc)
+        finally:
+            release.set()
+
+    def _run_holder() -> None:
+        asyncio.run(_holder())
+
+    holder = threading.Thread(target=_run_holder, daemon=True)
+    holder.start()
+    assert entered.wait(20)
+
+    worker = threading.Thread(target=_second_loop, daemon=True)
+    worker.start()
+    worker.join(timeout=20)
+    release.set()
+    holder.join(timeout=20)
+
+    assert not worker.is_alive()
+    assert not holder.is_alive()
+    assert len(outcome) == 1
+    assert isinstance(outcome[0], RuntimeError)
+    assert "another event loop" in str(outcome[0])
+    assert resumes == [1]
+    assert installed[-1] is None
+    assert driver._active == 0
+    assert driver._supervisor is None
+    assert driver._stop is None
+
+
+@pytest.mark.unit
+def test_cross_loop_entry_during_install_startup_raises(monkeypatch):
+    """#4202: a second loop entering while the first is mid-install must also fail.
+
+    The holder is parked inside the startup resume, so the seam is already
+    installed and the supervisor is alive while ``_active`` is still 0 — the
+    window where a guard that only checked ``_active`` let a second loop
+    double-install and overwrite the supervisor references.
+    """
+    resumes: list[int] = []
+    installed: list[Any] = []
+    monkeypatch.setattr(service_module, "set_scheduler", installed.append)
+
+    resume_started = threading.Event()
+    release = threading.Event()
+    outcome: list[Exception] = []
+
+    async def _slow_resume(task_group: asyncio.TaskGroup) -> None:
+        resumes.append(1)
+        resume_started.set()
+        await asyncio.to_thread(release.wait, 20)
+
+    monkeypatch.setattr(driver, "_resume_incomplete_websets", _slow_resume)
+
+    async def _holder() -> None:
+        async with driver.webset_task_lifespan(None):
+            pass
+
+    def _run_holder() -> None:
+        asyncio.run(_holder())
+
+    def _second_loop() -> None:
+        async def _attempt() -> None:
+            async with driver.webset_task_lifespan(None):
+                pass
+
+        try:
+            asyncio.run(_attempt())
+        except Exception as exc:
+            outcome.append(exc)
+
+    holder = threading.Thread(target=_run_holder, daemon=True)
+    holder.start()
+    assert resume_started.wait(20)
+
+    assert driver._active == 0
+    assert driver._supervisor is not None
+    assert not driver._supervisor.done()
+    assert isinstance(installed[-1], driver.WebsetTaskScheduler)
+
+    worker = threading.Thread(target=_second_loop, daemon=True)
+    worker.start()
+    worker.join(timeout=20)
+    release.set()
+    holder.join(timeout=20)
+
+    assert not worker.is_alive()
+    assert not holder.is_alive()
+    assert len(outcome) == 1
+    assert isinstance(outcome[0], RuntimeError)
+    assert "another event loop" in str(outcome[0])
+    assert resumes == [1]
+    assert installed[-1] is None
+    assert driver._active == 0
+    assert driver._supervisor is None
+    assert driver._stop is None
+    assert driver._supervisor_loop is None
 
 
 # ── AC2: startup resume ───────────────────────────────────────────────────────
