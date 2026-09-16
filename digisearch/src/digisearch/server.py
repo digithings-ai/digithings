@@ -826,6 +826,39 @@ def _coerce_web_search_max_results(raw: object) -> int | None:
     return min(max(num, 1), 10)
 
 
+def _coerce_web_search_offset(raw: object) -> int | None:
+    """Defensively coerce an orchestrator offset arg; None when invalid.
+
+    Accepts ints (never bools — the bool-is-int quirk silently mapped True to
+    1), integral floats, and int-looking strings; a missing arg (None) maps to
+    0 (the unpaged call). Negatives are invalid (the ``exa_search``
+    ``offset >= 0`` contract), and the beyond-cap window is deliberately NOT
+    clamped here — clamping would silently serve a different page; it is left
+    to ``exa_search``'s explicit ``ExaPageOutOfRangeError``.
+    """
+    if raw is None:
+        return 0
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        number = raw
+    elif isinstance(raw, float):
+        if not raw.is_integer():
+            return None
+        number = int(raw)
+    elif isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return None
+        try:
+            number = int(text)
+        except ValueError:
+            return None
+    else:
+        return None
+    return number if number >= 0 else None
+
+
 # --- Phase D websets: orchestrator invoke branches (#4066, R12) --------------
 
 _WEBSET_VERIFICATION_STATES = ("verified", "rejected", "pending")
@@ -1164,6 +1197,11 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         if stype not in web_exa.VALID_SEARCH_TYPES:
             return OrchestratorInvokeResponse(ok=False, error=f"invalid search_type: {stype!r}")
         n_raw = args.get("num_results", 8)
+        start = _coerce_web_search_offset(args.get("offset"))
+        if start is None:
+            return OrchestratorInvokeResponse(
+                ok=False, error="offset must be a non-negative integer"
+            )
         inc = args.get("include_domains")
         exc = args.get("exclude_domains")
         try:
@@ -1171,6 +1209,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
                 qtext,
                 search_type=stype,  # type: ignore[arg-type]
                 num_results=int(n_raw) if isinstance(n_raw, int) else 8,
+                offset=start,
                 category=args.get("category"),
                 contents_text=bool(args.get("contents_text", False)),
                 output_schema=args.get("output_schema")
@@ -1180,6 +1219,8 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
                 exclude_domains=exc if isinstance(exc, list) else None,
             )
         except (web_exa.ExaError, ValueError) as e:
+            # Beyond-cap pages land here as the explicit ExaPageOutOfRangeError
+            # message — ok:false, never a silently truncated page (#4241).
             return OrchestratorInvokeResponse(ok=False, error=str(e))
         return OrchestratorInvokeResponse(ok=True, service="digisearch", tool=tool, data=data)
 
@@ -1294,6 +1335,17 @@ class ExaWebSearchRequest(BaseModel):
         default="auto", description="instant|fast|auto|deep-lite|deep|deep-reasoning."
     )
     num_results: int = Field(default=8, ge=1, le=100)
+    offset: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Page start over one enlarged EXA window (EXA POST /search has no offset), so "
+            "`results[offset : offset + num_results]` come from a single window fetched with "
+            "`numResults = offset + num_results`. `offset + num_results` must stay within "
+            "EXA_MAX_RESULTS (100): a page past the cap is rejected 400, never silently "
+            "truncated. `offset=0` (default) is the unpaged call."
+        ),
+    )
     category: str | None = None
     contents_text: bool = False
     output_schema: dict[str, Any] | None = None
@@ -1324,6 +1376,13 @@ def api_web_search(req: ExaWebSearchRequest) -> WebSearchData:
 
     Mounted at ``/v1/digisearch_web_search`` (not ``/v1/web_search``): the first-party
     searxng→ddgs web search owns ``/v1/web_search`` on develop.
+
+    ``offset`` pages the recall set (client-side slice of one enlarged window —
+    EXA ``POST /search`` has no offset). A window reaching past the
+    ``web_exa.EXA_MAX_RESULTS`` (100) cap is 400 with the explicit
+    :class:`digisearch.web_exa.ExaPageOutOfRangeError` message; a negative
+    offset is 422 (``ge=0``). ``offset=0`` (default) is byte-identical to the
+    unpaged call (#4234, #4241).
     """
     from digisearch import web_exa
 
@@ -1336,6 +1395,7 @@ def api_web_search(req: ExaWebSearchRequest) -> WebSearchData:
             req.query,
             search_type=req.search_type,  # type: ignore[arg-type]
             num_results=req.num_results,
+            offset=req.offset,
             category=req.category,
             contents_text=req.contents_text,
             output_schema=req.output_schema,

@@ -207,11 +207,64 @@ def test_exa_seam_passthrough_when_configured(monkeypatch):
         "query": "etf flows",
         "search_type": "deep",
         "num_results": 25,
+        "offset": 0,
         "category": "news",
         "include_domains": ["a.com"],
         "exclude_domains": None,
     }
     assert data.results == []
+
+
+@pytest.mark.unit
+def test_exa_seam_forwards_offset(monkeypatch):
+    """#4241: the runner seam threads the #4234 offset (EXA-only) through."""
+    from digisearch.monitors import runner as mod
+
+    captured: dict = {}
+
+    def fake_exa(query, **kwargs):
+        captured["query"] = query
+        captured.update(kwargs)
+        return WebSearchData(results=[])
+
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    monkeypatch.setattr(mod, "exa_search", fake_exa)
+    mod._invoke_shallow_recall(
+        query="etf flows",
+        search_type="auto",
+        num_results=8,
+        category=None,
+        include_domains=None,
+        exclude_domains=None,
+        offset=8,
+    )
+    assert captured["offset"] == 8
+
+
+@pytest.mark.unit
+def test_oss_seam_rejects_nonzero_offset(monkeypatch):
+    """The OSS seam has no offset — fail loudly, never silently serve page 1."""
+    from digisearch.monitors import runner as mod
+
+    calls: list = []
+
+    def fake_search(req):
+        calls.append(req)
+        return WebSearchResponse(query=req.query, results=[], provider="searxng")
+
+    monkeypatch.delenv("EXA_API_KEY", raising=False)
+    monkeypatch.setattr(mod, "search_web", fake_search)
+    with pytest.raises(ValueError, match="offset"):
+        mod._invoke_shallow_recall(
+            query="etf flows",
+            search_type="auto",
+            num_results=8,
+            category=None,
+            include_domains=None,
+            exclude_domains=None,
+            offset=8,
+        )
+    assert calls == []
 
 
 @pytest.mark.unit

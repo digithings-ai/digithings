@@ -272,13 +272,19 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 111) re-recorded for #4192 (web_search provider
     soft-error envelope sentence in ARCHITECTURE.md) — fixture prose only;
     RecursiveChunker unchanged.
+    Re-recorded at count 112 for #4241 (offset rows in the EXA web-search table
+    + monitors recall-path offset sentence in ARCHITECTURE.md) — fixture prose
+    only; RecursiveChunker unchanged.
+    Re-recorded at count 113 for the #4241 docs note (EXA hosted Websets API
+    subscription surface in ARCHITECTURE.md) — fixture prose only;
+    RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 111
+    assert len(chunks) == 113
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -302,7 +308,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "c86663a520afa724",
         "7e8464fe6a6cc067",
         "805b4f2eb13bd3fd",
-        "74e1fdd756cc9dc8",
+        "9e59c09159a62591",
+        "1103ffe080b90ed4",
         "decc6483e87f6403",
         "7973399b6e155051",
         "e0ed75d4b266835e",
@@ -314,8 +321,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "7af3cdc7d42ec69e",
         "a3b047cd3ed1947b",
         "35d304250e94973f",
-        "da47bdad65c33ded",
-        "aa924885a2a48bdc",
+        "7de224687f0a43ea",
+        "8685a691c30714f9",
         "ce691515430dae1f",
         "73d141db4779c6b1",
         "3ba5f0d98d67de27",
@@ -324,8 +331,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "4d46ce009fe0a623",
         "bed41ccd5021ddf1",
         "d168142221e6f74f",
-        "18d2781b06700dd8",
-        "5ede406baf408986",
+        "a73404f288469603",
+        "c04217b55eeb446e",
+        "8f4e8eebefd18c3d",
         "6de35d68bea0e990",
         "c5776a6b47ee3e04",
         "3aed1b59bbde9920",
