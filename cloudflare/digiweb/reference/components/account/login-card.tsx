@@ -157,7 +157,7 @@ export function LoginCard() {
             <Button type="button" variant="outline" className="mt-[1.1rem] w-full">
               Continue with SSO
             </Button>
-            <LayerButton type="button" variant="quiet" className="mt-2 w-full text-[0.7rem]">
+            <LayerButton type="button" variant="quiet" className="mt-2 w-full">
               Forgot password?
             </LayerButton>
           </form>
@@ -223,7 +223,7 @@ export function LoginCard() {
             <Button type="button" variant="outline" className="mt-[1.1rem] w-full">
               Continue with SSO
             </Button>
-            <LayerButton type="button" variant="quiet" className="mt-2 w-full text-[0.7rem]">
+            <LayerButton type="button" variant="quiet" className="mt-2 w-full">
               Forgot password?
             </LayerButton>
           </form>
